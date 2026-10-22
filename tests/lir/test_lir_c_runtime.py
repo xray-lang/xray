@@ -54,6 +54,14 @@ def main():
         'print(q(9223372036854775807))\n'
         'print(r(9223372036854775807))\n',
         b'-3074457345618258602\n-79\n-2\n-1\n3074457345618258602\n78\n')
+    cases['minus-one-divrem'] = (
+        'fn q(n:i64)->i64{return n/(-1)}\n'
+        'fn r(n:i64)->i64{return n%(-1)}\n'
+        'print(q(-9223372036854775807-1))\nprint(r(-9223372036854775807-1))\n'
+        'print(q(-7))\nprint(r(-7))\nprint(q(7))\nprint(r(7))\n'
+        'print(q(9223372036854775807))\nprint(r(9223372036854775807))\n'
+        'print(q(0))\nprint(r(0))\n',
+        b'-9223372036854775808\n0\n7\n0\n-7\n0\n-9223372036854775807\n0\n0\n0\n')
     cases['f64-source'] = ('fn carry(x:f64)->f64{print(7)\nreturn x}\ncarry(1.25)\nprint(2)\n', b'7\n2\n')
     refused_source, refused_c = root / 'refused-fadd.xr', root / 'refused-fadd.c'
     refused_source.write_text('print(1)\nfn add(x:f64)->f64{return x+1.0}\nadd(2.0)\nprint(2)\n', encoding='utf-8')

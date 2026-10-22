@@ -217,7 +217,7 @@ static void fixed_division_source(const char *text, bool slot_frontier) {
             CHECK(ordinal < function->instruction_count);
             const XrXirInstruction *rhs = &function->instructions[ordinal];
             CHECK(rhs->op == XR_XIR_CONST_INT && rhs->type == XR_XIR_I64);
-            CHECK(rhs->immediate != 0 && rhs->immediate != -1);
+            CHECK(rhs->immediate != 0);
             CHECK(v->args[0] < function->parameter_count ||
                   function->instructions[v->args[0] - function->parameter_count].op != XR_XIR_CONST_INT);
             printf("Closed fixed divisor: %s rhs=%lld, dynamic numerator\n",
@@ -253,7 +253,7 @@ static void fixed_division_source(const char *text, bool slot_frontier) {
             for (uint32_t i = 0; i < bv.instruction_count; ++i) {
                 XrLirInstructionView v;
                 OK(xr_lir_instruction_view(output.module, block, i, &v));
-                if (v.op == XR_LIR_CONST && v.type == XR_LIR_I64 && v.bits && v.bits != UINT64_MAX)
+                if (v.op == XR_LIR_CONST && v.type == XR_LIR_I64 && v.bits)
                     constants[v.result] = 1;
             }
         }
@@ -285,8 +285,10 @@ static void fixed_division(const char *fixtures) {
     xr_free(original);
     rejected("fn f(n:i64)->i64{return n/0}\nprint(f(8))\n", false, "DIV_INT");
     rejected("fn f(n:i64)->i64{return n%0}\nprint(f(8))\n", false, "REM_INT");
-    rejected("fn f(n:i64)->i64{return n/(-1)}\nprint(f(8))\n", false, "DIV_INT");
-    rejected("fn f(n:i64)->i64{return n%(-1)}\nprint(f(8))\n", false, "REM_INT");
+    fixed_division_source("fn q(n:i64)->i64{return n/(-1)}\n"
+                          "print(q(-9223372036854775807-1))\n", false);
+    fixed_division_source("fn r(n:i64)->i64{return n%(-1)}\n"
+                          "print(r(-9223372036854775807-1))\n", false);
     rejected("fn f(n:i64,d:i64)->i64{return n/(d+2)}\nprint(f(8,1))\n", false, "DIV_INT");
     rejected("fn f(n:i64)->i64{return n/(3 as i64)}\nprint(f(8))\n", false, "DIV_INT");
     rejected("fn f(n:i64,flag:bool)->i64{return n%(flag?3:7)}\nprint(f(8,true))\n", false, "REM_INT");

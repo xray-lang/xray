@@ -39,7 +39,7 @@ def main():
     expected = {'arithmetic': 17, 'extremes': -1, 'overflow': 9223372036854775806,
                 'fib': 2178309, 'swap': 1234, 'self': 1212,
                 'same-true': 1234, 'same-false': 3412, 'unused': 42, 'unit': None, 'bool': 1,
-                'source-entry': 0, 'source-call': 0, 'divrem': 7}
+                'source-entry': 0, 'source-call': 0, 'divrem': 0}
     sources = {
         'source-entry': 'fn main()->string{return "ordinary"}\nfn work()->i64{var i=0\nwhile(i<5){i=i+1}\nreturn i}\nwork()\n',
         'source-call': 'fn sum(n:i64)->i64{var i=0\nvar total=0\nwhile(i<n){total=total+i\ni=i+1}\nreturn total}\nsum(7)\n',
@@ -81,14 +81,14 @@ def main():
             gateway.write_text('#include "divrem.c"\n' + ''.join(
                 f'_Static_assert(_Generic(&xrl_f{i}, int64_t (*)(int64_t): 1, default: 0), "division ABI");\n'
                 f'int64_t (*get_f{i}(void))(int64_t) {{ return xrl_f{i}; }}\n'
-                for i in range(2, 6)), encoding='ascii')
+                for i in range(2, 8)), encoding='ascii')
             adapter_text = ('#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n' + ''.join(
-                f'extern int64_t (*get_f{i}(void))(int64_t);\n' for i in range(2, 6)) +
+                f'extern int64_t (*get_f{i}(void))(int64_t);\n' for i in range(2, 8)) +
                 'int main(int argc, char **argv) {\n    if (argc != 2) return 2;\n'
                 '    char *end; int64_t n = (int64_t)strtoll(argv[1], &end, 10);\n'
                 '    if (*end) return 2;\n' + ''.join(
                     f'    if (printf("%lld\\n", (long long)get_f{i}()(n)) < 0) return 3;\n'
-                    for i in range(2, 6)) + '    return 0;\n}\n')
+                    for i in range(2, 8)) + '    return 0;\n}\n')
             source = gateway
         adapter.write_text(adapter_text, encoding='ascii')
         if args.kind == 'msvc':
@@ -110,11 +110,14 @@ def main():
         run(command, cwd=root)
         if name == 'divrem':
             vectors = [
-                (-9223372036854775808, -3074457345618258602, -2, 95086309658296657, -79),
-                (-98, -32, -2, 1, -1), (-7, -2, -1, 0, -7), (-1, 0, -1, 0, -1),
-                (0, 0, 0, 0, 0), (1, 0, 1, 0, 1), (7, 2, 1, 0, 7),
-                (98, 32, 2, -1, 1),
-                (9223372036854775807, 3074457345618258602, 1, -95086309658296657, 78),
+                (-9223372036854775808, -3074457345618258602, -2, 95086309658296657, -79,
+                 -9223372036854775808, 0),
+                (-98, -32, -2, 1, -1, 98, 0), (-7, -2, -1, 0, -7, 7, 0),
+                (-1, 0, -1, 0, -1, 1, 0), (0, 0, 0, 0, 0, 0, 0),
+                (1, 0, 1, 0, 1, -1, 0), (7, 2, 1, 0, 7, -7, 0),
+                (98, 32, 2, -1, 1, -98, 0),
+                (9223372036854775807, 3074457345618258602, 1, -95086309658296657, 78,
+                 -9223372036854775807, 0),
             ]
             observations = []
             for n, *answers in vectors:

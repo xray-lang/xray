@@ -10,7 +10,8 @@
  * KEY CONCEPT:
  *   Wrapping arithmetic widens to unsigned before operations. Signed
  *   reconstruction uses only representable conversions. Fixed-divisor i64
- *   division stays signed after admission excludes both fault conditions.
+ *   division excludes zero at admission and selects the wrapping MIN/-1
+ *   result before evaluating signed C operators.
  *   No interpreter frame is emitted.
  */
 #include "xlir_c.h"
@@ -206,7 +207,7 @@ static void c_prepare_divisors(LirC *c) {
         for (uint32_t i = 0; i < view.instruction_count && c_work(c, 1); ++i) {
             XrLirInstructionView v;
             xr_lir_instruction_view(c->request->module, block, i, &v);
-            if (v.op == XR_LIR_CONST && v.type == XR_LIR_I64 && v.bits && v.bits != UINT64_MAX)
+            if (v.op == XR_LIR_CONST && v.type == XR_LIR_I64 && v.bits)
                 c->fixed_divisors[v.result] = 1;
         }
     }
@@ -221,7 +222,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_DIV: case XR_LIR_REM:
             if (v->type != XR_LIR_I64 || !c->fixed_divisors ||
                 !c->fixed_divisors[v->operands[1]])
-                c_error(c, XR_LIR_C_UNSUPPORTED, "division requires a direct nonzero, non-minus-one i64 constant");
+                c_error(c, XR_LIR_C_UNSUPPORTED, "division requires a direct nonzero i64 constant");
             break;
         case XR_LIR_CALL:
             c_visit(c, v->callee);
@@ -444,7 +445,14 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_integer(c, v);
             break;
         case XR_LIR_DIV: case XR_LIR_REM:
+            /* Select the wrapping pair before C can evaluate signed overflow. */
             c_format(c, "    v%" PRIu32 " = ", v->result);
+            c_value(c, v->operands[0]);
+            c_text(c, " == INT64_MIN && ");
+            c_value(c, v->operands[1]);
+            c_text(c, " == -INT64_C(1) ? ");
+            c_text(c, v->op == XR_LIR_DIV ? "INT64_MIN" : "INT64_C(0)");
+            c_text(c, " : ");
             c_value(c, v->operands[0]);
             c_text(c, v->op == XR_LIR_DIV ? " / " : " % ");
             c_value(c, v->operands[1]);

@@ -263,15 +263,16 @@ static void typed_output(const char *name) {
 static void fixed_division(void) {
     XrLirBlock entry = root_block();
     XrLirValue input = constant(entry, XR_LIR_I64, 7), result = input;
-    const char *names[] = {"quotient3", "remainder3", "quotientNegative97", "remainderNegative97"};
-    for (unsigned i = 0; i < 4; ++i) {
+    const char *names[] = {"quotient3", "remainder3", "quotientNegative97", "remainderNegative97",
+                           "quotientNegative1", "remainderNegative1"};
+    for (unsigned i = 0; i < 6; ++i) {
         XrLirType type = XR_LIR_I64;
         XrLirFunction f = function(names[i], &type, 1, type);
         XrLirBlock b = block(f, NULL, 0);
         OK(xr_lir_set_entry(module, f, b));
         XrLirValue n;
         OK(xr_lir_function_parameter(module, f, 0, &n));
-        XrLirValue rhs = constant(b, type, i < 2 ? 3 : (uint64_t)-INT64_C(97));
+        XrLirValue rhs = constant(b, type, i < 2 ? 3 : i < 4 ? (uint64_t)-INT64_C(97) : UINT64_MAX);
         ret(b, operation(b, i % 2 ? XR_LIR_REM : XR_LIR_DIV, type, n, rhs));
         result = call(entry, f, &input, 1);
     }
@@ -363,7 +364,8 @@ static void reject_division(unsigned kind, XrLirOp op) {
         rhs = constant(b, type, kind == 0 ? 0 : kind == 1 ? UINT64_MAX : 3);
         if (kind == 3)
             rhs = operation(b, XR_LIR_ADD, type, rhs, rhs);
-        if (kind == 6)
+        /* Even a nonzero constant behind INTCAST is outside direct-definition admission. */
+        if (kind == 1 || kind == 6)
             rhs = operation(b, XR_LIR_INTCAST, type, rhs, (XrLirValue) {0});
         if (kind == 4) {
             XrLirBlock next = block(root, &type, 1);

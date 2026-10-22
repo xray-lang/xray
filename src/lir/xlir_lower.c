@@ -252,7 +252,7 @@ static bool lower_mark(Lower *c, uint32_t function) {
     return true;
 }
 
-/* Only a direct constant definition proves division cannot fault for any lhs. */
+/* Only a direct nonzero constant excludes division by zero for every lhs. */
 static bool lower_fixed_divisor(const XrXirFunction *f, const XrXirInstruction *op) {
     uint32_t rhs = op->args[1];
     if (op->type != XR_XIR_I64 || xr_xir_operand_type(f, op->args[0]) != XR_XIR_I64 ||
@@ -260,7 +260,7 @@ static bool lower_fixed_divisor(const XrXirFunction *f, const XrXirInstruction *
         return false;
     const XrXirInstruction *definition = &f->instructions[rhs - f->parameter_count];
     return definition->op == XR_XIR_CONST_INT && definition->type == XR_XIR_I64 &&
-        definition->immediate != 0 && definition->immediate != -1;
+        definition->immediate != 0;
 }
 
 static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {

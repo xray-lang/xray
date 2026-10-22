@@ -73,6 +73,14 @@ def main():
         'print(q(9223372036854775807))\n'
         'print(r(9223372036854775807))\n'
     ), b'-3074457345618258602\n-79\n-2\n-1\n3074457345618258602\n78\n'))
+    cases.append(('minus-one-divrem', (
+        'fn q(n:i64)->i64{return n/(-1)}\n'
+        'fn r(n:i64)->i64{return n%(-1)}\n'
+        'print(q(-9223372036854775807-1))\nprint(r(-9223372036854775807-1))\n'
+        'print(q(-7))\nprint(r(-7))\nprint(q(7))\nprint(r(7))\n'
+        'print(q(9223372036854775807))\nprint(r(9223372036854775807))\n'
+        'print(q(0))\nprint(r(0))\n'
+    ), b'-9223372036854775808\n0\n7\n0\n-7\n0\n-9223372036854775807\n0\n0\n0\n'))
     for name, text, expected in cases:
         if not expected:
             raise AssertionError('Skeleton cases require nonempty expected output')
