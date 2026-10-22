@@ -38,6 +38,7 @@ error: aborting due to 1 previous error"""
 # The checker's one-line shape, and a `hint:` line sitting between a message
 # and its own location -- both real shapes the compiler emits today.
 INLINE = "/abs/path/010_invalid_index.xr:9:0: error: body cannot suspend"
+INLINE_CODE = "/abs/path/010_invalid_index.xr:4:5: error: E0330: throwing call requires try"
 HINTED = """error[E0363]: go closure cannot capture mutable variable 'counter'
 hint: bind a Channel handle as const
    --> /abs/path/010_invalid_index.xr:11:9"""
@@ -91,6 +92,12 @@ expect(rejects(f"--> 5:13 E0352\n{WORDING}\n\n--> 5:13 E0352\nexpected type 'i64
 # Every emitted shape has to parse, or a case could pin words nothing checks.
 expect(not rejects("--> 9:0\nbody cannot suspend\n", INLINE),
        "the checker's one-line shape must parse")
+expect(not rejects("--> 4:5 E0330\nthrowing call requires try\n", INLINE_CODE),
+       "an inline source diagnostic must retain its explicit error code")
+expect(rejects("--> 4:5 E0331\nthrowing call requires try\n", INLINE_CODE),
+       "an inline source diagnostic must not satisfy the wrong code")
+expect(rejects("--> 4:6 E0330\nthrowing call requires try\n", INLINE_CODE),
+       "an inline source code must not hide a wrong column")
 expect(not rejects("--> 11:9 E0363\ngo closure cannot capture\nhint: bind a Channel",
                    HINTED),
        "a location after a hint line must bind to its own diagnostic")

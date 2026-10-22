@@ -1,0 +1,2 @@
+const value=7
+if(true){print(value)}

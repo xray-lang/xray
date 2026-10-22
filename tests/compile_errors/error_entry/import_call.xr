@@ -1,0 +1,2 @@
+import "./fixtures/standalone_call" as peer
+print(1)

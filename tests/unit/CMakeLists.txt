@@ -4747,3 +4747,4 @@ set_tests_properties(test_xir_shared_interfaces test_xir_shared_interfaces_vecto
     TIMEOUT 120 LABELS "unit;xir;checked;independent;ownership")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/forin_full_runtime_fi.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/atomic_control_full_runtime_fi.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/source_entry.cmake")

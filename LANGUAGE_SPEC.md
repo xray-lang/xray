@@ -8634,6 +8634,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0332` | `XR_ERR_ANALYZE_ERROR_OVERRIDE` | Implementation or override error type is not a subset of its required signature |
 | `E0333` | `XR_ERR_ANALYZE_ERASED_THROWS` | Erased errors in freestanding or @strict(alloc), including bare throws and throws(Error) |
 | `E0334` | `XR_ERR_ANALYZE_CATCH_TYPE_NAME` | Single uppercase-leading catch identifier; suggest catch (e: T) |
+| `E0335` | `XR_ERR_ANALYZE_IMPORTED_TOP_LEVEL` | Imported module contains a standalone expression or control-flow statement; move it to the entry file and retain only declarations and state initialization |
 
 #### Analyzer
 

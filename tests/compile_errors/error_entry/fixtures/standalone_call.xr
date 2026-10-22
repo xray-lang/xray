@@ -1,0 +1,2 @@
+export fn value()->i64{return 7}
+print("call")

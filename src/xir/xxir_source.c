@@ -2216,6 +2216,7 @@ static bool source_resolved_identity(SourceContext *ctx, const XrModuleSpec *spe
 #include "xxir_source_library.inc.c"
 #include "xxir_source_history_receive.inc.c"
 #include "xxir_source_declaration_storage.inc.c"
+#include "xxir_source_entry.inc.c"
 
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
@@ -2242,8 +2243,8 @@ static bool collect_declarations(SourceContext *ctx) {
             if (!source_library_declaration_inventory(ctx,m,library,&nominals,&interfaces)) return false;
             continue;
         }
-        if (!count_closures(ast,&closures)) return false;
         if (!ast || ast->type != AST_PROGRAM) return source_fail(ctx, ast, XR_XIR_BAD_STRUCTURE, "parsed module required");
+        if (!source_module_entry_check(ctx,ast) || !count_closures(ast,&closures)) return false;
         for (int i = 0; i < ast->as.program.count; ++i) {
             AstNode *node = ast->as.program.statements[i];
             if (!source_work(ctx, node)) return false;

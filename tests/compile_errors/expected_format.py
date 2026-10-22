@@ -268,10 +268,14 @@ def parse_diagnostics(output: str) -> list[Diagnostic]:
         inline = INLINE_HEAD_RE.match(stripped)
         if inline:
             flush()
+            code, message = inline.group("code"), inline.group("msg").strip()
+            inline_code = INLINE_CODE_RE.match(message)
+            if code is None and inline_code:
+                code, message = inline_code.group("code"), inline_code.group("rest")
             diagnostics.append(Diagnostic(
-                inline.group("level").lower(), inline.group("code"),
+                inline.group("level").lower(), code,
                 inline.group("file"), int(inline.group("line")),
-                int(inline.group("col")), inline.group("msg").strip()))
+                int(inline.group("col")), message))
             continue
         rendered = RENDERED_HEAD_RE.match(stripped)
         if rendered:
