@@ -36,6 +36,7 @@ add_custom_command(OUTPUT "${protocol_selection}"
       "${FMT_ROOT}/src/app/lsp/xlsp_server.c" "${FMT_ROOT}/src/app/lsp/xlsp_handlers_textdoc.c"
       "${FMT_ROOT}/src/app/lsp/xlsp_transport.c" "${FMT_ROOT}/src/app/mcp/xmcp_tools_lang.c"
       "${FMT_ROOT}/src/app/lsp/xlsp_document_owner.c"
+      "${FMT_ROOT}/src/app/mcp/xmcp_source.c"
       "${FMT_ROOT}/src/app/mcp/xmcp_result.c" VERBATIM)
 add_executable(test_protocol_format "${CMAKE_CURRENT_LIST_DIR}/test_protocol_format.c"
     "${protocol_selection}" "${FMT_ROOT}/src/app/lsp/xlsp_format.c" "${FMT_ROOT}/src/app/mcp/xmcp_json.c"

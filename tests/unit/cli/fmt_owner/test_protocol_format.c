@@ -4,6 +4,7 @@
 #include "base/xjson.h"
 #include "base/xframing.h"
 #include "base/xchecks.h"
+#include "base/xresource_limits.h"
 #include "app/lsp/xlsp_server.h"
 #include "app/lsp/xlsp_format.h"
 #include "app/lsp/xlsp_transport.h"
