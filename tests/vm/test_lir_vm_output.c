@@ -54,13 +54,13 @@ static XrRbcProgram *from_lir(const char *path, bool known, bool point, bool ari
     XrLirBlock block = {0};
     OK(xr_lir_add_block(module, root, NULL, 0, &block));
     OK(xr_lir_set_entry(module, root, block));
-    XrLirValue value = {0};
+    XrLirValue value = {0}, result = {0};
     XrLirSource source = known ? (XrLirSource) {path, strlen(path), 3, 2, 3, 2} : (XrLirSource) {0};
     XrLirInstruction instruction = {.op = XR_LIR_CONST, .type = XR_LIR_I64,
         .bits = 42, .source = source};
     OK(xr_lir_emit_value(module, block, &instruction, &value));
     if (arithmetic) {
-        XrLirValue zero = {0}, result = {0};
+        XrLirValue zero = {0};
         instruction.bits = 0;
         OK(xr_lir_emit_value(module, block, &instruction, &zero));
         XrLirValue arguments[] = {value, zero};
