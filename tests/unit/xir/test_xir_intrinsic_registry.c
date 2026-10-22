@@ -334,6 +334,7 @@ static void consumers(Fixture *fixture) {
     xr_xir_domain_drop(domain);
 }
 #include "intrinsic_evaluation.h"
+#include "intrinsic_catalog.h"
 
 static void emit(Fixture *fixture, const char *path) {
     XrXirArtifact *code = lowered(fixture);
@@ -349,7 +350,12 @@ static void emit(Fixture *fixture, const char *path) {
 int main(int argc, char **argv) {
     registry();
     Fixture fixture = fixture_new();
-    if (argc == 3 && !strcmp(argv[1], "--emit")) { emit(&fixture, argv[2]); return 0; }
+    if (argc == 3 && !strcmp(argv[1], "--emit")) {
+        fixture_free(&fixture);
+        fixture = intrinsic_catalog_fixture();
+        emit(&fixture, argv[2]);
+        return 0;
+    }
     CHECK(argc == 6);
     predecessor_rejected(&fixture, argv[1], 33, 93, false);
     predecessor_rejected(&fixture, argv[2], 33, 93, false);
@@ -361,6 +367,9 @@ int main(int argc, char **argv) {
     invalid_packets(&fixture, fixture.suffix);
     consumers(&fixture);
     evaluation_transport(&fixture);
+    fixture_free(&fixture);
+    fixture = intrinsic_catalog_fixture();
+    consumers(&fixture);
     fixture_free(&fixture);
     source_rejected("fn bad()->bool{return \"x\".contains(1)}\n");
     source_rejected("fn bad()->bool{return \"x\".contains(\"x\",\"y\")}\n");
