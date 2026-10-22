@@ -1102,8 +1102,7 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
     if (op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_STRING_LEN ||
         op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
         (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
-        op->op == XR_XIR_STRING_STARTS_WITH ||
-        op->op == XR_XIR_STRING_ENDS_WITH || op->op == XR_XIR_STRING_INDEX_OF ||
+        op->op == XR_XIR_STRING_INDEX_OF ||
         op->op == XR_XIR_STRING_LAST_INDEX_OF) expected = XR_XIR_STRING;
 
     if (op->op == XR_XIR_PANIC_CODE || op->op == XR_XIR_PANIC_MESSAGE) expected = XR_XIR_PANIC_INFO;

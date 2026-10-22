@@ -51,8 +51,8 @@ int main(void) {
     CHECK(xr_xir_value_valid(&result));
     xr_xir_value_drop(&result);
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
-    const char expected[] = "true false true\n";
+    const char expected[] = "true false true\ntrue true false false true false\n";
     CHECK(output.size == sizeof(expected) - 1 && !memcmp(output.bytes, expected, sizeof(expected) - 1));
-    puts("generated intrinsic program: true false true");
+    puts("generated intrinsic program: contains, prefix and suffix fixed oracles passed");
     return 0;
 }

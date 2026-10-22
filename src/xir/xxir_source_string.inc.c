@@ -107,8 +107,6 @@ static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue re
     XrXirOp operation = XR_XIR_INVALID;
     XrXirType result = XR_XIR_BOOL;
     switch (member->operation) {
-    case XR_NATIVE_OPERATION_STRING_STARTS_WITH: operation = XR_XIR_STRING_STARTS_WITH; break;
-    case XR_NATIVE_OPERATION_STRING_ENDS_WITH: operation = XR_XIR_STRING_ENDS_WITH; break;
     case XR_NATIVE_OPERATION_STRING_INDEX_OF: operation = XR_XIR_STRING_INDEX_OF; result = XR_XIR_I64; break;
     case XR_NATIVE_OPERATION_STRING_LAST_INDEX_OF: operation = XR_XIR_STRING_LAST_INDEX_OF; result = XR_XIR_I64; break;
     default: return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string member identity is not executable");

@@ -16,6 +16,7 @@
 #include "xir/xxir_ctfe.h"
 #include "xir/xxir_emit_c.h"
 #include "xir/xxir_intrinsic.h"
+#include "xir/xxir_internal.h"
 #include "xir/xxir_program.h"
 #include "xir/xxir_output.h"
 #include "xir/xxir_vm.h"
@@ -23,17 +24,22 @@
 
 static const char source_text[] =
     "export fn anchor()->i64{return 7}\n"
+    "export fn spare()->i64{return 9}\n"
     "export fn probe(text:string,search:string)->bool{return text.contains(search)}\n"
-    "fn proof()->bool{return \"\".contains(\"\")}\n"
+    "export fn prefix(text:string,search:string)->bool{return text.startsWith(search)}\n"
+    "export fn suffix(text:string,search:string)->bool{return text.endsWith(search)}\n"
+    "fn proof()->bool{return \"\".contains(\"\") && \"\".startsWith(\"\") && \"\".endsWith(\"\")}\n"
     "export fn folded()->bool{return comptime proof()}\n"
-    "print(probe(\"\xc3\xa9\\0abc\",\"\\0a\"),probe(\"\xc3\xa9\\0abc\",\"z\"),folded())\n";
+    "print(probe(\"\xc3\xa9\\0abc\",\"\\0a\"),probe(\"\xc3\xa9\\0abc\",\"z\"),folded())\n"
+    "print(prefix(\"\xc3\xa9\\0abc\",\"\xc3\xa9\\0\"),suffix(\"\xc3\xa9\\0abc\",\"\\0abc\"),"
+    "prefix(\"xab\",\"ab\"),suffix(\"abx\",\"ab\"),prefix(\"\",\"\"),suffix(\"abc\",\"abcd\"))\n";
 
 typedef struct Fixture {
     XrXirCompileContext context;
     XrXirArtifact *closed;
     XrXirCheckedPacket packet;
     uint8_t identity[32];
-    uint32_t probe, folded, entry;
+    uint32_t probe, prefix, suffix, folded, entry;
 } Fixture;
 
 static uint32_t named(const XrXirModule *module, const char *name) {
@@ -50,15 +56,18 @@ static Fixture fixture_new(void) {
     SourceFixture source = source_fixture(input);
     xr_free(input);
     const XrXirModule *module = xr_xir_compile_artifact_module(source.source.checked);
-    const XrXirFunction *probe = &module->functions[named(module, "probe")];
-    bool found = false;
-    for (uint32_t i = 0; i < probe->instruction_count; ++i) {
-        const XrXirInstruction *op = &probe->instructions[i];
-        if (op->op != XR_XIR_CALL_INTRINSIC) continue;
-        CHECK(op->immediate == 1 && op->args[1] == 2 && op->type == XR_XIR_BOOL);
-        found = true;
+    const char *functions[] = {"probe", "prefix", "suffix"};
+    for (uint32_t c = 0; c < 3; ++c) {
+        const XrXirFunction *body = &module->functions[named(module, functions[c])];
+        bool found = false;
+        for (uint32_t i = 0; i < body->instruction_count; ++i) {
+            const XrXirInstruction *op = &body->instructions[i];
+            if (op->op != XR_XIR_CALL_INTRINSIC) continue;
+            CHECK(op->immediate == (int64_t)c + 1 && op->args[1] == 2 && op->type == XR_XIR_BOOL);
+            found = true;
+        }
+        CHECK(found);
     }
-    CHECK(found);
     Fixture fixture = {0};
     fixture.context = *xr_xir_compile_artifact_context(source.closed);
     CHECK(xr_compile_resources_retain(fixture.context.resources) == XR_COMPILE_RESOURCE_OK);
@@ -69,6 +78,8 @@ static Fixture fixture_new(void) {
         &fixture.closed, NULL) == XR_XIR_OK);
     module = xr_xir_compile_artifact_module(fixture.closed);
     fixture.probe = named(module, "probe");
+    fixture.prefix = named(module, "prefix");
+    fixture.suffix = named(module, "suffix");
     fixture.folded = named(module, "folded");
     fixture.entry = module->declarations->entry_function;
     return fixture;
@@ -100,6 +111,21 @@ static void registry(void) {
     CHECK(!xr_native_intrinsic_for_member(NULL, member) && !xr_native_intrinsic_for_member(owner, NULL));
     CHECK(!xr_native_intrinsic_for_member(xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY), member));
     CHECK(!xr_xir_intrinsic(-1) && !xr_xir_intrinsic(INT64_C(0x100000001)));
+    const char *names[] = {"startsWith", "endsWith"};
+    const char *symbols[] = {"xr_xir_string_starts_with", "xr_xir_string_ends_with"};
+    const XrNativeIntrinsicImplementation implementations[] = {
+        XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_STARTS_WITH, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_ENDS_WITH};
+    for (uint32_t i = 0; i < 2; ++i) {
+        member = xr_native_declaration_member(owner, names[i]);
+        call = xr_native_intrinsic_by_id(i + 2);
+        CHECK(call && xr_xir_intrinsic(i + 2) == call && call->owner == owner && call->member == member);
+        CHECK(xr_native_intrinsic_for_member(owner, member) == call && call->ctfe);
+        CHECK(call->implementation == implementations[i] && !strcmp(call->c_symbol, symbols[i]));
+        CHECK(call->effects == XR_NATIVE_INTRINSIC_READ && member->receiver == XR_NATIVE_RECEIVER_READ);
+        CHECK(member->result == XR_NATIVE_TERM_BOOL && member->parameter_count == 1 &&
+            member->parameters[0].type == XR_NATIVE_TERM_STRING && !strcmp(member->failures, "none"));
+        CHECK(member->allocation == XR_NATIVE_ALLOCATION_NO_HEAP && member->ownership == XR_NATIVE_RESULT_OWNERSHIP_OWNED);
+    }
 }
 static void lir_rejected(void) {
     SourceFixture source = source_fixture(
@@ -141,7 +167,8 @@ static uint32_t get32(const uint8_t *bytes) {
     for (unsigned i = 0; i < 4; ++i) value |= (uint32_t)bytes[i] << (8 * i);
     return value;
 }
-static void predecessor_rejected(Fixture *fixture, const char *path) {
+static void predecessor_rejected(Fixture *fixture, const char *path, uint32_t schema,
+    uint32_t contract, bool evaluation) {
     FILE *file = fopen(path, "rb");
     CHECK(file && !fseek(file, 0, SEEK_END));
     long end = ftell(file);
@@ -149,10 +176,10 @@ static void predecessor_rejected(Fixture *fixture, const char *path) {
     size_t length = (size_t)end;
     uint8_t *bytes = xr_malloc(length);
     CHECK(bytes && fread(bytes, 1, length, file) == length && !fclose(file));
-    CHECK(!memcmp(bytes, "XRCHK\0\0\0", 8));
-    CHECK(get32(bytes + 8) == 33 && get32(bytes + 12) == 93);
-    CHECK(get32(fixture->packet.bytes + 8) != get32(bytes + 8) &&
-        get32(fixture->packet.bytes + 12) != get32(bytes + 12));
+    CHECK(!memcmp(bytes, evaluation ? "XRCEV\0\0\0" : "XRCHK\0\0\0", 8));
+    CHECK(get32(bytes + 8) == schema && get32(bytes + 12) == contract);
+    CHECK(get32(fixture->packet.bytes + 12) != get32(bytes + 12));
+    if (!evaluation) CHECK(get32(fixture->packet.bytes + 8) != get32(bytes + 8));
     XrSHA256Context hash;
     uint8_t digest[32];
     xr_sha256_init(&hash);
@@ -161,17 +188,19 @@ static void predecessor_rejected(Fixture *fixture, const char *path) {
     xr_sha256_final(&hash, digest);
     CHECK(!memcmp(digest, bytes + 32, sizeof(digest)));
     XrXirArtifact *decoded = NULL;
-    CHECK(xr_xir_compile_checked_read(&fixture->context, bytes, length, &decoded, NULL) ==
-        XR_XIR_BAD_STRUCTURE);
+    XrXirStatus status = evaluation ? xir_evaluation_read(&fixture->context, bytes, length, &decoded, NULL) :
+        xr_xir_compile_checked_read(&fixture->context, bytes, length, &decoded, NULL);
+    CHECK(status == XR_XIR_BAD_STRUCTURE);
     CHECK(!decoded);
     xr_free(bytes);
 }
-static void packet_rejected(Fixture *fixture, size_t at, unsigned field, uint32_t value,
-    XrXirStatus expected, uint32_t instruction) {
+typedef struct PacketSite { Fixture *fixture; size_t offset; uint32_t function, instruction; } PacketSite;
+static void packet_rejected(const PacketSite *site, unsigned field, uint32_t value, XrXirStatus expected) {
+    Fixture *fixture = site->fixture;
     uint8_t *bytes = xr_malloc(fixture->packet.length);
     CHECK(bytes);
     memcpy(bytes, fixture->packet.bytes, fixture->packet.length);
-    put32(bytes + at + field, value);
+    put32(bytes + site->offset + field, value);
     XrSHA256Context hash;
     xr_sha256_init(&hash);
     xr_sha256_update(&hash, bytes, 32);
@@ -181,16 +210,16 @@ static void packet_rejected(Fixture *fixture, size_t at, unsigned field, uint32_
     XrXirDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_checked_read(&fixture->context, bytes,
         fixture->packet.length, &decoded, &diagnostic);
-    if (status != expected || diagnostic.function != fixture->probe || diagnostic.instruction != instruction)
+    if (status != expected || diagnostic.function != site->function || diagnostic.instruction != site->instruction)
         fprintf(stderr, "packet rejection %u: status=%u function=%u instruction=%u\n",
             field, (unsigned)status, diagnostic.function, diagnostic.instruction);
     CHECK(status == expected && !decoded);
-    CHECK(diagnostic.function == fixture->probe && diagnostic.instruction == instruction);
+    CHECK(diagnostic.function == site->function && diagnostic.instruction == site->instruction);
     xr_free(bytes);
 }
-static void invalid_packets(Fixture *fixture) {
+static void invalid_packets(Fixture *fixture, uint32_t function) {
     const XrXirModule *module = xr_xir_compile_artifact_module(fixture->closed);
-    const XrXirFunction *probe = &module->functions[fixture->probe];
+    const XrXirFunction *probe = &module->functions[function];
     uint32_t instruction = UINT32_MAX;
     for (uint32_t i = 0; i < probe->instruction_count; ++i)
         if (probe->instructions[i].op == XR_XIR_CALL_INTRINSIC) { instruction = i; break; }
@@ -204,13 +233,14 @@ static void invalid_packets(Fixture *fixture) {
     while (at + sizeof(pattern) <= fixture->packet.length &&
         memcmp(fixture->packet.bytes + at, pattern, sizeof(pattern))) ++at;
     CHECK(at + sizeof(pattern) <= fixture->packet.length);
-    packet_rejected(fixture, at, 24, UINT32_MAX, XR_XIR_BAD_STRUCTURE, instruction);
-    packet_rejected(fixture, at, 24, 0, XR_XIR_BAD_STRUCTURE, instruction);
-    packet_rejected(fixture, at, 28, 1, XR_XIR_BAD_STRUCTURE, instruction);
-    packet_rejected(fixture, at, 12, 1, XR_XIR_BAD_STRUCTURE, instruction);
-    packet_rejected(fixture, at, 4, XR_XIR_I64, XR_XIR_BAD_TYPE, instruction);
-    packet_rejected(fixture, at, 16, 1, XR_XIR_BAD_STRUCTURE, instruction);
-    packet_rejected(fixture, at, 32, 1, XR_XIR_BAD_STRUCTURE, instruction);
+    PacketSite site = {fixture, at, function, instruction};
+    packet_rejected(&site, 24, UINT32_MAX, XR_XIR_BAD_STRUCTURE);
+    packet_rejected(&site, 24, 0, XR_XIR_BAD_STRUCTURE);
+    packet_rejected(&site, 28, 1, XR_XIR_BAD_STRUCTURE);
+    packet_rejected(&site, 12, 1, XR_XIR_BAD_STRUCTURE);
+    packet_rejected(&site, 4, XR_XIR_I64, XR_XIR_BAD_TYPE);
+    packet_rejected(&site, 16, 1, XR_XIR_BAD_STRUCTURE);
+    packet_rejected(&site, 32, 1, XR_XIR_BAD_STRUCTURE);
 }
 static void execute(XrXirInstance *instance, uint32_t function, const XrXirValue *arguments,
     uint32_t count, bool expected) {
@@ -237,27 +267,44 @@ static XrXirOutputStatus output_bytes(void *context, XrXirOutputStream stream,
 static XrXirOutputStatus output_group(void *context, const XrXirOutputGroup *value) {
     return xr_xir_output_render(&((Output *)context)->sink, value);
 }
+typedef struct PredicateCase {
+    uint32_t function;
+    const char *text, *pattern;
+    size_t text_length, pattern_length;
+    bool expected;
+} PredicateCase;
 static void consumers(Fixture *fixture) {
     XrXirArtifact *code = lowered(fixture);
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(UINT64_MAX, &domain) == XR_XIR_VALUE_OK);
-    const char text[] = "\xc3\xa9\0abc";
-    const char hit[] = "\0a";
-    const char *patterns[] = {hit, "z", ""};
-    const size_t lengths[] = {sizeof(hit) - 1, 1, 0};
-    const bool expected[] = {true, false, true};
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(*patterns); ++i) {
+    const char text[] = "\xc3\xa9\0abc", hit[] = "\0a";
+    const char prefix[] = "\xc3\xa9\0", suffix[] = "\0abc";
+#define CASE(function, value, pattern, expected) \
+    {fixture->function, value, pattern, sizeof(value) - 1, sizeof(pattern) - 1, expected}
+    const PredicateCase cases[] = {
+        CASE(probe, text, hit, true), CASE(probe, text, "z", false), CASE(probe, text, "", true),
+        CASE(probe, "abcdefghijklmnop", "cdefghijkl", true),
+        CASE(prefix, text, prefix, true), CASE(prefix, text, hit, false),
+        CASE(prefix, "xab", "ab", false), CASE(prefix, "", "", true), CASE(prefix, "abc", "abcd", false),
+        CASE(prefix, "abcdefghijklmnop", "abcdefghij", true),
+        CASE(suffix, text, "abc", true), CASE(suffix, text, hit, false), CASE(suffix, text, suffix, true),
+        CASE(suffix, "abx", "ab", false), CASE(suffix, "", "", true), CASE(suffix, "abc", "abcd", false),
+        CASE(suffix, "abcdefghijklmnop", "ghijklmnop", true)
+    };
+#undef CASE
+    for (size_t i = 0; i < sizeof(cases) / sizeof(*cases); ++i) {
+        const PredicateCase *test = &cases[i];
         XrXirValue arguments[2] = {{0}, {0}};
-        CHECK(xr_xir_string_new(domain, text, sizeof(text) - 1, &arguments[0]) == XR_XIR_VALUE_OK);
-        CHECK(xr_xir_string_new(domain, patterns[i], lengths[i], &arguments[1]) == XR_XIR_VALUE_OK);
-        XrXirCtfeRequest request = {.artifact = code, .function = fixture->probe,
+        CHECK(xr_xir_string_new(domain, test->text, test->text_length, &arguments[0]) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_string_new(domain, test->pattern, test->pattern_length, &arguments[1]) == XR_XIR_VALUE_OK);
+        XrXirCtfeRequest request = {.artifact = code, .function = test->function,
             .target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
             .arguments = arguments, .argument_count = 2,
             .limits = {XR_XIR_CTFE_MAX_STEPS, XR_XIR_CTFE_MAX_FRAME_BYTES, XR_XIR_CTFE_MAX_OUTPUT_BYTES}};
         memcpy(request.checked_identity, fixture->identity, sizeof(fixture->identity));
         XrXirValue folded = {0};
         CHECK(xr_xir_compile_ctfe_leaf(&request, &folded) == XR_XIR_CTFE_OK);
-        CHECK(folded.type == XR_XIR_BOOL && !folded.reserved && folded.payload == expected[i]);
+        CHECK(folded.type == XR_XIR_BOOL && !folded.reserved && folded.payload == test->expected);
         xr_xir_value_drop(&folded);
         xr_xir_value_drop(&arguments[0]); xr_xir_value_drop(&arguments[1]);
     }
@@ -271,21 +318,23 @@ static void consumers(Fixture *fixture) {
     XrXirInstance *instance = NULL;
     CHECK(xr_xir_instance_new(program, &config, &instance) == XR_XIR_CALL_READY);
     xr_xir_compile_program_drop(program);
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(*patterns); ++i) {
+    for (size_t i = 0; i < sizeof(cases) / sizeof(*cases); ++i) {
+        const PredicateCase *test = &cases[i];
         XrXirValue arguments[2] = {{0}, {0}};
-        CHECK(xr_xir_string_new(domain, text, sizeof(text) - 1, &arguments[0]) == XR_XIR_VALUE_OK);
-        CHECK(xr_xir_string_new(domain, patterns[i], lengths[i], &arguments[1]) == XR_XIR_VALUE_OK);
-        execute(instance, fixture->probe, arguments, 2, expected[i]);
+        CHECK(xr_xir_string_new(domain, test->text, test->text_length, &arguments[0]) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_string_new(domain, test->pattern, test->pattern_length, &arguments[1]) == XR_XIR_VALUE_OK);
+        execute(instance, test->function, arguments, 2, test->expected);
         xr_xir_value_drop(&arguments[0]); xr_xir_value_drop(&arguments[1]);
     }
     execute(instance, fixture->folded, NULL, 0, true);
-    const char expected_output[] = "true false true\n";
+    const char expected_output[] = "true false true\ntrue true false false true false\n";
     CHECK(output.size == sizeof(expected_output) - 1 &&
         !memcmp(output.bytes, expected_output, sizeof(expected_output) - 1));
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
     xr_xir_domain_drop(domain);
-    xr_xir_compile_artifact_free(code);
 }
+#include "intrinsic_evaluation.h"
+
 static void emit(Fixture *fixture, const char *path) {
     XrXirArtifact *code = lowered(fixture);
     XrXirCSource output = {0};
@@ -301,15 +350,23 @@ int main(int argc, char **argv) {
     registry();
     Fixture fixture = fixture_new();
     if (argc == 3 && !strcmp(argv[1], "--emit")) { emit(&fixture, argv[2]); return 0; }
-    CHECK(argc == 3);
-    predecessor_rejected(&fixture, argv[1]);
-    predecessor_rejected(&fixture, argv[2]);
-    invalid_packets(&fixture);
+    CHECK(argc == 6);
+    predecessor_rejected(&fixture, argv[1], 33, 93, false);
+    predecessor_rejected(&fixture, argv[2], 33, 93, false);
+    predecessor_rejected(&fixture, argv[3], 34, 94, false);
+    predecessor_rejected(&fixture, argv[4], 34, 94, false);
+    predecessor_rejected(&fixture, argv[5], 1, 94, true);
+    invalid_packets(&fixture, fixture.probe);
+    invalid_packets(&fixture, fixture.prefix);
+    invalid_packets(&fixture, fixture.suffix);
     consumers(&fixture);
+    evaluation_transport(&fixture);
     fixture_free(&fixture);
     source_rejected("fn bad()->bool{return \"x\".contains(1)}\n");
     source_rejected("fn bad()->bool{return \"x\".contains(\"x\",\"y\")}\n");
+    source_rejected("fn bad()->bool{return \"x\".startsWith(1)}\n");
+    source_rejected("fn bad()->bool{return \"x\".endsWith(\"x\",\"y\")}\n");
     lir_rejected();
-    puts("canonical intrinsic Source/packet/VM/CTFE passed");
+    puts("canonical string predicates Source/packet/VM/CTFE passed");
     return 0;
 }

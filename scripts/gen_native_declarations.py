@@ -942,12 +942,17 @@ def render_prelude_source(root):
 
 
 # Explicit IDs are independent of source member order and operation ordinals.
-INTRINSICS = ((1, 'string', 'STRING_CONTAINS', 'READ', True, 'xr_xir_string_contains'),)
+INTRINSICS = (
+    (1, 'string', 'STRING_CONTAINS', 'READ', True, 'xr_xir_string_contains'),
+    (2, 'string', 'STRING_STARTS_WITH', 'READ', True, 'xr_xir_string_starts_with'),
+    (3, 'string', 'STRING_ENDS_WITH', 'READ', True, 'xr_xir_string_ends_with'),
+)
 
 
 def render_intrinsics(root):
     lines = ['static const XrNativeIntrinsicDeclaration xr_native_intrinsics[] = {']
     used = set()
+    bindings = set()
     for identity, stem, operation, effects, ctfe, symbol in INTRINSICS:
         if not 0 < identity <= 0xffffffff or identity in used:
             raise ValueError('invalid or duplicate intrinsic ID')
@@ -956,6 +961,10 @@ def render_intrinsics(root):
         matches = [i for i, member in enumerate(members) if member.operation == operation]
         if len(matches) != 1:
             raise ValueError('intrinsic requires one canonical member: ' + operation)
+        binding = (stem, matches[0])
+        if binding in bindings:
+            raise ValueError('duplicate intrinsic member binding')
+        bindings.add(binding)
         if not re.fullmatch(r'[a-zA-Z_][a-zA-Z_0-9]*', symbol):
             raise ValueError('invalid intrinsic C symbol')
         lines.append(f'    {{UINT32_C({identity}), XR_NATIVE_INTRINSIC_{effects}, '

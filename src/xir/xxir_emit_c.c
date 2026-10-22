@@ -871,21 +871,19 @@ static void emit_io_step(CBuffer *buffer, const XrXirFunction *function,
             " xr_xir_scalar_store(state->frame, %uu, result); }\n", destination);
         break;
     }
-    case XR_XIR_CALL_INTRINSIC: case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH: {
-        const XrNativeIntrinsicDeclaration *call = op->op == XR_XIR_CALL_INTRINSIC ?
-            xr_xir_intrinsic(op->immediate) : NULL;
-        if (op->op == XR_XIR_CALL_INTRINSIC && !call) {
+    case XR_XIR_CALL_INTRINSIC: {
+        const XrNativeIntrinsicDeclaration *call = xr_xir_intrinsic(op->immediate);
+        if (!call) {
             emit_reject(buffer, XR_XIR_BAD_STRUCTURE);
             return;
         }
-        const uint32_t *args = call ? function->operands + op->args[0] : op->args;
+        const uint32_t *args = function->operands + op->args[0];
         EMIT_FORMAT(buffer, et_63f709fc7cc6dda0, " { XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
             " XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
             " bool result = false; if (!%s(&left, &right, &result)) goto limit;\n"
             " xr_xir_scalar_store(state->frame, %uu, result); }\n",
             layout->offsets[args[0]], layout->offsets[args[1]],
-            call ? call->c_symbol :
-            op->op == XR_XIR_STRING_STARTS_WITH ? "xr_xir_string_starts_with" : "xr_xir_string_ends_with", destination);
+            call->c_symbol, destination);
         break;
     }
     case XR_XIR_LT_STRING: case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING:
@@ -1099,7 +1097,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     }
     append(buffer," state->pc = %uu;\n",index+1);
     if (op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_LAST_INDEX_OF ||
-        op->op == XR_XIR_CALL_INTRINSIC || (op->op >= XR_XIR_STRING_STARTS_WITH && op->op <= XR_XIR_STRING_ENDS_WITH) ||
+        op->op == XR_XIR_CALL_INTRINSIC ||
         op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
         (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
         op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT) {

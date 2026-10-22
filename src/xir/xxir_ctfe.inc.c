@@ -76,7 +76,7 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     case XR_XIR_F64_TRY_PARSE: case XR_XIR_STRING_COPY_BYTES: case XR_XIR_STRING_REPLACE:
     case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING:
     case XR_XIR_LT_STRING: case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING:
-    case XR_XIR_CALL_INTRINSIC: case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH:
+    case XR_XIR_CALL_INTRINSIC:
     case XR_XIR_STRING_INDEX_OF: case XR_XIR_STRING_LAST_INDEX_OF: *work = 8; return true;
     case XR_XIR_OWNED_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_READ: case XR_XIR_OWNED_RETAIN:
     case XR_XIR_OWNED_LOCAL_WRITE: *work = 2; return true;

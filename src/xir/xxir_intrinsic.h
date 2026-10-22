@@ -28,7 +28,6 @@ static inline const XrNativeIntrinsicDeclaration *xr_xir_intrinsic(int64_t id) {
     if (id <= 0 || (uint64_t)id > UINT32_MAX) return NULL;
     const XrNativeIntrinsicDeclaration *call = xr_native_intrinsic_by_id((uint32_t)id);
     if (!call || call->effects != XR_NATIVE_INTRINSIC_READ ||
-        call->implementation != XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_CONTAINS ||
         call->owner->id != XR_NATIVE_DECLARATION_STRING ||
         call->member->receiver != XR_NATIVE_RECEIVER_READ ||
         call->member->allocation != XR_NATIVE_ALLOCATION_NO_HEAP ||
@@ -36,6 +35,12 @@ static inline const XrNativeIntrinsicDeclaration *xr_xir_intrinsic(int64_t id) {
         strcmp(call->member->failures, "none") ||
         call->member->is_static || !call->member->is_method)
         return NULL;
+    switch (call->implementation) {
+    case XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_CONTAINS:
+    case XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_STARTS_WITH:
+    case XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_ENDS_WITH: break;
+    default: return NULL;
+    }
     return call;
 }
 static inline bool xr_xir_intrinsic_parameter(const XrNativeIntrinsicDeclaration *call,

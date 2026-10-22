@@ -519,16 +519,16 @@ static XrXirRunStatus vm_io_step(ScalarRun *run, VmState *state, XrXirAction *ac
         if (status == XR_XIR_VALUE_OK) xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], result);
         return value_run_status(status);
     }
-    case XR_XIR_CALL_INTRINSIC: case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH: {
-        const XrNativeIntrinsicDeclaration *call = op->op == XR_XIR_CALL_INTRINSIC ?
-            xr_xir_intrinsic(op->immediate) : NULL;
-        if (op->op == XR_XIR_CALL_INTRINSIC && !call) return XR_XIR_RUN_BAD_ARTIFACT;
-        const uint32_t *args = call ? run->function->operands + op->args[0] : op->args;
+    case XR_XIR_CALL_INTRINSIC: {
+        const XrNativeIntrinsicDeclaration *call = xr_xir_intrinsic(op->immediate);
+        if (!call) return XR_XIR_RUN_BAD_ARTIFACT;
+        const uint32_t *args = run->function->operands + op->args[0];
         XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[args[0]])};
         XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[args[1]])};
         bool result = false;
-        bool valid = call ? xr_xir_string_contains(&left, &right, &result) :
-            op->op == XR_XIR_STRING_STARTS_WITH ? xr_xir_string_starts_with(&left, &right, &result) :
+        bool valid = call->implementation == XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_CONTAINS ?
+            xr_xir_string_contains(&left, &right, &result) :
+            call->implementation == XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_STARTS_WITH ? xr_xir_string_starts_with(&left, &right, &result) :
             xr_xir_string_ends_with(&left, &right, &result);
         if (valid) xr_xir_scalar_store(run->frame, run->layout->offsets[result_id], result);
         state->instruction = next;
@@ -600,7 +600,7 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
         return XR_XIR_RUN_OK;
     }
     if (op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_LAST_INDEX_OF ||
-        op->op == XR_XIR_CALL_INTRINSIC || (op->op >= XR_XIR_STRING_STARTS_WITH && op->op <= XR_XIR_STRING_ENDS_WITH) ||
+        op->op == XR_XIR_CALL_INTRINSIC ||
         op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
         (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
         op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT)

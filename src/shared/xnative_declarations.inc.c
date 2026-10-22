@@ -604,4 +604,6 @@ static const XrNativeTypeDeclaration xr_native_stringbuilder = {
 
 static const XrNativeIntrinsicDeclaration xr_native_intrinsics[] = {
     {UINT32_C(1), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[4], true, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_CONTAINS, "xr_xir_string_contains"},
+    {UINT32_C(2), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[14], true, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_STARTS_WITH, "xr_xir_string_starts_with"},
+    {UINT32_C(3), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[15], true, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_ENDS_WITH, "xr_xir_string_ends_with"},
 };
