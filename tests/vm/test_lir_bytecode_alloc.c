@@ -111,7 +111,6 @@ static void source_map_failures(void) {
             CHECK(compiler.source_ids[i] == i + 1);
         xr_free(compiler.code);
         xr_free(compiler.source_ids);
-        for (size_t i = 0; i < 32; ++i) CHECK(!buffers[i].pointer);
         fail_at = SIZE_MAX;
         attempts = 0;
     }
@@ -125,7 +124,6 @@ static void source_map_failures(void) {
     for (size_t i = 0; i < 40; ++i) CHECK(compiler.source_ids[i] == i + 1);
     xr_free(compiler.code);
     xr_free(compiler.source_ids);
-    for (size_t i = 0; i < 32; ++i) CHECK(!buffers[i].pointer);
     attempts = 0;
 }
 

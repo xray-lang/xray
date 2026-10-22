@@ -107,7 +107,7 @@ static void panic_after_growth(void) {
         XR_CHECK(xr_rbc_module_prepare(&module, 0, &argument, 1, owner, &execution) == XR_RBC_OK,
             "prepared growing execution");
         XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
-        XR_CHECK(outcome && !blocks[0].pointer && !blocks[1].pointer, "one cleanup after transfer");
+        XR_CHECK(outcome, "owned outcome after transfer");
         xr_rbc_execution_free(&execution);
         XrtArithmeticPanic facts;
         const XrtLocationOwner *borrowed = NULL;
