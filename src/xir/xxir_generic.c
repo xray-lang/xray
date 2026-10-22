@@ -42,9 +42,11 @@ XrXirStatus xr_xir_compile_type_constraints(const XrXirCompileContext *compile_c
     XrXirCompileContext *remaining = &compile_state;
     if (!remaining || !xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
 
-    if (!module || constraints.interface_count || constraints.interfaces ||
-        constraints.markers & ~XR_XIR_CONSTRAINT_MASK || !xr_xir_type_in_context(module, function, type) ||
+    if (!module || function >= module->function_count || constraints.interface_count || constraints.interfaces ||
+        constraints.markers & ~XR_XIR_CONSTRAINT_MASK ||
         xr_xir_type_is_cell(module->types, type)) return XR_XIR_BAD_TYPE;
+    if (type == XR_XIR_NEVER ? !(constraints.markers & XR_XIR_CONSTRAINT_ERROR) :
+        !xr_xir_type_in_context(module, function, type)) return XR_XIR_BAD_TYPE;
     XrXirProofContext context = {module,{XR_XIR_CONTEXT_FUNCTION,function,0}};
     uint32_t borrowed=0;
     XrXirStatus status=xr_xir_compile_view_type_flags(remaining,module->types,type,&borrowed);
@@ -165,7 +167,8 @@ XrXirStatus xr_xir_compile_generic_call(const XrXirCompileContext *compile_conte
         XrXirType argument = from->arguments[first+a];
         XrXirStatus status = xr_xir_binder_kind(to,a) == XR_XIR_BINDER_RESULT_VARIABLE ?
             xr_xir_compile_result_argument(remaining, module, caller, argument) :
-            xr_xir_compile_type_satisfies(remaining, module, caller, argument, (XrXirConstraint){0});
+            xr_xir_compile_type_satisfies(remaining, module, caller, argument,
+                (XrXirConstraint){.markers=to->constraints[a].markers & XR_XIR_CONSTRAINT_ERROR});
         if (xr_xir_binder_kind(to,a) == XR_XIR_BINDER_TYPE && result_symbol(from,argument)) return XR_XIR_BAD_TYPE;
         if (status != XR_XIR_OK) return status;
         XrXirProofContext context = {module, {XR_XIR_CONTEXT_FUNCTION,caller,0}};

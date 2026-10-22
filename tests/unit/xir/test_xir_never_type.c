@@ -15,6 +15,8 @@
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include "xir_construction_fixture.h"
+#include "xir/xxir_generic.h"
 
 #define CHECK(expression) do { if (!(expression)) { \
     fprintf(stderr,"FAIL %d: %s\n",__LINE__,#expression); exit(1); \
@@ -85,6 +87,49 @@ static void check_no_value(const XrXirCompileContext *work,const XrXirTypes *typ
     CHECK(xr_xir_compile_type_descriptors_verify(work,&invalid)==XR_XIR_BAD_TYPE);
 }
 
+static void check_generic_error_argument(const XrXirCompileContext *work) {
+    const XrXirBlock blocks[2]={{0,2,0,0},{0,1,0,0}};
+    const XrXirInstruction caller[]={
+        {XR_XIR_CALL,XR_XIR_UNIT,{0},{0},1,{0,1}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
+    const XrXirInstruction body={XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
+    XrXirFunction functions[]={
+        {.name="entry",.name_length=5,.result=XR_XIR_UNIT,.blocks=&blocks[0],.block_count=1,
+         .instructions=caller,.instruction_count=2},
+        {.name="generic",.name_length=7,.result=XR_XIR_UNIT,.blocks=&blocks[1],.block_count=1,
+         .instructions=&body,.instruction_count=1}};
+    XrXirConstraint bound={.markers=XR_XIR_CONSTRAINT_ERROR};
+    const XrXirType argument=XR_XIR_NEVER;
+    const XrXirGeneric generics[]={
+        {.arguments=&argument,.argument_count=1},
+        {.constraints=&bound,.parameter_count=1}};
+    XrXirModule module={.stage=XR_XIR_BUILT,.functions=functions,.function_count=2,
+        .generics=generics,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirArtifact *checked=NULL,*closed=NULL;
+    bound.markers=0;
+    CHECK(xir_fixture_check(work,&module,&checked,NULL)==XR_XIR_BAD_TYPE && !checked);
+    bound.markers=XR_XIR_CONSTRAINT_ERROR;
+    CHECK(xir_fixture_check(work,&module,&checked,NULL)==XR_XIR_OK);
+    XrXirDiagnostic diagnostic={0};
+    XrXirStatus status=xr_xir_compile_specialize(checked,&closed,&diagnostic);
+    if (status!=XR_XIR_OK) fprintf(stderr,"specialize E status%u f%u b%u i%u reason%u\n",
+        (unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction,(unsigned)diagnostic.reason);
+    CHECK(status==XR_XIR_OK);
+    const XrXirModule *result=xr_xir_compile_artifact_module(closed);
+    bool found=false;
+    for (uint32_t f=0;f<result->function_count;++f) {
+        uint32_t original=UINT32_MAX;
+        CHECK(xr_xir_compile_specialization_origin(closed,f,&original)==XR_XIR_OK);
+        if (original==1) {
+            found=true;
+        }
+    }
+    CHECK(found);
+    CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);
+    xr_xir_compile_artifact_free(checked);
+}
+
 int main(void) {
     XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
     XrXirCompileContext work={0};
@@ -104,6 +149,7 @@ int main(void) {
     check_error_expression(&work,owned);
     check_no_value(&work,owned);
     xr_xir_compile_types_free(owned);
+    check_generic_error_argument(&work);
     xr_compile_resources_release(work.resources);
     puts("Never error constraints, substitution, owned clone and value rejection passed");
     return 0;

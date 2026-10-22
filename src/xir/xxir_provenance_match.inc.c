@@ -387,8 +387,10 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
             /* Closed substitutions prove the storage domain. Source callers
              * already proved visibility; a callee's template scope must not
              * acquire or reject private concrete declaration access. */
+            uint32_t markers=c->source->generics[origin->function].constraints[a].markers & XR_XIR_CONSTRAINT_ERROR;
             XrXirStatus status = result && origin->arguments[a] == XR_XIR_UNIT ? XR_XIR_OK :
-                xr_xir_compile_type_constraints(c->remaining, c->destination, f, origin->arguments[a], (XrXirConstraint){0});
+                xr_xir_compile_type_constraints(c->remaining, c->destination, f, origin->arguments[a],
+                    (XrXirConstraint){.markers=markers});
             if (status == XR_XIR_OK) status = xr_xir_compile_constraints_prove(c->remaining, &environment, &use);
             if (status != XR_XIR_OK) return status;
         }
