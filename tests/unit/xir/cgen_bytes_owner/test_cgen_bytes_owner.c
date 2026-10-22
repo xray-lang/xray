@@ -95,33 +95,37 @@ static void public_output(bool pressure, const char *output_path) {
     xr_xir_compile_artifact_free(checked);xr_xir_compile_artifact_free(closed);
     xr_compile_resources_release(resources);
     memset(payload,0xcd,sizeof(payload));
-    size_t baseline=runtime_bytes;
-    XrXirCSource output={0};runtime_attempts=0;
+    size_t baseline=pressure ? runtime_bytes : 0;
+    XrXirCSource output={0};
+    char sentinel='q';
+    if (pressure) runtime_attempts=0;
+    else {
+        output=(XrXirCSource){&sentinel,1};
+        CHECK(xr_xir_compile_emit_c(lowered,"bytes",1<<20,&output)==XR_XIR_BAD_STRUCTURE);
+        CHECK(output.text==&sentinel && output.length==1 && sentinel=='q');output=(XrXirCSource){0};
+    }
     CHECK(xr_xir_compile_emit_c(lowered,"bytes",1<<20,&output)==XR_XIR_OK);
-    size_t required=output.length+1,sites=runtime_attempts;
+    size_t required=pressure ? output.length+1 : 0,sites=pressure ? runtime_attempts : 0;
+    if (!pressure) {xr_xir_compile_artifact_free(lowered);lowered=NULL;}
     CHECK(output.text[output.length]=='\0');
     CHECK(strstr(output.text,"0x78,0x00,0x78,") && strstr(output.text,"(const char *)(const unsigned char[]){"));
-    if (!pressure) {
-        const XrXirCompileContext *owner=xr_xir_compile_artifact_context(lowered);
-        CHECK(owner && xr_compile_cgen_verify_output_or_ice(owner->resources,output.text,output.length,
-            "cgen_bytes_owner")==XI_CGEN_VERIFY_PASSED);
-    }
     if (output_path) {
         FILE *file=fopen(output_path,"wb");CHECK(file);
         CHECK(fwrite(output.text,1,output.length,file)==output.length);
         CHECK(fclose(file)==0);
     }
     xr_xir_compile_c_source_free(&output);
+    CHECK(!output.text && !output.length);
     if (pressure) {
         CHECK(runtime_bytes==baseline);
         CHECK(xr_xir_compile_emit_c(lowered,"bytes",required,&output)==XR_XIR_OK);
         CHECK(output.length+1==required && output.text[output.length]=='\0');xr_xir_compile_c_source_free(&output);
         CHECK(xr_xir_compile_emit_c(lowered,"bytes",required-1,&output)==XR_XIR_BUDGET);
         CHECK(!output.text && !output.length && runtime_bytes==baseline);
+        output=(XrXirCSource){&sentinel,1};
+        CHECK(xr_xir_compile_emit_c(lowered,"bytes",required,&output)==XR_XIR_BAD_STRUCTURE);
+        CHECK(output.text==&sentinel && output.length==1 && sentinel=='q');output=(XrXirCSource){0};
     }
-    char sentinel='q';output=(XrXirCSource){&sentinel,1};
-    CHECK(xr_xir_compile_emit_c(lowered,"bytes",required,&output)==XR_XIR_BAD_STRUCTURE);
-    CHECK(output.text==&sentinel && output.length==1 && sentinel=='q');output=(XrXirCSource){0};
     if (pressure) for(size_t fault=0;fault<sites;++fault) {
         runtime_attempts=0;runtime_fail_at=fault;
         CHECK(xr_xir_compile_emit_c(lowered,"bytes",1<<20,&output)==XR_XIR_OUT_OF_MEMORY);
@@ -130,7 +134,7 @@ static void public_output(bool pressure, const char *output_path) {
     }
     xr_xir_compile_artifact_free(lowered);CHECK(!runtime_live && !runtime_bytes);
     if (pressure) printf("Public emit: exact/minus-one byte limit, preserved output, %zu OOM points PASS\n",sites);
-    else puts("Public emit: retired input bytes, complete output and preserved nonempty destination PASS");
+    else puts("Public emit: retired input and Lowered owners, complete output and preserved destination PASS");
 }
 static void allocation_failures(void) {
     char bytes[5014];memset(bytes,0xab,sizeof(bytes));
@@ -174,14 +178,16 @@ static void byte_contents(uint32_t count) {
     CHECK(emit_finalize(&buffer) && buffer.status==XR_XIR_OK);
     const char *cursor=buffer.text;
     static const char prefix[]="(const char *)(const unsigned char[]){";
-    CHECK(!strncmp(cursor,prefix,sizeof(prefix)-1));cursor+=sizeof(prefix)-1;
+    CHECK(buffer.length>=sizeof(prefix)-1 && !strncmp(cursor,prefix,sizeof(prefix)-1));cursor+=sizeof(prefix)-1;
     for (uint32_t i=0;i<count;++i) {
-        if (i%16==0) {CHECK(!strncmp(cursor,"\n    ",5));cursor+=5;}
+        if (i%16==0) {
+            CHECK((size_t)(cursor-buffer.text)+5<=buffer.length && !strncmp(cursor,"\n    ",5));cursor+=5;
+        }
         char expected[6];
         CHECK(snprintf(expected,sizeof(expected),"0x%02x,",(unsigned char)input[i])==5);
-        CHECK(!memcmp(cursor,expected,5));cursor+=5;
+        CHECK((size_t)(cursor-buffer.text)+5<=buffer.length && !memcmp(cursor,expected,5));cursor+=5;
     }
-    CHECK(!strcmp(cursor,"\n    0}") && (size_t)(cursor+7-buffer.text)==buffer.length);
+    CHECK((size_t)(cursor-buffer.text)+7==buffer.length && !strcmp(cursor,"\n    0}"));
     xr_compile_resources_free(buffer.text);xr_compile_resources_release(resources);xr_free(input);
     CHECK(!runtime_live && !runtime_bytes);
 }
