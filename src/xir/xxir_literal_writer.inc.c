@@ -26,7 +26,7 @@ static bool literal_provider(SourceContext *ctx,const XirCtfeInstanceView *view,
         return source_fail(ctx,NULL,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BUDGET:ctx->diagnostic.status,"literal provider name failed");
     XrXirFunctionIdentity identity=ctx->identities[original];
     ctx->function=f;ctx->module=identity.module;++ctx->function_count;
-    ctx->functions[f]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),NULL,0,result,NULL,0,NULL,0,NULL,0};
+    ctx->functions[f]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),NULL,0,result,NULL,0,NULL,0,NULL,0, XR_XIR_NEVER};
     ctx->identities[f]=(XrXirFunctionIdentity){.module=identity.module,.nominal_owner=identity.nominal_owner,
         .method_kind=identity.nominal_owner?XR_XIR_MEMBER_HELPER:XR_XIR_NON_MEMBER};
     ctx->bodies[f].module=identity.module;ctx->returned=false;

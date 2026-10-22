@@ -395,6 +395,10 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
             if (status != XR_XIR_OK) return status;
         }
         const XrXirFunction *from = &c->source->functions[origin->function], *to = &c->destination->functions[f];
+        XrXirStatus error_status=xr_xir_compile_type_substitution_matches_between_scratch(c->remaining,
+            c->source->types,c->destination->types,origin->arguments,origin->argument_count,
+            from->error_type,to->error_type,&c->scratch);
+        if (error_status!=XR_XIR_OK) return error_status;
         bool is_default=false;
         XrXirStatus effect_status=provenance_effect_default(c,origin,&is_default);
         if (effect_status!=XR_XIR_OK) return effect_status;

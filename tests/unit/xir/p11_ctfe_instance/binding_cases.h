@@ -38,7 +38,7 @@ static XrXirStatus binding_source(XrXirCompileContext *context,XrXirArtifact **o
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     XrXirBlock block={.first=0,.count=2};
     functions[count]=(XrXirFunction){.name="$constant",.name_length=9,.result=XR_XIR_I64,
-        .blocks=&block,.block_count=1,.instructions=ops,.instruction_count=2};
+        .blocks=&block,.block_count=1,.instructions=ops,.instruction_count=2,.error_type=XR_XIR_NEVER};
     identities[count]=identities[actual[0].helper];
     if (mode==2) identities[count].exported=1;
     if (mode==3) ops[0].op=XR_XIR_ADD_INT;

@@ -34,7 +34,7 @@ static bool source_binding_accessor(SourceContext *ctx,const SourceName *symbol,
     if(parameters){parameter=source_alloc(ctx,1,sizeof(*parameter));if(!parameter)return false;*parameter=input;}
     ctx->function=function;ctx->module=root;ctx->locals=ctx->scope=NULL;
     ctx->loop=NULL;ctx->facts=NULL;ctx->epochs=NULL;ctx->flow_alternatives=0;ctx->returned=false;
-    ctx->functions[function]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),parameter,parameters,type,NULL,0,NULL,0,NULL,0};
+    ctx->functions[function]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),parameter,parameters,type,NULL,0,NULL,0,NULL,0, XR_XIR_NEVER};
     ctx->bodies[function].module=root;ctx->bodies[function].infer_result=true;
     ctx->identities[function]=(XrXirFunctionIdentity){.module=root,.exported=1,.promises=XR_XIR_FUNCTION_NO_SUSPEND};
     if(push) {

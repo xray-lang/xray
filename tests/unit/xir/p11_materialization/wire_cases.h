@@ -25,10 +25,10 @@ static void wire_built(const XrXirCompileContext *context) {
     XrXirBlock blocks[]={{0,1,0,0},{0,3,0,0},{0,4,0,0}};
     uint32_t operands[]={0,1};XrXirType pair=(XrXirType)256,field_types[]={XR_XIR_I64,XR_XIR_I64};
     XrXirFunction functions[]={
-        {"init",4,NULL,0,XR_XIR_UNIT,blocks,1,&init,1,NULL,0},
-        {"entry",5,NULL,0,XR_XIR_I64,blocks+1,1,entry,3,operands,1},
-        {"make",4,NULL,0,(XrXirType)256,blocks+2,1,make,4,operands,2},
-        {"sum",3,&pair,1,XR_XIR_I64,blocks+2,1,sum,4,NULL,0}};
+        {"init",4,NULL,0,XR_XIR_UNIT,blocks,1,&init,1,NULL,0,XR_XIR_NEVER},
+        {"entry",5,NULL,0,XR_XIR_I64,blocks+1,1,entry,3,operands,1,XR_XIR_NEVER},
+        {"make",4,NULL,0,(XrXirType)256,blocks+2,1,make,4,operands,2,XR_XIR_NEVER},
+        {"sum",3,&pair,1,XR_XIR_I64,blocks+2,1,sum,4,NULL,0,XR_XIR_NEVER}};
     XrXirSourceModule source={"alpha",5,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[]={
         {0},{.exported=1},{.nominal_owner=1,.method_kind=XR_XIR_MATERIALIZER},

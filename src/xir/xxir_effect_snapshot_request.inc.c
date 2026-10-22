@@ -19,6 +19,7 @@ typedef struct EffectBodyFunctionHead {
     uint32_t block_count,instruction_count;
     const uint32_t *operands;
     uint32_t operand_count;
+    XrXirType error_type;
 } EffectBodyFunctionHead;
 /* A partial head request retains the same storage preconditions. It writes
  * only the two real dimensions consumed by this call edge, never a complete
@@ -79,9 +80,9 @@ static XrXirStatus effect_body_raw_head(const EffectBodyRequest *request,uint32_
         if (!effect_body_read_work(&request->read,11+sizeof(*dimensions))) return XR_XIR_BUDGET;
         *dimensions=(EffectBodyFunctionDimensions){a->parameter_count,a->instruction_count};return XR_XIR_OK;
     }
-    if (!effect_body_read_work(&request->read,11+sizeof(*output))) return XR_XIR_BUDGET;
+    if (!effect_body_read_work(&request->read,12+sizeof(*output))) return XR_XIR_BUDGET;
     *output=(EffectBodyFunctionHead){a->name,a->name_length,a->parameters,a->parameter_count,
-        a->result,a->blocks,a->block_count,a->instruction_count,a->operands,a->operand_count};
+        a->result,a->blocks,a->block_count,a->instruction_count,a->operands,a->operand_count,a->error_type};
     return XR_XIR_OK;
 }
 static XrXirStatus effect_body_raw_instruction(const EffectBodyRequest *request,
@@ -144,9 +145,9 @@ static XrXirStatus effect_body_owned_head(const EffectBodyRequest *request,uint3
         if (!effect_body_read_work(&request->read,11+sizeof(*dimensions))) return XR_XIR_BUDGET;
         *dimensions=(EffectBodyFunctionDimensions){a->parameter_count,a->instruction_count};return XR_XIR_OK;
     }
-    if (!effect_body_read_work(&request->read,11+sizeof(*output))) return XR_XIR_BUDGET;
+    if (!effect_body_read_work(&request->read,12+sizeof(*output))) return XR_XIR_BUDGET;
     *output=(EffectBodyFunctionHead){a->name,a->name_length,a->parameters,a->parameter_count,
-        a->result,a->blocks,a->block_count,a->instruction_count,a->operands,a->operand_count};
+        a->result,a->blocks,a->block_count,a->instruction_count,a->operands,a->operand_count,a->error_type};
     return XR_XIR_OK;
 }
 static XrXirStatus effect_body_owned_instruction(const EffectBodyRequest *request,

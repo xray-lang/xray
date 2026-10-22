@@ -22,7 +22,7 @@ static bool source_iterator_cleanup(SourceContext *ctx,AstNode *node,SourceValue
     body->node=node;body->module=owner->module;body->parameters=parameter;body->type_owner=owner->type_owner;
     body->generic_owner=owner->generic_owner;body->type_parameters=owner->type_parameters;
     body->type_parameter_count=owner->type_parameter_count;body->declaration=declaration.declaration;
-    ctx->functions[index]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),parameter,1,XR_XIR_UNIT,NULL,0,NULL,0,NULL,0};
+    ctx->functions[index]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),parameter,1,XR_XIR_UNIT,NULL,0,NULL,0,NULL,0, XR_XIR_NEVER};
     ctx->generics[index].parameter_count=ctx->generics[outer].parameter_count;
     ctx->generics[index].constraints=ctx->generics[outer].constraints;
     ctx->identities[index]=ctx->identities[outer];

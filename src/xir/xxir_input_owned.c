@@ -68,7 +68,8 @@ XR_FUNC XrXirStatus xir_input_function_read_costs(const XirInputWork *work,
 }
 static XrXirStatus input_head_shape(const XirInputWork *work,const XirInputFunctionHead *head) {
     if(!head)return XR_XIR_BAD_STRUCTURE;
-    if(!input_work(work,8))return XR_XIR_BUDGET;
+    if(!input_work(work,9))return XR_XIR_BUDGET;
+    if(head->error_type==XR_XIR_UNIT)return XR_XIR_BAD_TYPE;
     if((head->name_length&&!head->name)||(head->parameter_count&&!head->parameters)||
         (head->block_count&&!head->blocks)||(head->operand_count&&!head->operands)||
         head->parameter_count>UINT32_MAX-head->instruction_count ||
@@ -119,9 +120,10 @@ static XrXirStatus input_records_equal(const XirInputWork *work,
 }
 static XrXirStatus input_metadata_equal(const XirInputWork *work,
     const XirInputFunctionHead *a,const XirInputFunctionHead *b) {
-    if(!input_work(work,12))return XR_XIR_BUDGET;
+    if(!input_work(work,13))return XR_XIR_BUDGET;
     if(a->name_length!=b->name_length || a->parameter_count!=b->parameter_count || a->result!=b->result ||
-        a->block_count!=b->block_count || a->instruction_count!=b->instruction_count || a->operand_count!=b->operand_count)
+        a->block_count!=b->block_count || a->instruction_count!=b->instruction_count || a->operand_count!=b->operand_count ||
+        a->error_type!=b->error_type)
         return XR_XIR_BAD_STRUCTURE;
     for(uint32_t i=0;i<a->name_length;++i) {
         if(!input_work(work,3))return XR_XIR_BUDGET;
@@ -298,7 +300,7 @@ XR_FUNC XrXirStatus xir_input_function_raw_match(const XrXirCompileContext *cont
         (source->instruction_count&&!source->instructions))return XR_XIR_BAD_STRUCTURE;
     if(!xir_compile_work(context,sizeof(XirInputFunctionHead)))return XR_XIR_BUDGET;
     XirInputFunctionHead head={source->name,source->name_length,source->parameters,source->parameter_count,
-        source->result,source->blocks,source->block_count,source->instruction_count,source->operands,source->operand_count};
+        source->result,source->blocks,source->block_count,source->instruction_count,source->operands,source->operand_count,source->error_type};
     XirInputWork work={context,input_compile_consume};
     XrXirStatus status=input_head_shape(&work,&head);
     if(status==XR_XIR_OK)status=xir_input_function_shape(&work,input);

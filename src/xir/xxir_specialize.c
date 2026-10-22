@@ -351,6 +351,7 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
     to->parameters = parameters; to->instructions = ops;
     const SpecInstance *instance = &c->instances[index];
     to->result = spec_type(c, instance, source->result);
+    to->error_type = spec_type(c, instance, source->error_type);
     for (uint32_t p = 0; p < source->parameter_count; ++p) parameters[p] = spec_type(c, instance, source->parameters[p]);
     for (uint32_t a=0;a<effect_count;++a) {
         if (!spec_work(c,2)) return UINT32_MAX;

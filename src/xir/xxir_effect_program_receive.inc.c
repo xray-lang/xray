@@ -18,7 +18,7 @@ static XrXirStatus effect_program_layout_head(const XrXirCompileContext *work,
     if (status!=XR_XIR_OK) return status;
     if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
     *output=(XirInputFunctionHead){head.name,head.name_length,head.parameters,head.parameter_count,
-        head.result,head.blocks,head.block_count,head.instruction_count,head.operands,head.operand_count};
+        head.result,head.blocks,head.block_count,head.instruction_count,head.operands,head.operand_count,head.error_type};
     return XR_XIR_OK;
 }
 static XrXirStatus effect_program_layout_instruction(const XrXirCompileContext *work,

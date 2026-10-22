@@ -938,12 +938,15 @@ static XrXirStatus proof_function_declaration(const XrXirModule *module, uint32_
     XrXirProofContext context = {module,{XR_XIR_CONTEXT_FUNCTION,index,0}};
     const XrXirFunction *function = &module->functions[index];
     if (function->parameter_count && !function->parameters) return XR_XIR_BAD_STRUCTURE;
+    if (function->error_type == XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
     XrXirStatus status = xr_xir_compile_method_signature_verify(budget, module, index);
     if (status == XR_XIR_OK) status = xr_xir_compile_context_constraints_verify(budget, &context);
     if (status == XR_XIR_OK) status = proof_static_owner(&context,budget);
     for (uint32_t p = 0; status == XR_XIR_OK && p < function->parameter_count; ++p)
         status = xr_xir_compile_type_use_verify_scratch(budget, &context, function->parameters[p], scratch);
     if (status == XR_XIR_OK) status = xr_xir_compile_type_use_verify_scratch(budget, &context, function->result, scratch);
+    if (status == XR_XIR_OK) status = xr_xir_compile_type_markers_prove(budget, &context,
+        function->error_type, XR_XIR_CONSTRAINT_ERROR);
     const XrXirGeneric *g = module->generics ? &module->generics[index] : NULL;
     for (uint32_t a = 0; status == XR_XIR_OK && g && a < g->argument_count; ++a) {
         if (xr_xir_type_is_cell(module->types,g->arguments[a])) return XR_XIR_BAD_TYPE;

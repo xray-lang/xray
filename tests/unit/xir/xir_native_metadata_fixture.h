@@ -29,7 +29,7 @@ static XrXirStatus native_metadata_fixture(const XrXirCompileContext *context,
         instructions[i][0] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}};
         instructions[i][1] = (XrXirInstruction) {XR_XIR_MATCH_FAIL, XR_XIR_UNIT, {0}, {0}, 0, {0}};
         functions[i] = (XrXirFunction) {names[i], (uint32_t)length, entry->parameters,
-            entry->parameter_count, entry->result, &block, 1, instructions[i], 2, NULL, 0};
+            entry->parameter_count, entry->result, &block, 1, instructions[i], 2, NULL, 0, XR_XIR_NEVER};
     }
     XrXirModule module = {XR_XIR_BUILT, functions, spec->entry_count, spec->declarations, NULL, spec->types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;

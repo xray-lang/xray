@@ -34,7 +34,7 @@ static XrXirStatus layout_raw_head(const XrXirCompileContext *context,
     const XrXirFunction *function=&module->functions[f];
     *output=(XirInputFunctionHead){function->name,function->name_length,function->parameters,
         function->parameter_count,function->result,function->blocks,function->block_count,
-        function->instruction_count,function->operands,function->operand_count};
+        function->instruction_count,function->operands,function->operand_count,function->error_type};
     return XR_XIR_OK;
 }
 static XrXirStatus layout_raw_instruction(const XrXirCompileContext *context,

@@ -24,7 +24,8 @@ static XrXirArtifact *literal_runtime_callers(XrXirCompileContext *context,const
         ops[i][0]=(XrXirInstruction){XR_XIR_CALL,XR_XIR_I64,{0},{0},provider,{0}};
         ops[i][1]=(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
         functions[count+i]=(XrXirFunction){.name=i?"literal_two":"literal_one",.name_length=11,.result=XR_XIR_I64,
-            .blocks=&blocks[i],.block_count=1,.instructions=ops[i],.instruction_count=2};
+            .blocks=&blocks[i],.block_count=1,.instructions=ops[i],.instruction_count=2,
+            .error_type=module->functions[provider].error_type};
         identities[count+i]=(XrXirFunctionIdentity){.module=module->declarations->functions[provider].module,.exported=1};
     }
     XrXirProvenance proof=*module->provenance;proof.contract_count=count+2;proof.contracts=contracts;

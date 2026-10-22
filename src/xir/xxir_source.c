@@ -2179,7 +2179,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     if (decl->param_count && !body->parameters) return false;
     XrXirFunction *function = &ctx->functions[index];
     *function = (XrXirFunction) {decl->name, (uint32_t) source_text_size(ctx, decl->name), body->parameters,
-        (uint32_t) decl->param_count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
+        (uint32_t) decl->param_count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER};
     if (!source_type(ctx, decl->return_type, &function->result)) return false;
     if (identity.test_role && function->result != XR_XIR_UNIT)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "test functions and hooks cannot return a value");
@@ -2759,8 +2759,11 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
         source_query_range(ctx, node, NULL))) return false;
     body->declaration = declaration.declaration;
     if (!source_query_syntax_role(ctx, body->declaration, XR_XIR_SOURCE_SYNTAX_CLOSURE, 0)) return false;
+    /* An unnamed body carries an explicit internal upper bound, not a proof
+     * of its source-level callable error contract. */
     ctx->functions[index] = (XrXirFunction) {name, (uint32_t) source_text_size(ctx, name), body->parameters,
-        scan.count + (uint32_t) decl->param_count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
+        scan.count + (uint32_t) decl->param_count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0,
+        node->type == AST_FUNCTION_DECL ? XR_XIR_NEVER : XR_XIR_ERROR};
     ctx->identities[index].module = ctx->module;
     ctx->identities[index].nominal_owner = ctx->identities[outer].nominal_owner;
     ctx->identities[index].method_kind = ctx->identities[index].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
@@ -2912,7 +2915,7 @@ static bool build_bodies(SourceContext *ctx) {
     ctx->bodies[ctx->function].module = ctx->module;
     ctx->identities[ctx->function].module = ctx->module;
     ctx->functions[ctx->function] = (XrXirFunction) {"$entry", 6, NULL, 0, XR_XIR_I64,
-        NULL, 0, NULL, 0, NULL, 0};
+        NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER};
     SourceValue value={0};
     if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},&value))return false;
     if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.id,0},{0},0,{0}},NULL))return false;

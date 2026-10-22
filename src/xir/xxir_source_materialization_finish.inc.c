@@ -42,7 +42,7 @@ static bool source_materialization_birth(SourceContext *ctx,const SourceMaterial
     if (!name || source_format(ctx,name,40,"$materialize%u",f)!=XR_DIAG_OK)
         return source_fail(ctx,request->site,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BUDGET:ctx->diagnostic.status,
             "constant materializer name failed");
-    ctx->functions[f]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),NULL,0,request->type,NULL,0,NULL,0,NULL,0};
+    ctx->functions[f]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),NULL,0,request->type,NULL,0,NULL,0,NULL,0, XR_XIR_NEVER};
     ctx->identities[f]=(XrXirFunctionIdentity){.module=request->module,.nominal_owner=request->nominal+1,.method_kind=XR_XIR_MATERIALIZER};
     ctx->bodies[f].module=request->module;
     if (ctx->literal_definition) return true;

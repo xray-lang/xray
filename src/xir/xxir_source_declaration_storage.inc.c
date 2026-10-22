@@ -55,7 +55,7 @@ static bool source_declaration_modules(SourceContext *ctx) {
         if(length>UINT32_MAX)return source_fail(ctx,NULL,XR_XIR_BUDGET,"module declaration name size exhausted");
         ctx->modules[m] = (XrXirSourceModule) {name, (uint32_t)length, deps, (uint32_t) spec->dep_count, m, 0,XR_XIR_MODULE_FRESH_STORAGE};
         ctx->bodies[m].module = m;
-        ctx->functions[m] = (XrXirFunction) {"$init", 5, NULL, 0, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
+        ctx->functions[m] = (XrXirFunction) {"$init", 5, NULL, 0, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0, XR_XIR_ERROR};
         ctx->identities[m].module = m;
     }
     return true;

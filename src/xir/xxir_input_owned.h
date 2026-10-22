@@ -32,6 +32,7 @@ typedef struct XirInputFunctionHead {
     uint32_t block_count,instruction_count;
     const uint32_t *operands;
     uint32_t operand_count;
+    XrXirType error_type;
 } XirInputFunctionHead;
 /* This readable external span is borrowed only during complete receiving.
  * It is never retained, used as a digest or accepted as semantic authority. */
@@ -66,7 +67,7 @@ typedef struct XirInputFunctionVisitor {
 XR_FUNC XrXirStatus xir_input_function_visit(const XirInputWork *,
     const XirOwnedInputFunction *,const XirInputFunctionVisitor *);
 /* This current projection contains only the two requested physical words.
- * Every complete receiving still proves all ten fields independently. */
+ * Every complete receiving still proves all fields independently. */
 typedef struct XirInputInstructionShape { XrXirOp op;XrXirType type; } XirInputInstructionShape;
 XR_FUNC XrXirStatus xir_input_instruction_shape(const XirInputWork *,
     const XirOwnedInputFunction *,uint32_t,XirInputInstructionShape *);

@@ -99,7 +99,7 @@ static bool source_instance_literal(SourceContext *ctx,uint32_t index) {
     uint32_t module=ctx->bodies[definition].module,nominal=ctx->identities[definition].nominal_owner;
     uint32_t parent=ctx->bodies[definition].declaration;
     ctx->function=f;ctx->module=module;++ctx->function_count;
-    ctx->functions[f]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),NULL,0,result,NULL,0,NULL,0,NULL,0};
+    ctx->functions[f]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),NULL,0,result,NULL,0,NULL,0,NULL,0, XR_XIR_NEVER};
     ctx->identities[f]=(XrXirFunctionIdentity){.module=module,.nominal_owner=nominal,
         .method_kind=nominal?XR_XIR_MEMBER_HELPER:XR_XIR_NON_MEMBER};
     ctx->bodies[f].node=node;ctx->bodies[f].module=module;

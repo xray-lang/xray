@@ -85,11 +85,11 @@ static XrXirStatus effect_body_type_nodes_match(const XrXirCompileContext *work,
 
 static XrXirStatus effect_body_function_copy(EffectTerms *terms,
     const XrXirFunction *source,EffectBodyFunction *target) {
-    if (!xir_compile_work(terms->remaining,11+sizeof(*target))) return XR_XIR_BUDGET;
+    if (!xir_compile_work(terms->remaining,12+sizeof(*target))) return XR_XIR_BUDGET;
     *target=(EffectBodyFunction){.name_length=source->name_length,
         .parameter_count=source->parameter_count,.result=source->result,
         .block_count=source->block_count,.instruction_count=source->instruction_count,
-        .operand_count=source->operand_count};
+        .operand_count=source->operand_count,.error_type=source->error_type};
     target->parameters=effect_body_copy(terms,source->parameters,source->parameter_count,sizeof(*source->parameters));
     target->blocks=effect_body_copy(terms,source->blocks,source->block_count,sizeof(*source->blocks));
     target->operands=effect_body_copy(terms,source->operands,source->operand_count,sizeof(*source->operands));
@@ -335,7 +335,7 @@ static inline XrXirStatus effect_body_material_create(const XrXirCompileContext 
 static XrXirStatus effect_body_function_compare(const XrXirCompileContext *work,
     const EffectBodyFunction *body,const XrXirFunction *source,bool *same) {
     EffectBodyRead read=effect_body_compile_read(work);
-    if (!xir_compile_work(work,7)) return XR_XIR_BUDGET;
+    if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
     if ((source->name_length && !source->name) || (source->parameter_count && !source->parameters) ||
         (source->block_count && !source->blocks) || (source->instruction_count && !source->instructions) ||
         (source->operand_count && !source->operands) || (body->name_length && !body->name) ||
@@ -343,7 +343,8 @@ static XrXirStatus effect_body_function_compare(const XrXirCompileContext *work,
         (body->operand_count && !body->operands)) return XR_XIR_BAD_STRUCTURE;
     if (source->name_length!=body->name_length || source->parameter_count!=body->parameter_count ||
         source->result!=body->result || source->block_count!=body->block_count ||
-        source->instruction_count!=body->instruction_count || source->operand_count!=body->operand_count)
+        source->instruction_count!=body->instruction_count || source->operand_count!=body->operand_count ||
+        source->error_type!=body->error_type)
         return effect_body_difference(same);
     const void *left[4]={source->name,source->parameters,source->blocks,source->operands};
     const void *right[4]={body->name,body->parameters,body->blocks,body->operands};

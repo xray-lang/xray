@@ -93,7 +93,7 @@ static XrXirStatus generated_receive_shape(const XrXirCompileContext *context,
             !request->origins[f].instructions) return XR_XIR_BAD_STRUCTURE;
         XirInputFunctionHead head={function->name,function->name_length,function->parameters,
             function->parameter_count,function->result,function->blocks,function->block_count,
-            function->instruction_count,function->operands,function->operand_count};
+            function->instruction_count,function->operands,function->operand_count,function->error_type};
         XrXirStatus status=xir_input_function_head_shape(&work,&head);
         if (status!=XR_XIR_OK) return status;
     }

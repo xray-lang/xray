@@ -114,6 +114,8 @@ typedef struct XrXirFunction {
     uint32_t instruction_count;
     const uint32_t *operands;
     uint32_t operand_count;
+    /* Required declaration metadata. Unit is missing, never implicit Never. */
+    XrXirType error_type;
 } XrXirFunction;
 
 #define XR_XIR_CONSTRAINT_SENDABLE 1u

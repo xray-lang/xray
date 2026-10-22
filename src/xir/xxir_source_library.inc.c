@@ -370,6 +370,7 @@ static bool source_library_function_query(SourceContext *ctx,uint32_t declaratio
     if (!source_query_parameters(ctx,declaration)) return false;
     const XrXirFunction *function=&ctx->functions[ctx->function];
     source_library_query_type(ctx,declaration,function->result,declaration);
+    source_library_query_type(ctx,declaration,function->error_type,declaration);
     XrXirSourceDeclaration *query=(XrXirSourceDeclaration *)&ctx->query.declarations[declaration-1];
     if (!source_work(ctx,NULL)) return false;
     query->checked_receiver_count=ctx->identities[ctx->function].method_kind==XR_XIR_READ_METHOD ? 1u : 0u;
@@ -408,6 +409,7 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     if ((original->parameter_count && !function->parameters) || !function->blocks ||
         (original->operand_count && !function->operands) || !instructions) return false;
     if (!source_library_type(ctx,map->unit,original->result,&function->result)) return false;
+    if (!source_library_type(ctx,map->unit,original->error_type,&function->error_type)) return false;
     for (uint32_t p=0; p<original->parameter_count; ++p)
         if (!source_library_type(ctx,map->unit,original->parameters[p],&((XrXirType *)function->parameters)[p])) return false;
     for (uint32_t i = 0; i < original->instruction_count; ++i)

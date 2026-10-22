@@ -129,6 +129,7 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
         if (c->reading) parameters[i] = (XrXirType) type;
     }
     f->result = (XrXirType) checked_u32(c, (uint32_t) f->result);
+    f->error_type = (XrXirType) checked_u32(c, (uint32_t) f->error_type);
     f->block_count = checked_count(c, f->block_count, &c->structural.blocks, 16);
     XrXirBlock *blocks = checked_array(c, f->blocks, f->block_count, sizeof(*blocks), 16);
     f->blocks = blocks;
@@ -700,10 +701,10 @@ static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction *
     if (c->status == XR_XIR_OK && kind > XR_XIR_LIBRARY) c->status = XR_XIR_BAD_STRUCTURE;
     if (c->reading && c->status == XR_XIR_OK) m->linkage_kind = (XrXirLinkageKind)kind;
     if (c->status != XR_XIR_OK) return;
-    uint32_t count = checked_count(c, m->function_count, &c->structural.functions, 24);
+    uint32_t count = checked_count(c, m->function_count, &c->structural.functions, 28);
     uint32_t declarations = checked_u32(c, m->declarations ? 1u : 0u);
     if (c->status == XR_XIR_OK && declarations > 1) c->status = XR_XIR_BAD_STRUCTURE;
-    XrXirFunction *functions = checked_array(c, m->functions, count, sizeof(*functions), 24);
+    XrXirFunction *functions = checked_array(c, m->functions, count, sizeof(*functions), 28);
     m->functions = functions; m->function_count = functions ? count : 0;
     for (uint32_t i = 0; i < m->function_count && c->status == XR_XIR_OK; ++i) {
         XrXirFunction f = functions[i];

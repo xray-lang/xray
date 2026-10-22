@@ -1,5 +1,6 @@
 add_executable(test_xir_never_type xir/test_xir_never_type.c)
-target_link_libraries(test_xir_never_type PRIVATE xray_xir xray_xir_scalar)
+target_link_libraries(test_xir_never_type PRIVATE xray_xir_source xray_xir_scalar)
+target_compile_definitions(test_xir_never_type PRIVATE XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 if(MSVC)
     target_compile_options(test_xir_never_type PRIVATE /W4 /WX /utf-8)
 else()
