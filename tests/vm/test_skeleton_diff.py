@@ -78,7 +78,9 @@ def main():
         adapter = folder / 'adapter.c'
         # The synthetic Checked program entry returns i64. Include its actual
         # definition to check that C type; its value is not a process exit code.
-        adapter.write_text('#include "generated.c"\nint main(void) {\n'
+        adapter.write_text('#include "generated.c"\n'
+                           '_Static_assert(_Generic(&xray_lir_entry, int64_t (*)(void): 1, default: 0),\n'
+                           '               "Source entry type");\nint main(void) {\n'
                            '    int64_t (*entry)(void) = xray_lir_entry;\n'
                            '    (void)entry();\n    return 0;\n}\n', encoding='ascii')
         executable = folder / ('native.exe' if args.kind == 'msvc' else 'native')
