@@ -142,7 +142,7 @@ xray 在编译期构建完整的**模块依赖图**（DAG）：
 1. 从入口文件开始，递归解析所有 `import` 声明，构建依赖图。
 2. 对依赖图进行拓扑排序，确定模块初始化顺序。
 3. 如果检测到**循环依赖**（SCC 大小 > 1 或自环），产生编译错误。
-4. 按拓扑序从叶子模块（无依赖）到入口模块依次初始化。
+4. 按拓扑序从叶子模块（无依赖）到入口模块依次初始化。被导入的模块只执行其模块状态的初始化表达式，不含其他可执行的顶层语句（§5.2.8）；入口文件最后执行其全部顶层语句。
 
 选择性导入（`import { foo } from "./m"`）在编译期解析为固定的模块索引和导出槽位，运行时为 O(1) 索引访问，不涉及字符串查找。
 
@@ -323,7 +323,7 @@ Xray builds a complete **module dependency graph** (DAG) at compile time:
 1. Starting from the entry file, all `import` declarations are recursively resolved to build the dependency graph.
 2. The graph is topologically sorted to determine module initialization order.
 3. If a **circular dependency** is detected (SCC size > 1 or self-loop), compilation fails with `E0504` and reports a concrete cycle path such as `a.xr -> b.xr -> a.xr`.
-4. Modules are initialized in topological order, from leaf modules (no dependencies) to the entry module.
+4. Modules are initialized in topological order, from leaf modules (no dependencies) to the entry module. An imported module runs only its module-state initializers and contains no other executable top-level statements (§5.2.8); the entry file runs all of its top-level statements last.
 
 Selective imports (`import { foo } from "./m"`) are resolved at compile time to fixed module indices and export slots, resulting in O(1) indexed access at runtime with no string lookup.
 

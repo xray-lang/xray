@@ -14,7 +14,7 @@
     "Source generations",
     "lexical scope"
   ],
-  "lead": "Each .xr file is a module. import/export must be top-level. The compiler builds a dependency DAG, topologically sorts it, and resolves selective imports to O(1) slot access at runtime.",
+  "lead": "Each .xr file is a module. import/export must be top-level. Only the entry file may contain executable top-level statements; an imported module contains only declarations and module-state initializers, and there is no special main function. The compiler builds a dependency DAG, topologically sorts it, and resolves selective imports to O(1) slot access at runtime.",
   "sections": [
     {
       "heading": "Imports",

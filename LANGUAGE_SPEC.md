@@ -2953,7 +2953,7 @@ fn runAll() throws
 
 These are signature fragments; ordinary definitions still require bodies. The compiler checks each body locally using callee signatures: uncaught errors must be a subset of the declared error type. An excess error is diagnosed with a suggestion to add or widen `throws(...)`. A call propagates through a `try` expression or is handled in a `try { } catch` region (§8). Callers rely on signatures, without whole-program error inference.
 
-Module top-level code and the program entry `main` implicitly allow arbitrary errors, but propagation sites still require marking. Expected closure types and local closure inference follow §2.8.1; that inference rule does not apply to ordinary named functions omitting `throws`.
+Top-level statements of the entry file and module-state initializers implicitly allow arbitrary errors (§5.2.8), but propagation sites still require marking. `fn main()` is an ordinary named function and gets no such permission. Expected closure types and local closure inference follow §2.8.1; that inference rule does not apply to ordinary named functions omitting `throws`.
 
 Throwing public standard-library APIs must declare typed `throws(E)`, which may include error-constrained generic parameters; non-throwing APIs need no extra clause. Other code using untyped `throws` receives only a lint. Freestanding and `@strict(alloc)` scopes prohibit erased error types, including `throws` and equivalent `throws(Error)`; constrained generic error clauses remain legal. Panic is not part of `throws`.
 
@@ -3073,18 +3073,37 @@ fn factorial(n: i64, acc: i64 = 1) -> i64 {
 
 #### 5.2.8 Program entry point
 
-xray has **no implicit `main` entry**: scripts/modules execute their top level in declaration order. `fn` declarations are hoisted and registered; expressions and statements run immediately.
+xray has **no fixed `main` entry function**. A program runs the top level of its **entry file** in order: `fn` declarations are hoisted and registered; expressions and statements run immediately.
 
 ```xray
-// hello.xr
+// hello.xr (entry file)
 print("loading")          // top-level statement, runs immediately
 fn greet() { print("hi") }
 greet()                   // must be called explicitly
 ```
 
-- `fn main()` has no special meaning; call `main()` explicitly if desired.
+- The entry file is the file given directly to `xray run`, `xray build`, and similar commands. Multi-file projects specify the entry file with the `main` field under `[project]` (or `[package]` for a package manifest), for example `main = "src/main.xr"`.
+- **Only the entry file may contain executable top-level statements.** The top level of an imported module may contain only declarations (`import`, `export`, functions, type and interface declarations, `extern "C"` blocks) and module-state declarations with their initializers (`const`, `var`, and their initializer expressions). A standalone expression statement or control-flow statement in an imported module is a compile error. Module state is initialized in the topological order of §11.6.
+- Top-level statements of the entry file and module-state initializers implicitly allow arbitrary errors; propagation sites still require marking. An uncaught error prints `[Uncaught Error] <value>` and exits with code 1 (§8).
+- `fn main()` has no special meaning and follows the same rules as any named function: omitting `throws` means it does not throw. Call it explicitly from the entry file's top level when needed, writing `try main()` if it can throw:
+
+```xray
+enum ConfigErr { Missing }
+
+fn loadPort(path: string) throws(ConfigErr) -> i64 {
+    if path == "" { throw ConfigErr.Missing }
+    return 8080
+}
+
+fn main() throws(ConfigErr) {
+    var port = try loadPort("app.toml")
+    print(port)
+}
+
+try main()
+```
+
 - Top-level `return` is forbidden (compile error `E0306`).
-- Multi-file projects specify the entry with the `main` field under `[project]` (or `[package]` for a package manifest), for example `main = "src/main.xr"`; that file follows the script execution rules above.
 
 #### 5.2.9 `extern "C"` C FFI Declaration Blocks
 
@@ -6055,7 +6074,7 @@ Xray builds a complete **module dependency graph** (DAG) at compile time:
 1. Starting from the entry file, all `import` declarations are recursively resolved to build the dependency graph.
 2. The graph is topologically sorted to determine module initialization order.
 3. If a **circular dependency** is detected (SCC size > 1 or self-loop), compilation fails with `E0504` and reports a concrete cycle path such as `a.xr -> b.xr -> a.xr`.
-4. Modules are initialized in topological order, from leaf modules (no dependencies) to the entry module.
+4. Modules are initialized in topological order, from leaf modules (no dependencies) to the entry module. An imported module runs only its module-state initializers and contains no other executable top-level statements (§5.2.8); the entry file runs all of its top-level statements last.
 
 Selective imports (`import { foo } from "./m"`) are resolved at compile time to fixed module indices and export slots, resulting in O(1) indexed access at runtime with no string lookup.
 

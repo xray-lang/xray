@@ -140,7 +140,7 @@ fn runAll() throws
 
 上例是签名片段；普通函数定义仍必须有函数体。编译器按函数体与被调签名做局部检查：未捕获错误必须包含在声明的错误类型内，超出时报错并建议补上或扩大 `throws(...)`；调用点用 `try` 表达式传播，或在 `try { } catch` 区域内处理（§8）。签名是调用方依据，不依赖全程序错误推导。
 
-模块顶层和程序入口 `main` 隐式允许任意错误，但传播点仍须标记。闭包的期望类型与局部错误推导见 §2.8.1，不能将闭包推导规则用于省略 `throws` 的普通具名函数。
+入口文件的顶层语句和各模块状态的初始化表达式隐式允许任意错误（§5.2.8），但传播点仍须标记。`fn main()` 是普通具名函数，没有这项许可。闭包的期望类型与局部错误推导见 §2.8.1，不能将闭包推导规则用于省略 `throws` 的普通具名函数。
 
 可能抛错的标准库公开 API 必须写带类型的 `throws(E)`，可包含受 `Error` 约束的泛型参数；不抛错 API 不需要额外子句。其他代码使用无类型 `throws` 时只给 lint 提示。freestanding 与 `@strict(alloc)` 范围内禁止擦除后的错误类型，包括 `throws` 和等价的 `throws(Error)`；带约束的泛型错误子句仍合法。panic 不进入 `throws`。
 
@@ -260,18 +260,37 @@ fn factorial(n: i64, acc: i64 = 1) -> i64 {
 
 #### 5.2.8 程序入口
 
-xray **没有隐式 `main` 入口**：脚本/模块从顶层开始顺序执行，遇到 `fn` 声明被提升注册，遇到表达式或语句被立即执行。
+xray **没有固定的 `main` 入口函数**。程序从**入口文件**的顶层开始顺序执行：遇到 `fn` 声明被提升注册，遇到表达式或语句立即执行。
 
 ```xray
-// hello.xr
+// hello.xr（入口文件）
 print("loading")          // 顶层语句，立即执行
 fn greet() { print("hi") }
 greet()                   // 必须显式调用
 ```
 
-- `fn main()` 没有任何特殊含义；如需手动调用，写 `main()`。
+- 入口文件是 `xray run`、`xray build` 等命令直接给出的文件。多文件项目的入口文件由 `xray.toml` 的 `[project]`（或 package manifest 的 `[package]`）中的 `main` 字段指定，例如 `main = "src/main.xr"`。
+- **只有入口文件可以包含可执行的顶层语句。** 被导入的模块，顶层只能包含声明（`import`、`export`、函数、类型与接口声明、`extern "C"` 块）以及模块状态的声明与初始化（`const`、`var` 及其初始化表达式）。被导入的模块中出现独立的表达式语句或控制流语句时，编译报错。模块状态按 §11.6 的拓扑序初始化。
+- 入口文件的顶层语句和各模块状态的初始化表达式隐式允许抛任意错误，传播点仍须标记；未捕获时输出 `[Uncaught Error] <值>` 并以退出码 1 结束（§8）。
+- `fn main()` 没有任何特殊含义，和其他具名函数遵守同一规则：省略 `throws` 即不抛错。需要时在入口文件顶层显式调用它，会抛错的写 `try main()`：
+
+```xray
+enum ConfigErr { Missing }
+
+fn loadPort(path: string) throws(ConfigErr) -> i64 {
+    if path == "" { throw ConfigErr.Missing }
+    return 8080
+}
+
+fn main() throws(ConfigErr) {
+    var port = try loadPort("app.toml")
+    print(port)
+}
+
+try main()
+```
+
 - 顶层不允许 `return`（编译错误 `E0306`）。
-- 多文件项目的入口由 `xray.toml` 的 `[project]`（或 package manifest 的 `[package]`）中的 `main` 字段指定，例如 `main = "src/main.xr"`；对应文件按上述脚本规则执行。
 
 #### 5.2.9 `extern "C"` C FFI 声明块
 
@@ -1416,7 +1435,7 @@ fn runAll() throws
 
 These are signature fragments; ordinary definitions still require bodies. The compiler checks each body locally using callee signatures: uncaught errors must be a subset of the declared error type. An excess error is diagnosed with a suggestion to add or widen `throws(...)`. A call propagates through a `try` expression or is handled in a `try { } catch` region (§8). Callers rely on signatures, without whole-program error inference.
 
-Module top-level code and the program entry `main` implicitly allow arbitrary errors, but propagation sites still require marking. Expected closure types and local closure inference follow §2.8.1; that inference rule does not apply to ordinary named functions omitting `throws`.
+Top-level statements of the entry file and module-state initializers implicitly allow arbitrary errors (§5.2.8), but propagation sites still require marking. `fn main()` is an ordinary named function and gets no such permission. Expected closure types and local closure inference follow §2.8.1; that inference rule does not apply to ordinary named functions omitting `throws`.
 
 Throwing public standard-library APIs must declare typed `throws(E)`, which may include error-constrained generic parameters; non-throwing APIs need no extra clause. Other code using untyped `throws` receives only a lint. Freestanding and `@strict(alloc)` scopes prohibit erased error types, including `throws` and equivalent `throws(Error)`; constrained generic error clauses remain legal. Panic is not part of `throws`.
 
@@ -1536,18 +1555,37 @@ fn factorial(n: i64, acc: i64 = 1) -> i64 {
 
 #### 5.2.8 Program entry point
 
-xray has **no implicit `main` entry**: scripts/modules execute their top level in declaration order. `fn` declarations are hoisted and registered; expressions and statements run immediately.
+xray has **no fixed `main` entry function**. A program runs the top level of its **entry file** in order: `fn` declarations are hoisted and registered; expressions and statements run immediately.
 
 ```xray
-// hello.xr
+// hello.xr (entry file)
 print("loading")          // top-level statement, runs immediately
 fn greet() { print("hi") }
 greet()                   // must be called explicitly
 ```
 
-- `fn main()` has no special meaning; call `main()` explicitly if desired.
+- The entry file is the file given directly to `xray run`, `xray build`, and similar commands. Multi-file projects specify the entry file with the `main` field under `[project]` (or `[package]` for a package manifest), for example `main = "src/main.xr"`.
+- **Only the entry file may contain executable top-level statements.** The top level of an imported module may contain only declarations (`import`, `export`, functions, type and interface declarations, `extern "C"` blocks) and module-state declarations with their initializers (`const`, `var`, and their initializer expressions). A standalone expression statement or control-flow statement in an imported module is a compile error. Module state is initialized in the topological order of §11.6.
+- Top-level statements of the entry file and module-state initializers implicitly allow arbitrary errors; propagation sites still require marking. An uncaught error prints `[Uncaught Error] <value>` and exits with code 1 (§8).
+- `fn main()` has no special meaning and follows the same rules as any named function: omitting `throws` means it does not throw. Call it explicitly from the entry file's top level when needed, writing `try main()` if it can throw:
+
+```xray
+enum ConfigErr { Missing }
+
+fn loadPort(path: string) throws(ConfigErr) -> i64 {
+    if path == "" { throw ConfigErr.Missing }
+    return 8080
+}
+
+fn main() throws(ConfigErr) {
+    var port = try loadPort("app.toml")
+    print(port)
+}
+
+try main()
+```
+
 - Top-level `return` is forbidden (compile error `E0306`).
-- Multi-file projects specify the entry with the `main` field under `[project]` (or `[package]` for a package manifest), for example `main = "src/main.xr"`; that file follows the script execution rules above.
 
 #### 5.2.9 `extern "C"` C FFI Declaration Blocks
 
