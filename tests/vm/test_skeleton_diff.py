@@ -76,11 +76,11 @@ def main():
         generated = folder / 'generated.c'
         invoke(folder, 'emit-c', [args.c_driver, source, generated])
         adapter = folder / 'adapter.c'
-        # Include the actual definition once: incompatible entry types must
-        # fail the host compiler, rather than being hidden behind an extern.
+        # The synthetic Checked program entry returns i64. Include its actual
+        # definition to check that C type; its value is not a process exit code.
         adapter.write_text('#include "generated.c"\nint main(void) {\n'
-                           '    void (*entry)(void) = xray_lir_entry;\n'
-                           '    entry();\n    return 0;\n}\n', encoding='ascii')
+                           '    int64_t (*entry)(void) = xray_lir_entry;\n'
+                           '    (void)entry();\n    return 0;\n}\n', encoding='ascii')
         executable = folder / ('native.exe' if args.kind == 'msvc' else 'native')
         if args.kind == 'msvc':
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
