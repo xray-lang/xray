@@ -320,11 +320,58 @@ static uint32_t source_named_function(const XrXirModule *module,const char *name
     CHECK(false);
     return 0;
 }
-static void check_source_bounds(const XrXirArtifact *artifact,bool has_closure,bool imported_error) {
+static uint32_t source_closure_function(const XrXirModule *module,const char *owner) {
+    const XrXirFunction *function=&module->functions[source_named_function(module,owner)];
+    uint32_t target=UINT32_MAX;
+    for (uint32_t i=0;i<function->instruction_count;++i) {
+        const XrXirInstruction *op=&function->instructions[i];
+        if (op->op!=XR_XIR_FUNCTION_REF) continue;
+        CHECK(target==UINT32_MAX && op->immediate>=0 && (uint64_t)op->immediate<module->function_count);
+        target=(uint32_t)op->immediate;
+    }
+    CHECK(target<module->function_count);
+    return target;
+}
+
+static char *source_transport_text(size_t *length) {
+    const char prefix[]="export struct Box{value:i64=41}\nexport fn raw()->i64{return 41}\n"
+        "export fn withDefault(x:i64=41)->i64{return x+1}\n"
+        "export fn withCall(x:i64=raw())->i64{return x}\n"
+        "var seed:i64=41\nfn identity<T>(value:T)->T{return value}\n"
+        "export fn makeGeneric()->fn()->i64{return fn()->i64{return identity<i64>(41)}}\n"
+        "export fn makeCell(base:i64)->fn()->i64{var captured=base;return fn()->i64{return captured}}\n"
+        "export fn makeSlot()->fn()->i64{return fn()->i64{return seed}}\n"
+        "export fn makeText()->fn()->string{return fn()->string{return \"owned\"}}\n"
+        "export fn makeIndirect(f:fn()->i64)->fn()->i64{return fn()->i64{return f()}}\n";
+    /* Compile the actual captured-body declaration instead of a second fixture
+     * spelling that could diverge from the standard library. */
+    FILE *file=fopen(XR_SOURCE_STDLIB "/_probe/_probe.xr","rb");
+    CHECK(file && !fseek(file,0,SEEK_END));
+    long size=ftell(file);CHECK(size>0 && !fseek(file,0,SEEK_SET));
+    char *bytes=xr_malloc((size_t)size+1);CHECK(bytes);
+    CHECK(fread(bytes,1,(size_t)size,file)==(size_t)size && !fclose(file));bytes[size]=0;
+    char *first=strstr(bytes,"export fn probeMakeAdder(");CHECK(first);
+    char *last=strchr(first,'{');CHECK(last);
+    uint32_t depth=1;
+    for (++last;depth && *last;++last) {
+        if (*last=='{') ++depth;
+        else if (*last=='}') --depth;
+    }
+    CHECK(!depth);
+    size_t declaration=(size_t)(last-first),prefix_length=sizeof(prefix)-1;
+    CHECK(declaration<SIZE_MAX-prefix_length);
+    *length=prefix_length+declaration;
+    char *text=xr_malloc(*length+1);CHECK(text);
+    memcpy(text,prefix,prefix_length);memcpy(text+prefix_length,first,declaration);text[*length]=0;
+    memset(bytes,0xa5,(size_t)size);xr_free(bytes);
+    return text;
+}
+
+static void check_source_bounds(const XrXirArtifact *artifact,bool consumer) {
     const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
     CHECK(module->defaults);
     uint32_t literal=source_named_function(module,"withDefault"),call=source_named_function(module,"withCall");
-    bool default_literal=false,default_call=false,field=false,constructor=false,closure=false;
+    bool default_literal=false,default_call=false,field=false,constructor=false;
     for (uint32_t d=0;d<module->defaults->count;++d) {
         const XrXirDefaultBinding *binding=&module->defaults->records[d];
         CHECK(binding->function<module->function_count);
@@ -349,17 +396,24 @@ static void check_source_bounds(const XrXirArtifact *artifact,bool has_closure,b
             CHECK(function->error_type==XR_XIR_ERROR);
             constructor=true;
         }
-        if (function->name_length>=8 && !memcmp(function->name,"$closure",8)) {
-            CHECK(function->error_type==XR_XIR_ERROR);
-            closure=true;
-        }
     }
     CHECK(default_literal && default_call && field && constructor);
     CHECK(module->functions[literal].error_type==XR_XIR_NEVER);
     CHECK(module->functions[call].error_type==XR_XIR_NEVER);
     CHECK(module->functions[source_named_function(module,"raw")].error_type==
-        (imported_error ? XR_XIR_ERROR : XR_XIR_NEVER));
-    CHECK(closure==has_closure);
+        (consumer ? XR_XIR_ERROR : XR_XIR_NEVER));
+    const char *empty[]={"probeMakeAdder","makeGeneric","makeCell","makeSlot","makeText"};
+    for (size_t i=0;i<sizeof(empty)/sizeof(empty[0]);++i) {
+        const XrXirFunction *closure=&module->functions[source_closure_function(module,empty[i])];
+        if (closure->error_type!=XR_XIR_NEVER)
+            fprintf(stderr,"closure %s E=%u expected Never\n",empty[i],(unsigned)closure->error_type);
+        CHECK(closure->error_type==XR_XIR_NEVER);
+    }
+    CHECK(module->functions[source_closure_function(module,"makeIndirect")].error_type==XR_XIR_ERROR);
+    if (consumer) {
+        CHECK(module->functions[source_closure_function(module,"viaClosure")].error_type==XR_XIR_NEVER);
+        CHECK(module->functions[source_closure_function(module,"viaWide")].error_type==XR_XIR_ERROR);
+    }
     for (uint32_t m=0;m<module->declarations->module_count;++m) {
         uint32_t initializer=module->declarations->modules[m].initializer;
         CHECK(module->functions[initializer].error_type==XR_XIR_ERROR);
@@ -396,16 +450,15 @@ static void check_source_transport(const XrXirCompileContext *work) {
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILER_SESSION_OK);
     XrXirSourceRequest request={session,library,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_LIBRARY,NULL};
-    const char text[]="export struct Box{value:i64=41}\nfn raw()->i64{return 41}\n"
-        "export fn withDefault(x:i64=41)->i64{return x+1}\n"
-        "export fn withCall(x:i64=raw())->i64{return x}\n";
-    XrXirSourceText input={"lib.xr",text,sizeof(text)-1};
+    size_t text_length=0;char *text=source_transport_text(&text_length);
+    XrXirSourceText input={"lib.xr",text,text_length};
     XrXirSourceResult source={0};
     XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"source E producer %u %s\n",status,diagnostic.message);
     CHECK(status==XR_XIR_OK);
-    check_source_bounds(source.checked,false,false);
+    memset(text,0xa5,text_length);xr_free(text);
+    check_source_bounds(source.checked,false);
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);
@@ -422,22 +475,25 @@ static void check_source_transport(const XrXirCompileContext *work) {
 
     CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILER_SESSION_OK);
     request.session=session;request.entry_path=root;request.linkage_kind=XR_XIR_PROGRAM;request.libraries=catalog;
-    const char consumer[]="import {withDefault,withCall,Box} from \"./lib\"\n"
+    char consumer[]="import {withDefault,withCall,Box,raw,probeMakeAdder} from \"./lib\"\n"
         "export fn answer()->i64{return withDefault()+withCall()+Box().value}\n"
-        "export fn viaClosure()->i64{var f=fn()->i64{return 9};return f()}\n";
+        "export fn viaClosure()->i64{var f=fn()->i64{return 9};return f()}\n"
+        "export fn viaWide()->i64{var f=fn()->i64{return raw()};return f()}\n"
+        "export fn captured()->i64{var f=probeMakeAdder(40);return f(2)}\n";
     input=(XrXirSourceText){"root.xr",consumer,sizeof(consumer)-1};
     status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"source E receiver %u %s\n",status,diagnostic.message);
     CHECK(status==XR_XIR_OK);
+    memset(consumer,0xa5,sizeof(consumer));
     xr_compile_session_free(session);
     xr_xir_compile_library_catalog_free(catalog);
-    check_source_bounds(source.checked,true,true);
+    check_source_bounds(source.checked,true);
     CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);
     XrXirArtifact *received=NULL;
     CHECK(xr_xir_compile_checked_read(work,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
-    check_source_bounds(received,true,true);
+    check_source_bounds(received,true);
     CHECK(xr_xir_compile_artifact_verify(received,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(received);
     CHECK(xr_test_rmdir(directory)==0);
