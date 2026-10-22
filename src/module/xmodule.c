@@ -871,32 +871,6 @@ ModuleType xr_module_detect_type(const char *path) {
 
 /* ========== Module Loading ========== */
 
-static bool proto_has_invalid_class_descriptors(XrProto *proto) {
-    if (!proto)
-        return false;
-
-    uint32_t code_count = (uint32_t) PROTO_CODE_COUNT(proto);
-    uint32_t const_count = (uint32_t) PROTO_CONST_COUNT(proto);
-    for (uint32_t i = 0; i < code_count; i++) {
-        XrInstruction inst = PROTO_CODE(proto, i);
-        if (GET_OPCODE(inst) != OP_CLASS_CREATE_FROM_DESCRIPTOR)
-            continue;
-        uint32_t const_index = (uint32_t) GETARG_Bx(inst);
-        if (const_index >= const_count)
-            return true;
-        XrValue desc_val = PROTO_CONSTANT(proto, const_index);
-        if (!XR_IS_PTR(desc_val) || XR_TO_PTR(desc_val) == NULL)
-            return true;
-    }
-
-    uint32_t sub_count = (uint32_t) PROTO_PROTO_COUNT(proto);
-    for (uint32_t i = 0; i < sub_count; i++) {
-        if (proto_has_invalid_class_descriptors(PROTO_PROTO(proto, i)))
-            return true;
-    }
-    return false;
-}
-
 /*
 ** Load xray script extension layer
 **
@@ -951,33 +925,7 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
     }
 
 #ifndef XR_STDLIB_FROM_FILE
-    // Prefer embedded bytecode: bytecode-only embedders can execute pure-Xray
-    // stdlib modules without linking the compiler or reading from disk.
-    size_t embedded_bc_size = 0;
-    const uint8_t *embedded_bc =
-        code ? NULL : xr_get_embedded_stdlib_bytecode(module_name, &embedded_bc_size);
-    if (embedded_bc && embedded_bc_size > 0) {
-        XrBootstrapContainerError bc_error;
-        code = xr_bootstrap_container_read(isolate, embedded_bc, embedded_bc_size, &bc_error);
-        if (!code) {
-            xr_isolate_set_current_module(isolate, prev_module);
-            xr_log_warning("module", "failed to load embedded stdlib bytecode for '%s': %d",
-                           module_name, bc_error);
-            return false;
-        }
-        if (proto_has_invalid_class_descriptors(code)) {
-            xr_instruction_unit_free(code);
-            code = NULL;
-            XR_DBG_MODULE("load_script_extension: embedded bytecode for %s needs source fallback",
-                          module_name);
-        } else {
-            embedded_bytecode = true;
-            XR_DBG_MODULE("load_script_extension: loaded embedded bytecode for %s", module_name);
-        }
-    }
-
-    // Source fallback keeps the installed/runtime layout independent while the
-    // stdlib bytecode generation path is filled in.
+    // Resolve the generated source table before consulting the filesystem.
     if (!code) {
         source = xr_get_embedded_stdlib(module_name);
         if (source) {
@@ -1038,8 +986,7 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
             xr_isolate_set_current_module(isolate, prev_module);
             xr_free(owned_source);
             xr_log_warning("module",
-                           "compiler not available for embedded stdlib source '%s' "
-                           "(embedded bytecode missing)",
+                           "compiler not available for embedded stdlib source '%s'",
                            path);
             return false;
         }

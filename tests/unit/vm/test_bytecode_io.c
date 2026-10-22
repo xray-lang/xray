@@ -204,48 +204,6 @@ TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction) {
     xray_vm_delete(iso);
 }
 
-#ifndef XR_STDLIB_FROM_FILE
-TEST(embedded_stdlib_bytecode_preserves_producer_identity) {
-    XrVMRuntime *iso = new_test_isolate();
-    ASSERT_NOT_NULL(iso);
-
-    /* Exercise the real embedded-bytecode diagnostic boundary.  The decoded
-     * proto first carries its serialized producer identity; clearing that
-     * field mutates the fixture to the stripped-container case, which must
-     * not manufacture an artifact path. */
-    size_t size = 0;
-    const uint8_t *embedded_bytecode = xr_get_embedded_stdlib_bytecode("path", &size);
-    ASSERT_NOT_NULL(embedded_bytecode);
-    ASSERT_GT(size, 0);
-    XrBootstrapContainerError error = XR_BOOTSTRAP_CONTAINER_OK;
-    XrProto *roundtrip = xr_bootstrap_container_read(iso, embedded_bytecode, size, &error);
-    ASSERT_NOT_NULL(roundtrip);
-    ASSERT_EQ_INT(error, XR_BOOTSTRAP_CONTAINER_OK);
-    ASSERT_NOT_NULL(roundtrip->source_file);
-    ASSERT_GT(strlen(roundtrip->source_file), 0);
-
-    char *producer_source = xr_strdup(roundtrip->source_file);
-    ASSERT_NOT_NULL(producer_source);
-    XrModuleExecutionFailureIdentity present =
-        xr_module_embedded_execution_failure_identity(roundtrip, "path");
-    ASSERT_TRUE(present.has_source_file);
-    ASSERT_STR_EQ(present.source_file, producer_source);
-    ASSERT_STR_EQ(present.module_name, "path");
-
-    xr_free((void *) roundtrip->source_file);
-    roundtrip->source_file = NULL;
-    XrModuleExecutionFailureIdentity missing =
-        xr_module_embedded_execution_failure_identity(roundtrip, "path");
-    ASSERT_FALSE(missing.has_source_file);
-    ASSERT_NULL(missing.source_file);
-    ASSERT_STR_EQ(missing.module_name, "path");
-
-    xr_free(producer_source);
-    xr_instruction_unit_free(roundtrip);
-    xray_vm_delete(iso);
-}
-#endif
-
 TEST(bytecode_roundtrips_reachable_entry_plan) {
     XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
@@ -1546,9 +1504,6 @@ TEST(bytecode_roundtrips_extern_cfn_callback_signature) {
 static void run_all_tests(void) {
     RUN_TEST_SUITE("Bytecode I/O");
     RUN_TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction);
-#ifndef XR_STDLIB_FROM_FILE
-    RUN_TEST(embedded_stdlib_bytecode_preserves_producer_identity);
-#endif
     RUN_TEST(bytecode_roundtrips_reachable_entry_plan);
     RUN_TEST(bytecode_roundtrips_struct_area_size);
     RUN_TEST(bytecode_roundtrips_exact_string_constant_lengths);

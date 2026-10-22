@@ -50,10 +50,6 @@ XR_FUNC XrOsIoStatus xr_stdlib_source_descriptor_work(void *owner,
 XR_FUNC XrOsIoStatus xr_get_embedded_stdlib_work(void *owner,
     XrOsIoStatus (*work)(void *, uint64_t), const char *name, const char **output);
 
-// Get pre-compiled bytecode for a stdlib module.
-// Returns NULL if module not found or no bytecode available.
-XR_FUNC const uint8_t *xr_get_embedded_stdlib_bytecode(const char *module_name, size_t *out_size);
-
 // Get source code for a stdlib module (fallback).
 // Returns NULL if module not found.
 XR_FUNC const char *xr_get_embedded_stdlib(const char *module_name);

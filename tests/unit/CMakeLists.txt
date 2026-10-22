@@ -178,10 +178,8 @@ if(WIN32)
     set_tests_properties(test_random_windows PROPERTIES LABELS "unit;crypto;runtime;windows")
 endif()
 
-# Compiler-owner tests need source/module/compiler state but not the finalized
-# stage-2 embedded stdlib. Keeping them on the bootstrap aggregate prevents an
-# edit to the compiler or Program producer from rebuilding every stdlib
-# bytecode before the focused test can start.
+# Legacy compiler-owner fixtures retain their shared object aggregate.
+# Its native-entry registry is generated alongside immutable source metadata.
 macro(add_xray_bootstrap_executable name source)
     if(TARGET xray_core_objs AND TARGET xray_stdlib_bootstrap_core)
         add_executable(${name} ${source} ${ARGN})
@@ -979,13 +977,7 @@ execute_process(
 add_xray_bootstrap_executable(test_xr_program_source_build
     program/test_xr_program_source_build.c
     plan/target_profile_test_fixture.c)
-# This test owns source -> XrProgram fixtures and independent VM/native oracles.
-# Linking the final xray_core archive made its edit/build
-# loop wait for the unrelated stage-2 stdlib bytecode
-# generators. Use the same stage-1 aggregate as xray_stdlib_bcgen: all common
-# objects plus the bootstrap embedded stdlib table. Full product and
-# embedded-stdlib tests continue to link the final archive and retain their
-# existing qualification boundary.
+# This fixture retains its existing legacy compiler object ownership.
 target_include_directories(test_xr_program_source_build PRIVATE
     ${XR_PROGRAM_SOURCE_FIXTURE_DIR})
 target_compile_definitions(test_xr_program_source_build PRIVATE
@@ -1950,11 +1942,6 @@ set_tests_properties(test_native_string_search_authority PROPERTIES
 add_test(NAME test_semantic_channel_type_identity
     COMMAND $<TARGET_FILE:test_semantic_plan> channel-type-identity)
 set_tests_properties(test_semantic_channel_type_identity PROPERTIES LABELS "semantic;channel;ownership")
-add_test(NAME test_native_channel_field_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_channel_field.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_channel_field_authority PROPERTIES
-    LABELS "aot;generated-c;channel;ownership;integration" TIMEOUT 240)
 add_test(NAME test_semantic_nullable_reference_phi
     COMMAND $<TARGET_FILE:test_semantic_plan> nullable-reference-phi)
 set_tests_properties(test_semantic_nullable_reference_phi PROPERTIES LABELS "semantic;ownership")
@@ -1966,51 +1953,16 @@ add_test(NAME test_native_array_pop_authority
         --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_array_pop_authority PROPERTIES
     LABELS "aot;generated-c;array;ownership;integration" TIMEOUT 240)
-add_test(NAME test_native_json_codec_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_json_codec.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_json_codec_authority PROPERTIES
-    LABELS "aot;generated-c;json;ownership;integration" TIMEOUT 240)
-add_test(NAME test_native_coroutine_method_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_coroutine_method.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_coroutine_method_authority PROPERTIES
-    LABELS "aot;generated-c;coroutine;integration" TIMEOUT 240)
 add_test(NAME test_native_tuple_boundary_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_tuple_boundary.py
         --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_tuple_boundary_authority PROPERTIES
     LABELS "aot;generated-c;tuple;ownership;integration" TIMEOUT 240)
-add_test(NAME test_native_tuple_array_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_tuple_array.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_tuple_array_authority PROPERTIES
-    LABELS "aot;generated-c;array;ownership;integration" TIMEOUT 240)
 add_test(NAME test_native_string_concat_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_string_concat.py
         --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_string_concat_authority PROPERTIES
     LABELS "aot;generated-c;string;ownership;integration" TIMEOUT 120)
-add_test(NAME test_native_execution_closure_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_execution_closure.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_execution_closure_authority PROPERTIES
-    LABELS "aot;generated-c;closure;integration" TIMEOUT 240)
-add_test(NAME test_native_stdlib_portability
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_stdlib_portability.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_stdlib_portability PROPERTIES
-    LABELS "aot;generated-c;portability;integration" TIMEOUT 240)
-add_test(NAME test_native_static_method_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_static_method.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_static_method_authority PROPERTIES
-    LABELS "aot;generated-c;class;ownership;integration" TIMEOUT 240)
-add_test(NAME test_native_move_receiver_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_move_receiver.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_move_receiver_authority PROPERTIES
-    LABELS "aot;generated-c;class;ownership;integration" TIMEOUT 240)
 add_test(NAME test_target_const_owner_transfer
     COMMAND $<TARGET_FILE:test_target_plan> const-owner-transfer)
 set_tests_properties(test_target_const_owner_transfer PROPERTIES
@@ -2081,31 +2033,6 @@ foreach(execution_case IN ITEMS
     set_tests_properties(test_run_${execution_case} PROPERTIES
         LABELS "aot;generated-c;execution;integration" TIMEOUT 240)
 endforeach()
-add_test(NAME test_native_channel_recv_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_channel_recv.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_channel_recv_authority PROPERTIES
-    LABELS "aot;generated-c;channel;ownership;integration" TIMEOUT 240)
-add_test(NAME test_native_channel_send_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_channel_send.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_channel_send_authority PROPERTIES
-    LABELS "aot;generated-c;channel;ownership;integration" TIMEOUT 240)
-add_test(NAME test_native_go_managed_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_go_managed.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_go_managed_authority PROPERTIES
-    LABELS "aot;generated-c;coroutine;ownership;integration" TIMEOUT 240)
-add_test(NAME test_native_captured_slice_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_captured_slice.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_captured_slice_authority PROPERTIES
-    LABELS "aot;generated-c;ownership;integration" TIMEOUT 240)
-add_test(NAME test_native_structural_object_carrier_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_structural_object_carrier.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_structural_object_carrier_authority PROPERTIES
-    LABELS "aot;generated-c;array;ownership;integration" TIMEOUT 240)
 add_test(NAME test_native_class_coalesce_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_class_coalesce.py
         --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
@@ -2116,25 +2043,10 @@ add_test(NAME test_native_ref_array_authority
         --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_ref_array_authority PROPERTIES
     LABELS "aot;generated-c;array;ownership;integration" TIMEOUT 240)
-add_test(NAME test_native_ref_slice_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_ref_slice.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_ref_slice_authority PROPERTIES
-    LABELS "aot;generated-c;slice;ownership;integration" TIMEOUT 240)
-add_test(NAME test_native_string_copy_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_string_copy.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_string_copy_authority PROPERTIES
-    LABELS "aot;generated-c;string;ownership;integration" TIMEOUT 240)
 add_test(NAME test_native_nullable_enum_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_nullable_enum.py
         --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_nullable_enum_authority PROPERTIES
-    LABELS "aot;generated-c;enum;integration" TIMEOUT 240)
-add_test(NAME test_native_enum_namespace_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_enum_namespace.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_enum_namespace_authority PROPERTIES
     LABELS "aot;generated-c;enum;integration" TIMEOUT 240)
 add_test(NAME test_native_module_const_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_module_const.py
@@ -2145,21 +2057,11 @@ add_test(NAME test_target_array_owned_string_result
     COMMAND $<TARGET_FILE:test_target_plan> array-owned-string-result)
 set_tests_properties(test_target_array_owned_string_result PROPERTIES
     LABELS "typed-plan;array;ownership" TIMEOUT 60)
-add_test(NAME test_native_array_string_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_array_string.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_array_string_authority PROPERTIES
-    LABELS "aot;generated-c;array;ownership;integration" TIMEOUT 240)
 add_test(NAME test_native_atomic_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_atomic.py
         --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_atomic_authority PROPERTIES
     LABELS "aot;generated-c;atomic;ownership;integration" TIMEOUT 240)
-add_test(NAME test_native_external_field_authority
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_external_field.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_external_field_authority PROPERTIES
-    LABELS "aot;generated-c;class;ownership;integration" TIMEOUT 240)
 add_test(NAME test_semantic_builtin_runtime_method_authority
     COMMAND $<TARGET_FILE:test_semantic_plan> builtin-runtime-method-authority)
 set_tests_properties(test_semantic_builtin_runtime_method_authority PROPERTIES
@@ -4242,12 +4144,6 @@ add_test(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
-add_test(NAME test_native_buffer_storage
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_buffer_storage.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_buffer_storage PROPERTIES
-    LABELS "aot;generated-c;ownership" TIMEOUT 120)
-
 # These fixtures keep large runtime/authority records on the stack or run the
 # complete compiler. Match the Windows driver budget without reducing ASan's.
 if((MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC") AND NOT ENABLE_ASAN)
@@ -4268,17 +4164,6 @@ if(ENABLE_ASAN)
     set_tests_properties(test_dostring_program_image PROPERTIES COST 230)
 endif()
 
-add_test(NAME test_native_leaf_representation
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_leaf_representation.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_leaf_representation PROPERTIES
-    LABELS "aot;generated-c;integration" TIMEOUT 180)
-
-add_test(NAME test_native_raw_slice
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_raw_slice.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
-set_tests_properties(test_native_raw_slice PROPERTIES
-    LABELS "aot;generated-c;ownership" TIMEOUT 120)
 add_test(NAME test_cgen_raw_slice COMMAND $<TARGET_FILE:test_xi_cgen> raw-slice)
 set_tests_properties(test_cgen_raw_slice PROPERTIES LABELS "aot;ownership" TIMEOUT 120)
 

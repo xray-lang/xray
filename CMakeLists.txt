@@ -1541,27 +1541,6 @@ set(XRAY_STDLIB_EMBEDDED_SOURCE_INC
     "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_embedded_sources.inc")
 set(XRAY_STDLIB_EMBEDDED_RUNTIME_INC
     "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_embedded_runtime.inc")
-set(XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/bootstrap")
-set(XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC
-    "${XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR}/stdlib_embedded_bytecodes.inc")
-set(XRAY_STDLIB_FINAL_BYTECODE_DIR
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/final")
-set(XRAY_STDLIB_FINAL_BYTECODE_INC
-    "${XRAY_STDLIB_FINAL_BYTECODE_DIR}/stdlib_embedded_bytecodes.inc")
-if(XR_STDLIB_FROM_FILE)
-    # Development builds compile stdlib source from disk and never read the
-    # embedded bytecode table.  Reuse the generated empty bootstrap table so
-    # focused compiler tests do not depend on successfully self-hosting every
-    # stdlib module before the compiler under test can be linked.
-    set(XRAY_STDLIB_RUNTIME_BYTECODE_DIR
-        "${XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR}")
-else()
-    set(XRAY_STDLIB_RUNTIME_BYTECODE_DIR
-        "${XRAY_STDLIB_FINAL_BYTECODE_DIR}")
-endif()
-set(XRAY_STDLIB_BYTECODE_DIR
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib-bytecode")
 set(XRAY_STDLIB_EMBED_GENERATOR
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py")
 # Match the embedded generator's metadata imports without unrelated tools.
@@ -1574,15 +1553,12 @@ add_custom_command(
     OUTPUT
         ${XRAY_STDLIB_EMBEDDED_SOURCE_INC}
         ${XRAY_STDLIB_EMBEDDED_RUNTIME_INC}
-        ${XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC}
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
             ${XRAY_STDLIB_EMBED_GENERATOR}
             --root ${CMAKE_CURRENT_SOURCE_DIR}
             --source-output ${XRAY_STDLIB_EMBEDDED_SOURCE_INC}
             --runtime-output ${XRAY_STDLIB_EMBEDDED_RUNTIME_INC}
-            --bytecode-output ${XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC}
             ${XRAY_STDLIB_SOURCELESS_MODULE_ARGS}
             ${XRAY_STDLIB_SCRIPT_SOURCES}
     DEPENDS
@@ -1595,8 +1571,7 @@ add_custom_command(
     VERBATIM
 )
 add_custom_target(gen-stdlib-embedded-sources
-    DEPENDS ${XRAY_STDLIB_EMBEDDED_SOURCE_INC} ${XRAY_STDLIB_EMBEDDED_RUNTIME_INC}
-        ${XRAY_STDLIB_BOOTSTRAP_BYTECODE_INC})
+    DEPENDS ${XRAY_STDLIB_EMBEDDED_SOURCE_INC} ${XRAY_STDLIB_EMBEDDED_RUNTIME_INC})
 
 # C include fragments use *.inc.c for editor support, but they are included
 # from owning .c files and must never be compiled as standalone translation units.
@@ -1654,15 +1629,7 @@ set(CORE_ALL_SOURCES
     ${STDLIB_SRC}
 )
 
-# The stdlib is embedded in two stages: `bootstrap` (a stub bytecode table, used
-# to build the generator) and `final` (the real table the generator produced).
-# The ONLY thing that differs between the two stages is which
-# stdlib_embedded_bytecodes.inc is on the include path, and exactly one
-# translation unit includes it — src/module/xstdlib_embedded_runtime.c.
-#
-# So compile that one file per stage, and everything else exactly once. Building
-# the full source list twice (identical preprocessor input, byte-identical flags
-# apart from that one -I) meant ~618 redundant translation units per clean build.
+# Legacy compiler fixtures share the generated native-entry registry object.
 # The immutable core-intrinsic registry is shared compiler/runtime metadata.
 # Keep it in the common object closure after moving it out of the mutable
 # frontend analyzer directory; the backend/install source lists below also
@@ -1678,24 +1645,23 @@ math(EXPR _core_removed "${_core_all_count} - ${_core_common_count}")
 if(NOT _core_removed EQUAL 1)
     message(FATAL_ERROR
         "CORE_COMMON_SOURCES must differ from CORE_ALL_SOURCES by exactly "
-        "src/module/xstdlib_embedded_runtime.c (removed ${_core_removed}). The two-stage "
-        "stdlib embedding assumes that file is the sole stage-dependent unit.")
+        "src/module/xstdlib_embedded_runtime.c (removed ${_core_removed}). The shared "
+        "native-entry registry must remain outside the common object aggregate.")
 endif()
 
-# Compiled once, shared by both stages.
+# Common objects remain shared by legacy fixture aggregates.
 add_library(xray_core_objs OBJECT ${CORE_COMMON_SOURCES})
 add_dependencies(xray_core_objs
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
     gen-native-type-defs gen-core-spec gen-target-query-registry gen-xr-program-schema)
 
-# Stage 1: stub bytecode table. Feeds xray_stdlib_bcgen, which produces the real
-# table.
+# Keep the registry object consumed by existing legacy compiler fixtures.
 add_library(xray_stdlib_bootstrap_core OBJECT src/module/xstdlib_embedded_runtime.c)
 add_dependencies(xray_stdlib_bootstrap_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
     gen-native-type-defs gen-target-query-registry gen-stdlib-embedded-sources)
 
-# Stage 2: the generated table. This is the core library everything else links.
+# The legacy core archive retains the same generated native-entry registry.
 add_library(xray_core STATIC src/module/xstdlib_embedded_runtime.c $<TARGET_OBJECTS:xray_core_objs>)
 add_dependencies(xray_core
     gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata
@@ -2169,9 +2135,8 @@ add_compile_definitions(
 
 
 # Core library include paths (detailed configuration).
-# xray_core_objs holds the sources shared by both stdlib-embedding stages, so it
-# needs every setting the two stage libraries share — everything below except the
-# stage-specific bytecode directory, which only xstdlib_embedded_runtime.c consumes.
+# The legacy object aggregates share ordinary generated metadata. The native
+# entry registry has no separate bytecode include directory.
 target_include_directories(xray_core_objs PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
@@ -2187,7 +2152,6 @@ target_include_directories(xray_stdlib_bootstrap_core PUBLIC
 
 target_include_directories(xray_stdlib_bootstrap_core PRIVATE
     ${XRAY_COMMON_INCLUDES}
-    ${XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
 
@@ -2197,7 +2161,6 @@ target_include_directories(xray_core PUBLIC
 
 target_include_directories(xray_core PRIVATE
     ${XRAY_COMMON_INCLUDES}
-    ${XRAY_STDLIB_RUNTIME_BYTECODE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
 
@@ -2215,7 +2178,6 @@ target_include_directories(xray_vm PUBLIC
 
 target_include_directories(xray_vm PRIVATE
     ${XRAY_COMMON_INCLUDES}
-    ${XRAY_STDLIB_RUNTIME_BYTECODE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
 
@@ -2334,78 +2296,7 @@ else()
     message(STATUS "OpenSSL: not found (ws/crypto modules may be limited)")
 endif()
 
-add_executable(xray_stdlib_bcgen
-    src/app/tools/xstdlib_bcgen.c
-    src/app/toolchain/xtc_model.c
-    src/app/toolchain/xtc_target_profile.c
-)
-# Both halves of stage 1: the shared core objects plus the bootstrap-stage
-# xstdlib_embedded_runtime.c (linking an OBJECT library contributes its objects).
-target_link_libraries(xray_stdlib_bcgen PRIVATE xray_core_objs xray_stdlib_bootstrap_core)
-target_include_directories(xray_stdlib_bcgen PRIVATE
-    ${XRAY_COMMON_INCLUDES}
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
-    # The bootstrap compiler runs the same recursive parser/lowering passes as
-    # xray.  ASan inflates those frames enough to overflow PE/COFF's default
-    # 1 MiB stack while compiling the embedded stdlib, so give both compiler
-    # executables the same Unix-like main-thread allowance.
-    target_link_options(xray_stdlib_bcgen PRIVATE "LINKER:/STACK:8388608")
-endif()
-
-set(XRAY_STDLIB_BYTECODE_OUTPUTS)
-foreach(XRAY_STDLIB_SOURCE IN LISTS XRAY_STDLIB_SCRIPT_SOURCES)
-    get_filename_component(XRAY_STDLIB_MODULE_DIR "${XRAY_STDLIB_SOURCE}" DIRECTORY)
-    get_filename_component(XRAY_STDLIB_MODULE "${XRAY_STDLIB_MODULE_DIR}" NAME)
-    string(REGEX REPLACE "[^A-Za-z0-9_]" "_" XRAY_STDLIB_STAGING_NAME "${XRAY_STDLIB_MODULE}")
-    string(REGEX REPLACE "^_+|_+$" "" XRAY_STDLIB_STAGING_NAME "${XRAY_STDLIB_STAGING_NAME}")
-    if(XRAY_STDLIB_STAGING_NAME STREQUAL "")
-        set(XRAY_STDLIB_STAGING_NAME "module")
-    endif()
-    set(XRAY_STDLIB_BYTECODE "${XRAY_STDLIB_BYTECODE_DIR}/${XRAY_STDLIB_STAGING_NAME}")
-    list(APPEND XRAY_STDLIB_BYTECODE_OUTPUTS "${XRAY_STDLIB_BYTECODE}")
-    add_custom_command(
-        OUTPUT "${XRAY_STDLIB_BYTECODE}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_BYTECODE_DIR}"
-        COMMAND ${CMAKE_COMMAND} -E env "XRAY_STDLIB_PATH=${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
-                $<TARGET_FILE:xray_stdlib_bcgen> compile "${XRAY_STDLIB_SOURCE}"
-                --output "${XRAY_STDLIB_BYTECODE}" --format bytecode
-                --stdlib-module "${XRAY_STDLIB_MODULE}"
-        # Each compilation resolves imports from source. Until an exact import
-        # depfile exists, every selected module is a dependency of every output.
-        DEPENDS xray_stdlib_bcgen ${XRAY_STDLIB_SCRIPT_SOURCES}
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        COMMENT "Compiling embedded stdlib module ${XRAY_STDLIB_MODULE}"
-        VERBATIM
-    )
-endforeach()
-
-add_custom_command(
-    OUTPUT ${XRAY_STDLIB_FINAL_BYTECODE_INC}
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_FINAL_BYTECODE_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
-            ${XRAY_STDLIB_EMBED_GENERATOR}
-            --root ${CMAKE_CURRENT_SOURCE_DIR}
-            --bytecode-dir ${XRAY_STDLIB_BYTECODE_DIR}
-            --require-bytecode
-            --bytecode-output ${XRAY_STDLIB_FINAL_BYTECODE_INC}
-            ${XRAY_STDLIB_SCRIPT_SOURCES}
-    DEPENDS
-        ${XRAY_STDLIB_BYTECODE_OUTPUTS}
-        ${XRAY_STDLIB_EMBED_GENERATOR}
-        ${XRAY_STDLIB_SCRIPT_SOURCES}
-    COMMENT "Generating embedded stdlib bytecode table"
-    VERBATIM
-)
-add_custom_target(gen-stdlib-embedded-bytecodes DEPENDS ${XRAY_STDLIB_FINAL_BYTECODE_INC})
-add_custom_target(gen-stdlib-embedded
-    DEPENDS gen-stdlib-embedded-sources gen-stdlib-embedded-bytecodes)
-if(XR_STDLIB_FROM_FILE)
-    add_dependencies(xray_core gen-stdlib-embedded-sources)
-else()
-    add_dependencies(xray_core gen-stdlib-embedded-bytecodes)
-endif()
+add_dependencies(xray_core gen-stdlib-embedded-sources)
 
 # ============================================================================
 # Build Target - Main Executable (optional LSP and DAP)
@@ -5435,13 +5326,13 @@ if(BUILD_TESTS)
     )
 
     add_test(
-        NAME stdlib_bytecode_staging_identity
+        NAME stdlib_source_embedding_identity
         COMMAND ${XRAY_PYTHON}
                 ${XRAY_STDLIB_EMBED_GENERATOR}
                 --self-test
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
-    set_tests_properties(stdlib_bytecode_staging_identity PROPERTIES
+    set_tests_properties(stdlib_source_embedding_identity PROPERTIES
         LABELS "meta;artifact;stdlib;target-machine"
         PROCESSORS 1
         TIMEOUT 30
@@ -5823,10 +5714,8 @@ else()
     message(STATUS "clang-tidy: not found (optional)")
 endif()
 
-# ========== Stdlib Script Source / Bytecode Embedding ==========
-# Canonical stdlib .xr files are embedded twice:
-#   1. source/bootstrap metadata for early module loading;
-#   2. final bytecode generated by xray_stdlib_bcgen for bytecode-only import.
+# ========== Stdlib Source and Native Entry Metadata ==========
+# Canonical stdlib .xr text and native-entry metadata share one generator.
 # Native factories may still anchor modules and set module->requires_script=true.
 
 # ============================================================================
