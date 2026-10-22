@@ -22,6 +22,7 @@
 #include "base/xsha256.h"
 
 static const char source_text[] =
+    "export fn anchor()->i64{return 7}\n"
     "export fn probe(text:string,search:string)->bool{return text.contains(search)}\n"
     "fn proof()->bool{return \"\".contains(\"\")}\n"
     "export fn folded()->bool{return comptime proof()}\n"
