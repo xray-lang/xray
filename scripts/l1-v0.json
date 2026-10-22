@@ -22,7 +22,9 @@
     "test_lir_lower",
     "test_lir_lower_allocations",
     "native_bench_reference",
-    "test_xir_library_string_source"
+    "test_xir_library_string_source",
+    "test_lir_bytecode",
+    "test_lir_bytecode_alloc"
   ],
   "tests": [
     "test_cli_usability",
@@ -57,7 +59,9 @@
     "test_lir_lower",
     "test_lir_lower_allocations",
     "native_bench_runner",
-    "test_xir_library_literal_owner"
+    "test_xir_library_literal_owner",
+    "lir_bytecode",
+    "lir_bytecode_alloc"
   ],
   "versionCommand": ["{build}/xray.exe", "--version", "--json"],
   "smokeStatus": "smoke: demos 2/22 stdlib 1/29 readme 0/6 native 0/3; native GAP, NOT_RUN (Task328 P2)"
