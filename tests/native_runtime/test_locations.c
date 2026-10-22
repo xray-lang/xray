@@ -13,12 +13,12 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 
 static void owned_bytes(void) {
-    char path[] = {'x', '\0', '\n', (char)0xc3, (char)0xa9, '!'};
-    const char expected[] = {'x', '\0', '\n', (char)0xc3, (char)0xa9};
-    XrtSourceLocation input[] = {{path, sizeof(path) - 1, 3, 5, 0, 0},
-        {path, sizeof(path) - 1, 7, 9, 8, 2}};
+    char path[] = "x\0\n\xc3\xa9!";
+    const char expected[] = "x\0\n\xc3\xa9";
+    XrtSourceLocation input[] = {{path, sizeof(expected) - 1, 3, 5, 0, 0},
+        {path, sizeof(expected) - 1, 7, 9, 8, 2}};
     {
-        memcpy(path, expected, sizeof(expected));
+        memcpy(path, expected, sizeof(expected) - 1);
         XrtLocationOwner *owner = NULL;
         CHECK(xrt_locations_create(input, 2, &owner) == XRT_LOCATION_OK);
         CHECK(xrt_locations_count(owner) == 2 && xrt_locations_retain(owner));
@@ -26,11 +26,11 @@ static void owned_bytes(void) {
         xrt_locations_release(owner);
         const XrtSourceLocation *first = xrt_locations_get(owner, 1);
         const XrtSourceLocation *last = xrt_locations_get(owner, 2);
-        CHECK(first && first->path != path && first->path_length == sizeof(expected));
-        CHECK(!memcmp(first->path, expected, sizeof(expected)) && first->line == 3 &&
+        CHECK(first && first->path != path && first->path_length == sizeof(expected) - 1);
+        CHECK(!memcmp(first->path, expected, sizeof(expected) - 1) && first->line == 3 &&
             first->column == 5 && !first->end_line && !first->end_column);
         CHECK(last && last->line == 7 && last->column == 9 && last->end_line == 8 &&
-            last->end_column == 2 && !memcmp(last->path, expected, sizeof(expected)));
+            last->end_column == 2 && !memcmp(last->path, expected, sizeof(expected) - 1));
         CHECK(!xrt_locations_get(owner, 0) && !xrt_locations_get(owner, 3));
         xrt_locations_release(owner);
     }
