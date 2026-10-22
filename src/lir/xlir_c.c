@@ -106,7 +106,8 @@ static void c_format(LirC *c, const char *format, ...) {
 }
 static const char *c_type(XrLirType type) {
     static const char *const types[] = {NULL, "void", "_Bool", "int8_t", "int16_t",
-        "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t"};
+        "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
+        NULL, NULL, "void *"};
     return (unsigned) type < sizeof(types) / sizeof(types[0]) ? types[type] : NULL;
 }
 static unsigned c_width(XrLirType type) {
@@ -146,7 +147,7 @@ static XrLirType c_value_type(LirC *c, uint32_t id) {
 }
 static bool c_scalar(LirC *c, XrLirType type) {
     if (!c_type(type))
-        c_error(c, XR_LIR_C_UNSUPPORTED, "C backend requires integer, bool or unit types");
+        c_error(c, XR_LIR_C_UNSUPPORTED, "C backend requires integer, bool, unit or data pointer types");
     return c->status == XR_LIR_C_OK;
 }
 static bool c_print_call(LirC *c, const XrLirInstructionView *v) {
@@ -376,7 +377,13 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge) {
 static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     static const char *const predicates[] = {NULL, "==", "!=", "<", "<=", ">", ">="};
     switch (v->op) {
-        case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
+        case XR_LIR_CONST:
+            if (v->type == XR_LIR_PTR)
+                c_format(c, "    v%" PRIu32 " = 0;\n", v->result);
+            else
+                c_integer(c, v);
+            break;
+        case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
         case XR_LIR_NEG: case XR_LIR_INTCAST:
             c_integer(c, v);
             break;

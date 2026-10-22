@@ -18,10 +18,9 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == XR_LIR_OK)
 
-static XrLirFunction function(XrLirModule *m, const XrLirType *parameters,
+static XrLirFunction function(XrLirModule *m, const char *name, const XrLirType *parameters,
     uint32_t count, XrLirType result) {
     XrLirFunction f;
-    const char *name = count ? "helper" : "root";
     XrLirFunctionSpec spec = {.name = name, .name_length = strlen(name), .parameters = parameters,
         .parameter_count = count, .result = result};
     OK(xr_lir_declare_function(m, &spec, &f)); OK(xr_lir_define_function(m, f)); return f;
@@ -49,7 +48,7 @@ static void build_helper(XrLirModule *m, XrLirFunction f, XrLirType type) {
     OK(xr_lir_set_entry(m, f, entry)); XrLirValue n, p[3];
     OK(xr_lir_function_parameter(m, f, 0, &n));
     for (uint32_t i = 0; i < 3; ++i) OK(xr_lir_block_parameter(m, loop, i, &p[i]));
-    XrLirValue sentinel = constant(m, entry, type, type == XR_LIR_I8 ? 0 : 1);
+    XrLirValue sentinel = constant(m, entry, type, type == XR_LIR_U16 ? 1 : 0);
     XrLirValue zero = constant(m, entry, XR_LIR_I64, 0), one = constant(m, entry, XR_LIR_I64, 1);
     XrLirValue initial[] = {n, sentinel, zero}; branch(m, entry, loop, initial);
     XrLirValue compare[] = {p[2], one}, condition;
@@ -65,21 +64,56 @@ static void build_helper(XrLirModule *m, XrLirFunction f, XrLirType type) {
     XrLirValue swapped[] = {p[1], p[0], next}; branch(m, body, loop, swapped);
     ret(m, done, p[1]);
 }
-static XrLirModule *make_carrier(XrLirType type) {
+static XrLirFunction comparator(XrLirModule *m, bool equal) {
+    XrLirType types[] = {XR_LIR_PTR, XR_LIR_PTR};
+    XrLirFunction f = function(m, equal ? "equal" : "different", types, 2, XR_LIR_I1);
+    XrLirBlock b = block(m, f, NULL, 0); OK(xr_lir_set_entry(m, f, b));
+    XrLirValue args[2], result;
+    for (uint32_t i = 0; i < 2; ++i) OK(xr_lir_function_parameter(m, f, i, &args[i]));
+    XrLirInstruction v = {.op = XR_LIR_ICMP, .type = XR_LIR_I1,
+        .predicate = equal ? XR_LIR_EQ : XR_LIR_NE, .operands = args, .operand_count = 2};
+    OK(xr_lir_emit_value(m, b, &v, &result)); ret(m, b, result); return f;
+}
+static void output_value(XrLirModule *m, XrLirBlock b) {
+    XrLirType type = XR_LIR_I64; XrLirFunction print;
+    XrLirFunctionSpec spec = {.name = "xrt_print_i64", .name_length = sizeof("xrt_print_i64") - 1,
+        .parameters = &type, .parameter_count = 1, .result = XR_LIR_UNIT,
+        .kind = XR_LIR_FUNCTION_EXTERNAL, .extern_kind = XR_LIR_EXTERN_PRINT_I64};
+    OK(xr_lir_declare_function(m, &spec, &print));
+    XrLirValue value = constant(m, b, type, 42);
+    XrLirInstruction v = {.op = XR_LIR_CALL, .type = XR_LIR_UNIT, .callee = print,
+        .operands = &value, .operand_count = 1, .source = {"pointer.xr", 10, 5, 1, 5, 9}};
+    OK(xr_lir_emit_effect(m, b, &v));
+}
+static XrLirModule *make_carrier(XrLirType type, bool output) {
     XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
-    XrLirType result = type == XR_LIR_U64 ? type : XR_LIR_I64;
-    XrLirFunction root = function(m, NULL, 0, result), helper = {0};
-    if (type != XR_LIR_U64) helper = function(m, &type, 1, type);
+    XrLirType result = type == XR_LIR_U64 || type == XR_LIR_PTR ? type : XR_LIR_I64;
+    XrLirFunction root = function(m, "root", NULL, 0, result), helper = {0};
+    if (type != XR_LIR_U64) helper = function(m, "helper", &type, 1, type);
     XrLirBlock entry = block(m, root, NULL, 0); OK(xr_lir_set_entry(m, root, entry));
     if (type == XR_LIR_U64) ret(m, entry, constant(m, entry, type, UINT64_MAX));
     else {
         build_helper(m, helper, type);
-        XrLirValue argument = constant(m, entry, type, type == XR_LIR_I8 ? 128 : 65535), called, widened;
+        uint64_t bits = type == XR_LIR_I8 ? 128 : type == XR_LIR_U16 ? 65535 : 0;
+        XrLirValue argument = constant(m, entry, type, bits), called, widened;
         XrLirInstruction v = {.op = XR_LIR_CALL, .type = type, .callee = helper,
             .operands = &argument, .operand_count = 1};
         OK(xr_lir_emit_value(m, entry, &v, &called));
-        v = (XrLirInstruction){.op = XR_LIR_INTCAST, .type = XR_LIR_I64, .operands = &called, .operand_count = 1};
-        OK(xr_lir_emit_value(m, entry, &v, &widened)); ret(m, entry, widened);
+        if (type == XR_LIR_PTR) {
+            XrLirValue args[] = {called, argument}, unused;
+            for (unsigned i = 0; i < 2; ++i) {
+                XrLirFunction compare = comparator(m, i == 0);
+                v = (XrLirInstruction){.op = XR_LIR_CALL, .type = XR_LIR_I1, .callee = compare,
+                    .operands = args, .operand_count = 2};
+                OK(xr_lir_emit_value(m, entry, &v, &unused));
+            }
+            if (output) output_value(m, entry);
+            ret(m, entry, called);
+        } else {
+            CHECK(!output);
+            v = (XrLirInstruction){.op = XR_LIR_INTCAST, .type = XR_LIR_I64, .operands = &called, .operand_count = 1};
+            OK(xr_lir_emit_value(m, entry, &v, &widened)); ret(m, entry, widened);
+        }
     }
     OK(xr_lir_module_finish(m, NULL)); OK(xr_lir_verify(m, NULL)); return m;
 }
@@ -92,7 +126,8 @@ static XrLirModule *sccp_and_retire(XrLirModule *m) {
 static void observe(XrLirModule *m, XrLirType type, bool report) {
     XrLirFunction root; XrLirFunctionView fv;
     OK(xr_lir_function_at(m, 0, &root)); OK(xr_lir_function_view(m, root, &fv));
-    CHECK(fv.parameter_count == 0 && fv.result == (type == XR_LIR_U64 ? type : XR_LIR_I64));
+    XrLirType result = type == XR_LIR_U64 || type == XR_LIR_PTR ? type : XR_LIR_I64;
+    CHECK(fv.parameter_count == 0 && fv.result == result);
     if (type == XR_LIR_U64) {
         CHECK(xr_lir_function_count(m) == 1);
         if (report) puts("{\"carrier\":\"u64\",\"root\":\"u64(void)\"}");
@@ -101,6 +136,14 @@ static void observe(XrLirModule *m, XrLirType type, bool report) {
     XrLirFunction helper; OK(xr_lir_function_at(m, 1, &helper));
     OK(xr_lir_function_view(m, helper, &fv));
     CHECK(helper.id == 2 && fv.parameter_count == 1 && fv.parameter_types[0] == type && fv.result == type);
+    if (type == XR_LIR_PTR) {
+        for (uint32_t i = 2; i < 4; ++i) {
+            XrLirFunction compare; XrLirFunctionView signature;
+            OK(xr_lir_function_at(m, i, &compare)); OK(xr_lir_function_view(m, compare, &signature));
+            CHECK(compare.id == i + 1 && signature.result == XR_LIR_I1 && signature.parameter_count == 2 &&
+                signature.parameter_types[0] == type && signature.parameter_types[1] == type);
+        }
+    }
     XrLirBlock loop = {0}; XrLirBlockView phi = {0};
     for (uint32_t i = 0; i < fv.block_count; ++i) {
         XrLirBlock b; XrLirBlockView bv; OK(xr_lir_block_at(m, helper, i, &b));
@@ -166,12 +209,12 @@ static void emit_c(XrLirModule *m, const char *path) {
 }
 static XrLirModule *transport(XrLirType type) {
     XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
-    XrLirFunction f = function(m, NULL, 0, type); XrLirBlock b = block(m, f, NULL, 0);
+    XrLirFunction f = function(m, "transport", NULL, 0, type); XrLirBlock b = block(m, f, NULL, 0);
     OK(xr_lir_set_entry(m, f, b)); ret(m, b, constant(m, b, type, 0));
     OK(xr_lir_module_finish(m, NULL)); OK(xr_lir_verify(m, NULL)); return m;
 }
 static void test_frontier(void) {
-    const XrLirType native_rejected[] = {XR_LIR_F32, XR_LIR_F64, XR_LIR_PTR};
+    const XrLirType native_rejected[] = {XR_LIR_F32, XR_LIR_F64};
     for (size_t i = 0; i < sizeof(native_rejected) / sizeof(*native_rejected); ++i) {
         XrLirModule *m = transport(native_rejected[i]); XrLirFunction root; OK(xr_lir_function_at(m, 0, &root));
         XrCompileResources *resources = resources_new(); XrLirCOutput out = {0}; XrLirCDiagnostic diagnostic;
@@ -190,19 +233,23 @@ static void test_frontier(void) {
     }
 }
 int main(int argc, char **argv) {
-    const XrLirType types[] = {XR_LIR_I8, XR_LIR_U16, XR_LIR_U64};
+    const XrLirType types[] = {XR_LIR_I8, XR_LIR_U16, XR_LIR_U64, XR_LIR_PTR};
     if (argc == 1) {
         test_frontier();
-        for (size_t i = 0; i < 3; ++i) {
-            XrLirModule *m = make_carrier(types[i]); observe(m, types[i], false);
-            m = sccp_and_retire(m); observe(m, types[i], false); xr_lir_module_destroy(m);
+        for (size_t i = 0; i < 4; ++i) {
+            for (unsigned output = 0; output <= (types[i] == XR_LIR_PTR ? 1u : 0u); ++output) {
+                XrLirModule *m = make_carrier(types[i], output != 0); observe(m, types[i], false);
+                m = sccp_and_retire(m); observe(m, types[i], false); xr_lir_module_destroy(m);
+            }
         }
         puts("Typed carriers, parallel edges and explicit backend frontiers passed"); return 0;
     }
     CHECK(argc == 4); XrLirType type = XR_LIR_TYPE_INVALID;
-    for (size_t i = 0; i < 3; ++i) if (!strcmp(argv[1], xr_lir_type_name(types[i]))) type = types[i];
+    bool output = !strcmp(argv[1], "ptr-output");
+    for (size_t i = 0; i < 4; ++i) if (!strcmp(argv[1], xr_lir_type_name(types[i]))) type = types[i];
+    if (output) type = XR_LIR_PTR;
     CHECK(type != XR_LIR_TYPE_INVALID && (!strcmp(argv[2], "before") || !strcmp(argv[2], "after")));
-    XrLirModule *m = make_carrier(type);
+    XrLirModule *m = make_carrier(type, output);
     if (!strcmp(argv[2], "after")) m = sccp_and_retire(m);
     observe(m, type, true); emit_c(m, argv[3]); return 0;
 }

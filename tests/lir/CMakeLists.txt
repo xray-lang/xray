@@ -109,6 +109,7 @@ set_tests_properties(test_lir_inline_native PROPERTIES LABELS "unit;lir;native" 
 add_test(NAME test_lir_carriers_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_carriers_native.py"
     --driver $<TARGET_FILE:test_lir_carriers>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library $<TARGET_FILE:xray_native_runtime>
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --work "${CMAKE_CURRENT_BINARY_DIR}/carriers" ${lir_c_native_options})
 set_tests_properties(test_lir_carriers_native PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)
