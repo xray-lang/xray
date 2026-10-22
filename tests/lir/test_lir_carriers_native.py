@@ -1,8 +1,9 @@
-"""Observe integer and opaque pointer carriers across separate native TUs."""
+"""Observe integer, pointer and binary64 carriers across separate native TUs."""
 import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -69,6 +70,213 @@ int main(int argc, char **argv) {{
     printf("%" PRId64 "\\n", root()); return 0;
 }}
 '''
+
+
+_F64_MACROS = ('_MSC_VER', '_M_X64', '_M_ARM64EC', '_M_FP_FAST', '__FAST_MATH__', '__FINITE_MATH_ONLY__')
+_ABI_ERROR = 'F64_TRANSPORT_REQUIRES_VALIDATED_MICROSOFT_X64_ABI'
+_FP_ERROR = 'F64_TRANSPORT_REQUIRES_NONFAST_FLOATING_POINT_MODE'
+_F64_INPUTS = ['0000000000000000', '8000000000000000', '3ff0000000000000', 'bff0000000000000',
+               '0000000000000001', '8000000000000001', '000fffffffffffff', '0010000000000000',
+               '7fefffffffffffff', '7ff0000000000000', 'fff0000000000000', '7ff8000000000000',
+               '7ff8000000001234', 'fff8000000001234', '7ff0000000000001', 'fff0000000001234']
+
+
+def _f64_profile(compiler, kind, options, work):
+    """Read independent compiler facts; a failed query is never a target denial."""
+    source = work / 'target-facts.c'
+    text = '#define F64_STR1(x) #x\n#define F64_STR(x) F64_STR1(x)\n'
+    for i, name in enumerate(_F64_MACROS):
+        text += (f'#ifdef {name}\nconst int f64_d{i} = 1;\nconst char *f64_v{i} = F64_STR({name});\n'
+                 f'#else\nconst int f64_d{i} = 0;\nconst char *f64_v{i} = "UNDEFINED";\n#endif\n')
+    source.write_text(text, encoding='ascii')
+    # These options only generate/debug/instrument code; retain target/FP/defines.
+    ignored = {'/Zi', '/Z7', '/GL-', '/clang:-fno-lto', '-fno-lto', '-g'}
+    preprocess = [x for x in options if str(x) not in ignored and not str(x).startswith(
+        ('/fsanitize=', '/clang:-fsanitize=', '-fsanitize='))]
+    argv = [compiler, *preprocess, *(['/EP'] if kind == 'msvc' else ['-E', '-P']), source]
+    record = run(argv, work)
+    output = bytes.fromhex(record['stdoutHex']).decode('ascii')
+    facts = {}
+    for i, name in enumerate(_F64_MACROS):
+        defined = re.findall(rf'const int f64_d{i}\s*=\s*([01])\s*;', output)
+        value = re.findall(rf'const char\s*\*f64_v{i}\s*=\s*"([^"]+)"\s*;', output)
+        assert len(defined) == len(value) == 1, (name, output)
+        present = defined[0] == '1'
+        assert (value[0] != 'UNDEFINED') == present
+        assert not present or value[0].isdigit(), (name, value)
+        facts[name] = {'defined': present, 'value': int(value[0]) if present else None}
+    abi = facts['_MSC_VER']['defined'] and facts['_M_X64']['defined'] and not facts['_M_ARM64EC']['defined']
+    fast = facts['_M_FP_FAST']['defined'] or facts['__FAST_MATH__']['defined'] or (
+        facts['__FINITE_MATH_ONLY__']['defined'] and facts['__FINITE_MATH_ONLY__']['value'] > 0)
+    return {'facts': facts, 'query': record, 'abiSupported': abi, 'fastMode': bool(fast),
+            'supported': abi and not fast, 'expectedGuard': _ABI_ERROR if not abi else _FP_ERROR if fast else None}
+
+
+def _f64_reject(command, work, marker, product):
+    result = subprocess.run([str(x) for x in command], cwd=work, capture_output=True, timeout=90)
+    output = result.stdout + result.stderr
+    errors = [line for line in output.decode('utf-8', errors='replace').splitlines()
+              if re.search(r'\b(?:fatal )?error(?: C[0-9]+)?:', line)]
+    assert result.returncode and marker.encode('ascii') in output and errors, (command, output)
+    assert all(_ABI_ERROR in line or _FP_ERROR in line for line in errors), errors
+    assert not product.exists(), product
+    return {'argv': [str(x) for x in command], 'exit': result.returncode,
+            'stdoutHex': result.stdout.hex(), 'stderrHex': result.stderr.hex(),
+            'status': 'UNSUPPORTED_TARGET_REJECTED', 'payloadVectorsExecuted': 0}
+
+
+def _f64_adapter():
+    return r'''#include "carrier.h"
+#include <stdint.h>
+#include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <string.h>
+#include <fenv.h>
+int main(int argc, char **argv) {
+    double one = 1.0, negative_zero = -0.0;
+    uint64_t first, second; memcpy(&first, &one, 8); memcpy(&second, &negative_zero, 8);
+    if (first != UINT64_C(0x3ff0000000000000) || second != UINT64_C(0x8000000000000000)) return 2;
+    fenv_t original;
+    if (fegetenv(&original)) return 3;
+    Carrier call = carrier_get(); Root root = root_get();
+    for (int i = 1; i < argc; ++i) {
+        char *end = NULL; errno = 0;
+        uint64_t expected = strtoull(argv[i], &end, 16);
+        if (errno || end == argv[i] || *end) return 4;
+        for (int mode = 0; mode < 2; ++mode) {
+            int rounding = mode ? FE_UPWARD : FE_TONEAREST;
+            if (fesetround(rounding) || feclearexcept(FE_ALL_EXCEPT)) return 5;
+            if (mode && feraiseexcept(FE_INEXACT)) return 6;
+            int flags = fetestexcept(FE_ALL_EXCEPT), round = fegetround();
+            double input; memcpy(&input, &expected, 8);
+            double result = call(input); uint64_t actual; memcpy(&actual, &result, 8);
+            int after_flags = fetestexcept(FE_ALL_EXCEPT), after_round = fegetround();
+            if (actual != expected || after_flags != flags || after_round != round) return 7;
+            printf("%016" PRIx64 "\n", actual);
+        }
+    }
+    if (fesetenv(&original) || fflush(stdout)) return 8;
+    double value = root(); uint64_t bits; memcpy(&bits, &value, 8);
+    printf("%016" PRIx64 "\n", bits); return 0;
+}
+'''
+
+
+def _f64_cases(args, root, results):
+    roots = {'f64': '8000000000000000', 'f64-zero': '0000000000000000',
+             'f64-finite': '3ff0000000000000', 'f64-subnormal': '0000000000000001',
+             'f64-inf': '7ff0000000000000', 'f64-nan': '7ff8000000000000'}
+    newline = b'\r\n' if os.name == 'nt' else b'\n'
+    profiles = {}
+    for base, answer in roots.items():
+        for output in (False, True):
+            case = base + ('-output' if output else '')
+            for mode in ('before', 'after'):
+                for fp in (('default', 'precise', 'strict') if args.kind == 'msvc' else ('default',)):
+                    work = root / (case + '-' + mode + '-' + fp); work.mkdir()
+                    generated, gateway, host = [work / x for x in ('generated.c', 'gateway.c', 'adapter.c')]
+                    producer = run([args.driver, case, mode, generated], work)
+                    observation = json.loads(bytes.fromhex(producer['stdoutHex']))
+                    assert observation['carrier'] == 'f64'
+                    a, b, _ = observation['parameters']
+                    assert observation['backedgeArguments'][:2] == [b, a] and observation['returned'] == b
+                    text = generated.read_text(encoding='ascii')
+                    assert 'double' in text and 'memcpy' in text and _ABI_ERROR in text and _FP_ERROR in text
+                    if output:
+                        assert '*(double *)context = xrl_f1();' in text and 'xrt_run_standalone(' in text
+                    else:
+                        assert 'xrt_' not in text and 'xray_native_runtime.h' not in text
+                    (work / 'carrier.h').write_text('typedef double Scalar;\ntypedef Scalar (*Carrier)(Scalar);\n'
+                        'typedef double (*Root)(void);\nCarrier carrier_get(void);\nRoot root_get(void);\n', encoding='ascii')
+                    gateway.write_text('#include "generated.c"\n#include "carrier.h"\n'
+                        '_Static_assert(_Generic(&xrl_f2, Carrier: 1, default: 0), "helper type");\n'
+                        '_Static_assert(_Generic(&xray_lir_entry, Root: 1, default: 0), "root type");\n'
+                        'Carrier carrier_get(void) { return &xrl_f2; }\nRoot root_get(void) { return &xray_lir_entry; }\n', encoding='ascii')
+                    if output:
+                        with gateway.open('a', encoding='ascii') as stream:
+                            stream.write('_Static_assert(_Generic(&xrl_f1, Root: 1, default: 0), "worker type");\n')
+                    host.write_text(_f64_adapter(), encoding='ascii')
+                    if args.kind == 'msvc':
+                        crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
+                               'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
+                        flags = ['/nologo', '/std:c11', '/W4', '/WX', '/O2', '/utf-8', crt]
+                        flags += ['/clang:-fno-lto'] if 'clang' in args.compiler.name.lower() else ['/GL-']
+                        if fp != 'default': flags += ['/fp:' + fp]
+                        if args.asan:
+                            flags += ['/fsanitize=address', '/Zi']
+                            if 'clang' in args.compiler.name.lower(): flags += ['/clang:-fsanitize=undefined']
+                        flags += ['/I' + str(args.include)] if output else []
+                        objects = [work / 'gateway.obj', work / 'adapter.obj']
+                        commands = [[args.compiler, *flags, '/c', path, '/Fo' + str(obj)]
+                                    for path, obj in zip((gateway, host), objects)]
+                        link = [args.compiler, *flags, *objects, *([args.library] if output else []),
+                                '/Fe:' + str(work / 'run.exe'), '/link', '/INCREMENTAL:NO']
+                        executable = work / 'run.exe'
+                    else:
+                        flags = ['-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', '-fno-lto']
+                        if args.asan: flags += ['-fsanitize=address,undefined', '-g']
+                        flags += ['-I' + str(args.include)] if output else []
+                        objects = [work / 'gateway.o', work / 'adapter.o']
+                        commands = [[args.compiler, *flags, '-c', path, '-o', obj]
+                                    for path, obj in zip((gateway, host), objects)]
+                        executable = work / 'run'
+                        link = [args.compiler, *flags, *objects, *([args.library] if output else []), '-lm', '-o', executable]
+                    if fp not in profiles:
+                        profiles[fp] = _f64_profile(args.compiler, args.kind, flags, work)
+                    profile = profiles[fp]
+                    record = {'case': case, 'mode': mode, 'fpMode': fp, 'producer': producer,
+                              'observation': observation, 'profile': profile, 'generatedSHA256': digest(generated)}
+                    if not profile['supported']:
+                        record['negative'] = _f64_reject(commands[0], work, profile['expectedGuard'], objects[0])
+                    else:
+                        record['compiles'] = [run(command, work) for command in commands]
+                        record['link'] = run(link, work)
+                        inputs = _F64_INPUTS if base == 'f64' else []
+                        native = run([executable, *inputs], work)
+                        expected = b''.join(x.encode('ascii') + newline for x in inputs for _ in range(2))
+                        if output: expected += b'42\n'
+                        expected += answer.encode('ascii') + newline
+                        assert native['stdoutHex'] == expected.hex() and native['stderrHex'] == ''
+                        record.update(native=native, expectedHex=expected.hex(), status='PASS',
+                                      payloadVectorsExecuted=len(inputs) * 2,
+                                      objects=[{'path': str(obj), 'sha256': digest(obj)} for obj in objects])
+                    if base == 'f64' and not output and mode == 'before' and fp == 'default':
+                        negative_flags = [x for x in flags if not str(x).startswith(('/fsanitize=', '/clang:-fsanitize=', '-fsanitize=')) and x != '/Zi']
+                        fast = ['/fp:fast'] if args.kind == 'msvc' else ['-ffast-math']
+                        variants = [('fast', args.compiler, fast)]
+                        if 'clang-cl' in args.compiler.name.lower():
+                            variants += [(arch, args.compiler, ['/clang:--target=' + arch + '-pc-windows-msvc'])
+                                         for arch in ('aarch64', 'arm64ec')]
+                        if args.kind == 'msvc' and args.compiler.name.lower() == 'cl.exe':
+                            x86 = args.compiler.parent.parent / 'x86' / args.compiler.name
+                            record['x86Control'] = {'compiler': str(x86), 'available': x86.is_file(),
+                                                    'qualification': 'compile-only negative, no execution'}
+                            if x86.is_file():
+                                variants += [('x86-default', x86, []), ('x86-fast', x86, fast)]
+                        record['guardRejections'] = []
+                        for label, compiler, options in variants:
+                            control = work / ('control-' + label); control.mkdir()
+                            facts = _f64_profile(compiler, args.kind, [*negative_flags, *options], control)
+                            marker = facts['expectedGuard']
+                            assert marker in (_ABI_ERROR, _FP_ERROR)
+                            if label.endswith('fast'): assert facts['fastMode']
+                            if label != 'fast': assert not facts['abiSupported'] and marker == _ABI_ERROR
+                            obj = control / ('rejected.obj' if args.kind == 'msvc' else 'rejected.o')
+                            command = ([compiler, *negative_flags, *options, '/c', generated, '/Fo' + str(obj)]
+                                       if args.kind == 'msvc' else [compiler, *negative_flags, *options, '-c', generated, '-o', obj])
+                            rejected = _f64_reject(command, control, marker, obj)
+                            rejected.update(control=label, profile=facts, expectedGuard=marker,
+                                            fpOnlyQualification=marker == _FP_ERROR)
+                            record['guardRejections'].append(rejected)
+                    if output:
+                        record['runtime'] = {'library': str(args.library), 'librarySHA256': digest(args.library),
+                                             'header': str(args.include / 'xray_native_runtime.h'),
+                                             'headerSHA256': digest(args.include / 'xray_native_runtime.h'),
+                                             'msvcRuntime': args.msvc_runtime}
+                    results.append(record)
+                    (root / 'case-results.json').write_text(json.dumps(results, indent=2) + '\n')
 
 
 def main():
@@ -185,7 +393,8 @@ def main():
                 'objects': [{'path': str(obj), 'sha256': digest(obj)} for obj in objects],
                 'link': linked, 'native': native, 'runtime': runtime})
             (root / 'case-results.json').write_text(json.dumps(results, indent=2) + '\n')
-    print('Integer and pointer carriers before/after SCCP passed across separate native TUs', flush=True)
+    _f64_cases(args, root, results)
+    print('Typed carriers and explicit target frontiers passed across separate native TUs', flush=True)
 
 
 if __name__ == '__main__':

@@ -36,7 +36,7 @@ typedef struct LirC {
     uint32_t block, instruction, scratch;
     XrLirSource source;
     uint32_t location_count, location_cursor;
-    bool runtime;
+    bool runtime, f64;
 } LirC;
 
 static void c_error(LirC *c, XrLirCStatus status, const char *message) {
@@ -109,7 +109,7 @@ static void c_format(LirC *c, const char *format, ...) {
 static const char *c_type(XrLirType type) {
     static const char *const types[] = {NULL, "void", "_Bool", "int8_t", "int16_t",
         "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
-        NULL, NULL, "void *"};
+        NULL, "double", "void *"};
     return (unsigned) type < sizeof(types) / sizeof(types[0]) ? types[type] : NULL;
 }
 static unsigned c_width(XrLirType type) {
@@ -149,7 +149,8 @@ static XrLirType c_value_type(LirC *c, uint32_t id) {
 }
 static bool c_scalar(LirC *c, XrLirType type) {
     if (!c_type(type))
-        c_error(c, XR_LIR_C_UNSUPPORTED, "C backend requires integer, bool, unit or data pointer types");
+        c_error(c, XR_LIR_C_UNSUPPORTED, "C backend requires integer, bool, unit, f64 transport or data pointer types");
+    c->f64 |= type == XR_LIR_F64;
     return c->status == XR_LIR_C_OK;
 }
 static bool c_print_call(LirC *c, const XrLirInstructionView *v) {
@@ -431,7 +432,11 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_CONST:
             if (v->type == XR_LIR_PTR)
                 c_format(c, "    v%" PRIu32 " = 0;\n", v->result);
-            else
+            else if (v->type == XR_LIR_F64) {
+                c_format(c, "    v%" PRIu32 " = UINT64_C(%" PRIu64 ");\n", c->scratch, v->bits);
+                c_format(c, "    memcpy(&v%" PRIu32 ", &v%" PRIu32 ", sizeof(v%" PRIu32 "));\n",
+                         v->result, c->scratch, v->result);
+            } else
                 c_integer(c, v);
             break;
         case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
@@ -519,10 +524,28 @@ static void c_standalone_root(LirC *c, XrLirType result) {
     }
     c_text(c, "}\n\n");
 }
+/* Compiler target macros belong to the emitted target, not this host.
+ * The selected binary64 closure must fail before unsupported C can execute. */
+static void c_preamble(LirC *c) {
+    if (c->f64) {
+        c_text(c, "#if !defined(_MSC_VER) || !defined(_M_X64) || defined(_M_ARM64EC)\n"
+            "#error F64_TRANSPORT_REQUIRES_VALIDATED_MICROSOFT_X64_ABI\n#endif\n"
+            "#if defined(_M_FP_FAST) || defined(__FAST_MATH__) || "
+            "(defined(__FINITE_MATH_ONLY__) && __FINITE_MATH_ONLY__ > 0)\n"
+            "#error F64_TRANSPORT_REQUIRES_NONFAST_FLOATING_POINT_MODE\n#endif\n"
+            "#include <stdint.h>\n#include <limits.h>\n#include <float.h>\n#include <string.h>\n"
+            "_Static_assert(CHAR_BIT == 8 && sizeof(double) == 8 && sizeof(uint64_t) == 8, "
+            "\"binary64 object size\");\n"
+            "_Static_assert(FLT_RADIX == 2 && DBL_MANT_DIG == 53 && DBL_MIN_EXP == -1021 "
+            "&& DBL_MAX_EXP == 1024, \"binary64 precision\");\n\n");
+    } else {
+        c_text(c, "#include <stdint.h>\n\n");
+    }
+}
 static void c_emit(LirC *c, XrLirType root_result) {
     XR_DCHECK(c->closure_count && c->closure[0] == c->request->entry.id,
               "emission starts from the explicit execution root");
-    c_text(c, "#include <stdint.h>\n\n");
+    c_preamble(c);
     if (c->runtime)
         c_text(c, "#include \"xray_native_runtime.h\"\n\n");
     c_locations(c);

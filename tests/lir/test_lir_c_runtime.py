@@ -8,6 +8,7 @@ import re
 import subprocess
 import tempfile
 from test_lir_c_native import run
+from test_lir_carriers_native import _f64_profile, _f64_reject
 
 
 def main():
@@ -53,6 +54,15 @@ def main():
         'print(q(9223372036854775807))\n'
         'print(r(9223372036854775807))\n',
         b'-3074457345618258602\n-79\n-2\n-1\n3074457345618258602\n78\n')
+    cases['f64-source'] = ('fn carry(x:f64)->f64{print(7)\nreturn x}\ncarry(1.25)\nprint(2)\n', b'7\n2\n')
+    refused_source, refused_c = root / 'refused-fadd.xr', root / 'refused-fadd.c'
+    refused_source.write_text('print(1)\nfn add(x:f64)->f64{return x+1.0}\nadd(2.0)\nprint(2)\n', encoding='utf-8')
+    refused = subprocess.run([str(args.driver), str(refused_source), str(refused_c)], capture_output=True, timeout=30)
+    (root / 'refused-fadd.stderr').write_bytes(refused.stderr)
+    assert refused.returncode == 1 and refused.stdout == b'' and not refused_c.exists()
+    assert b'C emission:' in refused.stderr and b'operation has no admitted portable C implementation' in refused.stderr
+    identity['selectedFadd'] = {'exit': refused.returncode, 'stdoutHex': refused.stdout.hex(),
+                                'stderrHex': refused.stderr.hex(), 'publishedC': False}
     typed_results = {'typed-i64-min': ('int64_t', 'INT64_MIN'),
                      'typed-u64': ('uint64_t', 'UINT64_MAX'),
                      'typed-bool': ('_Bool', '1'), 'typed-unit': ('void', None),
@@ -98,6 +108,15 @@ def main():
             f'    {result_type} (*entry)(void) = xray_lir_entry;\n' + invoke +
             '    if (argc > 1) fputs("AFTER_ENTRY", stderr);\n'
             f'    return {check};\n}}\n', encoding='ascii')
+        if name == 'f64-source':
+            workers = re.findall(r'static double (xrl_f[0-9]+)\(double p0\) \{(.*?)\n\}', text, re.S)
+            assert len(workers) == 1, workers
+            worker, body = workers[0]
+            assert 'return p0;' in body and re.search(r'\b' + worker + r'\((?:p|v)[0-9]+\)', text)
+            assertion = ('\n_Static_assert(_Generic(&' + worker +
+                         ', double (*)(double): 1, default: 0), "source worker type");\n')
+            adapter.write_text(adapter.read_text(encoding='ascii') + assertion, encoding='ascii')
+            identity['f64SourceWorker'] = {'name': worker, 'type': 'double(double)', 'returnsParameter': True}
         if args.kind == 'msvc':
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
@@ -113,10 +132,21 @@ def main():
                        '-I' + str(args.include), adapter, args.library, '-pthread', '-o', executable]
             if args.asan:
                 command += ['-fsanitize=address,undefined', '-g']
+        if name == 'f64-source':
+            options = [str(x) for x in command[1:] if isinstance(x, str) and x.startswith(('/', '-'))
+                       and not x.startswith(('/Fe:', '/INCREMENTAL:')) and x not in ('/link', '-o', '-pthread')]
+            profile = _f64_profile(args.compiler, args.kind, options, root)
+            identity['f64SourceProfile'] = profile
+            if not profile['supported']:
+                identity['f64Source'] = _f64_reject(command, root, profile['expectedGuard'], executable)
+                continue
         run(command, cwd=root)
         completed = run([executable], cwd=root)
         assert completed.stdout == expected and completed.stderr == b'', (name, completed)
         executables[name] = executable
+        if name == 'f64-source':
+            identity['f64Source'] = {'status': 'PASS_SOURCE_ADMISSION_AND_EFFECTS',
+                                     'stdoutHex': completed.stdout.hex(), 'payloadQualification': False}
     # A read-only stdout handle exercises a real write failure, without a stub.
     read_only = root / 'read-only-output'
     read_only.write_bytes(b'')
