@@ -70,3 +70,22 @@ add_test(NAME lir_vm_output COMMAND ${XRAY_PYTHON} -X utf8
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_lir_vm_output.py
     --client $<TARGET_FILE:test_lir_vm_output> --logs ${CMAKE_CURRENT_BINARY_DIR}/lir-vm-output)
 set_tests_properties(lir_vm_output PROPERTIES LABELS "unit;vm;lir;native-runtime;fast" TIMEOUT 120)
+
+if(MSVC)
+    set(skeleton_provider_kind msvc)
+else()
+    set(skeleton_provider_kind gnu)
+endif()
+set(skeleton_native_options)
+if(ENABLE_ASAN)
+    list(APPEND skeleton_native_options --asan)
+endif()
+add_test(NAME skeleton_diff COMMAND ${XRAY_PYTHON} -X utf8
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_skeleton_diff.py
+    --vm-driver $<TARGET_FILE:lir_vm_run> --c-driver $<TARGET_FILE:lir_c_run>
+    --fixtures ${CMAKE_CURRENT_SOURCE_DIR}/tests/lir/programs
+    --compiler "${CMAKE_C_COMPILER}" --kind "${skeleton_provider_kind}"
+    --include ${CMAKE_CURRENT_SOURCE_DIR}/include --library $<TARGET_FILE:xray_native_runtime>
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --work ${CMAKE_CURRENT_BINARY_DIR}/skeleton-diff ${skeleton_native_options})
+set_tests_properties(skeleton_diff PROPERTIES LABELS "unit;vm;lir;native;fast" TIMEOUT 120)
