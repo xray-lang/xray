@@ -258,17 +258,20 @@ static void sccp_propagate(Sccp *c) {
     }
 }
 static bool sccp_unknown_edges(Sccp *c) {
-    size_t before = c->edge_tail;
+    bool changed = false;
     for (uint32_t b = 0; b < c->view.block_count; ++b) {
         SccpBlock *block = &c->blocks[b + 1];
         if (!block->executable) continue;
         XrLirInstructionView v = sccp_instruction(c, b + 1, block->view.instruction_count - 1);
         if (v.op == XR_LIR_CONDBR && c->cells[v.operands[0]].kind == SCCP_UNSEEN) {
+            // Retained fallback edges must not later shrink to a single constant edge.
+            sccp_update(c, v.operands[0], (SccpCell){.kind = SCCP_OVERDEFINED, .type = XR_LIR_I1});
             sccp_activate_edge(c, b + 1, 0);
             sccp_activate_edge(c, b + 1, 1);
+            changed = true;
         }
     }
-    return c->edge_tail != before;
+    return changed;
 }
 static XrLirStatus sccp_begin(void *context, const XrLirModule *input, XrLirFunction function) {
     Sccp *c = context;
