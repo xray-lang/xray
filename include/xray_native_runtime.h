@@ -55,6 +55,19 @@ XRAY_API void xrt_run_standalone(const XrtSourceMap *map, XrtSynchronousRoot roo
 // a broken pipe emits no diagnostic. Raw unbound leaf calls are unsupported.
 XRAY_API void xrt_print_i64(int64_t value, uint32_t source_location_id);
 
+// End the active synchronous execution with division (420) or modulo (421)
+// by zero. The source id must be zero or in the active image map. Invalid
+// bindings, codes or ids violate host preconditions and abort. Embedded roots
+// capture facts for the host; standalone roots render once and exit with 1,
+// even if the diagnostic sink fails. No guest cleanup or exit callback runs.
+#ifdef __cplusplus
+#define XRT_NORETURN [[noreturn]]
+#else
+#define XRT_NORETURN _Noreturn
+#endif
+XRT_NORETURN XRAY_API void xrt_arithmetic_panic(uint32_t code, uint32_t source_id);
+#undef XRT_NORETURN
+
 #ifdef __cplusplus
 }
 #endif

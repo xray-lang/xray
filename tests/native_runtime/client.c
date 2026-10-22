@@ -67,8 +67,28 @@ static int close_output(void) {
 #endif
 }
 
+static void empty_root(void *context) { (void)context; }
+
 static int run_client(int argc, char **argv) {
     if (argc < 2) return 90;
+    if (strncmp(argv[1], "panic", 5) == 0) {
+        if (atexit(exit_callback)) return 92;
+        if (strcmp(argv[1], "panic-nested") == 0) {
+            const XrtSourceMap empty = {NULL, 0};
+            xrt_run_standalone(&empty, empty_root, NULL);
+        }
+        if (strcmp(argv[1], "panic-sink-error") == 0) {
+#if defined(XR_OS_WINDOWS)
+            if (!CloseHandle(GetStdHandle(STD_ERROR_HANDLE))) return 94;
+#else
+            if (close(STDERR_FILENO)) return 94;
+#endif
+        }
+        uint32_t id = argc > 2 ? (uint32_t)strtoul(argv[2], NULL, 10) : 0;
+        uint32_t code = strcmp(argv[1], "panic-rem") == 0 ? 421 :
+            strcmp(argv[1], "panic-bad-code") == 0 ? 430 : 420;
+        xrt_arithmetic_panic(code, id);
+    }
     if (strcmp(argv[1], "values") == 0) {
         xrt_print_i64(INT64_MIN, UINT32_MAX);
         xrt_print_i64(0, 0);
@@ -109,6 +129,8 @@ int main(int argc, char **argv) {
 #if defined(XR_OS_WINDOWS)
     (void)_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
+    if (argc > 1 && strcmp(argv[1], "unbound-panic") == 0)
+        xrt_arithmetic_panic(420, 0);
     ClientInput input = {argc, 90, argv};
     xrt_run_standalone(&xrt_standalone_source_map, invoke_client, &input);
     return input.result;

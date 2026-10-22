@@ -31,7 +31,7 @@ typedef struct {
 struct XrRbcOutcome {
     XrRbcStatus status;
     uint64_t bits;
-    XrtOutputFailure failure;
+    XrtExecutionFailure failure;
     XrtLocationOwner *locations;
 };
 
@@ -184,10 +184,11 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
     XrRbcOutcome *outcome = execution->pending;
     XrtExecutionStatus status = xrt_run_embedded(outcome->locations, &outcome->failure,
         xr_rbc_root, execution);
-    if (status == XRT_EXECUTION_OUTPUT_FAILURE)
+    if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_OUTPUT)
         outcome->status = XR_RBC_OUTPUT_FAILURE;
     else {
-        if (status == XRT_EXECUTION_INVALID) outcome->status = XR_RBC_INVALID;
+        // No arithmetic panic producer is admitted by this interpreter yet.
+        if (status != XRT_EXECUTION_COMPLETED) outcome->status = XR_RBC_INVALID;
         xrt_locations_release(outcome->locations);
         outcome->locations = NULL;
     }
@@ -221,7 +222,7 @@ XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
     XrtOutputFailure *facts, const XrtLocationOwner **borrowed_locations) {
     if (!outcome || outcome->status != XR_RBC_OUTPUT_FAILURE || !facts || !borrowed_locations)
         return false;
-    *facts = outcome->failure;
+    *facts = outcome->failure.detail.output;
     *borrowed_locations = outcome->locations;
     return true;
 }

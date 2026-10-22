@@ -24,8 +24,9 @@
 
 typedef struct Context {
     XrtLocationOwner *owner;
-    XrtOutputFailure failure;
+    XrtExecutionFailure failure;
     unsigned visits, after;
+    uint32_t panic_code, source_id;
     bool fail_inner;
     XrtExecutionStatus inner_status;
     struct Context *inner;
@@ -38,11 +39,18 @@ static void output_root(void *data) {
     xrt_print_i64(17, 1);
     ++context->after;
 }
+static void panic_root(void *data) {
+    Context *context = data;
+    ++context->visits;
+    xrt_arithmetic_panic(context->panic_code, context->source_id);
+}
 static void nested_root(void *data) {
     Context *context = data;
     context->inner_status = xrt_run_embedded(context->inner->owner, &context->inner->failure,
-        context->fail_inner ? output_root : normal_root, context->inner);
-    output_root(context);
+        context->inner->panic_code ? panic_root : context->fail_inner ? output_root : normal_root,
+        context->inner);
+    if (context->panic_code) panic_root(context);
+    else output_root(context);
 }
 
 static XrtLocationOwner *locations(const char *path) {
@@ -80,30 +88,63 @@ int main(void) {
     outer->owner = locations("outer-source.xr");
     inner->owner = locations("inner-source.xr");
     outer->inner = inner;
-    outer->failure.source_id = 99;
+    memset(&outer->failure, 0xa5, sizeof(outer->failure));
+    unsigned char prior[sizeof(outer->failure)];
+    memcpy(prior, &outer->failure, sizeof(prior));
     CHECK(xrt_run_embedded(NULL, &outer->failure, normal_root, outer) == XRT_EXECUTION_INVALID);
-    CHECK(!outer->visits && outer->failure.source_id == 99);
+    CHECK(!outer->visits && !memcmp(prior, &outer->failure, sizeof(prior)));
+    CHECK(xrt_run_embedded(outer->owner, NULL, normal_root, outer) == XRT_EXECUTION_INVALID);
     CHECK(xrt_run_embedded(outer->owner, &outer->failure, NULL, outer) == XRT_EXECUTION_INVALID);
+    CHECK(!outer->visits && !memcmp(prior, &outer->failure, sizeof(prior)));
     CHECK(xrt_run_embedded(outer->owner, &outer->failure, normal_root, outer) == XRT_EXECUTION_COMPLETED);
-    CHECK(outer->visits == 1 && outer->failure.source_id == 99);
+    CHECK(outer->visits == 1 && !memcmp(prior, &outer->failure, sizeof(prior)));
     for (unsigned failure = 0; failure < 2; ++failure) {
         outer->after = inner->after = 0;
         outer->fail_inner = failure != 0;
-        inner->failure.source_id = 99;
+        memset(&inner->failure, 0xa5, sizeof(inner->failure));
         SavedOutput saved = disable_output();
         XrtExecutionStatus status = xrt_run_embedded(outer->owner, &outer->failure, nested_root, outer);
         restore_output(saved);
-        CHECK(status == XRT_EXECUTION_OUTPUT_FAILURE && !outer->after && !inner->after);
-        CHECK(outer->failure.io.failed && outer->failure.io.code && outer->failure.source_id == 1);
-        CHECK(outer->failure.io.domain != XRT_IO_NONE);
-        CHECK(outer->inner_status == (failure ? XRT_EXECUTION_OUTPUT_FAILURE : XRT_EXECUTION_COMPLETED));
-        if (failure) CHECK(inner->failure.io.failed && inner->failure.source_id == 1);
-        else CHECK(inner->failure.source_id == 99);
+        CHECK(status == XRT_EXECUTION_FAILURE && !outer->after && !inner->after);
+        CHECK(outer->failure.kind == XRT_FAILURE_OUTPUT);
+        XrtOutputFailure *output = &outer->failure.detail.output;
+        CHECK(output->io.failed && output->io.code && output->source_id == 1);
+        CHECK(output->io.domain != XRT_IO_NONE);
+        CHECK(outer->inner_status == (failure ? XRT_EXECUTION_FAILURE : XRT_EXECUTION_COMPLETED));
+        if (failure) {
+            CHECK(inner->failure.kind == XRT_FAILURE_OUTPUT);
+            CHECK(inner->failure.detail.output.io.failed && inner->failure.detail.output.source_id == 1);
+        } else CHECK(!memcmp(prior, &inner->failure, sizeof(prior)));
         // The prior failed invocation leaves no expired recovery target behind.
         CHECK(xrt_run_embedded(outer->owner, &outer->failure, normal_root, outer) == XRT_EXECUTION_COMPLETED);
     }
     CHECK(xrt_run_embedded(outer->owner, &outer->failure, output_root, outer) == XRT_EXECUTION_COMPLETED);
     CHECK(outer->after == 1);
+    for (uint32_t code = 420; code <= 421; ++code) {
+        for (uint32_t id = 0; id <= 1; ++id) {
+            outer->panic_code = code;
+            outer->source_id = id;
+            CHECK(xrt_run_embedded(outer->owner, &outer->failure, panic_root, outer) == XRT_EXECUTION_FAILURE);
+            CHECK(outer->failure.kind == XRT_FAILURE_ARITHMETIC_PANIC);
+            CHECK(outer->failure.detail.panic.code == code && outer->failure.detail.panic.source_id == id);
+            memcpy(prior, &outer->failure, sizeof(prior));
+            CHECK(xrt_run_embedded(outer->owner, &outer->failure, normal_root, outer) == XRT_EXECUTION_COMPLETED);
+            CHECK(!memcmp(prior, &outer->failure, sizeof(prior)));
+        }
+    }
+    inner->panic_code = 420;
+    inner->source_id = 1;
+    CHECK(xrt_run_embedded(outer->owner, &outer->failure, nested_root, outer) == XRT_EXECUTION_FAILURE);
+    CHECK(outer->inner_status == XRT_EXECUTION_FAILURE);
+    CHECK(inner->failure.kind == XRT_FAILURE_ARITHMETIC_PANIC && inner->failure.detail.panic.code == 420);
+    CHECK(inner->failure.detail.panic.source_id == 1 && outer->failure.detail.panic.code == 421);
+    // A recovered panic restores the enclosing output binding and its variant.
+    outer->panic_code = 0;
+    SavedOutput saved = disable_output();
+    CHECK(xrt_run_embedded(outer->owner, &outer->failure, nested_root, outer) == XRT_EXECUTION_FAILURE);
+    restore_output(saved);
+    CHECK(outer->failure.kind == XRT_FAILURE_OUTPUT && outer->failure.detail.output.source_id == 1);
+    CHECK(inner->failure.kind == XRT_FAILURE_ARITHMETIC_PANIC && outer->inner_status == XRT_EXECUTION_FAILURE);
     xrt_locations_release(inner->owner);
     xrt_locations_release(outer->owner);
     xr_free(inner);

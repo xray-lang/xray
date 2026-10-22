@@ -214,12 +214,13 @@ static void nested_execution(const char *path) {
         XrRbcProgram *program = kind == 0 ? from_source("") :
             from_lir(path, true, false, kind == 1);
         Nested *nested = xr_calloc(1, sizeof(*nested));
-        XrtOutputFailure *failure = xr_calloc(1, sizeof(*failure));
+        XrtExecutionFailure *failure = xr_calloc(1, sizeof(*failure));
         CHECK(nested && failure);
         nested->execution = prepare(program);
-        CHECK(xrt_run_embedded(owner, failure, nested_root, nested) == XRT_EXECUTION_OUTPUT_FAILURE);
-        CHECK(nested->after_inner == 1 && !nested->after_outer && failure->source_id == 1);
-        CHECK(failure->io.failed && xrt_locations_get(owner, 1)->line == 33);
+        CHECK(xrt_run_embedded(owner, failure, nested_root, nested) == XRT_EXECUTION_FAILURE);
+        CHECK(failure->kind == XRT_FAILURE_OUTPUT);
+        CHECK(nested->after_inner == 1 && !nested->after_outer && failure->detail.output.source_id == 1);
+        CHECK(failure->detail.output.io.failed && xrt_locations_get(owner, 1)->line == 33);
         xr_rbc_execution_free(&nested->execution);
         xr_rbc_program_destroy(program);
         CHECK(nested->outcome && xr_rbc_outcome_status(nested->outcome) ==

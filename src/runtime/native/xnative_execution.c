@@ -12,13 +12,14 @@
  */
 #include "xnative_execution.h"
 #include "base/xchecks.h"
+#include "shared/xr_value_format_core.h"
 #include <setjmp.h>
 
 typedef struct XrtExecutionBinding {
     XrtSourceMap map;
     const struct XrtExecutionBinding *previous;
     jmp_buf *target;
-    XrtOutputFailure *failure;
+    XrtExecutionFailure *failure;
 } XrtExecutionBinding;
 
 static XR_THREAD_LOCAL const XrtExecutionBinding *current_execution;
@@ -49,7 +50,7 @@ XRAY_API void xrt_run_standalone(const XrtSourceMap *map, XrtSynchronousRoot roo
 }
 
 XR_FUNC XrtExecutionStatus xrt_run_embedded(const XrtLocationOwner *locations,
-    XrtOutputFailure *failure, XrtSynchronousRoot root, void *context) {
+    XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context) {
     if (!locations || !failure || !root)
         return XRT_EXECUTION_INVALID;
     jmp_buf target;
@@ -63,7 +64,7 @@ XR_FUNC XrtExecutionStatus xrt_run_embedded(const XrtLocationOwner *locations,
         return XRT_EXECUTION_COMPLETED;
     }
     current_execution = binding.previous;
-    return XRT_EXECUTION_OUTPUT_FAILURE;
+    return XRT_EXECUTION_FAILURE;
 }
 
 XR_FUNC XR_NORET void xrt_end_execution(XrtIoResult failure,
@@ -71,8 +72,31 @@ XR_FUNC XR_NORET void xrt_end_execution(XrtIoResult failure,
     const XrtExecutionBinding *binding = current_execution;
     XR_CHECK(binding && failure.failed, "Output failure requires an active execution");
     if (binding->target) {
-        *binding->failure = (XrtOutputFailure) {failure, operation, source_id};
+        binding->failure->kind = XRT_FAILURE_OUTPUT;
+        binding->failure->detail.output = (XrtOutputFailure) {failure, operation, source_id};
         longjmp(*binding->target, 1);
     }
     xrt_output_exit(&binding->map, failure, operation, source_id);
+}
+
+static int panic_write(void *context, const void *bytes, size_t length) {
+    (void)context;
+    return !xrt_io_write(2, bytes, length).failed;
+}
+
+XRAY_API_NORET void xrt_arithmetic_panic(uint32_t code, uint32_t source_id) {
+    const XrtExecutionBinding *binding = current_execution;
+    XR_CHECK(binding && (code == 420 || code == 421) && source_id <= binding->map.count,
+        "Arithmetic panic requires an active execution, valid code and source id");
+    if (binding->target) {
+        binding->failure->kind = XRT_FAILURE_ARITHMETIC_PANIC;
+        binding->failure->detail.panic = (XrtArithmeticPanic) {code, source_id};
+        longjmp(*binding->target, 1);
+    }
+    XrValueFormatSink sink = {NULL, panic_write};
+    if (!xr_value_format_panic(sink, code, 0, 0, 0, 0, NULL, 0, 0)) {
+        static const char fallback[] = "XR_RUN_6005: cannot render uncaught typed panic\n";
+        (void)xrt_io_write(2, fallback, sizeof(fallback) - 1);
+    }
+    _Exit(1);
 }
