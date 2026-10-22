@@ -12,6 +12,7 @@
  *   storage ordinals do not; successor ordinals keep parallel edges distinct.
  */
 #include "xlir_rebuild.h"
+#include "xlir_rebuild_internal.h"
 #include "xlir_builder.h"
 #include "xlir_verify.h"
 #include "base/xchecks.h"
@@ -29,6 +30,7 @@ typedef struct {
     RebuildFrame *stack;
     XrLirValue *values, *arguments;
     XrLirType *types;
+    const XrLirCopyPlan *plan;
 } Rebuild;
 
 static void *rebuild_storage(size_t count, size_t size) {
@@ -125,6 +127,7 @@ static XrLirStatus rebuild_parameters(Rebuild *c) {
         XrLirBlockView view;
         xr_lir_block_at(c->input, c->source, b, &block);
         xr_lir_block_view(c->input, block, &view);
+        if (c->plan && !c->plan->keep_block(c->plan->context, block.id)) continue;
         for (uint32_t p = 0; p < view.parameter_count; ++p)
             xr_lir_value_type(c->input, (XrLirValue){c->input, c->source.id, view.parameters[p]}, &c->types[p]);
         XrLirBlock *target = &c->blocks[block.id].handle;
@@ -135,11 +138,13 @@ static XrLirStatus rebuild_parameters(Rebuild *c) {
             if (status != XR_LIR_OK) return status;
         }
     }
+    if (!c->blocks[c->view.entry].handle.id) return XR_LIR_VERIFY_ERROR;
     return xr_lir_set_entry(c->output, function, c->blocks[c->view.entry].handle);
 }
 
 static XrLirStatus rebuild_arguments(Rebuild *c, const uint32_t *ids, uint32_t count, size_t offset) {
     for (uint32_t i = 0; i < count; ++i) {
+        if (!ids[i] || ids[i] > c->view.value_count) return XR_LIR_VERIFY_ERROR;
         XrLirValue mapped = c->values[ids[i]];
         if (!mapped.id) return XR_LIR_VERIFY_ERROR;
         c->arguments[offset + i] = mapped;
@@ -161,6 +166,8 @@ static XrLirStatus rebuild_instruction(Rebuild *c, XrLirBlock block,
     size_t offset = source->operand_count;
     for (uint32_t e = 0; e < source->edge_count; ++e) {
         XrLirEdgeView edge = source->edges[e];
+        if (!edge.target || edge.target > c->view.block_count ||
+            !c->blocks[edge.target].handle.id) return XR_LIR_VERIFY_ERROR;
         status = rebuild_arguments(c, edge.arguments, edge.argument_count, offset);
         if (status != XR_LIR_OK) return status;
         instruction.edges[e] = (XrLirEdge){c->blocks[edge.target].handle,
@@ -171,6 +178,18 @@ static XrLirStatus rebuild_instruction(Rebuild *c, XrLirBlock block,
     if (source->result)
         return xr_lir_emit_value(c->output, block, &instruction, &c->values[source->result]);
     return xr_lir_emit_effect(c->output, block, &instruction);
+}
+
+static XrLirStatus rebuild_project(Rebuild *c, XrLirBlock block, uint32_t ordinal,
+    XrLirInstructionView *view) {
+    xr_lir_instruction_view(c->input, block, ordinal, view);
+    uint64_t original = view->operand_count;
+    for (uint32_t e = 0; e < view->edge_count; ++e) original += view->edges[e].argument_count;
+    if (c->plan) c->plan->instruction(c->plan->context, block.id, ordinal, view);
+    if (view->edge_count > 2) return XR_LIR_VERIFY_ERROR;
+    uint64_t projected = view->operand_count;
+    for (uint32_t e = 0; e < view->edge_count; ++e) projected += view->edges[e].argument_count;
+    return projected <= original ? XR_LIR_OK : XR_LIR_VERIFY_ERROR;
 }
 
 static XrLirStatus rebuild_body(Rebuild *c) {
@@ -185,13 +204,15 @@ static XrLirStatus rebuild_body(Rebuild *c) {
         if (!c->blocks[block.id].emitted) {
             c->blocks[block.id].emitted = true;
             for (uint32_t n = 0; n < view.instruction_count; ++n) {
-                xr_lir_instruction_view(c->input, block, n, &instruction);
-                XrLirStatus status = rebuild_instruction(c, c->blocks[block.id].handle,
+                XrLirStatus status = rebuild_project(c, block, n, &instruction);
+                if (status != XR_LIR_OK) return status;
+                status = rebuild_instruction(c, c->blocks[block.id].handle,
                     &instruction, n + 1 == view.instruction_count);
                 if (status != XR_LIR_OK) return status;
             }
         }
-        xr_lir_instruction_view(c->input, block, view.instruction_count - 1, &instruction);
+        XrLirStatus status = rebuild_project(c, block, view.instruction_count - 1, &instruction);
+        if (status != XR_LIR_OK) return status;
         if (frame->next < instruction.edge_count) {
             uint32_t target = instruction.edges[frame->next++].target;
             if (!c->blocks[target].emitted) {
@@ -203,11 +224,12 @@ static XrLirStatus rebuild_body(Rebuild *c) {
     return XR_LIR_OK;
 }
 
-XR_FUNC XrLirStatus xr_lir_rebuild(const XrLirModule *input, XrLirModule **output) {
+XR_FUNC XrLirStatus xr_lir_internal_copy(const XrLirModule *input, XrLirModule **output,
+    const XrLirCopyPlan *plan) {
     if (!output || *output || !xr_lir_module_is_readable(input)) return XR_LIR_INVALID_ARGUMENT;
     XrLirStatus status = xr_lir_verify(input, NULL);
     if (status != XR_LIR_OK) return status;
-    Rebuild c = {.input = input};
+    Rebuild c = {.input = input, .plan = plan};
     status = rebuild_registry(&c);
     uint32_t count = xr_lir_function_count(input);
     if (status == XR_LIR_OK) status = rebuild_declarations(&c, count);
@@ -215,14 +237,20 @@ XR_FUNC XrLirStatus xr_lir_rebuild(const XrLirModule *input, XrLirModule **outpu
         xr_lir_function_at(input, f, &c.source);
         xr_lir_function_view(input, c.source, &c.view);
         if (c.view.kind == XR_LIR_FUNCTION_EXTERNAL) continue;
-        status = rebuild_function_storage(&c);
+        if (plan) status = plan->begin(plan->context, input, c.source);
+        if (status == XR_LIR_OK) status = rebuild_function_storage(&c);
         if (status == XR_LIR_OK) status = rebuild_parameters(&c);
         if (status == XR_LIR_OK) status = rebuild_body(&c);
         rebuild_function_free(&c);
+        if (plan) plan->end(plan->context);
     }
     if (status == XR_LIR_OK) status = xr_lir_module_finish(c.output, NULL);
     xr_free(c.functions);
     if (status == XR_LIR_OK) *output = c.output;
     else xr_lir_module_destroy(c.output);
     return status;
+}
+
+XR_FUNC XrLirStatus xr_lir_rebuild(const XrLirModule *input, XrLirModule **output) {
+    return xr_lir_internal_copy(input, output, NULL);
 }
