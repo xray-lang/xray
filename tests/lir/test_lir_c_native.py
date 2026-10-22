@@ -39,7 +39,7 @@ def main():
     expected = {'arithmetic': 17, 'extremes': -1, 'overflow': 9223372036854775806,
                 'fib': 2178309, 'swap': 1234, 'self': 1212,
                 'same-true': 1234, 'same-false': 3412, 'unused': 42, 'unit': None, 'bool': 1,
-                'source-entry': 0, 'source-call': 0}
+                'source-entry': 0, 'source-call': 0, 'divrem': 7}
     sources = {
         'source-entry': 'fn main()->string{return "ordinary"}\nfn work()->i64{var i=0\nwhile(i<5){i=i+1}\nreturn i}\nwork()\n',
         'source-call': 'fn sum(n:i64)->i64{var i=0\nvar total=0\nwhile(i<n){total=total+i\ni=i+1}\nreturn total}\nsum(7)\n',
@@ -75,6 +75,21 @@ def main():
         if name == 'unit':
             adapter_text = adapter_text.replace('int64_t actual = xray_lir_entry();',
                                                 'xray_lir_entry();\n    int64_t actual = 0;')
+        if name == 'divrem':
+            # Check the actual definitions; a separate adapter supplies runtime numerators.
+            gateway = root / 'divrem-gateway.c'
+            gateway.write_text('#include "divrem.c"\n' + ''.join(
+                f'_Static_assert(_Generic(&xrl_f{i}, int64_t (*)(int64_t): 1, default: 0), "division ABI");\n'
+                f'int64_t (*get_f{i}(void))(int64_t) {{ return xrl_f{i}; }}\n'
+                for i in range(2, 6)), encoding='ascii')
+            adapter_text = ('#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n' + ''.join(
+                f'extern int64_t (*get_f{i}(void))(int64_t);\n' for i in range(2, 6)) +
+                'int main(int argc, char **argv) {\n    if (argc != 2) return 2;\n'
+                '    char *end; int64_t n = (int64_t)strtoll(argv[1], &end, 10);\n'
+                '    if (*end) return 2;\n' + ''.join(
+                    f'    if (printf("%lld\\n", (long long)get_f{i}()(n)) < 0) return 3;\n'
+                    for i in range(2, 6)) + '    return 0;\n}\n')
+            source = gateway
         adapter.write_text(adapter_text, encoding='ascii')
         if args.kind == 'msvc':
             command = [args.compiler, '/nologo', '/std:c11', '/W4', '/WX', '/O2',
@@ -89,9 +104,30 @@ def main():
                        '-O2', source, adapter, '-o', executable]
             if args.asan:
                 command += ['-fsanitize=address,undefined', '-g']
+        if name == 'divrem':
+            no_lto = '/clang:-fno-lto' if 'clang' in args.compiler.name.lower() else '/GL-'
+            command.insert(1, no_lto if args.kind == 'msvc' else '-fno-lto')
         run(command, cwd=root)
-        completed = run([executable], cwd=root)
-        assert completed.stdout == b'' and completed.stderr == b''
+        if name == 'divrem':
+            vectors = [
+                (-9223372036854775808, -3074457345618258602, -2, 95086309658296657, -79),
+                (-98, -32, -2, 1, -1), (-7, -2, -1, 0, -7), (-1, 0, -1, 0, -1),
+                (0, 0, 0, 0, 0), (1, 0, 1, 0, 1), (7, 2, 1, 0, 7),
+                (98, 32, 2, -1, 1),
+                (9223372036854775807, 3074457345618258602, 1, -95086309658296657, 78),
+            ]
+            observations = []
+            for n, *answers in vectors:
+                completed = run([executable, str(n)], cwd=root)
+                fixed = ''.join(str(a) + ('\r\n' if os.name == 'nt' else '\n') for a in answers).encode('ascii')
+                assert completed.stdout == fixed and completed.stderr == b'', (n, completed)
+                observations.append({'numerator': n, 'expectedHex': fixed.hex(),
+                                     'stdoutHex': completed.stdout.hex(),
+                                     'stderrHex': completed.stderr.hex(), 'exit': completed.returncode})
+            (root / 'divrem-vectors.json').write_text(json.dumps(observations, indent=2) + '\n')
+        else:
+            completed = run([executable], cwd=root)
+            assert completed.stdout == b'' and completed.stderr == b''
         results[name] = 'PASS'
     output_source = root / 'ordinary-output.xr'
     output_text = root / 'ordinary-output.c'

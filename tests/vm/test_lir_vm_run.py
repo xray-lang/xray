@@ -37,7 +37,14 @@ def main():
             'print(identity(0))\nprint(identity(9223372036854775807))\n',
             stdout=b'-9223372036854775808\n-1\n0\n9223372036854775807\n')
         run('whole-closure', 'print(1)\nfn value(x:f64)->f64{return x+1.0}\nvalue(3.0)\n', 1, b'bytecode')
-        run('division-rejected', 'fn quotient(n:i64)->i64{return n/2}\nquotient(8)\n', 1, b'DIV_INT')
+        run('division-fixed', 'fn quotient(n:i64)->i64{return n/2}\nprint(quotient(8))\n', stdout=b'4\n')
+        run('remainder-fixed', 'fn remainder(n:i64)->i64{return n%3}\nprint(remainder(-7))\n', stdout=b'-1\n')
+        run('division-dynamic-rejected', 'fn quotient(n:i64,d:i64)->i64{return n/d}\nquotient(8,2)\n', 1, b'DIV_INT')
+        run('remainder-dynamic-rejected', 'fn remainder(n:i64,d:i64)->i64{return n%d}\nremainder(8,2)\n', 1, b'REM_INT')
+        run('division-zero-rejected', 'fn quotient(n:i64)->i64{return n/0}\nquotient(8)\n', 1, b'DIV_INT')
+        run('remainder-zero-rejected', 'fn remainder(n:i64)->i64{return n%0}\nremainder(8)\n', 1, b'REM_INT')
+        run('division-minus-one-rejected', 'fn quotient(n:i64)->i64{return n/(-1)}\nquotient(8)\n', 1, b'DIV_INT')
+        run('remainder-minus-one-rejected', 'fn remainder(n:i64)->i64{return n%(-1)}\nremainder(8)\n', 1, b'REM_INT')
         run('malformed', 'fn broken(\n', 1, b'source')
         missing = root / 'missing.xr'
         result = subprocess.run([args.driver, str(missing)], capture_output=True, timeout=15)

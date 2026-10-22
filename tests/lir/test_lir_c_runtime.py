@@ -43,6 +43,16 @@ def main():
         'typed-unit': (None, b'5\n'),
         'typed-root-call': (None, b'5\n'),
     }
+    cases['fixed-divrem'] = (
+        'fn q(n:i64)->i64{return n/3}\n'
+        'fn r(n:i64)->i64{return n%97}\n'
+        'print(q(-9223372036854775807-1))\n'
+        'print(r(-9223372036854775807-1))\n'
+        'print(q(-7))\n'
+        'print(r(-98))\n'
+        'print(q(9223372036854775807))\n'
+        'print(r(9223372036854775807))\n',
+        b'-3074457345618258602\n-79\n-2\n-1\n3074457345618258602\n78\n')
     typed_results = {'typed-i64-min': ('int64_t', 'INT64_MIN'),
                      'typed-u64': ('uint64_t', 'UINT64_MAX'),
                      'typed-bool': ('_Bool', '1'), 'typed-unit': ('void', None),

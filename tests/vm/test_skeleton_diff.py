@@ -63,6 +63,16 @@ def main():
          'print(identity(0))\nprint(identity(9223372036854775807))\n',
          b'-9223372036854775808\n-1\n0\n9223372036854775807\n'),
     ]
+    cases.append(('fixed-divrem', (
+        'fn q(n:i64)->i64{return n/3}\n'
+        'fn r(n:i64)->i64{return n%97}\n'
+        'print(q(-9223372036854775807-1))\n'
+        'print(r(-9223372036854775807-1))\n'
+        'print(q(-7))\n'
+        'print(r(-98))\n'
+        'print(q(9223372036854775807))\n'
+        'print(r(9223372036854775807))\n'
+    ), b'-3074457345618258602\n-79\n-2\n-1\n3074457345618258602\n78\n'))
     for name, text, expected in cases:
         if not expected:
             raise AssertionError('Skeleton cases require nonempty expected output')

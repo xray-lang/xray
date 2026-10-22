@@ -174,6 +174,8 @@ static bool lower_known(XrXirOp op) {
         case XR_XIR_ADD_INT:
         case XR_XIR_SUB_INT:
         case XR_XIR_MUL_INT:
+        case XR_XIR_DIV_INT:
+        case XR_XIR_REM_INT:
         case XR_XIR_EQ_INT:
         case XR_XIR_NE_INT:
         case XR_XIR_LT_INT:
@@ -250,6 +252,17 @@ static bool lower_mark(Lower *c, uint32_t function) {
     return true;
 }
 
+/* Only a direct constant definition proves division cannot fault for any lhs. */
+static bool lower_fixed_divisor(const XrXirFunction *f, const XrXirInstruction *op) {
+    uint32_t rhs = op->args[1];
+    if (op->type != XR_XIR_I64 || xr_xir_operand_type(f, op->args[0]) != XR_XIR_I64 ||
+        rhs < f->parameter_count || rhs - f->parameter_count >= f->instruction_count)
+        return false;
+    const XrXirInstruction *definition = &f->instructions[rhs - f->parameter_count];
+    return definition->op == XR_XIR_CONST_INT && definition->type == XR_XIR_I64 &&
+        definition->immediate != 0 && definition->immediate != -1;
+}
+
 static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
     if (!lower_known(op->op))
         return lower_unsupported(c, xr_xir_op_name(op->op));
@@ -258,6 +271,9 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
             lower_type(xr_xir_cell_element(c->source->types, op->type)) <= XR_LIR_UNIT)
             return lower_unsupported(c, "non-scalar Cell");
     } else if (!lower_type(op->type))
+        return lower_unsupported(c, xr_xir_op_name(op->op));
+    if ((op->op == XR_XIR_DIV_INT || op->op == XR_XIR_REM_INT) &&
+        !lower_fixed_divisor(f, op))
         return lower_unsupported(c, xr_xir_op_name(op->op));
     if (op->op == XR_XIR_CALL) {
         if (op->immediate < 0 || (uint64_t) op->immediate >= c->source->function_count)
@@ -628,6 +644,10 @@ static XrLirOp lower_operation(const LowerFunction *f, const XrXirInstruction *o
             return XR_LIR_SUB;
         case XR_XIR_MUL_INT:
             return XR_LIR_MUL;
+        case XR_XIR_DIV_INT:
+            return XR_LIR_DIV;
+        case XR_XIR_REM_INT:
+            return XR_LIR_REM;
         case XR_XIR_ADD_FLOAT:
             return XR_LIR_FADD;
         case XR_XIR_SUB_FLOAT:

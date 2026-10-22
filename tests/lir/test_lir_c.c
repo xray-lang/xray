@@ -260,9 +260,27 @@ static void typed_output(const char *name) {
         ret(body, constant(body, result, bits));
     }
 }
+static void fixed_division(void) {
+    XrLirBlock entry = root_block();
+    XrLirValue input = constant(entry, XR_LIR_I64, 7), result = input;
+    const char *names[] = {"quotient3", "remainder3", "quotientNegative97", "remainderNegative97"};
+    for (unsigned i = 0; i < 4; ++i) {
+        XrLirType type = XR_LIR_I64;
+        XrLirFunction f = function(names[i], &type, 1, type);
+        XrLirBlock b = block(f, NULL, 0);
+        OK(xr_lir_set_entry(module, f, b));
+        XrLirValue n;
+        OK(xr_lir_function_parameter(module, f, 0, &n));
+        XrLirValue rhs = constant(b, type, i < 2 ? 3 : (uint64_t)-INT64_C(97));
+        ret(b, operation(b, i % 2 ? XR_LIR_REM : XR_LIR_DIV, type, n, rhs));
+        result = call(entry, f, &input, 1);
+    }
+    ret(entry, result);
+}
 static void build(const char *name) {
     OK(xr_lir_module_create(NULL, &module));
-    if (!strcmp(name, "arithmetic")) arithmetic();
+    if (!strcmp(name, "divrem")) fixed_division();
+    else if (!strcmp(name, "arithmetic")) arithmetic();
     else if (!strcmp(name, "extremes")) extremes();
     else if (!strcmp(name, "overflow")) overflow();
     else if (!strcmp(name, "fib")) fib();
@@ -317,22 +335,59 @@ static void emit(const char *name, const char *path) {
     xr_lir_c_output_free(&output);
     CHECK(!output.bytes && !output.length && !output.entry_result);
 }
-static void reject(void) {
+static void reject_division(unsigned kind, XrLirOp op) {
     OK(xr_lir_module_create(NULL, &module));
     XrLirBlock b = root_block();
-    XrLirValue one = constant(b, XR_LIR_I64, 1);
-    ret(b, operation(b, XR_LIR_DIV, XR_LIR_I64, one, one));
+    XrLirType type = kind == 5 ? XR_LIR_I32 : XR_LIR_I64;
+    XrLirValue lhs = constant(b, type, 17), rhs;
+    if (kind == 2) {
+        /* A previous function's constant uses the SAME local id as this dynamic rhs. */
+        XrLirFunction prior = function("prior", NULL, 0, type);
+        XrLirBlock pb = block(prior, NULL, 0);
+        OK(xr_lir_set_entry(module, prior, pb));
+        XrLirValue safe = constant(pb, type, 97);
+        ret(pb, operation(pb, op, type, safe, safe));
+        (void)call(b, prior, NULL, 0);
+        XrLirType params[] = {type, type};
+        XrLirFunction dynamic = function("dynamic", params, 2, type);
+        XrLirBlock db = block(dynamic, NULL, 0);
+        OK(xr_lir_set_entry(module, dynamic, db));
+        XrLirValue n, d;
+        OK(xr_lir_function_parameter(module, dynamic, 0, &d));
+        OK(xr_lir_function_parameter(module, dynamic, 1, &n));
+        CHECK(d.id == safe.id);
+        ret(db, operation(db, op, type, n, d));
+        XrLirValue args[] = {lhs, lhs};
+        ret(b, call(b, dynamic, args, 2));
+    } else {
+        rhs = constant(b, type, kind == 0 ? 0 : kind == 1 ? UINT64_MAX : 3);
+        if (kind == 3)
+            rhs = operation(b, XR_LIR_ADD, type, rhs, rhs);
+        if (kind == 6)
+            rhs = operation(b, XR_LIR_INTCAST, type, rhs, (XrLirValue) {0});
+        if (kind == 4) {
+            XrLirBlock next = block(root, &type, 1);
+            branch(b, next, &rhs, 1);
+            b = next;
+            OK(xr_lir_block_parameter(module, b, 0, &rhs));
+        }
+        XrLirValue result = operation(b, op, type, lhs, rhs);
+        if (type != XR_LIR_I64)
+            result = operation(b, XR_LIR_INTCAST, XR_LIR_I64, result, (XrLirValue){0});
+        ret(b, result);
+    }
     OK(xr_lir_module_finish(module, NULL));
     XrCompileResources *r = resources();
     XrLirCRequest request = {module, root, r, "rejected"};
     XrLirCOutput output = {0};
     XrLirCDiagnostic diagnostic;
     CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_UNSUPPORTED);
-    CHECK(diagnostic.message[0] && !output.bytes && !output.length);
+    CHECK(diagnostic.message[0] && !output.bytes && !output.length && !output.entry_result);
     request.entry = (XrLirFunction) {0};
     CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_BAD_ARGUMENT);
     CHECK(!output.bytes);
     xr_lir_module_destroy(module);
+    module = NULL;
     xr_compile_resources_release(r);
 }
 int main(int argc, char **argv) {
@@ -341,13 +396,16 @@ int main(int argc, char **argv) {
         return 0;
     }
     CHECK(argc == 1);
-    const char *cases[] = {"arithmetic", "extremes", "overflow", "fib", "swap", "self",
+    const char *cases[] = {"divrem", "arithmetic", "extremes", "overflow", "fib", "swap", "self",
         "same-true", "same-false", "unused", "unit", "bool",
         "output-unknown", "output-point", "output-range", "typed-i64-min", "typed-u64",
         "typed-bool", "typed-unit", "typed-root-call"};
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
         emit(cases[i], NULL);
-    reject();
+    for (unsigned kind = 0; kind < 7; ++kind) {
+        reject_division(kind, XR_LIR_DIV);
+        reject_division(kind, XR_LIR_REM);
+    }
     puts("owned scalar C publication and rejection passed");
     return 0;
 }

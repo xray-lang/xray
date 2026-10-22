@@ -7,6 +7,7 @@
  * test_lir_lower.c - Source-backed Cell promotion and fail-closed lowering
  */
 #include "lir_source_fixture.h"
+#include "base/xmalloc.h"
 #include "lir/xlir_lower.h"
 #include "lir/xlir_builder.h"
 #include "lir/xlir_verify.h"
@@ -184,10 +185,111 @@ static void unsupported(void) {
              "b=Box(42)\nreturn b.value}\nprint(answer())\n",
              false, "CALL");
     rejected("print(1)\n", true, "overflow-checks");
-    rejected("fn quotient(n:i64)->i64{return n/2}\nprint(quotient(8))\n", false, "DIV_INT");
-    rejected("fn remainder(n:i64)->i64{return n%2}\nprint(remainder(8))\n", false, "REM_INT");
+    rejected("fn quotient(n:i64,d:i64)->i64{return n/d}\nprint(quotient(8,2))\n", false, "DIV_INT");
+    rejected("fn remainder(n:i64,d:i64)->i64{return n%d}\nprint(remainder(8,2))\n", false, "REM_INT");
     rejected("fn convert(x:f64)->i64{return x as i64}\nprint(convert(1.0))\n", false,
              "floating to integer");
+}
+static void fixed_division_source(const char *text, bool slot_frontier) {
+    SourceFixture fixture = source_fixture(text);
+    const XrXirModule *closed = xr_xir_compile_artifact_module(fixture.closed);
+    const XrXirDeclarations *declarations = closed->declarations;
+    printf("Closed modules=%u root=%u slots=%u storage=%u dependencies=%u\n",
+           declarations->module_count, declarations->root_module, declarations->slot_count,
+           declarations->modules[0].storage, declarations->modules[0].dependency_count);
+    for (uint32_t i = 0; i < declarations->slot_count; ++i)
+        printf("Closed slot%u module=%u type=%u mutable=%u\n", i,
+               declarations->slots[i].module, (unsigned)declarations->slots[i].type,
+               declarations->slots[i].mutable);
+    unsigned source_ops = 0, lir_ops = 0;
+    for (uint32_t f = 0; f < closed->function_count; ++f) {
+        const XrXirFunction *function = &closed->functions[f];
+        for (uint32_t i = 0; i < function->instruction_count; ++i) {
+            const XrXirInstruction *v = &function->instructions[i];
+            if (v->op == XR_XIR_SLOT_LOAD || v->op == XR_XIR_SLOT_INIT || v->op == XR_XIR_SLOT_STORE)
+                printf("Closed f%u instruction%u %s type=%u args=(%u,%u) immediate=%lld\n",
+                       f, i, xr_xir_op_name(v->op), (unsigned)v->type,
+                       v->args[0], v->args[1], (long long)v->immediate);
+            if (v->op != XR_XIR_DIV_INT && v->op != XR_XIR_REM_INT)
+                continue;
+            CHECK(v->type == XR_XIR_I64 && v->args[1] >= function->parameter_count);
+            uint32_t ordinal = v->args[1] - function->parameter_count;
+            CHECK(ordinal < function->instruction_count);
+            const XrXirInstruction *rhs = &function->instructions[ordinal];
+            CHECK(rhs->op == XR_XIR_CONST_INT && rhs->type == XR_XIR_I64);
+            CHECK(rhs->immediate != 0 && rhs->immediate != -1);
+            CHECK(v->args[0] < function->parameter_count ||
+                  function->instructions[v->args[0] - function->parameter_count].op != XR_XIR_CONST_INT);
+            printf("Closed fixed divisor: %s rhs=%lld, dynamic numerator\n",
+                   xr_xir_op_name(v->op), (long long)rhs->immediate);
+            ++source_ops;
+        }
+    }
+    if (slot_frontier) {
+        CHECK(declarations->module_count == 1 && declarations->root_module == 0);
+        CHECK(declarations->slot_count == 1 && declarations->slots[0].type == XR_XIR_I64);
+        CHECK(!declarations->slots[0].mutable && !declarations->modules[0].dependency_count);
+        CHECK(declarations->modules[0].storage == XR_XIR_MODULE_FRESH_STORAGE);
+    }
+    source_fixture_free(&fixture);
+    CHECK(source_ops > 0);
+    if (slot_frontier) {
+        rejected(text, false, "module imports, slots or receiving storage");
+        return;
+    }
+    XrLirLowered output = lower_text(text);
+    for (uint32_t f = 0; f < xr_lir_function_count(output.module); ++f) {
+        XrLirFunction function;
+        XrLirFunctionView view;
+        OK(xr_lir_function_at(output.module, f, &function));
+        OK(xr_lir_function_view(output.module, function, &view));
+        uint8_t *constants = xr_calloc((size_t) view.value_count + 1, 1);
+        CHECK(constants);
+        for (uint32_t b = 0; b < view.block_count; ++b) {
+            XrLirBlock block;
+            XrLirBlockView bv;
+            OK(xr_lir_block_at(output.module, function, b, &block));
+            OK(xr_lir_block_view(output.module, block, &bv));
+            for (uint32_t i = 0; i < bv.instruction_count; ++i) {
+                XrLirInstructionView v;
+                OK(xr_lir_instruction_view(output.module, block, i, &v));
+                if (v.op == XR_LIR_CONST && v.type == XR_LIR_I64 && v.bits && v.bits != UINT64_MAX)
+                    constants[v.result] = 1;
+            }
+        }
+        for (uint32_t b = 0; b < view.block_count; ++b) {
+            XrLirBlock block;
+            XrLirBlockView bv;
+            OK(xr_lir_block_at(output.module, function, b, &block));
+            OK(xr_lir_block_view(output.module, block, &bv));
+            for (uint32_t i = 0; i < bv.instruction_count; ++i) {
+                XrLirInstructionView v;
+                OK(xr_lir_instruction_view(output.module, block, i, &v));
+                if (v.op != XR_LIR_DIV && v.op != XR_LIR_REM)
+                    continue;
+                CHECK(v.type == XR_LIR_I64 && constants[v.operands[1]]);
+                CHECK(!constants[v.operands[0]] && v.source.path && v.source.line && v.source.column);
+                ++lir_ops;
+            }
+        }
+        xr_free(constants);
+    }
+    CHECK(lir_ops == source_ops);
+    xr_lir_lowered_free(&output);
+}
+static void fixed_division(const char *fixtures) {
+    fixed_division_source("fn quotient(n:i64)->i64{return n/2}\nprint(quotient(8))\n", false);
+    fixed_division_source("fn remainder(n:i64)->i64{return n%2}\nprint(remainder(8))\n", false);
+    char *original = read_file(fixtures, "../../../bench/native/integer_loop", "xr");
+    fixed_division_source(original, true);
+    xr_free(original);
+    rejected("fn f(n:i64)->i64{return n/0}\nprint(f(8))\n", false, "DIV_INT");
+    rejected("fn f(n:i64)->i64{return n%0}\nprint(f(8))\n", false, "REM_INT");
+    rejected("fn f(n:i64)->i64{return n/(-1)}\nprint(f(8))\n", false, "DIV_INT");
+    rejected("fn f(n:i64)->i64{return n%(-1)}\nprint(f(8))\n", false, "REM_INT");
+    rejected("fn f(n:i64,d:i64)->i64{return n/(d+2)}\nprint(f(8,1))\n", false, "DIV_INT");
+    rejected("fn f(n:i64)->i64{return n/(3 as i64)}\nprint(f(8))\n", false, "DIV_INT");
+    rejected("fn f(n:i64,flag:bool)->i64{return n%(flag?3:7)}\nprint(f(8,true))\n", false, "REM_INT");
 }
 static void swapped_backedge(void) {
     XrLirLowered output =
@@ -239,6 +341,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 3);
     supported_control();
     swapped_backedge();
+    fixed_division(argv[1]);
     unsupported();
     argument_validation();
     golden(argv[1], argv[2], "source-fib");

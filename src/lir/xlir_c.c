@@ -8,8 +8,10 @@
  * xlir_c.c - Direct scalar C calls and parallel SSA edge copies
  *
  * KEY CONCEPT:
- *   Arithmetic widens to unsigned before operations. Signed reconstruction
- *   uses only representable conversions. No interpreter frame is emitted.
+ *   Wrapping arithmetic widens to unsigned before operations. Signed
+ *   reconstruction uses only representable conversions. Fixed-divisor i64
+ *   division stays signed after admission excludes both fault conditions.
+ *   No interpreter frame is emitted.
  */
 #include "xlir_c.h"
 #include "xlir_verify.h"
@@ -28,7 +30,7 @@ typedef struct LirC {
     size_t length, capacity;
     uint32_t *closure;
     uint32_t closure_count;
-    uint8_t *seen;
+    uint8_t *seen, *fixed_divisors;
     XrLirFunction function;
     XrLirFunctionView view;
     uint32_t block, instruction, scratch;
@@ -170,12 +172,55 @@ static void c_visit(LirC *c, uint32_t id) {
         c->closure[c->closure_count++] = id;
     }
 }
+static bool c_has_division(LirC *c) {
+    for (uint32_t b = 0; b < c->view.block_count && c_work(c, 1); ++b) {
+        XrLirBlock block;
+        XrLirBlockView view;
+        xr_lir_block_at(c->request->module, c->function, b, &block);
+        xr_lir_block_view(c->request->module, block, &view);
+        for (uint32_t i = 0; i < view.instruction_count && c_work(c, 1); ++i) {
+            XrLirInstructionView v;
+            xr_lir_instruction_view(c->request->module, block, i, &v);
+            if (v.op == XR_LIR_DIV || v.op == XR_LIR_REM)
+                return true;
+        }
+    }
+    return false;
+}
+/* SSA verification already supplies unique definitions and dominance. Facts
+ * are local to this function and never inferred through aliases or edges. */
+static void c_prepare_divisors(LirC *c) {
+    if (!c_has_division(c) || c->status != XR_LIR_C_OK)
+        return;
+    void *facts = NULL;
+    if (!c_resource(c, xr_compile_resources_calloc(c->request->resources,
+                                                  (size_t)c->view.value_count + 1, 1, &facts)))
+        return;
+    c->fixed_divisors = facts;
+    for (uint32_t b = 0; b < c->view.block_count && c_work(c, 1); ++b) {
+        XrLirBlock block;
+        XrLirBlockView view;
+        xr_lir_block_at(c->request->module, c->function, b, &block);
+        xr_lir_block_view(c->request->module, block, &view);
+        for (uint32_t i = 0; i < view.instruction_count && c_work(c, 1); ++i) {
+            XrLirInstructionView v;
+            xr_lir_instruction_view(c->request->module, block, i, &v);
+            if (v.op == XR_LIR_CONST && v.type == XR_LIR_I64 && v.bits && v.bits != UINT64_MAX)
+                c->fixed_divisors[v.result] = 1;
+        }
+    }
+}
 static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     c_scalar(c, v->type);
     switch (v->op) {
         case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
         case XR_LIR_NEG: case XR_LIR_ICMP: case XR_LIR_INTCAST:
         case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
+            break;
+        case XR_LIR_DIV: case XR_LIR_REM:
+            if (v->type != XR_LIR_I64 || !c->fixed_divisors ||
+                !c->fixed_divisors[v->operands[1]])
+                c_error(c, XR_LIR_C_UNSUPPORTED, "division requires a direct nonzero, non-minus-one i64 constant");
             break;
         case XR_LIR_CALL:
             c_visit(c, v->callee);
@@ -207,6 +252,10 @@ static void c_admit(LirC *c) {
     c->seen = seen;
     c_visit(c, c->request->entry.id);
     for (uint32_t cursor = 0; cursor < c->closure_count && c_work(c, 1); ++cursor) {
+        xr_compile_resources_free(c->fixed_divisors);
+        c->fixed_divisors = NULL;
+        c->block = c->instruction = 0;
+        c->source = (XrLirSource) {0};
         c->function = (XrLirFunction) {c->request->module, c->closure[cursor]};
         xr_lir_function_view(c->request->module, c->function, &c->view);
         if (c->view.kind == XR_LIR_FUNCTION_EXTERNAL) {
@@ -218,6 +267,8 @@ static void c_admit(LirC *c) {
             c_scalar(c, c->view.parameter_types[p]);
         if (c->view.value_count >= UINT32_C(8388607))
             c_error(c, XR_LIR_C_UNSUPPORTED, "C temporary index exceeds the W4 limit");
+        if (c->status == XR_LIR_C_OK)
+            c_prepare_divisors(c);
         for (uint32_t b = 0; b < c->view.block_count && c_work(c, 1); ++b) {
             XrLirBlock block;
             XrLirBlockView view;
@@ -386,6 +437,13 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
         case XR_LIR_NEG: case XR_LIR_INTCAST:
             c_integer(c, v);
+            break;
+        case XR_LIR_DIV: case XR_LIR_REM:
+            c_format(c, "    v%" PRIu32 " = ", v->result);
+            c_value(c, v->operands[0]);
+            c_text(c, v->op == XR_LIR_DIV ? " / " : " % ");
+            c_value(c, v->operands[1]);
+            c_text(c, ";\n");
             break;
         case XR_LIR_ICMP:
             c_format(c, "    v%" PRIu32 " = ", v->result);
@@ -557,5 +615,6 @@ XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *request, XrLirCOutput *o
     xr_compile_resources_free(c.text);
     xr_compile_resources_free(c.closure);
     xr_compile_resources_free(c.seen);
+    xr_compile_resources_free(c.fixed_divisors);
     return c.status;
 }
