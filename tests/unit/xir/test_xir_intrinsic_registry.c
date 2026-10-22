@@ -151,7 +151,8 @@ static void predecessor_rejected(Fixture *fixture, const char *path) {
     CHECK(bytes && fread(bytes, 1, length, file) == length && !fclose(file));
     CHECK(!memcmp(bytes, "XRCHK\0\0\0", 8));
     CHECK(get32(bytes + 8) == 33 && get32(bytes + 12) == 93);
-    CHECK(XR_XIR_CHECKED_SCHEMA != 33 && XR_XIR_CHECKED_CONTRACT != 93);
+    CHECK(get32(fixture->packet.bytes + 8) != get32(bytes + 8) &&
+        get32(fixture->packet.bytes + 12) != get32(bytes + 12));
     XrSHA256Context hash;
     uint8_t digest[32];
     xr_sha256_init(&hash);
