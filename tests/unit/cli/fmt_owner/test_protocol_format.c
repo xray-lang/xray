@@ -7,6 +7,13 @@
 #include "app/lsp/xlsp_server.h"
 #include "app/lsp/xlsp_format.h"
 #include "app/lsp/xlsp_transport.h"
+#include "app/lsp/xlsp_document_store.h"
+#include "app/lsp/xlsp_pending_requests.h"
+#include "app/lsp/xlsp_protocol_message.h"
+#include "app/lsp/xlsp_protocol_output.h"
+#include "app/lsp/xlsp_method_table.h"
+#include "app/lsp/xlsp_framing.h"
+#include "app/lsp/xlsp_handlers_textdoc.h"
 #include "app/mcp/xmcp_tools_internal.h"
 #include "app/mcp/xmcp_json.h"
 #include "app/mcp/xmcp_server.h"
@@ -49,7 +56,14 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_new(const XrCompileResource
 static void fixture_log(const char *format,...){(void)format;}
 #define lsp_log fixture_log
 static XrJsonValue *fixture_other_handler(XrLspServer *server,XrJsonValue *params){(void)params;CHECK(!server->formatting_failure.stage);return xjson_new_null();}
+// Only these address identities are observed; neither handler is executed.
+static XrJsonValue *fixture_shutdown_identity(XrLspServer *server,XrJsonValue *params){(void)server;(void)params;exit(2);}
+static XrJsonValue *fixture_completion_identity(XrLspServer *server,XrJsonValue *params){(void)server;(void)params;exit(2);}
+#define xlsp_handle_lc_shutdown fixture_shutdown_identity
+#define xlsp_handle_td_completion_resolve fixture_completion_identity
 #include "protocol-selected.inc"
+#undef xlsp_handle_lc_shutdown
+#undef xlsp_handle_td_completion_resolve
 static void reset(void){CHECK(!live);attempts=0;fail_at=SIZE_MAX;limit_work=UINT64_MAX;cancel_on_failure=NULL;}
 static XrJsonValue *mcp(const char *code,bool tabs) {
     XmcpServer server={0};XmcpCallContext context={0};XrJsonValue *args=xjson_new_object();
@@ -82,7 +96,7 @@ static XrJsonValue *lsp_call(XrLspServer *server,XrJsonValue *params,bool format
 }
 static void lsp_cases(void){
     XrLspServer server={0};XrLspDocument doc={0};doc.server=&server;doc.uri="file:///test.xr";doc.content="var x=1\n";doc.length=8;doc.line_count=1;
-    XrLspDocBucket bucket={.doc=&doc};XrLspDocBucket *buckets[]={&bucket};XrLspDocTable table={.buckets=buckets,.bucket_count=1,.doc_count=1};server.doc_table=&table;
+    XrLspDocBucket bucket={.doc=&doc,.uri=doc.uri};XrLspDocBucket *buckets[]={&bucket};XrLspDocTable table={.buckets=buckets,.bucket_count=1,.doc_count=1};server.doc_table=&table;
     server.config.format_tab_size=4;server.config.format_insert_spaces=true;server.config.format_max_line_length=100;
     XrJsonValue *params=xjson_new_object(),*document=xjson_new_object();XJSON_SET_STRING(document,"uri",doc.uri);xjson_object_set(params,"textDocument",document);
     reset();server.formatting_failure.stage=99;XrJsonValue *out=lsp_call(&server,params,true,false);size_t count=attempts;

@@ -35,9 +35,13 @@ add_custom_command(OUTPUT "${protocol_selection}"
     DEPENDS "${CMAKE_CURRENT_LIST_DIR}/extract_protocol.py"
       "${FMT_ROOT}/src/app/lsp/xlsp_server.c" "${FMT_ROOT}/src/app/lsp/xlsp_handlers_textdoc.c"
       "${FMT_ROOT}/src/app/lsp/xlsp_transport.c" "${FMT_ROOT}/src/app/mcp/xmcp_tools_lang.c"
+      "${FMT_ROOT}/src/app/lsp/xlsp_document_owner.c"
       "${FMT_ROOT}/src/app/mcp/xmcp_result.c" VERBATIM)
 add_executable(test_protocol_format "${CMAKE_CURRENT_LIST_DIR}/test_protocol_format.c"
     "${protocol_selection}" "${FMT_ROOT}/src/app/lsp/xlsp_format.c" "${FMT_ROOT}/src/app/mcp/xmcp_json.c"
+    "${FMT_ROOT}/src/app/lsp/xlsp_document_store.c" "${FMT_ROOT}/src/app/lsp/xlsp_pending_requests.c"
+    "${FMT_ROOT}/src/app/lsp/xlsp_protocol_message.c" "${FMT_ROOT}/src/app/lsp/xlsp_protocol_output.c"
+    "${FMT_ROOT}/src/app/lsp/xlsp_framing.c"
     "${FMT_ROOT}/src/base/xjson.c" "${FMT_ROOT}/src/base/xframing.c")
 target_link_libraries(test_protocol_format PRIVATE xray_frontend_format)
 target_include_directories(test_protocol_format PRIVATE "${FMT_ROOT}/src" "${FMT_ROOT}/include" "${CMAKE_CURRENT_BINARY_DIR}")

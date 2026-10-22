@@ -40,9 +40,10 @@ fn(lang,'xmcp_tool_xray_format')
 server='src/app/lsp/xlsp_server.c'
 text=(root/server).read_text(encoding='utf-8')
 add(server,'cancel constant',re.search(r'(?m)^#define LSP_ERROR_REQUEST_CANCELLED .+$',text).group())
-for name in ('hash_uri','doc_table_get','xlsp_document_get','xlsp_request_id_free','xlsp_request_id_equals','xlsp_request_id_to_json','xlsp_request_id_debug','send_response','send_error','pending_request_remove','pending_request_is_cancelled'):fn(server,name)
+fn('src/app/lsp/xlsp_document_owner.c','xlsp_document_get')
+for name in ('send_protocol_message','send_response','send_error','pending_request_remove','pending_request_is_cancelled','finish_request_handler'):fn(server,name)
 fn('src/app/lsp/xlsp_handlers_textdoc.c','xlsp_handle_td_formatting')
-for name in ('write_all','xlsp_transport_write'):fn('src/app/lsp/xlsp_transport.c',name)
+for name in ('write_all','xlsp_transport_is_connected','xlsp_transport_write'):fn('src/app/lsp/xlsp_transport.c',name)
 text=(root/server).read_text(encoding='utf-8');needle='if (entry->request_handler) {';assert text.count(needle)==1
 selected=block(text,text.index(needle));records.append(dict(path=server,label='request_handler branch',sha256=hashlib.sha256(selected.encode()).hexdigest()))
 parts.append("""static void selected_dispatch(XrLspServer *server,XrJsonValue *params, bool formatting) {
