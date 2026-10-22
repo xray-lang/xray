@@ -601,3 +601,7 @@ static const XrNativeTypeDeclaration xr_native_stringbuilder = {
     "stdlib/types/stringbuilder.xr", "xray-native:prelude/StringBuilder", {{6, 118, 152, 17, 17, 67, 5, 101, 172, 106, 220, 107, 62, 147, 19, 235, 199, 66, 219, 3, 255, 182, 26, 2, 58, 22, 240, 91, 202, 73, 194, 253}},
     2, 7, xr_native_stringbuilder_members, 3
 };
+
+static const XrNativeIntrinsicDeclaration xr_native_intrinsics[] = {
+    {UINT32_C(1), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[4], true, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_CONTAINS, "xr_xir_string_contains"},
+};

@@ -10,6 +10,7 @@
  *   Only the common scalar kernel is linked; no native-cache bootstrap dependency.
  */
 #include "xxir_ctfe.h"
+#include "xxir_intrinsic.h"
 #include "xxir_ctfe_batch_internal.h"
 #include "xxir_internal.h"
 #include "xxir_compile_memory.h"

@@ -13,7 +13,7 @@
 static bool ctfe_string_read_opcode(XrXirOp op) {
     switch (op) {
     case XR_XIR_LT_STRING: case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING:
-    case XR_XIR_STRING_CONTAINS: case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH:
+    case XR_XIR_CALL_INTRINSIC: case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH:
     case XR_XIR_STRING_INDEX_OF: case XR_XIR_STRING_LAST_INDEX_OF: return true;
     default: return false;
     }
@@ -36,7 +36,7 @@ static XrXirCtfeStatus ctfe_string_read_work(ScalarRun *run,XrXirOp op,
         /* Index conversion may scan UTF-8 twice. Search uses at most one
          * comparison and constant loop bookkeeping per candidate byte.
          * Long-pattern skip-table lookups also pay their complete slot span. */
-        if (op!=XR_XIR_STRING_CONTAINS) {
+        if (op!=XR_XIR_CALL_INTRINSIC) {
             if (ac>UINT64_MAX/2) return XR_XIR_CTFE_BUDGET;
             bytes=2*(uint64_t)ac;
         }
@@ -62,7 +62,10 @@ static XrXirCtfeStatus ctfe_string_read_work(ScalarRun *run,XrXirOp op,
 }
 static XrXirCtfeStatus ctfe_string_read_step(ScalarRun *run,uint32_t *cursor) {
     const XrXirInstruction *op=&run->function->instructions[*cursor];
-    const uint32_t *args=op->op==XR_XIR_STRING_INDEX_OF?run->function->operands+op->args[0]:op->args;
+    const XrNativeIntrinsicDeclaration *call = op->op == XR_XIR_CALL_INTRINSIC ?
+        xr_xir_intrinsic(op->immediate) : NULL;
+    if (op->op == XR_XIR_CALL_INTRINSIC && (!call || !call->ctfe)) return XR_XIR_CTFE_BAD_ARTIFACT;
+    const uint32_t *args=op->op==XR_XIR_STRING_INDEX_OF || call ? run->function->operands+op->args[0]:op->args;
     XrXirValue left={XR_XIR_STRING,0,xr_xir_scalar_load(run->frame,run->layout->offsets[args[0]])};
     XrXirValue right={XR_XIR_STRING,0,xr_xir_scalar_load(run->frame,run->layout->offsets[args[1]])};
     int64_t start=op->op==XR_XIR_STRING_INDEX_OF?xr_xir_scalar_load(run->frame,run->layout->offsets[args[2]]):0;
@@ -79,7 +82,7 @@ static XrXirCtfeStatus ctfe_string_read_step(ScalarRun *run,uint32_t *cursor) {
         result=op->op==XR_XIR_LT_STRING?order<0:op->op==XR_XIR_LE_STRING?order<=0:op->op==XR_XIR_GT_STRING?order>0:order>=0;
     } else {
         bool found=false;
-        bool valid=op->op==XR_XIR_STRING_CONTAINS?xr_xir_string_contains(&left,&right,&found):
+        bool valid=call?xr_xir_string_contains(&left,&right,&found):
             op->op==XR_XIR_STRING_STARTS_WITH?xr_xir_string_starts_with(&left,&right,&found):
             xr_xir_string_ends_with(&left,&right,&found);
         if (!valid) return XR_XIR_CTFE_BAD_ARTIFACT;

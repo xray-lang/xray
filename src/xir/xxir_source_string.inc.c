@@ -9,6 +9,8 @@
  * KEY CONCEPT:
  *   The receiver snapshot survives argument effects and suspension.
  */
+#include "xxir_intrinsic.h"
+
 static bool source_string_value_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
     const XrNativeMemberDeclaration *member,SourceValue *value);
 static bool source_string_declaration(SourceContext *ctx) {
@@ -35,6 +37,8 @@ static bool source_string_declaration(SourceContext *ctx) {
 }
 static bool source_string_member_reference(SourceContext *ctx, AstNode *node,
     const XrNativeMemberDeclaration *member) {
+    const XrNativeIntrinsicDeclaration *intrinsic = xr_native_intrinsic_for_member(
+        xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING), member);
     uint32_t index = (uint32_t)member->operation - XR_NATIVE_OPERATION_STRING_CONTAINS;
     if (index >= sizeof(ctx->string_members) / sizeof(ctx->string_members[0]))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string member identity is not executable");
@@ -47,17 +51,41 @@ static bool source_string_member_reference(SourceContext *ctx, AstNode *node,
         ctx->string_members[index] = symbol.declaration;
         XrXirSourceType *parameter = source_alloc(ctx, member->parameter_count, sizeof(*parameter));
         if (!parameter) return false;
-        for (uint32_t i = 0; i < member->parameter_count; ++i)
-            parameter[i] = (XrXirSourceType) {i ? XR_XIR_I64 : XR_XIR_STRING, 0, true};
+        for (uint32_t i = 0; i < member->parameter_count; ++i) {
+            XrXirType type = i ? XR_XIR_I64 : XR_XIR_STRING;
+            if (intrinsic && !xr_xir_intrinsic_parameter(intrinsic, i + 1, &type))
+                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "intrinsic parameter is not representable");
+            parameter[i] = (XrXirSourceType) {type, 0, true};
+        }
         XrXirSourceDeclaration *record = (XrXirSourceDeclaration *)&ctx->query.declarations[symbol.declaration - 1];
         record->native_identity = member->id;
         record->signature = source_owned_text(ctx, member->signature);
         if (!record->signature) return false;
-        record->type = (XrXirSourceType) {member->result == XR_NATIVE_TERM_BOOL ? XR_XIR_BOOL : XR_XIR_I64, 0, true};
+        XrXirType result = member->result == XR_NATIVE_TERM_BOOL ? XR_XIR_BOOL : XR_XIR_I64;
+        if (intrinsic && !xr_xir_intrinsic_type(member->result, &result))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "intrinsic result is not representable");
+        record->type = (XrXirSourceType) {result, 0, true};
         record->parameters = parameter; record->parameter_count = member->parameter_count; record->exported = true;
     }
     return source_query_target_token_reference(ctx,node,
         ctx->string_members[index], XR_XIR_SOURCE_CALL);
+}
+static bool source_string_intrinsic_call(SourceContext *ctx, AstNode *node,
+    SourceValue receiver, const XrNativeIntrinsicDeclaration *call, SourceValue *value) {
+    XrXirType parameter, result;
+    if (xr_xir_intrinsic(call->id) != call || call->member->parameter_count != 1 ||
+        !xr_xir_intrinsic_parameter(call, 1, &parameter) ||
+        !xr_xir_intrinsic_type(call->member->result, &result))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "intrinsic declaration is not executable");
+    SourceValue arguments[2] = {receiver, {0}};
+    uint32_t supplied = 0;
+    if (!source_native_read_arguments(ctx, node, &parameter, 1, 1, &arguments[1], &supplied,
+        "intrinsic requires its declared plain arguments")) return false;
+    if (arguments[1].type != parameter)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "intrinsic argument type mismatch");
+    XrXirInstruction instruction = {XR_XIR_CALL_INTRINSIC, result, {0}, {0}, call->id, {0}};
+    return source_recipe_group(ctx, instruction, arguments, 2, value) &&
+        source_string_member_reference(ctx, node->as.call_expr.callee, call->member);
 }
 static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue receiver, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
@@ -74,10 +102,11 @@ static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue re
     if (!member || !member->is_public || member->is_static || !member->parameter_count ||
         member->parameters[0].type != XR_NATIVE_TERM_STRING || member->receiver != XR_NATIVE_RECEIVER_READ)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string member has no admitted value-operation contract");
+    const XrNativeIntrinsicDeclaration *intrinsic = xr_native_intrinsic_for_member(native, member);
+    if (intrinsic) return source_string_intrinsic_call(ctx, node, receiver, intrinsic, value);
     XrXirOp operation = XR_XIR_INVALID;
     XrXirType result = XR_XIR_BOOL;
     switch (member->operation) {
-    case XR_NATIVE_OPERATION_STRING_CONTAINS: operation = XR_XIR_STRING_CONTAINS; break;
     case XR_NATIVE_OPERATION_STRING_STARTS_WITH: operation = XR_XIR_STRING_STARTS_WITH; break;
     case XR_NATIVE_OPERATION_STRING_ENDS_WITH: operation = XR_XIR_STRING_ENDS_WITH; break;
     case XR_NATIVE_OPERATION_STRING_INDEX_OF: operation = XR_XIR_STRING_INDEX_OF; result = XR_XIR_I64; break;

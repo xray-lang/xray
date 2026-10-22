@@ -16,6 +16,7 @@
  */
 
 #include "xxir_internal.h"
+#include "xxir_intrinsic.h"
 #include "xxir_source_replay_internal.h"
 #include "xxir_map.h"
 #include "xxir_task_shapes.h"
@@ -250,6 +251,15 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if (range && (op->args[1] > 65536 || op->args[0] > function->operand_count ||
         op->args[1] > function->operand_count - op->args[0] || (!op->args[1] && op->args[0])))
         return XR_XIR_BAD_STRUCTURE;
+    if (op->op == XR_XIR_CALL_INTRINSIC) {
+        const XrNativeIntrinsicDeclaration *call = xr_xir_intrinsic(op->immediate);
+        XrXirType result;
+        if (!call || call->member->parameter_count == UINT32_MAX ||
+            op->args[1] != call->member->parameter_count + 1)
+            return XR_XIR_BAD_STRUCTURE;
+        if (!xr_xir_intrinsic_type(call->member->result, &result) || op->type != result)
+            return XR_XIR_BAD_TYPE;
+    }
     if (xr_xir_op_is_atomic(op->op) && op->op != XR_XIR_ATOMIC_NEW) {
         uint32_t required = xr_xir_atomic_required_operands(op->op);
         uint32_t maximum = required + (op->op != XR_XIR_ATOMIC_TO_STRING);
@@ -346,7 +356,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         if (op->immediate != 0 && op->immediate != 1) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
         if (op->immediate < 0 || (uint64_t)op->immediate > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
-    } else if (op->op != XR_XIR_CONST_INT && op->op != XR_XIR_CLEANUP_REGISTER && op->op != XR_XIR_CALL &&
+    } else if (op->op != XR_XIR_CONST_INT && op->op != XR_XIR_CLEANUP_REGISTER && op->op != XR_XIR_CALL && op->op != XR_XIR_CALL_INTRINSIC &&
                op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_GO && op->op != XR_XIR_GENERATOR_NEW && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
                op->op != XR_XIR_INVOKE_RESULT && op->op != XR_XIR_INVOKE_ERROR && op->op != XR_XIR_INVOKE_DISCARD && op->op != XR_XIR_CALL_INDIRECT &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
@@ -1092,7 +1102,7 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
     if (op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_STRING_LEN ||
         op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
         (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
-        op->op == XR_XIR_STRING_CONTAINS || op->op == XR_XIR_STRING_STARTS_WITH ||
+        op->op == XR_XIR_STRING_STARTS_WITH ||
         op->op == XR_XIR_STRING_ENDS_WITH || op->op == XR_XIR_STRING_INDEX_OF ||
         op->op == XR_XIR_STRING_LAST_INDEX_OF) expected = XR_XIR_STRING;
 
@@ -1133,6 +1143,9 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (!xir_compile_work(&context->remaining, count)) return XR_XIR_BUDGET;
         for (uint32_t a = 0; a < count; ++a) {
             XrXirType operand_type = indirect ? indirect->parameters[a].type : expected;
+            if (op->op == XR_XIR_CALL_INTRINSIC &&
+                !xr_xir_intrinsic_parameter(xr_xir_intrinsic(op->immediate), a, &operand_type))
+                return XR_XIR_BAD_TYPE;
             if (op->op == XR_XIR_CALL_REQUIREMENT)
                 operand_type = xr_xir_operand_type(function, function->operands[op->args[0] + a]);
             if (xr_xir_op_references_function(op->op)) {
@@ -1168,7 +1181,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 if (operand_type == XR_XIR_UNIT) return XR_XIR_BAD_VALUE;
                 if (operand_type != XR_XIR_BOOL && operand_type != XR_XIR_RUNE && !xr_xir_type_is_number(operand_type) && operand_type != XR_XIR_STRING) return XR_XIR_BAD_TYPE;
             }
-            uint32_t id = xr_xir_op_references_function(op->op) || op->op == XR_XIR_CALL_REQUIREMENT || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_PRINT || op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_REPLACE || op->op == XR_XIR_RANGE_CHECK ?
+            uint32_t id = xr_xir_op_references_function(op->op) || op->op == XR_XIR_CALL_INTRINSIC || op->op == XR_XIR_CALL_REQUIREMENT || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_PRINT || op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_REPLACE || op->op == XR_XIR_RANGE_CHECK ?
                 function->operands[op->args[0] + a] : op->args[a];
             XrXirStatus status = local_operand(context->module->types, function, op, id, a);
             if (status == XR_XIR_OK) status = value_use(function, graph, i, id, operand_type);

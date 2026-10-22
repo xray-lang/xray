@@ -201,7 +201,7 @@ static void byte_order(void) {
     _Static_assert(XR_XIR_MATCH_FAIL == 97, "match fault wire operation");
     _Static_assert(XR_XIR_ENUM_NEW == 94 && XR_XIR_ENUM_TAG == 95 && XR_XIR_ENUM_GET == 96, "enum wire operations");
     _Static_assert(XR_XIR_STRING_INDEX_OF == 92 && XR_XIR_STRING_LAST_INDEX_OF == 93, "search wire operations");
-    _Static_assert(XR_XIR_STRING_CONTAINS == 89 && XR_XIR_STRING_STARTS_WITH == 90 && XR_XIR_STRING_ENDS_WITH == 91, "string predicate wire operations");
+    _Static_assert(XR_XIR_CALL_INTRINSIC == 89 && XR_XIR_STRING_STARTS_WITH == 90 && XR_XIR_STRING_ENDS_WITH == 91, "string predicate wire operations");
     _Static_assert(XR_XIR_STRING_LEN == 86 && XR_XIR_EQ_STRING == 87 && XR_XIR_NE_STRING == 88, "string query wire operations");
     _Static_assert(XR_XIR_STRUCT_NEW == 82 && XR_XIR_STRUCT_GET == 83 && XR_XIR_STRUCT_SET == 84, "struct wire operations");
     _Static_assert(XR_XIR_F32 == 12 && XR_XIR_F64 == 13 && XR_XIR_CONVERT_NUMBER == 62 &&
@@ -933,16 +933,17 @@ static void nominal_callable_components(void) {
 }
 static void string_query_contracts(void) {
     XrXirType parameters[] = {XR_XIR_STRING, XR_XIR_STRING};
+    const uint32_t operands[] = {0, 1};
     XrXirInstruction ops[] = {
         {XR_XIR_STRING_LEN, XR_XIR_I64, {0}, {0}, 0, {0}},
         {XR_XIR_EQ_STRING, XR_XIR_BOOL, {0,1}, {0}, 0, {0}},
         {XR_XIR_NE_STRING, XR_XIR_BOOL, {0,1}, {0}, 0, {0}},
-        {XR_XIR_STRING_CONTAINS, XR_XIR_BOOL, {0,1}, {0}, 0, {0}},
+        {XR_XIR_CALL_INTRINSIC, XR_XIR_BOOL, {0,2}, {0}, 1, {0}},
         {XR_XIR_STRING_STARTS_WITH, XR_XIR_BOOL, {0,1}, {0}, 0, {0}},
         {XR_XIR_STRING_ENDS_WITH, XR_XIR_BOOL, {0,1}, {0}, 0, {0}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {7,0}, {0}, 0, {0}}};
     XrXirBlock block = {0,7, 0, 0};
-    XrXirFunction function = {"queries",7,parameters,2,XR_XIR_BOOL,&block,1,ops,7,NULL,0};
+    XrXirFunction function = {"queries",7,parameters,2,XR_XIR_BOOL,&block,1,ops,7,operands,2};
     XrXirModule built = {XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *decoded = NULL;
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
@@ -952,6 +953,8 @@ static void string_query_contracts(void) {
         uint8_t pattern[40] = {0};
         put32(pattern, (uint32_t)ops[i].op); put32(pattern+4,(uint32_t)ops[i].type);
         put32(pattern+8,ops[i].args[0]); put32(pattern+12,ops[i].args[1]);
+        put32(pattern+24,(uint32_t)ops[i].immediate);
+        put32(pattern+28,(uint32_t)((uint64_t)ops[i].immediate>>32));
         size_t found = 0; unsigned matches = 0;
         for (size_t at = 64; at + sizeof(pattern) <= packet.length; ++at)
             if (!memcmp(packet.bytes+at,pattern,sizeof(pattern))) { found=at; ++matches; }

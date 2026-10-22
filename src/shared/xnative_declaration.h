@@ -182,6 +182,27 @@ typedef struct XrNativeTypeDeclaration {
     const XrNativeMemberDeclaration *members;
     uint32_t member_count;
 } XrNativeTypeDeclaration;
+
+typedef enum XrNativeIntrinsicImplementation {
+    XR_NATIVE_INTRINSIC_IMPLEMENTATION_NONE,
+    XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_CONTAINS
+} XrNativeIntrinsicImplementation;
+typedef enum XrNativeIntrinsicEffects {
+    XR_NATIVE_INTRINSIC_READ = 1u << 0
+} XrNativeIntrinsicEffects;
+// IDs belong to the generated intrinsic namespace, never operation ordinals.
+// Signatures and ownership borrow the canonical declaration rather than copies.
+typedef struct XrNativeIntrinsicDeclaration {
+    uint32_t id, effects;
+    const XrNativeTypeDeclaration *owner;
+    const XrNativeMemberDeclaration *member;
+    bool ctfe;
+    XrNativeIntrinsicImplementation implementation;
+    const char *c_symbol;
+} XrNativeIntrinsicDeclaration;
+XR_FUNC const XrNativeIntrinsicDeclaration *xr_native_intrinsic_by_id(uint32_t id);
+XR_FUNC const XrNativeIntrinsicDeclaration *xr_native_intrinsic_for_member(
+    const XrNativeTypeDeclaration *owner, const XrNativeMemberDeclaration *member);
 XR_FUNC const XrNativeTypeDeclaration *xr_native_declaration_by_id(uint32_t id);
 XR_FUNC const XrNativeTypeDeclaration *xr_native_declaration_by_name(const char *name);
 XR_FUNC const XrNativeMemberDeclaration *xr_native_declaration_member(

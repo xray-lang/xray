@@ -13,6 +13,21 @@
 #include <string.h>
 #include "xnative_declarations.inc.c"
 
+XR_FUNC const XrNativeIntrinsicDeclaration *xr_native_intrinsic_by_id(uint32_t id) {
+    if (!id) return NULL;
+    for (size_t i = 0; i < sizeof(xr_native_intrinsics) / sizeof(*xr_native_intrinsics); ++i)
+        if (xr_native_intrinsics[i].id == id) return &xr_native_intrinsics[i];
+    return NULL;
+}
+XR_FUNC const XrNativeIntrinsicDeclaration *xr_native_intrinsic_for_member(
+    const XrNativeTypeDeclaration *owner, const XrNativeMemberDeclaration *member) {
+    if (!owner || !member) return NULL;
+    for (size_t i = 0; i < sizeof(xr_native_intrinsics) / sizeof(*xr_native_intrinsics); ++i)
+        if (xr_native_intrinsics[i].owner == owner && xr_native_intrinsics[i].member == member)
+            return &xr_native_intrinsics[i];
+    return NULL;
+}
+
 const XrNativeTypeDeclaration *xr_native_declaration_by_id(uint32_t id) {
     return id == xr_native_array.id ? &xr_native_array :
         id == xr_native_string.id ? &xr_native_string :
