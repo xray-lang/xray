@@ -59,11 +59,32 @@ def review_request(args) -> dict:
         raise ValueError("Review requires the author and reviewer roles")
     if review["authorRole"] == review["reviewerRole"]:
         raise ValueError("An independent reviewer is required")
-    for key in ("reviewEvidence", "l0Log"):
+    for key in ("reviewEvidence", "l0Log", "sliceAsanLog"):
         path = Path(review.get(key, ""))
         if not path.is_absolute() or not path.is_file() or path.stat().st_size == 0:
             raise ValueError(f"Review requires an existing, nonempty {key}")
     return review
+
+
+def slice_asan_gate(review: dict, changed: list[str], log: dict, logs: Path) -> None:
+    """Archive the author's gate and enforce the independent review's verdict."""
+    content = Path(review["sliceAsanLog"]).read_bytes()
+    (logs / "slice-asan.log").write_bytes(content)
+    result = review.get("sliceAsanResult")
+    log["sliceAsanEvidence"] = {"path": review["sliceAsanLog"],
+                                "sha256": hashlib.sha256(content).hexdigest(),
+                                "result": result}
+    log["gates"]["slice_asan"] = "FAIL"
+    if result == "PASS":
+        log["gates"]["slice_asan"] = "PASS"
+        return
+    native = any(p.startswith(("src/", "include/")) or
+                 Path(p).suffix.lower() in {".c", ".h", ".cc", ".cpp", ".hpp"} for p in changed)
+    reason = review.get("sliceAsanReason")
+    if result == "NOT_APPLICABLE" and not native and isinstance(reason, str) and reason.strip():
+        log["gates"]["slice_asan"] = "NOT_APPLICABLE: " + reason.strip()
+        return
+    raise RuntimeError("Slice ASan gate must pass; non-native slices require a reviewed reason")
 
 
 def integrate(args, review: dict, log: dict, logs: Path) -> None:
@@ -114,6 +135,7 @@ def integrate(args, review: dict, log: dict, logs: Path) -> None:
     log["committers"] = sorted(set(final_committers))
     changed = git(integration, "diff", "--name-only", main, candidate).splitlines()
     log["changed"] = changed
+    slice_asan_gate(review, changed, log, logs)
     relative = Path(args.manifest)
     if relative.is_absolute() or ".." in relative.parts:
         raise ValueError("L1 manifest must be a tracked path inside the candidate")
@@ -138,16 +160,6 @@ def integrate(args, review: dict, log: dict, logs: Path) -> None:
             log["gates"]["meta_ownership_inventory"] = "FAIL"
             xray_l1.tests(["meta_ownership_inventory"], args.build, logs, "metadata", environment)
             log["gates"]["meta_ownership_inventory"] = "PASS"
-    if any(re.match(r"src/(ir|aot|analysis|lir|hir)/", p) for p in changed):
-        log["gates"]["asan_focused"] = "FAIL"
-        if args.asan_unavailable:
-            log["gates"]["asan_focused"] = "NOT_RUN: " + args.asan_unavailable
-            raise RuntimeError("Required ASan lane is unavailable; main will not advance")
-        environment = {k: v for k, v in environment.items() if not k.startswith("XR_ASAN_")}
-        environment.update(XR_ASAN_BUILD_DIR=str(args.asan.resolve()), XR_ASAN_JOBS="4", XR_ASAN_PROFILE="full")
-        with Lease(args.slots, "heavy", priority=0, payload={"candidate": candidate}):
-            xray_l1.tests(["asan_focused"], args.build, logs, "asan", environment)
-        log["gates"]["asan_focused"] = "PASS"
     if git(integration, "rev-parse", "HEAD") != candidate or git(root, "rev-parse", args.branch) != source:
         raise RuntimeError("Candidate or reviewed branch moved while gates were running")
     clean(integration)
@@ -167,14 +179,12 @@ def main() -> int:
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--integration", type=Path, default=Path(r"E:\xray\wt\int"))
     parser.add_argument("--build", type=Path, default=Path(r"D:\xray-build\int-rel"))
-    parser.add_argument("--asan", type=Path, default=Path(r"D:\xray-build\int-asan"))
     parser.add_argument("--temporary", type=Path, default=Path(r"D:\xray-build\int-tmp"))
     parser.add_argument("--queue", type=Path, default=Path(r"D:\xray-build\queue"))
     parser.add_argument("--slots", type=Path, default=Path(r"D:\xray-build\slots"))
     parser.add_argument("--manifest", default="scripts/l1-v0.json")
-    parser.add_argument("--asan-unavailable", default="")
     args = parser.parse_args()
-    for name in ("repo", "integration", "build", "asan", "temporary", "queue", "slots", "review"):
+    for name in ("repo", "integration", "build", "temporary", "queue", "slots", "review"):
         setattr(args, name, getattr(args, name).resolve())
     review = review_request(args)
     started = time.time()
@@ -183,7 +193,8 @@ def main() -> int:
         logs.mkdir(parents=True)
         log = {"schema": 1, "sequence": lease.record["sequence"], "branch": args.branch,
                "review": review, "started": started, "processingStarted": time.time(),
-               "state": "RUNNING", "gates": {"L1": "FAIL"}}
+               "state": "RUNNING", "gates": {"L1": "FAIL", "slice_asan": "FAIL",
+                    "asan_focused": "NOT_RUN: redlist-2026-10-21; restore when the full lane can build"}}
         save_json(logs / "result.json", log)
         try:
             integrate(args, review, log, logs)

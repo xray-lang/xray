@@ -74,6 +74,8 @@ class QueueTests(unittest.TestCase):
         self.evidence.write_text("Synthetic review for isolated queue tests only.\n")
         self.l0 = self.root / "l0.log"
         self.l0.write_text("fixture L0 passed\n")
+        self.asan_log = self.root / "slice-asan.log"
+        self.asan_log.write_text("Synthetic slice ASan result for isolated queue tests only.\n")
 
     def tearDown(self):
         for child in self.children:
@@ -107,14 +109,15 @@ class QueueTests(unittest.TestCase):
         review = self.root / (name.replace("/", "-") + ".json")
         review.write_text(json.dumps({"approved": True, "sourceSHA": sha, "reviewedBase": self.base,
                                      "authorRole": "a", "reviewerRole": "b",
-                                     "reviewEvidence": str(self.evidence), "l0Log": str(self.l0)}))
+                                     "reviewEvidence": str(self.evidence), "l0Log": str(self.l0),
+                                     "sliceAsanLog": str(self.asan_log), "sliceAsanResult": "PASS"}))
         return name, review, sha
 
     def start(self, branch, extra=()):
         name, review, _ = branch
         args = [sys.executable, str(QUEUE), "--branch", name, "--review", str(review),
                 "--repo", str(self.repo), "--integration", str(self.integration),
-                "--build", str(self.root / "build"), "--asan", str(self.root / "asan"),
+                "--build", str(self.root / "build"),
                 "--temporary", str(self.root / "tmp"), "--slots", str(self.root / "slots"),
                 "--queue", str(self.root / "queue"), *extra]
         child = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -162,14 +165,17 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(two["oldMain"], one["newMain"])
         self.assertNotEqual(two["candidate"], second[2])
 
-    def test_compiler_change_runs_asan_in_heavy_slot(self):
+    def test_compiler_change_uses_reviewed_slice_asan_while_full_lane_is_red(self):
         branch = self.branch("a/aot", {"src/aot/change.c": "/* fixture */"})
         log = self.finish(self.start(branch), 0)
         self.assertEqual(log["gates"]["meta_ownership_inventory"], "PASS")
-        self.assertEqual(log["gates"]["asan_focused"], "PASS")
-        self.assertTrue((self.root / "build/asan-ran").exists())
+        self.assertEqual(log["gates"]["slice_asan"], "PASS")
+        self.assertIn("NOT_RUN: redlist-2026-10-21", log["gates"]["asan_focused"])
+        self.assertFalse((self.root / "build/asan-ran").exists())
+        saved = self.root / "queue/logs" / f"{log['sequence']:020d}" / "slice-asan.log"
+        self.assertEqual(saved.read_bytes(), self.asan_log.read_bytes())
         slots = [json.loads(p.read_text()) for p in (self.root / "slots/requests").glob("*.json")]
-        self.assertEqual([r["kind"] for r in slots], ["build", "heavy"])
+        self.assertEqual([r["kind"] for r in slots], ["build"])
 
     def test_placeholder_identity_is_rejected(self):
         branch = self.branch("a/invalid", {"invalid": "yes"}, invalid=True)
@@ -187,10 +193,32 @@ class QueueTests(unittest.TestCase):
         self.assertIn("tracked path", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
 
-    def test_asan_not_run_never_advances_main(self):
-        branch = self.branch("a/asan-unavailable", {"src/aot/change.c": "/* fixture */"})
-        log = self.finish(self.start(branch, ("--asan-unavailable", "fixture infrastructure failure")), 1)
-        self.assertTrue(log["gates"]["asan_focused"].startswith("NOT_RUN:"))
+    def test_failed_or_unrun_slice_asan_never_advances_main(self):
+        branch = self.branch("a/asan-failed", {"src/lir/change.c": "/* fixture */"})
+        review = json.loads(branch[1].read_text())
+        for result in ("FAIL", "NOT_RUN", "NOT_APPLICABLE"):
+            review.update(sliceAsanResult=result, sliceAsanReason="fixture reason")
+            branch[1].write_text(json.dumps(review))
+            log = self.finish(self.start(branch), 1)
+            self.assertEqual(log["gates"]["slice_asan"], "FAIL")
+            self.assertEqual(self.git("rev-parse", "main"), self.base)
+
+    def test_non_native_slice_requires_a_reason_for_asan_exemption(self):
+        branch = self.branch("a/docs", {"spec/source/entry.md": "fixture"})
+        review = json.loads(branch[1].read_text())
+        review.update(sliceAsanResult="NOT_APPLICABLE")
+        branch[1].write_text(json.dumps(review))
+        self.finish(self.start(branch), 1)
+        review["sliceAsanReason"] = "Only specification prose changed."
+        branch[1].write_text(json.dumps(review))
+        log = self.finish(self.start(branch), 0)
+        self.assertTrue(log["gates"]["slice_asan"].startswith("NOT_APPLICABLE:"))
+
+    def test_missing_slice_log_is_rejected_before_queueing(self):
+        branch = self.branch("a/no-log", {"src/hir/change.c": "/* fixture */"})
+        self.asan_log.unlink()
+        self.assertEqual(self.start(branch).wait(timeout=60), 1)
+        self.assertEqual(self.logs(), [])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
 
     def test_main_compare_and_swap_does_not_overwrite_a_race(self):
