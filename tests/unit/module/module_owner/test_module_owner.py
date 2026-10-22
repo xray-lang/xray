@@ -22,4 +22,4 @@ with tempfile.TemporaryDirectory(prefix="xray-module-owner-") as directory:
     (root / "many.xr").write_text("".join(f'import "./many_{i}"\n' for i in range(20)), encoding="utf-8")
     (root / "io/output.xr").unlink()
     assert not (root / "io/output.xr").exists()
-    subprocess.run([sys.argv[1], str(root)], check=True)
+    subprocess.run([sys.argv[1], str(root), *sys.argv[2:]], check=True)

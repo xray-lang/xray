@@ -85,7 +85,8 @@ static void make_packet(void) {
     const XrXirInstruction init_ops[] = {{XR_XIR_RETURN,XR_XIR_UNIT,{0,0},{0,0},0,{0,0}}};
     const XrXirInstruction ops[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0,0},{0,0},42,{0,0}}, {XR_XIR_RETURN,XR_XIR_UNIT,{0,0},{0,0},0,{0,0}}};
     const XrXirBlock init_block = {0,1,0,0}, block = {0,2,0,0};
-    const XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,init_ops,1,NULL,0}, {"answer",6,NULL,0,XR_XIR_I64,&block,1,ops,2,NULL,0}};
+    const XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,init_ops,1,NULL,0,XR_XIR_NEVER},
+        {"answer",6,NULL,0,XR_XIR_I64,&block,1,ops,2,NULL,0,XR_XIR_NEVER}};
     const char *canonical = "stdlib-module-v1:module=2:io:path=12:io/output.xr";
     XrXirSourceModule source = {canonical,(uint32_t)strlen(canonical),NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity names[] = {{0,0,0,0,0,0,0, 0, 0},{0,1,0,0,0,0,0, 0, 0}};
@@ -293,12 +294,23 @@ static void many_modules(void) {
     puts("module: 21-file growth keeps source edges valid; actual spec resize OOM cleaned with physical zero PASS");
 }
 int main(int argc, char **argv) {
-    CHECK(argc == 2); root_path = argv[1];
+    CHECK(argc == 2 || (argc == 3 && !strcmp(argv[2],"--l3-census"))); root_path = argv[1];
     CHECK(snprintf(main_path,sizeof(main_path),"%s/main.xr",root_path) > 0);
     CHECK(snprintf(cycle_path,sizeof(cycle_path),"%s/cycle_a.xr",root_path) > 0);
     CHECK(snprintf(missing_path,sizeof(missing_path),"%s/missing.xr",root_path) > 0);
     make_packet();
-    for (unsigned kind = 0; kind < 4; ++kind) qualify(kind);
-    rejection_and_lifetime(); topology_retry(); many_modules();
-    puts("real module owner gates PASS"); return 0;
+    if (argc == 3) {
+        for (unsigned kind = 0; kind < 4; ++kind) qualify(kind);
+        rejection_and_lifetime(); topology_retry(); many_modules();
+        puts("real module owner gates PASS");
+    } else {
+        for (unsigned kind = 0; kind < 4; ++kind) {
+            XrCompileResources *owner = NULL;
+            CHECK(xr_compile_resources_new(&unlimited,&owner) == XR_COMPILE_RESOURCE_OK);
+            CHECK(pipeline(owner,kind,true) == (kind == 3 ? XR_MODULE_INVALID : XR_MODULE_OK));
+            xr_compile_resources_release(owner);
+        }
+        puts("module source, file graph, checked library and cycle ownership PASS");
+    }
+    return 0;
 }
