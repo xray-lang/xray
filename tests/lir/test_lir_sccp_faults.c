@@ -6,9 +6,13 @@
  *
  * test_lir_sccp_faults.c - Representative partial analysis failures
  */
-#include "lir_test_programs.h"
+#include "lir/xlir_builder.h"
 #include "lir/xlir_verify.h"
 #include "base/xmalloc.h"
+#include <stdio.h>
+#include <stdlib.h>
+#define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#define OK(c) CHECK((c) == XR_LIR_OK)
 
 static void *real_calloc(size_t count, size_t size) { return xr_calloc(count, size); }
 static void *fault_calloc(size_t count, size_t size);
@@ -29,11 +33,18 @@ static void *fault_calloc(size_t count, size_t size) {
 }
 int main(void) {
     XrLirModule *input = NULL; OK(xr_lir_module_create(NULL, &input));
-    XrLirFunction f = test_function(input, "root", NULL, 0, XR_LIR_I64);
-    XrLirBlock b = test_block(input, f, NULL, 0); OK(xr_lir_set_entry(input, f, b));
-    XrLirValue a = test_constant(input, b, XR_LIR_I64, 20);
-    XrLirValue c = test_constant(input, b, XR_LIR_I64, 22);
-    test_return(input, b, test_binary(input, b, XR_LIR_ADD, a, c, XR_LIR_PREDICATE_NONE));
+    XrLirFunction f;
+    XrLirFunctionSpec spec = {.name = "root", .name_length = 4, .result = XR_LIR_I64};
+    OK(xr_lir_declare_function(input, &spec, &f)); OK(xr_lir_define_function(input, f));
+    XrLirBlock b; OK(xr_lir_add_block(input, f, NULL, 0, &b)); OK(xr_lir_set_entry(input, f, b));
+    XrLirValue operands[2], result;
+    XrLirInstruction v = {.op = XR_LIR_CONST, .type = XR_LIR_I64, .bits = 20};
+    OK(xr_lir_emit_value(input, b, &v, &operands[0]));
+    v.bits = 22; OK(xr_lir_emit_value(input, b, &v, &operands[1]));
+    v = (XrLirInstruction){.op = XR_LIR_ADD, .type = XR_LIR_I64, .operands = operands, .operand_count = 2};
+    OK(xr_lir_emit_value(input, b, &v, &result));
+    v = (XrLirInstruction){.op = XR_LIR_RET, .type = XR_LIR_UNIT, .operands = &result, .operand_count = 1};
+    OK(xr_lir_set_terminator(input, b, &v));
     OK(xr_lir_module_finish(input, NULL));
     const int points[] = {CELLS, NODES, USES};
     for (size_t i = 0; i < sizeof(points) / sizeof(points[0]); ++i) {

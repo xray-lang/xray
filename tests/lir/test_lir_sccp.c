@@ -58,13 +58,14 @@ static XrLirModule *optimize_and_retire(XrLirModule *input) {
     CHECK(bytes);
     return output;
 }
-static uint64_t run_vm(XrLirModule *module) {
-    XrLirFunction root; OK(xr_lir_function_at(module, 0, &root));
+static uint64_t run_vm_function(XrLirModule *module, uint32_t ordinal,
+    const uint64_t *arguments, size_t count) {
+    XrLirFunction root; OK(xr_lir_function_at(module, ordinal, &root));
     XrRbcProgram *program = NULL;
     CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
     xr_lir_module_destroy(module);
     XrRbcExecution *execution = NULL;
-    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+    CHECK(xr_rbc_program_prepare(program, arguments, count, &execution) == XR_RBC_OK);
     XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
     xr_rbc_execution_free(&execution);
     xr_rbc_program_destroy(program);
@@ -74,6 +75,7 @@ static uint64_t run_vm(XrLirModule *module) {
     xr_rbc_outcome_free(&outcome);
     return bits;
 }
+static uint64_t run_vm(XrLirModule *module) { return run_vm_function(module, 0, NULL, 0); }
 static void conditional(XrLirModule *m, XrLirBlock from, XrLirValue condition,
     XrLirEdge yes, XrLirEdge no) {
     XrLirInstruction v = {.op = XR_LIR_CONDBR, .type = XR_LIR_UNIT,
@@ -329,6 +331,10 @@ int main(int argc, char **argv) {
             CHECK(run_vm(make_case(names[i])) == answers[i]);
             CHECK(run_vm(optimize_and_retire(make_case(names[i]))) == answers[i]);
         }
+        uint64_t n = 12;
+        CHECK(run_vm_function(optimize_and_retire(test_fib()), 1, &n, 1) == 144);
+        n = 100;
+        CHECK(run_vm_function(optimize_and_retire(test_sum()), 1, &n, 1) == 4950);
         puts("Sparse integer propagation and owned reconstruction passed");
         return 0;
     }
