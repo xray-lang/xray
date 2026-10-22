@@ -112,8 +112,10 @@ XR_RBC_CASE(REM) {
     XR_RBC_CHECK_AB();
     XR_RBC_CHECK_REG(c);
     int64_t lhs = xr_rbc_signed(XR_RBC_REG(b)), rhs = xr_rbc_signed(XR_RBC_REG(c));
-    if (!rhs)
-        return XR_RBC_DIVIDE_BY_ZERO;
+    if (!rhs) {
+        uint32_t source_id = function->source_ids ? function->source_ids[pc - 1] : 0;
+        xrt_arithmetic_panic(op == XR_RBC_DIV ? 420u : 421u, source_id);
+    }
     if (lhs == INT64_MIN && rhs == -1)
         XR_RBC_REG(a) = op == XR_RBC_DIV ? (uint64_t) INT64_MIN : 0;
     else

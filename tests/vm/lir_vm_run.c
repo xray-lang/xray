@@ -13,6 +13,7 @@
 #include "lir/xlir_lower.h"
 #include "toolchain/xcompiler_session.h"
 #include "vm/register/xrbc_lir.h"
+#include "lir_vm_result_report.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_source.h"
 #include <stdio.h>
@@ -103,10 +104,7 @@ int main(int argc, char **argv) {
     if (status == XR_RBC_OK) status = xr_rbc_outcome_status(outcome);
     xr_rbc_execution_free(&execution);
     xr_rbc_program_destroy(program);
+    int result = lir_vm_result_report(outcome, status);
     xr_rbc_outcome_free(&outcome);
-    if (status != XR_RBC_OK) {
-        fprintf(stderr, "lir_vm_run: execution failed (%u)\n", (unsigned)status);
-        return 1;
-    }
-    return 0;
+    return result;
 }

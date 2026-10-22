@@ -69,6 +69,10 @@ typedef struct {
     size_t constant_count;
     uint32_t register_count;
     uint32_t parameter_count;
+    // NULL/0 is wholly unlocated. Otherwise count equals code_count and each ID
+    // is zero or belongs to the execution's location owner.
+    const uint32_t *source_ids;
+    size_t source_id_count;
 } XrRbcFunction;
 
 // Only the registered output leaf is admitted. Both physical arguments are
@@ -86,7 +90,7 @@ typedef enum {
     XR_RBC_OK,
     XR_RBC_INVALID,
     XR_RBC_OUT_OF_MEMORY,
-    XR_RBC_DIVIDE_BY_ZERO,
+    XR_RBC_ARITHMETIC_PANIC,
     XR_RBC_OUTPUT_FAILURE
 } XrRbcStatus;
 
@@ -101,8 +105,10 @@ typedef struct XrRbcExecution XrRbcExecution;
 typedef struct XrRbcOutcome XrRbcOutcome;
 
 // Prepare copies arguments, owns the initial stack and pending outcome, and
-// retains locations before any guest effects. Code/descriptors stay borrowed
-// until execution_free. Output must be empty; failure never publishes one.
+// retains locations before any guest effects. Every function's source map is
+// validated first; nonzero IDs belong to locations. Code/descriptors/maps stay
+// immutable and borrowed until execution_free. Output must be empty on entry;
+// failure never publishes one.
 // CALL A,Bx returns into A; the callee starts at A+1, the caller's top argument
 // window. CALLN reads value/id at A+1/A+2, with Bx selecting the actual leaf.
 // Callee locals may overwrite slots beyond the call window. LT/LE/EQ compare
@@ -117,9 +123,13 @@ XR_FUNC void xr_rbc_execution_free(XrRbcExecution **execution);
 XR_FUNC XrRbcStatus xr_rbc_outcome_status(const XrRbcOutcome *outcome);
 // Query handles must be live. False preserves every output; true copies bits
 // or scalar facts and borrows locations only through the outcome's lifetime.
+// Failure outcomes keep their owner independently of the executable. Retain
+// that owner explicitly before outcome_free to keep it longer.
 XR_FUNC bool xr_rbc_outcome_bits(const XrRbcOutcome *outcome, uint64_t *output);
 XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
     XrtOutputFailure *facts, const XrtLocationOwner **borrowed_locations);
+XR_FUNC bool xr_rbc_outcome_arithmetic_panic(const XrRbcOutcome *outcome,
+    XrtArithmeticPanic *facts, const XrtLocationOwner **borrowed_locations);
 XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome);
 XR_FUNC const char *xr_rbc_dispatch_name(void);
 

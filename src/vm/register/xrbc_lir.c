@@ -31,10 +31,10 @@ typedef struct {
     XrLirFunctionView view;
     const uint32_t *functions;
     uint32_t slots[XR_RBC_REGISTER_COUNT_MAX + 1];
-    uint32_t slot_count, scratch_count, register_count, source_id;
-    uint32_t *code;
+    uint32_t slot_count, scratch_count, register_count, source_id, current_source_id;
+    uint32_t *code, *source_ids;
     uint64_t *constants;
-    size_t code_count, code_capacity, constant_count, constant_capacity;
+    size_t code_count, code_capacity, source_id_capacity, constant_count, constant_capacity;
     size_t *blocks;
     RbcLirPatch *patches;
     size_t patch_count, patch_capacity;
@@ -91,7 +91,12 @@ static bool rbc_lir_emit(RbcLirCompiler *c, XrRbcOp op, uint32_t a,
     if (!rbc_lir_grow(c, &storage, &c->code_capacity,
             c->code_count + 1, sizeof(*c->code))) return false;
     c->code = storage;
-    c->code[c->code_count++] = word;
+    storage = c->source_ids;
+    if (!rbc_lir_grow(c, &storage, &c->source_id_capacity,
+            c->code_count + 1, sizeof(*c->source_ids))) return false;
+    c->source_ids = storage;
+    c->code[c->code_count] = word;
+    c->source_ids[c->code_count++] = c->current_source_id;
     return true;
 }
 
@@ -399,7 +404,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         for (uint32_t n = 0; n < bv.instruction_count; ++n) {
             XrLirInstructionView i;
             xr_lir_instruction_view(c->input, block, n, &i);
-            if (i.source.path_length) ++c->source_id;
+            c->current_source_id = i.source.path_length ? ++c->source_id : 0;
             c->diagnostic->block = block.id;
             c->diagnostic->instruction = n + 1;
             rbc_lir_error(c->diagnostic, XR_RBC_COMPILE_OK, "", i.source);
@@ -412,7 +417,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
             return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "branch exceeds jump encoding");
     }
     *out = (XrRbcFunction) {c->code, c->code_count, c->constants, c->constant_count,
-        c->register_count, c->view.parameter_count};
+        c->register_count, c->view.parameter_count, c->source_ids, c->code_count};
     return true;
 }
 
@@ -421,6 +426,7 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
     for (size_t f = 0; f < program->module.function_count; ++f) {
         xr_free((void *) program->module.functions[f].code);
         xr_free((void *) program->module.functions[f].constants);
+        xr_free((void *) program->module.functions[f].source_ids);
     }
     xr_free((void *) program->module.functions);
     xrt_locations_release(program->locations);
@@ -500,6 +506,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
         if (!success) {
             xr_free(c.code);
             xr_free(c.constants);
+            xr_free(c.source_ids);
             return c.status;
         }
         if (!f) {

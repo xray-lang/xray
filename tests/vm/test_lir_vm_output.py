@@ -29,6 +29,14 @@ def main():
         (args.logs / (label + '.stdout')).write_bytes(output)
         (args.logs / (label + '.stderr')).write_bytes(result.stderr)
         (args.logs / (label + '.exit')).write_text(str(result.returncode))
+        if mode.startswith('panic-'):
+            message = b'modulo' if mode == 'panic-rem' else b'division'
+            code = b'421' if mode == 'panic-rem' else b'420'
+            expected = b'' if mode == 'panic-bad-sink' else (
+                b'[Uncaught Panic] E0' + code + b': ' + message + b' by zero\n')
+            assert result.returncode == 1 and not output and result.stderr == expected, (
+                label, result.returncode, output, result.stderr)
+            return
         assert result.returncode == 0, (label, result.returncode, output, result.stderr)
         if mode == 'source':
             assert output == b'10\n21\n' and result.stderr == b'', (output, result.stderr)
@@ -41,6 +49,9 @@ def main():
         for order in ('program-first', 'outcome-first'):
             run(mode, order, pipe=mode in ('pipe', 'pipe-flush'))
     run('nested')
+    for mode in ('panic-div', 'panic-rem', 'panic-bad-sink'):
+        for order in ('program-first', 'outcome-first'):
+            run(mode, order)
     print('VM output, owned failure lifetime and host continuation passed')
 
 

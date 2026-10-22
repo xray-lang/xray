@@ -87,13 +87,98 @@ static void *allocate_location(size_t size) {
 #define xr_malloc(size) allocate(size)
 #include "vm/register/xrbc_lir.c"
 
+static void source_map_failures(void) {
+    for (unsigned grown = 0; grown < 2; ++grown) {
+        XrRbcCompileDiagnostic diagnostic = {0};
+        RbcLirCompiler compiler = {.diagnostic = &diagnostic};
+        size_t words = 0;
+        if (grown) {
+            compiler.current_source_id = 1;
+            CHECK(rbc_lir_emit(&compiler, XR_RBC_LOADI, 0, 0, 0, 0));
+            words = compiler.code_capacity;
+        }
+        for (size_t i = compiler.code_count; i < words; ++i) {
+            compiler.current_source_id = (uint32_t)i + 1;
+            CHECK(rbc_lir_emit(&compiler, XR_RBC_LOADI, 0, 0, 0, (int64_t)i));
+        }
+        // Code growth succeeds and relocates; the following map allocation fails.
+        attempts = 0;
+        fail_at = 2;
+        CHECK(!rbc_lir_emit(&compiler, XR_RBC_LOADI, 0, 0, 0, 99));
+        CHECK(compiler.status == XR_RBC_COMPILE_OUT_OF_MEMORY && compiler.code_count == words);
+        CHECK(compiler.code && compiler.code_capacity > words && compiler.source_id_capacity == words);
+        for (size_t i = 0; i < words; ++i)
+            CHECK(compiler.source_ids[i] == i + 1);
+        xr_free(compiler.code);
+        xr_free(compiler.source_ids);
+        for (size_t i = 0; i < 32; ++i) CHECK(!buffers[i].pointer);
+        fail_at = SIZE_MAX;
+        attempts = 0;
+    }
+    XrRbcCompileDiagnostic diagnostic = {0};
+    RbcLirCompiler compiler = {.diagnostic = &diagnostic};
+    for (uint32_t i = 0; i < 40; ++i) {
+        compiler.current_source_id = i + 1;
+        CHECK(rbc_lir_emit(&compiler, XR_RBC_LOADI, 0, 0, 0, i));
+    }
+    CHECK(compiler.code_count == 40);
+    for (size_t i = 0; i < 40; ++i) CHECK(compiler.source_ids[i] == i + 1);
+    xr_free(compiler.code);
+    xr_free(compiler.source_ids);
+    for (size_t i = 0; i < 32; ++i) CHECK(!buffers[i].pointer);
+    attempts = 0;
+}
+
+static void compiled_source_maps(void) {
+    XrLirModule *m = NULL;
+    OK(xr_lir_module_create(NULL, &m));
+    XrLirType type = XR_LIR_I64;
+    XrLirFunction root = test_function(m, "root", NULL, 0, type);
+    XrLirFunction helper = test_function(m, "helper", &type, 1, type);
+    XrLirBlock entry = test_block(m, root, NULL, 0), body = test_block(m, helper, NULL, 0);
+    OK(xr_lir_set_entry(m, root, entry));
+    OK(xr_lir_set_entry(m, helper, body));
+    XrLirInstruction instruction = {.op = XR_LIR_CONST, .type = type, .bits = 42,
+        .source = {"mapped.xr", 9, 2, 3, 2, 5}};
+    XrLirValue value, argument;
+    OK(xr_lir_emit_value(m, entry, &instruction, &value));
+    test_return(m, entry, test_call(m, entry, helper, value));
+    OK(xr_lir_function_parameter(m, helper, 0, &argument));
+    test_return(m, body, argument);
+    OK(xr_lir_module_finish(m, NULL));
+    XrRbcProgram *program = NULL;
+    CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(m);
+    CHECK(program->module.function_count == 2 && xrt_locations_count(program->locations) == 1);
+    bool located = false;
+    for (size_t f = 0; f < 2; ++f) {
+        const XrRbcFunction *function = &program->module.functions[f];
+        CHECK(function->source_ids && function->source_id_count == function->code_count);
+        CHECK(function->source_ids[0] == 0);
+        for (size_t pc = 0; pc < function->code_count; ++pc) {
+            CHECK(function->source_ids[pc] <= 1);
+            if (f) CHECK(function->source_ids[pc] == 0);
+            located |= function->source_ids[pc] != 0;
+        }
+    }
+    uint64_t bits = 0;
+    CHECK(located && execute(program, NULL, 0, &bits) == XR_RBC_OK && bits == 42);
+    xr_rbc_program_destroy(program);
+}
+
 int main(void) {
+    source_map_failures();
     XrLirModule *m = test_fib();
     XrLirFunction root;
     OK(xr_lir_function_at(m, 1, &root));
     XrRbcProgram *program = NULL;
     XrRbcCompileDiagnostic diagnostic;
     CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    for (size_t f = 0; f < program->module.function_count; ++f) {
+        const XrRbcFunction *function = &program->module.functions[f];
+        CHECK(function->source_ids && function->source_id_count == function->code_count);
+        CHECK(function->source_ids[0] == 0);
+    }
     size_t total = attempts;
     xr_rbc_program_destroy(program);
     const size_t failures[] = {1, total / 2, total};
@@ -115,6 +200,7 @@ int main(void) {
     CHECK(xr_rbc_program_locations(program));
     xr_rbc_program_destroy(program);
     xr_lir_module_destroy(m);
+    compiled_source_maps();
     puts("lir_bytecode_alloc: passed (representative compiler/owner failures, relocating buffers)");
     return 0;
 }

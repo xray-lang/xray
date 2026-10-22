@@ -88,6 +88,38 @@ static void invoke(const XrRbcModule *module, XrtLocationOwner *owner, bool prep
     xr_rbc_outcome_free(&outcome);
 }
 
+static void panic_after_growth(void) {
+    uint32_t code[11], ids[11] = {0};
+    XrRbcFunction function = make_countdown(code);
+    // The base case faults only after both indexed arrays have repeatedly relocated.
+    emit(code, 10, XR_RBC_DIV, 0, 0, 1);
+    ids[10] = 1;
+    function.source_ids = ids;
+    function.source_id_count = 11;
+    XrRbcModule module = {&function, 1, NULL, 0};
+    XrtSourceLocation location = {"grown.xr", 8, 19, 2, 19, 7};
+    XrtLocationOwner *owner = NULL;
+    XR_CHECK(xrt_locations_create(&location, 1, &owner) == XRT_LOCATION_OK, "owned fault site");
+    for (unsigned kind = 0; kind < 2; ++kind) {
+        emit(code, 10, kind ? XR_RBC_REM : XR_RBC_DIV, 0, 0, 1);
+        uint64_t argument = 128;
+        XrRbcExecution *execution = NULL;
+        XR_CHECK(xr_rbc_module_prepare(&module, 0, &argument, 1, owner, &execution) == XR_RBC_OK,
+            "prepared growing execution");
+        XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+        XR_CHECK(outcome && !blocks[0].pointer && !blocks[1].pointer, "one cleanup after transfer");
+        xr_rbc_execution_free(&execution);
+        XrtArithmeticPanic facts;
+        const XrtLocationOwner *borrowed = NULL;
+        XR_CHECK(xr_rbc_outcome_arithmetic_panic(outcome, &facts, &borrowed), "owned panic");
+        XR_CHECK(facts.code == (kind ? 421u : 420u) && facts.source_id == 1,
+            "actual deepest instruction site");
+        XR_CHECK(xrt_locations_get(borrowed, facts.source_id)->line == 19, "retained source");
+        xr_rbc_outcome_free(&outcome);
+    }
+    xrt_locations_release(owner);
+}
+
 int main(void) {
     uint32_t code[11];
     XrRbcFunction function = make_countdown(code);
@@ -104,5 +136,6 @@ int main(void) {
     invoke(&module, owner, false, XR_RBC_OK);
     xrt_locations_release(owner);
     puts("register_vm_alloc: passed");
+    panic_after_growth();
     return 0;
 }

@@ -85,6 +85,23 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
            (!function->constant_count || function->constants);
 }
 
+static bool xr_rbc_source_maps_valid(const XrRbcModule *module, const XrtLocationOwner *locations) {
+    // An unreachable callee must not hide invalid IDs until after guest effects.
+    size_t count = xrt_locations_count(locations);
+    for (size_t f = 0; f < module->function_count; ++f) {
+        const XrRbcFunction *function = &module->functions[f];
+        if (!function->source_ids) {
+            if (function->source_id_count) return false;
+            continue;
+        }
+        if (!function->source_id_count || function->source_id_count != function->code_count)
+            return false;
+        for (size_t pc = 0; pc < function->source_id_count; ++pc)
+            if (function->source_ids[pc] > count) return false;
+    }
+    return true;
+}
+
 static int64_t xr_rbc_signed(uint64_t bits) {
     // Avoid implementation-defined unsigned-to-signed conversion.
     return bits <= INT64_MAX ? (int64_t) bits : -1 - (int64_t) ~bits;
@@ -140,7 +157,8 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
         (module->native_count && !module->natives) || module->native_count > 65536)
         return XR_RBC_INVALID;
     const XrRbcFunction *function = &module->functions[entry];
-    if (!xr_rbc_function_valid(function) || argument_count != function->parameter_count)
+    if (!xr_rbc_function_valid(function) || argument_count != function->parameter_count ||
+        !xr_rbc_source_maps_valid(module, locations))
         return XR_RBC_INVALID;
     for (size_t i = 0; i < module->native_count; ++i)
         if (module->natives[i] != xrt_print_i64)
@@ -186,8 +204,9 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
         xr_rbc_root, execution);
     if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_OUTPUT)
         outcome->status = XR_RBC_OUTPUT_FAILURE;
+    else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_ARITHMETIC_PANIC)
+        outcome->status = XR_RBC_ARITHMETIC_PANIC;
     else {
-        // No arithmetic panic producer is admitted by this interpreter yet.
         if (status != XRT_EXECUTION_COMPLETED) outcome->status = XR_RBC_INVALID;
         xrt_locations_release(outcome->locations);
         outcome->locations = NULL;
@@ -223,6 +242,15 @@ XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
     if (!outcome || outcome->status != XR_RBC_OUTPUT_FAILURE || !facts || !borrowed_locations)
         return false;
     *facts = outcome->failure.detail.output;
+    *borrowed_locations = outcome->locations;
+    return true;
+}
+
+XR_FUNC bool xr_rbc_outcome_arithmetic_panic(const XrRbcOutcome *outcome,
+    XrtArithmeticPanic *facts, const XrtLocationOwner **borrowed_locations) {
+    if (!outcome || outcome->status != XR_RBC_ARITHMETIC_PANIC || !facts || !borrowed_locations)
+        return false;
+    *facts = outcome->failure.detail.panic;
     *borrowed_locations = outcome->locations;
     return true;
 }

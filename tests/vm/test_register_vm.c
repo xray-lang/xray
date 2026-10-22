@@ -129,15 +129,15 @@ static void test_arithmetic(void) {
         uint64_t args[2] = {cases[i].lhs, cases[i].rhs};
         emit(code, 0, cases[i].op, 0, 0, 1);
         emit(code, 1, XR_RBC_RET, 0, 0, 0);
-        CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 2, 2}, args, 2) == cases[i].result);
+        CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 2, 2, NULL, 0}, args, 2) == cases[i].result);
     }
     uint32_t code[2];
     uint64_t arg = (uint64_t) INT64_MIN;
     emit(code, 0, XR_RBC_NEG, 0, 0, 0);
     emit(code, 1, XR_RBC_RET, 0, 0, 0);
-    CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 1, 1}, &arg, 1) == arg);
+    CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 1, 1, NULL, 0}, &arg, 1) == arg);
     immediate(code, 0, XR_RBC_LOADI, 0, INT16_MIN);
-    CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 1, 0}, NULL, 0) == (uint64_t) INT16_MIN);
+    CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 1, 0, NULL, 0}, NULL, 0) == (uint64_t) INT16_MIN);
 }
 
 static void test_branches(void) {
@@ -154,7 +154,7 @@ static void test_branches(void) {
             bool expected = operation == XR_RBC_LT   ? lhs < 0
                             : operation == XR_RBC_LE ? lhs <= 0
                                                      : lhs == 0;
-            CHECK(run_function((XrRbcFunction) {code, 6, NULL, 0, 2, 2}, args, 2) ==
+            CHECK(run_function((XrRbcFunction) {code, 6, NULL, 0, 2, 2, NULL, 0}, args, 2) ==
                   (uint64_t) expected);
         }
     }
@@ -173,7 +173,7 @@ static void test_call_windows(void) {
     emit(callee, 0, XR_RBC_ADD, 2, 0, 1);
     immediate(callee, 1, XR_RBC_LOADI, 254, -10);
     emit(callee, 2, XR_RBC_RET, 2, 0, 0);
-    XrRbcFunction functions[] = {{caller, 7, NULL, 0, 4, 0}, {callee, 3, NULL, 0, 255, 2}};
+    XrRbcFunction functions[] = {{caller, 7, NULL, 0, 4, 0, NULL, 0}, {callee, 3, NULL, 0, 255, 2, NULL, 0}};
     XrRbcModule module = {functions, 2, NULL, 0};
     uint64_t result = 0;
     CHECK(execute(&module, 0, NULL, 0, &result) == XR_RBC_OK && result == 1042);
@@ -193,9 +193,9 @@ static void test_rejections(void) {
     uint64_t args[2] = {1, 0}, result = 42;
     emit(code, 0, XR_RBC_DIV, 0, 0, 1);
     emit(code, 1, XR_RBC_RET, 0, 0, 0);
-    XrRbcFunction function = {code, 2, NULL, 0, 2, 2};
+    XrRbcFunction function = {code, 2, NULL, 0, 2, 2, NULL, 0};
     XrRbcModule module = {&function, 1, NULL, 0};
-    CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_DIVIDE_BY_ZERO);
+    CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_ARITHMETIC_PANIC);
     CHECK(result == 42);
     CHECK(execute(&module, 1, args, 2, &result) == XR_RBC_INVALID);
     CHECK(execute(&module, 0, NULL, 2, &result) == XR_RBC_INVALID);
@@ -232,7 +232,7 @@ static void test_native_print(void) {
     immediate(code, 1, XR_RBC_LOADI, 254, 0);
     immediate(code, 2, XR_RBC_CALLN, 252, 0);
     emit(code, 3, XR_RBC_RET0, 0, 0, 0);
-    XrRbcFunction function = {code, 4, constants, 1, 255, 0};
+    XrRbcFunction function = {code, 4, constants, 1, 255, 0, NULL, 0};
     const XrRbcNativeI64 natives[] = {xrt_print_i64};
     XrRbcModule module = {&function, 1, natives, 1};
     uint64_t result;
@@ -248,7 +248,7 @@ static void unregistered(int64_t value, uint32_t id) {
 static void test_owned_execution(void) {
     uint32_t code[2];
     emit(code, 0, XR_RBC_RET, 0, 0, 0);
-    XrRbcFunction function = {code, 1, NULL, 0, 1, 1};
+    XrRbcFunction function = {code, 1, NULL, 0, 1, 1, NULL, 0};
     XrRbcModule module = {&function, 1, NULL, 0};
     XrtLocationOwner *owner = NULL;
     CHECK(xrt_locations_create(NULL, 0, &owner) == XRT_LOCATION_OK);
@@ -270,6 +270,11 @@ static void test_owned_execution(void) {
         facts.io.failed && facts.io.broken_pipe && facts.operation == XRT_OUTPUT_WRITE && borrowed == owner);
     CHECK(!xr_rbc_outcome_output_failure(NULL, &facts, &borrowed));
     CHECK(facts.source_id == 77 && borrowed == owner);
+    XrtArithmeticPanic panic = {99, 88};
+    CHECK(!xr_rbc_outcome_arithmetic_panic(outcome, &panic, &borrowed));
+    CHECK(panic.code == 99 && panic.source_id == 88 && borrowed == owner);
+    CHECK(!xr_rbc_outcome_arithmetic_panic(NULL, &panic, &borrowed));
+    CHECK(panic.code == 99 && panic.source_id == 88 && borrowed == owner);
     xr_rbc_outcome_free(&outcome);
     CHECK(!outcome && !xr_rbc_outcome_bits(NULL, &bits));
     CHECK(bits == UINT64_C(0x7ff0000000000001));
@@ -299,6 +304,86 @@ static void test_owned_execution(void) {
     xrt_locations_release(owner);
 }
 
+static void test_unknown_arithmetic_panic(void) {
+    uint32_t code[2];
+    emit(code, 1, XR_RBC_RET, 0, 0, 0);
+    XrRbcFunction function = {code, 2, NULL, 0, 2, 2, NULL, 0};
+    XrRbcModule module = {&function, 1, NULL, 0};
+    uint64_t arguments[] = {42, 0};
+    for (unsigned op = 0; op < 2; ++op) {
+        emit(code, 0, op ? XR_RBC_REM : XR_RBC_DIV, 0, 0, 1);
+        XrRbcExecution *execution = NULL;
+        CHECK(xr_rbc_module_prepare(&module, 0, arguments, 2, NULL, &execution) == XR_RBC_INVALID);
+        CHECK(!execution);
+        XrtLocationOwner *owner = NULL;
+        CHECK(xrt_locations_create(NULL, 0, &owner) == XRT_LOCATION_OK && owner);
+        CHECK(xr_rbc_module_prepare(&module, 0, arguments, 2, owner, &execution) == XR_RBC_OK);
+        xrt_locations_release(owner);
+        XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+        xr_rbc_execution_free(&execution);
+        XrtArithmeticPanic facts;
+        const XrtLocationOwner *borrowed = NULL;
+        CHECK(xr_rbc_outcome_arithmetic_panic(outcome, &facts, &borrowed));
+        CHECK(facts.code == (op ? 421u : 420u) && facts.source_id == 0 && borrowed);
+        CHECK(!xrt_locations_count(borrowed) && !xrt_locations_get(borrowed, 0));
+        xr_rbc_outcome_free(&outcome);
+    }
+}
+
+static void test_source_maps(void) {
+    uint32_t caller[5], callee[2], ids[5] = {0}, callee_ids[] = {1, 0}, bad_ids[] = {2, 0};
+    immediate(caller, 0, XR_RBC_LOADI, 1, 17);
+    immediate(caller, 1, XR_RBC_LOADI, 2, 0);
+    immediate(caller, 2, XR_RBC_CALLN, 0, 0);
+    immediate(caller, 3, XR_RBC_CALL, 0, 1);
+    emit(caller, 4, XR_RBC_RET, 0, 0, 0);
+    emit(callee, 0, XR_RBC_DIV, 0, 0, 1);
+    emit(callee, 1, XR_RBC_RET, 0, 0, 0);
+    XrRbcFunction functions[] = {
+        {caller, 5, NULL, 0, 3, 0, ids, 5},
+        {callee, 2, NULL, 0, 2, 2, callee_ids, 2},
+        {callee, 2, NULL, 0, 2, 2, callee_ids, 2}};
+    XrRbcNativeI64 native = xrt_print_i64;
+    XrRbcModule module = {functions, 3, &native, 1};
+    XrtSourceLocation location = {"raw.xr", 6, 7, 3, 7, 4};
+    XrtLocationOwner *owner = NULL;
+    CHECK(xrt_locations_create(&location, 1, &owner) == XRT_LOCATION_OK);
+    // A print precedes CALL; even an unreachable callee's bad metadata must reject preparation.
+    for (size_t f = 0; f < 3; ++f) {
+        XrRbcFunction original = functions[f];
+        for (unsigned kind = 0; kind < 4; ++kind) {
+            functions[f].source_ids = kind == 0 ? NULL : kind == 3 ? bad_ids : callee_ids;
+            functions[f].source_id_count = kind == 0 ? 1 : kind == 1 ? 0 : kind == 2 ? 1 : 2;
+            // For the root, ensure the ID test has a full map rather than a shape error.
+            uint32_t full_bad[] = {0, 0, 0, 0, 2};
+            if (kind == 3 && !f) {
+                functions[f].source_ids = full_bad;
+                functions[f].source_id_count = 5;
+            }
+            XrRbcExecution *execution = NULL;
+            CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, owner, &execution) == XR_RBC_INVALID);
+            CHECK(!execution);
+        }
+        functions[f] = original;
+    }
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, owner, &execution) == XR_RBC_OK);
+    xr_rbc_execution_free(&execution);
+    uint32_t invalid = XR_RBC_OP_COUNT;
+    functions[0] = (XrRbcFunction) {&invalid, 1, NULL, 0, 1, 0, NULL, 0};
+    module.function_count = 1;
+    CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, owner, &execution) == XR_RBC_OK);
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_INVALID);
+    XrtArithmeticPanic facts = {88, 77};
+    const XrtLocationOwner *borrowed = owner;
+    CHECK(!xr_rbc_outcome_arithmetic_panic(outcome, &facts, &borrowed));
+    CHECK(facts.code == 88 && facts.source_id == 77 && borrowed == owner);
+    xr_rbc_execution_free(&execution);
+    xr_rbc_outcome_free(&outcome);
+    xrt_locations_release(owner);
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--native-print") == 0) {
         test_native_print();
@@ -310,6 +395,8 @@ int main(int argc, char **argv) {
     test_call_windows();
     test_rejections();
     test_owned_execution();
+    test_source_maps();
+    test_unknown_arithmetic_panic();
     test_workloads(argc == 2 && strcmp(argv[1], "--timing") == 0);
     printf("register_vm: passed (%s)\n", xr_rbc_dispatch_name());
     return 0;
