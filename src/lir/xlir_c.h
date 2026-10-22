@@ -52,8 +52,12 @@ typedef struct XrLirCDiagnostic {
  * empty; failure publishes no text. Successful text owns its resource block
  * independently of the module and the caller's ledger reference. Every TU
  * passes the mandatory existing W1-W4 ICE boundary before publication.
- * xray_lir_entry is an ordinary exported C function, with no parameters and
- * entry_result as its C result type. There is no process exit-code mapping. */
+ * xray_lir_entry has no parameters and keeps entry_result as its C result type.
+ * With an output dependency it establishes the standalone runtime scope before
+ * invoking the complete selected root. Ordinary calls target typed workers;
+ * without that dependency the root stays a direct function with no runtime.
+ * The complete TU, including the bound wrapper, is verified before publication.
+ * There is no process exit-code mapping. */
 XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *, XrLirCOutput *, XrLirCDiagnostic *);
 XR_FUNC void xr_lir_c_output_free(XrLirCOutput *);
 #endif  // XLIR_C_H

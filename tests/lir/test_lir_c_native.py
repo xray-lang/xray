@@ -99,7 +99,8 @@ def main():
     run([args.source_driver, output_source, output_text], cwd=root)
     text = output_text.read_text(encoding='ascii')
     assert '#include "xray_native_runtime.h"' in text
-    assert text.count('const XrtStandaloneSourceMap xrt_standalone_source_map =') == 1
+    assert text.count('const XrtSourceMap xrt_standalone_source_map =') == 1
+    assert text.count('xrt_run_standalone(') == 1
     assert re.search(r'xrt_print_i64\(v[0-9]+, UINT32_C\(1\)\);', text)
     results['ordinary-output-owned-text'] = 'PASS'
     environment = dict(os.environ, XRAY_CGEN_ICE_DIR=str(root))

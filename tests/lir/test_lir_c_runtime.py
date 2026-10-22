@@ -37,7 +37,16 @@ def main():
         'output-unknown': (None, b'5\n'),
         'output-point': (None, b'5\n'),
         'output-range': (None, b'5\n'),
+        'typed-i64-min': (None, b'5\n'),
+        'typed-u64': (None, b'5\n'),
+        'typed-bool': (None, b'5\n'),
+        'typed-unit': (None, b'5\n'),
+        'typed-root-call': (None, b'5\n'),
     }
+    typed_results = {'typed-i64-min': ('int64_t', 'INT64_MIN'),
+                     'typed-u64': ('uint64_t', 'UINT64_MAX'),
+                     'typed-bool': ('_Bool', '1'), 'typed-unit': ('void', None),
+                     'typed-root-call': ('int64_t', 'INT64_C(9)')}
     executables = {}
     for name, (program, expected) in cases.items():
         source = root / (name + '.xr')
@@ -50,30 +59,40 @@ def main():
             source.write_text(program, encoding='utf-8')
             run([args.driver, source, generated], cwd=root)
         text = generated.read_text(encoding='ascii')
-        assert text.count('const XrtStandaloneSourceMap xrt_standalone_source_map =') == 1
+        assert text.count('const XrtSourceMap xrt_standalone_source_map =') == 1
+        assert text.count('xrt_run_standalone(') == 1
         assert '#include "xray_native_runtime.h"' in text and '({' not in text
         assert re.search(r'xrt_print_i64\((?:v|p)[0-9]+, UINT32_C\([0-9]+\)\);', text)
         assert 'invoke_io' not in text and 'fail_io' not in text and 'switch' not in text
         if name == 'fib':
             functions = re.findall(r'static int64_t (xrl_f[0-9]+)\(int64_t p0\) \{(.*?)\n\}', text, re.S)
             assert any(body.count(symbol + '(') == 2 and 'xrt_' not in body for symbol, body in functions)
+        if name == 'typed-root-call':
+            body = re.search(r'static int64_t xrl_f1\(void\) \{(.*?)\n\}', text, re.S)
+            assert body and body.group(1).count('xrl_f1(') == 1
+            assert 'xray_lir_entry' not in body.group(1) and 'xrt_' not in body.group(1)
+        result_type, expected_result = typed_results.get(name, ('int64_t', 'INT64_C(0)'))
+        invoke = ('    entry();\n' if result_type == 'void'
+                  else f'    {result_type} result = entry();\n')
+        check = '0' if expected_result is None else f'result == {expected_result} ? 0 : 1'
         # Distinct failure-mode adapters must not execute this post-entry marker.
+        # Include the real definition once so the typed pointer checks its ABI.
         adapter.write_text('#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n'
-            'extern int64_t xray_lir_entry(void);\n'
+            f'#include "{generated.name}"\n'
             'static void on_exit(void) { fputs("EXIT_CALLBACK", stderr); }\n'
             'int main(int argc, char **argv) {\n    (void)argv;\n'
             '    if (argc > 1 && atexit(on_exit) != 0) return 2;\n'
             '    if (argc > 2) {\n        static char buffer[128];\n'
             '        if (setvbuf(stdout, buffer, _IOFBF, sizeof(buffer)) != 0) return 2;\n'
             '        if (fputs("buffered", stdout) == EOF) return 2;\n    }\n'
-            '    int64_t result = xray_lir_entry();\n'
+            f'    {result_type} (*entry)(void) = xray_lir_entry;\n' + invoke +
             '    if (argc > 1) fputs("AFTER_ENTRY", stderr);\n'
-            '    return result == 0 ? 0 : 1;\n}\n', encoding='ascii')
+            f'    return {check};\n}}\n', encoding='ascii')
         if args.kind == 'msvc':
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
             command = [args.compiler, '/nologo', '/std:c11', '/W4', '/WX', '/O2', crt,
-                       '/I' + str(args.include), generated, adapter, args.library, '/Fe:' + str(executable)]
+                       '/I' + str(args.include), adapter, args.library, '/Fe:' + str(executable)]
             if args.asan:
                 command += ['/fsanitize=address', '/Zi']
                 if 'clang' in args.compiler.name.lower():
@@ -81,7 +100,7 @@ def main():
                 command += ['/link', '/INCREMENTAL:NO']
         else:
             command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2',
-                       '-I' + str(args.include), generated, adapter, args.library, '-pthread', '-o', executable]
+                       '-I' + str(args.include), adapter, args.library, '-pthread', '-o', executable]
             if args.asan:
                 command += ['-fsanitize=address,undefined', '-g']
         run(command, cwd=root)
@@ -93,7 +112,8 @@ def main():
     read_only.write_bytes(b'')
     locations = {'branch': b'branch.xr:2:1-2:1 ', 'output-unknown': b'unknown source',
                  'output-point': b'odd"\\x5c\xc3\xa9\\x0a.xr:4:3-4:3 ',
-                 'output-range': b'odd"\\x5c\xc3\xa9\\x0a.xr:4:3-5:8 '}
+                 'output-range': b'odd"\\x5c\xc3\xa9\\x0a.xr:4:3-5:8 ',
+                 'typed-unit': b'typed-root.xr:2:1-2:1 '}
     for name, location in locations.items():
         with read_only.open('rb') as stream:
             failure = subprocess.run([str(executables[name]), 'fail'], stdout=stream,

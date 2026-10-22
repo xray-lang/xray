@@ -209,6 +209,57 @@ static void output_call(const char *kind) {
     OK(xr_lir_emit_effect(module, b, &call));
     ret(b, constant(b, XR_LIR_I64, 0));
 }
+static XrLirType fixture_result(const char *name) {
+    if (!strcmp(name, "unit") || !strcmp(name, "typed-unit")) return XR_LIR_UNIT;
+    if (!strcmp(name, "bool") || !strcmp(name, "typed-bool")) return XR_LIR_I1;
+    if (!strcmp(name, "typed-u64")) return XR_LIR_U64;
+    return XR_LIR_I64;
+}
+static void typed_output(const char *name) {
+    XrLirType result = fixture_result(name), i64 = XR_LIR_I64;
+    root = function("typed root", NULL, 0, result);
+    XrLirBlock entry = block(root, NULL, 0);
+    OK(xr_lir_set_entry(module, root, entry));
+    XrLirFunction initialize = function("initializer", NULL, 0, XR_LIR_UNIT);
+    XrLirBlock init = block(initialize, NULL, 0);
+    OK(xr_lir_set_entry(module, initialize, init));
+    XrLirFunction print;
+    XrLirFunctionSpec spec = {.name = "xrt_print_i64", .name_length = 13,
+        .parameters = &i64, .parameter_count = 1, .result = XR_LIR_UNIT,
+        .kind = XR_LIR_FUNCTION_EXTERNAL, .extern_kind = XR_LIR_EXTERN_PRINT_I64};
+    OK(xr_lir_declare_function(module, &spec, &print));
+    XrLirValue value = constant(init, i64, 5);
+    static const char path[] = "typed-root.xr";
+    XrLirInstruction output = {.op = XR_LIR_CALL, .type = XR_LIR_UNIT,
+        .callee = print, .operands = &value, .operand_count = 1,
+        .source = {path, sizeof(path) - 1, 2, 1, 2, 1}};
+    OK(xr_lir_emit_effect(module, init, &output));
+    ret(init, (XrLirValue) {0});
+    bool recursive = !strcmp(name, "typed-root-call");
+    XrLirBlock body = entry;
+    if (recursive) {
+        XrLirBlock dead = block(root, NULL, 0);
+        body = block(root, NULL, 0);
+        XrLirValue condition = constant(entry, XR_LIR_I1, 0);
+        conditional(entry, condition, (XrLirEdge) {dead, NULL, 0}, (XrLirEdge) {body, NULL, 0});
+        ret(dead, call(dead, root, NULL, 0));
+    }
+    XrLirInstruction start = {.op = XR_LIR_CALL, .type = XR_LIR_UNIT, .callee = initialize};
+    OK(xr_lir_emit_effect(module, body, &start));
+    if (result == XR_LIR_UNIT) {
+        /* The final scalar callee must not change the selected void ABI. */
+        XrLirFunction scalar = function("last scalar", NULL, 0, i64);
+        XrLirBlock scalar_body = block(scalar, NULL, 0);
+        OK(xr_lir_set_entry(module, scalar, scalar_body));
+        ret(scalar_body, constant(scalar_body, i64, 17));
+        (void)call(body, scalar, NULL, 0);
+        ret(body, (XrLirValue) {0});
+    } else {
+        uint64_t bits = result == XR_LIR_U64 ? UINT64_MAX : result == XR_LIR_I1 ? 1
+            : recursive ? 9 : UINT64_C(0x8000000000000000);
+        ret(body, constant(body, result, bits));
+    }
+}
 static void build(const char *name) {
     OK(xr_lir_module_create(NULL, &module));
     if (!strcmp(name, "arithmetic")) arithmetic();
@@ -223,6 +274,7 @@ static void build(const char *name) {
     else if (!strcmp(name, "unit")) small_result(true);
     else if (!strcmp(name, "bool")) small_result(false);
     else if (!strncmp(name, "output-", 7)) output_call(name);
+    else if (!strncmp(name, "typed-", 6)) typed_output(name);
     else CHECK(false);
     OK(xr_lir_module_finish(module, NULL));
 }
@@ -242,8 +294,7 @@ static void emit(const char *name, const char *path) {
     if (status != XR_LIR_C_OK)
         fprintf(stderr, "C status %u: %s\n", (unsigned) status, diagnostic.message);
     CHECK(status == XR_LIR_C_OK && output.bytes && output.length);
-    CHECK(output.entry_result == (!strcmp(name, "unit") ? XR_LIR_UNIT
-        : !strcmp(name, "bool") ? XR_LIR_I1 : XR_LIR_I64));
+    CHECK(output.entry_result == fixture_result(name));
     xr_lir_module_destroy(module);
     module = NULL;
     xr_compile_resources_release(r);
@@ -292,7 +343,8 @@ int main(int argc, char **argv) {
     CHECK(argc == 1);
     const char *cases[] = {"arithmetic", "extremes", "overflow", "fib", "swap", "self",
         "same-true", "same-false", "unused", "unit", "bool",
-        "output-unknown", "output-point", "output-range"};
+        "output-unknown", "output-point", "output-range", "typed-i64-min", "typed-u64",
+        "typed-bool", "typed-unit", "typed-root-call"};
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
         emit(cases[i], NULL);
     reject();

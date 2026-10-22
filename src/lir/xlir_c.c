@@ -120,7 +120,7 @@ static uint64_t c_mask(XrLirType type) {
     return width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
 }
 static void c_function_name(LirC *c, uint32_t id) {
-    if (id == c->request->entry.id)
+    if (id == c->request->entry.id && !c->runtime)
         c_text(c, "xray_lir_entry");
     else
         c_format(c, "xrl_f%" PRIu32, id);
@@ -279,7 +279,7 @@ static void c_locations(LirC *c) {
     }
     if (c->location_count)
         c_text(c, "};\n");
-    c_text(c, "const XrtStandaloneSourceMap xrt_standalone_source_map = { ");
+    c_text(c, "const XrtSourceMap xrt_standalone_source_map = { ");
     c_format(c, "%s, UINT32_C(%" PRIu32 ") };\n\n",
         c->location_count ? "xrl_locations" : "NULL", c->location_count);
     XR_DCHECK(c->status != XR_LIR_C_OK || id == c->location_count,
@@ -287,7 +287,7 @@ static void c_locations(LirC *c) {
 }
 static void c_signature(LirC *c, bool definition) {
     XR_DCHECK(c_type(c->view.result) != NULL, "function result passed scalar admission");
-    if (c->function.id != c->request->entry.id)
+    if (c->runtime || c->function.id != c->request->entry.id)
         c_text(c, "static ");
     c_format(c, "%s ", c_type(c->view.result));
     c_function_name(c, c->function.id);
@@ -431,7 +431,30 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             XR_CHECK(false, "C instruction passed admission");
     }
 }
-static void c_emit(LirC *c) {
+static void c_standalone_root(LirC *c, XrLirType result) {
+    const char *type = c_type(result);
+    XR_DCHECK(type != NULL && c->runtime, "a bound root keeps its admitted result type");
+    c->function = c->request->entry;
+    c->block = c->instruction = 0;
+    c->source = (XrLirSource) {0};
+    c_text(c, "static void xrl_invoke(void *context) {\n");
+    if (result == XR_LIR_UNIT)
+        c_text(c, "    (void)context;\n    ");
+    else
+        c_format(c, "    *(%s *)context = ", type);
+    c_function_name(c, c->request->entry.id);
+    c_text(c, "();\n}\n\n");
+    c_format(c, "%s xray_lir_entry(void) {\n", type);
+    if (result == XR_LIR_UNIT) {
+        c_text(c, "    xrt_run_standalone(&xrt_standalone_source_map, xrl_invoke, NULL);\n");
+    } else {
+        c_format(c, "    %s result;\n", type);
+        c_text(c, "    xrt_run_standalone(&xrt_standalone_source_map, xrl_invoke, &result);\n");
+        c_text(c, "    return result;\n");
+    }
+    c_text(c, "}\n\n");
+}
+static void c_emit(LirC *c, XrLirType root_result) {
     XR_DCHECK(c->closure_count && c->closure[0] == c->request->entry.id,
               "emission starts from the explicit execution root");
     c_text(c, "#include <stdint.h>\n\n");
@@ -470,6 +493,8 @@ static void c_emit(LirC *c) {
         }
         c_text(c, "}\n\n");
     }
+    if (c->runtime && c->status == XR_LIR_C_OK)
+        c_standalone_root(c, root_result);
     XR_DCHECK(c->status != XR_LIR_C_OK || c->location_cursor == c->location_count,
               "ordinary output calls consume their own static location IDs");
 }
@@ -506,7 +531,7 @@ XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *request, XrLirCOutput *o
     }
     c_admit(&c);
     if (c.status == XR_LIR_C_OK)
-        c_emit(&c);
+        c_emit(&c, entry.result);
     if (c.status == XR_LIR_C_OK) {
         XiCgenVerifyStatus verified = xr_compile_cgen_verify_output_or_ice(request->resources,
             c.text, c.length, request->translation_unit);
