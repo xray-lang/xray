@@ -11,18 +11,19 @@ import subprocess
 def header_clients(build, logs):
     cache = dict(re.findall(r'^([^#/:\n]+):[^=\n]+=(.*)$',
                            (build / 'CMakeCache.txt').read_text(encoding='utf-8'), re.M))
-    recipes = json.loads((build / 'compile_commands.json').read_text(encoding='utf-8'))
-    recipe = next(x for x in recipes if Path(x['file']).name == 'client.c' and
-                  'MAP_KIND=0' in x['command'])
-    source = Path(recipe['file']).resolve().parents[2]
+    graph = subprocess.run([cache['CMAKE_MAKE_PROGRAM'], '-C', build, '-t', 'commands',
+                            'test_native_runtime_0'], capture_output=True, check=True, timeout=15)
+    recipe = next(line for line in graph.stdout.decode('utf-8').splitlines()
+                  if 'MAP_KIND=0' in line and 'client.c' in line)
+    source = Path(cache['CMAKE_HOME_DIRECTORY'])
     compiler = cache['CMAKE_C_COMPILER']
     msvc = os.name == 'nt' and Path(compiler).name.lower() in ('cl', 'cl.exe', 'clang-cl', 'clang-cl.exe')
     libraries = list(build.rglob('xray_native_runtime.lib' if msvc else 'libxray_native_runtime.a'))
     assert len(libraries) == 1, libraries
     library = libraries[0]
-    sanitizer = re.findall(r'(?<!\S)[/-](?:clang:-)?fsanitize=[^\s]+', recipe['command'])
+    sanitizer = re.findall(r'(?<!\S)[/-](?:clang:-)?fsanitize=[^\s]+', recipe)
     if msvc:
-        crt = re.findall(r'(?<!\S)[/-]M[TD]d?(?=\s)', recipe['command'])
+        crt = re.findall(r'(?<!\S)[/-]M[TD]d?(?=\s)', recipe)
         assert len(crt) == 1, recipe
         flags = ['/nologo', '/W4', '/WX', '/O2', '/utf-8', crt[0], *sanitizer]
         link = ['/link', '/INCREMENTAL:NO'] if sanitizer else []
@@ -55,6 +56,7 @@ def header_clients(build, logs):
         ran = subprocess.run([executable], capture_output=True, timeout=15)
         assert (ran.returncode, ran.stdout, ran.stderr) == (1, b'', b'[Uncaught Panic] E0421: modulo by zero\n')
         records.append({'language': language, 'command': [str(x) for x in command],
+                        'actualClientRecipe': recipe,
                         'compileExit': compiled.returncode, 'exit': ran.returncode,
                         'stderrHex': ran.stderr.hex(), 'library': str(library),
                         'librarySHA256': hashlib.sha256(library.read_bytes()).hexdigest(),
