@@ -113,6 +113,8 @@ static void check_declaration_packet(const XrXirCompileContext *work,XrXirType e
     CHECK(xr_xir_compile_declaration_constraints_verify(work,&module)==XR_XIR_BAD_TYPE);
     function.error_type=XR_XIR_I64;
     CHECK(xr_xir_compile_declaration_constraints_verify(work,&module)==XR_XIR_BAD_TYPE);
+    XrXirArtifact *invalid=NULL;
+    CHECK(xir_fixture_check(work,&module,&invalid,NULL)==XR_XIR_BAD_TYPE && !invalid);
     function.error_type=error_type;
     CHECK(xr_xir_compile_declaration_constraints_verify(work,&module)==XR_XIR_OK);
     XrXirArtifact *checked=NULL;
@@ -132,13 +134,27 @@ static void check_declaration_packet(const XrXirCompileContext *work,XrXirType e
     uint8_t *old=xr_malloc(packet.length);
     CHECK(old);
     memcpy(old,packet.bytes,packet.length);
-    old[8]=(uint8_t)(XR_XIR_CHECKED_SCHEMA-1);
+    for (uint32_t i=0;i<4;++i) old[8+i]=(uint8_t)((XR_XIR_CHECKED_SCHEMA-1)>>(8*i));
     CHECK(xr_xir_compile_checked_read(work,old,packet.length,&received,NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(!received);
     memcpy(old,packet.bytes,packet.length);
-    old[12]=(uint8_t)(XR_XIR_CHECKED_CONTRACT-1);
+    for (uint32_t i=0;i<4;++i) old[12+i]=(uint8_t)((XR_XIR_CHECKED_CONTRACT-1)>>(8*i));
     CHECK(xr_xir_compile_checked_read(work,old,packet.length,&received,NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(!received);
+    size_t error_at=64+12+4+function.name_length+4+4;
+    CHECK(error_at+4<=packet.length);
+    const XrXirType invalid_errors[]={XR_XIR_UNIT,XR_XIR_I64};
+    for (uint32_t e=0;e<2;++e) {
+        memcpy(old,packet.bytes,packet.length);
+        for (uint32_t i=0;i<4;++i) old[error_at+i]=(uint8_t)((uint32_t)invalid_errors[e]>>(8*i));
+        XrSHA256Context digest;
+        xr_sha256_init(&digest);
+        xr_sha256_update(&digest,old,32);
+        xr_sha256_update(&digest,old+64,packet.length-64);
+        xr_sha256_final(&digest,old+32);
+        CHECK(xr_xir_compile_checked_read(work,old,packet.length,&received,NULL)==XR_XIR_BAD_TYPE);
+        CHECK(!received);
+    }
     xr_free(old);
     CHECK(xr_xir_compile_checked_read(work,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
@@ -234,6 +250,67 @@ static void check_generic_declaration(const XrXirCompileContext *work) {
     CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     xr_xir_compile_artifact_free(checked);
+}
+
+static void check_lowered_error_remap(const XrXirCompileContext *work) {
+    NeverFixture fixture;
+    fixture_init(&fixture);
+    XrXirType parameter=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
+    XrXirTypeNode nodes[2]={fixture.node,fixture.node};
+    nodes[0].parameter_span=1;
+    nodes[0].nominal.arguments=&parameter;
+    fixture.types.nodes=nodes;fixture.types.count=2;
+    const XrXirBlock blocks[3]={{0,1,0,0},{0,3,0,0},{0,1,0,0}};
+    const XrXirInstruction caller[]={
+        {XR_XIR_CALL,XR_XIR_UNIT,{0},{0},2,{0,1}},
+        {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0,{0}}};
+    const XrXirInstruction body={XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
+    XrXirFunction functions[]={
+        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[0],.block_count=1,
+         .instructions=&body,.instruction_count=1,.error_type=XR_XIR_ERROR},
+        {.name="entry",.name_length=5,.result=XR_XIR_I64,.blocks=&blocks[1],.block_count=1,
+         .instructions=caller,.instruction_count=3,.error_type=XR_XIR_NEVER},
+        {.name="generic",.name_length=7,.result=XR_XIR_UNIT,.blocks=&blocks[2],.block_count=1,
+         .instructions=&body,.instruction_count=1,.error_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1)}};
+    XrXirConstraint bound={.markers=XR_XIR_CONSTRAINT_ERROR};
+    const XrXirGeneric generics[]={
+        {0},
+        {.arguments=&fixture.argument,.argument_count=1},
+        {.constraints=&bound,.parameter_count=1}};
+    const XrXirSourceModule source={.name="test",.name_length=4};
+    const XrXirFunctionIdentity identities[3]={{0},{0},{0}};
+    const XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
+        .root_module=0,.entry_function=1};
+    XrXirModule module={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,
+        .types=&fixture.types,.generics=generics,.declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
+    functions[1].error_type=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
+    CHECK(xir_fixture_check(work,&module,&checked,NULL)==XR_XIR_BAD_TYPE && !checked);
+    functions[1].error_type=XR_XIR_NEVER;
+    CHECK(xir_fixture_check(work,&module,&checked,NULL)==XR_XIR_OK);
+    memset(nodes,0xa5,sizeof(nodes));
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);
+    const XrXirModule *before=xr_xir_compile_artifact_module(closed);
+    bool before_remap=false;
+    for (uint32_t f=0;f<before->function_count;++f)
+        before_remap|=before->functions[f].error_type==(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);
+    CHECK(before_remap && before->types->nodes[0].parameter_span==1);
+    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);
+    const XrXirModule *after=xr_xir_compile_artifact_module(lowered);
+    bool remapped=false;
+    for (uint32_t f=0;f<after->function_count;++f)
+        if (after->functions[f].error_type!=XR_XIR_NEVER && after->functions[f].error_type!=XR_XIR_ERROR) {
+            CHECK(after->functions[f].error_type==(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE);
+            CHECK(xr_xir_type_is_enum(after->types,after->functions[f].error_type));
+            remapped=true;
+        }
+    CHECK(remapped);
+    CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(lowered);
 }
 
 static void check_source_bounds(const XrXirArtifact *artifact,bool has_closure) {
@@ -343,6 +420,7 @@ int main(void) {
     check_declaration_packet(&work,(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE);
     check_generic_declaration(&work);
     check_generic_error_argument(&work);
+    check_lowered_error_remap(&work);
     check_source_transport(&work);
     xr_compile_resources_release(work.resources);
     puts("Error declarations, substitution, owned packets and Source library transport passed");

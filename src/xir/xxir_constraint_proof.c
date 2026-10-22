@@ -945,6 +945,8 @@ static XrXirStatus proof_function_declaration(const XrXirModule *module, uint32_
     for (uint32_t p = 0; status == XR_XIR_OK && p < function->parameter_count; ++p)
         status = xr_xir_compile_type_use_verify_scratch(budget, &context, function->parameters[p], scratch);
     if (status == XR_XIR_OK) status = xr_xir_compile_type_use_verify_scratch(budget, &context, function->result, scratch);
+    if (status == XR_XIR_OK && function->error_type != XR_XIR_NEVER)
+        status = xr_xir_compile_type_use_verify_scratch(budget, &context, function->error_type, scratch);
     if (status == XR_XIR_OK) status = xr_xir_compile_type_markers_prove(budget, &context,
         function->error_type, XR_XIR_CONSTRAINT_ERROR);
     const XrXirGeneric *g = module->generics ? &module->generics[index] : NULL;
@@ -988,10 +990,8 @@ XrXirStatus xr_xir_compile_module_constraints_verify(const XrXirCompileContext *
     XrXirCompileContext *budget = &compile_state;
     if (!module || !budget || (module->function_count && !module->functions)) return XR_XIR_BAD_STRUCTURE;
     XirConstraintScratch scratch = {budget->resources,NULL};
-    /* Complete signature structure was admitted before this module pass.
-     * A scalar pool without generics has no declaration constraint obligations. */
-    XrXirStatus status = !module->types && !module->generics ? XR_XIR_OK :
-        declaration_constraints_verify_scratch(budget,module,&scratch);
+    /* Every function has an error declaration, including a scalar-only module. */
+    XrXirStatus status = declaration_constraints_verify_scratch(budget,module,&scratch);
     XrXirProofContext closed = {module,{XR_XIR_CONTEXT_CLOSED,0,0}};
     const XrXirDeclarations *declarations = module->declarations;
     for (uint32_t s = 0; status == XR_XIR_OK && declarations && s < declarations->slot_count; ++s) {

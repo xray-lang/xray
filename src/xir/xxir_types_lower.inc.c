@@ -86,8 +86,9 @@ static XrXirStatus lower_type_uses(XrXirModule *module, const uint32_t *map, uin
     XrXirFunction *functions = (XrXirFunction *) module->functions;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         XrXirFunction *function = &functions[f];
-        if (!lower_type_work(budget, (uint64_t) function->parameter_count + function->instruction_count + 1)) return XR_XIR_BUDGET;
+        if (!lower_type_work(budget, (uint64_t) function->parameter_count + function->instruction_count + 2)) return XR_XIR_BUDGET;
         if (!lower_type_id(&function->result, map, count)) return XR_XIR_BAD_TYPE;
+        if (!lower_type_id(&function->error_type, map, count)) return XR_XIR_BAD_TYPE;
         XrXirType *parameters = (XrXirType *) function->parameters;
         for (uint32_t p = 0; p < function->parameter_count; ++p)
             if (!lower_type_id(&parameters[p], map, count)) return XR_XIR_BAD_TYPE;
