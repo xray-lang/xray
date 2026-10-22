@@ -12,6 +12,20 @@ else()
     target_compile_options(xray_lir PRIVATE -Wall -Wextra -Werror -pedantic)
 endif()
 
+# Reuse the existing verifier implementation without the legacy C generator.
+add_library(xray_lir_c STATIC xlir_c.c "${PROJECT_SOURCE_DIR}/src/aot/xi_cgen_verify_output.c")
+target_link_libraries(xray_lir_c PUBLIC xray_lir xray_compile_resources)
+target_compile_features(xray_lir_c PUBLIC c_std_11)
+set_target_properties(xray_lir_c PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(xray_lir_c PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(xray_lir_c PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(xray_lir_c PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+
 # The source adapter is separate from the executor-independent SSA core.
 add_library(xray_lir_lower STATIC xlir_lower.c)
 target_link_libraries(xray_lir_lower PUBLIC xray_lir xray_xir_source)
