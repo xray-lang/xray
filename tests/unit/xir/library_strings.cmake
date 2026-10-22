@@ -53,6 +53,8 @@ foreach(string_target IN ITEMS xir_library_string_source_runtime
     endif()
 endforeach()
 add_test(NAME test_xir_library_string_source COMMAND test_xir_library_string_source)
+add_test(NAME test_xir_library_literal_owner COMMAND test_xir_library_string_source --literal-owner)
+set_tests_properties(test_xir_library_literal_owner PROPERTIES LABELS "unit;xir;ownership;fast" TIMEOUT 15)
 add_test(NAME test_xir_library_string_packet COMMAND test_xir_library_string_packet
     ${XIR_LIBRARY_STRING_CHECKED} ${CMAKE_CURRENT_BINARY_DIR}/library-string-packet-test.c)
 add_test(NAME test_xir_library_string_native COMMAND test_xir_library_string_native)

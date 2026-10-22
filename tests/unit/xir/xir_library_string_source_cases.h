@@ -9,15 +9,24 @@
 typedef struct StringLiteralFixture {bool grow;unsigned mode;} StringLiteralFixture;
 static XrXirStatus string_literal_operation(const XrXirCompileContext *context,void *opaque) {
     const StringLiteralFixture *fixture=opaque;SourceContext ctx={0};ctx.compile=*context;
-    XrXirLiteral original[16];uint32_t id=99;
-    if(fixture->grow){for(unsigned i=0;i<16;++i)original[i]=(XrXirLiteral){"owned",5};ctx.literals=original;ctx.literal_count=ctx.literal_capacity=16;}
+    XrXirLiteral original[16];XrXirLiteral *seed=NULL;uint32_t id=99;
+    if(fixture->grow){
+        seed=source_alloc(&ctx,16,sizeof(*seed));
+        if(!seed)return ctx.diagnostic.status;
+        for(unsigned i=0;i<16;++i)original[i]=(XrXirLiteral){"owned",5};
+        memcpy(seed,original,sizeof(original));ctx.literals=seed;ctx.literal_count=ctx.literal_capacity=16;
+    }
     if(fixture->mode==4){if(fixture->grow)ctx.literal_count=ctx.literal_capacity=UINT32_MAX/2+1;else ctx.literal_count=UINT32_MAX;}
     bool ok=source_literal_append(&ctx,NULL,(!fixture->grow&&fixture->mode==5)?NULL:"",
         fixture->grow&&fixture->mode==3?(size_t)UINT32_MAX+1:!fixture->grow&&fixture->mode==5?1:0,
         fixture->grow&&fixture->mode==5?NULL:&id);
     if(ok){CHECK(fixture->mode==0&&id==(fixture->grow?16u:0u));CHECK(ctx.literal_count==(fixture->grow?17u:1u)&&!ctx.functions);
-        CHECK(ctx.literals[id].length==0);if(fixture->grow)CHECK(ctx.literal_capacity==32&&ctx.literals!=original&&!memcmp(ctx.literals,original,sizeof(original)));}
-    else {CHECK(id==99);CHECK(ctx.literal_count==(fixture->mode==4?(fixture->grow?UINT32_MAX/2+1:UINT32_MAX):fixture->grow?16u:0u));if(fixture->grow)CHECK(ctx.literals==original);}
+        CHECK(ctx.literals[id].length==0);if(fixture->grow){
+            CHECK(ctx.literal_capacity==32&&ctx.literals!=seed&&!memcmp(ctx.literals,original,sizeof(original)));
+            CHECK(!((SourceMemory *)seed-1)->previous&&!memcmp(seed,original,sizeof(original)));
+        }}
+    else {CHECK(id==99);CHECK(ctx.literal_count==(fixture->mode==4?(fixture->grow?UINT32_MAX/2+1:UINT32_MAX):fixture->grow?16u:0u));if(fixture->grow)CHECK(ctx.literals==seed);}
+    source_release_retired_arrays(&ctx);
     while(ctx.memory)source_release_private(ctx.memory+1);
     return ok?XR_XIR_OK:ctx.diagnostic.status;
 }

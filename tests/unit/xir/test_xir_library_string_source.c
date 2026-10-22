@@ -122,6 +122,15 @@ static void string_source_case(unsigned reverse,const char *output_path) {
 }
 int main(int argc,char **argv) {
     CHECK(argc==1||argc==2);
+    if(argc==2&&!strcmp(argv[1],"--literal-owner")){
+        LibraryCompileOwner owner={0};
+        const XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
+        StringLiteralFixture fixture={true,0};
+        CHECK(library_compile_owner_new(&owner,&limits)==XR_XIR_OK);
+        CHECK(string_literal_operation(&owner.context,&fixture)==XR_XIR_OK);
+        library_compile_owner_drop(&owner);library_compile_observer_free();
+        puts("Source-owned literal growth and retirement PASS");return 0;
+    }
     library_string_source_boundaries();library_string_growth_boundaries();
     string_source_case(0,argc==2?argv[1]:NULL);string_source_case(1,NULL);
     library_compile_observer_free();puts("Library STRING original Source Checked lifetime PASS");return 0;
