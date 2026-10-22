@@ -3,6 +3,7 @@ add_library(xray_register_vm STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vm/register/xrbc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vm/register/xrbc_encode.c)
 target_include_directories(xray_register_vm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(xray_register_vm PUBLIC xray_native_runtime)
 
 add_executable(test_register_vm ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_register_vm.c)
 target_link_libraries(test_register_vm PRIVATE xray_register_vm)
@@ -17,6 +18,7 @@ add_executable(test_register_vm_alloc
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_register_vm_alloc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vm/register/xrbc_encode.c)
 target_include_directories(test_register_vm_alloc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(test_register_vm_alloc PRIVATE xray_native_runtime)
 add_test(NAME register_vm_alloc COMMAND test_register_vm_alloc)
 set_tests_properties(register_vm_alloc PROPERTIES LABELS "unit;vm;fast" TIMEOUT 10)
 
