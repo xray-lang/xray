@@ -58,12 +58,9 @@ def source(directory: Path, name: str, text: str) -> Path:
     return path
 
 
-def basic_cases(binary: Path, directory: Path, short_timeout: float,
-                build_timeout: float) -> list[Case]:
+def vm_cases(binary: Path, directory: Path, short_timeout: float) -> list[Case]:
     simple = source(directory, "simple.xr", "print(42)\n")
     tests = source(directory, "profile_test.xr", TEST_SOURCE)
-    executable = directory / ("profile.exe" if os.name == "nt" else "profile")
-    usage = f"Usage: {executable} [--sandbox]".encode("utf-8")
     return [
         Case("run-default-small", [binary, "run", simple], short_timeout),
         Case("run-sandbox-small", [binary, "run", "--sandbox", simple], short_timeout),
@@ -71,6 +68,15 @@ def basic_cases(binary: Path, directory: Path, short_timeout: float,
              stdout=b""),
         Case("test-sandbox-small", [binary, "test", "--sandbox", "--quiet", tests],
              short_timeout, stdout=b""),
+    ]
+
+
+def native_cases(binary: Path, directory: Path, short_timeout: float,
+                 build_timeout: float) -> list[Case]:
+    simple = source(directory, "simple.xr", "print(42)\n")
+    executable = directory / ("profile.exe" if os.name == "nt" else "profile")
+    usage = f"Usage: {executable} [--sandbox]".encode("utf-8")
+    return [
         Case("build-native-small", [binary, "build", simple, "-o", executable],
              build_timeout, stdout=None, stderr=None, artifact=executable),
         Case("native-default-small", [executable], short_timeout),
@@ -158,7 +164,7 @@ def main() -> int:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--suite", choices=("basic", "large"), default="basic")
+    parser.add_argument("--suite", choices=("vm", "native", "large"), required=True)
     parser.add_argument("--short-timeout", type=float, default=15)
     parser.add_argument("--build-timeout", type=float, default=120)
     parser.add_argument("--large-timeout", type=float, default=300)
@@ -180,9 +186,12 @@ def main() -> int:
         report_paths += (directory / "results.json",)
         report["run_directory"] = str(directory)
         environment = dict(os.environ, XRAY_STDLIB_PATH=str(root / "stdlib"), NO_COLOR="1")
-        cases = basic_cases(binary, directory, args.short_timeout, args.build_timeout) \
-            if args.suite == "basic" else large_cases(binary, directory, args.large_timeout,
-                                                     args.sandbox_timeout)
+        if args.suite == "vm":
+            cases = vm_cases(binary, directory, args.short_timeout)
+        elif args.suite == "native":
+            cases = native_cases(binary, directory, args.short_timeout, args.build_timeout)
+        else:
+            cases = large_cases(binary, directory, args.large_timeout, args.sandbox_timeout)
         report["planned_cases"] = [case.name for case in cases]
         report["command_timeout_sum_seconds"] = sum(case.timeout for case in cases)
         write_report(report_paths, report)

@@ -25,7 +25,7 @@
     "meta_ownership_scope",
     "smoke",
     "smoke_runner",
-    "test_cli_resource_profiles",
+    "test_cli_resource_profiles_vm",
     "test_xir_task_maximum_budget",
     "source_public_instance",
     "register_vm",
@@ -34,5 +34,5 @@
     "test_xir_p11_typed_literal_text"
   ],
   "versionCommand": ["{build}/xray.exe", "--version", "--json"],
-  "smokeStatus": "smoke: demos 2/22 stdlib 1/29 readme 0/6 native 0/3; native NOT_RUN (Task328 P2)"
+  "smokeStatus": "smoke: demos 2/22 stdlib 1/29 readme 0/6 native 0/3; native GAP, NOT_RUN (Task328 P2)"
 }
