@@ -37,7 +37,7 @@ typedef struct LirC {
     uint32_t block, instruction, scratch;
     XrLirSource source;
     uint32_t location_count, location_cursor;
-    bool runtime, f64;
+    bool runtime, f64, fneg;
 } LirC;
 
 static void c_error(LirC *c, XrLirCStatus status, const char *message) {
@@ -224,6 +224,12 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
                 !c->fixed_divisors[v->operands[1]])
                 c_error(c, XR_LIR_C_UNSUPPORTED, "division requires a direct nonzero i64 constant");
             break;
+        case XR_LIR_FNEG:
+            if (v->type == XR_LIR_F64)
+                c->fneg = true;
+            else
+                c_error(c, XR_LIR_C_UNSUPPORTED, "floating negation requires f64");
+            break;
         case XR_LIR_CALL:
             c_visit(c, v->callee);
             if (c_print_call(c, v) && c_located(&v->source)) {
@@ -406,6 +412,20 @@ static void c_integer(LirC *c, const XrLirInstructionView *v) {
     c_format(c, ") & UINT64_C(%" PRIu64 ");\n", c_mask(v->type));
     c_reconstruct(c, v->type, v->result);
 }
+/* Declared environment access prevents an integer NaN test from becoming a
+ * floating comparison that raises invalid for a signaling payload. */
+static void c_fneg(LirC *c, const XrLirInstructionView *v) {
+    c_format(c, "    memcpy(&v%" PRIu32 ", &", c->scratch);
+    c_value(c, v->operands[0]);
+    c_format(c, ", sizeof(v%" PRIu32 "));\n", c->scratch);
+    c_format(c, "    v%" PRIu32 " = ((v%" PRIu32 " & UINT64_C(0x7ff0000000000000)) == "
+        "UINT64_C(0x7ff0000000000000) && (v%" PRIu32 " & UINT64_C(0x000fffffffffffff)) != 0)\n",
+        c->scratch, c->scratch, c->scratch);
+    c_format(c, "        ? UINT64_C(0x7ff8000000000000) : v%" PRIu32 " ^ UINT64_C(0x8000000000000000);\n",
+        c->scratch);
+    c_format(c, "    memcpy(&v%" PRIu32 ", &v%" PRIu32 ", sizeof(v%" PRIu32 "));\n",
+        v->result, c->scratch, v->result);
+}
 static void c_edge(LirC *c, const XrLirEdgeView *edge) {
     XrLirBlock target = {c->request->module, c->function.id, edge->target};
     XrLirBlockView block;
@@ -457,6 +477,9 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_text(c, v->op == XR_LIR_DIV ? " / " : " % ");
             c_value(c, v->operands[1]);
             c_text(c, ";\n");
+            break;
+        case XR_LIR_FNEG:
+            c_fneg(c, v);
             break;
         case XR_LIR_ICMP:
             c_format(c, "    v%" PRIu32 " = ", v->result);
@@ -556,6 +579,12 @@ static void c_emit(LirC *c, XrLirType root_result) {
     c_preamble(c);
     if (c->runtime)
         c_text(c, "#include \"xray_native_runtime.h\"\n\n");
+    if (c->fneg)
+        c_text(c, "#if defined(_MSC_VER) && defined(_M_X64) && !defined(_M_ARM64EC) && "
+            "!defined(_M_FP_FAST) && !defined(__FAST_MATH__) && "
+            "(!defined(__FINITE_MATH_ONLY__) || __FINITE_MATH_ONLY__ <= 0)\n"
+            "#if defined(__clang__)\n#pragma STDC FENV_ACCESS ON\n"
+            "#elif defined(_MSC_VER)\n#pragma fenv_access(on)\n#endif\n#endif\n\n");
     c_locations(c);
     for (uint32_t n = 0; n < c->closure_count && c_work(c, 1); ++n) {
         c->function = (XrLirFunction) {c->request->module, c->closure[n]};

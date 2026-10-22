@@ -251,19 +251,27 @@ static void reject_float_operations(void) {
     const struct { XrLirOp op; XrLirType input, result; uint32_t arity; } cases[] = {
         {XR_LIR_FADD, XR_LIR_F64, XR_LIR_F64, 2}, {XR_LIR_FSUB, XR_LIR_F64, XR_LIR_F64, 2},
         {XR_LIR_FMUL, XR_LIR_F64, XR_LIR_F64, 2}, {XR_LIR_FDIV, XR_LIR_F64, XR_LIR_F64, 2},
-        {XR_LIR_FNEG, XR_LIR_F64, XR_LIR_F64, 1}, {XR_LIR_FCMP, XR_LIR_F64, XR_LIR_I1, 2},
+        {XR_LIR_FNEG, XR_LIR_F32, XR_LIR_F32, 1}, {XR_LIR_FCMP, XR_LIR_F64, XR_LIR_I1, 2},
         {XR_LIR_ITOF, XR_LIR_I64, XR_LIR_F64, 1}, {XR_LIR_FCAST, XR_LIR_F64, XR_LIR_F64, 1}
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(*cases); ++i) {
         XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
-        XrLirFunction f = function(m, "refused", NULL, 0, cases[i].result);
+        XrLirType root_type = cases[i].input == XR_LIR_F32 ? XR_LIR_UNIT : cases[i].result;
+        XrLirFunction f = function(m, "refused", NULL, 0, root_type);
         XrLirBlock b = block(m, f, NULL, 0); OK(xr_lir_set_entry(m, f, b));
-        XrLirValue a = constant(m, b, cases[i].input, 0), args[] = {a, a}, value;
+        XrLirValue a, value;
+        XrLirInstruction initial = {.op = XR_LIR_CONST, .type = cases[i].input,
+            .source = {"unsupported.xr", 14, 3, 7, 3, 9}};
+        OK(xr_lir_emit_value(m, b, &initial, &a)); XrLirValue args[] = {a, a};
         XrLirInstruction v = {.op = cases[i].op, .type = cases[i].result,
             .operands = args, .operand_count = cases[i].arity,
             .predicate = cases[i].op == XR_LIR_FCMP ? XR_LIR_EQ : XR_LIR_PREDICATE_NONE,
             .source = {"unsupported.xr", 14, 3, 7, 3, 9}};
-        OK(xr_lir_emit_value(m, b, &v, &value)); ret(m, b, value);
+        OK(xr_lir_emit_value(m, b, &v, &value));
+        if (root_type == XR_LIR_UNIT) {
+            XrLirInstruction term = {.op = XR_LIR_RET, .type = XR_LIR_UNIT};
+            OK(xr_lir_set_terminator(m, b, &term));
+        } else ret(m, b, value);
         OK(xr_lir_module_finish(m, NULL)); OK(xr_lir_verify(m, NULL));
         XrCompileResources *r = resources_new(); XrLirCOutput out = {0}; XrLirCDiagnostic diagnostic;
         XrLirCRequest request = {.module = m, .entry = f, .resources = r, .translation_unit = "float-frontier.c"};
@@ -284,6 +292,96 @@ static void emit_c(XrLirModule *m, const char *path) {
     FILE *file = fopen(path, "wb"); CHECK(file && out.bytes && out.length);
     CHECK(fwrite(out.bytes, 1, out.length, file) == out.length && fclose(file) == 0);
     xr_lir_c_output_free(&out);
+}
+static XrLirFunction negation_function(XrLirModule *m) {
+    XrLirType type = XR_LIR_F64;
+    XrLirFunction f = function(m, "negation", &type, 1, type);
+    XrLirBlock b = block(m, f, NULL, 0); OK(xr_lir_set_entry(m, f, b));
+    XrLirValue input, result; OK(xr_lir_function_parameter(m, f, 0, &input));
+    XrLirInstruction v = {.op = XR_LIR_FNEG, .type = type, .operands = &input,
+        .operand_count = 1, .source = {"negation.xr", 11, 7, 5, 7, 7}};
+    OK(xr_lir_emit_value(m, b, &v, &result)); ret(m, b, result); return f;
+}
+static XrLirModule *make_negation(bool output, uint64_t bits) {
+    XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
+    XrLirFunction root = function(m, "root", NULL, 0, XR_LIR_F64);
+    XrLirFunction helper = negation_function(m);
+    XrLirBlock b = block(m, root, NULL, 0); OK(xr_lir_set_entry(m, root, b));
+    XrLirValue argument = constant(m, b, XR_LIR_F64, bits), result;
+    XrLirInstruction call = {.op = XR_LIR_CALL, .type = XR_LIR_F64,
+        .callee = helper, .operands = &argument, .operand_count = 1};
+    OK(xr_lir_emit_value(m, b, &call, &result));
+    if (output) output_value(m, b);
+    ret(m, b, result); OK(xr_lir_module_finish(m, NULL)); return m;
+}
+static void observe_negation(XrLirModule *m, bool report) {
+    XrLirFunction helper; XrLirFunctionView fv;
+    OK(xr_lir_function_at(m, 1, &helper)); OK(xr_lir_function_view(m, helper, &fv));
+    CHECK(helper.id == 2 && fv.parameter_count == 1 && fv.parameter_types[0] == XR_LIR_F64 &&
+        fv.result == XR_LIR_F64 && fv.block_count == 1);
+    XrLirBlock b; XrLirInstructionView v, term;
+    OK(xr_lir_block_at(m, helper, 0, &b)); OK(xr_lir_instruction_view(m, b, 0, &v));
+    OK(xr_lir_instruction_view(m, b, 1, &term));
+    CHECK(v.op == XR_LIR_FNEG && v.type == XR_LIR_F64 && v.operands[0] == fv.parameters[0]);
+    CHECK(v.source.path_length == 11 && !memcmp(v.source.path, "negation.xr", 11) &&
+        v.source.line == 7 && v.source.column == 5 && v.source.end_line == 7 && v.source.end_column == 7);
+    CHECK(term.op == XR_LIR_RET && term.operands[0] == v.result);
+    if (report) printf("{\"carrier\":\"f64-negation\",\"helper\":2,\"parameter\":%u,"
+        "\"operand\":%u,\"returned\":%u,\"line\":7,\"column\":5}\n",
+        fv.parameters[0], v.operands[0], v.result);
+}
+/* Native admission must not turn the old VM transport success path into a
+ * bypass. This fixture requires the VM's distinct FNEG refusal explicitly. */
+static void emit_negation(XrLirModule *m, const char *path, bool output) {
+    observe_negation(m, path != NULL);
+    XrLirFunction root; OK(xr_lir_function_at(m, 0, &root));
+    XrRbcCompileDiagnostic diagnostic;
+    for (uint32_t i = 0; i < 2; ++i) {
+        XrLirFunction f; OK(xr_lir_function_at(m, i, &f)); XrRbcProgram *program = NULL;
+        CHECK(xr_rbc_compile(m, f, &program, &diagnostic) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+        CHECK(diagnostic.line == 7 && diagnostic.column == 5 && !strcmp(diagnostic.path, "negation.xr"));
+    }
+    XrCompileResources *resources = resources_new(); XrLirCOutput out = {0};
+    XrLirCRequest request = {.module = m, .entry = root, .resources = resources,
+        .translation_unit = path ? path : "native-negation.c"};
+    CHECK(xr_lir_emit_c(&request, &out, NULL) == XR_LIR_C_OK && out.entry_result == XR_LIR_F64);
+    xr_lir_module_destroy(m); xr_compile_resources_release(resources);
+    CHECK(diagnostic.line == 7 && !strcmp(diagnostic.path, "negation.xr"));
+    const char *policy = strstr(out.bytes, "#pragma STDC FENV_ACCESS ON");
+    const char *definitions = strstr(out.bytes, "double ");
+    CHECK(policy && definitions && policy < definitions && strstr(out.bytes, "#pragma fenv_access(on)"));
+    const char *header = strstr(out.bytes, "#include \"xray_native_runtime.h\"");
+    CHECK(output ? header && header < policy : !header);
+    CHECK(!strstr(policy, "#include "));
+    if (path) {
+        FILE *file = fopen(path, "wb"); CHECK(file);
+        CHECK(fwrite(out.bytes, 1, out.length, file) == out.length && fclose(file) == 0);
+    }
+    xr_lir_c_output_free(&out);
+}
+static void unselected_negation(bool integer_root) {
+    XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m)); (void)negation_function(m);
+    XrLirType type = integer_root ? XR_LIR_I64 : XR_LIR_F64;
+    XrLirFunction root = function(m, "selected", NULL, 0, type);
+    XrLirBlock b = block(m, root, NULL, 0); OK(xr_lir_set_entry(m, root, b));
+    ret(m, b, constant(m, b, type, 0)); OK(xr_lir_module_finish(m, NULL));
+    XrCompileResources *resources = resources_new(); XrLirCOutput out = {0};
+    XrLirCRequest request = {.module = m, .entry = root, .resources = resources,
+        .translation_unit = "unselected-negation.c"};
+    CHECK(xr_lir_emit_c(&request, &out, NULL) == XR_LIR_C_OK);
+    CHECK(!strstr(out.bytes, "FENV_ACCESS") && !strstr(out.bytes, "fenv_access"));
+    CHECK(integer_root ? !strstr(out.bytes, "double") : strstr(out.bytes, "double") != NULL);
+    xr_lir_module_destroy(m); xr_compile_resources_release(resources); xr_lir_c_output_free(&out);
+}
+static void native_negation(void) {
+    for (unsigned nan = 0; nan < 2; ++nan)
+        for (unsigned output = 0; output < 2; ++output)
+            for (unsigned after = 0; after < 2; ++after) {
+                XrLirModule *m = make_negation(output != 0, nan ? UINT64_C(0x7ff8000000000000) : 0);
+                if (after) m = sccp_and_retire(m);
+                emit_negation(m, NULL, output != 0);
+            }
+    unselected_negation(true); unselected_negation(false);
 }
 static XrLirModule *transport(XrLirType type) {
     XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
@@ -313,7 +411,7 @@ static void test_frontier(void) {
 int main(int argc, char **argv) {
     const XrLirType types[] = {XR_LIR_I8, XR_LIR_U16, XR_LIR_U64, XR_LIR_PTR};
     if (argc == 1) {
-        test_frontier(); f64_owned_programs(); reject_float_operations();
+        test_frontier(); f64_owned_programs(); reject_float_operations(); native_negation();
         for (size_t i = 0; i < 4; ++i) {
             for (unsigned output = 0; output <= (types[i] == XR_LIR_PTR ? 1u : 0u); ++output) {
                 XrLirModule *m = make_carrier(types[i], output != 0, 0); observe(m, types[i], false);
@@ -323,6 +421,14 @@ int main(int argc, char **argv) {
         puts("Typed carriers, parallel edges and explicit backend frontiers passed"); return 0;
     }
     CHECK(argc == 4); XrLirType type = XR_LIR_TYPE_INVALID;
+    if (!strcmp(argv[1], "fneg-zero") || !strcmp(argv[1], "fneg-zero-output") ||
+        !strcmp(argv[1], "fneg-nan") || !strcmp(argv[1], "fneg-nan-output")) {
+        CHECK(!strcmp(argv[2], "before") || !strcmp(argv[2], "after"));
+        bool effect = strstr(argv[1], "-output") != NULL;
+        XrLirModule *m = make_negation(effect, strstr(argv[1], "-nan") ? UINT64_C(0x7ff8000000000000) : 0);
+        if (!strcmp(argv[2], "after")) m = sccp_and_retire(m);
+        emit_negation(m, argv[3], effect); return 0;
+    }
     bool output = !strcmp(argv[1], "ptr-output");
     for (size_t i = 0; i < 4; ++i) if (!strcmp(argv[1], xr_lir_type_name(types[i]))) type = types[i];
     if (output) type = XR_LIR_PTR;

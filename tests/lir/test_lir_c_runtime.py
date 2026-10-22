@@ -63,6 +63,8 @@ def main():
         'print(q(0))\nprint(r(0))\n',
         b'-9223372036854775808\n0\n7\n0\n-7\n0\n-9223372036854775807\n0\n0\n0\n')
     cases['f64-source'] = ('fn carry(x:f64)->f64{print(7)\nreturn x}\ncarry(1.25)\nprint(2)\n', b'7\n2\n')
+    cases['f64-fneg-source'] = ('fn negative(x:f64)->f64{\nprint(13)\nreturn -x\n}\n'
+                                'negative(1.25)\nprint(2)\n', b'13\n2\n')
     refused_source, refused_c = root / 'refused-fadd.xr', root / 'refused-fadd.c'
     refused_source.write_text('print(1)\nfn add(x:f64)->f64{return x+1.0}\nadd(2.0)\nprint(2)\n', encoding='utf-8')
     refused = subprocess.run([str(args.driver), str(refused_source), str(refused_c)], capture_output=True, timeout=30)
@@ -116,15 +118,21 @@ def main():
             f'    {result_type} (*entry)(void) = xray_lir_entry;\n' + invoke +
             '    if (argc > 1) fputs("AFTER_ENTRY", stderr);\n'
             f'    return {check};\n}}\n', encoding='ascii')
-        if name == 'f64-source':
+        if name in ('f64-source', 'f64-fneg-source'):
             workers = re.findall(r'static double (xrl_f[0-9]+)\(double p0\) \{(.*?)\n\}', text, re.S)
             assert len(workers) == 1, workers
             worker, body = workers[0]
-            assert 'return p0;' in body and re.search(r'\b' + worker + r'\((?:p|v)[0-9]+\)', text)
+            assert re.search(r'\b' + worker + r'\((?:p|v)[0-9]+\)', text)
+            if name == 'f64-source':
+                assert 'return p0;' in body
+            else:
+                assert 'memcpy' in body and '0x7ff8000000000000' in body
+                assert '#pragma STDC FENV_ACCESS ON' in text and re.search(r'return v[0-9]+;', body)
             assertion = ('\n_Static_assert(_Generic(&' + worker +
                          ', double (*)(double): 1, default: 0), "source worker type");\n')
             adapter.write_text(adapter.read_text(encoding='ascii') + assertion, encoding='ascii')
-            identity['f64SourceWorker'] = {'name': worker, 'type': 'double(double)', 'returnsParameter': True}
+            key = 'f64SourceWorker' if name == 'f64-source' else 'f64NegationSourceWorker'
+            identity[key] = {'name': worker, 'type': 'double(double)', 'returnsParameter': name == 'f64-source'}
         if args.kind == 'msvc':
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
@@ -140,21 +148,23 @@ def main():
                        '-I' + str(args.include), adapter, args.library, '-pthread', '-o', executable]
             if args.asan:
                 command += ['-fsanitize=address,undefined', '-g']
-        if name == 'f64-source':
+        if name in ('f64-source', 'f64-fneg-source'):
             options = [str(x) for x in command[1:] if isinstance(x, str) and x.startswith(('/', '-'))
                        and not x.startswith(('/Fe:', '/INCREMENTAL:')) and x not in ('/link', '-o', '-pthread')]
             profile = _f64_profile(args.compiler, args.kind, options, root)
-            identity['f64SourceProfile'] = profile
+            key = 'f64Source' if name == 'f64-source' else 'f64NegationSource'
+            identity[key + 'Profile'] = profile
             if not profile['supported']:
-                identity['f64Source'] = _f64_reject(command, root, profile['expectedGuard'], executable)
+                identity[key] = _f64_reject(command, root, profile['expectedGuard'], executable)
                 continue
         run(command, cwd=root)
         completed = run([executable], cwd=root)
         assert completed.stdout == expected and completed.stderr == b'', (name, completed)
         executables[name] = executable
-        if name == 'f64-source':
-            identity['f64Source'] = {'status': 'PASS_SOURCE_ADMISSION_AND_EFFECTS',
-                                     'stdoutHex': completed.stdout.hex(), 'payloadQualification': False}
+        if name in ('f64-source', 'f64-fneg-source'):
+            key = 'f64Source' if name == 'f64-source' else 'f64NegationSource'
+            identity[key] = {'status': 'PASS_SOURCE_ADMISSION_AND_EFFECTS',
+                             'stdoutHex': completed.stdout.hex(), 'payloadQualification': False}
     # A read-only stdout handle exercises a real write failure, without a stub.
     read_only = root / 'read-only-output'
     read_only.write_bytes(b'')

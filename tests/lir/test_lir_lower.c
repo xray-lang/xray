@@ -293,6 +293,65 @@ static void fixed_division(const char *fixtures) {
     rejected("fn f(n:i64)->i64{return n/(3 as i64)}\nprint(f(8))\n", false, "DIV_INT");
     rejected("fn f(n:i64,flag:bool)->i64{return n%(flag?3:7)}\nprint(f(8,true))\n", false, "REM_INT");
 }
+static void floating_negation_source(void) {
+    const char *text = "fn negative(x:f64)->f64{\nprint(13)\nreturn -x\n}\nnegative(1.25)\nprint(2)\n";
+    SourceFixture fixture = source_fixture(text);
+    const XrXirModule *closed = xr_xir_compile_artifact_module(fixture.closed);
+    const XrXirSourceDebugView *debug = xr_xir_compile_source_snapshot_debug(fixture.source.snapshot);
+    const XrXirSourceView *source = xr_xir_compile_source_snapshot_view(fixture.source.snapshot);
+    CHECK(closed && debug && source);
+    XrXirSourceRange expected = {0}; char *path = NULL; size_t path_length = 0;
+    unsigned source_ops = 0, lir_ops = 0;
+    for (uint32_t f = 0; f < closed->function_count; ++f) {
+        const XrXirFunction *function = &closed->functions[f];
+        for (uint32_t i = 0; i < function->instruction_count; ++i) {
+            const XrXirInstruction *v = &function->instructions[i];
+            if (v->op != XR_XIR_NEG_FLOAT) continue;
+            CHECK(!source_ops++ && v->type == XR_XIR_F64 && function->parameter_count == 1);
+            CHECK(v->args[0] < function->parameter_count &&
+                function->parameters[v->args[0]] == XR_XIR_F64);
+            uint32_t origin = UINT32_MAX;
+            CHECK(xr_xir_compile_specialization_origin(fixture.closed, f, &origin) == XR_XIR_OK);
+            CHECK(origin < debug->function_count && debug->functions[origin].points &&
+                i < debug->functions[origin].instruction_count);
+            expected = debug->functions[origin].points[i].range;
+            CHECK(expected.line == 3 && expected.column > 0 && expected.module < source->module_count);
+            const XrXirSourceQueryModule *module = &source->modules[expected.module];
+            const char *borrowed = module->path ? module->path : module->identity;
+            CHECK(borrowed && borrowed[0]); path_length = strlen(borrowed);
+            CHECK(path_length < SIZE_MAX); path = xr_malloc(path_length + 1); CHECK(path);
+            memcpy(path, borrowed, path_length + 1);
+        }
+    }
+    CHECK(source_ops == 1 && path);
+    XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
+    XrLirLowered output = {0}; XrLirLowerFailure failure = {0};
+    XrLirStatus status = xr_lir_lower_checked(&request, &output, &failure);
+    source_fixture_free(&fixture);
+    CHECK(status == XR_LIR_OK && output.module && !failure.owned_path);
+    OK(xr_lir_verify(output.module, NULL));
+    for (uint32_t f = 0; f < xr_lir_function_count(output.module); ++f) {
+        XrLirFunction function; XrLirFunctionView fv;
+        OK(xr_lir_function_at(output.module, f, &function));
+        OK(xr_lir_function_view(output.module, function, &fv));
+        for (uint32_t b = 0; b < fv.block_count; ++b) {
+            XrLirBlock block; XrLirBlockView bv;
+            OK(xr_lir_block_at(output.module, function, b, &block));
+            OK(xr_lir_block_view(output.module, block, &bv));
+            for (uint32_t i = 0; i < bv.instruction_count; ++i) {
+                XrLirInstructionView v; OK(xr_lir_instruction_view(output.module, block, i, &v));
+                if (v.op != XR_LIR_FNEG) continue;
+                CHECK(v.type == XR_LIR_F64 && fv.parameter_count == 1 && v.operands[0] == fv.parameters[0]);
+                CHECK(v.source.path_length == path_length && !memcmp(v.source.path, path, path_length));
+                CHECK(v.source.line == (uint32_t)expected.line && v.source.column == (uint32_t)expected.column);
+                CHECK(v.source.end_line == (uint32_t)(expected.end_line ? expected.end_line : expected.line));
+                CHECK(v.source.end_column == (uint32_t)(expected.end_line ? expected.end_column : expected.column));
+                ++lir_ops;
+            }
+        }
+    }
+    CHECK(lir_ops == source_ops); xr_lir_lowered_free(&output); xr_free(path);
+}
 static void swapped_backedge(void) {
     XrLirLowered output =
         lower_text("fn swap(n:i64)->i64{var a=1\nvar b=2\nvar i=0\nwhile(i<n){const "
@@ -342,6 +401,7 @@ static void argument_validation(void) {
 int main(int argc, char **argv) {
     CHECK(argc == 3);
     supported_control();
+    floating_negation_source();
     swapped_backedge();
     fixed_division(argv[1]);
     unsupported();
