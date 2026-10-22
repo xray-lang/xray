@@ -108,18 +108,53 @@ static bool rbc_lir_scalar(XrLirType type) {
     return type == XR_LIR_I64 || type == XR_LIR_I1;
 }
 
+static XrLirSource rbc_lir_value_source(const XrLirModule *input, XrLirFunction f,
+    const XrLirFunctionView *view, uint32_t value, XrRbcCompileDiagnostic *d) {
+    XrLirSource fallback = {0};
+    uint32_t fallback_block = 0, fallback_instruction = 0;
+    for (uint32_t b = 0; b < view->block_count; ++b) {
+        XrLirBlock block;
+        XrLirBlockView bv;
+        xr_lir_block_at(input, f, b, &block);
+        xr_lir_block_view(input, block, &bv);
+        for (uint32_t n = 0; n < bv.instruction_count; ++n) {
+            XrLirInstructionView i;
+            xr_lir_instruction_view(input, block, n, &i);
+            if (!i.source.path_length || !i.source.line || !i.source.column) continue;
+            if (!fallback.path_length) {
+                fallback = i.source;
+                fallback_block = block.id;
+                fallback_instruction = n + 1;
+            }
+            bool selected = !value || i.result == value;
+            for (uint32_t a = 0; a < i.operand_count && !selected; ++a)
+                selected = i.operands[a] == value;
+            if (selected) {
+                d->block = block.id;
+                d->instruction = n + 1;
+                return i.source;
+            }
+        }
+    }
+    d->block = fallback_block;
+    d->instruction = fallback_instruction;
+    return fallback;
+}
+
 static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     const XrLirFunctionView *v, XrRbcCompileDiagnostic *d) {
     d->function = f.id;
+    d->block = d->instruction = 0;
     if (v->kind != XR_LIR_FUNCTION_DEFINITION ||
         (v->result != XR_LIR_UNIT && !rbc_lir_scalar(v->result))) {
         rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
-            "execution requires a scalar function definition", (XrLirSource) {0});
+            "execution requires a scalar function definition",
+            rbc_lir_value_source(input, f, v, 0, d));
         return false;
     }
     if (v->value_count > XR_RBC_REGISTER_COUNT_MAX) {
         rbc_lir_error(d, XR_RBC_COMPILE_LIMIT, "SSA values exceed register capacity",
-            (XrLirSource) {0});
+            rbc_lir_value_source(input, f, v, 0, d));
         return false;
     }
     for (uint32_t value = 1; value <= v->value_count; ++value) {
@@ -127,7 +162,8 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
         if (xr_lir_value_type(input, (XrLirValue) {input, f.id, value}, &type) != XR_LIR_OK ||
             !rbc_lir_scalar(type)) {
             rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
-                "value type is not an admitted scalar", (XrLirSource) {0});
+                "value type is not an admitted scalar",
+                rbc_lir_value_source(input, f, v, value, d));
             return false;
         }
     }
