@@ -26,7 +26,22 @@ static bool source_closure_call_never(SourceContext *ctx,const XrXirInstruction 
     return true;
 }
 
-static bool source_closure_recipe_never(SourceContext *ctx,const XrXirInstruction *op,bool *output) {
+static bool source_closure_operand_i64(SourceContext *ctx,uint32_t ordinal,uint32_t value) {
+    /* Instructions are not published yet. Parameters and earlier owned recipes
+     * are the only type authority while the anonymous body is unfinished. */
+    const XrXirFunction *function=&ctx->functions[ctx->function];
+    const SourceFunction *body=&ctx->bodies[ctx->function];
+    if (value<function->parameter_count)
+        return function->parameters && function->parameters[value]==XR_XIR_I64;
+    uint32_t index=value-function->parameter_count;
+    if (!body->recipes || index>=ordinal || index>=body->count) return false;
+    const SourceInstructionRecipe *recipe=&body->recipes[index];
+    return recipe->owner==ctx->function && recipe->value==value &&
+        recipe->instruction.type==XR_XIR_I64;
+}
+
+static bool source_closure_recipe_never(SourceContext *ctx,const XrXirInstruction *op,
+    uint32_t ordinal,bool *output) {
     *output=true;
     switch (op->op) {
     /* Materialization, value reads and integer bit arithmetic have no business
@@ -36,6 +51,16 @@ static bool source_closure_recipe_never(SourceContext *ctx,const XrXirInstructio
     case XR_XIR_COPY: case XR_XIR_SLOT_LOAD: case XR_XIR_CELL_READ:
     case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
     case XR_XIR_RETURN:
+        return true;
+    case XR_XIR_REM_INT:
+        *output=op->type==XR_XIR_I64 &&
+            source_closure_operand_i64(ctx,ordinal,op->args[0]) &&
+            source_closure_operand_i64(ctx,ordinal,op->args[1]);
+        return true;
+    case XR_XIR_EQUAL:
+        *output=op->type==XR_XIR_BOOL && op->immediate==0 &&
+            source_closure_operand_i64(ctx,ordinal,op->args[0]) &&
+            source_closure_operand_i64(ctx,ordinal,op->args[1]);
         return true;
     case XR_XIR_CALL:
         return source_closure_call_never(ctx,op,output);
@@ -56,7 +81,7 @@ static bool source_closure_error_bound(SourceContext *ctx) {
     for (uint32_t i=0;i<body->count;++i) {
         if (!source_work(ctx,body->node)) return false;
         bool empty=false;
-        if (!source_closure_recipe_never(ctx,&body->recipes[i].instruction,&empty)) return false;
+        if (!source_closure_recipe_never(ctx,&body->recipes[i].instruction,i,&empty)) return false;
         if (!empty) return true;
     }
     function->error_type=XR_XIR_NEVER;

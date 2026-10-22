@@ -342,7 +342,15 @@ static char *source_transport_text(size_t *length) {
         "export fn makeCell(base:i64)->fn()->i64{var captured=base;return fn()->i64{return captured}}\n"
         "export fn makeSlot()->fn()->i64{return fn()->i64{return seed}}\n"
         "export fn makeText()->fn()->string{return fn()->string{return \"owned\"}}\n"
-        "export fn makeIndirect(f:fn()->i64)->fn()->i64{return fn()->i64{return f()}}\n";
+        "export fn makeIndirect(f:fn()->i64)->fn()->i64{return fn()->i64{return f()}}\n"
+        "export fn filterEqual()->i64{var data=[1,2,3,4];"
+        "return len(data.filter(fn(x:i64)->bool{return x==2}))}\n"
+        "export fn filterRemainder()->i64{var data=[1,2,3,4];"
+        "return len(data.filter(fn(x:i64)->bool{return x%2==0}))}\n"
+        "export fn filterCaptured()->i64{var pivot:i64=2;var data=[1,2,3,4];"
+        "return len(data.filter(fn(x:i64)->bool{return x==pivot}))}\n"
+        "export fn equalFloatControl()->bool{var f=fn(x:f64)->bool{return x==2.0};return f(2.0)}\n"
+        "export fn notEqualControl()->bool{var f=fn(x:i64)->bool{return x!=2};return f(2)}\n";
     /* Compile the actual captured-body declaration instead of a second fixture
      * spelling that could diverge from the standard library. */
     FILE *file=fopen(XR_SOURCE_STDLIB "/_probe/_probe.xr","rb");
@@ -402,7 +410,8 @@ static void check_source_bounds(const XrXirArtifact *artifact,bool consumer) {
     CHECK(module->functions[call].error_type==XR_XIR_NEVER);
     CHECK(module->functions[source_named_function(module,"raw")].error_type==
         (consumer ? XR_XIR_ERROR : XR_XIR_NEVER));
-    const char *empty[]={"probeMakeAdder","makeGeneric","makeCell","makeSlot","makeText"};
+    const char *empty[]={"probeMakeAdder","makeGeneric","makeCell","makeSlot","makeText",
+        "filterEqual","filterRemainder","filterCaptured"};
     for (size_t i=0;i<sizeof(empty)/sizeof(empty[0]);++i) {
         const XrXirFunction *closure=&module->functions[source_closure_function(module,empty[i])];
         if (closure->error_type!=XR_XIR_NEVER)
@@ -410,6 +419,8 @@ static void check_source_bounds(const XrXirArtifact *artifact,bool consumer) {
         CHECK(closure->error_type==XR_XIR_NEVER);
     }
     CHECK(module->functions[source_closure_function(module,"makeIndirect")].error_type==XR_XIR_ERROR);
+    CHECK(module->functions[source_closure_function(module,"equalFloatControl")].error_type==XR_XIR_ERROR);
+    CHECK(module->functions[source_closure_function(module,"notEqualControl")].error_type==XR_XIR_ERROR);
     if (consumer) {
         CHECK(module->functions[source_closure_function(module,"viaClosure")].error_type==XR_XIR_NEVER);
         CHECK(module->functions[source_closure_function(module,"viaWide")].error_type==XR_XIR_ERROR);
