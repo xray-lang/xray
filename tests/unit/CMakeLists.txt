@@ -4458,12 +4458,8 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/root_parameters.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/root_parameter_vm.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/root_parameter_native.cmake)
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/mem/sysheap_allocations.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/object/registry_allocations.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/symbol/symbol_allocations.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/api/vm_metadata_allocations.cmake)
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/api/runtime_map_allocations.cmake)
 
 if(WIN32)
     add_executable(test_lsp_source_workspace xir/test_lsp_source_workspace.c)
