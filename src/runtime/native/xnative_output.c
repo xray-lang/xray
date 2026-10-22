@@ -56,17 +56,21 @@ static void diagnostic_location(uint32_t id) {
     if (!id) { diagnostic_text("unknown source"); return; }
     if ((size_t)id > map->count) { diagnostic_text("invalid source id "); diagnostic_number(id); return; }
     const XrtSourceLocation *location = &map->locations[id - 1];
+    bool has_end = location->end_line != 0 || location->end_column != 0;
     if (!location->path || !location->path_length || !location->line || !location->column ||
-        !location->end_line || !location->end_column || location->end_line < location->line ||
-        (location->end_line == location->line && location->end_column < location->column)) {
+        (has_end && (!location->end_line || !location->end_column ||
+         location->end_line < location->line ||
+         (location->end_line == location->line && location->end_column < location->column)))) {
         diagnostic_text("invalid source location");
         return;
     }
     diagnostic_path(location->path, location->path_length);
     diagnostic_text(":"); diagnostic_number(location->line);
     diagnostic_text(":"); diagnostic_number(location->column);
-    diagnostic_text("-"); diagnostic_number(location->end_line);
-    diagnostic_text(":"); diagnostic_number(location->end_column);
+    if (has_end) {
+        diagnostic_text("-"); diagnostic_number(location->end_line);
+        diagnostic_text(":"); diagnostic_number(location->end_column);
+    }
 }
 
 static XR_NORET void xrt_end_execution(XrtIoResult failure, const char *operation, uint32_t id) {

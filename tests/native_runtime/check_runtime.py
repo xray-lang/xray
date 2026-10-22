@@ -37,6 +37,7 @@ def main():
     if args.suite == 'output':
         code, output, error = run('raw-values', mode='values')
         assert (code, output, error) == (0, b'-9223372036854775808\n0\n9223372036854775807\n', b'')
+        assert run('prefix-order', mode='prefix') == (0, b'prefix:12\n', b'')
     elif args.suite == 'failures':
         cases = [
             ('location', 0, 1, b'source\\x0a.xrc:3:5-7:9'),
@@ -49,6 +50,9 @@ def main():
             ('zero-count', 4, 1, b'invalid source map'),
             ('oversize', 5, 1, b'invalid source map'),
             ('backwards', 6, 1, b'invalid source location'),
+            ('start-only', 7, 1, b'start.xrc:3:5 ['),
+            ('end-column-only', 8, 1, b'invalid source location'),
+            ('end-line-only', 9, 1, b'invalid source location'),
         ]
         for label, client, location, expected in cases:
             code, output, error = run(label, client, location=location)
@@ -58,8 +62,13 @@ def main():
             assert re.search(rb'\[(?:win32|errno)=[1-9][0-9]*\]\n$', error), (label, error)
         code, output, error = run('real-flush', mode='flush-error')
         assert code == 74 and not output and b'output flush failed at ' in error, (code, output, error)
-        assert re.search(rb'\[errno=[1-9][0-9]*\]\n$', error), error
+        assert re.search(rb'\[(?:win32|errno)=[1-9][0-9]*\]\n$', error), error
+        code, output, error = run('stale-codes', mode='stale-flush-error')
+        assert code == 74 and not output and b'output flush failed at ' in error, (code, output, error)
+        assert re.search(rb'\[(?:win32|errno)=[1-9][0-9]*\]\n$', error), error
         code, output, error = run('real-broken-pipe', mode='pipe', pipe=True)
+        assert (code, output, error) == (74, b'', b''), (code, output, error)
+        code, output, error = run('real-buffered-broken-pipe', mode='pipe-flush', pipe=True)
         assert (code, output, error) == (74, b'', b''), (code, output, error)
     elif args.suite == 'link_contract':
         for name, diagnostic in [('missing', rb'LNK20(?:01|19)|undefined (?:reference|symbol)'),

@@ -1,5 +1,5 @@
 set(native_runtime_clients)
-foreach(kind RANGE 0 6)
+foreach(kind RANGE 0 9)
     set(client "test_native_runtime_${kind}")
     add_executable(${client} client.c)
     target_compile_definitions(${client} PRIVATE MAP_KIND=${kind})
@@ -28,7 +28,8 @@ foreach(suite output failures link_contract)
             --clients "$<TARGET_FILE:test_native_runtime_0>" "$<TARGET_FILE:test_native_runtime_1>"
                 "$<TARGET_FILE:test_native_runtime_2>" "$<TARGET_FILE:test_native_runtime_3>"
                 "$<TARGET_FILE:test_native_runtime_4>" "$<TARGET_FILE:test_native_runtime_5>"
-                "$<TARGET_FILE:test_native_runtime_6>"
+                "$<TARGET_FILE:test_native_runtime_6>" "$<TARGET_FILE:test_native_runtime_7>"
+                "$<TARGET_FILE:test_native_runtime_8>" "$<TARGET_FILE:test_native_runtime_9>"
             --logs "${CMAKE_CURRENT_BINARY_DIR}/results-${suite}")
     set_tests_properties(native_runtime_${suite} PROPERTIES
         LABELS "unit;native-runtime;fast" TIMEOUT 90 RUN_SERIAL TRUE)

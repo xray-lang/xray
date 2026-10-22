@@ -8,6 +8,8 @@
  */
 #include "xray_native_runtime.h"
 #include "base/xplatform.h"
+#include <stdbool.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,10 +41,20 @@ const XrtStandaloneSourceMap xrt_standalone_source_map = {locations, (size_t)UIN
 #else
 const XrtStandaloneSourceMap xrt_standalone_source_map = {NULL, 1};
 #endif
-#else
+#elif MAP_KIND == 6
 static const char invalid_path[] = "invalid.xrc";
 static const XrtSourceLocation backwards[] = {{invalid_path, sizeof invalid_path - 1, 8, 4, 3, 2}};
 const XrtStandaloneSourceMap xrt_standalone_source_map = {backwards, 1};
+#else
+static const char start_path[] = "start.xrc";
+#if MAP_KIND == 7
+static const XrtSourceLocation start[] = {{start_path, sizeof start_path - 1, 3, 5, 0, 0}};
+#elif MAP_KIND == 8
+static const XrtSourceLocation start[] = {{start_path, sizeof start_path - 1, 3, 5, 0, 9}};
+#else
+static const XrtSourceLocation start[] = {{start_path, sizeof start_path - 1, 3, 5, 7, 0}};
+#endif
+const XrtStandaloneSourceMap xrt_standalone_source_map = {start, 1};
 #endif
 
 static void exit_callback(void) { fputs("EXIT_CALLBACK\n", stderr); }
@@ -64,10 +76,24 @@ int main(int argc, char **argv) {
         return 0;
     }
     static char buffer[128];
+    if (strcmp(argv[1], "prefix") == 0) {
+        if (fputs("prefix:", stdout) < 0) return 96;
+        xrt_print_i64(12, 0);
+        return 0;
+    }
     if (setvbuf(stdout, buffer, _IOFBF, sizeof buffer)) return 91;
     if (atexit(exit_callback)) return 92;
-    if (strcmp(argv[1], "flush-error") == 0 && fputs("buffered prefix", stdout) < 0) return 93;
-    if (strcmp(argv[1], "pipe") != 0 && close_output()) return 94;
+    bool stale = strcmp(argv[1], "stale-flush-error") == 0;
+    bool buffered = stale || strcmp(argv[1], "flush-error") == 0 || strcmp(argv[1], "pipe-flush") == 0;
+    bool pipe = strcmp(argv[1], "pipe") == 0 || strcmp(argv[1], "pipe-flush") == 0;
+    if (buffered && fputs("buffered prefix", stdout) < 0) return 93;
+    if (!pipe && close_output()) return 94;
+    if (stale) {
+        errno = EPIPE;
+#if defined(XR_OS_WINDOWS)
+        (void)_set_doserrno(ERROR_BROKEN_PIPE);
+#endif
+    }
     uint32_t id = argc > 2 ? (uint32_t)strtoul(argv[2], NULL, 10) : 1;
     xrt_print_i64(42, id);
     fputs("AFTER_CALL\n", stderr);

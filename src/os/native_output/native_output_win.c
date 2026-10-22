@@ -13,12 +13,23 @@
 #include "os/os_native_output.h"
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <windows.h>
 
+static bool broken_pipe(DWORD code) {
+    return code == ERROR_BROKEN_PIPE || code == ERROR_NO_DATA ||
+        code == ERROR_PIPE_NOT_CONNECTED;
+}
+
 XR_FUNCDEF XrtIoResult xrt_io_flush_stdout(void) {
+    // UCRT maps a broken-pipe flush to EINVAL, so preserve its original code.
+    (void)_set_doserrno(0);
     errno = 0;
     if (fflush(stdout) == 0) return (XrtIoResult){0};
     int code = errno;
+    unsigned long windows_code = 0;
+    if (_get_doserrno(&windows_code) == 0 && windows_code)
+        return (XrtIoResult){true, broken_pipe(windows_code), XRT_IO_WINDOWS, windows_code};
     return (XrtIoResult){true, code == EPIPE,
         code ? XRT_IO_ERRNO : XRT_IO_NONE, (uint32_t)code};
 }
@@ -30,9 +41,7 @@ XR_FUNCDEF XrtIoResult xrt_io_write(unsigned stream, const char *bytes, size_t l
         DWORD amount = length > MAXDWORD ? MAXDWORD : (DWORD)length;
         if (!WriteFile(handle, bytes, amount, &written, NULL)) {
             DWORD code = GetLastError();
-            bool pipe = code == ERROR_BROKEN_PIPE || code == ERROR_NO_DATA ||
-                code == ERROR_PIPE_NOT_CONNECTED;
-            return (XrtIoResult){true, pipe, XRT_IO_WINDOWS, code};
+            return (XrtIoResult){true, broken_pipe(code), XRT_IO_WINDOWS, code};
         }
         if (!written) return (XrtIoResult){true, false, XRT_IO_NONE, 0};
         bytes += written;

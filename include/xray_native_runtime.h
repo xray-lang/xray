@@ -25,6 +25,7 @@ extern "C" {
 typedef struct XrtSourceLocation {
     const char *path;
     size_t path_length;
+    // A missing end uses two zero fields; it does not erase the real start.
     uint32_t line, column, end_line, end_column;
 } XrtSourceLocation;
 
