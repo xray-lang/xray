@@ -584,6 +584,9 @@ XR_FUNC XrLirStatus xr_lir_module_finish(XrLirModule *m, XrLirDiagnostic *diagno
 static bool lir_readable(const XrLirModule *m) {
     return m && m->finished && m->failure == XR_LIR_OK;
 }
+XR_FUNC bool xr_lir_module_is_readable(const XrLirModule *m) {
+    return lir_readable(m);
+}
 XR_FUNC uint32_t xr_lir_intrinsic_count(const XrLirModule *m) {
     return lir_readable(m) ? m->intrinsic_count : 0;
 }
