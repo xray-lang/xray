@@ -350,7 +350,13 @@ static char *source_transport_text(size_t *length) {
         "export fn filterCaptured()->i64{var pivot:i64=2;var data=[1,2,3,4];"
         "return len(data.filter(fn(x:i64)->bool{return x==pivot}))}\n"
         "export fn equalFloatControl()->bool{var f=fn(x:f64)->bool{return x==2.0};return f(2.0)}\n"
-        "export fn notEqualControl()->bool{var f=fn(x:i64)->bool{return x!=2};return f(2)}\n";
+        "export fn notEqualControl()->bool{var f=fn(x:i64)->bool{return x!=2};return f(2)}\n"
+        "export fn makeCounter(base:i64)->fn()->i64{var count=base;"
+        "return fn()->i64{count=count+1;return count}}\n"
+        "export fn makeComposed(f:fn(i64)->i64,g:fn(i64)->i64)->fn(i64)->i64{"
+        "return fn(x:i64)->i64{return f(g(x))}}\n"
+        "export fn writeBoolControl()->bool{var flag=false;"
+        "var f=fn()->bool{flag=true;return flag};return f()}\n";
     /* Compile the actual captured-body declaration instead of a second fixture
      * spelling that could diverge from the standard library. */
     FILE *file=fopen(XR_SOURCE_STDLIB "/_probe/_probe.xr","rb");
@@ -411,7 +417,7 @@ static void check_source_bounds(const XrXirArtifact *artifact,bool consumer) {
     CHECK(module->functions[source_named_function(module,"raw")].error_type==
         (consumer ? XR_XIR_ERROR : XR_XIR_NEVER));
     const char *empty[]={"probeMakeAdder","makeGeneric","makeCell","makeSlot","makeText",
-        "filterEqual","filterRemainder","filterCaptured"};
+        "filterEqual","filterRemainder","filterCaptured","makeCounter"};
     for (size_t i=0;i<sizeof(empty)/sizeof(empty[0]);++i) {
         const XrXirFunction *closure=&module->functions[source_closure_function(module,empty[i])];
         if (closure->error_type!=XR_XIR_NEVER)
@@ -421,6 +427,14 @@ static void check_source_bounds(const XrXirArtifact *artifact,bool consumer) {
     CHECK(module->functions[source_closure_function(module,"makeIndirect")].error_type==XR_XIR_ERROR);
     CHECK(module->functions[source_closure_function(module,"equalFloatControl")].error_type==XR_XIR_ERROR);
     CHECK(module->functions[source_closure_function(module,"notEqualControl")].error_type==XR_XIR_ERROR);
+    CHECK(module->functions[source_closure_function(module,"writeBoolControl")].error_type==XR_XIR_ERROR);
+    const XrXirFunction *composed=&module->functions[source_closure_function(module,"makeComposed")];
+    CHECK(composed->error_type==XR_XIR_ERROR && composed->parameter_count==3);
+    for (uint32_t p=0;p<2;++p) {
+        const XrXirTypeNode *signature=xr_xir_callable_signature(module->types,composed->parameters[p]);
+        CHECK(signature && signature->element==XR_XIR_UNIT);
+    }
+    CHECK(composed->parameters[2]==XR_XIR_I64);
     if (consumer) {
         CHECK(module->functions[source_closure_function(module,"viaClosure")].error_type==XR_XIR_NEVER);
         CHECK(module->functions[source_closure_function(module,"viaWide")].error_type==XR_XIR_ERROR);

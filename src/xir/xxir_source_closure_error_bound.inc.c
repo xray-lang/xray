@@ -26,18 +26,22 @@ static bool source_closure_call_never(SourceContext *ctx,const XrXirInstruction 
     return true;
 }
 
-static bool source_closure_operand_i64(SourceContext *ctx,uint32_t ordinal,uint32_t value) {
+static XrXirType source_closure_operand_type(SourceContext *ctx,uint32_t ordinal,uint32_t value) {
     /* Instructions are not published yet. Parameters and earlier owned recipes
      * are the only type authority while the anonymous body is unfinished. */
     const XrXirFunction *function=&ctx->functions[ctx->function];
     const SourceFunction *body=&ctx->bodies[ctx->function];
     if (value<function->parameter_count)
-        return function->parameters && function->parameters[value]==XR_XIR_I64;
+        return function->parameters ? function->parameters[value] : XR_XIR_UNIT;
     uint32_t index=value-function->parameter_count;
-    if (!body->recipes || index>=ordinal || index>=body->count) return false;
+    if (!body->recipes || index>=ordinal || index>=body->count) return XR_XIR_UNIT;
     const SourceInstructionRecipe *recipe=&body->recipes[index];
-    return recipe->owner==ctx->function && recipe->value==value &&
-        recipe->instruction.type==XR_XIR_I64;
+    return recipe->owner==ctx->function && recipe->value==value ?
+        recipe->instruction.type : XR_XIR_UNIT;
+}
+
+static bool source_closure_operand_i64(SourceContext *ctx,uint32_t ordinal,uint32_t value) {
+    return source_closure_operand_type(ctx,ordinal,value)==XR_XIR_I64;
 }
 
 static bool source_closure_recipe_never(SourceContext *ctx,const XrXirInstruction *op,
@@ -62,6 +66,19 @@ static bool source_closure_recipe_never(SourceContext *ctx,const XrXirInstructio
             source_closure_operand_i64(ctx,ordinal,op->args[0]) &&
             source_closure_operand_i64(ctx,ordinal,op->args[1]);
         return true;
+    case XR_XIR_CELL_WRITE:
+        *output=op->type==XR_XIR_UNIT &&
+            xr_xir_cell_element(&ctx->types,source_closure_operand_type(ctx,ordinal,op->args[0]))==XR_XIR_I64 &&
+            source_closure_operand_i64(ctx,ordinal,op->args[1]);
+        return true;
+    case XR_XIR_CALL_INDIRECT: {
+        *output=false;
+        if (op->immediate<0 || (uint64_t)op->immediate>UINT32_MAX) return true;
+        XrXirType type=source_closure_operand_type(ctx,ordinal,(uint32_t)op->immediate);
+        const XrXirTypeNode *signature=xr_xir_callable_signature(&ctx->types,type);
+        *output=signature && signature->element==XR_XIR_NEVER && signature->result==op->type;
+        return true;
+    }
     case XR_XIR_CALL:
         return source_closure_call_never(ctx,op,output);
     default:
