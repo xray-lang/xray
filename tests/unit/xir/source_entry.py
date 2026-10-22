@@ -35,7 +35,7 @@ def main() -> int:
         return value
 
     peer = args.output / "peer.xr"
-    peer.write_text('fn start()->i64{print("init");return 40}\nvar state=start()\nexport fn value()->i64{return state+2}\n', encoding="utf-8")
+    peer.write_text('fn start()->i64{print("init");return 40}\nconst state=start()\nexport fn value()->i64{return state+2}\n', encoding="utf-8")
     cases = {
         "state_and_entry": ('import "./peer" as peer\nfn main(){print("unexpected")}\nif(peer.value()==42){print("entry")}\n', b"init\nentry\n"),
         "ordinary_main": ('fn main()->i64{return 7}\nprint(main())\n', b"7\n"),
@@ -57,6 +57,7 @@ def main() -> int:
 
     for name, text, rejected in (
         ("library_declarations", 'fn start()->i64{return 7}\nconst state=start()\nexport fn value()->i64{return state}\n', False),
+        ("library_mutable_initialization", 'fn start()->i64{return 7}\nvar state=start()\nexport fn value()->i64{return state}\n', False),
         ("library_statement", 'export fn value()->i64{return 7}\nprint("bad")\n', True),
     ):
         source = args.output / (name + ".xr")
