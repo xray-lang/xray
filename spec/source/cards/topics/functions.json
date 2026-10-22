@@ -25,7 +25,8 @@
       "heading": "Default parameters",
       "fences": [
         "decl-fn-default"
-      ]
+      ],
+      "markdown": "The function's throws clause bounds its body. Only omitted arguments evaluate their defaults and contribute escaping default errors to the call; explicitly supplied arguments skip those defaults. Throwing calls inside default expressions require their own try at the declaration, independently of the caller's propagation marker."
     },
     {
       "heading": "Multiple return values",
@@ -54,7 +55,7 @@
     },
     {
       "heading": "Error signatures and external verification",
-      "markdown": "- A named function without `throws` is non-throwing; `throws(Never)` is equivalent\n- `throws(E)` is part of the signature; bare `throws` means `throws(Error)`\n- Error checking is local to each body and uses callee signatures\n- Propagating calls require `try`, or a `try { } catch` handling region\n- Module top-level code and main implicitly allow errors, but still require propagation markers\n- Throwing public standard-library APIs require typed errors, including constrained generics; freestanding and @strict(alloc) reject erased throws\n- `xray verify` checks target artifact shape and no longer accepts `no_throw`"
+      "markdown": "- A named function without `throws` is non-throwing; `throws(Never)` is equivalent\n- `throws(E)` is part of the signature; bare `throws` means `throws(Error)`\n- Error checking is local to each body and uses callee signatures\n- Propagating calls require `try`, or a `try { } catch` handling region\n- Only the entry file may contain executable top-level statements. Entry-file top-level code and module-state initialization implicitly allow errors, with propagation markers; main is an ordinary function\n- Throwing public standard-library APIs require typed errors, including constrained generics; freestanding and @strict(alloc) reject erased throws\n- `xray verify` checks target artifact shape and no longer accepts `no_throw`"
     },
     {
       "heading": "Higher-order functions",

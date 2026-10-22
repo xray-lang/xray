@@ -162,6 +162,8 @@ connect("localhost", 443, true)
 - 默认参数只作用于**具名函数/方法/构造器的直接调用**。通过函数值（函数类型变量）的间接调用不携带默认表达式，必须传入全部实参。
 - 默认表达式在声明方模块、类型参数和成员权限作用域内按参数类型检查，包括未使用的声明；不引用调用方局部变量。本次调用的形参（包括前面的形参）及 `this` 不在默认表达式作用域内。普通泛型只使用定义处约束，不因某个具体实例而获得额外能力。
 - 接收者或被调用表达式先求值，然后显式实参从左到右求值，最后省略的尾部参数按声明顺序各求值一次。显式实参不执行对应默认表达式。默认表达式可以有普通已准入函数效应；挂起、失败和拥有式结果清理遵循普通调用规则，失败不回滚先前副作用，也不进入尚未开始的被调用函数体。
+- 函数的 `throws(E)` 只约束函数体，不包含调用方执行的参数默认表达式。调用的错误包含被调声明的错误，以及本次实际执行的默认表达式逃逸的错误；显式实参不承担被跳过默认表达式的错误。按实际泛型实参替换后再检查这一规则，不把所有默认值的错误无条件并入函数签名。
+- 默认表达式中的抛错调用仍须在声明处有自己的传播标记，调用方的外层 `try` 不能代替它。例如 `fn f(x: i64 = try read()) {}` 可有不抛错的函数体；省略参数的 `try f()` 承担默认值错误，显式 `f(1)` 不承担。遗漏默认表达式内的 `try` 或省略参数时缺少所需的调用点标记均报错；`try { } catch` 区域仍按 §8 的普通规则处理。
 - 默认表达式可以使用声明方可访问的私有名称；导出调用方不因此获得这些名称的直接访问权限。默认表达式先在声明处检查，再通过同一 Checked 特化与复验管线执行；不能依靠调用方重新绑定名称或运行时 AST 展开绕过权限。构造参数默认值在字段默认初始化及构造器体之前执行，不可观察部分构造的 `this`。
 
 - 普通泛型调用先从显式参数和已有结果期待完成实参推导及完整约束验证，再计算缺省参数；被省略的默认表达式不额外提供调用方类型推导证据。默认表达式自身仍在声明处按泛型参数类型及原约束检查。
@@ -600,6 +602,8 @@ class Vector2 {
 - 构造器参数**类型可省**——若参数名与字段同名，从字段类型自动推断；其他情况必须显式声明类型，不得从调用位点倒推定义的类型或能力。
 - 构造器隐式返回 `this`（编译期注入）。
 - struct 显式构造器按字段声明顺序先执行声明处的默认表达式；无声明默认表达式的字段保持未初始化（包括数值字段），由构造体负责初始化。只有没有显式构造器时才生成合法的默认构造器。
+- 合法的隐式构造器从字段初始化局部推导错误类型；有业务错误可能逃逸时，构造调用须按 §8 标记或处理。它不从调用方或全程序错误集合推导，不抛错的字段初始化不引入错误。
+- 显式 `init` 的 `throws(E)` 必须覆盖字段初始化和构造器体逃逸的错误；省略该子句时两者均不得有业务错误逃逸。构造参数默认值按 §5.2.2 在调用点单独计入，不能与字段初始化混为同一个默认值错误合同。
 - 字段读取前必须在每条到达路径上完成初始化；整体 `this` 的返回、方法调用或闭包捕获要求所有字段初始化。正常结束和无值 `return` 都返回完整的 `this`，构造器不能显式返回另一个值。失败不发布部分结构体，已执行的外部副作用不回滚。
 - const 字段的声明默认表达式或构造体赋值构成唯一初始化；存在任一路径已初始化时不能再次赋值，循环回边也参与检查。mutable 字段初始化后可继续更新。
 - 构造器的自然结束与无值 `return` 都先执行退出清理，再从已初始化字段组装并发布完整的 `this`。清理对 mutable 字段的合法更新进入最终构造结果；失败不发布结果。普通函数显式返回表达式先取值、再清理的值快照规则不因此改变。
@@ -1457,6 +1461,8 @@ connect("localhost", 443, true)
 - Default arguments apply only to **direct calls of a named function/method/constructor**. A call through a function value (a function-typed variable) carries no default expressions and must pass every argument.
 - Default expressions are checked against the parameter type in the declaring module, type-parameter and member-authority scope, including unused declarations; they cannot reference caller locals. Parameters of this invocation (including preceding parameters) and `this` are not in default-expression scope. Ordinary generics use only their definition constraints, without gaining capabilities from a concrete instance.
 - Evaluate the receiver or callee first, explicit arguments left to right next, and omitted trailing defaults once each in declaration order last. An explicit argument suppresses its default. Defaults permit ordinary admitted function effects; suspension, failure and owned-result cleanup follow ordinary call rules. Failure preserves earlier side effects and does not enter a callee body that has not started.
+- A function's `throws(E)` bounds only its body, excluding parameter defaults evaluated by the caller. A call includes the declared callee errors and errors escaping the defaults actually evaluated for that call; explicit arguments incur no errors from skipped defaults. Apply actual generic substitution before checking this rule; do not unconditionally add every default's errors to the function signature.
+- A throwing call inside a default expression still needs its own propagation marker at the declaration; an outer `try` at the caller does not replace it. For example, `fn f(x: i64 = try read()) {}` may have a non-throwing body: omitting the argument in `try f()` incurs the default's errors, whereas `f(1)` does not. Missing the inner `try` or a required marker at an omitting call is an error; ordinary `try { } catch` regions continue to follow §8.
 - Defaults may use private names accessible to their declaration; exported callers gain no direct access to those names. Check defaults at their declaration and execute through the same Checked specialization and revalidation pipeline, without caller-side rebinding or runtime AST expansion that bypasses authority. Constructor argument defaults run before field defaults and the constructor body and cannot observe partially constructed `this`.
 
 - Ordinary generic calls complete type-argument inference and all constraint proofs from explicit arguments and existing result context before evaluating omitted defaults. An omitted default contributes no additional caller-side inference evidence; its definition still checks against the formal generic type and original constraints.
@@ -1886,6 +1892,8 @@ class Vector2 {
 - Constructor parameters **may omit their types**—if a parameter shares a name with a field, the type is inferred from that field; otherwise an explicit type is required; call sites do not infer definition types or capabilities.
 - The constructor implicitly returns `this` (compiler-injected).
 - An explicit struct constructor evaluates declaration defaults in field declaration order before its body. Fields without a declaration default remain uninitialized, including numeric fields. A legal default constructor is synthesized only when no explicit constructor is declared.
+- A legal implicit constructor infers its error type locally from field initialization; a construction call must mark or handle escaping business errors under §8. It does not infer from the caller or whole-program error sets, and non-throwing field initialization contributes no error.
+- An explicit `init` must declare a `throws(E)` covering errors escaping both field initialization and its body; omitting the clause permits no business error to escape either region. Constructor parameter defaults contribute separately at the call site under §5.2.2; they are distinct from field-initialization errors.
 - A field read requires initialization on every incoming path. Returning the whole `this`, calling a method on it, or capturing it requires every field to be initialized. Normal completion and bare `return` return the complete `this`; constructors cannot explicitly return another value. Failure publishes no partial struct and does not roll back prior external effects.
 - Constructor fallthrough and bare `return` both execute exit cleanup before assembling and publishing the complete `this` from initialized fields. Permitted cleanup updates to mutable fields become part of the constructed result; failure publishes no result. This does not change ordinary explicit return expressions, whose values are evaluated and snapshotted before cleanup.
 - A const field is initialized exactly once by its declaration default or a body assignment. A write is rejected if any incoming path may already have initialized it, including loop backedges. Mutable fields permit subsequent updates.

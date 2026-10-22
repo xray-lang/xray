@@ -26,7 +26,7 @@
     {
       "heading": "Features",
       "bullets": [
-        "`constructor()` is called through `ClassName(...)`",
+        "`init(...)` declares the constructor called through `ClassName(...)`",
         "`extends` enables single inheritance",
         "actual overrides require `override` and a matching inherited method signature and receiver contract",
         "`final class` prevents inheritance",
@@ -35,6 +35,10 @@
         "`private` restricts access to the declaring class",
         "`this` is the current instance; `super` refers to the parent class"
       ]
+    },
+    {
+      "heading": "Constructor errors",
+      "markdown": "Implicit constructors infer errors locally from field initialization. Explicit init throws clauses cover both field initialization and the constructor body; omitting throws permits no escaping business error. Constructor argument defaults remain separate call-site computations under the default-parameter rules."
     }
   ]
 }

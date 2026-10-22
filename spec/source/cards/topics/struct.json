@@ -13,6 +13,10 @@
       "fences": [
         "decl-struct-point"
       ]
+    },
+    {
+      "heading": "Constructor errors",
+      "markdown": "A legal implicit constructor infers field-initialization errors locally. An explicit init must cover errors escaping field initialization and its body in its throws clause; no clause means neither may leak a business error. Omitted parameter defaults contribute separately at the call site."
     }
   ]
 }
