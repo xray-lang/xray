@@ -71,6 +71,73 @@ static void test_recursive_and_loop(void) {
     xr_rbc_program_destroy(program);
 }
 
+static void test_location_ownership(void) {
+    XrLirModule *m = NULL;
+    OK(xr_lir_module_create(NULL, &m));
+    XrLirFunction helper = test_function(m, "helper", NULL, 0, XR_LIR_I64);
+    XrLirFunction root = test_function(m, "root", NULL, 0, XR_LIR_I64);
+    XrLirFunction unused = test_function(m, "unused", NULL, 0, XR_LIR_I64);
+    char path[400];
+    memset(path, 'p', sizeof(path));
+    memcpy(path + sizeof(path) - 7, "\xc3\xa9\n.xr!", 7);
+    XrLirSource source = {path, sizeof(path) - 1, 7, 9, 7, 9};
+    XrLirBlock finish = test_block(m, root, NULL, 0);
+    XrLirBlock entry = test_block(m, root, NULL, 0);
+    OK(xr_lir_set_entry(m, root, entry));
+    XrLirInstruction instruction = {.op = XR_LIR_CONST, .type = XR_LIR_I64,
+        .bits = 1, .source = source};
+    XrLirValue ignored;
+    OK(xr_lir_emit_value(m, entry, &instruction, &ignored));
+    XrLirValue value = call(m, entry, helper, XR_LIR_I64, NULL, 0);
+    test_branch(m, entry, finish, NULL, 0);
+    instruction = (XrLirInstruction) {.op = XR_LIR_RET, .type = XR_LIR_UNIT,
+        .operands = &value, .operand_count = 1, .source = source};
+    OK(xr_lir_set_terminator(m, finish, &instruction));
+    XrLirBlock block = test_block(m, helper, NULL, 0);
+    OK(xr_lir_set_entry(m, helper, block));
+    instruction = (XrLirInstruction) {.op = XR_LIR_CONST, .type = XR_LIR_I64,
+        .bits = 7, .source = {"helper.xr", 9, 99, 2, 100, 3}};
+    OK(xr_lir_emit_value(m, block, &instruction, &value));
+    test_return(m, block, value);
+    block = test_block(m, unused, NULL, 0);
+    OK(xr_lir_set_entry(m, unused, block));
+    instruction.source.line = 200;
+    instruction.source.end_line = 201;
+    OK(xr_lir_emit_value(m, block, &instruction, &value));
+    test_return(m, block, value);
+    OK(xr_lir_module_finish(m, NULL));
+    XrRbcProgram *program = compile(m, root);
+    XrtLocationOwner *owner = xr_rbc_program_locations(program);
+    CHECK(owner && xrt_locations_count(owner) == 3);
+    CHECK(xrt_locations_retain(owner));
+    xr_lir_module_destroy(m);
+    CHECK(run(program, NULL, 0) == 7);
+    xr_rbc_program_destroy(program);
+    const XrtSourceLocation *first = xrt_locations_get(owner, 1);
+    const XrtSourceLocation *duplicate = xrt_locations_get(owner, 2);
+    const XrtSourceLocation *last = xrt_locations_get(owner, 3);
+    CHECK(first && duplicate && last && first->path_length == sizeof(path) - 1);
+    CHECK(!memcmp(first->path, path, sizeof(path) - 1));
+    memset(path, '?', sizeof(path));
+    CHECK(first->line == 7 && duplicate->line == 7 && last->line == 99);
+    CHECK(first->column == 9 && first->end_line == 7 && first->end_column == 9);
+    CHECK(!memcmp(first->path, duplicate->path, first->path_length));
+    CHECK(last->path_length == 9 && !memcmp(last->path, "helper.xr", 9));
+    CHECK(!xrt_locations_get(owner, 0) && !xrt_locations_get(owner, 4));
+    xrt_locations_release(owner);
+    CHECK(!xr_rbc_program_locations(NULL));
+
+    m = test_sum();
+    OK(xr_lir_function_at(m, 1, &root));
+    program = compile(m, root);
+    owner = xr_rbc_program_locations(program);
+    CHECK(owner && !xrt_locations_count(owner) && xrt_locations_retain(owner));
+    xrt_locations_release(owner);
+    CHECK(!xrt_locations_count(xr_rbc_program_locations(program)));
+    xr_rbc_program_destroy(program);
+    xr_lir_module_destroy(m);
+}
+
 static void test_comparisons(void) {
     const uint64_t inputs[][2] = {{0, 0}, {UINT64_MAX, 2}, {INT64_MAX, UINT64_C(1) << 63}};
     const bool expected[][6] = {{true, false, false, true, false, true},
@@ -503,6 +570,7 @@ static void test_f64_constants_and_refusals(void) {
 
 int main(void) {
     test_recursive_and_loop();
+    test_location_ownership();
     test_comparisons();
     test_arithmetic();
     test_constants_and_bool_calls();

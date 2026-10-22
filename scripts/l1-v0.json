@@ -3,6 +3,7 @@
   "targets": [
     "xray",
     "test_native_runtime_clients",
+    "test_native_locations",
     "test_unit_framework_probe",
     "test_cli_spec",
     "test_cli_toolchain_config",
@@ -37,6 +38,7 @@
   "tests": [
     "test_cli_usability",
     "native_runtime_output",
+    "native_location_owner",
     "native_runtime_failures",
     "native_runtime_link_contract",
     "unit_framework_reports_success",

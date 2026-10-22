@@ -15,6 +15,7 @@
 
 #include "xrbc.h"
 #include "lir/xlir.h"
+#include "runtime/native/xnative_locations.h"
 
 typedef struct XrRbcProgram XrRbcProgram;
 typedef enum {
@@ -44,5 +45,8 @@ XR_FUNC XrRbcStatus xr_rbc_program_run(const XrRbcProgram *program, const uint64
     size_t argument_count, uint64_t *result);
 // The view and everything reachable through it borrow the program.
 XR_FUNC const XrRbcModule *xr_rbc_program_view(const XrRbcProgram *program);
+// Borrowed immutable metadata, including a real owner for empty tables. Retain
+// before using it beyond Program destruction; release only references you own.
+XR_FUNC XrtLocationOwner *xr_rbc_program_locations(const XrRbcProgram *program);
 
 #endif  // XRBC_LIR_H

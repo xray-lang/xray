@@ -87,6 +87,30 @@ static uint64_t run(XrRbcProgram *program, uint64_t argument) {
     return result;
 }
 
+static void metadata_lifetime(void) {
+    XrLirLowered lowered = lower("fn value(x:i64)->i64{return x+1}\nvalue(9)\n");
+    XrRbcProgram *program = NULL;
+    CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, NULL) == XR_RBC_COMPILE_OK);
+    XrtLocationOwner *owner = xr_rbc_program_locations(program);
+    CHECK(owner && xrt_locations_count(owner) && xrt_locations_retain(owner));
+    XrtSourceLocation expected = *xrt_locations_get(owner, 1);
+    char *path = xr_malloc(expected.path_length);
+    CHECK(path);
+    memcpy(path, expected.path, expected.path_length);
+    // Source/session were retired by lower; now retire the last producer too.
+    xr_lir_lowered_free(&lowered);
+    uint64_t result = UINT64_MAX;
+    CHECK(xr_rbc_program_run(program, NULL, 0, &result) == XR_RBC_OK && result == 0);
+    xr_rbc_program_destroy(program);
+    const XrtSourceLocation *actual = xrt_locations_get(owner, 1);
+    CHECK(actual && actual->path_length == expected.path_length &&
+        !memcmp(actual->path, path, actual->path_length));
+    CHECK(actual->line == expected.line && actual->column == expected.column &&
+        actual->end_line == expected.end_line && actual->end_column == expected.end_column);
+    xr_free(path);
+    xrt_locations_release(owner);
+}
+
 static void numerical_oracles(void) {
     XrRbcProgram *fib = callable("fn fib(n:i64)->i64{if(n<2){return n}\n"
         "return fib(n-1)+fib(n-2)}\nprint(fib(10))\n");
@@ -202,6 +226,7 @@ static void f64_transport(void) {
 }
 
 int main(void) {
+    metadata_lifetime();
     numerical_oracles();
     actual_entry_and_refusal();
     f64_transport();

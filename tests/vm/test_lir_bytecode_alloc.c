@@ -56,6 +56,19 @@ static void *relocate(void *old, size_t size) {
 #define xr_calloc(count, size) allocate_zero(count, size)
 #define xr_realloc(old, size) relocate(old, size)
 #define xr_free(pointer) release(pointer)
+static bool fail_location_allocation;
+static void *allocate_location(size_t size) {
+    if (fail_location_allocation) {
+        fail_location_allocation = false;
+        return NULL;
+    }
+    return allocate(size);
+}
+#undef xr_malloc
+#define xr_malloc(size) allocate_location(size)
+#include "runtime/native/xnative_locations.c"
+#undef xr_malloc
+#define xr_malloc(size) allocate(size)
 #include "vm/register/xrbc_lir.c"
 
 int main(void) {
@@ -78,7 +91,14 @@ int main(void) {
         CHECK(xr_rbc_program_run(program, &n, 1, &result) == XR_RBC_OK && result == 144);
         xr_rbc_program_destroy(program);
     }
+    program = NULL;
+    fail_location_allocation = true;
+    CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_OUT_OF_MEMORY);
+    CHECK(!program && !fail_location_allocation && diagnostic.status == XR_RBC_COMPILE_OUT_OF_MEMORY);
+    CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    CHECK(xr_rbc_program_locations(program));
+    xr_rbc_program_destroy(program);
     xr_lir_module_destroy(m);
-    puts("lir_bytecode_alloc: passed (three representative failures, relocating buffers)");
+    puts("lir_bytecode_alloc: passed (representative compiler/owner failures, relocating buffers)");
     return 0;
 }

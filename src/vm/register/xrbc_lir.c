@@ -18,6 +18,7 @@
 
 struct XrRbcProgram {
     XrRbcModule module;
+    XrtLocationOwner *locations;
     XrLirType parameters[XR_RBC_REGISTER_COUNT_MAX];
     uint32_t parameter_count;
 };
@@ -397,7 +398,66 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
         xr_free((void *) program->module.functions[f].constants);
     }
     xr_free((void *) program->module.functions);
+    xrt_locations_release(program->locations);
     xr_free(program);
+}
+
+// Use the same retained function/block/instruction order as code emission.
+// Unknown source does not occupy an ID; equal locations remain distinct sites.
+static XrRbcCompileStatus rbc_lir_locations(const XrLirModule *input, const uint32_t *ids,
+    uint32_t count, XrRbcProgram *p, XrRbcCompileDiagnostic *d) {
+    XrtSourceLocation *locations = NULL;
+    size_t capacity = 0, used = 0;
+    XrRbcCompileStatus status = XR_RBC_COMPILE_OK;
+    for (uint32_t f = 0; f < count; ++f) {
+        XrLirFunction function = {input, ids[f]};
+        XrLirFunctionView view;
+        xr_lir_function_view(input, function, &view);
+        d->function = ids[f];
+        for (uint32_t b = 0; b < view.block_count; ++b) {
+            XrLirBlock block;
+            XrLirBlockView bv;
+            xr_lir_block_at(input, function, b, &block);
+            xr_lir_block_view(input, block, &bv);
+            for (uint32_t n = 0; n < bv.instruction_count; ++n) {
+                XrLirInstructionView instruction;
+                xr_lir_instruction_view(input, block, n, &instruction);
+                XrLirSource source = instruction.source;
+                if (!source.path_length) continue;
+                d->block = block.id;
+                d->instruction = n + 1;
+                if (used == UINT32_MAX || used >= SIZE_MAX / sizeof(*locations)) {
+                    status = rbc_lir_error(d, XR_RBC_COMPILE_LIMIT,
+                        "source location table exceeds address space", source);
+                    goto done;
+                }
+                if (used == capacity) {
+                    size_t maximum = SIZE_MAX / sizeof(*locations);
+                    size_t next = capacity ? (capacity > maximum / 2 ? maximum : capacity * 2) : 8;
+                    if (next > maximum) next = maximum;
+                    XrtSourceLocation *grown = xr_realloc(locations, next * sizeof(*locations));
+                    if (!grown) {
+                        status = rbc_lir_error(d, XR_RBC_COMPILE_OUT_OF_MEMORY,
+                            "cannot collect source locations", source);
+                        goto done;
+                    }
+                    locations = grown;
+                    capacity = next;
+                }
+                locations[used++] = (XrtSourceLocation) {source.path, source.path_length,
+                    source.line, source.column, source.end_line, source.end_column};
+            }
+        }
+    }
+    XrtLocationStatus created = xrt_locations_create(locations, used, &p->locations);
+    if (created != XRT_LOCATION_OK) {
+        status = created == XRT_LOCATION_OUT_OF_MEMORY ? XR_RBC_COMPILE_OUT_OF_MEMORY :
+            created == XRT_LOCATION_LIMIT ? XR_RBC_COMPILE_LIMIT : XR_RBC_COMPILE_INVALID;
+        rbc_lir_error(d, status, "cannot own source locations", (XrLirSource) {0});
+    }
+done:
+    xr_free(locations);
+    return status;
 }
 
 static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t *ids,
@@ -463,6 +523,9 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
         status = d->status;
         goto done;
     }
+    status = rbc_lir_locations(input, ids, count, p, d);
+    if (status != XR_RBC_COMPILE_OK) goto done;
+    status = XR_RBC_COMPILE_OUT_OF_MEMORY;
     XrRbcFunction *functions = xr_calloc(count, sizeof(*functions));
     if (!functions) {
         rbc_lir_error(d, status, "cannot allocate executable functions", (XrLirSource) {0});
@@ -493,4 +556,8 @@ XR_FUNC XrRbcStatus xr_rbc_program_run(const XrRbcProgram *p, const uint64_t *ar
 
 XR_FUNC const XrRbcModule *xr_rbc_program_view(const XrRbcProgram *program) {
     return program ? &program->module : NULL;
+}
+
+XR_FUNC XrtLocationOwner *xr_rbc_program_locations(const XrRbcProgram *program) {
+    return program ? program->locations : NULL;
 }
