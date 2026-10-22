@@ -136,6 +136,35 @@ static void source_rejected(const char *text) {
 static void put32(uint8_t *bytes, uint32_t value) {
     for (unsigned i = 0; i < 4; ++i) bytes[i] = (uint8_t)(value >> (8 * i));
 }
+static uint32_t get32(const uint8_t *bytes) {
+    uint32_t value = 0;
+    for (unsigned i = 0; i < 4; ++i) value |= (uint32_t)bytes[i] << (8 * i);
+    return value;
+}
+static void predecessor_rejected(Fixture *fixture, const char *path) {
+    FILE *file = fopen(path, "rb");
+    CHECK(file && !fseek(file, 0, SEEK_END));
+    long end = ftell(file);
+    CHECK(end >= 64 && !fseek(file, 0, SEEK_SET));
+    size_t length = (size_t)end;
+    uint8_t *bytes = xr_malloc(length);
+    CHECK(bytes && fread(bytes, 1, length, file) == length && !fclose(file));
+    CHECK(!memcmp(bytes, "XRCHK\0\0\0", 8));
+    CHECK(get32(bytes + 8) == 33 && get32(bytes + 12) == 93);
+    CHECK(XR_XIR_CHECKED_SCHEMA != 33 && XR_XIR_CHECKED_CONTRACT != 93);
+    XrSHA256Context hash;
+    uint8_t digest[32];
+    xr_sha256_init(&hash);
+    xr_sha256_update(&hash, bytes, 32);
+    xr_sha256_update(&hash, bytes + 64, length - 64);
+    xr_sha256_final(&hash, digest);
+    CHECK(!memcmp(digest, bytes + 32, sizeof(digest)));
+    XrXirArtifact *decoded = NULL;
+    CHECK(xr_xir_compile_checked_read(&fixture->context, bytes, length, &decoded, NULL) ==
+        XR_XIR_BAD_STRUCTURE);
+    CHECK(!decoded);
+    xr_free(bytes);
+}
 static void packet_rejected(Fixture *fixture, size_t at, unsigned field, uint32_t value,
     XrXirStatus expected, uint32_t instruction) {
     uint8_t *bytes = xr_malloc(fixture->packet.length);
@@ -271,7 +300,9 @@ int main(int argc, char **argv) {
     registry();
     Fixture fixture = fixture_new();
     if (argc == 3 && !strcmp(argv[1], "--emit")) { emit(&fixture, argv[2]); return 0; }
-    CHECK(argc == 1);
+    CHECK(argc == 3);
+    predecessor_rejected(&fixture, argv[1]);
+    predecessor_rejected(&fixture, argv[2]);
     invalid_packets(&fixture);
     consumers(&fixture);
     fixture_free(&fixture);
