@@ -35,7 +35,7 @@ for name in ('ErrorCapture','FormatCapture'):
     match=re.search(r'typedef struct(?: '+name+r')?\s*\{[^}]+\}\s*'+name+r';',text);assert match
     add(lang,name,match.group())
 for name in ('make_diagnostic','make_parser_diagnostics','make_format_result_content','format_error_callback'):fn(lang,name)
-for name in ('xmcp_make_error_result','xmcp_make_text_result','xmcp_make_text_structured_result'):fn('src/app/mcp/xmcp_tools.c',name)
+for name in ('xmcp_make_error_result','xmcp_make_text_result','xmcp_make_text_structured_result'):fn('src/app/mcp/xmcp_result.c',name)
 fn(lang,'xmcp_tool_xray_format')
 server='src/app/lsp/xlsp_server.c'
 text=(root/server).read_text(encoding='utf-8')

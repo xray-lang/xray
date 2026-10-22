@@ -8,6 +8,7 @@
 #include "app/lsp/xlsp_format.h"
 #include "app/lsp/xlsp_transport.h"
 #include "app/mcp/xmcp_tools_internal.h"
+#include "app/mcp/xmcp_json.h"
 #include "app/mcp/xmcp_server.h"
 #include "frontend/format/xfmt.h"
 #include "frontend/parser/xparse.h"
@@ -53,6 +54,7 @@ static void reset(void){CHECK(!live);attempts=0;fail_at=SIZE_MAX;limit_work=UINT
 static XrJsonValue *mcp(const char *code,bool tabs) {
     XmcpServer server={0};XmcpCallContext context={0};XrJsonValue *args=xjson_new_object();
     XJSON_SET_STRING(args,"code",code);XJSON_SET_INT(args,"indentSize",2);XJSON_SET_BOOL(args,"useTabs",tabs);
+    xmcp_json_begin();
     XrJsonValue *out=xmcp_tool_xray_format(&server,&context,args);xjson_free(args);CHECK(out && !live);return out;
 }
 static void mcp_cases(void){
