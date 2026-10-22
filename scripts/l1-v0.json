@@ -43,7 +43,8 @@
     "test_lir_sccp",
     "test_lir_sccp_faults",
     "test_lir_inline",
-    "test_lir_inline_faults"
+    "test_lir_inline_faults",
+    "test_lir_carriers"
   ],
   "tests": [
     "test_cli_usability",
@@ -106,7 +107,9 @@
     "test_lir_sccp_native",
     "test_lir_inline",
     "test_lir_inline_faults",
-    "test_lir_inline_native"
+    "test_lir_inline_native",
+    "test_lir_carriers",
+    "test_lir_carriers_native"
   ],
   "versionCommand": [
     "{build}/xray.exe",
