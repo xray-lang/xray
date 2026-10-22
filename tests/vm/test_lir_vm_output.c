@@ -125,7 +125,9 @@ static void next_execution(void) {
     CHECK(SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE) _get_osfhandle(_fileno(stdout))));
 #else
     int sink = open("/dev/null", O_WRONLY);
-    CHECK(sink >= 0 && dup2(sink, STDOUT_FILENO) >= 0 && close(sink) == 0);
+    CHECK(sink >= 0);
+    if (sink != STDOUT_FILENO)
+        CHECK(dup2(sink, STDOUT_FILENO) >= 0 && close(sink) == 0);
 #endif
     clearerr(stdout);
     CHECK(fflush(stdout) == 0);
