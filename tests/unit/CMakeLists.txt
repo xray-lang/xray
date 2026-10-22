@@ -4748,3 +4748,4 @@ set_tests_properties(test_xir_shared_interfaces test_xir_shared_interfaces_vecto
 include("${CMAKE_CURRENT_LIST_DIR}/xir/forin_full_runtime_fi.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/atomic_control_full_runtime_fi.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/source_entry.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/never_type.cmake")

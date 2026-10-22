@@ -31,7 +31,8 @@
     "test_lir_c",
     "test_lir_c_faults",
     "lir_c_run",
-    "xir_stdlib_checkedgen"
+    "xir_stdlib_checkedgen",
+    "test_xir_never_type"
   ],
   "tests": [
     "test_cli_usability",
@@ -78,7 +79,8 @@
     "test_lir_c_faults",
     "test_lir_c_native",
     "test_lir_c_runtime",
-    "test_source_entry"
+    "test_source_entry",
+    "test_xir_never_type"
   ],
   "versionCommand": [
     "{build}/xray.exe",

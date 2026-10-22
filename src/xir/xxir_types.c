@@ -346,7 +346,8 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
             const XrXirNominalNativeRecord *native=xr_xir_nominal_native_record(types,
                 (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+index));
             bool unit_payload=argument==XR_XIR_UNIT && count==1 && native && native->native_id==XR_NATIVE_DECLARATION_RECV;
-            if (!unit_payload && !nominal && !type_component(types, argument, index)) return XR_XIR_BAD_TYPE;
+            if (argument != XR_XIR_NEVER && !unit_payload && !nominal &&
+                !type_component(types, argument, index)) return XR_XIR_BAD_TYPE;
             uint32_t component = xr_xir_type_span(types, argument);
             if (component > span) span = component;
         }

@@ -13,7 +13,7 @@ XR_FUNC XrXirStatus xr_xir_compile_type_description(const XrXirCompileContext *c
     XrXirTypeDescription description = {0}; description.type = type;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     if (!node) {
-        if (type != XR_XIR_UNIT && type != XR_XIR_BOOL && type != XR_XIR_RUNE &&
+        if (type != XR_XIR_UNIT && type != XR_XIR_NEVER && type != XR_XIR_BOOL && type != XR_XIR_RUNE &&
             !xr_xir_type_is_number(type) && type != XR_XIR_STRING &&
             type != XR_XIR_ERROR && type != XR_XIR_PANIC_INFO) return XR_XIR_BAD_TYPE;
     } else {

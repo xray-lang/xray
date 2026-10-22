@@ -143,7 +143,7 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
         bool parameter = id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT;
         const XrXirConstraint *fact = parameter ? constraint_fact(environment,id-XR_XIR_TYPE_PARAMETER_BASE) : NULL;
         if (parameter ? (!fact || !(fact->markers & XR_XIR_CONSTRAINT_ERROR)) :
-            (type != XR_XIR_ERROR && !xr_xir_type_is_enum(types, type))) return XR_XIR_BAD_TYPE;
+            (type != XR_XIR_NEVER && type != XR_XIR_ERROR && !xr_xir_type_is_enum(types, type))) return XR_XIR_BAD_TYPE;
     }
     if (required & XR_XIR_CONSTRAINT_EQUAL) {
         XrXirStatus status = constraint_equal(environment,type,work);
@@ -191,7 +191,7 @@ static bool constraint_argument_shape(const XrXirTypes *types, XrXirType type, u
         return id - XR_XIR_TYPE_PARAMETER_BASE < count;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node ? node->parameter_span <= count : type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) ||
-        type == XR_XIR_STRING || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO;
+        type == XR_XIR_STRING || type == XR_XIR_NEVER || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO;
 }
 XrXirStatus xr_xir_compile_constraint_structure(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirConstraint constraint, uint32_t count) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
@@ -697,8 +697,8 @@ static XrXirStatus metadata_type_storage_prove(const XrXirCompileContext *compil
     XrXirCompileContext *budget = &compile_state;
     ConstraintProof proof = {0};
     XrXirStatus status = proof_begin(&proof,context,budget,NULL,NULL);
-    if (status == XR_XIR_OK && !constraint_argument_shape(proof.environment.types,type,
-        proof.environment.parameter_count)) status = XR_XIR_BAD_TYPE;
+    if (status == XR_XIR_OK && (type == XR_XIR_NEVER || !constraint_argument_shape(proof.environment.types,type,
+        proof.environment.parameter_count))) status = XR_XIR_BAD_TYPE;
     if (status == XR_XIR_OK) status = proof_type(&proof,type);
     return proof_run(&proof,status);
 }

@@ -13,7 +13,8 @@
 #define XXIR_TYPE_DESCRIPTION_H
 #include "xxir_nominal.h"
 
-/* Kind zero denotes a builtin scalar; other kinds are XrXirTypeKind values.
+/* Kind zero denotes a builtin type; Never has no value or layout. Other kinds
+ * are XrXirTypeKind values.
  * The original pool must be structurally admitted and remain unchanged while
  * these synchronous views are in use. References die with that pool. This is
  * not a pool certificate, an owning constant, or a visibility/access grant. */
