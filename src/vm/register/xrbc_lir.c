@@ -105,7 +105,8 @@ static bool rbc_lir_jump(RbcLirCompiler *c, uint32_t target) {
 }
 
 static bool rbc_lir_scalar(XrLirType type) {
-    return type == XR_LIR_I64 || type == XR_LIR_I1;
+    // Slot transport is bit-preserving; operation admission remains separate.
+    return type == XR_LIR_I64 || type == XR_LIR_I1 || type == XR_LIR_F64;
 }
 
 static XrLirSource rbc_lir_value_source(const XrLirModule *input, XrLirFunction f,

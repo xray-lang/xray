@@ -351,10 +351,10 @@ static void test_unused_and_invalid(void) {
     XrLirRegistry registry = {&intrinsic, 1};
     XrLirModule *m = NULL;
     OK(xr_lir_module_create(&registry, &m));
-    XrLirFunction unused = test_function(m, "unused_float", NULL, 0, XR_LIR_F64);
+    XrLirFunction unused = test_function(m, "unused_float", NULL, 0, XR_LIR_F32);
     XrLirBlock float_body = test_block(m, unused, NULL, 0);
     OK(xr_lir_set_entry(m, unused, float_body));
-    test_return(m, float_body, test_constant(m, float_body, XR_LIR_F64, 0));
+    test_return(m, float_body, test_constant(m, float_body, XR_LIR_F32, 0));
     XrLirFunction root = test_function(m, "root", NULL, 0, XR_LIR_I64);
     XrLirBlock body = test_block(m, root, NULL, 0);
     OK(xr_lir_set_entry(m, root, body));
@@ -431,6 +431,76 @@ static void test_owned_diagnostic_and_rejection(void) {
     CHECK(xr_rbc_compile(NULL, (XrLirFunction) {0}, &program, &diagnostic) == XR_RBC_COMPILE_INVALID);
 }
 
+static void test_f64_constants_and_refusals(void) {
+    const uint64_t bits[] = {0, UINT64_C(0x8000000000000000),
+        UINT64_C(0x7ff0000000000000), UINT64_C(0xfff0000000000000),
+        UINT64_C(0x7ff8000000000000)};
+    for (size_t n = 0; n < sizeof(bits) / sizeof(bits[0]); ++n) {
+        XrLirModule *m = NULL;
+        OK(xr_lir_module_create(NULL, &m));
+        XrLirFunction f = test_function(m, "constant", NULL, 0, XR_LIR_F64);
+        XrLirBlock b = test_block(m, f, NULL, 0);
+        OK(xr_lir_set_entry(m, f, b));
+        test_return(m, b, test_constant(m, b, XR_LIR_F64, bits[n]));
+        OK(xr_lir_module_finish(m, NULL));
+        XrRbcProgram *program = compile(m, f);
+        xr_lir_module_destroy(m);
+        CHECK(run(program, NULL, 0) == bits[n]);
+        xr_rbc_program_destroy(program);
+    }
+    const struct { XrLirOp op; XrLirType input, output; uint32_t arity; } cases[] = {
+        {XR_LIR_FADD, XR_LIR_F64, XR_LIR_F64, 2},
+        {XR_LIR_FSUB, XR_LIR_F64, XR_LIR_F64, 2},
+        {XR_LIR_FMUL, XR_LIR_F64, XR_LIR_F64, 2},
+        {XR_LIR_FDIV, XR_LIR_F64, XR_LIR_F64, 2},
+        {XR_LIR_FNEG, XR_LIR_F64, XR_LIR_F64, 1},
+        {XR_LIR_FCMP, XR_LIR_F64, XR_LIR_I1, 2},
+        {XR_LIR_ITOF, XR_LIR_I64, XR_LIR_F64, 1},
+        {XR_LIR_FCAST, XR_LIR_F64, XR_LIR_F64, 1},
+        {XR_LIR_INTCAST, XR_LIR_I64, XR_LIR_I64, 1}
+    };
+    for (size_t n = 0; n < sizeof(cases) / sizeof(cases[0]); ++n) {
+        XrLirModule *m = NULL;
+        OK(xr_lir_module_create(NULL, &m));
+        XrLirFunction f = test_function(m, "refused", &cases[n].input, 1, cases[n].output);
+        XrLirBlock b = test_block(m, f, NULL, 0);
+        OK(xr_lir_set_entry(m, f, b));
+        XrLirValue a = parameter(m, f, 0), arguments[] = {a, a}, result;
+        XrLirInstruction i = {.op = cases[n].op, .type = cases[n].output,
+            .operands = arguments, .operand_count = cases[n].arity,
+            .predicate = cases[n].op == XR_LIR_FCMP ? XR_LIR_EQ : XR_LIR_PREDICATE_NONE,
+            .source = {"refused.xr", 10, 3, 5, 3, 9}};
+        OK(xr_lir_emit_value(m, b, &i, &result));
+        test_return(m, b, result);
+        OK(xr_lir_module_finish(m, NULL));
+        XrRbcProgram *program = NULL;
+        XrRbcCompileDiagnostic diagnostic;
+        CHECK(xr_rbc_compile(m, f, &program, &diagnostic) == XR_RBC_COMPILE_UNSUPPORTED);
+        CHECK(!program);
+        xr_lir_module_destroy(m);
+        CHECK(!strcmp(diagnostic.path, "refused.xr") && diagnostic.line == 3);
+    }
+    // Unsupported value admission still owns the available defining location.
+    XrLirModule *m = NULL;
+    OK(xr_lir_module_create(NULL, &m));
+    XrLirFunction f = test_function(m, "f32_value", NULL, 0, XR_LIR_I64);
+    XrLirBlock b = test_block(m, f, NULL, 0);
+    OK(xr_lir_set_entry(m, f, b));
+    XrLirValue unused;
+    XrLirInstruction i = {.op = XR_LIR_CONST, .type = XR_LIR_F32, .bits = 0,
+        .source = {"unsupported-value.xr", 20, 7, 11, 7, 14}};
+    OK(xr_lir_emit_value(m, b, &i, &unused));
+    test_return(m, b, test_constant(m, b, XR_LIR_I64, 0));
+    OK(xr_lir_module_finish(m, NULL));
+    XrRbcProgram *program = NULL;
+    XrRbcCompileDiagnostic diagnostic;
+    CHECK(xr_rbc_compile(m, f, &program, &diagnostic) == XR_RBC_COMPILE_UNSUPPORTED);
+    CHECK(!program);
+    xr_lir_module_destroy(m);
+    CHECK(!strcmp(diagnostic.path, "unsupported-value.xr") && diagnostic.line == 7 &&
+        diagnostic.column == 11 && diagnostic.instruction == 1);
+}
+
 int main(void) {
     test_recursive_and_loop();
     test_comparisons();
@@ -446,6 +516,7 @@ int main(void) {
     test_call_capacity(254);
     test_unused_and_invalid();
     test_owned_diagnostic_and_rejection();
+    test_f64_constants_and_refusals();
     puts("lir_bytecode: passed");
     return 0;
 }

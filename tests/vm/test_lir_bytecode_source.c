@@ -10,6 +10,10 @@
 #include "lir/xlir_lower.h"
 #include "lir/xlir_verify.h"
 #include "vm/register/xrbc_lir.h"
+#include <fenv.h>
+#if defined(XR_ARCH_X86_64)
+#include <xmmintrin.h>
+#endif
 
 static XrLirLowered lower(const char *text) {
     SourceFixture source = source_fixture(text);
@@ -120,13 +124,87 @@ static void actual_entry_and_refusal(void) {
     CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, &diagnostic) ==
         XR_RBC_COMPILE_UNSUPPORTED && !program);
     xr_lir_lowered_free(&lowered);
-    CHECK(diagnostic.message[0] && diagnostic.path[0] && diagnostic.line == 4 &&
+    CHECK(diagnostic.message[0] && diagnostic.path[0] && diagnostic.line == 1 &&
         diagnostic.column && diagnostic.block && diagnostic.instruction);
+    lowered = lower("fn value(x:f64)->f64{\nreturn x+1.0\n}\nvalue(3.0)\n");
+    CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, &diagnostic) ==
+        XR_RBC_COMPILE_UNSUPPORTED && !program);
+    xr_lir_lowered_free(&lowered);
+    CHECK(diagnostic.path[0] && diagnostic.line == 2 && diagnostic.column);
+}
+
+static void f64_transport(void) {
+    XrLirLowered whole = lower("fn identity(x:f64)->f64{return x}\nidentity(1.25)\n");
+    XrRbcProgram *entry = NULL;
+    CHECK(xr_rbc_compile(whole.module, whole.entry, &entry, NULL) == XR_RBC_COMPILE_OK);
+    xr_lir_lowered_free(&whole);
+    uint64_t entry_result = UINT64_MAX;
+    CHECK(xr_rbc_program_run(entry, NULL, 0, &entry_result) == XR_RBC_OK && entry_result == 0);
+    xr_rbc_program_destroy(entry);
+    XrRbcProgram *identity = callable("fn identity(x:f64)->f64{return x}\nidentity(1.25)\n");
+    XrRbcProgram *swap = callable("fn swap(x:f64,y:f64)->f64{var a=x\nvar b=y\nvar i=0\n"
+        "while(i<3){const t=a\na=b\nb=t\ni=i+1}\nreturn b}\nswap(1.0,2.0)\n");
+    XrRbcProgram *recurse = callable("fn echo(n:i64,x:f64)->f64{if(n==0){return x}\n"
+        "return echo(n-1,x)}\necho(32,1.0)\n");
+    const uint64_t cases[] = {0, UINT64_C(0x8000000000000000),
+        UINT64_C(0x3ff0000000000000), UINT64_C(0xbff0000000000000),
+        1, UINT64_C(0x8000000000000001), UINT64_C(0x7ff0000000000000),
+        UINT64_C(0xfff0000000000000), UINT64_C(0x7ff8000000000000),
+        UINT64_C(0x7ff8deadbeef1234), UINT64_C(0x7ff0000000000001),
+        UINT64_C(0xfff0000000000001)};
+    const int modes[] = {FE_TONEAREST, FE_DOWNWARD, FE_UPWARD, FE_TOWARDZERO};
+    fenv_t original;
+    CHECK(fegetenv(&original) == 0);
+#if defined(XR_ARCH_X86_64)
+    unsigned original_control = _mm_getcsr();
+    const unsigned control_cases = 4;
+#else
+    const unsigned control_cases = 1;
+#endif
+    for (size_t mode = 0; mode < sizeof(modes) / sizeof(modes[0]); ++mode) {
+        CHECK(fesetround(modes[mode]) == 0);
+        for (unsigned control = 0; control < control_cases; ++control) {
+            CHECK(feclearexcept(FE_ALL_EXCEPT) == 0 && feraiseexcept(FE_INEXACT) == 0);
+#if defined(XR_ARCH_X86_64)
+            unsigned mask = (1u << 6) | (1u << 15);
+            _mm_setcsr((_mm_getcsr() & ~mask) | ((control & 1u) << 6) |
+                (((control >> 1) & 1u) << 15));
+            unsigned expected_control = _mm_getcsr();
+#endif
+            int flags = fetestexcept(FE_ALL_EXCEPT);
+            for (size_t n = 0; n < sizeof(cases) / sizeof(cases[0]); ++n) {
+                uint64_t value = cases[n], result = ~value;
+                CHECK(xr_rbc_program_run(identity, &value, 1, &result) == XR_RBC_OK &&
+                    result == value);
+                uint64_t arguments[] = {value, cases[(n + 1) % (sizeof(cases) / sizeof(cases[0]))]};
+                result = ~value;
+                CHECK(xr_rbc_program_run(swap, arguments, 2, &result) == XR_RBC_OK &&
+                    result == value);
+                arguments[0] = 32;
+                arguments[1] = value;
+                result = ~value;
+                CHECK(xr_rbc_program_run(recurse, arguments, 2, &result) == XR_RBC_OK &&
+                    result == value);
+                CHECK(fegetround() == modes[mode] && fetestexcept(FE_ALL_EXCEPT) == flags);
+#if defined(XR_ARCH_X86_64)
+                CHECK(_mm_getcsr() == expected_control);
+#endif
+            }
+        }
+    }
+    CHECK(fesetenv(&original) == 0);
+#if defined(XR_ARCH_X86_64)
+    _mm_setcsr(original_control);
+#endif
+    xr_rbc_program_destroy(identity);
+    xr_rbc_program_destroy(swap);
+    xr_rbc_program_destroy(recurse);
 }
 
 int main(void) {
     numerical_oracles();
     actual_entry_and_refusal();
+    f64_transport();
     puts("Source-backed bytecode integration passed");
     return 0;
 }

@@ -54,6 +54,9 @@ foreach(target lir_vm_run test_lir_bytecode_source)
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
     endif()
 endforeach()
+if(UNIX)
+    target_link_libraries(test_lir_bytecode_source PRIVATE m)
+endif()
 add_test(NAME lir_bytecode_source COMMAND test_lir_bytecode_source)
 add_test(NAME lir_vm_source COMMAND ${XRAY_PYTHON} -X utf8
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_lir_vm_run.py
