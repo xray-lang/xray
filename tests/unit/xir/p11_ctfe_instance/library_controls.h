@@ -202,6 +202,27 @@ static void library_slot_catalog_controls(void) {
     xr_compile_resources_release(context.resources);
     fprintf(stderr,"Slot facts: actual Catalog private storage, selected function alias, retired packet/catalog, VM42 and private/export-state refusals PASS\n");
 }
+static void library_slot_source_import_controls(void) {
+    XrXirCompileContext context;context_new(&context);char root[1024],peer[1024];
+    CHECK(snprintf(root,sizeof(root),"%s/slot-source-root.xr",MATERIALIZATION_ROOT)>0);
+    CHECK(snprintf(peer,sizeof(peer),"%s/slot-source-peer.xr",MATERIALIZATION_ROOT)>0);
+    char root_text[]="import \"./slot-source-peer\" as peer;fn main()->i64{return 7};export fn run()->i64{return peer.value()}";
+    char peer_text[]="fn start()->i64{return 40};const state=start();export fn value()->i64{return state+2}";
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,MATERIALIZATION_ROOT};
+    XrModuleOverlayInput overlays[]={{authority,"slot-source-root.xr",root,root_text,sizeof(root_text)-1},
+        {authority,"slot-source-peer.xr",peer,peer_text,sizeof(peer_text)-1}};
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrXirSourceRequest request={session,root,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    XrXirStatus status=xr_xir_compile_source_check_overlay(&request,overlays,2,&source,&diagnostic,NULL);
+    if (status!=XR_XIR_OK) fprintf(stderr,"Source import slot status%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
+    CHECK(status==XR_XIR_OK && source.checked && source.checked->module.declarations->module_count>=2);
+    const char *const names[]={"state"};library_slot_names(source.checked->construction,names,1);
+    XrXirArtifact *owned=source.checked;source.checked=NULL;xr_xir_compile_source_result_free(&source);
+    xr_compile_session_free(session);memset(root_text,0xa5,sizeof(root_text));memset(peer_text,0xa5,sizeof(peer_text));
+    memset(overlays,0xa5,sizeof(overlays));library_slot_program(owned,names,1);xr_compile_resources_release(context.resources);
+    fprintf(stderr,"Two real Source namespaces preserve imported private state after producer retirement; module initializers and run42 PASS\n");
+}
 typedef struct LibrarySlotAst {
     XrCompilerSession *session;
     XrXirSourceAst input;
@@ -314,6 +335,7 @@ static void library_slot_forward_controls(void) {
 static void library_comptime_controls(void) {
     library_slot_fact_controls();
     library_slot_catalog_controls();
+    library_slot_source_import_controls();
     library_slot_forward_controls();
     XrXirCompileContext context;context_new(&context);XrXirArtifact *source=NULL,*received=NULL;
     CHECK(library_comptime_operation(&context,"fresh",&source)==XR_XIR_OK);

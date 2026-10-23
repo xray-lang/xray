@@ -13,7 +13,12 @@ static bool source_slot_facts_prepare(SourceContext *ctx,XrXirSlotFacts *output)
     if (ctx->slot_count>ctx->slot_capacity ||
         (ctx->slot_count && (!ctx->slots || !ctx->slot_facts || !ctx->slot_fact_present)))
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source slot fact capacity is incomplete");
-    for (uint32_t m=0;m<ctx->module_count;++m) {
+    uint32_t previous_module=ctx->module;
+    /* Artifact modules include received Checked internals without a Source
+     * namespace. Their facts were copied with the actual library slot map. */
+    for (uint32_t m=0;m<(uint32_t)ctx->graph->spec_count;++m) {
+        if (source_owned_checked(&ctx->graph->specs[m])) continue;
+        ctx->module=m;
         for (const SourceName *name=ctx->names[m];name;name=name->next) {
             if (!source_work(ctx,name->node)) return false;
             if (name->kind!=SOURCE_SLOT && name->kind!=SOURCE_UNIT_SLOT) continue;
@@ -21,7 +26,7 @@ static bool source_slot_facts_prepare(SourceContext *ctx,XrXirSlotFacts *output)
             if (slot>=ctx->slot_count)
                 return source_fail(ctx,name->node,XR_XIR_BAD_STRUCTURE,"source slot name lost its actual coordinates");
             if (ctx->slot_fact_present[slot]) continue;
-            if (name->module!=m || ctx->slots[slot].module!=m || name->checked_library || !name->node || (!name->hidden &&
+            if (ctx->slots[slot].module!=m || name->checked_library || !name->node || (!name->hidden &&
                 name->node->type!=AST_VAR_DECL && name->node->type!=AST_CONST_DECL &&
                 name->node->type!=AST_DESTRUCTURE_DECL))
                 return source_fail(ctx,name->node,XR_XIR_BAD_STRUCTURE,"source slot has no declaration facts");
@@ -31,6 +36,7 @@ static bool source_slot_facts_prepare(SourceContext *ctx,XrXirSlotFacts *output)
                 !source_slot_fact(ctx,slot,name->name,(uint32_t)length,exported)) return false;
         }
     }
+    ctx->module=previous_module;
     for (uint32_t s=0;s<ctx->slot_count;++s) {
         if (!source_work(ctx,NULL)) return false;
         if (!ctx->slot_fact_present[s] || ctx->slot_facts[s].slot!=s)
