@@ -87,25 +87,48 @@ static XrXirLibraryCatalog *prelude_endian_catalog(const XrXirCompileContext *co
     memset(logical,0,sizeof(logical));memset(space,0,sizeof(space));memset(physical,0,strlen(physical));policy.free(policy.context,physical);
     return catalog;
 }
+static char *prelude_endian_catalog_locator(const XrXirLibraryCatalog *catalog) {
+    size_t count=0;const char *selected=NULL;
+    const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources_v2(catalog,&count);
+    for (size_t i=0;i<count;++i) if (resources[i].canonical && !strcmp(resources[i].canonical,XIR_PRELUDE_CANONICAL)) {
+        CHECK(!selected && resources[i].source_locator);selected=resources[i].source_locator;
+    }
+    CHECK(selected);size_t bytes=strlen(selected)+1;char *owned=xr_malloc(bytes);CHECK(owned);
+    memcpy(owned,selected,bytes);return owned;
+}
+static void prelude_endian_snapshot_path(const XrXirSourceResult *result,const char *expected) {
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(result->snapshot);CHECK(view && view->complete);
+    uint32_t matches=0;
+    for (uint32_t i=0;i<view->module_count;++i) if (!strcmp(view->modules[i].identity,XIR_PRELUDE_CANONICAL)) {
+        CHECK(++matches==1);
+        if (expected) CHECK(view->modules[i].path && !strcmp(view->modules[i].path,expected));
+        else CHECK(!view->modules[i].path);
+    }
+    CHECK(matches==1);
+}
 static void prelude_endian_owner(void) {
     for (unsigned flow=0;flow<2;++flow) {
         LibraryCompileOwner compiler={0};
         CHECK(library_compile_owner_new(&compiler,&library_compile_limits)==XR_XIR_OK);
         const XrXirCompileContext *context=&compiler.context;
         XrXirLibraryCatalog *catalog=flow?prelude_endian_catalog(context):NULL;
+        char *locator=flow?prelude_endian_catalog_locator(catalog):NULL;
         XrXirSourceResult accepted[3]={
             prelude_endian_check(context,catalog,XR_SOURCE_FIXTURES "/endian_field.xr",true),
             prelude_endian_check(context,catalog,XR_SOURCE_FIXTURES "/endian_field.xr",false),
             prelude_endian_check(context,catalog,XR_SOURCE_FIXTURES "/endian_shadow.xr",false)};
-        prelude_endian_refusal(context,catalog);xr_xir_compile_library_catalog_free(catalog);
+        prelude_endian_refusal(context,catalog);
+        for (unsigned i=0;i<2;++i) prelude_endian_snapshot_path(&accepted[i],locator);
+        xr_xir_compile_library_catalog_free(catalog);
         for (unsigned i=0;i<3;++i) {
+            if (i<2) prelude_endian_snapshot_path(&accepted[i],locator);
             prelude_endian_field(accepted[i].checked,i==2);XrXirArtifact *owned=NULL;
             CHECK(prelude_roundtrip(context,accepted[i].checked,&owned)==XR_XIR_OK);
             xr_xir_compile_source_result_free(&accepted[i]);
             CHECK(xr_xir_compile_artifact_verify(owned,NULL)==XR_XIR_OK);
             prelude_endian_field(owned,i==2);xr_xir_compile_artifact_free(owned);
         }
-        library_compile_owner_drop(&compiler);
+        xr_free(locator);library_compile_owner_drop(&compiler);
     }
     puts("Canonical Endian Source/File/Catalog fields, shadow and refusal after producer retirement PASS");
 }
