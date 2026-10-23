@@ -74,7 +74,7 @@ static bool source_library_slots(SourceContext *ctx,const XrXirModule *library,
         const XrXirSlot *original=&d->slots[s];
         if (target>=ctx->slot_count || original->module>=map->module_count ||
             map->modules[original->module]==UINT32_MAX || original->mutable>1 ||
-            !library_catalog_state_type(library->types,original->type))
+            !library_catalog_state_slot(library->types,d,facts,s))
             return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"library slot relocation is not admitted");
         XrXirSlot owned=*original;
         if (!source_library_type(ctx,map->unit,original->type,&owned.type)) return false;

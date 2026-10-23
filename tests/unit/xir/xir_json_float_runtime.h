@@ -52,7 +52,7 @@ static XrXirValue json_float_cases(XrXirProgram *program,const uint32_t selectio
         CHECK(runtime_live==live && runtime_bytes==bytes);
     }
     XrXirValue embedded=json_float_take(program,selection[1],"1\0x",3);json_float_expected(&embedded,false,0);xr_xir_value_drop(&embedded);
-    fprintf(stderr,"JSON floating cold library: %zu independent exact-bit/grammar cases plus embedded NUL and comptime42\n",sizeof(cases)/sizeof(*cases));
+    fprintf(stderr,"JSON floating cold library: private binary64 state, %zu exact-bit/grammar cases, embedded NUL and comptime42\n",sizeof(cases)/sizeof(*cases));
     XrXirValue kept=json_float_take(program,selection[2],NULL,0);xr_xir_compile_program_drop(program);return kept;
 }
 static void json_float_retained(XrXirValue *value) {

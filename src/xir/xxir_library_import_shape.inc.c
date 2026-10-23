@@ -148,6 +148,17 @@ static bool library_catalog_state_type(const XrXirTypes *types,XrXirType type) {
     default:return false;
     }
 }
+/* Binary64 state remains private and immutable; a logical Cell element does
+ * not grant the same admission as the actual direct scalar slot. */
+static bool library_catalog_state_slot(const XrXirTypes *types,const XrXirDeclarations *declarations,
+    const XrXirSlotFacts *facts,uint32_t ordinal) {
+    if (!declarations || ordinal>=declarations->slot_count || !declarations->slots) return false;
+    const XrXirSlot *slot=&declarations->slots[ordinal];
+    if (slot->type!=XR_XIR_F64) return library_catalog_state_type(types,slot->type);
+    if (slot->mutable || !facts || facts->count!=declarations->slot_count || !facts->rows) return false;
+    const XrXirSlotFact *fact=&facts->rows[ordinal];
+    return fact->slot==ordinal && fact->name && fact->name_length && fact->exported==0;
+}
 static XrXirStatus library_catalog_closed_types(const XrXirModule *m,
     const XrXirCompileContext *context) {
     const XrXirTypes *types = m->types;
@@ -233,11 +244,12 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
     if(!d || !d->module_count || !d->modules) return XR_XIR_BAD_STAGE;
     /* State remains lexically private. The shared checker has verified each
      * initializer and access; import bounds the owned relocation surface. */
+    const XrXirSlotFacts *slot_facts=xr_xir_compile_construction_slots(construction);
     for (uint32_t s=0; s<d->slot_count; ++s) {
         if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
         const XrXirSlot *slot=&d->slots[s];
         if (slot->module>=d->module_count || slot->mutable>1 ||
-            !library_catalog_state_type(m->types,slot->type))
+            !library_catalog_state_slot(m->types,d,slot_facts,s))
             return XR_XIR_BAD_STAGE;
     }
     XrXirStatus typed_status = library_catalog_closed_types(m,context);

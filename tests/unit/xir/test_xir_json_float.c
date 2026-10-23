@@ -10,6 +10,7 @@
 #include "base/xresource_limits.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_library_catalog.h"
+#include "xir/xxir_construction.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
 #include <stdio.h>
@@ -22,13 +23,19 @@ static XrXirCompileContext json_float_context(void) {
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();return context;
 }
 typedef struct JsonFloatSource {const char *text,*logical;XrXirLinkageKind kind;const XrXirLibraryCatalog *catalog;} JsonFloatSource;
-static XrXirSourceResult json_float_source(const XrXirCompileContext *context,const JsonFloatSource *source) {
+static XrXirStatus json_float_source_check(const XrXirCompileContext *context,const JsonFloatSource *source,
+    XrXirSourceResult *result,XrXirSourceDiagnostic *diagnostic) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_JSON_FLOAT_WORK};char path[1024];
     CHECK(snprintf(path,sizeof(path),"%s/%s",XR_JSON_FLOAT_WORK,source->logical)>0);
     XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,source->kind,source->catalog};
-    XrXirSourceText input={source->logical,source->text,strlen(source->text)};XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,NULL);xr_compile_session_free(session);
+    XrXirSourceText input={source->logical,source->text,strlen(source->text)};
+    XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,result,diagnostic,NULL);
+    xr_compile_session_free(session);return status;
+}
+static XrXirSourceResult json_float_source(const XrXirCompileContext *context,const JsonFloatSource *source) {
+    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+    XrXirStatus status=json_float_source_check(context,source,&result,&diagnostic);
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
     fprintf(stderr,"JSON floating %s Source%u %d:%d %s spent=%llu/%llu/%llu\n",source->logical,status,diagnostic.line,diagnostic.column,
         diagnostic.message,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,(unsigned long long)stats.work);
@@ -74,12 +81,42 @@ static uint32_t json_float_entry(const XrXirModule *module,const char *name) {
         if(module->functions[f].name_length==strlen(name) && !memcmp(module->functions[f].name,name,strlen(name))){CHECK(found==UINT32_MAX);found=f;}
     CHECK(found!=UINT32_MAX);return found;
 }
-/* Floating body admission must not extend the independently closed state
- * surface. Each genuine Source packet reaches the common Catalog reader. */
+static void json_float_source_refusal(const XrXirCompileContext *context,const JsonFloatSource *source,
+    const char *message) {
+    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+    CHECK(json_float_source_check(context,source,&result,&diagnostic)!=XR_XIR_OK);
+    CHECK(!result.checked && !result.snapshot && strstr(diagnostic.message,message));
+    xr_xir_compile_source_result_free(&result);
+}
+static void json_float_packet_digest(XrXirCheckedPacket *packet) {
+    CHECK(packet->length>=64);XrSHA256Context sha;
+    xr_sha256_init(&sha);xr_sha256_update(&sha,packet->bytes,32);
+    xr_sha256_update(&sha,packet->bytes+64,packet->length-64);xr_sha256_final(&sha,packet->bytes+32);
+}
+/* Corrupt complete wire facts while keeping both packet digests authentic. */
+static void json_float_state_fact_refusals(const XrXirCompileContext *context,XrXirCheckedPacket *packet,
+    XrXirLibraryInput *input) {
+    static const uint8_t fact[]={1,0,0,0,0,0,0,0,6,0,0,0,'s','t','o','r','e','d',0,0,0,0};
+    size_t position=0;unsigned matches=0;
+    for(size_t at=64;at+sizeof(fact)<=packet->length;++at)
+        if(!memcmp(packet->bytes+at,fact,sizeof(fact))){position=at;++matches;}
+    CHECK(matches==1);
+    const unsigned offsets[]={0,4,18};
+    for(unsigned i=0;i<3;++i) {
+        size_t at=position+offsets[i];uint8_t saved=packet->bytes[at];packet->bytes[at]=i?1:0;
+        json_float_packet_digest(packet);xr_sha256(packet->bytes,packet->length,input->sha256);
+        XrXirLibraryCatalog *catalog=NULL;
+        XrXirStatus status=xr_xir_compile_library_catalog_new_v2(context,input,1,&catalog);
+        CHECK(!catalog && (status==XR_XIR_BAD_STRUCTURE || (i==2 && status==XR_XIR_BAD_STAGE)));
+        packet->bytes[at]=saved;
+    }
+    json_float_packet_digest(packet);xr_sha256(packet->bytes,packet->length,input->sha256);
+}
+/* Private immutable binary64 state uses the ordinary receiving slot path. */
 static void json_float_catalog_state_boundaries(void) {
     static const struct {const char *text;XrXirType type;bool mutable;XrXirStatus expected;} cases[]={
         {"const stored:i64=1\nexport fn observe()->i64{return stored}\n",XR_XIR_I64,false,XR_XIR_OK},
-        {"const stored:f64=1.0\nexport fn observe()->f64{return stored}\n",XR_XIR_F64,false,XR_XIR_BAD_STAGE},
+        {"const stored:f64=1.0\nexport fn observe()->f64{return stored}\n",XR_XIR_F64,false,XR_XIR_OK},
         {"var stored:f64=1.0\nexport fn observe()->f64{return stored}\n",XR_XIR_F64,true,XR_XIR_BAD_STAGE}
     };
     XrXirCompileContext context=json_float_context();
@@ -96,8 +133,15 @@ static void json_float_catalog_state_boundaries(void) {
         xr_xir_compile_source_result_free(&result);
         XrXirLibraryModuleInput binding={{XR_MODULE_IDENTITY_SCRIPT,NULL,XR_JSON_FLOAT_WORK},"number-decoding.xr"};
         XrXirLibraryInput input={packet.bytes,packet.length,{0},&binding,1};xr_sha256(packet.bytes,packet.length,input.sha256);
+        if(cases[i].type==XR_XIR_F64 && !cases[i].mutable) json_float_state_fact_refusals(&context,&packet,&input);
         XrXirLibraryCatalog *catalog=NULL;XrXirStatus status=xr_xir_compile_library_catalog_new_v2(&context,&input,1,&catalog);
-        CHECK((status==XR_XIR_OK)==(catalog!=NULL));xr_xir_compile_library_catalog_free(catalog);
+        CHECK((status==XR_XIR_OK)==(catalog!=NULL));
+        if(catalog && cases[i].type==XR_XIR_F64) {
+            JsonFloatSource private_read={"import {stored} from \"./number-decoding\"\nexport fn read()->f64{return stored}\n",
+                "private-reader.xr",XR_XIR_PROGRAM,catalog};
+            json_float_source_refusal(&context,&private_read,"export");
+        }
+        xr_xir_compile_library_catalog_free(catalog);
         memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
         XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
         CHECK(after.live_bytes==baseline.live_bytes && !runtime_live && !runtime_bytes);
@@ -105,6 +149,8 @@ static void json_float_catalog_state_boundaries(void) {
             i,(unsigned)logical,(unsigned)cases[i].mutable,status,cases[i].expected,(unsigned long long)after.work);
         CHECK(status==cases[i].expected);
     }
+    JsonFloatSource exported={"export const stored:f64=1.0\n","exported-state.xr",XR_XIR_LIBRARY,NULL};
+    json_float_source_refusal(&context,&exported,"exported state is not admitted");
     xr_compile_resources_release(context.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);
 }
@@ -115,6 +161,10 @@ int main(int argc,char **argv) {
     memset(text,0xa5,sizeof(text));XrXirLibraryCatalog *numbers=json_float_catalog(&context,&result,1);
     json_float_read(XR_JSON_FLOAT_SOURCE,text);
     static const char floating_proof[]=
+        "\nconst storedFinite:f64=1.5\nconst storedZero:f64=-0.0\n"
+        "const storedInfinity:f64=1.0/0.0\nconst storedNan:f64=0.0/0.0\n"
+        "export fn floatState()->bool {return storedFinite==1.5 && 1.0/storedZero<0.0 && "
+        "storedInfinity>1.7976931348623157e308 && storedNan!=storedNan}\n"
         "\nstruct FloatProbe {value:f64 init(value:f64){this.value=value}}\n"
         "fn floatIdentity<T>(value:T)->T{return value}\n"
         "export fn floatArithmetic(x:f64)->bool {const box=FloatProbe(x);const value=floatIdentity<f64>(box.value);"
@@ -126,10 +176,10 @@ int main(int argc,char **argv) {
     request=(JsonFloatSource){text,"float-decoding.xr",XR_XIR_LIBRARY,numbers};result=json_float_source(&context,&request);
     memset(text,0xa5,sizeof(text));xr_xir_compile_library_catalog_free(numbers);XrXirLibraryCatalog *library=json_float_catalog(&context,&result,2);
     static const char consumer[]=
-        "import {jsonFloat,floatArithmetic} from \"./float-decoding\"\n"
+        "import {jsonFloat,floatArithmetic,floatState} from \"./float-decoding\"\n"
         "export fn inspect(text:string)->f64? {return jsonFloat(text)}\n"
         "export fn main()->i64 {const value=comptime jsonFloat(\"1.7976931348623157e308\");const arithmetic=comptime floatArithmetic(2.0);"
-        "return (arithmetic && floatArithmetic(2.0) && value!=null && value! == 1.7976931348623157e308)?42:0}\n"
+        "return (arithmetic && floatArithmetic(2.0) && floatState() && value!=null && value! == 1.7976931348623157e308)?42:0}\n"
         "export fn observed()->f64? {return jsonFloat(\"1.7976931348623157e308\")}\n";
     request=(JsonFloatSource){consumer,"receiver.xr",XR_XIR_PROGRAM,library};result=json_float_source(&context,&request);xr_xir_compile_library_catalog_free(library);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(result.checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&result);

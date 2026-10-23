@@ -17,4 +17,4 @@ add_test(NAME test_xir_json_float COMMAND test_xir_json_float)
 set_tests_properties(test_xir_json_float PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;json;library;ownership;numeric")
 add_test(NAME test_xir_json_float_catalog_state COMMAND test_xir_json_float --catalog-state)
 set_tests_properties(test_xir_json_float_catalog_state PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
-    LABELS "unit;xir;source;json;library;ownership;negative")
+    LABELS "unit;xir;source;json;library;ownership;state;numeric")
