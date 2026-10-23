@@ -25,10 +25,10 @@ int main(void) {
         {.op=XR_XIR_RETURN,.args={0}}};
     XrXirBlock one={0,1,0,0},two={0,2,0,0};
     XrXirFunction functions[]={
-        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0},
-        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0},
-        {"old",3,NULL,0,XR_XIR_I64,&two,1,old,2,NULL,0},
-        {"answer",6,NULL,0,XR_XIR_I64,&two,1,call,2,NULL,0}};
+        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER},
+        {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,&ret,1,NULL,0,XR_XIR_NEVER},
+        {"old",3,NULL,0,XR_XIR_I64,&two,1,old,2,NULL,0,XR_XIR_NEVER},
+        {"answer",6,NULL,0,XR_XIR_I64,&two,1,call,2,NULL,0,XR_XIR_NEVER}};
     uint32_t dependency=0;
     XrXirSourceModule modules[]={
         {"birth",5,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE},{"current",7,&dependency,1,1,1,XR_XIR_MODULE_FRESH_STORAGE}};
@@ -37,7 +37,7 @@ int main(void) {
     XrXirDeclarations declarations={modules,2,identities,NULL,0,NULL,0,1,3,NULL};
     XrXirModule built={XR_XIR_BUILT,functions,4,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirConstruction *construction=NULL;
-    CHECK(xr_xir_compile_construction_new_v3(&owner.context,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&construction)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v4(&owner.context,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction)==XR_XIR_OK);
     XrXirArtifact *checked=NULL,*decoded=NULL;
     CHECK(xr_xir_compile_check_v2(&owner.context,&built,construction,&checked,NULL)==XR_XIR_OK);
     CHECK(identities[2].module==0 && !identities[2].exported && xr_xir_module_same_scope(&declarations,0,1));

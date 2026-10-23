@@ -36,10 +36,10 @@ static void library_construction_reject(const XrXirModule *module,const XrXirCon
     CHECK(output==(XrXirArtifact *)(uintptr_t)1 && source_live==blocks && source_bytes==bytes);
 }
 static void library_construction_reject_rows(const XrXirModule *module,
-    const XrXirConstructionRow *rows,uint32_t count) {
+    const XrXirConstructionRow *rows,uint32_t count,const XrXirSlotFacts *slots) {
     size_t blocks=source_live,bytes=source_bytes;
     XrXirConstruction *bad=NULL;
-    CHECK(xr_xir_compile_construction_new_v3(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},&bad)==XR_XIR_OK && bad);
+    CHECK(xr_xir_compile_construction_new_v4(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},slots,&bad)==XR_XIR_OK && bad);
     library_construction_reject(module,bad);
     xr_xir_compile_construction_free(bad);
     CHECK(source_live==blocks && source_bytes==bytes);
@@ -76,26 +76,26 @@ static void library_construction_attacks(const XrXirArtifact *artifact) {
     rows[owner].field_initializers=fields;
     uint32_t saved=fields[field];
     fields[field]=module->function_count+1;
-    library_construction_reject_rows(module,rows,count);
+    library_construction_reject_rows(module,rows,count,xr_xir_compile_construction_slots(construction));
     fields[field]=nominal->default_initializer;
-    library_construction_reject_rows(module,rows,count);
+    library_construction_reject_rows(module,rows,count,xr_xir_compile_construction_slots(construction));
     fields[field]=saved;rows[owner].default_initializer=saved;
-    library_construction_reject_rows(module,rows,count);
+    library_construction_reject_rows(module,rows,count,xr_xir_compile_construction_slots(construction));
     rows[owner].default_initializer=module->function_count+1;
-    library_construction_reject_rows(module,rows,count);
+    library_construction_reject_rows(module,rows,count,xr_xir_compile_construction_slots(construction));
     rows[owner].default_initializer=nominal->default_initializer;
     if(nominal->field_count>1){
         uint32_t other=field?0:1,old=fields[other];
-        fields[other]=saved;library_construction_reject_rows(module,rows,count);fields[other]=old;
+        fields[other]=saved;library_construction_reject_rows(module,rows,count,xr_xir_compile_construction_slots(construction));fields[other]=old;
     }
     library_construction_reject(module,NULL);
     size_t blocks=source_live,bytes=source_bytes;
     XrXirConstruction *bad=NULL;
-    CHECK(xr_xir_compile_construction_new_v3(library_context,module->types,&(XrXirConstructionSpec){rows,count-1,NULL,0,NULL},&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
+    CHECK(xr_xir_compile_construction_new_v4(library_context,module->types,&(XrXirConstructionSpec){rows,count-1,NULL,0,NULL},xr_xir_compile_construction_slots(construction),&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
     rows[owner].field_count=nominal->field_count-1;
-    CHECK(xr_xir_compile_construction_new_v3(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
+    CHECK(xr_xir_compile_construction_new_v4(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},xr_xir_compile_construction_slots(construction),&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
     bad=(XrXirConstruction *)(uintptr_t)1;
-    CHECK(xr_xir_compile_construction_new_v3(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},&bad)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_construction_new_v4(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},xr_xir_compile_construction_slots(construction),&bad)==XR_XIR_BAD_STRUCTURE);
     CHECK(bad==(XrXirConstruction *)(uintptr_t)1 && source_live==blocks && source_bytes==bytes);
     free(fields);free(rows);
 }
@@ -114,14 +114,14 @@ static void library_construction_projection(const XrXirArtifact *checked) {
     }
     library_construction_attacks(m->provenance->source);
     XrXirConstructionRow *rows=library_construction_rows(construction);
-    rows[0].default_initializer=1;library_construction_reject_rows(m,rows,table->count);
+    rows[0].default_initializer=1;library_construction_reject_rows(m,rows,table->count,xr_xir_compile_construction_slots(construction));
     rows[0].default_initializer=0;
     uint32_t owner=UINT32_MAX;
     for(uint32_t n=0;n<table->count;++n)if(rows[n].field_count){owner=n;break;}
     CHECK(owner!=UINT32_MAX);
     uint32_t *fields=calloc(rows[owner].field_count,sizeof(*fields));CHECK(fields);
     rows[owner].field_initializers=fields;fields[0]=1;
-    library_construction_reject_rows(m,rows,table->count);
+    library_construction_reject_rows(m,rows,table->count,xr_xir_compile_construction_slots(construction));
     free(fields);free(rows);xr_xir_compile_artifact_free(specialized);
 }
 

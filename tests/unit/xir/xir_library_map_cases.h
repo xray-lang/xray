@@ -36,7 +36,7 @@ static XrXirArtifact *library_initializer_middle(const char *canonical) {
         .declarations=&declarations,.linkage_kind=XR_XIR_LIBRARY};
     XrXirArtifact *checked=NULL;
     XrXirConstruction *construction=NULL;
-    CHECK(xr_xir_compile_construction_new_v3(library_context,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&construction)==XR_XIR_OK&&construction);
+    CHECK(xr_xir_compile_construction_new_v4(library_context,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction)==XR_XIR_OK&&construction);
     CHECK(xr_xir_compile_check_v2(library_context,&built,construction,&checked,NULL)==XR_XIR_OK&&checked);
     xr_xir_compile_construction_free(construction);
     return checked;

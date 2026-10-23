@@ -66,7 +66,7 @@ static void native_dispose(NativeFixture *f) {
 }
 static XrXirSourceSnapshot *native_snapshot(const XrXirCompileContext *context,NativeFixture *f) {
     const XrXirConstructionSpec input={0};
-    XrXirConstruction *construction=NULL;CHECK(xr_xir_compile_construction_new_v3(context,NULL,&input,&construction)==XR_XIR_OK);
+    XrXirConstruction *construction=NULL;CHECK(xr_xir_compile_construction_new_v4(context,NULL,&input,&(XrXirSlotFacts){NULL,0},&construction)==XR_XIR_OK);
     XrXirSourceSnapshot *s=NULL;CHECK(xr_xir_compile_source_snapshot_copy_v2(context,&f->view,construction,&s)==XR_XIR_OK);
     xr_xir_compile_construction_free(construction);CHECK(xr_xir_compile_source_snapshot_syntax_copy(s,&f->syntax)==XR_XIR_OK);return s;
 }

@@ -54,7 +54,7 @@ static XrXirStatus binding_source(XrXirCompileContext *context,XrXirArtifact **o
     XrXirConstructionSpec input={original->construction->rows,original->construction->count,
         original->construction->materializations,original->construction->materialization_count,&table};
     XrXirConstruction *construction=NULL;
-    status=xr_xir_compile_construction_new_v3(context,original->module.types,&input,&construction);
+    status=xr_xir_compile_construction_new_v4(context,original->module.types,&input,xr_xir_compile_construction_slots(original->construction),&construction);
     if (status==XR_XIR_OK) {
         /* The receiving owner has copied every vector before producer poison. */
         memset(types,0xa5,sizeof(types));memset(rows,0xa5,sizeof(rows));memset(&site,0xa5,sizeof(site));

@@ -32,12 +32,12 @@ _Static_assert(offsetof(XrXirConstructionRow, default_initializer) == 0, "Constr
 _Static_assert(offsetof(XrXirConstructionRow, field_initializers) == 8, "Field bindings offset");
 _Static_assert(offsetof(XrXirConstructionRow, field_count) == 16, "Field denominator offset");
 typedef XrXirStatus (*ConstructionPrototype)(const XrXirCompileContext *,
-    const XrXirTypes *, const XrXirConstructionRow *, uint32_t, XrXirConstruction **);
+    const XrXirTypes *, const XrXirConstructionSpec *, const XrXirSlotFacts *, XrXirConstruction **);
 typedef XrXirStatus (*CheckPrototype)(const XrXirCompileContext *, const XrXirModule *,
     const XrXirConstruction *, XrXirArtifact **, XrXirDiagnostic *);
 typedef XrXirStatus (*VerifyPrototype)(const XrXirCompileContext *, const XrXirModule *,
     const XrXirConstruction *, XrXirDiagnostic *);
-_Static_assert(_Generic(&xr_xir_compile_construction_new_v3, ConstructionPrototype:1, default:0),
+_Static_assert(_Generic(&xr_xir_compile_construction_new_v4, ConstructionPrototype:1, default:0),
     "Explicit immutable construction owner");
 _Static_assert(_Generic(&xr_xir_compile_check_v2, CheckPrototype:1, default:0),
     "Mandatory construction check input");

@@ -90,6 +90,13 @@ static XrXirStatus source_facts_construction_match(const XrXirCompileContext *co
     if (status!=XR_XIR_OK) return status;
     if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
     if (stored->count!=actual->count) return XR_XIR_BAD_STRUCTURE;
+    if (stored->slots.count!=actual->slots.count) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t s=0;s<stored->slots.count;++s) {
+        const XrXirSlotFact *a=&stored->slots.rows[s],*b=&actual->slots.rows[s];
+        if (!xir_compile_work(context,sizeof(*a)+a->name_length)) return XR_XIR_BUDGET;
+        if (a->slot!=b->slot || a->name_length!=b->name_length || a->exported!=b->exported ||
+            memcmp(a->name,b->name,a->name_length)) return XR_XIR_BAD_STRUCTURE;
+    }
     for (uint32_t n=0;n<stored->count;++n) {
         const XrXirConstructionRow *a=&stored->rows[n],*b=&actual->rows[n];
         if (!xir_compile_work(context,6)) return XR_XIR_BUDGET;

@@ -7312,6 +7312,30 @@ Older versions reject without compatibility readers or adapters.
 | Immutable Program | `src/xir/xxir_program.h`: `XR_XIR_PROGRAM_ABI_VERSION` |
 | Checked wire | `src/xir/xxir_checked.h`: `XR_XIR_CHECKED_SCHEMA` |
 | Checked semantics | `src/xir/xxir_checked.h`: `XR_XIR_CHECKED_CONTRACT` |
+| Construction C interface | `src/xir/xxir_construction.h`: `XR_XIR_CONSTRUCTION_C_INTERFACE_VERSION` |
+
+Immutable Construction also owns a complete module-slot inventory. `XrXirSlotFact`
+contains the actual dense `slot` ordinal, UTF-8 `name` bytes and `name_length`, and
+an `exported` value of zero or one. Names have no terminator guarantee and contain no NUL.
+`XrXirSlotFacts` is the complete read-only view. Even zero slots require an explicit
+non-NULL view with NULL rows and zero count. The sole `xr_xir_compile_construction_new_v4`
+receives the unchanged five-field `XrXirConstructionSpec` and that view, copying
+all rows and name bytes into its receiving compiler resource owner. Retired constructor
+symbols have no aliases. `xr_xir_compile_construction_slots` borrows until that owner
+is freed; a missing owner returns NULL. Complete checking compares the actual Module
+slot denominator, dense ordinals, module ownership and mutability; a mutable slot
+cannot carry an exported flag. Checking precedes any no-nominal or Lowered early return.
+Module, Declarations, Slot and nominal Spec layouts are unchanged. Source produces
+actual declaration and implicit-declaration names. Library/history relocation keeps
+the authentic names and flags; query aliases cannot rewrite them. Clone, literal
+materialization, lifetime relocation, comptime, specialization and lower retain the
+complete component, and SourceFacts compares it with the current owner.
+Every Construction appends a mandatory u32 slot count after nominal rows,
+materialization rows and the comptime table, then u32 ordinal, u32 name length,
+exact name bytes and u32 exported per row, including recursive provenance sources.
+Revisions follow the implementation constants in this table; old packets reject.
+These slot-name/export facts grant no cross-module read, initialization, write or
+runtime historical-storage permission. Public-state reading requires separate admission.
 
 The new compiler has one stage order: `Built → Checked → specialization and
 reverification → Lowered`. This section freezes the nongeneric scalar subset;
@@ -8275,7 +8299,7 @@ Derived fields can introduce receiving type nodes, so later comptime occurrences
 
 Library comptime independently constructs an ordinary Program from the same immutable source graph, follows complete Built/Checked/specialization/Lowered transitions and uses the sole CTFE evaluator. A library template is never relabelled executable. Results match actual syntax occurrences, modules, declaration ancestry, expected contexts and complete cross-pool result types before independent Library Source reconstruction. Every temporary Program, catalogue, snapshot and failed prefix uses the original ledger without resetting budgets.
 
-The materialization catalogue originated in Checked schema29/contract74. Section17.76 now requires schema30/contract75 and construction C interface revision3: xr_xir_compile_construction_new_v3 alone receives XrXirConstructionSpec. Unversioned and v2 symbols retire without aliases, so old compiled objects fail to link instead of binding the changed signature. Old wire is also refused. Value/Call/Instance layouts and opcodes remain unchanged; private Source construction inventory gains materialization requests. Original128M work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth and policy2/8MiB logical output remain. Complete FI, same-owner retry, resources/lifetimes and shared/provider/formal safety require separate measured evidence. This mechanism grants neither foreign/identity-bearing exports nor complete P11 qualification.
+The materialization catalogue originated in Checked schema29/contract74. Section17.6 defines the shared current revisions: xr_xir_compile_construction_new_v4 alone receives XrXirConstructionSpec and a complete slot-facts view. Unversioned, v2 and v3 symbols retire without aliases, so old compiled objects fail to link instead of binding the changed signature. Old wire is also refused. Value/Call/Instance layouts and opcodes remain unchanged; private Source construction inventory gains materialization requests. Original128M work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth and policy2/8MiB logical output remain. Complete FI, same-owner retry, resources/lifetimes and shared/provider/formal safety require separate measured evidence. This mechanism grants neither foreign/identity-bearing exports nor complete P11 qualification.
 
 ### 17.68 Finite recursive data and original-owner observations
 
@@ -8369,7 +8393,7 @@ The common construction owner holds actual Source caller/instruction/helper site
 
 Ordinary specialization selects a provider only for a real current call and its complete closed substitution; missing keys fail compilation. Independent INSTANCE correspondence repeats the same selection while preserving original generic Source, ordinary requirements/private witnesses and all other body/effect checks. The verifier executes no CTFE and erases no closed provenance. Projected INSTANCE and Lowered contain no unresolved sites, while recursive Source owns the original complete table. Tables, argument vectors, wire I/O, cloning, cleanup and failure prefixes charge the receiving owner's original finite ledger; final release allocates nothing and neither refunds nor resets budgets.
 
-The common input layout and Module encoding actually add site and binding counts and fields, requiring an atomic Checked schema30/contract75 cutover. Construction C interface revision3 exposes only xr_xir_compile_construction_new_v3; unversioned and v2 constructor symbols retire, old wire is rejected, and no shim remains. Every Module encodes site_count and caller/instruction/helper rows after the materialization catalogue, then binding_count and site/argument_count/arguments/provider rows, recursively in Source provenance. Value24, Call29, Program30, opcodes and all existing budgets remain unchanged. Historical bytes remain refusal vectors; current fixed vectors derive from independent complete field models.
+The common input layout and Module encoding actually add site and binding counts and fields, requiring the common Checked revision defined in17.6. The Construction C interface exposes only xr_xir_compile_construction_new_v4 with a complete slot-facts view; unversioned, v2 and v3 constructor symbols retire, old wire is rejected, and no shim remains. Every Module encodes site_count and caller/instruction/helper rows after the materialization catalogue, then binding_count and site/argument_count/arguments/provider rows, recursively in Source provenance. Value24, Call29, Program30, opcodes and all existing budgets remain unchanged. Historical bytes remain refusal vectors; current fixed vectors derive from independent complete field models.
 
 This section connects the common canonical binding dependency; AST-independent typed literal receiving follows17.77. Public Program per-instance receiving follows17.78. Library canonical sites, ordered keys and future-instance receiving follow17.81; dropping metadata while retaining runtime helper calls is forbidden. Complete Library qualification, full FI and formal safety each require independent evidence. This mechanism and focused validation do not complete P11/C0/C1.
 

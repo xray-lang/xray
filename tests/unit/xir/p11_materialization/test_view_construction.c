@@ -54,8 +54,10 @@ static void shifted_body(SourceContext *ctx,const XrXirModule *module,
     XirViewRelocation relocation={module,old,body,map->values,map->boundaries,0,0};
     CHECK(xir_compile_view_relocate(&ctx->compile,&relocation)==XR_XIR_OK);
 }
-static void relocation_admission(const XrXirCompileContext *context,const XrXirModule *module,
-    XrXirConstruction *old,bool comptime) {
+static XrXirArtifact *relocation_admission(const XrXirCompileContext *context,const XrXirModule *module,
+    const XrXirConstruction *original,bool comptime) {
+    XrXirConstruction *old=NULL;
+    CHECK(xir_construction_clone(context,module->types,original,&old)==XR_XIR_OK && old!=original);
     SourceContext ctx={.compile=*context,.types=module->types?*module->types:(XrXirTypes){0},.function_count=module->function_count,
         .functions=module->functions,.construction=old};
     XirViewNormalization n={.module=*module};
@@ -78,15 +80,27 @@ static void relocation_admission(const XrXirCompileContext *context,const XrXirM
             CHECK(after->instruction==before->instruction+1 && after->function==before->function && after->nominal==before->nominal);
         }
     }
+    const XrXirSlotFacts *before=xr_xir_compile_construction_slots(old),*after=xr_xir_compile_construction_slots(owner);
+    CHECK(before && after && after->count==before->count);
+    for (uint32_t s=0;s<before->count;++s) {
+        CHECK(after->rows!=before->rows && after->rows[s].name!=before->rows[s].name);
+        CHECK(after->rows[s].slot==before->rows[s].slot && after->rows[s].exported==before->rows[s].exported);
+        CHECK(after->rows[s].name_length==before->rows[s].name_length &&
+            !memcmp(after->rows[s].name,before->rows[s].name,before->rows[s].name_length));
+    }
+    /* Retire an independent owner, while the actual Module remains alive. */
+    xr_xir_compile_construction_free(old);ctx.construction=NULL;
     XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_check_v2(context,&replacement,owner,&artifact,&diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"relocated check status=%u at %u:%u\n",status,diagnostic.function,diagnostic.instruction);
-    CHECK(status==XR_XIR_OK && artifact);xr_xir_compile_artifact_free(artifact);
+    CHECK(status==XR_XIR_OK && artifact);
     xr_xir_compile_construction_free(owner);
     for (size_t i=0;i<ctx.count;++i) xr_compile_resources_free(ctx.allocations[i]);
+    CHECK(xr_xir_compile_artifact_verify(artifact,NULL)==XR_XIR_OK);return artifact;
 }
 static void generic_sites(const XrXirCompileContext *context) {
-    const char text[]="fn compute<T>()->i64{return comptime {const values:Array<T>=[];42}}\n"
-        "export fn run()->i64{return compute<i64>()}\n";
+    const char text[]="const seed:i64=17;var step:i64=25;\n"
+        "fn compute<T>()->i64{return comptime {const values:Array<T>=[];42}}\n"
+        "export fn run()->i64{return seed+step+compute<i64>()-42}\n";
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"construction-coordinate",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
@@ -94,16 +108,26 @@ static void generic_sites(const XrXirCompileContext *context) {
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"generic source status=%u %s\n",status,diagnostic.message);
     CHECK(status==XR_XIR_OK && result.checked);xr_compile_session_free(session);
-    relocation_admission(context,&result.checked->module,result.checked->construction,true);
+    XrXirArtifact *received=relocation_admission(context,&result.checked->module,result.checked->construction,true);
     xr_xir_compile_source_result_free(&result);
+    const char *const names[]={"seed","step"};
+    const XrXirSlotFacts *facts=xr_xir_compile_construction_slots(received->construction);
+    CHECK(facts && facts->count==2 && received->module.declarations->slot_count==2);
+    for (uint32_t s=0;s<2;++s) {
+        CHECK(facts->rows[s].slot==s && facts->rows[s].exported==0);
+        CHECK(facts->rows[s].name_length==strlen(names[s]) &&
+            !memcmp(facts->rows[s].name,names[s],facts->rows[s].name_length));
+    }
+    CHECK(xr_xir_compile_artifact_verify(received,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
 }
 int main(void) {
     XrXirCompileContext context;context_new(&context);PreparedMaterialization input;prepare(&context,0,&input);
     XrXirConstruction *owner=NULL;const XrXirConstruction *source=input.source.checked->construction;
     XrXirConstructionSpec spec={source->rows,source->count,input.edges,2,NULL};
-    CHECK(xr_xir_compile_construction_new_v3(&context,input.module.types,&spec,&owner)==XR_XIR_OK);
-    relocation_admission(&context,&input.module,owner,false);
-    xr_xir_compile_construction_free(owner);prepared_free(&input);generic_sites(&context);
+    CHECK(xr_xir_compile_construction_new_v4(&context,input.module.types,&spec,xr_xir_compile_construction_slots(source),&owner)==XR_XIR_OK);
+    XrXirArtifact *received=relocation_admission(&context,&input.module,owner,false);
+    xr_xir_compile_construction_free(owner);prepared_free(&input);
+    CHECK(xr_xir_compile_artifact_verify(received,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);generic_sites(&context);
     xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
-    puts("Materializer and generic CTFE coordinates: stale owner rejected, fresh owner fully admitted; physical0 PASS");return 0;
+    puts("Production construction forwarding with an SSA relocation map: stale coordinates rejected, nonempty slot facts independently owned after Source/map retirement; Source Slice execution NOT_TESTED");return 0;
 }

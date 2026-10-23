@@ -7259,6 +7259,21 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 | 不可变Program | `src/xir/xxir_program.h`：`XR_XIR_PROGRAM_ABI_VERSION` |
 | Checked wire | `src/xir/xxir_checked.h`：`XR_XIR_CHECKED_SCHEMA` |
 | Checked语义 | `src/xir/xxir_checked.h`：`XR_XIR_CHECKED_CONTRACT` |
+| Construction C接口 | `src/xir/xxir_construction.h`：`XR_XIR_CONSTRUCTION_C_INTERFACE_VERSION` |
+
+不可变 Construction 还拥有完整模块槽事实。`XrXirSlotFact` 保存实际 `slot` 序号、
+UTF-8 `name` 字节及 `name_length`、值为0或1的 `exported`；不承诺名称以NUL结尾，名称内部不能含NUL。
+`XrXirSlotFacts` 是完整稠密表的只读视图，零槽时也必须显式提供非NULL视图、NULL rows和零count。
+单一 `xr_xir_compile_construction_new_v4` 接收原五字段 `XrXirConstructionSpec` 与该完整视图，
+将每行及名称复制到接收方编译资源所有者；旧构造符号不提供别名。
+`xr_xir_compile_construction_slots` 只借用当前所有者的视图，生命周期到该所有者释放为止；缺失所有者返回NULL。
+共同检查必须将事实数量与实际Module槽数、稠密序号、槽所属模块及可变性对应起来；导出标志不能用于可变槽。
+此检查先于无名义声明或Lowered的早退。原Module、Declarations、Slot及名义Spec布局不变。
+真实Source从实际声明及隐式声明产生名称；库与历史映射保留原名称和标志，查询别名不能改写它们。
+clone、物化、生命周期重定位、comptime、特化及lower保留完整事实，SourceFacts比较当前完整组件。
+每个Construction在原名义行、物化行和comptime表之后编码必有的u32槽数，再逐行编码u32序号、
+u32名称长度、精确名称字节及u32导出标志；递归来源同样编码。版本以本表中的实现常量为准，旧包拒绝。
+这些槽名称和导出事实不授予跨模块读取、初始化、写入或运行时历史存储权限；公开状态读取仍由独立准入决定。
 
 新编译主干唯一阶段顺序为 `Built → Checked → 特化与复验 → Lowered`。
 本节先冻结非泛型标量子集；前述旧产品实现尚未迁移，本节不宣称 CLI 已切换。
@@ -8062,7 +8077,7 @@ Source 先完成普通函数库存，再迭代生成尾部物化函数，避免�
 
 库内 comptime 由同一不可变源码图独立构造普通 Program，经过完整 Built/Checked/特化/Lowered 路径后使用唯一 CTFE 求值器。库模板不改标为可执行产物。结果按实际语法 occurrence、模块、声明祖先、期望上下文和完整跨池结果类型接收，再由独立 Library Source 构造复验。所有临时 Program、目录、快照和失败前缀使用原 ledger，不重置预算。
 
-物化目录最初增加于 Checked schema29/contract74；当前由17.76原子切到schema30/contract75，construction C接口revision3统一由xr_xir_compile_construction_new_v3接收XrXirConstructionSpec；旧无版本及v2构造符号退休，不保留别名，旧编译对象必须链接失败，不误绑定新签名。旧 wire 同样拒绝。Value/Call/Instance 布局和 opcode 不变，Source 私有构造库存增加物化请求。原 work128M、累计分配64MiB、live8MiB、steps/frame65536、depth128及 policy2/8MiB 逻辑输出保持。完整 FI、同 owner 重试、资源/寿命与共同/provider/正式安全必须分别取得实际证据；此机制不授予 foreign/identity-bearing 输出或完整 P11 资格。
+物化目录最初增加于 Checked schema29/contract74；当前协议由17.6实现常量统一定义，construction C接口单一由xr_xir_compile_construction_new_v4接收XrXirConstructionSpec及完整槽事实视图；旧无版本、v2和v3构造符号退休，不保留别名，旧编译对象必须链接失败，不误绑定新签名。旧 wire 同样拒绝。Value/Call/Instance 布局和 opcode 不变，Source 私有构造库存增加物化请求。原 work128M、累计分配64MiB、live8MiB、steps/frame65536、depth128及 policy2/8MiB 逻辑输出保持。完整 FI、同 owner 重试、资源/寿命与共同/provider/正式安全必须分别取得实际证据；此机制不授予 foreign/identity-bearing 输出或完整 P11 资格。
 
 ### 17.68 有限递归数据与按原拥有者观察
 
@@ -8156,7 +8171,7 @@ Source对依赖词法类型实参的comptime表达式生成真实普通泛型hel
 
 普通特化只对真实当前调用及完整关闭替换选择provider，缺键编译失败。INSTANCE对应检查独立重做同一选择，保留原泛型Source、普通requirement/private witness以及其他body/effect验证；不在verifier执行CTFE，不抹除关闭来源。投影INSTANCE和Lowered不携带未解决站点，递归来源仍完整拥有原表。表、每项实参、wire读写、clone、清理及失败前缀均使用接收方原有限ledger；最后释放不分配，不退款或重置预算。
 
-由于共同输入布局与Module编码实际增加站点和绑定计数及其字段，Checked原子切到schema30/contract75；construction C接口revision3只提供xr_xir_compile_construction_new_v3，旧无版本和v2构造符号退休，旧wire拒绝，不保留shim。每个Module在物化目录后编码site_count与各caller/instruction/helper，再编码binding_count与各site/argument_count/arguments/provider；递归来源同样编码。Value24、Call29、Program30、opcode及全部既有预算不变。历史字节保留为拒绝向量，当前固定向量由独立完整字段模型推导。
+由于共同输入布局与Module编码实际增加站点和绑定计数及其字段，Checked协议使用17.6所列实现常量；construction C接口只提供xr_xir_compile_construction_new_v4并要求完整槽事实视图，旧无版本、v2和v3构造符号退休，旧wire拒绝，不保留shim。每个Module在物化目录后编码site_count与各caller/instruction/helper，再编码binding_count与各site/argument_count/arguments/provider；递归来源同样编码。Value24、Call29、Program30、opcode及全部既有预算不变。历史字节保留为拒绝向量，当前固定向量由独立完整字段模型推导。
 
 本节贯通共同规范绑定依赖，无AST typed literal接收核见17.77。公共Program逐实例常量接回见17.78。Library规范站点、完整键与未来实例接回按17.81执行，不得丢弃表而保留运行期helper调用。完整Library资格、全FI与正式安全仍须分别取得，不能将本机制或定向验证视为P11/C0/C1完成。
 

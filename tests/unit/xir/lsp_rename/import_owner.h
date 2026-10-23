@@ -35,7 +35,7 @@ static void import_owner(void) {
     XrXirSourceSyntaxView syntax={facts,3,spans,1,markers,2};
     XrXirConstruction *construction=NULL;
     const XrXirConstructionSpec input={0};
-    CHECK(xr_xir_compile_construction_new_v3(&context,NULL,&input,&construction)==XR_XIR_OK&&construction);
+    CHECK(xr_xir_compile_construction_new_v4(&context,NULL,&input,&(XrXirSlotFacts){NULL,0},&construction)==XR_XIR_OK&&construction);
     for(unsigned mode=0;mode<12;++mode) {
         XrXirSourceMarker changed[3]={markers[0],markers[1],markers[0]};
         XrXirSourceSyntaxView bad=syntax;bad.markers=changed;

@@ -503,6 +503,24 @@ static void checked_defaults(CheckedCursor *c, XrXirModule *module) {
     }
 }
 #include "xxir_checked_comptime.inc.c"
+static void checked_slot_facts(CheckedCursor *c,const XrXirModule *module,XrXirConstruction *owner) {
+    uint32_t count=checked_u32(c,c->reading?0:owner->slots.count);
+    uint32_t expected=module->declarations?module->declarations->slot_count:0;
+    if (c->status!=XR_XIR_OK) return;
+    if (count!=expected) { c->status=XR_XIR_BAD_STRUCTURE;return; }
+    XrXirSlotFact *rows=checked_array(c,(void *)owner->slots.rows,count,sizeof(*rows),12);
+    if (c->reading) { owner->slots.rows=rows;owner->slots.count=rows?count:0; }
+    for (uint32_t s=0;s<count && c->status==XR_XIR_OK;++s) {
+        XrXirSlotFact row=rows[s];
+        row.slot=checked_u32(c,row.slot);
+        row.name=checked_blob(c,row.name,&row.name_length);
+        if (c->reading) rows[s]=row;
+        row.exported=checked_u32(c,row.exported);
+        if (c->reading) rows[s]=row;
+        if (c->status==XR_XIR_OK && (row.slot!=s || row.exported>1 || !row.name_length))
+            c->status=XR_XIR_BAD_STRUCTURE;
+    }
+}
 /* The exact dense denominators are wire facts, even when every helper is zero. */
 static void checked_construction(CheckedCursor *c, XrXirModule *module,
     XrXirConstruction **construction) {
@@ -552,6 +570,7 @@ static void checked_construction(CheckedCursor *c, XrXirModule *module,
         if (c->reading) bindings[i]=row;
     }
     if (c->status==XR_XIR_OK) checked_comptime(c,owner);
+    if (c->status==XR_XIR_OK) checked_slot_facts(c,module,owner);
 }
 
 static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction **construction, uint32_t evidence_limit);

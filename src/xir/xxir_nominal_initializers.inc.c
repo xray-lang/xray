@@ -84,11 +84,27 @@ static XrXirStatus nominal_initializer_target(const XrXirCompileContext *context
     }
     return nominal_initializer_signature(context,m,owner,function,field);
 }
+static XrXirStatus construction_module_slots(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirSlotFacts *facts) {
+    const XrXirDeclarations *d=module->declarations;
+    uint32_t count=d?d->slot_count:0;
+    if (!facts || facts->count!=count || (count && (!d->slots || !d->modules)))
+        return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t s=0;s<count;++s) {
+        if (!xir_compile_work(context,sizeof(*d->slots)+1)) return XR_XIR_BUDGET;
+        const XrXirSlot *slot=&d->slots[s];
+        if (facts->rows[s].slot!=s || slot->module>=d->module_count || slot->mutable>1 ||
+            (facts->rows[s].exported && slot->mutable)) return XR_XIR_BAD_STRUCTURE;
+    }
+    return XR_XIR_OK;
+}
 XR_FUNC XrXirStatus xir_construction_verify(
     const XrXirCompileContext *context, const XrXirModule *m, const XrXirConstruction *construction) {
     if (!xir_compile_context_valid(context) || !m) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus shape = xir_construction_shape(context, m->types, construction);
     if (shape != XR_XIR_OK) return shape;
+    shape=construction_module_slots(context,m,&construction->slots);
+    if (shape!=XR_XIR_OK) return shape;
     shape=xir_materialization_verify(context,m,construction);
     if (shape!=XR_XIR_OK) return shape;
     shape=xir_comptime_verify(context,m,construction);

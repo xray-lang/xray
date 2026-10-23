@@ -57,7 +57,8 @@ static bool source_program_seal(SourceContext *ctx,const XrXirArtifact *source,X
     const XrXirConstruction *original=source->construction;
     XrXirConstructionSpec input={original->rows,original->count,original->materializations,original->materialization_count,&merged};
     XrXirConstruction *construction=NULL;
-    XrXirStatus status=xr_xir_compile_construction_new_v3(&ctx->compile,source->module.types,&input,&construction);
+    XrXirStatus status=xr_xir_compile_construction_new_v4(&ctx->compile,source->module.types,&input,
+        xr_xir_compile_construction_slots(original),&construction);
     if (status==XR_XIR_OK) status=xr_xir_compile_recheck_v2(&ctx->compile,&source->module,construction,output,NULL);
     xr_xir_compile_construction_free(construction);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"comptime canonical receiving failed complete checking");

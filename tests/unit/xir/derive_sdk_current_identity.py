@@ -129,12 +129,17 @@ def main():
     for symbol,data in [('current_sdk_kat_preimage',historical_image),('current_sdk_kat_file_digest',historical_file),('current_sdk_kat_digest',historical_digest)]:
         match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',historical_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete historical32/91 bytes changed'
-    image,file_digest,digest=current_preimage(current_rows,96,30,35,36,36)
+    prior_slot_image,prior_slot_file,prior_slot_digest=current_preimage(current_rows,96,30,35,36,36)
+    prior_slot_text=Path(__file__).with_name('sdk_previous36_96_identity_golden.h').read_text(encoding='utf-8')
+    for symbol,data in [('current_sdk_kat_preimage',prior_slot_image),('current_sdk_kat_file_digest',prior_slot_file),('current_sdk_kat_digest',prior_slot_digest)]:
+        match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',prior_slot_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete predecessor36/96 bytes changed'
+    image,file_digest,digest=current_preimage(current_rows,97,30,35,37,36)
     identity_offset=len(b'xray:xir-runtime-sdk:v1')+4
     assert image[:identity_offset]==previous_image[:identity_offset]
     old_current_image,_,_=current_preimage(old_rows,75,25)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(36,96,30,35,36)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(37,97,30,35,36)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
     assert len(image)==3338 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest

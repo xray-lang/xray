@@ -93,6 +93,8 @@ typedef struct SourceContext {
     uint32_t *nominal_constructors;
     uint32_t type_capacity;
     XrXirSlot *slots;
+    XrXirSlotFact *slot_facts;
+    bool *slot_fact_present;
     XrXirLiteral *literals;
     SourceName **names, *locals, *scope;
     SourceFact *facts;

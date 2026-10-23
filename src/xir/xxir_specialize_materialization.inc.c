@@ -12,8 +12,9 @@
  */
 static XrXirStatus spec_materialization_construction(SpecContext *c,
     const XrXirModule *module,XrXirConstruction **output) {
+    const XrXirSlotFacts *slots=xr_xir_compile_construction_slots(c->source_artifact->construction);
     if (!c->source_artifact->construction->materialization_count)
-        return xir_construction_empty(&c->remaining,module->types,output);
+        return xir_construction_project(&c->remaining,module->types,slots,output);
     uint32_t count=0;
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *body=&module->functions[f];
@@ -26,7 +27,7 @@ static XrXirStatus spec_materialization_construction(SpecContext *c,
             }
         }
     }
-    if (!count) return xir_construction_empty(&c->remaining,module->types,output);
+    if (!count) return xir_construction_project(&c->remaining,module->types,slots,output);
     XrXirMaterializationBinding *edges=spec_alloc(c,count,sizeof(*edges));
     if (!edges) return c->diagnostic.status;
     uint32_t next=0;
@@ -45,9 +46,9 @@ static XrXirStatus spec_materialization_construction(SpecContext *c,
     }
     if (next!=count) return XR_XIR_BAD_STRUCTURE;
     XrXirConstruction *empty=NULL;
-    XrXirStatus status=xir_construction_empty(&c->remaining,module->types,&empty);
+    XrXirStatus status=xir_construction_project(&c->remaining,module->types,slots,&empty);
     if (status!=XR_XIR_OK) return status;
     XrXirConstructionSpec input={empty->rows,empty->count,edges,count,NULL};
-    status=xr_xir_compile_construction_new_v3(&c->remaining,module->types,&input,output);
+    status=xr_xir_compile_construction_new_v4(&c->remaining,module->types,&input,slots,output);
     xr_xir_compile_construction_free(empty);return status;
 }

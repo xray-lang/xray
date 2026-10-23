@@ -49,7 +49,7 @@ static void fixture(TypeFixture *f) {
 static XrXirStatus make_snapshot(const XrXirCompileContext *context,TypeFixture *f,XrXirSourceSnapshot **out) {
     XrXirConstructionRow rows[2]={{0},{0}};XrXirConstruction *construction=NULL;
     const XrXirConstructionSpec input={.rows=rows,.count=2};
-    XrXirStatus status=xr_xir_compile_construction_new_v3(context,&f->types,&input,&construction);
+    XrXirStatus status=xr_xir_compile_construction_new_v4(context,&f->types,&input,&(XrXirSlotFacts){NULL,0},&construction);
     if(status==XR_XIR_OK)status=xr_xir_compile_source_snapshot_copy_v2(context,&f->view,construction,out);
     xr_xir_compile_construction_free(construction);
     if(status==XR_XIR_OK)status=xr_xir_compile_source_snapshot_syntax_copy(*out,&f->syntax);

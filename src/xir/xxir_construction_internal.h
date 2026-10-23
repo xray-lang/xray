@@ -21,6 +21,7 @@ struct XrXirConstruction {
     XrXirMaterializationBinding *materializations;
     uint32_t materialization_count;
     XrXirComptimeTable comptime;
+    XrXirSlotFacts slots;
 };
 /* An owner is mandatory, including when no nominal declarations exist.
  * A live foreign input owner may be borrowed. Checks and copies charge the
@@ -32,6 +33,10 @@ XR_FUNC XrXirStatus xir_construction_clone(const XrXirCompileContext *context,
     XrXirConstruction **output);
 XR_FUNC XrXirStatus xir_construction_empty(const XrXirCompileContext *context,
     const XrXirTypes *types, XrXirConstruction **output);
+/* Clear nominal helper bindings while preserving the actual full slot view.
+ * The receiving owner still requires complete module admission. */
+XR_FUNC XrXirStatus xir_construction_project(const XrXirCompileContext *context,
+    const XrXirTypes *types, const XrXirSlotFacts *slots, XrXirConstruction **output);
 XR_FUNC XrXirStatus xir_construction_verify(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction);
 XR_FUNC XrXirStatus xir_materialization_verify(const XrXirCompileContext *context,

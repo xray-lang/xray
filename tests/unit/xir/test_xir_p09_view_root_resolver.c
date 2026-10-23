@@ -246,7 +246,7 @@ static XrXirStatus resolve_sequence(const XrXirCompileContext *context,uint32_t 
     if (kind==23) {f.left.selection=selection;f.left.selection_count=2;f.right.selection=&other;f.right.selection_count=1;}
     unsigned char before[sizeof(f)];memcpy(before,&f,sizeof(f));XrXirConstruction *construction=NULL;
     XirViewRootResolver *resolver=NULL;XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xir_fixture_construction(context,&f.types,&construction);if (status!=XR_XIR_OK) goto done;
+    XrXirStatus status=xir_fixture_module_construction(context,&f.module,&construction);if (status!=XR_XIR_OK) goto done;
     status=xir_compile_view_prepare_ordinary(context,&f.module,construction,&diagnostic);
     if (status==XR_XIR_BUDGET || status==XR_XIR_OUT_OF_MEMORY) goto done;
     if (kind==12 || kind==13) {CHECK(status==XR_XIR_BAD_TYPE);goto done;}

@@ -134,7 +134,7 @@ static XrXirStatus checked(const XrXirCompileContext *context,const PreparedMate
     const XrXirMaterializationBinding *edges,uint32_t count,XrXirArtifact **output) {
     const XrXirConstruction *source=input->source.checked->construction;
     XrXirConstructionSpec spec={source->rows,source->count,edges,count,NULL};XrXirConstruction *owner=NULL;
-    XrXirStatus status=xr_xir_compile_construction_new_v3(context,input->module.types,&spec,&owner);
+    XrXirStatus status=xr_xir_compile_construction_new_v4(context,input->module.types,&spec,xr_xir_compile_construction_slots(source),&owner);
     XrXirDiagnostic diagnostic={0};
     if (status==XR_XIR_OK) status=xr_xir_compile_check_v2(context,&input->module,owner,output,&diagnostic);
     if (status!=XR_XIR_OK && status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_BUDGET)

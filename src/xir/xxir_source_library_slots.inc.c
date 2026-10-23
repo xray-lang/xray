@@ -9,6 +9,16 @@
  * KEY CONCEPT:
  *   Slot ownership follows selected module views; root permission is independent.
  */
+static bool source_slot_fact(SourceContext *ctx,uint32_t slot,const char *name,
+    uint32_t length,uint32_t exported) {
+    if (slot>=ctx->slot_count || slot>=ctx->slot_capacity || !ctx->slot_facts ||
+        !ctx->slot_fact_present || ctx->slot_fact_present[slot] || !name || !length || exported>1)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source slot name has no unique actual owner");
+    char *owned=source_alloc(ctx,length,1);
+    if (!owned || !source_copy_bytes(ctx,NULL,owned,name,length)) return false;
+    ctx->slot_facts[slot]=(XrXirSlotFact){slot,owned,length,exported};
+    ctx->slot_fact_present[slot]=true;return true;
+}
 static bool source_library_slot_map(SourceContext *ctx,const XrXirModule *library,
     SourceLibraryMap *map,uint32_t first) {
     const XrXirDeclarations *d=library->declarations;
@@ -53,6 +63,10 @@ static bool source_library_slot_instruction(SourceContext *ctx,const SourceLibra
 static bool source_library_slots(SourceContext *ctx,const XrXirModule *library,
     const SourceLibraryMap *map) {
     const XrXirDeclarations *d=library->declarations;
+    const XrXirSlotFacts *facts=map->unit?xr_xir_compile_construction_slots(map->unit->construction):NULL;
+    if (!facts || facts->count!=d->slot_count || (facts->count && !facts->rows) ||
+        map->slot_count!=d->slot_count || map->unit->library!=library)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library complete slot facts are missing");
     for (uint32_t s=0; s<map->slot_count; ++s) {
         if (!source_work(ctx,NULL)) return false;
         uint32_t target=map->slots[s];
@@ -66,6 +80,10 @@ static bool source_library_slots(SourceContext *ctx,const XrXirModule *library,
         if (!source_library_type(ctx,map->unit,original->type,&owned.type)) return false;
         owned.module=map->modules[original->module];
         if (!source_copy_bytes(ctx,NULL,&ctx->slots[target],&owned,sizeof(owned))) return false;
+        const XrXirSlotFact *fact=&facts->rows[s];
+        if (fact->slot!=s)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library slot fact ordinal is inconsistent");
+        if (!source_slot_fact(ctx,target,fact->name,fact->name_length,fact->exported)) return false;
     }
     return true;
 }
