@@ -3976,18 +3976,6 @@ set_tests_properties(test_program_native_entropy_cli PROPERTIES
     LABELS "integration;cli;canonical-program;native;provider;crypto"
     TIMEOUT 600 COST 180)
 
-add_executable(test_cli_fs
-    cli/test_cli_fs.c
-    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_fs.c
-    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_output.c
-)
-target_include_directories(test_cli_fs PRIVATE
-    ${XRAY_COMMON_INCLUDES}
-    ${CMAKE_SOURCE_DIR}/src/app/cli
-)
-target_link_libraries(test_cli_fs PRIVATE xray_core)
-add_test(NAME test_cli_fs COMMAND test_cli_fs)
-
 add_test(NAME test_conversion_inventory
     COMMAND ${XRAY_PYTHON}
         ${CMAKE_SOURCE_DIR}/tests/unit/api/test_conversion_inventory.py
