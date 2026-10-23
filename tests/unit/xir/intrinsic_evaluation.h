@@ -15,6 +15,7 @@
 #include "xir/xxir_source_comptime_instances_internal.h"
 #include "xir/xxir_construction_internal.h"
 #include "xir/xxir_comptime_pending_internal.h"
+#include "xir_comptime_construction_fixture.h"
 
 static void evaluation_transport(Fixture *fixture) {
     XrXirCompileContext *context = &fixture->context;
@@ -46,10 +47,8 @@ static void evaluation_transport(Fixture *fixture) {
     // This compiler-only input records the observed call as an unresolved site.
     // It does not claim a public Source snapshot or invent a function body.
     XrXirComptimeTable table = {&site, 1, NULL, 0};
-    XrXirConstructionSpec spec = {original->construction->rows, original->construction->count,
-        original->construction->materializations, original->construction->materialization_count, &table};
     XrXirConstruction *construction = NULL;
-    CHECK(xr_xir_compile_construction_new_v3(context, original->module.types, &spec, &construction) == XR_XIR_OK);
+    CHECK(xir_fixture_comptime_construction(context, original, &table, &construction) == XR_XIR_OK);
     XrXirModule built = original->module;
     built.stage = XR_XIR_BUILT;
     XrXirArtifact *unbound = NULL;

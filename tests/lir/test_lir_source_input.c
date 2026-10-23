@@ -13,6 +13,7 @@
 #include "xir/xxir_internal.h"
 #include "xir/xxir_comptime_pending_internal.h"
 #include "xir/xxir_source_comptime_instances_internal.h"
+#include "../unit/xir/xir_comptime_construction_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -206,12 +207,8 @@ static void evaluation_origin_rejected(void) {
     XrXirComptimeTable table = {&site, 1, NULL, 0};
     /* Recheck complete Source with a missing key so the ordinary compiler
      * producer, rather than a forged purpose bit, creates evaluation input. */
-    XrXirConstructionSpec spec = {checked->construction->rows, checked->construction->count,
-                                  checked->construction->materializations,
-                                  checked->construction->materialization_count, &table};
     XrXirConstruction *construction = NULL;
-    XIR_OK(xr_xir_compile_construction_new_v3(&checked->context, checked->module.types, &spec,
-                                              &construction));
+    XIR_OK(xir_fixture_comptime_construction(&checked->context, checked, &table, &construction));
     XrXirModule built = checked->module;
     built.stage = XR_XIR_BUILT;
     XrXirArtifact *source = NULL, *evaluation = NULL;

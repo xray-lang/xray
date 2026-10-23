@@ -8,6 +8,7 @@
  */
 #include "xir/xxir_comptime_pending_internal.h"
 #include "xir/xxir_construction_internal.h"
+#include "../xir_comptime_construction_fixture.h"
 static XrXirStatus pending_generated_source(XrXirCompileContext *context,XrXirArtifact **output) {
     XirSourceComptimeInstances stage={0};
     XrXirStatus status=comptime_instances_operation(context,comptime_instances_text("nested"),&stage,
@@ -19,9 +20,7 @@ static XrXirStatus pending_generated_source(XrXirCompileContext *context,XrXirAr
         const XrXirArtifact *source=views[0].definition;
         XrXirComptimeSite site={actual[0].source_function,actual[0].source_instruction,actual[0].helper};
         XrXirComptimeTable table={&site,1,NULL,0};
-        XrXirConstructionSpec spec={source->construction->rows,source->construction->count,
-            source->construction->materializations,source->construction->materialization_count,&table};
-        status=xr_xir_compile_construction_new_v3(context,source->module.types,&spec,&construction);
+        status=xir_fixture_comptime_construction(context,source,&table,&construction);
         if (status==XR_XIR_OK) {
             XrXirModule built=source->module;built.stage=XR_XIR_BUILT;
             status=xr_xir_compile_check_v2(context,&built,construction,output,NULL);
