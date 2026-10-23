@@ -10,7 +10,7 @@
  *   Only this producer's unfinished anonymous bodies may refine their bound.
  *   Direct calls use the actual substituted declaration, never a callee body.
  */
-static bool source_closure_call_never(SourceContext *ctx,const XrXirInstruction *op,bool *output) {
+static bool source_recipe_call_never(SourceContext *ctx,const XrXirInstruction *op,bool *output) {
     *output=false;
     if (op->immediate<0 || (uint64_t)op->immediate>=ctx->function_count) return true;
     uint32_t callee=(uint32_t)op->immediate;
@@ -26,7 +26,7 @@ static bool source_closure_call_never(SourceContext *ctx,const XrXirInstruction 
     return true;
 }
 
-static XrXirType source_closure_operand_type(SourceContext *ctx,uint32_t ordinal,uint32_t value) {
+static XrXirType source_recipe_operand_type(SourceContext *ctx,uint32_t ordinal,uint32_t value) {
     /* Instructions are not published yet. Parameters and earlier owned recipes
      * are the only type authority while the anonymous body is unfinished. */
     const XrXirFunction *function=&ctx->functions[ctx->function];
@@ -40,11 +40,11 @@ static XrXirType source_closure_operand_type(SourceContext *ctx,uint32_t ordinal
         recipe->instruction.type : XR_XIR_UNIT;
 }
 
-static bool source_closure_operand_i64(SourceContext *ctx,uint32_t ordinal,uint32_t value) {
-    return source_closure_operand_type(ctx,ordinal,value)==XR_XIR_I64;
+static bool source_recipe_operand_i64(SourceContext *ctx,uint32_t ordinal,uint32_t value) {
+    return source_recipe_operand_type(ctx,ordinal,value)==XR_XIR_I64;
 }
 
-static bool source_closure_recipe_never(SourceContext *ctx,const XrXirInstruction *op,
+static bool source_recipe_never(SourceContext *ctx,const XrXirInstruction *op,
     uint32_t ordinal,bool *output) {
     *output=true;
     switch (op->op) {
@@ -58,29 +58,29 @@ static bool source_closure_recipe_never(SourceContext *ctx,const XrXirInstructio
         return true;
     case XR_XIR_REM_INT:
         *output=op->type==XR_XIR_I64 &&
-            source_closure_operand_i64(ctx,ordinal,op->args[0]) &&
-            source_closure_operand_i64(ctx,ordinal,op->args[1]);
+            source_recipe_operand_i64(ctx,ordinal,op->args[0]) &&
+            source_recipe_operand_i64(ctx,ordinal,op->args[1]);
         return true;
     case XR_XIR_EQUAL:
         *output=op->type==XR_XIR_BOOL && op->immediate==0 &&
-            source_closure_operand_i64(ctx,ordinal,op->args[0]) &&
-            source_closure_operand_i64(ctx,ordinal,op->args[1]);
+            source_recipe_operand_i64(ctx,ordinal,op->args[0]) &&
+            source_recipe_operand_i64(ctx,ordinal,op->args[1]);
         return true;
     case XR_XIR_CELL_WRITE:
         *output=op->type==XR_XIR_UNIT &&
-            xr_xir_cell_element(&ctx->types,source_closure_operand_type(ctx,ordinal,op->args[0]))==XR_XIR_I64 &&
-            source_closure_operand_i64(ctx,ordinal,op->args[1]);
+            xr_xir_cell_element(&ctx->types,source_recipe_operand_type(ctx,ordinal,op->args[0]))==XR_XIR_I64 &&
+            source_recipe_operand_i64(ctx,ordinal,op->args[1]);
         return true;
     case XR_XIR_CALL_INDIRECT: {
         *output=false;
         if (op->immediate<0 || (uint64_t)op->immediate>UINT32_MAX) return true;
-        XrXirType type=source_closure_operand_type(ctx,ordinal,(uint32_t)op->immediate);
+        XrXirType type=source_recipe_operand_type(ctx,ordinal,(uint32_t)op->immediate);
         const XrXirTypeNode *signature=xr_xir_callable_signature(&ctx->types,type);
         *output=signature && signature->element==XR_XIR_NEVER && signature->result==op->type;
         return true;
     }
     case XR_XIR_CALL:
-        return source_closure_call_never(ctx,op,output);
+        return source_recipe_call_never(ctx,op,output);
     default:
         *output=false;
         return true;
@@ -88,19 +88,20 @@ static bool source_closure_recipe_never(SourceContext *ctx,const XrXirInstructio
 }
 
 static bool source_closure_error_bound(SourceContext *ctx) {
-    SourceFunction *body=&ctx->bodies[ctx->function];
-    XrXirFunction *function=&ctx->functions[ctx->function];
-    if (body->checked_library || function->error_type!=XR_XIR_ERROR || !body->node ||
-        body->node->type!=AST_FUNCTION_EXPR || !body->count ||
-        body->node->as.function_expr.throws_clause.syntax!=XR_THROWS_OMITTED ||
-        (ctx->identities[ctx->function].promises & XR_XIR_FUNCTION_GENERATOR))
+    uint32_t function=ctx->function;
+    if (ctx->bodies[function].checked_library || ctx->functions[function].error_type!=XR_XIR_ERROR ||
+        !ctx->bodies[function].node || ctx->bodies[function].node->type!=AST_FUNCTION_EXPR ||
+        !ctx->bodies[function].count ||
+        ctx->bodies[function].node->as.function_expr.throws_clause.syntax!=XR_THROWS_OMITTED ||
+        (ctx->identities[function].promises & XR_XIR_FUNCTION_GENERATOR))
         return true;
-    for (uint32_t i=0;i<body->count;++i) {
-        if (!source_work(ctx,body->node)) return false;
+    for (uint32_t i=0;i<ctx->bodies[function].count;++i) {
+        if (!source_work(ctx,ctx->bodies[function].node)) return false;
+        XrXirInstruction op=ctx->bodies[function].recipes[i].instruction;
         bool empty=false;
-        if (!source_closure_recipe_never(ctx,&body->recipes[i].instruction,i,&empty)) return false;
+        if (!source_recipe_never(ctx,&op,i,&empty)) return false;
         if (!empty) return true;
     }
-    function->error_type=XR_XIR_NEVER;
+    ctx->functions[function].error_type=XR_XIR_NEVER;
     return true;
 }

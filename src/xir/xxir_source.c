@@ -2465,8 +2465,8 @@ static bool source_declaration_target(SourceContext *ctx, const SourceDeclaratio
 }
 #include "xxir_source_manifest.inc.c"
 #include "xxir_source_implements.inc.c"
-#include "xxir_source_default_error_bound.inc.c"
 #include "xxir_source_closure_error_bound.inc.c"
+#include "xxir_source_default_error_bound.inc.c"
 static bool finish_body(SourceContext *ctx) {
     XrXirFunction *function = &ctx->functions[ctx->function];
     SourceFunction *body = &ctx->bodies[ctx->function];
