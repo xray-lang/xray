@@ -1,0 +1,11 @@
+enum Endian { Local }
+class EndianBox {
+    order: Endian
+    init() { this.order = Endian.Local }
+}
+export fn consumerAnswer() -> i64 {
+    const box = EndianBox()
+    const order: Endian = box.order
+    return 42
+}
+assert(consumerAnswer() == 42)

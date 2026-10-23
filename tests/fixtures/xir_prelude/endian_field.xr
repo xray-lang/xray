@@ -1,0 +1,12 @@
+class EndianBox {
+    order: Endian
+    init() { this.order = Endian.LE }
+}
+export fn consumerAnswer() -> i64 {
+    const box = EndianBox()
+    const order: Endian = box.order
+    const native: Endian = Endian.Native
+    const big: Endian = Endian.BE
+    return 42
+}
+assert(consumerAnswer() == 42)

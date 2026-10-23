@@ -61,3 +61,7 @@ endforeach()
 add_test(NAME test_xir_prelude_source COMMAND test_xir_prelude_source)
 set_tests_properties(test_xir_prelude_source PROPERTIES
     LABELS "unit;xir;execution;ownership;abi;budget" TIMEOUT 1200 RUN_SERIAL TRUE COST 120)
+
+add_test(NAME test_xir_prelude_endian_source COMMAND test_xir_prelude_source --endian-owner)
+set_tests_properties(test_xir_prelude_endian_source PROPERTIES
+    LABELS "unit;xir;compiler;ownership;prelude" TIMEOUT 60)

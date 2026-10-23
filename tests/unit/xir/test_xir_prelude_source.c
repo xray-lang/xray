@@ -77,7 +77,9 @@ static void prelude_program(const XrXirCompileContext *context,const XrXirLibrar
     }
     xr_test_prelude_run(context,owned);
 }
+#include "xir_prelude_endian_cases.h"
 int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--endian-owner")) { prelude_endian_owner();return 0; }
     CHECK(argc==1 || argc==3);LibraryCompileOwner compiler={0};
     CHECK(library_compile_owner_new(&compiler,&library_compile_limits)==XR_XIR_OK);
     library_compile_operation_cases("Canonical generated prelude Source and two reads",prelude_factory_operation,NULL);

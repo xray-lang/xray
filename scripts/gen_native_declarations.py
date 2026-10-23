@@ -867,7 +867,8 @@ def channel_result_rows(root):
     rows = [('Ordering', 'ORDERING', [('Relaxed','NONE'),('Acquire','NONE'),('Release','NONE'),('AcquireRelease','NONE'),('SeqCst','NONE')], 4, 0),
             ('CryptoError', 'CRYPTO_ERROR', [('InvalidLength','NONE')], 0, 0),
             ('Recv', 'RECV', [('Value','TYPE_PARAM_0'),('Empty','NONE'),('Timeout','NONE'),('Closed','NONE')], 7, 1),
-            ('SendResult', 'SEND_RESULT', [('Sent','NONE'),('Full','NONE'),('Timeout','NONE'),('Closed','NONE')], 8, 0)]
+            ('SendResult', 'SEND_RESULT', [('Sent','NONE'),('Full','NONE'),('Timeout','NONE'),('Closed','NONE')], 8, 0),
+            ('Endian', 'ENDIAN', [('Native','NONE'),('LE','NONE'),('BE','NONE')], 0, 0)]
     for name, kind, variants, _, arity in rows:
         registrations = re.findall(r'^\s*XR_BUILTIN_ENUM\(\s*"'+name+r'"', prelude, re.M)
         matches = list(re.finditer(r'XR_BUILTIN_ENUM\("'+name+r'",\s*'+str(arity)+r',\s*'+kind+r',', prelude))
