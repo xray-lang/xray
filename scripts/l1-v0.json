@@ -38,6 +38,7 @@
     "test_lir_c",
     "test_lir_c_faults",
     "lir_c_run",
+    "lir_pipeline_eval",
     "xir_stdlib_checkedgen",
     "test_xir_never_type",
     "test_lir_sccp",
@@ -47,6 +48,7 @@
     "test_lir_carriers"
   ],
   "tests": [
+    "test_lir_pipeline_eval",
     "test_cli_usability",
     "native_runtime_output",
     "native_location_owner",

@@ -1,0 +1,8 @@
+fn helper(n: i64) -> i64 {
+    var value: i64 = 0
+    if (n > 0) { value = n + 3 } else { value = n - 3 }
+    print(value)
+    return value
+}
+print(helper(7))
+print(helper(-7))
