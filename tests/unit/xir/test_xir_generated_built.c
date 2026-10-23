@@ -86,6 +86,7 @@ static void generated_fixture(GeneratedFixture *f,unsigned kind) {
         f->entry[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=42};
     }
     for(unsigned fn=0;fn<3;++fn) {
+        f->functions[fn].error_type=XR_XIR_NEVER;
         for(unsigned i=0;i<f->functions[fn].instruction_count;++i)
             f->sites[fn][i]=(XrXirGeneratedOrigin){{f->module_name,4},{f->file,14},{f->field,12},23+i,7+fn};
         f->origins[fn]=(XrXirGeneratedFunctionOrigins){f->sites[fn][0],f->sites[fn],f->functions[fn].instruction_count};

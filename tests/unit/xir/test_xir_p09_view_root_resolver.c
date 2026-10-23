@@ -63,11 +63,12 @@ static void resolve_base(ResolveFixture *f) {
     f->nodes[17]=(XrXirTypeNode){.kind=XR_XIR_TYPE_TUPLE,.parameters=f->fields[17],.parameter_count=3};
     f->ref=(XrXirCallableParameter){(XrXirType)Q_CELL,XR_PARAM_REF};
     f->nodes[18]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=&f->ref,.parameter_count=1,
-        .result=(XrXirType)Q_SHARED,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
-    f->nodes[19]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+        .element=XR_XIR_NEVER,.result=(XrXirType)Q_SHARED,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    f->nodes[19]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,
+        .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->types=(XrXirTypes){f->nodes,20,&f->nominals,NULL};
     for (uint32_t i=0;i<4;++i) f->functions[i]=(XrXirFunction){.name="body",.name_length=4,
-        .blocks=f->blocks+i,.block_count=1,.instructions=f->ops[i]};
+        .blocks=f->blocks+i,.block_count=1,.instructions=f->ops[i],.error_type=XR_XIR_NEVER};
     f->source=(XrXirSourceModule){.name="root",.name_length=4,.initializer=3};
     f->literals[0]=(XrXirLiteral){"a\0b",3};f->literals[1]=(XrXirLiteral){"a\0b",3};f->literals[2]=(XrXirLiteral){"a\0c",3};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
