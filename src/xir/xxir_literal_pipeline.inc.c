@@ -43,7 +43,7 @@ static XrXirStatus literal_verify_bindings(const XrXirCompileContext *context,co
     return XR_XIR_OK;
 }
 static XrXirStatus literal_receive(const XirLiteralRequest *request,const XrXirComptimeSite *site,
-    XirLiteralDefinitions *output,XrXirDiagnostic *diagnostic) {
+    XirLiteralDefinitions *output,XrXirDiagnostic *diagnostic,SourceContext *source_owner) {
     if (!request || !xir_compile_context_valid(request->context) || !request->instances || !request->count ||
         request->count>request->context->limits.functions || (site && request->count!=1) ||
         !output || output->definition || output->bindings || output->count)
@@ -78,6 +78,8 @@ static XrXirStatus literal_receive(const XirLiteralRequest *request,const XrXirC
     }
     status=literal_check(&ctx,original,result.bindings,site,&result.definition,diagnostic);
     if (status==XR_XIR_OK) status=literal_verify_bindings(context,views,&result);
+    if (status==XR_XIR_OK && !source_generated_debug_receive(source_owner,&ctx,original->module.function_count))
+        status=source_owner->diagnostic.status;
     if (status==XR_XIR_OK) { *output=result;result=(XirLiteralDefinitions){0}; }
 done:
     xr_xir_compile_instance_literals_free(&result);source_comptime_context_free(&ctx);xr_compile_resources_free(views);
@@ -86,9 +88,9 @@ done:
 }
 XR_FUNC XrXirStatus xr_xir_compile_instance_literals(const XirLiteralRequest *request,
     XirLiteralDefinitions *output,XrXirDiagnostic *diagnostic) {
-    return literal_receive(request,NULL,output,diagnostic);
+    return literal_receive(request,NULL,output,diagnostic,NULL);
 }
 XR_FUNC XrXirStatus xr_xir_compile_instance_literals_at(const XirLiteralRequest *request,
     const XrXirComptimeSite *site,XirLiteralDefinitions *output,XrXirDiagnostic *diagnostic) {
-    return site?literal_receive(request,site,output,diagnostic):literal_status(diagnostic,XR_XIR_BAD_STRUCTURE);
+    return site?literal_receive(request,site,output,diagnostic,NULL):literal_status(diagnostic,XR_XIR_BAD_STRUCTURE);
 }

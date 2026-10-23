@@ -27,6 +27,7 @@ static XrXirStatus program_source(XrXirCompileContext *context,const char *text,
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,output,diagnostic,NULL);
     xr_compile_session_free(session);return status;
 }
+#include "program_debug.h"
 static void program_normal(const char *kind) {
     XrXirCompileContext context;context_new(&context);XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=!strcmp(kind,"foreign")?program_foreign_source(&context,&source,&diagnostic):
@@ -40,8 +41,12 @@ static void program_normal(const char *kind) {
     const XrXirConstruction *query=xr_xir_compile_source_snapshot_construction(source.snapshot);
     CHECK(xr_xir_compile_construction_comptime(query)->site_count==sites && xr_xir_compile_construction_comptime(query)->binding_count==bindings);
     CHECK(xr_xir_compile_artifact_verify(source.checked,NULL)==XR_XIR_OK);
+    uint64_t debug_before[4],debug_after[4];program_debug_observe(source.snapshot,&source.checked->module,debug_before);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
+    XrXirSourceSnapshot *snapshot=source.snapshot;source.snapshot=NULL;
     xr_xir_compile_source_result_free(&source);XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;
+    program_debug_observe(snapshot,NULL,debug_after);
+    CHECK(!memcmp(debug_before,debug_after,sizeof(debug_before)));xr_xir_compile_source_snapshot_free(snapshot);
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);

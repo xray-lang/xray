@@ -39,6 +39,11 @@ typedef struct XrXirSourceHistoryUnit {
     bool interactive;
 } SourceHistoryUnit;
 typedef struct SourceHistoryEdge { uint32_t from,to; } SourceHistoryEdge;
+
+typedef struct SourceGeneratedDebug {
+    struct SourceGeneratedDebug *next;
+    XrXirSourceDebugFunction function;
+} SourceGeneratedDebug;
 typedef struct SourceHistoryReceive {
     const SourceHistoryUnit *unit;
     struct SourceLibraryMap *map;
@@ -61,6 +66,8 @@ typedef struct SourceContext {
     struct SourceHistoryReceive *history;
     SourceLibraryUnit *library_units;
     SourceRootQuery *root_queries;
+    SourceGeneratedDebug *generated_debug;
+    uint32_t generated_debug_count;
     SourceRootFlow *root_flow;
     XrXirProvenance *effect_evidence;
     SourceManifest *manifests;

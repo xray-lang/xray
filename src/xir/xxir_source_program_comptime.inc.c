@@ -18,7 +18,7 @@ static bool source_program_complete(SourceContext *ctx,const XrXirArtifact *sour
     XirComptimeResolveRequest request={sealed,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
         {XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},XR_XIR_CTFE_MAX_CALL_DEPTH};
     XirComptimeResolveFailure failure={0};XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_comptime_resolve(&request,output,&failure,&diagnostic);
+    XrXirStatus status=source_comptime_resolve(&request,output,&failure,&diagnostic,ctx);
     xr_xir_compile_artifact_free(sealed);
     if (status==XR_XIR_OK) return true;
     if (failure.root_local) return source_program_failure(ctx,failure.site.helper,failure.status);
