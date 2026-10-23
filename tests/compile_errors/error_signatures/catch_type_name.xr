@@ -1,5 +1,4 @@
 enum NetErr { Failed }
-fn mayFail() throws(NetErr) {}
 fn caller() {
-    try { mayFail() } catch (NetErr) {} // error
+    try {} catch (NetErr) {} // error
 }

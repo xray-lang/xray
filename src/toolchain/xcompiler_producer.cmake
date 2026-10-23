@@ -12,7 +12,7 @@ set(XR_COMPILER_PARSER_SOURCES
     frontend/parser/xparse_owner.c frontend/parser/xparse_resources.c frontend/parser/xparse_stmt.c
     frontend/parser/xparse_type.c frontend/parser/xstring_pool.c frontend/parser/xtype_ref.c
     frontend/parser/xtype_scope.c frontend/lexer/xlex.c frontend/lexer/xquoted_literal.c
-    base/xcompile_state.c base/xarena.c base/xutf8.c base/xsimd.c
+    base/xcompile_state.c base/xarena.c base/xutf8.c base/xsimd.c base/xunicode.c
     toolchain/xcompiler_arena_backing.c toolchain/xcompiler_session.c)
 if(WIN32)
     list(APPEND XR_COMPILER_PARSER_SOURCES os/win/fd_win.c)

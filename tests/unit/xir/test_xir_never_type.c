@@ -650,12 +650,62 @@ static void check_source_transport(const XrXirCompileContext *work) {
 }
 
 #include "xir_callable_error_cases.h"
+
+static void check_catch_binding_names(const XrXirCompileContext *work) {
+    char directory[XR_TEST_PATH_MAX]="xir-catch-binding-XXXXXX";
+    CHECK(xr_test_mkdtemp(directory));
+    char absolute[XR_TEST_PATH_MAX],root[XR_TEST_PATH_MAX];
+    CHECK(xr_test_realpath_buf(directory,absolute,sizeof(absolute)));
+    CHECK(snprintf(root,sizeof(root),"%s/root.xr",absolute)>0);
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
+    const struct { const char *clause; bool valid; } cases[]={
+        {"catch (Fault)",false},
+        {"catch (Typo)",false},
+        {"catch (\xCE\x94)",false},
+        {"catch (error)",true},
+        {"catch (Fault: Fault)",true},
+        {"catch (Fault.Bad)",true},
+        {"catch panic (P)",true},
+        {"catch (\xCE\xB4)",true},
+        {"catch (_Fault)",true},
+    };
+    for (size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
+        char text[256];
+        int length=snprintf(text,sizeof(text),
+            "enum Fault { Bad }\nfn caller() {\n    try {} %s {}\n}\n",cases[i].clause);
+        CHECK(length>0 && (size_t)length<sizeof(text));
+        XrCompilerSession *session=NULL;
+        CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILER_SESSION_OK);
+        XrXirSourceRequest request={session,root,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_LIBRARY,NULL};
+        XrXirSourceText input={"root.xr",text,(size_t)length};
+        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+        XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,NULL);
+        xr_compile_session_free(session);
+        if ((status==XR_XIR_OK)!=cases[i].valid)
+            fprintf(stderr,"catch binding %s: %u at %d:%d: %s\n",cases[i].clause,
+                status,diagnostic.line,diagnostic.column,diagnostic.message);
+        if (cases[i].valid) {
+            CHECK(status==XR_XIR_OK && result.checked && result.snapshot);
+            CHECK(xr_xir_compile_artifact_verify(result.checked,NULL)==XR_XIR_OK);
+        } else {
+            CHECK(status==XR_XIR_BAD_TYPE && diagnostic.status==status);
+            CHECK(!result.checked && !result.snapshot);
+            CHECK(diagnostic.line==3 && diagnostic.column==19);
+            CHECK(strncmp(diagnostic.message,"E0334:",6)==0);
+            CHECK(strstr(diagnostic.message,"catch (e: TypeName)"));
+        }
+        xr_xir_compile_source_result_free(&result);
+    }
+    CHECK(xr_test_rmdir(directory)==0);
+}
+
 int main(void) {
     xr_test_suppress_dialogs();
     XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
     XrXirCompileContext work={0};
     CHECK(xr_compile_resources_new(&limits,&work.resources)==XR_COMPILE_RESOURCE_OK);
     work.limits=xr_xir_compile_default_limits();
+    check_catch_binding_names(&work);
     check_callable_errors(&work);
     NeverFixture *producer=xr_malloc(sizeof(*producer));
     CHECK(producer);

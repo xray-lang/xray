@@ -14,6 +14,21 @@
  *   protects exactly the blocks of its try body; nested bodies keep their own
  *   innermost handler, and no handler protects itself or its siblings.
  */
+#include "base/xunicode.h"
+#include "base/xutf8.h"
+
+static bool source_catch_binding_name(SourceContext *ctx, const XrCatchClause *clause) {
+    if (clause->is_panic || clause->pattern || clause->type || !clause->var_name) return true;
+    size_t length = source_text_size(ctx, clause->var_name);
+    if (ctx->diagnostic.status != XR_XIR_OK) return false;
+    uint32_t first = 0;
+    (void)xr_utf8_decode(clause->var_name, length, &first);
+    if (!xr_unicode_is_upper(first)) return true;
+    AstNode site = {0};
+    site.line = clause->var_line; site.column = clause->var_column;
+    return source_fail(ctx, &site, XR_XIR_BAD_TYPE,
+        "E0334: bare catch name must not start with an uppercase letter; use catch (e: TypeName) to filter by type");
+}
 
 /* The first alternative names the handler's enum type. An Error carries no
  * static type arguments, so a generic enum states them there; the remaining
@@ -244,6 +259,7 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
         if (!source_work(ctx,node)) return false;
         if (!clause || !clause->body || (clause->pattern && (clause->var_name || clause->is_panic)))
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"malformed catch clause");
+        if (!source_catch_binding_name(ctx,clause)) return false;
         if (clause->is_panic) {
             if (panic) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"try allows one catch panic clause");
             if (clause->type && (!source_type(ctx,clause->type,&types[i]) || types[i] != XR_XIR_PANIC_INFO))
