@@ -11,6 +11,7 @@
 #include "frontend/parser/xparse.h"
 #include "frontend/parser/xast.h"
 #include "../xir_slot_previous36_96_golden.h"
+#include "../xir_effect_input_fixture.h"
 static void library_slot_names(const XrXirConstruction *owner,const char *const *names,uint32_t count) {
     const XrXirSlotFacts *facts=xr_xir_compile_construction_slots(owner);
     CHECK(facts && facts->count==count && (!!facts->rows==!!count));
@@ -140,6 +141,9 @@ static void library_slot_fact_controls(void) {
     CHECK(status==XR_XIR_OK && source.checked && source.snapshot);
     CHECK(source.checked->module.declarations->slot_count==4);
     library_slot_names(source.checked->construction,names,4);library_slot_raw_controls(&receiver,source.checked);
+    XrXirEffects *effects=NULL;
+    const XirFixtureEffectInput effect_input={&source.checked->module,source.checked->construction};
+    CHECK(xir_fixture_effects_infer(&receiver,effect_input,&effects)==XR_XIR_OK && effects);
     XrXirSlotFact rows[4];char bytes[4][8];
     const XrXirSlotFacts *original=xr_xir_compile_construction_slots(source.checked->construction);
     for (uint32_t s=0;s<4;++s) {
@@ -155,6 +159,10 @@ static void library_slot_fact_controls(void) {
     CHECK(xr_xir_compile_source_snapshot_copy_v2(&receiver,xr_xir_compile_source_snapshot_view(source.snapshot),owned,&snapshot)==XR_XIR_OK);
     xr_xir_compile_construction_free(owned);xr_xir_compile_source_result_free(&source);
     xr_compile_resources_release(producer.resources);
+    /* This compares the existing owned Module representation; the current
+     * inference entry does not consume the borrowed Construction. */
+    CHECK(xir_effects_source_body_match(&receiver,&received->module,effects)==XR_XIR_OK);
+    xr_xir_compile_effects_free(effects);
     library_slot_names(xr_xir_compile_source_snapshot_construction(snapshot),names,4);
     library_slot_names(received->construction,names,4);CHECK(xr_xir_compile_artifact_verify(received,NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0},again={0};CHECK(xr_xir_compile_checked_write(received,&packet,NULL)==XR_XIR_OK);

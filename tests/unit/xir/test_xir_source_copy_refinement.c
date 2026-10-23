@@ -18,6 +18,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "xir_root_parameter_fixture.h"
 #include "xir/xxir_effects.c"
+#include "xir_effect_input_fixture.h"
 
 typedef struct CopyFixture {
     XrXirTypeNode nodes[4];
@@ -39,7 +40,7 @@ static void copy_fixture(CopyFixture *f) {
     const uint32_t flags[4]={XR_XIR_CALLABLE_ROOT_UNRESOLVED,XR_XIR_CALLABLE_ROOT_REQUIRED,
         XR_XIR_CALLABLE_ROOT_NONE,XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_NO_SUSPEND};
     for (uint32_t t=0;t<4;++t)
-        f->nodes[t]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=flags[t]};
+        f->nodes[t]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=flags[t]};
     f->types=(XrXirTypes){.nodes=f->nodes,.count=4};
     f->parameters[0]=f->parameters[1]=(XrXirType)256;
     f->instructions[0]=(XrXirInstruction){.op=XR_XIR_COPY,.type=(XrXirType)256,.args={0,0}};
@@ -47,7 +48,7 @@ static void copy_fixture(CopyFixture *f) {
     f->instructions[2]=(XrXirInstruction){.op=XR_XIR_COPY,.type=(XrXirType)256,.args={1,0}};
     f->instructions[3]=(XrXirInstruction){.op=XR_XIR_RETURN};
     f->function=(XrXirFunction){.name=f->name,.name_length=10,.parameters=f->parameters,
-        .parameter_count=2,.instructions=f->instructions,.instruction_count=4};
+        .parameter_count=2,.instructions=f->instructions,.instruction_count=4,.error_type=XR_XIR_NEVER};
     f->declarations=(XrXirDeclarations){.functions=&f->identity};
     f->values[0]=(XrXirRootValueIdentity){0,XR_XIR_EFFECT_VALUE_PROPAGATE,(XrXirType)256};
     f->values[1]=(XrXirRootValueIdentity){1,XR_XIR_EFFECT_VALUE_FIXED,(XrXirType)256};
@@ -58,10 +59,11 @@ static void copy_fixture(CopyFixture *f) {
         .types=&f->types,.declarations=&f->declarations,.provenance=&f->provenance};
 }
 
-static XrXirStatus copy_operation(const XrXirCompileContext *context,bool oracle) {
+static XrXirStatus copy_operation(const XrXirCompileContext *context,
+    const XrXirConstruction *construction,bool oracle) {
     CopyFixture producer,current;copy_fixture(&producer);copy_fixture(&current);
     XrXirEffects effects={.resources=context->resources,.count=1};
-    XrXirStatus status=xir_effects_refinement_capture(context,&producer.module,&effects);
+    XrXirStatus status=xir_fixture_effects_capture(context,(XirFixtureEffectInput){&producer.module,construction},&effects);
     memset(&producer,0,sizeof(producer));
     XrXirType *declarations=NULL;
     if (status==XR_XIR_OK) {
@@ -105,32 +107,33 @@ static XrXirStatus copy_operation(const XrXirCompileContext *context,bool oracle
     xr_compile_resources_free(declarations);effect_refinement_free(effects.refinement);return status;
 }
 
-static void copy_capture_rejections(const XrXirCompileContext *context) {
+static void copy_capture_rejections(const XrXirCompileContext *context,
+    const XrXirConstruction *construction) {
     for (uint32_t which=0;which<3;++which) {
         CopyFixture fixture;copy_fixture(&fixture);
         if (!which) fixture.instructions[0].op=XR_XIR_FUNCTION_WEAKEN;
         else if (which==1) fixture.parameters[0]=(XrXirType)257;
         else fixture.values[1].instruction=0;
         XrXirEffects effects={.resources=context->resources,.count=1};
-        CHECK(xir_effects_refinement_capture(context,&fixture.module,&effects)==
+        CHECK(xir_fixture_effects_capture(context,(XirFixtureEffectInput){&fixture.module,construction},&effects)==
             (which==1?XR_XIR_BAD_TYPE:XR_XIR_BAD_STRUCTURE));
         CHECK(!effects.refinement);
     }
 }
 
-static void copy_resources(void) {
+static void copy_resources(const XrXirConstruction *construction) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&context).live_bytes;rp_attempts=0;
-    CHECK(copy_operation(&context,false)==XR_XIR_OK);
+    CHECK(copy_operation(&context,construction,false)==XR_XIR_OK);
     size_t sites=rp_attempts;XrCompileResourceStats required=rp_stats(&context);
     rp_owner_free(&context,baseline);rp_balanced(physical);CHECK(sites);
     for (size_t site=0;site<sites;++site) {
         context=rp_owner(rp_caps());baseline=rp_stats(&context).live_bytes;
         RootParameterMark retained=rp_mark();rp_attempts=0;rp_fail_at=site;rp_injected=false;
-        XrXirStatus status=copy_operation(&context,false);rp_fail_at=SIZE_MAX;
+        XrXirStatus status=copy_operation(&context,construction,false);rp_fail_at=SIZE_MAX;
         CHECK(status==XR_XIR_OUT_OF_MEMORY && rp_injected);rp_balanced(retained);
         XrCompileResourceStats paid=rp_stats(&context);CHECK(paid.live_bytes==baseline);
-        CHECK(copy_operation(&context,false)==XR_XIR_OK);
+        CHECK(copy_operation(&context,construction,false)==XR_XIR_OK);
         XrCompileResourceStats retried=rp_stats(&context);
         CHECK(retried.allocated_bytes>paid.allocated_bytes && retried.work>paid.work);
         rp_owner_free(&context,baseline);rp_balanced(physical);
@@ -142,20 +145,26 @@ static void copy_resources(void) {
         if (!axis) limits.allocated_bytes=amount-less;
         else if (axis==1) limits.live_bytes=amount-less;else limits.work=amount-less;
         context=rp_owner(limits);baseline=rp_stats(&context).live_bytes;
-        CHECK(copy_operation(&context,false)==(less?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK(copy_operation(&context,construction,false)==(less?XR_XIR_BUDGET:XR_XIR_OK));
         rp_owner_free(&context,baseline);rp_balanced(physical);
     }
     printf("copy refinement: %zu complete OOM sites, same-owner retry, exact/minus1 three axes, physical0\n",sites);
 }
 
 int main(int argc,char **argv) {
-    if (argc==2 && !strcmp(argv[1],"--compiler")) copy_resources();
-    else if (argc==1) {
+    if (argc!=1 && (argc!=2 || strcmp(argv[1],"--compiler"))) return 2;
+    /* This independent setup ledger stays outside every injected operation. */
+    XrXirCompileContext setup=rp_owner(rp_caps());XrXirConstruction *construction=NULL;
+    const XrXirConstructionSpec spec={0};const XrXirSlotFacts slots={NULL,0};
+    CHECK(xr_xir_compile_construction_new_v4(&setup,NULL,&spec,&slots,&construction)==XR_XIR_OK && construction);
+    if (argc==2) copy_resources(construction);
+    else {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
-        CHECK(copy_operation(&context,true)==XR_XIR_OK);copy_capture_rejections(&context);
+        CHECK(copy_operation(&context,construction,true)==XR_XIR_OK);copy_capture_rejections(&context,construction);
         rp_owner_free(&context,baseline);rp_balanced(physical);
         puts("copy refinement: owned propagation edge, seven mutations, fixed/bind/current bounds, physical0");
-    } else return 2;
+    }
+    xr_xir_compile_construction_free(construction);xr_compile_resources_release(setup.resources);
     return 0;
 }
