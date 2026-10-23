@@ -7,7 +7,10 @@
  * library_native.c - Real generated Library bodies cross providers
  */
 #include "xir/xxir_checked.h"
+#include "xir/xxir_compile_memory.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_program_internal.h"
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +25,7 @@ XR_DATA const uint32_t p11_library_callback_count;
 XR_DATA const XrXirResumeEntry p11_library_resume_callbacks[];
 XR_DATA const XrXirReleaseEntry p11_library_release_callbacks[];
 typedef struct LibraryNativeOwner {
+    /* The received Input owns this body, including after Program transfer. */
     XrXirArtifact *lowered;
     XrXirVmBinding *bindings;
     XrXirCallEntry *vm_entries,*entries;
@@ -69,7 +73,7 @@ static void library_native_code_release(void *opaque) {
     xr_compile_resources_free(owner->entries);owner->entries=NULL;
     xr_compile_resources_free(owner->bindings);owner->bindings=NULL;
     xr_compile_resources_free(owner->vm_entries);owner->vm_entries=NULL;
-    xr_xir_compile_artifact_free(owner->lowered);owner->lowered=NULL;++owner->releases;
+    owner->lowered=NULL;++owner->releases;
 }
 static XrXirProgram *library_native_prepare(LibraryNativeOwner *owner,const char *mode) {
     library_observed=owner;
@@ -78,29 +82,41 @@ static XrXirProgram *library_native_prepare(LibraryNativeOwner *owner,const char
     XrXirCompileContext context={0};XrCompileResourceLimits caps={UINT64_C(67108864),UINT64_C(8388608),UINT64_C(128000000)};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();
     const XrXirProgramSpec *native=&p11_library_native_program;
-    XrXirArtifact *checked=NULL,*closed=NULL;
-    CHECK(xr_xir_compile_checked_read(&context,native->proof.bytes,native->proof.length,&checked,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
-    XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
-    CHECK(packet.length==native->proof.length && !memcmp(packet.bytes,native->proof.bytes,packet.length));
-    memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_lower(closed,&native->target,&owner->lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
-    XrXirProgramProof proof=xr_xir_compile_program_proof(owner->lowered);
-    CHECK(proof.length==native->proof.length && !memcmp(proof.identity,native->proof.identity,32) && !memcmp(proof.bytes,native->proof.bytes,proof.length));
+    XrXirProgramInput *input=NULL;XrXirProgram *program=NULL;XrXirStatus status=XR_XIR_OK;
+    XrXirCheckedPacket packet={.length=native->packet.length};
+    packet.bytes=xir_compile_copy(&context,native->packet.bytes,packet.length,&status);
+    if(status==XR_XIR_OK) {
+        XrXirProgramPacket borrowed=native->packet;borrowed.bytes=packet.bytes;
+        status=xir_program_input_read(&context,&borrowed,&native->target,&input);
+    }
+    if(packet.bytes) memset(packet.bytes,0xa5,packet.length);
+    xr_xir_compile_checked_packet_free(&packet);
+    if(status!=XR_XIR_OK) goto finish;
+    owner->lowered=input->artifact;
+    XrXirProgramPacket received=xir_program_packet_borrow(owner->lowered);
+    CHECK(received.length==native->packet.length && !memcmp(received.bytes,native->packet.bytes,received.length) &&
+        !memcmp(received.identity,native->packet.identity,32));
     const XrXirModule *module=xr_xir_compile_artifact_module(owner->lowered);owner->count=module->function_count;owner->run=UINT32_MAX;
     CHECK(owner->count==native->entry_count && owner->count==p11_library_callback_count);
     for(uint32_t f=0;f<owner->count;++f) if(module->functions[f].name_length==3 && !memcmp(module->functions[f].name,"run",3)) {CHECK(owner->run==UINT32_MAX);owner->run=f;}
     CHECK(owner->run<owner->count && module->declarations->functions[owner->run].exported);
-    CHECK(xr_xir_compile_vm_bind_table(owner->lowered,&owner->bindings,&owner->vm_entries)==XR_XIR_OK);
-    CHECK(xr_compile_resources_calloc(context.resources,owner->count,sizeof(*owner->entries),(void **)&owner->entries)==XR_COMPILE_RESOURCE_OK);
+    status=xr_xir_compile_vm_bind_table(owner->lowered,&owner->bindings,&owner->vm_entries);
+    if(status!=XR_XIR_OK) goto finish;
+    owner->entries=xir_compile_calloc(&context,owner->count,sizeof(*owner->entries),&status);
+    if(status!=XR_XIR_OK) goto finish;
     for(uint32_t f=0;f<owner->count;++f) {
         owner->entries[f]=library_native_function(owner,f)?native->entries[f]:owner->vm_entries[f];
         CHECK(owner->entries[f].resume && owner->entries[f].release);
         owner->entries[f].resume=p11_library_resume_callbacks[f];owner->entries[f].release=p11_library_release_callbacks[f];
     }
     XrXirProgramSpec spec=*native;spec.entries=owner->entries;spec.code=(XrXirCodeLease){owner,library_native_code_release};
-    XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(&context,&spec,&program)==XR_XIR_OK);
+    status=xir_program_receive(&context,&spec,&input,NULL,&program);
+    if(status==XR_XIR_OK) CHECK(!input);
+finish:
+    if(status!=XR_XIR_OK) library_native_code_release(owner);
+    xir_program_input_free(input);
     xr_compile_resources_release(context.resources);
+    CHECK(status==XR_XIR_OK && program);
     return program;
 }
 static void library_native_normal(LibraryNativeOwner *owner,XrXirProgram *program,const char *mode) {
@@ -117,7 +133,7 @@ static void library_native_normal(LibraryNativeOwner *owner,XrXirProgram *progra
     if(runtime_live || runtime_bytes) runtime_report_residuals(stderr);
     instance_compile_report();
     CHECK(owner->releases==1 && !runtime_live && !runtime_bytes && !instance_compile_live && !instance_compile_bytes);
-    fprintf(stderr,"Library %s authentic generated C and complete proof, two Instances42 real crossings%llu/%llu physical0\n",mode,(unsigned long long)owner->crossings[0],(unsigned long long)owner->crossings[1]);
+    fprintf(stderr,"Library %s authentic generated C and owned Input, two Instances42 real crossings%llu/%llu physical0\n",mode,(unsigned long long)owner->crossings[0],(unsigned long long)owner->crossings[1]);
 }
 #include "library_runtime.h"
 int main(int argc,char **argv) {
