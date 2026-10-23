@@ -27,14 +27,25 @@ static XrXirArtifact *suspension_program(const XrXirCompileContext *context,unsi
         rows[2][1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={0}};blocks[2].count=2;
     }
     for(uint32_t f=0;f<5;++f)
-        functions[f]=(XrXirFunction){"f",1,NULL,0,f?XR_XIR_I64:XR_XIR_UNIT,
-            &blocks[f],1,rows[f],blocks[f].count,NULL,0};
+        functions[f]=(XrXirFunction){.name="f",.name_length=1,.result=f?XR_XIR_I64:XR_XIR_UNIT,
+            .blocks=&blocks[f],.block_count=1,.instructions=rows[f],
+            .instruction_count=blocks[f].count,.error_type=XR_XIR_NEVER};
     const XrXirSourceModule source={"root",4,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
     const XrXirModule module={XR_XIR_BUILT,functions,5,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xir_fixture_check(context,&module,&checked,NULL)==XR_XIR_OK);
+    const XrXirConstructionSpec spec={0};
+    const XrXirSlotFacts slots={NULL,0};
+    XrXirConstruction *construction=NULL;
+    CHECK(xr_xir_compile_construction_new_v4(context,NULL,&spec,&slots,&construction)==XR_XIR_OK);
+    XrXirDiagnostic diagnostic={0};
+    XrXirStatus checked_status=xr_xir_compile_check_v2(context,&module,construction,&checked,&diagnostic);
+    xr_xir_compile_construction_free(construction);
+    if (checked_status!=XR_XIR_OK)
+        fprintf(stderr,"Suspension fixture check status%u f%u b%u i%u reason%u\n",
+            checked_status,diagnostic.function,diagnostic.block,diagnostic.instruction,diagnostic.reason);
+    CHECK(checked_status==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);xr_xir_compile_artifact_free(closed);
