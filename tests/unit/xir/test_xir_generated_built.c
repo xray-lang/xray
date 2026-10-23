@@ -59,13 +59,13 @@ static void generated_fixture(GeneratedFixture *f,unsigned kind) {
         if(kind==3)f->ops[2].args[0]=1;
     }
     f->blocks[0]=(XrXirBlock){0,1,0,0};f->blocks[1]=(XrXirBlock){0,count,0,0};f->blocks[2]=(XrXirBlock){0,2,0,0};
-    f->functions[0]=(XrXirFunction){f->names[0],4,NULL,0,XR_XIR_UNIT,&f->blocks[0],1,&f->init,1,NULL,0};
+    f->functions[0]=(XrXirFunction){f->names[0],4,NULL,0,XR_XIR_UNIT,&f->blocks[0],1,&f->init,1,NULL,0,XR_XIR_NEVER};
     f->functions[1]=(XrXirFunction){f->names[1],3,NULL,0,kind==1?XR_XIR_BOOL:kind==3?(XrXirType)256:XR_XIR_I64,
-        &f->blocks[1],1,f->ops,count,NULL,0};
-    f->functions[2]=(XrXirFunction){f->names[2],4,NULL,0,XR_XIR_I64,&f->blocks[2],1,f->entry,2,NULL,0};
+        &f->blocks[1],1,f->ops,count,NULL,0,XR_XIR_NEVER};
+    f->functions[2]=(XrXirFunction){f->names[2],4,NULL,0,XR_XIR_I64,&f->blocks[2],1,f->entry,2,NULL,0,XR_XIR_NEVER};
     f->identities[2].exported=1;
     if(kind==2)f->identities[1].promises=XR_XIR_FUNCTION_NO_SUSPEND;
-    f->source_module=(XrXirSourceModule){f->module_name,4,NULL,0,0};
+    f->source_module=(XrXirSourceModule){.name=f->module_name,.name_length=4};
     f->declarations=(XrXirDeclarations){&f->source_module,1,f->identities,NULL,0,NULL,0,0,2,NULL};
     f->built=(XrXirModule){.stage=XR_XIR_BUILT,.functions=f->functions,.function_count=3,
         .declarations=&f->declarations,.linkage_kind=XR_XIR_PROGRAM};
@@ -86,7 +86,6 @@ static void generated_fixture(GeneratedFixture *f,unsigned kind) {
         f->entry[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=42};
     }
     for(unsigned fn=0;fn<3;++fn) {
-        f->functions[fn].error_type=XR_XIR_NEVER;
         for(unsigned i=0;i<f->functions[fn].instruction_count;++i)
             f->sites[fn][i]=(XrXirGeneratedOrigin){{f->module_name,4},{f->file,14},{f->field,12},23+i,7+fn};
         f->origins[fn]=(XrXirGeneratedFunctionOrigins){f->sites[fn][0],f->sites[fn],f->functions[fn].instruction_count};
