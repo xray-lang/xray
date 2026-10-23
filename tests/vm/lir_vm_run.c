@@ -56,7 +56,7 @@ static XrRbcProgram *compile_file(const char *path) {
         goto done;
     }
     XrLirLowerRequest lower_request = {closed, source.snapshot, false};
-    if (xr_lir_lower_checked(&lower_request, &lowered, &lower_failure) != XR_LIR_OK) {
+    if (xr_lir_lower_program_checked(&lower_request, &lowered, &lower_failure) != XR_LIR_OK) {
         fprintf(stderr, "lir_vm_run: lower %s:%u:%u: %s\n",
             lower_failure.owned_path ? lower_failure.owned_path : path,
             lower_failure.diagnostic.source.line, lower_failure.diagnostic.source.column,

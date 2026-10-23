@@ -28,7 +28,7 @@ static XrRbcProgram *from_source(const char *text) {
     XrLirLowered lowered = {0};
     XrLirLowerFailure failure = {0};
     XrLirLowerRequest request = {source.closed, source.source.snapshot, false};
-    OK(xr_lir_lower_checked(&request, &lowered, &failure));
+    OK(xr_lir_lower_program_checked(&request, &lowered, &failure));
     source_fixture_free(&source);
     XrRbcProgram *program = NULL;
     CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, NULL) == XR_RBC_COMPILE_OK);
@@ -284,6 +284,18 @@ static void nested_execution(const char *path) {
 int main(int argc, char **argv) {
     CHECK(argc >= 2);
     const char *mode = argv[1];
+    if (!strcmp(mode, "literal-repeat")) {
+        XrRbcProgram *program = from_source("const n=7\nprint(n)\nprint(99)\n");
+        for (unsigned i = 0; i < 2; ++i) {
+            XrRbcOutcome *outcome = invoke(program);
+            uint64_t bits = UINT64_MAX;
+            CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK);
+            CHECK(xr_rbc_outcome_bits(outcome, &bits) && !bits);
+            xr_rbc_outcome_free(&outcome);
+        }
+        xr_rbc_program_destroy(program);
+        return 0;
+    }
     if (!strcmp(mode, "source")) {
         XrRbcProgram *program = from_source(
             "fn sum(a:i64,b:i64,c:i64,d:i64)->i64{return a+b+c+d}\n"
@@ -305,12 +317,14 @@ int main(int argc, char **argv) {
             !strcmp(mode, "panic-bad-sink"), argc == 2 || strcmp(argv[2], "outcome-first") != 0);
     if (!strcmp(mode, "nested")) nested_execution(path);
     else {
-        bool source_case = !strcmp(mode, "source-failure");
+        bool literal = !strcmp(mode, "literal-failure");
+        bool source_case = literal || !strcmp(mode, "source-failure");
         bool point = !strcmp(mode, "point"), known = strcmp(mode, "unknown") != 0;
         bool buffered = !strcmp(mode, "flush") || !strcmp(mode, "pipe-flush");
         bool pipe = !strcmp(mode, "pipe") || !strcmp(mode, "pipe-flush");
         XrRbcProgram *program = source_case ?
-            from_source("fn fail()->i64{\nprint(42)\nreturn 1}\nprint(fail())\n") :
+            from_source(literal ? "const n=7\nprint(n)\nprint(99)\n" :
+                "fn fail()->i64{\nprint(42)\nreturn 1}\nprint(fail())\n") :
             from_lir(path, known, point, false);
         XrtSourceLocation expected = source_case ? source_print_location(program) : (XrtSourceLocation) {0};
         XrRbcExecution *execution = prepare(program);

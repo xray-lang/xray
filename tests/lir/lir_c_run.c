@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         goto done;
     }
     XrLirLowerRequest lower_request = {closed, source.snapshot, false};
-    if (xr_lir_lower_checked(&lower_request, &lowered, &lower_failure) != XR_LIR_OK) {
+    if (xr_lir_lower_program_checked(&lower_request, &lowered, &lower_failure) != XR_LIR_OK) {
         fprintf(stderr, "lowering: %s\n", lower_failure.diagnostic.message);
         goto done;
     }

@@ -133,7 +133,7 @@ static void lir_rejected(void) {
     XrLirLowerRequest request = {source.closed, source.source.snapshot, false};
     XrLirLowered output = {0};
     XrLirLowerFailure failure = {0};
-    XrLirStatus status = xr_lir_lower_checked(&request, &output, &failure);
+    XrLirStatus status = xr_lir_lower_program_checked(&request, &output, &failure);
     source_fixture_free(&source);
     CHECK(status == XR_LIR_UNSUPPORTED && failure.diagnostic.status == status);
     CHECK(!output.module && !output.entry.id);

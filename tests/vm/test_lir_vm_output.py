@@ -38,14 +38,16 @@ def main():
                 label, result.returncode, output, result.stderr)
             return
         assert result.returncode == 0, (label, result.returncode, output, result.stderr)
-        if mode == 'source':
-            assert output == b'10\n21\n' and result.stderr == b'', (output, result.stderr)
+        if mode in ('source', 'literal-repeat'):
+            expected = b'7\n99\n7\n99\n' if mode == 'literal-repeat' else b'10\n21\n'
+            assert output == expected and result.stderr == b'', (output, result.stderr)
         else:
             marker = b'HOST_ALIVE\r\n' if os.name == 'nt' else b'HOST_ALIVE\n'
             assert not output and result.stderr == marker, (label, output, result.stderr)
 
     run('source')
-    for mode in ('write', 'flush', 'pipe', 'pipe-flush', 'point', 'unknown', 'source-failure'):
+    run('literal-repeat')
+    for mode in ('write', 'flush', 'pipe', 'pipe-flush', 'point', 'unknown', 'source-failure', 'literal-failure'):
         for order in ('program-first', 'outcome-first'):
             run(mode, order, pipe=mode in ('pipe', 'pipe-flush'))
     run('nested')

@@ -54,7 +54,7 @@ static XrLirLowered lower_text(const char *text) {
                     ++phis;
         CHECK(phis > 0);
     }
-    XrLirStatus status = xr_lir_lower_checked(&request, &output, &failure);
+    XrLirStatus status = xr_lir_lower_program_checked(&request, &output, &failure);
     source_fixture_free(&fixture);
     if (status != XR_LIR_OK)
         fprintf(stderr, "lower %u %u:%u: %s\n%s\n", (unsigned) status,
@@ -158,7 +158,7 @@ static void rejected(const char *text, bool overflow, const char *message) {
     XrLirLowered output = {0};
     XrLirLowerFailure failure = {0};
     XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, overflow};
-    XrLirStatus status = xr_lir_lower_checked(&request, &output, &failure);
+    XrLirStatus status = xr_lir_lower_program_checked(&request, &output, &failure);
     source_fixture_free(&fixture);
     if (status != XR_LIR_UNSUPPORTED || !strstr(failure.diagnostic.message, message))
         fprintf(stderr, "rejection %u: %s; expected %s\n", (unsigned) status,
@@ -233,10 +233,6 @@ static void fixed_division_source(const char *text, bool slot_frontier) {
     }
     source_fixture_free(&fixture);
     CHECK(source_ops > 0);
-    if (slot_frontier) {
-        rejected(text, false, "module imports, slots or receiving storage");
-        return;
-    }
     XrLirLowered output = lower_text(text);
     for (uint32_t f = 0; f < xr_lir_function_count(output.module); ++f) {
         XrLirFunction function;
@@ -326,7 +322,7 @@ static void floating_negation_source(void) {
     CHECK(source_ops == 1 && path);
     XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
     XrLirLowered output = {0}; XrLirLowerFailure failure = {0};
-    XrLirStatus status = xr_lir_lower_checked(&request, &output, &failure);
+    XrLirStatus status = xr_lir_lower_program_checked(&request, &output, &failure);
     source_fixture_free(&fixture);
     CHECK(status == XR_LIR_OK && output.module && !failure.owned_path);
     OK(xr_lir_verify(output.module, NULL));
@@ -385,18 +381,133 @@ static void swapped_backedge(void) {
 }
 static void argument_validation(void) {
     XrLirLowered output = {0};
-    CHECK(xr_lir_lower_checked(NULL, &output, NULL) == XR_LIR_INVALID_ARGUMENT);
+    CHECK(xr_lir_lower_program_checked(NULL, &output, NULL) == XR_LIR_INVALID_ARGUMENT);
     SourceFixture fixture = source_fixture("print(1)\n");
     XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
-    CHECK(xr_lir_lower_checked(&request, NULL, NULL) == XR_LIR_INVALID_ARGUMENT);
-    OK(xr_lir_lower_checked(&request, &output, NULL));
+    CHECK(xr_lir_lower_program_checked(&request, NULL, NULL) == XR_LIR_INVALID_ARGUMENT);
+    OK(xr_lir_lower_program_checked(&request, &output, NULL));
     XrLirModule *module = output.module;
-    CHECK(xr_lir_lower_checked(&request, &output, NULL) == XR_LIR_INVALID_ARGUMENT &&
+    CHECK(xr_lir_lower_program_checked(&request, &output, NULL) == XR_LIR_INVALID_ARGUMENT &&
           output.module == module);
     xr_lir_lowered_free(&output);
     source_fixture_free(&fixture);
     xr_lir_lowered_free(NULL);
     xr_lir_lower_failure_free(NULL);
+}
+static void literal_sources(void) {
+    const char *text = "const n=7\nprint(n)\nprint(n)\n";
+    SourceFixture fixture = source_fixture(text);
+    const XrXirModule *original = xr_xir_compile_artifact_module(fixture.closed);
+    CHECK(original->declarations->slot_count == 1);
+    const XrXirFunction *init =
+        &original->functions[original->declarations->modules[0].initializer];
+    const XrXirSourceDebugView *debug = xr_xir_compile_source_snapshot_debug(fixture.source.snapshot);
+    const XrXirSourceView *source = xr_xir_compile_source_snapshot_view(fixture.source.snapshot);
+    uint32_t origin = UINT32_MAX;
+    CHECK(xr_xir_compile_specialization_origin(fixture.closed,
+        original->declarations->modules[0].initializer, &origin) == XR_XIR_OK);
+    CHECK(debug && source && origin < debug->function_count);
+    XrXirSourceRange expected[4] = {{0}};
+    const char *borrowed = source->modules[0].path ? source->modules[0].path : source->modules[0].identity;
+    size_t path_length = strlen(borrowed);
+    char *path = xr_malloc(path_length + 1);
+    CHECK(path);
+    memcpy(path, borrowed, path_length + 1);
+    unsigned loads = 0, inits = 0;
+    for (uint32_t i = 0; i < init->instruction_count; ++i) {
+        loads += init->instructions[i].op == XR_XIR_SLOT_LOAD;
+        inits += init->instructions[i].op == XR_XIR_SLOT_INIT;
+        if (init->instructions[i].op == XR_XIR_SLOT_LOAD) {
+            XrXirSourceRange range = debug->functions[origin].points[i].range;
+            CHECK(range.line == 2 || range.line == 3);
+            expected[range.line] = range;
+        }
+    }
+    CHECK(loads == 2 && inits == 1);
+    XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
+    XrLirLowered output = {0};
+    OK(xr_lir_lower_program_checked(&request, &output, NULL));
+    CHECK(original->declarations->slot_count == 1);
+    source_fixture_free(&fixture);
+    unsigned found[4] = {0};
+    uint32_t values[4] = {0};
+    for (uint32_t f = 0; f < xr_lir_function_count(output.module); ++f) {
+        XrLirFunction function;
+        XrLirFunctionView view;
+        OK(xr_lir_function_at(output.module, f, &function));
+        OK(xr_lir_function_view(output.module, function, &view));
+        for (uint32_t b = 0; b < view.block_count; ++b) {
+            XrLirBlock block;
+            XrLirBlockView bv;
+            OK(xr_lir_block_at(output.module, function, b, &block));
+            OK(xr_lir_block_view(output.module, block, &bv));
+            for (uint32_t i = 0; i < bv.instruction_count; ++i) {
+                XrLirInstructionView op;
+                OK(xr_lir_instruction_view(output.module, block, i, &op));
+                if (op.op != XR_LIR_CONST || op.bits != 7 ||
+                    op.source.line < 2 || op.source.line > 3) continue;
+                CHECK(op.type == XR_LIR_I64 && op.source.path && op.source.column > 0);
+                XrXirSourceRange range = expected[op.source.line];
+                CHECK(op.source.path_length == path_length && !memcmp(op.source.path, path, path_length));
+                CHECK(op.source.column == (uint32_t)range.column);
+                CHECK(op.source.end_line == (uint32_t)(range.end_line ? range.end_line : range.line));
+                CHECK(op.source.end_column == (uint32_t)(range.end_line ? range.end_column : range.column));
+                ++found[op.source.line];
+                values[op.source.line] = op.result;
+            }
+        }
+    }
+    CHECK(found[2] == 1 && found[3] == 1 && values[2] != values[3]);
+    xr_free(path);
+    xr_lir_lowered_free(&output);
+    output = lower_text("const n=0\nprint(n)\n");
+    xr_lir_lowered_free(&output);
+    rejected("const n=1+2\nprint(n)\n", false, "direct same-block i64 literal");
+    rejected("fn value()->i64{return 7}\nconst n=value()\nprint(n)\n", false,
+             "direct same-block i64 literal");
+    rejected("const s=\"managed\"\nprint(7)\n", false, "module slots");
+    rejected("var n=7\nprint(n)\n", false, "module slots");
+    rejected("const n=7\nconst m=8\nprint(n+m)\n", false, "module slots");
+    rejected("const n=7\nfn reader()->i64{return n}\nprint(reader())\n", false,
+             "slot read outside");
+    rejected("const n=7\nfn unused()->i64{return n}\nprint(1)\n", false,
+             "slot read outside");
+    rejected("const n=7\nif(true){print(n)}\n", false, "slot read outside");
+}
+static void local_boundaries(void) {
+    static const char *texts[] = {
+        "fn selected(x:i64)->i64{return x+1}\nprint(selected(7))\n",
+        "fn selected(x:i64)->i64{print(x)\nreturn x}\nprint(selected(7))\n",
+        ("fn leaf(x:i64)->i64{print(x)\nreturn x}\n"
+         "fn selected(x:i64)->i64{return leaf(x)}\nprint(selected(7))\n"),
+        "const n=7\nfn selected(x:i64)->i64{return x+1}\nprint(selected(n))\n",
+        "fn selected(x:i64)->i64{return x+1}\nprint(7)\n",
+    };
+    for (size_t t = 0; t < sizeof(texts) / sizeof(texts[0]); ++t) {
+        SourceFixture fixture = source_fixture(texts[t]);
+        const XrXirModule *source = xr_xir_compile_artifact_module(fixture.closed);
+        uint32_t selected = UINT32_MAX;
+        for (uint32_t f = 0; f < source->function_count; ++f)
+            if (source->functions[f].name_length == 8 &&
+                !memcmp(source->functions[f].name, "selected", 8)) selected = f;
+        CHECK(selected != UINT32_MAX);
+        XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
+        XrLirLowered output = {0};
+        XrLirLowerFailure failure = {0};
+        OK(xr_lir_lower_program_checked(&request, &output, NULL));
+        xr_lir_lowered_free(&output);
+        XrLirStatus status = xr_lir_lower_local_checked(&request, selected, &output, &failure);
+        source_fixture_free(&fixture);
+        if (!t) CHECK(status == XR_LIR_OK && output.module && output.entry.id);
+        else {
+            CHECK(status == XR_LIR_UNSUPPORTED && !output.module && !output.entry.id);
+            if (!failure.owned_path || !failure.diagnostic.source.line)
+                fprintf(stderr, "local refusal %zu: %s\n", t, failure.diagnostic.message);
+            CHECK(failure.owned_path && failure.diagnostic.source.line);
+        }
+        xr_lir_lowered_free(&output);
+        xr_lir_lower_failure_free(&failure);
+    }
 }
 int main(int argc, char **argv) {
     CHECK(argc == 3);
@@ -406,6 +517,8 @@ int main(int argc, char **argv) {
     fixed_division(argv[1]);
     unsupported();
     argument_validation();
+    literal_sources();
+    local_boundaries();
     golden(argv[1], argv[2], "source-fib");
     golden(argv[1], argv[2], "source-sum");
     puts("source-backed scalar LIR lowering passed");

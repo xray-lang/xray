@@ -81,6 +81,12 @@ def main():
         'print(q(9223372036854775807))\nprint(r(9223372036854775807))\n'
         'print(q(0))\nprint(r(0))\n'
     ), b'-9223372036854775808\n0\n7\n0\n-7\n0\n-9223372036854775807\n0\n0\n0\n'))
+    original = (args.fixtures / '../../../bench/native/integer_loop.xr').resolve().read_bytes()
+    needle = b'const n = 100000000'
+    assert original.count(needle) == 1
+    for n, expected in ((0, b'0\n'), (1000, b'46995\n')):
+        cases.append(('literal-loop-' + str(n), original.replace(
+            needle, b'const n = ' + str(n).encode()), expected))
     for name, text, expected in cases:
         if not expected:
             raise AssertionError('Skeleton cases require nonempty expected output')
@@ -90,7 +96,10 @@ def main():
             source = (args.fixtures / ('source-' + name + '.xr')).resolve()
         else:
             source = folder / (name + '.xr')
-            source.write_text(text, encoding='utf-8', newline='\n')
+            if isinstance(text, bytes):
+                source.write_bytes(text)
+            else:
+                source.write_text(text, encoding='utf-8', newline='\n')
         (folder / 'expected.stdout').write_bytes(expected)
         vm = invoke(folder, 'vm', [args.vm_driver, source])
         if vm.stdout != expected or vm.stderr:

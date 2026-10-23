@@ -51,7 +51,7 @@ static XrLirStatus run(const SourceFixture *fixture) {
     XrLirLowerRequest request = {fixture->closed, fixture->source.snapshot, false};
     XrLirLowered output = {0};
     XrLirLowerFailure failure = {0};
-    XrLirStatus status = xr_lir_lower_checked(&request, &output, &failure);
+    XrLirStatus status = xr_lir_lower_program_checked(&request, &output, &failure);
     if (status == XR_LIR_OK) {
         CHECK(output.module && output.entry.id);
         OK(xr_lir_verify(output.module, NULL));

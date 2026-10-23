@@ -31,12 +31,31 @@ static XrRbcStatus execute(XrRbcProgram *program, const uint64_t *arguments,
     return status;
 }
 
-static XrLirLowered lower(const char *text) {
+// Select the actual original callee before construction; never inspect an erased module.
+static uint32_t source_callee(const XrXirModule *module) {
+    const XrXirFunction *initializer =
+        &module->functions[module->declarations->modules[0].initializer];
+    uint32_t selected = UINT32_MAX;
+    for (uint32_t i = 0; i < initializer->instruction_count; ++i) {
+        const XrXirInstruction *op = &initializer->instructions[i];
+        if (op->op != XR_XIR_CALL) continue;
+        CHECK(selected == UINT32_MAX && op->immediate >= 0 &&
+            (uint64_t) op->immediate < module->function_count);
+        selected = (uint32_t) op->immediate;
+    }
+    CHECK(selected != UINT32_MAX);
+    return selected;
+}
+
+static XrLirLowered lower(const char *text, bool local) {
     SourceFixture source = source_fixture(text);
     XrLirLowerRequest request = {source.closed, source.source.snapshot, false};
     XrLirLowered result = {0};
     XrLirLowerFailure failure = {0};
-    XrLirStatus status = xr_lir_lower_checked(&request, &result, &failure);
+    XrLirStatus status = local
+        ? xr_lir_lower_local_checked(&request,
+            source_callee(xr_xir_compile_artifact_module(source.closed)), &result, &failure)
+        : xr_lir_lower_program_checked(&request, &result, &failure);
     if (status != XR_LIR_OK) fprintf(stderr, "lower: %s\n", failure.diagnostic.message);
     CHECK(status == XR_LIR_OK);
     source_fixture_free(&source);
@@ -45,52 +64,11 @@ static XrLirLowered lower(const char *text) {
     return result;
 }
 
-static XrLirFunction function_id(const XrLirModule *module, uint32_t id) {
-    for (uint32_t i = 0; i < xr_lir_function_count(module); ++i) {
-        XrLirFunction function;
-        OK(xr_lir_function_at(module, i, &function));
-        if (function.id == id) return function;
-    }
-    CHECK(false);
-    return (XrLirFunction){0};
-}
-
-// Follow the returned entry's initializer call, then its one ordinary call.
-// No synthetic display name is used as a source-language entry convention.
-static XrLirFunction initialized_function(const XrLirLowered *lowered) {
-    XrLirBlock block;
-    XrLirInstructionView instruction;
-    OK(xr_lir_block_at(lowered->module, lowered->entry, 0, &block));
-    OK(xr_lir_instruction_view(lowered->module, block, 0, &instruction));
-    CHECK(instruction.op == XR_LIR_CALL);
-    XrLirFunction initializer = function_id(lowered->module, instruction.callee);
-    XrLirFunctionView view;
-    OK(xr_lir_function_view(lowered->module, initializer, &view));
-    XrLirFunction selected = {0};
-    for (uint32_t b = 0; b < view.block_count; ++b) {
-        XrLirBlockView bv;
-        OK(xr_lir_block_at(lowered->module, initializer, b, &block));
-        OK(xr_lir_block_view(lowered->module, block, &bv));
-        for (uint32_t i = 0; i < bv.instruction_count; ++i) {
-            OK(xr_lir_instruction_view(lowered->module, block, i, &instruction));
-            if (instruction.op != XR_LIR_CALL) continue;
-            XrLirFunction function = function_id(lowered->module, instruction.callee);
-            XrLirFunctionView callee;
-            OK(xr_lir_function_view(lowered->module, function, &callee));
-            if (callee.kind == XR_LIR_FUNCTION_EXTERNAL) continue;
-            CHECK(!selected.id);
-            selected = function;
-        }
-    }
-    CHECK(selected.id);
-    return selected;
-}
-
 static XrRbcProgram *callable(const char *text) {
-    XrLirLowered lowered = lower(text);
+    XrLirLowered lowered = lower(text, true);
     XrRbcProgram *program = NULL;
     XrRbcCompileDiagnostic diagnostic = {0};
-    CHECK(xr_rbc_compile(lowered.module, initialized_function(&lowered), &program,
+    CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program,
         &diagnostic) == XR_RBC_COMPILE_OK && program);
     // Neither Source nor LIR remains alive during any execution below.
     xr_lir_lowered_free(&lowered);
@@ -104,8 +82,8 @@ static uint64_t run(XrRbcProgram *program, uint64_t argument) {
 }
 
 static void i64_identity_cast(void) {
-    XrLirLowered lowered = lower("fn identity(x:i64)->i64{\nreturn x as i64\n}\nidentity(17)\n");
-    XrLirFunction selected = initialized_function(&lowered);
+    XrLirLowered lowered = lower("fn identity(x:i64)->i64{\nreturn x as i64\n}\nidentity(17)\n", true);
+    XrLirFunction selected = lowered.entry;
     XrLirFunctionView function;
     OK(xr_lir_function_view(lowered.module, selected, &function));
     uint32_t casts = 0;
@@ -138,7 +116,7 @@ static void i64_identity_cast(void) {
 }
 
 static void metadata_lifetime(void) {
-    XrLirLowered lowered = lower("fn value(x:i64)->i64{return x+1}\nvalue(9)\n");
+    XrLirLowered lowered = lower("fn value(x:i64)->i64{return x+1}\nvalue(9)\n", false);
     XrRbcProgram *program = NULL;
     CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, NULL) == XR_RBC_COMPILE_OK);
     XrtLocationOwner *owner = xr_rbc_program_locations(program);
@@ -183,7 +161,7 @@ static void numerical_oracles(void) {
 }
 
 static void actual_entry_and_refusal(void) {
-    XrLirLowered lowered = lower("fn main()->i64{print(99)\nreturn 7}\n");
+    XrLirLowered lowered = lower("fn main()->i64{print(99)\nreturn 7}\n", false);
     XrRbcProgram *program = NULL;
     XrRbcCompileDiagnostic diagnostic = {0};
     CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, &diagnostic) ==
@@ -193,14 +171,14 @@ static void actual_entry_and_refusal(void) {
     CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 0);
     xr_rbc_program_destroy(program);
 
-    lowered = lower("print(1)\nfn value(x:f64)->f64{return x+1.0}\nprint(2)\nvalue(3.0)\n");
+    lowered = lower("print(1)\nfn value(x:f64)->f64{return x+1.0}\nprint(2)\nvalue(3.0)\n", false);
     program = NULL;
     CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, &diagnostic) ==
         XR_RBC_COMPILE_UNSUPPORTED && !program);
     xr_lir_lowered_free(&lowered);
     CHECK(diagnostic.message[0] && diagnostic.path[0] && diagnostic.line == 2 &&
         diagnostic.column && diagnostic.block && diagnostic.instruction);
-    lowered = lower("fn value(x:f64)->f64{\nreturn x+1.0\n}\nvalue(3.0)\n");
+    lowered = lower("fn value(x:f64)->f64{\nreturn x+1.0\n}\nvalue(3.0)\n", false);
     CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, &diagnostic) ==
         XR_RBC_COMPILE_UNSUPPORTED && !program);
     xr_lir_lowered_free(&lowered);
@@ -208,7 +186,7 @@ static void actual_entry_and_refusal(void) {
 }
 
 static void f64_transport(void) {
-    XrLirLowered whole = lower("fn identity(x:f64)->f64{return x}\nidentity(1.25)\n");
+    XrLirLowered whole = lower("fn identity(x:f64)->f64{return x}\nidentity(1.25)\n", false);
     XrRbcProgram *entry = NULL;
     CHECK(xr_rbc_compile(whole.module, whole.entry, &entry, NULL) == XR_RBC_COMPILE_OK);
     xr_lir_lowered_free(&whole);

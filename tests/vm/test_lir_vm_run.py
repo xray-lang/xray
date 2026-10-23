@@ -32,6 +32,17 @@ def main():
         run('loop', 'fn sum(n:i64)->i64{var i=0\nvar total=0\n'
             'while(i<n){total=total+i\ni=i+1}\nreturn total}\nsum(1000)\n')
         run('output', 'print(7)\n', stdout=b'7\n')
+        run('literal-zero', 'const n=0\nprint(n)\n', stdout=b'0\n')
+        run('printing-closure', 'fn leaf(x:i64)->i64{print(x)\nreturn x}\n'
+            'fn call(x:i64)->i64{return leaf(x)}\nprint(call(7))\n', stdout=b'7\n7\n')
+        original = (Path(__file__).resolve().parents[2] / 'bench/native/integer_loop.xr').read_bytes()
+        needle = b'const n = 100000000'
+        assert original.count(needle) == 1
+        for n, expected in ((0, b'0\n'), (1000, b'46995\n')):
+            path = root / ('literal-loop-' + str(n) + '.xr')
+            path.write_bytes(original.replace(needle, b'const n = ' + str(n).encode()))
+            result = subprocess.run([args.driver, str(path)], capture_output=True, timeout=15)
+            assert result.returncode == 0 and result.stdout == expected and not result.stderr
         run('i64-cast', 'fn identity(x:i64)->i64{return x as i64}\n'
             'print(identity(-9223372036854775807-1))\nprint(identity(-1))\n'
             'print(identity(0))\nprint(identity(9223372036854775807))\n',

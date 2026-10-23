@@ -30,6 +30,7 @@ typedef struct Lower {
     uint32_t function, block, instruction;
     XrLirStatus status;
     XrLirLowerFailure *failure;
+    uint64_t literal;
     bool prints;
 } Lower;
 typedef struct LowerFunction {
@@ -167,6 +168,8 @@ static bool lower_build(Lower *c, XrLirStatus status) {
 
 static bool lower_known(XrXirOp op) {
     switch (op) {
+        case XR_XIR_SLOT_INIT:
+        case XR_XIR_SLOT_LOAD:
         case XR_XIR_CONST_BOOL:
         case XR_XIR_CONST_INT:
         case XR_XIR_CONST_FLOAT:
@@ -211,6 +214,109 @@ static bool lower_known(XrXirOp op) {
         default:
             return false;
     }
+}
+
+/* Inspect every original function, including bodies outside the retained
+ * roots. Erasing storage must not hide a reader, address, or publication. */
+static bool lower_literal(Lower *c) {
+    const XrXirDeclarations *d = c->source->declarations;
+    if (!d->slot_count)
+        return true;
+    if (d->slot_count != 1 || !d->slots || d->slots[0].module != 0 ||
+        d->slots[0].type != XR_XIR_I64 || d->slots[0].mutable)
+        return lower_unsupported(c, "module slots other than one immutable i64 literal");
+    uint32_t init = d->modules[0].initializer, init_block = UINT32_MAX, init_at = UINT32_MAX;
+    for (uint32_t f = 0; f < c->source->function_count; ++f) {
+        const XrXirFunction *function = &c->source->functions[f];
+        for (uint32_t b = 0; b < function->block_count; ++b) {
+            const XrXirBlock *block = &function->blocks[b];
+            for (uint32_t i = block->first; i < block->first + block->count; ++i) {
+                const XrXirInstruction *op = &function->instructions[i];
+                c->function = f;
+                c->block = b;
+                c->instruction = i;
+                if (op->op == XR_XIR_CALL && op->immediate == (int64_t) init)
+                    return lower_unsupported(c, "call back to module initializer");
+                if (op->op == XR_XIR_SLOT_LOAD)
+                    continue;
+                if (op->op == XR_XIR_SLOT_STORE || op->op == XR_XIR_SLOT_PLACE ||
+                    op->op == XR_XIR_SLOT_GROUP_INIT)
+                    return lower_unsupported(c, "module slot write, address or group");
+                if (op->op != XR_XIR_SLOT_INIT)
+                    continue;
+                if (f != init || b != 0 || op->immediate != 0 || init_at != UINT32_MAX ||
+                    op->args[0] < function->parameter_count)
+                    return lower_unsupported(c, "module slot initializer");
+                uint32_t value = op->args[0] - function->parameter_count;
+                if (value < block->first || value >= i ||
+                    function->instructions[value].op != XR_XIR_CONST_INT ||
+                    function->instructions[value].type != XR_XIR_I64)
+                    return lower_unsupported(c, "module slot without a direct same-block i64 literal");
+                init_block = b;
+                init_at = i;
+                c->literal = (uint64_t) function->instructions[value].immediate;
+            }
+        }
+    }
+    if (init_at == UINT32_MAX)
+        return lower_unsupported(c, "module slot without initialization");
+    /* Checked edges never target block zero. With no original call back to
+     * this initializer, its sole publication executes once per wrapper call. */
+    for (uint32_t f = 0; f < c->source->function_count; ++f) {
+        const XrXirFunction *function = &c->source->functions[f];
+        for (uint32_t b = 0; b < function->block_count; ++b) {
+            const XrXirBlock *block = &function->blocks[b];
+            for (uint32_t i = block->first; i < block->first + block->count; ++i) {
+                const XrXirInstruction *op = &function->instructions[i];
+                if (op->op != XR_XIR_SLOT_LOAD)
+                    continue;
+                c->function = f;
+                c->block = b;
+                c->instruction = i;
+                if (f != init || b != init_block || i <= init_at || op->immediate != 0 ||
+                    op->type != XR_XIR_I64)
+                    return lower_unsupported(c, "module slot read outside its initialized block");
+            }
+        }
+    }
+    return true;
+}
+
+/* Reuse the bounded function worklist without changing the retained root set.
+ * The second visit bit belongs only to this structural local-call walk. */
+static bool lower_local_pure(Lower *c, uint32_t selected) {
+    c->function = selected < c->source->function_count ? selected : c->function;
+    c->block = 0;
+    c->instruction = UINT32_MAX;
+    if (selected >= c->source->function_count || !c->active[selected])
+        return lower_unsupported(c, "local function outside the retained program closure");
+    c->queued = 1;
+    c->queue[0] = selected;
+    c->active[selected] |= 2;
+    for (uint32_t at = 0; at < c->queued; ++at) {
+        c->function = c->queue[at];
+        const XrXirFunction *f = &c->source->functions[c->function];
+        for (uint32_t b = 0; b < f->block_count; ++b) {
+            c->block = b;
+            for (uint32_t i = f->blocks[b].first; i < f->blocks[b].first + f->blocks[b].count; ++i) {
+                c->instruction = i;
+                const XrXirInstruction *op = &f->instructions[i];
+                if (op->op == XR_XIR_PRINT || !lower_known(op->op))
+                    return lower_unsupported(c, "effect in local function closure");
+                if (op->op != XR_XIR_CALL)
+                    continue;
+                if (op->immediate < 0 || (uint64_t) op->immediate >= c->source->function_count ||
+                    !(c->active[(uint32_t) op->immediate] & 1))
+                    return lower_unsupported(c, "local call outside the retained program closure");
+                uint32_t callee = (uint32_t) op->immediate;
+                if (!(c->active[callee] & 2)) {
+                    c->active[callee] |= 2;
+                    c->queue[c->queued++] = callee;
+                }
+            }
+        }
+    }
+    return true;
 }
 /* Compiler-only locals, including short-circuit results, obey the same SSA
  * state equations as nonescaping Cells but have no heap identity. */
@@ -637,6 +743,7 @@ static XrLirOp lower_operation(const LowerFunction *f, const XrXirInstruction *o
         case XR_XIR_CONST_BOOL:
         case XR_XIR_CONST_INT:
         case XR_XIR_CONST_FLOAT:
+        case XR_XIR_SLOT_LOAD:
             return XR_LIR_CONST;
         case XR_XIR_ADD_INT:
             return XR_LIR_ADD;
@@ -692,7 +799,7 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
                                     .source = lower_source(c)};
     XrLirValue operands[2] = {{0}};
     if (instruction.op == XR_LIR_CONST)
-        instruction.bits = (uint64_t) op->immediate;
+        instruction.bits = op->op == XR_XIR_SLOT_LOAD ? c->literal : (uint64_t) op->immediate;
     else {
         instruction.operand_count =
             op->op == XR_XIR_NEG_FLOAT || op->op == XR_XIR_CONVERT_NUMBER ? 1u : 2u;
@@ -757,6 +864,8 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
         c->instruction = i;
         const XrXirInstruction *op = &f->source->instructions[i];
         uint32_t result = f->source->parameter_count + i;
+        if (op->op == XR_XIR_SLOT_INIT)
+            continue;
         if (lower_state_new(op->op) || lower_state_read(op->op) || lower_state_write(op->op)) {
             uint32_t cell;
             if (!lower_cell_index(f, lower_state_new(op->op) ? result : op->args[0], &cell))
@@ -932,8 +1041,8 @@ XR_FUNC void xr_lir_lower_failure_free(XrLirLowerFailure *failure) {
     *failure = (XrLirLowerFailure) {0};
 }
 
-XR_FUNC XrLirStatus xr_lir_lower_checked(const XrLirLowerRequest *request, XrLirLowered *output,
-                                         XrLirLowerFailure *failure) {
+static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t selected, bool local,
+                               XrLirLowered *output, XrLirLowerFailure *failure) {
     if (!request || !request->closed || !request->snapshot || !output || output->module ||
         output->entry.module || output->entry.id || (failure && failure->owned_path))
         return XR_LIR_INVALID_ARGUMENT;
@@ -952,12 +1061,14 @@ XR_FUNC XrLirStatus xr_lir_lower_checked(const XrLirLowerRequest *request, XrLir
     c.function = d->modules && d->module_count ? d->modules[0].initializer : d->entry_function;
     if (request->overflow_checks)
         return lower_unsupported(&c, "overflow-checks"), c.status;
-    if (d->module_count != 1 || d->root_module != 0 || !d->modules || d->slot_count ||
+    if (d->module_count != 1 || d->root_module != 0 || !d->modules || (local && d->slot_count) ||
         d->modules[0].dependency_count || d->modules[0].storage != XR_XIR_MODULE_FRESH_STORAGE)
         return lower_unsupported(&c, "module imports, slots or receiving storage"), c.status;
     if (d->entry_function >= source->function_count ||
         d->modules[0].initializer >= source->function_count)
         return lower_error(&c, XR_LIR_VERIFY_ERROR, "invalid Checked program entry");
+    if (!lower_literal(&c))
+        return c.status;
     c.functions = lower_alloc(&c, source->function_count, sizeof(*c.functions));
     c.active = lower_alloc(&c, source->function_count, 1);
     c.queue = lower_alloc(&c, source->function_count, sizeof(*c.queue));
@@ -966,6 +1077,8 @@ XR_FUNC XrLirStatus xr_lir_lower_checked(const XrLirLowerRequest *request, XrLir
         good = lower_mark(&c, d->modules[0].initializer) && lower_mark(&c, d->entry_function);
     for (uint32_t at = 0; at < c.queued && good; ++at)
         good = lower_admit_function(&c, c.queue[at]);
+    if (good && local)
+        good = lower_local_pure(&c, selected);
     if (good)
         good = lower_build(&c, xr_lir_module_create(NULL, &c.module));
     if (good && c.prints) {
@@ -986,7 +1099,9 @@ XR_FUNC XrLirStatus xr_lir_lower_checked(const XrLirLowerRequest *request, XrLir
         if (c.active[f])
             good = lower_function(&c, f);
     XrLirFunction entry = {0};
-    if (good)
+    if (good && local)
+        entry = c.functions[selected];
+    else if (good)
         good = lower_wrapper(&c, &entry);
     if (good)
         good = lower_build(&c, xr_lir_module_finish(c.module, NULL));
@@ -1000,4 +1115,13 @@ XR_FUNC XrLirStatus xr_lir_lower_checked(const XrLirLowerRequest *request, XrLir
     xr_free(c.active);
     xr_free(c.queue);
     return good ? XR_LIR_OK : (c.status == XR_LIR_OK ? XR_LIR_VERIFY_ERROR : c.status);
+}
+
+XR_FUNC XrLirStatus xr_lir_lower_program_checked(const XrLirLowerRequest *request,
+                                                 XrLirLowered *output, XrLirLowerFailure *failure) {
+    return lower_checked(request, 0, false, output, failure);
+}
+XR_FUNC XrLirStatus xr_lir_lower_local_checked(const XrLirLowerRequest *request, uint32_t selected,
+                                               XrLirLowered *output, XrLirLowerFailure *failure) {
+    return lower_checked(request, selected, true, output, failure);
 }

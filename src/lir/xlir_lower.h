@@ -33,8 +33,16 @@ typedef struct XrLirLowerFailure {
 /* Output and optional failure must initially be empty. The snapshot must
  * correspond to the source of the supplied specialization. An unsupported
  * operation never publishes a partial module or selects another executor. */
-XR_FUNC XrLirStatus xr_lir_lower_checked(const XrLirLowerRequest *, XrLirLowered *,
-                                         XrLirLowerFailure *);
+/* Each complete execution starts a fresh independent scalar domain, running
+ * the actual declaration initializer before the declaration entry. No state
+ * or lifecycle is attached to a canonical program instance. */
+XR_FUNC XrLirStatus xr_lir_lower_program_checked(const XrLirLowerRequest *, XrLirLowered *,
+                                                 XrLirLowerFailure *);
+/* A local numerical observation skips initialization. The original program
+ * must have no slots, and the retained selected function's transitive direct
+ * calls must be scalar and effect-free. This is not a complete execution. */
+XR_FUNC XrLirStatus xr_lir_lower_local_checked(const XrLirLowerRequest *, uint32_t closed_function,
+                                               XrLirLowered *, XrLirLowerFailure *);
 XR_FUNC void xr_lir_lowered_free(XrLirLowered *);
 XR_FUNC void xr_lir_lower_failure_free(XrLirLowerFailure *);
 

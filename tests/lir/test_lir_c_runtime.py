@@ -63,6 +63,9 @@ def main():
         'print(q(0))\nprint(r(0))\n',
         b'-9223372036854775808\n0\n7\n0\n-7\n0\n-9223372036854775807\n0\n0\n0\n')
     cases['f64-source'] = ('fn carry(x:f64)->f64{print(7)\nreturn x}\ncarry(1.25)\nprint(2)\n', b'7\n2\n')
+    cases['literal-slot'] = ('const n=7\nprint(n)\nprint(99)\n', b'7\n99\n')
+    cases['printing-closure'] = ('fn leaf(x:i64)->i64{print(x)\nreturn x}\n'
+                                 'fn call(x:i64)->i64{return leaf(x)}\nprint(call(7))\n', b'7\n7\n')
     cases['f64-fneg-source'] = ('fn negative(x:f64)->f64{\nprint(13)\nreturn -x\n}\n'
                                 'negative(1.25)\nprint(2)\n', b'13\n2\n')
     refused_source, refused_c = root / 'refused-fadd.xr', root / 'refused-fadd.c'
@@ -160,6 +163,23 @@ def main():
         run(command, cwd=root)
         completed = run([executable], cwd=root)
         assert completed.stdout == expected and completed.stderr == b'', (name, completed)
+        if name == 'literal-slot':
+            # Reuse the same compiled image and actual complete entry twice.
+            twice = root / 'literal-twice-adapter.c'
+            twice.write_text(f'#include "{generated.name}"\nint main(void) {{\n'
+                             '    (void)xray_lir_entry();\n    (void)xray_lir_entry();\n'
+                             '    return 0;\n}\n', encoding='ascii')
+            twice_exe = root / ('literal-twice.exe' if os.name == 'nt' else 'literal-twice')
+            twice_command = [str(x) for x in command]
+            twice_command = [str(twice) if x == str(adapter) else
+                             str(twice_exe) if x == str(executable) else
+                             '/Fe:' + str(twice_exe) if x == '/Fe:' + str(executable) else x
+                             for x in twice_command]
+            run(twice_command, cwd=root)
+            repeated = run([twice_exe], cwd=root)
+            assert repeated.stdout == expected * 2 and not repeated.stderr
+            identity['literalRepeatedEntry'] = {'calls': 2, 'stdoutHex': repeated.stdout.hex(),
+                                               'sameImage': True}
         executables[name] = executable
         if name in ('f64-source', 'f64-fneg-source'):
             key = 'f64Source' if name == 'f64-source' else 'f64NegationSource'
@@ -171,7 +191,8 @@ def main():
     locations = {'branch': b'branch.xr:2:1-2:1 ', 'output-unknown': b'unknown source',
                  'output-point': b'odd"\\x5c\xc3\xa9\\x0a.xr:4:3-4:3 ',
                  'output-range': b'odd"\\x5c\xc3\xa9\\x0a.xr:4:3-5:8 ',
-                 'typed-unit': b'typed-root.xr:2:1-2:1 '}
+                 'typed-unit': b'typed-root.xr:2:1-2:1 ',
+                 'literal-slot': b'literal-slot.xr:2:1-2:1 '}
     for name, location in locations.items():
         with read_only.open('rb') as stream:
             failure = subprocess.run([str(executables[name]), 'fail'], stdout=stream,
