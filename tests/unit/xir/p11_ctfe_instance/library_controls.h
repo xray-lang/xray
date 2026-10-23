@@ -340,7 +340,44 @@ static void library_slot_forward_controls(void) {
     }
     fprintf(stderr,"Slotful Source literal/comptime seal preserves complete facts through specialization/lower and VM42; existing view body rejection retained, view execution NOT_TESTED\n");
 }
+static void library_construction_compare_controls(void) {
+    XrXirCompileContext producer,receiver;context_new(&producer);context_new(&receiver);
+    XrXirArtifact *source=NULL,*received=NULL;XrXirConstruction *copy=NULL;
+    CHECK(library_comptime_operation(&producer,"fresh",&source)==XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(&receiver,&source->module,source->construction,&received,NULL)==XR_XIR_OK);
+    CHECK(xir_construction_clone(&receiver,received->module.types,source->construction,&copy)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(source);xr_compile_resources_release(producer.resources);
+    bool same=false;
+    CHECK(xir_construction_compare(&receiver,received->module.types,received->construction,copy,&same)==XR_XIR_OK && same);
+    CHECK(received->construction->comptime.binding_count>1 && copy->comptime.binding_count>1);
+    XrXirComptimeBinding *binding=(XrXirComptimeBinding *)received->construction->comptime.bindings;
+    uint32_t provider=binding[0].provider;CHECK(binding[1].provider!=provider);
+    binding[0].provider=binding[1].provider;
+    CHECK(xir_construction_shape(&receiver,received->module.types,received->construction)==XR_XIR_OK);
+    same=true;
+    CHECK(xir_construction_compare(&receiver,received->module.types,copy,received->construction,&same)==XR_XIR_OK && !same);
+    CHECK(xr_xir_compile_artifact_verify(received,NULL)==XR_XIR_BAD_STRUCTURE);
+    binding[0].provider=provider;CHECK(xr_xir_compile_artifact_verify(received,NULL)==XR_XIR_OK);
+    CHECK(binding[0].argument_count==1 && binding[0].arguments[0]!=XR_XIR_I8);
+    XrXirType *arguments=(XrXirType *)binding[0].arguments,argument=arguments[0];
+    arguments[0]=XR_XIR_I8;
+    CHECK(xir_construction_shape(&receiver,received->module.types,received->construction)==XR_XIR_OK);
+    same=true;
+    CHECK(xir_construction_compare(&receiver,received->module.types,copy,received->construction,&same)==XR_XIR_OK && !same);
+    CHECK(xr_xir_compile_artifact_verify(received,NULL)==XR_XIR_BAD_STRUCTURE);
+    arguments[0]=argument;CHECK(xr_xir_compile_artifact_verify(received,NULL)==XR_XIR_OK);
+    const XrXirComptimeBinding *bindings=copy->comptime.bindings;copy->comptime.bindings=NULL;
+    same=true;
+    XrXirStatus malformed=xir_construction_compare(&receiver,received->module.types,received->construction,copy,&same);
+    copy->comptime.bindings=bindings;CHECK(malformed==XR_XIR_BAD_STRUCTURE && same);
+    CHECK(xir_construction_compare(&receiver,received->module.types,NULL,NULL,NULL)==XR_XIR_BAD_STRUCTURE);
+    same=false;
+    CHECK(xir_construction_compare(&receiver,received->module.types,received->construction,copy,&same)==XR_XIR_OK && same);
+    xr_xir_compile_construction_free(copy);xr_xir_compile_artifact_free(received);
+    xr_compile_resources_release(receiver.resources);
+}
 static void library_comptime_controls(void) {
+    library_construction_compare_controls();
     library_slot_fact_controls();
     library_slot_catalog_controls();
     library_slot_source_import_controls();

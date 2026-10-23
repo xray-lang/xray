@@ -85,29 +85,9 @@ static XrXirStatus source_facts_contract_match(const XrXirCompileContext *contex
 
 static XrXirStatus source_facts_construction_match(const XrXirCompileContext *context,
     const XrXirModule *source,const XrXirConstruction *stored,const XrXirConstruction *actual) {
-    XrXirStatus status=xir_construction_shape(context,source->types,actual);
-    if (status==XR_XIR_OK) status=xir_construction_shape(context,source->types,stored);
-    if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-    if (stored->count!=actual->count) return XR_XIR_BAD_STRUCTURE;
-    if (stored->slots.count!=actual->slots.count) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t s=0;s<stored->slots.count;++s) {
-        const XrXirSlotFact *a=&stored->slots.rows[s],*b=&actual->slots.rows[s];
-        if (!xir_compile_work(context,sizeof(*a)+a->name_length)) return XR_XIR_BUDGET;
-        if (a->slot!=b->slot || a->name_length!=b->name_length || a->exported!=b->exported ||
-            memcmp(a->name,b->name,a->name_length)) return XR_XIR_BAD_STRUCTURE;
-    }
-    for (uint32_t n=0;n<stored->count;++n) {
-        const XrXirConstructionRow *a=&stored->rows[n],*b=&actual->rows[n];
-        if (!xir_compile_work(context,6)) return XR_XIR_BUDGET;
-        if (stored->kinds[n]!=actual->kinds[n] || a->default_initializer!=b->default_initializer ||
-            a->field_count!=b->field_count) return XR_XIR_BAD_STRUCTURE;
-        for (uint32_t f=0;f<a->field_count;++f) {
-            if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
-            if (a->field_initializers[f]!=b->field_initializers[f]) return XR_XIR_BAD_STRUCTURE;
-        }
-    }
-    return XR_XIR_OK;
+    bool same=false;
+    XrXirStatus status=xir_construction_compare(context,source->types,stored,actual,&same);
+    return status==XR_XIR_OK && !same ? XR_XIR_BAD_STRUCTURE : status;
 }
 
 static XrXirStatus source_facts_input_match(const XrXirCompileContext *context,

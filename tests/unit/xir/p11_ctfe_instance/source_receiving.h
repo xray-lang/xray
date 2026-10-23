@@ -37,6 +37,22 @@ static void instance_source_receiving(const char *kind,unsigned ordinal) {
     if (!strcmp(kind,"boxed")) {
         CHECK(!constants.source.checked->module.declarations->functions[provider].nominal_owner);
         CHECK(xr_xir_compile_construction_materialization_count(constants.source.checked->construction)==2);
+        bool same=false;
+        const XrXirConstruction *snapshot=xr_xir_compile_source_snapshot_construction(constants.source.snapshot);
+        CHECK(xir_construction_compare(&context,constants.source.checked->module.types,
+            constants.source.checked->construction,snapshot,&same)==XR_XIR_OK && same);
+        XrXirMaterializationBinding *binding=&constants.source.checked->construction->materializations[0];
+        uint32_t function=binding->function,replacement=0;
+        while (replacement<constants.source.checked->module.function_count &&
+            (replacement==function || replacement==binding->caller)) ++replacement;
+        CHECK(replacement<constants.source.checked->module.function_count);binding->function=replacement;
+        CHECK(xir_construction_shape(&context,constants.source.checked->module.types,
+            constants.source.checked->construction)==XR_XIR_OK);
+        same=true;
+        CHECK(xir_construction_compare(&context,constants.source.checked->module.types,
+            constants.source.checked->construction,snapshot,&same)==XR_XIR_OK && !same);
+        CHECK(xr_xir_compile_artifact_verify(constants.source.checked,NULL)==XR_XIR_BAD_STRUCTURE);
+        binding->function=function;CHECK(xr_xir_compile_artifact_verify(constants.source.checked,NULL)==XR_XIR_OK);
     }
     if (!strcmp(kind,"foreign")) {
         XrXirArtifact *actual=NULL;CHECK(xr_xir_compile_specialize(constants.source.checked,&actual,NULL)==XR_XIR_OK);

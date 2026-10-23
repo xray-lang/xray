@@ -28,6 +28,12 @@ struct XrXirConstruction {
  * receiver; published copies own all facts on that receiver's ledger. */
 XR_FUNC XrXirStatus xir_construction_shape(const XrXirCompileContext *context,
     const XrXirTypes *types, const XrXirConstruction *construction);
+/* Both live owners use the same current type/ordinal coordinate space.
+ * Complete physical fact correspondence grants no guest equality, module or
+ * execution permission. Errors preserve same and never become differences. */
+XR_FUNC XrXirStatus xir_construction_compare(const XrXirCompileContext *context,
+    const XrXirTypes *types,const XrXirConstruction *left,
+    const XrXirConstruction *right,bool *same);
 XR_FUNC XrXirStatus xir_construction_clone(const XrXirCompileContext *context,
     const XrXirTypes *types, const XrXirConstruction *source,
     XrXirConstruction **output);

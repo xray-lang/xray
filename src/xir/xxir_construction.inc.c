@@ -186,6 +186,69 @@ XR_FUNC XrXirStatus xir_construction_shape(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) status=comptime_storage_shape(context,&construction->comptime);
     return status==XR_XIR_OK?construction_slots_shape(context,&construction->slots):status;
 }
+static XrXirStatus construction_compare_rows(const XrXirCompileContext *context,
+    const XrXirConstruction *left,const XrXirConstruction *right,bool *same) {
+    for (uint32_t s=0;s<left->slots.count;++s) {
+        const XrXirSlotFact *a=&left->slots.rows[s],*b=&right->slots.rows[s];
+        if (!xir_compile_work(context,sizeof(*a)+(uint64_t)a->name_length)) return XR_XIR_BUDGET;
+        if (a->slot!=b->slot || a->name_length!=b->name_length || a->exported!=b->exported ||
+            (a->name_length && memcmp(a->name,b->name,a->name_length))) { *same=false;return XR_XIR_OK; }
+    }
+    for (uint32_t n=0;n<left->count;++n) {
+        const XrXirConstructionRow *a=&left->rows[n],*b=&right->rows[n];
+        if (!xir_compile_work(context,6)) return XR_XIR_BUDGET;
+        if (left->kinds[n]!=right->kinds[n] || a->default_initializer!=b->default_initializer ||
+            a->field_count!=b->field_count) { *same=false;return XR_XIR_OK; }
+        for (uint32_t f=0;f<a->field_count;++f) {
+            if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+            if (a->field_initializers[f]!=b->field_initializers[f]) { *same=false;return XR_XIR_OK; }
+        }
+    }
+    return XR_XIR_OK;
+}
+static XrXirStatus construction_compare_bindings(const XrXirCompileContext *context,
+    const XrXirConstruction *left,const XrXirConstruction *right,bool *same) {
+    for (uint32_t m=0;m<left->materialization_count;++m) {
+        const XrXirMaterializationBinding *a=&left->materializations[m],*b=&right->materializations[m];
+        if (!xir_compile_work(context,8)) return XR_XIR_BUDGET;
+        if (a->caller!=b->caller || a->instruction!=b->instruction ||
+            a->function!=b->function || a->nominal!=b->nominal) { *same=false;return XR_XIR_OK; }
+    }
+    for (uint32_t s=0;s<left->comptime.site_count;++s) {
+        const XrXirComptimeSite *a=&left->comptime.sites[s],*b=&right->comptime.sites[s];
+        if (!xir_compile_work(context,6)) return XR_XIR_BUDGET;
+        if (a->caller!=b->caller || a->instruction!=b->instruction || a->helper!=b->helper) {
+            *same=false;return XR_XIR_OK;
+        }
+    }
+    for (uint32_t b=0;b<left->comptime.binding_count;++b) {
+        const XrXirComptimeBinding *a=&left->comptime.bindings[b],*c=&right->comptime.bindings[b];
+        if (!xir_compile_work(context,6)) return XR_XIR_BUDGET;
+        if (a->site!=c->site || a->argument_count!=c->argument_count || a->provider!=c->provider) {
+            *same=false;return XR_XIR_OK;
+        }
+        if (!xir_compile_work(context,(uint64_t)a->argument_count*2)) return XR_XIR_BUDGET;
+        if (xir_comptime_key_order(a,c)) { *same=false;return XR_XIR_OK; }
+    }
+    return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xir_construction_compare(const XrXirCompileContext *context,
+    const XrXirTypes *types,const XrXirConstruction *left,
+    const XrXirConstruction *right,bool *same) {
+    if (!same) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=xir_construction_shape(context,types,right);
+    if (status==XR_XIR_OK) status=xir_construction_shape(context,types,left);
+    if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(context,5)) return XR_XIR_BUDGET;
+    bool equal=left->count==right->count && left->slots.count==right->slots.count &&
+        left->materialization_count==right->materialization_count &&
+        left->comptime.site_count==right->comptime.site_count &&
+        left->comptime.binding_count==right->comptime.binding_count;
+    if (equal) status=construction_compare_rows(context,left,right,&equal);
+    if (status==XR_XIR_OK && equal) status=construction_compare_bindings(context,left,right,&equal);
+    if (status==XR_XIR_OK) *same=equal;
+    return status;
+}
 XR_FUNC XrXirStatus xir_construction_clone(const XrXirCompileContext *context,
     const XrXirTypes *types, const XrXirConstruction *source, XrXirConstruction **output) {
     XrXirStatus status = xir_construction_shape(context, types, source);
