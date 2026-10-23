@@ -76,3 +76,8 @@ foreach(mode IN ITEMS 0 31 48 49)
             TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
     endforeach()
 endforeach()
+
+add_test(NAME test_xir_effect_input_selector_resources COMMAND test_xir_effect_input_selector resources)
+set_tests_properties(test_xir_effect_input_selector_resources PROPERTIES
+    LABELS "unit;xir;ownership;metadata;final-proof;compiler-fault;resources"
+    TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)

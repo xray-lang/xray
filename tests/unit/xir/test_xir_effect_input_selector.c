@@ -6,14 +6,15 @@
 static void selector_no_callback(void *memory,size_t bytes) { (void)memory;(void)bytes;CHECK(false); }
 static void selector_scalar_domain(void) {
     XrXirTypeNode nodes[2]={{.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_NONE}};
+        {.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_NONE}};
     XrXirTypes types={.nodes=nodes,.count=2};XrXirType parameter=XR_XIR_I64;
     XrXirInstruction done={.op=XR_XIR_RETURN},ops[3]={
         {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=1},
         {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=2},{.op=XR_XIR_RETURN,.args={0}}};
     XrXirBlock blocks[2]={{.count=1},{.count=3}};
-    XrXirFunction functions[2]={{.name="init",.name_length=4,.instructions=&done,.instruction_count=1,.blocks=blocks,.block_count=1},
-        {.name="scalar",.name_length=6,.parameters=&parameter,.parameter_count=1,.result=XR_XIR_I64,
+    XrXirFunction functions[2]={{.name="init",.name_length=4,.error_type=XR_XIR_NEVER,
+        .instructions=&done,.instruction_count=1,.blocks=blocks,.block_count=1},
+        {.name="scalar",.name_length=6,.error_type=XR_XIR_NEVER,.parameters=&parameter,.parameter_count=1,.result=XR_XIR_I64,
          .instructions=ops,.instruction_count=3,.blocks=&blocks[1],.block_count=1}};
     XrXirFunctionIdentity identities[2]={{0}};
     XrXirSourceModule identity={.name="scalar",.name_length=6};
@@ -65,6 +66,10 @@ typedef struct SelectorRawSource {
 } SelectorRawSource;
 static void selector_raw_source_fixture(SelectorRawSource *f) {
     memset(f,0,sizeof(*f));conditional_raw_fixture(&f->raw,2);
+    for(uint32_t n=0;n<6;++n) {
+        if(f->raw.nodes[n].kind==XR_XIR_TYPE_CALLABLE) f->raw.nodes[n].element=XR_XIR_NEVER;
+    }
+    for(uint32_t n=0;n<4;++n) f->raw.functions[n].error_type=XR_XIR_NEVER;
     f->forward[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=1};
     f->forward[1]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=2};
     f->forward[2]=f->raw.forward_ops[0];f->forward[3]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={4,0}};
@@ -74,7 +79,7 @@ static void selector_raw_source_fixture(SelectorRawSource *f) {
     memcpy(f->functions,f->raw.functions,sizeof(f->raw.functions));
     memcpy(f->generics,f->raw.generics,sizeof(f->raw.generics));
     memcpy(f->identities,f->raw.identities,sizeof(f->raw.identities));
-    f->functions[4]=(XrXirFunction){.name="entry",.name_length=5,.result=XR_XIR_I64,
+    f->functions[4]=(XrXirFunction){.name="entry",.name_length=5,.error_type=XR_XIR_NEVER,.result=XR_XIR_I64,
         .instructions=f->entry,.instruction_count=2};
     for(uint32_t n=0;n<5;++n) {
         f->blocks[n]=(XrXirBlock){.count=f->functions[n].instruction_count};
@@ -83,9 +88,9 @@ static void selector_raw_source_fixture(SelectorRawSource *f) {
     f->raw.declarations.functions=f->identities;f->raw.declarations.entry_function=4;
     f->raw.module.functions=f->functions;f->raw.module.function_count=5;f->raw.module.generics=f->generics;
 }
-static void selector_raw_source_replay(void) {
+static void selector_raw_source_replay(bool resources) {
     size_t sites=0;uint64_t peak=0,maximum=0;
-    for(size_t pass=0;pass<=sites;++pass) {
+    for(size_t pass=0;pass<=(resources?sites:0);++pass) {
         SelectorRawSource fixture;selector_raw_source_fixture(&fixture);
         XrCompileResourceLimits caps=pc_caps();caps.work=4000000;
         XrXirCompileContext context=pc_owner(caps);context.limits.functions=32;
@@ -132,7 +137,7 @@ static void selector_raw_source_replay(void) {
         xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);
     }
     printf("raw source replay: original5-function captured generic input, 4M owner, dead producer, twice current proof, FI%zu same-owner retries, maxwork%llu peak%llu physical0\n",
-        sites,(unsigned long long)maximum,(unsigned long long)peak);
+        resources?sites:0,(unsigned long long)maximum,(unsigned long long)peak);
 }
 static void selector_capture_support(void) {
     XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
@@ -163,16 +168,20 @@ static void selector_capture_support(void) {
  * the source relation or the independent exhaustive receiving obligation. */
 static void selector_complete_chain(void) {
     for(uint32_t copies=126;copies<=128;++copies) {
-        XrXirTypeNode callable={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_NONE};
+        XrXirTypeNode callable={.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,
+            .result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_NONE};
         XrXirTypes types={.nodes=&callable,.count=1};
         XrXirInstruction done={.op=XR_XIR_RETURN},ops[130]={0};
         ops[0]=(XrXirInstruction){.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)256,.immediate=1};
         for(uint32_t i=1;i<=copies;++i) ops[i]=(XrXirInstruction){.op=XR_XIR_COPY,.type=(XrXirType)256,.args={i-1}};
         ops[copies+1]=done;
         XrXirBlock blocks[3]={{.count=1},{.count=1},{.count=copies+2}};
-        XrXirFunction functions[3]={{.name="init",.name_length=4,.instructions=&done,.instruction_count=1,.blocks=&blocks[0],.block_count=1},
-            {.name="leaf",.name_length=4,.instructions=&done,.instruction_count=1,.blocks=&blocks[1],.block_count=1},
-            {.name="chain",.name_length=5,.instructions=ops,.instruction_count=copies+2,.blocks=&blocks[2],.block_count=1}};
+        XrXirFunction functions[3]={{.name="init",.name_length=4,.error_type=XR_XIR_NEVER,
+            .instructions=&done,.instruction_count=1,.blocks=&blocks[0],.block_count=1},
+            {.name="leaf",.name_length=4,.error_type=XR_XIR_NEVER,
+                .instructions=&done,.instruction_count=1,.blocks=&blocks[1],.block_count=1},
+            {.name="chain",.name_length=5,.error_type=XR_XIR_NEVER,
+                .instructions=ops,.instruction_count=copies+2,.blocks=&blocks[2],.block_count=1}};
         XrXirFunctionIdentity identities[3]={{0}};
         XrXirSourceModule identity={.name="chain",.name_length=5};
         XrXirDeclarations declarations={.modules=&identity,.module_count=1,.functions=identities,
@@ -296,7 +305,7 @@ static void selector_invocation_projection(void) {
         CHECK(selector_head_projection.calls==(deny?deny:2));
         CHECK(selector_head_projection.function[0]==source && !selector_head_projection.dimensions[0]);
         if(deny!=1) CHECK(selector_head_projection.function[1]==target && selector_head_projection.dimensions[1]);
-        if(!deny) CHECK(selector_head_projection.fee[0]==11+sizeof(EffectBodyFunctionHead) &&
+        if(!deny) CHECK(selector_head_projection.fee[0]==12+sizeof(EffectBodyFunctionHead) &&
             selector_head_projection.fee[1]==11+sizeof(EffectBodyFunctionDimensions));
     }
     for(uint32_t f=0;f<effect_body_count(material);++f) for(uint32_t mode=0;mode<6;++mode) {
@@ -366,7 +375,7 @@ static void selector_capture_signature(void) {
         CHECK(selector_signature_trace.kind[0]==3 && selector_signature_trace.function[0]==2);
         if(deny!=1) CHECK(selector_signature_trace.kind[1]==1 && selector_signature_trace.function[1]==0);
         if(!deny) CHECK(selector_signature_trace.fee[0]==11+sizeof(EffectBodyFunctionSignature) &&
-            selector_signature_trace.fee[1]==11+sizeof(EffectBodyFunctionHead));
+            selector_signature_trace.fee[1]==12+sizeof(EffectBodyFunctionHead));
     }
     for(uint32_t deny=0;deny<=1;++deny) {
         selector_signature_trace=(SelectorSignatureTrace){.deny=deny};XrXirType type=(XrXirType)UINT32_MAX;
@@ -405,13 +414,17 @@ static void selector_capture_signature(void) {
     puts("capture signatures: literal REF identity, source full head, exact fees, all three callback refusals, unchanged outputs, full storage checks, cancellation/recovery and physical0 PASS");
 }
 
-int main(void) {
+int main(int argc,char **argv) {
+    if(argc==2 && strcmp(argv[1],"resources")==0) {
+        selector_raw_source_replay(true);return 0;
+    }
+    CHECK(argc==1);
     selector_capture_signature();
     selector_invocation_projection();
     selector_current_handoff();
     selector_complete_chain();
     selector_capture_support();
-    selector_raw_source_replay();
+    selector_raw_source_replay(false);
     selector_scalar_domain();
     EdgeFixture fixture;pc_empty_fixture(&fixture,4);
     XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
