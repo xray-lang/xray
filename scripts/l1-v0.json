@@ -46,7 +46,11 @@
     "test_lir_inline",
     "test_lir_inline_faults",
     "test_lir_carriers",
-    "test_xir_prelude_source"
+    "test_xir_prelude_source",
+    "test_xir_json_float",
+    "test_xir_json_float_native",
+    "test_xir_json_float_mixed",
+    "test_xir_json_float_vm"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -113,7 +117,12 @@
     "test_lir_inline_native",
     "test_lir_carriers",
     "test_lir_carriers_native",
-    "test_xir_prelude_endian_source"
+    "test_xir_prelude_endian_source",
+    "test_xir_json_float_catalog_state",
+    "test_xir_json_float",
+    "test_xir_json_float_native",
+    "test_xir_json_float_mixed",
+    "test_xir_json_float_vm"
   ],
   "versionCommand": [
     "{build}/xray.exe",
