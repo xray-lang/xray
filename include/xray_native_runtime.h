@@ -55,6 +55,12 @@ XRAY_API void xrt_run_standalone(const XrtSourceMap *map, XrtSynchronousRoot roo
 // a broken pipe emits no diagnostic. Raw unbound leaf calls are unsupported.
 XRAY_API void xrt_print_i64(int64_t value, uint32_t source_location_id);
 
+// Borrow bytes for this synchronous call, preserving byte_length bytes exactly
+// (including embedded NUL), then emit one LF. No NUL terminator is required.
+// NULL is valid only for an empty span. Nonempty spans must be readable.
+// Flush/write failures use the same execution-ending protocol as integer output.
+XRAY_API void xrt_print_string(const char *bytes, size_t byte_length, uint32_t source_location_id);
+
 // End the active synchronous execution with division (420) or modulo (421)
 // by zero. The source id must be zero or in the active image map. Invalid
 // bindings, codes or ids violate host preconditions and abort. Embedded roots

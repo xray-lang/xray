@@ -44,6 +44,12 @@ static void panic_root(void *data) {
     ++context->visits;
     xrt_arithmetic_panic(context->panic_code, context->source_id);
 }
+static void string_root(void *data) {
+    Context *context = data;
+    ++context->visits;
+    xrt_print_string("embedded\0text", 13, 1);
+    ++context->after;
+}
 static void nested_root(void *data) {
     Context *context = data;
     context->inner_status = xrt_run_embedded(context->inner->owner, &context->inner->failure,
@@ -120,6 +126,19 @@ int main(void) {
     }
     CHECK(xrt_run_embedded(outer->owner, &outer->failure, output_root, outer) == XRT_EXECUTION_COMPLETED);
     CHECK(outer->after == 1);
+    outer->after = 0;
+    SavedOutput string_output = disable_output();
+    CHECK(xrt_run_embedded(outer->owner, &outer->failure, string_root, outer) == XRT_EXECUTION_FAILURE);
+    restore_output(string_output);
+    CHECK(!outer->after && outer->failure.kind == XRT_FAILURE_OUTPUT);
+    CHECK(outer->failure.detail.output.operation == XRT_OUTPUT_WRITE);
+    CHECK(outer->failure.detail.output.source_id == 1 && outer->failure.detail.output.io.failed);
+    CHECK(outer->failure.detail.output.io.code && outer->failure.detail.output.io.domain != XRT_IO_NONE);
+    const XrtSourceLocation *string_location = xrt_locations_get(outer->owner, 1);
+    CHECK(string_location && string_location->line == 7 && string_location->column == 9);
+    memcpy(prior, &outer->failure, sizeof(prior));
+    CHECK(xrt_run_embedded(outer->owner, &outer->failure, normal_root, outer) == XRT_EXECUTION_COMPLETED);
+    CHECK(!memcmp(prior, &outer->failure, sizeof(prior)));
     for (uint32_t code = 420; code <= 421; ++code) {
         for (uint32_t id = 0; id <= 1; ++id) {
             outer->panic_code = code;

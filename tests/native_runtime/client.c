@@ -71,6 +71,18 @@ static void empty_root(void *context) { (void)context; }
 
 static int run_client(int argc, char **argv) {
     if (argc < 2) return 90;
+    bool string_output = strncmp(argv[1], "string-", 7) == 0;
+    const char *mode = string_output ? argv[1] + 7 : argv[1];
+    if (string_output && strcmp(mode, "values") == 0) {
+        const char bytes[] = "A\0\xe4\xb8\xad\r\nZ!";
+        xrt_print_string(bytes, sizeof bytes - 2, 1);
+        xrt_print_string(NULL, 0, 0);
+        return 0;
+    }
+    if (string_output && strcmp(mode, "bad-span") == 0) {
+        xrt_print_string(NULL, 1, 1);
+        return 97;
+    }
     if (strncmp(argv[1], "panic", 5) == 0) {
         if (atexit(exit_callback)) return 92;
         if (strcmp(argv[1], "panic-nested") == 0) {
@@ -96,16 +108,17 @@ static int run_client(int argc, char **argv) {
         return 0;
     }
     static char buffer[128];
-    if (strcmp(argv[1], "prefix") == 0) {
+    if (strcmp(mode, "prefix") == 0) {
         if (fputs("prefix:", stdout) < 0) return 96;
-        xrt_print_i64(12, 0);
+        if (string_output) xrt_print_string("text", 4, 0);
+        else xrt_print_i64(12, 0);
         return 0;
     }
     if (setvbuf(stdout, buffer, _IOFBF, sizeof buffer)) return 91;
     if (atexit(exit_callback)) return 92;
-    bool stale = strcmp(argv[1], "stale-flush-error") == 0;
-    bool buffered = stale || strcmp(argv[1], "flush-error") == 0 || strcmp(argv[1], "pipe-flush") == 0;
-    bool pipe = strcmp(argv[1], "pipe") == 0 || strcmp(argv[1], "pipe-flush") == 0;
+    bool stale = strcmp(mode, "stale-flush-error") == 0;
+    bool buffered = stale || strcmp(mode, "flush-error") == 0 || strcmp(mode, "pipe-flush") == 0;
+    bool pipe = strcmp(mode, "pipe") == 0 || strcmp(mode, "pipe-flush") == 0 || strcmp(mode, "empty-pipe") == 0;
     if (buffered && fputs("buffered prefix", stdout) < 0) return 93;
     if (!pipe && close_output()) return 94;
     if (stale) {
@@ -115,7 +128,10 @@ static int run_client(int argc, char **argv) {
 #endif
     }
     uint32_t id = argc > 2 ? (uint32_t)strtoul(argv[2], NULL, 10) : 1;
-    xrt_print_i64(42, id);
+    if (string_output) {
+        bool empty = strcmp(mode, "empty-error") == 0 || strcmp(mode, "empty-pipe") == 0;
+        xrt_print_string(empty ? NULL : "text", empty ? 0 : 4, id);
+    } else xrt_print_i64(42, id);
     fputs("AFTER_CALL\n", stderr);
     return 95;
 }

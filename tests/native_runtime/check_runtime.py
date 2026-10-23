@@ -34,7 +34,8 @@ def header_clients(build, logs):
             '#ifdef XRT_NORETURN\n#error header macro leaked\n#endif\n'
             'const XrtSourceMap xrt_standalone_source_map = {NULL, 0};\n'
             'static void (*const leaf)(uint32_t, uint32_t) = xrt_arithmetic_panic;\n'
-            'static void invoke(void *context) { leaf(*(uint32_t *)context, 0); }\n'
+            'static void (*const text)(const char *, size_t, uint32_t) = xrt_print_string;\n'
+            'static void invoke(void *context) { text("header", 6, 0); leaf(*(uint32_t *)context, 0); }\n'
             'int main(void) { uint32_t code = 421;\n'
             'xrt_run_standalone(&xrt_standalone_source_map, invoke, &code); return 77; }\n')
     records = []
@@ -54,7 +55,7 @@ def header_clients(build, logs):
         compile_log.write_bytes(compiled.stdout + compiled.stderr)
         assert compiled.returncode == 0, (command, str(compile_log))
         ran = subprocess.run([executable], capture_output=True, timeout=15)
-        assert (ran.returncode, ran.stdout, ran.stderr) == (1, b'', b'[Uncaught Panic] E0421: modulo by zero\n')
+        assert (ran.returncode, ran.stdout, ran.stderr) == (1, b'header\n', b'[Uncaught Panic] E0421: modulo by zero\n')
         records.append({'language': language, 'command': [str(x) for x in command],
                         'actualClientRecipe': recipe,
                         'compileExit': compiled.returncode, 'exit': ran.returncode,
@@ -96,6 +97,8 @@ def main():
         code, output, error = run('raw-values', mode='values')
         assert (code, output, error) == (0, b'-9223372036854775808\n0\n9223372036854775807\n', b'')
         assert run('prefix-order', mode='prefix') == (0, b'prefix:12\n', b'')
+        assert run('string-bytes', mode='string-values') == (0, b'A\0\xe4\xb8\xad\r\nZ\n\n', b'')
+        assert run('string-prefix', mode='string-prefix') == (0, b'prefix:text\n', b'')
     elif args.suite == 'failures':
         for mode, expected in [('panic-div', b'[Uncaught Panic] E0420: division by zero\n'),
                                ('panic-rem', b'[Uncaught Panic] E0421: modulo by zero\n'),
@@ -141,6 +144,17 @@ def main():
         assert (code, output, error) == (74, b'', b''), (code, output, error)
         code, output, error = run('real-buffered-broken-pipe', mode='pipe-flush', pipe=True)
         assert (code, output, error) == (74, b'', b''), (code, output, error)
+        for mode in ('write-error', 'empty-error', 'flush-error'):
+            code, output, error = run('string-' + mode, mode='string-' + mode)
+            operation = b'flush' if mode == 'flush-error' else b'write'
+            assert code == 74 and not output, (mode, code, output, error)
+            assert error.startswith(b'xray: output ' + operation + b' failed at '), error
+            assert b'source\\x0a.xrc:3:5-7:9' in error and error.count(b'\n') == 1, error
+        for mode in ('pipe', 'pipe-flush', 'empty-pipe'):
+            assert run('string-' + mode, mode='string-' + mode, pipe=True) == (74, b'', b'')
+        code, output, error = run('string-bad-span', mode='string-bad-span')
+        assert code not in (0, 1, 74) and not output, (code, output, error)
+        assert b'String output requires bytes for a nonempty span' in error
     elif args.suite == 'link_contract':
         header_clients(Path(args.build).resolve(), args.logs.resolve())
         for name, diagnostic in [('missing', rb'LNK20(?:01|19)|undefined (?:reference|symbol)'),

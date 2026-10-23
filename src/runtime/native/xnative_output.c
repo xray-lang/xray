@@ -12,6 +12,7 @@
  *   active root only after the I/O helper has restored its local OS state.
  */
 #include "xnative_execution.h"
+#include "base/xchecks.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -98,5 +99,15 @@ XRAY_API void xrt_print_i64(int64_t value, uint32_t source_location_id) {
     XrtIoResult result = xrt_io_flush_stdout();
     if (result.failed) xrt_end_execution(result, XRT_OUTPUT_FLUSH, source_location_id);
     result = xrt_io_write(1, bytes, length);
+    if (result.failed) xrt_end_execution(result, XRT_OUTPUT_WRITE, source_location_id);
+}
+
+XRAY_API void xrt_print_string(const char *bytes, size_t byte_length, uint32_t source_location_id) {
+    XR_CHECK(bytes || !byte_length, "String output requires bytes for a nonempty span");
+    XrtIoResult result = xrt_io_flush_stdout();
+    if (result.failed) xrt_end_execution(result, XRT_OUTPUT_FLUSH, source_location_id);
+    result = xrt_io_write(1, bytes, byte_length);
+    if (result.failed) xrt_end_execution(result, XRT_OUTPUT_WRITE, source_location_id);
+    result = xrt_io_write(1, "\n", 1);
     if (result.failed) xrt_end_execution(result, XRT_OUTPUT_WRITE, source_location_id);
 }
