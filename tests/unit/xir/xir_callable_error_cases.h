@@ -20,6 +20,7 @@
 #include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_view_prepare_internal.h"
 #include "xir/xxir_implementation.h"
+#include "xir_effect_input_fixture.h"
 #include "xir_callable_old35_golden.h"
 
 static void callable_error_old_packet(const XrXirCompileContext *work,const uint8_t *bytes,size_t length,const uint8_t *expected) {
@@ -407,10 +408,12 @@ static void callable_error_library(const XrXirCompileContext *work,bool nested) 
     f->error_bound.markers=XR_XIR_CONSTRAINT_ERROR;
     XrXirConstruction *facts=NULL;CHECK(xir_fixture_construction(work,&f->types,&facts)==XR_XIR_OK);
     XrXirStatus ordinary=xir_compile_view_prepare_ordinary(work,&f->module,facts,&initial);
-    xr_xir_compile_construction_free(facts);
     if (ordinary!=XR_XIR_OK) fprintf(stderr,"Callable library ordinary %u f%u b%u i%u\n",ordinary,initial.function,initial.block,initial.instruction);
     CHECK(ordinary==XR_XIR_OK);
-    XrXirEffects *effects=NULL;XrXirStatus inferred=xr_xir_compile_effects_infer_verified(work,&f->module,&effects);
+    XrXirEffects *effects=NULL;
+    XrXirStatus inferred=xir_fixture_effects_infer(work,
+        (XirFixtureEffectInput){&f->module,facts},&effects);
+    xr_xir_compile_construction_free(facts);
     if (inferred!=XR_XIR_OK) fprintf(stderr,"Callable library effects %u\n",inferred);
     CHECK(inferred==XR_XIR_OK);
     xr_xir_compile_effects_free(effects);

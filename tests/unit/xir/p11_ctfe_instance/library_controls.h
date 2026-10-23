@@ -159,9 +159,9 @@ static void library_slot_fact_controls(void) {
     CHECK(xr_xir_compile_source_snapshot_copy_v2(&receiver,xr_xir_compile_source_snapshot_view(source.snapshot),owned,&snapshot)==XR_XIR_OK);
     xr_xir_compile_construction_free(owned);xr_xir_compile_source_result_free(&source);
     xr_compile_resources_release(producer.resources);
-    /* This compares the existing owned Module representation; the current
-     * inference entry does not consume the borrowed Construction. */
-    CHECK(xir_effects_source_body_match(&receiver,&received->module,effects)==XR_XIR_OK);
+    /* The receiving Artifact owns both inputs after its producer retires. */
+    const XirFixtureEffectInput received_input={&received->module,received->construction};
+    CHECK(xir_fixture_effects_body_match(&receiver,received_input,effects)==XR_XIR_OK);
     xr_xir_compile_effects_free(effects);
     library_slot_names(xr_xir_compile_source_snapshot_construction(snapshot),names,4);
     library_slot_names(received->construction,names,4);CHECK(xr_xir_compile_artifact_verify(received,NULL)==XR_XIR_OK);
