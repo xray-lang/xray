@@ -45,7 +45,12 @@ static XrXirArtifact *program_input(const XrXirCompileContext *context) {
     const XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xir_fixture_check(context,&module,&checked,NULL)==XR_XIR_OK);
+    XrXirDiagnostic diagnostic={0};
+    XrXirStatus checked_status=xir_fixture_check(context,&module,&checked,&diagnostic);
+    if (checked_status!=XR_XIR_OK)
+        fprintf(stderr,"Program fixture check status%u f%u b%u i%u reason%u\n",
+            checked_status,diagnostic.function,diagnostic.block,diagnostic.instruction,diagnostic.reason);
+    CHECK(checked_status==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);xr_xir_compile_artifact_free(closed);
