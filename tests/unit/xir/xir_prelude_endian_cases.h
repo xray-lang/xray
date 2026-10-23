@@ -27,7 +27,7 @@ static XrXirSourceResult prelude_endian_check(const XrXirCompileContext *context
     } else status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     xr_compile_session_free(session);
     if (status!=XR_XIR_OK)
-        fprintf(stderr,"Endian %s status%u %d:%d %s\n",file,status,diagnostic.line,diagnostic.column,diagnostic.message);
+        fprintf(stderr,"Endian %s catalog%u text%u status%u %d:%d %s\n",file,catalog!=NULL,text,status,diagnostic.line,diagnostic.column,diagnostic.message);
     const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(result.snapshot);
     CHECK(status==XR_XIR_OK && result.checked && view && view->complete);
     return result;
@@ -75,14 +75,16 @@ static XrXirLibraryCatalog *prelude_endian_catalog(const XrXirCompileContext *co
     XrXirSourceResult producer={0};XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_prelude_library(context,&producer,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(producer.checked,&packet,NULL)==XR_XIR_OK);
-    char logical[]="prelude/builtin_symbols.def",space[]="prelude",physical[]=XR_SOURCE_STDLIB;
+    char logical[]="prelude/builtin_symbols.def",space[]="prelude";char *physical=NULL;
+    XrOsIoPolicy policy=xr_compile_io_policy(context->resources);
+    CHECK(xr_realpath_owned(&policy,XR_SOURCE_STDLIB,&physical)==XR_OS_IO_OK);
     XrXirLibraryModuleInput binding={{XR_MODULE_IDENTITY_STDLIB,space,physical},logical};
     XrXirLibraryInput input={.packet=packet.bytes,.length=packet.length,.modules=&binding,.module_count=1};
     xr_sha256(input.packet,input.length,input.sha256);XrXirLibraryCatalog *catalog=NULL;
     CHECK(xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&producer);memset(packet.bytes,0,packet.length);
     xr_xir_compile_checked_packet_free(&packet);memset(&input,0,sizeof(input));memset(&binding,0,sizeof(binding));
-    memset(logical,0,sizeof(logical));memset(space,0,sizeof(space));memset(physical,0,sizeof(physical));
+    memset(logical,0,sizeof(logical));memset(space,0,sizeof(space));memset(physical,0,strlen(physical));policy.free(policy.context,physical);
     return catalog;
 }
 static void prelude_endian_owner(void) {
