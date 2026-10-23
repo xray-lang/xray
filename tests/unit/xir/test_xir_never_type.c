@@ -662,11 +662,15 @@ static void check_catch_binding_names(const XrXirCompileContext *work) {
         {"catch (Fault)",false},
         {"catch (Typo)",false},
         {"catch (\xCE\x94)",false},
+        {"catch (\xC4\x82)",false},
+        {"catch (\xD0\x81)",false},
+        {"catch (\xF0\x90\x90\x80)",false},
         {"catch (error)",true},
         {"catch (Fault: Fault)",true},
         {"catch (Fault.Bad)",true},
         {"catch panic (P)",true},
         {"catch (\xCE\xB4)",true},
+        {"catch (\xCE\xA2)",true},
         {"catch (_Fault)",true},
     };
     for (size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
