@@ -91,7 +91,7 @@ static char *prelude_endian_catalog_locator(const XrXirLibraryCatalog *catalog) 
     size_t count=0;const char *selected=NULL;
     const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources_v2(catalog,&count);
     for (size_t i=0;i<count;++i) if (resources[i].canonical && !strcmp(resources[i].canonical,XIR_PRELUDE_CANONICAL)) {
-        CHECK(!selected && resources[i].source_locator);selected=resources[i].source_locator;
+        CHECK(!selected && resources[i].checked && resources[i].source_locator);selected=resources[i].source_locator;
     }
     CHECK(selected);size_t bytes=strlen(selected)+1;char *owned=xr_malloc(bytes);CHECK(owned);
     memcpy(owned,selected,bytes);return owned;
