@@ -318,6 +318,8 @@ JSON 标量 `null`、`bool`、`i64`、`f64`、`string` 可在有明确 `JSON.Val
 | `iterator()` | 迭代协议；惰性产出与 `toArray()` 相同的元素序列 |
 | `len(range)` | 返回范围中的元素数量 |
 
+计数结果为 `i64`；若数学上的元素数量超过 `i64` 上限，返回 `MAX_I64`（`9223372036854775807`），不发生整数回绕。
+
 ```xray @id=range-members
 var pages = 1..=3
 print(pages.start)          // 1
@@ -710,6 +712,8 @@ JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly when 
 | `toString()` | Returns an `a..b` or `a..=b` string |
 | `iterator()` | iteration protocol; yields the same elements as `toArray()`, lazily |
 | `len(range)` | Returns the number of elements in the range |
+
+The count is an `i64`. If the mathematical number of elements exceeds the `i64` maximum, it saturates at `MAX_I64` (`9223372036854775807`) without integer wraparound.
 
 ```xray @id=range-members-en
 var pages = 1..=3
