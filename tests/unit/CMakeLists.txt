@@ -320,6 +320,8 @@ else()
 endif()
 add_test(NAME test_xir_stages COMMAND test_xir_stages)
 set_tests_properties(test_xir_stages PROPERTIES LABELS "unit;xir;metadata;ownership")
+add_test(NAME l3_xir_array_frame_limits COMMAND test_xir_stages --legacy-array-frame-limits)
+set_tests_properties(l3_xir_array_frame_limits PROPERTIES LABELS "l3;xir;legacy-resource;redlist" TIMEOUT 60)
 add_executable(test_xir_allocations xir/test_xir_allocations.c
     ${CMAKE_SOURCE_DIR}/src/aot/xi_cgen_verify_output.c
     ${CMAKE_SOURCE_DIR}/src/shared/xnative_declaration.c)

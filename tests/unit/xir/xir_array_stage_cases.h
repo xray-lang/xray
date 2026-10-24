@@ -15,12 +15,32 @@
 #include "xir_array_metadata_fixture.h"
 #include "xir/xxir_operand_roles.h"
 
+static void array_stage_immutable_slot(XirArrayMetadataFixture *f) {
+    XrXirType array = (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
+    f->slot = (XrXirSlot){0, array, 0};
+    f->init[1] = (XrXirInstruction){XR_XIR_SLOT_INIT, XR_XIR_UNIT, {0}, {0}, 0, {0}};
+    f->init[2] = (XrXirInstruction){XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}};
+    f->blocks[0].count = 3; f->functions[0].instruction_count = 3;
+    f->ops[6] = (XrXirInstruction){XR_XIR_SLOT_PLACE, array, {0}, {0}, 0, {0}};
+    f->ops[7] = (XrXirInstruction){XR_XIR_PLACE_READ, array, {6}, {0}, 0, {0}};
+}
+
+static void array_stage_slot_place(void) {
+    XirArrayMetadataFixture f; xir_array_metadata_init(&f); array_stage_immutable_slot(&f);
+    XrXirCompileContext context = stage_context_default();
+    CHECK(xir_fixture_verify(&context, &f.module, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_place_kind(&f.functions[1], 6) == XR_XIR_PLACE_SLOT);
+    CHECK(xr_xir_place_kind(&f.functions[1], 7) == XR_XIR_PLACE_NONE);
+}
+
 static void array_stage_layout(void) {
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
     CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
     CHECK(xr_xir_place_kind(&f.functions[1], 3) == XR_XIR_PLACE_LOCAL);
     CHECK(xr_xir_place_kind(&f.functions[1], 5) == XR_XIR_PLACE_CELL);
-    CHECK(xr_xir_place_kind(&f.functions[1], 6) == XR_XIR_PLACE_SLOT);
+    CHECK(xr_xir_place_kind(&f.functions[1], 6) == XR_XIR_PLACE_NONE);
+    CHECK(xr_xir_place_kind(&f.functions[1], 7) == XR_XIR_PLACE_CELL);
+    array_stage_slot_place();
     CHECK(xr_xir_place_kind(&f.functions[1], UINT32_MAX) == XR_XIR_PLACE_NONE);
     CHECK(xr_xir_place_kind(&f.functions[2], 0) == XR_XIR_PLACE_NONE);
     XrXirArtifact *checked = NULL, *lowered = NULL;
@@ -28,23 +48,52 @@ static void array_stage_layout(void) {
     memset(&f, 0xCC, sizeof(f));
     CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(lowered, 1);
-    CHECK(layout->slot_count == 14 && layout->frame_bytes == 72 && layout->outgoing_count == 2);
-    CHECK(layout->offsets[5] == UINT32_MAX && layout->offsets[6] == UINT32_MAX);
-    CHECK(layout->owned_count == 3 && layout->owned_offsets[0] == 16 &&
-        layout->owned_offsets[1] == 24 && layout->owned_offsets[2] == 32);
+    const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
+    const XrXirFunction *function = &module->functions[1];
+    CHECK(layout->slot_count == function->parameter_count + function->instruction_count);
+    CHECK(layout->outgoing_count == function->instructions[2].args[1]);
+    uint32_t owned_values = 0;
+    uint64_t storage_end = 0;
+    for (uint32_t value = 0; value < layout->slot_count; ++value) {
+        XrXirPlaceKind place = xr_xir_place_kind(function, value);
+        if (place != XR_XIR_PLACE_NONE && place != XR_XIR_PLACE_LOCAL) {
+            CHECK(layout->offsets[value] == UINT32_MAX); continue;
+        }
+        XrXirType type = xr_xir_operand_type(function, value);
+        XrXirLayout physical = {0};
+        CHECK(xr_xir_compile_layout(&stage_context, module->types, type,
+            &fixture_target, XR_XIR_LAYOUT_FRAME, &physical) == XR_XIR_OK);
+        uint32_t offset = layout->offsets[value];
+        if (physical.size) {
+            CHECK(offset != UINT32_MAX && physical.alignment && offset % physical.alignment == 0);
+            CHECK(offset <= layout->frame_bytes && physical.size <= layout->frame_bytes - offset);
+            CHECK(offset >= storage_end);
+            storage_end = (uint64_t) offset + physical.size;
+        } else CHECK(offset == UINT32_MAX);
+        if (xr_xir_type_is_owned(module->types, type)) {
+            CHECK(owned_values < layout->owned_count && layout->owned_offsets[owned_values] == offset);
+            ++owned_values;
+        }
+    }
+    CHECK(owned_values == layout->owned_count && owned_values);
     CHECK(xr_xir_compile_artifact_module(lowered)->functions[1].instructions[3].op == XR_XIR_OWNED_LOCAL_NEW);
     uint32_t *offsets = (uint32_t *) layout->offsets;
-    offsets[5] = 40;
+    uint32_t saved_place = offsets[5], saved_owned = layout->owned_offsets[0];
+    offsets[5] = offsets[0];
     CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_BAD_LAYOUT);
-    offsets[5] = UINT32_MAX;
+    offsets[5] = saved_place;
     uint32_t *owned = (uint32_t *) layout->owned_offsets;
     owned[0] = UINT32_MAX;
     CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_BAD_LAYOUT);
-    owned[0] = 16;
+    owned[0] = saved_owned;
     CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(lowered); lowered = NULL;
     xr_xir_compile_artifact_free(checked);
-    checked = NULL;
+}
+
+static void array_stage_frame_limits(void) {
+    XirArrayMetadataFixture f;
+    XrXirArtifact *checked = NULL, *lowered = NULL;
     for (uint64_t frame = 103; frame <= 104; ++frame) {
         xir_array_metadata_init(&f);
         XrXirCompileContext context = stage_context_default(); context.limits.frame_bytes = frame;
@@ -73,19 +122,27 @@ static void array_stage_attacks(void) {
         if (attack == 8) f.functions[1].operand_count = 6;
         if (attack == 9) f.operands[2] = 2;
         if (attack == 10) f.operands[0] = 5;
-        if (attack == 11) f.ops[10].args[0] = 2;
+        if (attack == 11) f.ops[11].args[0] = 2;
         if (attack == 12) f.ops[7] = (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 0, {0}};
         if (attack == 13) f.ops[8].type = XR_XIR_BOOL;
         if (attack == 14) f.operands[4] = 2;
         if (attack == 15) f.ops[5].targets[0] = 1;
-        if (attack == 16) f.ops[12].args[1] = 1;
-        if (attack == 17) { f.operands[2] = 6; f.slot.mutable = 0; }
+        if (attack == 16) f.ops[13].args[1] = 1;
+        if (attack == 17) { array_stage_immutable_slot(&f); f.operands[2] = 6; }
         if (attack == 18) f.ops[11] = (XrXirInstruction) {XR_XIR_COPY, array, {5}, {0}, 0, {0}};
         if (attack == 19) f.ops[11] = (XrXirInstruction) {XR_XIR_LOCAL_READ, array, {5}, {0}, 0, {0}};
         if (attack == 20) f.ops[11] = (XrXirInstruction) {XR_XIR_SLOT_STORE, XR_XIR_UNIT, {6}, {0}, 0, {0}};
-        if (attack == 21) f.ops[13].args[0] = 5;
+        if (attack == 21) {
+            f.ops[13] = (XrXirInstruction) {XR_XIR_LOCAL_NEW, XR_XIR_I64, {0}, {0}, 0, {0}};
+            f.ops[14].args[0] = 0;
+            XrXirArtifact *valid = NULL;
+            CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
+            CHECK(xir_fixture_check(&stage_context, &f.module, &valid, NULL) == XR_XIR_OK && valid);
+            xr_xir_compile_artifact_free(valid);
+            f.ops[14].args[0] = 13;
+        }
         if (attack == 22) f.ops[11] = (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {4, 5}, {0}, 0, {0}};
-        if (attack == 23) f.ops[11] = (XrXirInstruction) {XR_XIR_LOCAL_NEW, array, {6}, {0}, 0, {0}};
+        if (attack == 23) f.ops[11] = (XrXirInstruction) {XR_XIR_LOCAL_NEW, array, {7}, {0}, 0, {0}};
         if (attack == 24 || attack == 25) {
             f.functions[1].operand_count = 6; f.operands[5] = 5;
             f.ops[11] = (XrXirInstruction) {attack == 24 ? XR_XIR_CALL : XR_XIR_FUNCTION_REF,
@@ -102,11 +159,11 @@ static void array_stage_attacks(void) {
         CHECK(xir_fixture_check(&stage_context, &f.module, &artifact, NULL) != XR_XIR_OK && !artifact);
     }
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
-    f.operands[2] = 6; /* A mutable slot is independently a writable receiver. */
+    f.operands[2] = 7; /* The shared Cell projection remains a writable receiver. */
     CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
-    f.ops[8].args[0] = 2; /* Ordinary values remain readable snapshots. */
+    f.ops[9].args[0] = 2; /* Ordinary values remain readable snapshots. */
     CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
-    f.slot.mutable = 0; f.operands[2] = 3;
+    array_stage_immutable_slot(&f); f.operands[2] = 3;
     CHECK(xir_fixture_verify(&stage_context, &f.module, NULL) == XR_XIR_OK);
 }
 

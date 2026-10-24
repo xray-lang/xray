@@ -978,8 +978,12 @@ static void panic_handler_structure(void) {
 #include "xir_class_array_core_cases.h"
 #include "xir_method_owner_cases.h"
 
-int main(void) {
+int main(int argc, char **argv) {
     stage_context = stage_context_default();
+    if (argc == 2 && strcmp(argv[1], "--legacy-array-frame-limits") == 0) {
+        array_stage_frame_limits(); stage_contexts_free(); return 0;
+    }
+    CHECK(argc == 1);
     method_owner_cases();
     class_core_cases();
     class_array_core_cases();
