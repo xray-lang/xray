@@ -1322,7 +1322,7 @@ add_xray_unit_test(test_rc_container_release object/test_rc_container_release.c)
 # ============================================================================
 
 add_xray_unit_test(test_lexer frontend/test_lexer.c)
-add_xray_unit_test(test_lexer_keywords frontend/test_lexer_keywords.c)
+include("${CMAKE_CURRENT_LIST_DIR}/frontend/lexer_keywords.cmake")
 add_xray_unit_test(test_lexer_positions frontend/test_lexer_positions.c)
 add_xray_unit_test(test_lexer_trivia frontend/test_lexer_trivia.c)
 add_xray_bootstrap_unit_test(test_parser frontend/test_parser.c)
