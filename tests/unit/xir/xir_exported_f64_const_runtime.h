@@ -19,7 +19,7 @@ static XrXirValue ci_take(XrXirInstance *instance,uint32_t entry) {
     XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);return value;
 }
 static void ci_number(XrXirValue *value,XrXirType type,uint64_t expected) {
-    CHECK(value->type==type && !value->reserved && (uint64_t)value->payload==expected);xr_xir_value_drop(value);
+    CHECK(value->type==(uint32_t)type && !value->reserved && (uint64_t)value->payload==expected);xr_xir_value_drop(value);
 }
 static XrXirValue ci_runtime_cases(XrXirProgram *program,const uint32_t selection[6]) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
