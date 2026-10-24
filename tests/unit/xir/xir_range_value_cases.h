@@ -28,6 +28,10 @@ static const char range_consumer_source[]=
     "export fn rangeLength(r:Range)->i64{return len(r)}\n"
     "fn factory(closed:bool)->Range{endpointCalls+=1;return publicRange(-2,3,closed)}\n"
     "export fn lenOnce(closed:bool)->i64{endpointCalls=0;const n=len(factory(closed));return n*100+endpointCalls}\n";
+static const char range_constructor_source[]=
+    "class Holder<T>{const value:T;const extra:i64;init(value:T,extra:i64=7){this.value=value;this.extra=extra}}\n"
+    "export fn generic()->i64{const a=Holder<i64>(41);const b=Holder<Range>(1..=3,9);"
+    "return a.value+a.extra+b.value.count()+b.extra}\n";
 static const char *const range_entry_names[]={"literal","inclusive","constructed","rangeCount","endpoints","once","accept","rangeLength","lenOnce"};
 static const char *const range_rejections[]={
     "export fn f()->Range{return Range(1,2)}",
@@ -43,6 +47,8 @@ static const char *const range_rejections[]={
     "export fn f(r:Range){r._step=2}",
     "class Range {} export fn f(r:Range)->Range{return 1..3}",
     "class Secret {private init(){}} export fn f()->Secret{return Secret()}",
-    "class Range {count()->i64{return 1}} export fn f(r:Range)->i64{return len(r)}"
+    "class Range {count()->i64{return 1}} export fn f(r:Range)->i64{return len(r)}",
+    "class Holder<T>{const value:T;init(value:T){this.value=value}} export fn f(){const c=Holder<i64>(\"bad\")}",
+    "class Holder<T>{const value:T;init(value:T,n:i64=7){this.value=value}} export fn f(){const c=Holder<i64>(1,\"bad\")}"
 };
 #endif // XIR_RANGE_VALUE_CASES_H

@@ -116,6 +116,17 @@ static void range_authority(void) {
     XrXirCompileContext context=range_context();
     const char *positive="type R=Range\nexport fn f(r:R)->i64{return r.start+r.end+r.count()+len(r)}";
     XrXirSourceResult result=range_source(&context,positive,"typed.xr",XR_XIR_PROGRAM,NULL);xr_xir_compile_source_result_free(&result);
+    result=range_source(&context,range_constructor_source,"generic.xr",XR_XIR_PROGRAM,NULL);
+    XrXirArtifact *closed=NULL,*lowered=NULL;
+    CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&result);
+    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    uint32_t entry=range_entry(xr_xir_compile_artifact_module(lowered),"generic");
+    XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
+    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+    XrXirValue answer=range_take(instance,entry,NULL,0);range_integer(&answer,60);
+    xr_xir_compile_program_drop(program);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     for(size_t i=0;i<sizeof(range_rejections)/sizeof(*range_rejections);++i) {
         XrXirSourceResult refused={0};CHECK(range_check(&context,range_rejections[i],"refused.xr",XR_XIR_PROGRAM,NULL,&refused)!=XR_XIR_OK);
         xr_xir_compile_source_result_free(&refused);
