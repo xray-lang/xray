@@ -107,15 +107,35 @@ static void method_owner_cases(void) {
     functions[2].result = receiver; identities[2].method_kind = XR_XIR_CONSTRUCTOR;
     member_code[0] = (XrXirInstruction){XR_XIR_STRUCT_NEW,receiver,{0},{0},0,{0}};
     member_code[1].args[0] = 0;
+    uint32_t method_parameters = generic[2].parameter_count;
+    uint32_t method_access = identities[2].member_access;
+    generic[2].parameter_count = nominal[0].parameter_count;
+    identities[2].member_access = XR_XIR_MEMBER_PUBLIC;
     for (unsigned mode = 0; mode < 3; ++mode) {
         XrXirArtifact *checked = NULL;
         if (mode == 1) identities[2].nominal_owner = 2;
         if (mode == 2) { argument = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1); node.parameter_span = 2; }
-        CHECK(xir_fixture_check(&stage_context, &module, &checked, NULL) == (mode ? XR_XIR_BAD_TYPE : XR_XIR_OK));
+        XrXirConstructionRow rows[2] = {{0}, {0}};
+        CHECK(identities[2].nominal_owner && identities[2].nominal_owner <= 2);
+        rows[identities[2].nominal_owner - 1].default_initializer = 3;
+        XrXirConstructionSpec spec = {rows, 2, NULL, 0, NULL};
+        XrXirSlotFacts slots = {NULL, 0};
+        XrXirConstruction *construction = NULL;
+        CHECK(xr_xir_compile_types_structure_verify(&stage_context, &types) == XR_XIR_OK);
+        CHECK(xr_xir_compile_construction_new_v4(&stage_context, &types, &spec, &slots, &construction) == XR_XIR_OK);
+        XrXirDiagnostic diagnostic = {0};
+        XrXirStatus status = xr_xir_compile_check_v2(&stage_context, &module, construction, &checked, &diagnostic);
+        xr_xir_compile_construction_free(construction);
+        if (status != (mode ? XR_XIR_BAD_TYPE : XR_XIR_OK))
+            fprintf(stderr, "constructor mode%u status%u f%u b%u i%u reason%u\n",
+                mode, (unsigned)status, diagnostic.function, diagnostic.block, diagnostic.instruction, (unsigned)diagnostic.reason);
+        CHECK(status == (mode ? XR_XIR_BAD_TYPE : XR_XIR_OK));
         CHECK(mode ? !checked : !!checked); xr_xir_compile_artifact_free(checked); checked = NULL;
         identities[2].nominal_owner = 1;
         argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; node.parameter_span = 1;
     }
+    generic[2].parameter_count = method_parameters;
+    identities[2].member_access = method_access;
     functions[2].result = XR_XIR_I64; member_code[0] = code[0];
     identities[2].method_kind = XR_XIR_STATIC_METHOD;
     XrXirArtifact *checked = NULL;
