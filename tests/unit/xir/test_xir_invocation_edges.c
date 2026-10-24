@@ -247,7 +247,8 @@ static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
             .blocks=&blocks[4],.block_count=1,.operands=actuals,.operand_count=2},
         {.name="cycle",.name_length=5,.parameters=&callback,.parameter_count=1,.instructions=loop,
             .instruction_count=edges_large?13u:5u,.blocks=&blocks[5],.block_count=3,.operands=loop_operands,.operand_count=4}};
-    const XrXirSourceModule source={"edges",5,NULL,0,0};const XrXirFunctionIdentity identities[6]={0};
+    const XrXirSourceModule source={.name="edges",.name_length=5,.dependencies=NULL,.dependency_count=0,
+        .initializer=0,.lexical_scope=0,.storage=XR_XIR_MODULE_FRESH_STORAGE};const XrXirFunctionIdentity identities[6]={0};
     const XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     XrXirEffectParameter plain={0},variable={.kind=XR_XIR_EFFECT_PARAMETER_VARIABLE},

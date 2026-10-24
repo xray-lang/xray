@@ -53,7 +53,8 @@ static uint32_t seed_source_once(unsigned shape,uint32_t cut,unsigned attack) {
         {.name="callback",.name_length=8,.parameters=&callable,.parameter_count=1,.result=XR_XIR_UNIT,.instructions=fixed?escape:&ret,.instruction_count=fixed?2u:1u,.blocks=&blocks[3],.block_count=1},
         {.name="cell",.name_length=4,.parameters=&cell,.parameter_count=1,.instructions=&ret,.instruction_count=1,.blocks=&blocks[4],.block_count=1},
         {.name="object",.name_length=6,.parameters=&object,.parameter_count=1,.instructions=&ret,.instruction_count=1,.blocks=&blocks[5],.block_count=1}};
-    const XrXirSourceModule source={"inventory",9,NULL,0,0};XrXirFunctionIdentity identities[6]={0};
+    const XrXirSourceModule source={.name="inventory",.name_length=9,.dependencies=NULL,.dependency_count=0,
+        .initializer=0,.lexical_scope=0,.storage=XR_XIR_MODULE_FRESH_STORAGE};XrXirFunctionIdentity identities[6]={0};
     const XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     XrXirEffectParameter plain={0},callback={.kind=fixed?XR_XIR_EFFECT_PARAMETER_FIXED:XR_XIR_EFFECT_PARAMETER_VARIABLE,
         .uses=fixed?XR_XIR_EFFECT_USE_FIXED:0};
