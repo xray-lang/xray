@@ -32,6 +32,21 @@ static inline XrXirStatus xir_fixture_effects_body_match(const XrXirCompileConte
     (void)input.construction;
     return xir_effects_source_body_match(context,input.module,effects);
 }
+static inline XrXirStatus xir_fixture_effects_program_body(const XrXirCompileContext *context,
+    XirFixtureEffectInput input,const XrXirEffects *effects) {
+    (void)input.construction;
+    return xir_effects_program_body_match(context,input.module,effects);
+}
+static inline XrXirStatus xir_fixture_effects_program_final(const XrXirCompileContext *context,
+    XirFixtureEffectInput input,const XrXirEffects *effects) {
+    (void)input.construction;
+    return xir_effects_program_final_verify(context,input.module,effects);
+}
+static inline XrXirStatus xir_fixture_effects_program_root(const XrXirCompileContext *context,
+    XirFixtureEffectInput input,const XrXirEffects *effects) {
+    (void)input.construction;
+    return xir_effects_program_root_current(context,input.module,effects);
+}
 static inline XrXirStatus xir_fixture_effects_refine(const XrXirCompileContext *context,
     XirFixtureEffectInput input,const XrXirRootRefiner *refiner,XrXirEffects **output) {
     (void)input.construction;

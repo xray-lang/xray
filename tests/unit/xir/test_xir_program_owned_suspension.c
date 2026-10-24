@@ -80,7 +80,8 @@ int main(int argc,char **argv) {
     XrXirArtifact *artifact=suspension_program(&context,variant);
     XrXirEffects *effects=artifact->program_final;
     EffectFinalOutcomes *final=effects->invocations->final->outcomes;
-    CHECK(xir_effects_program_root_current(&context,&artifact->module,effects)==XR_XIR_OK);
+    CHECK(xir_fixture_effects_program_root(&context,
+        (XirFixtureEffectInput){&artifact->module,artifact->construction},effects)==XR_XIR_OK);
     XrXirEffectWitness saved[2]={final->witnesses[1],final->witnesses[2]};
     if(variant<3) {
         uint32_t instruction=variant?1:0,target=variant==2?3:2,distance=variant==2?2:1;
@@ -92,10 +93,12 @@ int main(int argc,char **argv) {
         final->functions[f].suspend=XR_XIR_EFFECT_MAY;
         final->witnesses[f]=(XrXirEffectWitness){XR_XIR_EFFECT_CAUSE_CALL,0,3-f,1};
     }
-    CHECK(xir_effects_program_root_current(&context,&artifact->module,effects)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_fixture_effects_program_root(&context,
+        (XirFixtureEffectInput){&artifact->module,artifact->construction},effects)==XR_XIR_BAD_STRUCTURE);
     final->witnesses[1]=saved[0];final->witnesses[2]=saved[1];
     if(variant==3) for(uint32_t f=1;f<3;++f) final->functions[f].suspend=XR_XIR_EFFECT_NONE;
-    CHECK(xir_effects_program_root_current(&context,&artifact->module,effects)==XR_XIR_OK);
+    CHECK(xir_fixture_effects_program_root(&context,
+        (XirFixtureEffectInput){&artifact->module,artifact->construction},effects)==XR_XIR_OK);
     if(variant<3) {
         XrXirProgram *program=NULL;
         CHECK(xr_xir_compile_vm_program_take(&artifact,&program)==XR_XIR_OK && !artifact);

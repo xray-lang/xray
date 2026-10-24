@@ -14,7 +14,8 @@ int main(int argc,char **argv) {
     CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     XrXirArtifact *artifact=program_input(&context);
     XrXirEffects *effects=artifact->program_final;
-    CHECK(xir_effects_program_final_verify(&context,&artifact->module,effects)==XR_XIR_OK);
+    CHECK(xir_fixture_effects_program_final(&context,
+        (XirFixtureEffectInput){&artifact->module,artifact->construction},effects)==XR_XIR_OK);
     EffectInvocationCertificate *certificate=effects->invocations;
     EffectInvocationFinal *graph=certificate->final;
     CHECK(graph->count>=3 && graph->nodes[2].parameter_count==1);
@@ -69,7 +70,8 @@ int main(int argc,char **argv) {
     if(attack==36) { graph->capture.facts=(EffectCaptureFact *)(uintptr_t)1;graph->capture.capacity=1; }
     if(attack==37) outcomes->error_proof=(EffectErrorFinite *)((uint8_t *)outcomes->error_proof+_Alignof(EffectErrorFinite));
     if(attack==38) outcomes->control_proof=(EffectControlProof *)((uint8_t *)outcomes->control_proof+_Alignof(EffectControlProof));
-    XrXirStatus status=xir_effects_program_final_verify(&context,&artifact->module,effects);
+    XrXirStatus status=xir_fixture_effects_program_final(&context,
+        (XirFixtureEffectInput){&artifact->module,artifact->construction},effects);
     fprintf(stderr,"Final storage attack%u status%u\n",attack,status);
     *certificate=saved_certificate;*graph=saved_graph;*outcomes=saved_outcomes;
     graph->nodes[2]=saved_node;

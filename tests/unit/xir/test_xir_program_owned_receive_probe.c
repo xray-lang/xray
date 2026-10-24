@@ -3,6 +3,12 @@
 #include "test_xir_program_input_storage.c"
 #undef main
 
+static XrXirStatus program_fixture_current_input(const XrXirCompileContext *context,
+    XirFixtureEffectInput input,const EffectBodyMaterial *body) {
+    (void)input.construction;
+    return effect_invocation_current_input_match(context,input.module,body);
+}
+
 static void rejected_final(const XrXirCompileContext *context,XrXirArtifact *artifact,
     XrXirEffects *effects) {
     EffectFinalOutcomes *final=(EffectFinalOutcomes *)effect_final_outcomes(effects);
@@ -25,13 +31,15 @@ static void rejected_final(const XrXirCompileContext *context,XrXirArtifact *art
             parameter->kind=XR_XIR_EFFECT_PARAMETER_VARIABLE;
             roles->resources=context->resources;
         }
-        XrXirStatus status=xir_effects_program_final_verify(context,&artifact->module,effects);
+        XrXirStatus status=xir_fixture_effects_program_final(context,
+        (XirFixtureEffectInput){&artifact->module,artifact->construction},effects);
         fprintf(stderr,"received Final attack%u status%u\n",attack,status);
         final->root[1]=root;final->functions[1]=control;final->go_safe[1]=worker;
         final->task_errors[1]=errors;final->entry_roots[1].intrinsic_mask=intrinsic;
         *parameter=saved;*roles=saved_roles;
         CHECK(status==XR_XIR_BAD_STRUCTURE);
-        CHECK(xir_effects_program_final_verify(context,&artifact->module,effects)==XR_XIR_OK);
+        CHECK(xir_fixture_effects_program_final(context,
+        (XirFixtureEffectInput){&artifact->module,artifact->construction},effects)==XR_XIR_OK);
     }
 }
 
@@ -51,15 +59,18 @@ int main(void) {
     XrXirStatus outcomes[6];
     outcomes[0]=effect_source_relations(&context,certificate,effects);
     fprintf(stderr,"independent_relations=%u\n",outcomes[0]);
-    outcomes[1]=xir_effects_program_final_verify(&context,&artifact->module,effects);
+    outcomes[1]=xir_fixture_effects_program_final(&context,
+        (XirFixtureEffectInput){&artifact->module,artifact->construction},effects);
     fprintf(stderr,"current_lowered_receiver=%u\n",outcomes[1]);
     outcomes[2]=effect_source_publication_match(&context,&artifact->module,effects);
     fprintf(stderr,"public_projection=%u\n",outcomes[2]);
     outcomes[3]=effect_program_semantics_current(&context,effects);
     fprintf(stderr,"independent_control_error=%u\n",outcomes[3]);
-    outcomes[4]=effect_invocation_current_input_match(&context,&artifact->module,certificate->body);
+    outcomes[4]=program_fixture_current_input(&context,
+        (XirFixtureEffectInput){&artifact->module,artifact->construction},certificate->body);
     fprintf(stderr,"current_input=%u\n",outcomes[4]);
-    outcomes[5]=xir_effects_program_body_match(&context,&artifact->module,effects);
+    outcomes[5]=xir_fixture_effects_program_body(&context,
+        (XirFixtureEffectInput){&artifact->module,artifact->construction},effects);
     fprintf(stderr,"physical_correspondence=%u\n",outcomes[5]);
     CHECK(xir_effects_program_layout_match(&context,effects,&artifact->target,artifact->layouts)==XR_XIR_OK);
     uint32_t frame=artifact->layouts[1].frame_bytes;

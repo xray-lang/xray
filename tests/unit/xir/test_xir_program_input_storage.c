@@ -14,6 +14,7 @@
 #include "xir/xxir_program.h"
 #include "xir/xxir_generic.h"
 #include "xir_construction_fixture.h"
+#include "xir_effect_input_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -93,7 +94,8 @@ int main(int argc,char **argv) {
     XrXirArtifact *artifact=program_input(&context);
     XrXirEffects *effects=NULL;
     CHECK(xr_xir_compile_effects_analyze(artifact,&effects)==XR_XIR_OK);
-    CHECK(xir_effects_program_body_match(&context,&artifact->module,effects)==XR_XIR_OK);
+    CHECK(xir_fixture_effects_program_body(&context,
+        (XirFixtureEffectInput){&artifact->module,artifact->construction},effects)==XR_XIR_OK);
     EffectBodyMaterial *material=effects->invocations->body;
     EffectBodyFunction *owned=material->functions;
     EffectBodyFunction saved_owned=owned[1],saved_parameter=owned[2];
@@ -122,14 +124,16 @@ int main(int argc,char **argv) {
     if(attack==19)owned[1].run_count=owned[1].run_capacity+1;
     XrCompileResourceStats before={0},after={0};
     CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
-    XrXirStatus status=xir_effects_program_body_match(&context,&artifact->module,effects);
+    XrXirStatus status=xir_fixture_effects_program_body(&context,
+        (XirFixtureEffectInput){&artifact->module,artifact->construction},effects);
     CHECK(status==(attack?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes);
     CHECK(after.live_bytes==before.live_bytes && after.work>before.work);
     material->functions=owned;owned[1]=saved_owned;owned[2]=saved_parameter;
     artifact->module=saved_module;raw[1]=saved_raw;
-    CHECK(xir_effects_program_body_match(&context,&artifact->module,effects)==XR_XIR_OK);
+    CHECK(xir_fixture_effects_program_body(&context,
+        (XirFixtureEffectInput){&artifact->module,artifact->construction},effects)==XR_XIR_OK);
     xr_xir_compile_effects_free(effects);
     XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_vm_program_take(&artifact,&program)==XR_XIR_OK && !artifact);
