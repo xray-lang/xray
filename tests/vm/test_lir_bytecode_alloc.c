@@ -164,7 +164,31 @@ static void compiled_source_maps(void) {
     xr_rbc_program_destroy(program);
 }
 
+static void register_workspace_failure(void) {
+    XrLirModule *m = test_fib();
+    XrLirFunction root;
+    XrLirFunctionView view;
+    OK(xr_lir_function_at(m, 1, &root));
+    OK(xr_lir_function_view(m, root, &view));
+    XrRbcCompileDiagnostic diagnostic = {0};
+    RbcLirCompiler compiler = {.input = m, .function = root, .view = view,
+        .diagnostic = &diagnostic, .status = XR_RBC_COMPILE_OK};
+    // Fail the workspace request directly, without a compile allocation quota.
+    fail_at = attempts + 1;
+    CHECK(!rbc_lir_assign_slots(&compiler));
+    CHECK(compiler.status == XR_RBC_COMPILE_OUT_OF_MEMORY);
+    CHECK(diagnostic.status == XR_RBC_COMPILE_OUT_OF_MEMORY);
+    fail_at = SIZE_MAX;
+    XrRbcProgram *program = NULL;
+    CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    uint64_t input = 12, result = 0;
+    CHECK(execute(program, &input, 1, &result) == XR_RBC_OK && result == 144);
+    xr_rbc_program_destroy(program);
+    xr_lir_module_destroy(m);
+}
+
 int main(void) {
+    register_workspace_failure();
     source_map_failures();
     XrLirModule *m = test_fib();
     XrLirFunction root;

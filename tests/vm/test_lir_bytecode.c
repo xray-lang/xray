@@ -69,6 +69,8 @@ static XrLirValue call(XrLirModule *m, XrLirBlock b, XrLirFunction callee,
     return result;
 }
 
+#include "lir_bytecode_moves_cases.h"
+
 static void test_i64_identity_cast(void) {
     XrLirModule *m = NULL;
     OK(xr_lir_module_create(NULL, &m));
@@ -425,10 +427,14 @@ static void test_capacity(uint32_t count, bool scratch) {
     XrRbcProgram *program = NULL;
     XrRbcCompileDiagnostic diagnostic;
     XrRbcCompileStatus status = xr_rbc_compile(m, root, &program, &diagnostic);
-    if (count == 255 && !scratch) {
+    if ((count == 255 && !scratch) || (count == 254 && scratch)) {
         CHECK(status == XR_RBC_COMPILE_OK);
         CHECK(xr_rbc_program_view(program)->functions[0].register_count == 255);
-        CHECK(run(program, arguments, count) == 254);
+        CHECK(run(program, arguments, count) == count - 1);
+        if (scratch) {
+            arguments[0] = 1;
+            CHECK(run(program, arguments, count) == count - 1);
+        }
     } else CHECK(status == XR_RBC_COMPILE_LIMIT && !program);
     xr_lir_module_destroy(m);
     xr_rbc_program_destroy(program);
@@ -725,6 +731,7 @@ static void test_owned_arithmetic_panics(void) {
 }
 
 int main(void) {
+    test_edge_moves();
     test_owned_arithmetic_panics();
     test_i64_identity_cast();
     test_recursive_and_loop();
@@ -738,6 +745,7 @@ int main(void) {
     test_capacity(255, false);
     test_capacity(256, false);
     test_capacity(254, true);
+    test_capacity(255, true);
     test_call_capacity(253);
     test_call_capacity(254);
     test_unused_and_invalid();

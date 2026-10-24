@@ -85,6 +85,7 @@ static bool rbc_lir_emit(RbcLirCompiler *c, XrRbcOp op, uint32_t a,
     uint32_t word;
     if (!xr_rbc_encode(&word, (XrRbcOperands) {op, a, b, third, immediate}))
         return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "operand exceeds bytecode encoding");
+    if (op == XR_RBC_MOV && a == b) return true;
     void *storage = c->code;
     if (c->code_count == SIZE_MAX)
         return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "instruction count exceeds address space");
@@ -244,31 +245,29 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
     return true;
 }
 
+#include "xrbc_lir_registers.inc.c"
+
 static bool rbc_lir_layout(RbcLirCompiler *c) {
-    for (size_t i = 0; i < sizeof(c->slots) / sizeof(c->slots[0]); ++i)
-        c->slots[i] = UINT32_MAX;
-    for (uint32_t i = 0; i < c->view.parameter_count; ++i)
-        c->slots[c->view.parameters[i]] = c->slot_count++;
+    if (!rbc_lir_assign_slots(c)) return false;
     uint32_t window = 0;
     for (uint32_t b = 0; b < c->view.block_count; ++b) {
         XrLirBlock block;
         XrLirBlockView bv;
         xr_lir_block_at(c->input, c->function, b, &block);
         xr_lir_block_view(c->input, block, &bv);
-        for (uint32_t n = 0; n < bv.parameter_count; ++n)
-            c->slots[bv.parameters[n]] = c->slot_count++;
         for (uint32_t n = 0; n < bv.instruction_count; ++n) {
             XrLirInstructionView i;
             xr_lir_instruction_view(c->input, block, n, &i);
-            if (i.result) c->slots[i.result] = c->slot_count++;
             if (i.op == XR_LIR_CALL) {
                 uint32_t physical = c->functions[i.callee - 1] == UINT32_MAX ? 2 : i.operand_count;
                 if (window < physical + 1) window = physical + 1;
             }
             if (i.op == XR_LIR_CONDBR && !c->scratch_count) c->scratch_count = 1;
-            for (uint32_t e = 0; e < i.edge_count; ++e)
-                if (c->scratch_count < i.edges[e].argument_count)
-                    c->scratch_count = i.edges[e].argument_count;
+            for (uint32_t e = 0; e < i.edge_count; ++e) {
+                bool scratch = false;
+                if (!rbc_lir_copies(c, i.edges[e], false, &scratch)) return false;
+                if (scratch) c->scratch_count = 1;
+            }
         }
     }
     uint64_t registers = (uint64_t) c->slot_count + c->scratch_count + window;
@@ -313,18 +312,8 @@ static bool rbc_lir_comparison(RbcLirCompiler *c, const XrLirInstructionView *i)
 }
 
 static bool rbc_lir_edge(RbcLirCompiler *c, XrLirEdgeView edge) {
-    XrLirBlockView target;
-    xr_lir_block_view(c->input,
-        (XrLirBlock) {c->input, c->function.id, edge.target}, &target);
-    // Snapshot every source before writing any destination: loops can swap
-    // block arguments or form longer cycles, including repeated sources.
-    for (uint32_t i = 0; i < edge.argument_count; ++i)
-        if (!rbc_lir_emit(c, XR_RBC_MOV, c->slot_count + i,
-                c->slots[edge.arguments[i]], 0, 0)) return false;
-    for (uint32_t i = 0; i < edge.argument_count; ++i)
-        if (!rbc_lir_emit(c, XR_RBC_MOV, c->slots[target.parameters[i]],
-                c->slot_count + i, 0, 0)) return false;
-    return rbc_lir_jump(c, edge.target);
+    bool scratch = false;
+    return rbc_lir_copies(c, edge, true, &scratch) && rbc_lir_jump(c, edge.target);
 }
 
 static bool rbc_lir_conditional(RbcLirCompiler *c, const XrLirInstructionView *i) {
