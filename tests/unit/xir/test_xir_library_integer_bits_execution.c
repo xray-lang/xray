@@ -9,6 +9,7 @@
 #include "base/xresource_limits.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_nominal.h"
+#include "xir/xxir_generic.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_emit_c.h"
 #include "xir/xxir_program_packet_internal.h"
