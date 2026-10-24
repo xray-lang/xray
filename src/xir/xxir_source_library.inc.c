@@ -136,7 +136,8 @@ static bool source_library_inventory(SourceContext *ctx, uint32_t module,
         if (*slots==UINT32_MAX)
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"library slot inventory exhausted");
         ++*slots;
-        if (facts && d->slots[s].type==XR_XIR_I64 && !d->slots[s].mutable && facts->rows[s].exported==1) {
+        if (facts && (d->slots[s].type==XR_XIR_I64 || d->slots[s].type==XR_XIR_F64) &&
+            !d->slots[s].mutable && facts->rows[s].exported==1) {
             if (*readers==UINT32_MAX) return source_fail(ctx,NULL,XR_XIR_BUDGET,"library constant reader inventory exhausted");
             ++*readers;
         }
