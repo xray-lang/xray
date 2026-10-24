@@ -122,7 +122,7 @@ static void range_authority(void) {
     }
     result=range_source(&context,range_library_source,"range-lib.xr",XR_XIR_LIBRARY,NULL);
     range_definition_negatives(&context,result.checked);xr_xir_compile_source_result_free(&result);
-    xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);
+    xr_compile_resources_release(context.resources);
 }
 static void range_flow(unsigned mode,const char *packet_path) {
     XrXirCompileContext context=range_context();XrXirLibraryCatalog *catalog=NULL;

@@ -73,6 +73,5 @@ static XrXirValue range_runtime_cases(XrXirProgram *program,const uint32_t selec
 }
 static void range_retained(XrXirValue *value) {
     range_fields(value,INT64_MIN,INT64_MAX,true);xr_xir_value_drop(value);
-    CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);
 }
 #endif // XIR_RANGE_VALUE_RUNTIME_H

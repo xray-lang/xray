@@ -6759,8 +6759,6 @@ JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly when 
 
 The count is an `i64`. If the mathematical number of elements exceeds the `i64` maximum, it saturates at `MAX_I64` (`9223372036854775807`) without integer wraparound.
 
-The count is an `i64`. If the mathematical number of elements exceeds the `i64` maximum, it saturates at `MAX_I64` (`9223372036854775807`) without integer wraparound.
-
 ```xray
 var pages = 1..=3
 print(pages.start)          // 1
