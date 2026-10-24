@@ -47,6 +47,11 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_GE_FLOAT:
     case XR_XIR_F64_TRY_PARSE:
     case XR_XIR_ADD_INT:
+    case XR_XIR_AND_INT:
+    case XR_XIR_OR_INT:
+    case XR_XIR_XOR_INT:
+    case XR_XIR_SHL_INT:
+    case XR_XIR_SHR_INT:
     case XR_XIR_CONST_BOOL:
     // Canonical intrinsic IDs do not belong to a module's function or type tables.
     case XR_XIR_CALL_INTRINSIC:
