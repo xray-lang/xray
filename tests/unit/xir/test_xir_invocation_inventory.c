@@ -67,14 +67,16 @@ static uint32_t inventory_source_once(uint32_t cut,unsigned mode) {
     uint32_t saved_count=final->count,saved_space=final->root_spaces[1];EffectInvocationNode saved_node=final->nodes[final->roots[1]];
     inventory_final=mode?final:NULL;inventory_frees=0;inventory_cut=cut;inventory_attacks=0;inventory_mode=mode;
     CHECK(!pc_free_hook);pc_free_hook=inventory_free;
-    status=xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects);
+    status=xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
+        xr_xir_compile_artifact_construction(checked)},effects);
     pc_free_hook=NULL;inventory_final=NULL;uint32_t frees=inventory_frees;
     CHECK(!mode || inventory_attacks==1);
     fprintf(stderr,"actual Source inventory mode%u cut%u frees%u status%u expected%u\n",mode,cut,frees,status,mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK);
     final->sites=sites;final->site_count=2;final->binding_count=2;memcpy(sites,saved_sites,sizeof(saved_sites));
     final->nodes[final->roots[2]].input[0]=saved_input;
     final->count=saved_count;final->root_spaces[1]=saved_space;final->nodes[final->roots[1]]=saved_node;
-    CHECK(xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects)==XR_XIR_OK);
+    CHECK(xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
+        xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);memset(ops,0xDC,sizeof(ops));memset(functions,0xDC,sizeof(functions));
     CHECK(error_finite_outcomes_match(&context,effects->invocations->body,final->outcomes)==XR_XIR_OK);
     size_t allocated=attempts;uint64_t physical=live_bytes;pc_allocate_hook=inventory_no_callback;pc_free_hook=inventory_no_callback;

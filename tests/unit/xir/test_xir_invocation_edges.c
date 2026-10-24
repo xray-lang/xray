@@ -301,7 +301,8 @@ static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
     for(uint32_t n=0;n<final->count;++n) if(final->nodes[n].input) saved_inputs[n]=final->nodes[n].input[0];
     edges_final=mode?final:NULL;edges_cut=cut;edges_frees=0;edges_attacks=0;edges_mode=mode;
     CHECK(!pc_free_hook);pc_free_hook=edges_free;
-    status=xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects);
+    status=xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
+        xr_xir_compile_artifact_construction(checked)},effects);
     pc_free_hook=NULL;edges_final=NULL;uint32_t frees=edges_frees;CHECK(!mode || edges_attacks==1);
     fprintf(stderr,"actual Source edges mode%u cut%u frees%u status%u expected%u no_return%u opaque%u\n",mode,cut,frees,status,
         mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK,(unsigned)edges_no_return,(unsigned)edges_opaque);
@@ -310,7 +311,8 @@ static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
     memcpy(final->nodes,saved_nodes,final->count*sizeof(*final->nodes));
     final->nodes[saved_edges[edges_direct].target].input[0]=saved_binding;
     for(uint32_t n=0;n<final->count;++n) if(final->nodes[n].input) final->nodes[n].input[0]=saved_inputs[n];
-    CHECK(xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects)==XR_XIR_OK);
+    CHECK(xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
+        xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);memset(ops,0xDC,sizeof(ops));memset(caller,0xDC,sizeof(caller));
     memset(functions,0xDC,sizeof(functions));memset(loop,0xDC,sizeof(loop));memset(type,0xDC,sizeof(type));
     memset(operands,0xDC,sizeof(operands));memset(actuals,0xDC,sizeof(actuals));memset(loop_operands,0xDC,sizeof(loop_operands));

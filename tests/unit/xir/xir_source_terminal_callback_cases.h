@@ -35,7 +35,7 @@ static void pc_final_all_terms_retired(const XrXirEffects *effects) {
 }
 
 static void pc_final_retired_terms_rejections(const XrXirCompileContext *context,
-    const XrXirModule *source,XrXirEffects *effects) {
+    XirFixtureEffectInput source,XrXirEffects *effects) {
     EffectTerms *terms=&effects->invocations->final->outcomes->contexts->ordinary->terms;
     EffectTerms saved=*terms;
     for (uint32_t mode=0;mode<7;++mode) {
@@ -48,11 +48,11 @@ static void pc_final_retired_terms_rejections(const XrXirCompileContext *context
         case 5:terms->match.resources=(XrCompileResources *)(uintptr_t)1;break;
         default:terms->remaining=(const XrXirCompileContext *)(uintptr_t)1;break;
         }
-        XrXirStatus status=xir_effects_source_terminal(context,source,effects);
+        XrXirStatus status=xir_fixture_effects_terminal(context,source,effects);
         *terms=saved;
         CHECK(status==XR_XIR_BAD_STRUCTURE);
     }
-    CHECK(xir_effects_source_terminal(context,source,effects)==XR_XIR_OK);
+    CHECK(xir_fixture_effects_terminal(context,source,effects)==XR_XIR_OK);
     fprintf(stderr,"published constructor scratch resurrection: seven fields rejected and sameowner restored\n");
 }
 
@@ -84,11 +84,14 @@ static XrXirStatus pc_source_terminal_operation(const XrXirCompileContext *conte
         effect_contexts_read(effects)==published->contexts);
     const EffectContextOwner *original=published->contexts;
     size_t calls=attempts;uint64_t observed_work=pc_stats(context).work;
-    CHECK(xir_effects_context_refresh(context,xr_xir_compile_artifact_module(checked),effects)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_fixture_effects_refresh(context,
+        (XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
+        xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_BAD_STRUCTURE);
     CHECK(attempts==calls && pc_stats(context).work==observed_work);
     CHECK(effect_contexts_read(effects)==original);
     const XrXirModule *input=xr_xir_compile_artifact_module(checked);
-    if (!mutation) pc_final_retired_terms_rejections(context,input,effects);
+    if (!mutation) pc_final_retired_terms_rejections(context,
+        (XirFixtureEffectInput){input,xr_xir_compile_artifact_construction(checked)},effects);
     XrXirModule current=*input;XrXirFunction functions[5];XrXirInstruction rows[2];
     CHECK(input->function_count==5 && input->functions[2].instruction_count==2);
     memcpy(functions,input->functions,sizeof(functions));memcpy(rows,functions[2].instructions,sizeof(rows));
@@ -104,11 +107,13 @@ static XrXirStatus pc_source_terminal_operation(const XrXirCompileContext *conte
     CHECK(prefix);pc_source_terminal_skip=prefix-1;pc_source_terminal_observed=0;pc_source_terminal_calls=0;
     pc_source_terminal_mutation=mutation;pc_source_terminal_row=&rows[0];
     if (mutation==2) pc_free_hook=pc_source_terminal_trigger;else pc_allocate_hook=pc_source_terminal_trigger;
-    XrXirStatus status=xir_effects_source_terminal(context,&current,effects);
+    XrXirStatus status=xir_fixture_effects_terminal(context,
+        (XirFixtureEffectInput){&current,xr_xir_compile_artifact_construction(checked)},effects);
     pc_allocate_hook=NULL;pc_free_hook=NULL;pc_source_terminal_row=NULL;
     CHECK(pc_source_terminal_calls==1 && pc_source_terminal_observed==prefix);
     rows[0].type=XR_XIR_I64;
-    CHECK(xir_effects_source_terminal(context,&current,effects)==XR_XIR_OK);
+    CHECK(xir_fixture_effects_terminal(context,
+        (XirFixtureEffectInput){&current,xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_OK);
     if (oracle) fprintf(stderr,"late Source receiving mutation%u prefix%zu callback%u status%u restored0\n",
         mutation,prefix,pc_source_terminal_calls,status);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));

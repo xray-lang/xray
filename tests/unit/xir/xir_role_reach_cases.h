@@ -37,7 +37,8 @@ static void pc_role_reach_literals(void) {
         CHECK(effect_role_proof_match(&context,certificate->body,
             &certificate->final->role_proof)==XR_XIR_BAD_STRUCTURE);
         memcpy(claims,saved,sizeof(saved));
-        CHECK(xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects)==XR_XIR_OK);
+        CHECK(xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
+        xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_OK);
         xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
         CHECK(effect_role_proof_match(&context,certificate->body,
             &certificate->final->role_proof)==XR_XIR_OK);

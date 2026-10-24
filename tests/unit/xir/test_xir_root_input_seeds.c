@@ -86,12 +86,14 @@ static uint32_t seed_source_once(unsigned shape,uint32_t cut,unsigned attack) {
     CHECK(certificate->declared->functions[3].bounds[0].mask==mask);
     seed_certificate=attack?certificate:NULL;seed_cut=cut;seed_frees=0;seed_attacks=0;seed_attack=attack;seed_shape=shape;
     CHECK(!pc_free_hook);pc_free_hook=seed_free;
-    status=xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects);
+    status=xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
+        xr_xir_compile_artifact_construction(checked)},effects);
     pc_free_hook=NULL;seed_certificate=NULL;uint32_t frees=seed_frees;CHECK(!attack || seed_attacks==1);
     fprintf(stderr,"actual Source root seed shape%u attack%u cut%u frees%u status%u expected%u\n",shape,attack,cut,frees,status,attack?XR_XIR_BAD_STRUCTURE:XR_XIR_OK);
     for(uint32_t f=3;f<6;++f) memcpy(final->nodes[final->roots[f]].input,saved[f-3],(size_t)basis.row_words*sizeof(uint64_t));
     certificate->declared->functions[3].bounds[0].mask=mask;
-    CHECK(xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects)==XR_XIR_OK);
+    CHECK(xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
+        xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);memset(ops,0xDC,sizeof(ops));memset(functions,0xDC,sizeof(functions));
     size_t allocated=attempts;uint64_t physical=live_bytes;pc_allocate_hook=seed_forbid;pc_free_hook=seed_forbid;
     CHECK(effect_final_inventories_match(&context,certificate,final->outcomes)==XR_XIR_OK);

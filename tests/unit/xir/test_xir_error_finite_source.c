@@ -98,7 +98,8 @@ static uint32_t source_error_once(uint32_t cut,bool attack,uint32_t mode) {
     source_cut=cut;source_marker_mode=false;source_attack_enabled=attack;
     if(attack && !cut) source_error_attack();
     CHECK(!pc_free_hook && !pc_allocate_hook);pc_free_hook=source_callback;
-    status=xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects);
+    status=xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
+        xr_xir_compile_artifact_construction(checked)},effects);
     pc_free_hook=NULL;pc_allocate_hook=NULL;source_outcomes=NULL;
     CHECK(source_attacks==(attack?1u:0u));
     fprintf(stderr,"actual Source Error attack%u mode%u callbacks%u status%u expected%u work%llu\n",
@@ -108,7 +109,8 @@ static uint32_t source_error_once(uint32_t cut,bool attack,uint32_t mode) {
     memcpy(control,control_saved,(size_t)control_bytes);outcomes->functions[1]=function_saved;
     outcomes->witnesses[1]=witness_saved;outcomes->task_creation[1]=task_saved;outcomes->go_safe[1]=go_saved;
     memcpy(proof->facts,facts,(size_t)count*sizeof(*facts));proof->count=count;
-    CHECK(xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects)==XR_XIR_OK);
+    CHECK(xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
+        xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);memset(ops,0xAC,sizeof(ops));memset(functions,0xAC,sizeof(functions));
     size_t allocations=attempts;uint64_t physical=live_bytes;
     CHECK(error_finite_outcomes_match(&context,effects->invocations->body,outcomes)==XR_XIR_OK);
@@ -130,7 +132,8 @@ static void source_nonempty(void) {
     CHECK(status==XR_XIR_OK);
     EffectFinalOutcomes *outcomes=effects->invocations->final->outcomes;
     CHECK(outcomes->errors[1]==8 && outcomes->functions[1].throws==XR_XIR_EFFECT_MAY && outcomes->task_errors[1]==XR_XIR_OK);
-    CHECK(xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects)==XR_XIR_OK);
+    CHECK(xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
+        xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_OK);
     uint64_t row=outcomes->errors[1];outcomes->errors[1]=0;outcomes->functions[1].throws=XR_XIR_EFFECT_NONE;
     CHECK(error_finite_outcomes_match(&context,effects->invocations->body,outcomes)==XR_XIR_BAD_STRUCTURE);
     outcomes->errors[1]=row;outcomes->functions[1].throws=XR_XIR_EFFECT_MAY;
@@ -183,7 +186,8 @@ static uint32_t source_marker_once(uint32_t cut,bool attack,bool unsafe,uint32_t
     source_cut=cut;source_marker_mode=true;source_attack_enabled=attack;
     if(attack && !cut) source_marker_attack();
     CHECK(!pc_free_hook && !pc_allocate_hook);pc_free_hook=source_callback;
-    XrXirStatus status=xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects);
+    XrXirStatus status=xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
+        xr_xir_compile_artifact_construction(checked)},effects);
     pc_free_hook=NULL;pc_allocate_hook=NULL;source_outcomes=NULL;uint32_t frees=source_frees;
     CHECK(source_attacks==(attack?1u:0u));
     fprintf(stderr,"actual Source known-atom marker attack%u callbacks%u status%u expected%u row%llu permission%u\n",
@@ -191,7 +195,8 @@ static uint32_t source_marker_once(uint32_t cut,bool attack,bool unsafe,uint32_t
     outcomes->task_errors[1]=permission;memcpy(markers->nodes,saved,markers->count*sizeof(*saved));
     memcpy(control,control_saved,(size_t)control_bytes);outcomes->functions[1]=function_saved;
     outcomes->witnesses[1]=witness_saved;outcomes->task_creation[1]=task_saved;outcomes->go_safe[1]=go_saved;
-    CHECK(xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects)==XR_XIR_OK);
+    CHECK(xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
+        xr_xir_compile_artifact_construction(checked)},effects)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xDE,sizeof(fixture));
     CHECK(error_finite_outcomes_match(&context,effects->invocations->body,outcomes)==XR_XIR_OK);
     xr_xir_compile_effects_free(effects);pc_release(&context,baseline);

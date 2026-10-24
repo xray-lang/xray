@@ -55,7 +55,8 @@ static uint32_t role_source_once(uint32_t cut,uint32_t mode,bool attack,XrXirSta
     memcpy(facts,proof.facts,sizeof(facts));role_source_noalloc(&context,certificate);
     rc_frees=0;rc_cut=cut;rc_mode=mode;rc_mutations=0;rc_certificate=attack?certificate:NULL;
     CHECK(!pc_free_hook);pc_free_hook=role_source_free;
-    XrXirStatus status=xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects);
+    XrXirStatus status=xir_fixture_effects_terminal(&context,(XirFixtureEffectInput){xr_xir_compile_artifact_module(checked),
+        xr_xir_compile_artifact_construction(checked)},effects);
     pc_free_hook=NULL;rc_certificate=NULL;uint32_t frees=rc_frees;
     CHECK(!attack || rc_mutations==1);
     certificate->final->role_proof=proof;memcpy(proof.facts,facts,sizeof(facts));

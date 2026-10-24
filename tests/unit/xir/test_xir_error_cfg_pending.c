@@ -49,6 +49,7 @@ static void pc_free(void *p) {
 #pragma pop_macro("xr_free")
 #pragma pop_macro("xr_malloc")
 #include "xir/xxir_effects.c"
+#include "xir_effect_input_fixture.h"
 #include "xir_legacy_error_oracle.h"
 #include "xir_error_cfg_pending_fixture.h"
 static XrCompileResourceLimits pc_caps(void) { return (XrCompileResourceLimits){8388608,4194304,8000000}; }
