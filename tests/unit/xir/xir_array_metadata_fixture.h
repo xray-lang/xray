@@ -33,7 +33,7 @@ static void xir_array_metadata_init(XirArrayMetadataFixture *f) {
     XrXirType array = (XrXirType) 256, cell = (XrXirType) 257;
     f->nodes[0] = (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, XR_XIR_I64, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
     f->nodes[1] = (XrXirTypeNode) {XR_XIR_TYPE_CELL, array, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
-    f->nodes[2] = (XrXirTypeNode) {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_I64, 8, 0, {0}};
+    f->nodes[2] = (XrXirTypeNode) {XR_XIR_TYPE_CALLABLE, XR_XIR_NEVER, NULL, 0, XR_XIR_I64, 8, 0, {0}};
     f->types = (XrXirTypes) {f->nodes, 3, NULL, NULL};
     f->init[0] = (XrXirInstruction) {XR_XIR_ARRAY_NEW, array, {0}, {0}, 0, {0}};
     f->init[1] = (XrXirInstruction) {XR_XIR_CELL_NEW, cell, {0}, {0}, 0, {0}};
@@ -62,9 +62,9 @@ static void xir_array_metadata_init(XirArrayMetadataFixture *f) {
     f->blocks[0] = (XrXirBlock) {0, 4, 0, 0};
     f->blocks[1] = (XrXirBlock) {0, 15, 0, 0};
     f->blocks[2] = (XrXirBlock) {0, 2, 0, 0};
-    f->functions[0] = (XrXirFunction) {"init", 4, NULL, 0, XR_XIR_UNIT, &f->blocks[0], 1, f->init, 4, NULL, 0};
-    f->functions[1] = (XrXirFunction) {"entry", 5, NULL, 0, XR_XIR_I64, &f->blocks[1], 1, f->ops, 15, f->operands, 5};
-    f->functions[2] = (XrXirFunction) {"read", 4, &f->worker_parameter, 1, XR_XIR_I64, &f->blocks[2], 1, f->worker, 2, NULL, 0};
+    f->functions[0] = (XrXirFunction) {"init", 4, NULL, 0, XR_XIR_UNIT, &f->blocks[0], 1, f->init, 4, NULL, 0, XR_XIR_NEVER};
+    f->functions[1] = (XrXirFunction) {"entry", 5, NULL, 0, XR_XIR_I64, &f->blocks[1], 1, f->ops, 15, f->operands, 5, XR_XIR_NEVER};
+    f->functions[2] = (XrXirFunction) {"read", 4, &f->worker_parameter, 1, XR_XIR_I64, &f->blocks[2], 1, f->worker, 2, NULL, 0, XR_XIR_NEVER};
     f->source = (XrXirSourceModule) {"app", 3, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->slot = (XrXirSlot) {0, cell, 1};
     f->declarations = (XrXirDeclarations) {&f->source, 1, f->identities, &f->slot, 1, NULL, 0, 0, 1, NULL};

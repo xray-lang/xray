@@ -39,7 +39,7 @@ static void class_array_core_cases(void){
  XrXirInstruction add[]={CLASS_OP(XR_XIR_CLASS_GET,(XrXirType)256,0,0,0),CLASS_OP(XR_XIR_CLASS_SET,XR_XIR_UNIT,0,1,0),CLASS_OP(XR_XIR_RETURN,XR_XIR_UNIT,2,0,0)};
  XrXirType cp[]={(XrXirType)256,(XrXirType)257},ap[]={ct,(XrXirType)256};uint32_t operands[]={0,1};
  XrXirBlock blocks[]={{0,1,0,0},{0,2,0,0},{0,3,0,0}};
- XrXirFunction functions[]={ {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,1,NULL,0}, {"new",3,cp,2,ct,&blocks[1],1,ctor,2,operands,2}, {"replace",7,ap,2,(XrXirType)256,&blocks[2],1,add,3,NULL,0}, {"entry",5,NULL,0,XR_XIR_I64,&entryblock,1,entry,2,NULL,0}};
+ XrXirFunction functions[]={ {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,1,NULL,0,XR_XIR_NEVER}, {"new",3,cp,2,ct,&blocks[1],1,ctor,2,operands,2,XR_XIR_NEVER}, {"replace",7,ap,2,(XrXirType)256,&blocks[2],1,add,3,NULL,0,XR_XIR_NEVER}, {"entry",5,NULL,0,XR_XIR_I64,&entryblock,1,entry,2,NULL,0,XR_XIR_NEVER}};
  XrXirFunctionIdentity ids[]={{0},{.nominal_owner=1,.method_kind=XR_XIR_CONSTRUCTOR},{.nominal_owner=1,.method_kind=XR_XIR_READ_METHOD},{0}};
  XrXirLiteral text={"counter",7};XrXirSourceModule sm={"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};XrXirDeclarations ds={.modules=&sm,.module_count=1,.functions=ids,.entry_function=3,.literals=&text,.literal_count=1};
  XrXirModule m={XR_XIR_BUILT,functions,4,&ds,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};XrXirDiagnostic d;XrXirStatus s=xir_fixture_verify(&stage_context, &m, &d);

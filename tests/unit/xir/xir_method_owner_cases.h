@@ -30,9 +30,9 @@ static void method_owner_cases(void) {
     XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirBlock block = {0,2,0,0}, init_block = {0,1,0,0};
     XrXirFunction functions[3] = {
-        {"main",4,NULL,0,XR_XIR_I64,&block,1,code,2,NULL,0},
-        {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0},
-        {"read",4,&receiver,1,XR_XIR_I64,&block,1,member_code,2,NULL,0}};
+        {"main",4,NULL,0,XR_XIR_I64,&block,1,code,2,NULL,0,XR_XIR_NEVER},
+        {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0,XR_XIR_NEVER},
+        {"read",4,&receiver,1,XR_XIR_I64,&block,1,member_code,2,NULL,0,XR_XIR_NEVER}};
     XrXirGeneric generic[3] = {{0},{0},{constraints,2,NULL,0, NULL}};
     XrXirFunctionIdentity identities[3] = {{0,1,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0},
         {0,0,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0},{0,0,1,XR_XIR_MEMBER_PRIVATE,0,0,XR_XIR_READ_METHOD, 0, 0}};
@@ -45,7 +45,11 @@ static void method_owner_cases(void) {
         nominal[0].variants = kind == XR_XIR_NOMINAL_ENUM ? &variant : NULL;
         nominal[0].variant_count = kind == XR_XIR_NOMINAL_ENUM ? 1 : 0;
         XrXirArtifact *checked = NULL;
-        CHECK(xir_fixture_check(&stage_context, &module, &checked, NULL) == XR_XIR_OK && checked);
+        XrXirDiagnostic diagnostic = {0};
+        XrXirStatus status = xir_fixture_check(&stage_context, &module, &checked, &diagnostic);
+        if (status != XR_XIR_OK) fprintf(stderr, "method owner kind%u status%u f%u b%u i%u reason%u\n",
+            kind, (unsigned)status, diagnostic.function, diagnostic.block, diagnostic.instruction, (unsigned)diagnostic.reason);
+        CHECK(status == XR_XIR_OK && checked);
         xr_xir_compile_artifact_free(checked); checked = NULL;
     }
     nominal[0].kind = XR_XIR_NOMINAL_STRUCT; nominal[0].flags = 0;
@@ -61,7 +65,7 @@ static void method_owner_cases(void) {
             {XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0,{0}}};
         XrXirBlock entry_block={0,3,0,0};uint32_t operands[]={0};
         XrXirFunction original_main=functions[0];
-        functions[0]=(XrXirFunction){"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry_ops,3,operands,1};
+        functions[0]=(XrXirFunction){"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry_ops,3,operands,1,XR_XIR_NEVER};
         generic[0]=(XrXirGeneric){NULL,0,call_args,2, NULL};types.nodes=pair;types.count=2;
         XrXirArtifact *original=NULL,*special=NULL;
         CHECK(xir_fixture_check(&stage_context, &module, &original, NULL)==XR_XIR_OK);

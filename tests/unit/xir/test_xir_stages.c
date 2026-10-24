@@ -58,7 +58,7 @@ static void fixture_init(Fixture *fixture) {
     fixture->instructions[4] = (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 9, {0}};
     fixture->instructions[5] = (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {6, 0}, {0, 0}, 0, {0}};
     fixture->function = (XrXirFunction) {fixture->name, 5, fixture->parameters, 2,
-        XR_XIR_I64, fixture->blocks, 3, fixture->instructions, 6, NULL, 0};
+        XR_XIR_I64, fixture->blocks, 3, fixture->instructions, 6, NULL, 0, XR_XIR_NEVER};
     fixture->module = (XrXirModule) {XR_XIR_BUILT, &fixture->function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
 }
 
@@ -317,7 +317,7 @@ static void loops_and_storage_order(void) {
         {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}},
     };
     XrXirBlock blocks[] = {{0, 2, 0, 0}, {2, 1, 0, 0}, {3, 1, 0, 0}, {4, 1, 0, 0}};
-    XrXirFunction function = {"loop", 4, NULL, 0, XR_XIR_UNIT, blocks, 4, ops, 5, NULL, 0};
+    XrXirFunction function = {"loop", 4, NULL, 0, XR_XIR_UNIT, blocks, 4, ops, 5, NULL, 0, XR_XIR_NEVER};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_OK);
     ops[0].immediate = 2;
@@ -346,7 +346,7 @@ static void dominance_word_boundary(void) {
         else
             ops[next++] = (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {b + 1, 0}, 0, {0}};
     }
-    XrXirFunction function = {"wide", 4, NULL, 0, XR_XIR_I64, blocks, 70, ops, 71, NULL, 0};
+    XrXirFunction function = {"wide", 4, NULL, 0, XR_XIR_I64, blocks, 70, ops, 71, NULL, 0, XR_XIR_NEVER};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_OK);
     ops[64] = (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {0, 0}, {65, 69}, 0, {0}};
@@ -367,7 +367,7 @@ static void reverse_storage_and_boolean_values(void) {
         {XR_XIR_JUMP, XR_XIR_UNIT, {0, 0}, {1, 0}, 0, {0}},
     };
     XrXirBlock blocks[] = {{0, 1, 0, 0}, {1, 1, 0, 0}, {2, 4, 0, 0}};
-    XrXirFunction function = {"reverse", 7, NULL, 0, XR_XIR_BOOL, blocks, 3, ops, 6, NULL, 0};
+    XrXirFunction function = {"reverse", 7, NULL, 0, XR_XIR_BOOL, blocks, 3, ops, 6, NULL, 0, XR_XIR_NEVER};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xir_fixture_check(&stage_context, &module, &checked, NULL) == XR_XIR_OK);
@@ -385,7 +385,7 @@ static void numeric_admission(void) {
         XrXirType result = op >= XR_XIR_NE_INT && op <= XR_XIR_GE_INT ? XR_XIR_BOOL : XR_XIR_I64;
         XrXirInstruction ops[] = {{op, result, {0, 1}, {0}, 0, {0}}, {XR_XIR_RETURN, XR_XIR_UNIT, {2}, {0}, 0, {0}}};
         const XrXirBlock block = {0, 2, 0, 0};
-        XrXirFunction function = {"number", 6, parameters, 2, result, &block, 1, ops, 2, NULL, 0};
+        XrXirFunction function = {"number", 6, parameters, 2, result, &block, 1, ops, 2, NULL, 0, XR_XIR_NEVER};
         XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
         CHECK(xir_fixture_verify(&stage_context, &module, NULL) == XR_XIR_OK);
         parameters[1] = XR_XIR_BOOL;
@@ -404,7 +404,7 @@ static void constructed_metadata(void) {
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, {0}},
         {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0, {0}},
-        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,&input,1,(XrXirType)256,XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_NEVER,&input,1,(XrXirType)256,XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}},
         {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0, {0}},
         {XR_XIR_TYPE_ARRAY,(XrXirType)(XR_XIR_TYPE_PARAMETER_LIMIT-1),NULL,0,XR_XIR_UNIT,0,65536, {0}}
     };
@@ -548,9 +548,9 @@ static XrXirStatus nominal_context_use(const XrXirTypes *types, XrXirType type,
     XrXirInstruction op = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirBlock block = {0,1,0,0};
     XrXirFunction functions[] = {
-        {"alpha_init",10,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
-        {"other_init",10,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
-        {"use",3,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0}};
+        {"alpha_init",10,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,XR_XIR_NEVER},
+        {"other_init",10,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,XR_XIR_NEVER},
+        {"use",3,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,XR_XIR_NEVER}};
     uint32_t dependency = 1;
     XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"other",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
@@ -569,9 +569,9 @@ static XrXirStatus nominal_catalog_semantics(const XrXirTypes *types, XrXirCompi
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     XrXirBlock entry_block = {0,2,0,0};
     XrXirFunction functions[] = {
-        {"alpha_init",10,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
-        {"other_init",10,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
-        {"entry",5,NULL,0,XR_XIR_I64,&entry_block,1,entry_ops,2,NULL,0}};
+        {"alpha_init",10,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,XR_XIR_NEVER},
+        {"other_init",10,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0,XR_XIR_NEVER},
+        {"entry",5,NULL,0,XR_XIR_I64,&entry_block,1,entry_ops,2,NULL,0,XR_XIR_NEVER}};
     uint32_t dependency = 1;
     XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"other",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
@@ -623,7 +623,7 @@ static void nominal_instance_metadata(void) {
         if (mode == 8) argument = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + 2);
         if (mode == 9) nodes[0].kind = XR_XIR_TYPE_CELL;
         if (mode == 10) {
-            nodes[0].kind = XR_XIR_TYPE_CALLABLE; nodes[0].element = XR_XIR_UNIT;
+            nodes[0].kind = XR_XIR_TYPE_CALLABLE; nodes[0].element = XR_XIR_NEVER;
             nodes[0].result = XR_XIR_STRING; nodes[0].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
         }
         budget = stage_context_default();
@@ -849,15 +849,15 @@ static void error_filter_guards(void) {
             {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, -1, {0}},
             {XR_XIR_RETURN, XR_XIR_UNIT, {7}, {0}, 0, {0}}};
         XrXirBlock blocks[] = {{0, 2, 0, 0}, {2, 3, 0, 0}, {5, 2, 0, 0}};
-        XrXirFunction function = {"filter", 6, parameters, 2, XR_XIR_I64, blocks, 3, ops, 7, NULL, 0};
+        XrXirFunction function = {"filter", 6, parameters, 2, XR_XIR_I64, blocks, 3, ops, 7, NULL, 0, XR_XIR_NEVER};
         XrXirInstruction ret = {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}};
         XrXirBlock empty = {0, 1, 0, 0}, entry_block = {0, 2, 0, 0};
         XrXirInstruction entry_ops[] = {{XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}},
             {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
         XrXirFunction functions[] = {
-            {"init_alpha", 10, NULL, 0, XR_XIR_UNIT, &empty, 1, &ret, 1, NULL, 0},
-            {"init_root", 9, NULL, 0, XR_XIR_UNIT, &empty, 1, &ret, 1, NULL, 0},
-            {"entry", 5, NULL, 0, XR_XIR_I64, &entry_block, 1, entry_ops, 2, NULL, 0}, function};
+            {"init_alpha", 10, NULL, 0, XR_XIR_UNIT, &empty, 1, &ret, 1, NULL, 0, XR_XIR_NEVER},
+            {"init_root", 9, NULL, 0, XR_XIR_UNIT, &empty, 1, &ret, 1, NULL, 0, XR_XIR_NEVER},
+            {"entry", 5, NULL, 0, XR_XIR_I64, &entry_block, 1, entry_ops, 2, NULL, 0, XR_XIR_NEVER}, function};
         uint32_t dependency = 0;
         XrXirSourceModule modules[] = {{"alpha", 5, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE}, {"root", 4, &dependency, 1, 1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
         XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
@@ -925,7 +925,7 @@ static void panic_handler_structure(void) {
             {XR_XIR_PANIC_CATCH, XR_XIR_UNIT, {0}, {0}, 0, {0}},
             {XR_XIR_COPY, XR_XIR_I64, {0}, {0}, 0, {0}},
             {XR_XIR_RETURN, XR_XIR_UNIT, {6}, {0}, 0, {0}}};
-        XrXirFunction function = {"panic", 5, NULL, 0, XR_XIR_I64, blocks, 3, ops, 8, NULL, 0};
+        XrXirFunction function = {"panic", 5, NULL, 0, XR_XIR_I64, blocks, 3, ops, 8, NULL, 0, XR_XIR_NEVER};
         XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
         if (mode == 1) blocks[0].panic = 2;
         if (mode == 2) blocks[1].panic = 1;
