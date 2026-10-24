@@ -495,8 +495,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F01",
-        "first_diagnostic": "stdlib/math/math.xr:12:14: error: exported state is not admitted"
+        "feature": "F06",
+        "first_diagnostic": "stdlib/math/math.xr:165:11: error: parameter contract is not implemented in XIR"
       }
     },
     {
