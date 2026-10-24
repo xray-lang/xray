@@ -1029,7 +1029,7 @@ add_xray_unit_test(test_xvalue value/test_xvalue.c)
 
 add_xray_unit_test(test_xhash util/test_xhash.c)
 add_xray_unit_test(test_dynarray util/test_dynarray.c)
-add_xray_unit_test(test_hashmap util/test_hashmap.c)
+include("${CMAKE_CURRENT_LIST_DIR}/util/hashmap.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/util/arena.cmake)
 
 # ============================================================================

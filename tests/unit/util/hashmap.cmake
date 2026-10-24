@@ -1,0 +1,17 @@
+add_executable(test_hashmap util/test_hashmap.c
+    "${CMAKE_SOURCE_DIR}/src/base/xhashmap.c"
+    "${CMAKE_SOURCE_DIR}/src/base/xio_policy.c")
+target_link_libraries(test_hashmap PRIVATE xray_compile_resources)
+target_include_directories(test_hashmap PRIVATE "${CMAKE_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(test_hashmap PRIVATE c_std_11)
+target_compile_definitions(test_hashmap PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+if(MSVC)
+    target_compile_options(test_hashmap PRIVATE /utf-8 /W4 /WX)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_hashmap PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(test_hashmap PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_hashmap COMMAND test_hashmap)
+set_tests_properties(test_hashmap PROPERTIES LABELS "unit;metadata" TIMEOUT 120)

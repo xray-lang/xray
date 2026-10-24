@@ -59,7 +59,8 @@
     "test_xir_range_value_catalog_native",
     "test_xir_range_value_catalog_vm_native",
     "test_xir_range_value_catalog_native_vm",
-    "test_xir_range_value_sdk"
+    "test_xir_range_value_sdk",
+    "test_hashmap"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -142,7 +143,8 @@
     "test_xir_range_value_catalog_native",
     "test_xir_range_value_catalog_vm_native",
     "test_xir_range_value_catalog_native_vm",
-    "test_xir_range_value_sdk"
+    "test_xir_range_value_sdk",
+    "test_hashmap"
   ],
   "versionCommand": [
     "{build}/xray.exe",
