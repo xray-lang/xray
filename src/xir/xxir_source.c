@@ -1121,6 +1121,8 @@ static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceAr
     const SourceValue *evaluated, SourceValue *value);
 static bool source_stringbuilder_type(SourceContext *ctx,XrXirType type);
 static bool source_stringbuilder_length(SourceContext *ctx,AstNode *node,SourceValue receiver,SourceValue *value);
+static bool source_range_is(SourceContext *ctx,XrXirType type);
+static bool source_range_length(SourceContext *ctx,AstNode *node,SourceValue receiver,SourceValue *value);
 #include "xxir_source_array.inc.c"
 static bool source_hash_for_each(SourceContext *ctx, AstNode *node, const SourceValue *evaluated,
     XrXirType receiver_type, SourceValue *value);
@@ -1182,6 +1184,7 @@ static bool source_string_literal(SourceContext *ctx, AstNode *node, const char 
 static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *binding,
     SourceName *target,SourceExpectedType result_context,SourceValue *value);
 #include "xxir_source_constructors.inc.c"
+#include "xxir_source_range.inc.c"
 #include "xxir_source_panic.inc.c"
 static bool finish_body(SourceContext *ctx);
 static bool source_generator_yield(SourceContext *ctx,AstNode *node,bool top);
@@ -1712,6 +1715,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         return source_tuple_literal(ctx,node,context,value);
     case AST_INDEX_GET: return source_index_get(ctx, node, value);
     case AST_SLICE_EXPR: return source_slice(ctx,node,context,value);
+    case AST_RANGE: return source_range_value(ctx,node,value);
     case AST_INDEX_SET: return source_index_set(ctx, node, value);
     case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING: case AST_LITERAL_RUNE:
         return source_literal(ctx, node, value);

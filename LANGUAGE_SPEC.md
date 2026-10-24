@@ -6746,6 +6746,8 @@ JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly when 
 
 `a..b` is the half-open interval `[a, b)`, while `a..=b` is the inclusive interval `[a, b]`. Both forms work in expressions, `for-in`, and range patterns in `match`.
 
+`Range(start: i64, end: i64, inclusive: bool)` also constructs a range. All three arguments are required; there are no defaults or step argument. `false` selects a half-open interval and `true` an inclusive interval; the internal step is always 1. `start` and `end` are public and read-only. A start greater than the endpoint still produces an empty range.
+
 | Member | Description |
 |--|--|
 | `start` / `end` | The start and the declared endpoint |

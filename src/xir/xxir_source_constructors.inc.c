@@ -163,6 +163,22 @@ typedef struct SourceConstructorCall {
     SourceName *binding, *target;
     XrXirType type;
 } SourceConstructorCall;
+static bool source_constructor_emit(SourceContext *ctx,AstNode *node,XrXirType type,
+    uint32_t index,SourceValue *arguments,SourceValue *value) {
+    XrXirTypeNode nominal=*xr_xir_type_node(&ctx->types,type);
+    SourceSubstitution substitution={nominal.nominal.arguments,nominal.nominal.argument_count};
+    const XrXirFunction *function=&ctx->functions[index];
+    for(uint32_t p=0;p<function->parameter_count;++p) {
+        if(!source_work(ctx,node)) return false;
+        XrXirType expected;
+        if(!source_substitute(ctx,&substitution,function->parameters[p],0,&expected)) return false;
+        if(!arguments || arguments[p].type!=expected)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"constructor argument type differs from its declaration");
+    }
+    XrXirInstruction op={XR_XIR_CALL,type,{0},{0},index,{0}};
+    return source_type_arguments(ctx,node,substitution.types,substitution.count,&op) &&
+        source_recipe_group(ctx,op,arguments,function->parameter_count,value);
+}
 static bool source_constructor_invoke(SourceContext *ctx, AstNode *node,
     const SourceConstructorCall *call, SourceValue *value) {
     XrXirType type = call->type;
@@ -193,9 +209,7 @@ static bool source_constructor_invoke(SourceContext *ctx, AstNode *node,
         !source_argument_arity(ctx,node,index,(uint32_t)syntax.arg_count) || !source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
     for (uint32_t p = (uint32_t)syntax.arg_count; p < function->parameter_count; ++p)
         if (!source_argument_default(ctx, node, index, p, &substitution, &arguments[p])) return false;
-    XrXirInstruction op = {XR_XIR_CALL, type, {0}, {0}, index, {0}};
-    return source_type_arguments(ctx, node, substitution.types, substitution.count, &op) &&
-        source_recipe_group(ctx, op, arguments, function->parameter_count, value);
+    return source_constructor_emit(ctx,node,type,index,arguments,value);
 }
 static bool source_constructor_call(SourceContext *ctx, AstNode *node, XrXirType type,
     SourceName *binding, SourceName *target, SourceValue *value) {

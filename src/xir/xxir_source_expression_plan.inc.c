@@ -109,13 +109,20 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
         plan->binding=visible_name(ctx,node->as.new_expr.module_name ?
             node->as.new_expr.module_name : node->as.new_expr.class_name);
         if(!plan->binding && !node->as.new_expr.module_name &&
-            source_text_same(ctx,node,node->as.new_expr.class_name,"StringBuilder"))
-            plan->binding=source_prelude_lookup(ctx,"StringBuilder");
+            (source_text_same(ctx,node,node->as.new_expr.class_name,"StringBuilder") ||
+             source_text_same(ctx,node,node->as.new_expr.class_name,"Range")))
+            plan->binding=source_prelude_lookup(ctx,node->as.new_expr.class_name);
     } else if (node->type==AST_CALL_EXPR && node->as.call_expr.callee && node->as.call_expr.callee->type==AST_VARIABLE) {
         plan->binding=visible_name(ctx,node->as.call_expr.callee->as.variable.name);
+        if(!plan->binding && source_text_same(ctx,node,node->as.call_expr.callee->as.variable.name,"Range"))
+            plan->binding=source_prelude_lookup(ctx,"Range");
         if (plan->binding && plan->binding->kind==SOURCE_FUNCTION && !ctx->generics[plan->binding->index].parameter_count) {
             plan->type_ready=true;plan->ground_type=ctx->functions[plan->binding->index].result;
         }
+    }
+    if(node->type==AST_RANGE) {
+        if(!source_range_type(ctx,node,&plan->ground_type)) return NULL;
+        plan->type_ready=true;
     }
     if (!plan->type_ready) {
         SourceExpectedType ground;
@@ -129,6 +136,19 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
         plan->state=SOURCE_TERM_FAILED;return NULL;
     }
     switch(node->type) {
+    case AST_RANGE: {
+        if(ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"range expression depth exhausted");return NULL;}
+        SourceExpectedType endpoint={true,XR_XIR_I64,false,false};
+        ctx->active_expression=plan;++ctx->depth;
+        plan->left=source_plan_collect(ctx,node->as.range.start,endpoint);
+        SourceFact *facts=ctx->facts;SourceEpoch *epochs=ctx->epochs;
+        if(plan->left && source_planned_effects(ctx,plan->left,0))
+            plan->right=source_plan_collect(ctx,node->as.range.end,endpoint);
+        ctx->facts=facts;ctx->epochs=epochs;
+        --ctx->depth;ctx->active_expression=parent;
+        if(!plan->left || !plan->right) return NULL;
+        break;
+    }
     case AST_ASSIGNMENT: {
         SourceName *binding=visible_name(ctx,node->as.assignment.name);plan->binding=binding;
         SourceExpectedType hint={binding!=NULL,binding?binding->type:XR_XIR_UNIT,false, binding && binding->inferred};

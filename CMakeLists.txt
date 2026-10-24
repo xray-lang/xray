@@ -510,6 +510,7 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/stdlib/types/bool.xr
             ${CMAKE_SOURCE_DIR}/stdlib/types/rune.xr
             ${CMAKE_SOURCE_DIR}/stdlib/prelude/builtin_symbols.def
+            ${CMAKE_SOURCE_DIR}/stdlib/prelude/range.xr
     COMMENT "projecting governed native value declarations"
 )
 

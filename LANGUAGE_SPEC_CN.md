@@ -6695,6 +6695,8 @@ JSON 标量 `null`、`bool`、`i64`、`f64`、`string` 可在有明确 `JSON.Val
 
 `a..b` 是半开区间 `[a, b)`，`a..=b` 是闭区间 `[a, b]`；两种范围都可用于表达式、`for-in` 和 `match` 范围模式。
 
+也可调用 `Range(start: i64, end: i64, inclusive: bool)`；三个参数都必填，没有默认值或步长参数。`inclusive` 为 `false` 时是半开区间，为 `true` 时是闭区间；内部步长固定为 1。`start`、`end` 公开只读；起点大于终点时仍为空范围。
+
 | 成员 | 说明 |
 |--|--|
 | `start` / `end` | 起点与声明的终点 |

@@ -1,0 +1,30 @@
+// Integer range storage is immutable; public construction always uses a unit step.
+export class Range {
+    const start: i64
+    const end: i64
+    private const _step: i64
+    private const _inclusive: bool
+
+    init(start: i64, end: i64, inclusive: bool) {
+        this.start = start
+        this.end = end
+        this._step = 1
+        this._inclusive = inclusive
+    }
+
+    count() -> i64 {
+        if (this.end < this.start) { return 0 }
+        const maximum: i64 = 9223372036854775807
+        var distance: i64 = 0
+        if (this.start < 0 && this.end >= 0) {
+            // Adding one before negation also handles the smallest signed integer.
+            const below: i64 = -(this.start + 1)
+            if (this.end >= maximum - below) { return maximum }
+            distance = this.end + below + 1
+        } else {
+            distance = this.end - this.start
+        }
+        if (this._inclusive && distance < maximum) { return distance + 1 }
+        return distance
+    }
+}

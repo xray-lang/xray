@@ -16,7 +16,7 @@ typedef struct SourcePreludeScan { SourceContext *ctx; uint32_t depth; bool need
 static bool source_prelude_word(SourcePreludeScan *scan,const char *name) {
     if (!name) return true;
     if (source_text_same(scan->ctx,NULL,name,"Atomic") || source_text_same(scan->ctx,NULL,name,"Channel") ||
-        source_text_same(scan->ctx,NULL,name,"StringBuilder"))
+        source_text_same(scan->ctx,NULL,name,"StringBuilder") || source_text_same(scan->ctx,NULL,name,"Range"))
         scan->needed=true;
     for (uint32_t e=0;e<xir_prelude_source.enum_count && !scan->needed;++e) {
         if (!source_work(scan->ctx,NULL)) return false;
@@ -120,8 +120,15 @@ static bool source_prelude_scan(AstNode *node,void *pointer) {
     if (scan->depth==128) return source_fail(scan->ctx,node,XR_XIR_BUDGET,"native source discovery depth exhausted");
     if (node->type==AST_VARIABLE && !source_prelude_word(scan,node->as.variable.name)) return false;
     if (!source_prelude_signature(scan,node)) return false;
+    if (node->type==AST_RANGE) scan->needed=true;
     ++scan->depth;
-    bool ok=xr_ast_for_each_child(node,source_prelude_scan,scan);
+    bool ok;
+    if (node->type==AST_FOR_IN_STMT && node->as.for_in_stmt.collection &&
+        node->as.for_in_stmt.collection->type==AST_RANGE) {
+        RangeNode *range=&node->as.for_in_stmt.collection->as.range;
+        ok=source_prelude_scan(range->start,scan) && source_prelude_scan(range->end,scan) &&
+            source_prelude_scan(node->as.for_in_stmt.body,scan);
+    } else ok=xr_ast_for_each_child(node,source_prelude_scan,scan);
     --scan->depth;
     return ok || source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"unknown source discovery syntax");
 }
@@ -171,7 +178,7 @@ static bool source_prelude_discover(SourceContext *ctx) {
 
 static SourceName *source_prelude_name(SourceContext *ctx,const char *name) {
     if (!ctx->prelude_module || !ctx->names || !name) return NULL;
-    bool known=source_text_same(ctx,NULL,name,"StringBuilder");
+    bool known=source_text_same(ctx,NULL,name,"StringBuilder") || source_text_same(ctx,NULL,name,"Range");
     for (uint32_t e=0;e<xir_prelude_source.enum_count && !known;++e) {
         if (!source_work(ctx,NULL)) return NULL;
         known=source_text_same(ctx,NULL,name,xir_prelude_source.enums[e].name);
@@ -203,6 +210,12 @@ static bool source_prelude_bind(SourceContext *ctx,SourceName *symbol,XrXirNomin
             !source_span_same(ctx,symbol->node,(const char *)native->source_fingerprint.bytes,
                 (const char *)xir_prelude_source.stringbuilder_input_sha256,32))
             return source_fail(ctx,symbol->node,XR_XIR_BAD_STRUCTURE,"canonical StringBuilder source owner is invalid");
+        return true;
+    }
+    if(source_text_same(ctx,symbol->node,symbol->name,"Range")) {
+        if(!owned || symbol->node->type!=AST_CLASS_DECL || record->kind!=XR_XIR_NOMINAL_CLASS ||
+            record->exported!=1 || symbol->node->as.class_decl.type_param_count)
+            return source_fail(ctx,symbol->node,XR_XIR_BAD_STRUCTURE,"canonical Range source owner is invalid");
         return true;
     }
     const XirPreludeEnum *expected=NULL;
