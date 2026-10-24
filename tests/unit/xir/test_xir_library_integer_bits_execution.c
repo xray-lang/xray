@@ -59,7 +59,7 @@ static void bits_emit(XrXirArtifact *artifact,const char *path,const uint32_t se
 #endif
 #if BITS_CONSUMER_KIND==2 || BITS_CONSUMER_KIND==4
 static uint64_t bits_engine_steps[2],bits_crossings;
-static unsigned bits_lease_releases;
+static bool bits_code_retired;
 typedef struct BitsMixedEntry {XrXirVmBinding vm;XrXirCallEntry actual;bool native;struct BitsMixedEntry *family;uint32_t count;} BitsMixedEntry;
 typedef struct BitsMixedOwner {XrXirArtifact *artifact;XrXirCallEntry *entries;XrXirVmBinding *bindings;BitsMixedEntry *mixed;} BitsMixedOwner;
 static XrXirAction bits_resume(XrXirCallView *view) {
@@ -76,9 +76,10 @@ static void bits_release(XrXirCallView *view,XrXirCallStatus reason) {
     entry->actual.release(view,reason);CHECK(view->environment==entry);
 }
 static void bits_code_release(void *pointer) {
+    CHECK(!bits_code_retired);bits_code_retired=true;
     BitsMixedOwner *owner=pointer;xr_xir_compile_artifact_free(owner->artifact);
     xr_compile_resources_free(owner->entries);xr_compile_resources_free(owner->bindings);xr_compile_resources_free(owner->mixed);
-    xr_compile_resources_free(owner);++bits_lease_releases;
+    xr_compile_resources_free(owner);
 }
 static XrXirProgram *bits_mixed_program(const XrXirCompileContext *context,XrXirArtifact *artifact) {
     BitsMixedOwner *owner=NULL;CHECK(xr_compile_resources_calloc(context->resources,1,sizeof(*owner),(void **)&owner)==XR_COMPILE_RESOURCE_OK);
@@ -115,9 +116,12 @@ int main(int argc,char **argv) {
     XrXirArtifact *artifact=bits_packet(&context,XR_LIBRARY_INTEGER_BITS_PACKET);program=bits_mixed_program(&context,artifact);
 #endif
 #endif
+#if BITS_CONSUMER_KIND==2 || BITS_CONSUMER_KIND==4
+    CHECK(!bits_code_retired);
+#endif
     XrXirValue kept=bits_runtime_cases(program,selection);xr_compile_resources_release(context.resources);bits_retained(&kept);
 #if BITS_CONSUMER_KIND==2 || BITS_CONSUMER_KIND==4
-    CHECK(bits_lease_releases==1 && bits_engine_steps[0] && bits_engine_steps[1] && bits_crossings);
+    CHECK(bits_code_retired && bits_engine_steps[0] && bits_engine_steps[1] && bits_crossings);
     fprintf(stderr,"Integer bits mixed actual VM%llu C%llu calls%llu\n",(unsigned long long)bits_engine_steps[0],(unsigned long long)bits_engine_steps[1],(unsigned long long)bits_crossings);
 #endif
     fprintf(stderr,"Integer bits consumer%u actual parameterized cold Library operations PASS\n",(unsigned)BITS_CONSUMER_KIND);return 0;
