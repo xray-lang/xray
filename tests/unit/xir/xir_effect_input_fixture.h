@@ -62,4 +62,9 @@ static inline XrXirStatus xir_fixture_effects_capture(const XrXirCompileContext 
     (void)input.construction;
     return xir_effects_refinement_capture(context,input.module,effects);
 }
+static inline XrXirStatus xir_fixture_effects_terminal(const XrXirCompileContext *context,
+    XirFixtureEffectInput input,const XrXirEffects *effects) {
+    (void)input.construction;
+    return xir_effects_source_terminal(context,input.module,effects);
+}
 #endif // XIR_EFFECT_INPUT_FIXTURE_H
