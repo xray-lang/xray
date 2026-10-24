@@ -89,13 +89,15 @@ static void invoke(const XrRbcModule *module, XrtLocationOwner *owner, bool prep
 }
 
 static void panic_after_growth(void) {
-    uint32_t code[11], ids[11] = {0};
+    uint32_t code[12], ids[12] = {0};
     XrRbcFunction function = make_countdown(code);
     // The base case faults only after both indexed arrays have repeatedly relocated.
     emit(code, 10, XR_RBC_DIV, 0, 0, 1);
+    emit(code, 11, XR_RBC_RET0, 0, 0, 0);
+    function.code_count = 12;
     ids[10] = 1;
     function.source_ids = ids;
-    function.source_id_count = 11;
+    function.source_id_count = 12;
     XrRbcModule module = {&function, 1, NULL, 0};
     XrtSourceLocation location = {"grown.xr", 8, 19, 2, 19, 7};
     XrtLocationOwner *owner = NULL;
