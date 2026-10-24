@@ -342,6 +342,7 @@ static void c_locations(LirC *c) {
     c_text(c, "const XrtSourceMap xrt_standalone_source_map = { ");
     c_format(c, "%s, UINT32_C(%" PRIu32 ") };\n\n",
         c->location_count ? "xrl_locations" : "NULL", c->location_count);
+    (void) id;
     XR_DCHECK(c->status != XR_LIR_C_OK || id == c->location_count,
               "static source locations match admitted calls");
 }
