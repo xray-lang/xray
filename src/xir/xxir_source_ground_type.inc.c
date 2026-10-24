@@ -44,6 +44,10 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
         }
         return true;
     }
+    if (node->type==AST_VARIABLE || node->type==AST_MEMBER_ACCESS) {
+        if (!source_exported_const_ground(ctx,node,output)) return false;
+        if (output->present) return true;
+    }
     if (node->type==AST_VARIABLE || node->type==AST_THIS_EXPR) {
         SourceName *binding=visible_name(ctx,node->type==AST_VARIABLE ? node->as.variable.name : "this");
         if (binding && (binding->kind==SOURCE_UNIT_LOCAL || binding->kind==SOURCE_UNIT_SLOT)) {

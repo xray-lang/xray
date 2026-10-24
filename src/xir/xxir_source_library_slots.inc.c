@@ -60,6 +60,35 @@ static bool source_library_slot_instruction(SourceContext *ctx,const SourceLibra
     }
     op->immediate=(int64_t)(((uint64_t)target<<32)|count);return true;
 }
+static bool source_library_public_slot(SourceContext *ctx,const XrXirModule *library,
+    const SourceLibraryMap *map,const XrXirSlotFacts *facts,uint32_t slot,uint32_t target) {
+    const XrXirSlot *original=&library->declarations->slots[slot];
+    const XrXirSlotFact *fact=&facts->rows[slot];
+    if (library->linkage_kind!=XR_XIR_LIBRARY || original->mutable ||
+        original->type!=XR_XIR_I64 || fact->exported!=1) return true;
+    for (uint32_t s=0;s<map->slot_count;++s) {
+        if (!source_work(ctx,NULL)) return false;
+        if (s==slot || map->slots[s]==UINT32_MAX ||
+            library->declarations->slots[s].module!=original->module) continue;
+        const XrXirSlotFact *peer=&facts->rows[s];
+        if (peer->name_length==fact->name_length &&
+            source_span_same(ctx,NULL,peer->name,fact->name,fact->name_length))
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library public slot name conflicts with actual module state");
+        if (ctx->diagnostic.status!=XR_XIR_OK) return false;
+    }
+    char *name=source_library_owned_name(ctx,fact->name,fact->name_length);bool visible=false;
+    if (!name || !source_library_source_name(ctx,name,fact->name_length,&visible)) return false;
+    if (!visible) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library public slot has no Source declaration spelling");
+    uint32_t owner=ctx->slots[target].module;ctx->module=owner;
+    SourceName *symbol=add_name(ctx,&ctx->names[owner],name,NULL);
+    if (!symbol) return false;
+    symbol->kind=SOURCE_SLOT;symbol->index=target;symbol->module=owner;
+    symbol->type=XR_XIR_I64;symbol->checked_library=true;
+    if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,0,(XrXirSourceRange){owner,0,0,0,0})) return false;
+    source_query_binding_type(ctx,symbol);
+    ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration-1].exported=true;
+    return true;
+}
 static bool source_library_slots(SourceContext *ctx,const XrXirModule *library,
     const SourceLibraryMap *map) {
     const XrXirDeclarations *d=library->declarations;
@@ -83,7 +112,8 @@ static bool source_library_slots(SourceContext *ctx,const XrXirModule *library,
         const XrXirSlotFact *fact=&facts->rows[s];
         if (fact->slot!=s)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library slot fact ordinal is inconsistent");
-        if (!source_slot_fact(ctx,target,fact->name,fact->name_length,fact->exported)) return false;
+        if (!source_slot_fact(ctx,target,fact->name,fact->name_length,fact->exported) ||
+            !source_library_public_slot(ctx,library,map,facts,s,target)) return false;
     }
     return true;
 }

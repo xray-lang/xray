@@ -4518,6 +4518,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/json_integer_object.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/json_float.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/range_value.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/library_integer_bits.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/exported_i64_const.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/source_decimal_parse.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/json_float_native.cmake")
 

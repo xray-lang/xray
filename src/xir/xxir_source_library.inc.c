@@ -11,6 +11,7 @@
  */
 #include "xxir_internal.h"
 #include "xxir_library_import_shape.inc.c"
+#include "xxir_source_library_names.inc.c"
 static bool source_owned_checked(const XrModuleSpec *spec) {
     return spec->representation==XR_MODULE_CHECKED_LIBRARY || spec->representation==XR_MODULE_CHECKED_HISTORY;
 }
@@ -111,11 +112,18 @@ static bool source_library_group_first(SourceContext *ctx,uint32_t module) {
     return true;
 }
 static bool source_library_inventory(SourceContext *ctx, uint32_t module,
-    const XrXirModule *library, uint32_t *count, uint32_t *slots) {
+    const XrXirModule *library, uint32_t *count, uint32_t *slots,uint32_t *readers) {
     const XrXirDeclarations *d = library->declarations;
     uint32_t source_module=source_owned_module(&ctx->graph->specs[module]);
     if (!d || source_module >= d->module_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library module view is invalid");
+    const XrXirSlotFacts *facts=NULL;
+    if (library->linkage_kind==XR_XIR_LIBRARY) {
+        const XrXirArtifact *artifact=source_owned_artifact(&ctx->graph->specs[module]);
+        facts=xr_xir_compile_construction_slots(xr_xir_compile_artifact_construction(artifact));
+        if (!facts || facts->count!=d->slot_count || (facts->count && !facts->rows))
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library constant inventory needs complete facts");
+    }
     uint32_t total = 0;
     for (uint32_t f = 0; f < library->function_count; ++f) {
         if (!source_work(ctx,NULL)) return false;
@@ -128,6 +136,10 @@ static bool source_library_inventory(SourceContext *ctx, uint32_t module,
         if (*slots==UINT32_MAX)
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"library slot inventory exhausted");
         ++*slots;
+        if (facts && d->slots[s].type==XR_XIR_I64 && !d->slots[s].mutable && facts->rows[s].exported==1) {
+            if (*readers==UINT32_MAX) return source_fail(ctx,NULL,XR_XIR_BUDGET,"library constant reader inventory exhausted");
+            ++*readers;
+        }
     }
     *count = total; return true;
 }
@@ -137,7 +149,7 @@ static bool source_library_inventory(SourceContext *ctx, uint32_t module,
  * Every view still proves its identity and dependency edges. Only counts leave
  * this scope; subsequent copying and final construction retain their checks. */
 static bool source_library_group_inventory(SourceContext *ctx,uint32_t *functions,
-    uint32_t *slots,uint32_t *nominals,uint32_t *interfaces) {
+    uint32_t *slots,uint32_t *nominals,uint32_t *interfaces,uint32_t *readers) {
     uint32_t first=ctx->module;
     const XrXirArtifact *artifact=source_owned_artifact(&ctx->graph->specs[first]);
     const XrXirModule *library=source_library_module(ctx,first);
@@ -149,7 +161,7 @@ static bool source_library_group_inventory(SourceContext *ctx,uint32_t *function
         ctx->module=m;
         if(m!=first && !source_library_view(ctx,m,artifact,library)) return false;
         uint32_t imported=0;
-        if(!source_library_inventory(ctx,m,library,&imported,slots)) return false;
+        if(!source_library_inventory(ctx,m,library,&imported,slots,readers)) return false;
         if(imported>ctx->compile.limits.functions || *functions>ctx->compile.limits.functions-imported)
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"library function inventory exhausted");
         *functions+=imported;
@@ -393,10 +405,8 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     const XrXirFunction *original = &library->functions[index];
     XrXirFunction *function = &ctx->functions[target];
     *function = *original;
-    char *name = source_alloc(ctx, (size_t)original->name_length + 1, 1);
+    char *name=source_library_owned_name(ctx,original->name,original->name_length);
     if (!name) return false;
-    if (!source_copy_bytes(ctx, NULL, name, original->name, original->name_length)) return false;
-    name[original->name_length] = 0;
     function->name = name;
     function->parameters = source_library_bytes(ctx, original->parameters,
         original->parameter_count, sizeof(*original->parameters));
@@ -489,6 +499,11 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     if (ctx->identities[target].nominal_owner || ctx->identities[target].cleanup_owner ||
         ctx->identities[target].method_kind != XR_XIR_NON_MEMBER)
         return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"library member cannot be installed as a top-level function");
+    if (library->linkage_kind==XR_XIR_LIBRARY) {
+        bool visible=false;
+        if (!source_library_source_name(ctx,name,original->name_length,&visible)) return false;
+        if (!visible) return true;
+    }
     SourceName *symbol = add_name(ctx, &ctx->names[module], name, NULL);
     if (!symbol) return false;
     symbol->kind = SOURCE_FUNCTION; symbol->index = target; symbol->module = module; ctx->function = target;
