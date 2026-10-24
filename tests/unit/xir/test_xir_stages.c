@@ -891,11 +891,37 @@ static void panic_handler_packets(const XrXirArtifact *checked) {
     CHECK(xr_xir_compile_checked_read(&stage_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_module(decoded)->functions[0].blocks[1].panic == 2);
     xr_xir_compile_artifact_free(decoded); decoded = NULL;
-    CHECK(packet.length == 497 && packet.bytes[121] == 2);
-    CHECK(packet.bytes[349] == XR_XIR_PANIC_CATCH && packet.bytes[389] == XR_XIR_COPY);
+    const XrXirModule *module = xr_xir_compile_artifact_module(checked);
+    CHECK(module->function_count == 1);
+    const XrXirFunction *function = &module->functions[0];
+    CHECK(function->block_count == 3 && function->instruction_count == 8);
+    // The declaration error word precedes the canonical block records.
+    size_t blocks = 64 + 3 * 4 + 4 + function->name_length + 4 +
+        (size_t)function->parameter_count * 4 + 4 + 4 + 4;
+    size_t instructions = blocks + (size_t)function->block_count * 16 + 4;
+    CHECK(instructions <= packet.length && function->instruction_count <= (packet.length - instructions) / 40);
+    uint8_t word[4];
+    stage_packet_word(word, (uint32_t)function->error_type);
+    CHECK(!memcmp(packet.bytes + blocks - 8, word, sizeof(word)));
+    for (uint32_t b = 0; b < function->block_count; ++b) {
+        const XrXirBlock *block = &function->blocks[b];
+        uint32_t fields[] = {block->first, block->count, block->panic, block->frontier};
+        for (unsigned field = 0; field < 4; ++field) {
+            stage_packet_word(word, fields[field]);
+            CHECK(!memcmp(packet.bytes + blocks + b * 16 + field * 4, word, sizeof(word)));
+        }
+    }
+    size_t caught = instructions + 5 * 40, copied = instructions + 6 * 40;
+    CHECK(function->instructions[5].op == XR_XIR_PANIC_CATCH && function->instructions[6].op == XR_XIR_COPY);
+    stage_packet_word(word, (uint32_t)function->instructions[5].op);
+    CHECK(!memcmp(packet.bytes + caught, word, sizeof(word)));
+    stage_packet_word(word, (uint32_t)function->instructions[6].op);
+    CHECK(!memcmp(packet.bytes + copied, word, sizeof(word)));
+    stage_packet_word(word, function->instructions[6].args[0]);
+    CHECK(!memcmp(packet.bytes + copied + 8, word, sizeof(word)));
     const struct { size_t offset; uint8_t value; } attacks[] = {
-        {105, 2}, {121, 1}, {121, 3}, {121, 0}, {137, 2},
-        {349, XR_XIR_COPY}, {389, XR_XIR_PANIC_CATCH}, {397, 2},
+        {blocks + 8, 2}, {blocks + 16 + 8, 1}, {blocks + 16 + 8, 3}, {blocks + 16 + 8, 0}, {blocks + 32 + 8, 2},
+        {caught, XR_XIR_COPY}, {copied, XR_XIR_PANIC_CATCH}, {copied + 8, 2},
         {8, XR_XIR_CHECKED_SCHEMA - 1}, {12, XR_XIR_CHECKED_CONTRACT - 1}};
     for (size_t i = 0; i < sizeof(attacks) / sizeof(attacks[0]); ++i) {
         uint8_t saved = packet.bytes[attacks[i].offset];
