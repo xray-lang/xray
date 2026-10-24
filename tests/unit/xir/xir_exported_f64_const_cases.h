@@ -10,6 +10,7 @@
 #define XIR_EXPORTED_F64_CONST_CASES_H
 static const char ci_other_source[]="export const PI:f64=16.0\n";
 static const char ci_flags_source[]=
+    "import \"./other\" as other\n"
     "export const PI:f64=3.14159265358979323846\n"
     "export const E:f64=2.71828182845904523536\n"
     "export const TAU:f64=6.28318530717958647692\n"
@@ -25,7 +26,8 @@ static const char ci_flags_source[]=
     "export const INF:f64=1.0/0.0\nexport const NAN:f64=0.0/0.0\n"
     "export const ZERO:f64=-(0.0)\n"
     "var initMarker:i64=0\nfn initialize()->i64{initMarker+=1;return 0}\n"
-    "const initialized:i64=initialize()\nexport fn initCount()->i64{return initMarker}\n";
+    "const initialized:i64=initialize()\nexport fn initCount()->i64{return initMarker}\n"
+    "export fn otherValue()->f64{return other.PI}\n";
 static const char ci_facade_source[]=
     "import \"./flags\" as flags\nimport {PI as R} from \"./flags\"\n"
     "export fn through()->f64{return flags.PI}\n"
