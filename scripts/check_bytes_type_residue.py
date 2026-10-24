@@ -89,7 +89,6 @@ ALLOWED_REMOVED_NAMESPACE_FILES = {
 }
 ALLOWED_XRD_REMOVED_ALIAS_GUARD_FILES = {
     Path("src/frontend/analyzer/xanalyzer_xrd.c"),
-    Path("tests/unit/analyzer/test_analyzer.c"),
 }
 SKIP_REMOVED_TYPE_SCAN_FILES = {
     Path("scripts/check_bytes_type_residue.py"),

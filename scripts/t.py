@@ -149,7 +149,6 @@ SLOW_QEMU = ("aot_freestanding_qemu_smoke|aot_freestanding_riscv_qemu_smoke|"
 T0_EXTRA_CTEST_NAMES = (
     "expected_format_self_test",
     "stdlib_analyzer_builtins_sync",
-    "test_analyzer",
     "test_build_tree_lock",
     "test_canonical_program_test_profile",
     "test_tiered_test_runner",
