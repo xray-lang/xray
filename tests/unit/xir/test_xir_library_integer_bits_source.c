@@ -14,6 +14,7 @@
 #include "xir/xxir_library_catalog.h"
 #include "xir/xxir_construction.h"
 #include "xir/xxir_checked.h"
+#include "xir/xxir_nominal.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
