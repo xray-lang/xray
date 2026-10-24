@@ -14,7 +14,7 @@ typedef struct { uint64_t words[4]; } RbcLirSet;
 typedef struct {
     RbcLirSet conflicts[256], members[256];
     uint32_t parent[256], fixed[256];
-    RbcLirSet live[];
+    RbcLirSet *live;
 } RbcLirRegisters;
 
 static void rbc_lir_set_add(RbcLirSet *set, uint32_t value) {
@@ -176,6 +176,8 @@ static bool rbc_lir_assign_slots(RbcLirCompiler *c) {
     if (!r)
         return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot allocate register workspace");
     memset(r, 0, bytes);
+    // Fixed set members align the adjacent per-block storage as well.
+    r->live = (RbcLirSet *) (r + 1);
     for (uint32_t v = 1; v <= c->view.value_count; ++v) {
         r->parent[v] = v;
         r->fixed[v] = UINT32_MAX;
