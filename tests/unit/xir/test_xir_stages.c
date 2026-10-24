@@ -788,17 +788,35 @@ static void enum_metadata_cases(void) {
     CHECK(xr_xir_compile_types_structure_verify(&b, &types) == XR_XIR_OK);
 }
 
+static void stage_packet_word(uint8_t *bytes, uint32_t value) {
+    for (unsigned i = 0; i < 4; ++i) bytes[i] = (uint8_t)(value >> (i * 8));
+}
 static void error_filter_packets(const XrXirArtifact *checked) {
     XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL;
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(&stage_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded = NULL;
-    _Static_assert(XR_XIR_ERROR_IS == 103 && XR_XIR_ERROR_NARROW == 104, "error filter wire identity");
-    const uint8_t needle[40] = {[0]=103, [4]=1, [25]=1};
+    const XrXirModule *module = xr_xir_compile_artifact_module(checked);
+    const XrXirInstruction *filter = NULL;
+    uint32_t filters = 0;
+    for (uint32_t f = 0; f < module->function_count; ++f)
+        for (uint32_t i = 0; i < module->functions[f].instruction_count; ++i)
+            if (module->functions[f].instructions[i].op == XR_XIR_ERROR_IS) {
+                filter = &module->functions[f].instructions[i]; ++filters;
+            }
+    CHECK(filters == 1 && filter);
+    uint64_t immediate = (uint64_t)filter->immediate;
+    uint32_t words[] = {(uint32_t)filter->op, (uint32_t)filter->type, filter->args[0], filter->args[1],
+        filter->targets[0], filter->targets[1], (uint32_t)immediate, (uint32_t)(immediate >> 32),
+        (uint32_t)filter->type_arguments[0], (uint32_t)filter->type_arguments[1]};
+    uint8_t needle[40], branch[4], narrow[4];
+    for (unsigned i = 0; i < sizeof(words) / sizeof(words[0]); ++i) stage_packet_word(needle + i * 4, words[i]);
+    stage_packet_word(branch, XR_XIR_BRANCH); stage_packet_word(narrow, XR_XIR_ERROR_NARROW);
     size_t offset = 0; uint32_t found = 0;
     for (size_t i = 64; i + 120 <= packet.length; ++i)
         if (!memcmp(packet.bytes+i,needle,sizeof(needle))) {offset=i; ++found;}
-    CHECK(found == 1 && packet.bytes[offset+40] == XR_XIR_BRANCH && packet.bytes[offset+80] == 104);
+    CHECK(found == 1 && !memcmp(packet.bytes+offset+40, branch, sizeof(branch)) &&
+          !memcmp(packet.bytes+offset+80, narrow, sizeof(narrow)));
     for (unsigned mode = 0; mode < 6; ++mode) {
         size_t position = mode == 0 ? offset+88 : mode == 1 ? offset+24 : mode == 2 ? offset+56 :
             mode == 3 ? offset+60 : mode == 4 ? offset+80 : 12;
