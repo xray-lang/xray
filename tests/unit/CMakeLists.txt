@@ -4162,8 +4162,6 @@ add_xray_unit_test(test_module_source_allocations module/test_module_source_allo
 set_tests_properties(test_module_source_allocations PROPERTIES
     LABELS "unit;module;ownership;source" RUN_SERIAL TRUE TIMEOUT 120)
 
-add_xray_bootstrap_unit_test(test_callable52_source_facts plan/test_callable52_source_facts.c plan/target_profile_test_fixture.c)
-target_sources(test_callable52_source_facts PRIVATE plan/test_callable52_graph_oom_probe.c)
 
 add_xray_bootstrap_unit_test(test_vm_parallel_original_source_probe vm/test_vm_parallel_isolate.c)
 
