@@ -136,7 +136,8 @@ static EffectErrorFinite *finite_prepare(const XrXirCompileContext *work,
         const EffectBodyFunction *head=&material->functions[proof->invocations->nodes[node].body];
         uint32_t values=head->parameter_count+head->instruction_count;
         uint64_t size=head->block_count+(uint64_t)head->block_count*values*proof->words*64+(uint64_t)proof->words*64;
-        proof->rows[f]=(EffectErrorFiniteRow){at,at+size,head->block_count,values,node};at+=size;
+        proof->rows[f]=(EffectErrorFiniteRow){.first=at,.end=at+size,
+            .blocks=head->block_count,.values=values,.node=node,.returned=0};at+=size;
     }
     return proof;
 }

@@ -61,7 +61,8 @@ static uint32_t source_error_once(uint32_t cut,bool attack,uint32_t mode) {
     blocks[0].count=1;functions[0].instructions=&init;functions[0].instruction_count=1;
     functions[0].result=XR_XIR_UNIT;functions[0].name="init";functions[0].name_length=4;
     functions[1].name="main";functions[1].name_length=4;
-    const XrXirSourceModule source={"root",4,NULL,0,0};
+    const XrXirSourceModule source={.name="root",.name_length=4,.dependencies=NULL,
+        .dependency_count=0,.initializer=0,.lexical_scope=0,.storage=XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity identities[2]={{.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER}};
     const XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=1};
     XrXirFunctionEffectContract contracts[2]={{.formula={.constant_mask=XR_XIR_CALLABLE_ROOT_REQUIRED}},{0}};
