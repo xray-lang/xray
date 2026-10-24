@@ -85,6 +85,69 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
            (!function->constant_count || function->constants);
 }
 
+static bool xr_rbc_instruction_valid(const XrRbcModule *module,
+    const XrRbcFunction *function, size_t pc) {
+    uint32_t word = function->code[pc], op = word & 255;
+    uint32_t a = (word >> 8) & 255, b = (word >> 16) & 255, c = word >> 24;
+    uint32_t index = word >> 16, registers = function->register_count;
+    size_t remaining = function->code_count - pc;
+    bool comparison = op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ;
+    switch (op) {
+    case XR_RBC_MOV: case XR_RBC_NEG:
+    case XR_RBC_LT: case XR_RBC_LE: case XR_RBC_EQ:
+        if (a >= registers || b >= registers || c) return false;
+        if (comparison && (remaining <= 2 || (function->code[pc + 1] & 255) != XR_RBC_JMP))
+            return false;
+        break;
+    case XR_RBC_ADD: case XR_RBC_SUB: case XR_RBC_MUL:
+    case XR_RBC_DIV: case XR_RBC_REM: case XR_RBC_AND: case XR_RBC_OR:
+    case XR_RBC_XOR: case XR_RBC_SHL: case XR_RBC_SHR: case XR_RBC_USHR:
+        if (a >= registers || b >= registers || c >= registers) return false;
+        break;
+    case XR_RBC_LOADK:
+        if (a >= registers || index >= function->constant_count) return false;
+        break;
+    case XR_RBC_LOADI:
+        if (a >= registers) return false;
+        break;
+    case XR_RBC_JMP: {
+        uint32_t bits = word >> 8;
+        int32_t offset = bits <= XR_RBC_JUMP_MAX ? (int32_t) bits : (int32_t) bits - 16777216;
+        size_t next = pc + 1;
+        if (offset < 0) return (size_t) -offset <= next;
+        return (size_t) offset < function->code_count - next;
+    }
+    case XR_RBC_CALL:
+        if (a >= registers || index >= module->function_count ||
+            a + 1 + module->functions[index].parameter_count != registers) return false;
+        break;
+    case XR_RBC_CALLN:
+        if (a + 2 >= registers || index >= module->native_count) return false;
+        break;
+    case XR_RBC_RET:
+        return a < registers && !(word >> 16);
+    case XR_RBC_RET0:
+        return word == XR_RBC_RET0;
+    default:
+        return false;
+    }
+    // Every possible successor must remain within the validated function,
+    // even when the instruction or comparison's false edge is unreachable.
+    return remaining > (comparison ? 2u : 1u);
+}
+
+static bool xr_rbc_module_valid(const XrRbcModule *module) {
+    // Validate descriptors before using any call target's parameter count.
+    for (size_t f = 0; f < module->function_count; ++f)
+        if (!xr_rbc_function_valid(&module->functions[f])) return false;
+    for (size_t f = 0; f < module->function_count; ++f) {
+        const XrRbcFunction *function = &module->functions[f];
+        for (size_t pc = 0; pc < function->code_count; ++pc)
+            if (!xr_rbc_instruction_valid(module, function, pc)) return false;
+    }
+    return true;
+}
+
 static bool xr_rbc_source_maps_valid(const XrRbcModule *module, const XrtLocationOwner *locations) {
     // An unreachable callee must not hide invalid IDs until after guest effects.
     size_t count = xrt_locations_count(locations);
@@ -117,13 +180,8 @@ static uint64_t xr_rbc_shift_right(uint64_t bits, uint64_t amount) {
 
 static XrRbcStatus xr_rbc_call(const XrRbcModule *module, XrRbcStack *stack, uint32_t destination,
                                uint32_t target) {
-    if (target >= module->function_count || !xr_rbc_function_valid(&module->functions[target]))
-        return XR_RBC_INVALID;
     const XrRbcFunction *callee = &module->functions[target];
     XrRbcFrame caller = stack->frames[stack->depth - 1];
-    if ((size_t) destination + 1 + callee->parameter_count !=
-        module->functions[caller.function].register_count)
-        return XR_RBC_INVALID;
     if (caller.base > SIZE_MAX - destination - 1 || stack->depth == SIZE_MAX)
         return XR_RBC_OUT_OF_MEMORY;
     size_t base = caller.base + destination + 1;
@@ -157,7 +215,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
         (module->native_count && !module->natives) || module->native_count > 65536)
         return XR_RBC_INVALID;
     const XrRbcFunction *function = &module->functions[entry];
-    if (!xr_rbc_function_valid(function) || argument_count != function->parameter_count ||
+    if (argument_count != function->parameter_count || !xr_rbc_module_valid(module) ||
         !xr_rbc_source_maps_valid(module, locations))
         return XR_RBC_INVALID;
     for (size_t i = 0; i < module->native_count; ++i)

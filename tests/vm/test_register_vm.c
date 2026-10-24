@@ -37,6 +37,16 @@ static XrRbcStatus execute(const XrRbcModule *module, uint32_t entry,
     return status;
 }
 
+static void reject_prepare(const XrRbcModule *module, uint32_t entry,
+    const uint64_t *arguments, size_t count) {
+    XrtLocationOwner *owner = NULL;
+    CHECK(xrt_locations_create(NULL, 0, &owner) == XRT_LOCATION_OK);
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(module, entry, arguments, count, owner, &execution) == XR_RBC_INVALID);
+    CHECK(!execution);
+    xrt_locations_release(owner);
+}
+
 static void test_encoding(void) {
     uint32_t word = 0;
     CHECK(sizeof(word) == 4 && sizeof(uint64_t) == 8);
@@ -197,32 +207,92 @@ static void test_rejections(void) {
     XrRbcModule module = {&function, 1, NULL, 0};
     CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_ARITHMETIC_PANIC);
     CHECK(result == 42);
-    CHECK(execute(&module, 1, args, 2, &result) == XR_RBC_INVALID);
-    CHECK(execute(&module, 0, NULL, 2, &result) == XR_RBC_INVALID);
-    CHECK(execute(&module, 0, args, 1, &result) == XR_RBC_INVALID);
+    reject_prepare(&module, 1, args, 2);
+    reject_prepare(&module, 0, NULL, 2);
+    reject_prepare(&module, 0, args, 1);
     function.register_count = 256;
-    CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    reject_prepare(&module, 0, args, 2);
     function.register_count = 2;
     immediate(code, 0, XR_RBC_JMP, 0, -2);
-    CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    reject_prepare(&module, 0, args, 2);
     immediate(code, 0, XR_RBC_JMP, 0, 1);
-    CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    reject_prepare(&module, 0, args, 2);
     immediate(code, 0, XR_RBC_CALL, 0, 99);
-    CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    reject_prepare(&module, 0, args, 2);
     immediate(code, 0, XR_RBC_CALL, 0, 0);
-    CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    reject_prepare(&module, 0, args, 2);
     immediate(code, 0, XR_RBC_CALLN, 0, 0);
-    CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    reject_prepare(&module, 0, args, 2);
     immediate(code, 0, XR_RBC_LOADK, 0, 0);
-    CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    reject_prepare(&module, 0, args, 2);
     emit(code, 0, XR_RBC_MOV, 0, 2, 0);
-    CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    reject_prepare(&module, 0, args, 2);
     emit(code, 0, XR_RBC_LT, 0, 1, 0);
-    CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    reject_prepare(&module, 0, args, 2);
     code[0] = 255;
-    CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    reject_prepare(&module, 0, args, 2);
     emit(code, 0, XR_RBC_RET0, 0, 0, 0);
     CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_OK && result == 0);
+}
+
+static void test_prepare_unreachable(void) {
+    uint32_t root = XR_RBC_RET0, code[] = {XR_RBC_RET0, XR_RBC_RET0, XR_RBC_RET0, XR_RBC_RET0};
+    uint64_t constant = 42;
+    XrRbcFunction functions[] = {
+        {&root, 1, NULL, 0, 1, 0, NULL, 0},
+        {code, 4, &constant, 1, 3, 0, NULL, 0}};
+    const XrRbcNativeI64 native = xrt_print_i64;
+    XrRbcModule module = {functions, 2, &native, 1};
+    const uint32_t invalid[] = {
+        255, XR_RBC_MOV | (3u << 8), XR_RBC_MOV | (3u << 16), XR_RBC_MOV | (1u << 24),
+        XR_RBC_ADD | (3u << 8), XR_RBC_ADD | (3u << 16), XR_RBC_ADD | (3u << 24),
+        XR_RBC_NEG | (3u << 16), XR_RBC_LOADI | (3u << 8), XR_RBC_LOADK | (1u << 16),
+        XR_RBC_CALL | (2u << 8) | (2u << 16), XR_RBC_CALL | (1u << 16),
+        XR_RBC_CALLN | (1u << 8), XR_RBC_CALLN | (1u << 16),
+        XR_RBC_RET | (3u << 8), XR_RBC_RET | (1u << 16), XR_RBC_RET0 | (1u << 8),
+        XR_RBC_JMP | (UINT32_C(0xfffffe) << 8), XR_RBC_JMP | (3u << 8),
+        XR_RBC_LT | (3u << 8), XR_RBC_LE | (3u << 16), XR_RBC_EQ | (1u << 24)};
+    // The root never calls this function. Every malformed instruction must
+    // still fail at preparation, without entering the dispatch loop.
+    for (size_t n = 0; n < sizeof(invalid) / sizeof(invalid[0]); ++n) {
+        code[0] = invalid[n];
+        reject_prepare(&module, 0, NULL, 0);
+    }
+    for (uint32_t op = XR_RBC_LT; op <= XR_RBC_EQ; ++op) {
+        code[0] = op;
+        reject_prepare(&module, 0, NULL, 0); // The next word is not JMP.
+        code[0] = XR_RBC_RET0;
+        code[2] = op;
+        immediate(code, 3, XR_RBC_JMP, 0, -4);
+        reject_prepare(&module, 0, NULL, 0); // False continuation falls off.
+        code[2] = code[3] = XR_RBC_RET0;
+    }
+    immediate(code, 3, XR_RBC_LOADI, 0, 0);
+    reject_prepare(&module, 0, NULL, 0); // Unreachable ordinary fallthrough.
+    code[3] = XR_RBC_RET0;
+    XrRbcFunction valid = functions[1];
+    for (unsigned kind = 0; kind < 6; ++kind) {
+        functions[1] = valid;
+        if (kind == 0) functions[1].code = NULL;
+        if (kind == 1) functions[1].code_count = 0;
+        if (kind == 2) functions[1].register_count = 0;
+        if (kind == 3) functions[1].register_count = 256;
+        if (kind == 4) functions[1].parameter_count = 4;
+        if (kind == 5) functions[1].constants = NULL;
+        reject_prepare(&module, 0, NULL, 0);
+    }
+    functions[1] = valid;
+    XrtLocationOwner *owner = NULL;
+    CHECK(xrt_locations_create(NULL, 0, &owner) == XRT_LOCATION_OK);
+    XrRbcExecution *execution = NULL;
+    immediate(code, 3, XR_RBC_JMP, 0, -4);
+    CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, owner, &execution) == XR_RBC_OK);
+    xr_rbc_execution_free(&execution); // A valid unreachable loop is admitted.
+    code[0] = XR_RBC_LT;
+    immediate(code, 1, XR_RBC_JMP, 0, 1);
+    CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, owner, &execution) == XR_RBC_OK);
+    xr_rbc_execution_free(&execution);
+    xrt_locations_release(owner);
 }
 
 static void test_native_print(void) {
@@ -293,7 +363,15 @@ static void test_owned_execution(void) {
     immediate(code, 0, XR_RBC_CALLN, 0, 0);
     emit(code, 1, XR_RBC_RET0, 0, 0, 0);
     uint64_t args[] = {0, 55, UINT64_C(1) << 32};
-    CHECK(execute(&module, 0, args, 3, &bits) == XR_RBC_INVALID);
+    CHECK(xr_rbc_module_prepare(&module, 0, args, 3, owner, &execution) == XR_RBC_OK);
+    outcome = xr_rbc_execution_run(execution);
+    CHECK(outcome && xr_rbc_outcome_status(outcome) == XR_RBC_INVALID);
+    panic = (XrtArithmeticPanic) {88, 77};
+    borrowed = owner;
+    CHECK(!xr_rbc_outcome_arithmetic_panic(outcome, &panic, &borrowed));
+    CHECK(panic.code == 88 && panic.source_id == 77 && borrowed == owner);
+    xr_rbc_execution_free(&execution);
+    xr_rbc_outcome_free(&outcome);
     args[2] = 1; // Nonzero ID is invalid for a genuine empty image, never unknown.
     CHECK(execute(&module, 0, args, 3, &bits) == XR_RBC_INVALID);
     function.register_count = function.parameter_count = 2;
@@ -372,15 +450,8 @@ static void test_source_maps(void) {
     uint32_t invalid = XR_RBC_OP_COUNT;
     functions[0] = (XrRbcFunction) {&invalid, 1, NULL, 0, 1, 0, NULL, 0};
     module.function_count = 1;
-    CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, owner, &execution) == XR_RBC_OK);
-    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
-    CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_INVALID);
-    XrtArithmeticPanic facts = {88, 77};
-    const XrtLocationOwner *borrowed = owner;
-    CHECK(!xr_rbc_outcome_arithmetic_panic(outcome, &facts, &borrowed));
-    CHECK(facts.code == 88 && facts.source_id == 77 && borrowed == owner);
-    xr_rbc_execution_free(&execution);
-    xr_rbc_outcome_free(&outcome);
+    CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, owner, &execution) == XR_RBC_INVALID);
+    CHECK(!execution);
     xrt_locations_release(owner);
 }
 
@@ -394,6 +465,7 @@ int main(int argc, char **argv) {
     test_branches();
     test_call_windows();
     test_rejections();
+    test_prepare_unreachable();
     test_owned_execution();
     test_source_maps();
     test_unknown_arithmetic_panic();

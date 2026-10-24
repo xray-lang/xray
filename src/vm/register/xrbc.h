@@ -10,7 +10,8 @@
  * KEY CONCEPT:
  *   Instructions occupy one 32-bit word. Registers contain untagged bits;
  *   instruction selection supplies their types. This is an internal API for
- *   trusted, in-process programs, not a serialized bytecode loader.
+ *   trusted, in-process programs, not a serialized bytecode loader. Code and
+ *   descriptors are validated once at preparation, never during dispatch.
  */
 
 #ifndef XRBC_H
@@ -106,8 +107,13 @@ typedef struct XrRbcOutcome XrRbcOutcome;
 
 // Prepare copies arguments, owns the initial stack and pending outcome, and
 // retains locations before any guest effects. Every function's source map is
-// validated first; nonzero IDs belong to locations. Code/descriptors/maps stay
-// immutable and borrowed until execution_free. Output must be empty on entry;
+// validated first, together with every instruction in every function, including
+// unreachable code. Invalid register, constant, branch, comparison, and call
+// operands reject preparation before any execution is published. Nonzero IDs
+// belong to locations. Code/descriptors/maps stay
+// immutable and borrowed until execution_free; mutating them violates this
+// trusted in-process API. Runtime argument values, arithmetic failures and
+// stack allocation failures remain execution-time concerns. Output is empty on entry;
 // failure never publishes one.
 // CALL A,Bx returns into A; the callee starts at A+1, the caller's top argument
 // window. CALLN reads value/id at A+1/A+2, with Bx selecting the actual leaf.
