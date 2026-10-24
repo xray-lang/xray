@@ -450,10 +450,10 @@ XR_FUNC bool xr_xir_instance_initialization_publication_missing(
 static XrXirCallStatus instance_config_init(XrXirInstanceConfig *config, size_t size, bool sandbox) {
     if (!config) return XR_XIR_CALL_BAD_ARGUMENT;
     if (size != sizeof(*config)) return XR_XIR_CALL_BAD_ABI;
-    uint64_t live = sandbox ? XR_RESOURCE_SANDBOX_RUNTIME_LIVE : XR_RESOURCE_DEFAULT_LIMIT;
+    uint64_t live_limit = sandbox ? XR_RESOURCE_SANDBOX_RUNTIME_LIVE : XR_RESOURCE_DEFAULT_LIMIT;
     uint64_t requested = sandbox ? XR_RESOURCE_SANDBOX_RUNTIME_REQUESTED : XR_RESOURCE_DEFAULT_LIMIT;
     *config = (XrXirInstanceConfig) {XR_XIR_CALL_ABI_VERSION, sizeof(*config),
-        live, live, live,
+        live_limit, live_limit, live_limit,
         sandbox ? XR_RESOURCE_SANDBOX_RUNTIME_POLLS : XR_RESOURCE_DEFAULT_LIMIT,
         sandbox ? XR_RESOURCE_SANDBOX_RUNTIME_DEPTH : XR_RESOURCE_DEFAULT_DEPTH,
         {0}, NULL, NULL, {0}, requested, requested,
