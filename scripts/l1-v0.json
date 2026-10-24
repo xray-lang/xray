@@ -62,7 +62,12 @@
     "test_xir_range_value_sdk",
     "test_hashmap",
     "test_xir_effect_source_terminal_ordinary",
-    "test_lexer_keywords"
+    "test_lexer_keywords",
+    "test_xir_library_integer_bits_source",
+    "test_xir_library_integer_bits_packet",
+    "test_xir_library_integer_bits_native",
+    "test_xir_library_integer_bits_vm_native",
+    "test_xir_library_integer_bits_native_vm"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -148,7 +153,12 @@
     "test_xir_range_value_sdk",
     "test_hashmap",
     "test_xir_effect_source_terminal_ordinary",
-    "test_lexer_keywords"
+    "test_lexer_keywords",
+    "test_xir_library_integer_bits_source",
+    "test_xir_library_integer_bits_packet",
+    "test_xir_library_integer_bits_native",
+    "test_xir_library_integer_bits_vm_native",
+    "test_xir_library_integer_bits_native_vm"
   ],
   "versionCommand": [
     "{build}/xray.exe",
