@@ -544,7 +544,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/parallel/parallel.xr:34:26: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/parallel/parallel.xr:37:0: error: indexed receiver is not an Array"
       }
     },
     {
