@@ -1,5 +1,5 @@
 set(P11_LIBRARY_NATIVE_DIR "${CMAKE_CURRENT_BINARY_DIR}/library-native")
-foreach(kind array private multi method nested mixed builtin none local fresh dual known closed closed-method text foreign)
+foreach(kind array private multi method nested mixed builtin none local fresh dual known closed closed-method foreign)
     set(material "${P11_LIBRARY_NATIVE_DIR}/${kind}.c")
     add_custom_command(OUTPUT "${material}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${P11_LIBRARY_NATIVE_DIR}"
