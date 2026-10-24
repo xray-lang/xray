@@ -42,8 +42,8 @@ static const char *const ci_logical_names[]={"other.xr","flags.xr","facade.xr","
 static const char *const ci_rejections[]={
     "export var VALUE:i64=1",
     "export const VALUE=1",
-    "export const VALUE:f64=1.0",
-    "export const VALUE:i64=1+2",
+    "export const VALUE:f32=1.0",
+    "fn initializeValue()->i64{return 3} export const VALUE:i64=initializeValue()",
     "export const {value}={value:1}",
     "import {initialized} from \"./flags\";export fn f()->i64{return initialized}",
     "import {PROT_READ} from \"./flags\";export fn f(){PROT_READ=2}",

@@ -153,8 +153,8 @@ static bool library_catalog_state_type(const XrXirTypes *types,XrXirType type) {
     default:return false;
     }
 }
-/* Binary64 state remains private and immutable; a logical Cell element does
- * not grant the same admission as the actual direct scalar slot. */
+/* Only an actual immutable binary64 slot with complete ownership facts is
+ * admitted; a logical Cell element cannot grant the same permission. */
 static bool library_catalog_state_slot(const XrXirTypes *types,const XrXirDeclarations *declarations,
     const XrXirSlotFacts *facts,uint32_t ordinal) {
     if (!declarations || ordinal>=declarations->slot_count || !declarations->slots) return false;
@@ -162,7 +162,7 @@ static bool library_catalog_state_slot(const XrXirTypes *types,const XrXirDeclar
     if (slot->type!=XR_XIR_F64) return library_catalog_state_type(types,slot->type);
     if (slot->mutable || !facts || facts->count!=declarations->slot_count || !facts->rows) return false;
     const XrXirSlotFact *fact=&facts->rows[ordinal];
-    return fact->slot==ordinal && fact->name && fact->name_length && fact->exported==0;
+    return fact->slot==ordinal && fact->name && fact->name_length && fact->exported<=1;
 }
 static XrXirStatus library_catalog_closed_types(const XrXirModule *m,
     const XrXirCompileContext *context) {

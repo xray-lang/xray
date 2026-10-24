@@ -103,7 +103,7 @@ static void json_float_state_fact_refusals(const XrXirCompileContext *context,Xr
     CHECK(matches==1);
     const unsigned offsets[]={0,4,18};
     for(unsigned i=0;i<3;++i) {
-        size_t at=position+offsets[i];uint8_t saved=packet->bytes[at];packet->bytes[at]=i?1:0;
+        size_t at=position+offsets[i];uint8_t saved=packet->bytes[at];packet->bytes[at]=i==2?2:i?1:0;
         json_float_packet_digest(packet);xr_sha256(packet->bytes,packet->length,input->sha256);
         XrXirLibraryCatalog *catalog=NULL;
         XrXirStatus status=xr_xir_compile_library_catalog_new_v2(context,input,1,&catalog);
@@ -114,10 +114,11 @@ static void json_float_state_fact_refusals(const XrXirCompileContext *context,Xr
 }
 /* Private immutable binary64 state uses the ordinary receiving slot path. */
 static void json_float_catalog_state_boundaries(void) {
-    static const struct {const char *text;XrXirType type;bool mutable;XrXirStatus expected;} cases[]={
-        {"const stored:i64=1\nexport fn observe()->i64{return stored}\n",XR_XIR_I64,false,XR_XIR_OK},
-        {"const stored:f64=1.0\nexport fn observe()->f64{return stored}\n",XR_XIR_F64,false,XR_XIR_OK},
-        {"var stored:f64=1.0\nexport fn observe()->f64{return stored}\n",XR_XIR_F64,true,XR_XIR_BAD_STAGE}
+    static const struct {const char *text;XrXirType type;bool mutable,exported;XrXirStatus expected;} cases[]={
+        {"const stored:i64=1\nexport fn observe()->i64{return stored}\n",XR_XIR_I64,false,false,XR_XIR_OK},
+        {"const stored:f64=1.0\nexport fn observe()->f64{return stored}\n",XR_XIR_F64,false,false,XR_XIR_OK},
+        {"export const stored:f64=1.0\nexport fn observe()->f64{return stored}\n",XR_XIR_F64,false,true,XR_XIR_OK},
+        {"var stored:f64=1.0\nexport fn observe()->f64{return stored}\n",XR_XIR_F64,true,false,XR_XIR_BAD_STAGE}
     };
     XrXirCompileContext context=json_float_context();
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
@@ -133,13 +134,19 @@ static void json_float_catalog_state_boundaries(void) {
         xr_xir_compile_source_result_free(&result);
         XrXirLibraryModuleInput binding={{XR_MODULE_IDENTITY_SCRIPT,NULL,XR_JSON_FLOAT_WORK},"number-decoding.xr"};
         XrXirLibraryInput input={packet.bytes,packet.length,{0},&binding,1};xr_sha256(packet.bytes,packet.length,input.sha256);
-        if(cases[i].type==XR_XIR_F64 && !cases[i].mutable) json_float_state_fact_refusals(&context,&packet,&input);
+        if(cases[i].type==XR_XIR_F64 && !cases[i].mutable && !cases[i].exported) json_float_state_fact_refusals(&context,&packet,&input);
         XrXirLibraryCatalog *catalog=NULL;XrXirStatus status=xr_xir_compile_library_catalog_new_v2(&context,&input,1,&catalog);
         CHECK((status==XR_XIR_OK)==(catalog!=NULL));
-        if(catalog && cases[i].type==XR_XIR_F64) {
+        if(catalog && cases[i].type==XR_XIR_F64 && !cases[i].exported) {
             JsonFloatSource private_read={"import {stored} from \"./number-decoding\"\nexport fn read()->f64{return stored}\n",
                 "private-reader.xr",XR_XIR_PROGRAM,catalog};
             json_float_source_refusal(&context,&private_read,"export");
+        }
+        if(catalog && cases[i].exported) {
+            JsonFloatSource public_read={"import {stored} from \"./number-decoding\"\nexport fn read()->f64{return stored}\n",
+                "public-reader.xr",XR_XIR_PROGRAM,catalog};
+            XrXirSourceResult received=json_float_source(&context,&public_read);
+            xr_xir_compile_source_result_free(&received);
         }
         xr_xir_compile_library_catalog_free(catalog);
         memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
@@ -149,7 +156,7 @@ static void json_float_catalog_state_boundaries(void) {
             i,(unsigned)logical,(unsigned)cases[i].mutable,status,cases[i].expected,(unsigned long long)after.work);
         CHECK(status==cases[i].expected);
     }
-    JsonFloatSource exported={"export const stored:f64=1.0\n","exported-state.xr",XR_XIR_LIBRARY,NULL};
+    JsonFloatSource exported={"export const stored:f32=1.0\n","exported-state.xr",XR_XIR_LIBRARY,NULL};
     json_float_source_refusal(&context,&exported,"exported state is not admitted");
     xr_compile_resources_release(context.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);

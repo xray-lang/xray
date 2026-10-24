@@ -75,7 +75,15 @@
     "test_xir_exported_i64_const_source_native_vm",
     "test_xir_exported_i64_const_catalog_native",
     "test_xir_exported_i64_const_catalog_vm_native",
-    "test_xir_exported_i64_const_catalog_native_vm"
+    "test_xir_exported_i64_const_catalog_native_vm",
+    "test_xir_exported_f64_const",
+    "test_xir_exported_f64_const_packet",
+    "test_xir_exported_f64_const_source_native",
+    "test_xir_exported_f64_const_source_vm_native",
+    "test_xir_exported_f64_const_source_native_vm",
+    "test_xir_exported_f64_const_catalog_native",
+    "test_xir_exported_f64_const_catalog_vm_native",
+    "test_xir_exported_f64_const_catalog_native_vm"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -176,7 +184,17 @@
     "test_xir_exported_i64_const_catalog_vm",
     "test_xir_exported_i64_const_catalog_native",
     "test_xir_exported_i64_const_catalog_vm_native",
-    "test_xir_exported_i64_const_catalog_native_vm"
+    "test_xir_exported_i64_const_catalog_native_vm",
+    "test_xir_exported_f64_const",
+    "test_xir_exported_f64_const_authority",
+    "test_xir_exported_f64_const_source_vm",
+    "test_xir_exported_f64_const_source_native",
+    "test_xir_exported_f64_const_source_vm_native",
+    "test_xir_exported_f64_const_source_native_vm",
+    "test_xir_exported_f64_const_catalog_vm",
+    "test_xir_exported_f64_const_catalog_native",
+    "test_xir_exported_f64_const_catalog_vm_native",
+    "test_xir_exported_f64_const_catalog_native_vm"
   ],
   "versionCommand": [
     "{build}/xray.exe",
