@@ -44,12 +44,11 @@ static XrXirStatus error_finite_empty(const EffectErrorFiniteRead *read,
         return XR_XIR_BAD_STRUCTURE;
     *empty=true;return XR_XIR_OK;
 }
-static XrXirStatus error_finite_carrier(const EffectErrorFiniteRead *read,
-    uint32_t function,uint32_t value,ErrorFiniteVisit visit,void *owner,bool *paused) {
-    const EffectErrorFiniteRow *row=&read->proof->rows[function];
-    for(uint32_t b=0;b<row->blocks;++b) for(uint32_t w=0;w<read->proof->words;++w) {
+static XrXirStatus error_finite_block_carrier(const EffectErrorFiniteRead *read,
+    uint32_t function,uint32_t block,uint32_t value,ErrorFiniteVisit visit,void *owner,bool *paused) {
+    for(uint32_t w=0;w<read->proof->words;++w) {
         if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
-        XrXirStatus status=visit(read,function,error_finite_entry_coordinate(read->proof,function,b,value,w),owner,paused);
+        XrXirStatus status=visit(read,function,error_finite_entry_coordinate(read->proof,function,block,value,w),owner,paused);
         if(status!=XR_XIR_OK || *paused) return status;
     }
     return XR_XIR_OK;
@@ -66,24 +65,18 @@ static XrXirStatus error_finite_fields_active(ErrorFlow *view,const EffectBodyRe
     if(opcode==XR_XIR_GO || opcode==XR_XIR_INVOKE_ERROR) { *active=true;return XR_XIR_OK; }
     return error_type_active(view,(XrXirType)type,active);
 }
-static XrXirStatus error_finite_walk(const EffectErrorFiniteRead *read,
-    uint32_t function,ErrorFiniteVisit visit,void *owner,bool *empty) {
-    bool paused=false;
-    XrXirStatus status=error_finite_empty(read,function,empty);
-    if(status!=XR_XIR_OK || *empty) return status;
-    EffectErrorEquationRead equation;status=error_finite_equation(read,function,&equation);
-    if(status!=XR_XIR_OK) return status;
-    const EffectErrorFiniteRow *row=&read->proof->rows[function];
-    const EffectBodyFunction *head=&read->proof->material->functions[equation.function];
-    XrXirCompileContext current=*read->work;
-    ErrorFlow view={.body=equation.body,.function=&equation.head,.function_index=equation.function,.remaining=&current};
-    for(uint32_t b=0;b<row->blocks;++b) {
-        status=visit(read,function,row->first+b,owner,&paused);if(status!=XR_XIR_OK || paused) return status;
-    }
+/* Coordinates are stored by block, then value. Revisit current membership in
+ * that order so new facts avoid repeatedly shifting later block rows. No
+ * membership or Error result survives an individual consuming walk. */
+static XrXirStatus error_finite_block_values(const EffectErrorFiniteRead *read,
+    uint32_t function,uint32_t block,ErrorFlow *view,ErrorFiniteVisit visit,void *owner,bool *paused) {
+    const EffectBodyFunction *head=&read->proof->material->functions[view->function_index];
+    XrXirStatus status=XR_XIR_OK;
     for(uint32_t p=0;p<head->parameter_count;++p) {
-        bool active=false;status=error_type_active(&view,head->parameters[p],&active);
+        if(!xir_compile_work(read->work,2+sizeof(*head->parameters))) return XR_XIR_BUDGET;
+        bool active=false;status=error_type_active(view,head->parameters[p],&active);
         if(status!=XR_XIR_OK) return status;
-        if(active) { status=error_finite_carrier(read,function,p,visit,owner,&paused);if(status!=XR_XIR_OK || paused) return status; }
+        if(active) { status=error_finite_block_carrier(read,function,block,p,visit,owner,paused);if(status!=XR_XIR_OK || *paused) return status; }
     }
     EffectBodyRead body=effect_body_compile_read(read->work);
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
@@ -92,22 +85,41 @@ static XrXirStatus error_finite_walk(const EffectErrorFiniteRead *read,
         if(status!=XR_XIR_OK) return status;
         bool constant=!(ref->mask&UINT32_C(3)),active=false;
         if(constant) {
-            status=error_finite_fields_active(&view,&body,ref,ref->first,&active);
+            status=error_finite_fields_active(view,&body,ref,ref->first,&active);
             if(status!=XR_XIR_OK) return status;
             if(!active) continue;
         }
         for(uint32_t i=0;i<ref->count;++i) {
             if(!constant) {
-                status=error_finite_fields_active(&view,&body,ref,ref->first+i,&active);
+                status=error_finite_fields_active(view,&body,ref,ref->first+i,&active);
                 if(status!=XR_XIR_OK) return status;
             }
             if(!active) continue;
-            status=error_finite_carrier(read,function,head->parameter_count+ref->first+i,visit,owner,&paused);
-            if(status!=XR_XIR_OK || paused) return status;
+            status=error_finite_block_carrier(read,function,block,head->parameter_count+ref->first+i,visit,owner,paused);
+            if(status!=XR_XIR_OK || *paused) return status;
         }
     }
     if(cursor.first!=head->instruction_count || cursor.run!=head->run_count)
         return XR_XIR_BAD_STRUCTURE;
+    return XR_XIR_OK;
+}
+static XrXirStatus error_finite_walk(const EffectErrorFiniteRead *read,
+    uint32_t function,ErrorFiniteVisit visit,void *owner,bool *empty) {
+    bool paused=false;
+    XrXirStatus status=error_finite_empty(read,function,empty);
+    if(status!=XR_XIR_OK || *empty) return status;
+    EffectErrorEquationRead equation;status=error_finite_equation(read,function,&equation);
+    if(status!=XR_XIR_OK) return status;
+    const EffectErrorFiniteRow *row=&read->proof->rows[function];
+    XrXirCompileContext current=*read->work;
+    ErrorFlow view={.body=equation.body,.function=&equation.head,.function_index=equation.function,.remaining=&current};
+    for(uint32_t b=0;b<row->blocks;++b) {
+        status=visit(read,function,row->first+b,owner,&paused);if(status!=XR_XIR_OK || paused) return status;
+    }
+    for(uint32_t b=0;b<row->blocks;++b) {
+        status=error_finite_block_values(read,function,b,&view,visit,owner,&paused);
+        if(status!=XR_XIR_OK || paused) return status;
+    }
     for(uint32_t w=0;w<read->proof->words;++w) {
         status=visit(read,function,row->end-(uint64_t)read->proof->words*64+(uint64_t)w*64,owner,&paused);
         if(status!=XR_XIR_OK || paused) return status;

@@ -231,7 +231,8 @@ static void finite_index_growth_boundary(void *memory,size_t bytes) {
     CHECK(finite_index_live_view && !finite_index_live_view->work &&
         !finite_index_live_view->input.work && !finite_index_live_view->predecessors.ready);
 }
-/* The filtered parallel arms carry distinct enum halves to the same PHI.
+/* Two live enum carriers cross the same cyclic block rows.
+ * The filtered parallel arms carry distinct enum halves to the same PHI.
  * A high-numbered back edge exercises the last source bit and the general
  * path beyond one word, independently of the function's instruction offset. */
 static void finite_index_fixture(EdgeFixture *fixture,XrXirBlock *blocks,uint32_t count) {
@@ -241,7 +242,7 @@ static void finite_index_fixture(EdgeFixture *fixture,XrXirBlock *blocks,uint32_
     for (uint32_t b=0;b<count;++b) {
         blocks[b]=(XrXirBlock){.first=n};
         if (!b) {
-            fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64};
+            fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_COPY,.type=(XrXirType)EE_ENUM,.args={0}};
             fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_JUMP,.targets={1}};
         } else if (b==1) {
             fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_BRANCH,.args={1},.targets={1,2}};
@@ -285,6 +286,8 @@ static void finite_index_words(void) {
         finite_verify(&context,proof,XR_XIR_OK);
         EffectErrorFiniteRead plain={proof,&context,UINT32_MAX,NULL};uint64_t result=0;
         CHECK(error_finite_word(&plain,proof->rows[1].end-64,64,&result)==XR_XIR_OK && result==12);
+        CHECK(error_finite_word(&plain,error_finite_entry_coordinate(proof,1,4,2,0),64,&result)==
+            XR_XIR_OK && result==12);
         EffectErrorFiniteView view={0};
         CHECK(error_finite_view_open(&context,proof,&view)==XR_XIR_OK);
         EffectErrorFiniteRead current={proof,&context,UINT32_MAX,&view};
