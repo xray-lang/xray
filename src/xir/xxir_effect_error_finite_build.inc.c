@@ -24,7 +24,7 @@ static XrXirStatus error_finite_grow(const XrXirCompileContext *work,EffectError
     uint32_t count=proof->count,old_capacity=proof->capacity,capacity=old_capacity?old_capacity*2:32;
     if((uint64_t)capacity>SIZE_MAX/sizeof(*proof->facts)) return XR_XIR_BUDGET;
     EffectErrorFiniteFact *old=proof->facts;
-    *current=(EffectErrorFiniteView){0};XrXirStatus status=XR_XIR_OK;
+    error_finite_view_reset(current);XrXirStatus status=XR_XIR_OK;
     EffectErrorFiniteFact *facts=xir_compile_alloc(work,(size_t)capacity*sizeof(*facts),&status);
     if(!facts) return status;
     status=error_finite_geometry(work,proof);
@@ -92,7 +92,7 @@ static XrXirStatus error_finite_derive_coordinate(const EffectErrorFiniteRead *r
     return XR_XIR_OK;
 }
 static XrXirStatus error_finite_derive(const XrXirCompileContext *work,EffectErrorFinite *proof) {
-    bool changed=true;EffectErrorFiniteView current={0};
+    bool changed=true;EffectErrorFiniteView current;error_finite_view_reset(&current);
     ErrorFiniteDerive derive={proof,1,&changed,false};
     /* Every growing equation advances the witness rank. A complete stable
      * sweep still closes loops and recursive calls, and the independent

@@ -456,14 +456,24 @@ static XrXirStatus error_finite_geometry(const XrXirCompileContext *work,const E
     }
     return XR_XIR_OK;
 }
+/* Expiration clears every borrowed identity before a callback. Ordinal rows
+ * stay unread until their charged per-function initialization is needed. */
+static void error_finite_view_reset(EffectErrorFiniteView *current) {
+    current->work=NULL;current->proof=NULL;current->material=NULL;
+    current->input=(EffectBodyCurrentRead){0};
+    current->predecessors.ready=false;
+}
 static XrXirStatus error_finite_view_open(const XrXirCompileContext *work,
     const EffectErrorFinite *proof,EffectErrorFiniteView *output) {
     if(!output || output->work || output->proof || output->material) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=error_finite_geometry(work,proof);if(status!=XR_XIR_OK) return status;
     EffectBodyCurrentRead input={0};
     status=effect_body_current_open(work,proof->material,&input);if(status!=XR_XIR_OK) return status;
-    if(!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
-    *output=(EffectErrorFiniteView){.work=work,.proof=proof,.material=proof->material,.input=input};
+    uint64_t stores=sizeof(output->work)+sizeof(output->proof)+sizeof(output->material)+
+        sizeof(output->input)+sizeof(output->predecessors.ready);
+    if(!xir_compile_work(work,stores)) return XR_XIR_BUDGET;
+    output->work=work;output->proof=proof;output->material=proof->material;
+    output->input=input;output->predecessors.ready=false;
     return XR_XIR_OK;
 }
 static XrXirStatus error_finite_check_current(EffectErrorFiniteView *current) {
@@ -494,6 +504,7 @@ static XrXirStatus error_finite_check_current(EffectErrorFiniteView *current) {
 }
 
 static XrXirStatus error_finite_check(const XrXirCompileContext *work,const EffectErrorFinite *proof) {
-    EffectErrorFiniteView current={0};XrXirStatus status=error_finite_view_open(work,proof,&current);
+    EffectErrorFiniteView current;error_finite_view_reset(&current);
+    XrXirStatus status=error_finite_view_open(work,proof,&current);
     return status==XR_XIR_OK?error_finite_check_current(&current):status;
 }

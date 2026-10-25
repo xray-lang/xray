@@ -54,18 +54,20 @@ static bool source_recipe_never(SourceContext *ctx,const XrXirInstruction *op,
     case XR_XIR_CONST_RUNE: case XR_XIR_CONST_STRING:
     case XR_XIR_COPY: case XR_XIR_SLOT_LOAD: case XR_XIR_CELL_READ:
     case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
-    case XR_XIR_RETURN:
+    case XR_XIR_JUMP: case XR_XIR_BRANCH: case XR_XIR_RETURN:
         return true;
     case XR_XIR_REM_INT:
         *output=op->type==XR_XIR_I64 &&
             source_recipe_operand_i64(ctx,ordinal,op->args[0]) &&
             source_recipe_operand_i64(ctx,ordinal,op->args[1]);
         return true;
-    case XR_XIR_EQUAL:
-        *output=op->type==XR_XIR_BOOL && op->immediate==0 &&
-            source_recipe_operand_i64(ctx,ordinal,op->args[0]) &&
-            source_recipe_operand_i64(ctx,ordinal,op->args[1]);
+    case XR_XIR_EQUAL: {
+        XrXirType left=source_recipe_operand_type(ctx,ordinal,op->args[0]);
+        XrXirType right=source_recipe_operand_type(ctx,ordinal,op->args[1]);
+        *output=op->type==XR_XIR_BOOL && op->immediate==0 && left==right &&
+            (left==XR_XIR_I64 || left==XR_XIR_STRING);
         return true;
+    }
     case XR_XIR_CELL_WRITE:
         *output=op->type==XR_XIR_UNIT &&
             xr_xir_cell_element(&ctx->types,source_recipe_operand_type(ctx,ordinal,op->args[0]))==XR_XIR_I64 &&
