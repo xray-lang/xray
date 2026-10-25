@@ -26,8 +26,13 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "slice_u8_backend_cases.h"
 #include "../test_win_compat.h"
-static const char library_text[]="export fn read(v:Slice<u8>)->i64{if(v[0]!=8){return -10};return len(v)}\nexport fn readFunction()->fn(Slice<u8>)->i64{return read}\nexport fn ignored(a:Array<u8>){const v:Slice<u8>=a[1:2]}\nexport fn run()->i64{var a:Array<u8>=[7,8,9];const v:Slice<u8>=a[1:2];const copy=v;const reader=readFunction();const n=reader(copy);ignored(a);a=[40];return n}\n";
-static const char source_text[]="export fn read(v:Slice<u8>)->i64{if(v[0]!=8){return -10};return len(v)}\nexport fn readFunction()->fn(Slice<u8>)->i64{return read}\nexport fn ignored(a:Array<u8>){const v:Slice<u8>=a[1:2]}\nexport fn run()->i64{var a:Array<u8>=[7,8,9];const v:Slice<u8>=a[1:2];const copy=v;const reader=readFunction();const n=reader(copy);ignored(a);a=[40];return n}\nexport fn receiver()->i64{return run()}\n";
+#define SLICE_INVOKE_CLEANUP_SOURCE \
+    "enum CleanupError{Failed}\n" \
+    "fn cleanup_scalar()->i64{return 7}\n" \
+    "fn invoke_cleanup(fail:bool)->i64{var root:Array<u8>=[8];const v:Slice<u8>=root[0:1];" \
+    "try{const n=cleanup_scalar();if(fail){throw CleanupError.Failed};return len(v)+n}catch(CleanupError.Failed){root=[9];return 11}}\n"
+static const char library_text[]=SLICE_INVOKE_CLEANUP_SOURCE "export fn read(v:Slice<u8>)->i64{if(v[0]!=8){return -10};return len(v)}\nexport fn readFunction()->fn(Slice<u8>)->i64{return read}\nexport fn ignored(a:Array<u8>){const v:Slice<u8>=a[1:2]}\nexport fn run()->i64{if(invoke_cleanup(false)!=8){return -20};if(invoke_cleanup(true)!=11){return -21};var a:Array<u8>=[7,8,9];const v:Slice<u8>=a[1:2];const copy=v;const reader=readFunction();const n=reader(copy);ignored(a);a=[40];return n}\n";
+static const char source_text[]=SLICE_INVOKE_CLEANUP_SOURCE "export fn read(v:Slice<u8>)->i64{if(v[0]!=8){return -10};return len(v)}\nexport fn readFunction()->fn(Slice<u8>)->i64{return read}\nexport fn ignored(a:Array<u8>){const v:Slice<u8>=a[1:2]}\nexport fn run()->i64{if(invoke_cleanup(false)!=8){return -20};if(invoke_cleanup(true)!=11){return -21};var a:Array<u8>=[7,8,9];const v:Slice<u8>=a[1:2];const copy=v;const reader=readFunction();const n=reader(copy);ignored(a);a=[40];return n}\nexport fn receiver()->i64{return run()}\n";
 static uint32_t named(const XrXirModule *module,const char *name) {
     for (uint32_t f=0;f<module->function_count;++f)
         if (module->functions[f].name_length==strlen(name) &&
@@ -79,6 +84,37 @@ static void snapshot_debug(const XrXirSourceResult *source,bool local_source) {
             CHECK(!row->points[i].statement && !row->points[i].flags);
         if (function->instructions[i].op==XR_XIR_VIEW_NEW)
             CHECK(row->points[i].statement && row->points[i].range.line>0);
+    }
+    if (local_source) {
+        uint32_t invoked=named(module,"invoke_cleanup"),scalar=named(module,"cleanup_scalar");
+        const XrXirFunction *body=module->functions+invoked;
+        const XrXirSourceDebugFunction *observed=debug->functions+invoked;
+        CHECK(observed->route_count && observed->points);
+        bool invocation=false,local_throw=false;
+        for (uint32_t r=0;r<observed->route_count;++r) {
+            const XrXirSourceDebugRoute *route=observed->routes+r;
+            CHECK(route->instruction<body->instruction_count);
+            const XrXirInstruction *call=body->instructions+route->instruction;
+            if (call->op!=XR_XIR_INVOKE) {
+                bool thrown=false;
+                for (uint32_t t=0;t<observed->throw_count;++t)
+                    thrown|=observed->throw_sites[t].instruction==route->instruction &&
+                        observed->throw_sites[t].operand==route->error;
+                CHECK(thrown);local_throw=true;continue;
+            }
+            CHECK(call->immediate==scalar && call->targets[1]<body->block_count);
+            const XrXirBlock *error=body->blocks+call->targets[1];
+            CHECK(error->count>2 && error->first==route->error-body->parameter_count &&
+                (uint64_t)error->first+error->count-1==route->edge);
+            CHECK(body->instructions[error->first].op==XR_XIR_INVOKE_ERROR &&
+                body->instructions[error->first].immediate==route->instruction &&
+                body->instructions[route->edge].op==XR_XIR_JUMP);
+            for (uint32_t i=error->first+1;i<route->edge;++i)
+                CHECK(body->instructions[i].op==XR_XIR_VIEW_CLEANUP &&
+                    !observed->points[i].statement && !observed->points[i].flags);
+            invocation=true;
+        }
+        CHECK(invocation && local_throw);
     }
 }
 

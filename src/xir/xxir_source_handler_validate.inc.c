@@ -179,9 +179,16 @@ static XrXirStatus source_debug_handler_validate(XrCompileResources *resources,
                 route->error-body->parameter_count>=body->instruction_count) return XR_XIR_BAD_STRUCTURE;
             const XrXirBlock *error=&body->blocks[call->targets[1]];
             const XrXirInstruction *value=&body->instructions[route->error-body->parameter_count];
-            if (error->count!=2 || error->first!=route->error-body->parameter_count ||
-                (uint64_t)error->first+1!=route->edge || value->op!=XR_XIR_INVOKE_ERROR ||
+            if (error->count<2 || error->first!=route->error-body->parameter_count ||
+                error->count>body->instruction_count-error->first ||
+                (uint64_t)error->first+error->count-1!=route->edge || value->op!=XR_XIR_INVOKE_ERROR ||
                 value->immediate!=route->instruction) return XR_XIR_BAD_STRUCTURE;
+            for (uint32_t i=error->first+1;i<route->edge;++i) {
+                const XrXirInstruction *cleanup=body->instructions+i;
+                if (!source_handler_validation_work(resources,(uint64_t)sizeof(*cleanup)+cleanup->args[1])) return XR_XIR_BUDGET;
+                if (!source_handler_cleanup_shape(body,cleanup) || function->points[i].statement ||
+                    function->points[i].flags) return XR_XIR_BAD_STRUCTURE;
+            }
         } else if (route->edge!=route->instruction) return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status=source_handler_edge_validate(resources,body,&function->handlers[route->handler-1],route->edge,route->error,route->input);
         if (status!=XR_XIR_OK) return status;
