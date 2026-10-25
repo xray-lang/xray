@@ -192,7 +192,23 @@ static XrXirStatus error_row_active(const ErrorFlow *flow, uint32_t value, bool 
     if (value >= flow->function->parameter_count) {
         XrXirInstruction storage;const XrXirInstruction *actual=NULL;
         EffectBodyInstructionFields fields;
-        XrXirStatus status=effect_body_request_fields(&flow->body,flow->function_index,
+        XrXirStatus status=XR_XIR_OK;
+        if(flow->body.current && effect_body_request_sequence_owned(&flow->body)) {
+            if(!effect_body_read_work(&flow->body.read,3*sizeof(uint32_t))) return XR_XIR_BUDGET;
+            const EffectBodyRun *ref=NULL;uint32_t words[3]={0};
+            uint32_t instruction=value-flow->function->parameter_count;
+            status=effect_body_current_record(&flow->body,flow->function_index,instruction,&ref);
+            if(status==XR_XIR_OK) status=effect_body_run_word(&flow->body.read,ref,instruction,0,words);
+            if(status==XR_XIR_OK && !effect_body_read_work(&flow->body.read,2)) status=XR_XIR_BUDGET;
+            if(status==XR_XIR_OK && (words[0]<=XR_XIR_INVALID || words[0]>=XR_XIR_OP_COUNT))
+                status=XR_XIR_BAD_STRUCTURE;
+            if(status==XR_XIR_OK) status=effect_body_run_word(&flow->body.read,ref,instruction,1,words+1);
+            if(status==XR_XIR_OK) status=effect_body_run_word(&flow->body.read,ref,instruction,2,words+2);
+            if(status==XR_XIR_OK && !effect_body_read_work(&flow->body.read,sizeof(fields)+2))
+                status=XR_XIR_BUDGET;
+            if(status==XR_XIR_OK)
+                fields=(EffectBodyInstructionFields){(XrXirOp)words[0],(XrXirType)words[1],words[2]};
+        } else status=effect_body_request_fields(&flow->body,flow->function_index,
             value-flow->function->parameter_count,&storage,&actual,&fields);
         if (status!=XR_XIR_OK) return status;
         if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
