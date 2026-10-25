@@ -31,7 +31,7 @@
     "fn cleanup_scalar()->i64{return 7}\n" \
     "fn invoke_cleanup(fail:bool)->i64{var root:Array<u8>=[8];const v:Slice<u8>=root[0:1];" \
     "try{const n=cleanup_scalar();if(fail){throw CleanupError.Failed};return len(v)+n}catch(CleanupError.Failed){root=[9];return 11}}\n"
-static const char library_text[]=SLICE_INVOKE_CLEANUP_SOURCE "export fn read(v:Slice<u8>)->i64{if(v[0]!=8){return -10};return len(v)}\nexport fn readFunction()->fn(Slice<u8>)->i64{return read}\nexport fn ignored(a:Array<u8>){const v:Slice<u8>=a[1:2]}\nexport fn run()->i64{if(invoke_cleanup(false)!=8){return -20};if(invoke_cleanup(true)!=11){return -21};var a:Array<u8>=[7,8,9];const v:Slice<u8>=a[1:2];const copy=v;const reader=readFunction();const n=reader(copy);ignored(a);a=[40];return n}\n";
+static const char library_text[]="export fn read(v:Slice<u8>)->i64{if(v[0]!=8){return -10};return len(v)}\nexport fn readFunction()->fn(Slice<u8>)->i64{return read}\nexport fn ignored(a:Array<u8>){const v:Slice<u8>=a[1:2]}\nexport fn run()->i64{var a:Array<u8>=[7,8,9];const v:Slice<u8>=a[1:2];const copy=v;const reader=readFunction();const n=reader(copy);ignored(a);a=[40];return n}\n";
 static const char source_text[]=SLICE_INVOKE_CLEANUP_SOURCE "export fn read(v:Slice<u8>)->i64{if(v[0]!=8){return -10};return len(v)}\nexport fn readFunction()->fn(Slice<u8>)->i64{return read}\nexport fn ignored(a:Array<u8>){const v:Slice<u8>=a[1:2]}\nexport fn run()->i64{if(invoke_cleanup(false)!=8){return -20};if(invoke_cleanup(true)!=11){return -21};var a:Array<u8>=[7,8,9];const v:Slice<u8>=a[1:2];const copy=v;const reader=readFunction();const n=reader(copy);ignored(a);a=[40];return n}\nexport fn receiver()->i64{return run()}\n";
 static uint32_t named(const XrXirModule *module,const char *name) {
     for (uint32_t f=0;f<module->function_count;++f)
@@ -70,7 +70,7 @@ static void inspect(const XrXirModule *module) {
         }
     }
 }
-static void snapshot_debug(const XrXirSourceResult *source,bool local_source) {
+static void snapshot_debug(const XrXirSourceResult *source,bool local_source,bool invocation_fixture) {
     const XrXirModule *module=xr_xir_compile_artifact_module(source->checked);
     const XrXirSourceDebugView *debug=xr_xir_compile_source_snapshot_debug(source->snapshot);
     CHECK(debug && debug->function_count==module->function_count);
@@ -78,14 +78,13 @@ static void snapshot_debug(const XrXirSourceResult *source,bool local_source) {
     const XrXirSourceDebugFunction *row=debug->functions+f;
     CHECK(row->instruction_count==function->instruction_count);
     if (local_source) CHECK(row->points);
-    if (!row->points) return;
-    for (uint32_t i=0;i<function->instruction_count;++i) {
+    if (row->points) for (uint32_t i=0;i<function->instruction_count;++i) {
         if (function->instructions[i].op==XR_XIR_VIEW_CLEANUP)
             CHECK(!row->points[i].statement && !row->points[i].flags);
         if (function->instructions[i].op==XR_XIR_VIEW_NEW)
             CHECK(row->points[i].statement && row->points[i].range.line>0);
     }
-    if (local_source) {
+    if (invocation_fixture) {
         uint32_t invoked=named(module,"invoke_cleanup"),scalar=named(module,"cleanup_scalar");
         const XrXirFunction *body=module->functions+invoked;
         const XrXirSourceDebugFunction *observed=debug->functions+invoked;
@@ -120,7 +119,7 @@ static void snapshot_debug(const XrXirSourceResult *source,bool local_source) {
 
 static XrXirArtifact *replay_source(const XrXirCompileContext *context,
     XrXirSourceResult *source,uint8_t identity[32],bool local_source) {
-    inspect(xr_xir_compile_artifact_module(source->checked));snapshot_debug(source,local_source);
+    inspect(xr_xir_compile_artifact_module(source->checked));snapshot_debug(source,local_source,true);
     XrXirCheckedPacket packet={0};XrXirArtifact *read=NULL,*closed=NULL;
     CHECK(xr_xir_compile_checked_write(source->checked,&packet,NULL)==XR_XIR_OK);
     xr_sha256(packet.bytes,packet.length,identity);
@@ -149,7 +148,7 @@ static void cold_source(const XrXirSourceRequest *request,const char *path,char 
     XrXirStatus status=xr_xir_compile_source_check_text(request,&input,source,&diagnostic,NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"cold %s status=%u %d:%d %s\n",path,status,
         diagnostic.line,diagnostic.column,diagnostic.message);
-    CHECK(status==XR_XIR_OK && source->checked && source->snapshot);snapshot_debug(source,request->linkage_kind==XR_XIR_LIBRARY);
+    CHECK(status==XR_XIR_OK && source->checked && source->snapshot);snapshot_debug(source,request->linkage_kind==XR_XIR_LIBRARY,request->linkage_kind==XR_XIR_PROGRAM);
     memset(text,0xa5,input.length);
 }
 static XrXirArtifact *cold_fixture(const XrXirCompileContext *context,uint8_t identity[32]) {
@@ -180,7 +179,8 @@ static XrXirArtifact *cold_fixture(const XrXirCompileContext *context,uint8_t id
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
     request.session=session;request.entry_path=root;request.linkage_kind=XR_XIR_PROGRAM;request.libraries=catalog;
-    const char consumer[]= "import {run} from \"./lib\"\nexport fn receiver()->i64{return run()}";
+    const char consumer[]= "import {run} from \"./lib\"\n" SLICE_INVOKE_CLEANUP_SOURCE
+        "export fn receiver()->i64{if(invoke_cleanup(false)!=8){return -20};if(invoke_cleanup(true)!=11){return -21};return run()}";
     char consumer_text[sizeof(consumer)];
     strcpy(consumer_text,consumer);
     XrXirSourceResult received={0};cold_source(&request,"root.xr",consumer_text,&received);
