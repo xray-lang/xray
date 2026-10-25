@@ -125,6 +125,18 @@ static inline XrXirStatus error_equation_value(const EffectErrorEquationRead *re
         bool cell=xr_xir_type_is_cell(read->body.domain.types,type),follow=false;
         while (cursor>first) {
             uint32_t i=--cursor;XrXirInstruction op;
+            if(read->body.current && effect_body_request_sequence_owned(&read->body)) {
+                XrXirOp opcode=XR_XIR_INVALID;
+                status=error_equation_current_opcode(read,i,&opcode);
+                if(status!=XR_XIR_OK) return status;
+                if(!xir_compile_work(read->work,8)) return XR_XIR_BUDGET;
+                if(cell && error_equation_invalidates_cells(opcode))
+                    return error_equation_type_word(read,type,word,output);
+                bool writes=opcode==XR_XIR_LOCAL_WRITE || opcode==XR_XIR_OWNED_LOCAL_WRITE ||
+                    opcode==XR_XIR_SCALAR_LOCAL_WRITE || (cell && opcode==XR_XIR_CELL_WRITE);
+                if(!writes && (value!=(uint64_t)read->head.parameter_count+i || opcode==XR_XIR_PHI))
+                    continue;
+            }
             status=error_equation_operation(read,i,&op);
             if (status!=XR_XIR_OK) return status;
             if (!xir_compile_work(read->work,8)) return XR_XIR_BUDGET;
