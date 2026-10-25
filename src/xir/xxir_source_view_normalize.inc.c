@@ -29,6 +29,66 @@ static bool source_view_value(SourceContext *ctx,const XirViewNormalizedFunction
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Source lifetime value identity is invalid");
     *value=map->values[*value];return true;
 }
+static bool source_view_instruction(SourceContext *ctx,const XirViewNormalizedFunction *map,
+    uint32_t parameters,uint32_t *instruction) {
+    if (*instruction==UINT32_MAX) return true;
+    if (*instruction>=map->old_instructions)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Source lifetime instruction identity is invalid");
+    uint32_t value=parameters+*instruction;
+    if (!source_view_value(ctx,map,parameters,&value)) return false;
+    *instruction=value-parameters;return true;
+}
+static bool source_view_debug_handlers(SourceContext *ctx,const XirViewNormalizedFunction *map,
+    uint32_t parameters,SourceFunction *body) {
+    XrXirSourceDebugHandler *handlers=source_view_copy(ctx,body->debug_handlers,body->handler_count,sizeof(*handlers));
+    XrXirSourceDebugRoute *routes=source_view_copy(ctx,body->debug_routes,body->route_count,sizeof(*routes));
+    if ((body->handler_count && !handlers) || (body->route_count && !routes)) return false;
+    for (uint32_t h=0;h<body->handler_count;++h) {
+        if (!source_work(ctx,NULL) || !source_view_value(ctx,map,parameters,&handlers[h].error) ||
+            !source_view_instruction(ctx,map,parameters,&handlers[h].propagation)) return false;
+        XrXirSourceDebugSelector *selectors=source_view_copy(ctx,handlers[h].selectors,
+            handlers[h].selector_count,sizeof(*selectors));
+        if (handlers[h].selector_count && !selectors) return false;
+        for (uint32_t s=0;s<handlers[h].selector_count;++s) {
+            if (!source_work(ctx,NULL) || !source_view_instruction(ctx,map,parameters,&selectors[s].first) ||
+                !source_view_instruction(ctx,map,parameters,&selectors[s].accepted) ||
+                !source_view_instruction(ctx,map,parameters,&selectors[s].rejected)) return false;
+        }
+        handlers[h].selectors=selectors;
+    }
+    for (uint32_t r=0;r<body->route_count;++r) {
+        if (!source_work(ctx,NULL) || !source_view_instruction(ctx,map,parameters,&routes[r].instruction) ||
+            !source_view_instruction(ctx,map,parameters,&routes[r].edge) ||
+            !source_view_value(ctx,map,parameters,&routes[r].error)) return false;
+    }
+    body->debug_handlers=handlers;body->debug_routes=routes;return true;
+}
+static bool source_view_debug(SourceContext *ctx,uint32_t f,const XirViewNormalization *n,SourceFunction *body) {
+    const XrXirFunction *old=ctx->functions+f,*function=n->bodies+f;
+    const XirViewNormalizedFunction *map=n->functions+f;
+    if (body->debug_points) {
+        XrXirSourceDebugPoint *points=source_alloc(ctx,function->instruction_count,sizeof(*points));
+        if (!points) return false;
+        for (uint32_t i=0;i<old->instruction_count;++i) {
+            if (!source_work_units(ctx,NULL,sizeof(*points))) return false;
+            uint32_t destination=map->values[old->parameter_count+i]-old->parameter_count;
+            points[destination]=body->debug_points[i];
+        }
+        body->debug_points=points;
+    }
+    XrXirSourceDebugBinding *bindings=source_view_copy(ctx,body->debug_bindings,
+        body->debug_binding_count,sizeof(*bindings));
+    XrXirSourceDebugThrow *throws=source_view_copy(ctx,body->debug_throws,body->throw_count,sizeof(*throws));
+    if ((body->debug_binding_count && !bindings) || (body->throw_count && !throws)) return false;
+    for (uint32_t b=0;b<body->debug_binding_count;++b)
+        if (!source_work(ctx,NULL) || !source_view_value(ctx,map,old->parameter_count,&bindings[b].value)) return false;
+    for (uint32_t t=0;t<body->throw_count;++t) {
+        if (!source_work(ctx,NULL) || !source_view_instruction(ctx,map,old->parameter_count,&throws[t].instruction) ||
+            !source_view_value(ctx,map,old->parameter_count,&throws[t].operand)) return false;
+    }
+    body->debug_bindings=bindings;body->debug_throws=throws;
+    return source_view_debug_handlers(ctx,map,old->parameter_count,body);
+}
 static bool source_view_roots(SourceContext *ctx,uint32_t f,const XirViewNormalization *n,SourceFunction *body) {
     const XrXirFunction *old=ctx->functions+f,*function=n->bodies+f;
     const XirViewNormalizedFunction *map=n->functions+f;
@@ -174,8 +234,36 @@ static XrXirStatus source_view_access_failure(SourceContext *ctx,const XrXirModu
         diagnostic->function,block,diagnostic->instruction,xr_xir_op_name(op))!=XR_DIAG_OK) status=XR_XIR_BUDGET;
     source_fail(ctx,site,status,message);return ctx->diagnostic.status;
 }
+static XrXirStatus source_view_checked_copy(void *owner,const XrXirModule *module,
+    uint32_t function,bool *preserved) {
+    SourceContext *ctx=owner;
+    if (!ctx || !module || !preserved) return XR_XIR_BAD_STRUCTURE;
+    *preserved=false;
+    if (module->functions!=ctx->functions || module->function_count!=ctx->function_count ||
+        function>=ctx->function_count) return XR_XIR_BAD_STRUCTURE;
+    if (!source_work(ctx,NULL)) return ctx->diagnostic.status;
+    const SourceFunction *body=ctx->bodies+function;
+    if (!body->checked_library) return XR_XIR_OK;
+    if (body->module>=(uint32_t)ctx->graph->spec_count) return XR_XIR_BAD_STRUCTURE;
+    const XrModuleSpec *spec=ctx->graph->specs+body->module;
+    if (spec->representation!=XR_MODULE_CHECKED_LIBRARY) return XR_XIR_OK;
+    const XrXirArtifact *artifact=source_owned_artifact(spec);
+    if (!artifact) return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *library=xr_xir_compile_artifact_module(artifact);
+    const XrXirCompileContext *context=xr_xir_compile_artifact_context(artifact);
+    if (!artifact || !library || library->stage!=XR_XIR_CHECKED || library->linkage_kind!=XR_XIR_LIBRARY ||
+        !context || context->resources!=ctx->compile.resources) return XR_XIR_BAD_STRUCTURE;
+    SourceLibraryUnit *unit=source_library_unit(ctx,library);
+    if (!unit) return ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status;
+    if (unit->artifact!=artifact || unit->construction!=xr_xir_compile_artifact_construction(artifact) ||
+        body->node || body->recipes || body->parameters!=module->functions[function].parameters)
+        return XR_XIR_BAD_STRUCTURE;
+    *preserved=true;return XR_XIR_OK;
+}
 static XrXirStatus source_view_normalize(SourceContext *ctx,const XrXirModule *module,XrXirDiagnostic *diagnostic) {
-    XirViewNormalization *n=NULL;XrXirStatus status=xir_compile_view_normalize_verified(&ctx->compile,module,&n,diagnostic);
+    XirViewNormalization *n=NULL;
+    XirViewNormalizationSource source={module,ctx,source_view_checked_copy};
+    XrXirStatus status=xir_compile_view_normalize_source_verified(&ctx->compile,module,&source,&n,diagnostic);
     if (status!=XR_XIR_OK) return status;
     XrXirConstruction *construction=NULL;
     XrXirFunction *functions=source_alloc(ctx,ctx->function_capacity,sizeof(*functions));
@@ -192,7 +280,8 @@ static XrXirStatus source_view_normalize(SourceContext *ctx,const XrXirModule *m
         functions[f].blocks=source_view_copy(ctx,functions[f].blocks,functions[f].block_count,sizeof(*functions[f].blocks));
         functions[f].operands=source_view_copy(ctx,functions[f].operands,functions[f].operand_count,sizeof(*functions[f].operands));
         if (!functions[f].instructions || !functions[f].blocks || (functions[f].operand_count && !functions[f].operands) ||
-            !source_view_roots(ctx,f,n,bodies+f) || !source_view_regions(ctx,f,n,bodies+f)) goto source_failure;
+            !source_view_roots(ctx,f,n,bodies+f) || !source_view_regions(ctx,f,n,bodies+f) ||
+            !source_view_debug(ctx,f,n,bodies+f)) goto source_failure;
         bodies[f].count=functions[f].instruction_count;bodies[f].operands=(uint32_t *)functions[f].operands;
         bodies[f].operand_count=bodies[f].operand_capacity=functions[f].operand_count;
     }

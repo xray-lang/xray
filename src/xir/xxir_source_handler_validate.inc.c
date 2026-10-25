@@ -16,18 +16,50 @@ static bool source_selector_value(const XrXirFunction *body,const XrXirSourceDeb
     return value==handler->error || (value>=body->parameter_count &&
         value-body->parameter_count>=selector->first && value-body->parameter_count<instruction);
 }
-static bool source_selector_edge(const XrXirFunction *body,const XrXirSourceDebugSelector *selector,
-    uint32_t instruction,uint32_t block) {
-    if (!body->blocks || block>=body->block_count) return false;
-    uint32_t target=body->blocks[block].first;
-    return target>instruction && ((target>=selector->first && target<=selector->accepted) || target==selector->rejected);
+/* The caller has admitted this immutable function in its complete module.
+ * These checks classify synthetic cleanup; they grant no storage authority. */
+static bool source_handler_cleanup_shape(const XrXirFunction *body,const XrXirInstruction *op) {
+    if (op->op!=XR_XIR_VIEW_CLEANUP || op->type!=XR_XIR_UNIT || op->immediate ||
+        op->targets[0] || op->targets[1] || op->type_arguments[0] || op->type_arguments[1] ||
+        !op->args[1] || !body->operands || op->args[0]>body->operand_count ||
+        op->args[1]>body->operand_count-op->args[0]) return false;
+    for (uint32_t a=0;a<op->args[1];++a) {
+        uint32_t value=body->operands[op->args[0]+a];
+        if (value>=(uint64_t)body->parameter_count+body->instruction_count ||
+            (a && value<=body->operands[op->args[0]+a-1])) return false;
+    }
+    return true;
 }
-static XrXirStatus source_selector_validate(XrCompileResources *resources,const XrXirFunction *body,
+static XrXirStatus source_selector_edge(XrCompileResources *resources,
+    const XrXirSourceDebugFunction *function,const XrXirFunction *body,
+    const XrXirSourceDebugSelector *selector,uint32_t instruction,uint32_t block) {
+    if (!body->blocks || block>=body->block_count || !function->points) return XR_XIR_BAD_STRUCTURE;
+    const XrXirBlock *destination=body->blocks+block;
+    if (destination->first>body->instruction_count || !destination->count ||
+        destination->count>body->instruction_count-destination->first) return XR_XIR_BAD_STRUCTURE;
+    uint32_t target=destination->first,end=target+destination->count;
+    while (target<end && body->instructions[target].op==XR_XIR_VIEW_CLEANUP) {
+        const XrXirInstruction *cleanup=body->instructions+target;
+        if (!source_handler_validation_work(resources,(uint64_t)sizeof(*cleanup)+cleanup->args[1])) return XR_XIR_BUDGET;
+        if (!source_handler_cleanup_shape(body,cleanup) || function->points[target].statement ||
+            function->points[target].flags) return XR_XIR_BAD_STRUCTURE;
+        ++target;
+    }
+    return target<end && target>instruction && ((target>=selector->first && target<=selector->accepted) ||
+        target==selector->rejected)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+}
+static XrXirStatus source_selector_validate(XrCompileResources *resources,
+    const XrXirSourceDebugFunction *function,const XrXirFunction *body,
     const XrXirSourceDebugHandler *handler,const XrXirSourceDebugSelector *selector) {
     for (uint32_t i=selector->first;i<selector->accepted;++i) {
         if (!source_handler_validation_work(resources,sizeof(XrXirInstruction))) return XR_XIR_BUDGET;
         const XrXirInstruction *op=&body->instructions[i];uint32_t values=0;
         switch (op->op) {
+        case XR_XIR_VIEW_CLEANUP:
+            if (!source_handler_validation_work(resources,op->args[1])) return XR_XIR_BUDGET;
+            if (!source_handler_cleanup_shape(body,op) || function->points[i].statement ||
+                function->points[i].flags) return XR_XIR_BAD_STRUCTURE;
+            break;
         case XR_XIR_CONST_INT:case XR_XIR_CONST_FLOAT:case XR_XIR_CONST_BOOL:
         case XR_XIR_CONST_RUNE:case XR_XIR_CONST_STRING:break;
         case XR_XIR_ERROR_IS:case XR_XIR_ERROR_NARROW:
@@ -35,14 +67,18 @@ static XrXirStatus source_selector_validate(XrCompileResources *resources,const 
             values=1;break;
         case XR_XIR_ENUM_TAG:case XR_XIR_ENUM_GET:values=1;break;
         case XR_XIR_EQ_INT:case XR_XIR_LE_INT:case XR_XIR_GE_INT:case XR_XIR_EQUAL:values=2;break;
-        case XR_XIR_BRANCH:
-            if (!source_selector_edge(body,selector,i,op->targets[1])) return XR_XIR_BAD_STRUCTURE;
+        case XR_XIR_BRANCH: {
+            XrXirStatus status=source_selector_edge(resources,function,body,selector,i,op->targets[1]);
+            if (status!=XR_XIR_OK) return status;
             values=1;
             /* Both outgoing edges must remain in this explicit selector. */
+        }
             /* fall through */
-        case XR_XIR_JUMP:
-            if (!source_selector_edge(body,selector,i,op->targets[0])) return XR_XIR_BAD_STRUCTURE;
+        case XR_XIR_JUMP: {
+            XrXirStatus status=source_selector_edge(resources,function,body,selector,i,op->targets[0]);
+            if (status!=XR_XIR_OK) return status;
             break;
+        }
         case XR_XIR_PHI:
             if (!op->args[1] || op->args[1]%2 || !body->operands || !body->blocks ||
                 op->args[0]>body->operand_count || op->args[1]>body->operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;
@@ -107,7 +143,7 @@ static XrXirStatus source_debug_handler_validate(XrCompileResources *resources,
                 const XrXirInstruction *test=&body->instructions[selector->first];
                 if (test->op!=XR_XIR_ERROR_IS || test->args[0]!=handler->error) return XR_XIR_BAD_STRUCTURE;
             }
-            XrXirStatus status=source_selector_validate(resources,body,handler,selector);if (status!=XR_XIR_OK) return status;
+            XrXirStatus status=source_selector_validate(resources,function,body,handler,selector);if (status!=XR_XIR_OK) return status;
         }
         uint32_t rejected=handler->selectors[handler->selector_count-1].rejected;
         if (rejected!=handler->propagation) return XR_XIR_BAD_STRUCTURE;

@@ -7,7 +7,28 @@
  * xxir_vm_debug_selector.inc.c - Match owned Source selectors without frames
  */
 #include "xxir_vm_debug_selector_values.inc.c"
-static XrXirValueStatus debug_selector_match(DebugSelector *run,XrXirDomain *domain,bool *matches) {
+static XrXirValueStatus debug_selector_target(DebugSelector *run,XrXirVmDebug *debug,uint32_t block,uint32_t *output) {
+    const XrXirFunction *body=run->function;
+    if (!body->blocks || block>=body->block_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirBlock *destination=body->blocks+block;
+    if (destination->first>body->instruction_count || !destination->count ||
+        destination->count>body->instruction_count-destination->first) return XR_XIR_VALUE_BAD_ARGUMENT;
+    uint32_t target=destination->first,end=target+destination->count;
+    uint32_t function=(uint32_t)(body-run->module->functions);
+    while (target<end && body->instructions[target].op==XR_XIR_VIEW_CLEANUP) {
+        const XrXirInstruction *cleanup=body->instructions+target;
+        if (!xr_xir_domain_work(debug->domain,(uint64_t)sizeof(*cleanup)+cleanup->args[1])) return XR_XIR_VALUE_LIMIT;
+        DebugSourcePoint point=debug_source_point(debug,function,target);
+        if (!source_handler_cleanup_shape(body,cleanup) || point.statement || point.flags!=DEBUG_SOURCE_AUTHORED)
+            return XR_XIR_VALUE_BAD_ARGUMENT;
+        /* Observation advances a code coordinate without touching guest owners. */
+        ++target;
+    }
+    if (target==end) return XR_XIR_VALUE_BAD_ARGUMENT;
+    *output=target;return XR_XIR_VALUE_OK;
+}
+static XrXirValueStatus debug_selector_match(DebugSelector *run,XrXirVmDebug *debug,bool *matches) {
+    XrXirDomain *domain=debug->domain;
     uint32_t count=run->selector->accepted-run->selector->first;
     if (!count) { *matches=true;return XR_XIR_VALUE_OK; }
     if (!xr_xir_domain_work(domain,(uint64_t)count*2+1)) return XR_XIR_VALUE_LIMIT;
@@ -21,6 +42,15 @@ static XrXirValueStatus debug_selector_match(DebugSelector *run,XrXirDomain *dom
     run->predecessor=UINT32_MAX;
     while (instruction<run->selector->accepted) {
         const XrXirInstruction *op=&run->function->instructions[instruction];
+        if (op->op==XR_XIR_VIEW_CLEANUP) {
+            if (!xr_xir_domain_work(domain,(uint64_t)sizeof(*op)+op->args[1])) { status=XR_XIR_VALUE_LIMIT;break; }
+            uint32_t function=(uint32_t)(run->function-run->module->functions);
+            DebugSourcePoint point=debug_source_point(debug,function,instruction);
+            if (!source_handler_cleanup_shape(run->function,op) || point.statement || point.flags!=DEBUG_SOURCE_AUTHORED) {
+                status=XR_XIR_VALUE_BAD_ARGUMENT;break;
+            }
+            ++instruction;continue;
+        }
         if (op->op==XR_XIR_JUMP || op->op==XR_XIR_BRANCH) {
             if (!xr_xir_domain_work(domain,33)) { status=XR_XIR_VALUE_LIMIT;break; }
             uint32_t edge=0;
@@ -32,7 +62,8 @@ static XrXirValueStatus debug_selector_match(DebugSelector *run,XrXirDomain *dom
                 edge=value->payload ? 0 : 1;
             }
             run->predecessor=debug_selector_block(run->function,instruction);
-            uint32_t target=run->function->blocks[op->targets[edge]].first;
+            uint32_t target=0;status=debug_selector_target(run,debug,op->targets[edge],&target);
+            if (status!=XR_XIR_VALUE_OK) break;
             if (target==run->selector->rejected) { instruction=target;break; }
             if (target<=instruction || target>run->selector->accepted) { status=XR_XIR_VALUE_BAD_ARGUMENT;break; }
             instruction=target;continue;
@@ -76,7 +107,7 @@ static XrXirValueStatus debug_exception_function(XrXirVmDebug *debug,XrXirCallVi
             /* Existing Function/Cell/Class identities keep their real receiving
              * Domain and live admission. Observation owns only new scratch and
              * literal values; changing a receiver would reject legal payloads. */
-            bool matches=false;XrXirValueStatus status=debug_selector_match(&run,debug->domain,&matches);
+            bool matches=false;XrXirValueStatus status=debug_selector_match(&run,debug,&matches);
             if (status!=XR_XIR_VALUE_OK) return status;
             if (matches) {
                 result=(XirVmDebugExceptionLocal){XIR_VM_DEBUG_EXCEPTION_LOCAL_MATCH,function,handler,run.selector->accepted};

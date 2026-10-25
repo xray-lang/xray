@@ -1,0 +1,2 @@
+fn size()->i64{var root:Array<u8>=[11,22,33];const view:Slice<u8>=root[1:2];return len(view)}
+print(size())

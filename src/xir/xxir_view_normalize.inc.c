@@ -20,6 +20,7 @@ typedef struct ViewNormalizeFunction {
 } ViewNormalizeFunction;
 typedef struct ViewNormalize {
     const XrXirModule *module;
+    const XirViewNormalizationSource *source;
     ViewNormalizeFunction *plans;
     uint32_t marker;
 } ViewNormalize;
@@ -50,9 +51,19 @@ static XrXirStatus view_normalize_group(const XrXirCompileContext *context,
     }
     return XR_XIR_OK;
 }
+static XrXirStatus view_normalize_preserved(const ViewNormalize *n,uint32_t f,bool *preserved) {
+    *preserved=false;
+    if (!n->source) return XR_XIR_OK;
+    if (n->source->generation!=n->module || !n->source->owner || !n->source->checked_copy)
+        return XR_XIR_BAD_STRUCTURE;
+    return n->source->checked_copy(n->source->owner,n->module,f,preserved);
+}
 static XrXirStatus view_normalize_visit(void *user,const XrXirCompileContext *context,
     const XrXirViewLiveEvent *event) {
-    ViewNormalize *n=user;const XrXirFunction *f=&n->module->functions[event->function];
+    ViewNormalize *n=user;bool preserved=false;
+    XrXirStatus copy_status=view_normalize_preserved(n,event->function,&preserved);
+    if (copy_status!=XR_XIR_OK || preserved) return copy_status;
+    const XrXirFunction *f=&n->module->functions[event->function];
     ViewNormalizeFunction *plan=n->plans+event->function;XrXirStatus status=XR_XIR_OK;
     if (event->kind==XR_XIR_VIEW_LIVE_EDGE) return XR_XIR_OK;
     if (!plan->before) {
@@ -68,14 +79,14 @@ static XrXirStatus view_normalize_visit(void *user,const XrXirCompileContext *co
         }
         if (at<block->first+block->count) {
             XrXirOp op=f->instructions[at].op;
-            if (op==XR_XIR_PANIC_CATCH || op==XR_XIR_INVOKE_RESULT ||
+            if (op==XR_XIR_PANIC_CATCH || op==XR_XIR_ERROR_NARROW || op==XR_XIR_INVOKE_RESULT ||
                 op==XR_XIR_INVOKE_ERROR || op==XR_XIR_INVOKE_DISCARD) ++at;
         }
         n->marker=at;return XR_XIR_OK;
     }
     uint32_t i=event->instruction;const XrXirInstruction *op=f->instructions+i;
     if (i==n->marker) status=view_normalize_group(context,event,plan->before+i,true,UINT32_MAX);
-    bool selector=op->op==XR_XIR_PANIC_CATCH || op->op==XR_XIR_INVOKE_RESULT ||
+    bool selector=op->op==XR_XIR_PANIC_CATCH || op->op==XR_XIR_ERROR_NARROW || op->op==XR_XIR_INVOKE_RESULT ||
         op->op==XR_XIR_INVOKE_ERROR || op->op==XR_XIR_INVOKE_DISCARD;
     if (status==XR_XIR_OK && !view_normalize_terminals[op->op] && op->op!=XR_XIR_PHI && !selector)
         status=view_normalize_group(context,event,plan->after+i,false,f->parameter_count+i);
@@ -220,15 +231,21 @@ static XrXirStatus view_normalize_body(const XrXirCompileContext *context,
     XirViewRelocation relocation={module,source,destination,row->values,row->boundaries,0,0};
     return xir_compile_view_relocate(context,&relocation);
 }
-XR_FUNC XrXirStatus xir_compile_view_normalize_verified(const XrXirCompileContext *context,
-    const XrXirModule *module,XirViewNormalization **output,XrXirDiagnostic *diagnostic) {
+static XrXirStatus view_normalize_verified(const XrXirCompileContext *context,
+    const XrXirModule *module,const XirViewNormalizationSource *source,
+    XirViewNormalization **output,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !module || !output || *output ||
         !module->function_count || !module->functions) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t f=0;f<module->function_count;++f) for (uint32_t i=0;i<module->functions[f].instruction_count;++i) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-        if (module->functions[f].instructions[i].op==XR_XIR_VIEW_CLEANUP) return XR_XIR_BAD_STAGE;
+    XrXirStatus status=XR_XIR_OK;ViewNormalize builder={.module=module,.source=source};
+    for (uint32_t f=0;f<module->function_count;++f) {
+        bool preserved=false;status=view_normalize_preserved(&builder,f,&preserved);
+        if (status!=XR_XIR_OK) return status;
+        for (uint32_t i=0;i<module->functions[f].instruction_count;++i) {
+            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+            if (!preserved && module->functions[f].instructions[i].op==XR_XIR_VIEW_CLEANUP)
+                return XR_XIR_BAD_STAGE;
+        }
     }
-    XrXirStatus status=XR_XIR_OK;ViewNormalize builder={.module=module};
     XirViewNormalization *n=xir_compile_calloc(context,1,sizeof(*n),&status);
     if (!n) return status;n->module=*module;
     builder.plans=xir_compile_calloc(context,module->function_count,sizeof(*builder.plans),&status);
@@ -236,10 +253,21 @@ XR_FUNC XrXirStatus xir_compile_view_normalize_verified(const XrXirCompileContex
     n->bodies=xir_compile_copy(context,module->functions,(size_t)module->function_count*sizeof(*n->bodies),&status);
     if (status==XR_XIR_OK) status=xir_compile_view_liveness_verified(context,module,view_normalize_visit,&builder,diagnostic);
     for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f) {
-        status=view_normalize_body(context,module,f,builder.plans+f,n);
+        bool preserved=false;status=view_normalize_preserved(&builder,f,&preserved);
+        if (status==XR_XIR_OK && !preserved) status=view_normalize_body(context,module,f,builder.plans+f,n);
         if (diagnostic && status!=XR_XIR_OK) *diagnostic=(XrXirDiagnostic){status,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     }
     view_normalize_plans_free(&builder);
     if (status!=XR_XIR_OK) {xir_compile_view_normalization_free(n);return status;}
     n->module.functions=n->bodies;*output=n;return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xir_compile_view_normalize_verified(const XrXirCompileContext *context,
+    const XrXirModule *module,XirViewNormalization **output,XrXirDiagnostic *diagnostic) {
+    return view_normalize_verified(context,module,NULL,output,diagnostic);
+}
+XR_FUNC XrXirStatus xir_compile_view_normalize_source_verified(const XrXirCompileContext *context,
+    const XrXirModule *module,const XirViewNormalizationSource *source,
+    XirViewNormalization **output,XrXirDiagnostic *diagnostic) {
+    if (!source) return XR_XIR_BAD_STRUCTURE;
+    return view_normalize_verified(context,module,source,output,diagnostic);
 }

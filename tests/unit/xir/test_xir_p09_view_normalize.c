@@ -32,12 +32,12 @@ static void norm_fixture(NormalizeFixture *f) {
     f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)N_MUT};
     f->types=(XrXirTypes){f->nodes,3,NULL,NULL};
     for (uint32_t i=0;i<4;++i) f->functions[i]=(XrXirFunction){
-        "body",4,NULL,0,XR_XIR_UNIT,f->blocks[i],1,f->ops[i],0,NULL,0};
+        "body",4,NULL,0,XR_XIR_UNIT,f->blocks[i],1,f->ops[i],0,NULL,0,XR_XIR_NEVER};
     norm_op(f,0,(XrXirInstruction){.op=XR_XIR_RETURN});
     uint32_t value=norm_op(f,1,(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64});
     norm_op(f,1,(XrXirInstruction){.op=XR_XIR_RETURN,.args={value}});f->functions[1].result=XR_XIR_I64;
     norm_op(f,3,(XrXirInstruction){.op=XR_XIR_RETURN});
-    f->source=(XrXirSourceModule){"root",4,NULL,0,0};
+    f->source=(XrXirSourceModule){"root",4,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations=(XrXirDeclarations){&f->source,1,f->identities,NULL,0,NULL,0,0,1,NULL};
     f->module=(XrXirModule){XR_XIR_BUILT,f->functions,4,&f->declarations,NULL,&f->types,NULL,XR_XIR_PROGRAM,NULL};
     f->parameters[2][0]=(XrXirType)N_SHARED;f->functions[2].parameters=f->parameters[2];f->functions[2].parameter_count=1;

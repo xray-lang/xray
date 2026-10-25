@@ -711,6 +711,27 @@
         "feature": "F10",
         "first_diagnostic": "stdlib/yaml/yaml.xr:159:4: error: type declaration is not admitted by XIR (kind 13)"
       }
+    },
+    {
+      "id": "demos/07-advanced/readonly_byte_slice.xr",
+      "path": "demos/07-advanced/readonly_byte_slice.xr",
+      "mode": "run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
+    },
+    {
+      "id": "native:demos/07-advanced/readonly_byte_slice.xr",
+      "path": "demos/07-advanced/readonly_byte_slice.xr",
+      "mode": "build-run",
+      "expect": "gap",
+      "exit_code": null,
+      "stdout": "tests/smoke/expected/one.txt",
+      "gap": {
+        "feature": "Task328 P2",
+        "first_diagnostic": null,
+        "deferred": "Task328 P2 direct-C path is not integrated; legacy native output is not its acceptance evidence"
+      }
     }
   ]
 }

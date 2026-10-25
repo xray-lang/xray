@@ -1852,6 +1852,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     emit_checked_identity(buffer);
     EMIT_LITERAL(buffer,"#include \"xir/xxir_call_native_source_internal.h\"\n");
     EMIT_LITERAL(buffer,"#include \"xir/xxir_call_view_operation_internal.h\"\n");
+    EMIT_LITERAL(buffer,"#include \"xir/xxir_call_view_moves_internal.h\"\n");
     append(buffer,"_Static_assert(XIR_CALL_NATIVE_SOURCE_VERSION==%uu,\"native source observation version\");\n",XIR_CALL_NATIVE_SOURCE_VERSION);
     EMIT_FORMAT(buffer, et_403de8a738e2f845, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_generator_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"

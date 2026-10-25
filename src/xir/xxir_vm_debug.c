@@ -451,6 +451,9 @@ static XrXirValueStatus copy_frame_values(XrXirVmDebug *debug, const DebugFrame 
         if (live->point.layout->offsets[i] == UINT32_MAX) continue;
         XrXirType type = xr_xir_operand_type(function, i);
         if (type == XR_XIR_UNIT) continue;
+        const XrXirTypeNode *node=xr_xir_type_node(module->types,type);
+        /* A detached snapshot cannot retain a live borrowed byte view. */
+        if (node && node->kind==XR_XIR_TYPE_SLICE && node->element==XR_XIR_U8) continue;
         XrXirValue value = {(uint32_t)type, 0,
             xr_xir_scalar_load(live->point.frame, live->point.layout->offsets[i])};
         /* A moved owned slot is canonical empty storage, not a readable value. */
