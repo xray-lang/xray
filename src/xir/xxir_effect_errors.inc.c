@@ -204,10 +204,9 @@ static XrXirStatus error_row_active(const ErrorFlow *flow, uint32_t value, bool 
                 status=XR_XIR_BAD_STRUCTURE;
             if(status==XR_XIR_OK) status=effect_body_run_word(&flow->body.read,ref,instruction,1,words+1);
             if(status==XR_XIR_OK) status=effect_body_run_word(&flow->body.read,ref,instruction,2,words+2);
-            if(status==XR_XIR_OK && !effect_body_read_work(&flow->body.read,sizeof(fields)+2))
-                status=XR_XIR_BUDGET;
-            if(status==XR_XIR_OK)
-                fields=(EffectBodyInstructionFields){(XrXirOp)words[0],(XrXirType)words[1],words[2]};
+            if(status!=XR_XIR_OK) return status;
+            if(!effect_body_read_work(&flow->body.read,sizeof(fields)+2)) return XR_XIR_BUDGET;
+            fields=(EffectBodyInstructionFields){(XrXirOp)words[0],(XrXirType)words[1],words[2]};
         } else status=effect_body_request_fields(&flow->body,flow->function_index,
             value-flow->function->parameter_count,&storage,&actual,&fields);
         if (status!=XR_XIR_OK) return status;
