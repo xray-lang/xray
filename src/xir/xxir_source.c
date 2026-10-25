@@ -1136,6 +1136,8 @@ static bool source_hash_for_each(SourceContext *ctx, AstNode *node, const Source
 #include "xxir_source_index.inc.c"
 static bool source_string_owned_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
     const XrNativeMemberDeclaration *member,SourceValue *value);
+static bool source_string_value_reference(SourceContext *ctx,AstNode *node,
+    const XrNativeMemberDeclaration *member,XrXirType result);
 #include "xxir_source_string.inc.c"
 #include "xxir_source_decimal.inc.c"
 static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,
@@ -1335,6 +1337,11 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                         xr_xir_type_is_cell(&ctx->types,ctx->functions[ref_method->index].parameters[0]))
                         return source_ref_method_call(ctx, node, member->object, ref_method, result_context, value);
                 }
+            }
+            if (path_type==XR_XIR_STRING) {
+                bool handled=false;
+                if (!source_string_borrowed_call(ctx,node,&handled,value)) return false;
+                if (handled) return true;
             }
             if (!expression(ctx, member->object, &receiver)) return false;
             if(source_stringbuilder_type(ctx,receiver.type)) return source_stringbuilder_call(ctx,node,receiver,value);

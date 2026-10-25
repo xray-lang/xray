@@ -149,16 +149,17 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             self.assertEqual(entry["operation"], member.operation)
             self.assertEqual(entry["xir_admitted"], member.name in {
                 "contains", "startsWith", "endsWith", "indexOf", "lastIndexOf", "toString", "repeat",
-                "copyBytes", "replace", "replaceAll"})
+                "bytes", "copyBytes", "replace", "replaceAll"})
             if entry["xir_admitted"]:
-                self.assertEqual(entry["allocation"], "may_heap" if member.name in {"repeat", "copyBytes", "replace", "replaceAll"} else "no_heap")
+                self.assertEqual(entry["allocation"], "may_heap" if member.name in {"repeat", "bytes", "copyBytes", "replace", "replaceAll"} else "no_heap")
                 failures = {"indexOf": ["bounds", "limit"], "lastIndexOf": ["limit"],
                             "toString": ["retain"], "repeat": ["allocation", "retain", "limit"],
+                            "bytes": ["allocation", "retain", "limit"],
                             "copyBytes": ["allocation", "retain", "limit"],
                             "replace": ["allocation", "retain", "limit"],
                             "replaceAll": ["allocation", "retain", "limit"]}
                 self.assertEqual(entry["failures"], failures.get(member.name, []))
-                self.assertEqual(entry["ownership"], "owned")
+                self.assertEqual(entry["ownership"], "borrowed" if member.name=="bytes" else "owned")
         with self.assertRaises(ValueError):
             inventory.collect_native_declaration(ROOT, path,
                 source.replace("contains(search: string)", "contains(search: i64)"), "stdlib", "string")

@@ -36,6 +36,7 @@ struct string {
     // @native-operation STRING_COPY_BYTES allocation=may_heap failures=allocation,retain,limit ownership=owned
     copyBytes() -> Array<u8>
     // Borrowed UTF-8 bytes; readonly because strings are immutable.
+    // @native-operation STRING_BYTES allocation=may_heap failures=allocation,retain,limit ownership=borrowed
     // @lowered
     bytes() -> Slice<u8>
     runes() -> Iterator<rune>

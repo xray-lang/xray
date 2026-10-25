@@ -1,0 +1,52 @@
+// Complete cluster naming helpers and their real callers keep their original bodies.
+fn _asciiPrintable(s: string) -> bool {
+    const b: Slice<u8> = s.bytes()
+    for (var i = 0; i < len(b); i++) {
+        var c = b[i] as i64
+        if (c < 0x20 || c > 0x7E) { return false }
+    }
+    return true
+}
+
+fn _containsZeroByte(s: string) -> bool {
+    const b: Slice<u8> = s.bytes()
+    for (var i = 0; i < len(b); i++) {
+        if (b[i] == 0) { return true }
+    }
+    return false
+}
+
+fn _fitsCString(s: string, maxBytes: i64, allowEmpty: bool) -> bool {
+    const b: Slice<u8> = s.bytes()
+    if ((!allowEmpty && len(b) == 0) || len(b) > maxBytes) { return false }
+    return !_containsZeroByte(s)
+}
+
+fn _validName(s: string, maxLen: i64) -> bool {
+    return len(s) > 0 && len(s) <= maxLen && _asciiPrintable(s)
+}
+
+export fn printableName(s: string, maxLen: i64) -> bool { const check = _validName; return check(s, maxLen) }
+export fn cStringName(s: string, maxBytes: i64, allowEmpty: bool) -> bool { return _fitsCString(s, maxBytes, allowEmpty) }
+export fn discardBytes(s: string) { s.bytes() }
+export fn scalarBytes(s: string) -> i64 { s.bytes(); return 17 }
+
+// TEST-CONSUMER
+fn _refBytes(s: ref string) -> i64 {
+    const b: Slice<u8> = s.bytes()
+    const copy: Slice<u8> = b
+    var seen = 0
+    try {
+        if (len(b) > 0) { seen = b[0] as i64 }
+        const zero = len(b) - len(copy)
+        seen += 10 / zero
+    } catch panic {
+        if (len(copy) > 0) { seen += copy[0] as i64 }
+    }
+    return seen
+}
+export fn refAndPanic(s: string) -> i64 { var owner = s; return _refBytes(ref owner) }
+
+// TEST-ENTRY
+print(printableName("alpha", 8), printableName("a\0b", 8), printableName("é", 8))
+print(cStringName("", 8, true), cStringName("", 8, false), cStringName("a\0b", 8, true))

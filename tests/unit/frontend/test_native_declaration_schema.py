@@ -223,11 +223,12 @@ class NativeDeclarations(unittest.TestCase):
         for member in members:
             self.assertTrue(rows[member.line - 1][member.column - 1:].startswith(member.name))
         admitted = [m for m in members if m.operation != 'NONE']
-        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf', 'toString', 'repeat', 'copyBytes', 'replace', 'replaceAll'})
+        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf', 'toString', 'repeat', 'bytes', 'copyBytes', 'replace', 'replaceAll'})
         for member in admitted:
-            self.assertEqual(schema.simple_term(member.result, ''), 'I64' if member.name in {'indexOf', 'lastIndexOf'} else 'ARRAY_U8' if member.name=='copyBytes' else 'STRING' if member.name in {'toString','repeat','replace','replaceAll'} else 'BOOL')
-            self.assertEqual(member.allocation, 'may_heap' if member.name in {'repeat','copyBytes','replace','replaceAll'} else 'no_heap')
-            self.assertEqual(member.failures, {'indexOf':'bounds,limit','lastIndexOf':'limit','toString':'retain','repeat':'allocation,retain,limit','copyBytes':'allocation,retain,limit','replace':'allocation,retain,limit','replaceAll':'allocation,retain,limit'}.get(member.name,'none'))
+            self.assertEqual(schema.simple_term(member.result, ''), 'I64' if member.name in {'indexOf', 'lastIndexOf'} else 'SLICE_U8' if member.name=='bytes' else 'ARRAY_U8' if member.name=='copyBytes' else 'STRING' if member.name in {'toString','repeat','replace','replaceAll'} else 'BOOL')
+            self.assertEqual(member.allocation, 'may_heap' if member.name in {'repeat','bytes','copyBytes','replace','replaceAll'} else 'no_heap')
+            self.assertEqual(member.failures, {'indexOf':'bounds,limit','lastIndexOf':'limit','toString':'retain','repeat':'allocation,retain,limit','bytes':'allocation,retain,limit','copyBytes':'allocation,retain,limit','replace':'allocation,retain,limit','replaceAll':'allocation,retain,limit'}.get(member.name,'none'))
+            self.assertEqual(member.ownership, 'borrowed' if member.name=='bytes' else 'owned')
         self.assertNotIn('xr_native_def_string[]', embed.render(ROOT / 'stdlib/types'))
         for before, after in [('struct string', 'class string'), ('id=2', 'id=1'),
                               ('struct string {', 'struct string<T> {'),
@@ -243,6 +244,9 @@ class NativeDeclarations(unittest.TestCase):
                               ('failures=bounds,limit', 'failures=none'),
                               ('repeat(count: i64)', 'repeat(count: u64)'),
                               ('toString() -> string', 'ref toString() -> string'),
+                              ('bytes() -> Slice<u8>', 'bytes() -> MutSlice<u8>'),
+                              ('bytes() -> Slice<u8>', 'ref bytes() -> Slice<u8>'),
+                              ('ownership=borrowed', 'ownership=owned'),
                               ('STRING_REPEAT allocation=may_heap', 'STRING_REPEAT allocation=no_heap')]:
             with self.subTest(before=before), self.assertRaises(ValueError):
                 schema.parse_source(source.replace(before, after), self.prelude)
@@ -340,7 +344,8 @@ class NativeDeclarations(unittest.TestCase):
                              'stdlib/types/coroutine.xr', 'stdlib/types/channel.xr', 'stdlib/types/iterator.xr',
                              'stdlib/types/i64.xr', 'stdlib/types/f64.xr', 'stdlib/types/bool.xr',
                              'stdlib/types/rune.xr', 'stdlib/types/map.xr', 'stdlib/types/set.xr',
-                             'stdlib/types/stringbuilder.xr', 'stdlib/prelude/builtin_symbols.def']:
+                             'stdlib/types/stringbuilder.xr', 'stdlib/prelude/builtin_symbols.def',
+                             'stdlib/prelude/range.xr']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())
@@ -453,7 +458,7 @@ class NativeDeclarations(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(self.prelude, encoding='utf-8')
             _, rows = schema.channel_result_rows(root)
-            self.assertEqual(rows[-2:], [
+            self.assertEqual([row for row in rows if row[0] in ('Recv', 'SendResult')], [
                 ('Recv', 'RECV', [('Value', 'TYPE_PARAM_0'), ('Empty', 'NONE'),
                                   ('Timeout', 'NONE'), ('Closed', 'NONE')], 7, 1),
                 ('SendResult', 'SEND_RESULT', [('Sent', 'NONE'), ('Full', 'NONE'),

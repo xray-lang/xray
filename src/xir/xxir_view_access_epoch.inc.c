@@ -208,6 +208,10 @@ static XrXirStatus view_access_root_chain(ViewAccess *a,ViewAccessRootEpoch *q,b
         if (q->value==q->target) {*current=true;break;}
         const XrXirInstruction *op=a->body->instructions+q->value-a->body->parameter_count;
         q->observer=q->value-a->body->parameter_count;
+        if (xr_xir_intrinsic_string_bytes(op)) {
+            q->value=a->body->operands[op->args[0]];
+            continue;
+        }
         switch (op->op) {
         case XR_XIR_COPY:case XR_XIR_OWNED_RETAIN:case XR_XIR_CELL_PROJECT:case XR_XIR_CELL_PLACE:
         case XR_XIR_FIELD_PLACE:case XR_XIR_INDEX_PLACE:case XR_XIR_LOCAL_READ:case XR_XIR_OWNED_LOCAL_READ:
@@ -331,7 +335,7 @@ static XrXirStatus view_access_root_older(ViewAccess *a,uint32_t value,uint32_t 
          * execution of its source. If even the newest source precedes the
          * fresh allocation, every identity it could forward precedes it too. */
         if (op->op==XR_XIR_COPY || op->op==XR_XIR_OWNED_RETAIN) q.value=op->args[0];
-        else if (op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW)
+        else if (op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW || xr_xir_intrinsic_string_bytes(op))
             q.value=a->body->operands[op->args[0]];
         else break;
     }

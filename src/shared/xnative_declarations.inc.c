@@ -109,10 +109,10 @@ static const XrNativeTypeDeclaration xr_native_array = {
 };
 
 static const XrNativeParameter xr_native_string_parameters_0[] = {
-    {"bytes", "Slice < u8 >", XR_NATIVE_TERM_UNADMITTED, false, false},
+    {"bytes", "Slice < u8 >", XR_NATIVE_TERM_SLICE_U8, false, false},
 };
 static const XrNativeParameter xr_native_string_parameters_1[] = {
-    {"bytes", "Slice < u8 >", XR_NATIVE_TERM_UNADMITTED, false, false},
+    {"bytes", "Slice < u8 >", XR_NATIVE_TERM_SLICE_U8, false, false},
 };
 static const XrNativeParameter xr_native_string_parameters_2[] = {
     {"value", "rune", XR_NATIVE_TERM_UNADMITTED, false, false},
@@ -177,12 +177,12 @@ static const XrNativeMemberDeclaration xr_native_string_members[] = {
     {15, "startsWith", "(search: string) -> bool", "bool", 32, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_STARTS_WITH, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_14, 1, XR_NATIVE_TERM_BOOL},
     {16, "endsWith", "(search: string) -> bool", "bool", 34, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_ENDS_WITH, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_15, 1, XR_NATIVE_TERM_BOOL},
     {17, "copyBytes", "() -> Array<u8>", "Array < u8 >", 37, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_COPY_BYTES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_U8},
-    {18, "bytes", "() -> Slice<u8>", "Slice < u8 >", 40, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {19, "runes", "() -> Iterator<rune>", "Iterator < rune >", 41, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {18, "bytes", "() -> Slice<u8>", "Slice < u8 >", 41, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_STRING_BYTES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_BORROWED, NULL, 0, XR_NATIVE_TERM_SLICE_U8},
+    {19, "runes", "() -> Iterator<rune>", "Iterator < rune >", 42, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
 };
 static const XrNativeTypeDeclaration xr_native_string = {
     2, XR_NATIVE_DECLARATION_VALUE, "string", NULL, 0,
-    "stdlib/types/string.xr", "xray-native:prelude/string", {{60, 155, 199, 195, 65, 227, 146, 199, 190, 146, 41, 12, 253, 224, 173, 29, 43, 176, 85, 11, 161, 11, 50, 115, 232, 105, 168, 174, 241, 76, 200, 84}},
+    "stdlib/types/string.xr", "xray-native:prelude/string", {{137, 24, 10, 188, 88, 57, 37, 148, 44, 106, 69, 4, 158, 31, 20, 237, 21, 110, 192, 218, 3, 13, 223, 15, 38, 98, 209, 79, 49, 204, 40, 126}},
     9, 8, xr_native_string_members, 19
 };
 
@@ -606,4 +606,5 @@ static const XrNativeIntrinsicDeclaration xr_native_intrinsics[] = {
     {UINT32_C(1), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[4], true, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_CONTAINS, "xr_xir_string_contains"},
     {UINT32_C(2), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[14], true, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_STARTS_WITH, "xr_xir_string_starts_with"},
     {UINT32_C(3), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[15], true, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_ENDS_WITH, "xr_xir_string_ends_with"},
+    {UINT32_C(4), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[17], false, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_BYTES, "xr_xir_call_view_operation"},
 };

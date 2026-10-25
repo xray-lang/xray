@@ -9,6 +9,8 @@
  * KEY CONCEPT:
  *   Declared input selection precedes body traversal; body facts never choose it.
  */
+#include "xxir_intrinsic.h"
+
 typedef struct ViewOriginPair {uint32_t first,second;} ViewOriginPair;
 typedef struct ViewOriginSet {
     ViewOriginPair *pairs;
@@ -179,6 +181,11 @@ static XrXirStatus view_origin_step(ViewOriginQuery *q,ViewOriginPair task) {
     if (task.first<q->function->parameter_count)
         return task.first==q->candidate ? XR_XIR_OK : XR_XIR_BAD_VALUE;
     const XrXirInstruction *op=&q->function->instructions[task.first-q->function->parameter_count];
+    if (xr_xir_intrinsic_string_bytes(op)) {
+        if (task.second || op->args[1]!=1 || op->args[0]>=q->function->operand_count)
+            return XR_XIR_BAD_STRUCTURE;
+        return view_origin_push(q,q->function->operands[op->args[0]],0);
+    }
     switch (op->op) {
     case XR_XIR_VIEW_NEW:case XR_XIR_VIEW_REBORROW:
         if (task.second || op->args[1]!=3 || op->args[0]>q->function->operand_count ||

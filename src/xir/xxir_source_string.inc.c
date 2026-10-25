@@ -87,6 +87,45 @@ static bool source_string_intrinsic_call(SourceContext *ctx, AstNode *node,
     return source_recipe_group(ctx, instruction, arguments, 2, value) &&
         source_string_member_reference(ctx, node->as.call_expr.callee, call->member);
 }
+static bool source_string_borrowed_root(SourceContext *ctx,AstNode *node,SourceValue *root) {
+    while (node && node->type==AST_GROUPING) {
+        if (!source_work(ctx,node)) return false;
+        node=node->as.grouping;
+    }
+    if (!node || node->type!=AST_VARIABLE)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"borrowed string bytes require a named local owner");
+    SourceName *binding=visible_name(ctx,node->as.variable.name);
+    if (!source_name_ready(binding) || binding->kind!=SOURCE_LOCAL ||
+        binding->type!=XR_XIR_STRING || binding->construction)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"borrowed string bytes require an initialized local String");
+    if (!source_query_reference(ctx,node,binding,binding,XR_XIR_SOURCE_READ)) return false;
+    if (binding->mutable) return source_binding_cell(ctx,binding,root);
+    SourceValue value={0};XrXirType cell;
+    /* An immutable binding gets function-local storage, never return authority
+     * from a by-value parameter or an arbitrary receiver expression. */
+    return source_binding_read(ctx,binding,&value) &&
+        source_cell_type(ctx,XR_XIR_STRING,&cell) &&
+        source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cell,{value.id},{0},0,{0}},root);
+}
+static bool source_string_borrowed_call(SourceContext *ctx,AstNode *node,bool *handled,SourceValue *value) {
+    const CallExprNode *syntax=&node->as.call_expr;
+    const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
+    const XrNativeIntrinsicDeclaration *call=xr_xir_intrinsic(4);
+    *handled=call && source_text_same(ctx,node,syntax->callee->as.member_access.name,call->member->name);
+    if (!*handled) return ctx->diagnostic.status==XR_XIR_OK;
+    if (!source_string_declaration(ctx)) return false;
+    const XrNativeMemberDeclaration *member=source_native_member(ctx,native,syntax->callee->as.member_access.name);
+    if (!member || member!=call->member || xr_native_intrinsic_for_member(native,member)!=call ||
+        call->implementation!=XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_BYTES ||
+        syntax->arg_count || syntax->default_arg_count || syntax->type_arg_count)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"borrowed string bytes require their exact plain declaration");
+    SourceValue root={0};XrXirType result;
+    if (!source_string_borrowed_root(ctx,syntax->callee->as.member_access.object,&root) ||
+        !source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_SLICE,.element=XR_XIR_U8},&result) ||
+        !source_string_value_reference(ctx,syntax->callee,member,result)) return false;
+    return source_recipe_group(ctx,(XrXirInstruction){XR_XIR_CALL_INTRINSIC,result,{0},{0},call->id,{0}},
+        &root,1,value);
+}
 static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue receiver, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (!source_string_declaration(ctx)) return false;

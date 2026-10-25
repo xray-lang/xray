@@ -259,7 +259,11 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         if (!call || call->member->parameter_count == UINT32_MAX ||
             op->args[1] != call->member->parameter_count + 1)
             return XR_XIR_BAD_STRUCTURE;
-        if (!xr_xir_intrinsic_type(call->member->result, &result) || op->type != result)
+        if (xr_xir_intrinsic_string_bytes(op)) {
+            const XrXirTypeNode *view=xr_xir_type_node(module->types,op->type);
+            if (!view || view->kind!=XR_XIR_TYPE_SLICE || view->element!=XR_XIR_U8)
+                return XR_XIR_BAD_TYPE;
+        } else if (!xr_xir_intrinsic_type(call->member->result, &result) || op->type != result)
             return XR_XIR_BAD_TYPE;
     }
     if (xr_xir_op_is_atomic(op->op) && op->op != XR_XIR_ATOMIC_NEW) {
@@ -1144,7 +1148,14 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (!xir_compile_work(&context->remaining, count)) return XR_XIR_BUDGET;
         for (uint32_t a = 0; a < count; ++a) {
             XrXirType operand_type = indirect ? indirect->parameters[a].type : expected;
-            if (op->op == XR_XIR_CALL_INTRINSIC &&
+            if (xr_xir_intrinsic_string_bytes(op)) {
+                uint32_t operand=function->operands[op->args[0]+a];
+                if (operand>=(uint64_t)function->parameter_count+function->instruction_count)
+                    return XR_XIR_BAD_VALUE;
+                operand_type=xr_xir_operand_type(function,operand);
+                if (a || !xr_xir_intrinsic_string_bytes_types(context->module->types,operand_type,op->type))
+                    return XR_XIR_BAD_TYPE;
+            } else if (op->op == XR_XIR_CALL_INTRINSIC &&
                 !xr_xir_intrinsic_parameter(xr_xir_intrinsic(op->immediate), a, &operand_type))
                 return XR_XIR_BAD_TYPE;
             if (op->op == XR_XIR_CALL_REQUIREMENT)

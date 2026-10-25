@@ -12,6 +12,7 @@
  *   root lifetime, reborrow permission or executable move implementation.
  */
 #include "xxir_view_types_internal.h"
+#include "xxir_intrinsic.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
 #include "xxir_compile_memory.h"
@@ -160,7 +161,7 @@ static XrXirStatus affine_instruction(AffineCheck *a,uint32_t i,bool check) {
         op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP;
     bool definition=op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME ||
         op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_PHI || call || op->op==XR_XIR_INVOKE_RESULT ||
-        op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW ||
+        op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW || xr_xir_intrinsic_string_bytes(op) ||
         (shared_copy && !affine_mutable(a,f->parameter_count+i));
     if (check && result!=UINT32_MAX && !definition) return XR_XIR_BAD_VALUE;
     if (call) {
