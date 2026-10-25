@@ -42,20 +42,26 @@ static const XrXirTypes *error_finite_types(const EffectErrorFinite *proof) {
         types->nominals==input->nominals && types->interfaces==input->interfaces?input:types;
 }
 #include "xxir_effect_error_types.inc.c"
-/* This identity belongs only to the current callback-free receiving walk.
- * It retains no rows, computed facts or admission result. A full construction
- * buffer unwinds its walk before allocating and opens a fresh view afterward. */
+typedef struct EffectErrorPredecessors {
+    uint64_t rows[64];
+    uint32_t function,blocks;
+    bool ready;
+} EffectErrorPredecessors;
+/* This identity and its structural block positions belong only to the current
+ * callback-free walk. No Error facts or admission result are retained. A full
+ * construction buffer expires this view before allocating and reopens it. */
 typedef struct EffectErrorFiniteView {
     const XrXirCompileContext *work;
     const EffectErrorFinite *proof;
     const EffectBodyMaterial *material;
     EffectBodyCurrentRead input;
+    EffectErrorPredecessors predecessors;
 } EffectErrorFiniteView;
 typedef struct EffectErrorFiniteRead {
     const EffectErrorFinite *proof;
     const XrXirCompileContext *work;
     uint32_t limit;
-    const EffectErrorFiniteView *current;
+    EffectErrorFiniteView *current;
 } EffectErrorFiniteRead;
 #include "xxir_effect_error_context_namespace.inc.c"
 
@@ -183,6 +189,46 @@ static XrXirStatus error_finite_predecessor_block(const EffectErrorEquationRead 
     }
     return XR_XIR_OK;
 }
+/* One machine word names every possible source block in a compact function.
+ * Only candidate positions are retained; each selected block still replays
+ * all parallel/panic edges and reads its current strict-rank reachability. */
+static XrXirStatus error_finite_predecessor_index(const EffectErrorEquationRead *equation,
+    EffectErrorFiniteView *current) {
+    EffectErrorPredecessors *index=&current->predecessors;
+    const EffectBodyFunctionHead *head=&equation->head;
+    if (current->material!=equation->body.owner || current->input.material!=current->material ||
+        current->input.work!=equation->work || head->block_count>64) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(equation->work,3)) return XR_XIR_BUDGET;
+    if (index->ready && index->function==equation->function && index->blocks==head->block_count)
+        return XR_XIR_OK;
+    if (!xir_compile_work(equation->work,sizeof(index->ready)+(uint64_t)head->block_count*sizeof(*index->rows)))
+        return XR_XIR_BUDGET;
+    index->ready=false;
+    memset(index->rows,0,(size_t)head->block_count*sizeof(*index->rows));
+    for (uint32_t b=0;b<head->block_count;++b) {
+        const XrXirBlock *block=&head->blocks[b];
+        if (!xir_compile_work(equation->work,4)) return XR_XIR_BUDGET;
+        if (!block->count || block->first>head->instruction_count ||
+            block->count>head->instruction_count-block->first) return XR_XIR_BAD_STRUCTURE;
+        uint32_t targets[2]={0},count=0;
+        XrXirStatus status=error_finite_successors(equation,block->first+block->count-1,targets,&count);
+        if (status!=XR_XIR_OK) return status;
+        if (block->panic) {
+            if (block->panic>=head->block_count) return XR_XIR_BAD_STRUCTURE;
+            if (!xir_compile_work(equation->work,3)) return XR_XIR_BUDGET;
+            index->rows[block->panic]|=UINT64_C(1)<<b;
+        }
+        for (uint32_t side=0;side<count;++side) {
+            if (targets[side]>=head->block_count) return XR_XIR_BAD_STRUCTURE;
+            if (!xir_compile_work(equation->work,3)) return XR_XIR_BUDGET;
+            index->rows[targets[side]]|=UINT64_C(1)<<b;
+        }
+    }
+    if (!xir_compile_work(equation->work,sizeof(index->function)+sizeof(index->blocks)+sizeof(index->ready)))
+        return XR_XIR_BUDGET;
+    index->function=equation->function;index->blocks=head->block_count;index->ready=true;
+    return XR_XIR_OK;
+}
 /* Reachability occupies the first coordinates of each framed, sorted fact row.
  * This read-only equation walk can enumerate those actual facts once, applying
  * the same strict rank limit as a Boolean lookup. No cursor survives insertion,
@@ -205,6 +251,21 @@ static XrXirStatus error_finite_predecessors(const EffectErrorEquationRead *equa
     if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
     if(row->blocks!=equation->head.block_count || row->first>UINT64_MAX-row->blocks)
         return XR_XIR_BAD_STRUCTURE;
+    if (row->blocks<=64) {
+        if (query->to>=row->blocks) return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status=error_finite_predecessor_index(equation,read->current);
+        if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(read->work,sizeof(uint64_t)+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint64_t mask=read->current->predecessors.rows[query->to];
+        for (uint32_t b=0;mask;++b,mask>>=1) {
+            if (!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+            if (!(mask&UINT64_C(1))) continue;
+            bool reachable=false;status=error_finite_reachable(read,equation->context,b,&reachable);
+            if (status==XR_XIR_OK && reachable) status=error_finite_predecessor_block(equation,query,b);
+            if (status!=XR_XIR_OK) return status;
+        }
+        return XR_XIR_OK;
+    }
     uint32_t at=0;XrXirStatus status=error_finite_lower(read,row->first,&at);
     if(status!=XR_XIR_OK) return status;
     for(;at<proof->count;++at) {
@@ -402,9 +463,10 @@ static XrXirStatus error_finite_view_open(const XrXirCompileContext *work,
     EffectBodyCurrentRead input={0};
     status=effect_body_current_open(work,proof->material,&input);if(status!=XR_XIR_OK) return status;
     if(!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
-    *output=(EffectErrorFiniteView){work,proof,proof->material,input};return XR_XIR_OK;
+    *output=(EffectErrorFiniteView){.work=work,.proof=proof,.material=proof->material,.input=input};
+    return XR_XIR_OK;
 }
-static XrXirStatus error_finite_check_current(const EffectErrorFiniteView *current) {
+static XrXirStatus error_finite_check_current(EffectErrorFiniteView *current) {
     const EffectErrorFinite *proof=current->proof;const XrXirCompileContext *work=current->work;
     XrXirStatus status=XR_XIR_OK;EffectErrorFiniteRead read={proof,work,UINT32_MAX,current};
     for(uint32_t f=0;f<proof->contexts;++f) {

@@ -225,6 +225,101 @@ static void finite_cycle(void) {
     finite_clear(proof);effect_body_material_free(material);pc_release(&context,baseline);
     puts("finite Error direct recursion: empty least solution; jointly consistent fake positive cycle rejected");
 }
+static EffectErrorFiniteView *finite_index_live_view;
+static void finite_index_growth_boundary(void *memory,size_t bytes) {
+    (void)memory;(void)bytes;
+    CHECK(finite_index_live_view && !finite_index_live_view->work &&
+        !finite_index_live_view->input.work && !finite_index_live_view->predecessors.ready);
+}
+/* The filtered parallel arms carry distinct enum halves to the same PHI.
+ * A high-numbered back edge exercises the last source bit and the general
+ * path beyond one word, independently of the function's instruction offset. */
+static void finite_index_fixture(EdgeFixture *fixture,XrXirBlock *blocks,uint32_t count) {
+    ee_fixture(fixture,EE_FILTER,false);
+    fixture->parameters[0]=(XrXirType)EE_ENUM;
+    uint32_t n=0,phi=UINT32_MAX;
+    for (uint32_t b=0;b<count;++b) {
+        blocks[b]=(XrXirBlock){.first=n};
+        if (!b) {
+            fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64};
+            fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_JUMP,.targets={1}};
+        } else if (b==1) {
+            fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_BRANCH,.args={1},.targets={1,2}};
+        } else if (b==2) {
+            uint32_t tag=2+n;
+            fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_ENUM_TAG,.type=XR_XIR_I64,.args={0}};
+            uint32_t zero=2+n;
+            fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64};
+            uint32_t test=2+n;
+            fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_EQ_INT,.type=XR_XIR_BOOL,.args={tag,zero}};
+            fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_BRANCH,.args={test},.targets={3,3}};
+        } else if (b==3) {
+            phi=2+n;
+            fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_PHI,.type=(XrXirType)EE_ENUM,.args={0,2}};
+            fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_JUMP,.targets={5}};
+        } else if (b==4) {
+            fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_THROW,.args={phi}};
+        } else if (b+1==count) {
+            fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_BRANCH,.args={1},.targets={b,4}};
+        } else fixture->subject[n++]=(XrXirInstruction){.op=XR_XIR_JUMP,.targets={b+1}};
+        blocks[b].count=n-blocks[b].first;
+    }
+    CHECK(n<EE_MAX_OPS && phi==9);
+    fixture->operands[0]=2;fixture->operands[1]=0;
+    fixture->functions[1].blocks=blocks;fixture->functions[1].block_count=count;
+    fixture->functions[1].instruction_count=n;
+    fixture->functions[1].operands=fixture->operands;fixture->functions[1].operand_count=2;
+}
+static void finite_index_words(void) {
+    for (uint32_t blocks_count=63;blocks_count<=65;++blocks_count) {
+        EdgeFixture fixture;XrXirBlock blocks[65];
+        finite_index_fixture(&fixture,blocks,blocks_count);
+        XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+        EffectBodyMaterial *material=NULL;
+        CHECK(effect_body_material_create(&context,&fixture.module,&material)==XR_XIR_OK);
+        XrXirEffects seed={.resources=context.resources,.count=fixture.module.function_count};
+        CHECK(effect_errors_seed(&material->domain,&seed,&context)==XR_XIR_OK);
+        EffectErrorFinite *proof=finite_prepare(&context,&fixture.module,
+            seed.outcomes_work.atoms,seed.outcomes_work.atom_count);
+        CHECK(error_finite_derive(&context,proof)==XR_XIR_OK);
+        finite_verify(&context,proof,XR_XIR_OK);
+        EffectErrorFiniteRead plain={proof,&context,UINT32_MAX,NULL};uint64_t result=0;
+        CHECK(error_finite_word(&plain,proof->rows[1].end-64,64,&result)==XR_XIR_OK && result==12);
+        EffectErrorFiniteView view={0};
+        CHECK(error_finite_view_open(&context,proof,&view)==XR_XIR_OK);
+        EffectErrorFiniteRead current={proof,&context,UINT32_MAX,&view};
+        uint64_t coordinate=error_finite_entry_coordinate(proof,1,4,9,0),expected=0,actual=0;
+        uint32_t expected_bits=0,actual_bits=0;
+        CHECK(error_finite_rhs(&plain,1,coordinate,&expected,&expected_bits)==XR_XIR_OK && expected==12);
+        CHECK(error_finite_rhs(&current,1,coordinate,&actual,&actual_bits)==XR_XIR_OK &&
+            actual==expected && actual_bits==expected_bits);
+        CHECK(blocks_count>64 || (view.predecessors.ready && view.predecessors.function==1));
+        plain.limit=current.limit=1;
+        CHECK(error_finite_rhs(&plain,1,coordinate,&expected,&expected_bits)==XR_XIR_OK && !expected);
+        CHECK(error_finite_rhs(&current,1,coordinate,&actual,&actual_bits)==XR_XIR_OK && actual==expected);
+        {
+            EffectErrorEquationRead original,indexed;
+            CHECK(error_finite_equation(&plain,1,&original)==XR_XIR_OK);
+            CHECK(error_finite_equation(&current,1,&indexed)==XR_XIR_OK);
+            EffectErrorFiniteEdgeQuery a={.to=4,.reach=true},b=a;
+            CHECK(error_finite_predecessors(&original,&a)==XR_XIR_OK && !a.result);
+            CHECK(error_finite_predecessors(&indexed,&b)==XR_XIR_OK && b.result==a.result);
+        }
+        proof->capacity=proof->count;finite_index_live_view=&view;
+        pc_allocate_hook=finite_index_growth_boundary;pc_free_hook=finite_index_growth_boundary;
+        CHECK(error_finite_grow(&context,proof,&view)==XR_XIR_OK);
+        pc_allocate_hook=NULL;pc_free_hook=NULL;finite_index_live_view=NULL;
+        CHECK(!view.work && !view.input.work && !view.predecessors.ready);
+        CHECK(error_finite_view_open(&context,proof,&view)==XR_XIR_OK);
+        current.limit=UINT32_MAX;
+        CHECK(error_finite_rhs(&current,1,coordinate,&actual,&actual_bits)==XR_XIR_OK && actual==12);
+        view=(EffectErrorFiniteView){0};
+        finite_verify(&context,proof,XR_XIR_OK);
+        finite_clear(proof);effect_outcomes_clear(&seed.outcomes_work,seed.count);
+        effect_body_material_free(material);pc_release(&context,baseline);
+    }
+    puts("finite Error predecessors: 63/64/65 blocks, parallel filters, high back edges and fresh rank/growth reads");
+}
 #include "error_marker_type_cases.h"
 #include "xir_error_finite_growth_cases.h"
 #ifndef FINITE_PROOF_ENTRY
@@ -232,6 +327,7 @@ static void finite_cycle(void) {
 #endif
 int FINITE_PROOF_ENTRY(int argc,char **argv) {
     CHECK(argc==2);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);
+    if(!mode) finite_index_words();
     if(mode>=31) { CHECK(mode<35);finite_growth_case(mode-31); }
     else if(mode>=15) marker_case(mode-15);
     else if(mode==14) finite_cycle();else { CHECK(mode<14);finite_cfg(mode,false);finite_cfg(mode,true); }
