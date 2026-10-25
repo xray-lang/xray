@@ -1,7 +1,5 @@
 add_executable(test_xir_p09_string_mutation "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_string_mutation.c")
 target_link_libraries(test_xir_p09_string_mutation PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
-add_executable(test_xir_p09_string_mutation_native
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_string_mutation.c" "${P09_STRING_MUTATION_C}")
 foreach(target test_xir_p09_string_mutation)
     target_compile_definitions(${target} PRIVATE XR_CAPACITY_COMPONENT="string_append"
         XR_CAPACITY_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_array_capacity")
