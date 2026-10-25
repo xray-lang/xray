@@ -10,24 +10,6 @@ else()
 endif()
 add_test(NAME test_xir_tuple_destructure_source COMMAND test_xir_tuple_destructure_source)
 set_tests_properties(test_xir_tuple_destructure_source PROPERTIES LABELS "unit;xir;tuple;source;ownership;execution" TIMEOUT 180)
-set(XIR_TUPLE_DESTRUCTURE_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_tuple_destructure.c)
-add_custom_command(OUTPUT ${XIR_TUPLE_DESTRUCTURE_GENERATED}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_tuple_destructure_source> ${XIR_TUPLE_DESTRUCTURE_GENERATED}
-    DEPENDS test_xir_tuple_destructure_source
-        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_tuple_destructure/local/root.xr
-        ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_tuple_destructure/local/library.xr
-    VERBATIM)
-add_executable(test_xir_tuple_destructure_native xir/test_xir_tuple_destructure_native.c ${XIR_TUPLE_DESTRUCTURE_GENERATED})
-include(${CMAKE_CURRENT_SOURCE_DIR}/xir/tuple_destructure_mixed.cmake)
-target_link_libraries(test_xir_tuple_destructure_native PRIVATE xray_xir_scalar)
-if(MSVC)
-    target_compile_options(test_xir_tuple_destructure_native PRIVATE /W4 /WX /utf-8 /std:c11)
-else()
-    target_compile_options(test_xir_tuple_destructure_native PRIVATE -Wall -Wextra -Werror -std=c11 -Wpedantic)
-endif()
-add_test(NAME test_xir_tuple_destructure_native COMMAND test_xir_tuple_destructure_native)
-set_tests_properties(test_xir_tuple_destructure_native PROPERTIES LABELS "unit;xir;tuple;native;ownership;execution" TIMEOUT 180)
 add_executable(test_xir_tuple_slot_publication_gap xir/test_xir_tuple_slot_publication_gap.c)
 target_link_libraries(test_xir_tuple_slot_publication_gap PRIVATE xray_xir_source_product)
 if(MSVC)

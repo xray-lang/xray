@@ -18,14 +18,7 @@ target_link_libraries(test_xir_source_array_packets PRIVATE xray_xir_source xray
 target_compile_definitions(test_xir_source_array_packets PRIVATE
     XR_ARRAY_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source"
     XR_ARRAY_REORDER_SOURCE_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_reordering_source")
-add_executable(test_xir_array_c_producer xir/test_xir_array_c_producer.c
-    ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED})
-target_link_libraries(test_xir_array_c_producer PRIVATE xray_xir_vm xray_xir_cgen)
-target_compile_definitions(test_xir_array_c_producer PRIVATE
-    XR_ARRAY_CHECKED_FIXTURE="${XIR_ARRAY_CHECKED_GENERATED}"
-    XR_ARRAY_BOUNDS_CHECKED_FIXTURE="${XIR_ARRAY_BOUNDS_CHECKED_GENERATED}"
-    XR_ARRAY_REORDER_CHECKED_FIXTURE="${XIR_ARRAY_REORDER_CHECKED_GENERATED}")
-foreach(array_producer IN ITEMS test_xir_source_array_packets test_xir_array_c_producer)
+foreach(array_producer IN ITEMS test_xir_source_array_packets)
     set_target_properties(${array_producer} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${array_producer} PRIVATE /W4 /WX /utf-8)

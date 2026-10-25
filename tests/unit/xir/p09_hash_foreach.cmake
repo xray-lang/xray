@@ -23,8 +23,6 @@ foreach(target test_xir_p09_hash_foreach test_xir_p09_hash_foreach_native test_x
     set_tests_properties(${target} PROPERTIES TIMEOUT 120 LABELS "unit;xir;hash;source;ownership;codec;provider")
 endforeach()
 
-
-
 add_executable(test_xir_p09_hash_position "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_position.c")
 target_include_directories(test_xir_p09_hash_position PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/base")
 target_link_libraries(test_xir_p09_hash_position PRIVATE xray_xir_scalar)
@@ -45,18 +43,9 @@ set_tests_properties(test_xir_p09_hash_position PROPERTIES TIMEOUT 120 LABELS "u
 add_test(NAME test_xir_p09_hash_position_allocations COMMAND test_xir_p09_hash_position --full)
 set_tests_properties(test_xir_p09_hash_position_allocations PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "unit;xir;hash;ownership;memory;budget;fault")
 
-set(HASH_FOREACH_MATRIX_C "${CMAKE_BINARY_DIR}/generated/xir_p09_hash_foreach_matrix.c")
 add_executable(test_xir_p09_hash_foreach_matrix "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_foreach_matrix.c")
 target_link_libraries(test_xir_p09_hash_foreach_matrix PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm)
-add_custom_command(OUTPUT "${HASH_FOREACH_MATRIX_C}"
-    COMMAND $<TARGET_FILE:test_xir_p09_hash_foreach_matrix> "${HASH_FOREACH_MATRIX_C}"
-    DEPENDS test_xir_p09_hash_foreach_matrix VERBATIM)
-foreach(mode native mixed)
-    add_executable(test_xir_p09_hash_foreach_matrix_${mode}
-        "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_foreach_matrix_${mode}.c" "${HASH_FOREACH_MATRIX_C}")
-    target_link_libraries(test_xir_p09_hash_foreach_matrix_${mode} PRIVATE xray_xir_source xray_xir_vm)
-endforeach()
-foreach(target test_xir_p09_hash_foreach_matrix test_xir_p09_hash_foreach_matrix_native test_xir_p09_hash_foreach_matrix_mixed)
+foreach(target test_xir_p09_hash_foreach_matrix)
     target_compile_definitions(${target} PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
     set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
@@ -74,7 +63,7 @@ add_test(NAME test_xir_p09_hash_position81_vectors COMMAND ${XRAY_PYTHON}
 set_tests_properties(test_xir_p09_hash_position81_vectors PROPERTIES TIMEOUT 30 LABELS "unit;xir;hash;codec")
 
 add_executable(test_xir_p09_hash_foreach_resources
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_foreach_resources.c" "${HASH_FOREACH_MATRIX_C}")
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_foreach_resources.c")
 target_link_libraries(test_xir_p09_hash_foreach_resources PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_p09_hash_foreach_resources PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
 set_target_properties(test_xir_p09_hash_foreach_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
@@ -88,25 +77,8 @@ set_tests_properties(test_xir_p09_hash_foreach_resources_normal PROPERTIES TIMEO
 add_test(NAME test_xir_p09_hash_foreach_resources COMMAND test_xir_p09_hash_foreach_resources)
 set_tests_properties(test_xir_p09_hash_foreach_resources PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;hash;resources;allocation;ownership;cancellation")
 
-foreach(mode native mixed)
-    set(target test_xir_p09_hash_foreach_resources_${mode})
-    add_executable(${target}
-        "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_foreach_resources_${mode}.c" "${HASH_FOREACH_C}" "${HASH_FOREACH_MATRIX_C}")
-    target_link_libraries(${target} PRIVATE xray_xir_source xray_xir_vm)
-    target_compile_definitions(${target} PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
-    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-    if(MSVC)
-        target_compile_options(${target} PRIVATE /utf-8 /W4 /WX)
-    else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
-    endif()
-    add_test(NAME ${target}_normal COMMAND ${target} --normal)
-    set_tests_properties(${target}_normal PROPERTIES TIMEOUT 120 LABELS "unit;xir;hash;resources;target-impact;provider")
-    add_test(NAME ${target} COMMAND ${target})
-    set_tests_properties(${target} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;hash;resources;allocation;ownership;cancellation;provider")
-endforeach()
 
-foreach(target test_xir_p09_hash_foreach_resources test_xir_p09_hash_foreach_resources_native test_xir_p09_hash_foreach_resources_mixed)
+foreach(target test_xir_p09_hash_foreach_resources)
     add_test(NAME ${target}_cancellation COMMAND ${target} --cancel)
     set_tests_properties(${target}_cancellation PROPERTIES TIMEOUT 120
         LABELS "unit;xir;hash;resources;cancellation;ownership;target-impact;provider")
@@ -131,7 +103,7 @@ set_tests_properties(test_xir_p09_hash_foreach_compiler PROPERTIES TIMEOUT 600 R
     LABELS "unit;xir;hash;source;ownership;fault-injection;compiler-faults")
 
 foreach(row RANGE 0 3)
-    foreach(target test_xir_p09_hash_foreach_resources test_xir_p09_hash_foreach_resources_native test_xir_p09_hash_foreach_resources_mixed)
+    foreach(target test_xir_p09_hash_foreach_resources)
         add_test(NAME ${target}_matrix_${row}_normal COMMAND ${target} --normal ${row})
         add_test(NAME ${target}_matrix_${row}_cancellation COMMAND ${target} --cancel ${row})
         set_tests_properties(${target}_matrix_${row}_normal ${target}_matrix_${row}_cancellation

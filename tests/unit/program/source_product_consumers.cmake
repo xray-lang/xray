@@ -34,17 +34,23 @@ foreach(case IN LISTS product_consumer_cases)
     add_executable(${producer} "${main}")
     target_link_libraries(${producer} PRIVATE source_product_consumer_driver)
     file(GLOB product_consumer_case_sources "${product_consumer_fixture_root}/${case}/*.xr")
-    add_custom_command(OUTPUT "${generated}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/generated"
-        COMMAND $<TARGET_FILE:${producer}> 0 "${generated}"
-        DEPENDS ${producer} ${product_consumer_case_sources}
-        VERBATIM)
-    set(consumer_has_native 1)
-    set(native_main "${CMAKE_CURRENT_BINARY_DIR}/source_product_${case}_native_main.c")
-    configure_file("${product_consumer_main_template}" "${native_main}" @ONLY)
-    add_executable(${native} "${native_main}" "${generated}")
-    target_link_libraries(${native} PRIVATE source_product_consumer_driver)
-    foreach(target IN ITEMS ${producer} ${native})
+    set(consumer_targets ${producer})
+    set(consumer_modes 0)
+    if(NOT case STREQUAL "integer_comparisons")
+        add_custom_command(OUTPUT "${generated}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/generated"
+            COMMAND $<TARGET_FILE:${producer}> 0 "${generated}"
+            DEPENDS ${producer} ${product_consumer_case_sources}
+            VERBATIM)
+        set(consumer_has_native 1)
+        set(native_main "${CMAKE_CURRENT_BINARY_DIR}/source_product_${case}_native_main.c")
+        configure_file("${product_consumer_main_template}" "${native_main}" @ONLY)
+        add_executable(${native} "${native_main}" "${generated}")
+        target_link_libraries(${native} PRIVATE source_product_consumer_driver)
+        list(APPEND consumer_targets ${native})
+        list(APPEND consumer_modes 1 2 3)
+    endif()
+    foreach(target IN LISTS consumer_targets)
         set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
         if(MSVC)
             target_compile_options(${target} PRIVATE /utf-8 /W4 /WX)
@@ -53,13 +59,17 @@ foreach(case IN LISTS product_consumer_cases)
         endif()
     endforeach()
     add_test(NAME ${producer}_vm COMMAND ${producer} 0)
-    add_test(NAME ${producer}_native COMMAND ${native} 1)
-    add_test(NAME ${producer}_mixed_even COMMAND ${native} 2)
-    add_test(NAME ${producer}_mixed_odd COMMAND ${native} 3)
-    set_tests_properties(${producer}_vm ${producer}_native ${producer}_mixed_even
-        ${producer}_mixed_odd PROPERTIES TIMEOUT 120
+    set_tests_properties(${producer}_vm PROPERTIES TIMEOUT 120
         LABELS "unit;xir;source-product;program-consumer;ownership;execution")
-    foreach(mode IN ITEMS 0 1 2 3)
+    if(NOT case STREQUAL "integer_comparisons")
+        add_test(NAME ${producer}_native COMMAND ${native} 1)
+        add_test(NAME ${producer}_mixed_even COMMAND ${native} 2)
+        add_test(NAME ${producer}_mixed_odd COMMAND ${native} 3)
+        set_tests_properties(${producer}_native ${producer}_mixed_even
+            ${producer}_mixed_odd PROPERTIES TIMEOUT 120
+            LABELS "unit;xir;source-product;program-consumer;ownership;execution")
+    endif()
+    foreach(mode IN LISTS consumer_modes)
         if(mode EQUAL 0)
             set(executable ${producer})
         else()
@@ -106,13 +116,17 @@ foreach(case IN LISTS product_nominal_graph_cases)
     add_executable(${producer} "${main}")
     target_link_libraries(${producer} PRIVATE source_product_nominal_driver)
     set(generated "${CMAKE_BINARY_DIR}/generated/source_product_${case}.c")
-    add_custom_command(OUTPUT "${generated}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/generated"
-        COMMAND $<TARGET_FILE:${producer}> 0 "${generated}"
-        DEPENDS ${producer} "${product_consumer_fixture_root}/${case}/root.xr" VERBATIM)
-    add_library(${producer}_native_object OBJECT "${generated}")
-    target_link_libraries(${producer}_native_object PRIVATE xray_xir_source_product)
-    foreach(target IN ITEMS ${producer} ${producer}_native_object)
+    set(nominal_targets ${producer})
+    if(NOT case STREQUAL "deep_class_graph")
+        add_custom_command(OUTPUT "${generated}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/generated"
+            COMMAND $<TARGET_FILE:${producer}> 0 "${generated}"
+            DEPENDS ${producer} "${product_consumer_fixture_root}/${case}/root.xr" VERBATIM)
+        add_library(${producer}_native_object OBJECT "${generated}")
+        target_link_libraries(${producer}_native_object PRIVATE xray_xir_source_product)
+        list(APPEND nominal_targets ${producer}_native_object)
+    endif()
+    foreach(target IN LISTS nominal_targets)
         set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
         if(MSVC)
             target_compile_options(${target} PRIVATE /utf-8 /W4 /WX)

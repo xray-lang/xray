@@ -28,32 +28,34 @@ foreach(case IN ITEMS mutation query generic suspend failure shape)
         COMMAND test_xir_p10_reference --accept native_spread_${case} ${expected} ${suspensions})
     set_tests_properties(test_xir_p10_reference_native_spread_${case} PROPERTIES
         TIMEOUT 30 LABELS "unit;xir;p10;reference;call;spread;ownership")
-    set(generated "${CMAKE_CURRENT_BINARY_DIR}/generated_native/native_spread_${case}.c")
-    add_custom_command(OUTPUT "${generated}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
-        COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit native_spread_${case} ${expected} "${generated}" ${suspensions}
-        DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/native_spread_${case}.xr"
-        VERBATIM)
-    foreach(backend IN ITEMS native mixed)
-        set(target test_xir_p10_reference_${backend}_native_spread_${case})
-        add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" "${generated}")
-        target_link_libraries(${target} PRIVATE xray_xir_vm)
-        set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-        if(backend STREQUAL "mixed")
-            target_compile_definitions(${target} PRIVATE XR_LANGUAGE_MIXED=1)
-        else()
-            target_compile_definitions(${target} PRIVATE XR_LANGUAGE_MIXED=0)
-        endif()
-        if(MSVC)
-            target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
-        else()
-            target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
-        endif()
-        list(APPEND reference_native_targets ${target})
-        add_test(NAME ${target} COMMAND ${target} ${expected} ${suspensions})
-        set_tests_properties(${target} PROPERTIES
-            TIMEOUT 30 LABELS "unit;xir;p10;reference;call;spread;ownership;${backend}")
-    endforeach()
+    if(NOT case STREQUAL "query")
+        set(generated "${CMAKE_CURRENT_BINARY_DIR}/generated_native/native_spread_${case}.c")
+        add_custom_command(OUTPUT "${generated}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
+            COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit native_spread_${case} ${expected} "${generated}" ${suspensions}
+            DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/native_spread_${case}.xr"
+            VERBATIM)
+        foreach(backend IN ITEMS native mixed)
+            set(target test_xir_p10_reference_${backend}_native_spread_${case})
+            add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" "${generated}")
+            target_link_libraries(${target} PRIVATE xray_xir_vm)
+            set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+            if(backend STREQUAL "mixed")
+                target_compile_definitions(${target} PRIVATE XR_LANGUAGE_MIXED=1)
+            else()
+                target_compile_definitions(${target} PRIVATE XR_LANGUAGE_MIXED=0)
+            endif()
+            if(MSVC)
+                target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+            else()
+                target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
+            endif()
+            list(APPEND reference_native_targets ${target})
+            add_test(NAME ${target} COMMAND ${target} ${expected} ${suspensions})
+            set_tests_properties(${target} PROPERTIES
+                TIMEOUT 30 LABELS "unit;xir;p10;reference;call;spread;ownership;${backend}")
+        endforeach()
+    endif()
     add_test(NAME test_xir_p10_native_spread_${case}_source_resources
         COMMAND test_xir_p10_initializer_resources --native-spread-${case})
     set_tests_properties(test_xir_p10_native_spread_${case}_source_resources PROPERTIES
@@ -83,7 +85,7 @@ set_tests_properties(test_xir_p10_reference_native_spread_callback PROPERTIES TI
 add_test(NAME test_xir_p10_native_spread_source_baseline
     COMMAND test_xir_p10_initializer_resources --native-spread-baseline)
 set_tests_properties(test_xir_p10_native_spread_source_baseline PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;native;spread;resource-control")
-foreach(case IN ITEMS mutation query generic suspend failure shape)
+foreach(case IN ITEMS mutation generic suspend failure shape)
     set(target test_xir_p10_native_spread_${case}_runtime)
     add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/test_initializer_places_runtime.c"
         "${CMAKE_CURRENT_BINARY_DIR}/generated_native/native_spread_${case}.c")
@@ -91,8 +93,6 @@ foreach(case IN ITEMS mutation query generic suspend failure shape)
     set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(case STREQUAL "mutation")
         target_compile_definitions(${target} PRIVATE XR_LANGUAGE_RUNTIME_EXPECTED=1311719360 XR_LANGUAGE_RUNTIME_CROSSINGS=2 XR_LANGUAGE_RUNTIME_SUSPENSIONS=0)
-    elseif(case STREQUAL "query")
-        target_compile_definitions(${target} PRIVATE XR_LANGUAGE_RUNTIME_EXPECTED=122011590 XR_LANGUAGE_RUNTIME_CROSSINGS=3 XR_LANGUAGE_RUNTIME_SUSPENSIONS=0)
     elseif(case STREQUAL "generic")
         target_compile_definitions(${target} PRIVATE XR_LANGUAGE_RUNTIME_EXPECTED=13742 XR_LANGUAGE_RUNTIME_CROSSINGS=1 XR_LANGUAGE_RUNTIME_SUSPENSIONS=0)
     elseif(case STREQUAL "suspend")

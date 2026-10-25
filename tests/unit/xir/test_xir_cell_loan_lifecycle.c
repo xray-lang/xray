@@ -32,9 +32,6 @@ static void cell_life_zero(void) {
     if (runtime_live || runtime_bytes || runtime_owned) runtime_report_residuals(stderr);
     CHECK(!runtime_live && !runtime_bytes && !runtime_owned);
 }
-#if defined(XR_CELL_LIFE_BACKEND)
-#include "xir_cell_lifecycle_native_backend.h"
-#else
 static XrXirProgram *cell_life_program(const XrXirCompileContext *context, const char *fixture, uint32_t *entries) {
     XrXirArtifact *lowered = NULL;
     XrXirProgram *program = NULL;
@@ -46,7 +43,6 @@ static XrXirProgram *cell_life_program(const XrXirCompileContext *context, const
     return program;
 }
 static void cell_life_program_release(void) { }
-#endif
 static void cell_life_mode(const char *fixture, unsigned mode) {
     CHECK(mode < CELL_LIFE_MODES);
     cell_life_zero();
@@ -128,13 +124,7 @@ static void cell_life_existing(const char *name, bool unit) {
     printf("Cell existing %s unchanged expectations and compiler/runtime physical0\n", name);
 }
 #include "xir_cell_lifecycle_resources.h"
-#if defined(XR_CELL_LIFE_PRODUCER)
-#include "xir_cell_lifecycle_native_producer.h"
-#endif
 int main(int argc, char **argv) {
-#if defined(XR_CELL_LIFE_PRODUCER)
-    if (argc == 7 && !strcmp(argv[1], "--write-c")) return cell_life_write_c(argv);
-#endif
     if (argc == 2) {
         CHECK(!strcmp(argv[1],"--runtime-normal") || !strcmp(argv[1],"--runtime-fi") ||
             !strcmp(argv[1],"--runtime-axes") || !strcmp(argv[1],"--runtime-prepare"));
