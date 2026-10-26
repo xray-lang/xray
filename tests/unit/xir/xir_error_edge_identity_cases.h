@@ -64,6 +64,12 @@ static void edge_identity_fields(const XrXirInstruction *value,const XrXirInstru
         value->targets[side]==raw->targets[side]);
 }
 
+/* Parameters preserve the ABI-specific fee oracle without a constant
+ * controlling expression in the strict MSVC build. */
+static bool edge_identity_reference_layout(size_t pointer_bytes,size_t instruction_bytes,size_t opcode_bytes) {
+    return pointer_bytes==8 && instruction_bytes==40 && opcode_bytes==4;
+}
+
 /* The reference is measured before any oracle read. Later fresh ledgers repeat
  * only that setup and helper, so an exact/minus-one cap cannot hide work. */
 static void edge_identity_fee_sample(unsigned pattern,uint32_t instruction,uint32_t side,
@@ -83,7 +89,7 @@ static void edge_identity_fee_sample(unsigned pattern,uint32_t instruction,uint3
     CHECK(error_equation_operation(&read,instruction,&full)==XR_XIR_OK);
     uint64_t full_fee=pc_stats(&work).work-before;
     CHECK(full_fee>*fee);
-    if(sizeof(void *)==8 && sizeof(XrXirInstruction)==40 && sizeof(XrXirOp)==4)
+    if(edge_identity_reference_layout(sizeof(void *),sizeof(XrXirInstruction),sizeof(XrXirOp)))
         CHECK(full_fee-*fee>=30);
     EffectErrorEquationRead independent=read;
     independent.body=effect_body_raw_request(&work,&f.module);
