@@ -123,7 +123,7 @@ static XrXirArtifact *replay_source(const XrXirCompileContext *context,
     const XrXirModule *module=xr_xir_compile_artifact_module(source->checked);
     inspect(module,true);snapshot_debug(source,local_source,true);
     if (!local_source) CHECK(module->declarations->functions[named(module,"read")].module!=
-        module->declarations->entry_module);
+        module->declarations->root_module);
     XrXirCheckedPacket packet={0};XrXirArtifact *read=NULL,*closed=NULL;
     CHECK(xr_xir_compile_checked_write(source->checked,&packet,NULL)==XR_XIR_OK);
     xr_sha256(packet.bytes,packet.length,identity);
