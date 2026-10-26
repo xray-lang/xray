@@ -140,9 +140,11 @@ static void fresh_class_alias(FreshClassFixture *f,FreshClassCase kind) {
         uint32_t view=0;
         for (uint32_t p=0;p<6;++p)
             view=fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_COPY,.type=(XrXirType)FC_SHARED});
-        /* The table offset equals the Cell id; the payload is a view owner. */
-        while (f->functions[0].operand_count<f->cell) fresh_class_group(f,0,&view,1);
-        uint32_t at=fresh_class_group(f,0,&view,1);CHECK(at==f->cell);
+        /* A real String group keeps the following cleanup span dense. */
+        uint32_t text=f->functions[0].parameter_count;
+        uint32_t at=fresh_class_group(f,0,(uint32_t[]){text,text,text},3);
+        fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_PRINT,.args={at,3}});
+        at=fresh_class_group(f,0,&view,1);CHECK(at==f->cell);
         fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_VIEW_CLEANUP,.args={at,1}});
     }
 }
