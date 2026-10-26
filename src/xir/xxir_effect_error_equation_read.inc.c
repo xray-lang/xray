@@ -151,18 +151,23 @@ static inline XrXirStatus error_equation_value(const EffectErrorEquationRead *re
         while (cursor>floor) {
             uint32_t i=--cursor;XrXirInstruction op;
             if(read->body.current && effect_body_request_sequence_owned(&read->body)) {
-                XrXirOp opcode=XR_XIR_INVALID;
-                status=error_equation_current_opcode(read,i,&opcode);
+                const EffectBodyRun *ref=NULL;uint32_t opcode=XR_XIR_INVALID;
+                status=effect_body_current_record(&read->body,read->function,i,&ref);
+                if(status==XR_XIR_OK) status=effect_body_run_word(&read->body.read,ref,i,0,&opcode);
                 if(status!=XR_XIR_OK) return status;
+                if(opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
                 if(!xir_compile_work(read->work,8)) return XR_XIR_BUDGET;
-                if(cell && error_equation_invalidates_cells(opcode))
+                if(cell && error_equation_invalidates_cells((XrXirOp)opcode))
                     return error_equation_type_word(read,type,word,output);
                 bool writes=opcode==XR_XIR_LOCAL_WRITE || opcode==XR_XIR_OWNED_LOCAL_WRITE ||
                     opcode==XR_XIR_SCALAR_LOCAL_WRITE || (cell && opcode==XR_XIR_CELL_WRITE);
                 if(!writes && (value!=(uint64_t)read->head.parameter_count+i || opcode==XR_XIR_PHI))
                     continue;
-            }
-            status=error_equation_operation(read,i,&op);
+                /* The selected run belongs to this same read. Reconstruct every
+                 * column without repeating its directory search; no run pointer
+                 * escapes this iteration or survives a transfer callback. */
+                status=effect_body_instruction_ref_value(&read->body.read,ref,i,&op);
+            } else status=error_equation_operation(read,i,&op);
             if (status!=XR_XIR_OK) return status;
             if (!xir_compile_work(read->work,8)) return XR_XIR_BUDGET;
             if (cell && error_equation_invalidates_cells(op.op))
