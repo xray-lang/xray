@@ -137,10 +137,12 @@ static void equation_terminal_edges(const EffectErrorEquationRead *read,ErrorFlo
 }
 
 #include "error_equation_proof_probe.inc.c"
+#include "xir_current_request_prefix_cases.h"
 #ifndef XIR_ERROR_EQUATION_TEST_ENTRY
 #define XIR_ERROR_EQUATION_TEST_ENTRY main
 #endif
 int XIR_ERROR_EQUATION_TEST_ENTRY(int argc,char **argv) {
+    if(argc==2 && !strcmp(argv[1],"request-prefix")) { finite_request_prefix_cases();return 0; }
     CHECK(argc==3 || argc==4);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);
     bool saved=strtoul(argv[2],NULL,10)!=0;CHECK(mode<15);
     unsigned proof_attack=argc==4?(unsigned)strtoul(argv[3],NULL,10):0;

@@ -59,3 +59,7 @@ foreach(equation_attack RANGE 9 12)
         COMMAND test_xir_error_equation_current 0 0 ${equation_attack})
     set_tests_properties(test_xir_error_equation_proof_storage_${equation_attack} PROPERTIES TIMEOUT 60)
 endforeach()
+
+add_test(NAME test_xir_current_request_prefix COMMAND test_xir_error_equation_current request-prefix)
+set_tests_properties(test_xir_current_request_prefix PROPERTIES
+    LABELS "unit;xir;ownership;metadata;final-proof;resources" TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1)
