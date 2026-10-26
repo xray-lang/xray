@@ -458,10 +458,12 @@ static void finite_index_words(void) {
 }
 #include "error_marker_type_cases.h"
 #include "xir_error_finite_growth_cases.h"
+#include "xir_error_edge_identity_cases.h"
 #ifndef FINITE_PROOF_ENTRY
 #define FINITE_PROOF_ENTRY main
 #endif
 int FINITE_PROOF_ENTRY(int argc,char **argv) {
+    if(argc==2 && !strcmp(argv[1],"edge-identity")) { finite_edge_identity_cases();return 0; }
     CHECK(argc==2);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);
     if(!mode) { finite_local_assignments();finite_index_words(); }
     if(mode>=31) { CHECK(mode<35);finite_growth_case(mode-31); }
