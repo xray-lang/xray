@@ -728,6 +728,19 @@
         "first_diagnostic": null,
         "deferred": "Task328 P2 direct-C path is not integrated; legacy native output is not its acceptance evidence"
       }
+    },
+    {
+      "id": "native:stdlib/base64/base64.xr",
+      "path": "stdlib/base64/base64.xr",
+      "mode": "build-run",
+      "expect": "gap",
+      "exit_code": null,
+      "stdout": "tests/smoke/expected/one.txt",
+      "gap": {
+        "feature": "Task328 P2",
+        "first_diagnostic": null,
+        "deferred": "Task328 P2 direct-C path is not integrated; legacy native output is not its acceptance evidence"
+      }
     }
   ]
 }
