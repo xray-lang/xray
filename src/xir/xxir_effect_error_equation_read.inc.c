@@ -372,8 +372,27 @@ static inline XrXirStatus error_equation_edge_possible(const EffectErrorEquation
 
 /* Phi inputs read the same filtered predecessor snapshot. No earlier Phi
  * assignment can replace a later one's source, including self and back edges. */
-static inline XrXirStatus error_equation_edge_word(const EffectErrorEquationRead *read,
-    const EffectErrorEdgeRead *edge,uint32_t value,uint32_t word,uint64_t *output,bool *possible) {
+typedef struct EffectErrorEdgeValueRead {
+    uint32_t value,word;
+    const EffectErrorEquationRead *eligible;
+} EffectErrorEdgeValueRead;
+
+/* Eligibility belongs only to this destination in the calling current walk.
+ * It never classifies a Phi source, transfer result or independently read RHS. */
+static inline XrXirStatus error_equation_edge_word_read(const EffectErrorEquationRead *read,
+    const EffectErrorEdgeRead *edge,const EffectErrorEdgeValueRead *query,uint64_t *output,bool *possible) {
+    if(!read || !query) return XR_XIR_BAD_STRUCTURE;
+    if(!xir_compile_work(read->work,3+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+    uint32_t value=query->value,word=query->word;
+    if(query->eligible) {
+        if(!xir_compile_work(read->work,10+sizeof(const EffectBodyCurrentRead *))) return XR_XIR_BUDGET;
+        const EffectBodyCurrentRead *current=read->body.current;
+        if(query->eligible!=read || !current || current->material!=read->body.owner ||
+            current->work!=read->work || read->body.read.owner!=read->work ||
+            read->body.head!=effect_body_owned_head || read->body.instruction!=effect_body_owned_instruction ||
+            read->body.type!=effect_body_owned_type || read->body.shape!=effect_body_owned_shape ||
+            read->body.read.consume!=effect_body_compile_consume) return XR_XIR_BAD_STRUCTURE;
+    }
     EffectErrorFilterRead filter;
     XrXirStatus status=error_equation_edge_possible(read,edge,&filter,possible);
     if(status!=XR_XIR_OK) return status;
@@ -405,9 +424,18 @@ static inline XrXirStatus error_equation_edge_word(const EffectErrorEquationRead
             }
         }
     }
-    bool active=false;XrXirType type=XR_XIR_UNIT;
-    status=error_equation_membership(read,value,&active,&type);
-    if(status!=XR_XIR_OK) return status;
-    if(!active) { *output=0;return XR_XIR_OK; }
+    if(!xir_compile_work(read->work,1)) return XR_XIR_BUDGET;
+    if(!query->eligible) {
+        bool active=false;XrXirType type=XR_XIR_UNIT;
+        status=error_equation_membership(read,value,&active,&type);
+        if(status!=XR_XIR_OK) return status;
+        if(!active) { *output=0;return XR_XIR_OK; }
+    }
     return error_equation_edge_source(read,edge,&filter,source,word,output);
+}
+static inline XrXirStatus error_equation_edge_word(const EffectErrorEquationRead *read,
+    const EffectErrorEdgeRead *edge,uint32_t value,uint32_t word,uint64_t *output,bool *possible) {
+    if(!xir_compile_work(read->work,sizeof(EffectErrorEdgeValueRead))) return XR_XIR_BUDGET;
+    EffectErrorEdgeValueRead query={value,word,NULL};
+    return error_equation_edge_word_read(read,edge,&query,output,possible);
 }

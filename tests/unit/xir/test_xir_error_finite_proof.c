@@ -307,6 +307,99 @@ static void finite_index_fixture(EdgeFixture *fixture,XrXirBlock *blocks,uint32_
     fixture->functions[1].instruction_count=n;
     fixture->functions[1].operands=fixture->operands;fixture->functions[1].operand_count=2;
 }
+typedef struct FiniteEligiblePoll { bool requested;uint32_t calls; } FiniteEligiblePoll;
+static bool finite_eligible_poll(const void *owner) {
+    FiniteEligiblePoll *poll=(FiniteEligiblePoll *)owner;++poll->calls;return poll->requested;
+}
+/* Direct reader negatives use private head projections, not live Input writes.
+ * Edge possibility and the canonical Phi decode succeed before the rejected
+ * span, prefix, source, or predecessor projection is consumed. */
+static void finite_eligible_edges(const EffectErrorEquationRead *equation) {
+    CHECK(equation->head.block_count<=65 && equation->head.parameter_count==2);
+    EffectErrorEdgeRead edge={2,3,equation->head.blocks[2].first+equation->head.blocks[2].count,
+        EFFECT_ERROR_EDGE_NORMAL};
+    EffectErrorEdgeValueRead query={9,0,equation};uint64_t expected=0,actual=0,joined=0;
+    bool possible=false,original=false;
+    for(uint32_t side=0;side<2;++side) {
+        edge.kind=side?EFFECT_ERROR_EDGE_ALTERNATE:EFFECT_ERROR_EDGE_NORMAL;
+        CHECK(error_equation_edge_word(equation,&edge,9,0,&expected,&original)==XR_XIR_OK);
+        CHECK(error_equation_edge_word_read(equation,&edge,&query,&actual,&possible)==XR_XIR_OK);
+        CHECK(original && possible && actual==expected && actual==(side?8u:4u));joined|=actual;
+    }
+    CHECK(joined==12);edge.kind=EFFECT_ERROR_EDGE_NORMAL;
+    EffectErrorEquationRead other=*equation;actual=UINT64_MAX;
+    CHECK(error_equation_edge_word_read(&other,&edge,&query,&actual,&possible)==XR_XIR_BAD_STRUCTURE);
+    CHECK(actual==UINT64_MAX);query.eligible=&other;
+    for(uint32_t kind=0;kind<4;++kind) {
+        other=*equation;
+        EffectBodyCurrentRead current=*equation->body.current;
+        if(!kind) other.body.current=NULL;
+        else if(kind==1) { current.work=NULL;other.body.current=&current; }
+        else if(kind==2) other.body.read.owner=NULL;
+        else other.body.type=NULL;
+        CHECK(error_equation_edge_word_read(&other,&edge,&query,&actual,&possible)==XR_XIR_BAD_STRUCTURE);
+        CHECK(actual==UINT64_MAX);
+    }
+    for(uint32_t kind=0;kind<4;++kind) {
+        other=*equation;uint32_t operands[2]={2,0};XrXirBlock blocks[65];
+        memcpy(blocks,equation->head.blocks,(size_t)equation->head.block_count*sizeof(*blocks));
+        if(!kind) other.head.operand_count=1;
+        else if(kind==1) { operands[0]=1;other.head.operands=operands; }
+        else if(kind==2) { operands[1]=UINT32_MAX;other.head.operands=operands; }
+        else { blocks[3].first=6;blocks[3].count=3;other.head.blocks=blocks; }
+        EffectErrorFilterRead filter;XrXirInstruction phi;
+        CHECK(error_equation_edge_possible(&other,&edge,&filter,&possible)==XR_XIR_OK && possible);
+        CHECK(error_equation_operation(&other,7,&phi)==XR_XIR_OK && phi.op==XR_XIR_PHI);
+        CHECK(error_equation_edge_word_read(&other,&edge,&query,&actual,&possible)==XR_XIR_BAD_STRUCTURE);
+        CHECK(actual==UINT64_MAX);
+    }
+    query.eligible=NULL;
+    CHECK(error_equation_edge_word_read(equation,&edge,&query,&actual,&possible)==XR_XIR_OK &&
+        possible && actual==4);
+    query.eligible=equation;FiniteEligiblePoll poll={0};
+    CHECK(xr_compile_resources_begin_cancel(equation->work->resources,finite_eligible_poll,&poll)==XR_COMPILE_RESOURCE_OK);
+    CHECK(error_equation_edge_word_read(equation,&edge,&query,&actual,&possible)==XR_XIR_OK &&
+        possible && actual==4 && poll.calls);
+    poll.requested=true;actual=UINT64_MAX;
+    CHECK(error_equation_edge_word_read(equation,&edge,&query,&actual,&possible)==XR_XIR_BUDGET);
+    CHECK(actual==UINT64_MAX);
+    CHECK(xr_compile_resources_end_cancel(equation->work->resources,finite_eligible_poll,&poll)==XR_COMPILE_RESOURCE_CANCELLED);
+    CHECK(error_equation_edge_word_read(equation,&edge,&query,&actual,&possible)==XR_XIR_OK &&
+        possible && actual==4);
+}
+typedef struct FiniteEligibleCompare { uint32_t selected,carriers;bool controls; } FiniteEligibleCompare;
+/* The ordinary RHS rebuilds its own equation and never receives eligibility.
+ * Literal words additionally prevent two readers sharing a wrong result. */
+static XrXirStatus finite_eligible_compare(EffectErrorFiniteRead *read,const EffectErrorEquationRead *equation,
+    uint32_t function,uint64_t coordinate,void *owner,bool *paused) {
+    FiniteEligibleCompare *compare=owner;*paused=false;
+    const EffectErrorFiniteRow *row=&read->proof->rows[function];
+    uint64_t phi=error_finite_entry_coordinate(read->proof,function,3,9,0);
+    bool carrier=coordinate==phi ||
+        coordinate==error_finite_entry_coordinate(read->proof,function,4,2,0) ||
+        coordinate==error_finite_entry_coordinate(read->proof,function,row->blocks-1,9,0);
+    bool reach=coordinate==row->first,summary=coordinate==row->end-64;
+    if(!carrier && !reach && !summary) return XR_XIR_OK;
+    EffectErrorFiniteRead independent={read->proof,read->work,read->limit,NULL};
+    uint64_t expected=0,actual=0;uint32_t expected_bits=0,actual_bits=0;
+    CHECK(error_finite_rhs(&independent,function,coordinate,&expected,&expected_bits)==XR_XIR_OK);
+    CHECK(error_finite_rhs_walk(read,equation,function,coordinate,&actual,&actual_bits)==XR_XIR_OK);
+    CHECK(actual==expected && actual_bits==expected_bits && actual_bits==(reach?1u:64u));
+    CHECK(actual==(reach?1u:read->limit==1?0u:12u));
+    ++compare->selected;if(carrier) ++compare->carriers;
+    if(compare->controls && coordinate==phi) finite_eligible_edges(equation);
+    return XR_XIR_OK;
+}
+static void finite_eligible_walk(EffectErrorFiniteRead *read,bool controls) {
+    CHECK(read->current && read->proof->words==1);
+    FiniteEligibleCompare compare={.controls=controls};bool empty=true;
+    size_t allocated=attempts;uint64_t physical=live_bytes,work=pc_stats(read->work).work;
+    pc_allocate_hook=finite_no_callback;pc_free_hook=finite_no_callback;
+    CHECK(error_finite_walk(read,1,finite_eligible_compare,&compare,&empty)==XR_XIR_OK && !empty);
+    pc_allocate_hook=NULL;pc_free_hook=NULL;
+    CHECK(compare.selected==5 && compare.carriers==3);
+    CHECK(attempts==allocated && live_bytes==physical && pc_stats(read->work).work>=work);
+}
 static void finite_index_words(void) {
     for (uint32_t blocks_count=63;blocks_count<=65;++blocks_count) {
         EdgeFixture fixture;XrXirBlock blocks[65];
@@ -334,6 +427,7 @@ static void finite_index_words(void) {
             actual==expected && actual_bits==expected_bits);
         CHECK(blocks_count>64 || (view.predecessors.ready && view.predecessors.function==1 &&
             !view.predecessors.local_writes));
+        finite_eligible_walk(&current,true);
         plain.limit=current.limit=1;
         CHECK(error_finite_rhs(&plain,1,coordinate,&expected,&expected_bits)==XR_XIR_OK && !expected);
         CHECK(error_finite_rhs(&current,1,coordinate,&actual,&actual_bits)==XR_XIR_OK && actual==expected);
@@ -345,6 +439,7 @@ static void finite_index_words(void) {
             CHECK(error_finite_predecessors(&original,&a)==XR_XIR_OK && !a.result);
             CHECK(error_finite_predecessors(&indexed,&b)==XR_XIR_OK && b.result==a.result);
         }
+        finite_eligible_walk(&current,false);
         proof->capacity=proof->count;finite_index_live_view=&view;
         pc_allocate_hook=finite_index_growth_boundary;pc_free_hook=finite_index_growth_boundary;
         CHECK(error_finite_grow(&context,proof,&view)==XR_XIR_OK);
@@ -353,6 +448,7 @@ static void finite_index_words(void) {
         CHECK(error_finite_view_open(&context,proof,&view)==XR_XIR_OK);
         current.limit=UINT32_MAX;
         CHECK(error_finite_rhs(&current,1,coordinate,&actual,&actual_bits)==XR_XIR_OK && actual==12);
+        finite_eligible_walk(&current,true);
         view=(EffectErrorFiniteView){0};
         finite_verify(&context,proof,XR_XIR_OK);
         finite_clear(proof);effect_outcomes_clear(&seed.outcomes_work,seed.count);

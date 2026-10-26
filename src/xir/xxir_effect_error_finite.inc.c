@@ -121,6 +121,7 @@ typedef struct EffectErrorFiniteEdgeQuery {
     uint32_t to,value,word;
     uint64_t result;
     bool reach;
+    const EffectErrorEquationRead *eligible;
 } EffectErrorFiniteEdgeQuery;
 static XrXirStatus error_finite_edge(const EffectErrorEquationRead *equation,
     const EffectErrorEdgeRead *edge,EffectErrorFiniteEdgeQuery *query) {
@@ -129,7 +130,11 @@ static XrXirStatus error_finite_edge(const EffectErrorEquationRead *equation,
     if(query->reach) {
         EffectErrorFilterRead filter;status=error_equation_edge_possible(equation,edge,&filter,&possible);
         if(possible) result=1;
-    } else status=error_equation_edge_word(equation,edge,query->value,query->word,&result,&possible);
+    } else {
+        if(!xir_compile_work(equation->work,sizeof(EffectErrorEdgeValueRead))) return XR_XIR_BUDGET;
+        EffectErrorEdgeValueRead value={query->value,query->word,query->eligible};
+        status=error_equation_edge_word_read(equation,edge,&value,&result,&possible);
+    }
     if(status==XR_XIR_OK && possible) query->result|=result;
     return status;
 }
@@ -336,6 +341,7 @@ static XrXirStatus error_finite_rhs_equation(const EffectErrorFiniteRead *read,
     XrXirStatus status=XR_XIR_OK;
     uint64_t local=coordinate-row->first,summary=row->end-row->first-(uint64_t)proof->words*64;
     if(local<row->blocks) {
+        if(!xir_compile_work(read->work,sizeof(const EffectErrorEquationRead *))) return XR_XIR_BUDGET;
         EffectErrorFiniteEdgeQuery query={.to=(uint32_t)local,.reach=true,.result=local?0:1};
         status=error_finite_predecessors(equation,&query);*output=query.result;*bits=1;return status;
     }
@@ -346,7 +352,8 @@ static XrXirStatus error_finite_rhs_equation(const EffectErrorFiniteRead *read,
     bool reachable=false;status=error_finite_reachable(read,function,block,&reachable);
     if(status!=XR_XIR_OK) return status;
     if(!reachable) { *output=0;return XR_XIR_OK; }
-    EffectErrorFiniteEdgeQuery query={.to=block,.value=value,.word=word};
+    if(!xir_compile_work(read->work,1+sizeof(const EffectErrorEquationRead *))) return XR_XIR_BUDGET;
+    EffectErrorFiniteEdgeQuery query={.to=block,.value=value,.word=word,.eligible=eligible?equation:NULL};
     XrXirType type=XR_XIR_UNIT;
     if(!eligible) {
         bool active=false;status=error_equation_membership(equation,value,&active,&type);
