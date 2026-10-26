@@ -84,10 +84,11 @@ static void fresh_class_base(FreshClassFixture *f,FreshClassCase kind) {
 static void fresh_class_factory(FreshClassFixture *f,FreshClassCase kind) {
     bool slot=kind==FC_OLD_FACTORY || kind==FC_BRANCH_FACTORY || kind==FC_FACTORY_PUBLICATION;
     if (slot) {
-        f->slot=(XrXirSlot){0,(XrXirType)FC_OBJECT,kind==FC_FACTORY_PUBLICATION};f->declarations.slots=&f->slot;f->declarations.slot_count=1;
+        f->slot=(XrXirSlot){0,(XrXirType)FC_CELL,1};f->declarations.slots=&f->slot;f->declarations.slot_count=1;
         uint32_t text=fresh_class_op(f,3,(XrXirInstruction){.op=XR_XIR_CONST_STRING,.type=XR_XIR_STRING});
         uint32_t object=fresh_class_new(f,3,text,text);
-        fresh_class_op(f,3,(XrXirInstruction){.op=XR_XIR_SLOT_INIT,.args={object}});
+        uint32_t module_cell=fresh_class_op(f,3,(XrXirInstruction){.op=XR_XIR_CELL_NEW,.type=(XrXirType)FC_CELL,.args={object}});
+        fresh_class_op(f,3,(XrXirInstruction){.op=XR_XIR_SLOT_INIT,.args={module_cell}});
     }
     fresh_class_op(f,3,(XrXirInstruction){.op=XR_XIR_RETURN});
     fresh_class_op(f,2,(XrXirInstruction){.op=XR_XIR_RETURN});
@@ -99,7 +100,8 @@ static void fresh_class_factory(FreshClassFixture *f,FreshClassCase kind) {
     if (kind==FC_OLD_FACTORY) {
         f->functions[1].name="init";f->functions[1].name_length=4;
         f->identities[1].nominal_owner=1;f->identities[1].method_kind=XR_XIR_CONSTRUCTOR;
-        uint32_t old=fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_SLOT_LOAD,.type=(XrXirType)FC_OBJECT});
+        uint32_t module_cell=fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_SLOT_LOAD,.type=(XrXirType)FC_CELL});
+        uint32_t old=fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_CELL_READ,.type=(XrXirType)FC_OBJECT,.args={module_cell}});
         fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_RETURN,.args={old}});return;
     }
     uint32_t values[2];
@@ -115,7 +117,8 @@ static void fresh_class_factory(FreshClassFixture *f,FreshClassCase kind) {
     }
     if (kind==FC_FACTORY_PUBLICATION) {
         uint32_t published=fresh_class_new(f,1,values[0],values[1]);
-        fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_SLOT_STORE,.args={published}});
+        uint32_t module_cell=fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_SLOT_LOAD,.type=(XrXirType)FC_CELL});
+        fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_CELL_WRITE,.args={module_cell,published}});
     }
     if (kind==FC_BRANCH_FACTORY) {
         uint32_t condition=fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_CONST_BOOL,.type=XR_XIR_BOOL});
@@ -128,9 +131,10 @@ static void fresh_class_factory(FreshClassFixture *f,FreshClassCase kind) {
     if (kind==FC_BRANCH_FACTORY) {
         f->blocks[1][1].count=f->functions[1].instruction_count-f->blocks[1][1].first;
         f->blocks[1][2].first=f->functions[1].instruction_count;
-        object=fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_SLOT_LOAD,.type=(XrXirType)FC_OBJECT});
+        uint32_t module_cell=fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_SLOT_LOAD,.type=(XrXirType)FC_CELL});
+        object=fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_CELL_READ,.type=(XrXirType)FC_OBJECT,.args={module_cell}});
         fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_RETURN,.args={object}});
-        f->blocks[1][2].count=2;f->functions[1].block_count=3;
+        f->blocks[1][2].count=f->functions[1].instruction_count-f->blocks[1][2].first;f->functions[1].block_count=3;
     }
 }
 static void fresh_class_alias(FreshClassFixture *f,FreshClassCase kind) {
@@ -189,8 +193,7 @@ static void fresh_class_fixture(FreshClassFixture *f,FreshClassCase kind) {
     bool factory=kind==FC_FACTORY || kind==FC_CLASS_COPY || kind==FC_OLD_FACTORY || kind==FC_BRANCH_FACTORY || kind==FC_FACTORY_PUBLICATION;
     if (kind==FC_INDIRECT) {
         uint32_t callee=fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)FC_CALLABLE,.immediate=1});
-        uint32_t at=fresh_class_group(f,0,&callee,1);
-        f->object=fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_CALL_INDIRECT,.type=(XrXirType)FC_OBJECT,.args={at,1}});
+        f->object=fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_CALL_INDIRECT,.type=(XrXirType)FC_OBJECT,.immediate=callee});
     } else f->object=factory?fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_CALL,.type=(XrXirType)FC_OBJECT,.immediate=1}):
         fresh_class_new(f,0,first,second);
     if (kind==FC_LOOP_CELL) {
@@ -251,7 +254,7 @@ static XrXirNominalTable *fresh_class_physical(const XrXirCompileContext *contex
     }
     return identities;
 }
-static void fresh_class_case(FreshClassCase kind,bool lowered) {
+static bool fresh_class_case(FreshClassCase kind,bool lowered) {
     FreshClassFixture f;fresh_class_fixture(&f,kind);
     XrXirCompileContext context=owner_new(caps());uint64_t baseline=stats(&context).live_bytes;
     XrXirNominalTable *identities=lowered?fresh_class_physical(&context,&f):NULL;
@@ -262,7 +265,11 @@ static void fresh_class_case(FreshClassCase kind,bool lowered) {
     if (status==XR_XIR_OK) {stage="return origins";status=xir_compile_view_return_origins_verified(&context,&f.module,&diagnostic);}
     if (status==XR_XIR_OK) {stage="affine";status=xir_compile_view_affine_verified(&context,&f.module,&diagnostic);}
     if (status!=XR_XIR_OK) fprintf(stderr,"fresh Class prefix case=%u physical=%u stage=%s status=%u at %u/%u/%u\n",kind,(unsigned)lowered,stage,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
-    CHECK(status==XR_XIR_OK);
+    if (status!=XR_XIR_OK) {
+        fprintf(stderr,"fresh Class proof case=%u physical=%u NOT_RUN: invalid %s prefix\n",(unsigned)kind,(unsigned)lowered,stage);
+        CHECK(!memcmp(before,&f,sizeof(f)));xr_xir_compile_construction_free(construction);
+        xr_xir_compile_nominal_free(identities);owner_free(&context,baseline);return false;
+    }
     if (!lowered && (kind==FC_FACTORY || kind==FC_ARRAY_FIELD)) {
         /* This small outer frame exercises resolver initialization rejection. */
         XrXirCompileContext denied=context;denied.limits.frame_bytes=64;
@@ -274,7 +281,7 @@ static void fresh_class_case(FreshClassCase kind,bool lowered) {
     CHECK(status==f.expected);
     if (status!=XR_XIR_OK) CHECK(diagnostic.function==0 && diagnostic.instruction==f.access);
     CHECK(!memcmp(before,&f,sizeof(f)));xr_xir_compile_construction_free(construction);
-    xr_xir_compile_nominal_free(identities);owner_free(&context,baseline);
+    xr_xir_compile_nominal_free(identities);owner_free(&context,baseline);return true;
 }
 static void fresh_class_aggregate_rejected(void) {
     FreshClassFixture f;fresh_class_base(&f,FC_DIRECT);
@@ -296,7 +303,13 @@ static void fresh_class_cell_return_rejected(void) {
 static void fresh_class_cases(void) {
     fresh_class_aggregate_rejected();
     fresh_class_cell_return_rejected();
-    for (FreshClassCase kind=0;kind<FC_CASE_COUNT;++kind) {fresh_class_case(kind,false);fresh_class_case(kind,true);}
+    bool all_prefixes=true;
+    for (FreshClassCase kind=0;kind<FC_CASE_COUNT;++kind) {
+        bool built_ok=fresh_class_case(kind,false);
+        bool lowered_ok=fresh_class_case(kind,true);
+        all_prefixes=all_prefixes && built_ok && lowered_ok;
+    }
+    CHECK(all_prefixes);
     puts("Fresh closed Class fields and stable private Cells keep unsupported aliases unresolved");
 }
 #endif // XIR_VIEW_ACCESS_FRESH_CLASS_CASES_H
