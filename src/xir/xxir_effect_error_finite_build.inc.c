@@ -60,10 +60,16 @@ typedef struct ErrorFiniteDerive {
     EffectErrorFinite *proof;
     uint32_t rank;
     bool *changed,full;
+    uint64_t walked,resume;
 } ErrorFiniteDerive;
 static XrXirStatus error_finite_derive_coordinate(EffectErrorFiniteRead *read,const EffectErrorEquationRead *equation,
     uint32_t function,uint64_t coordinate,void *owner,bool *paused) {
-    ErrorFiniteDerive *derive=owner;uint64_t result=0;uint32_t bits=0;
+    ErrorFiniteDerive *derive=owner;
+    if(!xir_compile_work(read->work,sizeof(derive->walked)+2)) return XR_XIR_BUDGET;
+    if(derive->walked==UINT64_MAX) return XR_XIR_BAD_STRUCTURE;
+    ++derive->walked;
+    if(derive->walked<=derive->resume) return XR_XIR_OK;
+    uint64_t result=0;uint32_t bits=0;
     /* Earlier equations in this walk already have strictly smaller ranks.
      * Read their current facts without waiting for another complete sweep. */
     if(!xir_compile_work(read->work,sizeof(read->limit))) return XR_XIR_BUDGET;
@@ -93,7 +99,8 @@ static XrXirStatus error_finite_derive_coordinate(EffectErrorFiniteRead *read,co
 }
 static XrXirStatus error_finite_derive(const XrXirCompileContext *work,EffectErrorFinite *proof) {
     bool changed=true;EffectErrorFiniteView current;error_finite_view_reset(&current);
-    ErrorFiniteDerive derive={proof,1,&changed,false};
+    if(!xir_compile_work(work,2*sizeof(uint64_t))) return XR_XIR_BUDGET;
+    ErrorFiniteDerive derive={.proof=proof,.rank=1,.changed=&changed};
     /* Every growing equation advances the witness rank. A complete stable
      * sweep still closes loops and recursive calls, and the independent
      * receiver still checks closure and strict lower-rank support. */
@@ -103,15 +110,27 @@ static XrXirStatus error_finite_derive(const XrXirCompileContext *work,EffectErr
             XrXirStatus status=XR_XIR_OK;
             if(!current.work) status=error_finite_view_open(work,proof,&current);
             if(status!=XR_XIR_OK) return status;
+            if(!xir_compile_work(work,sizeof(derive.walked))) return XR_XIR_BUDGET;
+            derive.walked=0;
             {
                 EffectErrorFiniteRead read={proof,work,derive.rank,&current};bool empty=false;
                 status=error_finite_walk(&read,f,error_finite_derive_coordinate,&derive,&empty);
             }
             if(status!=XR_XIR_OK) return status;
             if(derive.full) {
+                if(!xir_compile_work(work,sizeof(derive.resume)+sizeof(changed)+sizeof(derive.full)+2))
+                    return XR_XIR_BUDGET;
+                if(!derive.walked) return XR_XIR_BAD_STRUCTURE;
+                derive.resume=derive.walked-1;
+                /* Only a scheduling ordinal survives growth. Callback changes
+                 * may move the domain, so a complete fresh sweep must follow. */
+                changed=true;
                 status=error_finite_grow(work,proof,&current);if(status!=XR_XIR_OK) return status;
                 derive.full=false;
-            } else ++f;
+            } else {
+                if(!xir_compile_work(work,sizeof(derive.resume))) return XR_XIR_BUDGET;
+                derive.resume=0;++f;
+            }
         }
     }
     return XR_XIR_OK;

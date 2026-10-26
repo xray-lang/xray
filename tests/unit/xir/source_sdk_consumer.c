@@ -42,10 +42,12 @@ static XrSourceCompiler *compiler_new(const char *stdlib) {
     XrSourceCompiler *compiler = NULL;
     CHECK(xray_source_compiler_new(&options, &compiler) == XR_SOURCE_OK && compiler); return compiler;
 }
-static XrSourceProgram *compile(XrSourceCompiler *compiler, char *bytes) {
+static XrSourceProgram *compile(XrSourceCompiler *compiler, char *bytes, const char *case_name) {
     XrSourceText text = {NULL, "installed-embedding", bytes, strlen(bytes)};
     XrSourceProgram *program = NULL; XrSourceDiagnostic *diagnostic = NULL;
     XrSourceStatus status = xray_source_compile_text(compiler, &text, &program, &diagnostic);
+    if (status != XR_SOURCE_OK || !program || diagnostic)
+        fprintf(stderr, "[sdk-compile-failure] case=%s status=%u\n", case_name, (unsigned)status);
     if (diagnostic) { XrSourceDiagnosticInfo info; CHECK(xray_source_diagnostic_info(diagnostic, &info) == XR_SOURCE_OK); fprintf(stderr, "%s\n", info.message); }
     CHECK(status == XR_SOURCE_OK && program && !diagnostic); memset(bytes, '!', strlen(bytes)); return program;
 }
@@ -54,7 +56,7 @@ static void checked_program(const char *stdlib) {
     char source[] = "import time as Clock\nimport \"std/io/output\" as Output\n"
         "Output.writeStdout(\"A\\0B\")\nconst begin=Clock.nanos()\nClock.sleep(1)\n"
         "print(Clock.nanos()-begin>=1000000)\n";
-    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceProgram *program = compile(compiler, source, __func__); xray_source_compiler_free(compiler);
     Output out = {0}; XrSourceCallOptions options;
     CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
     options.write = capture; options.context = &out;
@@ -68,7 +70,7 @@ static void checked_program(const char *stdlib) {
 static void detached_cancellation(const char *stdlib) {
     XrSourceCompiler *compiler = compiler_new(stdlib);
     char source[] = "var n:i64=0\nwhile(true){ n+=1 }\n";
-    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceProgram *program = compile(compiler, source, __func__); xray_source_compiler_free(compiler);
     XrSourceCallOptions options; CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
     XrSourceCall *call = NULL; CHECK(xray_source_call_begin(program, &options, &call) == XR_SOURCE_OK);
     xray_source_program_free(program); XrSourceEvent event = {0};
@@ -87,7 +89,7 @@ static void detached_cancellation(const char *stdlib) {
 }
 static void owned_panic(const char *stdlib) {
     XrSourceCompiler *compiler = compiler_new(stdlib); char source[] = "assert(false,\"p\\0中z\")\n";
-    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceProgram *program = compile(compiler, source, __func__); xray_source_compiler_free(compiler);
     XrSourceCallOptions options; CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
     XrSourceResult *result = NULL; CHECK(xray_source_execute(program, &options, &result, NULL) == XR_SOURCE_OK);
     xray_source_program_free(program); XrSourceEvent event;
@@ -117,7 +119,7 @@ static void library_methods(const char *stdlib) {
         "0 72057594037927936 2 2\n2.5 -2 -3 -2 -3 false -2.5 true false 65 A\nA\0B A\0BA\0B tr"
         "ue true true 2 5\n";
     XrSourceCompiler *compiler = compiler_new(stdlib);
-    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceProgram *program = compile(compiler, source, __func__); xray_source_compiler_free(compiler);
     Output out = {0}; XrSourceCallOptions options;
     CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
     options.write = capture; options.context = &out;
@@ -144,7 +146,7 @@ static void generic_initializers(const char *stdlib) {
         "print(number(value),count<i64>(value),first<i64>(value),original[0])\n";
     const char expected[] = "A\0\xe4\xb8\xad\xf0\x9f\x98\x80" "0\n7 2 11 99\n";
     XrSourceCompiler *compiler = compiler_new(stdlib);
-    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceProgram *program = compile(compiler, source, __func__); xray_source_compiler_free(compiler);
     Output out = {0}; XrSourceCallOptions options;
     CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
     options.write = capture; options.context = &out;
@@ -179,8 +181,8 @@ static void compiler_constants(const char *stdlib) {
     const char *expected[] = {expected_first,expected_second};
     const size_t lengths[] = {sizeof(expected_first)-1,sizeof(expected_second)-1};
     XrSourceCompiler *compiler = compiler_new(stdlib);
-    XrSourceProgram *programs[] = {compile(compiler, first),NULL};
-    programs[1] = compile(compiler, second); xray_source_compiler_free(compiler);
+    XrSourceProgram *programs[] = {compile(compiler, first, __func__),NULL};
+    programs[1] = compile(compiler, second, __func__); xray_source_compiler_free(compiler);
     for (size_t i=0;i<2;++i) {
         Output out = {0}; XrSourceCallOptions options;
         CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
@@ -221,7 +223,7 @@ static void typed_tasks(const char *stdlib) {
         "18446744073709551615\n18446744073709551615\n1.5\n1.5\n1.5\n1.5\n"
         "x\nx\n-42\n-42\ntrue\ntrue\nA\0B\nA\0B\nunit\n";
     XrSourceCompiler *compiler = compiler_new(stdlib);
-    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceProgram *program = compile(compiler, source, __func__); xray_source_compiler_free(compiler);
     XrSourceCallOptions options; CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
     Output out = {{0}, 0}; options.write = capture; options.context = &out;
     XrSourceResult *result = NULL; CHECK(xray_source_execute(program, &options, &result, NULL) == XR_SOURCE_OK);
@@ -242,7 +244,7 @@ static void timer_waits(const char *stdlib) {
     XrSourceCompiler *compiler = compiler_new(stdlib);
     char source[] = "import time\nfn worker()->i64{time.sleep(3);return 43}\n"
         "fn main()->i64{return await go worker()}\nprint(main())\n";
-    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceProgram *program = compile(compiler, source, __func__); xray_source_compiler_free(compiler);
     Output out = {0}; XrSourceCallOptions options;
     CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
     options.write = capture; options.context = &out;
@@ -329,6 +331,9 @@ static int constructed_task_case(const TaskCase *test, const char *stdlib, size_
     XrSourceText text = {NULL, test->name, source, length};
     XrSourceProgram *program = NULL; XrSourceDiagnostic *diagnostic = NULL;
     XrSourceStatus status = xray_source_compile_text(compiler, &text, &program, &diagnostic);
+    if (status != XR_SOURCE_OK || !program || diagnostic)
+        fprintf(stderr, "[sdk-compile-failure] case=constructed_tasks/%s status=%u\n",
+            test->name, (unsigned)status);
     memset(source, '!', sizeof(source));
     xray_source_compiler_free(compiler);
     if (status != XR_SOURCE_OK) {
