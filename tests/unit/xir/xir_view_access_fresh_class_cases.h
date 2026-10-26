@@ -246,26 +246,26 @@ static XrXirNominalTable *fresh_class_physical(const XrXirCompileContext *contex
     }
     return identities;
 }
-static void fresh_class_case(FreshClassCase kind,bool physical) {
+static void fresh_class_case(FreshClassCase kind,bool lowered) {
     FreshClassFixture f;fresh_class_fixture(&f,kind);
     XrXirCompileContext context=owner_new(caps());uint64_t baseline=stats(&context).live_bytes;
-    XrXirNominalTable *identities=physical?fresh_class_physical(&context,&f):NULL;
+    XrXirNominalTable *identities=lowered?fresh_class_physical(&context,&f):NULL;
     unsigned char before[sizeof(f)];memcpy(before,&f,sizeof(f));
     XrXirConstruction *construction=NULL;XrXirDiagnostic diagnostic={0};const char *stage="types and construction";
     XrXirStatus status=xir_fixture_module_construction(&context,&f.module,&construction);
     if (status==XR_XIR_OK) {stage="ordinary";status=xir_compile_view_prepare_ordinary(&context,&f.module,construction,&diagnostic);}
     if (status==XR_XIR_OK) {stage="return origins";status=xir_compile_view_return_origins_verified(&context,&f.module,&diagnostic);}
     if (status==XR_XIR_OK) {stage="affine";status=xir_compile_view_affine_verified(&context,&f.module,&diagnostic);}
-    if (status!=XR_XIR_OK) fprintf(stderr,"fresh Class prefix case=%u physical=%u stage=%s status=%u at %u/%u/%u\n",kind,(unsigned)physical,stage,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
+    if (status!=XR_XIR_OK) fprintf(stderr,"fresh Class prefix case=%u physical=%u stage=%s status=%u at %u/%u/%u\n",kind,(unsigned)lowered,stage,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK);
-    if (!physical && (kind==FC_FACTORY || kind==FC_ARRAY_FIELD)) {
+    if (!lowered && (kind==FC_FACTORY || kind==FC_ARRAY_FIELD)) {
         /* This small outer frame exercises resolver initialization rejection. */
         XrXirCompileContext denied=context;denied.limits.frame_bytes=64;
         CHECK(xir_compile_view_access_verified(&denied,&f.module,&diagnostic)==XR_XIR_BUDGET);
     }
     status=xir_compile_view_access_verified(&context,&f.module,&diagnostic);
     if (status!=f.expected || (status!=XR_XIR_OK && (diagnostic.function!=0 || diagnostic.instruction!=f.access)))
-        fprintf(stderr,"fresh Class access case=%u physical=%u status=%u expected=%u at %u/%u/%u\n",kind,(unsigned)physical,status,f.expected,diagnostic.function,diagnostic.block,diagnostic.instruction);
+        fprintf(stderr,"fresh Class access case=%u physical=%u status=%u expected=%u at %u/%u/%u\n",kind,(unsigned)lowered,status,f.expected,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==f.expected);
     if (status!=XR_XIR_OK) CHECK(diagnostic.function==0 && diagnostic.instruction==f.access);
     CHECK(!memcmp(before,&f,sizeof(f)));xr_xir_compile_construction_free(construction);
