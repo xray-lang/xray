@@ -295,6 +295,28 @@ typedef struct EffectErrorEdgeRead {
     EffectErrorEdgeKind kind;
 } EffectErrorEdgeRead;
 
+/* Edge identity consumes only these three physical columns. The current view
+ * has framed every column; filters, Phi inputs and contributing transfers keep
+ * their complete readers. No projected value outlives this classification. */
+static XrXirStatus error_equation_edge_identity(const EffectErrorEquationRead *read,
+    uint32_t instruction,uint32_t side,XrXirInstruction *terminal) {
+    const EffectBodyRequest *body=&read->body;
+    if(!body->current || !effect_body_request_sequence_owned(body))
+        return error_equation_operation(read,instruction,terminal);
+    if(!xir_compile_work(read->work,8)) return XR_XIR_BUDGET;
+    if(body->current->work!=read->work) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyRun *ref=NULL;uint32_t opcode=XR_XIR_INVALID;
+    XrXirStatus status=effect_body_current_record(body,read->function,instruction,&ref);
+    if(status==XR_XIR_OK) status=effect_body_run_word(&body->read,ref,instruction,0,&opcode);
+    if(status!=XR_XIR_OK) return status;
+    if(opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+    if(!xir_compile_work(read->work,sizeof(terminal->op))) return XR_XIR_BUDGET;
+    terminal->op=(XrXirOp)opcode;
+    status=effect_body_run_word(&body->read,ref,instruction,2,&terminal->args[0]);
+    if(status==XR_XIR_OK)
+        status=effect_body_run_word(&body->read,ref,instruction,4+side,&terminal->targets[side]);
+    return status;
+}
 /* Coordinates name an actual Input edge, never an arbitrary state transfer.
  * Source reachability and positive support remain separate proof obligations. */
 static inline XrXirStatus error_equation_edge_classify(const EffectErrorEquationRead *read,
@@ -310,7 +332,7 @@ static inline XrXirStatus error_equation_edge_classify(const EffectErrorEquation
         return from->panic && from->panic==edge->to && edge->cursor>=from->first && edge->cursor<end?
             XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     if(edge->kind>EFFECT_ERROR_EDGE_ALTERNATE || edge->cursor!=end) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=error_equation_operation(read,end-1,terminal);
+    XrXirStatus status=error_equation_edge_identity(read,end-1,(uint32_t)edge->kind,terminal);
     if(status!=XR_XIR_OK) return status;
     bool alternate=edge->kind==EFFECT_ERROR_EDGE_ALTERNATE;
     if(terminal->op==XR_XIR_JUMP || terminal->op==XR_XIR_CLEANUP_REGISTER ||
