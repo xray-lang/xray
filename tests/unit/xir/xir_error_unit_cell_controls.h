@@ -15,7 +15,7 @@ static void pc_unit_cell_fixture(EdgeFixture *f,unsigned mode) {
     f->parameters[0]=XR_XIR_ERROR;
     f->parameters[1]=write ? (XrXirType)EE_CELL : (XrXirType)EE_ENUM;
     f->functions[1].parameters=f->parameters;f->functions[1].parameter_count=2;
-    f->functions[1].block_count=1;
+    f->functions[1].block_count=1;f->functions[1].error_type=XR_XIR_NEVER;
     if (!write) {
         f->subject[0]=(XrXirInstruction){.op=XR_XIR_CELL_NEW,.type=(XrXirType)EE_CELL,
             .args={unit ? 0u : 1u}};

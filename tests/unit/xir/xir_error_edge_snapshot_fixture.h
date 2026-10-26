@@ -36,7 +36,7 @@ static void ee_cleanup_fixture(EdgeFixture *f, EdgeCase mode, bool snapshot) {
     f->cleanup[1]=(XrXirInstruction){.op=XR_XIR_CELL_WRITE,.args={0,1}};
     f->cleanup[2]=f->init;f->cleanup_block=(XrXirBlock){.count=3};
     f->functions[3]=(XrXirFunction){.name="cleanup",.name_length=7,
-        .parameters=&f->cleanup_parameter,.parameter_count=1,.result=XR_XIR_UNIT,
+        .parameters=&f->cleanup_parameter,.parameter_count=1,.result=XR_XIR_UNIT,.error_type=XR_XIR_NEVER,
         .blocks=&f->cleanup_block,.block_count=1,.instructions=f->cleanup,.instruction_count=3};
     f->identities[3].cleanup_owner=2;f->module.function_count=4;
     f->subject[4]=(XrXirInstruction){.op=XR_XIR_CLEANUP_REGISTER,.args={0,1},.targets={1},.immediate=3};
@@ -103,12 +103,12 @@ static void ee_fixture(EdgeFixture *f, EdgeCase mode, bool snapshot) {
     f->source=(XrXirSourceModule){.name="edges",.name_length=5,.initializer=0};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
         .root_module=UINT32_MAX,.entry_function=UINT32_MAX};
-    f->functions[0]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
+    f->functions[0]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,.error_type=XR_XIR_NEVER,
         .blocks=&f->one,.block_count=1,.instructions=&f->init,.instruction_count=1};
     f->thrower[0]=(XrXirInstruction){.op=XR_XIR_ENUM_NEW,.type=(XrXirType)EE_ENUM,.immediate=1};
     f->thrower[1]=(XrXirInstruction){.op=XR_XIR_THROW,.args={0}};
     f->throw_block=(XrXirBlock){.count=2};
-    f->functions[2]=(XrXirFunction){.name="thrower",.name_length=7,.result=XR_XIR_UNIT,
+    f->functions[2]=(XrXirFunction){.name="thrower",.name_length=7,.result=XR_XIR_UNIT,.error_type=(XrXirType)EE_ENUM,
         .blocks=&f->throw_block,.block_count=1,.instructions=f->thrower,.instruction_count=2};
     f->module=(XrXirModule){.stage=XR_XIR_CHECKED,.functions=f->functions,.function_count=3,
         .declarations=&f->declarations,.types=&f->types,.linkage_kind=XR_XIR_LIBRARY};
@@ -120,7 +120,7 @@ static void ee_fixture(EdgeFixture *f, EdgeCase mode, bool snapshot) {
     f->subject[5]=(XrXirInstruction){.op=XR_XIR_THROW,.args={5}};
     f->blocks[0]=(XrXirBlock){.count=5};f->blocks[1]=(XrXirBlock){.first=5,.count=1};
     f->functions[1]=(XrXirFunction){.name="subject",.name_length=7,.parameters=f->parameters,
-        .parameter_count=2,.result=XR_XIR_UNIT,.blocks=f->blocks,.block_count=2,
+        .parameter_count=2,.result=XR_XIR_UNIT,.error_type=(XrXirType)EE_ENUM,.blocks=f->blocks,.block_count=2,
         .instructions=f->subject,.instruction_count=6};
     if (mode==EE_BRANCH) {
         f->subject[4]=(XrXirInstruction){.op=XR_XIR_BRANCH,.args={1},.targets={1,2}};

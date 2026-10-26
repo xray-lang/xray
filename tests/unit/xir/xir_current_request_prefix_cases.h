@@ -41,6 +41,7 @@ static void prefix_fixture(EdgeFixture *f,unsigned kind) {
     static const XrXirType parameters[]={(XrXirType)EE_ENUM,XR_XIR_BOOL,(XrXirType)EE_CELL};
     CHECK(kind<7);ee_fixture(f,EE_JUMP,false);
     f->functions[1].parameters=parameters;f->functions[1].parameter_count=3;
+    f->functions[1].error_type=kind==6?(XrXirType)EE_ENUM:XR_XIR_NEVER;
     f->subject[0]=(XrXirInstruction){.op=XR_XIR_ENUM_NEW,.type=(XrXirType)EE_ENUM};
     f->subject[1]=(XrXirInstruction){.op=ops[kind],.type=types[kind],.args={kind==3?1u:0u,0}};
     f->subject[2]=(XrXirInstruction){.op=XR_XIR_RETURN};

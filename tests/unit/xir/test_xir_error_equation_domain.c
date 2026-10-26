@@ -35,6 +35,7 @@ static void domain_fixture(EdgeFixture *fixture,unsigned mode) {
     fixture->subject[1]=(XrXirInstruction){.op=XR_XIR_RETURN};
     fixture->blocks[0]=(XrXirBlock){.count=2};
     fixture->functions[1]=(XrXirFunction){.name="caller",.name_length=6,.result=XR_XIR_UNIT,
+        .error_type=mode==1?XR_XIR_NEVER:mode==6?XR_XIR_ERROR:(XrXirType)EE_ENUM,
         .blocks=fixture->blocks,.block_count=1,.instructions=fixture->subject,.instruction_count=2};
     fixture->thrower[0]=(XrXirInstruction){.op=XR_XIR_ENUM_NEW,.type=(XrXirType)EE_ENUM};
     fixture->thrower[1]=(XrXirInstruction){.op=XR_XIR_THROW,.args={0}};
@@ -58,6 +59,7 @@ static void domain_fixture(EdgeFixture *fixture,unsigned mode) {
         fixture->thrower[0]=(XrXirInstruction){.op=XR_XIR_THROW,.args={0}};
         fixture->functions[2].instruction_count=1;fixture->throw_block.count=1;
     }
+    fixture->functions[2].error_type=fixture->functions[1].error_type;
 }
 static uint64_t domain_literal(unsigned mode,uint32_t function,uint32_t word) {
     if(!function || mode==1) return 0;

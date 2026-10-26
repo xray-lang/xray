@@ -137,6 +137,7 @@ static void equation_unseeded_fixture(EdgeFixture *fixture) {
     fixture->operands[0]=0;fixture->operands[1]=0;
     fixture->operands[2]=1;fixture->operands[3]=5;
     fixture->functions[1].parameters=NULL;fixture->functions[1].parameter_count=0;
+    fixture->functions[1].error_type=XR_XIR_NEVER;
     fixture->functions[1].instructions=fixture->subject;fixture->functions[1].instruction_count=8;
     fixture->functions[1].blocks=fixture->blocks;fixture->functions[1].block_count=3;
     fixture->functions[1].operands=fixture->operands;fixture->functions[1].operand_count=4;
