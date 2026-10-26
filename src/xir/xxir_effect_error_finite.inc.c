@@ -268,11 +268,12 @@ static XrXirStatus error_finite_predecessors(const EffectErrorEquationRead *equa
         if (query->to>=row->blocks) return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status=error_finite_predecessor_index(equation,read->current);
         if (status!=XR_XIR_OK) return status;
-        if (!xir_compile_work(read->work,sizeof(uint64_t)+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        if (!xir_compile_work(read->work,sizeof(uint64_t))) return XR_XIR_BUDGET;
         uint64_t mask=read->current->predecessors.rows[query->to];
-        for (uint32_t b=0;mask;++b,mask>>=1) {
-            if (!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
-            if (!(mask&UINT64_C(1))) continue;
+        while (mask) {
+            if (!xir_compile_work(read->work,sizeof(uint32_t)+4)) return XR_XIR_BUDGET;
+            uint32_t b=(uint32_t)__builtin_ctzll(mask);mask&=mask-1;
+            if (b>=row->blocks) return XR_XIR_BAD_STRUCTURE;
             bool reachable=false;status=error_finite_reachable(read,equation->context,b,&reachable);
             if (status==XR_XIR_OK && reachable) status=error_finite_predecessor_block(equation,query,b);
             if (status!=XR_XIR_OK) return status;
