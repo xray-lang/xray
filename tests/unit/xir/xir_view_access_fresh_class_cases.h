@@ -137,9 +137,12 @@ static void fresh_class_alias(FreshClassFixture *f,FreshClassCase kind) {
     if (kind==FC_CELL_COPY) fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_COPY,.type=(XrXirType)FC_CELL,.args={f->cell}});
     if (kind==FC_CELL_LOCAL_ALIAS) fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_LOCAL_NEW,.type=(XrXirType)FC_CELL,.args={f->cell}});
     if (kind==FC_CLEANUP_METADATA) {
+        uint32_t view=0;
         for (uint32_t p=0;p<6;++p)
-            fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_COPY,.type=(XrXirType)FC_SHARED});
-        uint32_t at=fresh_class_group(f,0,&f->cell,1);
+            view=fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_COPY,.type=(XrXirType)FC_SHARED});
+        /* The table offset equals the Cell id; the payload is a view owner. */
+        while (f->functions[0].operand_count<f->cell) fresh_class_group(f,0,&view,1);
+        uint32_t at=fresh_class_group(f,0,&view,1);CHECK(at==f->cell);
         fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_VIEW_CLEANUP,.args={at,1}});
     }
 }
