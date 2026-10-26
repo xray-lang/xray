@@ -23,7 +23,8 @@ static size_t assert_packet_instruction(const XrXirCheckedPacket *packet,uint32_
     for (uint32_t f=0;f<=function;++f) {
         uint32_t length=assert_packet_u32(packet,&position);assert_packet_skip(packet,&position,length);
         uint32_t parameters=assert_packet_u32(packet,&position);assert_packet_skip(packet,&position,(uint64_t)parameters*4);
-        assert_packet_u32(packet,&position);
+        /* Checked functions encode both result and advertised error types. */
+        assert_packet_u32(packet,&position);assert_packet_u32(packet,&position);
         uint32_t blocks=assert_packet_u32(packet,&position);assert_packet_skip(packet,&position,(uint64_t)blocks*16);
         uint32_t instructions=assert_packet_u32(packet,&position);CHECK(instructions);
         if (f==function) return position;
