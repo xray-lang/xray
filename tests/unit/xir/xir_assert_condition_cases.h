@@ -64,15 +64,19 @@ static void assert_runtime_oom(XrXirProgram *program, uint32_t function) {
         XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
         if (status==XR_XIR_CALL_READY) status=xr_xir_instance_start(instance,function,NULL,0);
-        unsigned suspensions=0;
-        if (status==XR_XIR_CALL_READY) status=assert_poll(instance,&suspensions);
+        unsigned suspensions=0;bool driven_oom=false;
+        if (status==XR_XIR_CALL_READY) {
+            status=assert_poll(instance,&suspensions);driven_oom=status==XR_XIR_CALL_OOM;
+        }
         if (!fault) {CHECK(status==XR_XIR_CALL_RETURNED);sites=runtime_attempts;}
         else {
             if (status!=XR_XIR_CALL_OOM) fprintf(stderr,"assert OOM entry=%u site=%zu/%zu status=%u\n",function,fault,sites,status);
             CHECK(runtime_attempts>runtime_fail_at && status==XR_XIR_CALL_OOM);
         }
         runtime_fail_at=SIZE_MAX;
-        if (instance) CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+        /* A driven failure remains the executor completion at teardown. */
+        if (instance) CHECK(xr_xir_instance_free(instance)==
+            (driven_oom?XR_XIR_CALL_OOM:XR_XIR_CALL_READY));
         CHECK(runtime_live==live && runtime_bytes==bytes);
     }
     printf("Assertion entry %u actual runtime OOM=%zu physical baseline restored\n",function,sites);
