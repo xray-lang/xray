@@ -303,6 +303,9 @@ static XrXirStatus error_equation_edge_identity(const EffectErrorEquationRead *r
     const EffectBodyRequest *body=&read->body;
     if(!body->current || !effect_body_request_sequence_owned(body))
         return error_equation_operation(read,instruction,terminal);
+    if(!terminal || !body->owner || !body->domain.types ||
+        read->function>=body->domain.function_count)
+        return XR_XIR_BAD_STRUCTURE;
     if(!xir_compile_work(read->work,8)) return XR_XIR_BUDGET;
     if(body->current->work!=read->work) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyRun *ref=NULL;uint32_t opcode=XR_XIR_INVALID;

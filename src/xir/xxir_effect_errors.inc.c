@@ -194,6 +194,8 @@ static XrXirStatus error_row_active(const ErrorFlow *flow, uint32_t value, bool 
         EffectBodyInstructionFields fields;
         XrXirStatus status=XR_XIR_OK;
         if(flow->body.current && effect_body_request_sequence_owned(&flow->body)) {
+            if(!flow->body.owner || !flow->body.domain.types ||
+                flow->function_index>=flow->body.domain.function_count) return XR_XIR_BAD_STRUCTURE;
             if(!effect_body_read_work(&flow->body.read,3*sizeof(uint32_t))) return XR_XIR_BUDGET;
             const EffectBodyRun *ref=NULL;uint32_t words[3]={0};
             uint32_t instruction=value-flow->function->parameter_count;
