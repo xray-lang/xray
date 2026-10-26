@@ -67,7 +67,7 @@ static void fresh_class_base(FreshClassFixture *f,FreshClassCase kind) {
         .operands=f->operands[b],.error_type=XR_XIR_NEVER};
     f->parameters[0][0]=(XrXirType)(kind==FC_MUT_SCALAR?FC_MUT:FC_SHARED);f->parameters[0][1]=XR_XIR_BOOL;
     f->functions[0].parameter_count=2;
-    if (kind==FC_NESTED_FIELD || kind==FC_ARRAY_FIELD || kind==FC_OBJECT_ARRAY_FIELD || kind==FC_CLASS_PHI) {
+    if (kind==FC_ARRAY_FIELD || kind==FC_OBJECT_ARRAY_FIELD || kind==FC_CLASS_PHI) {
         f->parameters[0][2]=kind==FC_CLASS_PHI?(XrXirType)FC_OBJECT:f->field_types[1];f->functions[0].parameter_count=3;
     }
     f->parameters[2][0]=(XrXirType)FC_OBJECT;f->parameters[2][1]=f->parameters[0][0];f->functions[2].parameter_count=2;
@@ -93,7 +93,17 @@ static void fresh_class_factory(FreshClassFixture *f,FreshClassCase kind) {
     fresh_class_op(f,3,(XrXirInstruction){.op=XR_XIR_RETURN});
     fresh_class_op(f,2,(XrXirInstruction){.op=XR_XIR_RETURN});
     fresh_class_op(f,4,(XrXirInstruction){.op=XR_XIR_RETURN});
-    if (kind==FC_NESTED_FIELD || kind==FC_ARRAY_FIELD || kind==FC_OBJECT_ARRAY_FIELD) {
+    if (kind==FC_NESTED_FIELD) {
+        /* Construct without an entry borrow so the consumer, not payload
+         * construction, exercises the closed-field rejection. */
+        f->functions[1].result=(XrXirType)FC_OBJECT;
+        uint32_t text=fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_CONST_STRING,.type=XR_XIR_STRING});
+        uint32_t at=fresh_class_group(f,1,&text,1);
+        uint32_t inner=fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_CLASS_NEW,.type=(XrXirType)FC_INNER,.args={at,1}});
+        uint32_t object=fresh_class_new(f,1,text,inner);
+        fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_RETURN,.args={object}});return;
+    }
+    if (kind==FC_ARRAY_FIELD || kind==FC_OBJECT_ARRAY_FIELD) {
         fresh_class_op(f,1,(XrXirInstruction){.op=XR_XIR_RETURN});return;
     }
     f->functions[1].result=(XrXirType)FC_OBJECT;
@@ -189,8 +199,9 @@ static void fresh_class_fixture(FreshClassFixture *f,FreshClassCase kind) {
     }
     uint32_t first=fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_CONST_STRING,.type=XR_XIR_STRING});
     uint32_t second=fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_CONST_STRING,.type=XR_XIR_STRING});
-    if (kind==FC_NESTED_FIELD || kind==FC_ARRAY_FIELD || kind==FC_OBJECT_ARRAY_FIELD) second=2;
-    bool factory=kind==FC_FACTORY || kind==FC_CLASS_COPY || kind==FC_OLD_FACTORY || kind==FC_BRANCH_FACTORY || kind==FC_FACTORY_PUBLICATION;
+    if (kind==FC_ARRAY_FIELD || kind==FC_OBJECT_ARRAY_FIELD) second=2;
+    bool factory=kind==FC_FACTORY || kind==FC_CLASS_COPY || kind==FC_OLD_FACTORY || kind==FC_BRANCH_FACTORY ||
+        kind==FC_FACTORY_PUBLICATION || kind==FC_NESTED_FIELD;
     if (kind==FC_INDIRECT) {
         uint32_t callee=fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)FC_CALLABLE,.immediate=1});
         f->object=fresh_class_op(f,0,(XrXirInstruction){.op=XR_XIR_CALL_INDIRECT,.type=(XrXirType)FC_OBJECT,.immediate=callee});
