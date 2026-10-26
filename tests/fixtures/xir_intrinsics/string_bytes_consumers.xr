@@ -54,7 +54,7 @@ const scalarSlotChecked: bool = match (true) {
         const scalarSlotView: Slice<u8> = scalarSlotOwner.bytes()
         scalarSlotCount = len(scalarSlotView)
         scalarSlotReady = scalarSlotView[0] == 65
-        if (scalarSlotCount != 2 || !scalarSlotReady) { panic("scalar slot initialization mismatch") }
+        if (scalarSlotCount != 2 || !scalarSlotReady) { assert(false, "scalar slot initialization mismatch") }
         true
     }
 }
