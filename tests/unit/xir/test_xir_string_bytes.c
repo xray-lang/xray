@@ -60,14 +60,52 @@ static void string_bytes_fixture_names(StringBytesFixture *fixture) {
     fixture->functions=(StringBytesFunctions){module->declarations->entry_function,
         string_bytes_named(module,"printableName"),string_bytes_named(module,"cStringName"),
         string_bytes_named(module,"discardBytes"),string_bytes_named(module,"scalarBytes"),
-        string_bytes_named(module,"refAndPanic")};
+        string_bytes_named(module,"refAndPanic"),string_bytes_named(module,"borrowedVarBytes")};
     fixture->ascii=string_bytes_named(module,"_asciiPrintable");
+}
+static void string_bytes_mutable_view_debug(const XrXirSourceResult *source) {
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(source->snapshot);
+    const XrXirSourceDebugView *debug=xr_xir_compile_source_snapshot_debug(source->snapshot);
+    const XrXirModule *module=xr_xir_compile_artifact_module(source->checked);
+    CHECK(view && view->complete && debug && module);
+    uint32_t parent=0,binding=0;
+    for (uint32_t d=0;d<view->declaration_count;++d) {
+        const XrXirSourceDeclaration *decl=view->declarations+d;
+        if (decl->kind==XR_XIR_SOURCE_FUNCTION && !strcmp(decl->name,"_refBytes")) parent=decl->id;
+    }
+    CHECK(parent);
+    for (uint32_t d=0;d<view->declaration_count;++d) {
+        const XrXirSourceDeclaration *decl=view->declarations+d;
+        if (decl->parent!=parent || decl->kind!=XR_XIR_SOURCE_BINDING || strcmp(decl->name,"b")) continue;
+        CHECK(decl->mutable && decl->type.known && !binding);
+        const XrXirTypeNode *type=xr_xir_type_node(view->types,decl->type.type);
+        CHECK(type && type->kind==XR_XIR_TYPE_SLICE && !type->flags && type->element==XR_XIR_U8);
+        binding=decl->id;
+    }
+    CHECK(binding);
+    bool found=false;
+    for (uint32_t f=0;f<debug->function_count;++f) {
+        const XrXirSourceDebugFunction *function=debug->functions+f;
+        if (function->declaration!=parent) continue;
+        CHECK(function->function<module->function_count);
+        for (uint32_t b=0;b<function->binding_count;++b) {
+            const XrXirSourceDebugBinding *value=function->bindings+b;
+            if (value->declaration!=binding) continue;
+            CHECK(!value->flags);
+            XrXirType physical=xr_xir_operand_type(module->functions+function->function,value->value);
+            const XrXirTypeNode *type=xr_xir_type_node(module->types,physical);
+            CHECK(type && type->kind==XR_XIR_TYPE_SLICE && !type->flags && type->element==XR_XIR_U8);
+            found=true;
+        }
+    }
+    CHECK(found);
 }
 static StringBytesFixture string_bytes_fixture(const char *path) {
     char *text=string_bytes_source(path);
     SourceFixture source=source_fixture(text);
     memset(text,0xa5,strlen(text));
     xr_free(text);
+    string_bytes_mutable_view_debug(&source.source);
     StringBytesFixture fixture={0};
     fixture.context=*xr_xir_compile_artifact_context(source.closed);
     CHECK(xr_compile_resources_retain(fixture.context.resources)==XR_COMPILE_RESOURCE_OK);
@@ -146,7 +184,7 @@ static StringBytesFixture string_bytes_catalog_fixture(const char *path) {
     char *text=string_bytes_source(path);
     char *body=strstr(text,"// TEST-CONSUMER");
     CHECK(body);
-    const char imports[]="import {printableName,cStringName,discardBytes,scalarBytes} from \"./lib\"\n"
+    const char imports[]="import {printableName,cStringName,discardBytes,scalarBytes,borrowedVarBytes} from \"./lib\"\n"
         "fn caller0()->i64{return 11}\nfn caller1()->i64{return 13}\n";
     size_t consumer_size=sizeof(imports)+strlen(body);
     char *consumer=xr_malloc(consumer_size);
@@ -189,6 +227,7 @@ static StringBytesFixture string_bytes_catalog_fixture(const char *path) {
     xr_free(consumer);
     xr_compile_session_free(session);
     xr_xir_compile_library_catalog_free(catalog);
+    string_bytes_mutable_view_debug(&received);
     XrXirArtifact *closed=NULL;
     CHECK(xr_xir_compile_specialize(received.checked,&closed,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&received);
@@ -319,6 +358,25 @@ static void string_bytes_source_rejected(const char *text,bool borrowed) {
     xr_compile_session_free(session);
     xr_compile_resources_release(context.resources);
 }
+static void string_bytes_alias_rejected(const char *text,const char *reason) {
+    const XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
+    XrXirCompileContext context={0};
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits();
+    XrCompilerSession *session=NULL;
+    CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"string-bytes-alias-negative",NULL};
+    XrXirSourceRequest request={.session=session,.authority=&authority,.context=&context,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirSourceText input={NULL,text,strlen(text)};
+    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+    XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,NULL);
+    fprintf(stderr,"string bytes alias rejected status=%u %s\n",(unsigned)status,diagnostic.message);
+    CHECK(status==XR_XIR_BAD_TYPE && diagnostic.status==status && strstr(diagnostic.message,reason));
+    CHECK(!result.checked && !result.snapshot);
+    xr_xir_compile_source_result_free(&result);
+    xr_compile_session_free(session);
+    xr_compile_resources_release(context.resources);
+}
 static void string_bytes_emit(StringBytesFixture *fixture,const char *path,const char *packet_path) {
     XrXirArtifact *code=string_bytes_lowered(fixture);
     XrXirCSource generated={0};
@@ -360,6 +418,14 @@ int main(int argc,char **argv) {
     string_bytes_source_rejected("fn bad(s:string)->Slice<u8>{return s.bytes()}",true);
     string_bytes_source_rejected("fn bad(s:ref string)->i64{const b=s.bytes();s=\"changed\";return len(b)}",true);
     string_bytes_source_rejected("fn bad()->i64{var s=\"a\";const b=s.bytes();s=\"changed\";return len(b)}",true);
+    string_bytes_alias_rejected("fn bad(s:string)->i64{var b:Slice<u8> = s.bytes();b=s.bytes();return len(b)}",
+        "borrowed local rebinding and ref storage");
+    string_bytes_alias_rejected("fn touch<T>(p:ref T){}\nfn bad(s:string)->i64{var b:Slice<u8> = s.bytes();touch(ref b);return len(b)}",
+        "borrowed local rebinding and ref storage");
+    string_bytes_alias_rejected("fn bad(s:string)->fn()->i64{var b:Slice<u8> = s.bytes();return fn()->i64{return len(b)}}",
+        "shared borrowed local capture");
+    string_bytes_alias_rejected("fn bad(s:string)->i64{var b:Slice<u8> = s.bytes();defer{len(b)};return len(b)}",
+        "shared borrowed local capture");
     string_bytes_invalid_packets(&fixture);
     string_bytes_vm(&fixture);
     if (!packet) {

@@ -67,7 +67,7 @@ static void access_base(AccessFixture *f,uint32_t kind) {
     f->nodes[11]=(XrXirTypeNode){.kind=XR_XIR_TYPE_TUPLE,.parameters=f->nested,.parameter_count=2};
     f->nodes[12]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)A_TUPLE};
     f->call=(XrXirCallableParameter){(XrXirType)A_OPTIONAL_MUT,XR_PARAM_READ};
-    f->nodes[13]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=&f->call,.parameter_count=1,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    f->nodes[13]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=kind==64?XR_XIR_ERROR:XR_XIR_NEVER,.parameters=&f->call,.parameter_count=1,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->nodes[14]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)A_MUT_PAIR};
     f->single_field[0]=(XrXirCallableParameter){XR_XIR_UNIT,XR_PARAM_READ};
     f->single_field[1]=(XrXirCallableParameter){(XrXirType)A_OPTIONAL_MUT,XR_PARAM_READ};
@@ -92,11 +92,11 @@ static void access_base(AccessFixture *f,uint32_t kind) {
     if (kind==122 || kind==123 || kind==130 || kind==131)
         f->parameters[1]=(XrXirType)(kind==122 || kind==130?A_SHARED:A_MUT);
     f->functions[0]=(XrXirFunction){.name="access",.name_length=6,.parameters=f->parameters,.parameter_count=count,
-        .blocks=f->blocks,.block_count=1,.instructions=f->ops};
+        .blocks=f->blocks,.block_count=1,.instructions=f->ops,.error_type=XR_XIR_NEVER};
     for (uint32_t i=0;i<2;++i) {
         f->other[i]=(XrXirInstruction){.op=XR_XIR_RETURN};f->single[i]=(XrXirBlock){.count=1};
         f->functions[i+1]=(XrXirFunction){.name="body",.name_length=4,.blocks=f->single+i,.block_count=1,
-            .instructions=f->other+i,.instruction_count=1};
+            .instructions=f->other+i,.instruction_count=1,.error_type=kind==64 && i==1?XR_XIR_ERROR:XR_XIR_NEVER};
     }
     if (kind>=112 && kind<115) {
         f->entry[0]=(XrXirCallableParameter){f->parameters[0],XR_PARAM_REF};
@@ -981,9 +981,12 @@ static void access_root_model_dump(void) {
     }
     puts("]}");
 }
+#include "xir_view_access_fresh_class_cases.h"
+
 int main(int argc,char **argv) {
     if (argc==2 && !strcmp(argv[1],"--root-model")) {access_root_model_dump();return 0;}
     bool normal=argc==2 && !strcmp(argv[1],"--normal");CHECK(argc==1 || normal);setvbuf(stdout,NULL,_IONBF,0);
+    fresh_class_cases();
     for (uint32_t kind=0;kind<A_CASES;++kind) access_resources(kind,normal);
     for (uint32_t kind=148;kind<A_CASES;++kind) access_frame_boundary(kind);
     puts("Proven conflicts reject, unresolved epochs stay explicit, and Source execution remains closed");return 0;

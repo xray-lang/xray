@@ -31,9 +31,23 @@ export fn cStringName(s: string, maxBytes: i64, allowEmpty: bool) -> bool { retu
 export fn discardBytes(s: string) { s.bytes() }
 export fn scalarBytes(s: string) -> i64 { s.bytes(); return 17 }
 
+fn _readVarBytes(src: Slice<u8>) -> i64 {
+    var sum = 0
+    for (var i = 0; i < len(src); i++) { sum += src[i] as i64 }
+    return sum
+}
+export fn borrowedVarBytes(s: string) -> i64 {
+    var b: Slice<u8> = s.bytes()
+    const copy: Slice<u8> = b
+    { var b = 7; b += 1 }
+    fn shadow(b: i64) -> i64 { return b }
+    if (len(copy) == 0) { return shadow(0) }
+    return _readVarBytes(copy) + shadow(len(b))
+}
+
 // TEST-CONSUMER
 fn _refBytes(s: ref string) -> i64 {
-    const b: Slice<u8> = s.bytes()
+    var b: Slice<u8> = s.bytes()
     const copy: Slice<u8> = b
     var seen = 0
     try {

@@ -248,6 +248,8 @@ typedef struct SourceMaterialization SourceMaterialization;
 #include "xxir_source_context.inc.c"
 static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment **output);
 static const XrXirModule *source_history_module(SourceContext *ctx,const SourceHistoryUnit *unit);
+static bool source_shared_byte_slice(SourceContext *ctx, XrXirType type);
+static bool source_binding_shared_alias(SourceContext *ctx, const SourceName *symbol, bool *alias);
 static SourceName *source_history_name(SourceContext *ctx,const char *name);
 typedef enum SourceBindingAccessor { SOURCE_ACCESS_READ, SOURCE_ACCESS_WRITE, SOURCE_ACCESS_PUSH } SourceBindingAccessor;
 static bool source_history_binding_read(SourceContext *ctx,const SourceName *symbol,SourceValue *value);
@@ -1881,14 +1883,17 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     symbol = source_alloc(ctx, 1, sizeof(*symbol));
     if (!symbol) return false;
     XrXirType logical_type = initial.type;
+    bool shared_alias = !decl->is_const && source_shared_byte_slice(ctx, logical_type);
     if (!decl->is_const) {
         if (!decl->type_annotation && !source_root_join_record(ctx,&initial)) return false;
-        XrXirType cell;
-        if (!source_cell_type(ctx, initial.type, &cell) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_NEW, cell,
-                {initial.type == XR_XIR_UNIT ? 0 : initial.id, 0}, {0}, 0, {0}}, &initial)) return false;
+        if (!shared_alias) {
+            XrXirType cell;
+            if (!source_cell_type(ctx, initial.type, &cell) ||
+                !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_NEW, cell,
+                    {initial.type == XR_XIR_UNIT ? 0 : initial.id, 0}, {0}, 0, {0}}, &initial)) return false;
+        }
     }
-    if (!decl->is_const && decl->type_annotation && initial.type != XR_XIR_UNIT)
+    if (!decl->is_const && !shared_alias && decl->type_annotation && initial.type != XR_XIR_UNIT)
         ctx->bodies[ctx->function].recipes[initial.id - ctx->functions[ctx->function].parameter_count].root.kind = 1;
     /* owned: The graph outlives this temporary binding; snapshot publication copies its name. */
     *symbol = (SourceName){.next=ctx->locals,.name=decl->name,.imported=NULL,.node=node,.kind=logical_type == XR_XIR_UNIT && decl->is_const ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,
@@ -2535,6 +2540,9 @@ static bool capture_name(SourceCaptureScan *scan, const char *name, AstNode *nod
     if (source && source->kind == SOURCE_PENDING)
         return source_fail(ctx, node, XR_XIR_BAD_VALUE, "nested function is used before its declaration completes");
     if (!source_local_name(source)) return ctx->diagnostic.status == XR_XIR_OK;
+    bool alias = false;
+    if (!source_binding_shared_alias(ctx, source, &alias)) return false;
+    if (alias) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "shared borrowed local capture is not admitted");
     for (SourceCapture *p = scan->captures; p; p = p->next) {
         if (!source_work(ctx, node)) return false;
         if (p->source == source) return true;

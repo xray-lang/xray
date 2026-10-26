@@ -24,7 +24,7 @@ typedef struct StringBytesCase {
 } StringBytesCase;
 
 typedef struct StringBytesFunctions {
-    uint32_t entry,printable,c_string,discard,scalar,ref_panic;
+    uint32_t entry,printable,c_string,discard,scalar,ref_panic,var_bytes;
 } StringBytesFunctions;
 
 #define STRING_BYTES_CASE(kind, text, maximum, allow, expected) \
@@ -102,6 +102,11 @@ static void string_bytes_run(XrXirProgram *program,const StringBytesFunctions *f
         result=string_bytes_execute(instance,functions->ref_panic,arguments,1);
         int64_t expected_head=test->length?2*(int64_t)(uint8_t)test->text[0]:0;
         CHECK(result.type==XR_XIR_I64 && result.payload==expected_head);
+        xr_xir_value_drop(&result);
+        int64_t expected_sum=(int64_t)test->length;
+        for (size_t b=0;b<test->length;++b) expected_sum+=(uint8_t)test->text[b];
+        result=string_bytes_execute(instance,functions->var_bytes,arguments,1);
+        CHECK(result.type==XR_XIR_I64 && (int64_t)result.payload==expected_sum);
         xr_xir_value_drop(&result);
         xr_xir_value_drop(arguments);
     }

@@ -67,7 +67,7 @@ static XrXirProgram *string_bytes_mixed(StringBytesFixture *fixture,bool native_
     for (uint32_t i=0;i<owner->count;++i) {
         StringBytesMixedBinding *binding=owner->bindings+i;
         bool caller=i==fixture->functions.printable || i==fixture->functions.c_string ||
-            i==fixture->functions.ref_panic;
+            i==fixture->functions.ref_panic || i==fixture->functions.var_bytes;
         binding->native=caller==native_callers;
         binding->owner=owner;
         if (binding->native) binding->actual=string_bytes_program.entries[i];

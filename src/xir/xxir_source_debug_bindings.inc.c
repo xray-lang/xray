@@ -26,9 +26,11 @@ static bool source_debug_environment(SourceContext *ctx,uint32_t *output) {
     while (count) {
         if (!source_work_units(ctx,NULL,sizeof(XrXirSourceDebugBinding))) return false;
         SourceName *name=ctx->debug_names[--count];
+        bool alias = false;
+        if (!source_binding_shared_alias(ctx, name, &alias)) return false;
         uint32_t flags=name->kind==SOURCE_PENDING ? XR_XIR_SOURCE_DEBUG_UNAVAILABLE :
             name->kind==SOURCE_UNIT_LOCAL ? XR_XIR_SOURCE_DEBUG_UNIT :
-            name->mutable && !name->construction ? XR_XIR_SOURCE_DEBUG_CELL : 0;
+            name->mutable && !name->construction && !alias ? XR_XIR_SOURCE_DEBUG_CELL : 0;
         XrXirSourceDebugBinding binding={name->declaration,
             flags & (XR_XIR_SOURCE_DEBUG_UNIT|XR_XIR_SOURCE_DEBUG_UNAVAILABLE) ? UINT32_MAX : name->index,parent,flags};
         uint32_t cached=name->debug_binding;

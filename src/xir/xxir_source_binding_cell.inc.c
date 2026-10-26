@@ -7,11 +7,33 @@
  * xxir_source_binding_cell.inc.c - Stable mutable binding storage
  *
  * KEY CONCEPT:
- *   Source names expose logical values while mutable bindings own one Cell.
+ *   Source names keep logical mutability; shared views use existing SSA aliases,
+ *   and mutable Cell operations require a real stored owner.
  */
+static bool source_shared_byte_slice(SourceContext *ctx, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(&ctx->types, type);
+    return node && node->kind == XR_XIR_TYPE_SLICE && !node->flags && node->element == XR_XIR_U8;
+}
+static bool source_binding_shared_alias(SourceContext *ctx, const SourceName *symbol, bool *alias) {
+    *alias = false;
+    if (!symbol || symbol->kind != SOURCE_LOCAL || !symbol->mutable || symbol->construction ||
+        !source_shared_byte_slice(ctx, symbol->type)) return true;
+    uint32_t value = symbol->index;
+    XrXirType physical;
+    const XrXirInstruction *producer = NULL;
+    if (!source_borrow_value(ctx, symbol->node, &value, &physical, &producer)) return false;
+    if (physical != symbol->type)
+        return source_fail(ctx, symbol->node, XR_XIR_BAD_TYPE, "borrowed local requires its shared SSA value");
+    *alias = true;
+    return true;
+}
 static bool source_binding_cell(SourceContext *ctx, const SourceName *symbol, SourceValue *cell) {
     if (!symbol || !symbol->mutable || symbol->construction)
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "mutable Cell owner required");
+    bool alias = false;
+    if (!source_binding_shared_alias(ctx, symbol, &alias)) return false;
+    if (alias) return source_fail(ctx, symbol->node, XR_XIR_BAD_TYPE,
+        "borrowed local rebinding and ref storage are not admitted");
     if (symbol->kind == SOURCE_LOCAL) {
         if (!source_cell_type(ctx, symbol->type, &cell->type)) return false;
         cell->id = symbol->index;
@@ -35,7 +57,9 @@ static bool source_binding_read(SourceContext *ctx, const SourceName *symbol, So
     if ((symbol->kind==SOURCE_SLOT || symbol->kind==SOURCE_UNIT_SLOT) &&
         symbol->module!=ctx->bodies[ctx->function].module && ctx->history)
         return source_history_binding_read(ctx,symbol,value);
-    if (symbol->mutable) {
+    bool alias = false;
+    if (!source_binding_shared_alias(ctx, symbol, &alias)) return false;
+    if (symbol->mutable && !alias) {
         SourceValue cell = {0};
         return source_binding_cell(ctx, symbol, &cell) &&
             source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_READ, symbol->type,

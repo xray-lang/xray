@@ -102,9 +102,13 @@ static XrXirStatus view_access_ancestor(ViewAccess *a,const ViewAccessOrigin *pa
     }
     return XR_XIR_OK;
 }
+#include "xxir_view_access_fresh_class.inc.c"
+
 static XrXirStatus view_access_fresh_input(ViewAccess *a,const XrXirViewRootEvent *fresh,
     const XrXirViewRootEvent *input,uint32_t queried,bool *disjoint) {
     *disjoint=false;
+    if (fresh->kind==XR_XIR_VIEW_ROOT_OBJECT)
+        return view_access_fresh_class_input(a,fresh,input,disjoint);
     if (fresh->opaque_suffix || input->opaque_suffix || fresh->dynamic_identity || input->dynamic_identity ||
         fresh->kind!=XR_XIR_VIEW_ROOT_CELL || fresh->root_function!=a->function || input->root_function!=a->function ||
         (input->kind!=XR_XIR_VIEW_ROOT_PARAMETER && input->kind!=XR_XIR_VIEW_ROOT_BORROWED_PARAMETER)) return XR_XIR_OK;
