@@ -206,13 +206,16 @@ static void prefix_foreign(void) {
     EdgeFixture f;prefix_fixture(&f,0);
     XrXirCompileContext work=pc_owner(pc_caps());uint64_t baseline=pc_stats(&work).live_bytes;
     EffectBodyMaterial *material=NULL;EffectBodyCurrentRead current={0};EffectErrorEquationRead original;
-    prefix_open(&work,&f,&material,&current,&original);XrXirCompileContext copy=work;
+    prefix_open(&work,&f,&material,&current,&original);XrXirCompileContext copy=work;bool correct=true;
     for(unsigned helper=0;helper<2;++helper) {
         EffectErrorEquationRead read=original;read.body.read.owner=&copy;PrefixOutput result=prefix_sentinel();
-        CHECK(prefix_call(helper,&read,&work,read.head.parameter_count+1,&result)==XR_XIR_BAD_STRUCTURE);
-        CHECK(prefix_unchanged(&result));
+        XrXirStatus actual=prefix_call(helper,&read,&work,read.head.parameter_count+1,&result);
+        if(actual!=XR_XIR_BAD_STRUCTURE || !prefix_unchanged(&result)) {
+            fprintf(stderr,"current binding helper%u actual%u expected%u\n",helper,(unsigned)actual,
+                (unsigned)XR_XIR_BAD_STRUCTURE);correct=false;
+        }
     }
-    prefix_close(&work,material,&current,baseline);
+    prefix_close(&work,material,&current,baseline);CHECK(correct);
 }
 static void prefix_frame(void) {
     EdgeFixture f;prefix_fixture(&f,0);
@@ -237,6 +240,26 @@ static void prefix_frame(void) {
     }
     prefix_close(&work,material,&current,baseline);
 }
+static void prefix_valid_cancel(void) {
+    EdgeFixture f;prefix_fixture(&f,0);
+    XrXirCompileContext work=pc_owner(pc_caps());uint64_t baseline=pc_stats(&work).live_bytes;
+    EffectBodyMaterial *material=NULL;EffectBodyCurrentRead current={0};EffectErrorEquationRead read;
+    prefix_open(&work,&f,&material,&current,&read);
+    for(unsigned helper=0;helper<2;++helper) {
+        PrefixPoll poll={0,false};PrefixOutput result=prefix_sentinel();
+        CHECK(xr_compile_resources_begin_cancel(work.resources,prefix_poll,&poll)==XR_COMPILE_RESOURCE_OK);
+        CHECK(prefix_call(helper,&read,&work,read.head.parameter_count+1,&result)==XR_XIR_OK && poll.calls);
+        poll.requested=true;result=prefix_sentinel();uint32_t calls=poll.calls;
+        CHECK(prefix_call(helper,&read,&work,read.head.parameter_count+1,&result)==XR_XIR_BUDGET);
+        CHECK(prefix_unchanged(&result) && poll.calls==calls+1);
+        CHECK(xr_compile_resources_end_cancel(work.resources,prefix_poll,&poll)==XR_COMPILE_RESOURCE_CANCELLED);
+        result=prefix_sentinel();
+        CHECK(prefix_call(helper,&read,&work,read.head.parameter_count+1,&result)==XR_XIR_OK);
+        if(!helper) prefix_literal(0,&result);
+        else CHECK(result.terminal.op==f.subject[1].op && result.terminal.targets[1]==f.subject[1].targets[1]);
+    }
+    prefix_close(&work,material,&current,baseline);
+}
 static void finite_request_prefix_cases(void) {
     CHECK(!live && !live_bytes && !pc_allocate_hook && !pc_free_hook);
     uint64_t setup=prefix_setup_work();unsigned failures=0;
@@ -256,7 +279,7 @@ static void finite_request_prefix_cases(void) {
         for(unsigned adapter=1;adapter<4;++adapter)
             if(!prefix_bad(1,3,0,adapter,setup)) ++failures;
     }
-    prefix_valid();prefix_foreign();prefix_frame();
+    prefix_valid();prefix_foreign();prefix_frame();prefix_valid_cancel();
     for(unsigned helper=0;helper<2;++helper) {
         uint64_t measured=0,fee=0;prefix_fee_sample(helper,&measured,&fee);
         prefix_fee_boundary(helper,measured,fee,false);prefix_fee_boundary(helper,measured,fee,true);
