@@ -234,6 +234,30 @@ static XrXirStatus source_view_access_failure(SourceContext *ctx,const XrXirModu
         diagnostic->function,block,diagnostic->instruction,xr_xir_op_name(op))!=XR_DIAG_OK) status=XR_XIR_BUDGET;
     source_fail(ctx,site,status,message);return ctx->diagnostic.status;
 }
+static XrXirStatus source_view_core_copy(SourceContext *ctx,const XrXirModule *module,
+    uint32_t function,bool *preserved) {
+    const SourceFunction *body=ctx->bodies+function;
+    const SourceCoreCopy *copy=body->core_copy;
+    const XrXirFunction *current=module->functions+function;
+    const XrXirDeclarations *declarations=module->declarations;
+    if (!copy || copy->resources!=ctx->compile.resources || copy->function!=function ||
+        copy->module!=body->module || copy->module>=ctx->module_count || !declarations ||
+        declarations->modules!=ctx->modules || declarations->module_count!=ctx->module_count ||
+        declarations->functions!=ctx->identities || ctx->identities[function].module!=copy->module ||
+        ctx->modules[copy->module].name!=copy->module_name ||
+        ctx->modules[copy->module].name_length!=copy->module_name_length ||
+        body->node || body->recipes || body->parameters!=current->parameters)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *original=&copy->body;
+    if (current->name!=original->name || current->name_length!=original->name_length ||
+        current->parameters!=original->parameters || current->parameter_count!=original->parameter_count ||
+        current->result!=original->result || current->error_type!=original->error_type ||
+        current->blocks!=original->blocks || current->block_count!=original->block_count ||
+        current->instructions!=original->instructions || current->instruction_count!=original->instruction_count ||
+        current->operands!=original->operands || current->operand_count!=original->operand_count)
+        return XR_XIR_BAD_STRUCTURE;
+    *preserved=true;return XR_XIR_OK;
+}
 static XrXirStatus source_view_checked_copy(void *owner,const XrXirModule *module,
     uint32_t function,bool *preserved) {
     SourceContext *ctx=owner;
@@ -244,6 +268,7 @@ static XrXirStatus source_view_checked_copy(void *owner,const XrXirModule *modul
     if (!source_work(ctx,NULL)) return ctx->diagnostic.status;
     const SourceFunction *body=ctx->bodies+function;
     if (!body->checked_library) return XR_XIR_OK;
+    if (body->core_copy) return source_view_core_copy(ctx,module,function,preserved);
     if (body->module>=(uint32_t)ctx->graph->spec_count) return XR_XIR_BAD_STRUCTURE;
     const XrModuleSpec *spec=ctx->graph->specs+body->module;
     if (spec->representation!=XR_MODULE_CHECKED_LIBRARY) return XR_XIR_OK;

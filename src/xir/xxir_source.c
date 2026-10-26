@@ -166,9 +166,11 @@ typedef struct SourceThrowRecipe {
     uint32_t instruction,operand;
 } SourceThrowRecipe;
 #include "xxir_source_handler_types.inc.c"
+typedef struct SourceCoreCopy SourceCoreCopy;
 typedef struct SourceFunction {
     AstNode *node, *type_owner;
     bool checked_library;
+    const SourceCoreCopy *core_copy;
     const XrXirFunctionEffectContract *library_effect;
     XrGenericParam **type_parameters;
     uint32_t type_parameter_count;

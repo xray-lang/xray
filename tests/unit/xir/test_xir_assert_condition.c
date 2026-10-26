@@ -119,6 +119,7 @@ static XrXirArtifact *assert_lower(XrXirSourceResult *source) {
 }
 #include "xir_assert_condition_packet_gates.inc.c"
 #include "xir_assert_condition_authority_gates.inc.c"
+#include "xir_assert_core_copy_cases.inc.c"
 #include "xir_assert_condition_pipeline_gates.inc.c"
 #include "xir_assert_condition_initialization.inc.c"
 #include "xir_assert_condition_lexical_gates.inc.c"
@@ -180,6 +181,7 @@ int main(int argc,char **argv) {
     assert_lexical(argv[1],path);
     assert_source_oom(argv[1],path);
     assert_ordinary_memory_origin();
+    assert_core_view_copies();
     assert_initialization(argv[1],path);
     CHECK(runtime_live==0 && runtime_bytes==0 && !assert_compile_extra_blocks() && !assert_compile_extra_bytes());
     puts("Typed assert Source/default owner, owned packet, VM, lexical shadow and invalid calls PASS");

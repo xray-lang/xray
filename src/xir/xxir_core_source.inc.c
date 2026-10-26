@@ -13,6 +13,15 @@
 #include "xir_core_declarations_source.inc.c"
 #include "xxir_core_source_identity.h"
 
+/* Only receiving-owned leaves describe an installed checked core copy. Table
+ * growth may move functions and bodies after the temporary factory retires. */
+struct SourceCoreCopy {
+    XrCompileResources *resources;
+    XrXirFunction body;
+    const char *module_name;
+    uint32_t module_name_length,module,function;
+};
+
 static bool source_core_contract(SourceContext *ctx) {
     if (!ctx->core_factory || ctx->graph->spec_count != 1 || ctx->function_count != 7 ||
         !ctx->has_generics || ctx->types.count != 1 || ctx->types.nominals || ctx->types.interfaces ||
@@ -289,9 +298,28 @@ static bool source_core_install_identity(SourceContext *ctx,const XrXirSourceMod
     if (!owned) return false;
     *output=owned;*length=(uint32_t)canonical_length;return true;
 }
+static bool source_core_copy_provenance(SourceContext *ctx,uint32_t first,uint32_t count) {
+    SourceCoreCopy *copies=source_alloc(ctx,count,sizeof(*copies));
+    if (!copies) return false;
+    const XrXirSourceModule *module=ctx->modules+ctx->module_count;
+    for (uint32_t f=0;f<count;++f) {
+        SourceCoreCopy *copy=copies+f;
+        if (!source_copy_bytes(ctx,NULL,&copy->body,ctx->functions+first+f,sizeof(copy->body))) return false;
+        copy->resources=ctx->compile.resources;copy->module=ctx->module_count;copy->function=first+f;
+        copy->module_name=module->name;copy->module_name_length=module->name_length;
+        ctx->bodies[first+f].core_copy=copy;
+    }
+    return true;
+}
 static bool source_core_install(SourceContext *ctx, const SourceContext *core,
     const XrXirArtifact *artifact) {
     const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    const XrXirCompileContext *owner=xr_xir_compile_artifact_context(artifact);
+    if (!core->core_factory || !module || module->stage!=XR_XIR_CHECKED ||
+        module->linkage_kind!=XR_XIR_LIBRARY || !module->declarations ||
+        !owner || owner->resources!=ctx->compile.resources ||
+        core->compile.resources!=ctx->compile.resources || !xr_xir_compile_artifact_construction(artifact))
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"core copy has no checked factory owner");
     uint32_t first=ctx->function_count, count=module->function_count;
     if (first > ctx->function_capacity || count > ctx->function_capacity-first ||
         first > ctx->compile.limits.functions || count > ctx->compile.limits.functions-first ||
@@ -334,6 +362,7 @@ static bool source_core_install(SourceContext *ctx, const SourceContext *core,
         ctx->bodies[first+1+i].declaration=declarations[i];
         if (i==2) ctx->assert_equal=symbol; else if (i) ctx->assert_panics=symbol; else ctx->assertion=symbol;
     }
+    if (!source_core_copy_provenance(ctx,first,count)) return false;
     ctx->function_count+=count; ++ctx->module_count;
     return true;
 }
