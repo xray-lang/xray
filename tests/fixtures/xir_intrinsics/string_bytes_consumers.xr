@@ -29,7 +29,11 @@ fn _validName(s: string, maxLen: i64) -> bool {
 export fn printableName(s: string, maxLen: i64) -> bool { const check = _validName; return check(s, maxLen) }
 export fn cStringName(s: string, maxBytes: i64, allowEmpty: bool) -> bool { return _fitsCString(s, maxBytes, allowEmpty) }
 export fn discardBytes(s: string) { s.bytes() }
-export fn scalarBytes(s: string) -> i64 { s.bytes(); return 17 }
+export fn scalarBytes(s: string) -> i64 {
+    s.bytes()
+    if (scalarSlotCount != 2 || !scalarSlotReady || !scalarSlotChecked) { return -17 }
+    return 17
+}
 
 fn _readVarBytes(src: Slice<u8>) -> i64 {
     var sum = 0
@@ -54,7 +58,6 @@ const scalarSlotChecked: bool = match (true) {
         const scalarSlotView: Slice<u8> = scalarSlotOwner.bytes()
         scalarSlotCount = len(scalarSlotView)
         scalarSlotReady = scalarSlotView[0] == 65
-        if (scalarSlotCount != 2 || !scalarSlotReady) { assert(false, "scalar slot initialization mismatch") }
         true
     }
 }
