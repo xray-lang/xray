@@ -329,33 +329,63 @@ static XrXirStatus error_finite_summary(const EffectErrorEquationRead *equation,
 }
 /* A coordinate is decoded only through dimensions recomputed from current Input.
  * The finite rank is not a permission and never suppresses a closure check. */
-static XrXirStatus error_finite_rhs(const EffectErrorFiniteRead *read,
-    uint32_t function,uint64_t coordinate,uint64_t *output,uint32_t *bits) {
+static XrXirStatus error_finite_rhs_equation(const EffectErrorFiniteRead *read,
+    uint32_t function,uint64_t coordinate,const EffectErrorEquationRead *equation,bool eligible,
+    uint64_t *output,uint32_t *bits) {
     const EffectErrorFinite *proof=read->proof;const EffectErrorFiniteRow *row=&proof->rows[function];
-    if(coordinate<row->first || coordinate>=row->end) return XR_XIR_BAD_STRUCTURE;
-    EffectErrorEquationRead equation;XrXirStatus status=error_finite_equation(read,function,&equation);
-    if(status!=XR_XIR_OK) return status;
+    XrXirStatus status=XR_XIR_OK;
     uint64_t local=coordinate-row->first,summary=row->end-row->first-(uint64_t)proof->words*64;
     if(local<row->blocks) {
         EffectErrorFiniteEdgeQuery query={.to=(uint32_t)local,.reach=true,.result=local?0:1};
-        status=error_finite_predecessors(&equation,&query);*output=query.result;*bits=1;return status;
+        status=error_finite_predecessors(equation,&query);*output=query.result;*bits=1;return status;
     }
     *bits=64;
-    if(local>=summary) return error_finite_summary(&equation,(uint32_t)((local-summary)/64),output);
+    if(local>=summary) return error_finite_summary(equation,(uint32_t)((local-summary)/64),output);
     uint64_t entry=(local-row->blocks)/64;uint32_t word=(uint32_t)(entry%proof->words);
     entry/=proof->words;uint32_t value=(uint32_t)(entry%row->values),block=(uint32_t)(entry/row->values);
     bool reachable=false;status=error_finite_reachable(read,function,block,&reachable);
     if(status!=XR_XIR_OK) return status;
     if(!reachable) { *output=0;return XR_XIR_OK; }
     EffectErrorFiniteEdgeQuery query={.to=block,.value=value,.word=word};
-    bool active=false;XrXirType type=XR_XIR_UNIT;
-    status=error_equation_membership(&equation,value,&active,&type);
-    if(status!=XR_XIR_OK) return status;
-    if(!active) { *output=0;return XR_XIR_OK; }
-    if(!block && value<equation.head.parameter_count) {
-        status=error_equation_type_word(&equation,type,word,&query.result);if(status!=XR_XIR_OK) return status;
+    XrXirType type=XR_XIR_UNIT;
+    if(!eligible) {
+        bool active=false;status=error_equation_membership(equation,value,&active,&type);
+        if(status!=XR_XIR_OK) return status;
+        if(!active) { *output=0;return XR_XIR_OK; }
+    } else if(!block && value<equation->head.parameter_count) {
+        if(!equation->head.parameters) return XR_XIR_BAD_STRUCTURE;
+        if(!xir_compile_work(read->work,sizeof(type))) return XR_XIR_BUDGET;
+        type=equation->head.parameters[value];
     }
-    status=error_finite_predecessors(&equation,&query);*output=query.result;return status;
+    if(!block && value<equation->head.parameter_count) {
+        status=error_equation_type_word(equation,type,word,&query.result);if(status!=XR_XIR_OK) return status;
+    }
+    status=error_finite_predecessors(equation,&query);*output=query.result;return status;
+}
+static XrXirStatus error_finite_rhs(const EffectErrorFiniteRead *read,
+    uint32_t function,uint64_t coordinate,uint64_t *output,uint32_t *bits) {
+    const EffectErrorFinite *proof=read->proof;const EffectErrorFiniteRow *row=&proof->rows[function];
+    if(coordinate<row->first || coordinate>=row->end) return XR_XIR_BAD_STRUCTURE;
+    EffectErrorEquationRead equation;XrXirStatus status=error_finite_equation(read,function,&equation);
+    if(status!=XR_XIR_OK) return status;
+    return error_finite_rhs_equation(read,function,coordinate,&equation,false,output,bits);
+}
+/* A current walk already framed this head and selected every carrier from its
+ * present opcode and type. The loan ends before growth; strict support uses
+ * the independent reader above and never consumes this eligibility. */
+static XrXirStatus error_finite_rhs_walk(const EffectErrorFiniteRead *read,
+    const EffectErrorEquationRead *equation,uint32_t function,uint64_t coordinate,uint64_t *output,uint32_t *bits) {
+    if(!xir_compile_work(read->work,1)) return XR_XIR_BUDGET;
+    if(!read->current) return error_finite_rhs(read,function,coordinate,output,bits);
+    if(!xir_compile_work(read->work,11)) return XR_XIR_BUDGET;
+    const EffectErrorFinite *proof=read->proof;
+    if(equation->owner!=read || equation->work!=read->work || equation->context!=function ||
+        equation->body.owner!=proof->material || equation->body.current!=&read->current->input ||
+        read->current->work!=read->work || read->current->proof!=proof ||
+        read->current->material!=proof->material || function>=proof->contexts) return XR_XIR_BAD_STRUCTURE;
+    const EffectErrorFiniteRow *row=&proof->rows[function];
+    if(coordinate<row->first || coordinate>=row->end) return XR_XIR_BAD_STRUCTURE;
+    return error_finite_rhs_equation(read,function,coordinate,equation,true,output,bits);
 }
 #include "xxir_effect_error_finite_walk.inc.c"
 

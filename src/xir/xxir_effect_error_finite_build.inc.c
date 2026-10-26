@@ -61,13 +61,13 @@ typedef struct ErrorFiniteDerive {
     uint32_t rank;
     bool *changed,full;
 } ErrorFiniteDerive;
-static XrXirStatus error_finite_derive_coordinate(const EffectErrorFiniteRead *read,
+static XrXirStatus error_finite_derive_coordinate(EffectErrorFiniteRead *read,const EffectErrorEquationRead *equation,
     uint32_t function,uint64_t coordinate,void *owner,bool *paused) {
     ErrorFiniteDerive *derive=owner;uint64_t result=0;uint32_t bits=0;
     /* Earlier equations in this walk already have strictly smaller ranks.
      * Read their current facts without waiting for another complete sweep. */
-    if(!xir_compile_work(read->work,sizeof(EffectErrorFiniteRead))) return XR_XIR_BUDGET;
-    EffectErrorFiniteRead current=*read;current.limit=derive->rank;read=&current;
+    if(!xir_compile_work(read->work,sizeof(read->limit))) return XR_XIR_BUDGET;
+    read->limit=derive->rank;
     const EffectErrorFiniteRow *row=&read->proof->rows[function];
     /* Reachability is a monotone Boolean equation. A true fact from an earlier
      * rank cannot gain another bit, so construction need not derive it again.
@@ -77,7 +77,7 @@ static XrXirStatus error_finite_derive_coordinate(const EffectErrorFiniteRead *r
         XrXirStatus prior=error_finite_word(read,coordinate,1,&reached);
         if(prior!=XR_XIR_OK || reached) return prior;
     }
-    XrXirStatus status=error_finite_rhs(read,function,coordinate,&result,&bits);
+    XrXirStatus status=error_finite_rhs_walk(read,equation,function,coordinate,&result,&bits);
     if(status!=XR_XIR_OK) return status;
     uint32_t count=derive->proof->count;
     for(uint32_t bit=0;bit<bits;++bit) if(result&(UINT64_C(1)<<bit)) {
