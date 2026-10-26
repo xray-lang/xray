@@ -225,6 +225,42 @@ static void finite_cycle(void) {
     finite_clear(proof);effect_body_material_free(material);pc_release(&context,baseline);
     puts("finite Error direct recursion: empty least solution; jointly consistent fake positive cycle rejected");
 }
+/* Local assignment must replace the earlier enum seed even when a later COPY
+ * reads it. All three storage forms retain the complete local transfer. */
+static void finite_local_assignments(void) {
+    static const XrXirOp news[]={XR_XIR_LOCAL_NEW,XR_XIR_OWNED_LOCAL_NEW,XR_XIR_SCALAR_LOCAL_NEW};
+    static const XrXirOp writes[]={XR_XIR_LOCAL_WRITE,XR_XIR_OWNED_LOCAL_WRITE,XR_XIR_SCALAR_LOCAL_WRITE};
+    for(uint32_t kind=0;kind<XR_COUNTOF(news);++kind) {
+        EdgeFixture fixture;ee_fixture(&fixture,EE_JUMP,false);
+        fixture.subject[0]=(XrXirInstruction){.op=XR_XIR_ENUM_NEW,.type=(XrXirType)EE_ENUM};
+        fixture.subject[1]=(XrXirInstruction){.op=news[kind],.type=(XrXirType)EE_ENUM,.args={2}};
+        fixture.subject[2]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64};
+        fixture.subject[3]=(XrXirInstruction){.op=XR_XIR_ENUM_NEW,.type=(XrXirType)EE_ENUM,.immediate=1};
+        fixture.subject[4]=(XrXirInstruction){.op=writes[kind],.args={3,5}};
+        fixture.subject[5]=(XrXirInstruction){.op=XR_XIR_COPY,.type=(XrXirType)EE_ENUM,.args={3}};
+        fixture.subject[6]=(XrXirInstruction){.op=XR_XIR_JUMP,.targets={1}};
+        fixture.subject[7]=(XrXirInstruction){.op=XR_XIR_THROW,.args={7}};
+        fixture.blocks[0]=(XrXirBlock){.count=7};fixture.blocks[1]=(XrXirBlock){.first=7,.count=1};
+        fixture.functions[1].instruction_count=8;
+        XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+        EffectBodyMaterial *material=NULL;
+        CHECK(effect_body_material_create(&context,&fixture.module,&material)==XR_XIR_OK);
+        XrXirEffects seed={.resources=context.resources,.count=fixture.module.function_count};
+        CHECK(effect_errors_seed(&material->domain,&seed,&context)==XR_XIR_OK);
+        EffectErrorFinite *proof=finite_prepare(&context,&fixture.module,seed.outcomes_work.atoms,seed.outcomes_work.atom_count);
+        CHECK(finite_build(&context,proof,&fixture.module)==XR_XIR_OK);
+        finite_verify(&context,proof,XR_XIR_OK);
+        EffectErrorFiniteRead plain={proof,&context,UINT32_MAX,NULL};uint64_t result=0;
+        uint64_t summary=proof->rows[1].end-64;
+        CHECK(error_finite_word(&plain,summary,64,&result)==XR_XIR_OK && result==8);
+        uint32_t at=0;CHECK(error_finite_lower(&plain,summary+3,&at)==XR_XIR_OK && at<proof->count);
+        CHECK(proof->facts[at].coordinate==summary+3);
+        proof->facts[at].coordinate=summary+2;
+        finite_verify(&context,proof,XR_XIR_BAD_STRUCTURE);proof->facts[at].coordinate=summary+3;
+        finite_clear(proof);effect_outcomes_clear(&seed.outcomes_work,seed.count);
+        effect_body_material_free(material);pc_release(&context,baseline);
+    }
+}
 static EffectErrorFiniteView *finite_index_live_view;
 static void finite_index_growth_boundary(void *memory,size_t bytes) {
     (void)memory;(void)bytes;
@@ -296,7 +332,8 @@ static void finite_index_words(void) {
         CHECK(error_finite_rhs(&plain,1,coordinate,&expected,&expected_bits)==XR_XIR_OK && expected==12);
         CHECK(error_finite_rhs(&current,1,coordinate,&actual,&actual_bits)==XR_XIR_OK &&
             actual==expected && actual_bits==expected_bits);
-        CHECK(blocks_count>64 || (view.predecessors.ready && view.predecessors.function==1));
+        CHECK(blocks_count>64 || (view.predecessors.ready && view.predecessors.function==1 &&
+            !view.predecessors.local_writes));
         plain.limit=current.limit=1;
         CHECK(error_finite_rhs(&plain,1,coordinate,&expected,&expected_bits)==XR_XIR_OK && !expected);
         CHECK(error_finite_rhs(&current,1,coordinate,&actual,&actual_bits)==XR_XIR_OK && actual==expected);
@@ -330,7 +367,7 @@ static void finite_index_words(void) {
 #endif
 int FINITE_PROOF_ENTRY(int argc,char **argv) {
     CHECK(argc==2);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);
-    if(!mode) finite_index_words();
+    if(!mode) { finite_local_assignments();finite_index_words(); }
     if(mode>=31) { CHECK(mode<35);finite_growth_case(mode-31); }
     else if(mode>=15) marker_case(mode-15);
     else if(mode==14) finite_cycle();else { CHECK(mode<14);finite_cfg(mode,false);finite_cfg(mode,true); }

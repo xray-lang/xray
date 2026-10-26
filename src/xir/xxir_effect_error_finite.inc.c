@@ -42,11 +42,6 @@ static const XrXirTypes *error_finite_types(const EffectErrorFinite *proof) {
         types->nominals==input->nominals && types->interfaces==input->interfaces?input:types;
 }
 #include "xxir_effect_error_types.inc.c"
-typedef struct EffectErrorPredecessors {
-    uint64_t rows[64];
-    uint32_t function,blocks;
-    bool ready;
-} EffectErrorPredecessors;
 /* This identity and its structural block positions belong only to the current
  * callback-free walk. No Error facts or admission result are retained. A full
  * construction buffer expires this view before allocating and reopens it. */
@@ -107,9 +102,11 @@ static XrXirStatus error_finite_equation(const EffectErrorFiniteRead *read,
     uint32_t body=UINT32_MAX;
     XrXirStatus status=error_finite_context_read(read,function,&body);
     if(status!=XR_XIR_OK) return status;
+    if(!xir_compile_work(read->work,sizeof(output->predecessors))) return XR_XIR_BUDGET;
     *output=(EffectErrorEquationRead){.body=effect_body_owned_request(read->work,read->proof->material),
         .work=read->work,.atoms=read->proof->atoms,.context=function,.function=body,
         .atom_count=read->proof->atom_count,.words=read->proof->words,.owner=read,
+        .predecessors=read->current?&read->current->predecessors:NULL,
         .entry=error_finite_entry,.call=error_finite_call,.result=error_finite_result};
     if(read->current) output->body.current=&read->current->input;
     return effect_body_request_head(&output->body,output->function,&output->head);
@@ -205,11 +202,27 @@ static XrXirStatus error_finite_predecessor_index(const EffectErrorEquationRead 
         return XR_XIR_BUDGET;
     index->ready=false;
     memset(index->rows,0,(size_t)head->block_count*sizeof(*index->rows));
+    if(!xir_compile_work(equation->work,sizeof(index->local_writes))) return XR_XIR_BUDGET;
+    index->local_writes=0;
     for (uint32_t b=0;b<head->block_count;++b) {
         const XrXirBlock *block=&head->blocks[b];
         if (!xir_compile_work(equation->work,4)) return XR_XIR_BUDGET;
         if (!block->count || block->first>head->instruction_count ||
             block->count>head->instruction_count-block->first) return XR_XIR_BAD_STRUCTURE;
+        /* Structural write positions expire with this callback-free view. No
+         * Error, membership, rank or edge verdict is retained with them. */
+        for(uint32_t i=block->first;i<block->first+block->count;++i) {
+            if(!xir_compile_work(equation->work,2)) return XR_XIR_BUDGET;
+            XrXirOp opcode=XR_XIR_INVALID;
+            XrXirStatus status=error_equation_current_opcode(equation,i,&opcode);
+            if(status!=XR_XIR_OK) return status;
+            if(!xir_compile_work(equation->work,3)) return XR_XIR_BUDGET;
+            if(opcode==XR_XIR_LOCAL_WRITE || opcode==XR_XIR_OWNED_LOCAL_WRITE ||
+                opcode==XR_XIR_SCALAR_LOCAL_WRITE) {
+                if(!xir_compile_work(equation->work,sizeof(index->local_writes))) return XR_XIR_BUDGET;
+                index->local_writes|=UINT64_C(1)<<b;
+            }
+        }
         uint32_t targets[2]={0},count=0;
         XrXirStatus status=error_finite_successors(equation,block->first+block->count-1,targets,&count);
         if (status!=XR_XIR_OK) return status;

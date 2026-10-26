@@ -10,6 +10,12 @@
  *   Current Input defines every transfer. Proposed block entries and call
  *   summaries remain operands whose closure and rootedness require proof.
  */
+typedef struct EffectErrorPredecessors {
+    uint64_t rows[64],local_writes;
+    uint32_t function,blocks;
+    bool ready;
+} EffectErrorPredecessors;
+
 typedef struct EffectErrorEquationRead {
     EffectBodyRequest body;
     EffectBodyFunctionHead head;
@@ -17,6 +23,7 @@ typedef struct EffectErrorEquationRead {
     const EffectErrorAtom *atoms;
     uint32_t context,function,atom_count,words,rank_limit;
     const void *owner;
+    const EffectErrorPredecessors *predecessors;
     XrXirStatus (*entry)(const struct EffectErrorEquationRead *,uint32_t,uint32_t,uint32_t,uint64_t *);
     XrXirStatus (*call)(const struct EffectErrorEquationRead *,uint32_t,uint32_t,uint64_t *);
     XrXirStatus (*result)(const struct EffectErrorEquationRead *,uint32_t,uint32_t,uint64_t *);
@@ -123,7 +130,25 @@ static inline XrXirStatus error_equation_value(const EffectErrorEquationRead *re
         if (status!=XR_XIR_OK) return status;
         if (!active) { *output=0;return XR_XIR_OK; }
         bool cell=xr_xir_type_is_cell(read->body.domain.types,type),follow=false;
-        while (cursor>first) {
+        if(!xir_compile_work(read->work,sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t floor=first;
+        if(!cell && read->predecessors) {
+            if(!xir_compile_work(read->work,4+sizeof(read->predecessors->ready)+
+                2*sizeof(uint32_t)+sizeof(uint64_t))) return XR_XIR_BUDGET;
+            const EffectErrorPredecessors *index=read->predecessors;
+            if(index->ready && index->function==read->function && index->blocks==read->head.block_count &&
+                index->blocks<=64 && !(index->local_writes&(UINT64_C(1)<<block))) {
+                /* Without local assignments, only this value's actual definition
+                 * can change its incoming row. Copies still follow their source
+                 * at the original cursor, and PHIs still consume the entry. */
+                if(!xir_compile_work(read->work,5+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+                if(value>=read->head.parameter_count && value-read->head.parameter_count>=first &&
+                    value-read->head.parameter_count<cursor) {
+                    floor=value-read->head.parameter_count;cursor=floor+1;
+                } else cursor=first;
+            }
+        }
+        while (cursor>floor) {
             uint32_t i=--cursor;XrXirInstruction op;
             if(read->body.current && effect_body_request_sequence_owned(&read->body)) {
                 XrXirOp opcode=XR_XIR_INVALID;
