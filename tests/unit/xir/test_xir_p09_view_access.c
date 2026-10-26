@@ -982,11 +982,13 @@ static void access_root_model_dump(void) {
     puts("]}");
 }
 #include "xir_view_access_fresh_class_cases.h"
+#include "xir_view_access_scalar_slot_cases.h"
 
 int main(int argc,char **argv) {
     if (argc==2 && !strcmp(argv[1],"--root-model")) {access_root_model_dump();return 0;}
     bool normal=argc==2 && !strcmp(argv[1],"--normal");CHECK(argc==1 || normal);setvbuf(stdout,NULL,_IONBF,0);
     fresh_class_cases();
+    scalar_slot_cases();
     for (uint32_t kind=0;kind<A_CASES;++kind) access_resources(kind,normal);
     for (uint32_t kind=148;kind<A_CASES;++kind) access_frame_boundary(kind);
     puts("Proven conflicts reject, unresolved epochs stay explicit, and Source execution remains closed");return 0;

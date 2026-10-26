@@ -174,6 +174,23 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
     const XrXirTypes *types=a->resolver->check.module->types;const uint8_t *flags=a->resolver->check.flags;
     uint32_t result=a->body->parameter_count+event->instruction;
     bool binding=false;XrXirStatus bound=view_access_binding(a,op,&binding);if (binding) return bound;
+    if (op->op==XR_XIR_SLOT_INIT) {
+        ViewRootCheck *c=&a->resolver->check;
+        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+        const XrXirDeclarations *d=c->module->declarations;
+        if (d && op->immediate>=0 && (uint64_t)op->immediate<d->slot_count) {
+            const XrXirSlot *slot=&d->slots[op->immediate];
+            XrXirType payload=xr_xir_operand_type(a->body,op->args[0]);
+            if (slot->mutable && slot->type==payload && slot->module<d->module_count &&
+                d->modules[slot->module].initializer==a->function && xr_xir_type_is_cell(types,payload)) {
+                XrXirType scalar=xr_xir_cell_element(types,payload);
+                /* Publishing scalar storage does not access another owner's payload.
+                 * The instance still checks the Cell's actual publication authority. */
+                if (scalar==XR_XIR_BOOL || scalar==XR_XIR_RUNE || xr_xir_type_is_number(scalar))
+                    return XR_XIR_OK;
+            }
+        }
+    }
     if (view_access_structural(op->op)) return XR_XIR_OK;
     if (op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW || xr_xir_intrinsic_string_bytes(op)) {
         uint32_t source=a->body->operands[op->args[0]];bool sub=op->op==XR_XIR_VIEW_REBORROW;

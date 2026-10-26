@@ -45,6 +45,17 @@ export fn borrowedVarBytes(s: string) -> i64 {
     return _readVarBytes(copy) + shadow(len(b))
 }
 
+// Scalar module storage remains distinct from the lexical byte-view owner.
+var scalarSlotCount: i64 = 0
+var scalarSlotReady: bool = false
+{
+    var scalarSlotOwner = "Az"
+    const scalarSlotView: Slice<u8> = scalarSlotOwner.bytes()
+    scalarSlotCount = len(scalarSlotView)
+    scalarSlotReady = scalarSlotView[0] == 65
+}
+if (scalarSlotCount != 2 || !scalarSlotReady) { panic("scalar slot initialization mismatch") }
+
 // TEST-CONSUMER
 fn _refBytes(s: ref string) -> i64 {
     var b: Slice<u8> = s.bytes()

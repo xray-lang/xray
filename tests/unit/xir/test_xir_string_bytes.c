@@ -55,8 +55,30 @@ static void string_bytes_registry(void) {
     CHECK(call->member->result==XR_NATIVE_TERM_SLICE_U8);
     CHECK(!xr_xir_intrinsic(5) && !xr_xir_intrinsic(6));
 }
+static void string_bytes_scalar_slots(const XrXirModule *module) {
+    bool scalar=false,boolean=false,borrowed=false;
+    const XrXirDeclarations *d=module->declarations;
+    for (uint32_t m=0;m<d->module_count;++m) {
+        const XrXirFunction *body=module->functions+d->modules[m].initializer;
+        bool local_scalar=false,local_boolean=false,local_borrowed=false;
+        for (uint32_t i=0;i<body->instruction_count;++i) {
+            const XrXirInstruction *op=body->instructions+i;
+            if (xr_xir_intrinsic_string_bytes(op)) local_borrowed=true;
+            if (op->op!=XR_XIR_SLOT_INIT || op->immediate<0 || (uint64_t)op->immediate>=d->slot_count) continue;
+            const XrXirSlot *slot=&d->slots[op->immediate];
+            XrXirType payload=xr_xir_operand_type(body,op->args[0]);
+            if (!slot->mutable || slot->module!=m || slot->type!=payload ||
+                !xr_xir_type_is_cell(module->types,payload)) continue;
+            XrXirType element=xr_xir_cell_element(module->types,payload);
+            local_scalar|=element==XR_XIR_I64;local_boolean|=element==XR_XIR_BOOL;
+        }
+        if (local_scalar && local_boolean && local_borrowed) scalar=boolean=borrowed=true;
+    }
+    CHECK(scalar && boolean && borrowed);
+}
 static void string_bytes_fixture_names(StringBytesFixture *fixture) {
     const XrXirModule *module=xr_xir_compile_artifact_module(fixture->checked);
+    string_bytes_scalar_slots(module);
     fixture->functions=(StringBytesFunctions){module->declarations->entry_function,
         string_bytes_named(module,"printableName"),string_bytes_named(module,"cStringName"),
         string_bytes_named(module,"discardBytes"),string_bytes_named(module,"scalarBytes"),
