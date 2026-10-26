@@ -53,7 +53,9 @@ for record in manifest['same_body_vectors']:
     assert packet(literal[64:],54,21)[32:64].hex()==record['old_digest']
     assert packet(literal[64:],55,21)[32:64].hex()==record['previous55_digest']
     assert packet(literal[64:],57)[32:64].hex()==record['current_digest']
-print(json.dumps({'core_bytes':len(current65),'core_digest':current65[32:64].hex(),
+from derive_assert_condition_current_vector import verify_current
+current_condition=verify_current()
+print(json.dumps({'current_condition37_100':current_condition,'core_bytes':len(current65),'core_digest':current65[32:64].hex(),
     'complete_previous25_64_sha256':hashlib.sha256(current64).hexdigest(),
     'complete_previous24_63_sha256':hashlib.sha256(current).hexdigest(),
     'previous54_whole_bodies_reproduced':len(manifest['same_body_vectors']),
