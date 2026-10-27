@@ -246,7 +246,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F04",
-        "first_diagnostic": "stdlib/crypto/crypto.xr:97:27: error: string member has no admitted value-operation contract"
+        "first_diagnostic": "stdlib/crypto/crypto.xr:374:5: error: name is not an initialized value"
       }
     },
     {
@@ -386,7 +386,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F04",
-        "first_diagnostic": "stdlib/crypto/crypto.xr:97:27: error: string member has no admitted value-operation contract"
+        "first_diagnostic": "stdlib/crypto/crypto.xr:374:5: error: name is not an initialized value"
       }
     },
     {
