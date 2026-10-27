@@ -1,0 +1,56 @@
+// Ordinary string values survive ref updates and CSV field resets.
+import csv
+import { CsvError, defaultParseOptions } from csv
+
+fn appendPiece(target: ref string, value: string) {
+    target += value
+}
+
+var accumulator = "left"
+var snapshot = accumulator
+appendPiece(ref accumulator, "中🌍")
+assertEqual(snapshot, "left")
+assertEqual(accumulator, "left中🌍")
+accumulator += accumulator
+assertEqual(accumulator, "left中🌍left中🌍")
+assertEqual(snapshot, "left")
+
+var rhsEvaluations = 0
+fn replaceDuringRhs() -> string {
+    rhsEvaluations = rhsEvaluations + 1
+    accumulator = "rebound"
+    return "!"
+}
+accumulator += replaceDuringRhs()
+assertEqual(rhsEvaluations, 1)
+assertEqual(accumulator, "left中🌍left中🌍!")
+assertEqual(snapshot, "left")
+
+var document = csv.parse("alpha,\"中🌍\",tail\n,\"quote\"\"kept\",z\nlast,end,abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+assertEqual(len(document.rows), 3)
+assertEqual(document.rows[0][0], "alpha")
+assertEqual(document.rows[0][1], "中🌍")
+assertEqual(document.rows[0][2], "tail")
+assertEqual(document.rows[1][0], "")
+assertEqual(document.rows[1][1], "quote\"kept")
+assertEqual(document.rows[1][2], "z")
+assertEqual(document.rows[2][0], "last")
+assertEqual(document.rows[2][1], "end")
+assertEqual(document.rows[2][2], "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+assertEqual(csv.stringify(document), "alpha,中🌍,tail\n,\"quote\"\"kept\",z\nlast,end,abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n")
+assertEqual(document.rows[0][0], "alpha")
+assertEqual(document.rows[0][1], "中🌍")
+
+var limited = defaultParseOptions()
+limited.maxFieldBytes = 3
+var rejected = false
+try {
+    csv.parse("🌍", limited)
+} catch (error: CsvError) {
+    rejected = match (error) {
+        CsvError.FieldLimitExceeded { limit } -> limit == 3,
+        _ -> false
+    }
+}
+assert(rejected)
+print("ordinary string CSV snapshots PASS")

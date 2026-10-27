@@ -24,13 +24,15 @@ fn _hexVal(c: i64) -> i64 {
 export fn hexEncode(data: Slice<u8>) -> string {
     var src = data
     var alphabet: Slice<u8> = HEX.bytes()
-    var out = StringBuilder()
+    var out = ""
     for (var i = 0; i < len(src); i++) {
         var b = src[i] as i64
-        out.append(rune((alphabet[b >> 4] as i64))!)
-        out.append(rune((alphabet[b & 15] as i64))!)
+        var _encodedRune0 = rune((alphabet[b >> 4] as i64))!
+        out += "${_encodedRune0}"
+        var _encodedRune1 = rune((alphabet[b & 15] as i64))!
+        out += "${_encodedRune1}"
     }
-    return out.toString()
+    return out
 }
 
 export fn hexDecode(hex: string) -> Array<u8> {

@@ -89,15 +89,15 @@ fn rotr64(x: u64, n: u64) -> u64 {
 }
 
 fn hexOf(bytes: Array<u8>) -> string {
-    var out = StringBuilder()
+    var out = ""
     for (var i = 0; i < len(bytes); i++) {
         var b = bytes[i] as i64
         var hi = (b >> 4) & 15
         var lo = b & 15
-        out.append(HEX_DIGITS.slice(hi, hi + 1))
-        out.append(HEX_DIGITS.slice(lo, lo + 1))
+        out += HEX_DIGITS.slice(hi, hi + 1)
+        out += HEX_DIGITS.slice(lo, lo + 1)
     }
-    return out.toString()
+    return out
 }
 
 // Append the message length in bits, big-endian over eight bytes.
@@ -390,16 +390,16 @@ export fn uuid() -> string {
     b[6] = ((((b[6] as i64) & 15) | 64)) as u8
     b[8] = ((((b[8] as i64) & 63) | 128)) as u8
 
-    var out = StringBuilder()
+    var out = ""
     for (var i = 0; i < 16; i++) {
-        if (i == 4 || i == 6 || i == 8 || i == 10) { out.append("-") }
+        if (i == 4 || i == 6 || i == 8 || i == 10) { out += "-" }
         var v = b[i] as i64
         var hi = (v >> 4) & 15
         var lo = v & 15
-        out.append(HEX_DIGITS.slice(hi, hi + 1))
-        out.append(HEX_DIGITS.slice(lo, lo + 1))
+        out += HEX_DIGITS.slice(hi, hi + 1)
+        out += HEX_DIGITS.slice(lo, lo + 1)
     }
-    return out.toString()
+    return out
 }
 
 // Compare two strings in time that does not depend on where they first differ.

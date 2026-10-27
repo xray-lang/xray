@@ -52,26 +52,26 @@ fn _levelName(level: LogLevel) -> string {
 }
 
 fn _jsonEscape(s: string) -> string {
-    var out = StringBuilder()
-    out.append("\"")
+    var out = ""
+    out += "\""
     for (var i = 0; i < len(s); i++) {
         var c = s.runes().nth(i)
         if (c == "\"") {
-            out.append("\\\"")
+            out += "\\\""
         } else if (c == "\\") {
-            out.append("\\\\")
+            out += "\\\\"
         } else if (c == "\n") {
-            out.append("\\n")
+            out += "\\n"
         } else if (c == "\r") {
-            out.append("\\r")
+            out += "\\r"
         } else if (c == "\t") {
-            out.append("\\t")
+            out += "\\t"
         } else {
-            out.append(c)
+            out += "${c}"
         }
     }
-    out.append("\"")
-    return out.toString()
+    out += "\""
+    return out
 }
 
 fn _jsonValue(value: JSON.Value) -> string {
@@ -97,32 +97,32 @@ fn _message(args: Array<JSON.Value>) -> string {
     return string(args[0])
 }
 
-fn _appendTextAttrs(out: ref StringBuilder, args: Array<JSON.Value>, start: i64) {
+fn _appendTextAttrs(out: ref string, args: Array<JSON.Value>, start: i64) {
     var i = start
     while (i + 1 < len(args)) {
         var key = string(args[i])
         var val = string(args[i + 1])
-        out.append(" ")
-        out.append(key)
-        out.append("=")
+        out += " "
+        out += key
+        out += "="
         if (_needsQuote(val)) {
-            out.append("\"")
-            out.append(val)
-            out.append("\"")
+            out += "\""
+            out += val
+            out += "\""
         } else {
-            out.append(val)
+            out += val
         }
         i = i + 2
     }
 }
 
-fn _appendJsonAttrs(out: ref StringBuilder, args: Array<JSON.Value>, start: i64) {
+fn _appendJsonAttrs(out: ref string, args: Array<JSON.Value>, start: i64) {
     var i = start
     while (i + 1 < len(args)) {
-        out.append(",")
-        out.append(_jsonEscape(string(args[i])))
-        out.append(":")
-        out.append(_jsonValue(args[i + 1]))
+        out += ","
+        out += _jsonEscape(string(args[i]))
+        out += ":"
+        out += _jsonValue(args[i + 1])
         i = i + 2
     }
 }
@@ -130,34 +130,34 @@ fn _appendJsonAttrs(out: ref StringBuilder, args: Array<JSON.Value>, start: i64)
 fn _formatLine(logger: Logger, level: LogLevel, args: Array<JSON.Value>) -> string {
     var msg = _message(args)
     if (logger.format == LogFormat.JSON) {
-        var out = StringBuilder()
-        out.append("{\"level\":")
-        out.append(_jsonEscape(_levelName(level)))
-        out.append(",\"msg\":")
-        out.append(_jsonEscape(msg))
-        if (logger.source) { out.append(",\"source\":true") }
+        var out = ""
+        out += "{\"level\":"
+        out += _jsonEscape(_levelName(level))
+        out += ",\"msg\":"
+        out += _jsonEscape(msg)
+        if (logger.source) { out += ",\"source\":true" }
         if (len(logger.jsonContext) > 0) {
-            out.append(",")
-            out.append(logger.jsonContext)
+            out += ","
+            out += logger.jsonContext
         }
         _appendJsonAttrs(ref out, args, 1)
-        out.append("}")
-        return out.toString()
+        out += "}"
+        return out
     }
 
-    var out = StringBuilder()
-    out.append(_levelName(level))
-    if (logger.source) { out.append(" [source]") }
+    var out = ""
+    out += _levelName(level)
+    if (logger.source) { out += " [source]" }
     if (len(msg) > 0) {
-        out.append(" ")
-        out.append(msg)
+        out += " "
+        out += msg
     }
     if (len(logger.textContext) > 0) {
-        out.append(" ")
-        out.append(logger.textContext)
+        out += " "
+        out += logger.textContext
     }
     _appendTextAttrs(ref out, args, 1)
-    return out.toString()
+    return out
 }
 
 fn _writeRaw(output: Path?, line: string) {
@@ -194,17 +194,17 @@ fn _rootLogger() -> Logger {
 }
 
 fn _contextText(args: Array<JSON.Value>) -> string {
-    var out = StringBuilder()
+    var out = ""
     _appendTextAttrs(ref out, args, 0)
-    var s = out.toString()
+    var s = out
     if (len(s) > 0 && s.runes().nth(0) == ' ') { return s.slice(1) }
     return s
 }
 
 fn _contextJson(args: Array<JSON.Value>) -> string {
-    var out = StringBuilder()
+    var out = ""
     _appendJsonAttrs(ref out, args, 0)
-    var s = out.toString()
+    var s = out
     if (len(s) > 0 && s.runes().nth(0) == ',') { return s.slice(1) }
     return s
 }

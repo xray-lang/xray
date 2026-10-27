@@ -1,33 +1,33 @@
 // text - explicit Unicode-text operations for always-valid UTF-8 strings.
 
 export fn lower(value: string) -> string {
-    var out = StringBuilder()
+    var out = ""
     var iter = value.runes()
     while (iter.hasNext()) {
         var r = iter.next()
         var cp = (r.toUInt32() as i64)
         if (cp >= 65 && cp <= 90) {
-            out.append(rune(cp + 32)!)
+            out += "${rune(cp + 32)!}"
         } else {
-            out.append(r)
+            out += "${r}"
         }
     }
-    return out.toString()
+    return out
 }
 
 export fn upper(value: string) -> string {
-    var out = StringBuilder()
+    var out = ""
     var iter = value.runes()
     while (iter.hasNext()) {
         var r = iter.next()
         var cp = (r.toUInt32() as i64)
         if (cp >= 97 && cp <= 122) {
-            out.append(rune(cp - 32)!)
+            out += "${rune(cp - 32)!}"
         } else {
-            out.append(r)
+            out += "${r}"
         }
     }
-    return out.toString()
+    return out
 }
 
 export fn trimStart(value: string) -> string {
@@ -51,31 +51,31 @@ export fn trim(value: string) -> string {
 }
 
 export fn reverseRunes(value: string) -> string {
-    var out = StringBuilder()
-    for (var i = len(value); i > 0; i--) { out.append(value.runes().nth(i - 1)) }
-    return out.toString()
+    var out = ""
+    for (var i = len(value); i > 0; i--) { out += "${value.runes().nth(i - 1)}" }
+    return out
 }
 
 export fn padStart(value: string, targetLength: i64, padding: string = " ") -> string {
     if (targetLength <= len(value) || len(padding) == 0) { return value }
-    var out = StringBuilder()
+    var out = ""
     var needed = targetLength - len(value)
-    for (var i = 0; i < needed; i++) { out.append(padding.runes().nth(i % len(padding))) }
-    out.append(value)
-    return out.toString()
+    for (var i = 0; i < needed; i++) { out += "${padding.runes().nth(i % len(padding))}" }
+    out += value
+    return out
 }
 
 export fn padEnd(value: string, targetLength: i64, padding: string = " ") -> string {
     if (targetLength <= len(value) || len(padding) == 0) { return value }
-    var out = StringBuilder()
-    out.append(value)
+    var out = ""
+    out += value
     var needed = targetLength - len(value)
-    for (var i = 0; i < needed; i++) { out.append(padding.runes().nth(i % len(padding))) }
-    return out.toString()
+    for (var i = 0; i < needed; i++) { out += "${padding.runes().nth(i % len(padding))}" }
+    return out
 }
 
 export fn translate(value: string, table: Map<string, string>) -> string {
-    var out = StringBuilder()
+    var out = ""
     var iter = value.runes()
     while (iter.hasNext()) {
         var r = iter.next()
@@ -87,7 +87,7 @@ export fn translate(value: string, table: Map<string, string>) -> string {
                 break
             }
         }
-        out.append(translated)
+        out += translated
     }
-    return out.toString()
+    return out
 }
