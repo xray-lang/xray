@@ -13,6 +13,11 @@
 #include <string.h>
 #include "xnative_declarations.inc.c"
 
+XR_FUNC const XrNativeCallableDeclaration *xr_native_callable_by_id(uint32_t id) {
+    for (size_t i = 0; i < sizeof(xr_native_callables) / sizeof(*xr_native_callables); ++i)
+        if (id && xr_native_callables[i].id == id) return &xr_native_callables[i];
+    return NULL;
+}
 XR_FUNC const XrNativeIntrinsicDeclaration *xr_native_intrinsic_by_id(uint32_t id) {
     if (!id) return NULL;
     for (size_t i = 0; i < sizeof(xr_native_intrinsics) / sizeof(*xr_native_intrinsics); ++i)
@@ -43,7 +48,8 @@ const XrNativeTypeDeclaration *xr_native_declaration_by_id(uint32_t id) {
         id == xr_native_bool.id ? &xr_native_bool :
         id == xr_native_rune.id ? &xr_native_rune :
         id == xr_native_map.id ? &xr_native_map :
-        id == xr_native_set.id ? &xr_native_set : NULL;
+        id == xr_native_set.id ? &xr_native_set :
+        id == xr_native_utf8_error.id ? &xr_native_utf8_error : NULL;
 }
 static bool native_text_equal(const char *left, const char *right) {
     return left && right && strcmp(left, right) == 0;
@@ -54,7 +60,7 @@ XR_FUNC const XrNativeTypeDeclaration *xr_native_declaration_by_name(const char 
         &xr_native_string, &xr_native_atomic, &xr_native_ordering, &xr_native_task,
         &xr_native_channel, &xr_native_recv, &xr_native_send_result, &xr_native_iterator,
         &xr_native_map, &xr_native_set, &xr_native_i64, &xr_native_f64,
-        &xr_native_bool, &xr_native_rune};
+        &xr_native_bool, &xr_native_rune, &xr_native_utf8_error};
     for (size_t i = 0; i < sizeof(declarations) / sizeof(*declarations); ++i) {
         if (native_text_equal(name, declarations[i]->name)) return declarations[i];
     }

@@ -177,7 +177,9 @@ XR_FUNC XrXirStatus xir_compile_view_may_owned_function_scoped(const XrXirCompil
     ViewMayOwner m={.affine={.context=&limited,.module=module,.function=module->functions+function,.types=flags,
         .location={XR_XIR_OK,function,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}}};
     ViewMayScoped scope={&m,visitor,user};m.visitor=visitor?view_may_scoped_visit:NULL;m.user=&scope;
-    status=view_may_function(&m);
+    if (module->declarations && module->declarations->functions[function].native_callable)
+        status=xir_native_callable_verify(module,function);
+    else status=view_may_function(&m);
     if (status!=XR_XIR_OK && diagnostic) {*diagnostic=m.affine.location;diagnostic->status=status;}
     xr_compile_resources_free(m.extra);affine_free(&m.affine);xr_compile_resources_free(flags);return status;
 }

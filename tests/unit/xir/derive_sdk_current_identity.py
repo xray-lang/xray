@@ -168,7 +168,12 @@ def main():
     for symbol,data in [('previous38_98_sdk_kat_preimage',prior_slice_image),('previous38_98_sdk_kat_file_digest',prior_slice_file),('previous38_98_sdk_kat_digest',prior_slice_digest)]:
         match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',prior_slice_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete predecessor38/98 bytes changed'
-    image,file_digest,digest=current_preimage(current_rows,99,30,35,38,36)
+    prior_native_image,prior_native_file,prior_native_digest=current_preimage(current_rows,99,30,35,38,36)
+    prior_native_text=Path(__file__).with_name('sdk_current_identity_golden.h').read_text(encoding='utf-8')
+    for symbol,data in [('previous38_99_sdk_kat_preimage',prior_native_image),('previous38_99_sdk_kat_file_digest',prior_native_file),('previous38_99_sdk_kat_digest',prior_native_digest)]:
+        match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',prior_native_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete predecessor38/99 bytes changed'
+    image,file_digest,digest=current_preimage(current_rows,100,30,35,39,37)
     prior_resources_image,prior_resources_file,prior_resources_digest=current_preimage(frozen_rows,98,30,35,37,36)
     assert len(prior_resources_image)==3338
     assert prior_resources_digest.hex()=='8fd650c91daccdcad55f6bf8c40b5f4e2f9ed9611d721eff0c26321e84adeca1'
@@ -176,7 +181,7 @@ def main():
     assert image[:identity_offset]==previous_image[:identity_offset]
     old_current_image,_,_=current_preimage(old_rows,75,25)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(38,99,30,35,36)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(39,100,30,35,37)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
     assert len(image)==3330 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest
@@ -185,7 +190,8 @@ def main():
             ('previous37_97_sdk_kat_preimage',prior_bytes_image),('previous37_97_sdk_kat_file_digest',prior_bytes_file),('previous37_97_sdk_kat_digest',prior_bytes_digest),
             ('previous_resource_sdk_kat_preimage',prior_resources_image),('previous_resource_sdk_kat_file_digest',prior_resources_file),('previous_resource_sdk_kat_digest',prior_resources_digest),
             ('previous37_new_resources_sdk_kat_preimage',prior_new_resources_image),('previous37_new_resources_sdk_kat_file_digest',prior_new_resources_file),('previous37_new_resources_sdk_kat_digest',prior_new_resources_digest),
-            ('previous38_98_sdk_kat_preimage',prior_slice_image),('previous38_98_sdk_kat_file_digest',prior_slice_file),('previous38_98_sdk_kat_digest',prior_slice_digest)):
+            ('previous38_98_sdk_kat_preimage',prior_slice_image),('previous38_98_sdk_kat_file_digest',prior_slice_file),('previous38_98_sdk_kat_digest',prior_slice_digest),
+            ('previous38_99_sdk_kat_preimage',prior_native_image),('previous38_99_sdk_kat_file_digest',prior_native_file),('previous38_99_sdk_kat_digest',prior_native_digest)):
         output+='static const uint8_t '+name+'[] = {\n'
         for at in range(0,len(data),16):output+='    '+','.join('0x'+format(x,'02x') for x in data[at:at+16])+',\n'
         output+='};\n'

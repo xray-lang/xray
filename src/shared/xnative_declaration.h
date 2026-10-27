@@ -29,7 +29,8 @@ typedef enum XrNativeDeclarationId { XR_NATIVE_DECLARATION_ARRAY = 1, XR_NATIVE_
     XR_NATIVE_DECLARATION_INTEGER = 12, XR_NATIVE_DECLARATION_FLOAT = 13,
     XR_NATIVE_DECLARATION_BOOLEAN = 14, XR_NATIVE_DECLARATION_RUNE = 15,
     /* Retired identities are never assigned to another declaration. */
-    XR_NATIVE_DECLARATION_RETIRED_16 = 16 } XrNativeDeclarationId;
+    XR_NATIVE_DECLARATION_RETIRED_16 = 16,
+    XR_NATIVE_DECLARATION_UTF8_ERROR = 17 } XrNativeDeclarationId;
 typedef enum XrNativeTypeTerm {
     XR_NATIVE_TERM_UNADMITTED, XR_NATIVE_TERM_UNIT, XR_NATIVE_TERM_I64,
     XR_NATIVE_TERM_ELEMENT, XR_NATIVE_TERM_STRING, XR_NATIVE_TERM_BOOL,
@@ -45,7 +46,7 @@ typedef enum XrNativeTypeTerm {
     XR_NATIVE_TERM_SEND_RESULT, XR_NATIVE_TERM_RECV_ELEMENT, XR_NATIVE_TERM_F64, XR_NATIVE_TERM_NULLABLE_I64, XR_NATIVE_TERM_U32,
     XR_NATIVE_TERM_ARRAY_U8,
     /* The two retired type-term slots remain unassigned. */
-    XR_NATIVE_TERM_NULLABLE_F64 = 35
+    XR_NATIVE_TERM_NULLABLE_F64 = 35, XR_NATIVE_TERM_SLICE_U8 = 36
 } XrNativeTypeTerm;
 /* RESULT_VARIABLE and the callback terms require an admitted recipe's exact
  * signature. They never grant authority to an arbitrary unparsed signature. */
@@ -144,6 +145,7 @@ typedef enum XrNativeOperation {
     /* The three retired operation slots remain unassigned. */
     XR_NATIVE_OPERATION_F64_TRY_PARSE = 115,
     XR_NATIVE_OPERATION_STRING_SLICE,
+    XR_NATIVE_OPERATION_STRING_FROM_UTF8,
     XR_NATIVE_OPERATION_COUNT
 } XrNativeOperation;
 typedef enum XrNativeAllocation {
@@ -184,6 +186,15 @@ typedef struct XrNativeTypeDeclaration {
     uint32_t member_count;
 } XrNativeTypeDeclaration;
 
+/* Callable IDs authenticate ordinary function bodies, independently of inline intrinsics. */
+typedef struct XrNativeCallableDeclaration {
+    uint32_t id;
+    const XrNativeTypeDeclaration *owner;
+    const XrNativeMemberDeclaration *member;
+    const XrNativeTypeDeclaration *error_e_type;
+    bool ctfe;
+} XrNativeCallableDeclaration;
+XR_FUNC const XrNativeCallableDeclaration *xr_native_callable_by_id(uint32_t id);
 typedef enum XrNativeIntrinsicImplementation {
     XR_NATIVE_INTRINSIC_IMPLEMENTATION_NONE,
     XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_CONTAINS,

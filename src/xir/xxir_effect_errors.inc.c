@@ -916,12 +916,46 @@ static XrXirStatus error_storage_prepare(ErrorFlow *flow, size_t bytes) {
     }
     return XR_XIR_OK;
 }
+#include "xxir_native_callable.h"
+static bool error_native(const EffectBodyRequest *body,uint32_t f) {
+    return body->domain.declarations && f<body->domain.function_count &&
+        body->domain.declarations->functions && body->domain.declarations->functions[f].native_callable;
+}
+static XrXirStatus error_native_header(const EffectBodyRequest *body,uint32_t f,
+    const EffectBodyFunctionHead *head) {
+    if (!error_native(body,f) || !head) return XR_XIR_BAD_STRUCTURE;
+    const XrXirDeclarations *d=body->domain.declarations;
+    const XrXirFunctionIdentity *id=&d->functions[f];
+    if (!xir_native_callable_identity(id) || id->module>=d->module_count || f==d->entry_function ||
+        !head->name || !head->name_length || memchr(head->name,0,head->name_length) ||
+        head->block_count || head->blocks || head->instruction_count || head->operand_count || head->operands ||
+        (body->domain.generics && (body->domain.generics[f].parameter_count || body->domain.generics[f].argument_count)))
+        return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t m=0;m<d->module_count;++m)
+        if (d->modules[m].initializer==f) return XR_XIR_BAD_STRUCTURE;
+    return xir_native_callable_types(id->native_callable,body->domain.types,head->parameters,
+        head->parameter_count,head->result,head->error_type) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+}
+static XrXirStatus error_native_leaf(ErrorFlow *flow,uint32_t f) {
+    const EffectBodyFunctionHead *head=&flow->head;
+    XrXirStatus status=error_native_header(&flow->body,f,head);if (status!=XR_XIR_OK) return status;
+    uint32_t summary=flow->invocations?error_invocation_summary(flow->invocations,flow->invocation):f;
+    if (summary>=(flow->invocations?flow->summary_count:flow->effects->count)) return XR_XIR_BAD_STRUCTURE;
+    uint64_t *set=flow->effects->outcomes_work.errors+(size_t)summary*flow->effects->outcomes_work.words;
+    bool found=false;
+    for (uint32_t a=0;a<flow->effects->outcomes_work.atom_count;++a) {
+        if (flow->effects->outcomes_work.atoms[a].type!=head->error_type) continue;
+        found=true;if (!error_bit(set,a+2)) {error_add(set,a+2);flow->summary_changed=true;}
+    }
+    return found ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+}
 static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
     flow->scheduling=false;flow->front=flow->back=flow->pending=0;
     flow->function_index=f;
     XrXirStatus head_status=effect_body_request_head(&flow->body,f,&flow->head);
     if (head_status!=XR_XIR_OK) return head_status;
     flow->function=&flow->head;
+    if (error_native(&flow->body,f)) return error_native_leaf(flow,f);
 
     flow->cell_types=NULL;flow->cell_material=NULL;flow->cell_function=flow->cell_type_count=0;
     flow->cells = NULL; flow->cell_count = flow->active_count = 0;
@@ -1193,7 +1227,8 @@ static inline XrXirStatus error_empty_escaping(const XrXirFunction *function, bo
 }
 static XrXirStatus error_empty_escaping_read(const EffectBodyRequest *body,uint32_t function,bool *empty) {
     if (!body || !empty) return XR_XIR_BAD_STRUCTURE;
-    *empty=false;EffectBodyFunctionDimensions head={0};
+    *empty=false;if (error_native(body,function)) return XR_XIR_OK;
+    EffectBodyFunctionDimensions head={0};
     XrXirStatus status=effect_body_request_dimensions(body,function,&head);
     for (uint32_t i=0;status==XR_XIR_OK && i<head.instruction_count;++i) {
 
@@ -1214,6 +1249,7 @@ static XrXirStatus error_empty_escaping_graph(uint32_t index,
     XrXirStatus status=effect_graph_owned_physical_function(work,graph,index,&physical);
     if (status!=XR_XIR_OK) return status;
     EffectBodyRequest body=effect_body_owned_request(work,graph->material);
+    if (error_native(&body,index)) return XR_XIR_OK;
     EffectBodyFunctionDimensions dimensions={0};
     status=effect_body_request_dimensions(&body,index,&dimensions);
     if (status!=XR_XIR_OK) return status;

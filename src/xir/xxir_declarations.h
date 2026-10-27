@@ -57,6 +57,8 @@ typedef struct XrXirFunctionIdentity {
     uint32_t promises;
     uint32_t method_kind;
     uint32_t test_role, test_timeout_seconds;
+    /* Zero is ordinary code; otherwise the canonical callable selects the body. */
+    uint32_t native_callable;
 } XrXirFunctionIdentity;
 
 #define XR_XIR_FUNCTION_NO_SUSPEND 1u

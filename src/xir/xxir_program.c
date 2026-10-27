@@ -16,6 +16,8 @@
 #include "../base/xsha256.h"
 #include "xxir_compile_memory.h"
 #include "xxir_atomic.h"
+#include "xxir_native_callable.h"
+#include "xxir_instance_value.h"
 #include "../base/xchecks.h"
 
 static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
@@ -76,6 +78,16 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
             (entry->cleanup_owner && (entry->result != XR_XIR_UNIT ||
              !(spec->entries[entry->cleanup_owner - 1].flags & XR_XIR_ENTRY_EXIT)))) return XR_XIR_BAD_STRUCTURE;
         if (!entry->resume || (entry->parameter_count && !entry->parameters)) return XR_XIR_BAD_STRUCTURE;
+        uint32_t native=spec->declarations->functions[i].native_callable;
+        if (native) {
+            const XrXirFunctionIdentity *id=&spec->declarations->functions[i];
+            if (entry->resume!=xr_xir_instance_native_callable || entry->release!=xr_xir_instance_native_callable_release ||
+                entry->environment || entry->state_bytes!=sizeof(XrXirValue) ||
+                entry->flags || id->exported || id->nominal_owner || id->member_access || id->cleanup_owner ||
+                id->method_kind || id->test_role || id->test_timeout_seconds || id->promises!=XR_XIR_FUNCTION_NO_SUSPEND ||
+                !xir_native_callable_types(native,spec->types,entry->parameters,entry->parameter_count,entry->result,
+                    xir_native_callable_error(spec->types,native))) return XR_XIR_BAD_STRUCTURE;
+        } else if (entry->resume==xr_xir_instance_native_callable) return XR_XIR_BAD_STRUCTURE;
         if (xr_xir_type_is_cell(spec->types, entry->result) ||
             (entry->result != XR_XIR_UNIT && !program_value_type(spec, entry->result))) return XR_XIR_BAD_TYPE;
         if (entry->parameter_count > context->limits.parameters) return XR_XIR_BUDGET;

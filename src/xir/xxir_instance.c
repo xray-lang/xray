@@ -18,6 +18,10 @@
 #include "xxir_instance_debug_internal.h"
 #include "xxir_instance_activation.h"
 #include "xxir_instance_value.h"
+#include "xxir_native_callable.h"
+#include "xxir_from_utf8_internal.h"
+#include "xxir_call_view_internal.h"
+#include "xxir_enum.h"
 #include "xxir_instance_binding.h"
 #include "xxir_instance_hash.h"
 #include "xxir_instance_function_internal.h"
@@ -1887,3 +1891,39 @@ XrXirAction xr_xir_instance_panic_land(XrXirCallView *view, void *frame, XrXirAc
 #include "xxir_instance_binding.inc.c"
 
 #include "xxir_instance_hash.inc.c"
+
+XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
+    XrXirInstance *instance=view_instance(view);XrXirValue *value=NULL;
+    XrXirCallStatus status=XR_XIR_CALL_BAD_STATE;bool thrown=false;
+    if (!instance || view->phase!=XR_XIR_CALL_NORMAL) goto failed;
+    uint32_t index=xr_xir_call_current_entry(view->activation);
+    const XrXirProgram *program=instance->program;
+    if (index>=program->entry_count) goto failed;
+    const XrXirCallEntry *entry=&program->entries[index];
+    uint32_t id=program->declarations->functions[index].native_callable;
+    XrXirType error=xir_native_callable_error(program->types,id);
+    if (entry->resume!=xr_xir_instance_native_callable || entry->state_bytes!=sizeof(XrXirValue) ||
+        entry->release!=xr_xir_instance_native_callable_release || entry->environment || entry->flags || entry->cleanup_owner ||
+        !view->state || (uintptr_t)view->state%_Alignof(XrXirValue) || view->argument_count!=1 || !view->arguments ||
+        !xir_native_callable_types(id,program->types,entry->parameters,entry->parameter_count,entry->result,error) ||
+        !xr_xir_value_argument(&view->arguments[0],view->arena,entry->parameters[0])) goto failed;
+    XrXirValue *state=view->state;
+    if (state->type || state->reserved || state->payload) goto failed;
+    value=state;
+    status=xr_xir_call_execution_status(view);if (status!=XR_XIR_CALL_READY) goto failed;
+    XrXirViewAccess access={0};XrXirValueStatus converted=xr_xir_call_view_access(view,&access);
+    if (converted==XR_XIR_VALUE_OK) converted=xir_from_utf8(&view->arguments[0],&access,value);
+    if (converted==XR_XIR_VALUE_BAD_UTF8) {
+        converted=xr_xir_enum_new(error,0,NULL,0,xr_xir_call_admission(view),value);thrown=true;
+    }
+    status=value_call_status(converted);if (status!=XR_XIR_CALL_READY) goto failed;
+    status=xr_xir_call_execution_status(view);if (status!=XR_XIR_CALL_READY) goto failed;
+    return (XrXirAction){thrown?XR_XIR_ACTION_THROW:XR_XIR_ACTION_RETURN,0,NULL,0,*value,{0},0};
+failed:
+    if (value) xr_xir_value_drop(value);
+    return (XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{0},0};
+}
+XR_FUNC void xr_xir_instance_native_callable_release(XrXirCallView *view,XrXirCallStatus reason) {
+    (void)reason;
+    xr_xir_value_drop(view->state);
+}

@@ -402,9 +402,19 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
         c->diagnostic->function = origin->function;
         XrXirStatus name_status = provenance_name(c, origin, from, to, is_default);
         if (name_status != XR_XIR_OK) return name_status;
+        bool native=c->source->declarations &&
+            c->source->declarations->functions[origin->function].native_callable;
+        bool native_to=c->destination->declarations &&
+            c->destination->declarations->functions[f].native_callable;
+        if (native || native_to) {
+            if (!native || !native_to) return XR_XIR_BAD_STRUCTURE;
+            XrXirStatus status=xir_native_callable_verify(c->source,origin->function);
+            if (status==XR_XIR_OK) status=xir_native_callable_verify(c->destination,f);
+            if (status!=XR_XIR_OK) return status;
+        }
         if (from->parameter_count != to->parameter_count || from->instruction_count != to->instruction_count ||
             from->block_count != to->block_count || from->operand_count != to->operand_count ||
-            (to->parameter_count && !to->parameters) || !to->blocks || !to->instructions ||
+            (to->parameter_count && !to->parameters) || (!native && (!to->blocks || !to->instructions)) ||
             (to->operand_count && !to->operands))
             return XR_XIR_BAD_STRUCTURE;
         if (c->source->declarations) {
@@ -413,7 +423,8 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
             if (identity->module != actual->module || ((!c->effects || is_default) ? identity->exported : 0) != actual->exported ||
                 identity->nominal_owner != actual->nominal_owner || identity->member_access != actual->member_access ||
                 identity->promises != actual->promises || identity->method_kind != actual->method_kind ||
-                identity->test_role != actual->test_role || identity->test_timeout_seconds != actual->test_timeout_seconds)
+                identity->test_role != actual->test_role || identity->test_timeout_seconds != actual->test_timeout_seconds ||
+                identity->native_callable != actual->native_callable)
                 return XR_XIR_BAD_STRUCTURE;
             if (!!identity->cleanup_owner != !!actual->cleanup_owner) return XR_XIR_BAD_STRUCTURE;
             if (identity->cleanup_owner) {

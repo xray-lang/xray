@@ -121,6 +121,8 @@ static bool source_prelude_scan(AstNode *node,void *pointer) {
     if (node->type==AST_VARIABLE && !source_prelude_word(scan,node->as.variable.name)) return false;
     if (!source_prelude_signature(scan,node)) return false;
     if (node->type==AST_RANGE) scan->needed=true;
+    if (node->type==AST_MEMBER_ACCESS && source_text_same(scan->ctx,node,node->as.member_access.name,"fromUtf8"))
+        scan->needed=true;
     ++scan->depth;
     bool ok;
     if (node->type==AST_FOR_IN_STMT && node->as.for_in_stmt.collection &&

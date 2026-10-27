@@ -12,6 +12,7 @@
  */
 
 #include "xxir_types.h"
+#include "xxir_native_callable.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_type_scratch_internal.h"
@@ -37,6 +38,7 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     if (identity->method_kind > XR_XIR_MATERIALIZER ||
         (!!identity->nominal_owner != (identity->method_kind != XR_XIR_NON_MEMBER)))
         return XR_XIR_BAD_STRUCTURE;
+    if (identity->native_callable) return xir_native_callable_verify(module,index);
     if (!identity->nominal_owner) return XR_XIR_OK;
     const XrXirNominalTable *table = module->types ? module->types->nominals : NULL;
     uint32_t owner = identity->nominal_owner-1;
@@ -205,6 +207,7 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
     for (uint32_t i = 0; i < functions; ++i)
         if (d->functions[i].module >= d->module_count || d->functions[i].exported > 1 ||
             d->functions[i].method_kind > XR_XIR_MATERIALIZER ||
+            (d->functions[i].native_callable && !xr_native_callable_by_id(d->functions[i].native_callable)) ||
             d->functions[i].test_role > XR_XIR_TEST_ROLE_AFTER_EACH ||
             (d->functions[i].test_role != XR_XIR_TEST_ROLE_TEST && d->functions[i].test_timeout_seconds) ||
             d->functions[i].test_timeout_seconds > INT_MAX ||

@@ -14,9 +14,9 @@ fn encodeText(data: string, options: Base64EncodeOptions = Base64EncodeOptions()
     return base64.encode(view, options)
 }
 
-fn decodeText(data: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> string {
-    var decoded = base64.decode(data, options)
-    return string.fromUtf8(decoded[:])!
+fn decodeText(data: string, options: Base64DecodeOptions = Base64DecodeOptions()) throws(Error) -> string {
+    var decoded = try base64.decode(data, options)
+    return try string.fromUtf8(decoded[:])
 }
 
 fn decodeFails(data: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> bool {
@@ -49,16 +49,16 @@ fn optionalDecodeOptions() -> Base64DecodeOptions {
 }
 
 print(encodeText("Hello, World!"))
-print(decodeText("SGVsbG8sIFdvcmxkIQ=="))
+print(try decodeText("SGVsbG8sIFdvcmxkIQ=="))
 print(encodeText("A"))
 print(encodeText("AB"))
 print(encodeText("ABC"))
 print(encodeText(""))
-print(decodeText("") == "")
+print(try decodeText("") == "")
 print(encodeText("你好世界"))
-print(decodeText(encodeText("你好世界")))
+print(try decodeText(encodeText("你好世界")))
 print(encodeText("subjects?_d", urlEncodeOptions()))
-print(decodeText(encodeText("test +/= data", urlEncodeOptions()), urlDecodeOptions()))
+print(try decodeText(encodeText("test +/= data", urlEncodeOptions()), urlDecodeOptions()))
 print(base64.isValid("QUJD"))
 print(base64.isValid("QQ=="))
 print(base64.isValid("A"))
@@ -66,7 +66,7 @@ print(base64.isValid("Q==="))
 print(decodeFails("!!!!"))
 print(decodeFails("A"))
 
-var bs = base64.decode("SGVs", optionalDecodeOptions())
+var bs = try base64.decode("SGVs", optionalDecodeOptions())
 print(len(bs))
 print(bs[0])
 print(bs[1])

@@ -1033,6 +1033,10 @@ static XrXirStatus bind_verified(const XrXirArtifact *artifact, uint32_t functio
         }
     }
 
+    if (module->declarations && module->declarations->functions[function].native_callable) {
+        result.state_bytes=(uint32_t)sizeof(XrXirValue);result.resume=xr_xir_instance_native_callable;
+        result.release=xr_xir_instance_native_callable_release;result.environment=NULL;
+    }
     *binding = (XrXirVmBinding) {artifact, function};
     *entry = result;
     return XR_XIR_OK;
@@ -1098,6 +1102,12 @@ static XrXirStatus vm_program_match(const XrXirCompileContext *context,
 
         const XrXirCallEntry *entry=&program->entries[f];
         const XrXirVmBinding *binding=&owner->bindings[f];
+        if (module->declarations->functions[f].native_callable) {
+            if (entry->resume!=xr_xir_instance_native_callable || entry->release!=xr_xir_instance_native_callable_release ||
+                entry->state_bytes!=sizeof(XrXirValue) || entry->environment)
+                return XR_XIR_BAD_STRUCTURE;
+            continue;
+        }
         const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(artifact,f);
         uint64_t bytes=sizeof(VmState)+(uint64_t)layout->frame_bytes+
             (uint64_t)layout->outgoing_count*sizeof(XrXirValue)+
@@ -1258,6 +1268,12 @@ static XrXirStatus debug_program_match(const XrXirCompileContext *context,const 
                 return XR_XIR_BAD_STRUCTURE;
             continue;
         }
+        if (module->declarations->functions[f].native_callable) {
+            if (entry->resume!=xr_xir_instance_native_callable || entry->release!=xr_xir_instance_native_callable_release ||
+                entry->state_bytes!=sizeof(XrXirValue) || entry->environment)
+                return XR_XIR_BAD_STRUCTURE;
+            continue;
+        }
         const DebugVmBinding *binding=&owner->bindings[f];
         const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(artifact,f);
         uint64_t bytes=sizeof(VmState)+(uint64_t)layout->frame_bytes+
@@ -1312,8 +1328,10 @@ static XrXirStatus debug_program_take(XrXirArtifact **artifact,XrXirVmDebug *deb
         else {
             status=bind_verified(original,f,&owner->bindings[f].base,&entries[f]);
             if (status!=XR_XIR_OK) goto finish;
-            owner->bindings[f].debug=debug;entries[f].environment=&owner->bindings[f];
-            entries[f].resume=debug_vm_resume;entries[f].release=debug_vm_release;
+            if (!module->declarations->functions[f].native_callable) {
+                owner->bindings[f].debug=debug;entries[f].environment=&owner->bindings[f];
+                entries[f].resume=debug_vm_resume;entries[f].release=debug_vm_release;
+            }
         }
         const XrXirType *parameters=entries[f].parameters;entries[f].parameters=NULL;
         uint64_t bytes=(uint64_t)entries[f].parameter_count*sizeof(*parameters);

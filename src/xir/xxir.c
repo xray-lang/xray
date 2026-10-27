@@ -16,6 +16,7 @@
 #include "xxir_compile_memory.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_native_callable.h"
 #include "xxir_operand_roles.h"
 #include "../base/xmalloc.h"
 #include "../base/xsha256.h"
@@ -143,6 +144,11 @@ static XrXirArtifact *clone_module_receiving(const XrXirCompileContext *compile_
     for (uint32_t i = 0; i < source->function_count; ++i) {
         const XrXirFunction *from = &source->functions[i];
         XrXirFunction *to = &functions[i];
+        bool native=source->declarations && source->declarations->functions[i].native_callable;
+        if (native) {
+            *allocation_status=xir_native_callable_verify(source,i);
+            if (*allocation_status!=XR_XIR_OK) {xr_xir_compile_artifact_free(copy);return NULL;}
+        }
         *to = *from;
         to->name = copy_bytes(compile_context, from->name, from->name_length, allocation_status);
         to->parameters = copy_bytes(compile_context, from->parameters,
@@ -152,7 +158,8 @@ static XrXirArtifact *clone_module_receiving(const XrXirCompileContext *compile_
                                      (size_t) from->instruction_count * sizeof(*from->instructions), allocation_status);
         to->operands = copy_bytes(compile_context, from->operands, (size_t) from->operand_count * sizeof(*from->operands), allocation_status);
         if (!to->name || (to->parameter_count && !to->parameters) ||
-            !to->blocks || !to->instructions || (to->operand_count && !to->operands)) {
+            (!native && (!to->blocks || !to->instructions)) || (to->operand_count && !to->operands)) {
+            if (*allocation_status==XR_XIR_OK) *allocation_status=XR_XIR_BAD_STRUCTURE;
             xr_xir_compile_artifact_free(copy);
             return NULL;
         }

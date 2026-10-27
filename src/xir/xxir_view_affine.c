@@ -13,6 +13,7 @@
  */
 #include "xxir_view_types_internal.h"
 #include "xxir_types.h"
+#include "xxir_native_callable.h"
 #include "xxir_operand_roles.h"
 #include "xxir_compile_memory.h"
 #include "../base/xchecks.h"
@@ -265,6 +266,9 @@ XR_FUNC XrXirStatus xir_compile_view_affine_verified(const XrXirCompileContext *
     if (status!=XR_XIR_OK || !types) return status;
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
 
+        if (module->declarations && module->declarations->functions[f].native_callable) {
+            status=xir_native_callable_verify(module,f);continue;
+        }
         AffineCheck a={.context=context,.module=module,.function=&module->functions[f],.types=types,
             .location={XR_XIR_OK,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
         status=affine_function(&a);

@@ -109,10 +109,10 @@ static const XrNativeTypeDeclaration xr_native_array = {
 };
 
 static const XrNativeParameter xr_native_string_parameters_0[] = {
-    {"bytes", "Slice < u8 >", XR_NATIVE_TERM_UNADMITTED, false, false},
+    {"bytes", "Slice < u8 >", XR_NATIVE_TERM_SLICE_U8, false, false},
 };
 static const XrNativeParameter xr_native_string_parameters_1[] = {
-    {"bytes", "Slice < u8 >", XR_NATIVE_TERM_UNADMITTED, false, false},
+    {"bytes", "Slice < u8 >", XR_NATIVE_TERM_SLICE_U8, false, false},
 };
 static const XrNativeParameter xr_native_string_parameters_2[] = {
     {"value", "rune", XR_NATIVE_TERM_UNADMITTED, false, false},
@@ -160,29 +160,29 @@ static const XrNativeParameter xr_native_string_parameters_15[] = {
     {"search", "string", XR_NATIVE_TERM_STRING, false, false},
 };
 static const XrNativeMemberDeclaration xr_native_string_members[] = {
-    {1, "fromUtf8", "(bytes: Slice<u8>) -> string", "string", 10, 12, XR_NATIVE_RECEIVER_READ, true, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_string_parameters_0, 1, XR_NATIVE_TERM_STRING},
-    {2, "fromUtf8Lossy", "(bytes: Slice<u8>) -> string", "string", 11, 12, XR_NATIVE_RECEIVER_READ, true, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_string_parameters_1, 1, XR_NATIVE_TERM_STRING},
-    {3, "fromRune", "(value: rune) -> string", "string", 12, 12, XR_NATIVE_RECEIVER_READ, true, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_string_parameters_2, 1, XR_NATIVE_TERM_STRING},
-    {4, "join", "(parts: Array<string>, separator?: string) -> string", "string", 13, 12, XR_NATIVE_RECEIVER_READ, true, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_string_parameters_3, 2, XR_NATIVE_TERM_STRING},
-    {5, "contains", "(search: string) -> bool", "bool", 15, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_CONTAINS, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_4, 1, XR_NATIVE_TERM_BOOL},
-    {6, "indexOf", "(search: string, start?: i64) -> i64", "i64", 17, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_INDEX_OF, XR_NATIVE_ALLOCATION_NO_HEAP, "bounds,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_5, 2, XR_NATIVE_TERM_I64},
-    {7, "lastIndexOf", "(search: string) -> i64", "i64", 19, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_LAST_INDEX_OF, XR_NATIVE_ALLOCATION_NO_HEAP, "limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_6, 1, XR_NATIVE_TERM_I64},
-    {8, "slice", "(start: i64, end?: i64) -> string", "string", 21, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_SLICE, XR_NATIVE_ALLOCATION_MAY_HEAP, "bounds,allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_7, 2, XR_NATIVE_TERM_STRING},
-    {9, "sliceBytes", "(start: i64, end: i64) -> string", "string", 22, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_string_parameters_8, 2, XR_NATIVE_TERM_STRING},
-    {10, "toString", "() -> string", "string", 24, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_TO_STRING, XR_NATIVE_ALLOCATION_NO_HEAP, "retain", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING},
-    {11, "split", "(separator: string) -> Array<string>", "Array < string >", 25, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_string_parameters_10, 1, XR_NATIVE_TERM_UNADMITTED},
-    {12, "replace", "(search: string, replacement: string) -> string", "string", 27, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_REPLACE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_11, 2, XR_NATIVE_TERM_STRING},
-    {13, "replaceAll", "(search: string, replacement: string) -> string", "string", 29, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_REPLACE_ALL, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_12, 2, XR_NATIVE_TERM_STRING},
-    {14, "repeat", "(count: i64) -> string", "string", 31, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_REPEAT, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_13, 1, XR_NATIVE_TERM_STRING},
-    {15, "startsWith", "(search: string) -> bool", "bool", 33, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_STARTS_WITH, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_14, 1, XR_NATIVE_TERM_BOOL},
-    {16, "endsWith", "(search: string) -> bool", "bool", 35, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_ENDS_WITH, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_15, 1, XR_NATIVE_TERM_BOOL},
-    {17, "copyBytes", "() -> Array<u8>", "Array < u8 >", 38, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_COPY_BYTES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_U8},
-    {18, "bytes", "() -> Slice<u8>", "Slice < u8 >", 41, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {19, "runes", "() -> Iterator<rune>", "Iterator < rune >", 42, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {1, "fromUtf8", "(bytes: Slice<u8>) throws(Utf8Error) -> string", "string", 11, 12, XR_NATIVE_RECEIVER_READ, true, true, false, true, XR_NATIVE_OPERATION_STRING_FROM_UTF8, XR_NATIVE_ALLOCATION_MAY_HEAP, "utf8,allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_0, 1, XR_NATIVE_TERM_STRING},
+    {2, "fromUtf8Lossy", "(bytes: Slice<u8>) -> string", "string", 12, 12, XR_NATIVE_RECEIVER_READ, true, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_string_parameters_1, 1, XR_NATIVE_TERM_STRING},
+    {3, "fromRune", "(value: rune) -> string", "string", 13, 12, XR_NATIVE_RECEIVER_READ, true, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_string_parameters_2, 1, XR_NATIVE_TERM_STRING},
+    {4, "join", "(parts: Array<string>, separator?: string) -> string", "string", 14, 12, XR_NATIVE_RECEIVER_READ, true, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_string_parameters_3, 2, XR_NATIVE_TERM_STRING},
+    {5, "contains", "(search: string) -> bool", "bool", 16, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_CONTAINS, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_4, 1, XR_NATIVE_TERM_BOOL},
+    {6, "indexOf", "(search: string, start?: i64) -> i64", "i64", 18, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_INDEX_OF, XR_NATIVE_ALLOCATION_NO_HEAP, "bounds,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_5, 2, XR_NATIVE_TERM_I64},
+    {7, "lastIndexOf", "(search: string) -> i64", "i64", 20, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_LAST_INDEX_OF, XR_NATIVE_ALLOCATION_NO_HEAP, "limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_6, 1, XR_NATIVE_TERM_I64},
+    {8, "slice", "(start: i64, end?: i64) -> string", "string", 22, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_SLICE, XR_NATIVE_ALLOCATION_MAY_HEAP, "bounds,allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_7, 2, XR_NATIVE_TERM_STRING},
+    {9, "sliceBytes", "(start: i64, end: i64) -> string", "string", 23, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_string_parameters_8, 2, XR_NATIVE_TERM_STRING},
+    {10, "toString", "() -> string", "string", 25, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_TO_STRING, XR_NATIVE_ALLOCATION_NO_HEAP, "retain", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING},
+    {11, "split", "(separator: string) -> Array<string>", "Array < string >", 26, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_string_parameters_10, 1, XR_NATIVE_TERM_UNADMITTED},
+    {12, "replace", "(search: string, replacement: string) -> string", "string", 28, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_REPLACE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_11, 2, XR_NATIVE_TERM_STRING},
+    {13, "replaceAll", "(search: string, replacement: string) -> string", "string", 30, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_REPLACE_ALL, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_12, 2, XR_NATIVE_TERM_STRING},
+    {14, "repeat", "(count: i64) -> string", "string", 32, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_REPEAT, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_13, 1, XR_NATIVE_TERM_STRING},
+    {15, "startsWith", "(search: string) -> bool", "bool", 34, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_STARTS_WITH, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_14, 1, XR_NATIVE_TERM_BOOL},
+    {16, "endsWith", "(search: string) -> bool", "bool", 36, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_ENDS_WITH, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_15, 1, XR_NATIVE_TERM_BOOL},
+    {17, "copyBytes", "() -> Array<u8>", "Array < u8 >", 39, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_COPY_BYTES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_U8},
+    {18, "bytes", "() -> Slice<u8>", "Slice < u8 >", 42, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_SLICE_U8},
+    {19, "runes", "() -> Iterator<rune>", "Iterator < rune >", 43, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
 };
 static const XrNativeTypeDeclaration xr_native_string = {
     2, XR_NATIVE_DECLARATION_VALUE, "string", NULL, 0,
-    "stdlib/types/string.xr", "xray-native:prelude/string", {{148, 66, 140, 207, 116, 1, 115, 178, 237, 75, 250, 176, 94, 114, 23, 77, 144, 76, 17, 3, 96, 107, 137, 230, 230, 153, 162, 120, 235, 212, 102, 50}},
+    "stdlib/types/string.xr", "xray-native:prelude/string", {{76, 84, 58, 250, 170, 77, 114, 124, 234, 80, 162, 141, 86, 159, 186, 11, 10, 38, 85, 23, 25, 128, 79, 54, 190, 120, 127, 71, 13, 80, 199, 32}},
     9, 8, xr_native_string_members, 19
 };
 
@@ -445,6 +445,14 @@ static const XrNativeTypeDeclaration xr_native_channel = {
     "stdlib/types/channel.xr", "xray-native:prelude/Channel", {{13, 38, 183, 244, 193, 170, 66, 255, 203, 78, 4, 160, 22, 224, 158, 32, 192, 31, 75, 221, 224, 140, 35, 6, 137, 184, 33, 193, 158, 126, 170, 184}},
     16, 7, xr_native_channel_members, 10
 };
+static const XrNativeMemberDeclaration xr_native_utf8_error_members[] = {
+    {1, "InvalidUtf8", "InvalidUtf8", "Utf8Error", 192, 42, XR_NATIVE_RECEIVER_READ, true, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+};
+static const XrNativeTypeDeclaration xr_native_utf8_error = {
+    17, XR_NATIVE_DECLARATION_VALUE, "Utf8Error", NULL, 0,
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Utf8Error", {{227, 221, 204, 7, 10, 180, 45, 216, 194, 0, 126, 99, 111, 197, 55, 89, 54, 227, 185, 191, 5, 17, 179, 139, 183, 193, 163, 37, 101, 111, 88, 154}},
+    191, 18, xr_native_utf8_error_members, 1
+};
 static const XrNativeParameter xr_native_recv_value_parameters[] = {
     {"value", "T", XR_NATIVE_TERM_ELEMENT, false, false}
 };
@@ -587,4 +595,8 @@ static const XrNativeIntrinsicDeclaration xr_native_intrinsics[] = {
     {UINT32_C(2), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[14], true, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_STARTS_WITH, "xr_xir_string_starts_with"},
     {UINT32_C(3), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[15], true, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_ENDS_WITH, "xr_xir_string_ends_with"},
     {UINT32_C(4), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[7], true, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_SLICE, "xr_xir_string_slice"},
+};
+
+static const XrNativeCallableDeclaration xr_native_callables[] = {
+    {UINT32_C(1), &xr_native_string, &xr_native_string_members[0], &xr_native_utf8_error, false}
 };

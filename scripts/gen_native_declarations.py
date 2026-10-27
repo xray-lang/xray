@@ -10,7 +10,7 @@ import re
 
 TYPE_MARKER = re.compile(r'^\s*//\s*@native-type\s+id=([1-9][0-9]*)\s*$', re.M)
 OP_MARKER = re.compile(r'//\s*@native-operation\s+([A-Z_][A-Z_0-9]*)\s+allocation=(no_heap|may_heap)\s+'
-                       r'failures=([a-z_,]+)\s+ownership=(owned|unit)\s*$')
+                       r'failures=([a-z0-9_,]+)\s+ownership=(owned|unit)\s*$')
 IDENT = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
 TOKENS = re.compile(r'\s*(\.\.\.|->|[A-Za-z_][A-Za-z0-9_]*|[<>()?,:|])')
 
@@ -136,6 +136,7 @@ class Member:
     allocation: str = 'unknown'
     failures: str = ''
     ownership: str = 'unknown'
+    error: str = 'Never'
 
 
 def simple_term(term, binder):
@@ -164,6 +165,8 @@ def simple_term(term, binder):
         return 'U32'
     if term == ('name', 'Array', (('name', 'u8', ()),)):
         return 'ARRAY_U8'
+    if term == ('name', 'Slice', (('name', 'u8', ()),)):
+        return 'SLICE_U8'
     if term == ('name', 'string', ()):
         return 'STRING'
     if term == ('name', 'bool', ()):
@@ -339,6 +342,10 @@ def parse_source(source, prelude):
             params = parser.parameters()
             result = ('tuple', ())
             result_text = '()'
+            error = 'Never'
+            if parser.peek() == 'throws':
+                parser.take('throws'); parser.take('(')
+                error = parser.take(); parser.take(')')
             if parser.peek() == '->':
                 parser.take('->')
                 start = parser.pos
@@ -352,6 +359,7 @@ def parse_source(source, prelude):
             raise ValueError('trailing signature tokens')
         member = Member(name, signature, number, len(raw[:raw.index(name)].encode('utf-8')) + 1, receiver, static,
                         method, lowered, params, result, result_text)
+        member.error = error if method else 'Never'
         if pending:
             member.operation, member.allocation, member.failures, member.ownership = pending.groups()
         members.append(member)
@@ -452,6 +460,7 @@ def parse_source(source, prelude):
             'STRING_CONTAINS': ('contains', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
             'STRING_STARTS_WITH': ('startsWith', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
             'STRING_ENDS_WITH': ('endsWith', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
+            'STRING_FROM_UTF8': ('fromUtf8', 'READ', ('SLICE_U8',), 'STRING', 'may_heap', 'utf8,allocation,retain,limit', 'owned'),
             'STRING_SLICE': ('slice', 'READ', ('I64', 'I64'), 'STRING', 'may_heap', 'bounds,allocation,retain,limit', 'owned'),
             'STRING_TO_STRING': ('toString', 'READ', (), 'STRING', 'no_heap', 'retain', 'owned'),
             'STRING_REPEAT': ('repeat', 'READ', ('I64',), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
@@ -461,13 +470,15 @@ def parse_source(source, prelude):
         }.get(member.operation)
         optional = tuple(p[3] for p in member.parameters)
         expected_optional = (False, True) if member.operation in ('STRING_INDEX_OF', 'STRING_SLICE') else (False,) * len(member.parameters)
-        expected_static = member.operation == 'ARRAY_WITH_CAPACITY'
+        expected_static = member.operation in ('ARRAY_WITH_CAPACITY', 'STRING_FROM_UTF8')
+        if member.error != ('Utf8Error' if member.operation == 'STRING_FROM_UTF8' else 'Never'):
+            raise ValueError('native operation error type disagrees with its declaration')
         expected_method = member.operation != 'ARRAY_CAPACITY'
         if shape != expected or member.static != expected_static or member.method != expected_method or optional != expected_optional or any(p[4] for p in member.parameters):
             raise ValueError('operation declaration disagrees with its semantic contract: ' + member.operation)
     required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(recipes) if header[0] == 1 else {
         'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH', 'STRING_INDEX_OF', 'STRING_LAST_INDEX_OF',
-        'STRING_TO_STRING', 'STRING_REPEAT', 'STRING_COPY_BYTES', 'STRING_REPLACE', 'STRING_REPLACE_ALL', 'STRING_SLICE'}
+        'STRING_TO_STRING', 'STRING_REPEAT', 'STRING_COPY_BYTES', 'STRING_REPLACE', 'STRING_REPLACE_ALL', 'STRING_SLICE', 'STRING_FROM_UTF8'}
     if used != required:
         raise ValueError('incorrect admitted native operation set')
     return header, members
@@ -849,7 +860,8 @@ def render_channel_identity(root):
 
 def channel_result_rows(root):
     prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8').replace('\r\n', '\n')
-    rows = [('Ordering', 'ORDERING', [('Relaxed','NONE'),('Acquire','NONE'),('Release','NONE'),('AcquireRelease','NONE'),('SeqCst','NONE')], 4, 0),
+    rows = [('Utf8Error', 'UTF8_ERROR', [('InvalidUtf8','NONE')], 17, 0),
+            ('Ordering', 'ORDERING', [('Relaxed','NONE'),('Acquire','NONE'),('Release','NONE'),('AcquireRelease','NONE'),('SeqCst','NONE')], 4, 0),
             ('CryptoError', 'CRYPTO_ERROR', [('InvalidLength','NONE')], 0, 0),
             ('Recv', 'RECV', [('Value','TYPE_PARAM_0'),('Empty','NONE'),('Timeout','NONE'),('Closed','NONE')], 7, 1),
             ('SendResult', 'SEND_RESULT', [('Sent','NONE'),('Full','NONE'),('Timeout','NONE'),('Closed','NONE')], 8, 0),
@@ -872,8 +884,8 @@ def channel_result_rows(root):
 def render_channel_result_identities(root):
     prelude, rows = channel_result_rows(root);digest=hashlib.sha256(prelude.encode('utf-8')).digest();lines=[]
     for name, _, variants, native_id, arity in rows:
-        if native_id not in (7,8):continue
-        variable='recv' if native_id==7 else 'send_result'
+        if native_id not in (7,8,17):continue
+        variable={7:'recv', 8:'send_result', 17:'utf8_error'}[native_id]
         line,raw=next((number,raw) for number,raw in enumerate(prelude.splitlines(),1) if 'XR_BUILTIN_ENUM("'+name+'",' in raw)
         if arity:
             lines += ['static const XrNativeParameter xr_native_recv_value_parameters[] = {',
@@ -965,6 +977,10 @@ def render(root):
         scalar_lines += generated
     lines += array_lines + string_lines + integer_lines + scalar_lines + render_atomic_identities(root) + render_task_identity(root) + render_channel_identity(root) + render_channel_result_identities(root) + render_iterator_identity(root) + render_type(root, 'map')[0] + render_type(root, 'set')[0]
     lines += render_intrinsics(root)
+    _, _, string_members = render_type(root, 'string')
+    decoder = next(i for i, m in enumerate(string_members) if m.operation == 'STRING_FROM_UTF8')
+    lines += ['static const XrNativeCallableDeclaration xr_native_callables[] = {',
+              '    {UINT32_C(1), &xr_native_string, &xr_native_string_members['+str(decoder)+'], &xr_native_utf8_error, false}', '};']
     binder = header[2]
     receiver = {}
     for operation in ('ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'):

@@ -1520,6 +1520,13 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
                                   const char *prefix, uint32_t index, bool *waiting_helper_emitted) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     const XrXirFunction *function = &module->functions[index];
+    if (module->declarations && module->declarations->functions[index].native_callable) {
+        append(buffer, "static const XrXirType %s_parameters_%u[] = {", prefix, index);
+        for (uint32_t p = 0; p < function->parameter_count && ((buffer)->status == XR_XIR_OK); ++p)
+            append(buffer, "%s(XrXirType) %u", p ? ", " : "", (uint32_t) function->parameters[p]);
+        EMIT_LITERAL(buffer, "};\n");
+        return;
+    }
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(artifact, index);
     if ((uint64_t) layout->frame_bytes + (uint64_t) layout->outgoing_count * sizeof(XrXirValue) +
         (uint64_t) layout->path_count * sizeof(XrXirValuePathStep) > UINT32_MAX - 128u - sizeof(XrXirAtomicProgress) - sizeof(XrXirChannelCallState)) {
@@ -1827,7 +1834,7 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     }
     EMIT_FORMAT(buffer, et_69a1907ec586c822, "};\nstatic const XrXirFunctionIdentity %s_identities[] = {\n", prefix);
     for (uint32_t f = 0; f < module->function_count && ((buffer)->status == XR_XIR_OK); ++f)
-        append(buffer, "    {%uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner, d->functions[f].member_access, d->functions[f].cleanup_owner, d->functions[f].promises, d->functions[f].method_kind, d->functions[f].test_role, d->functions[f].test_timeout_seconds);
+        append(buffer, "    {%uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner, d->functions[f].member_access, d->functions[f].cleanup_owner, d->functions[f].promises, d->functions[f].method_kind, d->functions[f].test_role, d->functions[f].test_timeout_seconds, d->functions[f].native_callable);
     EMIT_LITERAL(buffer, "};\n");
     if (d->slot_count) {
         EMIT_FORMAT(buffer, et_f16c13d386d8e11f, "static const XrXirSlot %s_slots[] = {\n", prefix);
@@ -1850,10 +1857,11 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     EMIT_U_SHAPE(buffer, et_4c51538f4bdf2e07, ", %uu, ", ", ", "u, ", d->slot_count);
     if (d->literal_count) append(buffer, "%s_literals", prefix); else EMIT_LITERAL(buffer, "NULL");
     append(buffer, ", %uu, %uu, %uu, NULL};\n", d->literal_count, d->root_module, d->entry_function);
-    EMIT_FORMAT(buffer, et_8b67e06edccf604b, "_Static_assert(sizeof(XrXirFunctionIdentity) == 36, \"XIR function identity stride\");\n"
+    EMIT_FORMAT(buffer, et_19845b6223cea369, "_Static_assert(sizeof(XrXirFunctionIdentity) == 40, \"XIR function identity stride\");\n"
         "_Static_assert(offsetof(XrXirFunctionIdentity, method_kind) == 24, \"XIR method role offset\");\n"
         "_Static_assert(offsetof(XrXirFunctionIdentity, test_role) == 28, \"XIR test role offset\");\n"
         "_Static_assert(offsetof(XrXirFunctionIdentity, test_timeout_seconds) == 32, \"XIR test timeout offset\");\n"
+        "_Static_assert(offsetof(XrXirFunctionIdentity, native_callable) == 36, \"XIR native callable offset\");\n"
         "_Static_assert(offsetof(XrXirDeclarations, implementations) == 64, \"XIR implementation table offset\");\n"
         "_Static_assert(sizeof(XrXirDeclarations) == 72, \"XIR declaration stride\");\n"
         "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == %uu, \"XIR program ABI\");\n"
@@ -1864,8 +1872,11 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     append(buffer, ", {%s_checked, sizeof(%s_checked), %s_identity}};\n",
         prefix, prefix, prefix);
     append(buffer,"static const uint32_t %s_native_source_offsets[] = {\n",prefix);
-    for(uint32_t f=0;f<module->function_count && ((buffer)->status == XR_XIR_OK);++f)
-        append(buffer,"    (uint32_t)offsetof(%s_state_%u,frame),\n",prefix,f);
+    for(uint32_t f=0;f<module->function_count && ((buffer)->status == XR_XIR_OK);++f) {
+        if (module->declarations && module->declarations->functions[f].native_callable)
+            EMIT_LITERAL(buffer,"    UINT32_MAX,\n");
+        else append(buffer,"    (uint32_t)offsetof(%s_state_%u,frame),\n",prefix,f);
+    }
     append(buffer,"};\nXR_DATADEF const XirCallNativeSourceCode %s_native_source = {\n"
         "    %uu,%uu,%s_entries,%s_native_source_offsets};\n",
         prefix,XIR_CALL_NATIVE_SOURCE_VERSION,module->function_count,prefix,prefix);
@@ -1923,6 +1934,11 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
             if (xr_xir_function_is_generator(module,f)) flags|=XR_XIR_ENTRY_GENERATOR;
             for (uint32_t child = f + 1; child < module->function_count && ((buffer)->status == XR_XIR_OK); ++child)
                 if (module->declarations->functions[child].cleanup_owner == f + 1) flags |= XR_XIR_ENTRY_EXIT;
+        }
+        if (module->declarations && module->declarations->functions[f].native_callable) {
+            append(buffer, ", %uu, (XrXirType) %u, (uint32_t)sizeof(XrXirValue), xr_xir_instance_native_callable, xr_xir_instance_native_callable_release, NULL, 0, 0},\n",
+                function->parameter_count,(uint32_t)function->result);
+            continue;
         }
         append(buffer, ", %uu, (XrXirType) %u, (uint32_t) sizeof(%s_state_%u), %s_f%u, %s_release_%u, NULL, %uu, %uu},\n",
                function->parameter_count, (uint32_t) function->result, symbol_prefix, f, symbol_prefix, f,

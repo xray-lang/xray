@@ -249,3 +249,32 @@ XR_FUNC XrXirValueStatus xr_xir_view_copy(XrXirType array,const XrXirValue *valu
     return status==XR_XIR_VALUE_OK ? xr_xir_view_storage_copy(array,&((const XirView *)object_pointer(value))->storage,
         &authority,access->values,output) : status;
 }
+
+#include "xxir_from_utf8_internal.h"
+XR_FUNC XrXirValueStatus xir_from_utf8(const XrXirValue *input,
+    const XrXirViewAccess *access,XrXirValue *output) {
+    if (!unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();XrXirCellAuthority authority={0};
+    XrXirValueStatus status=view_value_permission(input,access,false,&authority);
+    if (status==XR_XIR_VALUE_OK) {
+        const XirView *view=(const XirView *)object_pointer(input);
+        const XrXirViewStorage *storage=&view->storage;
+        XirCell *cell=view_storage_access(storage,&authority,access->values);
+        if (!cell || storage->kind!=XR_XIR_TYPE_SLICE || storage->element!=XR_XIR_U8)
+            status=XR_XIR_VALUE_BAD_ARGUMENT;
+        else {
+            const char *bytes=NULL;
+            if (cell->value.type==XR_XIR_STRING)
+                bytes=((const XirString *)object_pointer(&cell->value))->bytes;
+            else {
+                const XirArray *array=(const XirArray *)object_pointer(&cell->value);
+                if (array->element!=XR_XIR_U8 || array->stride!=1) status=XR_XIR_VALUE_BAD_ARGUMENT;
+                else bytes=(const char *)array->data;
+            }
+            if (status==XR_XIR_VALUE_OK)
+                status=xr_xir_string_new_graph_operation(access->values->domain,
+                    bytes ? bytes+(size_t)storage->offset : NULL,(size_t)storage->length,output);
+        }
+    }
+    xr_xir_value_graph_end();return status;
+}

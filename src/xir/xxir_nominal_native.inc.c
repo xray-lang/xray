@@ -35,6 +35,7 @@ static XrXirStatus nominal_native_verify(
     if (record->native_id==XR_NATIVE_DECLARATION_ORDERING) variants=5;
     else if (record->native_id==XR_NATIVE_DECLARATION_RECV) { arity=1; fields=1; variants=4; }
     else if (record->native_id==XR_NATIVE_DECLARATION_SEND_RESULT) variants=4;
+    else if (record->native_id==XR_NATIVE_DECLARATION_UTF8_ERROR) variants=1;
     else return XR_XIR_BAD_STRUCTURE;
     if (identity->kind!=XR_XIR_NOMINAL_ENUM || identity->exported!=1 || identity->arity!=arity ||
         identity->field_count!=fields || (!fields && identity->fields) || identity->flags ||

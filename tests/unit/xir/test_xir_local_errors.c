@@ -26,7 +26,7 @@ typedef struct LocalErrorCase {
 static uint32_t local_answer(XrXirSourceProduct *product) {
     XrXirSourceProductPacketView packet={0};XrXirArtifact *checked=NULL;
     CHECK(xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK);
-    CHECK(packet.length>64 && packet.bytes[8]==38 && !packet.bytes[9] && !packet.bytes[10] && !packet.bytes[11]);
+    CHECK(packet.length>64 && packet.bytes[8]==39 && !packet.bytes[9] && !packet.bytes[10] && !packet.bytes[11]);
     uint8_t *old=xr_malloc(packet.length);CHECK(old);memcpy(old,packet.bytes,packet.length);old[8]=37;
     CHECK(xr_xir_compile_checked_read(xr_xir_compile_source_product_context(product),old,packet.length,&checked,NULL)==XR_XIR_BAD_STRUCTURE && !checked);
     xr_free(old);

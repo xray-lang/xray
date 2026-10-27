@@ -15,6 +15,9 @@
 #define XXIR_INSTANCE_VALUE_H
 #include "xxir_program.h"
 #include "xxir_array.h"
+/* The active Program entry authenticates the canonical ordinary callee. */
+XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view);
+XR_FUNC void xr_xir_instance_native_callable_release(XrXirCallView *,XrXirCallStatus);
 
 typedef enum XrXirValueRootKind {
     XR_XIR_ROOT_VALUE, XR_XIR_ROOT_LOCAL, XR_XIR_ROOT_CELL, XR_XIR_ROOT_SLOT,

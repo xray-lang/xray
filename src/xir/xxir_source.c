@@ -1223,6 +1223,7 @@ static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *bi
 }
 #include "xxir_source_task_call.inc.c"
 #include "xxir_source_iterator_call.inc.c"
+#include "xxir_source_from_utf8.inc.c"
 static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType result_context, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (call->arg_count < 0 || call->arg_count > 65536 || call->type_arg_count < 0 ||
@@ -1284,6 +1285,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         if (target && target->kind == SOURCE_IMPORT) target = imported_declaration(ctx, target, target->imported);
     } else if (callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &callee->as.member_access;
+        if (source_from_utf8_receiver(ctx,callee))
+            return source_from_utf8_call(ctx,node,value);
         if (source_decimal_static_receiver(ctx, member->object))
             return source_decimal_static_call(ctx, node, value);
         if (source_array_static_receiver(ctx, member->object))
@@ -2348,6 +2351,9 @@ static bool collect_declarations(SourceContext *ctx) {
     if (closures.helpers > UINT32_MAX - capacity)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"synthetic helper capacity exhausted");
     capacity += closures.helpers;
+    /* Each source module can own one canonical decoder body. */
+    if (count>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"native callable capacity overflow");
+    capacity+=count;
     if (!ctx->core_factory && capacity <= UINT32_MAX - 7) capacity += 7;
     if (readers>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_BUDGET,"binding reader capacity exhausted");
     capacity+=readers;

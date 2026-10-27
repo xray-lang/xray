@@ -255,6 +255,9 @@ XR_FUNC XrXirStatus xir_compile_view_liveness_verified(const XrXirCompileContext
     if (status!=XR_XIR_OK || !flags) return status;
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
 
+        if (module->declarations && module->declarations->functions[f].native_callable) {
+            status=xir_native_callable_verify(module,f);continue;
+        }
         ViewLive a={.context=context,.module=module,.function=&module->functions[f],.types=flags,.visitor=visitor,.user=user,
             .location={XR_XIR_OK,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
         status=view_live_allocate(&a);

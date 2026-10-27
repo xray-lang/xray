@@ -415,10 +415,10 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
         original->block_count, sizeof(*original->blocks));
     function->operands = source_library_bytes(ctx, original->operands,
         original->operand_count, sizeof(*original->operands));
-    XrXirInstruction *instructions = source_alloc(ctx, original->instruction_count, sizeof(*instructions));
+    XrXirInstruction *instructions = original->instruction_count ? source_alloc(ctx, original->instruction_count, sizeof(*instructions)) : NULL;
     function->instructions = instructions;
-    if ((original->parameter_count && !function->parameters) || !function->blocks ||
-        (original->operand_count && !function->operands) || !instructions) return false;
+    if ((original->parameter_count && !function->parameters) || (original->block_count && !function->blocks) ||
+        (original->operand_count && !function->operands) || (original->instruction_count && !instructions)) return false;
     if (!source_library_type(ctx,map->unit,original->result,&function->result)) return false;
     if (!source_library_type(ctx,map->unit,original->error_type,&function->error_type)) return false;
     for (uint32_t p=0; p<original->parameter_count; ++p)

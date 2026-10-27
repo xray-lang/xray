@@ -13,9 +13,9 @@ fn encodeText(data: string, options: Base64EncodeOptions = Base64EncodeOptions()
     return base64.encode(view, options)
 }
 
-fn decodeText(data: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> string {
-    var decoded = base64.decode(data, options)
-    return string.fromUtf8(decoded[:])!
+fn decodeText(data: string, options: Base64DecodeOptions = Base64DecodeOptions()) throws(Error) -> string {
+    var decoded = try base64.decode(data, options)
+    return try string.fromUtf8(decoded[:])
 }
 
 fn decodeFails(data: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> bool {
@@ -48,14 +48,14 @@ fn optionalDecodeOptions() -> Base64DecodeOptions {
 }
 
 print(encodeText("Hello, World!"))
-print(decodeText("SGVsbG8sIFdvcmxkIQ=="))
+print(try decodeText("SGVsbG8sIFdvcmxkIQ=="))
 print(encodeText(""))
-print(decodeText(""))
+print(try decodeText(""))
 print(encodeText("A"))
 print(encodeText("AB"))
 print(encodeText("ABC"))
 print(encodeText("test data with special chars: +/=", urlEncodeOptions()))
-print(decodeText(encodeText("test data with special chars: +/=", urlEncodeOptions()),
+print(try decodeText(encodeText("test data with special chars: +/=", urlEncodeOptions()),
                  urlDecodeOptions()))
 print(decodeFails("A"))
 print(decodeFails("Q==="))
@@ -68,7 +68,7 @@ bytes[3] = 1
 bytes[4] = 128
 var encodedBytes = base64.encode(bytes[:])
 print(encodedBytes)
-var decodedBytes = base64.decode(encodedBytes)
+var decodedBytes = try base64.decode(encodedBytes)
 print(len(decodedBytes))
 print(decodedBytes[0])
 print(decodedBytes[1])

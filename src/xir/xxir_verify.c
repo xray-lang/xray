@@ -24,6 +24,7 @@
 #include "xxir_defaults_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_native_callable.h"
 #include "xxir_view_types_internal.h"
 #include "xxir_view_access_internal.h"
 #include "xxir_view_prepare_internal.h"
@@ -405,8 +406,14 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
         (uint64_t) function->instruction_count * sizeof(*function->instructions);
     if (!(bytes <= SIZE_MAX) || bytes > SIZE_MAX)
         return XR_XIR_BUDGET;
-    if (!function->name || !function->name_length || !function->blocks ||
-        !function->block_count || !function->instructions || !function->instruction_count ||
+    uint32_t native_index=(uint32_t)(function-context->module->functions);
+    bool native=context->module->declarations && context->module->declarations->functions[native_index].native_callable;
+    if (native) {
+        XrXirStatus status=xir_native_callable_verify(context->module,native_index);
+        if (status!=XR_XIR_OK) return status;
+    }
+    if (!function->name || !function->name_length || (!native && (!function->blocks ||
+        !function->block_count || !function->instructions || !function->instruction_count)) ||
         (function->parameter_count && !function->parameters) ||
         (function->operand_count && !function->operands) || (!function->operand_count && function->operands) ||
         function->parameter_count > 65536 ||
@@ -1172,6 +1179,8 @@ static XrXirStatus verify_function(const XrXirFunction *function, XrXirStage sta
     XrXirStatus status = function_shape(function, stage, context, signature_constraints_proved);
     if (status != XR_XIR_OK)
         return status;
+    uint32_t index=(uint32_t)(function-context->module->functions);
+    if (context->module->declarations && context->module->declarations->functions[index].native_callable) return XR_XIR_OK;
     Graph graph = {0};
     status = graph_allocate(&graph, function, context);
     if (status == XR_XIR_OK)

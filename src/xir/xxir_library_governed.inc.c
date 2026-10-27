@@ -25,7 +25,8 @@ static XrXirStatus library_governed_ordering_module(
     for (uint32_t n=0;table && n<table->count;++n) {
 
         const XrXirNominalDeclaration *record=&table->declarations[n];
-        if (record->native.native_id!=XR_NATIVE_DECLARATION_ORDERING) continue;
+        if (record->native.native_id!=XR_NATIVE_DECLARATION_ORDERING &&
+            record->native.native_id!=XR_NATIVE_DECLARATION_UTF8_ERROR) continue;
 
         if (record->module.length==view->name_length &&
             !memcmp(record->module.bytes,view->name,view->name_length)) owned=true;

@@ -302,6 +302,11 @@ static XrXirStatus error_finite_summary(const EffectErrorEquationRead *equation,
     uint32_t word,uint64_t *output) {
     const EffectErrorFiniteRead *read=equation->owner;uint64_t result=0;
     bool returned=read->proof->rows[equation->context].returned!=0;
+    if (error_native(&equation->body,equation->function)) {
+        XrXirStatus status=error_native_header(&equation->body,equation->function,&equation->head);
+        return status==XR_XIR_OK ? error_equation_type_word(equation,
+            returned?equation->head.result:equation->head.error_type,word,output) : status;
+    }
     for(uint32_t b=0;b<equation->head.block_count;++b) {
         bool reachable=false;XrXirStatus status=error_finite_reachable(read,equation->context,b,&reachable);
         if(status!=XR_XIR_OK) return status;
@@ -489,7 +494,14 @@ static XrXirStatus error_finite_geometry(const XrXirCompileContext *work,const E
         if(status!=XR_XIR_OK) return status;
         uint64_t values=(uint64_t)head->parameter_count+head->instruction_count;
         uint64_t summary=(uint64_t)proof->words*64;
-        if(values>UINT32_MAX || !values || !head->block_count || first>UINT64_MAX-summary ||
+        EffectBodyRequest request=effect_body_owned_request(work,proof->material);
+        uint32_t function=proof->invocations->nodes[node].body;
+        if (error_native(&request,function)) {
+            EffectBodyFunctionHead native_head={0};status=effect_body_request_head(&request,function,&native_head);
+            if (status==XR_XIR_OK) status=error_native_header(&request,function,&native_head);
+            if (status!=XR_XIR_OK) return status;
+        } else if (!head->block_count) return XR_XIR_BAD_STRUCTURE;
+        if(values>UINT32_MAX || !values || first>UINT64_MAX-summary ||
             head->block_count>UINT64_MAX-first-summary ||
             (uint64_t)head->block_count*values>(UINT64_MAX-first-head->block_count-summary)/summary)
             return XR_XIR_BAD_STRUCTURE;

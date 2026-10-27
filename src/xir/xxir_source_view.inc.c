@@ -19,7 +19,7 @@ static bool source_string_bytes_call(SourceContext *ctx,AstNode *node,SourceValu
     if (!native || native->id!=2 || !member || member!=xr_native_declaration_member(native,"bytes") ||
         member->id!=18 || !member->is_method || !member->is_public || member->is_static ||
         !member->lowered || member->receiver!=XR_NATIVE_RECEIVER_READ || member->parameter_count ||
-        member->operation!=XR_NATIVE_OPERATION_NONE || member->result!=XR_NATIVE_TERM_UNADMITTED ||
+        member->operation!=XR_NATIVE_OPERATION_NONE || member->result!=XR_NATIVE_TERM_SLICE_U8 ||
         !source_text_same(ctx,node,member->signature,"() -> Slice<u8>") ||
         !source_text_same(ctx,node,member->result_text,"Slice < u8 >") ||
         receiver.type!=XR_XIR_STRING || call->arg_count || call->type_arg_count || call->default_arg_count)

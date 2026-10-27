@@ -23,6 +23,13 @@ static XrXirStatus error_finite_empty(const EffectErrorFiniteRead *read,
     if(status!=XR_XIR_OK) return status;
     /* No escaping errors does not prove the returned carrier has no errors. */
     if(read->proof->rows[function].returned) { *empty=false;return XR_XIR_OK; }
+    EffectBodyRequest request=effect_body_owned_request(read->work,read->proof->material);
+    if (read->current) request.current=&read->current->input;
+    if (error_native(&request,actual)) {
+        EffectBodyFunctionHead head={0};status=effect_body_request_head(&request,actual,&head);
+        if (status==XR_XIR_OK) status=error_native_header(&request,actual,&head);
+        *empty=false;return status;
+    }
     const EffectBodyFunction *head=&read->proof->material->functions[actual];
     EffectBodyRead body=(EffectBodyRead){.owner=read->work};
     if(!read->current) status=effect_role_range(read->work,head->runs,head->run_capacity,sizeof(*head->runs));

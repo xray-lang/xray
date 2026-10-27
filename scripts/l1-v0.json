@@ -89,7 +89,10 @@
     "test_xir_slice_u8_backend_native",
     "test_source_nullable_print",
     "test_source_nullable_print_native",
-    "test_xir_ctfe_slice_u8"
+    "test_xir_ctfe_slice_u8",
+    "test_xir_from_utf8",
+    "test_xir_from_utf8_native",
+    "test_xir_from_utf8_fault"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -220,7 +223,12 @@
     "test_xir_ctfe_slice_u8_argument-resources",
     "test_xir_ctfe_slice_u8_argument-authority",
     "test_xir_ctfe_slice_u8_argument-cancel",
-    "test_xir_ctfe_slice_u8_argument-memory"
+    "test_xir_ctfe_slice_u8_argument-memory",
+    "xir_from_utf8",
+    "xir_from_utf8_native",
+    "xir_from_utf8_physical_header",
+    "xir_from_utf8_physical_bytes",
+    "xir_from_utf8_cancel_after_allocation"
   ],
   "versionCommand": [
     "{build}/xray.exe",
