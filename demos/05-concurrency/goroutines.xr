@@ -15,7 +15,7 @@ fn compute(name: string, n: i64) -> i64 {
 
 // go launches a coroutine, returns a Task
 var t = go compute("task-1", 100)
-var result = await t
+var result = try await t
 print("result: ${result}")
 
 // === Multiple goroutines ===
@@ -24,7 +24,7 @@ var t2 = go compute("beta", 75)
 var t3 = go compute("gamma", 100)
 
 // await all waits for all tasks
-var results = await all [t1, t2, t3]
+var results = try await all [t1, t2, t3]
 print("all results: ${results}")
 
 // === await any (first to finish wins) ===
@@ -35,12 +35,12 @@ fn slowTask(name: string, delay: i64) -> string {
 
 var fast = go slowTask("fast", 10)
 var slow = go slowTask("slow", 200)
-var first = await any [fast, slow]
+var first = try await any [fast, slow]
 print("first finished: ${first}")
 
 // === Task properties ===
 var task = go compute("check", 10)
-var val = await task
+var val = try await task
 print("task.done: ${task.done}")
 print("task.status: ${task.status}")
 print("task.awaitResult: ${task.awaitResult()}")

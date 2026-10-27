@@ -46,7 +46,7 @@ static bool source_local_marked(SourceContext *ctx) {
 }
 static bool source_local_accept(SourceContext *ctx, AstNode *node, XrXirType error,
     bool marked, SourceLocalHandler *handlers) {
-    if (error==XR_XIR_NEVER || (ctx->linkage_kind==XR_XIR_PROGRAM && ctx->function==ctx->entry_function)) return true;
+    if (error==XR_XIR_NEVER) return true;
     if (error==XR_XIR_UNIT) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"call has no declared error type");
     SourceFunction *body=&ctx->bodies[ctx->function];
     if (!marked)

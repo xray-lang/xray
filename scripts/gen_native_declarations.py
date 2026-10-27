@@ -809,7 +809,7 @@ def render_channel_identity(root):
     expected = ['enum Recv<T> {', 'Value { value: T },', 'Empty,', 'Timeout,', 'Closed,', '}',
                 'enum SendResult {', 'Sent,', 'Full,', 'Timeout,', 'Closed,', '}',
                 'class Channel<T> {', 'capacity: i64', 'isClosed: bool',
-                'send(value: T)', 'recv() -> Recv<T>', 'recvOr(default: T) -> T',
+                'send(value: T) throws(SendResult)', 'recv() -> Recv<T>', 'recvOr(default: T) -> T',
                 'trySend(value: T) -> SendResult', 'tryRecv() -> Recv<T>',
                 'sendTimeout(value: T, timeout: i64) -> SendResult',
                 'recvTimeout(timeout: i64) -> Recv<T>', 'close()', '}']
@@ -820,6 +820,8 @@ def render_channel_identity(root):
         text = raw.strip(); name = IDENT.match(text).group(); signature = text[len(name):]
         parser = TypeParser(signature); method = parser.peek() == '('
         parameters = parser.parameters() if method else []; result_text = '()'
+        if method and parser.peek() == 'throws':
+            parser.take('throws'); parser.take('('); parser.take('SendResult'); parser.take(')')
         if not method:
             parser.take(':'); result_text = signature[1:].strip(); parser.type()
         elif parser.peek() == '->':

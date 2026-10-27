@@ -430,7 +430,7 @@ static const XrNativeParameter xr_native_channel_parameters_8[] = {
 static const XrNativeMemberDeclaration xr_native_channel_members[] = {
     {1, "capacity", ": i64", "i64", 17, 5, XR_NATIVE_RECEIVER_READ, false, false, true, true, XR_NATIVE_OPERATION_CHANNEL_CAPACITY, XR_NATIVE_ALLOCATION_NO_HEAP, "limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64},
     {2, "isClosed", ": bool", "bool", 18, 5, XR_NATIVE_RECEIVER_READ, false, false, true, true, XR_NATIVE_OPERATION_CHANNEL_IS_CLOSED, XR_NATIVE_ALLOCATION_NO_HEAP, "limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_BOOL},
-    {3, "send", "(value: T)", "()", 20, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_CHANNEL_SEND, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_UNIT, xr_native_channel_parameters_2, 1, XR_NATIVE_TERM_UNIT},
+    {3, "send", "(value: T) throws(SendResult)", "()", 20, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_CHANNEL_SEND, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_UNIT, xr_native_channel_parameters_2, 1, XR_NATIVE_TERM_UNIT},
     {4, "recv", "() -> Recv<T>", "Recv<T>", 21, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_CHANNEL_RECV, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_RECV_ELEMENT},
     {5, "recvOr", "(default: T) -> T", "T", 22, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_CHANNEL_RECV_OR, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_channel_parameters_4, 1, XR_NATIVE_TERM_ELEMENT},
     {6, "trySend", "(value: T) -> SendResult", "SendResult", 24, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_CHANNEL_TRY_SEND, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_channel_parameters_5, 1, XR_NATIVE_TERM_SEND_RESULT},
@@ -442,7 +442,7 @@ static const XrNativeMemberDeclaration xr_native_channel_members[] = {
 static const char *const xr_native_channel_type_parameters[] = {"T"};
 static const XrNativeTypeDeclaration xr_native_channel = {
     6, XR_NATIVE_DECLARATION_IDENTITY, "Channel", xr_native_channel_type_parameters, 1,
-    "stdlib/types/channel.xr", "xray-native:prelude/Channel", {{255, 43, 224, 43, 204, 40, 190, 68, 247, 146, 123, 116, 109, 49, 110, 236, 127, 239, 78, 129, 95, 38, 147, 32, 126, 240, 113, 118, 187, 191, 18, 132}},
+    "stdlib/types/channel.xr", "xray-native:prelude/Channel", {{13, 38, 183, 244, 193, 170, 66, 255, 203, 78, 4, 160, 22, 224, 158, 32, 192, 31, 75, 221, 224, 140, 35, 6, 137, 184, 33, 193, 158, 126, 170, 184}},
     16, 7, xr_native_channel_members, 10
 };
 static const XrNativeParameter xr_native_recv_value_parameters[] = {

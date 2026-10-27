@@ -17,7 +17,7 @@ class Channel<T> {
     capacity: i64
     isClosed: bool
 
-    send(value: T)
+    send(value: T) throws(SendResult)
     recv() -> Recv<T>
     recvOr(default: T) -> T
 

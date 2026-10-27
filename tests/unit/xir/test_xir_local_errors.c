@@ -224,7 +224,13 @@ int main(void) {
             "export fn answer()->i64{try{return comptime pure()}catch(e){return 42}}\n","E0330",0},
         {"comptime fallible helper","enum Failure{Bad}\nfn sourceValue() throws(Failure)->i64{return 7}\n"
             "fn folded() throws(Failure)->i64{return try comptime try sourceValue()}\n"
-            "export fn answer()->i64{try{return folded()}catch(e){return -1}}\n",NULL,7}
+            "export fn answer()->i64{try{return folded()}catch(e){return -1}}\n",NULL,7},
+        {"closed Channel send","fn send(ch:Channel<i64>) throws(SendResult){try ch.send(7)}\n"
+            "export fn answer()->i64{const ch=Channel<i64>(1);ch.close();try{send(ch);return 0}catch(e:SendResult){return 42}}\n",NULL,42},
+        {"program top-level marker","const ch=Channel<i64>(1)\nch.send(7)\n"
+            "export fn answer()->i64{return 42}\n","E0330",0},
+        {"program top-level propagation","const ch=Channel<i64>(1)\ntry ch.send(7)\n"
+            "export fn answer()->i64{return 42}\n",NULL,42}
     };
     for (size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) local_case(&cases[i]);
     puts("Local declared errors, markers, defaults, constructors and independent VM execution passed");return 0;

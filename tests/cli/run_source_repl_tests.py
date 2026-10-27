@@ -59,7 +59,7 @@ def main() -> None:
         result = invoke(b"42\0discard\n.exit\n", "--module-id", "cli-repl-tests")
         require(result.returncode == 1 and b"zero byte" in result.stderr, result)
         started = time.monotonic()
-        result = run("import time\n{const before=time.monotonic();time.sleep(25);print(time.monotonic()-before>=25)}\nfn worker()->i64{Coro.yield();return 42}\nawait go worker()\n.exit\n")
+        result = run("import time\n{const before=time.monotonic();time.sleep(25);print(time.monotonic()-before>=25)}\nfn worker()->i64{Coro.yield();return 42}\ntry await go worker()\n.exit\n")
         require(not result.stderr and b"true\n" in result.stdout and b"42\n" in result.stdout and time.monotonic()-started >= 0.025, result)
     print("Source REPL CLI: ten commands, real FILE imports, old birth state, type effects, multiline/long input, strict bytes, timer and Task yield PASS")
 
