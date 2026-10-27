@@ -102,7 +102,7 @@ void xr_prelude_register_all_native_types(XrVMRuntime *isolate) {
     if (!isolate)
         return;
     /* Core types (int/float/bool/string/array/map/set/json/bigint/
-     * stringbuilder/arrayslice/Exception) are registered by xr_core_init().
+     * arrayslice/Exception) are registered by xr_core_init().
      * Prelude registers only the remaining native types. */
     xr_iterator_register_class(isolate);
     xr_register_range_class(isolate);

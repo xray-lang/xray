@@ -24,7 +24,6 @@
 #include "../../runtime/object/xarray.h"
 #include "../../runtime/object/xmap.h"
 #include "../../runtime/object/xjson.h"
-#include "../../runtime/object/xstringbuilder.h"
 #include "../../coro/xcoroutine.h"
 #include "../../vm/xvm_coro_state.h"
 #include "../../module/xmodule.h"
@@ -320,21 +319,7 @@ char *xr_value_to_debug_string(XrVMRuntime *isolate, XrValue val) {
                 break;
             case XR_TINSTANCE: {
                 XrObjectInstance *inst = (XrObjectInstance *) hdr;
-                if (inst->klass && inst->klass->builtin_kind == XR_BK_STRINGBUILDER) {
-                    XrStringBuilder *sb = (XrStringBuilder *) hdr;
-                    size_t len = xr_stringbuilder_length(sb);
-                    if (len <= 50) {
-                        XrString *s = xr_stringbuilder_to_string(sb);
-                        if (s) {
-                            snprintf(buf, sizeof(buf), "StringBuilder(%zu) \"%.*s\"", len,
-                                     (int) len, XR_STRING_CHARS(s));
-                        } else {
-                            snprintf(buf, sizeof(buf), "StringBuilder(%zu)", len);
-                        }
-                    } else {
-                        snprintf(buf, sizeof(buf), "StringBuilder(%zu)", len);
-                    }
-                } else if (inst->klass && inst->klass->builtin_kind == XR_BK_ITERATOR) {
+                if (inst->klass && inst->klass->builtin_kind == XR_BK_ITERATOR) {
                     snprintf(buf, sizeof(buf), "<iterator> @%p", (void *) hdr);
                 } else {
                     const char *class_name = xr_class_display_name(inst->klass);

@@ -64,7 +64,6 @@ typedef struct XrChannel XrChannel;
 // the object API rather than as a separate struct declaration here.
 typedef struct XrBigInt XrBigInt;
 typedef struct XrIterator XrIterator;
-typedef struct XrStringBuilder XrStringBuilder;
 typedef struct XrCFunction XrCFunction;
 typedef struct XrBoundMethod XrBoundMethod;
 

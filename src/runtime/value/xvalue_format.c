@@ -35,7 +35,6 @@
 #include "../object/xset.h"
 #include "../object/xtuple.h"
 #include "../object/xstring.h"
-#include "../object/xstringbuilder.h"
 #include "../symbol/xsymbol_table.h"
 #include "../xisolate_internal.h"
 #include "../../base/xutf8.h"
@@ -368,21 +367,6 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
                     xr_strbuf_append_cstr(sb, "DateTime{...}", 13);
             } else if (cls && cls->builtin_kind == XR_BK_ITERATOR) {
                 xr_strbuf_append_cstr(sb, "<iterator>", 10);
-            } else if (cls && cls->builtin_kind == XR_BK_STRINGBUILDER) {
-                XrStringBuilder *sbuilder = (XrStringBuilder *) gc;
-                XrString *content = xr_stringbuilder_to_string(sbuilder);
-                if (content && content->length > 0) {
-                    xr_strbuf_append_cstr(sb, "StringBuilder(\"", 15);
-                    if (content->length <= 64) {
-                        xr_strbuf_append_str(sb, content);
-                    } else {
-                        xr_strbuf_append_cstr(sb, content->data, 64);
-                        xr_strbuf_append_cstr(sb, "...", 3);
-                    }
-                    xr_strbuf_append_cstr(sb, "\")", 2);
-                } else {
-                    xr_strbuf_append_cstr(sb, "StringBuilder()", 14);
-                }
             } else if (cls && cls->builtin_kind == XR_BK_ADT_ENUM) {
                 /* ADT enum aggregate: format as "EnumName.Variant(p1, p2, ...)". */
                 XrEnumAggregateValue *agg = xr_value_to_enum_aggregate(val);

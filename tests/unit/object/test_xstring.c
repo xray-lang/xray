@@ -11,6 +11,7 @@
 #include "../test_framework.h"
 #include "../test_helper.h"
 #include "runtime/object/xstring.h"
+#include "runtime/object/xmap.h"
 #include "runtime/mem/xruntime_object_heap.h"
 
 static XrVMRuntime *X = NULL;
@@ -540,6 +541,58 @@ TEST(string_split_edges) {
 
 /* ========== String Replace Tests ========== */
 
+TEST(string_translate_unicode_snapshot_and_unmapped_values) {
+    setup();
+    const char input_bytes[] = "a\xc3\xa9\xf0\x9f\x99\x82\0z";
+    const char expected[] = "\xce\xbbXY\0z";
+    XrString *input = xr_string_new(X, input_bytes, sizeof(input_bytes) - 1u);
+    XrMap *table = xr_map_new(NULL);
+    ASSERT_NOT_NULL(input);
+    ASSERT_NOT_NULL(table);
+    XrString *a = xr_string_intern(X, "a", 1u, 0);
+    XrString *accent = xr_string_intern(X, "\xc3\xa9", 2u, 0);
+    XrString *emoji = xr_string_intern(X, "\xf0\x9f\x99\x82", 4u, 0);
+    XrString *z = xr_string_intern(X, "z", 1u, 0);
+    XrString *lambda = xr_string_intern(X, "\xce\xbb", 2u, 0);
+    XrString *xy = xr_string_intern(X, "XY", 2u, 0);
+    XrString *empty = xr_string_intern(X, "", 0u, 0);
+    ASSERT_NOT_NULL(a); ASSERT_NOT_NULL(accent); ASSERT_NOT_NULL(emoji);
+    ASSERT_NOT_NULL(z); ASSERT_NOT_NULL(lambda); ASSERT_NOT_NULL(xy);
+    ASSERT_NOT_NULL(empty);
+    xr_map_set(table, xr_string_value(a), xr_string_value(lambda));
+    xr_map_set(table, xr_string_value(accent), xr_string_value(xy));
+    xr_map_set(table, xr_string_value(emoji), xr_string_value(empty));
+    xr_map_set(table, xr_string_value(z), xr_int(7));
+    XrString *result = xr_string_translate(X, input, table);
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ_UINT(result->length, sizeof(expected) - 1u);
+    ASSERT_EQ_INT(memcmp(result->data, expected, sizeof(expected) - 1u), 0);
+    ASSERT_EQ_INT(memcmp(input->data, input_bytes, sizeof(input_bytes) - 1u), 0);
+    xr_map_set(table, xr_string_value(accent), xr_string_value(empty));
+    XrString *next = xr_string_translate(X, input, table);
+    ASSERT_NOT_NULL(next);
+    ASSERT_EQ_INT(memcmp(result->data, expected, sizeof(expected) - 1u), 0);
+    ASSERT_EQ_UINT(next->length, 4u);
+    teardown();
+}
+
+TEST(string_translate_identity_and_invalid_key_cleanup) {
+    setup();
+    XrString *input = xr_string_new(X, "source", 6u);
+    XrString *empty = xr_string_intern(X, "", 0u, 0);
+    XrMap *table = xr_map_new(NULL);
+    ASSERT_NOT_NULL(input); ASSERT_NOT_NULL(empty); ASSERT_NOT_NULL(table);
+    ASSERT_EQ_PTR(xr_string_translate(X, input, NULL), input);
+    ASSERT_EQ_PTR(xr_string_translate(X, empty, table), empty);
+    ASSERT_NULL(xr_string_translate(NULL, input, table));
+    ASSERT_NULL(xr_string_translate(X, NULL, table));
+    const char invalid[] = {(char) 0xff};
+    XrString *raw = xr_string_new_raw_bytes(X, invalid, sizeof(invalid));
+    ASSERT_NOT_NULL(raw);
+    ASSERT_NULL(xr_string_translate(X, raw, table));
+    teardown();
+}
+
 TEST(string_replace) {
     setup();
     XrString *s = xr_string_intern(X, "hello world", 11, xr_string_hash("hello world", 11));
@@ -706,6 +759,8 @@ static void run_all_tests(void) {
     RUN_TEST(string_split_edges);
 
     RUN_TEST_SUITE("String Replace");
+    RUN_TEST(string_translate_unicode_snapshot_and_unmapped_values);
+    RUN_TEST(string_translate_identity_and_invalid_key_cleanup);
     RUN_TEST(string_replace);
     RUN_TEST(string_replace_all);
     RUN_TEST(string_replace_edges);
