@@ -5,23 +5,21 @@
 
 static int failures = 0;
 
-#define CHECK(condition)                                                                           \
-    do {                                                                                           \
-        if (!(condition)) {                                                                        \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #condition);                   \
-            ++failures;                                                                            \
-        }                                                                                          \
-    } while (0)
+static void check(bool condition, const char *expression, const char *file, int line) {
+    if (!condition) {
+        fprintf(stderr, "FAIL %s:%d: %s\n", file, line, expression);
+        ++failures;
+    }
+}
+#define CHECK(condition) check((condition), #condition, __FILE__, __LINE__)
 
 static void test_registry_identity_and_lookup(void) {
-    size_t index;
-
     CHECK(XR_CORE_SPEC_EPOCH == 1u);
-    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 95u);
+    CHECK(XR_CORE_SPEC_OPERATION_COUNT == 90u);
     CHECK(XR_CORE_SPEC_FEATURE_COUNT == 1u);
     CHECK(strlen(XR_CORE_SPEC_SEMANTIC_SHA256) == 64u);
 
-    for (index = 0; index < XR_CORE_SPEC_OPERATION_COUNT; ++index) {
+    for (size_t index = 0; index < XR_CORE_SPEC_OPERATION_COUNT; ++index) {
         const XrCoreOperationSpec *operation = &xr_core_operation_specs[index];
         CHECK(operation->stable_id != 0u);
         CHECK(operation->spelling != NULL);
@@ -59,11 +57,6 @@ static void test_registry_identity_and_lookup(void) {
         case XR_CORE_OP_CORE_INTEGER_BITWISE:
         case XR_CORE_OP_CORE_STRING_SLICE:
         case XR_CORE_OP_CORE_ARRAY_ALLOCATE_DEFAULT:
-        case XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT:
-        case XR_CORE_OP_CORE_STRING_BUILDER_APPEND:
-        case XR_CORE_OP_CORE_STRING_BUILDER_CLEAR:
-        case XR_CORE_OP_CORE_STRING_BUILDER_LENGTH:
-        case XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT:
         case XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL:
         case XR_CORE_OP_CORE_ARRAY_APPEND:
             evaluator_status = XR_CORE_COVERAGE_NOT_APPLICABLE;
@@ -322,6 +315,23 @@ static void test_module_place_metadata(void) {
     }
 }
 
+static void test_retired_text_operations(void) {
+    static const struct {
+        uint16_t id;
+        const char *spelling;
+    } retired[] = {
+        {173u, "core.string_builder.construct"},
+        {174u, "core.string_builder.append"},
+        {175u, "core.string_builder.clear"},
+        {176u, "core.string_builder.length"},
+        {177u, "core.string_builder.snapshot"},
+    };
+    for (size_t index = 0u; index < sizeof(retired) / sizeof(retired[0]); ++index) {
+        CHECK(xr_core_spec_operation_by_id(retired[index].id) == NULL);
+        CHECK(xr_core_spec_operation_by_spelling(retired[index].spelling) == NULL);
+    }
+}
+
 static void test_exact_integer_types(void) {
     static const struct {
         uint16_t type_id;
@@ -350,6 +360,7 @@ static void test_exact_integer_types(void) {
 }
 
 int main(void) {
+    test_retired_text_operations();
     test_exact_integer_types();
     test_registry_identity_and_lookup();
     test_operation_metadata();

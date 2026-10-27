@@ -13,6 +13,7 @@
     "capabilities",
     "traps",
     "features",
+    "retired_type_ids",
     "retired_operation_ids",
     "operations"
   ],
@@ -70,6 +71,31 @@
               "ACTIVE",
               "RETIRED"
             ]
+          }
+        }
+      }
+    },
+    "retired_type_ids": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stable_id",
+          "name",
+          "reason"
+        ],
+        "properties": {
+          "stable_id": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "reason": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
           }
         }
       }
