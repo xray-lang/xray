@@ -219,7 +219,12 @@ int main(void) {
         {"nested Task error name","enum Failure{Bad}\nstruct Box<T>{value:T}\n"
             "fn worker() throws(Failure)->i64{return 1}\n"
             "export fn answer()->i64{const box=Box<Task<i64,Failure>>{value:go worker()};"
-            "if(typeName(box)==\"Box<Task<i64, Failure>>\"){return 42};return 0}\n",NULL,42}
+            "if(typeName(box)==\"Box<Task<i64, Failure>>\"){return 42};return 0}\n",NULL,42},
+        {"comptime own marker","enum Failure{Bad}\nfn pure() throws(Failure)->i64{return 1}\n"
+            "export fn answer()->i64{try{return comptime pure()}catch(e){return 42}}\n","E0330",0},
+        {"comptime fallible helper","enum Failure{Bad}\nfn sourceValue() throws(Failure)->i64{return 7}\n"
+            "fn folded() throws(Failure)->i64{return try comptime try sourceValue()}\n"
+            "export fn answer()->i64{try{return folded()}catch(e){return -1}}\n",NULL,7}
     };
     for (size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) local_case(&cases[i]);
     puts("Local declared errors, markers, defaults, constructors and independent VM execution passed");return 0;
