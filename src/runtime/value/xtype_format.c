@@ -246,8 +246,6 @@ const char *xr_type_to_string(XrType *type) {
     }
     if (xr_type_is_named_class(type, "BigInt"))
         return "BigInt";
-    if (xr_type_is_named_class(type, "StringBuilder"))
-        return "StringBuilder";
     if (xr_type_is_named_class(type, "PanicInfo"))
         return "PanicInfo";
     if (type->kind == XR_KIND_ENUM) {

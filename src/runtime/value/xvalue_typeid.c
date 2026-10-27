@@ -110,8 +110,6 @@ static XrTypeIdentityCoreKind xr_value_type_identity_kind(XrValue v) {
                     switch (inst->klass->builtin_kind) {
                         case XR_BK_STRUCT_OBJECT:
                             return XR_TYPE_IDENTITY_CORE_OBJECT;
-                        case XR_BK_STRINGBUILDER:
-                            return XR_TYPE_IDENTITY_CORE_STRINGBUILDER;
                         case XR_BK_ADT_ENUM:
                             return XR_TYPE_IDENTITY_CORE_ENUM_VALUE;
                         case XR_BK_ITERATOR:

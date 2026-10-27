@@ -701,13 +701,6 @@ XrType *xr_type_new_u8_slice(XrVMRuntime *X) {
     return xr_type_new_slice(X, elem);
 }
 
-XrType *xr_type_new_stringbuilder(XrVMRuntime *X) {
-    XrType *type = type_alloc(X, XR_KIND_INSTANCE);
-    if (type)
-        type->instance.class_name = "StringBuilder";
-    return type;
-}
-
 XrType *xr_type_new_named_instance(XrVMRuntime *X, const char *name) {
     X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
