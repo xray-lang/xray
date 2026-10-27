@@ -34,7 +34,8 @@ typedef struct XtcXirNativeAdmissionDiagnostic {
 /* Borrow three live owners synchronously on their one shared ledger. Operation
  * must be READY. Admit only the controlled local Windows x64 MSVC C11/MD recipe;
  * installed toolchain/search directories are trusted not to change concurrently.
- * This does not authenticate a provider or prove negative filesystem lookups.
+ * The provider and OS loader are trusted host inputs. This does not close the
+ * DLL namespace, authenticate a provider or establish a native sandbox.
  * Read the held OUTPUT once, then seal the existing native artifact. No provider
  * runs, source emission or file reopens occur here. Output must initially be NULL
  * and is preserved on failure. A failed output read keeps Operation's first error

@@ -50,7 +50,7 @@ static void invocation_test_free(void *pointer) {
 #undef xr_free
 #define xr_malloc invocation_fixture_malloc
 #define xr_free invocation_fixture_free
-static const XrCompileResourceLimits sdk_unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+static const XrCompileResourceLimits sdk_unlimited = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
 static XrCompileResources *sdk_ledger(const XrCompileResourceLimits *limits) {
     XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(limits, &resources) == XR_COMPILE_RESOURCE_OK); return resources;

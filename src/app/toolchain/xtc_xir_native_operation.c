@@ -64,7 +64,7 @@ static XtcXirNativeOperationStatus native_workspace_status(XtcXirWorkspaceStatus
         case XTC_XIR_WORKSPACE_OVERFLOW: return XTC_XIR_NATIVE_OVERFLOW;
         case XTC_XIR_WORKSPACE_OUT_OF_MEMORY: return XTC_XIR_NATIVE_OUT_OF_MEMORY;
         case XTC_XIR_WORKSPACE_IO: return XTC_XIR_NATIVE_IO;
-        case XTC_XIR_WORKSPACE_IDENTITY_MISMATCH: return XTC_XIR_NATIVE_REPLAY_MISMATCH;
+        case XTC_XIR_WORKSPACE_IDENTITY_MISMATCH: return XTC_XIR_NATIVE_INPUT_MISMATCH;
         case XTC_XIR_WORKSPACE_PENDING: return XTC_XIR_NATIVE_PENDING;
         default: return XTC_XIR_NATIVE_INVALID;
     }
@@ -82,7 +82,7 @@ static XtcXirNativeOperationStatus native_invocation_status(XrXirInvocationStatu
         case XR_XIR_INVOCATION_TIMEOUT: return XTC_XIR_NATIVE_TIMEOUT;
         case XR_XIR_INVOCATION_CANCELLED: return XTC_XIR_NATIVE_CANCELLED;
         case XR_XIR_INVOCATION_CHILD_FAILED: return XTC_XIR_NATIVE_CHILD_FAILED;
-        case XR_XIR_INVOCATION_REPLAY_MISMATCH: return XTC_XIR_NATIVE_REPLAY_MISMATCH;
+        case XR_XIR_INVOCATION_INPUT_MISMATCH: return XTC_XIR_NATIVE_INPUT_MISMATCH;
         default: return XTC_XIR_NATIVE_INVALID;
     }
 }

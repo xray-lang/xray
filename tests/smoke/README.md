@@ -38,12 +38,13 @@ paths use `#xray-N` to identify the Nth Xray fence.
   output disappeared. A gap that succeeds must be reviewed, given an output
   oracle, and promoted to `pass` with its native companion in the same change.
 
-The current five native companions exercise the actual direct-C CLI build path.
-They record an exact exit-1 invocation-profile rejection, empty stdout and no
-published executable on this Windows provider. They are executed `gap` cases;
-native program execution has not been reached, and no native functional pass
-is claimed. The original VM/native output oracles remain shared. Promote a
-companion only after its real build and executable match that full oracle.
+The current five native companions build through the trusted-host direct-C
+CLI path and execute against their original, complete VM output oracles.
+Provider and explicit input identities, private workspace/output ownership,
+C11/W1-W4 validation, cancellation and owned-child cleanup remain required.
+This ordinary host-toolchain boundary is not a hermetic Windows loader
+namespace proof or a native sandbox. The old replay receipt is retired
+with its consumers; it is not replaced by a fabricated run count.
 
 The base64 VM entry now passes its original `import base64; print(1)` oracle.
 This checks module import, not the complete encoding/decoding property cases.
@@ -60,8 +61,8 @@ record. It is not evidence that the new direct-C path has been implemented.
 The summary counts actual `pass` results, not accepted known failures:
 
 ```text
-smoke: demos 3/23 stdlib 2/29 readme 0/6 native 0/5
-smoke gate: pass=5 gap=58 fail=0 not_run=0
+smoke: demos 3/23 stdlib 2/29 readme 0/6 native 5/5
+smoke gate: pass=10 gap=53 fail=0 not_run=0
 ```
 
 Each invocation writes a current `results.json` and a fresh log directory under

@@ -33,7 +33,7 @@ static XrXirNativeProjection *projection(XrCompileResources *resources, const ch
     const char *source, const char *stdlib) {
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, directory};
     XrXirSourceProductRequest request = {{session, source, &authority, &context, stdlib, NULL, XR_XIR_PROGRAM, NULL},
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
@@ -75,14 +75,13 @@ static void unit(const char *parent) {
         CHECK(!owner); runtime_fail_at = SIZE_MAX;
         xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes);
     }
-    for (unsigned axis = 0; axis < 3; ++axis) for (unsigned minus = 0; minus < 2; ++minus) {
+    for (unsigned minus = 0; minus < 2; ++minus) {
         XrCompileResourceLimits limits = sdk_unlimited;
-        if (!axis) limits.allocated_bytes = exact.allocated_bytes - minus;
-        else if (axis == 1) limits.live_bytes = exact.peak_bytes - minus;
-        else limits.work = exact.work - minus;
+        limits.memory_mode = XR_COMPILE_MEMORY_FINITE;
+        limits.memory_limit = exact.peak_bytes - minus;
         resources = sdk_ledger(&limits);
         CHECK(xtc_xir_native_operation_new(resources, &ws, &test_limits, &owner) ==
-            (minus ? XTC_XIR_NATIVE_BUDGET : XTC_XIR_NATIVE_OK));
+            (minus ? XTC_XIR_NATIVE_MEMORY_LIMIT : XTC_XIR_NATIVE_OK));
         CHECK(minus ? !owner : !!owner);
         close_owner(&owner); xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes);
     }
@@ -101,8 +100,6 @@ static void unit(const char *parent) {
     operation_workspace_closes = 0;
     size_t allocation_boundary = runtime_attempts; XrCompileResourceStats before_close;
     CHECK(xr_compile_resources_stats(resources, &before_close) == XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_resources_work(resources, UINT64_MAX - before_close.work) == XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_resources_stats(resources, &before_close) == XR_COMPILE_RESOURCE_OK && before_close.work == UINT64_MAX);
     operation_hold_workspace = true;
     XtcXirNativeOperationStatus status = XTC_XIR_NATIVE_PENDING;
     for (unsigned i = 0; status == XTC_XIR_NATIVE_PENDING && i < 100; ++i)
@@ -115,10 +112,10 @@ static void unit(const char *parent) {
     CHECK(xtc_xir_native_operation_diagnostic(owner)->status == XTC_XIR_NATIVE_CANCELLED);
     close_owner(&owner); CHECK(GetFileAttributesA(root) == INVALID_FILE_ATTRIBUTES && GetFileAttributesA(unregistered) == INVALID_FILE_ATTRIBUTES);
     XrCompileResourceStats after_close; CHECK(xr_compile_resources_stats(resources, &after_close) == XR_COMPILE_RESOURCE_OK);
-    CHECK(runtime_attempts == allocation_boundary && after_close.work == before_close.work);
+    CHECK(runtime_attempts == allocation_boundary && after_close.held_bytes < before_close.held_bytes);
     xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes);
-    printf("unit constructor OOM=%zu exact allocated=%llu peak=%llu work=%llu; workspace pending/cleanup=PASS physical=0\n",
-        allocations, (unsigned long long)exact.allocated_bytes, (unsigned long long)exact.peak_bytes, (unsigned long long)exact.work);
+    printf("unit constructor OOM=%zu exact allocated=%llu peak=%llu; workspace pending/cleanup=PASS physical=0\n",
+        allocations, (unsigned long long)exact.allocated_bytes, (unsigned long long)exact.peak_bytes);
 }
 static bool cancelled(void *context) { (void)context; return true; }
 static void preflight(const char *parent, XrCompileResources *resources, XtcXirNativeOperationRequest *request) {
@@ -157,7 +154,7 @@ static void preflight(const char *parent, XrCompileResources *resources, XtcXirN
         CHECK(status == XTC_XIR_NATIVE_OUT_OF_MEMORY && !operation_run_calls);
         operation_direct_fail = SIZE_MAX; close_owner(&owner);
         XrCompileResourceStats current; CHECK(xr_compile_resources_stats(resources, &current) == XR_COMPILE_RESOURCE_OK);
-        CHECK(current.live_bytes == baseline.live_bytes);
+        CHECK(current.held_bytes == baseline.held_bytes);
     }
     printf("preflight direct actual OOM=%zu foreign/pre-cancel zero allocation; real SDK launcher/3 prepared=PASS\n", direct);
 }
@@ -196,7 +193,7 @@ static int run_test(int argc, char **argv) {
     const XrXirInvocationProviderFacts *provider = xtc_xir_native_operation_provider(owner);
     CHECK(provider && provider->compiler.path[0] && provider->linker.path[0]);
     CHECK(provider->compiler.version.file_text[0] && provider->linker.version.file_text[0]);
-    CHECK(facts && facts->completed_runs == 6 && facts->kind == XR_XIR_INVOCATION_LOCKED_REPLAY_FACTS);
+    CHECK(facts && facts->file_count);
     const XrXirInvocationFile *output = NULL;
     for (uint32_t i = 0; i < facts->file_count; ++i) {
         const XrXirInvocationFile *file = xtc_xir_native_operation_file(owner, i);
@@ -217,7 +214,7 @@ static int run_test(int argc, char **argv) {
     length = 0;
     CHECK(xtc_xir_native_operation_read_output(owner, 64 * 1024 * 1024, &bytes, &length) == XTC_XIR_NATIVE_OK);
     CHECK(length > 2 && ((char *)bytes)[0] == 'M' && ((char *)bytes)[1] == 'Z');
-    printf("native completed=%u files=%u output=%zu producer-dead=PASS\n", facts->completed_runs, facts->file_count, length);
+    printf("native files=%u output=%zu producer-dead=PASS\n", facts->file_count, length);
     void *failed_bytes = NULL; size_t failed_length = 0;
     runtime_fail_at = runtime_attempts;
     CHECK(xtc_xir_native_operation_read_output(owner, 64 * 1024 * 1024, &failed_bytes, &failed_length) == XTC_XIR_NATIVE_OUT_OF_MEMORY);

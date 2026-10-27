@@ -544,8 +544,12 @@ static XrProcessStatus process_capture_read(XrCompileResources *r, XrPipeHandle 
 }
 XR_FUNC XrProcessStatus xtc_process_run(const XrToolchainProcess *p,
     XrProcessCancelled cancelled, void *context, XrProcessResult *output) {
-    if (!p || !output || output->stdout_bytes.data || output->stderr_bytes.data ||
-        (p->spec.completion_policy == XR_PROC_COMPLETE_ROOT && p->spec.image_mode != XR_PROC_IMAGES_WINDOWS_TREE)) return XTC_PROCESS_INVALID;
+    if (!p || !output || output->stdout_bytes.data || output->stderr_bytes.data) return XTC_PROCESS_INVALID;
+    /* Ordinary ROOT requests use the existing managed group. Once the root
+     * exits, revoke its descendants before draining inherited pipe handles.
+     * Image-observed requests keep the debug-pump's own ROOT completion path. */
+    bool revoke_on_root_exit = p->spec.completion_policy == XR_PROC_COMPLETE_ROOT &&
+        p->spec.image_mode == XR_PROC_IMAGES_NONE;
     XrProcessResult result = {0}; result.exit_code = -1;
     XrCompileResources *r = p->resources;
     XtcCapture captures[2] = {{0},{0}};
@@ -566,7 +570,7 @@ XR_FUNC XrProcessStatus xtc_process_run(const XrToolchainProcess *p,
     options.complete_environment = true; options.new_process_group = true;
     options.image_mode = p->spec.image_mode; options.image_observer = p->spec.image_observer;
 
-    options.completion_policy = p->spec.completion_policy;
+    options.completion_policy = revoke_on_root_exit ? XR_PROC_COMPLETE_TREE : p->spec.completion_policy;
     options.has_stdout = options.has_stderr = true; options.stdout_write = pipes[0].write; options.stderr_write = pipes[1].write;
     s = process_os(xr_proc_spawn(p->spec.executable, p->spec.argv, &options, &pid));
     for (unsigned i = 0; i < 2; ++i) { if (xr_pipe_close(pipes[i].write) != 0 && s == XTC_PROCESS_OK) s = XTC_PROCESS_IO; pipes[i].write = XR_PIPE_INVALID; }
@@ -588,6 +592,9 @@ XR_FUNC XrProcessStatus xtc_process_run(const XrToolchainProcess *p,
             XrProcWaitResult wait = xr_proc_try_wait(pid, &result.exit_code);
             if (wait == XR_PROC_WAIT_ERROR) { s = process_os(xr_proc_last_error()); break; }
             exited = wait == XR_PROC_WAIT_EXITED;
+            if (exited && revoke_on_root_exit && xr_proc_kill_tree(pid, 9) != 0) {
+                s = process_os(xr_proc_last_error()); break;
+            }
         }
         /* The active image pump already waits for an event that can wake it.
          * Sleeping again would throttle each debuggee scheduling handoff. */

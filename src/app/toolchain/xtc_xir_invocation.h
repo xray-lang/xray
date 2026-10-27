@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xtc_xir_invocation.h - Owned observations from locked native command replay
+ * xtc_xir_invocation.h - Owned trusted-host native commands and explicit inputs
  */
 #ifndef XTC_XIR_INVOCATION_H
 #define XTC_XIR_INVOCATION_H
@@ -21,7 +21,7 @@ typedef enum XrXirInvocationStatus {
     XR_XIR_INVOCATION_BUDGET, XR_XIR_INVOCATION_OUT_OF_MEMORY,
     XR_XIR_INVOCATION_IO, XR_XIR_INVOCATION_TIMEOUT,
     XR_XIR_INVOCATION_CANCELLED, XR_XIR_INVOCATION_CHILD_FAILED,
-    XR_XIR_INVOCATION_REPLAY_MISMATCH,
+    XR_XIR_INVOCATION_INPUT_MISMATCH,
     XR_XIR_INVOCATION_MEMORY_LIMIT, XR_XIR_INVOCATION_OVERFLOW
 } XrXirInvocationStatus;
 typedef enum XrXirInvocationStage {
@@ -29,7 +29,7 @@ typedef enum XrXirInvocationStage {
     XR_XIR_INVOCATION_LINK, XR_XIR_INVOCATION_NO_STAGE
 } XrXirInvocationStage;
 typedef enum XrXirInvocationPass {
-    XR_XIR_INVOCATION_OBSERVE, XR_XIR_INVOCATION_REPLAY,
+    XR_XIR_INVOCATION_EXECUTE,
     XR_XIR_INVOCATION_NO_PASS
 } XrXirInvocationPass;
 typedef enum XrXirInvocationFailureDomain {
@@ -49,7 +49,7 @@ typedef enum XrXirInvocationFileKind {
     XR_XIR_INVOCATION_SDK_ARCHIVE, XR_XIR_INVOCATION_CRT,
     XR_XIR_INVOCATION_SYSTEM, XR_XIR_INVOCATION_REPORT,
     XR_XIR_INVOCATION_OUTPUT, XR_XIR_INVOCATION_HEADER,
-    XR_XIR_INVOCATION_PROVIDER_IMAGE, XR_XIR_INVOCATION_PROVIDER_CONFIG
+    XR_XIR_INVOCATION_PROVIDER_EXECUTABLE, XR_XIR_INVOCATION_PROVIDER_CONFIG
 } XrXirInvocationFileKind;
 typedef struct XrXirInvocationLibrary {
     const char *path;
@@ -90,12 +90,8 @@ typedef struct XrXirInvocationFile {
     uint64_t length;
     uint8_t digest[32];
 } XrXirInvocationFile;
-typedef enum XrXirInvocationFactKind {
-    XR_XIR_INVOCATION_LOCKED_REPLAY_FACTS = 1
-} XrXirInvocationFactKind;
 typedef struct XrXirInvocationFacts {
-    XrXirInvocationFactKind kind;
-    uint32_t completed_runs, file_count;
+    uint32_t file_count;
     XrXirNativeProjectionFacts projection;
     XrXirRuntimeSdkFacts sdk;
 } XrXirInvocationFacts;
@@ -104,11 +100,9 @@ typedef struct XrXirInvocationProviderImageFacts {
     uint64_t length;
     uint8_t digest[32];
     XtcXirPeVersion version;
-    uint32_t observed_image_index;
 } XrXirInvocationProviderImageFacts;
 typedef struct XrXirInvocationProviderFacts {
     XrXirInvocationProviderImageFacts compiler, linker;
-    uint32_t launcher_compiler_image_index;
 } XrXirInvocationProviderFacts;
 typedef struct XrXirInvocation XrXirInvocation;
 
@@ -124,9 +118,10 @@ typedef struct XrXirInvocation XrXirInvocation;
  * concurrently during this build. No continuous directory proof is granted.
  * Every artifact is initially CREATE_NEW; existing paths are never overwritten.
  * The caller owns both directories and must later reclaim disk artifacts even
- * on failure. Free releases only this owner's memory and file/image leases.
- * Success records six completed runs and equal observed inputs under positive
- * leases. It grants no Target, namespace or future execution authority.
+ * on failure. Free releases only this owner's memory and explicit file leases.
+ * Success owns the explicit provider/config/SDK/C/header/library inputs and
+ * the completed output. The toolchain and OS loader are trusted host inputs;
+ * this is not a DLL namespace proof, negative-lookup proof or native sandbox.
  * Output must be empty and is unchanged on failure. Diagnostic retains the
  * first typed failure and requires no additional allocation. */
 XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationRequest *request,
@@ -135,11 +130,9 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
  * Queries neither allocate nor consume work. */
 XR_FUNC XrCompileResources *xtc_xir_invocation_resources(const XrXirInvocation *owner);
 XR_FUNC const XrXirInvocationFacts *xtc_xir_invocation_facts(const XrXirInvocation *owner);
-/* Compiler and linker refer to the GENERATED and LINK observed collectors;
- * launcher_compiler_image_index refers to LAUNCHER's matching compiler row.
- * Version values come from those held image bytes, bounded by artifact_bytes,
- * before result publication. Paths borrow this owner's collectors.
- * These self-reported versions grant no provider or Binding authority. */
+/* Compiler/linker facts come from executable bytes pinned before execution.
+ * Version parsing is bounded by artifact_bytes. Paths borrow this owner.
+ * No loaded-DLL or future execution authority is granted. */
 XR_FUNC const XrXirInvocationProviderFacts *xtc_xir_invocation_provider(const XrXirInvocation *owner);
 XR_FUNC const XrProcessView *xtc_xir_invocation_command(const XrXirInvocation *owner,
     XrXirInvocationStage stage);

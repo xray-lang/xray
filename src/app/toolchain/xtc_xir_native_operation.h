@@ -16,7 +16,7 @@ typedef enum XtcXirNativeOperationStatus {
     XTC_XIR_NATIVE_OK, XTC_XIR_NATIVE_INVALID, XTC_XIR_NATIVE_UNRESOLVED,
     XTC_XIR_NATIVE_UNSUPPORTED, XTC_XIR_NATIVE_BUDGET, XTC_XIR_NATIVE_OUT_OF_MEMORY,
     XTC_XIR_NATIVE_IO, XTC_XIR_NATIVE_TIMEOUT, XTC_XIR_NATIVE_CANCELLED,
-    XTC_XIR_NATIVE_CHILD_FAILED, XTC_XIR_NATIVE_REPLAY_MISMATCH,
+    XTC_XIR_NATIVE_CHILD_FAILED, XTC_XIR_NATIVE_INPUT_MISMATCH,
     XTC_XIR_NATIVE_PENDING,
     XTC_XIR_NATIVE_MEMORY_LIMIT, XTC_XIR_NATIVE_OVERFLOW
 } XtcXirNativeOperationStatus;
@@ -67,7 +67,7 @@ XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_new(XrCompileResour
  * workspace contents. */
 XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_run(XtcXirNativeOperation *owner,
     const XtcXirNativeOperationRequest *request);
-/* READY-only borrows. Facts remain LOCKED_REPLAY_FACTS, never Target admission. */
+/* READY-only borrows of owned explicit inputs and output; no namespace authority. */
 XR_FUNC const XrXirInvocationFacts *xtc_xir_native_operation_facts(const XtcXirNativeOperation *owner);
 XR_FUNC const XrXirInvocationProviderFacts *xtc_xir_native_operation_provider(const XtcXirNativeOperation *owner);
 XR_FUNC const XrProcessView *xtc_xir_native_operation_command(const XtcXirNativeOperation *owner,

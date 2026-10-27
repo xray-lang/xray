@@ -286,6 +286,35 @@ static void descendants(void) {
         xtc_process_free(p); xr_compile_resources_release(r); CHECK(!live && !physical_handles);
     }
 }
+/* ROOT/NONE must observe the leader's real exit while a descendant still
+ * owns its inherited pipes, then revoke only this request's managed Job. */
+static void root_completion_without_observer(void) {
+    char temp[MAX_PATH], path[MAX_PATH]; CHECK(GetTempPathA(sizeof(temp), temp));
+    CHECK(snprintf(path, sizeof(path), "%sowned-root-%lu.pid", temp, GetCurrentProcessId()) > 0);
+    (void)DeleteFileA(path);
+    wchar_t self[32768], command[32768]; CHECK(GetModuleFileNameW(NULL, self, 32768));
+    CHECK(swprintf(command, 32768, L"\"%ls\" --sleep", self) > 0);
+    STARTUPINFOW startup = {0}; startup.cb = sizeof(startup); PROCESS_INFORMATION unrelated = {0};
+    CHECK(CreateProcessW(self, command, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &startup, &unrelated));
+    CHECK(CloseHandle(unrelated.hThread));
+    XrCompileResources *r = ledger(unlimited); XrToolchainProcess *p = NULL; XrProcessSpec s;
+    spec_init(&s, "--descendant-parent"); s.argv[2] = path; s.timeout_ms = 3000;
+    s.completion_policy = XR_PROC_COMPLETE_ROOT;
+    CHECK(xtc_process_prepare(r, &s, &p) == XTC_PROCESS_OK);
+    xr_compile_resources_release(r); memset(&s, 0xCD, sizeof(s));
+    XrProcessResult result = {0};
+    CHECK(xtc_process_run(p, NULL, NULL, &result) == XTC_PROCESS_OK);
+    CHECK(result.exit_code == 0 && !result.stdout_bytes.length && !result.stderr_bytes.length);
+    FILE *stream = fopen(path, "rb"); CHECK(stream); unsigned long child = 0;
+    CHECK(fscanf(stream, "%lu", &child) == 1 && !fclose(stream));
+    HANDLE process = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, child);
+    if (process) { CHECK(WaitForSingleObject(process, 5000) == WAIT_OBJECT_0); CHECK(CloseHandle(process)); }
+    CHECK(WaitForSingleObject(unrelated.hProcess, 0) == WAIT_TIMEOUT);
+    CHECK(TerminateProcess(unrelated.hProcess, 0)); CHECK(WaitForSingleObject(unrelated.hProcess, 5000) == WAIT_OBJECT_0);
+    CHECK(CloseHandle(unrelated.hProcess)); CHECK(DeleteFileA(path));
+    xtc_process_free(p); xtc_process_result_free(&result);
+    CHECK(!live && !physical_bytes && !physical_handles);
+}
 #ifdef XTC_TEST_SDK
 static void sdk_target_process(const char *root) {
     XrCompileResources *r = ledger(unlimited); XrXirRuntimeSdk *sdk = NULL; XrXirTargetSnapshot *target = NULL;
@@ -691,7 +720,7 @@ int main(int argc, char **argv) {
     inherited_process_warmup();
     CHECK(!physical_handles); DWORD before = handles();
     printf("OS handle samples: initial=%lu first-spawn=%lu first-missing-input=%lu\n", initial, after_spawn, before);
-    basic(); failures(); descendants(); os_failures(); bad_requests(); missing_inputs();
+    basic(); failures(); descendants(); root_completion_without_observer(); os_failures(); bad_requests(); missing_inputs();
     capture_idle(); budgets(); oom(); unicode_environment(); snapshot_failures();
     detached_group_flag(); runtime_program_paths(); concurrent_waiters(); cumulative_requests();
 #ifdef XTC_TEST_SDK

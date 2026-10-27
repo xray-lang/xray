@@ -30,7 +30,7 @@ typedef struct NativeAdmission {
     uint32_t sdk_words[17];
 } NativeAdmission;
 static const char admission_triple[] = "x86_64-pc-windows-msvc";
-static const char admission_options[] = "xray:xir-native-commands:trusted-local:v2:sha256:";
+static const char admission_options[] = "xray:xir-native-commands:trusted-host:v1:sha256:";
 static bool admission_fail(NativeAdmission *a, XtcXirNativeAdmissionStatus status,
     XtcXirNativeAdmissionDomain domain, int code) {
     if (a->diagnostic.status == XTC_XIR_ADMISSION_OK) {
@@ -93,7 +93,7 @@ static bool admission_producers(NativeAdmission *a) {
     a->source = *xr_compile_native_projection_facts(a->projection);
     a->runtime = *xr_xir_runtime_sdk_facts(a->sdk);
     a->provider = *xtc_xir_native_operation_provider(a->operation);
-    if (a->facts.kind != XR_XIR_INVOCATION_LOCKED_REPLAY_FACTS || a->facts.completed_runs != 6 || !a->facts.file_count)
+    if (!a->facts.file_count)
         return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_SELF, 0);
     const XrXirSourceProductFacts *s = &a->source.source, *f = &a->facts.projection.source;
 #define SAME_WORD(field) do { \
@@ -132,7 +132,7 @@ static bool admission_producers(NativeAdmission *a) {
         if (!view) return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_OPERATION, 0);
         a->commands[i] = *view;
         if (!view->executable || !view->cwd || !view->argv || !view->env_keys || !view->env_values ||
-            view->completion_policy != XR_PROC_COMPLETE_ROOT || view->image_mode != XR_PROC_IMAGES_WINDOWS_TREE ||
+            view->completion_policy != XR_PROC_COMPLETE_ROOT || view->image_mode != XR_PROC_IMAGES_NONE ||
             !view->argc || view->argc > XTC_PROCESS_MAX_ARGS || view->env_count != 3 ||
             (i < 2 && view->argc != 26 + i) || (i == 2 && view->argc < 15))
             return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_OPERATION, 0);
@@ -147,12 +147,13 @@ static bool admission_row(NativeAdmission *a, uint32_t index, XrXirInvocationFil
 }
 static bool admission_selected(XrXirInvocationFileKind kind) {
     return kind == XR_XIR_INVOCATION_HEADER || kind == XR_XIR_INVOCATION_CRT || kind == XR_XIR_INVOCATION_SYSTEM ||
-        kind == XR_XIR_INVOCATION_PROVIDER_IMAGE || kind == XR_XIR_INVOCATION_PROVIDER_CONFIG;
+        kind == XR_XIR_INVOCATION_PROVIDER_EXECUTABLE || kind == XR_XIR_INVOCATION_PROVIDER_CONFIG;
 }
 #ifdef XR_OS_WINDOWS
 static bool admission_io(NativeAdmission *a, XrOsIoStatus status) {
     if (status == XR_OS_IO_OK) return true;
-    return admission_fail(a, status == XR_OS_IO_OVERFLOW ? XTC_XIR_ADMISSION_OVERFLOW :
+    return admission_fail(a, status == XR_OS_IO_MEMORY_LIMIT ? XTC_XIR_ADMISSION_MEMORY_LIMIT :
+        status == XR_OS_IO_OVERFLOW ? XTC_XIR_ADMISSION_OVERFLOW :
         status == XR_OS_IO_OUT_OF_MEMORY ? XTC_XIR_ADMISSION_OUT_OF_MEMORY :
         status == XR_OS_IO_NOT_FOUND ? XTC_XIR_ADMISSION_UNRESOLVED :
         status == XR_OS_IO_IO ? XTC_XIR_ADMISSION_IO : XTC_XIR_ADMISSION_INVALID,
@@ -237,24 +238,22 @@ static bool admission_files(NativeAdmission *a) {
                 if (row.stage == XR_XIR_INVOCATION_LAUNCHER)
                     return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_SELF, 0);
                 break;
-            case XR_XIR_INVOCATION_REPORT: case XR_XIR_INVOCATION_PROVIDER_IMAGE: break;
+            case XR_XIR_INVOCATION_REPORT: case XR_XIR_INVOCATION_PROVIDER_EXECUTABLE: break;
             default: return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_SELF, 0);
         }
 
         ++counts[row.stage][row.kind];
-        if (row.kind == XR_XIR_INVOCATION_PROVIDER_IMAGE) {
+        if (row.kind == XR_XIR_INVOCATION_PROVIDER_EXECUTABLE) {
             const XrXirInvocationProviderImageFacts *provider = row.stage == XR_XIR_INVOCATION_LINK ?
                 &a->provider.linker : &a->provider.compiler;
 
-            uint32_t selected = row.stage == XR_XIR_INVOCATION_LAUNCHER ?
-                a->provider.launcher_compiler_image_index : provider->observed_image_index;
-            if (counts[row.stage][row.kind] - 1 == selected) {
-                if (!admission_text_same(a, row.path, provider->path) ||
-                    !admission_same(a, row.digest, provider->digest)) return false;
-                if (row.length != provider->length)
-                    return admission_fail(a, XTC_XIR_ADMISSION_MISMATCH, XTC_XIR_ADMISSION_SELF, 0);
-                provider_seen[row.stage] = true;
-            }
+            if (provider_seen[row.stage])
+                return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_SELF, 0);
+            if (!admission_text_same(a, row.path, provider->path) ||
+                !admission_same(a, row.digest, provider->digest)) return false;
+            if (row.length != provider->length)
+                return admission_fail(a, XTC_XIR_ADMISSION_MISMATCH, XTC_XIR_ADMISSION_SELF, 0);
+            provider_seen[row.stage] = true;
         }
         if (row.kind == XR_XIR_INVOCATION_SOURCE && row.stage == XR_XIR_INVOCATION_GENERATED) {
             if (!admission_same(a, row.digest, a->source.generated_digest.bytes)) return false;
@@ -305,7 +304,7 @@ static bool admission_sift(NativeAdmission *a, uint32_t root, uint32_t count) {
     return true;
 }
 static bool admission_sysroot(NativeAdmission *a, XrFingerprint *output) {
-    static const char domain[] = "xray:xir-native-observed-inputs:trusted-local:v1";
+    static const char domain[] = "xray:xir-native-explicit-inputs:trusted-host:v1";
     for (uint32_t i = a->selected / 2; i; --i) if (!admission_sift(a, i - 1, a->selected)) return false;
     for (uint32_t i = a->selected; i > 1; --i) {
         admission_swap(a, 0, i - 1);
@@ -338,11 +337,11 @@ static bool admission_sysroot(NativeAdmission *a, XrFingerprint *output) {
     return true;
 }
 static bool admission_commands(NativeAdmission *a, XrFingerprint *output) {
-    static const char domain[] = "xray:xir-native-commands:trusted-local:v2";
+    static const char domain[] = "xray:xir-native-commands:trusted-host:v1";
     XrSHA256Context hash;
     xr_sha256_init(&hash);
     xr_sha256_update(&hash, (const uint8_t *)domain, sizeof(domain) - 1);
-    admission_integer(&hash, 2, 4);
+    admission_integer(&hash, 1, 4);
     admission_integer(&hash, 3, 4);
     for (unsigned stage = 0; stage < 3; ++stage) {
         const XrProcessView *c = &a->commands[stage];

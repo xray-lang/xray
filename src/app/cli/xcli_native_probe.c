@@ -98,7 +98,7 @@ static bool probe_execute(XrCliNativeProbe *owner) {
     const XrXirInvocationFacts *facts=xtc_xir_native_operation_facts(owner->operation);
     const XrProcessView *link=xtc_xir_native_operation_command(owner->operation,XR_XIR_INVOCATION_LINK);
     const XrXirInvocationFile *output=NULL;
-    if (!facts || facts->completed_runs!=6 || !link || link->env_count>XTC_PROCESS_MAX_ENV)
+    if (!facts || !facts->file_count || !link || link->env_count>XTC_PROCESS_MAX_ENV)
         return probe_fail(owner,XR_CLI_NATIVE_PROBE_INTEGRITY,"PROBE_INPUT_INVALID","native-run-input",0,0);
     for (uint32_t i=0;i<facts->file_count;++i) {
 
@@ -192,7 +192,7 @@ static bool probe_attempt(XrCliNativeProbe *owner,const XrCliNativeProbeRequest 
     }
     const XtcXirNativeOperationDiagnostic *d=xtc_xir_native_operation_diagnostic(owner->operation);
     owner->retryable=status==XTC_XIR_NATIVE_CHILD_FAILED && d && d->domain==XTC_XIR_NATIVE_INVOCATION &&
-        d->invocation.domain==XR_XIR_INVOCATION_PROCESS && d->invocation.pass==XR_XIR_INVOCATION_OBSERVE &&
+        d->invocation.domain==XR_XIR_INVOCATION_PROCESS && d->invocation.pass==XR_XIR_INVOCATION_EXECUTE &&
         d->invocation.stage<=XR_XIR_INVOCATION_LINK && d->invocation.exit_code!=0;
     if (d && d->domain==XTC_XIR_NATIVE_INVOCATION && d->invocation.stage<=XR_XIR_INVOCATION_LINK) {
         owner->report.c_compile=d->invocation.stage ? "ok" : "failed";

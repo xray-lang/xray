@@ -13,13 +13,9 @@
       "id": "native:demos/01-basics/control_flow.xr",
       "path": "demos/01-basics/control_flow.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/control_flow.txt",
-      "gap": {
-        "feature": "Task328 P2",
-        "first_diagnostic": "XR_BUILD_6007: native transaction failed (status=3 domain=6 code=3 os=0 stage=0 pass=0 child=0 invocation_domain=0 invocation_code=0)"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/control_flow.txt"
     },
     {
       "id": "demos/01-basics/functions.xr",
@@ -45,13 +41,9 @@
       "id": "native:demos/01-basics/hello.xr",
       "path": "demos/01-basics/hello.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/hello.txt",
-      "gap": {
-        "feature": "Task328 P2",
-        "first_diagnostic": "XR_BUILD_6007: native transaction failed (status=3 domain=6 code=3 os=0 stage=0 pass=0 child=0 invocation_domain=0 invocation_code=0)"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/hello.txt"
     },
     {
       "id": "demos/01-basics/quoted_literals.xr",
@@ -637,13 +629,9 @@
       "id": "native:stdlib/time/time.xr",
       "path": "stdlib/time/time.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task328 P2",
-        "first_diagnostic": "XR_BUILD_6007: native transaction failed (status=3 domain=6 code=3 os=0 stage=0 pass=0 child=0 invocation_domain=0 invocation_code=0)"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/toml/toml.xr",
@@ -717,25 +705,17 @@
       "id": "native:demos/07-advanced/readonly_byte_slice.xr",
       "path": "demos/07-advanced/readonly_byte_slice.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task328 P2",
-        "first_diagnostic": "XR_BUILD_6007: native transaction failed (status=3 domain=6 code=3 os=0 stage=0 pass=0 child=0 invocation_domain=0 invocation_code=0)"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "native:stdlib/base64/base64.xr",
       "path": "stdlib/base64/base64.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task328 P2",
-        "first_diagnostic": "XR_BUILD_6007: native transaction failed (status=3 domain=6 code=3 os=0 stage=0 pass=0 child=0 invocation_domain=0 invocation_code=0)"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     }
   ]
 }
