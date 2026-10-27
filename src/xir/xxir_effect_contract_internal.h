@@ -309,7 +309,7 @@ static inline bool xir_effect_evidence_is_evaluation(const XrXirModule *module) 
 }
 
 /* This lexical owner proves only absence of implicit module-storage access
- * in the actual default execution closure. It grants no root, alias, result
+ * in the actual default or direct Class-result execution closure. It grants no root, alias, result
  * freshness or executable permission. The callback retains no scope or input.
  * Complete immutable input products use the resource owner's held-memory
  * policy; the callback frame excludes the operation's live temporary scratch.
@@ -321,4 +321,10 @@ XR_FUNC XrXirStatus xir_effects_default_access_operation(const XrXirCompileConte
     const XrXirModule *module,XirEffectDefaultAccessOperation operation,void *data);
 XR_FUNC XrXirStatus xir_effects_default_access_site(XirEffectDefaultAccessScope *scope,
     const XrXirCompileContext *remaining,uint32_t caller,uint32_t instruction);
+/* A current direct Class-result call uses the same owned Control closure.
+ * Module, site, target, argument/receiver types and result stay bound to this
+ * lexical input; this is not object identity or executable permission. */
+XR_FUNC XrXirStatus xir_effects_class_call_access_site(XirEffectDefaultAccessScope *scope,
+    const XrXirCompileContext *remaining,const XrXirModule *module,
+    uint32_t caller,uint32_t instruction,XrXirType result);
 #endif // XXIR_EFFECT_CONTRACT_INTERNAL_H

@@ -1382,6 +1382,17 @@ static XrXirStatus view_cell_access_operation(void *data,const XrXirCompileConte
     XrXirStatus status=xir_compile_view_access_cells_verified(remaining,held->module,&held->cells,held->diagnostic);
     held->cells.default_access=NULL;return status;
 }
+static bool view_cell_access_scope_needed(const XrXirModule *module) {
+    if (module->defaults && module->defaults->count) return true;
+    for (uint32_t f=0;f<module->function_count;++f) {
+        const XrXirFunction *body=module->functions+f;
+        for (uint32_t i=0;i<body->instruction_count;++i) {
+            const XrXirInstruction *op=body->instructions+i;
+            if (op->op==XR_XIR_CALL && xr_xir_type_is_class(module->types,op->type)) return true;
+        }
+    }
+    return false;
+}
 XR_FUNC XrXirStatus xir_compile_view_cell_access_verified(const XrXirCompileContext *context,
     const XrXirModule *module,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !module) return XR_XIR_BAD_STRUCTURE;
@@ -1395,7 +1406,7 @@ XR_FUNC XrXirStatus xir_compile_view_cell_access_verified(const XrXirCompileCont
     if (status==XR_XIR_OK) {
         held.remaining=*context;held.remaining.limits.frame_bytes-=fixed+held.bytes;
         held.cells=(XirViewAccessCells){.owner=held.owner,.role=xr_xir_cell_provenance_role};
-        status=module->defaults && module->defaults->count ?
+        status=view_cell_access_scope_needed(module) ?
             xir_effects_default_access_operation(&held.remaining,module,view_cell_access_operation,&held):
             xir_compile_view_access_cells_verified(&held.remaining,module,&held.cells,diagnostic);
     }

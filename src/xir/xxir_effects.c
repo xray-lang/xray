@@ -1008,6 +1008,54 @@ XR_FUNC XrXirStatus xir_effects_default_access_site(XirEffectDefaultAccessScope 
     if (status!=XR_XIR_OK) scope->status=status;
     return status;
 }
+typedef struct EffectClassCallAccessQuery {
+    XrXirCompileContext work;
+    EffectBodyRequest body;
+    XrXirInstruction storage;
+    const XrXirInstruction *operation;
+    EffectBodyFunctionHead source,target;
+    uint32_t callee;
+} EffectClassCallAccessQuery;
+XR_FUNC XrXirStatus xir_effects_class_call_access_site(XirEffectDefaultAccessScope *scope,
+    const XrXirCompileContext *remaining,const XrXirModule *module,
+    uint32_t caller,uint32_t instruction,XrXirType result) {
+    if (!scope || !scope->active) return XR_XIR_BAD_STRUCTURE;
+    if (scope->status!=XR_XIR_OK) return scope->status;
+    if (!xir_compile_context_valid(remaining) || module!=scope->module ||
+        remaining->resources!=scope->remaining.resources ||
+        remaining->limits.frame_bytes>scope->remaining.limits.frame_bytes)
+        return scope->status=XR_XIR_BAD_STRUCTURE;
+    EffectClassCallAccessQuery query={0};query.callee=UINT32_MAX;
+    if (sizeof(query)>remaining->limits.frame_bytes) return scope->status=XR_XIR_BUDGET;
+    query.work=*remaining;query.work.limits.frame_bytes-=sizeof(query);
+    XrXirStatus status=effect_invocation_current_input_match(&query.work,module,scope->graph.material);
+    query.body=effect_body_owned_request(&query.work,scope->graph.material);
+    if (status==XR_XIR_OK) status=effect_body_request_instruction(&query.body,caller,instruction,&query.storage,&query.operation);
+    const XrXirInstruction *op=query.operation;
+    if (status==XR_XIR_OK && op->op!=XR_XIR_CALL) status=XR_XIR_UNRESOLVED;
+    if (status==XR_XIR_OK && (op->type!=result || !xr_xir_type_is_class(query.body.domain.types,result))) status=XR_XIR_BAD_TYPE;
+    if (status==XR_XIR_OK) {
+        if (op->immediate<0 || (uint64_t)op->immediate>=effect_body_count(scope->graph.material)) status=XR_XIR_BAD_STRUCTURE;
+        else query.callee=(uint32_t)op->immediate;
+    }
+    if (status==XR_XIR_OK) status=effect_body_request_head(&query.body,caller,&query.source);
+    if (status==XR_XIR_OK) status=effect_body_request_head(&query.body,query.callee,&query.target);
+    if (status==XR_XIR_OK && (query.target.result!=result || query.target.parameter_count!=op->args[1])) status=XR_XIR_UNRESOLVED;
+    if (status==XR_XIR_OK && (op->args[0]>query.source.operand_count || op->args[1]>query.source.operand_count-op->args[0])) status=XR_XIR_BAD_STRUCTURE;
+    for (uint32_t p=0;status==XR_XIR_OK && p<query.target.parameter_count;++p) {
+        XrXirType type=XR_XIR_UNIT;
+        status=effect_body_request_type(&query.body,caller,query.source.operands[op->args[0]+p],&type);
+        if (status==XR_XIR_OK && type!=query.target.parameters[p]) status=XR_XIR_UNRESOLVED;
+    }
+    if (status==XR_XIR_OK) {
+        const XrXirDeclarations *d=module->declarations;
+        if (!d || !d->functions || !d->modules || d->functions[caller].module>=d->module_count ||
+            d->functions[query.callee].module>=d->module_count) status=XR_XIR_BAD_STRUCTURE;
+        else if (d->functions[caller].module!=d->functions[query.callee].module) status=XR_XIR_UNRESOLVED;
+    }
+    if (status==XR_XIR_OK && scope->graph.default_access_denied[query.callee]) status=XR_XIR_UNRESOLVED;
+    if (status!=XR_XIR_OK) scope->status=status;return status;
+}
 XR_FUNC XrXirStatus xir_effects_default_access_operation(const XrXirCompileContext *context,
     const XrXirModule *module,XirEffectDefaultAccessOperation operation,void *data) {
     if (!xir_compile_context_valid(context) || !module || !module->functions ||

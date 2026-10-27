@@ -156,25 +156,60 @@ static XrXirStatus view_access_overlap(ViewAccess *a,const XrXirViewRootEvent *l
 static void view_access_roots_free(ViewAccess *a,ViewRootComparison *roots) {
     while (roots->left) {ViewRootSaved *p=roots->left;roots->left=p->next;view_access_release(a,p,p->bytes);}
 }
+/* This is only a body/storage boundary, never object freshness or identity.
+ * Keep the resolver's opaque call root intact and authenticate the actual
+ * direct/default closure before using its statically admitted Class result. */
+static XrXirStatus view_access_class_body(ViewAccess *a,uint32_t value,bool *body) {
+    *body=false;
+    if (value<a->body->parameter_count || value-a->body->parameter_count>=a->body->instruction_count)
+        return XR_XIR_OK;
+    uint32_t instruction=value-a->body->parameter_count;
+    const XrXirInstruction *producer=a->body->instructions+instruction;
+    if ((producer->op!=XR_XIR_CALL_DEFAULT && producer->op!=XR_XIR_CALL) ||
+        !xr_xir_type_is_class(a->resolver->check.module->types,producer->type) ||
+        !a->cells || !a->cells->default_access) return XR_XIR_OK;
+    XrXirStatus status=producer->op==XR_XIR_CALL_DEFAULT ?
+        xir_effects_default_access_site(a->cells->default_access,a->resolver->check.context,a->function,instruction) :
+        xir_effects_class_call_access_site(a->cells->default_access,a->resolver->check.context,
+            a->resolver->check.module,a->function,instruction,producer->type);
+    if (status==XR_XIR_OK) *body=true;return status;
+}
+static bool view_access_cell_storage(const ViewAccess *a,const XrXirViewRootEvent *root) {
+    if (root->kind!=XR_XIR_VIEW_ROOT_CELL || root->opaque_suffix || root->dynamic_identity) return false;
+    for (uint32_t p=0;p<root->step_count;++p)
+        if (xr_xir_type_is_class(a->resolver->check.module->types,root->steps[p].container)) return false;
+    return true;
+}
 static XrXirStatus view_access_storage(ViewAccess *a,uint32_t left,uint32_t right,
     uint32_t left_query,uint32_t right_query,ViewAccessDecision *output) {
     *output=VIEW_ACCESS_UNKNOWN;ViewRootComparison l={a->resolver,NULL,false},r=l;
-    uint64_t reserved=a->resolver->check.reserved;
-    XirViewRootRequest request={a->function,left,a->instruction,NULL,0};
-    XrXirStatus status=xir_compile_view_root_resolver_query(a->resolver,&request,view_root_save,&l,NULL);
-    request.value=right;if (status==XR_XIR_OK) status=xir_compile_view_root_resolver_query(a->resolver,&request,view_root_save,&r,NULL);
+    uint64_t reserved=a->resolver->check.reserved;bool left_body=false,right_body=false;
+    XrXirStatus status=view_access_class_body(a,left,&left_body);
+    if (status==XR_XIR_OK) status=view_access_class_body(a,right,&right_body);
+    if (status!=XR_XIR_OK) return status;
+    XirViewRootRequest request={a->function,right,a->instruction,NULL,0};
+    status=xir_compile_view_root_resolver_query(a->resolver,&request,view_root_save,&r,NULL);
+    bool storage=r.left!=NULL;
+    for (ViewRootSaved *p=r.left;p;p=p->next) storage&=view_access_cell_storage(a,&p->event);
+    if (status==XR_XIR_OK && left_body && storage) { *output=VIEW_ACCESS_SAFE;goto done; }
+    request.value=left;
+    if (status==XR_XIR_OK) status=xir_compile_view_root_resolver_query(a->resolver,&request,view_root_save,&l,NULL);
+    storage=l.left!=NULL;
+    for (ViewRootSaved *p=l.left;p;p=p->next) storage&=view_access_cell_storage(a,&p->event);
+    if (status==XR_XIR_OK && right_body && storage) { *output=VIEW_ACCESS_SAFE;goto done; }
     bool all_safe=true,all_overlap=true;
     for (ViewRootSaved *p=l.left;p && status==XR_XIR_OK;p=p->next) for (ViewRootSaved *q=r.left;q;q=q->next) {
         bool disjoint=false,fresh=false,entry=false,epochs=false,overlap=false;
         status=view_root_path_pair(&a->resolver->check,&p->event,&q->event,&disjoint);
         if (status==XR_XIR_OK && !disjoint) status=view_access_fresh_input(a,&p->event,&q->event,left_query,&fresh);
         if (status==XR_XIR_OK && !disjoint && !fresh) status=view_access_fresh_input(a,&q->event,&p->event,right_query,&fresh);
-        if (status==XR_XIR_OK && !disjoint && !fresh) status=view_access_entry_regions(a,&p->event,&q->event,&entry);
+        if (status==XR_XIR_OK && !disjoint && !fresh && !entry) status=view_access_entry_regions(a,&p->event,&q->event,&entry);
         if (status==XR_XIR_OK && !disjoint && !fresh && !entry) status=view_access_epoch_separation(a,&p->event,&q->event,left_query,right_query,&epochs);
         if (status==XR_XIR_OK && !disjoint && !fresh && !entry && !epochs) status=view_access_overlap(a,&p->event,&q->event,left_query,right_query,&overlap);
         if (status!=XR_XIR_OK) break;all_safe&=disjoint || fresh || entry || epochs;all_overlap&=overlap;
     }
     if (status==XR_XIR_OK && l.left && r.left) *output=all_safe?VIEW_ACCESS_SAFE:all_overlap?VIEW_ACCESS_BLOCKED:VIEW_ACCESS_UNKNOWN;
+done:
     view_access_roots_free(a,&l);view_access_roots_free(a,&r);
     XR_CHECK(a->resolver->check.reserved==reserved,"storage comparisons retire every saved producer path");
     return status;
