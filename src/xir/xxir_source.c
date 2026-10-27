@@ -166,6 +166,19 @@ typedef struct SourceThrowRecipe {
     uint32_t instruction,operand;
 } SourceThrowRecipe;
 #include "xxir_source_handler_types.inc.c"
+typedef struct SourceLocalHandler {
+    struct SourceLocalHandler *previous;
+    const XrXirType *types;
+    const bool *complete;
+    uint32_t count;
+} SourceLocalHandler;
+typedef struct SourcePendingError {
+    struct SourcePendingError *next;
+    SourceLocalHandler *handler;
+    AstNode *node;
+    uint32_t target, first_argument, argument_count;
+    bool marked;
+} SourcePendingError;
 typedef struct SourceFunction {
     AstNode *node, *type_owner;
     bool checked_library;
@@ -207,6 +220,9 @@ typedef struct SourceFunction {
     uint32_t *constructor_places;
     AstNode *default_expression;
     SourceErrorContext *error_context;
+    SourceLocalHandler *local_handler;
+    bool infer_errors, infer_initializer;
+    SourcePendingError *pending_errors;
     XrXirInitializationRegion *initialization_regions, *initialization_parent;
 } SourceFunction;
 typedef struct SourcePatch { struct SourcePatch *next; uint32_t instruction; } SourcePatch;
@@ -610,7 +626,7 @@ static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
     }
     if (node.kind != XR_XIR_TYPE_CALLABLE && node.kind != XR_XIR_TYPE_TUPLE) {
         if (!source_substitute(ctx, sub, node.element, depth + 1, &node.element)) return false;
-        if (node.kind == XR_XIR_TYPE_MAP &&
+        if ((node.kind == XR_XIR_TYPE_MAP || node.kind == XR_XIR_TYPE_TASK || node.kind == XR_XIR_TYPE_ITERATOR) &&
             !source_substitute(ctx, sub, node.result, depth + 1, &node.result)) return false;
         return source_intern_type(ctx, node, output);
     }
@@ -625,6 +641,8 @@ static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
     if (node.kind == XR_XIR_TYPE_CALLABLE && !source_substitute(ctx, sub, node.element, depth + 1, &node.element)) return false;
     return source_intern_type(ctx, node, output);
 }
+static bool source_error_clause_type(SourceContext *ctx, AstNode *node,
+    const XrThrowsClause *clause, XrXirType *output);
 static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     if (!ref->nchildren || !ref->children || ref->requires_nothrow || ref->borrow_origin_syntax || ref->borrow_origin_count)
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "callable promises require an implemented contract");
@@ -641,9 +659,10 @@ static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *
         parameters[p].mode = mode;
         if (mode == XR_PARAM_REF && !source_cell_type(ctx, parameters[p].type, &parameters[p].type)) return false;
     }
-    XrXirType result;
-    if (!source_type(ctx, ref->children[count], &result)) return false;
-    --ctx->depth; return source_signature(ctx, parameters, count, result, XR_XIR_NEVER, type);
+    XrXirType result, error;
+    if (!source_type(ctx, ref->children[count], &result) ||
+        !source_error_clause_type(ctx, NULL, &ref->throws_clause, &error)) return false;
+    --ctx->depth; return source_signature(ctx, parameters, count, result, error, type);
 }
 static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);
 static bool source_tuple_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *type) {
@@ -752,6 +771,7 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "type declaration is not admitted by XIR");
     return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, message);
 }
+#include "xxir_source_local_errors.inc.c"
 #include "xxir_source_region_emit.inc.c"
 static bool begin_block(SourceContext *ctx) {
     SourceFunction *body = &ctx->bodies[ctx->function];
@@ -1203,10 +1223,6 @@ static bool source_text_conversion(SourceContext *ctx, AstNode *node, SourceValu
 #include "xxir_source_rune.inc.c"
 static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *binding,
     SourceName *target,SourceExpectedType result_context,SourceValue *value) {
-    if (!result_context.present && ctx->active_expression->task_element_context.present) {
-        if (!source_task_type(ctx,ctx->active_expression->task_element_context.type,&result_context.type)) return false;
-        result_context.present=true;
-    }
     SourceDirectRequest direct={target->index,{0},NULL,result_context};
     SourceDirectArguments prepared={0};
     if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
@@ -1740,6 +1756,10 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
             return source_hash_construct(ctx, node, value);
         return source_array_construct(ctx, node, value);
     case AST_AS_EXPR: return source_number_cast(ctx, node, value);
+    case AST_TRY_EXPR:
+        if (node->as.try_expr.mode != XR_TRY_PROPAGATE || !ctx->active_expression->left)
+            return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "try expression mode is not yet supported");
+        return source_plan_complete(ctx, ctx->active_expression->left, value);
     case AST_TERNARY: return source_conditional(ctx, node, context, value);
     case AST_MATCH_EXPR: {
         ++ctx->flow_alternatives;
@@ -2152,7 +2172,7 @@ static bool source_test_role(SourceContext *ctx, AstNode *node, XrXirFunctionIde
 static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) {
     FunctionDeclNode *decl = &node->as.function_decl;
     if (decl->is_extern || decl->type_param_count < 0 || decl->type_param_count > 65536 ||
-        decl->throws_clause.syntax != XR_THROWS_OMITTED || decl->borrow_origin_count || !decl->body || decl->param_count > 65536 || decl->param_count < 0)
+        decl->borrow_origin_count || !decl->body || decl->param_count > 65536 || decl->param_count < 0)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "function contract is not implemented in XIR");
     XrXirFunctionIdentity identity = {.module = ctx->module, .exported = node->is_exported};
     if (!source_test_role(ctx, node, &identity)) return false;
@@ -2192,7 +2212,8 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     XrXirFunction *function = &ctx->functions[index];
     *function = (XrXirFunction) {decl->name, (uint32_t) source_text_size(ctx, decl->name), body->parameters,
         (uint32_t) decl->param_count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER};
-    if (!source_type(ctx, decl->return_type, &function->result)) return false;
+    if (!source_type(ctx, decl->return_type, &function->result) ||
+        !source_error_clause_type(ctx, node, &decl->throws_clause, &function->error_type)) return false;
     if (identity.test_role && function->result != XR_XIR_UNIT)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "test functions and hooks cannot return a value");
     for (int i = 0; i < decl->param_count; ++i) {
@@ -2482,8 +2503,6 @@ static bool source_declaration_target(SourceContext *ctx, const SourceDeclaratio
 }
 #include "xxir_source_manifest.inc.c"
 #include "xxir_source_implements.inc.c"
-#include "xxir_source_closure_error_bound.inc.c"
-#include "xxir_source_default_error_bound.inc.c"
 static bool finish_body(SourceContext *ctx) {
     XrXirFunction *function = &ctx->functions[ctx->function];
     SourceFunction *body = &ctx->bodies[ctx->function];
@@ -2492,8 +2511,7 @@ static bool finish_body(SourceContext *ctx) {
             function->result != XR_XIR_UNIT) return source_fail(ctx, body->node, XR_XIR_BAD_TYPE, "value function requires a return");
         if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}}, NULL)) return false;
     }
-    return source_constant_default_error_bound(ctx) && source_closure_error_bound(ctx) &&
-        source_region_emit(ctx,function,true);
+    return source_region_emit(ctx,function,true);
 }
 typedef struct SourceCapture {
     struct SourceCapture *next;
@@ -2742,7 +2760,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     if (context) { context_copy = *context; context = &context_copy; }
     bool no_suspend = context && (context->flags & XR_XIR_CALLABLE_NO_SUSPEND);
     FunctionDeclNode *decl = &node->as.function_expr;
-    if (decl->is_extern || decl->attr_count || decl->type_param_count || decl->throws_clause.syntax != XR_THROWS_OMITTED ||
+    if (decl->is_extern || decl->attr_count || decl->type_param_count ||
         decl->borrow_origin_count || !decl->body || decl->param_count < 0 || decl->param_count > 65536)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "closure contract is not implemented in XIR");
     if (context) {
@@ -2797,6 +2815,12 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     ctx->facts = NULL;ctx->epochs=NULL; ctx->flow_alternatives = 0;
     XrXirType type = XR_XIR_UNIT;
     bool ok = closure_parameters(ctx, node, &scan, parameters, context);
+    if (ok && decl->throws_clause.syntax != XR_THROWS_OMITTED)
+        ok = source_error_clause_type(ctx, node, &decl->throws_clause, &ctx->functions[index].error_type);
+    else if (ok && node->type == AST_FUNCTION_EXPR) {
+        body->infer_errors = context == NULL;
+        ctx->functions[index].error_type = context ? context->element : XR_XIR_NEVER;
+    }
     if (ok) {
         if (decl->return_type) ok = source_type(ctx, decl->return_type, &ctx->functions[index].result);
         else if (context && !expected.infer_result) ctx->functions[index].result = context->result;

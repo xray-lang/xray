@@ -397,25 +397,19 @@ static const XrNativeMemberDeclaration xr_native_ordering_members[] = {
 };
 static const XrNativeTypeDeclaration xr_native_ordering = {
     4, XR_NATIVE_DECLARATION_VALUE, "Ordering", NULL, 0,
-    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Ordering", {{124, 126, 23, 73, 236, 174, 73, 173, 193, 42, 87, 150, 20, 153, 31, 52, 35, 108, 2, 246, 20, 151, 180, 57, 203, 97, 7, 63, 152, 147, 209, 140}},
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Ordering", {{100, 217, 232, 37, 148, 105, 36, 185, 14, 190, 15, 20, 147, 205, 242, 183, 152, 142, 47, 189, 155, 13, 252, 139, 222, 21, 184, 175, 42, 189, 37, 223}},
     180, 18, xr_native_ordering_members, 5
 };
-static const XrNativeParameter xr_native_task_parameters_5[] = {
-    {"timeout", "i64", XR_NATIVE_TERM_UNADMITTED, false, false},
-};
 static const XrNativeMemberDeclaration xr_native_task_members[] = {
-    {1, "done", ": bool", "bool", 19, 5, XR_NATIVE_RECEIVER_READ, false, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {2, "status", ": TaskStatus", "TaskStatus", 20, 5, XR_NATIVE_RECEIVER_READ, false, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {3, "cancel", "()", "()", 22, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {4, "poll", "() -> TaskResult<T>", "TaskResult<T>", 23, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {5, "awaitResult", "() -> TaskResult<T>", "TaskResult<T>", 24, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {6, "awaitTimeout", "(timeout: i64) -> TaskResult<T>", "TaskResult<T>", 25, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_task_parameters_5, 1, XR_NATIVE_TERM_UNADMITTED},
+    {1, "cancel", "()", "()", 10, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {2, "poll", "() -> TaskResult<T, E>?", "TaskResult<T, E>?", 11, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {3, "awaitResult", "() -> TaskResult<T, E>", "TaskResult<T, E>", 12, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
 };
-static const char *const xr_native_task_type_parameters[] = {"T"};
+static const char *const xr_native_task_type_parameters[] = {"T", "E"};
 static const XrNativeTypeDeclaration xr_native_task = {
-    5, XR_NATIVE_DECLARATION_IDENTITY, "Task", xr_native_task_type_parameters, 1,
-    "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{248, 92, 134, 139, 241, 43, 43, 144, 152, 142, 173, 92, 247, 70, 253, 142, 82, 45, 92, 45, 99, 152, 166, 72, 130, 180, 118, 55, 199, 45, 199, 166}},
-    18, 7, xr_native_task_members, 6
+    5, XR_NATIVE_DECLARATION_IDENTITY, "Task", xr_native_task_type_parameters, 2,
+    "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{205, 151, 13, 79, 215, 1, 166, 223, 89, 107, 97, 247, 135, 76, 14, 24, 104, 230, 218, 157, 232, 241, 126, 202, 26, 161, 187, 33, 119, 208, 82, 230}},
+    9, 7, xr_native_task_members, 3
 };
 static const XrNativeParameter xr_native_channel_parameters_2[] = {
     {"value", "T", XR_NATIVE_TERM_ELEMENT, false, false},
@@ -463,7 +457,7 @@ static const XrNativeMemberDeclaration xr_native_recv_members[] = {
 static const char *const xr_native_recv_type_parameters[] = {"T"};
 static const XrNativeTypeDeclaration xr_native_recv = {
     7, XR_NATIVE_DECLARATION_VALUE, "Recv", xr_native_recv_type_parameters, 1,
-    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Recv", {{124, 126, 23, 73, 236, 174, 73, 173, 193, 42, 87, 150, 20, 153, 31, 52, 35, 108, 2, 246, 20, 151, 180, 57, 203, 97, 7, 63, 152, 147, 209, 140}},
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Recv", {{100, 217, 232, 37, 148, 105, 36, 185, 14, 190, 15, 20, 147, 205, 242, 183, 152, 142, 47, 189, 155, 13, 252, 139, 222, 21, 184, 175, 42, 189, 37, 223}},
     208, 18, xr_native_recv_members, 4
 };
 static const XrNativeMemberDeclaration xr_native_send_result_members[] = {
@@ -474,23 +468,23 @@ static const XrNativeMemberDeclaration xr_native_send_result_members[] = {
 };
 static const XrNativeTypeDeclaration xr_native_send_result = {
     8, XR_NATIVE_DECLARATION_VALUE, "SendResult", NULL, 0,
-    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/SendResult", {{124, 126, 23, 73, 236, 174, 73, 173, 193, 42, 87, 150, 20, 153, 31, 52, 35, 108, 2, 246, 20, 151, 180, 57, 203, 97, 7, 63, 152, 147, 209, 140}},
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/SendResult", {{100, 217, 232, 37, 148, 105, 36, 185, 14, 190, 15, 20, 147, 205, 242, 183, 152, 142, 47, 189, 155, 13, 252, 139, 222, 21, 184, 175, 42, 189, 37, 223}},
     214, 18, xr_native_send_result_members, 4
 };
 static const XrNativeParameter xr_native_iterator_parameters_2[] = {
     {"index", "i64", XR_NATIVE_TERM_I64, false, false},
 };
 static const XrNativeMemberDeclaration xr_native_iterator_members[] = {
-    {1, "hasNext", "() -> bool", "bool", 5, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_ITERATOR_HAS_NEXT, XR_NATIVE_ALLOCATION_MAY_HEAP, "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_BOOL},
-    {2, "next", "() -> T", "T", 7, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_ITERATOR_NEXT, XR_NATIVE_ALLOCATION_MAY_HEAP, "IteratorExhausted", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ELEMENT},
-    {3, "nth", "(index: i64) -> T", "T", 9, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_ITERATOR_NTH, XR_NATIVE_ALLOCATION_MAY_HEAP, "IteratorExhausted", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_iterator_parameters_2, 1, XR_NATIVE_TERM_ELEMENT},
-    {4, "iterator", "() -> Iterator<T>", "Iterator<T>", 12, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {1, "hasNext", "() throws(E) -> bool", "bool", 5, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_ITERATOR_HAS_NEXT, XR_NATIVE_ALLOCATION_MAY_HEAP, "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_BOOL},
+    {2, "next", "() throws(E) -> T", "T", 7, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_ITERATOR_NEXT, XR_NATIVE_ALLOCATION_MAY_HEAP, "IteratorExhausted", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ELEMENT},
+    {3, "nth", "(index: i64) throws(E) -> T", "T", 9, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_ITERATOR_NTH, XR_NATIVE_ALLOCATION_MAY_HEAP, "IteratorExhausted", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_iterator_parameters_2, 1, XR_NATIVE_TERM_ELEMENT},
+    {4, "iterator", "() -> Iterator<T, E>", "Iterator<T, E>", 12, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
     {5, "toString", "() -> string", "string", 13, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
 };
-static const char *const xr_native_iterator_type_parameters[] = {"T"};
+static const char *const xr_native_iterator_type_parameters[] = {"T", "E"};
 static const XrNativeTypeDeclaration xr_native_iterator = {
-    9, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", xr_native_iterator_type_parameters, 1,
-    "stdlib/types/iterator.xr", "xray-native:prelude/Iterator", {{37, 29, 8, 208, 105, 216, 104, 232, 72, 124, 174, 16, 249, 46, 62, 173, 123, 96, 18, 98, 161, 187, 193, 211, 152, 159, 181, 135, 28, 44, 127, 148}},
+    9, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", xr_native_iterator_type_parameters, 2,
+    "stdlib/types/iterator.xr", "xray-native:prelude/Iterator", {{52, 5, 155, 24, 51, 203, 214, 103, 224, 92, 207, 77, 78, 54, 146, 26, 111, 161, 90, 98, 168, 48, 70, 35, 62, 170, 186, 234, 174, 222, 129, 182}},
     3, 7, xr_native_iterator_members, 5
 };
 static const XrNativeParameter xr_native_map_parameters_0[] = {

@@ -1,0 +1,4 @@
+enum Failure { Bad }
+fn fallible() throws(Failure) -> i64 { return 1 }
+fn choose(value: i64 = fallible()) -> i64 { return value }
+choose(42)

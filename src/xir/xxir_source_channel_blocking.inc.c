@@ -20,6 +20,7 @@ static bool source_channel_send_closed(SourceContext *ctx,AstNode *node,SourceVa
     XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,owner,0}};
     XrXirStatus status=xr_xir_compile_type_markers_prove(&ctx->compile,&proof,error_type,XR_XIR_CONSTRAINT_ERROR);
     if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"closed Channel send requires its authenticated enum value error");
+    if (!source_local_error(ctx,node,error_type,true)) return false;
     if (ctx->bodies[owner].error_context) {
         SourceConversionRecipe conversion={0};
         if (!source_conversion_plan(ctx,node,error.type,(SourceExpectedType){true,XR_XIR_ERROR,false,false},&conversion) ||

@@ -105,17 +105,17 @@ static void task_fixture_new(TaskFixture *fixture) {
     functions[6].cleanup_owner = 6;
     const XrXirSourceModule module = {"task-test", 9, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations = {&module, 1, functions, NULL, 0, NULL, 0, 0, 3, NULL};
+    const XrXirTypeNode nodes[] = {{.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64, .result = XR_XIR_NEVER},
+        {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_STRING, .result = XR_XIR_NEVER}};
+    const XrXirTypes types = {nodes, 2, NULL, NULL};
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
-        entries, 7, &declarations, {&fixture->witness, task_test_code_drop}, NULL, {0}};
+        entries, 7, &declarations, {&fixture->witness, task_test_code_drop}, &types, {0}};
     XrXirArtifact *proof = NULL;
     XrXirStatus proof_status = native_metadata_fixture(&fixture->compiler.context, &spec, &proof);
     if (proof_status != XR_XIR_OK) fprintf(stderr, "metadata proof status=%d\n", (int)proof_status);
     CHECK(proof_status == XR_XIR_OK);
-    const XrXirTypeNode nodes[] = {{.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64},
-        {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_STRING}};
-    const XrXirTypes types = {nodes, 2, NULL, NULL};
-    CHECK(xr_xir_compile_type_arena_new(&fixture->compiler.context, &types, &fixture->arena) == XR_XIR_VALUE_OK);
     CHECK(task_owned_program_take(&fixture->compiler.context,&spec,&proof,&fixture->program)==XR_XIR_OK && !proof);
+    fixture->arena=fixture->program->arena;CHECK(fixture->arena && xr_xir_compile_type_arena_retain(fixture->arena));
 }
 static void task_fixture_drop(TaskFixture *fixture) {
     xr_xir_compile_program_drop(fixture->program); fixture->program = NULL;

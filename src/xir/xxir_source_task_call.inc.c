@@ -59,8 +59,16 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
     SourceDirectRequest direct = {target->index, {0}, NULL, child};
     SourceDirectArguments prepared = {0};
     if (!source_direct_arguments(ctx, call, &direct, &prepared)) return false;
+    XrXirType error;
+    if (!source_substitute(ctx,&prepared.substitution,ctx->functions[target->index].error_type,0,&error)) return false;
+    XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);
+    XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,target->index,0}};
+    XrXirStatus status=xr_xir_compile_type_markers_prove(&ctx->compile,&proof,
+        ctx->functions[target->index].error_type,XR_XIR_CONSTRAINT_SENDABLE);
+    if (status!=XR_XIR_OK)
+        return source_fail(ctx,call,status,"Task worker declared error type must satisfy Sendable");
     XrXirInstruction op = {XR_XIR_GO, XR_XIR_UNIT, {0}, {0}, target->index, {0}};
-    return source_task_type(ctx, prepared.result, &op.type) &&
+    return source_task_type(ctx, call, prepared.result, error, &op.type) &&
         source_type_arguments(ctx, call, prepared.substitution.types, prepared.substitution.count, &op) &&
         source_query_reference(ctx, call->as.call_expr.callee, binding, target, XR_XIR_SOURCE_CALL) &&
         source_recipe_group(ctx, op, prepared.values, prepared.count, value);
@@ -100,6 +108,9 @@ static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedT
     if (!type || type->kind != XR_XIR_TYPE_TASK)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "await requires an admitted Task value");
     XrXirType element = type->element;
+    if (type->result==XR_XIR_UNIT)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Task error declaration is not yet supported");
+    if (!source_local_error(ctx,node,XR_XIR_ERROR,true)) return false;
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t origin = body->count, error = body->block_count;

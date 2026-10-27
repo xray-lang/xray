@@ -308,8 +308,10 @@ class NativeDeclarations(unittest.TestCase):
         rows = schema.render_iterator_identity(ROOT)
         self.assertEqual(rows, schema.render_iterator_identity(ROOT))
         projected = '\n'.join(rows)
-        self.assertIn('9, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", xr_native_iterator_type_parameters, 1', projected)
-        self.assertIn('xr_native_iterator_type_parameters[] = {"T"};', projected)
+        self.assertIn('9, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", xr_native_iterator_type_parameters, 2', projected)
+        self.assertIn('xr_native_iterator_type_parameters[] = {"T", "E"};', projected)
+        self.assertIn('() throws(E) -> bool', projected)
+        self.assertIn('() throws(E) -> T', projected)
         self.assertEqual(projected.count('XR_NATIVE_OPERATION_NONE'), 2)
         self.assertEqual(projected.count('XR_NATIVE_OPERATION_ITERATOR_HAS_NEXT'), 1)
         self.assertEqual(projected.count('XR_NATIVE_OPERATION_ITERATOR_NEXT'), 1)
@@ -324,8 +326,11 @@ class NativeDeclarations(unittest.TestCase):
             source = root / 'stdlib/types/iterator.xr'
             original = source.read_text(encoding='utf-8')
             self.assertEqual(schema.render_iterator_identity(root), rows)
-            for old, new in [('next() -> T', 'next() -> i64'),
-                             ('Iterator<T>', 'Iterator<U>'),
+            for old, new in [('next() throws(E) -> T', 'next() throws(E) -> i64'),
+                             ('Iterator<T, E: Error = Never>', 'Iterator<T, E: Error>'),
+                             ('hasNext() throws(E)', 'hasNext()'),
+                             ('next() throws(E)', 'next() throws(Error)'),
+                             ('iterator() -> Iterator<T, E>', 'iterator() -> Iterator<T>'),
                              ('// @lowered\n    nth(', '// removed\n    nth('),
                              ('// @lowered\n    hasNext()', '// removed\n    hasNext()'),
                              ('// Built-in', '// @native-type id=6\n// Built-in')]:

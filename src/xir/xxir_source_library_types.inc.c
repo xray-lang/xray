@@ -217,7 +217,7 @@ static bool source_library_intern_types(SourceContext *ctx, SourceLibraryUnit *u
             out.parameters=parameters;
             if (!source_library_type(ctx,unit,in->result,&out.result)) return false;
             if (in->kind==XR_XIR_TYPE_CALLABLE && !source_library_type(ctx,unit,in->element,&out.element)) return false;
-        } else if (in->kind==XR_XIR_TYPE_MAP) {
+        } else if (in->kind==XR_XIR_TYPE_MAP || in->kind==XR_XIR_TYPE_TASK || in->kind==XR_XIR_TYPE_ITERATOR) {
             if (!source_library_type(ctx,unit,in->element,&out.element) ||
                 !source_library_type(ctx,unit,in->result,&out.result)) return false;
         } else if (in->kind==XR_XIR_TYPE_ARRAY || in->kind==XR_XIR_TYPE_SET || in->kind==XR_XIR_TYPE_CELL ||

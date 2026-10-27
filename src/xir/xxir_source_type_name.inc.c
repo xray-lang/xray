@@ -37,6 +37,14 @@ static const char *source_scalar_type_name(XrXirType type) {
     default: return NULL;
     }
 }
+static bool source_type_name_collect(SourceContext *ctx,AstNode *node,XrXirType type,bool top,
+    uint32_t depth,SourceTypeName *name);
+static bool source_type_name_error(SourceContext *ctx,AstNode *node,XrXirType error,uint32_t depth,
+    SourceTypeName *name) {
+    const char *builtin=error==XR_XIR_NEVER ? "Never" : error==XR_XIR_ERROR ? "Error" : NULL;
+    if (builtin) {source_type_name_append(name,builtin,strlen(builtin));return true;}
+    return source_type_name_collect(ctx,node,error,false,depth,name);
+}
 /* `top` is the operand's own type: an Array reports just "Array", while inside arguments it shows its element. */
 static bool source_type_name_collect(SourceContext *ctx, AstNode *node, XrXirType type, bool top, uint32_t depth,
     SourceTypeName *name) {
@@ -64,6 +72,8 @@ static bool source_type_name_collect(SourceContext *ctx, AstNode *node, XrXirTyp
         if (!top) {
             source_type_name_append(name, "<", 1);
             if (!source_type_name_collect(ctx, node, shape->element, false, depth + 1, name)) return false;
+            source_type_name_append(name, ", ", 2);
+            if (!source_type_name_error(ctx,node,shape->result,depth+1,name)) return false;
             source_type_name_append(name, ">", 1);
         }
         return true;
@@ -87,6 +97,8 @@ static bool source_type_name_collect(SourceContext *ctx, AstNode *node, XrXirTyp
         if (!top) {
             source_type_name_append(name, "<", 1);
             if (!source_type_name_collect(ctx, node, shape->element, false, depth + 1, name)) return false;
+            source_type_name_append(name, ", ", 2);
+            if (!source_type_name_error(ctx,node,shape->result,depth+1,name)) return false;
             source_type_name_append(name, ">", 1);
         }
         return true;

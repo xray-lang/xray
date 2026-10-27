@@ -154,7 +154,7 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
         if (!work || !xir_compile_work(work, 1)) return XR_XIR_BUDGET;
 
         uint32_t id = (uint32_t) type;
-        if (type == XR_XIR_UNIT || type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING) return XR_XIR_OK;
+        if (type == XR_XIR_NEVER || type == XR_XIR_UNIT || type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING) return XR_XIR_OK;
         if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) {
             const XrXirConstraint *fact = constraint_fact(environment,id-XR_XIR_TYPE_PARAMETER_BASE);
             return fact && (constraint_marker_closure(fact->markers) & XR_XIR_CONSTRAINT_SENDABLE) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
@@ -434,7 +434,15 @@ static XrXirStatus proof_type_task(ConstraintProof *proof, XrXirType type) {
     } else if (node->kind == XR_XIR_TYPE_ATOMIC) {
         status=constraint_atomic(&proof->environment,node->element,XR_XIR_CONSTRAINT_ATOMIC_VALUE,proof->budget);
         if (status==XR_XIR_OK) status=proof_type_edge(proof,index,node->element);
-    } else if (node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_CHANNEL) {
+    } else if (node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_ITERATOR) {
+        uint32_t markers=XR_XIR_CONSTRAINT_ERROR |
+            (node->kind==XR_XIR_TYPE_TASK ? XR_XIR_CONSTRAINT_SENDABLE : 0);
+        status = constraint_markers(&proof->environment,node->result,markers,proof->budget,proof->read);
+        if (status == XR_XIR_OK) status = proof_type_edge(proof,index,node->result);
+        if (status == XR_XIR_OK && node->kind == XR_XIR_TYPE_TASK)
+            status = constraint_markers(&proof->environment,node->element,XR_XIR_CONSTRAINT_SENDABLE,proof->budget,proof->read);
+        if (status == XR_XIR_OK) status = proof_type_edge(proof,index,node->element);
+    } else if (node->kind == XR_XIR_TYPE_CHANNEL) {
         status = constraint_markers(&proof->environment, node->element, XR_XIR_CONSTRAINT_SENDABLE, proof->budget,proof->read);
         if (status == XR_XIR_OK) status = proof_type_edge(proof, index, node->element);
     } else if (node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET) {

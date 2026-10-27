@@ -55,6 +55,7 @@ static bool source_generator_method_factory(SourceContext *ctx,SourceName *metho
     ctx->identities[factory]=ctx->identities[producer];
     ctx->identities[factory].promises&=~XR_XIR_FUNCTION_GENERATOR;
     ctx->functions[factory]=ctx->functions[producer];
+    ctx->functions[factory].error_type=XR_XIR_NEVER;
     ++ctx->function_count;
     char *name=source_alloc(ctx,40,1);
     if(!name || source_format(ctx,name,40,"$generator_method%u",producer)!=XR_DIAG_OK)

@@ -131,6 +131,7 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
     body->parameters = count ? source_alloc(ctx, count, sizeof(*body->parameters)) : NULL;
     if (count && !body->parameters) return false;
     ctx->functions[index] = (XrXirFunction) {"init", 4, body->parameters, count, owner->type, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER};
+    if (!source_error_clause_type(ctx,node,&method->throws_clause,&ctx->functions[index].error_type)) return false;
     const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[owner->index];
     for (uint32_t p = 0; p < count; ++p) {
         XrParamNode *param = method->params[p];

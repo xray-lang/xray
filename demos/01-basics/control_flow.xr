@@ -80,7 +80,7 @@ enum MathError {
     DivByZero
 }
 
-fn safeDivide(a: i64, b: i64) -> i64 {
+fn safeDivide(a: i64, b: i64) throws(MathError) -> i64 {
     if (b == 0) { throw MathError.DivByZero }
     return a / b
 }

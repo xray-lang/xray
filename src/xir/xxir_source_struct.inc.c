@@ -259,7 +259,8 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
                 uint32_t index = (*next)++;
                 ctx->nominal_defaults[symbol->index][f] = index;
                 ctx->functions[index] = (XrXirFunction) {"$field_default", 14, NULL, 0,
-                    nominal->fields[f].type, NULL, 0, NULL, 0, NULL, 0, XR_XIR_ERROR};
+                    nominal->fields[f].type, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER};
+                ctx->bodies[index].infer_errors = ctx->bodies[index].infer_initializer = true;
                 ctx->bodies[index].node = node; ctx->bodies[index].module = m;
                 if (!source_nominal_function_scope(ctx,index,symbol)) return false;
                 ctx->bodies[index].declaration = ctx->nominal_members[symbol->index][f];

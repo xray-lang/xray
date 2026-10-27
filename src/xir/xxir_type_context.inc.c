@@ -68,7 +68,7 @@ static XrXirStatus type_context_verify(TypeContextProof *proof, XrXirType type, 
         if (status!=XR_XIR_OK || !found) break;
         const XrXirTypeNode *node = &types->nodes[i];
         if (node->kind == XR_XIR_TYPE_NOMINAL) status = type_context_nominal(&c, node, i);
-        else if (node->kind == XR_XIR_TYPE_MAP) {
+        else if (node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_ITERATOR) {
             status = type_context_edge(&c, node->element, i);
             if (status == XR_XIR_OK) status = type_context_edge(&c, node->result, i);
         } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_SET || node->kind == XR_XIR_TYPE_CELL ||

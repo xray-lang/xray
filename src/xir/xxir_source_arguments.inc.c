@@ -97,12 +97,13 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
             uint32_t helper = (*next)++;
             if (!source_default_binding_add(ctx, node, f, p + offset, helper)) return false;
             ctx->functions[helper] = (XrXirFunction) {"$argument_default", 17, NULL, 0,
-                ctx->functions[f].parameters[p + offset], NULL, 0, NULL, 0, NULL, 0, XR_XIR_ERROR};
+                ctx->functions[f].parameters[p + offset], NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER};
             SourceFunction *target = &ctx->bodies[helper];
             target->node = node; target->type_owner = body->type_owner; target->module = body->module;
             target->declaration = body->declaration; target->generic_owner = body->generic_owner;
             target->type_parameters = body->type_parameters; target->type_parameter_count = body->type_parameter_count;
             target->default_expression = expression;
+            target->infer_errors = target->infer_initializer = true;
             ctx->generics[helper] = ctx->generics[f];
             ctx->identities[helper] = ctx->identities[f];
             ctx->identities[helper].test_role = XR_XIR_TEST_ROLE_NONE;

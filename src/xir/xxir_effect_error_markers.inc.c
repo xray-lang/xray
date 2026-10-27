@@ -201,7 +201,7 @@ static XrXirStatus error_marker_rule(const XrXirCompileContext *work,const Effec
                 if(node->parameters[p].mode!=target->parameters[p].mode) return XR_XIR_BAD_STRUCTURE;
             }
             output->children=node->parameter_count+extra;
-        } else output->children=node->kind==XR_XIR_TYPE_MAP?2u:1u;
+        } else output->children=(node->kind==XR_XIR_TYPE_MAP || node->kind==XR_XIR_TYPE_TASK || node->kind==XR_XIR_TYPE_ITERATOR)?2u:1u;
         output->terminal=output->children==0;output->value=output->terminal?1u:0u;return XR_XIR_OK;
     }
     if(node && node->parameter_span>(generic?generic->parameter_count:0)) return XR_XIR_BAD_STRUCTURE;
@@ -241,7 +241,7 @@ static XrXirStatus error_marker_rule(const XrXirCompileContext *work,const Effec
             if(node->parameters[p].mode) return XR_XIR_OK;
         }
         output->children=node->parameter_count;
-    } else output->children=node->kind==XR_XIR_TYPE_MAP?2u:1u;
+    } else output->children=(node->kind==XR_XIR_TYPE_MAP || node->kind==XR_XIR_TYPE_TASK)?2u:1u;
     output->terminal=output->children==0;output->value=output->terminal?1u:0u;return XR_XIR_OK;
 }
 static XrXirStatus error_marker_child(const XrXirCompileContext *work,const EffectErrorFinite *proof,
@@ -269,7 +269,9 @@ static XrXirStatus error_marker_child(const XrXirCompileContext *work,const Effe
         else if(node->kind==XR_XIR_TYPE_CALLABLE && ordinal==node->parameter_count+1) {
             left=node->element;right=target->element;
         } else if(node->kind==XR_XIR_TYPE_CALLABLE && !ordinal) { left=node->result;right=target->result; }
-        else if(node->kind==XR_XIR_TYPE_MAP && ordinal) { left=node->result;right=target->result; }
+        else if((node->kind==XR_XIR_TYPE_MAP || node->kind==XR_XIR_TYPE_TASK || node->kind==XR_XIR_TYPE_ITERATOR) && ordinal) {
+            left=node->result;right=target->result;
+        }
         else if(node->kind==XR_XIR_TYPE_CALLABLE || node->kind==XR_XIR_TYPE_TUPLE) {
             uint32_t at=ordinal-(node->kind==XR_XIR_TYPE_CALLABLE?1u:0u);left=node->parameters[at].type;right=target->parameters[at].type;
         } else { left=node->element;right=target->element; }
@@ -301,7 +303,7 @@ static XrXirStatus error_marker_child(const XrXirCompileContext *work,const Effe
             *output=error_marker_pair_goal(goal->scope,view.declaration->fields[at].type,child,goal->left,true);return XR_XIR_OK;
         }
     } else if(node->kind==XR_XIR_TYPE_TUPLE) child=node->parameters[ordinal].type;
-    else if(node->kind==XR_XIR_TYPE_MAP && ordinal) child=node->result;
+    else if((node->kind==XR_XIR_TYPE_MAP || node->kind==XR_XIR_TYPE_TASK) && ordinal) child=node->result;
     else child=node->element;
     *output=error_marker_type_goal(goal->scope,ERROR_MARKER_SENDABLE,child);return XR_XIR_OK;
 }

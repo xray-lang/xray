@@ -28,6 +28,8 @@ static XrXirStatus task_go_shape(const XrXirModule *module, const XrXirInstructi
     XrXirProofContext proof = {module, {XR_XIR_CONTEXT_FUNCTION, callee, 0}};
     XrXirStatus status = xr_xir_compile_type_markers_prove(remaining, &proof, function->result,
         XR_XIR_CONSTRAINT_SENDABLE);
+    if (status==XR_XIR_OK) status=xr_xir_compile_type_markers_prove(remaining,&proof,function->error_type,
+        XR_XIR_CONSTRAINT_ERROR | XR_XIR_CONSTRAINT_SENDABLE);
     for (uint32_t p = 0; status == XR_XIR_OK && p < function->parameter_count; ++p) {
         if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
         status = xr_xir_compile_type_markers_prove(remaining, &proof, function->parameters[p],

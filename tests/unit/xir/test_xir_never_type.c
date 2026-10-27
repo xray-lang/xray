@@ -395,8 +395,8 @@ static char *source_transport_text(size_t *length) {
         "export fn filterCondition()->i64{var data=[1,2,3,4];"
         "return len(data.filter(fn(x:i64)->bool{if(x<3){return true}else{return false}}))}\n"
         "enum PredicateFailure{Bad}\n"
-        "export fn throwingCondition()->bool{var f=fn(x:i64)->bool{"
-        "if(x<3){throw PredicateFailure.Bad};return false};return f(4)}\n"
+        "export fn throwingCondition() throws(PredicateFailure)->bool{var f=fn(x:i64)->bool{"
+        "if(x<3){throw PredicateFailure.Bad};return false};return try f(4)}\n"
         "export fn equalFloatControl()->bool{var f=fn(x:f64)->bool{return x==2.0};return f(2.0)}\n"
         "export fn notEqualControl()->bool{var f=fn(x:i64)->bool{return x!=2};return f(2)}\n"
         "export fn makeCounter(base:i64)->fn()->i64{var count=base;"
@@ -453,7 +453,7 @@ static void check_source_bounds(const XrXirArtifact *artifact,bool consumer) {
             literals|=1u<<binding->ordinal;
         }
         if (binding->owner==source_named_function(module,"withUnknown")) {
-            CHECK(module->functions[binding->function].error_type==XR_XIR_ERROR);
+            CHECK(module->functions[binding->function].error_type==XR_XIR_NEVER);
             default_unknown=true;
         }
     }
@@ -467,7 +467,7 @@ static void check_source_bounds(const XrXirArtifact *artifact,bool consumer) {
                 function->result==XR_XIR_STRING?4u:0u;
         }
         if (function->name_length==8 && !memcmp(function->name,"$default",8)) {
-            CHECK(function->error_type==XR_XIR_ERROR);
+            CHECK(function->error_type==XR_XIR_NEVER);
             constructor=true;
         }
     }
@@ -487,10 +487,10 @@ static void check_source_bounds(const XrXirArtifact *artifact,bool consumer) {
     }
     check_source_indirect_bounds(module,&module->functions[source_closure_function(module,"makeIndirect")],1u,1u);
     check_source_indirect_bounds(module,&module->functions[source_closure_function(module,"makeStoredIndirect")],1u,2u);
-    CHECK(module->functions[source_closure_function(module,"throwingCondition")].error_type==XR_XIR_ERROR);
-    CHECK(module->functions[source_closure_function(module,"equalFloatControl")].error_type==XR_XIR_ERROR);
-    CHECK(module->functions[source_closure_function(module,"notEqualControl")].error_type==XR_XIR_ERROR);
-    CHECK(module->functions[source_closure_function(module,"writeBoolControl")].error_type==XR_XIR_ERROR);
+    CHECK(xr_xir_type_is_enum(module->types,module->functions[source_closure_function(module,"throwingCondition")].error_type));
+    CHECK(module->functions[source_closure_function(module,"equalFloatControl")].error_type==XR_XIR_NEVER);
+    CHECK(module->functions[source_closure_function(module,"notEqualControl")].error_type==XR_XIR_NEVER);
+    CHECK(module->functions[source_closure_function(module,"writeBoolControl")].error_type==XR_XIR_NEVER);
     const XrXirFunction *composed=&module->functions[source_closure_function(module,"makeComposed")];
     CHECK(composed->error_type==XR_XIR_NEVER && composed->parameter_count==3);
     check_source_indirect_bounds(module,composed,1u,1u);
@@ -585,7 +585,7 @@ static void check_imported_default(const XrXirCompileContext *work,bool wide) {
     CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILER_SESSION_OK);
     request.session=session;request.entry_path=root;request.linkage_kind=XR_XIR_PROGRAM;request.libraries=catalog;
     char consumer[]="import {raw} from \"./lib\"\n"
-        "export fn fromDefault(x:i64=raw())->i64{return x}\nfromDefault()\n";
+        "export fn fromDefault(x:i64=try raw())->i64{return x}\ntry fromDefault()\n";
     input=(XrXirSourceText){"root.xr",consumer,sizeof(consumer)-1};
     CHECK(xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL)==XR_XIR_OK);
     memset(consumer,0xa5,sizeof(consumer));
@@ -641,10 +641,10 @@ static void check_source_transport(const XrXirCompileContext *work) {
     char consumer[]="import {withDefault,withCall,Box,raw,probeMakeAdder} from \"./lib\"\n"
         "export fn answer()->i64{return withDefault()+withCall()+Box().value}\n"
         "export fn viaClosure()->i64{var f=fn()->i64{return 9};return f()}\n"
-        "export fn viaWide()->i64{var f=fn()->i64{return raw()};return f()}\n"
+        "export fn viaWide() throws(Error)->i64{var f=fn()->i64{return try raw()};return try f()}\n"
         "export fn captured()->i64{var f=probeMakeAdder(40);return f(2)}\n"
-        "export fn viaWideIndirect(f:fn()->i64)->i64{var target=raw;"
-        "var local=fn()->i64{f();return target()};return local()}\n";
+        "export fn viaWideIndirect(f:fn()->i64) throws(Error)->i64{var target=raw;"
+        "var local=fn()->i64{f();return try target()};return try local()}\n";
     input=(XrXirSourceText){"root.xr",consumer,sizeof(consumer)-1};
     status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"source E receiver %u %s\n",status,diagnostic.message);

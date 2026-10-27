@@ -285,7 +285,8 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
         XrXirTypeNode source=pool->types.nodes[frame->index];
         uint32_t components=source.kind==XR_XIR_TYPE_NOMINAL ? source.nominal.argument_count :
             source.kind==XR_XIR_TYPE_CALLABLE ? source.parameter_count+2 :
-            source.kind==XR_XIR_TYPE_TUPLE ? source.parameter_count : source.kind==XR_XIR_TYPE_MAP ? 2 : 1;
+            source.kind==XR_XIR_TYPE_TUPLE ? source.parameter_count :
+            (source.kind==XR_XIR_TYPE_MAP || source.kind==XR_XIR_TYPE_TASK || source.kind==XR_XIR_TYPE_ITERATOR) ? 2 : 1;
         if (frame->next==components) {
             if (pool->cache_count>=size || depth>size-pool->cache_count) {
                 pool->status=XR_XIR_BAD_TYPE;break;
@@ -301,7 +302,8 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
             --depth;continue;
         }
         XrXirType child=source.element;
-        if (source.kind==XR_XIR_TYPE_MAP && frame->next) child=source.result;
+        if ((source.kind==XR_XIR_TYPE_MAP || source.kind==XR_XIR_TYPE_TASK || source.kind==XR_XIR_TYPE_ITERATOR) && frame->next)
+            child=source.result;
         else if (source.kind==XR_XIR_TYPE_NOMINAL) child=source.nominal.arguments[frame->next];
         else if (source.kind==XR_XIR_TYPE_TUPLE) child=source.parameters[frame->next].type;
         else if (source.kind==XR_XIR_TYPE_CALLABLE && frame->next<=source.parameter_count)
@@ -314,7 +316,8 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
             continue;
         }
         if (source.kind==XR_XIR_TYPE_NOMINAL) ((XrXirType *)frame->node.nominal.arguments)[frame->next]=result;
-        else if (source.kind==XR_XIR_TYPE_MAP && frame->next) frame->node.result=result;
+        else if ((source.kind==XR_XIR_TYPE_MAP || source.kind==XR_XIR_TYPE_TASK || source.kind==XR_XIR_TYPE_ITERATOR) && frame->next)
+            frame->node.result=result;
         else if (source.kind!=XR_XIR_TYPE_CALLABLE && source.kind!=XR_XIR_TYPE_TUPLE) frame->node.element=result;
         else if (source.kind==XR_XIR_TYPE_CALLABLE && frame->next==source.parameter_count) frame->node.result=result;
         else if (source.kind==XR_XIR_TYPE_CALLABLE && frame->next>source.parameter_count) frame->node.element=result;

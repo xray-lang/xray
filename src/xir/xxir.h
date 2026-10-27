@@ -185,6 +185,7 @@ typedef struct XrXirTypeNode {
     XrXirType element;
     const XrXirCallableParameter *parameters;
     uint32_t parameter_count;
+    /* Callable return, Map value, or required Task/Iterator error type. */
     XrXirType result;
     uint32_t flags;
     uint32_t parameter_span;

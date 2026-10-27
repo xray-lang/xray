@@ -1,0 +1,6 @@
+enum Failure { Bad }
+fn fallible() throws(Failure) -> i64 { return 1 }
+struct Box {
+    value: i64 = try fallible()
+    init() {}
+}

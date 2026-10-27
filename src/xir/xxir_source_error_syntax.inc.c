@@ -24,7 +24,8 @@ static bool source_error_syntax_fail(SourceErrorSyntax *scan, int line, int colu
 }
 
 static bool source_error_clause(SourceErrorSyntax *scan, const XrThrowsClause *clause) {
-    if (clause->syntax == XR_THROWS_OMITTED) return true;
+    if (clause->syntax == XR_THROWS_OMITTED || clause->syntax == XR_THROWS_ERASED ||
+        (clause->syntax == XR_THROWS_TYPED && clause->type)) return true;
     return source_error_syntax_fail(scan, clause->line, clause->column,
         "throws clause is not yet supported by the compiler");
 }
@@ -33,10 +34,6 @@ static bool source_error_type(const XrTypeRef *type, void *pointer) {
     SourceErrorSyntax *scan = pointer;
     if (!source_work(scan->ctx, scan->node) || !source_error_clause(scan, &type->throws_clause))
         return false;
-    if (type->kind == XR_TREF_NAMED &&
-        source_text_same(scan->ctx, scan->node, type->name, "Never"))
-        return source_error_syntax_fail(scan, type->line, type->column,
-            "Never type is not yet supported by the compiler");
     return scan->ctx->diagnostic.status == XR_XIR_OK;
 }
 
@@ -53,6 +50,7 @@ static bool source_error_syntax(SourceContext *ctx, AstNode *node) {
     case AST_INTERFACE_METHOD:
         clause = &node->as.interface_method.throws_clause; break;
     case AST_TRY_EXPR:
+        if (node->as.try_expr.mode == XR_TRY_PROPAGATE) return true;
         return source_error_syntax_fail(&scan, node->line, node->column,
             node->as.try_expr.mode == XR_TRY_OPTIONAL ? "try? expressions are not yet supported by the compiler" :
             node->as.try_expr.mode == XR_TRY_ASSERT ? "try! expressions are not yet supported by the compiler" :

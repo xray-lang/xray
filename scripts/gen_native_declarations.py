@@ -665,25 +665,23 @@ def render_task_identity(root):
     prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8')
     bindings = re.findall(r'^\s*XR_BUILTIN_TYPE\("Task",\s*([0-9]+)\)\s*$', prelude, re.M)
     registrations = re.findall(r'XR_BUILTIN_[A-Z_]+\(\s*"Task"', prelude)
-    if bindings != ['1'] or len(registrations) != 1:
-        raise ValueError('Task registry needs one exact one-parameter binding')
+    if bindings != ['2'] or len(registrations) != 1:
+        raise ValueError('Task registry needs one exact value-and-error binding')
     if re.search(r'@native-|@lowered', source):
         raise ValueError('Task declaration grants no native member operation')
     rows = [(number, raw) for number, raw in enumerate(source.splitlines(), 1)
             if raw.strip() and not raw.strip().startswith('//')]
     expected = [
-        'enum TaskResult<T> {', 'Success { value: T },', 'Failed { error: Error },',
-        'Cancelled,', 'Timeout,', 'Pending,', '}',
-        'enum TaskStatus {', 'Pending,', 'Running,', 'Success,', 'Failed,', 'Cancelled,', '}',
-        'class Task<T> {', 'done: bool', 'status: TaskStatus', 'ref cancel()',
-        'ref poll() -> TaskResult<T>', 'ref awaitResult() -> TaskResult<T>',
-        'ref awaitTimeout(timeout: i64) -> TaskResult<T>', '}',
+        'enum TaskResult<T, E: Error> {', 'Success { value: T },', 'Error { error: E },',
+        'Panic { info: PanicInfo },', 'Cancelled,', '}',
+        'class Task<T: Sendable, E: Error & Sendable = Never> {', 'ref cancel()',
+        'ref poll() -> TaskResult<T, E>?', 'ref awaitResult() -> TaskResult<T, E>', '}',
     ]
     if [raw.strip() for _, raw in rows] != expected:
         raise ValueError('Task source differs from its complete governed declaration')
     output = []
     facts = []
-    for index, (number, raw) in enumerate(rows[15:21]):
+    for index, (number, raw) in enumerate(rows[7:-1]):
         text = raw.strip()
         receiver = 'REF' if text.startswith('ref ') else 'READ'
         if receiver == 'REF':
@@ -720,14 +718,14 @@ def render_task_identity(root):
             'XR_NATIVE_OPERATION_NONE', 'XR_NATIVE_ALLOCATION_UNKNOWN', '""',
             'XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN', params, str(len(parameters)),
             'XR_NATIVE_TERM_UNADMITTED']) + '},')
-    number, raw = rows[14]
+    number, raw = rows[6]
     digest = hashlib.sha256(source.encode('utf-8')).digest()
-    output += ['};', 'static const char *const xr_native_task_type_parameters[] = {"T"};',
+    output += ['};', 'static const char *const xr_native_task_type_parameters[] = {"T", "E"};',
         'static const XrNativeTypeDeclaration xr_native_task = {',
-        '    5, XR_NATIVE_DECLARATION_IDENTITY, "Task", xr_native_task_type_parameters, 1,',
+        '    5, XR_NATIVE_DECLARATION_IDENTITY, "Task", xr_native_task_type_parameters, 2,',
         '    "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{' +
         ', '.join(str(byte) for byte in digest) + '}},',
-        f'    {number}, {len(raw[:raw.index("Task")].encode("utf-8")) + 1}, xr_native_task_members, 6', '};']
+        f'    {number}, {len(raw[:raw.index("Task")].encode("utf-8")) + 1}, xr_native_task_members, 3', '};']
     return output
 
 
@@ -736,16 +734,16 @@ def render_iterator_identity(root):
     """Bind the complete declaration and its compiler-owned pull recipes."""
     source = (root / 'stdlib/types/iterator.xr').read_text(encoding='utf-8').replace('\r\n', '\n')
     prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8')
-    binding = re.findall(r'XR_BUILTIN_PRELUDE_TYPE\("Iterator",\s*1,\s*XR_TINSTANCE,\s*GENERIC_1\)', prelude)
+    binding = re.findall(r'XR_BUILTIN_PRELUDE_TYPE\("Iterator",\s*2,\s*XR_TINSTANCE,\s*GENERIC_2\)', prelude)
     registrations = re.findall(r'XR_BUILTIN_[A-Z_]+\(\s*"Iterator"', prelude)
     if len(binding) != 1 or len(registrations) != 1:
-        raise ValueError('Iterator registry needs one exact one-parameter binding')
+        raise ValueError('Iterator registry needs one exact value-and-error binding')
     if re.search(r'@native-', source):
         raise ValueError('Iterator identity grants no native member operation')
     rows = [(number, raw) for number, raw in enumerate(source.splitlines(), 1)
             if raw.strip() and not raw.strip().startswith('//')]
-    expected = ['class Iterator<T> {', 'hasNext() -> bool', 'next() -> T',
-                'nth(index: i64) -> T', 'iterator() -> Iterator<T>', 'toString() -> string', '}']
+    expected = ['class Iterator<T, E: Error = Never> {', 'hasNext() throws(E) -> bool', 'next() throws(E) -> T',
+                'nth(index: i64) throws(E) -> T', 'iterator() -> Iterator<T, E>', 'toString() -> string', '}']
     if [raw.strip() for _, raw in rows] != expected:
         raise ValueError('Iterator source differs from its complete governed declaration')
     output, facts = [], []
@@ -755,6 +753,8 @@ def render_iterator_identity(root):
         signature = text[len(name):]
         parser = TypeParser(signature)
         parameters = parser.parameters()
+        if parser.peek() == 'throws':
+            parser.take('throws'); parser.take('('); parser.take('E'); parser.take(')')
         parser.take('->')
         result = parser.type()
         if parser.peek() is not None:
@@ -785,9 +785,9 @@ def render_iterator_identity(root):
             'XR_NATIVE_TERM_' + simple_term(result, 'T')]) + '},')
     number, raw = rows[0]
     digest = hashlib.sha256(source.encode('utf-8')).digest()
-    output += ['};', 'static const char *const xr_native_iterator_type_parameters[] = {"T"};',
+    output += ['};', 'static const char *const xr_native_iterator_type_parameters[] = {"T", "E"};',
         'static const XrNativeTypeDeclaration xr_native_iterator = {',
-        '    9, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", xr_native_iterator_type_parameters, 1,',
+        '    9, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", xr_native_iterator_type_parameters, 2,',
         '    "stdlib/types/iterator.xr", "xray-native:prelude/Iterator", {{' +
         ', '.join(str(byte) for byte in digest) + '}},',
         f'    {number}, {len(raw[:raw.index("Iterator")].encode("utf-8")) + 1}, xr_native_iterator_members, 5', '};']

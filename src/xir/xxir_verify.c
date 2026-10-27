@@ -185,6 +185,9 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
         generic_status = task_go_shape(module, op, remaining);
         if (generic_status != XR_XIR_OK) return generic_status;
         result = xr_xir_task_element(module->types, op->type);
+        const XrXirTypeNode *task=xr_xir_type_node(module->types,op->type);
+        generic_status=xr_xir_compile_call_type_matches(remaining,module,caller_id,op,callee->error_type,task->result);
+        if (generic_status!=XR_XIR_OK) return generic_status;
     }
     const XrXirTypeNode *signature = NULL;
     if (op->op == XR_XIR_FUNCTION_REF) {

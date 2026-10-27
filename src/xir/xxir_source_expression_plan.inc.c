@@ -220,6 +220,17 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
         --ctx->depth;ctx->active_expression=parent;
         if (!plan->condition || !plan->left || !plan->right || !source_plan_binary_prepare(ctx,plan,(SourceExpectedType){false,XR_XIR_UNIT, false, false},false)) return NULL;
         break;
+    case AST_TRY_EXPR:
+        if (node->as.try_expr.mode!=XR_TRY_PROPAGATE) {
+            source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"try expression mode is not yet supported");return NULL;
+        }
+        if (ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"try expression depth exhausted");return NULL;}
+        ctx->active_expression=plan;++ctx->depth;
+        plan->left=source_plan_collect(ctx,node->as.try_expr.operand,context);
+        --ctx->depth;ctx->active_expression=parent;
+        if (!plan->left) return NULL;
+        if (plan->left->type_ready) {plan->type_ready=true;plan->ground_type=plan->left->ground_type;}
+        break;
     case AST_GROUPING:
         if (plan->integer.present || plan->decimal.node) break;
         /* Nonliteral grouping owns its child; no re-collection during completion. */

@@ -4,10 +4,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_task_outcome.inc.c - Certified error admission before terminal publication
+ * xxir_task_outcome.inc.c - Declared error admission before terminal publication
  *
  * KEY CONCEPT:
- *   The admitted value and exact worker error certificate share one Program.
+ *   The admitted value and immutable worker declaration share one Program.
  */
 static XrXirCallStatus task_core_error_admit(XrXirTaskExecutor *executor,
     uint32_t entry, const XrXirValue *error) {
@@ -15,11 +15,18 @@ static XrXirCallStatus task_core_error_admit(XrXirTaskExecutor *executor,
     const XrXirProgramPermissions *permissions=program->permissions;
     if (!permissions || entry>=permissions->function_count ||
         permissions->function_count!=program->entry_count ||
-        permissions->entries[entry].worker!=XR_XIR_OK || !permissions->effects)
+        permissions->entries[entry].worker!=XR_XIR_OK || !permissions->input || !permissions->input->artifact)
         return XR_XIR_CALL_BAD_STATE;
-    const XrXirEffects *effects=permissions->effects;
-    if (xr_xir_effects_error_unknown(effects,entry) || xr_xir_effects_error_unidentified(effects,entry))
+    const XrXirModule *module=xr_xir_compile_artifact_module(permissions->input->artifact);
+    if (!module || module->function_count!=program->entry_count || !module->functions)
         return XR_XIR_CALL_BAD_STATE;
+    XrXirType declared=module->functions[entry].error_type;
+    if (xr_xir_function_is_generator(module,entry)) {
+        const XrXirTypeNode *iterator=xr_xir_type_node(program->types,module->functions[entry].result);
+        if (!iterator || iterator->kind!=XR_XIR_TYPE_ITERATOR) return XR_XIR_CALL_BAD_STATE;
+        declared=iterator->result;
+    }
+    if (declared==XR_XIR_UNIT || declared==XR_XIR_NEVER) return XR_XIR_CALL_BAD_STATE;
     if (error->type!=XR_XIR_ERROR && !xr_xir_type_is_enum(program->types,(XrXirType)error->type))
         return XR_XIR_CALL_BAD_STATE;
     XrXirValueAdmission admission={program->arena,executor->config.domain,NULL,NULL,
@@ -33,10 +40,7 @@ static XrXirCallStatus task_core_error_admit(XrXirTaskExecutor *executor,
     const XirNominalValue *record=(const XirNominalValue *)(uintptr_t)error->payload;
     if (record->object.arena!=program->arena ||
         !xr_xir_type_is_enum(program->types,record->object.type)) return XR_XIR_CALL_BAD_STATE;
-    uint64_t work=0;
-    if (xr_xir_effects_error_query_work(effects,entry,&work)!=XR_XIR_OK) return XR_XIR_CALL_BAD_STATE;
-    if (!xr_xir_domain_work(executor->config.domain,work)) return XR_XIR_CALL_LIMIT;
-    return xr_xir_effects_error(effects,entry,record->object.type,record->variant) ?
+    return xr_xir_error_bound_accepts(record->object.type,declared) ?
         XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
 }
 static XrXirCallStatus task_core_outcome_admit(XrXirTaskExecutor *executor,

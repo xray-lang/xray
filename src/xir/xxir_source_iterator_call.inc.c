@@ -10,6 +10,12 @@ static bool source_iterator_consume(SourceContext *ctx,AstNode *node,SourceValue
     SourceValue index,XrXirOp operation,SourceValue *value) {
     XrXirType element=operation==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL :
         operation==XR_XIR_ITERATOR_CLOSE ? XR_XIR_UNIT : xr_xir_iterator_element(&ctx->types,receiver.type);
+    if (operation!=XR_XIR_ITERATOR_CLOSE) {
+        const XrXirTypeNode *iterator=xr_xir_type_node(&ctx->types,receiver.type);
+        if (!iterator || iterator->result==XR_XIR_UNIT)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Iterator error declaration is not yet supported");
+        if (!source_local_error(ctx,node,iterator->result,true)) return false;
+    }
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t origin = body->count, error = body->block_count;

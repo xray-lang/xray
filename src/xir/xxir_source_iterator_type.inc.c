@@ -13,8 +13,8 @@ static bool source_native_iterator_declaration(SourceContext *ctx) {
     if (ctx->iterator_declaration) return true;
     const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ITERATOR);
     if (!source_native_admit(ctx, native)) return false;
-    if (native->parameter_count!=1 || !native->parameter_names || !native->parameter_names[0])
-        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"native declaration requires one named type parameter");
+    if (native->parameter_count!=2 || !native->parameter_names || !native->parameter_names[0] || !native->parameter_names[1])
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Iterator declaration requires value and error parameters");
     XrXirSourceQueryModule *modules = source_query_append(ctx, ctx->query.modules,
         &ctx->query.module_count, &ctx->query_module_capacity, sizeof(*modules));
     if (!modules) return false;
@@ -25,37 +25,41 @@ static bool source_native_iterator_declaration(SourceContext *ctx) {
         (XrXirSourceRange) {ctx->iterator_module, (int) native->line, (int) native->column,
             (int) native->line, (int) native->column + 8})) return false;
     ctx->iterator_declaration = symbol.declaration;
-    XrXirConstraint *constraints = source_alloc(ctx, 1, sizeof(*constraints));
+    XrXirConstraint *constraints = source_alloc(ctx, 2, sizeof(*constraints));
     if (!constraints) return false;
     *constraints = (XrXirConstraint) {0};
+    constraints[1] = (XrXirConstraint) {XR_XIR_CONSTRAINT_ERROR, NULL, 0};
     XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
     record->native_identity = native->id; record->exported = true;
-    record->generic_parameter_count = 1; record->generic_constraints = constraints;
-    SourceName parameter = {0}; parameter.name = source_owned_text(ctx, native->parameter_names[0]);
-    if (!parameter.name || !source_query_declare(ctx, &parameter, XR_XIR_SOURCE_TYPE_PARAMETER,
-        ctx->iterator_declaration, (XrXirSourceRange) {ctx->iterator_module, 0, 0, 0, 0})) return false;
-    record = (XrXirSourceDeclaration *) &ctx->query.declarations[parameter.declaration - 1];
-    record->type = (XrXirSourceType) {(XrXirType) XR_XIR_TYPE_PARAMETER_BASE, ctx->iterator_declaration, true};
+    record->generic_parameter_count = 2; record->generic_constraints = constraints;
+    for (uint32_t p=0;p<2;++p) {
+        SourceName parameter = {0}; parameter.name = source_owned_text(ctx, native->parameter_names[p]);
+        if (!parameter.name || !source_query_declare(ctx, &parameter, XR_XIR_SOURCE_TYPE_PARAMETER,
+            ctx->iterator_declaration, (XrXirSourceRange) {ctx->iterator_module, 0, 0, 0, 0})) return false;
+        record = (XrXirSourceDeclaration *) &ctx->query.declarations[parameter.declaration - 1];
+        record->type = (XrXirSourceType) {(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+p), ctx->iterator_declaration, true};
+    }
     return true;
 }
-static bool source_iterator_type(SourceContext *ctx, XrXirType element, XrXirType *type) {
+static bool source_iterator_type(SourceContext *ctx, XrXirType element, XrXirType error, XrXirType *type) {
     if (xr_xir_type_is_cell(&ctx->types, element))
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "Iterator element cannot be a place");
     return source_native_iterator_declaration(ctx) && source_intern_type(ctx,
-        (XrXirTypeNode) {.kind = XR_XIR_TYPE_ITERATOR, .element = element}, type);
+        (XrXirTypeNode) {.kind = XR_XIR_TYPE_ITERATOR, .element = element, .result = error}, type);
 }
 static bool source_native_iterator_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     const XrNativeTypeDeclaration *native = source_native_find(ctx, ref->name);
-    if (!native || native->id != XR_NATIVE_DECLARATION_ITERATOR || ref->nchildren != 1 || !ref->children ||
+    if (!native || native->id != XR_NATIVE_DECLARATION_ITERATOR || (ref->nchildren != 1 && ref->nchildren != 2) || !ref->children ||
         source_native_type_shadowed(ctx, ref->name))
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "type name does not bind the governed Iterator declaration");
     if (ctx->depth >= 128) return source_fail(ctx, NULL, XR_XIR_BUDGET, "source type depth exhausted");
-    ++ctx->depth; XrXirType element;
+    ++ctx->depth; XrXirType element,error=XR_XIR_NEVER;
     bool ok = true;
     if (ref->children[0] && ref->children[0]->kind == XR_TREF_NULL) element = XR_XIR_UNIT;
     else ok = source_type(ctx, ref->children[0], &element);
+    if (ok && ref->nchildren==2) ok=source_error_type_ref(ctx,ref->children[1],&error);
     --ctx->depth;
-    if (!ok || !source_iterator_type(ctx, element, type)) return false;
+    if (!ok || !source_iterator_type(ctx, element, error, type)) return false;
     XrXirSourceRange range = {ctx->module, ref->line, ref->column, ref->line, ref->column};
     return source_query_target_reference(ctx, range, ctx->iterator_declaration, XR_XIR_SOURCE_TYPE_USE);
 }
@@ -84,7 +88,7 @@ static bool source_iterator_member_reference(SourceContext *ctx,AstNode *node,co
         char *signature=(char *)source_owned_text(ctx,member->signature);if(!signature) return false;
         XrXirSourceDeclaration *record=(XrXirSourceDeclaration *)&ctx->query.declarations[symbol.declaration-1];
         record->native_identity=member->id;record->signature=signature;record->exported=true;
-        record->generic_parent=ctx->iterator_declaration;record->generic_parent_count=1;
+        record->generic_parent=ctx->iterator_declaration;record->generic_parent_count=2;
         record->type=index ? (XrXirSourceType){(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,ctx->iterator_declaration,true} :
             (XrXirSourceType){XR_XIR_BOOL,0,true};
     }

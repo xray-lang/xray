@@ -31,12 +31,14 @@ static SourceName *add_name(SourceContext *ctx, SourceName **head, const char *n
 static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);
 static bool source_nominal_type(SourceContext *ctx, const char *name, XrXirType *type);
 static SourceName *source_nominal_name(SourceContext *ctx, const char *name);
+static bool source_error_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *output);
 static bool source_nominal_arguments(SourceContext *ctx, const char *name, XrTypeRef **arguments,
     uint32_t count, XrXirType *type);
 static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType *type) {
     uint32_t span = xr_xir_type_span(&ctx->types,
         node.kind == XR_XIR_TYPE_CALLABLE ? node.result : node.element);
-    if (node.kind == XR_XIR_TYPE_MAP || node.kind == XR_XIR_TYPE_CALLABLE) {
+    if (node.kind == XR_XIR_TYPE_MAP || node.kind == XR_XIR_TYPE_CALLABLE ||
+        node.kind == XR_XIR_TYPE_TASK || node.kind == XR_XIR_TYPE_ITERATOR) {
         uint32_t value_span = xr_xir_type_span(&ctx->types,
             node.kind == XR_XIR_TYPE_CALLABLE ? node.element : node.result);
         if (value_span > span) span = value_span;

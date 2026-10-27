@@ -17,6 +17,7 @@
 #include "xxir_error.h"
 #include "xxir_call_observer_internal.h"
 #include "xxir_effects.h"
+#include "xxir_operand_roles.h"
 #include <string.h>
 
 struct XrXirTaskExecutor {
@@ -321,6 +322,11 @@ static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirC
     if (!program->permissions || program->permissions->function_count != program->entry_count ||
         program->permissions->entries[request->entry].worker != XR_XIR_OK)
         return XR_XIR_CALL_BAD_ARGUMENT;
+    if (executor->config.task_arena!=program->arena || !program->permissions->input ||
+        !program->permissions->input->artifact) return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirModule *module=xr_xir_compile_artifact_module(program->permissions->input->artifact);
+    if (!module || module->function_count!=program->entry_count || !module->functions ||
+        node->result!=module->functions[request->entry].error_type) return XR_XIR_CALL_BAD_ARGUMENT;
     for (uint32_t p = 0; p < program->entries[request->entry].parameter_count; ++p) {
         XrXirType parameter = program->entries[request->entry].parameters[p];
         if (!xr_xir_task_parameter_supported(program->types, parameter)) return XR_XIR_CALL_UNSUPPORTED;

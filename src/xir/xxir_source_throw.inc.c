@@ -13,6 +13,7 @@ static bool source_throw(SourceContext *ctx,AstNode *node) {
     XrXirProofContext context={&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
     XrXirStatus status=xr_xir_compile_type_markers_prove(&ctx->compile,&context,value.type,XR_XIR_CONSTRAINT_ERROR);
     if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"throw requires a proved enum error value");
+    if (!source_local_error(ctx,node,value.type,false)) return false;
     if (ctx->bodies[ctx->function].error_context) {
         SourceConversionRecipe conversion;
         if (!source_conversion_plan(ctx,node,value.type,(SourceExpectedType){true,XR_XIR_ERROR,false,false},&conversion) ||

@@ -244,6 +244,30 @@ static XrXirStatus source_catch_type_proof(SourceContext *ctx, XrXirType type) {
     XrXirStatus status = xr_xir_compile_type_markers_prove(&ctx->compile, &context, type, XR_XIR_CONSTRAINT_ERROR);
     return status == XR_XIR_OK ? xr_xir_compile_type_access(&ctx->compile, &view, ctx->function, type) : status;
 }
+static bool source_catch_error_coverage(SourceContext *ctx,TryCatchNode *attempt,
+    const XrXirType *types,const SourceMatchArm *patterns,bool *complete) {
+    for (int i=0;i<attempt->catch_count;++i) {
+        XrCatchClause *clause=attempt->catch_clauses[i];
+        complete[i]=!clause->is_panic && !clause->pattern;
+        if (clause->is_panic || !clause->pattern) continue;
+        uint32_t rows=0;
+        for (int j=0;j<attempt->catch_count;++j) {
+            if (types[j]!=types[i] || attempt->catch_clauses[j]->is_panic) continue;
+            if (patterns[j].count>UINT32_MAX-rows)
+                return source_fail(ctx,clause->body,XR_XIR_BUDGET,"catch pattern coverage exhausted");
+            rows+=patterns[j].count;
+        }
+        SourceMatchPattern **matrix=rows ? source_alloc(ctx,rows,sizeof(*matrix)) : NULL;
+        if (rows && !matrix) return false;
+        uint32_t at=0;
+        for (int j=0;j<attempt->catch_count;++j) {
+            if (types[j]!=types[i] || attempt->catch_clauses[j]->is_panic) continue;
+            for (uint32_t k=0;k<patterns[j].count;++k) matrix[at++]=&patterns[j].patterns[k];
+        }
+        if (!source_pattern_coverage(ctx,(SourcePatternMatrix){&types[i],matrix,1,rows},0,&complete[i])) return false;
+    }
+    return true;
+}
 static bool source_try(SourceContext *ctx, AstNode *node) {
     TryCatchNode *attempt = &node->as.try_catch;
     if (attempt->catch_count < 1 || !attempt->catch_clauses)
@@ -292,7 +316,15 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
         handler.route=source_alloc(ctx,1,sizeof(*handler.route));if (!handler.route) return false;
         handler.route->propagation=UINT32_MAX;body->error_context=&handler;
     }
+    bool *complete=source_alloc(ctx,attempt->catch_count,sizeof(*complete));
+    if (!complete) return false;
+    if (!source_catch_error_coverage(ctx,attempt,types,patterns,complete)) return false;
+    SourceLocalHandler *local=source_alloc(ctx,1,sizeof(*local));
+    if (!local) return false;
+    *local=(SourceLocalHandler){body->local_handler,types,complete,(uint32_t)attempt->catch_count};
+    body->local_handler=local;
     bool ok = scoped_statement(ctx,attempt->try_body);
+    body->local_handler=local->previous;
     body->error_context = outer;
     if (!ok) return false;
     uint32_t end = body->block_count;

@@ -117,7 +117,7 @@ XR_BUILTIN_PRELUDE_TYPE("Channel",       1, XR_TCHANNEL,  GENERIC_1)
  * heap tag. It belongs here rather than in the constraint-interface list: it is
  * a concrete sealed class declared in stdlib/types/iterator.xr, and annotations
  * such as `var it: Iterator<int>` must resolve to that class. */
-XR_BUILTIN_PRELUDE_TYPE("Iterator",      1, XR_TINSTANCE, GENERIC_1)
+XR_BUILTIN_PRELUDE_TYPE("Iterator",      2, XR_TINSTANCE, GENERIC_2)
 XR_BUILTIN_PRELUDE_TYPE("Map",           2, XR_TMAP,      GENERIC_2)
 XR_BUILTIN_PRELUDE_TYPE("OsBarrier",     0, XR_TINSTANCE, SIMPLE)
 XR_BUILTIN_PRELUDE_TYPE("OsCondvar",     0, XR_TINSTANCE, SIMPLE)
@@ -156,7 +156,7 @@ XR_BUILTIN_TYPE("CFn",       1)
 XR_BUILTIN_TYPE("CoroLocal", 1)
 XR_BUILTIN_TYPE("MutPtr",    1)
 XR_BUILTIN_TYPE("Ptr",       1)
-XR_BUILTIN_TYPE("Task",      1)
+XR_BUILTIN_TYPE("Task",      2)
 
 /* ========== JSON namespace type heads ========== */
 XR_BUILTIN_NAMESPACE_TYPE("JSON", "Value",         0)

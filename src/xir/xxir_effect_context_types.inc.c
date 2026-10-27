@@ -108,7 +108,7 @@ static XrXirStatus effect_terms_import(EffectTerms *pool,
             node.nominal.arguments=arguments;
         } else {
             status=effect_terms_import_child(pool,cache,i,node.element,&node.element);
-            if (status==XR_XIR_OK && node.kind==XR_XIR_TYPE_MAP)
+            if (status==XR_XIR_OK && (node.kind==XR_XIR_TYPE_MAP || node.kind==XR_XIR_TYPE_TASK || node.kind==XR_XIR_TYPE_ITERATOR))
                 status=effect_terms_import_child(pool,cache,i,node.result,&node.result);
         }
         if (status!=XR_XIR_OK) return status;

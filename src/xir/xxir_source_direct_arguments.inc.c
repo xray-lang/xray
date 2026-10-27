@@ -58,6 +58,13 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     SourceSubstitution substitution = {types,count};
     SourceCallPlan plan = {SOURCE_CALL_FUNCTION,request->prefix,substitution,function.parameters,NULL,
         function.result,request->expected_result,values,offset,offset,ctx->generics[index].parameter_kinds,NULL};
+    const XrXirTypeNode *task=xr_xir_type_node(&ctx->types,function.result);
+    if (!plan.expected_result.present && ctx->active_expression &&
+        ctx->active_expression->task_element_context.present && task && task->kind==XR_XIR_TYPE_TASK) {
+        /* Await contributes result-element evidence only. It says nothing
+         * about the error parameter of the returned Task handle. */
+        plan.result=task->element;plan.expected_result=ctx->active_expression->task_element_context;
+    }
     if (!source_call_expand(ctx,node,&syntax,&plan,function.parameter_count)) return false;
     supplied=(uint32_t)syntax.arg_count+offset;
     if (!source_argument_arity(ctx,node,index,supplied) || !source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;

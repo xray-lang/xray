@@ -32,6 +32,8 @@ static bool source_generator_declaration(SourceContext *ctx,AstNode *node,uint32
     AstNode *body=node->type==AST_METHOD_DECL ? node->as.method_decl.body : node->as.function_decl.body;
     if (!source_generator_scan(body,&scan)) return false;
     if (!scan.found) return true;
+    if (function->error_type!=XR_XIR_NEVER)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"generator errors belong in the returned Iterator type, not a function throws clause");
     if (identity->test_role || identity->cleanup_owner)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"generator cannot be a test or cleanup body");
     for (uint32_t p=0;p<function->parameter_count;++p) {

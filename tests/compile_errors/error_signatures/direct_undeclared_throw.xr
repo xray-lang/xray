@@ -1,0 +1,4 @@
+enum Failure { Bad }
+fn missing() -> i64 {
+    throw Failure.Bad
+}

@@ -435,7 +435,7 @@ static void callable_error_library(const XrXirCompileContext *work,bool nested) 
     xr_xir_compile_checked_packet_free(&packet);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILER_SESSION_OK);
     XrXirSourceRequest request={session,root,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,catalog};
-    char text[128];CHECK(snprintf(text,sizeof(text),"import {entry} from \"./lib\"\nvar f=entry<%s>()\nf()\n",nested?"i64":"Error")>0);
+    char text[128];CHECK(snprintf(text,sizeof(text),"import {entry} from \"./lib\"\nvar f=entry<%s>()\ntry f()\n",nested?"i64":"Error")>0);
     XrXirSourceText input={"root.xr",text,strlen(text)};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);

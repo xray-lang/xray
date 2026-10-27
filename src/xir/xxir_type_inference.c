@@ -115,7 +115,7 @@ static void inference_pair(InferenceWalk *w, const InferenceTask *task) {
             if (from->parameters[p].mode != to->parameters[p].mode) { s->status = XR_XIR_BAD_TYPE; break; }
             inference_enqueue(w,from->parameters[p].type,to->parameters[p].type,depth);
         }
-    } else if (from->kind == XR_XIR_TYPE_MAP) {
+    } else if (from->kind == XR_XIR_TYPE_MAP || from->kind == XR_XIR_TYPE_TASK || from->kind == XR_XIR_TYPE_ITERATOR) {
         inference_enqueue(w, from->element, to->element, depth);
         inference_enqueue(w, from->result, to->result, depth);
     } else if (from->kind == XR_XIR_TYPE_ARRAY || from->kind == XR_XIR_TYPE_SET || from->kind == XR_XIR_TYPE_CELL ||
@@ -214,7 +214,8 @@ XR_FUNC XrXirStatus xr_xir_compile_inference_expected_known(XrXirInferenceState 
                 inference_enqueue(&walk,node->nominal.arguments[p],XR_XIR_UNIT,depth);
         } else {
             inference_enqueue(&walk,node->element,XR_XIR_UNIT,depth);
-            if (node->kind == XR_XIR_TYPE_MAP) inference_enqueue(&walk,node->result,XR_XIR_UNIT,depth);
+            if (node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_ITERATOR)
+                inference_enqueue(&walk,node->result,XR_XIR_UNIT,depth);
         }
     }
     inference_walk_dispose(&walk);

@@ -452,7 +452,7 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
                 XrXirType field = (XrXirType)checked_u32(c,(uint32_t)fields[p].type);
                 if (c->reading) fields[p] = (XrXirCallableParameter){field,0};
             }
-        } else if (s.kind == XR_XIR_TYPE_MAP) {
+        } else if (s.kind == XR_XIR_TYPE_MAP || s.kind == XR_XIR_TYPE_TASK || s.kind == XR_XIR_TYPE_ITERATOR) {
             s.element = (XrXirType)checked_u32(c, (uint32_t)s.element);
             s.result = (XrXirType)checked_u32(c, (uint32_t)s.result);
         } else if (s.kind == XR_XIR_TYPE_ARRAY || s.kind == XR_XIR_TYPE_SET || s.kind == XR_XIR_TYPE_CELL ||
