@@ -1,0 +1,13 @@
+fn maybe(text:string?)->string? { return text }
+fn next(count:ref i64)->string? { count++; return "once"+"!" }
+fn change(text:ref string?)->string? { text="changed"; return text }
+var text:string?=maybe("heap"+"-é中😀\0tail")
+var alias=text
+var count:i64=0
+const absent:string?=null
+print(absent,text)
+print(maybe(""),maybe("null"))
+print(next(ref count),count)
+print(text,change(ref text),text,alias)
+print("line\nbreak",absent)
+print("owned"+"-result")

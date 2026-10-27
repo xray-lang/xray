@@ -403,3 +403,34 @@ else()
 endif()
 add_test(NAME source_request_empty_enum COMMAND test_source_request_empty_enum)
 set_tests_properties(source_request_empty_enum PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ctfe;ownership")
+
+add_executable(test_source_nullable_print "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_nullable_print.c")
+target_link_libraries(test_source_nullable_print PRIVATE xray_source_api)
+target_include_directories(test_source_nullable_print PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_definitions(test_source_nullable_print PRIVATE
+    XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_NULLABLE_PRINT_SOURCE="${PROJECT_SOURCE_DIR}/tests/fixtures/nullable_string_print/main.xr")
+set(nullable_print_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/nullable_string_print.c")
+add_custom_command(OUTPUT "${nullable_print_generated}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND $<TARGET_FILE:test_source_nullable_print> --emit "${nullable_print_generated}"
+    DEPENDS test_source_nullable_print "${PROJECT_SOURCE_DIR}/tests/fixtures/nullable_string_print/main.xr"
+    VERBATIM)
+add_executable(test_source_nullable_print_native
+    "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_nullable_print_native.c" "${nullable_print_generated}")
+target_link_libraries(test_source_nullable_print_native PRIVATE xray_xir_scalar xray_compile_resources)
+foreach(target test_source_nullable_print test_source_nullable_print_native)
+    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+        if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+            target_compile_options(${target} PRIVATE /experimental:c11atomics)
+        endif()
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
+    endif()
+endforeach()
+add_test(NAME source_nullable_string_print COMMAND test_source_nullable_print)
+add_test(NAME source_nullable_string_print_native COMMAND test_source_nullable_print_native)
+set_tests_properties(source_nullable_string_print source_nullable_string_print_native PROPERTIES
+    TIMEOUT 60 LABELS "unit;api;source;ownership;nullable;generated-c")

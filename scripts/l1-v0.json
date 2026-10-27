@@ -86,7 +86,9 @@
     "test_xir_exported_f64_const_catalog_vm_native",
     "test_xir_exported_f64_const_catalog_native_vm",
     "test_xir_slice_u8_backend",
-    "test_xir_slice_u8_backend_native"
+    "test_xir_slice_u8_backend_native",
+    "test_source_nullable_print",
+    "test_source_nullable_print_native"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -202,7 +204,9 @@
     "xir_slice_u8_backend",
     "xir_slice_u8_backend_native",
     "xir_slice_u8_backend_vm_to_native",
-    "xir_slice_u8_backend_native_to_vm"
+    "xir_slice_u8_backend_native_to_vm",
+    "source_nullable_string_print",
+    "source_nullable_string_print_native"
   ],
   "versionCommand": [
     "{build}/xray.exe",
