@@ -12,6 +12,9 @@
  */
 #include "runtime/native/xnative_execution.h"
 #include "base/xmalloc.h"
+#include "xir/xxir_value_internal.h"
+#include "xir/xxir_compile_domain.h"
+#include "xir/xxir_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,6 +24,82 @@
 #include <unistd.h>
 #endif
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+
+#if defined(XR_NATIVE_STRING_ALLOCATIONS)
+typedef struct NativeStringBlock { void *pointer; size_t bytes; } NativeStringBlock;
+static NativeStringBlock native_string_blocks[64];
+static size_t native_string_calls, native_string_live, native_string_bytes;
+static size_t native_string_fail_at = SIZE_MAX;
+static bool native_string_injected;
+static bool native_string_fail(void) {
+    if (native_string_calls++ != native_string_fail_at) return false;
+    native_string_injected = true;
+    return true;
+}
+static void native_string_record(void *pointer, size_t bytes) {
+    if (!pointer) return;
+    CHECK(native_string_live < 64 && bytes <= SIZE_MAX - native_string_bytes);
+    native_string_blocks[native_string_live++] = (NativeStringBlock){pointer, bytes};
+    native_string_bytes += bytes;
+}
+static size_t native_string_block(void *pointer) {
+    size_t i = 0;
+    while (i < native_string_live && native_string_blocks[i].pointer != pointer) ++i;
+    CHECK(i < native_string_live);
+    return i;
+}
+static void *native_string_malloc(size_t bytes) {
+    if (native_string_fail()) return NULL;
+    void *pointer = xr_malloc(bytes);
+    native_string_record(pointer, bytes);
+    return pointer;
+}
+static void *native_string_calloc(size_t count, size_t bytes) {
+    CHECK(!count || bytes <= SIZE_MAX / count);
+    if (native_string_fail()) return NULL;
+    void *pointer = xr_calloc(count, bytes);
+    native_string_record(pointer, count * bytes);
+    return pointer;
+}
+static void native_string_free(void *pointer) {
+    if (pointer) {
+        size_t i = native_string_block(pointer);
+        native_string_bytes -= native_string_blocks[i].bytes;
+        native_string_blocks[i] = native_string_blocks[--native_string_live];
+    }
+    xr_free(pointer);
+}
+static void *native_string_realloc(void *pointer, size_t bytes) {
+    CHECK(bytes);
+    if (native_string_fail()) return NULL;
+    size_t i = pointer ? native_string_block(pointer) : 0;
+    void *replacement = xr_realloc(pointer, bytes);
+    if (!replacement) return NULL;
+    if (pointer) {
+        native_string_bytes -= native_string_blocks[i].bytes;
+        native_string_bytes += bytes;
+        native_string_blocks[i] = (NativeStringBlock){replacement, bytes};
+    } else native_string_record(replacement, bytes);
+    return replacement;
+}
+#pragma push_macro("xr_malloc")
+#pragma push_macro("xr_calloc")
+#pragma push_macro("xr_free")
+#pragma push_macro("xr_realloc")
+#undef xr_malloc
+#undef xr_calloc
+#undef xr_free
+#undef xr_realloc
+#define xr_malloc(bytes) native_string_malloc(bytes)
+#define xr_calloc(count, bytes) native_string_calloc(count, bytes)
+#define xr_free(pointer) native_string_free(pointer)
+#define xr_realloc(pointer, bytes) native_string_realloc(pointer, bytes)
+#include "xir/xxir_value.c"
+#pragma pop_macro("xr_realloc")
+#pragma pop_macro("xr_free")
+#pragma pop_macro("xr_calloc")
+#pragma pop_macro("xr_malloc")
+#endif
 
 typedef struct Context {
     XrtLocationOwner *owner;
@@ -87,7 +166,174 @@ static void restore_output(SavedOutput output) {
 }
 #endif
 
+static const char native_string_prefix[] = "Hello, \xE4\xB8\x96\xE7\x95\x8C\0v";
+static const char native_string_expected[] = "Hello, \xE4\xB8\x96\xE7\x95\x8C\0v314159";
+
+typedef struct NativeStringContext {
+    XrtLocationOwner *owner;
+    XrtExecutionFailure failure;
+    XrXirDomain *source, *destination;
+    XrXirValue left, right, joined, snapshot, moved;
+    int64_t number;
+    uint32_t panic_code;
+    unsigned after;
+} NativeStringContext;
+
+static void native_string_equal(const XrXirValue *value, const char *expected, size_t count) {
+    const char *bytes = NULL; size_t length = 0;
+    CHECK(xr_xir_string_view(value, &bytes, &length));
+    CHECK(length == count && (!count || !memcmp(bytes, expected, count)));
+}
+static void native_string_root(void *data) {
+    NativeStringContext *context = data;
+    char buffer[XR_XIR_SCALAR_TEXT_BYTES]; const char *bytes = NULL; size_t length = 0;
+    XrXirValue number = {XR_XIR_I64, 0, context->number};
+    CHECK(xr_xir_scalar_text(&number, buffer, &bytes, &length));
+    CHECK(xr_xir_string_new(context->source, native_string_prefix,
+        sizeof(native_string_prefix) - 1, &context->left) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(context->source, bytes, length, &context->right) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_concat(context->destination, &context->left, &context->right,
+        &context->joined) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_value_copy(&context->joined, &context->snapshot) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_value_move(&context->joined, &context->moved) == XR_XIR_VALUE_OK);
+    CHECK(!context->joined.type && !context->joined.payload);
+    native_string_equal(&context->left, native_string_prefix, sizeof(native_string_prefix) - 1);
+    if (context->panic_code) xrt_arithmetic_panic(context->panic_code, 1);
+    CHECK(xr_xir_string_view(&context->moved, &bytes, &length));
+    xrt_print_string(bytes, length, 1);
+    ++context->after;
+}
+/* These handles live in the caller context, outside the root's setjmp frame. */
+static void native_string_cleanup(NativeStringContext *context) {
+    xr_xir_value_drop(&context->left); xr_xir_value_drop(&context->right);
+    xr_xir_value_drop(&context->joined); xr_xir_value_drop(&context->snapshot);
+    xr_xir_value_drop(&context->moved);
+    xr_xir_domain_close(context->source); xr_xir_domain_drop(context->source);
+    xr_xir_domain_close(context->destination); xr_xir_domain_drop(context->destination);
+    xrt_locations_release(context->owner);
+    xr_free(context);
+}
+static void native_string_recovery(void) {
+    for (unsigned mode = 0; mode < 4; ++mode) {
+        NativeStringContext *context = xr_calloc(1, sizeof(*context));
+        CHECK(context);
+        context->owner = locations("native-string.xr");
+        context->number = 314159;
+        context->panic_code = mode >= 2 ? 418 + mode : 0;
+        CHECK(xr_xir_domain_new(UINT64_MAX, &context->source) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_domain_new(UINT64_MAX, &context->destination) == XR_XIR_VALUE_OK);
+        SavedOutput saved = mode == 1 ? disable_output() : (SavedOutput)0;
+        XrtExecutionStatus status = xrt_run_embedded(context->owner, &context->failure,
+            native_string_root, context);
+        if (mode == 1) restore_output(saved);
+        CHECK(status == (mode ? XRT_EXECUTION_FAILURE : XRT_EXECUTION_COMPLETED));
+        CHECK(context->after == (mode ? 0u : 1u));
+        if (mode == 1) {
+            CHECK(context->failure.kind == XRT_FAILURE_OUTPUT);
+            CHECK(context->failure.detail.output.io.failed && context->failure.detail.output.io.code);
+            CHECK(context->failure.detail.output.source_id == 1);
+        } else if (mode >= 2) {
+            CHECK(context->failure.kind == XRT_FAILURE_ARITHMETIC_PANIC);
+            CHECK(context->failure.detail.panic.code == 418 + mode);
+            CHECK(context->failure.detail.panic.source_id == 1);
+        }
+        native_string_equal(&context->snapshot, native_string_expected, sizeof(native_string_expected) - 1);
+        native_string_equal(&context->moved, native_string_expected, sizeof(native_string_expected) - 1);
+        XrXirValue escaped = {0};
+        if (!mode) CHECK(xr_xir_value_move(&context->moved, &escaped) == XR_XIR_VALUE_OK);
+        native_string_cleanup(context);
+        if (!mode) {
+            native_string_equal(&escaped, native_string_expected, sizeof(native_string_expected) - 1);
+            xr_xir_value_drop(&escaped);
+        }
+    }
+}
+static XrXirValueStatus native_string_held(uint64_t limit, const XrXirValue *left,
+    const XrXirValue *right, uint64_t *peak) {
+    XrCompileResourceLimits limits = {limit ? XR_COMPILE_MEMORY_FINITE : XR_COMPILE_MEMORY_ORDINARY,
+        limit, false};
+    XrCompileResources *resources = NULL; XrXirDomain *destination = NULL;
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats owner = {0}, baseline = {0}, after = {0};
+    CHECK(xr_compile_resources_stats(resources, &owner) == XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_xir_compile_domain_new(resources, UINT64_MAX, &destination) == XR_XIR_VALUE_OK);
+    CHECK(xr_compile_resources_stats(resources, &baseline) == XR_COMPILE_RESOURCE_OK);
+    XrXirValueStatus status = XR_XIR_VALUE_OK;
+    for (unsigned repeat = 0; repeat < 3; ++repeat) {
+        XrXirValue output = {0};
+        status = xr_xir_string_concat(destination, left, right, &output);
+        if (status == XR_XIR_VALUE_OK) native_string_equal(&output, "abcd", 4);
+        else CHECK(status == XR_XIR_VALUE_MEMORY_LIMIT && !output.type && !output.payload);
+        CHECK(xr_compile_resources_stats(resources, &after) == XR_COMPILE_RESOURCE_OK);
+        if (peak) *peak = after.peak_bytes;
+        xr_xir_value_drop(&output);
+        CHECK(xr_compile_resources_stats(resources, &after) == XR_COMPILE_RESOURCE_OK);
+        CHECK(after.held_bytes == baseline.held_bytes);
+    }
+    xr_xir_domain_close(destination); xr_xir_domain_drop(destination);
+    CHECK(xr_compile_resources_stats(resources, &after) == XR_COMPILE_RESOURCE_OK);
+    CHECK(after.held_bytes == owner.held_bytes);
+    xr_compile_resources_release(resources);
+    return status;
+}
+static void native_string_concat_cases(void) {
+    XrXirDomain *source = NULL, *destination = NULL;
+    CHECK(xr_xir_domain_new(UINT64_MAX, &source) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_domain_new(UINT64_MAX, &destination) == XR_XIR_VALUE_OK);
+    XrXirValue left = {0}, right = {0}, output = {0}, empty = {0};
+    CHECK(xr_xir_string_new(source, "ab", 2, &left) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(source, "cd", 2, &right) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(source, NULL, 0, &empty) == XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_concat(source, &left, &left, &output) == XR_XIR_VALUE_OK);
+    native_string_equal(&output, "abab", 4); native_string_equal(&left, "ab", 2);
+    xr_xir_value_drop(&output);
+    CHECK(xr_xir_string_concat(source, &left, &empty, &output) == XR_XIR_VALUE_OK);
+    CHECK(output.payload == left.payload);
+    xr_xir_value_drop(&output);
+    CHECK(xr_xir_string_concat(destination, &empty, &right, &output) == XR_XIR_VALUE_OK);
+    native_string_equal(&output, "cd", 2);
+    xr_xir_value_drop(&output);
+    int64_t prior = left.payload;
+    CHECK(xr_xir_string_concat(destination, &left, &right, &left) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(left.payload == prior);
+    CHECK(xr_xir_string_concat(NULL, &left, &right, &output) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xr_xir_string_concat(destination, NULL, &right, &output) == XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(!output.type && !output.payload);
+    uint64_t peak = 0;
+    CHECK(native_string_held(0, &left, &right, &peak) == XR_XIR_VALUE_OK && peak);
+    CHECK(native_string_held(peak, &left, &right, NULL) == XR_XIR_VALUE_OK);
+    CHECK(native_string_held(peak - 1, &left, &right, NULL) == XR_XIR_VALUE_MEMORY_LIMIT);
+    fprintf(stderr, "Shared String current held peak: %llu\n", (unsigned long long)peak);
+#if defined(XR_NATIVE_STRING_ALLOCATIONS)
+    XrXirDomainStats baseline = xr_xir_domain_stats(destination);
+    for (size_t site = 0; site < 2; ++site) {
+        size_t live = native_string_live, bytes = native_string_bytes;
+        native_string_injected = false;
+        native_string_fail_at = native_string_calls + site;
+        CHECK(xr_xir_string_concat(destination, &left, &right, &output) == XR_XIR_VALUE_OOM);
+        native_string_fail_at = SIZE_MAX;
+        CHECK(native_string_injected && !output.type && !output.payload);
+        CHECK(native_string_live == live && native_string_bytes == bytes);
+        CHECK(xr_xir_domain_stats(destination).live_bytes == baseline.live_bytes);
+        native_string_equal(&left, "ab", 2); native_string_equal(&right, "cd", 2);
+        CHECK(xr_xir_string_concat(destination, &left, &right, &output) == XR_XIR_VALUE_OK);
+        native_string_equal(&output, "abcd", 4); xr_xir_value_drop(&output);
+        CHECK(native_string_live == live && native_string_bytes == bytes);
+    }
+#endif
+    xr_xir_value_drop(&left); xr_xir_value_drop(&right); xr_xir_value_drop(&empty);
+    xr_xir_domain_close(source); xr_xir_domain_drop(source);
+    xr_xir_domain_close(destination); xr_xir_domain_drop(destination);
+}
+static void native_shared_strings(void) {
+    native_string_concat_cases(); native_string_recovery();
+#if defined(XR_NATIVE_STRING_ALLOCATIONS)
+    CHECK(!native_string_live && !native_string_bytes);
+#endif
+}
+
 int main(void) {
+    native_shared_strings();
     Context *outer = xr_calloc(1, sizeof(*outer));
     Context *inner = xr_calloc(1, sizeof(*inner));
     CHECK(outer && inner);

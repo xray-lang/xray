@@ -1294,26 +1294,25 @@ XR_FUNC XrXirValueStatus xr_xir_owned_slot_copy(void *frame, uint32_t offset, co
     xr_xir_value_graph_end();
     return graph_outcome;
 }
-static XrXirValueStatus xr_xir_string_slot_concat_graph_operation(void *frame,
-    uint32_t offset, XrXirValueAdmission *admission, int64_t left, int64_t right) {
-    if (!frame || !admission || !xr_xir_domain_current(admission->domain))
-        return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValue borrowed = {XR_XIR_STRING, 0, left}, suffix = {XR_XIR_STRING, 0, right}, owned = {0};
-    if (!xr_xir_value_argument(&borrowed, NULL, XR_XIR_STRING) ||
-        !xr_xir_value_argument(&suffix, NULL, XR_XIR_STRING)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XirString *first = string_pointer(&borrowed), *last = string_pointer(&suffix);
+static XrXirValueStatus xr_xir_string_concat_graph_operation(XrXirDomain *domain,
+    const XrXirValue *left, const XrXirValue *right, XrXirValue *output) {
+    if (!domain || !xr_xir_domain_current(domain) || !unit_value(output) ||
+        !xr_xir_value_argument(left, NULL, XR_XIR_STRING) ||
+        !xr_xir_value_argument(right, NULL, XR_XIR_STRING)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirString *first = string_pointer(left), *last = string_pointer(right);
+    XrXirValue owned = {0};
     XrXirValueStatus status = XR_XIR_VALUE_OK;
-    if (first->object.domain == admission->domain) {
-        status = xr_xir_value_copy(&borrowed, &owned);
-        if (status == XR_XIR_VALUE_OK) status = xr_xir_string_append(&owned, &suffix);
+    if (first->object.domain == domain) {
+        status = xr_xir_value_copy(left, &owned);
+        if (status == XR_XIR_VALUE_OK) status = xr_xir_string_append(&owned, right);
     } else {
-        /* Derived storage belongs to the receiving execution domain. A host
-         * argument's immutable storage does not lend its allocation budget. */
+        /* Immutable foreign inputs do not lend their allocation budget. */
         if (last->length >= SIZE_MAX - first->length) return XR_XIR_VALUE_LIMIT;
         size_t length = first->length + last->length;
-        if (!xr_xir_domain_is_compile(admission->domain) && (!xr_xir_domain_work(admission->domain, (uint64_t)length + 1))) return XR_XIR_VALUE_LIMIT;
+        if (!xr_xir_domain_is_compile(domain) && !xr_xir_domain_work(domain, (uint64_t)length + 1))
+            return XR_XIR_VALUE_LIMIT;
         XirString *joined = NULL;
-        status = string_allocate(admission->domain, length, &joined);
+        status = string_allocate(domain, length, &joined);
         if (status == XR_XIR_VALUE_OK) {
             if (first->length) memcpy(joined->bytes, first->bytes, first->length);
             if (last->length) memcpy(joined->bytes + first->length, last->bytes, last->length);
@@ -1325,6 +1324,22 @@ static XrXirValueStatus xr_xir_string_slot_concat_graph_operation(void *frame,
         xr_xir_value_drop(&owned);
         return status;
     }
+    *output = owned;
+    return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_string_concat(XrXirDomain *domain,
+    const XrXirValue *left, const XrXirValue *right, XrXirValue *output) {
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status = xr_xir_string_concat_graph_operation(domain, left, right, output);
+    xr_xir_value_graph_end();
+    return status;
+}
+static XrXirValueStatus xr_xir_string_slot_concat_graph_operation(void *frame,
+    uint32_t offset, XrXirValueAdmission *admission, int64_t left, int64_t right) {
+    if (!frame || !admission) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValue first = {XR_XIR_STRING, 0, left}, last = {XR_XIR_STRING, 0, right}, owned = {0};
+    XrXirValueStatus status = xr_xir_string_concat_graph_operation(admission->domain, &first, &last, &owned);
+    if (status != XR_XIR_VALUE_OK) return status;
     xr_xir_owned_slot_clear(frame, offset);
     memcpy((char *) frame + offset, &owned.payload, sizeof(owned.payload));
     return XR_XIR_VALUE_OK;

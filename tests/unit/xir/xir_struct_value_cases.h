@@ -18,7 +18,7 @@ static XrXirTypeArena *struct_value_arena(XrXirDomain *domain) {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, fields, 2}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, NULL, 0, fields + 2, 2}}};
     XrXirTypes types = {nodes, 2, &f.table, NULL};
-    XrCompileResourceLimits limits = value_compile_limits(65536, 1048576, 10000);
+    XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *arena = NULL;
     CHECK(value_compile_arena(&types, 100, limits, &arena) == XR_XIR_VALUE_OK);
     memset(&f, 0xCC, sizeof(f)); memset(nodes, 0xCC, sizeof(nodes));
@@ -38,7 +38,7 @@ static XrXirValue struct_deep_value(void) {
     XrXirNominalTable table = {NULL, DEPTH, identities}; XrXirTypes types = {nodes, DEPTH, &table, NULL};
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
     XrXirTypeArena *arena = NULL;
-    XrCompileResourceLimits limits = value_compile_limits(1048576, 1048576, 1000000);
+    XrCompileResourceLimits limits = value_compile_limits();
     CHECK(value_compile_arena(&types, 10000, limits, &arena) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {arena, domain, NULL, NULL, 1000000, 65536};
     XrXirValue child = {XR_XIR_I64, 0, 71};
@@ -71,7 +71,7 @@ static void struct_function_gate(void) {
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, fields, 1}},
         {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, NULL, 0, fields + 1, 1}}};
     XrXirTypes types = {nodes, 3, &f.table, NULL};
-    XrCompileResourceLimits limits = value_compile_limits(65536, 1048576, 10000);
+    XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *arena = NULL;
     CHECK(value_compile_arena(&types, 100, limits, &arena) == XR_XIR_VALUE_OK);
     StructGate gate = {true, 0};

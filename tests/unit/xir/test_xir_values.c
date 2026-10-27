@@ -81,7 +81,7 @@ static void cow_cases(void) {
 static XrXirTypeArena *value_atomic_arena(void) {
     XrXirTypeNode node = {.kind = XR_XIR_TYPE_ATOMIC, .element = XR_XIR_I64};
     XrXirTypes types = {&node, 1, NULL, NULL}; XrXirTypeArena *arena = NULL;
-    XrCompileResourceLimits limits = value_compile_limits(65536, 1048576, 100);
+    XrCompileResourceLimits limits = value_compile_limits();
     CHECK(value_compile_arena(&types, 65536, limits, &arena) == XR_XIR_VALUE_OK);
     return arena;
 }
@@ -130,7 +130,7 @@ static XrXirTypeArena *string_cell_arena(XrXirDomain *domain) {
     (void)domain;
     XrXirTypeNode node = {.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_STRING};
     XrXirTypes types = {&node, 1, NULL, NULL};
-    XrCompileResourceLimits limits = value_compile_limits(65536, 1048576, 100);
+    XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *arena = NULL;
     CHECK(value_compile_arena(&types, 65536, limits, &arena) == XR_XIR_VALUE_OK);
     return arena;
@@ -278,7 +278,7 @@ static void arena_identity_and_revocation(void) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType) 256},
     };
     XrXirTypes types = {nodes, 5, NULL, NULL};
-    XrCompileResourceLimits limits = value_compile_limits(65536, 1048576, 1000);
+    XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *arena = NULL, *foreign = NULL;
     CHECK(value_compile_arena(&types, 100, limits, &arena) == XR_XIR_VALUE_OK);
     CHECK(value_compile_arena(&types, 100, limits, &foreign) == XR_XIR_VALUE_OK);
@@ -339,7 +339,7 @@ static void nominal_arena_admission(void) {
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     XrXirDomainStats initial = xr_xir_domain_stats(domain);
     ValueCompileOwner owner = {0};
-    CHECK(value_compile_owner_new(&owner, value_compile_limits(65536,1048576,1000),100)==XR_XIR_OK);
+    CHECK(value_compile_owner_new(&owner, value_compile_limits(),100)==XR_XIR_OK);
     XrXirCompileLimits structural=owner.context.limits;
     XrXirTypeArena *arena=(XrXirTypeArena *)(uintptr_t)1, *occupied=arena;
     XrCompileResourceStats before=value_compile_stats(&owner.context);
@@ -358,7 +358,7 @@ static void nominal_arena_admission(void) {
     CHECK(xr_xir_compile_type_arena_new(&owner.context,&types,&arena)==XR_XIR_VALUE_BAD_ARGUMENT && !arena);
     CHECK(!memcmp(&structural,&owner.context.limits,sizeof(structural)));
     CHECK(xr_xir_domain_stats(domain).allocations==initial.allocations);
-    CHECK(value_compile_stats(&owner.context).live_bytes==owner.baseline.live_bytes);
+    CHECK(value_compile_stats(&owner.context).held_bytes==owner.baseline.held_bytes);
     value_compile_owner_release(&owner);xr_xir_domain_drop(domain);
 }
 
@@ -370,7 +370,7 @@ static void nominal_arena_ownership(void) {
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
-    const XrCompileResourceLimits limits=value_compile_limits(65536,1048576,10000);
+    const XrCompileResourceLimits limits=value_compile_limits();
     const ValueCompileProbe probe={&types,NULL,XR_XIR_UNIT,0,100};
     value_compile_boundaries(&probe,limits);
     XrXirTypeArena *arena=NULL;
@@ -513,7 +513,14 @@ static void string_search_coordinates(void) {
         xr_xir_value_drop(&text); xr_xir_value_drop(&pattern);
     }
 }
-int main(void) {
+int main(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1], "--strings")) {
+        unicode_cases(); cow_cases();
+        CHECK(!value_compile_live && !value_compile_bytes);
+        puts("Strict Unicode, CoW growth and independent string lifetime passed");
+        return 0;
+    }
+    if (argc != 1) return 2;
     string_search_coordinates();
     string_predicates();
     string_queries();

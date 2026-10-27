@@ -21,7 +21,7 @@ static XrXirTypeArena *array_value_arena(XrXirDomain *domain) {
         {.kind = XR_XIR_TYPE_CELL, .element = (XrXirType) 257},
     };
     XrXirTypes types = {nodes, 6, NULL, NULL};
-    XrCompileResourceLimits limits = value_compile_limits(65536, 0, 10000);
+    XrCompileResourceLimits limits = value_compile_limits();
     XrXirTypeArena *arena = NULL;
     CHECK(value_compile_arena(&types, 65536, limits, &arena) == XR_XIR_VALUE_OK);
     return arena;

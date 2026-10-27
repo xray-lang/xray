@@ -92,6 +92,11 @@ XR_FUNC bool xr_xir_domain_current(const XrXirDomain *domain);
  * It cannot bind execution policy or allocate execution metadata/call state. */
 XR_FUNC bool xr_xir_domain_is_compile(const XrXirDomain *domain);
 XR_FUNC bool xr_xir_domain_retain(XrXirDomain *domain);
+/* Borrowed inputs remain unchanged. Only a canonical Unit output receives an
+ * owned result, allocated in domain even when either input belongs elsewhere.
+ * Failure preserves all handles; no frame, call view or execution is required. */
+XR_FUNC XrXirValueStatus xr_xir_string_concat(XrXirDomain *domain,
+    const XrXirValue *left, const XrXirValue *right, XrXirValue *output);
 /* Only the actual NEW Instance calls this before any value publication. */
 XR_FUNC XrXirValueStatus xr_xir_domain_class_observation_open(XrXirDomain *domain,
     uint32_t capacity, XrXirClassObservation **output);
