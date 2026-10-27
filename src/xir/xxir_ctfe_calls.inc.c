@@ -64,7 +64,8 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
     }
     for (uint32_t a=0;a<body->parameter_count;++a) {
 
-        if (ctfe_slice_u8_type(module->types,body->parameters[a])) return XR_XIR_CTFE_NOT_SUPPORTED;
+        if (identity->cleanup_owner && ctfe_slice_u8_type(module->types,body->parameters[a]))
+            return XR_XIR_CTFE_NOT_SUPPORTED;
         admitted=ctfe_body_type_admit(artifact,body->parameters[a],true,summaries);
         if (admitted!=XR_XIR_CTFE_OK) return admitted;
     }
@@ -276,6 +277,11 @@ static XrXirCtfeStatus ctfe_call_enter(CtfeCallExecution *execution,
         XrXirValue argument={0};
         if (p<captures) argument=binding->captures[p];
         else { uint32_t id=body->operands[op->args[0]+p-captures];argument=ctfe_nominal_operand(&parent->run,id); }
+        if (ctfe_slice_u8_type(artifact->module.types,target->parameters[p])) {
+            status=p<captures?XR_XIR_CTFE_NOT_SUPPORTED:ctfe_view_argument(execution,child,p,&argument);
+            if (status!=XR_XIR_CTFE_OK) break;
+            continue;
+        }
         status=ctfe_value_type_admit(&parent->run,&execution->owned,target->parameters[p]);
         if (status!=XR_XIR_CTFE_OK) break;
 

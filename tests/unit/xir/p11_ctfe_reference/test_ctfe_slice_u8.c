@@ -205,7 +205,15 @@ static void slice_boundaries(void) {
         CHECK(slice_inline_source(&context,programs[i],&source)==XR_XIR_OK);XrXirArtifact *artifact=slice_lower(&context,&source);
         uint32_t function=slice_function(&artifact->module,"run");
         XrXirCtfeCallRequest request=slice_request(artifact,"run");XrXirValue denied={0};
-        CHECK(xr_xir_compile_ctfe_calls(&request,&denied)==XR_XIR_CTFE_NOT_SUPPORTED && !denied.type && !denied.payload);
+        XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_calls(&request,&denied);
+        if (!i) CHECK(evaluated==XR_XIR_CTFE_OK && denied.type==XR_XIR_I64 && denied.payload==2);
+        else {
+            CHECK(evaluated==XR_XIR_CTFE_NOT_SUPPORTED && !denied.type && !denied.payload);
+            uint32_t echo=slice_function(&artifact->module,"echo");
+            CHECK(xr_xir_compile_ctfe_type_admit(&context,artifact->module.types,
+                artifact->module.functions[echo].result)==XR_XIR_CTFE_NOT_SUPPORTED);
+        }
+        xr_xir_value_drop(&denied);
         XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&artifact,&program)==XR_XIR_OK && !artifact);
         XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
         XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
@@ -217,15 +225,127 @@ static void slice_boundaries(void) {
         xr_compile_resources_release(context.resources);
         CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     }
-    puts("Legal cross-callee Slice argument/return: VM2; CTFE NOT_SUPPORTED");
+    puts("Slice argument CTFE/VM2; borrowed return VM2, CTFE NOT_SUPPORTED");
 }
-static XrXirStatus slice_memory_attempt(uint64_t limit,uint64_t *peak) {
+static XrXirArtifact *slice_argument_artifact(XrXirCompileContext *context) {
+    XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    CHECK(slice_source(context,"slice_u8_arguments",&source,&diagnostic)==XR_XIR_OK);
+    return slice_lower(context,&source);
+}
+static const XrXirInstruction *slice_pause_arguments(XrXirCtfeCallRequest *request,CtfeCallExecution *execution) {
+    slice_pause_new(request,execution);uint32_t pair=slice_function(&execution->artifact->module,"pair");
+    for (unsigned i=0;i<2048;++i) {
+        slice_activate(execution);CtfeCallFrame *frame=execution->top;
+        const XrXirInstruction *op=&frame->run.function->instructions[frame->state.instruction];
+        if (op->op==XR_XIR_CALL && op->immediate==pair) return op;
+        XirScalarCoreAction action={0};CHECK(ctfe_call_step(execution,&action)==XR_XIR_CTFE_OK);
+        if (action.kind==XIR_SCALAR_RETURN) {
+            CHECK(execution->top->parent && !execution->top->state.frontier);XrXirValue output={0};
+            CHECK(ctfe_call_return(execution,&action.value,&output)==XR_XIR_CTFE_OK && !output.type);
+        } else CHECK(action.kind==XIR_SCALAR_CONTINUE);
+    }
+    CHECK(false);return NULL;
+}
+static void slice_argument_read(CtfeCallExecution *execution,const XrXirValue *value) {
+    XrXirValueAdmission admission=ctfe_value_admission(&execution->owned);
+    CtfeViewAccessContext context={execution,execution->top,&admission,XR_XIR_CTFE_OK};
+    XrXirViewAccess access={&admission,ctfe_view_authorize,&context};int64_t length=-1;
+    CHECK(xr_xir_view_len(value,&access,&length)==XR_XIR_VALUE_OK && length==4);
+}
+static XrXirValue slice_actual_argument(const CtfeCallFrame *frame,const XrXirInstruction *op) {
+    return ctfe_nominal_operand(&frame->run,frame->run.function->operands[op->args[0]]);
+}
+static void slice_argument_resources(void) {
+    XrXirCompileContext context={0};slice_context_new(&context);XrXirArtifact *artifact=slice_argument_artifact(&context);
+    XrXirCtfeCallRequest request=slice_request(artifact,"answer");
+    for (size_t index=0;index<2;++index) {
+        CtfeCallExecution execution={0};const XrXirInstruction *op=slice_pause_arguments(&request,&execution);
+        CtfeCallFrame *parent=execution.top;XrXirValue original=slice_actual_argument(parent,op);
+        uint32_t cursor=parent->state.instruction;uint64_t loans=execution.loan_bytes;
+        XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+        size_t live=source_fixture_compile_live,bytes=source_fixture_compile_bytes;
+        source_fixture_compile_fail_at=source_fixture_compile_attempts+(index?3:0);source_fixture_compile_injected=false;
+        CHECK(ctfe_call_enter(&execution,op,false)==XR_XIR_CTFE_OUT_OF_MEMORY && source_fixture_compile_injected);
+        source_fixture_compile_fail_at=SIZE_MAX;
+        CHECK(execution.top==parent && parent->state.instruction==cursor && execution.loan_bytes==loans);
+        CHECK(source_fixture_compile_live==live && source_fixture_compile_bytes==bytes);
+        CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);
+        slice_argument_read(&execution,&original);
+        CHECK(ctfe_call_enter(&execution,op,false)==XR_XIR_CTFE_OK && execution.top!=parent);
+        slice_execution_free(&execution);
+    }
+    CtfeCallExecution execution={0};const XrXirInstruction *op=slice_pause_arguments(&request,&execution);
+    CtfeCallFrame *parent=execution.top,*probe=NULL;XrXirValue original=slice_actual_argument(parent,op);
+    CHECK(ctfe_call_frame_new(&execution,(uint32_t)op->immediate,UINT32_MAX,&probe)==XR_XIR_CTFE_OK);
+    uint64_t child_bytes=probe->bytes;ctfe_call_frame_free(probe);uint64_t maximum=request.evaluation.limits.frame_bytes;
+    request.evaluation.limits.frame_bytes=execution.live_bytes+execution.loan_bytes+child_bytes+sizeof(CtfeViewBinding);
+    slice_activate(&execution);uint64_t loans=execution.loan_bytes;uint32_t cursor=parent->state.instruction;
+    XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+    CHECK(ctfe_call_enter(&execution,op,false)==XR_XIR_CTFE_FRAME_LIMIT);
+    CHECK(execution.top==parent && parent->state.instruction==cursor && execution.loan_bytes==loans);
+    CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);
+    request.evaluation.limits.frame_bytes=maximum;slice_activate(&execution);slice_argument_read(&execution,&original);
+    CHECK(ctfe_call_enter(&execution,op,false)==XR_XIR_CTFE_OK);slice_execution_free(&execution);
+    xr_xir_compile_artifact_free(artifact);xr_compile_resources_release(context.resources);
+    CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);puts("Actual Slice argument pack OOM/frame prefix rollback and reuse passed");
+}
+static void slice_argument_authority(void) {
+    XrXirCompileContext context={0};slice_context_new(&context);XrXirArtifact *artifact=slice_argument_artifact(&context);
+    XrXirCtfeCallRequest request=slice_request(artifact,"answer");CtfeCallExecution execution={0};
+    const XrXirInstruction *op=slice_pause_arguments(&request,&execution);CtfeCallFrame *parent=execution.top;
+    XrXirValue original=slice_actual_argument(parent,op);uint64_t loans=execution.loan_bytes;
+    --execution.owned.authority.epoch;
+    CHECK(ctfe_call_enter(&execution,op,false)==XR_XIR_CTFE_BAD_ARTIFACT && execution.top==parent && execution.loan_bytes==loans);
+    slice_activate(&execution);slice_argument_read(&execution,&original);
+    CHECK(ctfe_call_enter(&execution,op,false)==XR_XIR_CTFE_OK);CtfeCallFrame *sibling=execution.top;
+    slice_activate(&execution);XrXirValue incoming=ctfe_nominal_operand(&sibling->run,0);slice_argument_read(&execution,&incoming);
+    CHECK(incoming.payload!=original.payload && incoming.type==original.type);
+    XrXirValue late={0};CHECK(xr_xir_value_copy(&incoming,&late)==XR_XIR_VALUE_OK);
+    execution.top=parent;slice_activate(&execution);CtfeCallFrame *other=NULL;
+    CHECK(ctfe_call_frame_new(&execution,sibling->function,UINT32_MAX,&other)==XR_XIR_CTFE_OK);
+    CHECK(xr_xir_view_scope_active(&sibling->views->pin));
+    CHECK(ctfe_view_argument(&execution,other,0,&incoming)==XR_XIR_CTFE_BAD_ARTIFACT && !other->views);
+    ctfe_call_frame_free(other);slice_argument_read(&execution,&original);
+    execution.top=sibling;slice_activate(&execution);
+    XrXirValueAdmission admission=ctfe_value_admission(&execution.owned);
+    CtfeViewAccessContext denied={&execution,sibling,&admission,XR_XIR_CTFE_OK};
+    XrXirViewAccess access={&admission,ctfe_view_authorize,&denied};slice_execution_free(&execution);
+    CHECK(xr_xir_domain_current(admission.domain) && xr_xir_value_argument(&late,admission.arena,(XrXirType)late.type));
+    int64_t length=-1;CHECK(xr_xir_view_len(&late,&access,&length)==XR_XIR_VALUE_BAD_ARGUMENT && length==-1);
+    xr_xir_value_drop(&late);xr_xir_compile_artifact_free(artifact);xr_compile_resources_release(context.resources);
+    CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);puts("Actual caller epoch and live foreign sibling Slice grants denied");
+}
+typedef struct SliceArgumentCancel { unsigned polls,stop; } SliceArgumentCancel;
+static bool slice_argument_cancel_poll(const void *opaque) {
+    SliceArgumentCancel *cancel=(SliceArgumentCancel *)opaque;return ++cancel->polls>=cancel->stop;
+}
+static void slice_argument_cancel(void) {
+    XrXirCompileContext context={0};slice_context_new(&context);XrXirArtifact *artifact=slice_argument_artifact(&context);
+    XrXirCtfeCallRequest request=slice_request(artifact,"answer");CtfeCallExecution execution={0};
+    const XrXirInstruction *op=slice_pause_arguments(&request,&execution);CtfeCallFrame *parent=execution.top;
+    uint64_t loans=execution.loan_bytes;uint32_t cursor=parent->state.instruction;
+    size_t attempts=source_fixture_compile_attempts;XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+    SliceArgumentCancel cancel={0,4};XrCompileRequestControl control={0};
+    XrCompileRequestOptions options={.cancel_poll=slice_argument_cancel_poll,.cancel_context=&cancel};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    execution.owned.control=&control;request.evaluation.control=&control;
+    CHECK(ctfe_call_enter(&execution,op,false)==XR_XIR_CTFE_CANCELLED && cancel.polls>=cancel.stop);
+    CHECK(source_fixture_compile_attempts>=attempts+3 && execution.top==parent && execution.loan_bytes==loans);
+    CHECK(parent->state.instruction==cursor && xr_xir_view_scope_active(&parent->views->pin));
+    CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);
+    CHECK(xr_compile_request_control_poll(&control)==XR_COMPILE_RESOURCE_CANCELLED);
+    slice_execution_free(&execution);xr_xir_compile_artifact_free(artifact);xr_compile_resources_release(context.resources);
+    CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);puts("Cancelled Slice argument prefix leaves caller grant intact until terminal cleanup");
+}
+
+static XrXirStatus slice_memory_attempt(const char *name,uint64_t limit,uint64_t *peak) {
     XrCompileResourceLimits limits={limit?XR_COMPILE_MEMORY_FINITE:XR_COMPILE_MEMORY_ORDINARY,limit,false};
     XrXirCompileContext context={0};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats baseline={0},spent={0};
     CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
-    XrXirStatus status=slice_source(&context,"slice_u8_local",&source,&diagnostic);
+    XrXirStatus status=slice_source(&context,name,&source,&diagnostic);
     CHECK(xr_compile_resources_stats(context.resources,&spent)==XR_COMPILE_RESOURCE_OK);if(peak)*peak=spent.peak_bytes;
     if (status!=XR_XIR_OK) CHECK(status==XR_XIR_MEMORY_LIMIT && !source.checked && !source.snapshot);
     else CHECK(source.checked && source.snapshot);
@@ -234,10 +354,17 @@ static XrXirStatus slice_memory_attempt(uint64_t limit,uint64_t *peak) {
     xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);return status;
 }
 static void slice_memory(void) {
-    uint64_t peak=0;CHECK(slice_memory_attempt(0,&peak)==XR_XIR_OK && peak);
-    CHECK(slice_memory_attempt(peak,NULL)==XR_XIR_OK);
-    CHECK(slice_memory_attempt(peak-1,NULL)==XR_XIR_MEMORY_LIMIT);
+    uint64_t peak=0;CHECK(slice_memory_attempt("slice_u8_local",0,&peak)==XR_XIR_OK && peak);
+    CHECK(slice_memory_attempt("slice_u8_local",peak,NULL)==XR_XIR_OK);
+    CHECK(slice_memory_attempt("slice_u8_local",peak-1,NULL)==XR_XIR_MEMORY_LIMIT);
     fprintf(stderr,"Source Slice current held peak %llu; exact/minus1 typed memory boundary passed\n",(unsigned long long)peak);
+}
+static void slice_argument_memory(void) {
+    uint64_t peak=0;
+    CHECK(slice_memory_attempt("slice_u8_arguments",0,&peak)==XR_XIR_OK && peak);
+    CHECK(slice_memory_attempt("slice_u8_arguments",peak,NULL)==XR_XIR_OK);
+    CHECK(slice_memory_attempt("slice_u8_arguments",peak-1,NULL)==XR_XIR_MEMORY_LIMIT);
+    fprintf(stderr,"Argument Source dynamic held peak %llu; exact/minus1 typed memory cleanup passed\n",(unsigned long long)peak);
 }
 static void slice_runtime_work(void) {
     XrXirCompileContext context={0};slice_context_new(&context);XrXirArtifact *artifact=slice_real_artifact(&context);
@@ -300,6 +427,10 @@ static void slice_constant(const SliceConstantCase *selected) {
 }
 int main(int argc,char **argv) {
     if (argc!=2) return 2;
+    if (!strcmp(argv[1],"argument-resources")) {slice_argument_resources();return 0;}
+    if (!strcmp(argv[1],"argument-authority")) {slice_argument_authority();return 0;}
+    if (!strcmp(argv[1],"argument-cancel")) {slice_argument_cancel();return 0;}
+    if (!strcmp(argv[1],"argument-memory")) {slice_argument_memory();return 0;}
     if (!strcmp(argv[1],"boundaries")) {slice_boundaries();return 0;}
     if (!strcmp(argv[1],"memory")) {slice_memory();return 0;}
     if (!strcmp(argv[1],"runtime-work")) {slice_runtime_work();return 0;}

@@ -215,7 +215,12 @@
     "test_xir_ctfe_slice_u8_controls",
     "test_xir_ctfe_slice_u8_boundaries",
     "test_xir_ctfe_slice_u8_memory",
-    "test_xir_ctfe_slice_u8_runtime-work"
+    "test_xir_ctfe_slice_u8_runtime-work",
+    "test_xir_ctfe_slice_u8_arguments",
+    "test_xir_ctfe_slice_u8_argument-resources",
+    "test_xir_ctfe_slice_u8_argument-authority",
+    "test_xir_ctfe_slice_u8_argument-cancel",
+    "test_xir_ctfe_slice_u8_argument-memory"
   ],
   "versionCommand": [
     "{build}/xray.exe",

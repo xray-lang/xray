@@ -148,6 +148,41 @@ static XrXirCtfeStatus ctfe_view_create(CtfeViewAccessContext *context,
     } else ctfe_view_binding_free(context->frame,binding);
     return context->failure!=XR_XIR_CTFE_OK?context->failure:ctfe_value_status(created);
 }
+/* A call receives a distinct shared loan, authorized by the live caller leaf.
+ * Neither an equal root nor a retained physical pin substitutes for that grant. */
+static XrXirCtfeStatus ctfe_view_argument(CtfeCallExecution *execution,CtfeCallFrame *child,
+    uint32_t parameter,const XrXirValue *source) {
+    XrXirValueAdmission admission=ctfe_value_admission(&execution->owned);
+    CtfeViewAccessContext context={execution,execution->top,&admission,XR_XIR_CTFE_OK};
+    if (!ctfe_view_current(&context) || !child || child==execution->top ||
+        child->execution!=execution || child->parent!=execution->top || !child->epoch ||
+        child->epoch==execution->top->epoch || parameter>=child->run.function->parameter_count)
+        return XR_XIR_CTFE_BAD_ARTIFACT;
+    XrXirType type=child->run.function->parameters[parameter];
+    if (!ctfe_slice_u8_type(child->run.module->types,type) || child->cleanup)
+        return XR_XIR_CTFE_NOT_SUPPORTED;
+    uint32_t offset=child->run.layout->offsets[parameter];
+    if (!source || source->type!=(uint32_t)type || !xr_xir_value_argument(source,admission.arena,type) ||
+        xr_xir_scalar_load(child->run.frame,offset)) return XR_XIR_CTFE_BAD_ARTIFACT;
+    XrXirCtfeStatus status=ctfe_control_poll(execution->owned.control);
+    if (status!=XR_XIR_CTFE_OK) return status;
+    XrXirViewAccess access={&admission,ctfe_view_authorize,&context};int64_t length=0;
+    status=ctfe_value_status(xr_xir_view_len(source,&access,&length));
+    if (context.failure!=XR_XIR_CTFE_OK) return context.failure;
+    if (status!=XR_XIR_CTFE_OK) return status;
+    CtfeViewBinding *binding=NULL;status=ctfe_view_reserve(&context,&binding);
+    if (status!=XR_XIR_CTFE_OK) return status;
+    XrXirViewStorageSpec spec={{execution,child,child->epoch},0,length,XR_XIR_TYPE_SLICE};
+    XrXirValue received={0};
+    XrXirValueStatus copied=xr_xir_view_reborrow(type,source,&spec,&access,&received);
+    if (copied==XR_XIR_VALUE_OK) {
+        xr_xir_view_scope_pin_created(&received,&spec.authority,&binding->pin);binding->type=type;
+        binding->next=child->views;child->views=binding;
+        xr_xir_owned_slot_move(child->run.frame,offset,&received);
+    } else ctfe_view_binding_free(child,binding);
+    xr_xir_value_drop(&received);
+    return context.failure!=XR_XIR_CTFE_OK?context.failure:ctfe_value_status(copied);
+}
 static XrXirCtfeStatus ctfe_view_cleanup(CtfeCallExecution *execution,const XrXirInstruction *op) {
     CtfeCallFrame *frame=execution->top;ScalarRun *run=&frame->run;
     if (op->args[0]>run->function->operand_count || op->args[1]>run->function->operand_count-op->args[0])

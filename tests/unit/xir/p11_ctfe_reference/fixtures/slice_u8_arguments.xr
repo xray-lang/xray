@@ -1,0 +1,29 @@
+enum Problem { Stop }
+fn leaf(v:Slice<u8>)->i64 {
+    const sub:Slice<u8>=v[1:3]
+    return len(v)+len(sub)+(sub[0] as i64)
+}
+fn forward(v:Slice<u8>)->i64 { return leaf(v)+len(v) }
+fn pair(a:Slice<u8>,b:Slice<u8>)->i64 { return len(a)+len(b) }
+fn fail(v:Slice<u8>) throws(Problem)->i64 {
+    if (len(v)>0) { throw Problem.Stop }
+    return 0
+}
+fn answer()->i64 {
+    var xs:Array<u8>=[10,36,30,40]
+    var total=0
+    {
+        const view:Slice<u8>=xs[:]
+        total=forward(view)+len(view)+pair(view,view)
+        try { const unexpected=try fail(view); total=total+unexpected }
+        catch(e:Problem) { total=total+len(view) }
+    }
+    xs[1]=37
+    var text="A\0é"
+    {
+        const bytes:Slice<u8>=text.bytes()
+        total=total+forward(bytes)+len(bytes)
+    }
+    return total+(xs[1] as i64)
+}
+export fn run()->i64 { return comptime answer() }
