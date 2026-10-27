@@ -82,3 +82,25 @@ static XrXirCallStatus instance_cell_access(XrXirCallView *view,
     }
     return XR_XIR_CALL_BAD_STATE;
 }
+
+#include "xxir_instance_view_internal.h"
+XR_FUNC XrXirCallStatus xir_instance_view_module_root(XrXirCallView *view,const XrXirValue *root) {
+    if (!instance_view_current(view) || !xr_xir_value_valid(root) ||
+        xr_xir_cell_is_projection(root) || !xr_xir_cell_module_storage(root)) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance=view_instance(view);
+    if (!instance || view_is_child(instance,view) || !xr_xir_cell_in_domain(root,instance->domain))
+        return XR_XIR_CALL_BAD_STATE;
+    const XrXirDeclarations *d=instance->program->declarations;
+    uint32_t caller=xr_xir_call_current_entry(view->activation);
+    for (uint32_t slot=0;slot<d->slot_count;++slot) {
+        if (!instance_cell_work(view,1)) return XR_XIR_CALL_LIMIT;
+        if (!instance_cell_published(instance,slot,root)) continue;
+        XrXirCellPublication publication={instance,instance->domain,slot};
+        uint32_t module=d->slots[slot].module;
+        if (!xr_xir_cell_publication_matches(root,&publication) || module>=d->module_count ||
+            d->functions[caller].module!=module ||
+            (!instance->ready[module] && instance->current_module!=module)) return XR_XIR_CALL_BAD_STATE;
+        return XR_XIR_CALL_READY;
+    }
+    return XR_XIR_CALL_BAD_STATE;
+}

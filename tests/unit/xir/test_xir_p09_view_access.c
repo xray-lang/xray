@@ -989,10 +989,289 @@ static void access_root_model_dump(void) {
     }
     puts("]}");
 }
+typedef struct SlotPublication {
+    XrXirTypeNode nodes[8];XrXirTypes types;
+    XrXirInstruction ops[16],end[1];uint32_t operands[4];XrXirBlock blocks[3];
+    XrXirFunction functions[3];XrXirFunctionIdentity identities[3];
+    XrXirSourceModule modules[2];XrXirSlot slot;XrXirLiteral literal;XrXirDeclarations declarations;XrXirModule module;
+} SlotPublication;
+static void slot_publication_fixture(SlotPublication *f,uint32_t kind) {
+    memset(f,0,sizeof(*f));
+    f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_SLICE,.element=XR_XIR_U8};
+    f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_BOOL};
+    f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=(XrXirType)257};
+    f->nodes[3]=(XrXirTypeNode){.kind=XR_XIR_TYPE_SLICE,.element=XR_XIR_BOOL};
+    XrXirType element=kind==1?XR_XIR_U8:kind==5?(XrXirType)256:
+        kind==6?(XrXirType)257:kind==7?XR_XIR_STRING:XR_XIR_I64;
+    f->nodes[4]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=element};
+    f->nodes[5]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=kind==10?XR_XIR_STRING:(XrXirType)260};
+    if (kind==8) {
+        f->nodes[6]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=(XrXirType)260};
+        f->nodes[7]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=(XrXirType)262};
+    }
+    f->types=(XrXirTypes){f->nodes,kind==8?8u:6u,NULL,NULL};
+    f->ops[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64};
+    f->ops[1]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=1};
+    f->ops[2]=kind==10?(XrXirInstruction){.op=XR_XIR_CONST_STRING,.type=XR_XIR_STRING}:
+        (XrXirInstruction){.op=XR_XIR_ARRAY_NEW,.type=(XrXirType)260};
+    f->ops[3]=(XrXirInstruction){.op=XR_XIR_CELL_NEW,.type=(XrXirType)261,.args={2}};
+    uint32_t at=4,payload=3;
+    if (kind==8) {
+        f->ops[3]=(XrXirInstruction){.op=XR_XIR_ARRAY_NEW,.type=(XrXirType)262,.args={0,1}};
+        f->ops[at++]=(XrXirInstruction){.op=XR_XIR_CELL_NEW,.type=(XrXirType)263,.args={3}};
+        f->ops[at++]=(XrXirInstruction){.op=XR_XIR_CELL_PLACE,.type=(XrXirType)262,.args={4}};
+        f->ops[at++]=(XrXirInstruction){.op=XR_XIR_INDEX_PLACE,.type=(XrXirType)260,.args={5,0}};
+        f->ops[at++]=(XrXirInstruction){.op=XR_XIR_CELL_PROJECT,.type=(XrXirType)261,.args={6}};
+        payload=7;
+    }
+    f->ops[at++]=(XrXirInstruction){.op=XR_XIR_SLOT_INIT,.args={kind==9?UINT32_MAX:payload}};
+    uint32_t array=at;
+    f->ops[at++]=(XrXirInstruction){.op=XR_XIR_ARRAY_NEW,.type=(XrXirType)257};
+    f->ops[at++]=(XrXirInstruction){.op=XR_XIR_CELL_NEW,.type=(XrXirType)258,.args={array}};
+    uint32_t view=at;
+    f->ops[at++]=(XrXirInstruction){.op=XR_XIR_VIEW_NEW,.type=(XrXirType)259,.args={kind==8?1u:0u,3}};
+    f->ops[at++]=(XrXirInstruction){.op=XR_XIR_VIEW_END,.args={view}};
+    f->ops[at++]=(XrXirInstruction){.op=XR_XIR_RETURN};
+    uint32_t table=kind==8?1u:0u;f->operands[0]=2;
+    f->operands[table]=array+1;f->operands[table+1]=0;f->operands[table+2]=1;
+    f->blocks[0]=(XrXirBlock){.count=at};f->blocks[1]=f->blocks[2]=(XrXirBlock){.count=1};
+    f->end[0]=(XrXirInstruction){.op=XR_XIR_RETURN};
+    f->functions[0]=(XrXirFunction){.name="initialize",.name_length=10,.blocks=f->blocks,.block_count=1,
+        .instructions=f->ops,.instruction_count=at,.operands=f->operands,.operand_count=kind==8?4u:3u,.error_type=XR_XIR_NEVER};
+    f->functions[1]=(XrXirFunction){.name="other",.name_length=5,.blocks=f->blocks+1,.block_count=1,
+        .instructions=f->end,.instruction_count=1,.error_type=XR_XIR_NEVER};
+    f->functions[2]=(XrXirFunction){.name="ordinary",.name_length=8,.blocks=f->blocks+2,.block_count=1,
+        .instructions=f->end,.instruction_count=1,.error_type=XR_XIR_NEVER};
+    f->identities[1].module=1;
+    f->modules[0]=(XrXirSourceModule){.name="root",.name_length=4,.initializer=kind==4?2:0};
+    f->modules[1]=(XrXirSourceModule){.name="other",.name_length=5,.initializer=1};
+    f->slot=(XrXirSlot){kind==3?1u:0u,(XrXirType)261,1};
+    f->declarations=(XrXirDeclarations){.modules=f->modules,.module_count=2,.functions=f->identities,
+        .slots=&f->slot,.slot_count=1,.root_module=UINT32_MAX,.entry_function=UINT32_MAX};
+    if (kind==10) {f->literal=(XrXirLiteral){"array-owner",11};f->declarations.literals=&f->literal;f->declarations.literal_count=1;}
+    f->module=(XrXirModule){.stage=XR_XIR_BUILT,.functions=f->functions,.function_count=3,
+        .declarations=&f->declarations,.types=&f->types,.linkage_kind=XR_XIR_LIBRARY};
+}
+static XrXirStatus slot_publication_attempt(const XrXirCompileContext *context,uint32_t kind) {
+    SlotPublication f;slot_publication_fixture(&f,kind);unsigned char before[sizeof(f)];memcpy(before,&f,sizeof(f));
+    XrXirConstruction *construction=NULL;XrXirDiagnostic diagnostic={0};
+    const char *gate="types";
+    XrXirStatus status=xr_xir_compile_types_structure_verify(context,&f.types);
+    XrXirSlotFact fact={0,"fixture",7,0};const XrXirSlotFacts slots={&fact,1};
+    if (status==XR_XIR_OK) {gate="construction";status=xir_construction_project(context,&f.types,&slots,&construction);}
+    if (status==XR_XIR_OK) {gate="ordinary";status=xir_compile_view_prepare_ordinary(context,&f.module,construction,&diagnostic);}
+    if (status==XR_XIR_OK) {gate="affine";status=xir_compile_view_affine_verified(context,&f.module,&diagnostic);}
+    if (status==XR_XIR_OK) {gate="access";status=kind==2?xir_compile_view_access_verified(context,&f.module,&diagnostic):
+        xir_compile_view_cell_access_verified(context,&f.module,&diagnostic);}
+    if (status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_MEMORY_LIMIT && status!=XR_XIR_BUDGET)
+        fprintf(stderr,"Slot publication kind=%u %s status=%u at %u/%u/%u\n",kind,gate,status,
+            diagnostic.function,diagnostic.block,diagnostic.instruction);
+    CHECK(!memcmp(before,&f,sizeof(f)));xr_xir_compile_construction_free(construction);return status;
+}
+static void slot_publication_cases(void) {
+    static const XrXirStatus expected[]={XR_XIR_OK,XR_XIR_OK,XR_XIR_UNRESOLVED,
+        XR_XIR_BAD_STRUCTURE,XR_XIR_BAD_STRUCTURE,XR_XIR_BAD_TYPE,XR_XIR_UNRESOLVED,
+        XR_XIR_UNRESOLVED,XR_XIR_BAD_VALUE,XR_XIR_BAD_VALUE,XR_XIR_OK};
+    for (uint32_t kind=0;kind<sizeof(expected)/sizeof(expected[0]);++kind) {
+        XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).held_bytes;size_t first=attempts;
+        CHECK(slot_publication_attempt(&c,kind)==expected[kind]);size_t points=attempts-first;
+        CHECK(slot_publication_attempt(&c,kind)==expected[kind]);owner_free(&c,baseline);
+        if (kind>1 && kind!=10) continue;
+        CHECK(points>1);
+        for (uint32_t edge=0;edge<2;++edge) {
+            c=owner_new(caps());baseline=stats(&c).held_bytes;
+            fail_at=attempts+(edge?points-1:0);injected=false;
+            CHECK(slot_publication_attempt(&c,kind)==XR_XIR_OUT_OF_MEMORY && injected);
+            fail_at=SIZE_MAX;CHECK(slot_publication_attempt(&c,kind)==XR_XIR_OK);owner_free(&c,baseline);
+        }
+    }
+    puts("Scalar Array slot publication: authentic owner, module, borrowed refusal and physical zero passed");
+}
+
+#include "xir/xxir_program_internal.h"
+#include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_call_view_operation_internal.h"
+#include "xir/xxir_call_internal.h"
+#include "xir/xxir_instance_view_internal.h"
+#include "xir/xxir_array.h"
+#include "xir_native_metadata_fixture.h"
+enum { MP_ARRAY=256,MP_CELL,MP_SLICE,MP_PROJECT };
+typedef struct ModuleViewFrame { XrXirValue root,value,slice;uint32_t phase; } ModuleViewFrame;
+typedef struct ModuleViewWitness {
+    XrXirValue saved,foreign,late;XrXirViewAccess access;XrXirInstance *other;
+    uint32_t mode,checks,releases;
+} ModuleViewWitness;
+static void module_view_cleanup(XrXirCallView *view,XrXirCallStatus status) {
+    (void)status;ModuleViewFrame *f=view->state;
+    xr_xir_value_drop(&f->slice);xr_xir_value_drop(&f->value);xr_xir_value_drop(&f->root);
+}
+static XrXirAction module_view_done(void) {
+    return (XrXirAction){.kind=XR_XIR_ACTION_RETURN};
+}
+static XrXirAction module_view_init(XrXirCallView *view) {
+    if (xr_xir_call_current_entry(view->activation)==1) return module_view_done();
+    ModuleViewFrame *f=view->state;ModuleViewWitness *w=(ModuleViewWitness *)view->environment;
+    const XrXirValue values[]={{XR_XIR_U8,0,7},{XR_XIR_U8,0,9}};
+    CHECK(xr_xir_array_new((XrXirType)MP_ARRAY,values,2,xr_xir_call_admission(view),&f->value)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_instance_cell(view,(XrXirType)MP_CELL,&f->value,&f->root)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_slot_write(view,0,&f->root,true)==XR_XIR_CALL_READY);
+    if (!w->saved.type) CHECK(xr_xir_value_copy(&f->root,&w->saved)==XR_XIR_VALUE_OK);
+    return module_view_done();
+}
+static XrXirAction module_view_return(XrXirCallView *view) {
+    return (XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value={
+        xr_xir_call_current_entry(view->activation)==2?XR_XIR_I64:XR_XIR_UNIT,0,0}};
+}
+static XrXirAction module_view_borrowed(XrXirCallView *view) {
+    ModuleViewFrame *f=view->state;ModuleViewWitness *w=(ModuleViewWitness *)view->environment;
+    CHECK(xr_xir_value_copy(&view->arguments[0],&f->root)==XR_XIR_VALUE_OK);
+    XrXirCallViewOperation request={.operation=XR_XIR_VIEW_NEW,.type=(XrXirType)MP_SLICE,
+        .root=&f->root,.to_end=true};XrXirFaultDetail fault={0};
+    CHECK(xr_xir_call_view_operation(view,&request,&f->slice,&fault)==XR_XIR_VALUE_OK);
+    ++w->checks;return module_view_done();
+}
+static XrXirAction module_view_entry(XrXirCallView *view) {
+    ModuleViewFrame *f=view->state;ModuleViewWitness *w=(ModuleViewWitness *)view->environment;
+    if (f->phase) return module_view_return(view);
+    f->phase=1;
+    const XrXirValue *root=w->mode==2?&w->foreign:&w->saved;
+    CHECK(xr_xir_value_copy(root,&f->root)==XR_XIR_VALUE_OK);
+    fprintf(stderr,"Module View callback mode%u entry%u\n",w->mode,xr_xir_call_current_entry(view->activation));
+    if (w->mode==4) return (XrXirAction){.kind=XR_XIR_ACTION_CALL,.callee=4,.arguments=&f->root,.argument_count=1};
+    XrXirCallView copied=*view;copied.instance=NULL;
+    CHECK(xir_instance_view_module_root(&copied,&f->root)!=XR_XIR_CALL_READY);
+    copied=*view;copied.instance=w->other;
+    CHECK(xir_instance_view_module_root(&copied,&f->root)!=XR_XIR_CALL_READY);
+    XrXirCallViewOperation request={.operation=XR_XIR_VIEW_NEW,.type=(XrXirType)MP_SLICE,
+        .root=&f->root,.to_end=true};XrXirFaultDetail fault={0};
+    if (!w->mode || w->mode==3) {
+        const XrXirValuePathStep step={XR_XIR_PATH_INDEX,(XrXirType)MP_ARRAY,0};
+        const XrXirValuePath path={&step,1};
+        CHECK(xr_xir_call_cell_project(view,(XrXirType)MP_PROJECT,&f->root,&path,&f->value)==XR_XIR_VALUE_OK);
+        request.root=&f->value;
+        CHECK(xr_xir_call_view_operation(view,&request,&f->slice,&fault)==XR_XIR_VALUE_BAD_ARGUMENT && !f->slice.type);
+        xr_xir_value_drop(&f->value);request.root=&f->root;
+    }
+    XrXirValueStatus status=xr_xir_call_view_operation(view,&request,&f->slice,&fault);
+    if (w->mode==1 || w->mode==2) {
+        CHECK(status==XR_XIR_VALUE_BAD_ARGUMENT && !f->slice.type && !f->slice.payload && !fault.code);
+        ++w->checks;return module_view_return(view);
+    }
+    CHECK(status==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_call_view_access(view,&w->access)==XR_XIR_VALUE_OK);
+    int64_t count=-1;CHECK(xr_xir_view_len(&f->slice,&w->access,&count)==XR_XIR_VALUE_OK && count==2);
+    CHECK(xr_xir_value_copy(&f->slice,&w->late)==XR_XIR_VALUE_OK);
+    XrXirValue outside={0};request.root=&w->saved;
+    CHECK(xr_xir_call_view_operation(view,&request,&outside,&fault)==XR_XIR_VALUE_BAD_ARGUMENT && !outside.type);
+    request.root=&f->root;request.type=(XrXirType)UINT16_MAX;
+    CHECK(xr_xir_call_view_operation(view,&request,&f->value,&fault)==XR_XIR_VALUE_BAD_ARGUMENT && !f->value.type);
+    CHECK(xr_xir_call_view_local(view,(XrXirType)MP_SLICE,&f->root,0,2,&f->value)==XR_XIR_VALUE_BAD_ARGUMENT);
+    /* A genuine Cell carrying a publication outside the actual slot table is not a module root. */
+    const XrXirValue value={XR_XIR_U8,0,11};XrXirValue array={0};
+    CHECK(xr_xir_array_new((XrXirType)MP_ARRAY,&value,1,xr_xir_call_admission(view),&array)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_instance_cell(view,(XrXirType)MP_CELL,&array,&f->value)==XR_XIR_CALL_READY);
+    XrXirCellPublication publication={view->instance,xr_xir_call_admission(view)->domain,99};
+    CHECK(xr_xir_cell_publication_prepare(&f->value,&publication)==XR_XIR_VALUE_OK);
+    xr_xir_cell_publication_commit(&f->value,&publication);
+    request.type=(XrXirType)MP_SLICE;request.root=&f->value;
+    XrXirValue absent={0};CHECK(xr_xir_call_view_operation(view,&request,&absent,&fault)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(!absent.type && !absent.reserved && !absent.payload);xr_xir_value_drop(&array);
+    ++w->checks;
+    if (w->mode==3) return (XrXirAction){.kind=XR_XIR_ACTION_SUSPEND};
+    return module_view_return(view);
+}
+static void module_view_code_release(void *owner) {++((ModuleViewWitness *)owner)->releases;}
+static void module_view_run(XrXirInstance *instance,uint32_t entry) {
+    CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
+    XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance,UINT64_MAX);
+    if (polled.outcome.status!=XR_XIR_CALL_RETURNED) fprintf(stderr,"Module View entry%u status%u value%lld\n",entry,polled.outcome.status,(long long)polled.outcome.value.payload);
+    CHECK(polled.outcome.status==XR_XIR_CALL_RETURNED);
+    XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
+    CHECK(result.type==(uint32_t)(entry==2?XR_XIR_I64:XR_XIR_UNIT) && !result.reserved && !result.payload);
+}
+static XrXirStatus module_view_metadata(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec,XrXirArtifact **output) {
+    XrXirArtifact *base=NULL;XrXirStatus status=native_metadata_fixture(context,spec,&base);
+    if (status!=XR_XIR_OK) return status;
+    XrXirModule module=*xr_xir_compile_artifact_module(base);XrXirFunction functions[5];
+    memcpy(functions,module.functions,sizeof(functions));module.stage=XR_XIR_BUILT;module.functions=functions;
+    const XrXirBlock block={.count=3};
+    const XrXirInstruction ops[]={
+        {.op=XR_XIR_CELL_READ,.type=(XrXirType)MP_ARRAY,.args={0}},
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},
+        {.op=XR_XIR_MATCH_FAIL}};
+    functions[4].blocks=&block;functions[4].block_count=1;functions[4].instructions=ops;functions[4].instruction_count=3;
+    const XrXirBlock caller_block={.count=4};const uint32_t argument=0;
+    const XrXirInstruction caller_ops[]={
+        {.op=XR_XIR_SLOT_LOAD,.type=(XrXirType)MP_CELL},
+        {.op=XR_XIR_CALL,.args={0,1},.immediate=4},
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},
+        {.op=XR_XIR_RETURN,.args={2}}};
+    functions[2].blocks=&caller_block;functions[2].block_count=1;functions[2].instructions=caller_ops;
+    functions[2].instruction_count=4;functions[2].operands=&argument;functions[2].operand_count=1;
+    XrXirArtifact *checked=NULL,*closed=NULL;
+    status=xir_fixture_check(context,&module,&checked,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(checked,&closed,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&spec->target,output,NULL);
+    xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(checked);xr_xir_compile_artifact_free(base);
+    return status;
+}
+static void module_view_cases(void) {
+    CHECK(!live && !live_bytes);ModuleViewWitness w={0};NativeFixtureOwner owner={0};
+    CHECK(native_fixture_owner_new(&owner)==XR_XIR_OK);
+    const XrXirTypeNode nodes[]={
+        {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_U8},
+        {.kind=XR_XIR_TYPE_CELL,.element=(XrXirType)MP_ARRAY},
+        {.kind=XR_XIR_TYPE_SLICE,.element=XR_XIR_U8},
+        {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_U8}};
+    XrXirTypes types={nodes,4,NULL,NULL};uint32_t dependency=1;
+    XrXirSourceModule modules[]={{.name="root",.name_length=4,.dependencies=&dependency,.dependency_count=1,.initializer=0},
+        {.name="other",.name_length=5,.initializer=1}};
+    XrXirFunctionIdentity identities[5]={{0},{.module=1},{.exported=1},{.module=1,.exported=1},{.module=1,.exported=1}};
+    XrXirSlot slot={0,(XrXirType)MP_CELL,1};
+    XrXirDeclarations declarations={.modules=modules,.module_count=2,.functions=identities,.slots=&slot,
+        .slot_count=1,.root_module=0,.entry_function=2};
+    XrXirCallEntry entries[5]={0};
+    for (uint32_t i=0;i<5;++i) entries[i]=(XrXirCallEntry){.abi_version=XR_XIR_CALL_ABI_VERSION,
+        .result=i==2?XR_XIR_I64:XR_XIR_UNIT,.state_bytes=sizeof(ModuleViewFrame),
+        .resume=i<2?module_view_init:module_view_entry,.release=module_view_cleanup,.environment=&w};
+    const XrXirType parameter=(XrXirType)MP_CELL;
+    entries[4].parameters=&parameter;entries[4].parameter_count=1;entries[4].resume=module_view_borrowed;
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        entries,5,&declarations,{&w,module_view_code_release},&types,{0}};
+    XrXirArtifact *artifact=NULL;CHECK(module_view_metadata(&owner.context,&spec,&artifact)==XR_XIR_OK);
+    spec.types=xr_xir_compile_artifact_module(artifact)->types;spec.packet=xir_program_packet_borrow(artifact);
+    XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(artifact),&spec,&program)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(artifact);native_fixture_owner_free(&owner);
+    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    XrXirInstance *first=NULL,*second=NULL;
+    CHECK(xr_xir_instance_new(program,&config,&first)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_new(program,&config,&second)==XR_XIR_CALL_READY);
+    xr_xir_compile_program_drop(program);w.other=second;
+    module_view_run(first,2);
+    int64_t length=77;CHECK(xr_xir_view_len(&w.late,&w.access,&length)==XR_XIR_VALUE_BAD_ARGUMENT && length==77);
+    xr_xir_value_drop(&w.late);w.access=(XrXirViewAccess){0};
+    w.mode=1;module_view_run(first,3);
+    CHECK(xr_xir_value_copy(&w.saved,&w.foreign)==XR_XIR_VALUE_OK);
+    w.mode=2;module_view_run(second,2);xr_xir_value_drop(&w.foreign);
+    w.mode=4;module_view_run(first,2);
+    w.mode=3;CHECK(xr_xir_instance_start(first,2,NULL,0)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_poll_bounded(first,UINT64_MAX).outcome.status==XR_XIR_CALL_SUSPENDED);
+    CHECK(xr_xir_instance_cancel_current(first)==XR_XIR_CALL_CANCEL_REQUESTED);
+    CHECK(xr_xir_instance_poll_bounded(first,UINT64_MAX).outcome.status==XR_XIR_CALL_CANCELLED);
+    length=77;CHECK(xr_xir_view_len(&w.late,&w.access,&length)==XR_XIR_VALUE_BAD_ARGUMENT && length==77);
+    CHECK(w.checks==5);
+    CHECK(xr_xir_instance_free(first)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_free(second)==XR_XIR_CALL_READY);
+    xr_xir_value_drop(&w.saved);xr_xir_value_drop(&w.foreign);xr_xir_value_drop(&w.late);
+    CHECK(w.releases==1 && !live && !live_bytes);
+}
 #include "xir_view_access_default_access_cases.h"
 int main(int argc,char **argv) {
     if (argc==2 && !strcmp(argv[1],"--root-model")) {access_root_model_dump();return 0;}
+    if (argc==2 && !strcmp(argv[1],"--slot-init")) {slot_publication_cases();module_view_cases();return 0;}
     bool normal=argc==2 && !strcmp(argv[1],"--normal");CHECK(argc==1 || normal);setvbuf(stdout,NULL,_IONBF,0);
+    slot_publication_cases();module_view_cases();
     default_access_cases(normal);
     for (uint32_t kind=0;kind<A_CASES;++kind) access_resources(kind,normal);
     for (uint32_t kind=148;kind<A_CASES;++kind) access_frame_boundary(kind);

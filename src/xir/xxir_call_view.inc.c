@@ -10,6 +10,7 @@
  *   Physical pins stabilize exact registered identities. Only the current real
  *   callback can access them, and every frame pop revokes permission first.
  */
+#include "xxir_instance_view_internal.h"
 struct CallViewBinding {
     CallViewBinding *next;
     XrXirViewOriginPin pin;
@@ -184,6 +185,24 @@ XR_FUNC XrXirValueStatus xr_xir_call_view_reborrow(XrXirCallView *view,XrXirType
     status=xr_xir_view_reborrow(type,parent,&c.spec,&access,&created);
     call_view_finish(&c,status,&created,output);return status;
 }
+static XrXirValueStatus call_view_storage(CallViewCreation *c,XrXirType type,
+    const XrXirValue *root,int64_t offset,int64_t length,XrXirValue *output) {
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(c->call->config.admission.arena);
+    const XrXirTypeNode *cell=xr_xir_type_node(types,(XrXirType)root->type);
+    const XrXirTypeNode *result=xr_xir_type_node(types,type);
+    const XrXirTypeNode *array=cell ? xr_xir_type_node(types,cell->element) : NULL;
+    bool string=cell && cell->kind==XR_XIR_TYPE_CELL && cell->element==XR_XIR_STRING;
+    if (!cell || cell->kind!=XR_XIR_TYPE_CELL ||
+        (string ? c->spec.kind!=XR_XIR_TYPE_SLICE || result->element!=XR_XIR_U8 :
+         !array || array->kind!=XR_XIR_TYPE_ARRAY || result->element!=array->element)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    c->spec.authority=c->spec.kind==XR_XIR_TYPE_SLICE ? frame_cell_authority(c->call,c->frame) :
+        (XrXirCellAuthority){c->call,output,c->frame->epoch};
+    c->spec.offset=offset;c->spec.length=length;XrXirValueStatus status=call_view_reserve(c);
+    if (status!=XR_XIR_VALUE_OK) return status;
+    XrXirValue created={0};c->call->admitting=true;
+    status=xr_xir_view_new(type,root,NULL,&c->spec,&c->call->config.admission,&created);
+    call_view_finish(c,status,&created,output);return status;
+}
 XR_FUNC XrXirValueStatus xr_xir_call_view_local(XrXirCallView *view,XrXirType type,
     const XrXirValue *root,int64_t offset,int64_t length,XrXirValue *output) {
     CallViewCreation c={0};XrXirValueStatus status=call_view_prepare(view,type,output,&c);
@@ -191,21 +210,16 @@ XR_FUNC XrXirValueStatus xr_xir_call_view_local(XrXirCallView *view,XrXirType ty
     if (!call_view_slot(c.frame,root) || !xr_xir_value_valid(root) ||
         xr_xir_cell_is_projection(root) || xr_xir_cell_module_storage(root) ||
         offset<0 || length<0) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirTypes *types=xr_xir_compile_type_arena_types(c.call->config.admission.arena);
-    const XrXirTypeNode *cell=xr_xir_type_node(types,(XrXirType)root->type);
-    const XrXirTypeNode *result=xr_xir_type_node(types,type);
-    const XrXirTypeNode *array=cell ? xr_xir_type_node(types,cell->element) : NULL;
-    bool string=cell && cell->kind==XR_XIR_TYPE_CELL && cell->element==XR_XIR_STRING;
-    if (!cell || cell->kind!=XR_XIR_TYPE_CELL ||
-        (string ? c.spec.kind!=XR_XIR_TYPE_SLICE || result->element!=XR_XIR_U8 :
-         !array || array->kind!=XR_XIR_TYPE_ARRAY || result->element!=array->element)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    c.spec.authority=c.spec.kind==XR_XIR_TYPE_SLICE ? frame_cell_authority(c.call,c.frame) :
-        (XrXirCellAuthority){c.call,output,c.frame->epoch};
-    c.spec.offset=offset;c.spec.length=length;status=call_view_reserve(&c);
+    return call_view_storage(&c,type,root,offset,length,output);
+}
+static XrXirValueStatus call_view_module(XrXirCallView *view,XrXirType type,
+    const XrXirValue *root,int64_t offset,int64_t length,XrXirValue *output) {
+    CallViewCreation c={0};XrXirValueStatus status=call_view_prepare(view,type,output,&c);
     if (status!=XR_XIR_VALUE_OK) return status;
-    XrXirValue created={0};c.call->admitting=true;
-    status=xr_xir_view_new(type,root,NULL,&c.spec,&c.call->config.admission,&created);
-    call_view_finish(&c,status,&created,output);return status;
+    if (c.spec.kind!=XR_XIR_TYPE_SLICE || !call_view_slot(c.frame,root) || offset<0 || length<0)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirCallStatus admitted=xir_instance_view_module_root(view,root);
+    return admitted==XR_XIR_CALL_READY ? call_view_storage(&c,type,root,offset,length,output) : call_view_status(admitted);
 }
 static void frame_view_release(XrXirCall *call,CallFrame *frame) {
     while (frame->views) {

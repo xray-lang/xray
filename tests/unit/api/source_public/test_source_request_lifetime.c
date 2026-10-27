@@ -106,7 +106,71 @@ static void execution_policy(void) {
     options=(XrSourceExecutionOptions){XR_SOURCE_MEMORY_ORDINARY,1};
     CHECK(xray_source_execution_new(&options,&execution)==XR_SOURCE_BAD_ARGUMENT && !execution);
 }
+typedef struct ArrayOutput { char bytes[16]; size_t size; } ArrayOutput;
+static XrSourceWriteStatus array_write(void *context,XrSourceOutputStream stream,const char *bytes,size_t size) {
+    ArrayOutput *out=context;
+    CHECK(stream==XR_SOURCE_STDOUT && size<=sizeof(out->bytes)-out->size);
+    memcpy(out->bytes+out->size,bytes,size);out->size+=size;return XR_SOURCE_WRITE_OK;
+}
+static void global_array_source(char *source,size_t length,const char *name,const char *expected) {
+    Cancel cancel={0,0};XrSourceCompileOptions options=xray_source_compile_options_default();
+    options.stdlib_path=XR_PUBLIC_STDLIB;options.cancel_poll=cancel_poll;options.cancel_context=&cancel;
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"global-array-slice",source,length}};
+    XrSourceArtifact *artifact=NULL;XrSourceFailure failure={0};XrSourceDiagnostic *diagnostic=NULL;
+    XrSourceStatus status=xray_source_build(&input,&options,&artifact,&failure,&diagnostic);
+    if (status!=XR_SOURCE_OK && diagnostic) {
+        XrSourceDiagnosticInfo info={0};CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
+        fprintf(stderr,"Global Array Source %u %d:%d %s\n",(unsigned)status,info.line,info.column,info.message);
+    }
+    CHECK(status==XR_SOURCE_OK && artifact && !diagnostic && failure.cleanup_status==XR_SOURCE_OK);
+    size_t polls=cancel.polls;cancel.cancelled=1;memset(source,'!',length);
+    XrSourceExecution *execution=execution_new();XrSourceCallOptions runtime;
+    CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
+    ArrayOutput out={0};runtime.write=array_write;runtime.context=&out;XrSourceCall *call=NULL;
+    if (name) {
+        XrSourceInvocation invocation;CHECK(xray_source_invocation_init(&invocation,sizeof(invocation))==XR_SOURCE_OK);
+        invocation.name=name;invocation.name_length=strlen(name);
+        CHECK(xray_source_invoke_begin(execution,artifact,&invocation,&runtime,&call)==XR_SOURCE_OK);
+    } else CHECK(xray_source_artifact_begin(execution,artifact,&runtime,&call)==XR_SOURCE_OK);
+    xray_source_artifact_free(artifact);xray_source_execution_free(execution);
+    XrSourceEvent event=finish(call);
+    if (event.state!=XR_SOURCE_RUN_RETURNED)
+        fprintf(stderr,"Global Array runtime state=%u engine=%u output=%zu named=%u\n",
+            (unsigned)event.state,event.engine_status,out.size,name!=NULL);
+    CHECK(event.state==XR_SOURCE_RUN_RETURNED);
+    XrSourceResult *result=NULL;CHECK(xray_source_call_take(call,&result)==XR_SOURCE_OK && result);
+    CHECK(xray_source_call_drop(&call,NULL)==XR_SOURCE_OK && !call);
+    CHECK(cancel.polls==polls && out.size==strlen(expected) && !memcmp(out.bytes,expected,out.size));
+    if (name) {
+        const char *bytes=NULL;size_t size=0;
+        CHECK(xray_source_result_bytes(result,&bytes,&size)==XR_SOURCE_OK && size==11 && !memcmp(bytes,"array-owner",11));
+        XrSourceResult *copy=NULL;CHECK(xray_source_result_copy(result,&copy)==XR_SOURCE_OK && copy);
+        xray_source_result_free(result);result=copy;
+        CHECK(xray_source_result_bytes(result,&bytes,&size)==XR_SOURCE_OK && size==11 && !memcmp(bytes,"array-owner",11));
+    } else {
+        int64_t value=-1;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK && !value);
+    }
+    xray_source_result_free(result);
+}
+static void global_array_lifetime(void) {
+    char bytes[]="fn length(bytes:Slice<u8>)->i64 { return len(bytes) }\n"
+        "var good:Array<u8>=[65,0,195,169]\nprint(length(good[:]))\n";
+    global_array_source(bytes,sizeof(bytes)-1,NULL,"4\n");
+    char numbers[]="fn length(bytes:Slice<u8>)->i64 { return len(bytes) }\n"
+        "var good:Array<u8>=[65,0,195,169]\nvar values:Array<i64>=[7,9]\n"
+        "print(length(good[:]))\nprint(len(values))\n"
+        "export fn answer()->string { return \"array-owner\" }\n";
+    global_array_source(numbers,sizeof(numbers)-1,"answer","4\n2\n");
+}
+static void global_string_lifetime(void) {
+    char text[]="fn length(v:Slice<u8>)->i64 { return len(v) }\n"
+        "var text:string=\"array-\"+\"owner\"\nvar empty:string=\"\"\nvar utf8:string=\"A\\0é\"\n"
+        "print(length(text.bytes()))\nprint(length(empty.bytes()))\nprint(length(utf8.bytes()))\n"
+        "export fn answer()->string { return text }\n";
+    global_array_source(text,sizeof(text)-1,"answer","11\n0\n4\n");
+}
 int main(void) {
     independent_requests();detached_ast_and_result();ready_c_artifact();execution_policy();
+    global_array_lifetime();global_string_lifetime();
     puts("Independent Source requests, ready artifacts, detached AST and result ownership passed");return 0;
 }

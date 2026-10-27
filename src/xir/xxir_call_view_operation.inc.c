@@ -42,6 +42,17 @@ static XrXirValueStatus call_view_range_operation(XrXirCallView *view,
     XrXirValueStatus status=call_view_prepare(view,request->type,output,&creation);
     if (status!=XR_XIR_VALUE_OK || (!sub && !call_view_slot(creation.frame,request->root)))
         return status==XR_XIR_VALUE_OK ? XR_XIR_VALUE_BAD_ARGUMENT : status;
+    uint32_t parameter=UINT32_MAX;bool module=false;
+    if (!sub) {
+        status=call_view_root_parameter(view,request->root,&parameter);
+        if (status!=XR_XIR_VALUE_OK) return status;
+        module=parameter==UINT32_MAX && xr_xir_cell_module_storage(request->root);
+        if (module) {
+            if (creation.spec.kind!=XR_XIR_TYPE_SLICE) return XR_XIR_VALUE_BAD_ARGUMENT;
+            XrXirCallStatus admitted=xir_instance_view_module_root(view,request->root);
+            if (admitted!=XR_XIR_CALL_READY) return call_view_status(admitted);
+        }
+    }
     status=sub ? xr_xir_call_view_access(view,&access) :
         call_view_root_length(view,request->root,&length);
     if (sub && status==XR_XIR_VALUE_OK) status=xr_xir_view_len(request->root,&access,&length);
@@ -52,9 +63,7 @@ static XrXirValueStatus call_view_range_operation(XrXirCallView *view,
         return XR_XIR_VALUE_BOUNDS;
     }
     if (sub) return xr_xir_call_view_reborrow(view,request->type,request->root,start,end-start,output);
-    uint32_t parameter=UINT32_MAX;
-    status=call_view_root_parameter(view,request->root,&parameter);
-    if (status!=XR_XIR_VALUE_OK) return status;
+    if (module) return call_view_module(view,request->type,request->root,start,end-start,output);
     return parameter==UINT32_MAX ? xr_xir_call_view_local(view,request->type,request->root,start,end-start,output) :
         xr_xir_call_view_new(view,request->type,parameter,start,end-start,output);
 }

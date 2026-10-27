@@ -1,5 +1,5 @@
 add_executable(test_xir_p09_view_access xir/test_xir_p09_view_access.c)
-target_link_libraries(test_xir_p09_view_access PRIVATE xray_xir_scalar)
+target_link_libraries(test_xir_p09_view_access PRIVATE xray_xir_scalar xray_xir)
 target_include_directories(test_xir_p09_view_access PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/base)
 if(WIN32)
     target_sources(test_xir_p09_view_access PRIVATE ${PROJECT_SOURCE_DIR}/src/os/win/thread_win.c)

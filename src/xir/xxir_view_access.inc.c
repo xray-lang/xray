@@ -168,6 +168,9 @@ static XrXirStatus view_access_binding(ViewAccess *a,const XrXirInstruction *op,
     }
     return XR_XIR_OK;
 }
+static bool view_access_scalar_storage(XrXirType type) {
+    return type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_number(type);
+}
 static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEvent *event) {
     const XrXirInstruction *op=a->body->instructions+event->instruction;
     const XrXirTypes *types=a->resolver->check.module->types;const uint8_t *flags=a->resolver->check.flags;
@@ -185,8 +188,17 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
                 XrXirType scalar=xr_xir_cell_element(types,payload);
                 /* Publishing scalar storage does not access another referent.
                  * Ordinary IR, Cell origin and runtime publication checks retain authority. */
-                if (scalar==XR_XIR_BOOL || scalar==XR_XIR_RUNE || xr_xir_type_is_number(scalar))
-                    return XR_XIR_OK;
+                if (view_access_scalar_storage(scalar)) return XR_XIR_OK;
+                const XrXirTypeNode *array=xr_xir_type_node(types,scalar);
+                /* Publishing an owned Cell handle does not read its referent.
+                 * String and scalar Array storage have no borrowed descendants. */
+                bool storage=scalar==XR_XIR_STRING || (array && array->kind==XR_XIR_TYPE_ARRAY &&
+                    view_access_scalar_storage(array->element));
+                if (storage && !view_flags_at(types,flags,payload) &&
+                    !view_flags_at(types,flags,scalar==XR_XIR_STRING?XR_XIR_STRING:array->element) &&
+                    a->cells && a->cells->owner &&
+                    xr_xir_cell_provenance_origin(a->cells->owner,a->function,op->args[0])==
+                        (XR_XIR_CELL_ORIGIN_OWNED|XR_XIR_CELL_ORIGIN_MODULE)) return XR_XIR_OK;
             }
         }
     }
