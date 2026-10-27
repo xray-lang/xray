@@ -109,8 +109,7 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
         plan->binding=visible_name(ctx,node->as.new_expr.module_name ?
             node->as.new_expr.module_name : node->as.new_expr.class_name);
         if(!plan->binding && !node->as.new_expr.module_name &&
-            (source_text_same(ctx,node,node->as.new_expr.class_name,"StringBuilder") ||
-             source_text_same(ctx,node,node->as.new_expr.class_name,"Range")))
+            source_text_same(ctx,node,node->as.new_expr.class_name,"Range"))
             plan->binding=source_prelude_lookup(ctx,node->as.new_expr.class_name);
     } else if (node->type==AST_CALL_EXPR && node->as.call_expr.callee && node->as.call_expr.callee->type==AST_VARIABLE) {
         plan->binding=visible_name(ctx,node->as.call_expr.callee->as.variable.name);

@@ -18,7 +18,6 @@ typedef struct XirPreludeSource {
     uint8_t input_sha256[32];
     const XirPreludeEnum *enums;
     uint32_t enum_count;
-    uint8_t stringbuilder_input_sha256[32];
     uint8_t range_input_sha256[32];
 } XirPreludeSource;
 #include "../shared/xprelude_source.inc.c"

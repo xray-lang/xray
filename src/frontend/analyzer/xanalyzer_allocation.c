@@ -376,7 +376,6 @@ static XaAllocationContractKind alloc_intrinsic_contract(const char *name) {
         {"Map", XA_ALLOCATION_CONTRACT_MAY_HEAP},
         {"Set", XA_ALLOCATION_CONTRACT_MAY_HEAP},
         {"JSON", XA_ALLOCATION_CONTRACT_MAY_HEAP},
-        {"StringBuilder", XA_ALLOCATION_CONTRACT_MAY_HEAP},
         {"Atomic", XA_ALLOCATION_CONTRACT_MAY_HEAP},
         {"copy", XA_ALLOCATION_CONTRACT_MAY_HEAP},
         {"str_concat", XA_ALLOCATION_CONTRACT_MAY_HEAP},
