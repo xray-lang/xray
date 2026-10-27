@@ -66,6 +66,18 @@ static bool source_recipe_never(SourceContext *ctx,const XrXirInstruction *op,
             source_recipe_operand_i64(ctx,ordinal,op->args[0]) &&
             source_recipe_operand_i64(ctx,ordinal,op->args[1]);
         return true;
+    case XR_XIR_LT_INT: case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
+        *output=op->type==XR_XIR_BOOL &&
+            source_recipe_operand_i64(ctx,ordinal,op->args[0]) &&
+            source_recipe_operand_i64(ctx,ordinal,op->args[1]);
+        return true;
+    case XR_XIR_BRANCH:
+        *output=op->type==XR_XIR_UNIT &&
+            source_recipe_operand_type(ctx,ordinal,op->args[0])==XR_XIR_BOOL;
+        return true;
+    case XR_XIR_JUMP:
+        *output=op->type==XR_XIR_UNIT && !op->args[0] && !op->args[1] && !op->immediate;
+        return true;
     case XR_XIR_CELL_WRITE:
         *output=op->type==XR_XIR_UNIT &&
             xr_xir_cell_element(&ctx->types,source_recipe_operand_type(ctx,ordinal,op->args[0]))==XR_XIR_I64 &&

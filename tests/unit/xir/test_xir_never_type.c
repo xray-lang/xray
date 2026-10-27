@@ -384,6 +384,19 @@ static char *source_transport_text(size_t *length) {
         "return len(data.filter(fn(x:i64)->bool{return x%2==0}))}\n"
         "export fn filterCaptured()->i64{var pivot:i64=2;var data=[1,2,3,4];"
         "return len(data.filter(fn(x:i64)->bool{return x==pivot}))}\n"
+        "export fn filterLess()->i64{var data=[1,2,3,4];"
+        "return len(data.filter(fn(x:i64)->bool{return x<3}))}\n"
+        "export fn filterLessEqual()->i64{var data=[1,2,3,4];"
+        "return len(data.filter(fn(x:i64)->bool{return x<=3}))}\n"
+        "export fn filterGreater()->i64{var data=[1,2,3,4];"
+        "return len(data.filter(fn(x:i64)->bool{return x>3}))}\n"
+        "export fn filterGreaterEqual()->i64{var data=[1,2,3,4];"
+        "return len(data.filter(fn(x:i64)->bool{return x>=3}))}\n"
+        "export fn filterCondition()->i64{var data=[1,2,3,4];"
+        "return len(data.filter(fn(x:i64)->bool{if(x<3){return true}else{return false}}))}\n"
+        "enum PredicateFailure{Bad}\n"
+        "export fn throwingCondition()->bool{var f=fn(x:i64)->bool{"
+        "if(x<3){throw PredicateFailure.Bad};return false};return f(4)}\n"
         "export fn equalFloatControl()->bool{var f=fn(x:f64)->bool{return x==2.0};return f(2.0)}\n"
         "export fn notEqualControl()->bool{var f=fn(x:i64)->bool{return x!=2};return f(2)}\n"
         "export fn makeCounter(base:i64)->fn()->i64{var count=base;"
@@ -464,7 +477,8 @@ static void check_source_bounds(const XrXirArtifact *artifact,bool consumer) {
     CHECK(module->functions[source_named_function(module,"raw")].error_type==
         (consumer ? XR_XIR_ERROR : XR_XIR_NEVER));
     const char *empty[]={"probeMakeAdder","makeGeneric","makeCell","makeSlot","makeText",
-        "filterEqual","filterRemainder","filterCaptured","makeCounter"};
+        "filterEqual","filterRemainder","filterCaptured","makeCounter",
+        "filterLess","filterLessEqual","filterGreater","filterGreaterEqual","filterCondition"};
     for (size_t i=0;i<sizeof(empty)/sizeof(empty[0]);++i) {
         const XrXirFunction *closure=&module->functions[source_closure_function(module,empty[i])];
         if (closure->error_type!=XR_XIR_NEVER)
@@ -473,6 +487,7 @@ static void check_source_bounds(const XrXirArtifact *artifact,bool consumer) {
     }
     check_source_indirect_bounds(module,&module->functions[source_closure_function(module,"makeIndirect")],1u,1u);
     check_source_indirect_bounds(module,&module->functions[source_closure_function(module,"makeStoredIndirect")],1u,2u);
+    CHECK(module->functions[source_closure_function(module,"throwingCondition")].error_type==XR_XIR_ERROR);
     CHECK(module->functions[source_closure_function(module,"equalFloatControl")].error_type==XR_XIR_ERROR);
     CHECK(module->functions[source_closure_function(module,"notEqualControl")].error_type==XR_XIR_ERROR);
     CHECK(module->functions[source_closure_function(module,"writeBoolControl")].error_type==XR_XIR_ERROR);
