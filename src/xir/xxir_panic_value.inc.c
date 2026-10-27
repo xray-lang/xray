@@ -18,6 +18,7 @@ static size_t xr_xir_panic_message_format_graph_operation(XrXirFaultDetail detai
     case XR_XIR_PANIC_DIVIDE: written = snprintf(buffer, capacity, "division by zero"); break;
     case XR_XIR_PANIC_REMAINDER: written = snprintf(buffer, capacity, "modulo by zero"); break;
     case XR_XIR_PANIC_RANGE: written = snprintf(buffer, capacity, "numeric conversion is out of range"); break;
+    case XR_XIR_PANIC_STRING_SLICE_RANGE: written = snprintf(buffer, capacity, XR_ERROR_CORE_STRING_SLICE_RANGE_MSG); break;
     case XR_XIR_PANIC_DEFER_ASYNC: written = snprintf(buffer, capacity, "defer cleanup cannot suspend or create tasks"); break;
     case XR_XIR_PANIC_BOUNDS:
         written = snprintf(buffer, capacity, "array index out of range: %" PRId64 " (length %" PRId64 ")",

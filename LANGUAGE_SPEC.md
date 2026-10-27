@@ -6536,7 +6536,7 @@ Both methods prepare a private owned candidate: reverse reverses the element ord
 | `string.join(parts, separator?)` | joins an `Array<string>` |
 | `contains(s)` | substring containment test |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | return rune ordinals |
-| `slice(start, end?)` | independent rune-ordinal slice; the range must be valid |
+| `slice(start, end?)` | independent rune-ordinal slice; requires `0 <= start <= end <= len(receiver)`, with omitted end using the receiver length; an invalid range panics with E0433 and message `string slice range is invalid` |
 | `sliceBytes(start, end)` | slice by byte offset; invalid boundaries throw `StringSliceError.InvalidByteRange` |
 | `split(sep, limit?)` | split into `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | replacement |
@@ -8747,6 +8747,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | index out of bounds |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | missing Map key |
 | `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | `next()` / `nth()` on an exhausted `Iterator<T>`, violating the two-step pull protocol; see §5.3.6 |
+| `E0433` | `XR_ERR_STRING_SLICE_RANGE` | invalid half-open rune range in `string.slice`; message `string slice range is invalid` |
 
 #### System, Calls, Coroutines, and Stdlib
 

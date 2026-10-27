@@ -524,6 +524,21 @@ static XrXirRunStatus vm_io_step(ScalarRun *run, VmState *state, XrXirAction *ac
         if (!call) return XR_XIR_RUN_BAD_ARTIFACT;
         const uint32_t *args = run->function->operands + op->args[0];
         XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[args[0]])};
+        if(call->implementation==XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_SLICE) {
+            int64_t start=xr_xir_scalar_load(run->frame,run->layout->offsets[args[1]]);
+            int64_t end=xr_xir_scalar_load(run->frame,run->layout->offsets[args[2]]);
+            XrXirValue result={0};
+            XrXirValueStatus status=xr_xir_string_slice(&left,start,end,xr_xir_call_admission(run->view),&result);
+            state->instruction=next;
+            if(status==XR_XIR_VALUE_BOUNDS) {
+                *action=(XrXirAction){.kind=XR_XIR_ACTION_FAULT,
+                    .value={XR_XIR_I64,0,XR_XIR_CALL_RUNTIME_PANIC},
+                    .panic={{XR_XIR_PANIC_STRING_SLICE_RANGE,0,0,0},{0}}};
+                return XR_XIR_RUN_OK;
+            }
+            if(status==XR_XIR_VALUE_OK) xr_xir_owned_slot_move(run->frame,run->layout->offsets[result_id],&result);
+            xr_xir_value_drop(&result);return value_run_status(status);
+        }
         XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(run->frame, run->layout->offsets[args[1]])};
         bool result = false;
         bool valid = call->implementation == XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_CONTAINS ?

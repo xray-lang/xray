@@ -883,6 +883,27 @@ static void emit_io_step(CBuffer *buffer, const XrXirFunction *function,
             return;
         }
         const uint32_t *args = function->operands + op->args[0];
+        if(call->implementation==XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_SLICE) {
+            EMIT_FORMAT(buffer, et_a12fbb4e2f673d8e,
+                " { XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
+                " int64_t start = xr_xir_scalar_load(state->frame, %uu);\n"
+                " int64_t end = xr_xir_scalar_load(state->frame, %uu);\n"
+                " XrXirValue result = {0};\n"
+                " XrXirValueStatus status = %s(&left, start, end, xr_xir_call_admission(view), &result);\n"
+                " if (status == XR_XIR_VALUE_BOUNDS) {\n",
+                layout->offsets[args[0]],layout->offsets[args[1]],layout->offsets[args[2]],call->c_symbol);
+            emit_fault_return(buffer,function,layout,index,
+                "((XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,XR_XIR_CALL_RUNTIME_PANIC},"
+                "{{XR_XIR_PANIC_STRING_SLICE_RANGE,0,0,0},{0}},0})");
+            EMIT_LITERAL(buffer," }\n");
+            EMIT_STATIC(buffer, es_5ea5a5661efcb06b,
+                " if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&result); return xr_xir_call_fault(\n"
+                " status == XR_XIR_VALUE_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"
+                " status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT); }\n");
+            EMIT_FORMAT(buffer, et_fcc0888b31009443,
+                " xr_xir_owned_slot_move(state->frame, %uu, &result); }\n",destination);
+            break;
+        }
         EMIT_FORMAT(buffer, et_63f709fc7cc6dda0, " { XrXirValue left = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
             " XrXirValue right = {XR_XIR_STRING, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
             " bool result = false; if (!%s(&left, &right, &result)) goto limit;\n"

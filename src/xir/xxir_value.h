@@ -155,6 +155,10 @@ typedef struct XrXirValueAdmission {
     void *context;
     uint64_t work, scratch_bytes; /* work belongs only to execution Domains. */
 } XrXirValueAdmission;
+/* Strict scalar range. A proper substring owns receiving-domain storage;
+ * invalid ranges preserve the required Unit output and return BOUNDS. */
+XR_FUNC XrXirValueStatus xr_xir_string_slice(const XrXirValue *receiver,
+    int64_t start, int64_t end, XrXirValueAdmission *admission, XrXirValue *output);
 
 /* Owned immutable String operations publish only complete receiving values. */
 XR_FUNC XrXirValueStatus xr_xir_string_copy_bytes(const XrXirValue *receiver,

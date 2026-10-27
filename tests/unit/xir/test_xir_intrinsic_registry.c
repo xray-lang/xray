@@ -28,18 +28,30 @@ static const char source_text[] =
     "export fn probe(text:string,search:string)->bool{return text.contains(search)}\n"
     "export fn prefix(text:string,search:string)->bool{return text.startsWith(search)}\n"
     "export fn suffix(text:string,search:string)->bool{return text.endsWith(search)}\n"
+    "export fn cut(text:string,start:i64,end:i64)->string{return text.slice(start,end)}\n"
+    "export fn tail(text:string,start:i64)->string{return text.slice(start)}\n"
+    "fn sliceProof()->string{return \"A\xc3\xa9\xe4\xb8\xad\xf0\x9f\x98\x80\".slice(1,3)}\n"
+    "export fn cutFolded()->string{return comptime sliceProof()}\n"
     "fn proof()->bool{return \"\".contains(\"\") && \"\".startsWith(\"\") && \"\".endsWith(\"\")}\n"
     "export fn folded()->bool{return comptime proof()}\n"
     "print(probe(\"\xc3\xa9\\0abc\",\"\\0a\"),probe(\"\xc3\xa9\\0abc\",\"z\"),folded())\n"
     "print(prefix(\"\xc3\xa9\\0abc\",\"\xc3\xa9\\0\"),suffix(\"\xc3\xa9\\0abc\",\"\\0abc\"),"
-    "prefix(\"xab\",\"ab\"),suffix(\"abx\",\"ab\"),prefix(\"\",\"\"),suffix(\"abc\",\"abcd\"))\n";
+    "prefix(\"xab\",\"ab\"),suffix(\"abx\",\"ab\"),prefix(\"\",\"\"),suffix(\"abc\",\"abcd\"))\n"
+    "print(cut(\"A\xc3\xa9\xe4\xb8\xad\xf0\x9f\x98\x80\",1,3),tail(\"abc\",1),len(cut(\"a\\0b\",1,2)),cutFolded(),cutCatch(),cutCatchFolded(),sliceSnapshot())\n"
+    "fn sliceCatch()->i64{try{const value=cut(\"abc\",2,1);return len(value)}catch panic(p){"
+    "return p.code==433 && p.message==\"string slice range is invalid\" ? 42 : 0}}\n"
+    "export fn cutCatch()->i64{return sliceCatch()}\n"
+    "export fn cutCatchFolded()->i64{return comptime sliceCatch()}\n"
+    "fn changeSliceReceiver(text:ref string)->i64{text=\"changed\";return 1}\n"
+    "fn sliceSnapshot()->string{var text=\"A\xc3\xa9\xe4\xb8\xad\xf0\x9f\x98\x80\";"
+    "const part=text.slice(changeSliceReceiver(ref text),3);return part+\":\"+text}\n";
 
 typedef struct Fixture {
     XrXirCompileContext context;
     XrXirArtifact *closed;
     XrXirCheckedPacket packet;
     uint8_t identity[32];
-    uint32_t probe, prefix, suffix, folded, entry;
+    uint32_t probe, prefix, suffix, folded, cut, tail, cut_folded, entry;
 } Fixture;
 
 static uint32_t named(const XrXirModule *module, const char *name) {
@@ -81,6 +93,8 @@ static Fixture fixture_new(void) {
     fixture.prefix = named(module, "prefix");
     fixture.suffix = named(module, "suffix");
     fixture.folded = named(module, "folded");
+    fixture.cut = named(module, "cut");fixture.tail = named(module, "tail");
+    fixture.cut_folded = named(module, "cutFolded");
     fixture.entry = module->declarations->entry_function;
     return fixture;
 }
@@ -126,6 +140,16 @@ static void registry(void) {
             member->parameters[0].type == XR_NATIVE_TERM_STRING && !strcmp(member->failures, "none"));
         CHECK(member->allocation == XR_NATIVE_ALLOCATION_NO_HEAP && member->ownership == XR_NATIVE_RESULT_OWNERSHIP_OWNED);
     }
+    member=xr_native_declaration_member(owner,"slice");call=xr_xir_intrinsic(4);
+    CHECK(call && call->member==member && call->owner==owner && call->ctfe);
+    CHECK(call->implementation==XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_SLICE &&
+        !strcmp(call->c_symbol,"xr_xir_string_slice") && call->effects==XR_NATIVE_INTRINSIC_READ);
+    CHECK(member->allocation==XR_NATIVE_ALLOCATION_MAY_HEAP && member->result==XR_NATIVE_TERM_STRING &&
+        member->parameter_count==2 && !strcmp(member->failures,"bounds,allocation,retain,limit"));
+    XrXirType parameter=XR_XIR_UNIT;
+    CHECK(xr_xir_intrinsic_parameter(call,1,&parameter) && parameter==XR_XIR_I64);
+    CHECK(xr_xir_intrinsic_parameter(call,2,&parameter) && parameter==XR_XIR_I64);
+    CHECK(!xr_xir_intrinsic_parameter(call,3,&parameter));
 }
 static void lir_rejected(void) {
     SourceFixture source = source_fixture(
@@ -179,7 +203,8 @@ static void predecessor_rejected(Fixture *fixture, const char *path, uint32_t sc
     CHECK(!memcmp(bytes, evaluation ? "XRCEV\0\0\0" : "XRCHK\0\0\0", 8));
     CHECK(get32(bytes + 8) == schema && get32(bytes + 12) == contract);
     CHECK(get32(fixture->packet.bytes + 12) != get32(bytes + 12));
-    if (!evaluation) CHECK(get32(fixture->packet.bytes + 8) != get32(bytes + 8));
+    if (!evaluation) CHECK(get32(fixture->packet.bytes + 8) != get32(bytes + 8) ||
+        get32(fixture->packet.bytes + 12) != get32(bytes + 12));
     XrSHA256Context hash;
     uint8_t digest[32];
     xr_sha256_init(&hash);
@@ -255,7 +280,7 @@ static void execute(XrXirInstance *instance, uint32_t function, const XrXirValue
     CHECK(result.type == XR_XIR_BOOL && !result.reserved && result.payload == expected);
     xr_xir_value_drop(&result);
 }
-typedef struct Output { char bytes[64]; size_t size; XrXirOutputSink sink; } Output;
+typedef struct Output { char bytes[128]; size_t size; XrXirOutputSink sink; } Output;
 static XrXirOutputStatus output_bytes(void *context, XrXirOutputStream stream,
     const char *text, size_t size) {
     Output *output = context;
@@ -327,7 +352,8 @@ static void consumers(Fixture *fixture) {
         xr_xir_value_drop(&arguments[0]); xr_xir_value_drop(&arguments[1]);
     }
     execute(instance, fixture->folded, NULL, 0, true);
-    const char expected_output[] = "true false true\ntrue true false false true false\n";
+    const char expected_output[] = "true false true\ntrue true false false true false\n"
+        "\xc3\xa9\xe4\xb8\xad bc 1 \xc3\xa9\xe4\xb8\xad 42 42 \xc3\xa9\xe4\xb8\xad:changed\n";
     CHECK(output.size == sizeof(expected_output) - 1 &&
         !memcmp(output.bytes, expected_output, sizeof(expected_output) - 1));
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
@@ -335,6 +361,8 @@ static void consumers(Fixture *fixture) {
 }
 #include "intrinsic_evaluation.h"
 #include "intrinsic_catalog.h"
+#include "intrinsic_string_slice.h"
+extern void xr_test_string_slice_resources(void);
 
 static void emit(Fixture *fixture, const char *path) {
     XrXirArtifact *code = lowered(fixture);
@@ -349,6 +377,7 @@ static void emit(Fixture *fixture, const char *path) {
 }
 int main(int argc, char **argv) {
     registry();
+    xr_test_string_slice_resources();
     Fixture fixture = fixture_new();
     if (argc == 3 && !strcmp(argv[1], "--emit")) {
         fixture_free(&fixture);
@@ -356,25 +385,32 @@ int main(int argc, char **argv) {
         emit(&fixture, argv[2]);
         return 0;
     }
-    CHECK(argc == 6);
+    CHECK(argc == 7);
     predecessor_rejected(&fixture, argv[1], 33, 93, false);
     predecessor_rejected(&fixture, argv[2], 33, 93, false);
     predecessor_rejected(&fixture, argv[3], 34, 94, false);
     predecessor_rejected(&fixture, argv[4], 34, 94, false);
     predecessor_rejected(&fixture, argv[5], 1, 94, true);
+    predecessor_rejected(&fixture, argv[6], 38, 98, false);
     invalid_packets(&fixture, fixture.probe);
     invalid_packets(&fixture, fixture.prefix);
     invalid_packets(&fixture, fixture.suffix);
+    invalid_packets(&fixture, fixture.cut);
+    slice_consumers(&fixture);
     consumers(&fixture);
     evaluation_transport(&fixture);
     fixture_free(&fixture);
     fixture = intrinsic_catalog_fixture();
+    slice_consumers(&fixture);
     consumers(&fixture);
     fixture_free(&fixture);
     source_rejected("fn bad()->bool{return \"x\".contains(1)}\n");
     source_rejected("fn bad()->bool{return \"x\".contains(\"x\",\"y\")}\n");
     source_rejected("fn bad()->bool{return \"x\".startsWith(1)}\n");
     source_rejected("fn bad()->bool{return \"x\".endsWith(\"x\",\"y\")}\n");
+    source_rejected("fn bad()->string{return \"x\".slice()}\n");
+    source_rejected("fn bad()->string{return \"x\".slice(\"x\")}\n");
+    source_rejected("fn bad()->string{return \"x\".slice(0,1,2)}\n");
     lir_rejected();
     puts("canonical string predicates Source/packet/VM/CTFE passed");
     return 0;

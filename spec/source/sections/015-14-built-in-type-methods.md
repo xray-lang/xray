@@ -92,7 +92,7 @@ order: 015
 | `string.join(parts, separator?)` | 拼接 `Array<string>` |
 | `contains(s)` | 是否包含子串 |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | 返回 rune ordinal |
-| `slice(start, end?)` | 按 rune ordinal 取得独立 string；范围必须合法 |
+| `slice(start, end?)` | 按 rune ordinal 取得独立 string；须满足 `0 <= start <= end <= len(receiver)`，省略 end 使用 receiver 的长度；非法范围 panic E0433，消息为 `string slice range is invalid` |
 | `sliceBytes(start, end)` | 按 byte offset 切片；边界非法时抛 `StringSliceError.InvalidByteRange` |
 | `split(sep, limit?)` | 分割为 `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | 替换 |
@@ -496,7 +496,7 @@ Both methods prepare a private owned candidate: reverse reverses the element ord
 | `string.join(parts, separator?)` | joins an `Array<string>` |
 | `contains(s)` | substring containment test |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | return rune ordinals |
-| `slice(start, end?)` | independent rune-ordinal slice; the range must be valid |
+| `slice(start, end?)` | independent rune-ordinal slice; requires `0 <= start <= end <= len(receiver)`, with omitted end using the receiver length; an invalid range panics with E0433 and message `string slice range is invalid` |
 | `sliceBytes(start, end)` | slice by byte offset; invalid boundaries throw `StringSliceError.InvalidByteRange` |
 | `split(sep, limit?)` | split into `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | replacement |

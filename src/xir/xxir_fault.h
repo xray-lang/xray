@@ -28,6 +28,7 @@ typedef struct XrXirFaultDetail {
 #define XR_XIR_PANIC_NULL_UNWRAP 413u
 #define XR_XIR_PANIC_BOUNDS 430u
 #define XR_XIR_PANIC_ITERATOR_EXHAUSTED 432u
+#define XR_XIR_PANIC_STRING_SLICE_RANGE 433u
 #define XR_XIR_PANIC_KEY_NOT_FOUND 431u
 #define XR_XIR_PANIC_MATCH 442u
 #define XR_XIR_PANIC_DEFER_ASYNC 444u
@@ -56,7 +57,8 @@ static inline bool xr_xir_fault_defer_async_valid(XrXirFaultDetail fault) {
 }
 /* Runtime panics identified by their code alone share one call status. */
 static inline bool xr_xir_fault_runtime_valid(XrXirFaultDetail fault) {
-    return (fault.code == XR_XIR_PANIC_NULL_UNWRAP || fault.code==XR_XIR_PANIC_ITERATOR_EXHAUSTED || fault.code==XR_XIR_PANIC_KEY_NOT_FOUND) &&
+    return (fault.code == XR_XIR_PANIC_NULL_UNWRAP || fault.code==XR_XIR_PANIC_ITERATOR_EXHAUSTED ||
+        fault.code==XR_XIR_PANIC_KEY_NOT_FOUND || fault.code==XR_XIR_PANIC_STRING_SLICE_RANGE) &&
         !fault.reserved && !fault.index && !fault.length;
 }
 static inline bool xr_xir_fault_panic_valid(XrXirFaultDetail fault) {

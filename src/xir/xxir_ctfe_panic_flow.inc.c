@@ -16,6 +16,7 @@ static XrXirCtfeStatus ctfe_panic_status(uint32_t code) {
     case XR_XIR_PANIC_RANGE: return XR_XIR_CTFE_NUMERIC_RANGE;
     case XR_XIR_PANIC_NULL_UNWRAP: return XR_XIR_CTFE_NULL_UNWRAP;
     case XR_XIR_PANIC_BOUNDS: return XR_XIR_CTFE_BOUNDS;
+    case XR_XIR_PANIC_STRING_SLICE_RANGE: return XR_XIR_CTFE_BOUNDS;
     case XR_XIR_PANIC_ASSERTION: return XR_XIR_CTFE_ASSERTION_FAILURE;
     case XR_XIR_PANIC_MATCH: return XR_XIR_CTFE_MATCH_FAILURE;
     default: return XR_XIR_CTFE_BAD_ARTIFACT;
@@ -40,7 +41,9 @@ static XrXirCtfeStatus ctfe_panic_fault(CtfeCallExecution *execution,XrXirCtfeSt
     case XR_XIR_CTFE_DIVIDE_BY_ZERO: code=op->op==XR_XIR_REM_INT?XR_XIR_PANIC_REMAINDER:XR_XIR_PANIC_DIVIDE;break;
     case XR_XIR_CTFE_NUMERIC_RANGE: code=XR_XIR_PANIC_RANGE;break;
     case XR_XIR_CTFE_NULL_UNWRAP: code=XR_XIR_PANIC_NULL_UNWRAP;break;
-    case XR_XIR_CTFE_BOUNDS: code=XR_XIR_PANIC_BOUNDS;break;
+    case XR_XIR_CTFE_BOUNDS:
+        code=execution->owned.fault.code==XR_XIR_PANIC_STRING_SLICE_RANGE?
+            XR_XIR_PANIC_STRING_SLICE_RANGE:XR_XIR_PANIC_BOUNDS;break;
     case XR_XIR_CTFE_ASSERTION_FAILURE: code=XR_XIR_PANIC_ASSERTION;break;
     case XR_XIR_CTFE_MATCH_FAILURE: code=XR_XIR_PANIC_MATCH;break;
     default: return status;
@@ -48,6 +51,10 @@ static XrXirCtfeStatus ctfe_panic_fault(CtfeCallExecution *execution,XrXirCtfeSt
     XrXirPanicPayload panic={{code,0,0,0},{0}};
     if (code==XR_XIR_PANIC_BOUNDS) {
         if (!xr_xir_fault_bounds_valid(execution->owned.fault)) return XR_XIR_CTFE_BAD_ARTIFACT;
+        panic.detail=execution->owned.fault;
+    }
+    if(code==XR_XIR_PANIC_STRING_SLICE_RANGE) {
+        if(!xr_xir_fault_runtime_valid(execution->owned.fault)) return XR_XIR_CTFE_BAD_ARTIFACT;
         panic.detail=execution->owned.fault;
     }
     if (code==XR_XIR_PANIC_ASSERTION) panic.message=ctfe_nominal_operand(&frame->run,op->args[1]);

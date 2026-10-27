@@ -20,6 +20,7 @@ static inline bool xr_xir_intrinsic_type(XrNativeTypeTerm term, XrXirType *type)
     if (!type) return false;
     switch (term) {
     case XR_NATIVE_TERM_BOOL: *type = XR_XIR_BOOL; return true;
+    case XR_NATIVE_TERM_I64: *type = XR_XIR_I64; return true;
     case XR_NATIVE_TERM_STRING: *type = XR_XIR_STRING; return true;
     default: return false;
     }
@@ -30,15 +31,27 @@ static inline const XrNativeIntrinsicDeclaration *xr_xir_intrinsic(int64_t id) {
     if (!call || call->effects != XR_NATIVE_INTRINSIC_READ ||
         call->owner->id != XR_NATIVE_DECLARATION_STRING ||
         call->member->receiver != XR_NATIVE_RECEIVER_READ ||
-        call->member->allocation != XR_NATIVE_ALLOCATION_NO_HEAP ||
         call->member->ownership != XR_NATIVE_RESULT_OWNERSHIP_OWNED ||
-        strcmp(call->member->failures, "none") ||
         call->member->is_static || !call->member->is_method)
         return NULL;
     switch (call->implementation) {
     case XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_CONTAINS:
     case XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_STARTS_WITH:
-    case XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_ENDS_WITH: break;
+    case XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_ENDS_WITH:
+        if (call->member->allocation != XR_NATIVE_ALLOCATION_NO_HEAP ||
+            strcmp(call->member->failures, "none")) return NULL;
+        break;
+    case XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_SLICE:
+        if (call->member->operation != XR_NATIVE_OPERATION_STRING_SLICE ||
+            call->member->allocation != XR_NATIVE_ALLOCATION_MAY_HEAP ||
+            strcmp(call->member->failures, "bounds,allocation,retain,limit") ||
+            call->member->result != XR_NATIVE_TERM_STRING || call->member->parameter_count != 2 ||
+            !call->member->parameters ||
+            call->member->parameters[0].type != XR_NATIVE_TERM_I64 ||
+            call->member->parameters[1].type != XR_NATIVE_TERM_I64 ||
+            call->member->parameters[0].optional || !call->member->parameters[1].optional ||
+            call->member->parameters[0].variadic || call->member->parameters[1].variadic) return NULL;
+        break;
     default: return NULL;
     }
     return call;
@@ -53,6 +66,7 @@ static inline bool xr_xir_intrinsic_parameter(const XrNativeIntrinsicDeclaration
     }
     if (ordinal > call->member->parameter_count) return false;
     const XrNativeParameter *parameter = &call->member->parameters[ordinal - 1];
-    return !parameter->optional && !parameter->variadic && xr_xir_intrinsic_type(parameter->type, type);
+    bool expanded_end = call->implementation == XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_SLICE && ordinal == 2;
+    return (!parameter->optional || expanded_end) && !parameter->variadic && xr_xir_intrinsic_type(parameter->type, type);
 }
 #endif // XXIR_INTRINSIC_H

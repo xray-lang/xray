@@ -6478,7 +6478,7 @@ BigInt 使用 `123n` 字面量或 `i64.toBigInt()`；JSON 使用 `JSON.parse<T>`
 | `string.join(parts, separator?)` | 拼接 `Array<string>` |
 | `contains(s)` | 是否包含子串 |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | 返回 rune ordinal |
-| `slice(start, end?)` | 按 rune ordinal 取得独立 string；范围必须合法 |
+| `slice(start, end?)` | 按 rune ordinal 取得独立 string；须满足 `0 <= start <= end <= len(receiver)`，省略 end 使用 receiver 的长度；非法范围 panic E0433，消息为 `string slice range is invalid` |
 | `sliceBytes(start, end)` | 按 byte offset 切片；边界非法时抛 `StringSliceError.InvalidByteRange` |
 | `split(sep, limit?)` | 分割为 `Array<string>` |
 | `replace(from, to)` / `replaceAll(from, to)` | 替换 |
@@ -8525,6 +8525,7 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | 下标越界 |
 | `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map 键不存在 |
 | `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | 耗尽后仍调用 `Iterator<T>` 的 `next()` / `nth()`，违反两步拉取协议——见 §5.3.6 |
+| `E0433` | `XR_ERR_STRING_SLICE_RANGE` | `string.slice` 的 rune 半开区间非法；消息为 `string slice range is invalid` |
 
 #### 系统、调用、coroutine 与 stdlib
 

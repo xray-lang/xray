@@ -173,7 +173,7 @@
 #define XR_ERR_MOD_BY_ZERO 421
 #define XR_ERR_OVERFLOW 422
 
-/* ---- Runtime index/key errors (E04xx, 430-432) ---- */
+/* ---- Runtime index/key errors (E04xx, 430-433) ---- */
 #define XR_ERR_INDEX_OUT_OF_BOUNDS 430
 #define XR_ERR_KEY_NOT_FOUND 431
 /* An Iterator<T> was pulled past its end.  The pull protocol is two-step
@@ -182,6 +182,7 @@
  * Reporting the violation is the only alternative to handing back a zero value
  * or a null the static type forbids. */
 #define XR_ERR_ITERATOR_EXHAUSTED 432
+#define XR_ERR_STRING_SLICE_RANGE 433
 
 /* ---- Runtime system errors (E04xx, 440-445) ---- */
 #define XR_ERR_STACK_OVERFLOW 440

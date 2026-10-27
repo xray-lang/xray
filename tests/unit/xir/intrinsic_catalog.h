@@ -112,7 +112,7 @@ static Fixture intrinsic_catalog_fixture(void) {
     request.entry_path = root;
     request.linkage_kind = XR_XIR_PROGRAM;
     request.libraries = catalog;
-    const char imports[] = "import {probe,prefix,suffix,folded} from \"./lib\"\n"
+    const char imports[] = "import {probe,prefix,suffix,folded,cut,tail,cutFolded} from \"./lib\"\n"
         "fn caller0()->i64{return 11}\nfn caller1()->i64{return 13}\n";
     size_t size = sizeof(imports) - 1 + strlen(body + 1) + 1;
     char *consumer = xr_malloc(size);
@@ -150,6 +150,7 @@ static Fixture intrinsic_catalog_fixture(void) {
         CHECK(found);
     }
     fixture.folded = named(module, "folded");
+    fixture.cut=named(module,"cut");fixture.tail=named(module,"tail");fixture.cut_folded=named(module,"cutFolded");
     fixture.entry = module->declarations->entry_function;
     CHECK(xr_test_rmdir(directory) == 0);
     memset(absolute, 0xa5, sizeof(absolute));

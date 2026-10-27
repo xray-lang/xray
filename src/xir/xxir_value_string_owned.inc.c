@@ -10,6 +10,7 @@
  * allocation uses the ordinary Domain and typed Array storage, with no view.
  */
 #include "xxir_string_owned_cost.h"
+#include "../runtime/core/xr_text_kernel.h"
 typedef struct XirOwnedStringInputs {
     const XirString *text,*search,*replacement;
     bool all;
@@ -119,5 +120,31 @@ XR_FUNC XrXirValueStatus xr_xir_string_replace(const XrXirValue *receiver,
     if(!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus status=owned_string_replace_graph(receiver,search,replacement,all,admission,output);
+    xr_xir_value_graph_end();return status;
+}
+static XrXirValueStatus owned_string_slice_graph(const XrXirValue *receiver,
+    int64_t start,int64_t end,XrXirValueAdmission *admission,XrXirValue *output) {
+    if(!owned_string_admission(admission,output)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XirString *text=NULL;XrXirValueStatus status=owned_string_input(admission,receiver,&text);
+    if(status!=XR_XIR_VALUE_OK) return status;
+    if(start<0 || end<start || (uint64_t)end>(uint64_t)text->runes) return XR_XIR_VALUE_BOUNDS;
+    bool compile=admission_is_compile(admission);
+    if(!compile && !owned_string_work(admission,(uint64_t)text->length+1)) return XR_XIR_VALUE_LIMIT;
+    size_t offset=0,length=0;
+    if(!xr_text_scalar_range((const uint8_t *)text->bytes,text->length,start,end,&offset,&length))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if(length==SIZE_MAX) return XR_XIR_VALUE_OVERFLOW;
+    if(!compile && !owned_string_work(admission,(uint64_t)length)) return XR_XIR_VALUE_LIMIT;
+    XirString *string=NULL;status=string_allocate(admission->domain,length,&string);
+    if(status!=XR_XIR_VALUE_OK) return status;
+    if(length) memcpy(string->bytes,text->bytes+offset,length);
+    string->runes=(size_t)(end-start);
+    *output=string_value(string);return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_string_slice(const XrXirValue *receiver,
+    int64_t start,int64_t end,XrXirValueAdmission *admission,XrXirValue *output) {
+    if(!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status=owned_string_slice_graph(receiver,start,end,admission,output);
     xr_xir_value_graph_end();return status;
 }

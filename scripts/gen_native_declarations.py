@@ -452,6 +452,7 @@ def parse_source(source, prelude):
             'STRING_CONTAINS': ('contains', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
             'STRING_STARTS_WITH': ('startsWith', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
             'STRING_ENDS_WITH': ('endsWith', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
+            'STRING_SLICE': ('slice', 'READ', ('I64', 'I64'), 'STRING', 'may_heap', 'bounds,allocation,retain,limit', 'owned'),
             'STRING_TO_STRING': ('toString', 'READ', (), 'STRING', 'no_heap', 'retain', 'owned'),
             'STRING_REPEAT': ('repeat', 'READ', ('I64',), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
             'STRING_COPY_BYTES': ('copyBytes', 'READ', (), 'ARRAY_U8', 'may_heap', 'allocation,retain,limit', 'owned'),
@@ -459,14 +460,14 @@ def parse_source(source, prelude):
             'STRING_REPLACE_ALL': ('replaceAll', 'READ', ('STRING', 'STRING'), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
         }.get(member.operation)
         optional = tuple(p[3] for p in member.parameters)
-        expected_optional = (False, True) if member.operation == 'STRING_INDEX_OF' else (False,) * len(member.parameters)
+        expected_optional = (False, True) if member.operation in ('STRING_INDEX_OF', 'STRING_SLICE') else (False,) * len(member.parameters)
         expected_static = member.operation == 'ARRAY_WITH_CAPACITY'
         expected_method = member.operation != 'ARRAY_CAPACITY'
         if shape != expected or member.static != expected_static or member.method != expected_method or optional != expected_optional or any(p[4] for p in member.parameters):
             raise ValueError('operation declaration disagrees with its semantic contract: ' + member.operation)
     required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(recipes) if header[0] == 1 else {
         'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH', 'STRING_INDEX_OF', 'STRING_LAST_INDEX_OF',
-        'STRING_TO_STRING', 'STRING_REPEAT', 'STRING_COPY_BYTES', 'STRING_REPLACE', 'STRING_REPLACE_ALL'}
+        'STRING_TO_STRING', 'STRING_REPEAT', 'STRING_COPY_BYTES', 'STRING_REPLACE', 'STRING_REPLACE_ALL', 'STRING_SLICE'}
     if used != required:
         raise ValueError('incorrect admitted native operation set')
     return header, members
@@ -924,6 +925,7 @@ INTRINSICS = (
     (1, 'string', 'STRING_CONTAINS', 'READ', True, 'xr_xir_string_contains'),
     (2, 'string', 'STRING_STARTS_WITH', 'READ', True, 'xr_xir_string_starts_with'),
     (3, 'string', 'STRING_ENDS_WITH', 'READ', True, 'xr_xir_string_ends_with'),
+    (4, 'string', 'STRING_SLICE', 'READ', True, 'xr_xir_string_slice'),
 )
 
 

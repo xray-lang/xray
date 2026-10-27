@@ -67,7 +67,9 @@ static bool ctfe_string_opcode(const ScalarRun *run,const XrXirInstruction *op) 
 }
 static XrXirCtfeStatus ctfe_string_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[*cursor];
-    if(op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_STRING_REPLACE)
+    const XrNativeIntrinsicDeclaration *call=op->op==XR_XIR_CALL_INTRINSIC?xr_xir_intrinsic(op->immediate):NULL;
+    if(op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_STRING_REPLACE ||
+        (call && call->implementation==XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_SLICE))
         return ctfe_string_owned_step(run,cursor,state);
     if (op->op==XR_XIR_TO_STRING) return ctfe_text_step(run,cursor,state);
     if (ctfe_string_read_opcode(op->op)) return ctfe_string_read_step(run,cursor);

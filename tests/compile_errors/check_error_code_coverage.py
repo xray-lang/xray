@@ -126,6 +126,7 @@ EXEMPT = {
     "E0430": "runtime: src/vm/xvm_dispatch_collection.inc.c:524, plus AOT bounds-check traps",
     "E0431": "runtime: src/vm/xvm_dispatch_collection.inc.c:2009, src/aot/xrt_coll.h:2255",
     "E0432": "runtime: src/runtime/object/xiterator.c:626, src/aot/xrt_gen_iter.c:73",
+    "E0433": "runtime: String slice panic in src/xir/xxir_vm.c, xxir_emit_c.c and xxir_ctfe_string_owned.inc.c; exercised by test_xir_intrinsic_registry and its generated-C consumer",
     "E0440": "runtime: src/vm/xvm_dispatch_helpers.h:258",
     "E0441": "runtime: src/vm/xvm_dispatch_collection.inc.c:921",
     "E0442": "runtime: text-spliced by Xi lowering, src/ir/xi_lower_stmt.c:1708",

@@ -223,11 +223,11 @@ class NativeDeclarations(unittest.TestCase):
         for member in members:
             self.assertTrue(rows[member.line - 1][member.column - 1:].startswith(member.name))
         admitted = [m for m in members if m.operation != 'NONE']
-        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf', 'toString', 'repeat', 'copyBytes', 'replace', 'replaceAll'})
+        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf', 'toString', 'repeat', 'copyBytes', 'replace', 'replaceAll', 'slice'})
         for member in admitted:
-            self.assertEqual(schema.simple_term(member.result, ''), 'I64' if member.name in {'indexOf', 'lastIndexOf'} else 'ARRAY_U8' if member.name=='copyBytes' else 'STRING' if member.name in {'toString','repeat','replace','replaceAll'} else 'BOOL')
-            self.assertEqual(member.allocation, 'may_heap' if member.name in {'repeat','copyBytes','replace','replaceAll'} else 'no_heap')
-            self.assertEqual(member.failures, {'indexOf':'bounds,limit','lastIndexOf':'limit','toString':'retain','repeat':'allocation,retain,limit','copyBytes':'allocation,retain,limit','replace':'allocation,retain,limit','replaceAll':'allocation,retain,limit'}.get(member.name,'none'))
+            self.assertEqual(schema.simple_term(member.result, ''), 'I64' if member.name in {'indexOf', 'lastIndexOf'} else 'ARRAY_U8' if member.name=='copyBytes' else 'STRING' if member.name in {'toString','repeat','replace','replaceAll','slice'} else 'BOOL')
+            self.assertEqual(member.allocation, 'may_heap' if member.name in {'repeat','copyBytes','replace','replaceAll','slice'} else 'no_heap')
+            self.assertEqual(member.failures, {'indexOf':'bounds,limit','lastIndexOf':'limit','toString':'retain','repeat':'allocation,retain,limit','copyBytes':'allocation,retain,limit','replace':'allocation,retain,limit','replaceAll':'allocation,retain,limit','slice':'bounds,allocation,retain,limit'}.get(member.name,'none'))
         self.assertNotIn('xr_native_def_string[]', embed.render(ROOT / 'stdlib/types'))
         for before, after in [('struct string', 'class string'), ('id=2', 'id=1'),
                               ('struct string {', 'struct string<T> {'),
@@ -243,7 +243,12 @@ class NativeDeclarations(unittest.TestCase):
                               ('failures=bounds,limit', 'failures=none'),
                               ('repeat(count: i64)', 'repeat(count: u64)'),
                               ('toString() -> string', 'ref toString() -> string'),
-                              ('STRING_REPEAT allocation=may_heap', 'STRING_REPEAT allocation=no_heap')]:
+                              ('STRING_REPEAT allocation=may_heap', 'STRING_REPEAT allocation=no_heap'),
+                              ('slice(start: i64, end?: i64)', 'slice(start: i32, end?: i64)'),
+                              ('slice(start: i64, end?: i64)', 'slice(start: i64, end: i64)'),
+                              ('STRING_SLICE allocation=may_heap', 'STRING_SLICE allocation=no_heap'),
+                              ('STRING_SLICE allocation=may_heap failures=bounds,allocation,retain,limit',
+                               'STRING_SLICE allocation=may_heap failures=allocation,retain,limit')]:
             with self.subTest(before=before), self.assertRaises(ValueError):
                 schema.parse_source(source.replace(before, after), self.prelude)
 

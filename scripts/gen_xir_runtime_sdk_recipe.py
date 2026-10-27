@@ -42,8 +42,9 @@ def recipe(root: Path) -> dict:
         relative = path.relative_to(root).as_posix()
         if relative in entries:
             continue
-        if relative.startswith(('src/frontend/', 'src/vm/', 'src/program/', 'src/aot/',
-                                'src/api/', 'src/runtime/', 'src/coro/')):
+        if relative != 'src/runtime/core/xr_text_kernel.h' and relative.startswith((
+                'src/frontend/', 'src/vm/', 'src/program/', 'src/aot/',
+                'src/api/', 'src/runtime/', 'src/coro/')):
             raise ValueError(f'compiler or legacy runtime dependency: {relative}')
         kind = 3 if relative.endswith('.inc.c') else 1 if relative.endswith('.c') else \
             2 if relative.endswith('.h') else 4 if relative.endswith('.def') else 0

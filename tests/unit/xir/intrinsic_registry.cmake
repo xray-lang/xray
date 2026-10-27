@@ -1,4 +1,5 @@
 add_executable(test_xir_intrinsic_registry xir/test_xir_intrinsic_registry.c)
+target_sources(test_xir_intrinsic_registry PRIVATE xir/xir_string_slice_value_observer.c)
 target_link_libraries(test_xir_intrinsic_registry PRIVATE
     xray_xir_source xray_xir_vm xray_xir_cgen xray_lir_lower)
 set(intrinsic_contains_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/intrinsic_contains.c")
@@ -26,7 +27,8 @@ add_test(NAME xir_intrinsic_contains COMMAND test_xir_intrinsic_registry
     "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/scalar-schema33.xrc"
     "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/predicates-schema34.xrc"
     "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/scalar-schema34.xrc"
-    "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/evaluation-contract94.xrc")
+    "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/evaluation-contract94.xrc"
+    "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/time-schema38-contract98.xrc")
 add_test(NAME xir_intrinsic_contains_native COMMAND test_xir_intrinsic_registry_native)
 set_tests_properties(xir_intrinsic_contains xir_intrinsic_contains_native PROPERTIES
     LABELS "unit;xir;intrinsic;fast" TIMEOUT 60)

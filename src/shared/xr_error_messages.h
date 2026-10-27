@@ -15,6 +15,7 @@
 #define XR_ERROR_CORE_MODULO_BY_ZERO_MSG "modulo by zero"
 #define XR_ERROR_CORE_MODULO_REQUIRES_INTEGER_MSG "modulo requires integer types"
 #define XR_ERROR_CORE_NUMERIC_CONVERSION_RANGE_MSG "numeric conversion is out of range"
+#define XR_ERROR_CORE_STRING_SLICE_RANGE_MSG "string slice range is invalid"
 /* Spec 13.2 -- int(s) / float(s) throw when the string is not a whole decimal
  * number. Shared verbatim by the VM, hosted AOT and freestanding AOT so the
  * same input reports the same text on every profile. */

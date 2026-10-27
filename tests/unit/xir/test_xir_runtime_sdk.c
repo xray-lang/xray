@@ -402,7 +402,7 @@ static void sdk_fixed_parent_prefixes(XrCompileResources *resources,const XrXirS
     }
 }
 static void sdk_legacy_known_bytes(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==38 && XR_XIR_CHECKED_CONTRACT==98 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==38 && XR_XIR_CHECKED_CONTRACT==99 &&
         XR_XIR_VALUE_ABI_VERSION==30 && XR_XIR_CALL_ABI_VERSION==35 && XR_XIR_PROGRAM_ABI_VERSION==36,
         "SDK known bytes require the independently framed public contract");
     _Static_assert(sizeof(previous_call29_sdk_kat_preimage)==3186,"complete retired Call29 SDK preimage");
@@ -484,7 +484,7 @@ static void sdk_legacy_known_bytes(void) {
     xr_sha256(previous_program32_sdk_kat_preimage,sizeof(previous_program32_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous_program32_sdk_kat_digest,32));
     CHECK(memcmp(old_hash,current_sdk_kat_digest,32));
-    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,XR_XIR_CHECKED_SCHEMA,98,30,35,36,1,1,1,11,2,0,1,0,3,1,1};
+    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,XR_XIR_CHECKED_SCHEMA,XR_XIR_CHECKED_CONTRACT,30,35,36,1,1,1,11,2,0,1,0,3,1,1};
     memcpy(manifest.prefix,prefix,sizeof(prefix));
     manifest.target_triple="x86_64-windows-msvc";manifest.abi_recipe="xray:xir-runtime-abi-measurements:v1";
     manifest.closure_recipe="xray:xir-runtime-recipe:windows-x86_64-hosted:v1";
@@ -703,7 +703,7 @@ static int sdk_legacy_main(int argc,char **argv) {
 }
 /* Ordinary identity and ownership checks do not enter the pressure census. */
 static void sdk_known_bytes(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==38 && XR_XIR_CHECKED_CONTRACT==98 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==38 && XR_XIR_CHECKED_CONTRACT==99 &&
         XR_XIR_VALUE_ABI_VERSION==30 && XR_XIR_CALL_ABI_VERSION==35 && XR_XIR_PROGRAM_ABI_VERSION==36,
         "current known bytes require their independently framed identity");
     _Static_assert(sizeof(current_sdk_kat_preimage)==3330 && sizeof(historical32_91_sdk_kat_preimage)==3330,
@@ -717,7 +717,7 @@ static void sdk_known_bytes(void) {
     xr_sha256(historical32_91_sdk_kat_preimage,sizeof(historical32_91_sdk_kat_preimage),digest);
     CHECK(!memcmp(digest,historical32_91_sdk_kat_digest,32) && memcmp(digest,current_sdk_kat_digest,32));
     XrXirSdkManifest manifest={0};
-    const uint32_t prefix[]={2,XR_XIR_CHECKED_SCHEMA,98,30,35,36,1,1,1,11,2,0,1,0,3,1,1};
+    const uint32_t prefix[]={2,XR_XIR_CHECKED_SCHEMA,XR_XIR_CHECKED_CONTRACT,30,35,36,1,1,1,11,2,0,1,0,3,1,1};
     memcpy(manifest.prefix,prefix,sizeof(prefix));
     manifest.target_triple="x86_64-windows-msvc";
     manifest.abi_recipe="xray:xir-runtime-abi-measurements:v1";
@@ -729,6 +729,12 @@ static void sdk_known_bytes(void) {
     CHECK(sdk_identity(&json,&manifest) && !memcmp(manifest.digest,current_sdk_kat_digest,32));
     json=xr_json_cursor_make(NULL,0);
     CHECK(sdk_json_prefix(&json,&manifest) && json.status==XR_JSON_CURSOR_OK);
+    xr_sha256(previous38_98_sdk_kat_preimage,sizeof(previous38_98_sdk_kat_preimage),digest);
+    CHECK(!memcmp(digest,previous38_98_sdk_kat_digest,32) && memcmp(digest,current_sdk_kat_digest,32));
+    manifest.prefix[2]=98;memcpy(manifest.digest,previous38_98_sdk_kat_digest,32);
+    XrXirSdkManifest previous_slice=manifest;json=xr_json_cursor_make(NULL,0);
+    CHECK(!sdk_json_prefix(&json,&manifest) && json.status==XR_JSON_CURSOR_INVALID);
+    CHECK(!memcmp(&manifest,&previous_slice,sizeof(manifest)));
     xr_sha256(previous37_97_sdk_kat_preimage,sizeof(previous37_97_sdk_kat_preimage),digest);
     CHECK(!memcmp(digest,previous37_97_sdk_kat_digest,32) && memcmp(digest,current_sdk_kat_digest,32));
     manifest.prefix[2]=97;memcpy(manifest.digest,previous37_97_sdk_kat_digest,32);
