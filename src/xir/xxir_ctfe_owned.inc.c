@@ -76,6 +76,8 @@ static bool ctfe_cell_type(const XrXirTypes *types,XrXirType type) {
 }
 static bool ctfe_storage_instruction(const XrXirModule *module,const XrXirFunction *body,
     const XrXirInstruction *op) {
+    if (ctfe_slice_u8_type(module->types,op->type))
+        return op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW;
     if (op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT || op->op==XR_XIR_INVOKE_RESULT) return true;
     if (xr_xir_type_is_class(module->types,op->type)) return op->op==XR_XIR_CLASS_NEW || op->op==XR_XIR_CLASS_GET || op->op==XR_XIR_OBJECT_PLACE ||
         op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_CELL_READ || op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_ARRAY_GET ||

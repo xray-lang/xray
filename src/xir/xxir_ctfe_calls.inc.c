@@ -20,6 +20,8 @@ typedef struct CtfeCallFrame {
     size_t bytes;
     uint64_t epoch;
     CtfeCellLoan *loans;
+    struct CtfeViewBinding *views;
+    struct CtfeCallExecution *execution;
     uint32_t loan_count,loan_capacity,cleanup_parent;
     bool loans_committed,cleanup,invoked;
     uint8_t exit_kind;
@@ -38,12 +40,16 @@ typedef struct CtfeCallExecution {
     CtfeOwnedState owned;
 } CtfeCallExecution;
 
+#include "xxir_ctfe_view.inc.c"
+
 /* Scalar types and admitted opcodes use the same rules as leaf execution.
  * Calls are handled separately, before any runtime scalar CALL dispatcher. */
 static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32_t f,CtfeTypeInfo **summaries) {
     const XrXirModule *module=&artifact->module;
     const XrXirFunction *body=&module->functions[f];
 
+    /* Empty declarations have no ordinary compiler execution body. */
+    if (!body->block_count || !body->instruction_count) return XR_XIR_CTFE_NOT_SUPPORTED;
     if (!module->declarations || !module->declarations->functions) return XR_XIR_CTFE_NOT_SUPPORTED;
     const XrXirFunctionIdentity *identity=&module->declarations->functions[f];
     XrXirCtfeStatus owner=ctfe_nominal_owner_admit(artifact,identity->nominal_owner);
@@ -58,6 +64,7 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
     }
     for (uint32_t a=0;a<body->parameter_count;++a) {
 
+        if (ctfe_slice_u8_type(module->types,body->parameters[a])) return XR_XIR_CTFE_NOT_SUPPORTED;
         admitted=ctfe_body_type_admit(artifact,body->parameters[a],true,summaries);
         if (admitted!=XR_XIR_CTFE_OK) return admitted;
     }
@@ -222,7 +229,7 @@ static XrXirCtfeStatus ctfe_call_frame_new(CtfeCallExecution *execution,uint32_t
     if (status!=XR_XIR_CTFE_OK) return status;
 
     CtfeCallFrame *frame=memory;
-    frame->parent=execution->top;frame->function=function;frame->return_value=return_value;frame->bytes=(size_t)bytes;
+    frame->execution=execution;frame->parent=execution->top;frame->function=function;frame->return_value=return_value;frame->bytes=(size_t)bytes;
     frame->epoch=++execution->epoch;frame->loan_capacity=cells;
     frame->loans=(CtfeCellLoan *)((uint8_t *)(frame+1)+artifact->layouts[function].frame_bytes+scratch);
     /* The Artifact is borrowed synchronously and cannot grow during execution. */

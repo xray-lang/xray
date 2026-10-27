@@ -33,6 +33,7 @@ static XrXirCtfeStatus ctfe_mutation_admit(ScalarRun *run,CtfeOwnedState *state,
 
 #include "xxir_ctfe_projection_bounds.inc.c"
 static void ctfe_call_frame_free(CtfeCallFrame *frame) {
+    ctfe_view_frame_close(frame);
     xr_xir_value_drop(&frame->returned);
     xr_xir_panic_drop(&frame->panic);
     while (frame->loan_count) {

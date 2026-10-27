@@ -62,3 +62,22 @@ set_tests_properties(test_xir_p11_ctfe_reference_ref_closure_direct
 set_tests_properties(test_xir_p11_ctfe_reference_struct_identity_direct
     test_xir_p11_ctfe_reference_struct_identity_owning_direct
     test_xir_p11_ctfe_reference_struct_identity_owning PROPERTIES RUN_SERIAL TRUE)
+
+add_executable(test_xir_ctfe_slice_u8 "${CMAKE_CURRENT_LIST_DIR}/test_ctfe_slice_u8.c")
+target_link_libraries(test_xir_ctfe_slice_u8 PRIVATE xray_xir_source xray_xir_vm)
+target_compile_definitions(test_xir_ctfe_slice_u8 PRIVATE XR_CTFE_SLICE_FIXTURES="${CMAKE_CURRENT_LIST_DIR}/fixtures")
+set_target_properties(test_xir_ctfe_slice_u8 PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_ctfe_slice_u8 PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_ctfe_slice_u8 PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+foreach(name IN ITEMS slice_u8_local slice_u8_string)
+    add_test(NAME test_xir_ctfe_${name} COMMAND test_xir_ctfe_slice_u8 ${name})
+    set_tests_properties(test_xir_ctfe_${name} PROPERTIES LABELS "unit;xir;ctfe;ownership" TIMEOUT 60)
+endforeach()
+
+foreach(mode IN ITEMS resources authority controls boundaries memory runtime-work)
+    add_test(NAME test_xir_ctfe_slice_u8_${mode} COMMAND test_xir_ctfe_slice_u8 ${mode})
+    set_tests_properties(test_xir_ctfe_slice_u8_${mode} PROPERTIES LABELS "unit;xir;ctfe;ownership;resources" TIMEOUT 60)
+endforeach()

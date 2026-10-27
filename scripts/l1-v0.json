@@ -88,7 +88,8 @@
     "test_xir_slice_u8_backend",
     "test_xir_slice_u8_backend_native",
     "test_source_nullable_print",
-    "test_source_nullable_print_native"
+    "test_source_nullable_print_native",
+    "test_xir_ctfe_slice_u8"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -206,7 +207,15 @@
     "xir_slice_u8_backend_vm_to_native",
     "xir_slice_u8_backend_native_to_vm",
     "source_nullable_string_print",
-    "source_nullable_string_print_native"
+    "source_nullable_string_print_native",
+    "test_xir_ctfe_slice_u8_local",
+    "test_xir_ctfe_slice_u8_string",
+    "test_xir_ctfe_slice_u8_resources",
+    "test_xir_ctfe_slice_u8_authority",
+    "test_xir_ctfe_slice_u8_controls",
+    "test_xir_ctfe_slice_u8_boundaries",
+    "test_xir_ctfe_slice_u8_memory",
+    "test_xir_ctfe_slice_u8_runtime-work"
   ],
   "versionCommand": [
     "{build}/xray.exe",

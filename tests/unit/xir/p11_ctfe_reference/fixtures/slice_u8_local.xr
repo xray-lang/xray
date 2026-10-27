@@ -1,0 +1,12 @@
+fn answer()->i64 {
+    var xs: Array<u8> = [10, 36, 30, 40]
+    var total = 0
+    {
+        var view: Slice<u8> = xs[:]
+        const sub: Slice<u8> = view[1:3]
+        total = len(view) + len(sub) + (sub[0] as i64)
+    }
+    xs[1] = 37
+    return total + (xs[1] as i64)
+}
+export fn run()->i64 { return comptime answer() }

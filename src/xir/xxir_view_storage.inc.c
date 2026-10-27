@@ -15,6 +15,8 @@ static bool view_storage_empty(const XrXirViewStorage *view) {
         !view->offset && !view->length && cell_loan_empty(&view->loan.exclusive);
 }
 static bool view_storage_work(XrXirValueAdmission *admission,uint64_t work) {
+    if (!admission_domain_current(admission)) return false;
+    if (admission_is_compile(admission)) return true;
     if (admission->work<work) return false;
     admission->work-=work;return xr_xir_domain_work(admission->domain,work);
 }

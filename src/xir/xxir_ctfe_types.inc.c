@@ -12,6 +12,14 @@
  */
 #include "xxir_operand_roles.h"
 #include "xxir_constraint_proof.h"
+static bool ctfe_slice_u8_type(const XrXirTypes *types,XrXirType type) {
+    const XrXirTypeNode *node=xr_xir_type_node(types,type);
+    return node && node->kind==XR_XIR_TYPE_SLICE && node->element==XR_XIR_U8;
+}
+static bool ctfe_view_opcode(XrXirOp op) {
+    return op==XR_XIR_VIEW_NEW || op==XR_XIR_VIEW_REBORROW || op==XR_XIR_VIEW_LEN ||
+        op==XR_XIR_VIEW_GET || op==XR_XIR_VIEW_END || op==XR_XIR_VIEW_CLEANUP;
+}
 typedef struct CtfeTypeInfo { bool dynamic,pure_arrays,admitted; } CtfeTypeInfo;
 typedef struct CtfeTypeFrame { uint32_t index,next;bool dynamic,pure_arrays; } CtfeTypeFrame;
 static const XrXirTypeNode *ctfe_composite_node(const XrXirTypes *types,XrXirType type) {
@@ -95,6 +103,9 @@ static XrXirCtfeStatus ctfe_unit_enum_admit(
 static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
     const XrXirTypes *types,XrXirType type,bool internal,CtfeTypeInfo *output) {
     if (!xir_compile_context_valid(context)) return XR_XIR_CTFE_BAD_ARGUMENT;
+    if (internal && ctfe_slice_u8_type(types,type)) {
+        *output=(CtfeTypeInfo){true,false,true};return XR_XIR_CTFE_OK;
+    }
     if (internal && type==XR_XIR_ERROR) { *output=(CtfeTypeInfo){true,false,true};return XR_XIR_CTFE_OK; }
     if (internal && type==XR_XIR_PANIC_INFO) { *output=(CtfeTypeInfo){false,true,true};return XR_XIR_CTFE_OK; }
     if (ctfe_result_type(type)) { *output=(CtfeTypeInfo){false,type!=XR_XIR_UNIT,true};return XR_XIR_CTFE_OK; }
@@ -274,10 +285,12 @@ static XrXirCtfeStatus ctfe_tuple_instruction_admit(const XrXirArtifact *artifac
 }
 static XrXirCtfeStatus ctfe_tuple_scratch(const XrXirArtifact *artifact,uint32_t function,uint64_t *bytes) {
     *bytes=0;
-    if (!artifact->layouts[function].outgoing_count) return XR_XIR_CTFE_OK;
     const XrXirFunction *body=&artifact->module.functions[function];uint32_t count=0;
     for (uint32_t i=0;i<body->instruction_count;++i) {
 
+        if (ctfe_view_opcode(body->instructions[i].op)) {
+            if (body->instructions[i].op!=XR_XIR_VIEW_CLEANUP && count<2) count=2;continue;
+        }
         if (body->instructions[i].op==XR_XIR_ARRAY_NEW || body->instructions[i].op==XR_XIR_CLASS_NEW || body->instructions[i].op==XR_XIR_STRUCT_NEW || body->instructions[i].op==XR_XIR_ENUM_NEW || body->instructions[i].op==XR_XIR_FUNCTION_REF) {
             uint32_t arity=body->instructions[i].args[1];
             if (arity>count) count=arity;continue;

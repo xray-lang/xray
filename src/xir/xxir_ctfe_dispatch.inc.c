@@ -18,6 +18,7 @@ static XrXirCtfeStatus ctfe_call_step(CtfeCallExecution *execution,XirScalarCore
     }
     if (!ctfe_opcode_admitted(op->op)) return XR_XIR_CTFE_NOT_SUPPORTED;
     XrXirCtfeStatus flow=ctfe_tuple_flow_admit(run,op,&execution->owned);if (flow!=XR_XIR_CTFE_OK) return flow;
+    if (ctfe_view_opcode(op->op)) return ctfe_view_step(execution);
     if (op->op==XR_XIR_THROW || op->op==XR_XIR_CLEANUP_ERROR) {
         XrXirValue error=ctfe_nominal_operand(run,op->args[0]);
         return ctfe_error_begin(execution,&error,op->op==XR_XIR_THROW?CTFE_EXIT_ERROR:CTFE_EXIT_LOCAL_ERROR);
