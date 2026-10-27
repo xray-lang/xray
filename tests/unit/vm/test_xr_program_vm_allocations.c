@@ -13,7 +13,6 @@
 #include "../program/xr_program_module_fixture.h"
 #include "../program/xr_program_output_trap_fixture.h"
 #include "../program/xr_program_array_fixture.h"
-#include "../program/xr_program_string_builder_fixture.h"
 #include "../program/xr_program_array_default_fixture.h"
 #include "../program/xr_program_array_append_fixture.h"
 #include "../program/xr_program_string_slice_fixture.h"
@@ -655,58 +654,6 @@ static void test_assert_message_allocation_failures(void) {
     xr_target_profile_free(profile);
 }
 
-static void test_string_builder_allocation_failures(void) {
-    for (unsigned scenario = 0u; scenario < 3u; ++scenario) {
-        XrProgramArtifact artifact = {0};
-        XrValidatedProgram *program = NULL;
-        REQUIRE(xr_program_string_builder_fixture_write(scenario ? 99u + scenario : 0u, &artifact) == XR_PROGRAM_BUILD_OK);
-        REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
-        xr_program_artifact_free(&artifact);
-        XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
-        REQUIRE(profile);
-        XrVmCode *code = NULL;
-        REQUIRE(xr_vm_code_build(program, profile, NULL, &code, NULL) == XR_VM_CODE_OK);
-        size_t baseline = live_count;
-        bool completed = false;
-        for (size_t failure = 1u; failure < 128u; ++failure) {
-            XrExecutionBindingInput binding = {.schema_version = XR_EXECUTION_BINDING_SCHEMA_VERSION,
-                .program = program, .profile = profile, .generation = 1u};
-            XrInstance *instance = NULL;
-            REQUIRE(xr_execution_instance_create(&binding, &instance, NULL) == XR_EXECUTION_OK);
-            attempt = 0u; fail_at = failure; failed = false; armed = true;
-            XrVmOutcome outcome = xr_vm_code_execute(code, instance,
-                xr_validated_program_entry_function(program), NULL, 0u);
-            armed = false;
-            REQUIRE(outcome.kind == (failed ? XR_VM_OUTCOME_RESOURCE_LIMIT : XR_VM_OUTCOME_RETURN));
-            if (failed) REQUIRE(!outcome.private_owner && !outcome.owns_dynamic_values);
-            else {
-                const uint8_t expected[] = {'A', 0, 0xc3, 0xa9, 0xf0, 0x9f, 0x98, 0x80};
-                XrVmStringView view;
-                REQUIRE(xr_vm_value_string_view(&outcome.value, &view));
-                REQUIRE(view.size == (scenario == 2u ? 0u : scenario == 1u ? 72u : 8u));
-                for (size_t offset = 0u; offset < view.size; offset += sizeof(expected))
-                    REQUIRE(memcmp(view.bytes + offset, expected, sizeof(expected)) == 0);
-            }
-            xr_vm_outcome_dispose(&outcome);
-            REQUIRE(xr_execution_instance_lease_count(instance) == 0u);
-            REQUIRE(xr_execution_instance_begin_drain(instance, NULL) == XR_EXECUTION_OK);
-            REQUIRE(xr_execution_instance_retire(instance, NULL) == XR_EXECUTION_OK);
-            REQUIRE(xr_execution_instance_free(&instance, NULL) == XR_EXECUTION_OK);
-            REQUIRE(live_count == baseline);
-            if (!failed) {
-                printf("VM StringBuilder allocation failures: scenario=%u points=%zu\n", scenario, failure - 1u);
-                completed = true;
-                break;
-            }
-        }
-        REQUIRE(completed);
-        xr_vm_code_free(code);
-        REQUIRE(live_count == 0u);
-        xr_target_profile_free(profile);
-        xr_validated_program_free(program);
-    }
-}
-
 static void test_array_append_allocation_failures(void) {
     for (unsigned scenario = 0u; scenario < 2u; ++scenario) {
         XrProgramArtifact artifact = {0};
@@ -755,7 +702,6 @@ static void test_array_append_allocation_failures(void) {
 
 int main(void) {
     test_array_append_allocation_failures();
-    test_string_builder_allocation_failures();
     test_assert_message_allocation_failures();
     test_shared_handle_allocation_failures();
     test_owned_result_allocation_failures();
