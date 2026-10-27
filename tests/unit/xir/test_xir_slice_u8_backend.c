@@ -522,7 +522,7 @@ static XrXirArtifact *scalar_slot_source(const XrXirCompileContext *context,uint
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);return closed;
 }
-static void scalar_slot_non_scalar_refusals(const XrXirCompileContext *context) {
+static void scalar_slot_owned_publications(const XrXirCompileContext *context) {
     const char *const sources[]={
         "var scalar:string=\"abc\"\n" SCALAR_SLOT_VIEW_LOOP "export fn storage_receiver()->i64{return 1}",
         "var scalar:Array<u8>=[1]\n" SCALAR_SLOT_VIEW_LOOP "export fn storage_receiver()->i64{return 1}"
@@ -530,13 +530,21 @@ static void scalar_slot_non_scalar_refusals(const XrXirCompileContext *context) 
     for(uint32_t k=0;k<sizeof(sources)/sizeof(sources[0]);++k) {
         XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=source_check(context,sources[k],&source,&diagnostic,XR_XIR_PROGRAM);
-        fprintf(stderr,"non scalar publication Source%u status=%u: %s\n",k,status,diagnostic.message);
-        CHECK(status==XR_XIR_UNRESOLVED && diagnostic.status==status && strstr(diagnostic.message,"(SLOT_INIT)"));
-        CHECK(!source.checked && !source.snapshot);xr_xir_compile_source_result_free(&source);
+        if(status!=XR_XIR_OK)fprintf(stderr,"owned module publication Source%u status=%u: %s\n",k,status,diagnostic.message);
+        CHECK(status==XR_XIR_OK && source.checked && source.snapshot);
+        XrXirCheckedPacket packet={0};XrXirArtifact *checked=NULL,*closed=NULL;
+        CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
+        xr_xir_compile_source_result_free(&source);
+        CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
+        memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
+        CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+        XrXirArtifact *code=lower(closed);xr_xir_compile_artifact_free(closed);
+        uint32_t target=named(xr_xir_compile_artifact_module(code),"storage_receiver");
+        XrXirProgram *program=take_vm(&code);slice_program_case(program,target);
     }
 }
 static void scalar_slot_execution(const XrXirCompileContext *context) {
-    scalar_slot_non_scalar_refusals(context);
+    scalar_slot_owned_publications(context);
     for(uint32_t k=0;k<sizeof(scalar_slot_cases)/sizeof(scalar_slot_cases[0]);++k) {
         XrXirArtifact *closed=scalar_slot_source(context,k),*code=lower(closed);xr_xir_compile_artifact_free(closed);
         uint32_t target=named(xr_xir_compile_artifact_module(code),"storage_receiver");
