@@ -8,7 +8,7 @@
  * xi_receiver_alias.h - sealed "this call returns its own receiver" fact
  *
  * Some native members hand back the receiver itself (`return self`) so callers
- * can chain: Array.reverse/sort/fill/reserve/resize, StringBuilder.append/clear.
+ * can chain: Array.reverse/sort/fill/reserve/resize.
  * The result and the receiver are then ONE object under two SSA names, at +0 —
  * the callee added no reference.
  *

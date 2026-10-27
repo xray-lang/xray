@@ -8,6 +8,7 @@
 
 #include "../../../src/base/xbuiltin_enum.h"
 #include "../../../src/ir/xi_semantic_snapshot.h"
+#include "../../../src/ir/xi_semantic_intrinsic.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_effect.h"
@@ -448,9 +449,8 @@ static XiValue *func_tree_find_method(XiFunc *f, const char *name) {
     return NULL;
 }
 
-static uint32_t func_tree_count_intrinsic_method(XiFunc *f, const char *name,
-                                                 XaIntrinsicId intrinsic_id) {
-    if (!f || !name)
+static uint32_t func_tree_count_intrinsic_calls(XiFunc *f, XaIntrinsicId intrinsic_id) {
+    if (!f)
         return 0;
     uint32_t count = 0;
     for (uint32_t b = 0; b < f->nblocks; b++) {
@@ -459,13 +459,13 @@ static uint32_t func_tree_count_intrinsic_method(XiFunc *f, const char *name,
             continue;
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
-            if (v && v->op == XI_CALL_METHOD && v->aux &&
-                strcmp((const char *) v->aux, name) == 0 && v->xa_intrinsic_id == intrinsic_id)
+            if (v && (v->op == XI_CALL_BUILTIN || v->op == XI_CALL_METHOD) &&
+                v->xa_intrinsic_id == intrinsic_id)
                 count++;
         }
     }
     for (uint16_t i = 0; i < f->nchildren; i++)
-        count += func_tree_count_intrinsic_method(f->children[i], name, intrinsic_id);
+        count += func_tree_count_intrinsic_calls(f->children[i], intrinsic_id);
     return count;
 }
 
@@ -478,15 +478,14 @@ static XrSemanticOperationRecord *semantic_find_intrinsic_operation(XrSemanticPl
     return NULL;
 }
 
-static uint32_t semantic_count_string_builder_append_operations(const XrSemanticPlan *plan,
-                                                                uint8_t ownership) {
+static uint32_t semantic_count_array_reserve_operations(const XrSemanticPlan *plan) {
     uint32_t count = 0;
     for (uint32_t i = 0; plan && i < plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &plan->operations[i];
-        bool append = operation->evidence[1] == XA_INTRINSIC_STRING_BUILDER_APPEND &&
-                      (operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING ||
-                       operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE);
-        if (append && (ownership == UINT8_MAX || operation->result_ownership == ownership))
+        if (operation->evidence[1] == XA_INTRINSIC_ARRAY_RESERVE &&
+            operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR &&
+            operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+            operation->result_alias_operand == 0)
             count++;
     }
     return count;
@@ -1093,33 +1092,33 @@ TEST(user_method_named_fetch_add_remains_ordinary_call) {
     xi_func_free(f);
 }
 
-TEST(string_builder_append_lowers_with_stable_intrinsic_identity) {
+TEST(array_reserve_lowers_with_stable_intrinsic_identity) {
     XgGlobalEvidence evidence = {0};
     XiFunc *f = lower_source_with_global_evidence(
-        "fn appendRune(out: ref StringBuilder) { out.append('x') }\n"
-        "fn build() -> string {\n"
-        "  var builder = StringBuilder()\n"
-        "  builder.append(\"x\")\n"
-        "  builder.append('中')\n"
-        "  appendRune(ref builder)\n"
-        "  return builder.toString()\n"
+        "fn reserveMore(out: ref Array<i64>) { out.reserve(4) }\n"
+        "fn build() -> Array<i64> {\n"
+        "  var out = [1]\n"
+        "  out.reserve(2)\n"
+        "  out.reserve(3)\n"
+        "  reserveMore(ref out)\n"
+        "  return out\n"
         "}\n",
         &evidence);
     assert(f != NULL);
-    assert(func_tree_count_intrinsic_method(f, "append", XA_INTRINSIC_STRING_BUILDER_APPEND) == 3 &&
-           "every builtin StringBuilder.append call must carry one stable intrinsic identity");
-    XiValue *append = func_tree_find_method(f, "append");
-    assert(append && append->aux_int == ((int64_t) XI_METHOD_SYMBOL_APPEND << 1) &&
-           append->result_alias_operand == 0 && append->xg_capacity_op_id != XG_NO_ID &&
-           "append lowering must publish exact method, alias, and capacity evidence");
+    assert(func_tree_count_intrinsic_calls(f, XA_INTRINSIC_ARRAY_RESERVE) == 3 &&
+           "every Array.reserve call must carry its stable intrinsic identity");
+    XiValue *reserve = func_tree_find_op(f, XI_CALL_BUILTIN);
+    assert(reserve && reserve->xa_intrinsic_id == XA_INTRINSIC_ARRAY_RESERVE &&
+           reserve->result_alias_operand == 0 && reserve->xg_capacity_op_id != XG_NO_ID &&
+           "reserve lowering must publish exact receiver alias and capacity evidence");
 
     char error[512] = {0};
     XrSemanticPlan *plan = NULL;
     func_tree_mark_optimized_for_semantic_fixture(f);
     XiModule fixture = {
-        .identity = "memory-module-v1:id=32:string-builder-append-fixture-v1",
-        .path = "string-builder-append-fixture.xr",
-        .name = "string_builder_append_fixture",
+        .identity = "memory-module-v1:id=32:array-reserve-fixture-v1",
+        .path = "array-reserve-fixture.xr",
+        .name = "array_reserve_fixture",
         .init = f,
     };
     XiModule *saved_module = f->module;
@@ -1127,35 +1126,32 @@ TEST(string_builder_append_lowers_with_stable_intrinsic_identity) {
     bool built = xr_semantic_plan_build(f, &plan, error, sizeof(error));
     f->module = saved_module;
     if (!built)
-        fprintf(stderr, "StringBuilder.append SemanticPlan build failed: %s\n", error);
+        fprintf(stderr, "Array.reserve SemanticPlan build failed: %s\n", error);
     assert(built && plan != NULL);
-    assert(
-        semantic_count_string_builder_append_operations(plan, UINT8_MAX) == 3 &&
-        semantic_count_string_builder_append_operations(plan, XI_GEN_RESULT_OWNERSHIP_BORROWED) ==
-            1 &&
-        semantic_count_string_builder_append_operations(plan, XI_GEN_RESULT_OWNERSHIP_OWNED) == 2 &&
-        "every producer-marked append must freeze one exact shape and preserve receiver "
-        "ownership");
+    assert(semantic_count_array_reserve_operations(plan) == 3 &&
+           "all three reserves must seal their exact owned receiver-result contract");
     XrSemanticOperationRecord *operation =
-        semantic_find_intrinsic_operation(plan, XA_INTRINSIC_STRING_BUILDER_APPEND);
-    assert(operation &&
-           (operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING ||
-            operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE) &&
-           operation->semantic_immediate == ((int64_t) XI_METHOD_SYMBOL_APPEND << 1) &&
-           "SemanticPlan must consume the exact append producer marker");
+        semantic_find_intrinsic_operation(plan, XA_INTRINSIC_ARRAY_RESERVE);
+    assert(operation && operation->semantic_immediate == 0 &&
+           "SemanticPlan must consume the exact reserve producer marker");
     uint32_t saved_intrinsic = operation->evidence[1];
     operation->evidence[1] = XA_INTRINSIC_NONE;
     memset(error, 0, sizeof(error));
     assert(!xr_semantic_plan_verify(plan, error, sizeof(error)) &&
            strstr(error, "XR_SEM_0019") != NULL &&
-           "SemanticPlan must reject a missing append producer identity");
+           "SemanticPlan must reject a missing reserve producer identity");
+    operation->evidence[1] = (uint32_t) 6007;
+    memset(error, 0, sizeof(error));
+    assert(!xr_semantic_plan_verify(plan, error, sizeof(error)) &&
+           strstr(error, "XR_SEM_0019") != NULL &&
+           "a retired public append identity must not authorize a reserve");
     operation->evidence[1] = saved_intrinsic;
     int64_t saved_immediate = operation->semantic_immediate;
     operation->semantic_immediate = ((int64_t) XI_METHOD_SYMBOL_PUSH << 1);
     memset(error, 0, sizeof(error));
     assert(!xr_semantic_plan_verify(plan, error, sizeof(error)) &&
            strstr(error, "XR_SEM_0019") != NULL &&
-           "SemanticPlan must reject a mismatched append method identity");
+           "SemanticPlan must reject a mismatched reserve immediate");
     operation->semantic_immediate = saved_immediate;
     assert(xr_semantic_plan_verify(plan, error, sizeof(error)));
     xr_semantic_plan_free(plan);
@@ -1163,17 +1159,64 @@ TEST(string_builder_append_lowers_with_stable_intrinsic_identity) {
     xg_global_evidence_free(&evidence);
 }
 
+TEST(retired_builder_lowering_slot_is_rejected) {
+    XaIntrinsicDesc retired = {
+        .id = (XaIntrinsicId) 6007,
+        .lowering = (XaIntrinsicLowering) 68,
+    };
+    assert(xa_intrinsic_by_id(retired.id) == NULL &&
+           "retired public intrinsic identity must have no registry descriptor");
+    assert(xi_semantic_intrinsic_op(&retired) == XI_OP_COUNT &&
+           "retired lowering slot must have no Xi operation");
+}
+
 TEST(user_method_named_append_remains_ordinary_call) {
-    XiFunc *f = lower_source("class Writer {\n"
-                             "  append(value: string) -> string { return value }\n"
-                             "}\n"
-                             "fn use(writer: Writer) -> string {\n"
-                             "  return writer.append(\"x\")\n"
-                             "}\n");
+    XiFunc *f = lower_source(
+        "class StringBuilder {\n"
+        "  value: string\n"
+        "  init(seed: string) { this.value = seed }\n"
+        "  ref append(piece: string, count: i64) -> string {\n"
+        "    for (var i = 0; i < count; i++) { this.value += piece }\n"
+        "    return this.value\n"
+        "  }\n"
+        "  ref clear() -> i64 { this.value = \"\"; return 7 }\n"
+        "  toString() -> string { return this.value }\n"
+        "}\n"
+        "fn use(writer: ref StringBuilder) -> string {\n"
+        "  writer.append(\"x\", 2)\n"
+        "  writer.clear()\n"
+        "  return writer.toString()\n"
+        "}\n"
+        "var writer = StringBuilder(\"seed\")\n"
+        "print(use(ref writer))\n");
     assert(f != NULL);
     XiValue *append = func_tree_find_method(f, "append");
-    assert(append != NULL && append->xa_intrinsic_id == XA_INTRINSIC_NONE &&
-           "a user declaration with the same spelling must remain an ordinary method call");
+    assert(append && append->xa_intrinsic_id == XA_INTRINSIC_NONE &&
+           append->nargs == 3 && append->type && append->type->kind == XR_KIND_STRING &&
+           append->args && append->args[0] && append->args[0]->type &&
+           append->args[0]->type->kind == XR_KIND_INSTANCE &&
+           append->args[0]->type->instance.class_ref != NULL &&
+           append->args[1] && append->args[1]->type &&
+           append->args[1]->type->kind == XR_KIND_STRING &&
+           append->args[2] && append->args[2]->type &&
+           append->args[2]->type->kind == XR_KIND_INT &&
+           append->result_alias_operand != 0 && append->xg_capacity_op_id == XG_NO_ID &&
+           (append->flags & XI_FLAG_SIDE_EFFECT) != 0 &&
+           "ordinary append must use the declared two parameters, effect, and string result");
+    XiValue *constructor = func_tree_find_method(f, "init");
+    assert(constructor && xi_value_is_constructor_call(constructor) &&
+           constructor->nargs == 2 && constructor->type &&
+           constructor->type->kind == XR_KIND_INSTANCE &&
+           constructor->type->instance.class_ref != NULL && constructor->args &&
+           constructor->args[1] && constructor->args[1]->type &&
+           constructor->args[1]->type->kind == XR_KIND_STRING &&
+           !func_tree_has_builtin_name(f, "StringBuilder") &&
+           "same-named construction must retain the real class declaration and seed argument");
+    XiValue *clear = func_tree_find_method(f, "clear");
+    assert(clear && clear->type && clear->type->kind == XR_KIND_INT &&
+           clear->result_alias_operand != 0 &&
+           func_tree_has_op(f, XI_STORE_FIELD) && func_tree_has_op(f, XI_LOAD_FIELD) &&
+           "ordinary fields and scalar clear result must not inherit native receiver aliases");
     xi_func_free(f);
 }
 
@@ -4707,7 +4750,8 @@ int main(void) {
     run_scalar_parse_lowering_separates_typed_error_and_optional_flows();
     run_atomic_methods_lower_to_nothrow_canonical_ops();
     run_user_method_named_fetch_add_remains_ordinary_call();
-    run_string_builder_append_lowers_with_stable_intrinsic_identity();
+    run_array_reserve_lowers_with_stable_intrinsic_identity();
+    run_retired_builder_lowering_slot_is_rejected();
     run_user_method_named_append_remains_ordinary_call();
     run_exact_integer_bit_methods_lower_to_typed_semantic_ops();
     run_codegen_controls_lower_to_first_class_semantic_ops();

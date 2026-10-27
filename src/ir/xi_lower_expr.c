@@ -144,8 +144,6 @@ static int xi_lower_prelude_native_class_typeid(const char *name) {
         return -1;
     if (strcmp(name, "BigInt") == 0)
         return XR_TID_BIGINT;
-    if (strcmp(name, "StringBuilder") == 0)
-        return XR_TID_STRINGBUILDER;
     return -1;
 }
 
@@ -2395,8 +2393,8 @@ static struct XrType *lower_math_call_result_type(XiLower *l, const char *member
 }
 
 static bool lower_type_has_sequence_evidence(const struct XrType *type) {
-    return type && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type) || XR_TYPE_IS_STRING(type) ||
-                    xr_type_is_builtin_named_class(type, "StringBuilder"));
+    return type &&
+           (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type) || XR_TYPE_IS_STRING(type));
 }
 
 static XiValue *lower_type_namespace_member(XiLower *l, const MemberAccessNode *ma) {
@@ -7071,7 +7069,6 @@ static void lower_take_sequence_call_evidence(XiLower *l, const AstNode *node,
     uint8_t encoding_kind = 0;
     struct XrType *receiver_type;
     bool is_sequence;
-    bool is_string_builder;
     if (!out_ids)
         return;
     memset(out_ids, 0, sizeof(*out_ids));
@@ -7091,7 +7088,6 @@ static void lower_take_sequence_call_evidence(XiLower *l, const AstNode *node,
 
     receiver_type = xi_lower_node_type(l, member->object);
     is_sequence = lower_type_has_sequence_evidence(receiver_type);
-    is_string_builder = xr_type_is_builtin_named_class(receiver_type, "StringBuilder");
 
     if (is_sequence) {
         if (xi_lower_receiver_method_call_matches(receiver_type, member->name, call->arg_count,
@@ -7105,16 +7101,10 @@ static void lower_take_sequence_call_evidence(XiLower *l, const AstNode *node,
         else if (xi_lower_receiver_method_call_matches(receiver_type, member->name, call->arg_count,
                                                        XA_BUILTIN_RECEIVER_METHOD_ARRAY_CLEAR))
             capacity_kind = XG_CAPACITY_CLEAR;
-        else if (is_string_builder && strcmp(member->name, "clear") == 0 && call->arg_count == 0)
-            capacity_kind = XG_CAPACITY_CLEAR;
         else if (xi_lower_receiver_method_call_matches(
                      receiver_type, member->name, call->arg_count,
-                     XA_BUILTIN_RECEIVER_METHOD_ARRAY_TO_STRING) ||
-                 (is_string_builder && strcmp(member->name, "toString") == 0 &&
-                  call->arg_count == 0)) {
+                     XA_BUILTIN_RECEIVER_METHOD_ARRAY_TO_STRING)) {
             capacity_kind = XG_CAPACITY_TO_STRING;
-            if (is_string_builder)
-                encoding_kind = XG_ENCODING_BYTES_TO_STRING;
         } else if (xi_lower_receiver_method_call_matches(
                        receiver_type, member->name, call->arg_count,
                        XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM)) {
@@ -7419,30 +7409,6 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
         XiSequenceEvidenceIds sequence_ids;
         XiSequenceEvidenceKinds sequence_kinds = {
             .capacity_op_kind = XG_CAPACITY_RESERVE,
-        };
-        xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, sequence_kinds,
-                                            &sequence_ids);
-        xi_lower_apply_sequence_evidence_ids(value, &sequence_ids);
-    } else if (desc->id == XA_INTRINSIC_STRING_BUILDER_APPEND) {
-        const char *member_name = xa_intrinsic_source_member(desc);
-        if (args.count != 1 || !member_name ||
-            !xr_type_is_builtin_named_class(receiver->type, "StringBuilder") ||
-            !xr_type_is_builtin_named_class(result_type, "StringBuilder") ||
-            !xr_type_equals(result_type, receiver->type)) {
-            l->had_error = true;
-            return NULL;
-        }
-        value->aux = (void *) arena_strdup(l->func, member_name);
-        if (!value->aux) {
-            l->had_error = true;
-            return NULL;
-        }
-        value->aux_int = (int64_t) XI_METHOD_SYMBOL_APPEND << 1;
-        value->result_alias_operand = 0;
-        value->call_return_ownership = lower_call_return_ownership(l, call, receiver);
-        XiSequenceEvidenceIds sequence_ids;
-        XiSequenceEvidenceKinds sequence_kinds = {
-            .capacity_op_kind = XG_CAPACITY_APPEND,
         };
         xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, sequence_kinds,
                                             &sequence_ids);
@@ -10254,7 +10220,7 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
                                 XaSymbol *resolved_class_sym) {
     XR_DCHECK(cname != NULL, "construct must have class name");
 
-    /* The parser rewrites `Map(..)`, `Array(..)`, `StringBuilder(..)` and the
+    /* The parser rewrites `Map(..)`, `Array(..)` and the
      * rest of xr_is_construct_only_type_name() into a new-expr before any
      * scope exists, so the name alone cannot say which type is meant. The
      * analyzer has since resolved it: a user class that shadows the builtin
@@ -10359,15 +10325,6 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             } else {
                 v->aux_int = 0;
             }
-            v->line = (uint32_t) node->line;
-            return v;
-        }
-        if (strcmp(cname, "StringBuilder") == 0 && arg_count == 0) {
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 0);
-            if (!v)
-                return NULL;
-            v->aux = (void *) "StringBuilder";
-            v->flags |= XI_FLAG_SIDE_EFFECT;
             v->line = (uint32_t) node->line;
             return v;
         }

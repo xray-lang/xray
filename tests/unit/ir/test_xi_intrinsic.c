@@ -21,6 +21,7 @@
 #include "../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../src/runtime/symbol/xsymbol_table.h"
 #include "../../src/runtime/value/xtype.h"
+#include "../../src/runtime/class/xclass_info.h"
 #include "../../src/shared/xr_core_intrinsic.h"
 #include "../../src/shared/xr_assertion_plan.h"
 #include "../../src/shared/xr_print_plan.h"
@@ -223,13 +224,13 @@ static bool method_sym_display_name_exists(const char *name) {
     return false;
 }
 
-static void test_string_builder_append_symbol_identity(void) {
+static void test_append_method_symbol_identity(void) {
     ASSERT_TRUE(TEST_SYM_APPEND == 253,
-                "StringBuilder.append must keep stable method symbol 253");
+                "ordinary append methods keep stable method symbol 253");
     ASSERT_TRUE(SYMBOL_APPEND == 253 && xr_builtin_symbol_from_name("append") == SYMBOL_APPEND,
-                "runtime and Xi must share the stable append symbol");
+                "runtime and Xi must share the generic append selector");
     ASSERT_TRUE(method_sym_display_name_exists("append"),
-                "stable append identity must project its source spelling");
+                "the append selector remains available to ordinary user methods");
 }
 
 static void test_builtin_receiver_registry_method_symbols(void) {
@@ -482,33 +483,30 @@ static void test_semantic_intrinsic_registry(void) {
                     atomic_fetch_add->allocation == XA_INTRINSIC_ALLOCATION_NO_ALLOC,
                 "Atomic.fetchAdd must publish stable nothrow RMW semantics");
 
-    const XaIntrinsicDesc *builder_append =
-        xa_intrinsic_by_id(XA_INTRINSIC_STRING_BUILDER_APPEND);
-    ASSERT_TRUE(builder_append && builder_append->id == 6007 &&
-                    builder_append->family == XA_INTRINSIC_FAMILY_CORE &&
-                    builder_append->lowering == XA_INTRINSIC_LOWERING_STRING_BUILDER_APPEND &&
-                    builder_append->effect == XA_INTRINSIC_EFFECT_WRITE_ONLY &&
-                    builder_append->allocation == XA_INTRINSIC_ALLOCATION_MAY_ALLOC &&
-                    builder_append->min_arity == 1 && builder_append->max_arity == 1,
-                "StringBuilder.append must publish one typed core intrinsic identity");
-    ASSERT_TRUE(builder_append &&
-                    strcmp(xa_intrinsic_source_member(builder_append),
-                           XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0,
-                "the registry and pointer-free verifier must share one append projection");
-    XrType builtin_builder = {
+    ASSERT_TRUE(xa_intrinsic_by_id((XaIntrinsicId) 6007) == NULL,
+                "retired public append identity 6007 must remain unassigned");
+    ASSERT_TRUE(xa_intrinsic_by_key("core.StringBuilder.append") == NULL,
+                "retired public append key must not bind a replacement intrinsic");
+    for (size_t i = 0; i < xa_intrinsic_count(); i++) {
+        const XaIntrinsicDesc *desc = xa_intrinsic_at(i);
+        ASSERT_TRUE(desc && (unsigned) desc->lowering != 68u,
+                    "retired lowering slot 68 must not be reused");
+    }
+    XrType retired_builtin = {
         .kind = XR_KIND_INSTANCE,
         .instance = {.class_name = "StringBuilder"},
     };
-    XrType shadow_builder = {
+    XrClassInfo ordinary_class = {.name = "StringBuilder"};
+    XrType ordinary_builder = {
         .kind = XR_KIND_INSTANCE,
-        .instance = {.class_name = "StringBuilder", .class_ref = (XrClassInfo *) (uintptr_t) 1},
+        .instance = {.class_name = "StringBuilder", .class_ref = &ordinary_class},
     };
-    ASSERT_TRUE(xa_intrinsic_compiler_receiver_method(&builtin_builder, "append") ==
-                    XA_INTRINSIC_STRING_BUILDER_APPEND,
-                "builtin receiver binding must select append by typed receiver and stable symbol");
-    ASSERT_TRUE(xa_intrinsic_compiler_receiver_method(&shadow_builder, "append") ==
+    ASSERT_TRUE(xa_intrinsic_compiler_receiver_method(&retired_builtin, "append") ==
                     XA_INTRINSIC_NONE,
-                "a source class with the same spelling must not acquire builtin append semantics");
+                "a retired builtin spelling must not acquire append authority");
+    ASSERT_TRUE(xa_intrinsic_compiler_receiver_method(&ordinary_builder, "append") ==
+                    XA_INTRINSIC_NONE,
+                "an ordinary same-named class uses only its declared method contract");
 
     const XaIntrinsicDesc *par_map_into = xa_intrinsic_by_id(XA_INTRINSIC_PARALLEL_PLAN_MAP_INTO);
     ASSERT_TRUE(par_map_into && par_map_into->family == XA_INTRINSIC_FAMILY_PARALLEL &&
@@ -878,7 +876,7 @@ int main(void) {
     test_method_sym_no_dups();
     test_method_sym_names();
     test_method_sym_count();
-    test_string_builder_append_symbol_identity();
+    test_append_method_symbol_identity();
     test_builtin_receiver_registry_method_symbols();
     test_builtin_receiver_registry_method_ids();
     test_builtin_receiver_registry_metadata();

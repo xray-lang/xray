@@ -825,14 +825,6 @@ static bool call_returns_intrinsic_fresh(const XiFunc *f, const XiValue *v) {
      * method call named "init" while returning the receiver at +0. */
     if (xi_value_is_constructor_call(v))
         return true;
-    if (v && v->op == XI_CALL_BUILTIN && v->nargs == 0 && v->aux &&
-        strcmp((const char *) v->aux, "StringBuilder") == 0 &&
-        xr_type_is_builtin_named_class(v->type, "StringBuilder"))
-        return true;
-    if (v->op == XI_CALL_METHOD && v->nargs == 1 && v->args[0] && v->aux &&
-        strcmp((const char *) v->aux, "toString") == 0 &&
-        xr_type_is_builtin_named_class(v->args[0]->type, "StringBuilder"))
-        return true;
     /* Container-building intrinsics allocate a new array on both backends;
      * the result aliases no argument, so it is a fresh +1 the caller owns
      * (and must drop at its death point when never consumed). */

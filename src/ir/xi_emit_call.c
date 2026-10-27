@@ -1152,14 +1152,6 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_builtin_unary_opcode(ctx, v, dst, OP_CHR);
         return;
     }
-    if (bname && strcmp(bname, "StringBuilder") == 0) {
-        /* OP_NEWSTRINGBUILDER: A=dst, B=storage_mode (0=normal) */
-        emit_inst(
-            ctx, CREATE_ABC(
-                     OP_NEWSTRINGBUILDER, dst,
-                     xi_emit_allocation_storage_mode(ctx, xi_value_allocation_storage_mode(v)), 0));
-        return;
-    }
     if (bname && strcmp(bname, "array_copy_new") == 0) {
         emit_builtin_array_copy_new(ctx, v, dst);
         return;

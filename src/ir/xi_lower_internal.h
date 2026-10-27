@@ -81,7 +81,6 @@ static inline bool xi_lower_mark_storage_allocation(XiValue *v, uint8_t storage_
             if (v->array_intrinsic_kind == XI_ARRAY_INTRINSIC_WITH_CAPACITY ||
                 v->array_intrinsic_kind == XI_ARRAY_INTRINSIC_FILLED_NEW ||
                 (v->aux && (strcmp((const char *) v->aux, "array_copy_new") == 0 ||
-                            strcmp((const char *) v->aux, "StringBuilder") == 0 ||
                             strcmp((const char *) v->aux, "copy") == 0))) {
                 xi_value_set_allocation_storage_mode(v, storage_mode);
                 return true;

@@ -340,7 +340,7 @@ XR_FUNC bool xi_coro_value_rep_can_trace_root(const XiValue *v);
 XR_FUNC bool xi_coro_value_needs_arc_release(const XiValue *v);
 
 /* needs_boundary_clone: the value must be cloned as it crosses the coroutine
- * boundary (mutable aggregates / StringBuilder / json). */
+ * boundary (mutable aggregates, strings, and json). */
 XR_FUNC bool xi_coro_type_needs_boundary_clone(const struct XrType *type);
 XR_FUNC bool xi_coro_value_needs_boundary_clone(const XiValue *v);
 

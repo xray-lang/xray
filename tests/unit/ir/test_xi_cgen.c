@@ -6063,7 +6063,7 @@ TEST(cgen_str_concat_uses_single_allocation_helper) {
     CHECK_CGEN_STR_CONCAT(add_calls == 0 && !contains(code, "xrt_add("),
                           "AOT STR_CONCAT must not lower to nested binary xrt_add calls");
     CHECK_CGEN_STR_CONCAT(strbuf_new_calls == 0,
-                          "multi-part concat sites should not allocate temporary StringBuilder");
+                          "multi-part concat sites should use ordinary string concatenation");
     CHECK_CGEN_STR_CONCAT(part_init_calls >= 8,
                           "AOT STR_CONCAT should materialize every part exactly once");
     CHECK_CGEN_STR_CONCAT(concat_parts_calls >= 2,
@@ -8205,13 +8205,13 @@ static const char *g_runtime_constructor_c_output;
 
 TEST(cgen_runtime_constructors_use_verified_signatures) {
     const char *source = "@noinline fn render(piece: string) -> string {\n"
-                         "    var builder = StringBuilder()\n"
-                         "    builder.append(piece.slice(1, 2))\n"
-                         "    return builder.toString()\n"
+                         "    var text = \"\"\n"
+                         "    text += piece.slice(1, 2)\n"
+                         "    return text\n"
                          "}\n"
-                         "var text = StringBuilder()\n"
-                         "text.append('R')\n"
-                         "print(text.toString())\n"
+                         "var text = \"\"\n"
+                         "text += \"${'R'}\"\n"
+                         "print(text)\n"
                          "print(render(\"a=b\"))\n"
                          "const integer = Atomic(40)\n"
                          "integer.fetchAdd(2, Ordering.SeqCst)\n"
@@ -8227,7 +8227,8 @@ TEST(cgen_runtime_constructors_use_verified_signatures) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && !had_error);
-    assert(contains(code, "xrt_strbuf_new("));
+    assert(!contains(code, "xrt_strbuf_new(") &&
+           "ordinary strings must not construct the retired public builder");
     assert(contains(code, "xr_aot_atomic_new_i64("));
     assert(contains(code, "xr_aot_atomic_new_bool("));
     assert(contains(code, "xr_aot_atomic_new_f64("));
@@ -8277,37 +8278,60 @@ TEST(cgen_coroutine_aggregate_storage_survives_resume) {
     test_func_free(ir);
 }
 
-TEST(cgen_stringbuilder_constructor_consumes_emission_recipe) {
-    XiFunc *ir = compile_to_ir("var out = StringBuilder()\n");
-    assert(ir != NULL && "StringBuilder constructor IR compilation failed");
+TEST(cgen_same_named_user_constructor_consumes_declared_class) {
+    XiFunc *ir = compile_to_ir(
+        "class StringBuilder {\n"
+        "    value: i64\n"
+        "    init(seed: i64) { this.value = seed }\n"
+        "}\n"
+        "@noinline fn make(seed: i64) -> StringBuilder { return StringBuilder(seed) }\n"
+        "var out = make(42)\n"
+        "print(out.value)\n");
+    assert(ir != NULL && "ordinary same-named constructor IR compilation failed");
 
     bool had_error = false;
-    char *code = generate_c_with_status(ir, "stringbuilder_sync", &had_error);
-    assert(code != NULL && "StringBuilder constructor C generation failed");
-    assert(!had_error && "sealed StringBuilder constructor recipe should generate");
-    assert(count_between(code, code + strlen(code), "xrt_strbuf_new()") == 1 &&
-           "ordinary CGen must consume exactly one fixed StringBuilder allocation recipe");
-    assert(!contains(code, "xrt_call_builtin") &&
-           "StringBuilder construction must not use a generic builtin fallback");
+    char *code = generate_c_with_status(ir, "ordinary_builder_sync", &had_error);
+    assert(code != NULL && !had_error &&
+           "ordinary class declaration and its constructor parameter must generate");
+    const char *make = find_static_function_definition(code, "ordinary_builder_sync_make_");
+    assert(make != NULL && "ordinary class producer definition must exist");
+    const char *end = next_static_after(make);
+    assert(end != NULL && count_between(make, end, "xrt_obj_alloc(") == 1 &&
+           "ordinary constructor must allocate exactly one instance with its declared fields");
+    assert(contains(code, "xrt_native_ordinary_builder_sync_StringBuilder") &&
+           !contains(code, "xrt_strbuf_new(") && !contains(code, "xrt_call_builtin") &&
+           "the class name must not select a retired constructor or generic builtin recipe");
 
     xr_free(code);
     test_func_free(ir);
 }
 
-TEST(cgen_coro_stringbuilder_constructor_consumes_emission_recipe) {
-    XiFunc *ir = compile_to_ir("var out = StringBuilder()\nCoro.yield()\n");
-    assert(ir != NULL && "coroutine StringBuilder constructor IR compilation failed");
+TEST(cgen_coro_same_named_user_constructor_consumes_declared_class) {
+    XiFunc *ir = compile_to_ir(
+        "class StringBuilder {\n"
+        "    value: i64\n"
+        "    init(seed: i64) { this.value = seed }\n"
+        "}\n"
+        "@noinline fn make(seed: i64) -> StringBuilder { return StringBuilder(seed) }\n"
+        "var out = make(42)\n"
+        "Coro.yield()\n"
+        "print(out.value)\n");
+    assert(ir != NULL && "ordinary coroutine class constructor IR compilation failed");
 
     bool had_error = false;
-    char *code = generate_c_with_status(ir, "stringbuilder_coro", &had_error);
-    assert(code != NULL && "coroutine StringBuilder constructor C generation failed");
-    assert(!had_error && "sealed coroutine StringBuilder constructor recipe should generate");
+    char *code = generate_c_with_status(ir, "ordinary_builder_coro", &had_error);
+    assert(code != NULL && !had_error &&
+           "ordinary coroutine constructor declaration must generate");
     assert(contains(code, "_aot_resume") &&
-           "StringBuilder coroutine fixture must exercise the resume-body emitter");
-    assert(count_between(code, code + strlen(code), "xrt_strbuf_new()") == 1 &&
-           "coroutine CGen must consume exactly one fixed StringBuilder allocation recipe");
-    assert(!contains(code, "xrt_call_builtin") &&
-           "coroutine StringBuilder construction must not use a generic builtin fallback");
+           "ordinary class value must remain live through the resume-body emitter");
+    const char *make = find_static_function_definition(code, "ordinary_builder_coro_make_");
+    assert(make != NULL && "ordinary coroutine class producer definition must exist");
+    const char *end = next_static_after(make);
+    assert(end != NULL && count_between(make, end, "xrt_obj_alloc(") == 1 &&
+           "the producer must allocate one declared ordinary instance");
+    assert(contains(code, "xrt_native_ordinary_builder_coro_StringBuilder") &&
+           !contains(code, "xrt_strbuf_new(") && !contains(code, "xrt_call_builtin") &&
+           "coroutine construction must not recover a retired public builtin");
 
     xr_free(code);
     test_func_free(ir);
@@ -8315,14 +8339,14 @@ TEST(cgen_coro_stringbuilder_constructor_consumes_emission_recipe) {
 
 TEST(cgen_builtin_iterator_pull_methods_preserve_error_polls) {
     const char *src = "fn copyRunes(text: string) -> string {\n"
-                      "    var out = StringBuilder()\n"
+                      "    var out = \"\"\n"
                       "    var iter = text.runes()\n"
                       "    while (iter.hasNext()) {\n"
                       "        var r = iter.next()\n"
                       "        var cp = r.toUInt32()\n"
-                      "        if (cp > 0) { out.append(r) }\n"
+                      "        if (cp > 0) { out += \"${r}\" }\n"
                       "    }\n"
-                      "    return out.toString()\n"
+                      "    return out\n"
                       "}\n"
                       "print(copyRunes(\"Ab\"))\n";
 
@@ -8332,7 +8356,7 @@ TEST(cgen_builtin_iterator_pull_methods_preserve_error_polls) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "StringBuilder/Iterator direct runtime methods should generate");
+    assert(!had_error && "ordinary string accumulation and Iterator methods should generate");
 
     const char *fn = find_static_function_definition(code, "test_copyRunes_");
     assert(fn != NULL && "copyRunes definition should exist");
@@ -8342,21 +8366,20 @@ TEST(cgen_builtin_iterator_pull_methods_preserve_error_polls) {
            "Iterator.hasNext/next must poll the error channel because the static handle may be "
            "generator-backed");
     assert(count_between(fn, fn_end, "xrt_release(") >= 2 &&
-           "fresh StringBuilder and Iterator owners must both be released");
+           "owned string accumulation and Iterator owners must both be released");
 
     xr_free(code);
     test_func_free(ir);
 }
 
 TEST(cgen_err_check_releases_live_arc_owners_on_cold_edge) {
-    const char *src = "fn decode(bytes: Array<u8>) -> string? {\n"
-                      "    var out = StringBuilder()\n"
-                      "    out.append(\"prefix\")\n"
+    const char *src = "fn decode(bytes: Array<u8>) -> (string?, string) {\n"
+                      "    var out = \"prefix\" + string(len(bytes))\n"
                       "    var decoded = string.fromUtf8(bytes[:])\n"
-                      "    out.append(\"suffix\")\n"
-                      "    return decoded\n"
+                      "    out += \"suffix\"\n"
+                      "    return (decoded, out)\n"
                       "}\n"
-                      "print(decode([65 as u8]))\n";
+                      "print(decode([65 as u8]).0)\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -8376,7 +8399,7 @@ TEST(cgen_err_check_releases_live_arc_owners_on_cold_edge) {
     assert(check_end != NULL && check_end < fn_end &&
            "pending-error branch should have a bounded body");
     assert(count_between(check, check_end, "xrt_release(") >= 1 &&
-           "pending-error branch must release the live StringBuilder owner");
+           "pending-error branch must release the owned string needed by the success tuple");
 
     xr_free(code);
     test_func_free(ir);
@@ -17641,8 +17664,8 @@ int main(int argc, char **argv) {
     run_cgen_parallel_for_body_closure_stack_allocates();
     run_cgen_typed_array_uses_raw_storage_fast_path();
     run_cgen_checked_typed_array_store_proves_nonnull_data();
-    run_cgen_stringbuilder_constructor_consumes_emission_recipe();
-    run_cgen_coro_stringbuilder_constructor_consumes_emission_recipe();
+    run_cgen_same_named_user_constructor_consumes_declared_class();
+    run_cgen_coro_same_named_user_constructor_consumes_declared_class();
     run_cgen_builtin_iterator_pull_methods_preserve_error_polls();
     run_cgen_err_check_releases_live_arc_owners_on_cold_edge();
     run_cgen_typed_array_u8_uses_byte_storage_fast_path();

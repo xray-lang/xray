@@ -536,7 +536,7 @@ static bool xi_coro_is_closed_builtin_method_call(const XiValue *v) {
     /* Native classes and interfaces carry a NULL class_ref as their frozen
      * declaration identity.  User declarations always carry their owning
      * XrClassInfo, including when they shadow a builtin spelling.  This one
-     * identity gate covers StringBuilder, Iterator, Buffer, and the remaining
+     * identity gate covers Iterator, Buffer, and the remaining
      * compiler-owned named method tables without a name-based allow-list. */
     const XrType *receiver_type = receiver->type;
     if ((receiver_type->kind == XR_KIND_INSTANCE || receiver_type->kind == XR_KIND_INTERFACE) &&
@@ -1681,8 +1681,6 @@ XR_FUNC bool xi_coro_type_needs_boundary_clone(const XrType *type) {
         case XR_KIND_STRUCT_OBJECT:
         case XR_KIND_STRING:
             return true;
-        case XR_KIND_INSTANCE:
-            return xr_type_is_builtin_named_class(type, "StringBuilder");
         case XR_KIND_UNION:
             for (uint8_t i = 0; i < type->union_type.member_count; i++) {
                 if (xi_coro_type_needs_boundary_clone(type->union_type.members[i]))

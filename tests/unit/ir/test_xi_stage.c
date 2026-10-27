@@ -25,6 +25,7 @@
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/runtime/class/xclass_info.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xchecks.h"
 
@@ -70,13 +71,14 @@ static XrType stub_enum = {
     .kind = XR_KIND_ENUM, .id = 12, .frozen = true, .scalar_rep = XR_SCALAR_REP_NONE};
 static XrType stub_function = {
     .kind = XR_KIND_FUNCTION, .id = 8, .frozen = true, .function = {.return_type = &stub_int}};
-static XrType stub_string_builder = {
-    .kind = XR_KIND_INSTANCE, .id = 9, .frozen = true, .instance = {.class_name = "StringBuilder"}};
-static XrType stub_shadow_string_builder = {
+static XrType stub_iterator = {
+    .kind = XR_KIND_INSTANCE, .id = 9, .frozen = true, .instance = {.class_name = "Iterator"}};
+static XrClassInfo ordinary_string_builder_class = {.name = "StringBuilder"};
+static XrType stub_ordinary_string_builder = {
     .kind = XR_KIND_INSTANCE,
     .id = 10,
     .frozen = true,
-    .instance = {.class_name = "StringBuilder", .class_ref = (XrClassInfo *) (uintptr_t) 1}};
+    .instance = {.class_name = "StringBuilder", .class_ref = &ordinary_string_builder_class}};
 
 static XiCoroLoweredProgram *advance_to_coro_lowered(XiFunc *f) {
     char error[512] = {0};
@@ -928,20 +930,18 @@ static void test_coroutine_transition_accepts_open_callable(void) {
     printf("  PASS\n");
 }
 
-static XiSemanticLoweredProgram *make_string_builder_call_program(XrType *receiver_type,
-                                                                  bool with_yield,
-                                                                  XiFunc **out_func, char *error,
-                                                                  size_t error_size) {
-    XiFunc *f = xi_func_new("string_builder_coro_transition", &stub_void);
+static XiSemanticLoweredProgram *make_has_next_call_program(XrType *receiver_type,
+                                                            bool with_yield,
+                                                            XiFunc **out_func, char *error,
+                                                            size_t error_size) {
+    XiFunc *f = xi_func_new("has_next_coro_transition", &stub_void);
     XiBlock *entry = xi_block_new(f);
     XiValue *receiver = xi_value_new(f, entry, XI_PARAM, receiver_type, 0);
-    XiValue *argument = xi_value_new(f, entry, XI_CONST, &stub_string, 0);
-    XiValue *append = xi_value_new(f, entry, XI_CALL_METHOD, receiver_type, 2);
+    XiValue *call = xi_value_new(f, entry, XI_CALL_METHOD, &stub_bool, 1);
     XiValue *yield = with_yield ? xi_value_new(f, entry, XI_YIELD, &stub_void, 0) : NULL;
-    assert(f && entry && receiver && argument && append && (!with_yield || yield));
-    append->aux = (void *) "append";
-    append->args[0] = receiver;
-    append->args[1] = argument;
+    assert(f && entry && receiver && call && (!with_yield || yield));
+    call->aux = (void *) "hasNext";
+    call->args[0] = receiver;
     xi_block_set_return(entry, NULL);
 
     XiRawProgram *raw = xi_stage_adopt_raw(f, error, error_size);
@@ -959,13 +959,13 @@ static XiSemanticLoweredProgram *make_string_builder_call_program(XrType *receiv
     return semantic;
 }
 
-static void test_coroutine_transition_uses_builtin_string_builder_identity(void) {
-    printf("--- test_coroutine_transition_uses_builtin_string_builder_identity ---\n");
+static void test_coroutine_transition_distinguishes_native_and_user_class_identity(void) {
+    printf("--- test_coroutine_transition_distinguishes_native_and_user_class_identity ---\n");
 
     char error[256] = {0};
     XiFunc *builtin_func = NULL;
-    XiSemanticLoweredProgram *builtin = make_string_builder_call_program(
-        &stub_string_builder, true, &builtin_func, error, sizeof(error));
+    XiSemanticLoweredProgram *builtin = make_has_next_call_program(
+        &stub_iterator, true, &builtin_func, error, sizeof(error));
     XiCoroLoweredProgram *lowered =
         xi_program_lower_coroutines(builtin, NULL, error, sizeof(error));
     assert(lowered != NULL);
@@ -974,8 +974,8 @@ static void test_coroutine_transition_uses_builtin_string_builder_identity(void)
     xi_func_free(xi_coro_lowered_program_release(lowered));
 
     XiFunc *shadow_func = NULL;
-    XiSemanticLoweredProgram *shadow = make_string_builder_call_program(
-        &stub_shadow_string_builder, true, &shadow_func, error, sizeof(error));
+    XiSemanticLoweredProgram *shadow = make_has_next_call_program(
+        &stub_ordinary_string_builder, true, &shadow_func, error, sizeof(error));
     uint32_t blocks_before = shadow_func->nblocks;
     error[0] = '\0';
     assert(xi_program_lower_coroutines(shadow, NULL, error, sizeof(error)) == NULL);
@@ -1000,7 +1000,7 @@ static void test_coroutine_transition_keeps_known_builtin_sync(void) {
     char error[256] = {0};
     XiFunc *func = NULL;
     XiSemanticLoweredProgram *semantic =
-        make_string_builder_call_program(&stub_string_builder, false, &func, error, sizeof(error));
+        make_has_next_call_program(&stub_iterator, false, &func, error, sizeof(error));
     XiCoroResolver resolver = {0};
     resolver.call_suspendability = unknown_call_suspendability;
     XiCoroLoweredProgram *lowered =
@@ -1417,7 +1417,7 @@ int main(void) {
     test_lowering_fact_corruption_fails_closed();
     test_semantic_stage_cannot_skip_coroutine_lowering();
     test_coroutine_transition_accepts_open_callable();
-    test_coroutine_transition_uses_builtin_string_builder_identity();
+    test_coroutine_transition_distinguishes_native_and_user_class_identity();
     test_coroutine_transition_keeps_known_builtin_sync();
     test_coroutine_transition_rejects_invalid_cfg_before_rewrite();
     test_semantic_intrinsic_corruption_fails_closed();

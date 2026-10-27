@@ -52,12 +52,6 @@ static XrType t_func = {.kind = XR_KIND_FUNCTION, .id = 6, .frozen = true};
 static XrType t_span = {.kind = XR_KIND_SLICE, .id = 7, .frozen = true};
 static XrType t_bool = {.kind = XR_KIND_BOOL, .id = 8, .frozen = true};
 static XrType t_unit = {.kind = XR_KIND_UNIT, .id = 10, .frozen = true};
-static XrType t_stringbuilder = {
-    .kind = XR_KIND_INSTANCE,
-    .id = 9,
-    .frozen = true,
-    .instance = {.class_name = "StringBuilder"},
-};
 static XrType t_string = {.kind = XR_KIND_STRING, .id = 11, .frozen = true};
 static XrType t_json = {.kind = XR_KIND_JSON, .id = 12, .frozen = true};
 static XrType t_iterator = {
@@ -1341,13 +1335,23 @@ static void test_arc_local_method_maps_owned_parameter_after_receiver(void) {
     xi_func_free(root);
 }
 
-static void test_arc_stringbuilder_builtin_result_is_fresh(void) {
-    XiFunc *f = make_func("arc_fresh_stringbuilder", &t_int);
+static XiValue *make_owned_string(XiFunc *f, XiBlock *block) {
+    XiValue *left = xi_const_str(f, block, "prefix", &t_string);
+    XiValue *right = xi_const_str(f, block, "suffix", &t_string);
+    XiValue *text = xi_value_new(f, block, XI_STR_CONCAT, &t_string, 2);
+    if (!left || !right || !text)
+        return NULL;
+    text->args[0] = left;
+    text->args[1] = right;
+    return text;
+}
+
+static void test_arc_string_concat_result_is_fresh(void) {
+    XiFunc *f = make_func("arc_fresh_string_concat", &t_int);
     XiBlock *entry = f->entry;
 
-    XiValue *builder = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_stringbuilder, 0);
-    builder->aux = (void *) "StringBuilder";
-    builder->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *builder = make_owned_string(f, entry);
+    XR_CHECK(builder != NULL, "owned string fixture allocation");
     xi_block_set_return(entry, xi_const_int(f, entry, 0, &t_int));
 
     xi_arc_insert(f);
@@ -1360,9 +1364,9 @@ static void test_arc_stringbuilder_builtin_result_is_fresh(void) {
         }
     }
     ASSERT_EQ(count_ops(f, XI_RELEASE), 1,
-              "discarded StringBuilder() result must be released as a fresh owner");
+              "discarded string concatenation must be released as a fresh owner");
     ASSERT_EQ(release != NULL && release->args[0] == builder, true,
-              "StringBuilder death-point release must target the constructor result");
+              "string death-point release must target the concatenation result");
     xi_func_free(f);
 }
 
@@ -1546,9 +1550,8 @@ static void test_arc_err_check_carries_cold_edge_cleanup(void) {
     XiFunc *f = make_func("arc_err_check_cleanup", &t_int);
     XiBlock *entry = f->entry;
 
-    XiValue *builder = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_stringbuilder, 0);
-    builder->aux = (void *) "StringBuilder";
-    builder->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *builder = make_owned_string(f, entry);
+    XR_CHECK(builder != NULL, "owned string fixture allocation");
     XiValue *fallible = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_int, 0);
     fallible->aux = (void *) "fallible";
     fallible->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
@@ -1568,7 +1571,7 @@ static void test_arc_err_check_carries_cold_edge_cleanup(void) {
     ASSERT_EQ(fallible->uses, producer_uses_before,
               "ERR_CHECK must not force an otherwise-unused producer result to materialize");
     ASSERT_EQ(check->args[XI_ERR_CHECK_CLEANUP_ARG_BASE] == builder, true,
-              "ERR_CHECK cold edge must drop the StringBuilder live on success");
+              "ERR_CHECK cold edge must drop the owned string live on success");
     XiArcVerifyReport rep;
     ASSERT_EQ(xi_arc_verify(f, &rep), true,
               "error-edge cleanup operands must preserve the ARC contract");
@@ -1579,9 +1582,8 @@ static void test_arc_err_check_without_throwing_source_stays_operand_free(void) 
     XiFunc *f = make_func("arc_dead_err_check", &t_int);
     XiBlock *entry = f->entry;
 
-    XiValue *builder = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_stringbuilder, 0);
-    builder->aux = (void *) "StringBuilder";
-    builder->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *builder = make_owned_string(f, entry);
+    XR_CHECK(builder != NULL, "owned string fixture allocation");
     XiValue *check = xi_value_new(f, entry, XI_ERR_CHECK, &t_unit, 0);
     check->flags = XI_FLAG_SIDE_EFFECT;
     XiValue *use = xi_value_new(f, entry, XI_LEN, &t_int, 1);
@@ -1610,14 +1612,12 @@ static void test_arc_err_check_cleanup_requires_dominating_owner(void) {
     XiValue *cond = xi_const_bool(f, entry, true, &t_bool);
     xi_block_set_if(entry, cond, left, right);
 
-    XiValue *left_builder = xi_value_new(f, left, XI_CALL_BUILTIN, &t_stringbuilder, 0);
-    left_builder->aux = (void *) "StringBuilder";
-    left_builder->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *left_builder = make_owned_string(f, left);
+    XR_CHECK(left_builder != NULL, "owned string fixture allocation");
     xi_block_set_jump(left, join);
 
-    XiValue *right_builder = xi_value_new(f, right, XI_CALL_BUILTIN, &t_stringbuilder, 0);
-    right_builder->aux = (void *) "StringBuilder";
-    right_builder->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *right_builder = make_owned_string(f, right);
+    XR_CHECK(right_builder != NULL, "owned string fixture allocation");
     XiValue *fallible = xi_value_new(f, right, XI_CALL_BUILTIN, &t_int, 0);
     fallible->aux = (void *) "fallible";
     fallible->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
@@ -1626,7 +1626,7 @@ static void test_arc_err_check_cleanup_requires_dominating_owner(void) {
     check->error_producer = fallible;
     xi_block_set_jump(right, join);
 
-    XiPhi *merged = xi_phi_new(f, join, &t_stringbuilder, join->npreds);
+    XiPhi *merged = xi_phi_new(f, join, &t_string, join->npreds);
     for (uint16_t i = 0; i < join->npreds; i++)
         merged->value.args[i] = join->preds[i] == left ? left_builder : right_builder;
     XiValue *length = xi_value_new(f, join, XI_LEN, &t_int, 1);
@@ -1678,10 +1678,9 @@ static void test_arc_err_check_keeps_boxed_fresh_owner(void) {
     XiFunc *f = make_func("arc_err_check_boxed_fresh_owner", &t_int);
     XiBlock *entry = f->entry;
 
-    XiValue *builder = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_stringbuilder, 0);
-    builder->aux = (void *) "StringBuilder";
-    builder->flags = XI_FLAG_SIDE_EFFECT;
-    XiValue *boxed = xi_value_new(f, entry, XI_BOX, &t_stringbuilder, 1);
+    XiValue *builder = make_owned_string(f, entry);
+    XR_CHECK(builder != NULL, "owned string fixture allocation");
+    XiValue *boxed = xi_value_new(f, entry, XI_BOX, &t_string, 1);
     boxed->args[0] = builder;
     XiValue *fallible = xi_value_new(f, entry, XI_CALL_BUILTIN, &t_int, 0);
     fallible->aux = (void *) "fallible";
@@ -2260,7 +2259,7 @@ int main(void) {
     test_arc_resolved_callee_contract_overrides_callsite_borrow();
     test_arc_local_method_uses_resolved_borrow_contract();
     test_arc_local_method_maps_owned_parameter_after_receiver();
-    test_arc_stringbuilder_builtin_result_is_fresh();
+    test_arc_string_concat_result_is_fresh();
     test_arc_value_clone_is_fresh_owner();
     test_arc_builtin_iterator_results_are_fresh();
     test_map_entry_iterator_typed_shape();
