@@ -1118,11 +1118,6 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrValidatedFunc
                    instruction->result_ownership == XR_CORE_IR_NON_OWNER &&
                    function->panic_type_id == XR_CORE_TYPE_PANIC_INFO;
         }
-        case XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT:
-            return instruction->operand_count == 0u && instruction->successor_count == 0u &&
-                instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE &&
-                instruction->result_type_id == XR_CORE_TYPE_STRING_BUILDER &&
-                instruction->result_category == XR_CORE_IR_VALUE && instruction->result_ownership == XR_CORE_IR_OWNER;
         case XR_CORE_OP_CORE_ARRAY_APPEND: {
             if (instruction->operand_count != 2u || instruction->successor_count != 0u ||
                 instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_NONE ||
@@ -1140,33 +1135,6 @@ static bool instruction_shape_valid(const XrBackendIR *ir, const XrValidatedFunc
                 function->value_ownerships[instruction->operands[1]] ==
                     (xr_validated_program_type_ownership(ir->program, array->array_element_type) ==
                         XR_CORE_IR_TYPE_OWNERSHIP_AFFINE ? XR_CORE_IR_OWNER : XR_CORE_IR_NON_OWNER);
-        }
-        case XR_CORE_OP_CORE_STRING_BUILDER_APPEND:
-        case XR_CORE_OP_CORE_STRING_BUILDER_CLEAR: {
-            bool append = instruction->operation_id == XR_CORE_OP_CORE_STRING_BUILDER_APPEND;
-            if (instruction->operand_count != (append ? 2u : 1u) || instruction->successor_count != 0u ||
-                instruction->immediate_kind != XR_CORE_IR_IMMEDIATE_NONE ||
-                instruction->result_type_id != XR_CORE_TYPE_VOID || instruction->result_id != XR_PROGRAM_LOCATION_NONE ||
-                instruction->result_category != XR_CORE_IR_VALUE || instruction->result_ownership != XR_CORE_IR_NON_OWNER ||
-                function->value_types[instruction->operands[0]] != XR_CORE_TYPE_STRING_BUILDER ||
-                function->value_categories[instruction->operands[0]] != XR_CORE_IR_PLACE)
-                return false;
-            if (!append) return true;
-            uint16_t type = function->value_types[instruction->operands[1]];
-            return function->value_categories[instruction->operands[1]] == XR_CORE_IR_VALUE &&
-                (type == XR_CORE_TYPE_STRING || type == XR_CORE_TYPE_RUNE || type == XR_CORE_TYPE_I64 ||
-                 type == XR_CORE_TYPE_F64 || type == XR_CORE_TYPE_BOOL || type == XR_CORE_TYPE_VOID);
-        }
-        case XR_CORE_OP_CORE_STRING_BUILDER_LENGTH:
-        case XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT: {
-            bool snapshot = instruction->operation_id == XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT;
-            return instruction->operand_count == 1u && instruction->successor_count == 0u &&
-                instruction->immediate_kind == XR_CORE_IR_IMMEDIATE_NONE &&
-                instruction->result_type_id == (snapshot ? XR_CORE_TYPE_STRING : XR_CORE_TYPE_I64) &&
-                instruction->result_category == XR_CORE_IR_VALUE &&
-                instruction->result_ownership == (snapshot ? XR_CORE_IR_OWNER : XR_CORE_IR_NON_OWNER) &&
-                function->value_types[instruction->operands[0]] == XR_CORE_TYPE_STRING_BUILDER &&
-                function->value_categories[instruction->operands[0]] == XR_CORE_IR_VALUE;
         }
         case XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL: {
             if (instruction->operand_count != 2u || instruction->successor_count != 0u ||

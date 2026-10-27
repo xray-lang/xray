@@ -76,11 +76,6 @@ static bool operation_is_supported(uint16_t operation_id) {
         case XR_CORE_OP_CORE_TARGET_ENDIANNESS:
         case XR_CORE_OP_CORE_PROVIDER_CALL:
         case XR_CORE_OP_CORE_OUTPUT_GROUP:
-        case XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT:
-        case XR_CORE_OP_CORE_STRING_BUILDER_APPEND:
-        case XR_CORE_OP_CORE_STRING_BUILDER_CLEAR:
-        case XR_CORE_OP_CORE_STRING_BUILDER_LENGTH:
-        case XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT:
         case XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL:
         case XR_CORE_OP_CORE_CHANNEL_CONSTRUCT:
         case XR_CORE_OP_CORE_CHANNEL_IS_CLOSED:
@@ -220,9 +215,6 @@ bool xr_backend_representation_for_type(uint16_t type_id, uint8_t *representatio
             break;
         case XR_CORE_TYPE_PANIC_INFO:
             representation = XR_BACKEND_VALUE_PANIC_U32;
-            break;
-        case XR_CORE_TYPE_STRING_BUILDER:
-            representation = XR_BACKEND_VALUE_STRING_BUILDER_HANDLE;
             break;
         case XR_CORE_TYPE_STRING:
             representation = XR_BACKEND_VALUE_STRING_HANDLE;

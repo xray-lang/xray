@@ -25,8 +25,8 @@
 #define XR_CORE_IR_KEY_SIZE 32u
 #define XR_PROGRAM_FUNCTION_ENTRY UINT32_C(1)
 /* Builtin rows are the CoreSpec runtime types below the dynamic base; the
- * registry meta type (11) is never a program type. */
-#define XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT 20u
+ * registry meta type (11) and retired type identities are never program types. */
+#define XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT 19u
 #define XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE UINT16_C(32)
 
 typedef enum XrProgramTypeKind {

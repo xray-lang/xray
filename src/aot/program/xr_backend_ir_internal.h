@@ -33,7 +33,7 @@ typedef enum XrBackendValueRepresentation {
     XR_BACKEND_VALUE_I32,
     XR_BACKEND_VALUE_U64,
     XR_BACKEND_VALUE_F64,
-    XR_BACKEND_VALUE_STRING_BUILDER_HANDLE,
+    /* Representation 18 is retired; new identities start at 19. */
 } XrBackendValueRepresentation;
 
 struct XrBackendIR {

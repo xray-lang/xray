@@ -1977,19 +1977,19 @@ foreach(XR_CHANNEL_PART buffer storage)
     list(APPEND XRAY_SYNC_KERNEL_EMBEDS ${XR_CHANNEL_OUTPUT})
 endforeach()
 add_custom_target(gen-sync-kernel-embed DEPENDS ${XRAY_SYNC_KERNEL_EMBEDS})
-set(XRAY_STRING_BUILDER_EMBEDS)
-foreach(XR_BUILDER_INPUT IN ITEMS shared/xr_byte_compare_core.h shared/xr_buffer_capacity_core.h runtime/core/xr_string_builder_storage.h)
-    get_filename_component(XR_BUILDER_NAME "${XR_BUILDER_INPUT}" NAME_WE)
-    set(XR_BUILDER_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/${XR_BUILDER_NAME}_embedded.inc.c")
-    add_custom_command(OUTPUT "${XR_BUILDER_OUTPUT}"
+set(XRAY_TEXT_SUPPORT_EMBEDS)
+foreach(XR_TEXT_SUPPORT_INPUT IN ITEMS shared/xr_byte_compare_core.h shared/xr_buffer_capacity_core.h)
+    get_filename_component(XR_TEXT_SUPPORT_NAME "${XR_TEXT_SUPPORT_INPUT}" NAME_WE)
+    set(XR_TEXT_SUPPORT_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/${XR_TEXT_SUPPORT_NAME}_embedded.inc.c")
+    add_custom_command(OUTPUT "${XR_TEXT_SUPPORT_OUTPUT}"
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-        COMMAND ${CMAKE_COMMAND} -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/src/${XR_BUILDER_INPUT}
-                -DOUTPUT=${XR_BUILDER_OUTPUT} -DSYMBOL=${XR_BUILDER_NAME}_source
+        COMMAND ${CMAKE_COMMAND} -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/src/${XR_TEXT_SUPPORT_INPUT}
+                -DOUTPUT=${XR_TEXT_SUPPORT_OUTPUT} -DSYMBOL=${XR_TEXT_SUPPORT_NAME}_source
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/${XR_BUILDER_INPUT}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/${XR_TEXT_SUPPORT_INPUT}
                 ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedTextFile.cmake
         VERBATIM)
-    list(APPEND XRAY_STRING_BUILDER_EMBEDS "${XR_BUILDER_OUTPUT}")
+    list(APPEND XRAY_TEXT_SUPPORT_EMBEDS "${XR_TEXT_SUPPORT_OUTPUT}")
 endforeach()
 set(XRAY_PROVIDER_VALUE_EMBEDS)
 foreach(XR_PROVIDER_INPUT IN ITEMS base/xstable_id.h execution/xr_provider_value.h)
@@ -2006,7 +2006,7 @@ foreach(XR_PROVIDER_INPUT IN ITEMS base/xstable_id.h execution/xr_provider_value
     list(APPEND XRAY_PROVIDER_VALUE_EMBEDS "${XR_PROVIDER_OUTPUT}")
 endforeach()
 set_source_files_properties(src/aot/program/xr_backend_ir_emit_c.c PROPERTIES
-    OBJECT_DEPENDS "${XRAY_TEXT_KERNEL_EMBED};${XRAY_FLOAT_FORMAT_EMBED};${XRAY_INTEGER_KERNEL_EMBED};${XRAY_INTEGER_DIVISION_KERNEL_EMBED};${XRAY_INTEGER_BITWISE_KERNEL_EMBED};${XRAY_ARRAY_ALLOCATION_KERNEL_EMBED};${XRAY_ARRAY_APPEND_KERNEL_EMBED};${XRAY_STRING_BUILDER_EMBEDS};${XRAY_VALUE_FORMAT_EMBED};${XRAY_SYNC_KERNEL_EMBEDS};${XRAY_PROVIDER_VALUE_EMBEDS}")
+    OBJECT_DEPENDS "${XRAY_TEXT_KERNEL_EMBED};${XRAY_FLOAT_FORMAT_EMBED};${XRAY_INTEGER_KERNEL_EMBED};${XRAY_INTEGER_DIVISION_KERNEL_EMBED};${XRAY_INTEGER_BITWISE_KERNEL_EMBED};${XRAY_ARRAY_ALLOCATION_KERNEL_EMBED};${XRAY_ARRAY_APPEND_KERNEL_EMBED};${XRAY_TEXT_SUPPORT_EMBEDS};${XRAY_VALUE_FORMAT_EMBED};${XRAY_SYNC_KERNEL_EMBEDS};${XRAY_PROVIDER_VALUE_EMBEDS}")
 
 # The canonical-program AOT compiler is a private build product. This narrow
 # target keeps its warning contract independent from the legacy Xi/TargetPlan

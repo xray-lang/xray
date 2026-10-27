@@ -234,7 +234,6 @@ CORE_TYPE_NAMES = {
     "bool": "XR_CORE_TYPE_BOOL",
     "i64": "XR_CORE_TYPE_I64",
     "f64": "XR_CORE_TYPE_F64",
-    "string-builder": "XR_CORE_TYPE_STRING_BUILDER",
     "u32": "XR_CORE_TYPE_U32",
     "error": "XR_CORE_TYPE_ERROR",
     "panic-info": "XR_CORE_TYPE_PANIC_INFO",
@@ -250,7 +249,7 @@ CORE_TYPE_NAMES = {
 
 BUILTIN_OWNERSHIP = (
     "void, bool, i8, i16, i32, i64, u8, u16, u32, u64, f64, error, TargetOs, TargetArch, TargetAbi, TargetEndian and rune "
-    "are trivial with trivial copy; string is affine with explicit copy; panic-info and string-builder are affine "
+    "are trivial with trivial copy; string is affine with explicit copy; panic-info is affine "
     "with forbidden copy"
 )
 CONSTANT_SHAPE = (
@@ -314,7 +313,7 @@ def validate(schema: dict[str, Any]) -> None:
     require(schema["schema"] == "xray-program-format-schema/3", "program schema version drifted")
     fmt = schema["format"]
     require(isinstance(fmt, dict) and set(fmt) == FORMAT_KEYS, "format fields drifted")
-    require(fmt["major"] == 3 and fmt["minor"] == 11, "XrProgram format must be 3.11")
+    require(fmt["major"] == 3 and fmt["minor"] == 12, "XrProgram format must be 3.12")
     require(isinstance(fmt["magic_hex"], str) and re.fullmatch(r"[0-9a-f]{16}", fmt["magic_hex"]),
             "program magic must be eight canonical lowercase hex bytes")
     require(fmt["program_id_domain"] == "xray-program-id-v3", "ProgramId domain drifted")
@@ -339,7 +338,7 @@ def validate(schema: dict[str, Any]) -> None:
         "builtin_rows": [
             "0:void", "1:bool", "2:i64", "3:u32", "4:error", "5:panic-info", "6:u16",
             "7:TargetOs", "8:TargetArch", "9:TargetAbi", "10:TargetEndian", "12:string",
-            "13:rune", "14:i8", "15:u8", "16:i16", "17:i32", "18:u64", "19:f64", "20:string-builder",
+            "13:rune", "14:i8", "15:u8", "16:i16", "17:i32", "18:u64", "19:f64",
         ],
         "dynamic_type_base": 32,
         "dynamic_kinds": [
@@ -954,6 +953,12 @@ def self_test(schema: dict[str, Any], projection: dict[str, Any], core: dict[str
                        copy.deepcopy(core), xi_source),
             "program schema generation is nondeterministic")
     mutations: list[tuple[str, dict[str, Any]]] = []
+    mutation = copy.deepcopy(schema)
+    mutation["format"]["minor"] = 11
+    mutations.append(("retired builtin wire layout", mutation))
+    mutation = copy.deepcopy(schema)
+    mutation["type_system"]["builtin_rows"].append("20:string-builder")
+    mutations.append(("retired builtin type row", mutation))
     mutation = copy.deepcopy(schema)
     mutation["sections"][1]["stable_id"] = mutation["sections"][0]["stable_id"]
     mutations.append(("duplicate section id", mutation))
