@@ -16,17 +16,17 @@ typedef struct SourcePreludeScan { SourceContext *ctx; uint32_t depth; bool need
 static bool source_prelude_word(SourcePreludeScan *scan,const char *name) {
     if (!name) return true;
     if (source_text_same(scan->ctx,NULL,name,"Atomic") || source_text_same(scan->ctx,NULL,name,"Channel") ||
-        source_text_same(scan->ctx,NULL,name,"StringBuilder") || source_text_same(scan->ctx,NULL,name,"Range"))
+        source_text_same(scan->ctx,NULL,name,"Range"))
         scan->needed=true;
     for (uint32_t e=0;e<xir_prelude_source.enum_count && !scan->needed;++e) {
-        if (!source_work(scan->ctx,NULL)) return false;
+        if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (source_text_same(scan->ctx,NULL,name,xir_prelude_source.enums[e].name)) scan->needed=true;
     }
     return scan->ctx->diagnostic.status==XR_XIR_OK;
 }
 static bool source_prelude_ref(SourcePreludeScan *scan,const XrTypeRef *ref) {
     if (!ref || scan->needed) return true;
-    if (!source_work(scan->ctx,NULL)) return false;
+    if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (scan->depth==128) return source_fail(scan->ctx,NULL,XR_XIR_BUDGET,"native source discovery depth exhausted");
     if (!source_prelude_word(scan,ref->name)) return false;
     ++scan->depth;
@@ -46,13 +46,13 @@ static bool source_prelude_refs(SourcePreludeScan *scan,XrTypeRef **refs,int cou
 static bool source_prelude_params(SourcePreludeScan *scan,XrParamNode **params,int count) {
     if (count<0 || (count && !params)) return source_fail(scan->ctx,NULL,XR_XIR_BAD_TYPE,"source parameter list is malformed");
     for (int i=0;i<count && !scan->needed;++i)
-        if (!source_work(scan->ctx,NULL) || !params[i] || !source_prelude_ref(scan,params[i]->type)) return false;
+        if (!((scan->ctx)->diagnostic.status == XR_XIR_OK) || !params[i] || !source_prelude_ref(scan,params[i]->type)) return false;
     return true;
 }
 static bool source_prelude_generics(SourcePreludeScan *scan,XrGenericParam **params,int count) {
     if (count<0 || (count && !params)) return source_fail(scan->ctx,NULL,XR_XIR_BAD_TYPE,"source generic list is malformed");
     for (int i=0;i<count && !scan->needed;++i) {
-        if (!source_work(scan->ctx,NULL)) return false;
+        if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!params[i]) return source_fail(scan->ctx,NULL,XR_XIR_BAD_TYPE,"source generic parameter is missing");
         if (!source_prelude_refs(scan,params[i]->constraints,params[i]->constraint_count)) return false;
     }
@@ -105,7 +105,7 @@ static bool source_prelude_signature(SourcePreludeScan *scan,AstNode *node) {
             return source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"catch discovery inventory is malformed");
         for (int i=0;i<node->as.try_catch.catch_count && !scan->needed;++i) {
             XrCatchClause *clause=node->as.try_catch.catch_clauses[i];
-            if (!source_work(scan->ctx,node)) return false;
+            if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (!clause) return source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"catch discovery clause is missing");
             if (!source_prelude_ref(scan,clause->type)) return false;
         }
@@ -116,7 +116,7 @@ static bool source_prelude_signature(SourcePreludeScan *scan,AstNode *node) {
 static bool source_prelude_scan(AstNode *node,void *pointer) {
     SourcePreludeScan *scan=pointer;
     if (!node || scan->needed) return true;
-    if (!source_work(scan->ctx,node)) return false;
+    if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (scan->depth==128) return source_fail(scan->ctx,node,XR_XIR_BUDGET,"native source discovery depth exhausted");
     if (node->type==AST_VARIABLE && !source_prelude_word(scan,node->as.variable.name)) return false;
     if (!source_prelude_signature(scan,node)) return false;
@@ -161,13 +161,13 @@ static bool source_prelude_discover(SourceContext *ctx) {
     if (ctx->graph->specs[index].representation==XR_MODULE_CHECKED_LIBRARY) {
         const XrXirModule *library=source_library_module(ctx,(uint32_t)index); bool admitted=false;
         if (!library) return false;
-        XrXirStatus checked=library_prelude_module(&ctx->compile,library,ctx->graph->specs[index].resource->checked_module,&admitted);
+        XrXirStatus checked=library_prelude_module(library,ctx->graph->specs[index].resource->checked_module,&admitted);
         if (checked!=XR_XIR_OK || !admitted)
             return source_fail(ctx,NULL,checked==XR_XIR_OK ? XR_XIR_BAD_STRUCTURE : checked,"canonical prelude Catalog inventory is invalid");
     }
     ctx->prelude_module=(uint32_t)index+1;
     for (uint32_t m=0;m<original;++m) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (needed[m] && m!=(uint32_t)index) {
             status=xr_compile_module_graph_add_dependency(ctx->graph,(int)m,index);
             if (status!=XR_MODULE_OK) return source_module_fail(ctx,NULL,status,"canonical prelude dependency failed");
@@ -178,9 +178,9 @@ static bool source_prelude_discover(SourceContext *ctx) {
 
 static SourceName *source_prelude_name(SourceContext *ctx,const char *name) {
     if (!ctx->prelude_module || !ctx->names || !name) return NULL;
-    bool known=source_text_same(ctx,NULL,name,"StringBuilder") || source_text_same(ctx,NULL,name,"Range");
+    bool known=source_text_same(ctx,NULL,name,"Range");
     for (uint32_t e=0;e<xir_prelude_source.enum_count && !known;++e) {
-        if (!source_work(ctx,NULL)) return NULL;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
         known=source_text_same(ctx,NULL,name,xir_prelude_source.enums[e].name);
     }
     if (!known) return NULL;
@@ -189,7 +189,7 @@ static SourceName *source_prelude_name(SourceContext *ctx,const char *name) {
     bool dependency=ctx->module==module;
     const XrModuleSpec *consumer=&ctx->graph->specs[ctx->module];
     for (int i=0;i<consumer->dep_count && !dependency;++i) {
-        if (!source_work(ctx,NULL)) return NULL;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
         dependency=consumer->dep_indices[i]==(int)module;
     }
     return dependency ? find_name(ctx,ctx->names[module],name) : NULL;
@@ -203,15 +203,6 @@ static bool source_prelude_bind(SourceContext *ctx,SourceName *symbol,XrXirNomin
     bool owned=false;
     XrModuleStatus status=xr_compile_module_graph_owns_top_level_decl(ctx->graph,&ctx->graph->specs[ctx->module],symbol->node,&owned);
     if (status!=XR_MODULE_OK) return source_module_fail(ctx,symbol->node,status,"canonical prelude declaration lookup failed");
-    if(source_text_same(ctx,symbol->node,symbol->name,"StringBuilder")) {
-        const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING_BUILDER);
-        if(!owned || symbol->node->type!=AST_CLASS_DECL || record->kind!=XR_XIR_NOMINAL_CLASS ||
-            record->exported!=1 || record->parameter_count || !source_native_admit(ctx,native) ||
-            !source_span_same(ctx,symbol->node,(const char *)native->source_fingerprint.bytes,
-                (const char *)xir_prelude_source.stringbuilder_input_sha256,32))
-            return source_fail(ctx,symbol->node,XR_XIR_BAD_STRUCTURE,"canonical StringBuilder source owner is invalid");
-        return true;
-    }
     if(source_text_same(ctx,symbol->node,symbol->name,"Range")) {
         if(!owned || symbol->node->type!=AST_CLASS_DECL || record->kind!=XR_XIR_NOMINAL_CLASS ||
             record->exported!=1 || symbol->node->as.class_decl.type_param_count)
@@ -220,7 +211,7 @@ static bool source_prelude_bind(SourceContext *ctx,SourceName *symbol,XrXirNomin
     }
     const XirPreludeEnum *expected=NULL;
     for (uint32_t e=0;e<xir_prelude_source.enum_count;++e) {
-        if (!source_work(ctx,symbol->node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (source_text_same(ctx,symbol->node,symbol->name,xir_prelude_source.enums[e].name)) expected=&xir_prelude_source.enums[e];
     }
     if (!owned || !expected || symbol->node->type!=AST_ENUM_DECL ||

@@ -32,9 +32,7 @@ static XrXirStatus error_bindings_reserve(const XrXirCompileContext *work,Effect
     XrXirStatus status=XR_XIR_OK;
     ErrorTypeBinding *items=xir_compile_alloc(work,(size_t)capacity*sizeof(*items),&status);
     if(!items) return status;
-    if(!xir_compile_work(work,(uint64_t)bindings->count*sizeof(*items))) {
-        xr_compile_resources_free(items);return XR_XIR_BUDGET;
-    }
+
     if(bindings->count) memcpy(items,bindings->items,(size_t)bindings->count*sizeof(*items));
     xr_compile_resources_free(bindings->items);bindings->items=items;bindings->capacity=capacity;
     return XR_XIR_OK;
@@ -50,7 +48,7 @@ static XrXirStatus error_bindings_append(const XrXirCompileContext *work,EffectE
     if(status==XR_XIR_OK) status=error_marker_tree(work,proof,bindings->pairs,first);
     if(status!=XR_XIR_OK) return status;
     if(!bindings->pairs->nodes[first].value) return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(work,sizeof(*binding))) return XR_XIR_BUDGET;
+
     bindings->items[bindings->count++]=(ErrorTypeBinding){binding->function,binding->instruction,first,
         binding->source,binding->actual};return XR_XIR_OK;
 }
@@ -78,17 +76,17 @@ static XrXirStatus error_bindings_call(const XrXirCompileContext *work,EffectErr
     uint32_t function,uint32_t instruction,const XrXirInstruction *op,XirReadScratch *memory) {
     uint32_t count=op->type_arguments[1];
     for(uint32_t a=0;a<proof->atom_count;++a) {
-        if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
         XrXirType type=proof->atoms[a].type;uint32_t span=xr_xir_type_span(error_finite_types(proof),type);
         if(proof->atoms[a].variant==XR_XIR_ERROR_SYMBOLIC_VARIANT || !span || span>count) continue;
         bool duplicate=false;
         for(uint32_t prior=0;prior<a;++prior) {
-            if(!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
             if(proof->atoms[prior].type==type) { duplicate=true;break; }
         }
         if(duplicate) continue;
         for(uint32_t candidate=0;candidate<proof->atom_count;++candidate) {
-            if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
             if(proof->atoms[candidate].variant==XR_XIR_ERROR_SYMBOLIC_VARIANT) continue;
             ErrorTypeBinding binding={function,instruction,0,type,proof->atoms[candidate].type};
             XrXirStatus status=XR_XIR_OK;
@@ -110,7 +108,7 @@ static XrXirStatus error_bindings_build_attempt(const XrXirCompileContext *work,
     XirReadScratch *memory) {
     bool needed=false;
     for(uint32_t a=0;a<proof->atom_count;++a) {
-        if(!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
         needed|=proof->atoms[a].variant!=XR_XIR_ERROR_SYMBOLIC_VARIANT &&
             xr_xir_type_span(error_finite_types(proof),proof->atoms[a].type)!=0;
     }
@@ -151,7 +149,7 @@ static XrXirStatus error_finite_substitution(const XrXirCompileContext *work,
     status=error_marker_nodes_match(work,proof,bindings->pairs);if(status!=XR_XIR_OK) return status;
     const EffectErrorMarkers *pairs=bindings->pairs;
     for(uint32_t i=0;i<bindings->count;++i) {
-        if(!xir_compile_work(work,6)) return XR_XIR_BUDGET;
+
         const ErrorTypeBinding *binding=&bindings->items[i];
         if(binding->function!=function || binding->instruction!=instruction || binding->source!=source) continue;
         if(binding->first>=pairs->count) return XR_XIR_BAD_STRUCTURE;
@@ -160,7 +158,7 @@ static XrXirStatus error_finite_substitution(const XrXirCompileContext *work,
             (uint32_t)binding->actual,instruction,1};
         if(root->parent!=UINT32_MAX || root->ordinal!=i || !root->value ||
             !error_marker_goal_equal(&root->goal,&expected)) return XR_XIR_BAD_STRUCTURE;
-        if(!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+
         *output=binding->actual;return XR_XIR_OK;
     }
     return XR_XIR_BAD_STRUCTURE;

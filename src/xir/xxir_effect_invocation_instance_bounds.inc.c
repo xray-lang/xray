@@ -17,7 +17,7 @@ static XrXirStatus effect_invocation_instance_bound(const XrXirCompileContext *w
     const XirEffectCallableBound *request,EffectInvocationValueBound *output) {
     if (!request || !output || !!request->arguments!=!!request->argument_count)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,3+sizeof(*output))) return XR_XIR_BUDGET;
+
     XirEffectCallableBound bound=*request;
     uint32_t id=(uint32_t)bound.declared;
     if (id>=XR_XIR_TYPE_PARAMETER_BASE && id<XR_XIR_TYPE_PARAMETER_LIMIT) {
@@ -60,7 +60,7 @@ static XrXirStatus effect_invocation_instance_function(const XrXirCompileContext
     if (status!=XR_XIR_OK) return status;
     uint32_t count=0;
     for (uint32_t v=0;v<(uint32_t)values;++v) {
-        if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
         if (xr_xir_callable_signature(module->types,xr_xir_operand_type(body,v))) ++count;
     }
     EffectInvocationValueBound *records=count ?
@@ -68,7 +68,7 @@ static XrXirStatus effect_invocation_instance_function(const XrXirCompileContext
     if (count && !records) return status;
     uint32_t identity=0,at=0;
     for (uint32_t v=0;v<(uint32_t)values && status==XR_XIR_OK;++v) {
-        if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
+
         XrXirType actual=xr_xir_operand_type(body,v);
         XirEffectCallableBound request={source->types,module->types,origin->arguments,
             origin->argument_count,XR_XIR_UNIT,actual};
@@ -83,7 +83,7 @@ static XrXirStatus effect_invocation_instance_function(const XrXirCompileContext
             uint32_t instruction=v-body->parameter_count;
             request.declared=original->instructions[instruction].type;
             if (contract && identity<contract->value_count) {
-                if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
+
                 const XrXirRootValueIdentity *value=&contract->values[identity];
                 if (value->instruction<instruction) { status=XR_XIR_BAD_STRUCTURE;break; }
                 if (value->instruction==instruction) {
@@ -95,12 +95,12 @@ static XrXirStatus effect_invocation_instance_function(const XrXirCompileContext
         status=effect_invocation_instance_bound(work,&request,&record);
         if (status==XR_XIR_OK && record.callable) {
             if (at>=count) { status=XR_XIR_BAD_STRUCTURE;break; }
-            if (!xir_compile_work(work,sizeof(record))) { status=XR_XIR_BUDGET;break; }
+
             record.value=v;records[at++]=record;
         }
     }
     if (status==XR_XIR_OK && ((contract && identity!=contract->value_count) || at!=count)) status=XR_XIR_BAD_STRUCTURE;
-    if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(*bounds->functions)+1)) status=XR_XIR_BUDGET;
+
     if (status!=XR_XIR_OK) { xr_compile_resources_free(records);return status; }
     bounds->functions[f]=(EffectInvocationFunctionBounds){(uint32_t)values,count,records};
     ++bounds->count;return XR_XIR_OK;

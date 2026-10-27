@@ -91,7 +91,7 @@ static int dap_run(bool tcp,uint32_t port,XrCompileResources *resources,DapHost 
     }
     XrSourceCompilerConfig compiler_config={{resources,xr_xir_compile_default_limits()},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},stdlib.path,xr_source_compile_default_manifest_limits()};
-    if (xr_source_compiler_new(&compiler_config,&compiler,&diagnostic)!=XR_SOURCE_COMPILE_OK) goto done;
+    if (xr_source_compiler_new(&compiler_config,NULL,&compiler,&diagnostic)!=XR_SOURCE_COMPILE_OK) goto done;
     XrXirDomainBudgetControls budget={XR_RESOURCE_DEBUG_LIVE,XR_RESOURCE_DEBUG_LIVE,
         XR_RESOURCE_SANDBOX_RUNTIME_WORK,XR_RESOURCE_DEBUG_LIVE,XR_RESOURCE_DEBUG_LIVE};
     if (xr_xir_domain_new_budgeted(1048576,&budget,&domain)!=XR_XIR_VALUE_OK) goto done;

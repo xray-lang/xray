@@ -37,8 +37,8 @@ static XrXirValueStatus xr_xir_struct_new_graph_operation(XrXirType type, const 
     if (!node || !xr_xir_type_is_struct(xr_xir_compile_type_arena_types(admission->arena), type) ||
         node->parameter_span || node->nominal.field_count != count)
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (count > admission->work) return XR_XIR_VALUE_LIMIT;
-    admission->work -= count;
+    if (!admission_is_compile(admission) && (count > admission->work)) return XR_XIR_VALUE_LIMIT;
+    if (!admission_is_compile(admission)) admission->work -= count;
     for (uint32_t i = 0; i < count; ++i) {
         XrXirValueStatus status = xr_xir_value_admit(&fields[i], node->nominal.fields[i], admission);
         if (status != XR_XIR_VALUE_OK) return status;
@@ -61,10 +61,12 @@ static XrXirValueStatus xr_xir_struct_get_graph_operation(const XrXirValue *valu
     XrXirType local=(XrXirType)value->type;
     const XrXirTypeArena *birth=xr_xir_value_arena(value);
     if(birth!=admission->arena) {
-        uint64_t work=xir_type_arena_lookup_work(admission->arena);
-        if(work>admission->work || (admission->domain && !xr_xir_domain_work(admission->domain,work)))
-            return XR_XIR_VALUE_LIMIT;
-        admission->work-=work;
+        if (!admission_is_compile(admission)) {
+            uint64_t work=xir_type_arena_lookup_work(admission->arena);
+            if(work>admission->work || (admission->domain && !xr_xir_domain_work(admission->domain,work)))
+                return XR_XIR_VALUE_LIMIT;
+            admission->work-=work;
+        }
         if(!xir_type_arena_local_type(admission->arena,birth,local,&local))return XR_XIR_VALUE_BAD_ARGUMENT;
     }
     const XrXirTypes *types=xr_xir_compile_type_arena_types(admission->arena);
@@ -87,15 +89,15 @@ static XrXirValueStatus struct_observe_operation(const XrXirValue *value, uint32
     XrXirValueAdmission *admission, XrXirValue *output,bool receiving) {
     if (!value || !unit_value(output) || !admission || !admission->arena || !admission->domain)
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (admission->work<64 || !xr_xir_domain_work(admission->domain,64)) return XR_XIR_VALUE_LIMIT;
-    admission->work-=64;
+    if (!admission_is_compile(admission) && (admission->work<64 || !xr_xir_domain_work(admission->domain,64))) return XR_XIR_VALUE_LIMIT;
+    if (!admission_is_compile(admission)) admission->work-=64;
     const XrXirTypes *types=xr_xir_compile_type_arena_types(admission->arena);
     if (!xr_xir_value_argument(value,admission->arena,(XrXirType)value->type) ||
         !xr_xir_type_is_struct(types,(XrXirType)value->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XirNominalValue *record=(const XirNominalValue *)object_pointer(value);
     if ((!receiving && record->object.domain!=admission->domain) || field>=record->count) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!admission->work) return XR_XIR_VALUE_LIMIT;
-    --admission->work;
+    if (!admission_is_compile(admission) && (!admission->work)) return XR_XIR_VALUE_LIMIT;
+    if (!admission_is_compile(admission)) --admission->work;
     return receiving?value_copy_on_domain(&record->fields[field],admission->domain,output):
         xr_xir_value_copy(&record->fields[field],output);
 }

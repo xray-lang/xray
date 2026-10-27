@@ -106,7 +106,7 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
                 char *str_copy = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
                 if (!xr_parser_healthy(parser)) return NULL;
                 do { if (!ast_copy(parser->compiler_session, str_copy, payload.bytes, payload.length)) return NULL; } while (0);
-                do { if (!ast_work(parser->compiler_session, 1)) return NULL; str_copy[payload.length] = '\0'; } while (0);
+                do { str_copy[payload.length] = '\0'; } while (0);
 
                 name = str_copy;
             } else {

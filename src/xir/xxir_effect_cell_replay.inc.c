@@ -21,7 +21,7 @@ static XrXirStatus effect_cell_replay_rows_create(const XrXirCompileContext *wor
     if (!xir_compile_context_valid(work) || !body || !output || output->functions ||
         output->module.functions || output->module.function_count ||
         !effect_body_request_sequence_owned(body) || body->read.owner!=work) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,2*sizeof(*output))) return XR_XIR_BUDGET;
+
     XrXirStatus status=effect_body_request_sequence_binding(body);
     uint32_t count=body->domain.function_count;
     if (status!=XR_XIR_OK) return status;
@@ -36,7 +36,7 @@ static XrXirStatus effect_cell_replay_rows_create(const XrXirCompileContext *wor
         if (bytes>SIZE_MAX) {status=XR_XIR_BUDGET;break;}
         XrXirInstruction *rows=bytes ? xir_compile_alloc(work,(size_t)bytes,&status) : NULL;
         if (bytes && !rows) break;
-        if (!xir_compile_work(work,sizeof(*functions))) {xr_compile_resources_free(rows);status=XR_XIR_BUDGET;break;}
+
         functions[f]=(XrXirFunction){.name=head.name,.name_length=head.name_length,
             .parameters=head.parameters,.parameter_count=head.parameter_count,.result=head.result,
             .blocks=head.blocks,.block_count=head.block_count,.instructions=rows,
@@ -48,7 +48,7 @@ static XrXirStatus effect_cell_replay_rows_create(const XrXirCompileContext *wor
             status=effect_body_request_sequence_operation(body,f,i,&cursor,&storage,&op);
             if (status!=XR_XIR_OK) break;
             if (!op) {status=XR_XIR_BAD_STRUCTURE;break;}
-            if (!xir_compile_work(work,sizeof(*rows))) {status=XR_XIR_BUDGET;break;}
+
             rows[i]=*op;
         }
         if (status==XR_XIR_OK) status=effect_body_request_sequence_finish(body,f,&cursor);

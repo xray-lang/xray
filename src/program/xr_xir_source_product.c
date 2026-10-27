@@ -31,15 +31,15 @@ struct XrXirSourceProduct {
 static XrXirStatus source_product_tests(XrXirSourceProduct *product, const XrXirModule *module) {
     const XrXirCompileContext *context = &product->context;
     const XrXirDeclarations *d = module->declarations;
-    if (!xir_compile_work(context, sizeof(d->root_module))) return XR_XIR_BUDGET;
+
     uint32_t root = d->root_module;
     uint32_t count = 0;
     size_t names = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
-        if (!xir_compile_work(context, sizeof(XrXirFunctionIdentity))) return XR_XIR_BUDGET;
+
         XrXirFunctionIdentity identity = d->functions[f];
         if (!identity.test_role || identity.module != root) continue;
-        if (!xir_compile_work(context, sizeof(XrXirFunction))) return XR_XIR_BUDGET;
+
         XrXirFunction function = module->functions[f];
         if ((uint64_t)function.name_length + 1 > SIZE_MAX - names) return XR_XIR_BUDGET;
         names += (size_t)function.name_length + 1;
@@ -55,21 +55,19 @@ static XrXirStatus source_product_tests(XrXirSourceProduct *product, const XrXir
     char *name = (char *)(entries + count);
     uint32_t index = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
-        if (!xir_compile_work(context, sizeof(XrXirFunctionIdentity))) { status = XR_XIR_BUDGET; break; }
+
         XrXirFunctionIdentity identity = d->functions[f];
         if (!identity.test_role || identity.module != root) continue;
-        if (!xir_compile_work(context, sizeof(XrXirFunction))) { status = XR_XIR_BUDGET; break; }
+
         XrXirFunction function = module->functions[f];
-        if (!xir_compile_work(context, (uint64_t)function.name_length + 1 + sizeof(*entries))) {
-            status = XR_XIR_BUDGET; break;
-        }
+
         memcpy(name, function.name, function.name_length);
         name[function.name_length] = 0;
         entries[index++] = (XrXirSourceTestEntry){f, identity.test_role,
             identity.test_timeout_seconds, name, function.name_length};
         name += (size_t)function.name_length + 1;
     }
-    if (status == XR_XIR_OK && !xir_compile_work(context, sizeof(product->tests))) status = XR_XIR_BUDGET;
+
     if (status != XR_XIR_OK) { xr_compile_resources_free(entries); return status; }
     product->tests = (XrXirSourceTests){entries, count};
     return XR_XIR_OK;
@@ -90,15 +88,14 @@ static bool source_product_entry(const XrXirModule *module,uint32_t *entry) {
         module->functions[function].result!=XR_XIR_I64) return false;
     *entry=function;return true;
 }
-static bool source_layout_word(XrSHA256Context *hash,const XrXirCompileContext *context,uint32_t word) {
-    if (!xir_compile_work(context, 8)) return false;
+static void source_layout_word(XrSHA256Context *hash,uint32_t word) {
+
     uint8_t bytes[4];
     for (unsigned i=0;i<4;++i) bytes[i]=(uint8_t)(word>>(i*8));
-    xr_sha256_update(hash,bytes,sizeof(bytes));return true;
+    xr_sha256_update(hash,bytes,sizeof(bytes));
 }
 static XrXirStatus source_product_layout_digest(const XrXirArtifact *lowered,
     const XrXirSourceProductFacts *facts,uint8_t output[32]) {
-    const XrXirCompileContext *context = xr_xir_compile_artifact_context(lowered);
     static const uint8_t domain[]="xray:xir-lowered-layout:v1";
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     const XrXirTarget *target=xr_xir_compile_artifact_target(lowered);uint32_t entry=0;
@@ -106,13 +103,13 @@ static XrXirStatus source_product_layout_digest(const XrXirArtifact *lowered,
         module->function_count!=facts->function_count || module->declarations->module_count!=facts->module_count ||
         target->architecture!=facts->target.architecture || target->abi_version!=facts->target.abi_version)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context, sizeof(domain))) return XR_XIR_BUDGET;
+
     XrSHA256Context hash;xr_sha256_init(&hash);
     xr_sha256_update(&hash,domain,sizeof(domain)-1);
     uint32_t prefix[]={1,facts->target.architecture,facts->target.abi_version,
         XR_XIR_CALL_ABI_VERSION,XR_XIR_PROGRAM_ABI_VERSION,facts->entry,facts->function_count,facts->module_count};
     for (size_t i=0;i<sizeof(prefix)/sizeof(*prefix);++i)
-        if (!source_layout_word(&hash,context,prefix[i])) return XR_XIR_BUDGET;
+        source_layout_word(&hash,prefix[i]);
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(lowered,f);
         uint32_t parameters=module->functions[f].parameter_count;
@@ -122,30 +119,30 @@ static XrXirStatus source_product_layout_digest(const XrXirArtifact *lowered,
         uint32_t words[]={f,parameters,layout->slot_count,layout->frame_bytes,layout->result.size,
             layout->result.alignment,layout->owned_count,layout->outgoing_count,layout->path_count};
         for (size_t i=0;i<sizeof(words)/sizeof(*words);++i)
-            if (!source_layout_word(&hash,context,words[i])) return XR_XIR_BUDGET;
+            source_layout_word(&hash,words[i]);
         for (uint32_t i=0;i<layout->slot_count;++i)
-            if (!source_layout_word(&hash,context,layout->offsets[i])) return XR_XIR_BUDGET;
+            source_layout_word(&hash,layout->offsets[i]);
         for (uint32_t i=0;i<parameters;++i)
-            if (!source_layout_word(&hash,context,layout->parameters[i].size) ||
-                !source_layout_word(&hash,context,layout->parameters[i].alignment)) return XR_XIR_BUDGET;
+            {
+                source_layout_word(&hash,layout->parameters[i].size);
+                source_layout_word(&hash,layout->parameters[i].alignment);
+            }
         for (uint32_t i=0;i<layout->owned_count;++i)
-            if (!source_layout_word(&hash,context,layout->owned_offsets[i])) return XR_XIR_BUDGET;
+            source_layout_word(&hash,layout->owned_offsets[i]);
     }
-    if (!xir_compile_work(context, 1 + 32)) return XR_XIR_BUDGET;
+
     xr_sha256_final(&hash,output);return XR_XIR_OK;
 }
-static XrXirStatus source_product_hash(const XrXirCompileContext *context,
+static XrXirStatus source_product_hash(
     const XrXirCheckedPacket *packet, uint8_t digest[32]) {
-    if (packet->length > UINT64_MAX - 34 ||
-        !xir_compile_work(context, (uint64_t)packet->length + 34)) return XR_XIR_BUDGET;
     xr_sha256(packet->bytes, packet->length, digest);
     return XR_XIR_OK;
 }
-static XrXirStatus source_product_compare(const XrXirCompileContext *context,
+static XrXirStatus source_product_compare(
     const void *left, const void *right, size_t size) {
     const unsigned char *a = left, *b = right;
     for (size_t i = 0; i < size; ++i) {
-        if (!xir_compile_work(context, 2)) return XR_XIR_BUDGET;
+
         if (a[i] != b[i]) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
@@ -219,8 +216,8 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
         product->facts.entry=entry;
         product->facts.target=*xr_xir_compile_artifact_target(lowered);
         product->facts.function_count=module->function_count;product->facts.module_count=module->declarations->module_count;
-        status=source_product_hash(context,&source_packet,product->facts.source_digest);
-        if (status==XR_XIR_OK) status=source_product_hash(context,&closed_packet,product->facts.closed_digest);
+        status=source_product_hash(&source_packet,product->facts.source_digest);
+        if (status==XR_XIR_OK) status=source_product_hash(&closed_packet,product->facts.closed_digest);
         if (status==XR_XIR_OK)
             status=source_product_layout_digest(lowered,&product->facts,product->facts.lowered_layout_digest);
         if (status==XR_XIR_OK) status=source_product_tests(product,module);
@@ -277,7 +274,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
     const XrXirModule *body=xr_xir_compile_artifact_module(lowered);
     if (!xir_compile_context_valid(context)) goto done;
     if (!body || body->stage!=XR_XIR_LOWERED) { status = XR_XIR_BAD_STAGE; goto done; }
-    if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; goto done; }
+
     const XrXirDeclarations *declarations = body ? body->declarations : NULL;
     if (!body || body->linkage_kind != XR_XIR_PROGRAM || !declarations ||
         !declarations->modules || !declarations->module_count ||
@@ -285,14 +282,14 @@ XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
         (declarations->slot_count && !declarations->slots)) goto done;
     status = XR_XIR_OK;
     for (module=0;module<declarations->module_count;++module) {
-        if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
+
         if (declarations->modules[module].storage==XR_XIR_MODULE_BIRTH_STORAGE) {
             birth_rejected=true;status=XR_XIR_BAD_STRUCTURE;break;
         }
     }
     if (status!=XR_XIR_OK) goto done;
     for (uint32_t s = 0; s < declarations->slot_count; ++s) {
-        if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; break; }
+
         const XrXirSlot *slot = &declarations->slots[s];
         module = slot->module;
         if (module >= declarations->module_count || slot->mutable > 1) {
@@ -335,6 +332,9 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_public_admit(
 XR_FUNC const XrXirSourceProductFacts *xr_xir_compile_source_product_facts(const XrXirSourceProduct *product) {
     return product ? &product->facts : NULL;
 }
+XR_FUNC const XrXirModule *xr_xir_compile_source_product_module(const XrXirSourceProduct *product) {
+    return product && product->lowered ? xr_xir_compile_artifact_module(product->lowered) : NULL;
+}
 XR_FUNC const XrXirCompileContext *xr_xir_compile_source_product_context(const XrXirSourceProduct *product) {
     return product ? &product->context : NULL;
 }
@@ -364,11 +364,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_layout(const XrXirSourceProduc
         xr_xir_compile_artifact_layout(product->lowered,function)};return XR_XIR_OK;
 }
 static XrXirStatus source_product_packet_digest(const XrXirCheckedPacket *packet,
-    const uint8_t expected[32],const XrXirCompileContext *context) {
+    const uint8_t expected[32]) {
     if (!packet->bytes || packet->length<64) return XR_XIR_BAD_STRUCTURE;
     uint8_t digest[32];
-    XrXirStatus status=source_product_hash(context,packet,digest);
-    return status==XR_XIR_OK ? source_product_compare(context,digest,expected,32) : status;
+    XrXirStatus status=source_product_hash(packet,digest);
+    return status==XR_XIR_OK ? source_product_compare(digest,expected,32) : status;
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_product_verify(const XrXirSourceProduct *product,
     size_t code_limit,XrXirDiagnostic *diagnostic) {
@@ -383,26 +383,26 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_verify(const XrXirSourceProduc
     const XrXirCompileContext *context = &product->context;
     XrXirArtifact *source=NULL,*decoded_closed=NULL,*closed=NULL,*lowered=NULL;
     XrXirCheckedPacket packet={0};XrXirCSource actual={0},expected={0};
-    XrXirStatus status=source_product_packet_digest(&product->source_packet,product->facts.source_digest,context);
-    if (status==XR_XIR_OK) status=source_product_packet_digest(&product->closed_packet,product->facts.closed_digest,context);
+    XrXirStatus status=source_product_packet_digest(&product->source_packet,product->facts.source_digest);
+    if (status==XR_XIR_OK) status=source_product_packet_digest(&product->closed_packet,product->facts.closed_digest);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,product->source_packet.bytes,product->source_packet.length,&source,diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,product->closed_packet.bytes,product->closed_packet.length,&decoded_closed,diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_specialize(source,&closed,diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(closed,&packet,diagnostic);
     if (status==XR_XIR_OK) status=packet.length!=product->closed_packet.length ? XR_XIR_BAD_STRUCTURE :
-        source_product_compare(context,packet.bytes,product->closed_packet.bytes,packet.length);
+        source_product_compare(packet.bytes,product->closed_packet.bytes,packet.length);
     if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&product->facts.target,&lowered,diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(product->lowered,diagnostic);
     uint8_t layout_digest[32];
     if (status==XR_XIR_OK) status=source_product_layout_digest(lowered,&product->facts,layout_digest);
     if (status==XR_XIR_OK) {
-        status=source_product_compare(context,layout_digest,product->facts.lowered_layout_digest,32);
+        status=source_product_compare(layout_digest,product->facts.lowered_layout_digest,32);
         if (status==XR_XIR_BAD_STRUCTURE) status=XR_XIR_BAD_LAYOUT;
     }
     if (status==XR_XIR_OK) status=xr_xir_compile_emit_c(lowered,"source_product_proof",code_limit,&expected);
     if (status==XR_XIR_OK) status=xr_xir_compile_emit_c(product->lowered,"source_product_proof",code_limit,&actual);
     if (status==XR_XIR_OK) status=actual.length!=expected.length ? XR_XIR_BAD_STRUCTURE :
-        source_product_compare(context,actual.text,expected.text,actual.length);
+        source_product_compare(actual.text,expected.text,actual.length);
     xr_xir_compile_c_source_free(&actual);xr_xir_compile_c_source_free(&expected);xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(decoded_closed);xr_xir_compile_artifact_free(source);
     if (diagnostic) diagnostic->status=status;
@@ -422,11 +422,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_emit(const XrXirSourceProduct 
     return xr_xir_compile_emit_c(product->lowered,prefix,byte_limit,output);
 }
 XR_FUNC XrXirCtfeStatus xr_xir_compile_source_product_scalar(const XrXirSourceProduct *product,uint32_t function,
-    const XrXirValue *arguments,uint32_t count,XrXirCtfeLimits limits,XrXirValue *output) {
+    const XrXirValue *arguments,uint32_t count,XrXirCtfeLimits limits,XrCompileRequestControl *control,XrXirValue *output) {
     if (!product || !product->lowered) return XR_XIR_CTFE_BAD_ARGUMENT;
-    if (!xir_compile_work(&product->context,sizeof(XrXirCtfeRequest))) return XR_XIR_CTFE_BUDGET;
+
     XrXirCtfeRequest request={.artifact=product->lowered,.function=function,.target=product->facts.target,
-        .arguments=arguments,.argument_count=count,.limits=limits};
+        .arguments=arguments,.argument_count=count,.limits=limits,.control=control};
     memcpy(request.checked_identity,product->facts.closed_digest,sizeof(request.checked_identity));
     return xr_xir_compile_ctfe_leaf(&request,output);
 }

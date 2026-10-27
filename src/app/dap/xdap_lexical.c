@@ -14,7 +14,9 @@ XR_FUNC XrXirStatus xdap_lexical_open(const XdapLaunch *launch,const XrXirVmDebu
     if (!launch || !snapshot || !output) return XR_XIR_BAD_STRUCTURE;
     XrXirVmDebugFrameInfo info={0};XrXirValue name={0};
     XrXirValueStatus observed=xr_xir_vm_debug_snapshot_frame(snapshot,frame,&info,&name);
-    if (observed!=XR_XIR_VALUE_OK) return observed==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+    if (observed!=XR_XIR_VALUE_OK) return observed==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+        observed==XR_XIR_VALUE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        observed==XR_XIR_VALUE_OVERFLOW ? XR_XIR_OVERFLOW : observed==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
     xr_xir_value_drop(&name);
     const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(launch->source);
     const XrXirSourceView *source=xr_xir_compile_source_product_view(launch->source);
@@ -33,7 +35,6 @@ XR_FUNC XrXirValueStatus xdap_lexical_read(const XdapLexicalView *view,uint32_t 
         return XR_XIR_VALUE_BAD_ARGUMENT;
     bool visible=false;
     for (uint32_t b=view->environment;b;b=view->function->bindings[b-1].parent) {
-        if (xr_compile_resources_work(view->launch->resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_VALUE_LIMIT;
         if (b>view->function->binding_count || view->function->bindings[b-1].parent>=b) return XR_XIR_VALUE_BAD_ARGUMENT;
         if (b==id) { visible=true;break; }
     }
@@ -43,7 +44,6 @@ XR_FUNC XrXirValueStatus xdap_lexical_read(const XdapLexicalView *view,uint32_t 
     const char *text=view->source->declarations[binding->declaration-1].name;
     if (!text) return XR_XIR_VALUE_BAD_ARGUMENT;
     size_t bytes=strlen(text);
-    if (xr_compile_resources_work(view->launch->resources,(uint64_t)bytes+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_VALUE_LIMIT;
     if (binding->flags & XR_XIR_SOURCE_DEBUG_UNAVAILABLE) return XR_XIR_VALUE_UNSUPPORTED;
     XrXirValueStatus status=XR_XIR_VALUE_OK;
     if (!(binding->flags & XR_XIR_SOURCE_DEBUG_UNIT))
@@ -64,13 +64,11 @@ XR_FUNC XrXirValueStatus xdap_global_read(const XdapLexicalView *view,uint32_t i
         view->source!=xr_xir_compile_source_product_view(view->launch->source)) return XR_XIR_VALUE_BAD_ARGUMENT;
     uint32_t module=view->launch->functions[view->function->function].module;
     if (module>=view->launch->module_count) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (xr_compile_resources_work(view->launch->resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_VALUE_LIMIT;
     const XrXirSourceDebugGlobal *global=&debug->globals[index];
     if (!global->declaration || global->declaration>view->source->declaration_count) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirSourceDeclaration *declaration=&view->source->declarations[global->declaration-1];
     if (declaration->range.module!=view->launch->modules[module].query_module || !declaration->name) return XR_XIR_VALUE_BAD_ARGUMENT;
     size_t bytes=strlen(declaration->name);
-    if (xr_compile_resources_work(view->launch->resources,(uint64_t)bytes+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_VALUE_LIMIT;
     XrXirValueStatus status=xir_vm_debug_snapshot_slot(view->snapshot,view->frame,global->slot,output);
     if (status==XR_XIR_VALUE_OK) { *name=declaration->name;*length=bytes; }
     return status;

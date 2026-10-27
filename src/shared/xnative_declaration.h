@@ -28,7 +28,8 @@ typedef enum XrNativeDeclarationId { XR_NATIVE_DECLARATION_ARRAY = 1, XR_NATIVE_
     XR_NATIVE_DECLARATION_MAP = 10, XR_NATIVE_DECLARATION_SET = 11,
     XR_NATIVE_DECLARATION_INTEGER = 12, XR_NATIVE_DECLARATION_FLOAT = 13,
     XR_NATIVE_DECLARATION_BOOLEAN = 14, XR_NATIVE_DECLARATION_RUNE = 15,
-    XR_NATIVE_DECLARATION_STRING_BUILDER = 16 } XrNativeDeclarationId;
+    /* Retired identities are never assigned to another declaration. */
+    XR_NATIVE_DECLARATION_RETIRED_16 = 16 } XrNativeDeclarationId;
 typedef enum XrNativeTypeTerm {
     XR_NATIVE_TERM_UNADMITTED, XR_NATIVE_TERM_UNIT, XR_NATIVE_TERM_I64,
     XR_NATIVE_TERM_ELEMENT, XR_NATIVE_TERM_STRING, XR_NATIVE_TERM_BOOL,
@@ -42,8 +43,9 @@ typedef enum XrNativeTypeTerm {
     XR_NATIVE_TERM_ARRAY_KEY, XR_NATIVE_TERM_ARRAY_VALUE, XR_NATIVE_TERM_ARRAY_KEY_VALUE, XR_NATIVE_TERM_SET_ELEMENT,
     XR_NATIVE_TERM_CALLBACK_KEY_VALUE_VISIT, XR_NATIVE_TERM_CALLBACK_ELEMENT_VISIT,
     XR_NATIVE_TERM_SEND_RESULT, XR_NATIVE_TERM_RECV_ELEMENT, XR_NATIVE_TERM_F64, XR_NATIVE_TERM_NULLABLE_I64, XR_NATIVE_TERM_U32,
-    XR_NATIVE_TERM_ARRAY_U8, XR_NATIVE_TERM_STRING_BUILDER, XR_NATIVE_TERM_STRING_BUILDER_TEXT,
-    XR_NATIVE_TERM_NULLABLE_F64
+    XR_NATIVE_TERM_ARRAY_U8,
+    /* The two retired type-term slots remain unassigned. */
+    XR_NATIVE_TERM_NULLABLE_F64 = 35
 } XrNativeTypeTerm;
 /* RESULT_VARIABLE and the callback terms require an admitted recipe's exact
  * signature. They never grant authority to an arbitrary unparsed signature. */
@@ -139,10 +141,8 @@ typedef enum XrNativeOperation {
     XR_NATIVE_OPERATION_STRING_COPY_BYTES,
     XR_NATIVE_OPERATION_STRING_REPLACE,
     XR_NATIVE_OPERATION_STRING_REPLACE_ALL,
-    XR_NATIVE_OPERATION_STRING_BUILDER_APPEND,
-    XR_NATIVE_OPERATION_STRING_BUILDER_TO_STRING,
-    XR_NATIVE_OPERATION_STRING_BUILDER_CLEAR,
-    XR_NATIVE_OPERATION_F64_TRY_PARSE,
+    /* The three retired operation slots remain unassigned. */
+    XR_NATIVE_OPERATION_F64_TRY_PARSE = 115,
     XR_NATIVE_OPERATION_COUNT
 } XrNativeOperation;
 typedef enum XrNativeAllocation {
@@ -210,21 +210,4 @@ XR_FUNC const XrNativeTypeDeclaration *xr_native_declaration_by_name(const char 
 XR_FUNC const XrNativeMemberDeclaration *xr_native_declaration_member(
     const XrNativeTypeDeclaration *declaration, const char *name);
 XR_FUNC bool xr_native_declaration_validate(const XrNativeTypeDeclaration *declaration);
-typedef struct XrNativeDeclarationWork {
-    void *context;
-    bool (*charge)(void *context, uint64_t units);
-} XrNativeDeclarationWork;
-typedef enum XrNativeDeclarationStatus {
-    XR_NATIVE_DECLARATION_OK, XR_NATIVE_DECLARATION_NOT_FOUND,
-    XR_NATIVE_DECLARATION_INVALID, XR_NATIVE_DECLARATION_WORK_LIMIT
-} XrNativeDeclarationStatus;
-/* Work callbacks are borrowed for this synchronous operation. Every input
- * comparison is admitted before reading; failures leave output unchanged. */
-XR_FUNC XrNativeDeclarationStatus xr_native_declaration_admit(
-    const XrNativeDeclarationWork *work, const XrNativeTypeDeclaration *declaration);
-XR_FUNC XrNativeDeclarationStatus xr_native_declaration_find(
-    const XrNativeDeclarationWork *work, const char *name, const XrNativeTypeDeclaration **output);
-XR_FUNC XrNativeDeclarationStatus xr_native_declaration_find_member(
-    const XrNativeDeclarationWork *work, const XrNativeTypeDeclaration *declaration,
-    const char *name, const XrNativeMemberDeclaration **output);
 #endif // XNATIVE_DECLARATION_H

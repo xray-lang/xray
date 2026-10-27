@@ -25,6 +25,9 @@ XR_FUNC XrXirValueStatus xr_xir_compile_type_arena_new(const XrXirCompileContext
 XR_FUNC bool xr_xir_compile_type_arena_retain(XrXirTypeArena *arena);
 XR_FUNC void xr_xir_compile_type_arena_drop(XrXirTypeArena *arena);
 XR_FUNC const XrXirTypes *xr_xir_compile_type_arena_types(const XrXirTypeArena *arena);
+/* Complete enum Sendable semantics sealed before publication; no live query
+ * allocates, traverses values or grants a worker or error-bound permission. */
+XR_FUNC bool xr_xir_compile_type_arena_enum_sendable(const XrXirTypeArena *arena,XrXirType type);
 XR_FUNC uint32_t xr_xir_compile_type_arena_borrowed(const XrXirTypeArena *arena, XrXirType type);
 /* Declared logical view leaves, saturated at two; shared body identity never
  * turns two declared input leaves into a unique candidate. */

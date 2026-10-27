@@ -48,7 +48,6 @@ static XrXirStatus checked_read_mode(const XrXirCompileContext *compile_context,
 
     CheckedCursor c = {bytes, NULL, 8, length, limits.limits, limits, XR_XIR_OK, true};
     XrXirArtifact *artifact = NULL;
-    if (!checked_read_work(&c,8)) goto decode_failure;
     if (memcmp(bytes,evaluation?"XRCEV\0\0\0":"XRCHK\0\0\0",8)) { c.status=XR_XIR_BAD_STRUCTURE; goto decode_failure; }
     uint32_t schema = checked_u32(&c,0), contract = checked_u32(&c,0);
     uint32_t stage = checked_u32(&c,0), reserved = checked_u32(&c,0);
@@ -59,7 +58,6 @@ static XrXirStatus checked_read_mode(const XrXirCompileContext *compile_context,
     }
     if (stage != XR_XIR_CHECKED) { c.status=XR_XIR_BAD_STAGE; goto decode_failure; }
     /* Hash reads length-32 bytes; comparing the stored digest reads another 32. */
-    if (!checked_read_work(&c,length)) goto decode_failure;
     uint8_t digest[32]; checked_digest(bytes,length,digest);
     if (memcmp(digest,(const uint8_t *)bytes+32,32)) { c.status=XR_XIR_BAD_STRUCTURE; goto decode_failure; }
     artifact=xir_compile_calloc(compile_context, 1,sizeof(*artifact), &allocation_status);

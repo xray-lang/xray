@@ -81,7 +81,7 @@ static const char *xr_attr_string_arg(Parser *parser) {
     char *s = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
     if (!xr_parser_healthy(parser)) return NULL;
     do { if (!ast_copy(parser->compiler_session, s, payload.bytes, payload.length)) return NULL; } while (0);
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; s[payload.length] = '\0'; } while (0);
+    do { s[payload.length] = '\0'; } while (0);
 
     return s;
 }
@@ -117,7 +117,7 @@ static XrParsedGlobalAsmFragment xr_decode_previous_string_literal(Parser *parse
     char *text = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
     if (!xr_parser_healthy(parser)) return (XrParsedGlobalAsmFragment){0};
     do { if (!ast_copy(parser->compiler_session, text, payload.bytes, payload.length)) return (XrParsedGlobalAsmFragment){0}; } while (0);
-    do { if (!ast_work(parser->compiler_session, 1)) return (XrParsedGlobalAsmFragment){0}; text[payload.length] = '\0'; } while (0);
+    do { text[payload.length] = '\0'; } while (0);
     size_t len = payload.length;
 
     return (XrParsedGlobalAsmFragment) {.text = text, .len = len};
@@ -180,10 +180,10 @@ static AstNode *xr_parse_global_asm_declaration(Parser *parser) {
     Token close = parser->previous;
 
     size_t total = 0;
-    for (int i = 0; xr_parser_step(parser) && (i < fragment_count); i++) {
-        if (!ast_work(parser->compiler_session, 1)) return NULL;
+    for (int i = 0; xr_parser_healthy(parser) && (i < fragment_count); i++) {
+
         if (fragments[i].len >= SIZE_MAX - total) {
-            xr_compile_state_fail(parser->state, XR_COMPILE_RESOURCE_BUDGET);
+            xr_compile_state_fail(parser->state, XR_COMPILE_RESOURCE_OVERFLOW);
             return NULL;
         }
         total += fragments[i].len;
@@ -191,7 +191,7 @@ static AstNode *xr_parse_global_asm_declaration(Parser *parser) {
             (fragments[i].len == 0 || xr_parser_read_byte(parser, fragments[i].text + fragments[i].len - 1) != '\n')) {
             if (!xr_parser_healthy(parser)) return NULL;
             if (total == SIZE_MAX - 1) {
-                xr_compile_state_fail(parser->state, XR_COMPILE_RESOURCE_BUDGET);
+                xr_compile_state_fail(parser->state, XR_COMPILE_RESOURCE_OVERFLOW);
                 return NULL;
             }
             total++;
@@ -201,18 +201,18 @@ static AstNode *xr_parse_global_asm_declaration(Parser *parser) {
     char *text = (char *) ast_alloc(parser->compiler_session, total + 1);
     if (!xr_parser_healthy(parser)) return NULL;
     size_t pos = 0;
-    for (int i = 0; xr_parser_step(parser) && (i < fragment_count); i++) {
+    for (int i = 0; xr_parser_healthy(parser) && (i < fragment_count); i++) {
         if (fragments[i].len > 0) {
             do { if (!ast_copy(parser->compiler_session, text + pos, fragments[i].text, fragments[i].len)) return NULL; } while (0);
             pos += fragments[i].len;
         }
         if (i + 1 < fragment_count &&
             (fragments[i].len == 0 || xr_parser_read_byte(parser, fragments[i].text + fragments[i].len - 1) != '\n')) {
-            if (!ast_work(parser->compiler_session, 1)) return NULL;
+
             text[pos++] = '\n';
         }
     }
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; text[pos] = '\0'; } while (0);
+    do { text[pos] = '\0'; } while (0);
 
     AstNode *node = xr_ast_global_asm(parser->compiler_session, text, line);
     if (!xr_parser_healthy(parser)) return NULL;
@@ -268,7 +268,7 @@ XrAttribute *xr_parse_single_attribute(Parser *parser) {
     attr->str_arg = NULL;
     attr->derive_flags = 0;
     const XrPublicAttributeInfo *info =
-        xr_compile_public_attribute_by_name(parser->state, name_token.start, (size_t) name_token.length);
+        xr_public_attribute_by_name(name_token.start, (size_t) name_token.length);
     if (!xr_parser_healthy(parser)) return NULL;
     if (!info) {
         do {
@@ -369,7 +369,7 @@ XrAttribute *xr_parse_single_attribute(Parser *parser) {
                                                                    : (int) sizeof(name_buf) - 1;
                 if (!xr_parser_healthy(parser)) return NULL;
                 do { if (!ast_copy(parser->compiler_session, name_buf, target.start, (size_t) n)) return NULL; } while (0);
-                do { if (!ast_work(parser->compiler_session, 1)) return NULL; name_buf[n] = '\0'; } while (0);
+                do { name_buf[n] = '\0'; } while (0);
                 if (!xr_derive_target_bit(parser, target, &bit)) {
                     char msg[160];
                     xr_parser_format(parser, msg, sizeof(msg),
@@ -404,7 +404,7 @@ XrAttribute *xr_parse_single_attribute(Parser *parser) {
 
 static uint32_t attrs_derive_flags(Parser *parser, XrAttribute **attrs, int count) {
     uint32_t flags = 0;
-    for (int i = 0; xr_parser_step(parser) && i < count; i++) {
+    for (int i = 0; xr_parser_healthy(parser) && i < count; i++) {
         if (attrs[i] && attrs[i]->kind == ATTR_DERIVE)
             flags |= attrs[i]->derive_flags;
     }
@@ -422,7 +422,7 @@ typedef enum XrAttributeTarget {
 static bool validate_attribute_target(Parser *parser, XrAttribute **attrs, int count,
                                       XrAttributeTarget target) {
     if (!xr_parser_healthy(parser)) return false;
-    for (int i = 0; xr_parser_step(parser) && (i < count); i++) {
+    for (int i = 0; xr_parser_healthy(parser) && (i < count); i++) {
         XrAttribute *attr = attrs[i];
         if (!attr)
             continue;
@@ -434,7 +434,7 @@ static bool validate_attribute_target(Parser *parser, XrAttribute **attrs, int c
             allowed = target == XR_ATTR_TARGET_FUNCTION;
         if (allowed)
             continue;
-        const XrPublicAttributeInfo *info = xr_compile_public_attribute_by_kind(parser->state, attr->kind);
+        const XrPublicAttributeInfo *info = xr_public_attribute_by_kind(attr->kind);
         if (!xr_parser_healthy(parser)) return false;
         char message[160];
         xr_parser_format(parser, message, sizeof(message), "@%s cannot annotate this declaration; targets: %s",
@@ -469,14 +469,14 @@ bool xr_parser_reject_duplicate_assertion_attrs(Parser *parser, XrAttribute **at
     if (!xr_parser_healthy(parser)) return false;
     bool has_inline = false;
     bool has_noinline = false;
-    for (int i = 0; xr_parser_step(parser) && (i < count); i++) {
+    for (int i = 0; xr_parser_healthy(parser) && (i < count); i++) {
         if (!attrs[i])
             continue;
         has_inline = has_inline || attrs[i]->kind == ATTR_INLINE;
         has_noinline = has_noinline || attrs[i]->kind == ATTR_NOINLINE;
-        for (int j = 0; xr_parser_step(parser) && (j < i); j++) {
+        for (int j = 0; xr_parser_healthy(parser) && (j < i); j++) {
             if (attrs[j] && attrs[j]->kind == attrs[i]->kind) {
-                const XrPublicAttributeInfo *info = xr_compile_public_attribute_by_kind(parser->state, attrs[i]->kind);
+                const XrPublicAttributeInfo *info = xr_public_attribute_by_kind(attrs[i]->kind);
                 if (!xr_parser_healthy(parser)) return false;
                 char msg[96];
                 xr_parser_format(parser, msg, sizeof(msg), "duplicate @%s attribute",
@@ -503,11 +503,11 @@ bool xr_parser_reject_duplicate_assertion_attrs(Parser *parser, XrAttribute **at
 bool xr_parser_reject_invalid_assertion_attrs(Parser *parser, XrAttribute **attrs, int count,
                                               bool target_is_fn) {
     if (!xr_parser_healthy(parser)) return false;
-    for (int i = 0; xr_parser_step(parser) && (i < count); i++) {
+    for (int i = 0; xr_parser_healthy(parser) && (i < count); i++) {
         if (!attrs[i])
             continue;
         if (!target_is_fn || attrs[i]->kind == ATTR_DERIVE) {
-            const XrPublicAttributeInfo *info = xr_compile_public_attribute_by_kind(parser->state, attrs[i]->kind);
+            const XrPublicAttributeInfo *info = xr_public_attribute_by_kind(attrs[i]->kind);
             if (!xr_parser_healthy(parser)) return false;
             char msg[96];
             xr_parser_format(parser, msg, sizeof(msg), "@%s cannot annotate this declaration",
@@ -840,7 +840,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     char *func_name = (char *) ast_alloc(parser->compiler_session, (size_t) name_token.length + 1);
     if (!xr_parser_healthy(parser)) return NULL;
     do { if (!ast_copy(parser->compiler_session, func_name, name_token.start, name_token.length)) return NULL; } while (0);
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; func_name[name_token.length] = '\0'; } while (0);
+    do { func_name[name_token.length] = '\0'; } while (0);
 
     /* Parse generic type params <T: Constraint, U = int>. The helper installs a
      * scope holding them so `T` resolves in the signature and body below. */
@@ -1066,7 +1066,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     }
 
     // If has destructure params, insert destructure code at function body start
-    for (int i = 0; xr_parser_step(parser) && (body && i < param_count); i++) {
+    for (int i = 0; xr_parser_healthy(parser) && (body && i < param_count); i++) {
         if (params[i] && params[i]->pattern != NULL) {
             AstNode *param_var = xr_ast_variable(parser->compiler_session, params[i]->name, line);
             if (!xr_parser_healthy(parser)) return NULL;
@@ -1095,7 +1095,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
             }
 
             // Shift existing statements back
-            for (int j = block->count; xr_parser_step(parser) && (j > 0); j--) {
+            for (int j = block->count; xr_parser_healthy(parser) && (j > 0); j--) {
                 block->statements[j] = block->statements[j - 1];
             }
 
@@ -1204,14 +1204,14 @@ AstNode *xr_parse_call_argument_with_access(Parser *parser, XrCallArgAccess *out
             return NULL;
         AstNode *root = place;
         while (root && (root->type == AST_MEMBER_ACCESS || root->type == AST_INDEX_GET)) {
-            if (!ast_work(parser->compiler_session, 1)) return NULL;
+
             root = root->type == AST_MEMBER_ACCESS ? root->as.member_access.object : root->as.index_get.array;
         }
         if (root && root->type == AST_VARIABLE) {
-            if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+
             root->as.variable.access_marker_span = marker_span;
         } else if (root && root->type == AST_THIS_EXPR) {
-            if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+
             root->as.this_expr.access_marker_span = marker_span;
         }
         return place;
@@ -1246,8 +1246,8 @@ AstNode *xr_parse_call_argument(Parser *parser) {
 bool xr_is_construct_only_type_name(Parser *parser, const char *name) {
     if (!name)
         return false;
-    static const char *const names[] = {"Map", "Array", "Set", "Channel", "StringBuilder", NULL};
-    for (const char *const *p = names; xr_parser_step(parser) && (xr_parser_healthy(parser) && *p); p++) {
+    static const char *const names[] = {"Map", "Array", "Set", "Channel", NULL};
+    for (const char *const *p = names; xr_parser_healthy(parser) && (xr_parser_healthy(parser) && *p); p++) {
         if (xr_parser_compare_string(parser, name, *p) == 0)
             return true;
     }
@@ -1262,10 +1262,10 @@ static bool xr_parse_argument_token_end(Parser *parser,const Token *token,XrName
     for(int i=0;i<token->length;++i) {
         char byte=xr_parser_read_byte(parser,token->start+i);if(!xr_parser_healthy(parser))return false;
         if(byte=='\n') {
-            if(end.line==INT_MAX){xr_compile_state_fail(parser->state,XR_COMPILE_RESOURCE_BUDGET);return false;}
+            if(end.line==INT_MAX){xr_compile_state_fail(parser->state,XR_COMPILE_RESOURCE_OVERFLOW);return false;}
             ++end.line;end.column=1;
         } else {
-            if(end.column==INT_MAX){xr_compile_state_fail(parser->state,XR_COMPILE_RESOURCE_BUDGET);return false;}
+            if(end.column==INT_MAX){xr_compile_state_fail(parser->state,XR_COMPILE_RESOURCE_OVERFLOW);return false;}
             ++end.column;
         }
     }
@@ -1648,7 +1648,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             char *key_str = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
             if (!xr_parser_healthy(parser)) return NULL;
             do { if (!ast_copy(parser->compiler_session, key_str, payload.bytes, payload.length)) return NULL; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; key_str[payload.length] = '\0'; } while (0);
+            do { key_str[payload.length] = '\0'; } while (0);
             do {
                 key = xr_ast_literal_string(parser->compiler_session, key_str, payload.length, key_token.escape_mode,
                                         key_token.source_form, line);
@@ -1688,7 +1688,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
                 (char *) ast_alloc(parser->compiler_session, (size_t) key_token.length + 1);
             if (!xr_parser_healthy(parser)) return NULL;
             do { if (!ast_copy(parser->compiler_session, key_str, key_token.start, key_token.length)) return NULL; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; key_str[key_token.length] = '\0'; } while (0);
+            do { key_str[key_token.length] = '\0'; } while (0);
             do {
                 key = xr_ast_literal_string(parser->compiler_session, key_str, (size_t) key_token.length, XR_LITERAL_ESCAPED,
                                         XR_LITERAL_INLINE, line);
@@ -2016,7 +2016,7 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
         xr_parser_copy_string_n(parser, member_name, name, name_len);
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; member_name[name_len] = '\0'; } while (0);
+    do { member_name[name_len] = '\0'; } while (0);
 
     /* A plain `.` that continues an optional chain keeps the chain's
      * short-circuit: `a?.b.c` is null when `a` is null, without evaluating
@@ -2038,7 +2038,7 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
     }
     node->column = parser->previous.column;
     if (node->type == AST_MEMBER_ACCESS) {
-        if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+
         node->as.member_access.name_span = (XrNameSpan){parser->previous.line, parser->previous.column};
     }
 
@@ -2059,7 +2059,7 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
                 (char *) ast_alloc(parser->compiler_session, (size_t) field_token.length + 1);
             if (!xr_parser_healthy(parser)) return NULL;
             do { if (!ast_copy(parser->compiler_session, field_name, field_token.start, (size_t) field_token.length)) return NULL; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; field_name[field_token.length] = '\0'; } while (0);
+            do { field_name[field_token.length] = '\0'; } while (0);
             do {
                 xr_parser_consume(parser, TK_COLON,
                               "payload enum constructors require 'field: expression'");
@@ -2181,9 +2181,9 @@ static bool parse_alias_parameters(Parser *parser, XrGenericParam ***out, int *o
                 (char *) ast_alloc(parser->compiler_session, (size_t) param_token.length + 1);
             if (!xr_parser_healthy(parser)) return false;
             do { if (!ast_copy(parser->compiler_session, param_name, param_token.start, (size_t) param_token.length)) return false; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return false; param_name[param_token.length] = '\0'; } while (0);
+            do { param_name[param_token.length] = '\0'; } while (0);
 
-            for (int i = 0; xr_parser_step(parser) && (i < type_param_count); i++) {
+            for (int i = 0; xr_parser_healthy(parser) && (i < type_param_count); i++) {
                 if (type_params[i] && type_params[i]->name &&
                     xr_parser_compare_string(parser, type_params[i]->name, param_name) == 0) {
                     do {
@@ -2277,7 +2277,7 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
         const char **param_names = (const char **) ast_alloc_array(
             parser->compiler_session, sizeof(const char *), (size_t) type_param_count);
         if (!xr_parser_healthy(parser)) return NULL;
-        for (int i = 0; xr_parser_step(parser) && (i < type_param_count); i++)
+        for (int i = 0; xr_parser_healthy(parser) && (i < type_param_count); i++)
             param_names[i] = type_params[i]->name;
         alias_entry->type_param_names = param_names;
         alias_entry->type_param_count = type_param_count;
@@ -2290,7 +2290,7 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
             generic_scope = xr_parser_type_scope_new(parser, parser->type_scope);
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
-        for (int i = 0; xr_parser_step(parser) && (i < type_param_count); i++) {
+        for (int i = 0; xr_parser_healthy(parser) && (i < type_param_count); i++) {
             XrTypeRef *type_param =
                 xr_tref_type_param(parser->compiler_session, type_params[i]->name);
             if (!xr_parser_healthy(parser)) return NULL;
@@ -2775,7 +2775,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
                 (char *) ast_alloc(parser->compiler_session, (size_t) parser->current.length + 1);
             if (!xr_parser_healthy(parser)) return NULL;
             do { if (!ast_copy(parser->compiler_session, first_name, parser->current.start, parser->current.length)) return NULL; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; first_name[parser->current.length] = '\0'; } while (0);
+            do { first_name[parser->current.length] = '\0'; } while (0);
             do {
                 xr_parser_advance(parser);
                 if (!xr_parser_healthy(parser)) return NULL;

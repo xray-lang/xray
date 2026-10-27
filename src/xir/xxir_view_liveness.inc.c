@@ -46,7 +46,7 @@ static XrXirStatus view_live_allocate(ViewLive *a) {
     if (!f->block_count || !f->blocks || !f->instructions || total>UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
     a->total=(uint32_t)total;
     for (uint32_t v=0;v<a->total;++v) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         a->count+=view_live_owner(a,v);
     }
     if (!a->count) return XR_XIR_OK;
@@ -66,7 +66,7 @@ static XrXirStatus view_live_allocate(ViewLive *a) {
     if (status!=XR_XIR_OK) return status;
     uint32_t count=0;
     for (uint32_t v=0;v<a->total;++v) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         a->indices[v]=UINT32_MAX;
         if (view_live_owner(a,v)) {a->indices[v]=count;a->values[count++]=v;}
     }
@@ -79,13 +79,13 @@ static XrXirStatus view_live_allocate(ViewLive *a) {
 }
 static XrXirStatus view_live_row(ViewLive *a,uint64_t *to,const uint64_t *from,bool merge) {
     for (uint32_t w=0;w<a->words;++w) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         to[w]=merge ? to[w]|from[w] : from[w];
     }
     return XR_XIR_OK;
 }
 static XrXirStatus view_live_value(ViewLive *a,uint64_t *bits,uint32_t value,bool use) {
-    if (!xir_compile_work(a->context,3)) return XR_XIR_BUDGET;
+
     if (value>=a->total) return XR_XIR_BAD_STRUCTURE;
     uint32_t id=a->indices[value];if (id==UINT32_MAX) return XR_XIR_OK;
     uint64_t mask=UINT64_C(1)<<(id%64u);
@@ -101,7 +101,7 @@ static void view_live_enqueue(ViewLive *a,uint32_t block) {
 static XrXirStatus view_live_graph(ViewLive *a) {
     const XrXirFunction *f=a->function;
     for (uint32_t b=0;b<f->block_count;++b) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         a->heads[b]=UINT32_MAX;
     }
     a->reachable[0]=1;view_live_enqueue(a,0);
@@ -110,7 +110,7 @@ static XrXirStatus view_live_graph(ViewLive *a) {
         --a->pending;a->queued[b]=0;const XrXirBlock *block=&f->blocks[b];
         const XrXirInstruction *term=&f->instructions[block->first+block->count-1u];
         for (uint32_t e=0;e<3;++e) {
-            if (!xir_compile_work(a->context,4)) return XR_XIR_BUDGET;
+
             if (e<2 ? e>=affine_rules[term->op].edges : !block->panic) continue;
             uint32_t target=e<2 ? term->targets[e] : block->panic;
             if (target>=f->block_count) return XR_XIR_BAD_STRUCTURE;
@@ -119,7 +119,7 @@ static XrXirStatus view_live_graph(ViewLive *a) {
         }
     }
     for (uint32_t b=f->block_count;b>0;--b) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         if (!a->reachable[b-1u]) {a->location.block=b-1u;return XR_XIR_BAD_STRUCTURE;}
         view_live_enqueue(a,b-1u);
     }
@@ -130,10 +130,10 @@ static XrXirStatus view_live_edge(ViewLive *a,uint32_t from,uint32_t target,bool
     if (status!=XR_XIR_OK || panic) return status;
     const XrXirFunction *f=a->function;const XrXirBlock *block=&f->blocks[target];
     for (uint32_t i=block->first;i<block->first+block->count;++i) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         const XrXirInstruction *op=&f->instructions[i];if (op->op!=XR_XIR_PHI) break;
         for (uint32_t p=0;p<op->args[1];p+=2) {
-            if (!xir_compile_work(a->context,2)) return XR_XIR_BUDGET;
+
             if (f->operands[op->args[0]+p]!=from) continue;
             status=view_live_value(a,a->edge,f->operands[op->args[0]+p+1u],true);
             if (status!=XR_XIR_OK) return status;
@@ -171,10 +171,10 @@ static XrXirStatus view_live_instruction(ViewLive *a,uint32_t i) {
 static XrXirStatus view_live_output(ViewLive *a,uint32_t b) {
     const XrXirBlock *block=&a->function->blocks[b];
     const XrXirInstruction *term=&a->function->instructions[block->first+block->count-1u];
-    if (!xir_compile_work(a->context,a->words)) return XR_XIR_BUDGET;
+
     memset(a->current,0,(size_t)a->words*sizeof(*a->current));
     for (uint32_t e=0;e<3;++e) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         if (e<2 ? e>=affine_rules[term->op].edges : !block->panic) continue;
         uint32_t target=e<2 ? term->targets[e] : block->panic;
         XrXirStatus status=view_live_edge(a,b,target,e==2);
@@ -195,19 +195,19 @@ static XrXirStatus view_live_solve(ViewLive *a) {
         }
         bool changed=false;
         for (uint32_t w=0;w<a->words;++w) {
-            if (!xir_compile_work(a->context,2)) return XR_XIR_BUDGET;
+
             uint64_t *input=&a->inputs[(size_t)b*a->words+w];changed|=*input!=a->current[w];*input=a->current[w];
         }
         if (!changed) continue;
         for (uint32_t edge=a->heads[b];edge!=UINT32_MAX;edge=a->next[edge]) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             view_live_enqueue(a,a->predecessors[edge]);
         }
     }
     return XR_XIR_OK;
 }
 static XrXirStatus view_live_emit(ViewLive *a,XrXirViewLiveEvent *event) {
-    if (!xir_compile_work(a->context,sizeof(*event))) return XR_XIR_BUDGET;
+
     event->function=a->location.function;event->block=a->location.block;
     event->before.values=event->after.values=a->values;event->before.count=event->after.count=a->count;
     event->before.words=event->after.words=a->words;
@@ -217,7 +217,7 @@ static XrXirStatus view_live_visit(ViewLive *a) {
     if (!a->visitor) return XR_XIR_OK;
     const XrXirFunction *f=a->function;
     for (uint32_t b=0;b<f->block_count;++b) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         if (!a->reachable[b]) continue;
         a->location.block=b;a->location.instruction=UINT32_MAX;
         XrXirViewLiveEvent event={.kind=XR_XIR_VIEW_LIVE_ENTRY,.instruction=UINT32_MAX,.target=UINT32_MAX,
@@ -235,7 +235,7 @@ static XrXirStatus view_live_visit(ViewLive *a) {
         }
         const XrXirInstruction *term=&f->instructions[block->first+block->count-1u];
         for (uint32_t e=0;e<3;++e) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             if (e<2 ? e>=affine_rules[term->op].edges : !block->panic) continue;
             uint32_t target=e<2 ? term->targets[e] : block->panic;
             status=view_live_edge(a,b,target,e==2);if (status!=XR_XIR_OK) return status;
@@ -254,7 +254,7 @@ XR_FUNC XrXirStatus xir_compile_view_liveness_verified(const XrXirCompileContext
     uint8_t *flags=NULL;XrXirStatus status=xir_compile_view_flags_new(context,module->types,&flags);
     if (status!=XR_XIR_OK || !flags) return status;
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
-        if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
+
         ViewLive a={.context=context,.module=module,.function=&module->functions[f],.types=flags,.visitor=visitor,.user=user,
             .location={XR_XIR_OK,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
         status=view_live_allocate(&a);

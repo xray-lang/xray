@@ -36,7 +36,7 @@ static bool source_materialization_birth(SourceContext *ctx,const SourceMaterial
             "constant function inventory changed");
     /* The current declaration supplies scope and ancestry. The closed literal
      * body needs no open generic binders, even for a concrete generic nominal. */
-    if (!source_work_units(ctx,request->site,sizeof(SourceFunction)+sizeof(XrXirFunction)+sizeof(XrXirFunctionIdentity))) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     ctx->function=f;ctx->module=request->module;++ctx->function_count;
     char *name=source_alloc(ctx,40,1);
     if (!name || source_format(ctx,name,40,"$materialize%u",f)!=XR_DIAG_OK)
@@ -85,7 +85,7 @@ static bool source_materialization_sort(SourceContext *ctx,XrXirMaterializationB
             uint32_t end=middle+(count-middle<width?count-middle:width);
             uint32_t left=begin,right=middle,next=begin;
             while (left<middle || right<end) {
-                if (!source_work_units(ctx,NULL,2*sizeof(*input))) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 bool take=right==end || (left<middle && (input[left].caller<input[right].caller ||
                     (input[left].caller==input[right].caller && input[left].instruction<input[right].instruction)));
                 output[next++]=input[take?left++:right++];
@@ -100,7 +100,7 @@ static bool source_materialization_sort(SourceContext *ctx,XrXirMaterializationB
 static bool source_materialization_bindings(SourceContext *ctx,XrXirMaterializationBinding **output,uint32_t *output_count) {
     uint32_t count=ctx->materialization_count,total=count;
     for (SourceLibraryUnit *unit=ctx->library_units;unit;unit=unit->next) {
-        if (!source_work_units(ctx,NULL,sizeof(total))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (total>ctx->compile.limits.instructions || unit->materialization_count>ctx->compile.limits.instructions-total)
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"library literal inventory exhausted");
         total+=unit->materialization_count;
@@ -112,7 +112,7 @@ static bool source_materialization_bindings(SourceContext *ctx,XrXirMaterializat
     if ((count && (!requests || !seen)) || !rows) return false;
     uint32_t next=0;
     for (SourceMaterialization *request=ctx->materializations;request;request=request->next) {
-        if (!source_work_units(ctx,request->site,sizeof(*request))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (next==count || request->function!=ctx->materialization_begin+next)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"constant binding inventory changed");
         requests[next++]=request;
@@ -122,7 +122,7 @@ static bool source_materialization_bindings(SourceContext *ctx,XrXirMaterializat
     for (uint32_t f=0;count && f<ctx->function_count;++f) {
         const XrXirFunction *body=&ctx->functions[f];
         for (uint32_t i=0;i<body->instruction_count;++i) {
-            if (!source_work_units(ctx,NULL,sizeof(XrXirInstruction))) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             const XrXirInstruction *op=&body->instructions[i];
             if (op->op!=XR_XIR_CALL || op->immediate<0 || (uint64_t)op->immediate>=ctx->function_count ||
                 ctx->identities[op->immediate].method_kind!=XR_XIR_MATERIALIZER) continue;

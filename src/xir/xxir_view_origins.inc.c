@@ -41,10 +41,10 @@ static XrXirStatus view_origin_set_grow(const XrXirCompileContext *context,ViewO
     uint32_t *slots=xir_compile_calloc(context,(size_t)capacity*2u,sizeof(*slots),&status);
     if (!slots) return status;
     for (uint32_t i=0;i<set->count;++i) {
-        if (!xir_compile_work(context,4)) {status=XR_XIR_BUDGET;break;}
+
         uint32_t at=view_origin_hash(set->pairs[i].first,set->pairs[i].second)&(capacity*2u-1u);
         while (slots[at]) {
-            if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
+
             at=(at+1u)&(capacity*2u-1u);
         }
         if (status!=XR_XIR_OK) break;
@@ -59,20 +59,20 @@ static XrXirStatus view_origin_set_grow(const XrXirCompileContext *context,ViewO
 }
 static XrXirStatus view_origin_intern(const XrXirCompileContext *context,
     ViewOriginSet *set,ViewOriginPair pair,uint32_t *output) {
-    if (!xir_compile_work(context,3)) return XR_XIR_BUDGET;
+
     if (set->count==set->capacity) {
         XrXirStatus status=view_origin_set_grow(context,set);if (status!=XR_XIR_OK) return status;
     }
     uint32_t at=view_origin_hash(pair.first,pair.second)&(set->slot_count-1u);
     while (set->slots[at]) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         uint32_t index=set->slots[at]-1u;
         if (set->pairs[index].first==pair.first && set->pairs[index].second==pair.second) {
             *output=index;return XR_XIR_OK;
         }
         at=(at+1u)&(set->slot_count-1u);
     }
-    if (!xir_compile_work(context,sizeof(pair)+sizeof(*set->slots))) return XR_XIR_BUDGET;
+
     *output=set->count;set->pairs[set->count++]=pair;set->slots[at]=set->count;return XR_XIR_OK;
 }
 static XrXirStatus view_origin_push(ViewOriginQuery *q,uint32_t value,uint32_t path) {
@@ -89,12 +89,12 @@ static XrXirStatus view_origin_select(ViewOriginQuery *q,uint32_t value,uint32_t
 
 /* Captures are the actual bound physical prefix, not a return-body guess.
  * Every exposed callable signature must name the same physical candidate. */
-static XrXirStatus view_origin_candidates(const XrXirCompileContext *context,
+static XrXirStatus view_origin_candidates(
     const XrXirModule *module,const uint8_t *flags,uint32_t *captures,uint32_t *candidates) {
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *body=&module->functions[f];
         for (uint32_t i=0;i<body->instruction_count;++i) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             const XrXirInstruction *op=&body->instructions[i];
             if (op->op!=XR_XIR_FUNCTION_REF) continue;
             if (op->immediate<0 || (uint64_t)op->immediate>=module->function_count) return XR_XIR_BAD_STRUCTURE;
@@ -108,7 +108,7 @@ static XrXirStatus view_origin_candidates(const XrXirCompileContext *context,
         uint32_t result=view_flags_at(module->types,flags,body->result),count=0,permission=0;
         if (!result) continue;
         for (uint32_t p=captures[f];p<body->parameter_count;++p) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             bool reference=xr_xir_type_is_cell(module->types,body->parameters[p]);
             uint32_t leaves=reference ? 1u : view_leaves_at(module->types,flags,body->parameters[p]);
             if (!leaves) continue;
@@ -121,7 +121,7 @@ static XrXirStatus view_origin_candidates(const XrXirCompileContext *context,
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *body=&module->functions[f];
         for (uint32_t i=0;i<body->instruction_count;++i) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             const XrXirInstruction *op=&body->instructions[i];
             if (op->op!=XR_XIR_FUNCTION_REF) continue;
             uint32_t target=(uint32_t)op->immediate;
@@ -130,7 +130,7 @@ static XrXirStatus view_origin_candidates(const XrXirCompileContext *context,
             if (!signature || signature->parameter_count!=module->functions[target].parameter_count-op->args[1])
                 return XR_XIR_BAD_TYPE;
             uint32_t candidate;
-            XrXirStatus status=view_return_candidate(context,module->types,flags,signature,&candidate);
+            XrXirStatus status=view_return_candidate(module->types,flags,signature,&candidate);
             if (status!=XR_XIR_OK) return status;
             if (candidate==UINT32_MAX || candidate+op->args[1]!=candidates[target]) return XR_XIR_BAD_TYPE;
         }
@@ -144,7 +144,7 @@ static XrXirStatus view_origin_tuple(ViewOriginQuery *q,const XrXirInstruction *
     if (path && selection.first>=tuple->parameter_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t operand=0;
     for (uint32_t p=0;p<tuple->parameter_count;++p) {
-        if (!xir_compile_work(q->context,1)) return XR_XIR_BUDGET;
+
         XrXirType field=tuple->parameters[p].type;
         if (field==XR_XIR_UNIT) continue;
         if (operand>=op->args[1] || op->args[0]>q->function->operand_count ||
@@ -167,7 +167,7 @@ static XrXirStatus view_origin_call(ViewOriginQuery *q,const XrXirInstruction *o
         const XrXirTypeNode *signature=xr_xir_callable_signature(q->module->types,
             xr_xir_operand_type(q->function,(uint32_t)op->immediate));
         if (!signature) return XR_XIR_BAD_TYPE;
-        XrXirStatus status=view_return_candidate(q->context,q->module->types,q->flags,signature,&candidate);
+        XrXirStatus status=view_return_candidate(q->module->types,q->flags,signature,&candidate);
         if (status!=XR_XIR_OK) return status;
     }
     if (candidate==UINT32_MAX || candidate>=op->args[1] || op->args[0]>q->function->operand_count ||
@@ -175,7 +175,7 @@ static XrXirStatus view_origin_call(ViewOriginQuery *q,const XrXirInstruction *o
     return view_origin_push(q,q->function->operands[op->args[0]+candidate],0);
 }
 static XrXirStatus view_origin_step(ViewOriginQuery *q,ViewOriginPair task) {
-    if (!xir_compile_work(q->context,2)) return XR_XIR_BUDGET;
+
     if (task.first<q->function->parameter_count)
         return task.first==q->candidate ? XR_XIR_OK : XR_XIR_BAD_VALUE;
     const XrXirInstruction *op=&q->function->instructions[task.first-q->function->parameter_count];
@@ -222,7 +222,7 @@ static XrXirStatus view_origins_verify(const XrXirCompileContext *context,
     if (!module->function_count || !module->functions) return XR_XIR_BAD_STRUCTURE;
     bool needed=false;
     for (uint32_t f=0;f<module->function_count;++f) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         needed|=view_flags_at(module->types,flags,module->functions[f].result)!=0;
     }
     if (!needed) return XR_XIR_OK;
@@ -230,13 +230,13 @@ static XrXirStatus view_origins_verify(const XrXirCompileContext *context,
     uint32_t *storage=xir_compile_calloc(context,module->function_count,2*sizeof(uint32_t),&status);
     if (!storage) return status;
     uint32_t *captures=storage,*candidates=storage+module->function_count;
-    status=view_origin_candidates(context,module,flags,captures,candidates);
+    status=view_origin_candidates(module,flags,captures,candidates);
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
         if (candidates[f]==UINT32_MAX) continue;
         const XrXirFunction *body=&module->functions[f];
         ViewOriginQuery query={context,module,flags,candidates,body,candidates[f],{0},{0}};
         for (uint32_t b=0;b<body->block_count && status==XR_XIR_OK;++b) {
-            if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
+
             uint32_t last=body->blocks[b].first+body->blocks[b].count-1u;
             const XrXirInstruction *op=&body->instructions[last];
             if (op->op!=XR_XIR_RETURN) continue;

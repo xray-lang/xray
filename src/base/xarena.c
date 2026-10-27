@@ -19,7 +19,6 @@ struct XrArenaSegment {
 
 _Static_assert(sizeof(XrArenaSegment) % XR_ARENA_ALIGNMENT == 0,
     "Segment data must preserve arena alignment");
-_Static_assert(sizeof(size_t) <= sizeof(uint64_t), "Work bytes must fit the backing counter");
 
 static char *arena_segment_data(XrArenaSegment *segment) {
     return (char *) (segment + 1);
@@ -37,19 +36,12 @@ static bool arena_ready(XrArena *arena) {
         arena_fail(arena, XR_ARENA_BAD_ARGUMENT);
         return false;
     }
-    /* An explicit state backing may have failed through another owner. Query
-     * before raw bump/save/reset too; zero units perform no ledger refund. */
-    return arena_fail(arena, arena->backing.work(arena->backing.context, 0)) == XR_ARENA_OK;
-}
-
-static bool arena_work(XrArena *arena, size_t units) {
-    XrArenaStatus status = arena->backing.work(arena->backing.context, (uint64_t) units);
-    return arena_fail(arena, status) == XR_ARENA_OK;
+    return true;
 }
 
 static bool arena_align(XrArena *arena, size_t size, size_t *aligned) {
     if (size > SIZE_MAX - (XR_ARENA_ALIGNMENT - 1)) {
-        arena_fail(arena, XR_ARENA_BUDGET);
+        arena_fail(arena, XR_ARENA_OVERFLOW);
         return false;
     }
     *aligned = (size + XR_ARENA_ALIGNMENT - 1) & ~((size_t) XR_ARENA_ALIGNMENT - 1);
@@ -60,7 +52,7 @@ static XrArenaSegment *arena_segment(XrArena *arena, size_t capacity) {
     if (capacity > SIZE_MAX - sizeof(XrArenaSegment) ||
         capacity > SIZE_MAX - arena->total_capacity ||
         arena->segment_count == SIZE_MAX || arena->segment_serial == UINT64_MAX) {
-        arena_fail(arena, XR_ARENA_BUDGET);
+        arena_fail(arena, XR_ARENA_OVERFLOW);
         return NULL;
     }
     void *memory = NULL;
@@ -84,7 +76,7 @@ XR_FUNC XrArenaStatus xr_arena_open(XrArena *arena, size_t initial_size, const X
     if (!arena) return XR_ARENA_BAD_ARGUMENT;
     if (arena->status != XR_ARENA_OK) return arena->status;
     if (arena->retained || !backing || !backing->alloc || !backing->free ||
-        !backing->work || !backing->retain || !backing->release)
+        !backing->retain || !backing->release)
         return arena_fail(arena, XR_ARENA_BAD_ARGUMENT);
     arena->backing = *backing;
     XrArenaStatus status = arena->backing.retain(arena->backing.context);
@@ -107,7 +99,7 @@ static void *arena_bump(XrArena *arena, size_t size) {
     }
     if (!arena_align(arena, size, &size)) return NULL;
     if (size > SIZE_MAX - arena->total_allocated) {
-        arena_fail(arena, XR_ARENA_BUDGET);
+        arena_fail(arena, XR_ARENA_OVERFLOW);
         return NULL;
     }
     if (size > (size_t) (arena->limit - arena->position)) {
@@ -127,7 +119,7 @@ XR_FUNC void *xr_arena_alloc_raw(XrArena *arena, size_t size) {
 
 XR_FUNC void *xr_arena_alloc(XrArena *arena, size_t size) {
     void *memory = arena_bump(arena, size);
-    if (!memory || !arena_work(arena, size)) return NULL;
+    if (!memory) return NULL;
     memset(memory, 0, size);
     return memory;
 }
@@ -139,7 +131,7 @@ XR_FUNC void *xr_arena_alloc_array(XrArena *arena, size_t elem_size, size_t coun
         return NULL;
     }
     if (count > SIZE_MAX / elem_size) {
-        arena_fail(arena, XR_ARENA_BUDGET);
+        arena_fail(arena, XR_ARENA_OVERFLOW);
         return NULL;
     }
     return xr_arena_alloc(arena, elem_size * count);
@@ -169,7 +161,7 @@ XR_FUNC void xr_arena_destroy(XrArena *arena) {
 XR_FUNC void xr_arena_reset(XrArena *arena) {
     if (!arena_ready(arena)) return;
     if (arena->segment_serial == UINT64_MAX) {
-        arena_fail(arena, XR_ARENA_BUDGET);
+        arena_fail(arena, XR_ARENA_OVERFLOW);
         return;
     }
     XrArenaSegment *head = arena->head;
@@ -192,16 +184,16 @@ XR_FUNC char *xr_arena_strdup(XrArena *arena, const char *str) {
     }
     size_t length = 0;
     for (;;) {
-        if (!arena_work(arena, 1)) return NULL;
+
         if (!str[length]) break;
         if (length == SIZE_MAX - 1) {
-            arena_fail(arena, XR_ARENA_BUDGET);
+            arena_fail(arena, XR_ARENA_OVERFLOW);
             return NULL;
         }
         ++length;
     }
     char *copy = arena_bump(arena, length + 1);
-    if (!copy || !arena_work(arena, length + 1)) return NULL;
+    if (!copy) return NULL;
     memcpy(copy, str, length + 1);
     return copy;
 }
@@ -213,13 +205,13 @@ XR_FUNC char *xr_arena_strndup(XrArena *arena, const char *str, size_t len) {
         return NULL;
     }
     if (len == SIZE_MAX) {
-        arena_fail(arena, XR_ARENA_BUDGET);
+        arena_fail(arena, XR_ARENA_OVERFLOW);
         return NULL;
     }
     char *copy = arena_bump(arena, len + 1);
-    if (!copy || !arena_work(arena, len)) return NULL;
+    if (!copy) return NULL;
     if (len) memcpy(copy, str, len);
-    if (!arena_work(arena, 1)) return NULL;
+
     copy[len] = '\0';
     return copy;
 }
@@ -243,7 +235,7 @@ XR_FUNC void xr_arena_restore(XrArena *arena, XrArenaState state) {
     XrArenaSegment *segment = arena->head;
     size_t newer_used = 0;
     while (segment) {
-        if (!arena_work(arena, 1)) return;
+
         if (segment == state.head) break;
         newer_used += segment->size;
         segment = segment->next;

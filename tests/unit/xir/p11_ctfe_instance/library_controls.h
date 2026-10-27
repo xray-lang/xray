@@ -205,8 +205,27 @@ static void library_slot_catalog_controls(void) {
     XrXirArtifact *owned=consumer.checked;consumer.checked=NULL;xr_xir_compile_source_result_free(&consumer);
     library_slot_program(owned,names,1);
     XrXirSourceDiagnostic diagnostic={0};
-    CHECK(program_source(&context,"export const value:i64=42",&rejected,&diagnostic)==XR_XIR_BAD_STRUCTURE && !rejected.checked);
-    CHECK(strstr(diagnostic.message,"exported state is not admitted"));xr_xir_compile_source_result_free(&rejected);
+    XrCompileResourceStats exported_before=stats(&context);
+    size_t exported_blocks=source_fixture_compile_live,exported_bytes=source_fixture_compile_bytes;
+    XrXirSourceResult exported={0};
+    CHECK(program_source(&context,"export const value:i64=42",&exported,&diagnostic)==XR_XIR_OK && exported.checked && exported.snapshot);
+    const XrXirDeclarations *public_declarations=exported.checked->module.declarations;
+    const XrXirSlotFacts *public_facts=xr_xir_compile_construction_slots(exported.checked->construction);
+    CHECK(public_declarations && public_declarations->slot_count==1 && public_declarations->slots &&
+        public_declarations->slots[0].type==XR_XIR_I64 && public_declarations->slots[0].mutable==0);
+    CHECK(public_facts && public_facts->count==1 && public_facts->rows && public_facts->rows[0].slot==0 &&
+        public_facts->rows[0].exported==1 && public_facts->rows[0].name_length==5 && !memcmp(public_facts->rows[0].name,"value",5));
+    CHECK(xr_xir_compile_artifact_verify(exported.checked,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&exported);
+    CHECK(!exported.checked && !exported.snapshot && stats(&context).held_bytes==exported_before.held_bytes &&
+        source_fixture_compile_live==exported_blocks && source_fixture_compile_bytes==exported_bytes);
+    CHECK(program_source(&context,"export var value:i64=42",&rejected,&diagnostic)==XR_XIR_BAD_STRUCTURE &&
+        !rejected.checked && !rejected.snapshot);
+    CHECK(diagnostic.status==XR_XIR_BAD_STRUCTURE &&
+        !strcmp(diagnostic.message,"mutable export is not supported; use 'export const' instead"));
+    xr_xir_compile_source_result_free(&rejected);
+    CHECK(stats(&context).held_bytes==exported_before.held_bytes && source_fixture_compile_live==exported_blocks &&
+        source_fixture_compile_bytes==exported_bytes);
     xr_compile_resources_release(context.resources);
     fprintf(stderr,"Slot facts: actual Catalog private storage, selected function alias, retired packet/catalog, VM42 and private/export-state refusals PASS\n");
 }
@@ -219,7 +238,7 @@ static void library_slot_source_import_controls(void) {
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,MATERIALIZATION_ROOT};
     XrModuleOverlayInput overlays[]={{authority,"slot-source-root.xr",root,root_text,sizeof(root_text)-1},
         {authority,"slot-source-peer.xr",peer,peer_text,sizeof(peer_text)-1}};
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request={session,root,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_overlay(&request,overlays,2,&source,&diagnostic,NULL);
@@ -253,7 +272,7 @@ static void library_slot_ast_release(void *opaque) {
 static uint64_t library_slot_repl_prepare(XrXirSourceGenerations *generations,
     XrXirCompileContext *context,LibrarySlotAst *owner,const char *text) {
     CHECK(!owner->session && !owner->references);
-    CHECK(xr_compile_session_new(context->resources,&owner->session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&owner->session)==XR_COMPILE_RESOURCE_OK);
     owner->references=1;owner->input.source=(XrXirSourceText){NULL,text,strlen(text)};
     CHECK(xr_compile_parse_with_source(owner->session,text,NULL,&owner->input.program)==XR_PARSE_OK);
     XrXirSourceAstOwner syntax={owner->input,context->resources,owner,library_slot_ast_retain,library_slot_ast_release};
@@ -439,14 +458,14 @@ static void library_comptime_site_controls(void) {
     const XrXirProvenance *proof=checked->module.provenance;const XirEvaluationRoot *root=&proof->evaluation;
     XrXirComptimeSite site={proof->origins[root->caller].function,root->instruction,proof->origins[root->callee].function};
     XirCtfeInstanceBatchRequest evaluation=instance_batch_request(checked,&root->callee,1);
-    XirCtfeInstanceBatch *batch=NULL;CHECK(xr_xir_compile_ctfe_instance_batch(&evaluation,&batch)==XR_XIR_CTFE_OK);
-    XirLiteralRequest request={&context,batch,1};XirLiteralDefinitions output={0};XrCompileResourceStats before=stats(&context);
+    XirCtfeInstanceBatch *batch=NULL;CHECK(xr_xir_compile_ctfe_instance_batch(&evaluation,NULL,&batch)==XR_XIR_CTFE_OK);
+    XirLiteralRequest request={&context,batch,1,NULL};XirLiteralDefinitions output={0};XrCompileResourceStats before=stats(&context);
     CHECK(xr_xir_compile_instance_literals_at(&request,NULL,&output,NULL)==XR_XIR_BAD_STRUCTURE);
     XrXirComptimeSite wrong=site;++wrong.instruction;
     CHECK(xr_xir_compile_instance_literals_at(&request,&wrong,&output,NULL)==XR_XIR_BAD_STRUCTURE);
     wrong=site;wrong.helper=wrong.caller;
     CHECK(xr_xir_compile_instance_literals_at(&request,&wrong,&output,NULL)==XR_XIR_BAD_STRUCTURE);
-    CHECK(!output.definition && !output.bindings && !output.count && stats(&context).live_bytes==before.live_bytes);
+    CHECK(!output.definition && !output.bindings && !output.count && stats(&context).held_bytes==before.held_bytes);
     CHECK(xr_xir_compile_instance_literals_at(&request,&site,&output,NULL)==XR_XIR_OK);
     const XrXirComptimeTable *table=&output.definition->construction->comptime;
     CHECK(table->site_count==1 && table->binding_count==1 && table->bindings[0].provider==output.bindings[0].provider);
@@ -455,9 +474,9 @@ static void library_comptime_site_controls(void) {
     xr_xir_compile_artifact_free(checked);xr_xir_compile_comptime_pending_free(pending);xr_xir_compile_artifact_free(source);
     checked=instance_source(&context,"array");uint32_t function=instance_named(checked,"array",0);
     evaluation=instance_batch_request(checked,&function,1);batch=NULL;
-    CHECK(xr_xir_compile_ctfe_instance_batch(&evaluation,&batch)==XR_XIR_CTFE_OK);request.instances=batch;
+    CHECK(xr_xir_compile_ctfe_instance_batch(&evaluation,NULL,&batch)==XR_XIR_CTFE_OK);request.instances=batch;
     before=stats(&context);CHECK(xr_xir_compile_instance_literals_at(&request,&site,&output,NULL)==XR_XIR_BAD_STRUCTURE);
-    CHECK(!output.definition && !output.bindings && !output.count && stats(&context).live_bytes==before.live_bytes);
+    CHECK(!output.definition && !output.bindings && !output.count && stats(&context).held_bytes==before.held_bytes);
     xr_xir_compile_ctfe_instance_batch_free(batch);xr_xir_compile_artifact_free(checked);
     xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     fprintf(stderr,"Library site receiving: genuine exact pending root, no missing/wrong site or ordinary INSTANCE authority, atomic prefixes physical0\n");

@@ -58,20 +58,20 @@ struct XrXirRuntimeSdk {
     size_t root_length, scratch_length;
     XrCompileResources *resources;
     XrXirRuntimeSdkStatus status;
+    uint64_t metadata_bytes;
 };
 static bool sdk_fail(XrXirRuntimeSdk *sdk, XrXirRuntimeSdkStatus status) {
     if (sdk->status == XR_XIR_SDK_OK) sdk->status = status;
     return false;
 }
-static bool sdk_work(XrXirRuntimeSdk *sdk, uint64_t count) {
-    if (sdk->status != XR_XIR_SDK_OK) return false;
-    XrXirRuntimeSdkStatus status=sdk_resource_status(xr_compile_resources_work(sdk->resources,count));
-    return status==XR_XIR_SDK_OK || sdk_fail(sdk,status);
-}
 static void *sdk_allocate(XrXirRuntimeSdk *sdk, size_t bytes) {
     if (sdk->status != XR_XIR_SDK_OK) return NULL;
     if (bytes > SIZE_MAX-sizeof(SdkMemory)) {
-        sdk_fail(sdk,XR_XIR_SDK_BUDGET);return NULL;
+        sdk_fail(sdk,XR_XIR_SDK_OVERFLOW);return NULL;
+    }
+    size_t resident=sizeof(SdkMemory)+bytes;
+    if (resident > UINT64_MAX-sdk->metadata_bytes) {
+        sdk_fail(sdk,XR_XIR_SDK_OVERFLOW);return NULL;
     }
     void *allocation=NULL;
     XrXirRuntimeSdkStatus status=sdk_resource_status(xr_compile_resources_calloc(
@@ -79,17 +79,16 @@ static void *sdk_allocate(XrXirRuntimeSdk *sdk, size_t bytes) {
     if (status!=XR_XIR_SDK_OK) {sdk_fail(sdk,status);return NULL;}
     SdkMemory *memory=allocation;
     memory->next=sdk->memory;sdk->memory=memory;
+    sdk->metadata_bytes+=resident;
     return memory+1;
 }
 #include "xr_xir_runtime_sdk_windows.inc.c"
 
-static void sdk_facts_publish(XrXirRuntimeSdk *sdk,const XrCompileResourceStats *before) {
+static void sdk_facts_publish(XrXirRuntimeSdk *sdk) {
     const uint32_t *p=sdk->manifest.prefix;
-    XrCompileResourceStats after;
-    XR_CHECK(xr_compile_resources_stats(sdk->resources,&after)==XR_COMPILE_RESOURCE_OK,"Valid SDK ledger");
     sdk->facts=(XrXirRuntimeSdkFacts){p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],
         p[10],p[11],p[12],p[13],p[14],p[15],p[16],sdk->manifest.file_count,
-        sdk->manifest.bundle_bytes,after.allocated_bytes-before->allocated_bytes,after.work-before->work,{0}};
+        sdk->manifest.bundle_bytes,sdk->metadata_bytes,{0}};
     memcpy(sdk->facts.identity,sdk->manifest.digest,32);
 }
 XR_FUNC XrXirRuntimeSdkStatus xr_xir_runtime_sdk_load(const XrXirRuntimeSdkRequest *request,
@@ -98,33 +97,28 @@ XR_FUNC XrXirRuntimeSdkStatus xr_xir_runtime_sdk_load(const XrXirRuntimeSdkReque
         !request->manifest_length || !request->resources)
         return XR_XIR_SDK_INVALID;
     if (request->manifest_length > XR_XIR_SDK_MANIFEST_LIMIT) return XR_XIR_SDK_BUDGET;
-    XrCompileResourceStats before;
-    XrXirRuntimeSdkStatus status=sdk_resource_status(xr_compile_resources_stats(request->resources,&before));
-    if (status!=XR_XIR_SDK_OK) return status;
+    XrXirRuntimeSdkStatus status;
     void *allocation=NULL;
     status=sdk_resource_status(xr_compile_resources_calloc(request->resources,1,sizeof(XrXirRuntimeSdk),&allocation));
     if (status!=XR_XIR_SDK_OK) return status;
     XrXirRuntimeSdk *sdk=allocation;
-    sdk->resources=request->resources;
+    sdk->resources=request->resources;sdk->metadata_bytes=sizeof(*sdk);
     char *manifest=sdk_allocate(sdk,request->manifest_length);
     if (manifest) {
-        if (sdk_work(sdk,request->manifest_length)) {
-            memcpy(manifest,request->manifest,request->manifest_length);
-            sdk->status=sdk_json_parse(manifest,request->manifest_length,sdk->resources,&sdk->manifest,NULL);
-        }
+        memcpy(manifest,request->manifest,request->manifest_length);
+        sdk->status=sdk_json_parse(manifest,request->manifest_length,&sdk->manifest,NULL);
     }
     if (sdk->status==XR_XIR_SDK_OK) {
-        XrJsonCursor json=xr_json_cursor_make(NULL,0,sdk->resources,sdk_cursor_charge);
+        XrJsonCursor json=xr_json_cursor_make(NULL,0);
         if (!sdk_identity(&json,&sdk->manifest)) sdk->status=sdk_cursor_status(json.status);
-        if (sdk_work(sdk,sizeof(sdk_expected_prefix)) &&
+        if (sdk->status==XR_XIR_SDK_OK &&
             memcmp(sdk->manifest.prefix,sdk_expected_prefix,sizeof(sdk_expected_prefix))) sdk_fail(sdk,XR_XIR_SDK_INVALID);
-        if (sdk_work(sdk,32) && memcmp(sdk->manifest.digest,sdk_expected_identity,32)) sdk_fail(sdk,XR_XIR_SDK_INVALID);
+        if (sdk->status==XR_XIR_SDK_OK && memcmp(sdk->manifest.digest,sdk_expected_identity,32)) sdk_fail(sdk,XR_XIR_SDK_INVALID);
     }
     if (sdk->status==XR_XIR_SDK_OK) sdk_files_admit(sdk,request->root);
-    if (sdk->status==XR_XIR_SDK_OK) sdk_work(sdk,sizeof(sdk->facts)+32);
     status=sdk->status;
     if (status!=XR_XIR_SDK_OK) {xr_xir_runtime_sdk_free(sdk);return status;}
-    sdk_facts_publish(sdk,&before);*output=sdk;return XR_XIR_SDK_OK;
+    sdk_facts_publish(sdk);*output=sdk;return XR_XIR_SDK_OK;
 }
 XR_FUNC const XrXirRuntimeSdkFacts *xr_xir_runtime_sdk_facts(const XrXirRuntimeSdk *sdk) {
     return sdk ? &sdk->facts : NULL;
@@ -138,7 +132,7 @@ XR_FUNC const char *xr_xir_runtime_sdk_root(const XrXirRuntimeSdk *sdk) {
 XR_FUNC XrXirRuntimeSdkStatus xr_xir_runtime_sdk_file(const XrXirRuntimeSdk *sdk,
     const char *relative_path,const char **output) {
     if (!sdk || !relative_path || !output || *output) return XR_XIR_SDK_INVALID;
-    XrJsonCursor json=xr_json_cursor_make(NULL,0,sdk->resources,sdk_cursor_charge);
+    XrJsonCursor json=xr_json_cursor_make(NULL,0);
     for (uint32_t i=0;i<sdk->manifest.file_count;++i) {
         if (xr_json_cursor_equal(&json,relative_path,sdk->manifest.files[i].path)) {
             *output=sdk->manifest.files[i].absolute_path;return XR_XIR_SDK_OK;

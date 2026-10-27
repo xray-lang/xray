@@ -13067,7 +13067,7 @@ XR_FUNC XrOsIoStatus xg_compiler_image_hash_for_path(XrCompileState *state,
     const char *path, uint64_t *output) {
     XrCompileResourceStatus prior = xr_compile_state_status(state);
     if (prior != XR_COMPILE_RESOURCE_OK)
-        return prior == XR_COMPILE_RESOURCE_BUDGET ? XR_OS_IO_BUDGET
+        return prior == XR_COMPILE_RESOURCE_BUDGET ? XR_OS_IO_OVERFLOW
              : prior == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_OS_IO_OUT_OF_MEMORY
              : XR_OS_IO_BAD_ARGUMENT;
     if (!path || !output)
@@ -13075,8 +13075,8 @@ XR_FUNC XrOsIoStatus xg_compiler_image_hash_for_path(XrCompileState *state,
     XrOsIoPolicy policy = xr_compile_io_policy(xr_compile_state_resources(state));
     XrFsStat st;
     XrOsIoStatus status = xr_os_io_stat(&policy, path, &st);
-    if (status == XR_OS_IO_BUDGET || status == XR_OS_IO_OUT_OF_MEMORY)
-        (void) xr_compile_state_fail(state, status == XR_OS_IO_BUDGET
+    if (status == XR_OS_IO_OVERFLOW || status == XR_OS_IO_OUT_OF_MEMORY)
+        (void) xr_compile_state_fail(state, status == XR_OS_IO_OVERFLOW
             ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
     if (status != XR_OS_IO_OK && status != XR_OS_IO_NOT_FOUND)
         return status;

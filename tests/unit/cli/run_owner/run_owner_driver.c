@@ -26,17 +26,17 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv);
 #include "api/xsource_api.c"
 static size_t phase_allocations[5];
 static unsigned resource_calls;
-static bool budget_failure, sandbox_expected;
+static bool memory_failure, sandbox_expected;
 static XrCompileResourceStatus observed_resources(const XrCompileResourceLimits *limits,
     XrCompileResources **output) {
     ++resource_calls;phase_allocations[0]=runtime_attempts;
     const XrCompileResourceLimits expected=sandbox_expected ?
         (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS :
         (XrCompileResourceLimits)XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
-    CHECK(limits->allocated_bytes==expected.allocated_bytes && limits->live_bytes==expected.live_bytes &&
-        limits->work==expected.work);
+    CHECK(limits->memory_mode==expected.memory_mode && limits->memory_limit==expected.memory_limit &&
+        limits->profile_allocations==expected.profile_allocations);
     XrCompileResourceLimits actual=*limits;
-    if(budget_failure)actual.work=1;
+    if(memory_failure){actual.memory_mode=XR_COMPILE_MEMORY_FINITE;actual.memory_limit=0;}
     return xr_compile_resources_new(&actual,output);
 }
 static XrSourceCompileStatus observed_paths(XrCompileResources *resources,const char *entry,
@@ -50,9 +50,9 @@ static XrSourceCompileStatus observed_source(const XrSourceCompileRequest *reque
     CHECK(request->manifest_limits.input_bytes==1048576 && request->manifest_limits.depth==64);
     return xr_source_compile_build(request,output,diagnostic);
 }
-static XrSourceStatus observed_take(XrXirSourceProduct **product,XrSourceProgram **output) {
+static XrSourceStatus observed_take(XrXirSourceProduct **product,XrSourceTarget target,XrSourceArtifact **output) {
     phase_allocations[3]=runtime_attempts;
-    return xr_source_program_take_product(product,output);
+    return xr_source_artifact_take_product(product,target,output);
 }
 static int observed_program(XrXirProgram *program,uint32_t entry,bool sandbox) {
     phase_allocations[4]=runtime_attempts;
@@ -62,13 +62,13 @@ static int observed_program(XrXirProgram *program,uint32_t entry,bool sandbox) {
 #define xr_compile_resources_new observed_resources
 #define xr_source_paths observed_paths
 #define xr_source_compile_build observed_source
-#define xr_source_program_take_product observed_take
+#define xr_source_artifact_take_product observed_take
 #define xr_xir_host_program_main observed_program
 #include "app/cli/xcmd_run.c"
 #undef xr_compile_resources_new
 #undef xr_source_paths
 #undef xr_source_compile_build
-#undef xr_source_program_take_product
+#undef xr_source_artifact_take_product
 #undef xr_xir_host_program_main
 
 static void verify_boundaries(const XrCliInvocation *inv) {
@@ -82,10 +82,10 @@ static void verify_boundaries(const XrCliInvocation *inv) {
         CHECK(cmd_run(inv)==4 && runtime_attempts>phases[i] && resource_calls==1);
         runtime_fail_at=SIZE_MAX;CHECK(!runtime_live && !runtime_bytes);
     }
-    budget_failure=true;resource_calls=0;
+    memory_failure=true;resource_calls=0;
     CHECK(cmd_run(inv)==1 && !runtime_live && !runtime_bytes && resource_calls==1);
-    budget_failure=false;
-    printf("RUN_OWNER: selected resource policy, five phase OOM boundaries, one ledger, budget and physical zero PASS\n");
+    memory_failure=false;
+    printf("RUN_OWNER: selected resource policy, five phase OOM boundaries, one memory owner, held refusal and physical zero PASS\n");
 }
 #endif
 

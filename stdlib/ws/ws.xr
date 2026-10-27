@@ -165,33 +165,42 @@ fn _hexBytes(hex: string) -> Array<u8> {
 
 fn _base64Encode(data: Array<u8>) -> string {
     var n = len(data)
-    var out = StringBuilder()
+    var out = ""
     var i = 0
     while (i + 3 <= n) {
         var b0 = data[i] as i64
         var b1 = data[i + 1] as i64
         var b2 = data[i + 2] as i64
-        out.append(_B64_STD.runes().nth(b0 >> 2))
-        out.append(_B64_STD.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
-        out.append(_B64_STD.runes().nth(((b1 & 15) << 2) | (b2 >> 6)))
-        out.append(_B64_STD.runes().nth(b2 & 63))
+        var _encodedRune0 = _B64_STD.runes().nth(b0 >> 2)
+        out += "${_encodedRune0}"
+        var _encodedRune1 = _B64_STD.runes().nth(((b0 & 3) << 4) | (b1 >> 4))
+        out += "${_encodedRune1}"
+        var _encodedRune2 = _B64_STD.runes().nth(((b1 & 15) << 2) | (b2 >> 6))
+        out += "${_encodedRune2}"
+        var _encodedRune3 = _B64_STD.runes().nth(b2 & 63)
+        out += "${_encodedRune3}"
         i = i + 3
     }
     var rem = n - i
     if (rem == 1) {
         var b0 = data[i] as i64
-        out.append(_B64_STD.runes().nth(b0 >> 2))
-        out.append(_B64_STD.runes().nth((b0 & 3) << 4))
-        out.append("==")
+        var _encodedRune4 = _B64_STD.runes().nth(b0 >> 2)
+        out += "${_encodedRune4}"
+        var _encodedRune5 = _B64_STD.runes().nth((b0 & 3) << 4)
+        out += "${_encodedRune5}"
+        out += "=="
     } else if (rem == 2) {
         var b0 = data[i] as i64
         var b1 = data[i + 1] as i64
-        out.append(_B64_STD.runes().nth(b0 >> 2))
-        out.append(_B64_STD.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
-        out.append(_B64_STD.runes().nth((b1 & 15) << 2))
-        out.append("=")
+        var _encodedRune6 = _B64_STD.runes().nth(b0 >> 2)
+        out += "${_encodedRune6}"
+        var _encodedRune7 = _B64_STD.runes().nth(((b0 & 3) << 4) | (b1 >> 4))
+        out += "${_encodedRune7}"
+        var _encodedRune8 = _B64_STD.runes().nth((b1 & 15) << 2)
+        out += "${_encodedRune8}"
+        out += "="
     }
-    return out.toString()
+    return out
 }
 
 fn _isDigit(c: rune) -> bool {
@@ -455,23 +464,23 @@ export fn parseUpgradeRequest(
 }
 
 export fn upgradeResponse(secKey: string, protocol: string? = null, deflate: bool = false) -> string {
-    var out = StringBuilder()
-    out.append("HTTP/1.1 101 Switching Protocols\r\n")
-    out.append("Upgrade: websocket\r\n")
-    out.append("Connection: Upgrade\r\n")
-    out.append("Sec-WebSocket-Accept: ")
-    out.append(acceptKey(secKey))
-    out.append("\r\n")
+    var out = ""
+    out += "HTTP/1.1 101 Switching Protocols\r\n"
+    out += "Upgrade: websocket\r\n"
+    out += "Connection: Upgrade\r\n"
+    out += "Sec-WebSocket-Accept: "
+    out += acceptKey(secKey)
+    out += "\r\n"
     if (protocol != null && len(protocol!) > 0) {
-        out.append("Sec-WebSocket-Protocol: ")
-        out.append(protocol!)
-        out.append("\r\n")
+        out += "Sec-WebSocket-Protocol: "
+        out += protocol!
+        out += "\r\n"
     }
     if (deflate) {
-        out.append("Sec-WebSocket-Extensions: permessage-deflate\r\n")
+        out += "Sec-WebSocket-Extensions: permessage-deflate\r\n"
     }
-    out.append("\r\n")
-    return out.toString()
+    out += "\r\n"
+    return out
 }
 
 export fn clientHandshakeRequest(
@@ -484,37 +493,37 @@ export fn clientHandshakeRequest(
     if (len(url.path) == 0 || url.path.runes().nth(0) != '/' || _hasCrLf(url.path)) { return null }
     if (_hasCrLf(url.host)) { return null }
 
-    var out = StringBuilder()
-    out.append("GET ")
-    out.append(url.path)
-    out.append(" HTTP/1.1\r\n")
-    out.append("Host: ")
-    out.append(_hostHeader(url))
-    out.append("\r\n")
-    out.append("Upgrade: websocket\r\n")
-    out.append("Connection: Upgrade\r\n")
-    out.append("Sec-WebSocket-Key: ")
-    out.append(secKey)
-    out.append("\r\n")
-    out.append("Sec-WebSocket-Version: 13\r\n")
+    var out = ""
+    out += "GET "
+    out += url.path
+    out += " HTTP/1.1\r\n"
+    out += "Host: "
+    out += _hostHeader(url)
+    out += "\r\n"
+    out += "Upgrade: websocket\r\n"
+    out += "Connection: Upgrade\r\n"
+    out += "Sec-WebSocket-Key: "
+    out += secKey
+    out += "\r\n"
+    out += "Sec-WebSocket-Version: 13\r\n"
 
     if (deflate) {
-        out.append("Sec-WebSocket-Extensions: permessage-deflate; ")
-        out.append("client_no_context_takeover; server_no_context_takeover\r\n")
+        out += "Sec-WebSocket-Extensions: permessage-deflate; "
+        out += "client_no_context_takeover; server_no_context_takeover\r\n"
     }
 
     if (protocols != null && len(protocols!) > 0) {
-        out.append("Sec-WebSocket-Protocol: ")
+        out += "Sec-WebSocket-Protocol: "
         for (var i = 0; i < len(protocols!); i++) {
             if (len(protocols![i]) == 0 || _hasCrLf(protocols![i])) { return null }
-            if (i > 0) { out.append(", ") }
-            out.append(protocols![i])
+            if (i > 0) { out += ", " }
+            out += protocols![i]
         }
-        out.append("\r\n")
+        out += "\r\n"
     }
 
-    out.append("\r\n")
-    return out.toString()
+    out += "\r\n"
+    return out
 }
 
 export fn parseUpgradeResponse(

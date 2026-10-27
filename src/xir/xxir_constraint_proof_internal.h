@@ -45,6 +45,11 @@ XR_FUNC XrXirStatus xir_metadata_type_markers_prove(const XrXirCompileContext *c
  * reframes actual Input before retrying; no proof fact survives the attempt. */
 XR_FUNC XrXirStatus xir_metadata_type_markers_read(const XrXirCompileContext *context,
     const XirMetadataProofContext *proof,XrXirType type,uint32_t markers,XirReadScratch *memory);
+/* The closed pool is already structurally admitted. Each enum root completes
+ * the ordinary marker query independently; only temporary capacity is reused.
+ * Output belongs to an unpublished owner and has exactly types->count bytes. */
+XR_FUNC XrXirStatus xir_compile_enum_sendable_flags(const XrXirCompileContext *context,
+    const XrXirTypes *types,uint8_t *output,uint32_t count);
 XR_FUNC XrXirStatus xir_metadata_constraint_arguments_prove(const XrXirCompileContext *context,
     const XirMetadataProofContext *proof,const XirMetadataArguments *use);
 XR_FUNC void xr_xir_constraint_scratch_free(XirConstraintScratch *scratch);

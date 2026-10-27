@@ -10,6 +10,8 @@
  *   Source names expose logical values while mutable bindings own one Cell.
  */
 static bool source_binding_cell(SourceContext *ctx, const SourceName *symbol, SourceValue *cell) {
+    if (symbol && symbol->direct_borrowed)
+        return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"direct borrowed local cannot expose a Cell");
     if (!symbol || !symbol->mutable || symbol->construction)
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "mutable Cell owner required");
     if (symbol->kind == SOURCE_LOCAL) {
@@ -35,7 +37,7 @@ static bool source_binding_read(SourceContext *ctx, const SourceName *symbol, So
     if ((symbol->kind==SOURCE_SLOT || symbol->kind==SOURCE_UNIT_SLOT) &&
         symbol->module!=ctx->bodies[ctx->function].module && ctx->history)
         return source_history_binding_read(ctx,symbol,value);
-    if (symbol->mutable) {
+    if (symbol->mutable && !symbol->direct_borrowed) {
         SourceValue cell = {0};
         return source_binding_cell(ctx, symbol, &cell) &&
             source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_READ, symbol->type,
@@ -49,6 +51,8 @@ static bool source_binding_read(SourceContext *ctx, const SourceName *symbol, So
         {0}, {0}, symbol->index, {0}}, value);
 }
 static bool source_binding_write(SourceContext *ctx, const SourceName *symbol, SourceValue value) {
+    if (symbol->direct_borrowed)
+        return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"direct borrowed local cannot be reassigned");
     if (symbol->kind == SOURCE_UNIT_LOCAL) return true;
     if (value.type != symbol->type)
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "binding write changes its logical type");

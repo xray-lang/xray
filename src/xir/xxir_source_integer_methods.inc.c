@@ -11,7 +11,7 @@
 static uint32_t source_primitive_query_find(SourceContext *ctx,
     XrXirSourceDeclarationKind kind, uint32_t parent, uint32_t identity) {
     for (uint32_t i = 0; i < ctx->query.declaration_count; ++i) {
-        if (!source_work(ctx,NULL)) return 0;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return 0;
         const XrXirSourceDeclaration *row = &ctx->query.declarations[i];
         if (row->kind == kind && row->parent == parent && row->native_identity == identity)
             return row->id;
@@ -232,7 +232,7 @@ static bool source_integer_hex(SourceContext *ctx,AstNode *node,SourceValue rece
         !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_U64,{0},{0},15,{0}},&fifteen)) return false;
     for (int digit=15; digit>=0; --digit) {
         SourceValue shift,nibble,nonzero,ten,decimal,offset,letter,ascii,rune,text,candidate;
-        if (!source_work(ctx,node) ||
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) ||
             !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},digit*4,{0}},&shift) ||
             !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_SHR_INT,XR_XIR_U64,{magnitude.id,shift.id},{0},0,{0}},&nibble) ||
             !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_AND_INT,XR_XIR_U64,{nibble.id,fifteen.id},{0},0,{0}},&nibble) ||

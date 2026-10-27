@@ -129,9 +129,9 @@ void xlsp_parse_document(XrLspDocument *doc,XrLspServer *server) {
         XrCompileResourceLimits limits=(XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
         XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;XlspSyntaxSnapshot *fresh=NULL;
         if(xr_compile_resources_new(&limits,&resources)!=XR_COMPILE_RESOURCE_OK)return;
-        XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
+        XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);
         XrParseStatus parsed=XR_PARSE_BAD_ARGUMENT;
-        if(opened==XR_COMPILER_SESSION_OK) {
+        if(opened==XR_COMPILE_RESOURCE_OK) {
             XlspSourceDocument input={doc->uri,doc->content,strlen(doc->uri),doc->length,doc->version};
             parsed=xlsp_source_syntax_build(session,&input,&fresh);
         }

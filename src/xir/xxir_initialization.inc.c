@@ -43,7 +43,7 @@ static XrXirStatus initialization_allocate(InitializationGraph *graph, const XrX
     XrXirStatus allocation_status = XR_XIR_OK;
     uint64_t views = 1, nodes = (uint64_t)function->instruction_count+1;
     for (const XrXirInitializationRegion *r=regions; r; r=r->next) {
-        if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+
         if (r->first_instruction > r->function.instruction_count || r->first_block > r->function.block_count)
             return XR_XIR_BAD_STRUCTURE;
         ++views; nodes += (uint64_t)r->function.instruction_count-r->first_instruction+1;
@@ -67,13 +67,13 @@ static XrXirStatus initialization_allocate(InitializationGraph *graph, const XrX
     for (uint32_t n=0;n<graph->node_count;++n) graph->nodes[n].head=UINT32_MAX;
     return XR_XIR_OK;
 }
-static XrXirStatus initialization_connect(InitializationGraph *graph, XrXirCompileContext *remaining) {
+static XrXirStatus initialization_connect(InitializationGraph *graph) {
     for (uint32_t v=0;v<graph->view_count;++v) {
         const InitializationView *view=&graph->views[v];
         const XrXirFunction *function=view->function;
         uint32_t owner=view->region ? view->region->first_block : 0;
         for (uint32_t i=view->first;i<function->instruction_count;++i) {
-            if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+
             const XrXirInstruction *op=&function->instructions[i];
             if (!op->op || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
             uint32_t node=view->offset+i-view->first;
@@ -101,7 +101,7 @@ static XrXirStatus initialization_connect(InitializationGraph *graph, XrXirCompi
         if (!view->region) continue;
         const InitializationView *parent=NULL;
         for (uint32_t p=0;p<graph->view_count;++p) {
-            if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+
             if (graph->views[p].region==view->region->parent) { parent=&graph->views[p]; break; }
         }
         uint32_t checkpoint=view->region->checkpoint;
@@ -112,16 +112,16 @@ static XrXirStatus initialization_connect(InitializationGraph *graph, XrXirCompi
     return XR_XIR_OK;
 }
 static XrXirStatus initialization_solve(InitializationGraph *graph, uint32_t declaration,
-    uint32_t place, XrXirCompileContext *remaining) {
+    uint32_t place) {
     for (uint32_t n=0;n<graph->node_count;++n) graph->nodes[n].state=1;
     bool changed=true;
     while (changed) {
         changed=false;
         for (uint32_t n=0;n<graph->node_count;++n) {
-            if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+
             uint8_t state=n ? 1 : 0;
             for (uint32_t e=graph->nodes[n].head;e!=UINT32_MAX;e=graph->edges[e].next) {
-                if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+
                 const InitializationEdge *edge=&graph->edges[e];
                 const InitializationNode *source=&graph->nodes[edge->source];
                 uint8_t incoming=source->state;
@@ -139,7 +139,7 @@ static XrXirStatus initialization_solve(InitializationGraph *graph, uint32_t dec
 static XrXirStatus initialization_reads(const InitializationGraph *graph, uint32_t place,
     bool readonly, VerifyContext *context) {
     for (uint32_t n=0;n<graph->node_count;++n) {
-        if (!xir_compile_work(&context->remaining,1)) return XR_XIR_BUDGET;
+
         const InitializationNode *node=&graph->nodes[n];
         const XrXirInstruction *op=node->op;
         if (!op) continue;
@@ -153,14 +153,14 @@ static XrXirStatus initialization_reads(const InitializationGraph *graph, uint32
         }
         if (op->op==XR_XIR_PHI) continue;
         uint32_t count=operand_count(node->function,op,context->module);
-        if (!xir_compile_work(&context->remaining,count)) return XR_XIR_BUDGET;
+
         for (uint32_t a=0;a<count;++a) {
             uint32_t id=xr_xir_op_uses_operand_table(op->op) ? node->function->operands[op->args[0]+a] : op->args[a];
             if (!a && (op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_INDEX_PLACE)) continue;
             for (;;) {
                 XrXirPlaceKind kind=xr_xir_place_kind(node->function,id);
                 if (kind!=XR_XIR_PLACE_FIELD && kind!=XR_XIR_PLACE_INDEX) break;
-                if (!xir_compile_work(&context->remaining,1)) return XR_XIR_BUDGET;
+
                 id=node->function->instructions[id-node->function->parameter_count].args[0];
             }
             if (id!=place) continue;
@@ -180,14 +180,14 @@ static XrXirStatus initialization_check(const XrXirFunction *function,
     const XrXirInitializationRegion *regions, VerifyContext *context) {
     InitializationGraph graph={0}; XrXirStatus status=XR_XIR_OK;
     for (uint32_t i=0;i<function->instruction_count && status==XR_XIR_OK;++i) {
-        if (!xir_compile_work(&context->remaining,1)) {status=XR_XIR_BUDGET;break;}
+
         if (function->instructions[i].op!=XR_XIR_LOCAL_UNINIT) continue;
         if (!graph.nodes) {
             status=initialization_allocate(&graph,function,regions,&context->remaining);
-            if (status==XR_XIR_OK) status=initialization_connect(&graph,&context->remaining);
+            if (status==XR_XIR_OK) status=initialization_connect(&graph);
         }
         uint32_t place=function->parameter_count+i;
-        if (status==XR_XIR_OK) status=initialization_solve(&graph,i,place,&context->remaining);
+        if (status==XR_XIR_OK) status=initialization_solve(&graph,i,place);
         if (status==XR_XIR_OK) status=initialization_reads(&graph,place,function->instructions[i].immediate!=0,context);
     }
     initialization_free(&graph); return status;

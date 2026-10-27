@@ -25,7 +25,7 @@ XrXirStatus xr_xir_compile_interface_applications_copy_verified(const XrXirCompi
     if (!!source != !!count) return XR_XIR_BAD_STRUCTURE;
     if (!count) { *output = NULL; return XR_XIR_OK; }
     if ((uint64_t)count * sizeof(*source) > SIZE_MAX) return XR_XIR_BUDGET;
-    if (!xir_compile_work(compile_context, count)) return XR_XIR_BUDGET;
+
     XrXirInterfaceApplication *copy = xir_compile_calloc(compile_context, count, sizeof(*copy), &allocation_status);
     if (!copy) return allocation_status;
     XrXirStatus status = XR_XIR_OK;
@@ -56,7 +56,7 @@ XrXirStatus xr_xir_compile_constraint_array_copy_verified(const XrXirCompileCont
     if (!!source != !!count) return XR_XIR_BAD_STRUCTURE;
     if (!count) { *output = NULL; return XR_XIR_OK; }
     if ((uint64_t)count * sizeof(*source) > SIZE_MAX) return XR_XIR_BUDGET;
-    if (!xir_compile_work(compile_context, count)) return XR_XIR_BUDGET;
+
     XrXirConstraint *copy = xir_compile_calloc(compile_context, count, sizeof(*copy), &allocation_status);
     if (!copy) return allocation_status;
     for (uint32_t i = 0; i < count; ++i) {
@@ -67,16 +67,15 @@ XrXirStatus xr_xir_compile_constraint_array_copy_verified(const XrXirCompileCont
     }
     *output = copy; return XR_XIR_OK;
 }
-static XrXirStatus constraint_record_name(XrXirLiteral from, XrXirLiteral to, XrXirCompileContext *budget) {
-    uint64_t work = from.length == to.length ? (uint64_t)from.length + 1 : 1;
-    if (!xir_compile_work(budget, work)) return XR_XIR_BUDGET;
+static XrXirStatus constraint_record_name(XrXirLiteral from, XrXirLiteral to) {
+
 
     if (!from.bytes || !to.bytes || !from.length || !to.length) return XR_XIR_BAD_STRUCTURE;
     return from.length == to.length && !memcmp(from.bytes,to.bytes,from.length) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
 }
 static XrXirStatus constraint_record_identity(const XrXirTypes *from_types,
     const XrXirInterfaceApplication *from, const XrXirTypes *to_types,
-    const XrXirInterfaceApplication *to, XrXirCompileContext *budget) {
+    const XrXirInterfaceApplication *to) {
     if (!from_types || !to_types || !from_types->interfaces || !to_types->interfaces ||
         !from_types->interfaces->declarations || !to_types->interfaces->declarations ||
         from->declaration >= from_types->interfaces->count || to->declaration >= to_types->interfaces->count ||
@@ -86,8 +85,8 @@ static XrXirStatus constraint_record_identity(const XrXirTypes *from_types,
     const XrXirInterfaceDeclaration *b = &to_types->interfaces->declarations[to->declaration];
     if (a->parameter_count != b->parameter_count || from->argument_count != a->parameter_count ||
         to->argument_count != b->parameter_count) return XR_XIR_BAD_TYPE;
-    XrXirStatus status = constraint_record_name(a->module,b->module,budget);
-    return status == XR_XIR_OK ? constraint_record_name(a->name,b->name,budget) : status;
+    XrXirStatus status = constraint_record_name(a->module,b->module);
+    return status == XR_XIR_OK ? constraint_record_name(a->name,b->name) : status;
 }
 XrXirStatus xr_xir_compile_constraint_records_match(const XrXirCompileContext *compile_context, const XrXirTypes *from_types, XrXirConstraint from, const XrXirTypes *to_types, XrXirConstraint to, uint32_t parameter_count) {
     XrXirStatus allocation_status = XR_XIR_OK;
@@ -96,23 +95,23 @@ XrXirStatus xr_xir_compile_constraint_records_match(const XrXirCompileContext *c
     XrXirCompileContext *budget = &compile_state;
     if (!budget || (!!from.interfaces != !!from.interface_count) || (!!to.interfaces != !!to.interface_count))
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
+
 
     if (from.markers != to.markers || from.interface_count != to.interface_count) return XR_XIR_BAD_TYPE;
     if (!from.interface_count) return XR_XIR_OK;
     if (parameter_count > XR_XIR_TYPE_PARAMETER_LIMIT - XR_XIR_TYPE_PARAMETER_BASE) return XR_XIR_BAD_STRUCTURE;
     uint64_t bytes = (uint64_t)parameter_count * sizeof(XrXirType);
-    if (bytes > SIZE_MAX ||!xir_compile_work(budget, parameter_count)) return XR_XIR_BUDGET;
+    if (bytes > SIZE_MAX) return XR_XIR_BUDGET;
 
     XrXirType *parameters = parameter_count ? xir_compile_alloc(compile_context, (size_t)bytes, &allocation_status) : NULL;
     if (parameter_count && !parameters) {  return allocation_status; }
     for (uint32_t p = 0; p < parameter_count; ++p) parameters[p] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + p);
     XrXirStatus status = XR_XIR_OK;
     for (uint32_t i = 0; i < from.interface_count && status == XR_XIR_OK; ++i) {
-        if (!xir_compile_work(budget, 1)) { status = XR_XIR_BUDGET; break; }
+
 
         const XrXirInterfaceApplication *a = &from.interfaces[i], *b = &to.interfaces[i];
-        status = constraint_record_identity(from_types,a,to_types,b,budget);
+        status = constraint_record_identity(from_types,a,to_types,b);
         for (uint32_t p = 0; p < a->argument_count && status == XR_XIR_OK; ++p)
             status = xr_xir_compile_type_substitution_matches_between(budget, from_types, to_types, parameters, parameter_count, a->arguments[p], b->arguments[p]);
     }

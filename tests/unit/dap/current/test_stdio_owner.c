@@ -49,13 +49,13 @@ static size_t stdio_operation(unsigned mode,size_t fail) {
     else {
         CHECK(status==XR_XIR_OUT_OF_MEMORY && sites>fail && !message && length==777);
         XrCompileResourceStats spent={0};CHECK(xr_compile_resources_stats(owner,&spent)==XR_COMPILE_RESOURCE_OK);
-        if (!mode) { CHECK(!io && spent.live_bytes==baseline.live_bytes);CHECK(xdap_stdio_new(owner,8192,&io)==XR_XIR_OK); }
+        if (!mode) { CHECK(!io && spent.held_bytes==baseline.held_bytes);CHECK(xdap_stdio_new(owner,8192,&io)==XR_XIR_OK); }
         else {
             for (unsigned i=0;i<10 && !message;++i) CHECK(xdap_stdio_read(io,&message,&length,&eof)==XR_XIR_OK);
             CHECK(message && length==body);
         }
         XrCompileResourceStats retry={0};CHECK(xr_compile_resources_stats(owner,&retry)==XR_COMPILE_RESOURCE_OK);
-        CHECK(retry.allocated_bytes>=spent.allocated_bytes && retry.work>=spent.work);
+        CHECK(retry.allocated_bytes>=spent.allocated_bytes);
     }
     if (message) for (size_t i=0;i<length;++i) CHECK(message[i]=='a');
     xr_compile_resources_free(message);xdap_stdio_free(io);input_end(&input);owner_free(owner,baseline);return sites;
@@ -88,6 +88,23 @@ static void mode_failures(void) {
         clearerr(output ? stdout : stdin);owner_free(owner,baseline);
     }
 }
+static void finite_owner(void) {
+    StdioInput input=input_begin("",0);
+    XrCompileResourceStats baseline;XrCompileResources *owner=owner_new(&baseline);
+    XdapStdio *io=NULL;CHECK(xdap_stdio_new(owner,8192,&io)==XR_XIR_OK);
+    XrCompileResourceStats opened=sdk_stats(owner);xdap_stdio_free(io);owner_free(owner,baseline);
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,baseline.held_bytes,true};
+    owner=sdk_ledger(&limits);io=NULL;size_t attempts=runtime_attempts;
+    CHECK(xdap_stdio_new(owner,8192,&io)==XR_XIR_MEMORY_LIMIT && !io);
+    CHECK(sdk_stats(owner).held_bytes==baseline.held_bytes && runtime_attempts==attempts);
+    owner_free(owner,baseline);
+    limits.memory_limit=opened.held_bytes;owner=sdk_ledger(&limits);
+    CHECK(xdap_stdio_new(owner,8192,&io)==XR_XIR_OK && io);
+    xr_compile_resources_release(owner);xdap_stdio_free(io);
+    CHECK(!runtime_live && !runtime_bytes);
+    input_end(&input);
+    puts("Finite stdio constructor: owner-only held rejection before malloc, exact resident admission and producer-dead cleanup PASS");
+}
 int main(int argc,char **argv) {
     xr_test_suppress_dialogs();
     if (argc==2 && !strcmp(argv[1],"--resources")) {
@@ -96,6 +113,6 @@ int main(int argc,char **argv) {
             for (size_t i=0;i<sites;++i) stdio_operation(mode,i);
             printf("Stdio allocation slice %u: %zu sites; owned retry and physical baseline PASS\n",mode,sites);
         }
-    } else { CHECK(argc==1);rejected_prefix();mode_failures();puts("Strict stdio repeated rejection and mode failure ownership: PASS"); }
+    } else { CHECK(argc==1);rejected_prefix();mode_failures();finite_owner();puts("Strict stdio repeated rejection and mode failure ownership: PASS"); }
     return 0;
 }

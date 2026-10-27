@@ -22,9 +22,8 @@ static XrXirStatus library_comptime_foreign_source(XrXirCompileContext *context,
         CHECK(n>0 && (size_t)n<sizeof(paths[i]));
         overlays[i]=(XrModuleOverlayInput){authority,names[i],paths[i],texts[i],strlen(texts[i])};
     }
-    XrCompilerSession *session=NULL;XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK) return created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:
-        created==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
+    XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK) return p11_resource_status(created);
     XrXirSourceRequest request={session,paths[0],&authority,context,NULL,NULL,XR_XIR_LIBRARY,NULL};
     XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_overlay(&request,overlays,3,output,&diagnostic,NULL);

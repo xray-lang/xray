@@ -1,0 +1,32 @@
+cmake_minimum_required(VERSION 3.21)
+project(xray_request_resources_tests LANGUAGES C)
+if(NOT CMAKE_GENERATOR STREQUAL "Ninja")
+    message(FATAL_ERROR "Request resource tests require Ninja")
+endif()
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+option(XR_REQUEST_SANITIZERS "Instrument only the focused request resource targets" OFF)
+if(XR_REQUEST_SANITIZERS)
+    if(NOT MSVC OR NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
+        message(FATAL_ERROR "The focused dual sanitizer profile requires Windows clang-cl")
+    endif()
+    string(REPLACE "/RTC1" "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+    string(REPLACE "/RTCsu" "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+    string(REPLACE "/ZI" "/Zi" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+endif()
+enable_testing()
+include("${CMAKE_CURRENT_LIST_DIR}/../request_resources.cmake")
+if(XR_REQUEST_SANITIZERS)
+    set(XR_REQUEST_RUNTIME "C:/Program Files/LLVM/lib/clang/22/lib/windows")
+    foreach(request_target compile_request_foundation_production test_compile_request_memory test_compile_request_deadline)
+        target_compile_definitions(${request_target} PRIVATE XR_BUILD_ASAN=1 XR_BUILD_UBSAN=1)
+        target_compile_options(${request_target} PRIVATE
+            /fsanitize=address /clang:-fsanitize=undefined /clang:-fno-sanitize=function /Oy-)
+        # The dynamic ASan runtime also owns the UBSan handlers on this provider.
+        target_link_options(${request_target} PRIVATE /INCREMENTAL:NO /OPT:NOLLDTAILMERGE
+            "${XR_REQUEST_RUNTIME}/clang_rt.asan_dynamic-x86_64.lib"
+            /INCLUDE:__asan_seh_interceptor
+            "/WHOLEARCHIVE:${XR_REQUEST_RUNTIME}/clang_rt.asan_dynamic_runtime_thunk-x86_64.lib")
+    endforeach()
+endif()

@@ -8,11 +8,11 @@
  */
 typedef enum ViewAccessDecision { VIEW_ACCESS_SAFE,VIEW_ACCESS_BLOCKED,VIEW_ACCESS_UNKNOWN } ViewAccessDecision;
 typedef enum ViewAccessAncestor { VIEW_ACCESS_NO_ANCESTOR,VIEW_ACCESS_ANCESTOR,VIEW_ACCESS_ANCESTRY_UNKNOWN } ViewAccessAncestor;
-static XrXirStatus view_access_compatible(ViewAccess *a,const XrXirViewLoanOrigin *left,
+static XrXirStatus view_access_compatible(const XrXirViewLoanOrigin *left,
     const XrXirViewLoanOrigin *right,bool *compatible) {
     *compatible=true;
     for (uint32_t i=0;i<left->choice_count;++i) for (uint32_t j=0;j<right->choice_count;++j) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         if (left->choices[i].block==right->choices[j].block &&
             left->choices[i].predecessor!=right->choices[j].predecessor) *compatible=false;
     }
@@ -23,7 +23,7 @@ static XrXirStatus view_access_origin_stable(ViewAccess *a,const ViewAccessOrigi
     *stable=false;if (event->repeated_phi || !view_access_leaf(a,event->type) || event->kind==XR_XIR_VIEW_LOAN_UNRESOLVED)
         return XR_XIR_OK;
     for (uint32_t i=0;i<event->choice_count;++i) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         if (a->repeated[event->choices[i].block]) return XR_XIR_OK;
     }
     XrXirStatus status=view_access_stable(a,event->value,stable);
@@ -40,7 +40,7 @@ static bool view_access_same_scope(const XrXirViewLoanOrigin *left,const XrXirVi
         left->selection_count==right->selection_count && (!left->selection_count ||
         !memcmp(left->selection,right->selection,left->selection_count*sizeof(uint32_t)));
 }
-static XrXirStatus view_access_pinned_choices(ViewAccess *a,const XrXirViewLoanOrigin *event,
+static XrXirStatus view_access_pinned_choices(const XrXirViewLoanOrigin *event,
     const XrXirViewLoanOrigin *left,const XrXirViewLoanOrigin *right,bool *pinned) {
     *pinned=true;
     for (uint32_t i=0;i<event->choice_count;++i) {
@@ -48,7 +48,7 @@ static XrXirStatus view_access_pinned_choices(ViewAccess *a,const XrXirViewLoanO
         for (uint32_t side=0;side<2;++side) {
             const XrXirViewLoanOrigin *source=side?right:left;
             for (uint32_t j=0;j<source->choice_count;++j) {
-                if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
                 found|=event->choices[i].block==source->choices[j].block &&
                     event->choices[i].predecessor==source->choices[j].predecessor;
             }
@@ -64,7 +64,7 @@ static XrXirStatus view_access_ancestor(ViewAccess *a,const ViewAccessOrigin *pa
     uint64_t bound=(uint64_t)a->body->parameter_count+a->body->instruction_count;
     for (uint64_t depth=0;depth<bound;++depth) {
         const XrXirViewLoanOrigin *current=&current_origin->event;
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         if (current->kind==XR_XIR_VIEW_LOAN_NEW) {*output=VIEW_ACCESS_NO_ANCESTOR;return XR_XIR_OK;}
         if (current->kind==XR_XIR_VIEW_LOAN_INPUT) {
             if (parent->kind!=XR_XIR_VIEW_LOAN_INPUT) *output=VIEW_ACCESS_NO_ANCESTOR;
@@ -79,8 +79,8 @@ static XrXirStatus view_access_ancestor(ViewAccess *a,const ViewAccessOrigin *pa
         const ViewAccessOrigin *next=NULL;uint32_t count=0,matches=0;
         for (ViewAccessOrigin *p=origins;p;p=p->next) {
             bool compatible=false,other=false,stable=false;
-            status=view_access_compatible(a,parent,&p->event,&compatible);
-            if (status==XR_XIR_OK) status=view_access_compatible(a,child,&p->event,&other);
+            status=view_access_compatible(parent,&p->event,&compatible);
+            if (status==XR_XIR_OK) status=view_access_compatible(child,&p->event,&other);
             if (status!=XR_XIR_OK) return status;if (!compatible || !other || p->event.kind==XR_XIR_VIEW_LOAN_ABSENT) continue;
             status=view_access_origin_stable(a,p,&stable);if (status!=XR_XIR_OK) return status;
             if (stable) {
@@ -97,7 +97,7 @@ static XrXirStatus view_access_ancestor(ViewAccess *a,const ViewAccessOrigin *pa
         if (matches==count) {*output=VIEW_ACCESS_ANCESTOR;return XR_XIR_OK;}
         if (count!=1) return XR_XIR_OK;
         XR_CHECK(next,"a unique compatible parent keeps its owned scope observation");
-        bool pinned=false;status=view_access_pinned_choices(a,&next->event,parent,child,&pinned);
+        bool pinned=false;status=view_access_pinned_choices(&next->event,parent,child,&pinned);
         if (status!=XR_XIR_OK || !pinned) return status;current_origin=next;
     }
     return XR_XIR_OK;
@@ -109,7 +109,7 @@ static XrXirStatus view_access_fresh_input(ViewAccess *a,const XrXirViewRootEven
         fresh->kind!=XR_XIR_VIEW_ROOT_CELL || fresh->root_function!=a->function || input->root_function!=a->function ||
         (input->kind!=XR_XIR_VIEW_ROOT_PARAMETER && input->kind!=XR_XIR_VIEW_ROOT_BORROWED_PARAMETER)) return XR_XIR_OK;
     for (uint32_t i=0;i<fresh->step_count;++i) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         if (xr_xir_type_is_class(a->resolver->check.module->types,fresh->steps[i].container)) return XR_XIR_OK;
     }
     XrXirStatus status=view_access_stable(a,fresh->root_value,disjoint);
@@ -133,7 +133,7 @@ static XrXirStatus view_access_overlap(ViewAccess *a,const XrXirViewRootEvent *l
     }
     uint32_t common=left->step_count<right->step_count?left->step_count:right->step_count;
     for (uint32_t i=0;i<common;++i) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         const XrXirViewRootStep *l=left->steps+i,*r=right->steps+i;
         if (xr_xir_type_is_class(c->module->types,l->container) ||
             l->operation!=r->operation || l->container!=r->container) return XR_XIR_OK;
@@ -147,7 +147,7 @@ static XrXirStatus view_access_overlap(ViewAccess *a,const XrXirViewRootEvent *l
     for (uint32_t side=0;side<2;++side) {
         const XrXirViewRootEvent *event=side?right:left;
         for (uint32_t i=common;i<event->step_count;++i) {
-            if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
             if (xr_xir_type_is_class(c->module->types,event->steps[i].container)) return XR_XIR_OK;
         }
     }

@@ -155,7 +155,7 @@ XR_FUNC int xr_xir_host_main(const XrXirProgramSpec *spec, bool sandbox) {
     XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &context.resources);
     if (opened != XR_COMPILE_RESOURCE_OK)
         return host_binary_streams() ? host_failure("XR_RUN_6002: cannot initialize program admission\n",
-            opened == XR_COMPILE_RESOURCE_BUDGET ? 1 : 4) : 4;
+            opened == XR_COMPILE_RESOURCE_MEMORY_LIMIT || opened == XR_COMPILE_RESOURCE_OVERFLOW ? 1 : 4) : 4;
     XrXirProgram *program = NULL;
     XrXirStatus sealed = xr_xir_compile_program_seal(&context, spec, &program);
     xr_compile_resources_release(context.resources);

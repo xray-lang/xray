@@ -13,14 +13,14 @@
 int xr_parser_grow_capacity(Parser *parser, int old) {
     if (!xr_parser_healthy(parser)) return 0;
     if (old < 0 || old > INT_MAX / 2) {
-        xr_compile_state_fail(parser->state, old < 0 ? XR_COMPILE_RESOURCE_BAD_ARGUMENT : XR_COMPILE_RESOURCE_BUDGET);
+        xr_compile_state_fail(parser->state, old < 0 ? XR_COMPILE_RESOURCE_BAD_ARGUMENT : XR_COMPILE_RESOURCE_OVERFLOW);
         return 0;
     }
     return old ? old * 2 : 4;
 }
 
 char xr_parser_read_byte(const Parser *parser, const char *address) {
-    if (xr_compile_state_work(parser->state, 1) != XR_COMPILE_RESOURCE_OK) return 0;
+    if (!xr_parser_healthy(parser)) return 0;
     return *address;
 }
 
@@ -33,7 +33,7 @@ size_t xr_parser_string_length(const Parser *parser, const char *text) {
 int xr_parser_compare_bytes(const Parser *parser, const void *left, const void *right, size_t length) {
     const unsigned char *a = left, *b = right;
     for (size_t i = 0; i < length; ++i) {
-        if (xr_compile_state_work(parser->state, 2) != XR_COMPILE_RESOURCE_OK) return 0;
+        if ((i&4095u)==0 && xr_compile_session_poll(parser->compiler_session)!=XR_COMPILE_RESOURCE_OK)return 0;
         unsigned char first = a[i], second = b[i];
         if (first != second) return first < second ? -1 : 1;
     }
@@ -42,7 +42,7 @@ int xr_parser_compare_bytes(const Parser *parser, const void *left, const void *
 
 int xr_parser_compare_string_n(const Parser *parser, const char *left, const char *right, size_t length) {
     for (size_t i = 0; i < length; ++i) {
-        if (xr_compile_state_work(parser->state, 2) != XR_COMPILE_RESOURCE_OK) return 0;
+        if ((i&4095u)==0 && xr_compile_session_poll(parser->compiler_session)!=XR_COMPILE_RESOURCE_OK)return 0;
         unsigned char a = (unsigned char) left[i], b = (unsigned char) right[i];
         if (a != b) return a < b ? -1 : 1;
         if (!a) return 0;
@@ -57,7 +57,7 @@ int xr_parser_compare_string(const Parser *parser, const char *left, const char 
 void *xr_parser_find_byte(const Parser *parser, const void *text, int value, size_t length) {
     const unsigned char *bytes = text;
     for (size_t i = 0; i < length; ++i) {
-        if (xr_compile_state_work(parser->state, 1) != XR_COMPILE_RESOURCE_OK) return NULL;
+        if ((i&4095u)==0 && xr_compile_session_poll(parser->compiler_session)!=XR_COMPILE_RESOURCE_OK)return NULL;
         if (bytes[i] == (unsigned char) value) return (void *) (bytes + i);
     }
     return NULL;
@@ -65,7 +65,7 @@ void *xr_parser_find_byte(const Parser *parser, const void *text, int value, siz
 
 char *xr_parser_copy_string_n(const Parser *parser, char *destination, const char *source, size_t length) {
     for (size_t i = 0; i < length; ++i) {
-        if (xr_compile_state_work(parser->state, 1) != XR_COMPILE_RESOURCE_OK) return NULL;
+        if ((i&4095u)==0 && xr_compile_session_poll(parser->compiler_session)!=XR_COMPILE_RESOURCE_OK)return NULL;
         char value = source[i];
         destination[i] = value;
         if (!value) {
@@ -84,26 +84,25 @@ char *xr_parser_copy_string(const Parser *parser, char *destination, const char 
         ? destination : NULL;
 }
 
-static int parser_utf8_read(void *context, const uint8_t *address, uint8_t *output) {
-    XrCompileState *state = context;
-    if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) return 0;
-    *output = *address;
-    return 1;
+typedef struct ParserUtf8Input {
+    const Parser *parser;
+    size_t bytes;
+} ParserUtf8Input;
+static int parser_utf8_read(void *context,const uint8_t *address,uint8_t *output) {
+    ParserUtf8Input *input=context;
+    if((input->bytes++&4095u)==0 &&
+        xr_compile_session_poll(input->parser->compiler_session)!=XR_COMPILE_RESOURCE_OK)return 0;
+    *output=*address;return 1;
 }
-
-bool xr_parser_utf8_validate(const Parser *parser, const char *text, size_t length) {
-    XrUtf8ScanResult scan;
-    return xr_utf8_scan_strict_read((const uint8_t *) text, length, parser_utf8_read, parser->state, &scan)
-        && scan.error == XR_UTF8_OK;
+bool xr_parser_utf8_validate(const Parser *parser,const char *text,size_t length) {
+    XrUtf8ScanResult scan;ParserUtf8Input input={parser,0};
+    return xr_utf8_scan_strict_read((const uint8_t *)text,length,parser_utf8_read,&input,&scan) && scan.error==XR_UTF8_OK;
 }
-
-int xr_parser_utf8_decode(const Parser *parser, const char *text, size_t length, uint32_t *output) {
-    XrUtf8Step step;
-    if (!xr_utf8_core_decode_step_read((const uint8_t *) text, length, parser_utf8_read, parser->state, &step))
-        return 0;
-    if (step.error != XR_UTF8_OK) { *output = XR_UNICODE_INVALID; return 1; }
-    *output = step.scalar;
-    return (int) step.consumed;
+int xr_parser_utf8_decode(const Parser *parser,const char *text,size_t length,uint32_t *output) {
+    XrUtf8Step step;ParserUtf8Input input={parser,0};
+    if(!xr_utf8_core_decode_step_read((const uint8_t *)text,length,parser_utf8_read,&input,&step))return 0;
+    if(step.error!=XR_UTF8_OK){*output=XR_UNICODE_INVALID;return 1;}
+    *output=step.scalar;return (int)step.consumed;
 }
 
 XrQuotedStatus xr_parser_decode_quoted(Parser *parser, const Token *token, bool escapes,
@@ -113,14 +112,15 @@ XrQuotedStatus xr_parser_decode_quoted(Parser *parser, const Token *token, bool 
         return XR_QUOTED_BAD_ARGUMENT;
     }
     XrQuotedPayload temporary = {0};
-    XrQuotedStatus status = xr_compile_quoted_payload_decode(parser->state, token, escapes, &temporary, error);
+    XrQuotedStatus status = xr_compile_quoted_payload_decode(&(XrQuotedInput){parser->state,xr_compile_session_request(parser->compiler_session)}, token, escapes, &temporary, error);
     if (status != XR_QUOTED_OK) return status;
     char *owned = ast_strndup(parser->compiler_session, (const char *) temporary.bytes, temporary.length);
     size_t length = temporary.length;
     xr_quoted_payload_free(&temporary);
     if (!owned) {
         switch (xr_compile_state_status(parser->state)) {
-            case XR_COMPILE_RESOURCE_BUDGET: return XR_QUOTED_BUDGET;
+            case XR_COMPILE_RESOURCE_MEMORY_LIMIT:return XR_QUOTED_MEMORY_LIMIT;
+            case XR_COMPILE_RESOURCE_OVERFLOW:return XR_QUOTED_OVERFLOW;
             case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_QUOTED_OUT_OF_MEMORY;
             default: return XR_QUOTED_BAD_ARGUMENT;
         }
@@ -192,8 +192,4 @@ char *xr_parser_token_string(Parser *parser, const Token *token) {
         return NULL;
     }
     return ast_strndup(parser->compiler_session, token->start, (size_t) token->length);
-}
-
-bool xr_parser_step(const Parser *parser) {
-    return xr_parser_healthy(parser) && xr_compile_state_work(parser->state, 1) == XR_COMPILE_RESOURCE_OK;
 }

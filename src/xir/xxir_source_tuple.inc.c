@@ -11,7 +11,7 @@ static bool source_tuple_index(SourceContext *ctx,AstNode *node,const char *name
     if (!source_text_length(ctx,node,name,&length)) return false;
     if (!length) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple field index is empty");
     for (size_t i=0;i<length;++i) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         unsigned char digit=(unsigned char)name[i];
         if (digit<'0' || digit>'9' || index>(UINT32_MAX-(digit-'0'))/10)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple field requires a bounded decimal index");
@@ -46,7 +46,7 @@ static bool source_tuple_literal(SourceContext *ctx,AstNode *node,SourceExpected
     if (ctx->active_expression->tuple_prefix)
         return source_tuple_expanded_literal(ctx,node,expected,value);
     for (int i=0;i<literal->count;++i) {
-        if (!source_work(ctx,literal->elements[i])) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (literal->elements[i] && literal->elements[i]->type==AST_SPREAD_EXPR)
             return source_tuple_expanded_literal(ctx,node,expected,value);
     }
@@ -82,7 +82,7 @@ static bool source_tuple_spread_value(SourceContext *ctx,AstNode *node,
     if (!plan) return false;
     SourceExpressionPlan *literal=plan;
     while (literal->syntax->type==AST_GROUPING && literal->left) {
-        if (!source_work(ctx,literal->syntax)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         literal=literal->left;
     }
     /* A literal consumes its own statically expanded prefix. The enclosing
@@ -126,7 +126,7 @@ static bool source_tuple_expanded_literal(SourceContext *ctx,AstNode *node,
     SourceValue *fields=NULL;uint32_t count=0,capacity=0;
     for (int i=0;i<literal->count;++i) {
         AstNode *child=literal->elements[i];SourceValue element;
-        if (!child || !source_work(ctx,child))
+        if (!child || !((ctx)->diagnostic.status == XR_XIR_OK))
             return child ? false : source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple literal entry is missing");
         if (child->type!=AST_SPREAD_EXPR) {
             if (count>=65536) return source_fail(ctx,child,XR_XIR_BUDGET,"Tuple expanded arity exhausted");
@@ -162,7 +162,7 @@ static bool source_tuple_expanded_literal(SourceContext *ctx,AstNode *node,
         if (!types || !source_copy_bytes(ctx,child,types,signature->parameters,arity*sizeof(*types))) return false;
         for (uint32_t f=0;f<arity;++f) {
             SourceValue field;
-            if (!source_work(ctx,child) ||
+            if (!((ctx)->diagnostic.status == XR_XIR_OK) ||
                 !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TUPLE_FIELD,types[f].type,
                     {element.id,0},{0},f,{0}},&field) ||
                 !source_tuple_append(ctx,child,context,field,&fields,&count,&capacity)) return false;
@@ -176,7 +176,7 @@ static bool source_tuple_expanded_literal(SourceContext *ctx,AstNode *node,
     if (!types || !payloads) return false;
     uint32_t payload_count=0;
     for (uint32_t f=0;f<count;++f) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         types[f]=(XrXirCallableParameter){fields[f].type,0};
         if (fields[f].type!=XR_XIR_UNIT) payloads[payload_count++]=fields[f];
     }

@@ -43,7 +43,7 @@ fn utf16DecodeOptions(order: Endian) -> Utf16DecodeOptions {
 
 fn hexErrorCode(text: string) -> i64 {
     try {
-        var decoded = encoding.hexDecode(text)
+        var decoded = try encoding.hexDecode(text)
         return -1 - len(decoded)
     } catch (e: HexError) {
         return match (e) {
@@ -55,7 +55,7 @@ fn hexErrorCode(text: string) -> i64 {
 
 fn utf16ErrorCode(data: Slice<u8>) -> i64 {
     try {
-        var decoded = encoding.utf16Decode(data)
+        var decoded = try encoding.utf16Decode(data)
         return -1 - len(decoded)
     } catch (e: Utf16Error) {
         return match (e) {
@@ -74,7 +74,7 @@ print(encoding.hexEncode(allBytes[:]) == ALL_BYTES_HEX)
 var roundtripOk = true
 for (var length = 0; length <= 96; length++) {
     var input = fuzzBytes(length, 193 + length)
-    var decoded = encoding.hexDecode(encoding.hexEncode(input[:]))
+    var decoded = try encoding.hexDecode(encoding.hexEncode(input[:]))
     if (!sameBytes(input, decoded)) { roundtripOk = false }
 }
 print(roundtripOk)
@@ -102,8 +102,8 @@ var text = "A😀𝄞"
 var le = encoding.utf16Encode(text)
 var be = encoding.utf16Encode(text, utf16EncodeOptions(Endian.BE))
 print(len(le))
-print(encoding.utf16Decode(le[:]) == text)
-print(encoding.utf16Decode(be[:], utf16DecodeOptions(Endian.BE)) == text)
+print(try encoding.utf16Decode(le[:]) == text)
+print(try encoding.utf16Decode(be[:], utf16DecodeOptions(Endian.BE)) == text)
 
 print(hexErrorCode("abc"))
 print(hexErrorCode("0g"))

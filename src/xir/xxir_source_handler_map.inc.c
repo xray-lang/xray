@@ -24,7 +24,7 @@ static bool source_handler_selector(SourceContext *ctx,const SourceHandlerMap *m
     /* An interval is published only if its complete instruction sequence
      * survives sealing unchanged. A future emitter must provide new facts. */
     for (uint32_t i=input->first;i<input->accepted;++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t mapped=0;
         if (!source_handler_instruction(map,i,&mapped) ||
             mapped!=(uint64_t)output->first+i-input->first) return false;
@@ -42,7 +42,7 @@ static bool source_handler_map(SourceContext *ctx,const uint32_t *map,uint32_t c
     if ((body->handler_count && !handlers) || (body->route_count && !routes)) return false;
     uint32_t used=0;
     for (const SourceHandlerRecipe *recipe=body->handler_recipes;recipe;recipe=recipe->next) {
-        if (!source_work_units(ctx,NULL,sizeof(*recipe))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (++used>body->handler_count || !recipe->identity || recipe->identity>body->handler_count ||
             handlers[recipe->identity-1].selector_count || !recipe->selector_count || !recipe->selectors ||
             (recipe->parent && (recipe->parent->identity<=recipe->identity || recipe->parent->identity>body->handler_count))) goto invalid;
@@ -60,7 +60,7 @@ static bool source_handler_map(SourceContext *ctx,const uint32_t *map,uint32_t c
     if (used!=body->handler_count) goto invalid;
     used=0;
     for (const SourceRouteRecipe *recipe=body->route_recipes;recipe;recipe=recipe->next) {
-        if (!source_work_units(ctx,NULL,sizeof(*recipe))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t instruction=0,edge=0,error=0;
         if (used==body->route_count || !recipe->handler || !recipe->handler->identity || !recipe->flow ||
             recipe->flow->input==UINT32_MAX || recipe->flow->jump!=recipe->edge || recipe->flow->value.id!=recipe->error ||
@@ -68,7 +68,7 @@ static bool source_handler_map(SourceContext *ctx,const uint32_t *map,uint32_t c
             !source_handler_instruction(&mapping,recipe->edge,&edge) || !source_region_id(map,count,recipe->error,&error)) goto invalid;
         uint32_t at=used;
         while (at && routes[at-1].instruction>instruction) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             routes[at]=routes[at-1];--at;
         }
         if (at && routes[at-1].instruction==instruction) goto invalid;

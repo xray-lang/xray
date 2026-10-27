@@ -20,7 +20,7 @@ static bool literal_provider(SourceContext *ctx,const XirCtfeInstanceView *view,
             "literal result changed its actual closed definition type");
     if (f>=ctx->materialization_begin || !source_materialization_storage(ctx,f+1))
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"literal provider inventory exhausted");
-    if (!source_work_units(ctx,NULL,sizeof(XrXirFunction)+sizeof(XrXirFunctionIdentity)+sizeof(*binding))) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     char *name=source_alloc(ctx,40,1);
     if (!name || source_format(ctx,name,40,"$literal%u",f)!=XR_DIAG_OK)
         return source_fail(ctx,NULL,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BUDGET:ctx->diagnostic.status,"literal provider name failed");

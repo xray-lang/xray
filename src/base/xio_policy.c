@@ -21,21 +21,20 @@ static void system_free(void *context, void *memory) {
     (void)context;
     xr_free(memory);
 }
-static XrOsIoStatus system_work(void *context, uint64_t units) {
-    (void)units;
-    return context ? XR_OS_IO_OK : XR_OS_IO_BAD_ARGUMENT;
-}
 XR_FUNC XrOsIoPolicy xr_os_io_system_policy(void) {
     static unsigned char context;
-    return (XrOsIoPolicy){&context, system_allocate, system_free, system_work};
+    return (XrOsIoPolicy){&context, system_allocate, system_free};
 }
 
 static XrOsIoStatus compile_status(XrCompileResourceStatus status) {
     switch (status) {
     case XR_COMPILE_RESOURCE_OK: return XR_OS_IO_OK;
-    case XR_COMPILE_RESOURCE_BUDGET: return XR_OS_IO_BUDGET;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: return XR_OS_IO_MEMORY_LIMIT;
+    case XR_COMPILE_RESOURCE_OVERFLOW: return XR_OS_IO_OVERFLOW;
     case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_OS_IO_OUT_OF_MEMORY;
-    case XR_COMPILE_RESOURCE_CANCELLED:
+    case XR_COMPILE_RESOURCE_CANCELLED: return XR_OS_IO_CANCELLED;
+    case XR_COMPILE_RESOURCE_DEADLINE: return XR_OS_IO_DEADLINE;
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE: return XR_OS_IO_CLOCK_FAILURE;
     case XR_COMPILE_RESOURCE_BAD_ARGUMENT: return XR_OS_IO_BAD_ARGUMENT;
     }
     return XR_OS_IO_BAD_ARGUMENT;
@@ -47,9 +46,6 @@ static void compile_free(void *context, void *memory) {
     (void)context;
     xr_compile_resources_free(memory);
 }
-static XrOsIoStatus compile_work(void *context, uint64_t units) {
-    return compile_status(xr_compile_resources_work(context, units));
-}
 XR_FUNC XrOsIoPolicy xr_compile_io_policy(XrCompileResources *resources) {
-    return (XrOsIoPolicy){resources, compile_allocate, compile_free, compile_work};
+    return (XrOsIoPolicy){resources, compile_allocate, compile_free};
 }

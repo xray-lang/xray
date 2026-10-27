@@ -124,8 +124,6 @@ static XrType *create_type_for_builtin(XlspBuiltinType type) {
             return xr_type_new_channel(NULL, placeholder);
         case XLSP_TYPE_BIGINT:
             return xr_type_new_bigint(NULL);
-        case XLSP_TYPE_STRINGBUILDER:
-            return xr_type_new_stringbuilder(NULL);
         case XLSP_TYPE_PANIC_INFO:
             return xr_type_new_named_instance(NULL, "PanicInfo");
         case XLSP_TYPE_COROUTINE:
@@ -480,8 +478,6 @@ XlspBuiltinType xlsp_builtin_type_from_name(const char *name) {
         return XLSP_TYPE_JSON;
     if (strcmp(name, TYPE_NAME_BIGINT) == 0)
         return XLSP_TYPE_BIGINT;
-    if (strcmp(name, TYPE_NAME_STRINGBUILDER) == 0)
-        return XLSP_TYPE_STRINGBUILDER;
     if (strcmp(name, TYPE_NAME_PANIC_INFO) == 0)
         return XLSP_TYPE_PANIC_INFO;
     if (strcmp(name, TYPE_NAME_COROUTINE) == 0)
@@ -640,8 +636,6 @@ XlspBuiltinType xlsp_infer_literal_type(const char *text) {
         return XLSP_TYPE_CHANNEL;
     if (strncmp(text, TYPE_NAME_BIGINT, 6) == 0)
         return XLSP_TYPE_BIGINT;
-    if (strncmp(text, TYPE_NAME_STRINGBUILDER, 13) == 0)
-        return XLSP_TYPE_STRINGBUILDER;
 
     return XLSP_TYPE_UNRESOLVED;
 }

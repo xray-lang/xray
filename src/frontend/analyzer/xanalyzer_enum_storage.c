@@ -65,7 +65,7 @@ XR_FUNC XrCompileResourceStatus xa_enum_capture_status(XrCompileState *state, Xr
     return xr_compile_state_fail(
         state, status == XR_OS_IO_OK              ? XR_COMPILE_RESOURCE_OK
                : status == XR_OS_IO_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY
-               : status == XR_OS_IO_BUDGET        ? XR_COMPILE_RESOURCE_BUDGET
+               : status == XR_OS_IO_OVERFLOW        ? XR_COMPILE_RESOURCE_BUDGET
                                                   : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
 }
 XR_FUNC void xa_enum_info_free(XaEnumInfo *info) {
@@ -106,7 +106,7 @@ XR_FUNC XrOsIoStatus xa_enum_info_new(const XrOsIoPolicy *policy, const char *no
         !output || *output)
         return XR_OS_IO_BAD_ARGUMENT;
     if ((size_t) count > SIZE_MAX / sizeof(XaEnumVariantInfo))
-        return XR_OS_IO_BUDGET;
+        return XR_OS_IO_OVERFLOW;
     XrIoContext io = {policy, XR_OS_IO_OK};
     EnumInfoOwner *owner = io_alloc(&io, sizeof(*owner));
     if (!owner)
@@ -137,14 +137,14 @@ XR_FUNC XrOsIoStatus xa_enum_info_new(const XrOsIoPolicy *policy, const char *no
     if (io.status == XR_OS_IO_OK)
         info->name = copy_text(&io, name);
     for (uint32_t i = 0; i < count && io.status == XR_OS_IO_OK; ++i) {
-        if (!io_work(&io, 1))
+        if (!((&io)->status == XR_OS_IO_OK))
             break;
         info->variants[i].owner = info;
         info->variants[i].symbol = -1;
         info->variants[i].tag = i;
     }
     if (io.status == XR_OS_IO_OK)
-        (void) io_work(&io, 1);
+        (void) ((&io)->status == XR_OS_IO_OK);
     if (io.status != XR_OS_IO_OK) {
         xa_enum_info_free(info);
         return io.status;
@@ -159,7 +159,7 @@ XR_FUNC XrOsIoStatus xa_enum_variant_set_name(XaEnumVariantInfo *variant, const 
     XrIoContext io = {policy, XR_OS_IO_OK};
     char *copy = copy_text(&io, name);
     if (io.status == XR_OS_IO_OK)
-        (void) io_work(&io, 1);
+        (void) ((&io)->status == XR_OS_IO_OK);
     if (io.status != XR_OS_IO_OK) {
         io_free(&io, copy);
         return io.status;
@@ -184,7 +184,7 @@ XR_FUNC XrOsIoStatus xa_enum_variant_set_payload_names(XaEnumVariantInfo *varian
     }
     for (uint16_t i = 0; i < count && io.status == XR_OS_IO_OK; ++i) {
         size_t length;
-        if (!io_work(&io, 1) || !io_length(&io, names[i], &length))
+        if (!((&io)->status == XR_OS_IO_OK) || !io_length(&io, names[i], &length))
             break;
         if (!length) {
             (void) io_status(&io, XR_OS_IO_BAD_ARGUMENT);
@@ -193,7 +193,7 @@ XR_FUNC XrOsIoStatus xa_enum_variant_set_payload_names(XaEnumVariantInfo *varian
         for (uint16_t prior = 0; prior < i && io.status == XR_OS_IO_OK; ++prior) {
             size_t n = 0;
             for (;;) {
-                if (!io_work(&io, 2))
+                if (!((&io)->status == XR_OS_IO_OK))
                     break;
                 char a = names[i][n], b = names[prior][n];
                 if (a != b)
@@ -209,7 +209,7 @@ XR_FUNC XrOsIoStatus xa_enum_variant_set_payload_names(XaEnumVariantInfo *varian
             copy[i] = copy_text(&io, names[i]);
     }
     if (io.status == XR_OS_IO_OK)
-        (void) io_work(&io, 1);
+        (void) ((&io)->status == XR_OS_IO_OK);
     if (io.status != XR_OS_IO_OK) {
         free_names(policy, copy, count);
         return io.status;
@@ -236,7 +236,7 @@ XR_FUNC XrOsIoStatus xa_enum_variant_set_payload_locations(XaEnumVariantInfo *va
         }
     }
     for (uint16_t i = 0; i < count && io.status == XR_OS_IO_OK; ++i) {
-        if (!io_work(&io, 1))
+        if (!((&io)->status == XR_OS_IO_OK))
             break;
         XrNameSpan span = spans[i];
         size_t length;
@@ -258,7 +258,7 @@ XR_FUNC XrOsIoStatus xa_enum_variant_set_payload_locations(XaEnumVariantInfo *va
         locations[i].end_column = (uint32_t) span.column + (uint32_t) length;
     }
     if (io.status == XR_OS_IO_OK)
-        (void) io_work(&io, 1);
+        (void) ((&io)->status == XR_OS_IO_OK);
     if (io.status != XR_OS_IO_OK) {
         if (locations)
             for (uint16_t i = 0; i < count; ++i)
@@ -283,7 +283,7 @@ XR_FUNC XrOsIoStatus xa_enum_variant_set_payload_types(XaEnumVariantInfo *varian
             (void) io_copy(&io, copy, types, (size_t) count * sizeof(*copy));
     }
     if (io.status == XR_OS_IO_OK)
-        (void) io_work(&io, 1);
+        (void) ((&io)->status == XR_OS_IO_OK);
     if (io.status != XR_OS_IO_OK) {
         io_free(&io, copy);
         return io.status;
@@ -300,12 +300,12 @@ XR_FUNC XrOsIoStatus xa_enum_info_finalize_layout(XaEnumInfo *info) {
         return XR_OS_IO_BAD_ARGUMENT;
     XrIoContext io = {&owner->policy, XR_OS_IO_OK};
     if ((size_t) info->variant_count > SIZE_MAX / sizeof(const char *))
-        return XR_OS_IO_BUDGET;
+        return XR_OS_IO_OVERFLOW;
     const char **names = io_alloc(&io, (size_t) info->variant_count * sizeof(*names));
     int *counts = io_alloc(&io, (size_t) info->variant_count * sizeof(*counts));
     XrEnumLayout *layout = NULL;
     for (uint32_t i = 0; i < info->variant_count && io.status == XR_OS_IO_OK; ++i) {
-        if (!io_work(&io, 1))
+        if (!((&io)->status == XR_OS_IO_OK))
             break;
         XaEnumVariantInfo *variant = &info->variants[i];
         if (variant->owner != info || !variant->name ||
@@ -335,7 +335,7 @@ XR_FUNC XrOsIoStatus xa_enum_info_finalize_layout(XaEnumInfo *info) {
             continue;
         uint8_t *ids = io_alloc(&io, variant->payload_count);
         for (uint16_t j = 0; j < variant->payload_count && io.status == XR_OS_IO_OK; ++j) {
-            if (!io_work(&io, 1))
+            if (!((&io)->status == XR_OS_IO_OK))
                 break;
             ids[j] = xr_type_to_tid(variant->payload_types[j]);
         }
@@ -346,7 +346,7 @@ XR_FUNC XrOsIoStatus xa_enum_info_finalize_layout(XaEnumInfo *info) {
         io_free(&io, ids);
     }
     if (io.status == XR_OS_IO_OK)
-        (void) io_work(&io, 1);
+        (void) ((&io)->status == XR_OS_IO_OK);
     if (io.status == XR_OS_IO_OK) {
         XrEnumLayout *old = info->layout;
         info->layout = layout;
@@ -372,7 +372,7 @@ XR_FUNC XrOsIoStatus xa_enum_info_clone(const XrOsIoPolicy *policy, const XaEnum
         xa_enum_info_new(policy, source->nominal_owner, source->name, source->variant_count, &copy);
     XrIoContext io = {policy, status};
     for (uint32_t i = 0; i < source->variant_count && io.status == XR_OS_IO_OK; ++i) {
-        if (!io_work(&io, 1))
+        if (!((&io)->status == XR_OS_IO_OK))
             break;
         const XaEnumVariantInfo *src = &source->variants[i];
         XaEnumVariantInfo *dst = &copy->variants[i];
@@ -421,7 +421,7 @@ XR_FUNC XrOsIoStatus xa_enum_info_clone(const XrOsIoPolicy *policy, const XaEnum
     if (io.status == XR_OS_IO_OK)
         (void) io_status(&io, xa_enum_info_finalize_layout(copy));
     if (io.status == XR_OS_IO_OK)
-        (void) io_work(&io, 1);
+        (void) ((&io)->status == XR_OS_IO_OK);
     if (io.status != XR_OS_IO_OK) {
         xa_enum_info_free(copy);
         return io.status;

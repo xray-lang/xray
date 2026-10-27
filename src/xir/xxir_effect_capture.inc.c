@@ -10,7 +10,7 @@
  *   A closed target address is not precision. Only original variable captures
  *   and the same derived formula authenticate a different latent outer bound.
  */
-static XrXirStatus effect_capture_identity(const XrXirCompileContext *context,
+static XrXirStatus effect_capture_identity(
     const XirEffectCaptureRequest *request, bool *authentic) {
     *authentic=false;
     const XrXirModule *source=request->source;
@@ -21,12 +21,12 @@ static XrXirStatus effect_capture_identity(const XrXirCompileContext *context,
     if (!!contract->value_count!=!!contract->values) return XR_XIR_BAD_STRUCTURE;
     const XrXirInstruction *op=&source->functions[request->caller->function].instructions[request->instruction];
     for (uint32_t v=0;v<contract->value_count;++v) {
-        if (!xir_compile_work(context,3)) return XR_XIR_BUDGET;
+
         const XrXirRootValueIdentity *identity=&contract->values[v];
         if (identity->instruction!=request->instruction) continue;
         if (identity->mode!=XR_XIR_EFFECT_VALUE_AUTHENTIC_REF || identity->declared_type!=op->type)
             return XR_XIR_BAD_TYPE;
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         *authentic=true;
     }
     return XR_XIR_OK;
@@ -40,7 +40,7 @@ XR_FUNC XrXirStatus xir_effect_capture_bound(const XrXirCompileContext *context,
         return XR_XIR_BAD_STRUCTURE;
     if (q->caller->function>=q->source->function_count || q->target->function>=q->source->function_count)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,12)) return XR_XIR_BUDGET;
+
     const XrXirFunction *original=&q->source->functions[q->caller->function];
     if (!original->instructions || !q->actual->instructions || q->instruction>=original->instruction_count ||
         q->instruction>=q->actual->instruction_count ||
@@ -70,11 +70,11 @@ XR_FUNC XrXirStatus xir_effect_capture_bound(const XrXirCompileContext *context,
         q->caller->argument_count,before->type,after->type};
     XrXirStatus status=xir_effect_callable_bound_matches(context,&bound);
     bool authentic=false;
-    if (status==XR_XIR_OK) status=effect_capture_identity(context,q,&authentic);
+    if (status==XR_XIR_OK) status=effect_capture_identity(q,&authentic);
     XirEffectCaptureBound result={signature->flags,false};
     if (status!=XR_XIR_OK) return status;
     if (!authentic) {
-        if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
         *output=result;return XR_XIR_OK;
     }
     XirEffectContextInput input={q->source,q->types,q->caller,q->instruction,q->owners,q->owner_count};
@@ -99,7 +99,7 @@ XR_FUNC XrXirStatus xir_effect_capture_bound(const XrXirCompileContext *context,
     result.flags=(mask?mask:XR_XIR_CALLABLE_ROOT_NONE)|(signature->flags&XR_XIR_CALLABLE_NO_SUSPEND);
     if (!xr_xir_callable_flags_compatible(result.flags,signature->flags)) return XR_XIR_BAD_TYPE;
     result.refined=result.flags!=signature->flags;
-    if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
     *output=result;
     return XR_XIR_OK;
 }

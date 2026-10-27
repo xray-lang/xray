@@ -135,8 +135,8 @@ typedef struct XrClassTransition {
 typedef enum {
     XR_BK_NONE = 0,
     XR_BK_STRUCT_OBJECT,
-    XR_BK_STRINGBUILDER,
-    XR_BK_ITERATOR,
+    /* Builtin kind 2 is retired and must not be reassigned. */
+    XR_BK_ITERATOR = 3,
     XR_BK_SYSMUTEX,
     XR_BK_SYSRWLOCK,
     XR_BK_SYSCONDVAR,

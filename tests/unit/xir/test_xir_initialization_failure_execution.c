@@ -23,7 +23,7 @@
 #include "xir_initialization_failure_execution.h"
 extern const XrXirProgramSpec initialization_failure_program;
 
-int main(void){const XrXirCompileContext compile=*effects_source_owner(UINT64_C(32)*1024*1024,UINT64_C(64000000));
+int main(void){const XrXirCompileContext compile=*effects_source_owner();
 XrXirProgramSpec spec=initialization_failure_program;
 init_module_roles(spec.declarations);
 XrXirArtifact *checked=NULL,*lowered=NULL;

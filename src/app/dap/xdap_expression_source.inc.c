@@ -21,7 +21,6 @@ static const char *expression_primitive(XrXirType type) {
 }
 static bool expression_type(XdapJsonWriter *text,const XrXirTypes *types,XrXirType type,uint32_t depth) {
     if (depth==32) { text->status=XR_XIR_BUDGET;return false; }
-    if (xr_compile_resources_work(text->resources,1)!=XR_COMPILE_RESOURCE_OK) { text->status=XR_XIR_BUDGET;return false; }
     const char *primitive=expression_primitive(type);
     if (primitive) return xdap_json_text(text,primitive,strlen(primitive));
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
@@ -44,7 +43,6 @@ static XrXirStatus expression_function(const XrXirSourceProduct *product,uint32_
     const XrXirCompileContext *context=xr_xir_compile_source_product_context(product);uint32_t function=UINT32_MAX;
     if (!debug || !facts || !context) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<debug->function_count;++f) {
-        if (xr_compile_resources_work(context->resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
         const XrXirSourceDebugFunction *entry=&debug->functions[f];
         if (!entry->declaration || entry->declaration>facts->declaration_count) continue;
         const XrXirSourceDeclaration *declaration=&facts->declarations[entry->declaration-1];
@@ -74,8 +72,7 @@ static XrXirStatus expression_export(ExpressionState *state,const ExpressionData
     if (status==XR_XIR_OK) {
         XrSourceCompilerText input={NULL,"dap-managed-expression",text.bytes,text.length};
         XrSourceCompileStatus built=xr_source_compiler_build_text(request->compiler,&input,product,&diagnostic);
-        status=built==XR_SOURCE_COMPILE_OK ? XR_XIR_OK : built==XR_SOURCE_COMPILE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
-            built==XR_SOURCE_COMPILE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
+        status=expression_source_status(built);
     }
     if (status==XR_XIR_OK) status=expression_intrinsic_proof(state,*product);
     if (status==XR_XIR_OK) status=expression_function(*product,data->count,function);

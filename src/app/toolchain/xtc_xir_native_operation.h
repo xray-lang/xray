@@ -17,7 +17,8 @@ typedef enum XtcXirNativeOperationStatus {
     XTC_XIR_NATIVE_UNSUPPORTED, XTC_XIR_NATIVE_BUDGET, XTC_XIR_NATIVE_OUT_OF_MEMORY,
     XTC_XIR_NATIVE_IO, XTC_XIR_NATIVE_TIMEOUT, XTC_XIR_NATIVE_CANCELLED,
     XTC_XIR_NATIVE_CHILD_FAILED, XTC_XIR_NATIVE_REPLAY_MISMATCH,
-    XTC_XIR_NATIVE_PENDING
+    XTC_XIR_NATIVE_PENDING,
+    XTC_XIR_NATIVE_MEMORY_LIMIT, XTC_XIR_NATIVE_OVERFLOW
 } XtcXirNativeOperationStatus;
 typedef enum XtcXirNativeOperationPhase {
     XTC_XIR_NATIVE_NEW, XTC_XIR_NATIVE_RUNNING,
@@ -52,13 +53,13 @@ typedef struct XtcXirNativeOperationRequest {
 } XtcXirNativeOperationRequest;
 
 /* Copies/preallocates without disk I/O. All operations are serial. The single
- * mandatory ledger is retained by owned blocks; no default budget is created.
+ * memory owner is pinned by allocated blocks; no allocation policy is implicit.
  * Output must be NULL and is unchanged on failure. */
 XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_new(XrCompileResources *resources,
     const XtcXirWorkspaceRequest *workspace, const XtcXirNativeOperationLimits *limits,
     XtcXirNativeOperation **output);
 /* Exactly one synchronous transaction. Before any new allocation or disk I/O,
- * reject producers from another ledger. Request pointers are borrowed only
+ * reject producers from another memory owner. Request pointers are borrowed only
  * during this call. The real SDK launcher and five libraries are resolved through the admitted SDK owner. Provider
  * paths are explicit facts, not discovery or Target execution authority.
  * OK means a successful synchronous invocation and READY owned output.
@@ -75,7 +76,7 @@ XR_FUNC const XrXirInvocationFile *xtc_xir_native_operation_file(const XtcXirNat
     uint32_t index);
 /* Reads the held OUTPUT handle without reopening or hashing. Both outputs must
  * be empty and are preserved on failure. Returned bytes independently retain
- * the ledger and survive operation close; use xr_compile_resources_free. */
+ * the memory owner and survive operation close; use xr_compile_resources_free. */
 XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_read_output(XtcXirNativeOperation *owner,
     uint64_t limit, void **bytes, size_t *length);
 XR_FUNC XrCompileResources *xtc_xir_native_operation_resources(const XtcXirNativeOperation *owner);
@@ -84,7 +85,7 @@ XR_FUNC const XtcXirNativeOperationDiagnostic *xtc_xir_native_operation_diagnost
 XR_FUNC const XtcXirNativeOperationDiagnostic *xtc_xir_native_operation_cleanup_diagnostic(const XtcXirNativeOperation *owner);
 /* Release invocation/process/launcher leases, then reclaim the private
  * workspace with a finite positive step cap.
- * No new allocation/work is needed. PENDING or errors preserve the owner for
+ * No new allocation is needed. PENDING or errors preserve the owner for
  * retry. The immutable first failure is separate from current cleanup status.
  * OK frees/nulls; NULL is already closed. READY output
  * borrows expire when close starts. Read diagnostics before final close. */

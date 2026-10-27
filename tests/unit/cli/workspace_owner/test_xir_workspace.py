@@ -1,5 +1,5 @@
 from pathlib import Path
-import os, subprocess, sys, tempfile
+import hashlib, os, subprocess, sys, tempfile
 
 parent = Path(tempfile.mkdtemp(prefix='workspace-fixture-', dir=Path(sys.argv[1]).resolve().parent))
 result = subprocess.run([sys.argv[1], str(parent)], timeout=220, capture_output=True)
@@ -34,10 +34,13 @@ for source, output, expected in [('source.c', 'compiler-unrecorded.tmp', 0), ('b
     if expected:
         assert b'workspace-compiler-failure' in compiled.stdout + compiled.stderr
     else:
-        assert (paths['output'] / output).read_bytes()[:2] == b'\x64\x86'
+        artifact = (paths['output'] / output).read_bytes()
+        assert artifact[:2] == b'\x64\x86'
+        print('real MSVC object SHA256:', hashlib.sha256(artifact).hexdigest())
+    print('real MSVC input SHA256:', source, hashlib.sha256((paths['input'] / source).read_bytes()).hexdigest())
 stdout, stderr = process.communicate('continue\n', timeout=30)
 print(stdout, end=''); print(stderr, end='', file=sys.stderr)
 assert process.returncode == 0
 assert list(parent.iterdir()) == [], list(parent.iterdir())
 parent.rmdir()
-print('independent disk oracle: ordinary and real compiler private outputs removed after BUDGET')
+print('independent disk oracle: ordinary and real compiler private outputs removed after producer death and allocator denial')

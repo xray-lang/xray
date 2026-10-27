@@ -4,10 +4,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_emit_buffer.inc.c - C emission with charged byte reads and writes
+ * xxir_emit_buffer.inc.c - C emission with bounded owned output
  *
  * KEY CONCEPT:
- *   Both sizing and writing consume the same finite ledger and byte bound.
+ *   Sizing and writing share the output bound and preserve the first failure.
  */
 typedef struct CBuffer {
     char *text;
@@ -23,12 +23,6 @@ typedef struct CBuffer {
 
 #include "xxir_emit_literal_tables.inc.c"
 
-static bool emit_work(CBuffer *buffer, uint64_t units) {
-    if (buffer->status != XR_XIR_OK) return false;
-    if (xir_compile_work(buffer->context, units)) return true;
-    buffer->status = XR_XIR_BUDGET;
-    return false;
-}
 /* The tracked patterns have no overlapping prefix other than their first
  * byte. Match the emitted chunk itself, without storing a second byte stream. */
 static bool emit_label_byte(CBuffer *buffer, char byte) {
@@ -37,26 +31,26 @@ static bool emit_label_byte(CBuffer *buffer, char byte) {
     };
     static const unsigned lengths[2] = {sizeof("goto invalid;") - 1, sizeof("goto limit;") - 1};
     if (!buffer->tracking) return true;
-    if (!emit_work(buffer, 2)) return false;
+    if (!((buffer)->status == XR_XIR_OK)) return false;
     if (!buffer->label_match[0] && !buffer->label_match[1] && byte != 'g') return true;
     for (unsigned i = 0; i < 2; ++i) {
-        if (!emit_work(buffer, 1)) return false;
+        if (!((buffer)->status == XR_XIR_OK)) return false;
         if (buffer->label_used[i]) continue;
-        if (!emit_work(buffer, 2)) return false;
+        if (!((buffer)->status == XR_XIR_OK)) return false;
         unsigned match = buffer->label_match[i];
         if (byte == references[i][match]) ++match;
         else {
-            if (!emit_work(buffer, 1)) return false;
+            if (!((buffer)->status == XR_XIR_OK)) return false;
             match = byte == references[i][0] ? 1u : 0u;
         }
-        if (!emit_work(buffer, 2)) return false;
+        if (!((buffer)->status == XR_XIR_OK)) return false;
         bool used = match == lengths[i];
         buffer->label_match[i] = used ? 0 : match;
         buffer->label_used[i] = used;
         if (used) {
-            if (!emit_work(buffer, 2)) return false;
+            if (!((buffer)->status == XR_XIR_OK)) return false;
             if (buffer->label_used[0] && buffer->label_used[1]) {
-                if (!emit_work(buffer, 1)) return false;
+                if (!((buffer)->status == XR_XIR_OK)) return false;
                 buffer->tracking = false;
                 return true;
             }
@@ -71,7 +65,7 @@ static void emit_payload_byte(CBuffer *buffer, char byte) {
         return;
     }
     if (buffer->measuring) {
-        if (!emit_work(buffer, 1)) return;
+        if (!((buffer)->status == XR_XIR_OK)) return;
         ++buffer->length;
         return;
     }
@@ -80,7 +74,7 @@ static void emit_payload_byte(CBuffer *buffer, char byte) {
         size_t capacity = buffer->capacity ? buffer->capacity :
             (buffer->limit < 128 ? buffer->limit : 128);
         while (capacity < required && capacity <= buffer->limit / 2) {
-            if (!emit_work(buffer, 1)) return;
+            if (!((buffer)->status == XR_XIR_OK)) return;
             capacity *= 2;
         }
         if (capacity < required || capacity > buffer->limit) capacity = buffer->limit;
@@ -91,7 +85,7 @@ static void emit_payload_byte(CBuffer *buffer, char byte) {
         buffer->text = memory;
         buffer->capacity = capacity;
     }
-    if (!emit_work(buffer, 1)) return;
+    if (!((buffer)->status == XR_XIR_OK)) return;
     buffer->text[buffer->length++] = byte;
 }
 static void emit_byte(CBuffer *buffer, char byte) {
@@ -106,12 +100,12 @@ static bool emit_finalize(CBuffer *buffer) {
         buffer->status = XR_XIR_BAD_STRUCTURE;
         return false;
     }
-    if (!emit_work(buffer, 1)) return false;
+    if (!((buffer)->status == XR_XIR_OK)) return false;
     buffer->text[buffer->length] = 0;
     return true;
 }
 static bool emit_format_read(CBuffer *buffer, const char **cursor, char *byte) {
-    if (!emit_work(buffer, 1)) return false;
+    if (!((buffer)->status == XR_XIR_OK)) return false;
     *byte = *(*cursor)++;
     return true;
 }
@@ -131,7 +125,7 @@ static void emit_unsigned(CBuffer *buffer, uint64_t value, unsigned base, unsign
         if (buffer->status != XR_XIR_OK) return;
         unsigned count = 0;
         do {
-            if (!emit_work(buffer, 1)) return;
+            if (!((buffer)->status == XR_XIR_OK)) return;
             ++count;
             value /= base;
         } while (value);
@@ -140,14 +134,14 @@ static void emit_unsigned(CBuffer *buffer, uint64_t value, unsigned base, unsign
             buffer->status = XR_XIR_BUDGET;
             return;
         }
-        if (!emit_work(buffer, 1)) return;
+        if (!((buffer)->status == XR_XIR_OK)) return;
         buffer->length += emitted;
         return;
     }
     char digits[20];
     unsigned count = 0;
     do {
-        if (!emit_work(buffer, 1)) return;
+        if (!((buffer)->status == XR_XIR_OK)) return;
         digits[count++] = "0123456789abcdef"[value % base];
         value /= base;
     } while (value);
@@ -157,7 +151,7 @@ static void emit_unsigned(CBuffer *buffer, uint64_t value, unsigned base, unsign
         --width;
     }
     while (count) {
-        if (!emit_work(buffer, 1)) return;
+        if (!((buffer)->status == XR_XIR_OK)) return;
         emit_byte(buffer, digits[--count]);
     }
 }
@@ -173,14 +167,14 @@ static void emit_known_literal(CBuffer *buffer, const char *text, size_t length)
             buffer->limit - buffer->length - 1 : 0;
         size_t advanced = length < available ? length : available;
         if (advanced) {
-            if (!emit_work(buffer, 1)) return;
+            if (!((buffer)->status == XR_XIR_OK)) return;
             buffer->length += advanced;
         }
         if (advanced < length) buffer->status = XR_XIR_BUDGET;
         return;
     }
     for (size_t i = 0; i < length && buffer->status == XR_XIR_OK; ++i) {
-        if (!emit_work(buffer, 1)) return;
+        if (!((buffer)->status == XR_XIR_OK)) return;
         emit_byte(buffer, text[i]);
     }
 }
@@ -201,23 +195,23 @@ typedef struct EmitSpanState {
 static bool emit_span_begin(CBuffer *buffer, const EmitSpan *span, EmitSpanState *state) {
     static const unsigned lengths[2] = {13, 11};
     for (unsigned i = 0; i < 2; ++i) {
-        if (!emit_work(buffer, 1)) return false;
-        if (!emit_work(buffer, 1)) return false;
+        if (!((buffer)->status == XR_XIR_OK)) return false;
+        if (!((buffer)->status == XR_XIR_OK)) return false;
         state->tables[i] = span->table[i];
-        if (!emit_work(buffer, 1)) return false;
+        if (!((buffer)->status == XR_XIR_OK)) return false;
         state->match[i] = buffer->label_match[i];
-        if (!emit_work(buffer, 1)) return false;
+        if (!((buffer)->status == XR_XIR_OK)) return false;
         state->found[i] = buffer->label_used[i];
-        if (!emit_work(buffer, 1)) return false;
+        if (!((buffer)->status == XR_XIR_OK)) return false;
         if (!state->tables[i] || state->match[i] >= lengths[i] ||
             (state->found[i] && state->match[i])) {
             buffer->status = XR_XIR_BAD_STRUCTURE;
             return false;
         }
     }
-    if (!emit_work(buffer, 1)) return false;
+    if (!((buffer)->status == XR_XIR_OK)) return false;
     state->length = buffer->length;
-    return emit_work(buffer, 15);
+    return ((buffer)->status == XR_XIR_OK);
 }
 
 /* Fifteen prepaid operations always execute, including prefix0/OOM/BUDGET:
@@ -253,9 +247,9 @@ static void emit_span_commit(CBuffer *buffer, const EmitSpanState *state, size_t
 static void emit_static_span(CBuffer *buffer, const EmitSpan *span) {
     if (buffer->status != XR_XIR_OK) return;
     if (!span) { buffer->status = XR_XIR_BAD_STRUCTURE; return; }
-    if (!emit_work(buffer, 1)) return;
+    if (!((buffer)->status == XR_XIR_OK)) return;
     size_t length = span->length;
-    if (!emit_work(buffer, 1)) return;
+    if (!((buffer)->status == XR_XIR_OK)) return;
     const char *text = span->text;
     if (!text || length > (size_t)INT_MAX - 1) {
         buffer->status = XR_XIR_BAD_STRUCTURE;
@@ -268,13 +262,13 @@ static void emit_static_span(CBuffer *buffer, const EmitSpan *span) {
         size_t available = buffer->length < buffer->limit ? buffer->limit - buffer->length - 1 : 0;
         size_t advanced = length < available ? length : available;
         if (advanced) {
-            if (!emit_work(buffer, 1)) goto complete;
+            if (!((buffer)->status == XR_XIR_OK)) goto complete;
             buffer->length += advanced;
         }
         if (advanced < length) buffer->status = XR_XIR_BUDGET;
     } else {
         for (size_t i = 0; i < length; ++i) {
-            if (!emit_work(buffer, 1)) goto complete;
+            if (!((buffer)->status == XR_XIR_OK)) goto complete;
             char byte = text[i];
             emit_payload_byte(buffer, byte);
             if (buffer->status != XR_XIR_OK) goto complete;
@@ -291,20 +285,20 @@ complete:
 static void emit_template(CBuffer *buffer, const EmitTemplate *format, ...) {
     if (buffer->status != XR_XIR_OK) return;
     if (!format) { buffer->status = XR_XIR_BAD_STRUCTURE; return; }
-    if (!emit_work(buffer, 1)) return;
+    if (!((buffer)->status == XR_XIR_OK)) return;
     const EmitPart *parts = format->parts;
-    if (!emit_work(buffer, 1)) return;
+    if (!((buffer)->status == XR_XIR_OK)) return;
     size_t count = format->count;
     if (!parts && count) { buffer->status = XR_XIR_BAD_STRUCTURE; return; }
     va_list args;
     va_start(args, format);
     for (size_t i = 0; i < count && buffer->status == XR_XIR_OK; ++i) {
-        if (!emit_work(buffer, 1)) break;
-        if (!emit_work(buffer, 1)) break;
+        if (!((buffer)->status == XR_XIR_OK)) break;
+        if (!((buffer)->status == XR_XIR_OK)) break;
         unsigned kind = parts[i].kind;
-        if (!emit_work(buffer, 1)) break;
+        if (!((buffer)->status == XR_XIR_OK)) break;
         if (kind > EP_S) { buffer->status = XR_XIR_BAD_STRUCTURE; break; }
-        if (!emit_work(buffer, 1)) break;
+        if (!((buffer)->status == XR_XIR_OK)) break;
         if (kind == EP_TEXT) {
             unsigned span = parts[i].span;
             if (span >= EMIT_SPAN_COUNT) { buffer->status = XR_XIR_BAD_STRUCTURE; break; }

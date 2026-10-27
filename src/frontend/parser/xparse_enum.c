@@ -420,7 +420,7 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
         AstNode *method = parse_enum_method(parser, is_static, receiver_mode);
         if (!xr_parser_healthy(parser)) return NULL;
         if (method) {
-            if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+
             method->as.method_decl.receiver_mode_span = receiver_mode_span;
             method->as.method_decl.attributes = attributes;
             method->as.method_decl.attr_count = attr_count;

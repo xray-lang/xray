@@ -104,11 +104,11 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     XrCompileResources *resources=NULL;
     XrCompileResourceStatus opened=xr_compile_resources_new(&limits,&resources);
-    if (opened!=XR_COMPILE_RESOURCE_OK) return opened==XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
+    if (opened!=XR_COMPILE_RESOURCE_OK) return opened==XR_COMPILE_RESOURCE_MEMORY_LIMIT || opened==XR_COMPILE_RESOURCE_OVERFLOW ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
     XrCompileState *state=NULL;opened=xr_compile_state_new(resources,&state);
     if(opened!=XR_COMPILE_RESOURCE_OK) {
         xr_compile_resources_release(resources);
-        return opened==XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
+        return opened==XR_COMPILE_RESOURCE_MEMORY_LIMIT || opened==XR_COMPILE_RESOURCE_OVERFLOW ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
     }
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     XrSourcePaths paths={0}; XrSourcePathsDiagnostic path_diagnostic={0};

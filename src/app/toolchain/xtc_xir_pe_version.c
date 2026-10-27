@@ -11,11 +11,12 @@
 #include <string.h>
 
 typedef struct PeVersionReader {
-    XrCompileResources *resources;
     const uint8_t *bytes;
     size_t length, sections, resource, pe, optional, mapped_section;
     uint32_t resource_size, directories;
     uint16_t section_count;
+    size_t section_candidates_left;
+    uint32_t directory_entries_left;
     XtcXirPeVersionStatus status;
     bool found;
     uint32_t fixed[13];
@@ -25,17 +26,13 @@ static bool pe_fail(PeVersionReader *reader, XtcXirPeVersionStatus status) {
     if (reader->status == XTC_XIR_PE_VERSION_OK) reader->status = status;
     return false;
 }
-static bool pe_work(PeVersionReader *reader, uint64_t work) {
-    XrCompileResourceStatus status = xr_compile_resources_work(reader->resources, work);
-    return status == XR_COMPILE_RESOURCE_OK || pe_fail(reader,
-        status == XR_COMPILE_RESOURCE_BUDGET ? XTC_XIR_PE_VERSION_BUDGET : XTC_XIR_PE_VERSION_BAD_ARGUMENT);
-}
+
 static bool pe_range(PeVersionReader *reader, size_t offset, size_t length) {
     return (offset <= reader->length && length <= reader->length - offset) ||
         pe_fail(reader, XTC_XIR_PE_VERSION_TRUNCATED);
 }
 static bool pe_read(PeVersionReader *reader, size_t offset, unsigned width, uint32_t *output) {
-    if (!pe_range(reader, offset, width) || !pe_work(reader, width)) return false;
+    if (!pe_range(reader, offset, width)) return false;
     uint32_t value = 0;
     for (unsigned i = 0; i < width; ++i) value |= (uint32_t)reader->bytes[offset + i] << (8 * i);
     *output = value;
@@ -45,6 +42,11 @@ static bool pe_read(PeVersionReader *reader, size_t offset, unsigned width, uint
  * Check every candidate rather than choosing the first overlapping section. */
 static bool pe_rva(PeVersionReader *reader, uint32_t rva, uint32_t length, size_t *output) {
     if (!length || length > UINT32_MAX - rva) return pe_fail(reader, XTC_XIR_PE_VERSION_INVALID);
+    /* Each lookup revisits all section headers to detect ambiguous mappings.
+     * Bound those repeated candidate visits by the input's physical extent. */
+    if (reader->section_count > reader->section_candidates_left)
+        return pe_fail(reader, XTC_XIR_PE_VERSION_COMPLEXITY_LIMIT);
+    reader->section_candidates_left -= reader->section_count;
     bool found = false;
     size_t result = 0;
     for (uint32_t i = 0; i < reader->section_count; ++i) {
@@ -110,6 +112,7 @@ static bool pe_resource(PeVersionReader *reader) {
     if (!rva && !bytes) return pe_fail(reader, XTC_XIR_PE_VERSION_NOT_FOUND);
     if (!rva || bytes < 16 || (rva & 3)) return pe_fail(reader, XTC_XIR_PE_VERSION_INVALID);
     reader->resource_size = bytes;
+    reader->directory_entries_left = bytes / 8;
     return pe_rva(reader, rva, bytes, &reader->resource);
 }
 static bool pe_resource_range(PeVersionReader *reader, uint32_t offset, uint32_t length, unsigned alignment) {
@@ -141,7 +144,7 @@ static bool pe_fixed(PeVersionReader *reader, uint32_t offset) {
     static const char key[] = "VS_VERSION_INFO";
     for (unsigned i = 0; i < sizeof(key); ++i) {
         uint32_t unit;
-        if (!pe_read(reader, at + 6 + (size_t)i * 2, 2, &unit) || !pe_work(reader, 1)) return false;
+        if (!pe_read(reader, at + 6 + (size_t)i * 2, 2, &unit)) return false;
         if (unit != (uint8_t)key[i]) return pe_fail(reader, XTC_XIR_PE_VERSION_INVALID);
     }
     uint32_t fixed[13];
@@ -151,10 +154,8 @@ static bool pe_fixed(PeVersionReader *reader, uint32_t offset) {
     if (fixed[1] != 0x00010000) return pe_fail(reader, XTC_XIR_PE_VERSION_UNSUPPORTED);
     for (unsigned i = 0; i < 13; ++i) {
         if (reader->found) {
-            if (!pe_work(reader, 1)) return false;
             if (fixed[i] != reader->fixed[i]) return pe_fail(reader, XTC_XIR_PE_VERSION_AMBIGUOUS);
         } else {
-            if (!pe_work(reader, sizeof(uint32_t))) return false;
             reader->fixed[i] = fixed[i];
         }
     }
@@ -166,7 +167,6 @@ static bool pe_fixed(PeVersionReader *reader, uint32_t offset) {
 static bool pe_directory(PeVersionReader *reader, uint32_t offset, unsigned depth, uint32_t ancestors[3]) {
     if (!pe_resource_range(reader, offset, 16, 4)) return false;
     for (unsigned i = 0; i < depth; ++i) {
-        if (!pe_work(reader, 1)) return false;
         if (offset == ancestors[i]) return pe_fail(reader, XTC_XIR_PE_VERSION_INVALID);
     }
     ancestors[depth] = offset;
@@ -175,6 +175,12 @@ static bool pe_directory(PeVersionReader *reader, uint32_t offset, unsigned dept
         !pe_read(reader, reader->resource + offset + 14, 2, &ids)) return false;
     uint32_t count = named + ids;
     if (!pe_resource_range(reader, offset, 16 + count * 8, 4)) return false;
+    /* Aliased subdirectories can otherwise multiply a depth-bounded walk.
+     * Count every visit, including a repeated offset, against the number of
+     * encoded entries that could fit in the declared resource byte extent. */
+    if (count > reader->directory_entries_left)
+        return pe_fail(reader, XTC_XIR_PE_VERSION_COMPLEXITY_LIMIT);
+    reader->directory_entries_left -= count;
     for (uint32_t i = 0; i < count; ++i) {
         size_t entry = reader->resource + offset + 16 + (size_t)i * 8;
         uint32_t name, target;
@@ -193,56 +199,48 @@ static bool pe_directory(PeVersionReader *reader, uint32_t offset, unsigned dept
     }
     return true;
 }
-static bool pe_decimal(PeVersionReader *reader, const uint16_t parts[4], char output[24]) {
+static void pe_decimal(const uint16_t parts[4], char output[24]) {
     size_t used = 0;
     for (unsigned i = 0; i < 4; ++i) {
-        if (!pe_work(reader, 1)) return false;
         uint32_t value = parts[i];
         char digits[5];
         unsigned count = 0;
         do {
-            if (!pe_work(reader, 1)) return false;
             digits[count++] = (char)('0' + value % 10); value /= 10;
         } while (value);
         while (count) {
-            if (!pe_work(reader, 1)) return false;
             output[used++] = digits[--count];
         }
         if (i < 3) {
-            if (!pe_work(reader, 1)) return false;
             output[used++] = '.';
         }
     }
-    if (!pe_work(reader, 1)) return false;
     output[used] = 0;
-    return true;
 }
-XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_version_parse(XrCompileResources *resources,
-    const uint8_t *bytes, size_t length, XtcXirPeVersion *output) {
-    if (!resources || !bytes || !output) return XTC_XIR_PE_VERSION_BAD_ARGUMENT;
+XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_version_parse(const uint8_t *bytes, size_t length, XtcXirPeVersion *output) {
+    if (!bytes || !output) return XTC_XIR_PE_VERSION_BAD_ARGUMENT;
     PeVersionReader reader = {0};
-    reader.resources = resources; reader.bytes = bytes; reader.length = length;
+    reader.bytes = bytes; reader.length = length;
+    reader.section_candidates_left = length / 40;
     uint32_t ancestors[3];
     if (!pe_header(&reader) || !pe_resource(&reader) || !pe_directory(&reader, 0, 0, ancestors)) return reader.status;
     if (!reader.found) return XTC_XIR_PE_VERSION_NOT_FOUND;
-    if (!pe_work(&reader, sizeof(XtcXirPeVersion))) return reader.status;
     XtcXirPeVersion result = {0};
     for (unsigned i = 0; i < 4; ++i) {
-        if (!pe_work(&reader, 2)) return reader.status;
         unsigned shift = (i & 1) ? 0 : 16;
         result.file[i] = (uint16_t)(reader.fixed[2 + i / 2] >> shift);
         result.product[i] = (uint16_t)(reader.fixed[4 + i / 2] >> shift);
     }
-    if (!pe_decimal(&reader, result.file, result.file_text) || !pe_decimal(&reader, result.product, result.product_text) ||
-        !pe_work(&reader, sizeof(result))) return reader.status;
+    pe_decimal(result.file, result.file_text);
+    pe_decimal(result.product, result.product_text);
     memcpy(output, &result, sizeof(result));
     return XTC_XIR_PE_VERSION_OK;
 }
-XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_image_parse(XrCompileResources *resources,
-    const uint8_t *bytes, size_t length, XtcXirPeImage *output) {
-    if (!resources || !bytes || !output) return XTC_XIR_PE_VERSION_BAD_ARGUMENT;
+XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_image_parse(const uint8_t *bytes, size_t length, XtcXirPeImage *output) {
+    if (!bytes || !output) return XTC_XIR_PE_VERSION_BAD_ARGUMENT;
     PeVersionReader reader = {0};
-    reader.resources = resources; reader.bytes = bytes; reader.length = length;
+    reader.bytes = bytes; reader.length = length;
+    reader.section_candidates_left = length / 40;
     if (!pe_header(&reader)) return reader.status;
     uint32_t machine, magic, characteristics, subsystem, entry, image, headers, flags;
     if (!pe_read(&reader, reader.pe + 4, 2, &machine) ||
@@ -258,10 +256,8 @@ XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_image_parse(XrCompileResources *resourc
     size_t offset;
     if (!pe_rva(&reader, entry, 1, &offset) ||
         !pe_read(&reader, reader.mapped_section + 36, 4, &flags)) return reader.status;
-    if (!pe_work(&reader, sizeof(XtcXirPeImage))) return reader.status;
     XtcXirPeImage result = {(uint16_t)machine, (uint16_t)magic, (uint16_t)characteristics,
         (uint16_t)subsystem, entry, image, headers, flags};
-    if (!pe_work(&reader, sizeof(result))) return reader.status;
     memcpy(output, &result, sizeof(result));
     return XTC_XIR_PE_VERSION_OK;
 }

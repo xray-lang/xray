@@ -9,7 +9,7 @@
 XR_FUNC XrXirStatus xr_xir_compile_type_description(const XrXirCompileContext *context,
     const XrXirTypes *types, XrXirType type, XrXirTypeDescription *output) {
     if (!xir_compile_context_valid(context) || !output) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
     XrXirTypeDescription description = {0}; description.type = type;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     if (!node) {
@@ -52,7 +52,7 @@ XR_FUNC XrXirStatus xr_xir_compile_type_description(const XrXirCompileContext *c
 XR_FUNC XrXirStatus xr_xir_compile_description_field(const XrXirCompileContext *context,
     const XrXirTypeDescription *description, uint32_t field, XrXirFieldDescription *output) {
     if (!xir_compile_context_valid(context) || !description || !output) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
     if (field >= description->field_count) return XR_XIR_BAD_STRUCTURE;
     XrXirFieldDescription result = {0};
     if (description->kind == XR_XIR_TYPE_TUPLE) {

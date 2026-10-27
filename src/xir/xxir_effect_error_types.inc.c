@@ -12,7 +12,7 @@
 static XrXirStatus error_finite_types_frame(const XrXirCompileContext *work,const EffectErrorFinite *proof) {
     const XrXirTypes *input=proof->material->domain.types,*types=error_finite_types(proof);
     if(types==input) return XR_XIR_OK;
-    if(!xir_compile_work(work,6)) return XR_XIR_BUDGET;
+
     if(types->count<input->count || types->count>XR_XIR_CONSTRUCTED_TYPE_LIMIT-XR_XIR_CONSTRUCTED_TYPE_BASE ||
         types->nominals!=input->nominals || types->interfaces!=input->interfaces) return XR_XIR_BAD_STRUCTURE;
     const XrXirTypes *domains[2]={input,types};
@@ -31,5 +31,5 @@ static XrXirStatus error_finite_types_frame(const XrXirCompileContext *work,cons
         }
     }
     XrXirTypes prefix=*types;prefix.count=input->count;
-    return effect_body_type_nodes_compare(work,&prefix,input,NULL);
+    return effect_body_type_nodes_compare(&prefix,input,NULL);
 }

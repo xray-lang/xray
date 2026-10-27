@@ -14,7 +14,7 @@ typedef struct SourceGeneratorScan {SourceContext *ctx;uint32_t depth;bool found
 static bool source_generator_scan(AstNode *node,void *opaque) {
     SourceGeneratorScan *scan=opaque;
     if (!node) return true;
-    if (!source_work(scan->ctx,node)) return false;
+    if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (node->type==AST_FUNCTION_DECL || node->type==AST_FUNCTION_EXPR || node->type==AST_METHOD_DECL) return true;
     if (node->type==AST_YIELD_STMT) scan->found=true;
     if (scan->depth>=128) return source_fail(scan->ctx,node,XR_XIR_BUDGET,"generator body depth exhausted");
@@ -37,7 +37,7 @@ static bool source_generator_declaration(SourceContext *ctx,AstNode *node,uint32
     if (identity->test_role || identity->cleanup_owner)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"generator cannot be a test or cleanup body");
     for (uint32_t p=0;p<function->parameter_count;++p) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (p>=captures && xr_xir_type_is_cell(&ctx->types,function->parameters[p]))
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"generator cannot retain an external ref parameter");
     }

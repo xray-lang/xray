@@ -5,10 +5,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xir_source_program_compile_owner.h - Whole-graph finite ledgers and compiler physical owners
+ * xir_source_program_compile_owner.h - Whole-graph memory resources and compiler physical owners
  *
  * KEY CONCEPT:
- *   Parser, artifacts and Programs share a finite ledger and counted physical allocations.
+ *   Parser, artifacts and Programs share a memory owner and counted physical allocations.
  */
 #ifndef XIR_SOURCE_PROGRAM_COMPILE_OWNER_H
 #define XIR_SOURCE_PROGRAM_COMPILE_OWNER_H
@@ -21,7 +21,6 @@ enum { SOURCE_PROGRAM_OWNER_LIMIT = 32 };
 static SourceProgramAllocation *source_program_compile_allocations;
 static size_t source_program_compile_capacity, source_program_compile_peak_capacity;
 static size_t source_program_compile_peak_live, source_program_compile_peak_bytes;
-static size_t source_program_compile_max_capacity(void);
 static size_t source_program_compile_live, source_program_compile_bytes, source_program_compile_attempts;
 static size_t source_program_compile_fail_at=SIZE_MAX;
 static bool source_program_compile_injected;
@@ -34,8 +33,8 @@ static size_t source_program_compile_slot(const void *pointer) {
  * actual compiler allocation still has its original index and physical record. */
 static void source_program_compile_grow(void) {
     if (source_program_compile_live + 1 <= source_program_compile_capacity / 2) return;
+    CHECK(source_program_compile_capacity <= SIZE_MAX / 2);
     size_t capacity = source_program_compile_capacity ? source_program_compile_capacity * 2 : 512;
-    CHECK(capacity <= source_program_compile_max_capacity());
     CHECK(capacity <= SIZE_MAX / sizeof(*source_program_compile_allocations));
     SourceProgramAllocation *replacement = xr_calloc(capacity, sizeof(*replacement));
     CHECK(replacement);
@@ -91,50 +90,36 @@ static void source_program_compile_free(void *pointer) {
 #pragma pop_macro("xr_free")
 #pragma pop_macro("xr_malloc")
 
-/* Every tracked ledger has an 8 MiB live cap. A payload is nonzero and its
- * physical header is charged before malloc. Add one record per ledger itself. */
-static size_t source_program_compile_max_capacity(void) {
-    uint64_t records = SOURCE_PROGRAM_OWNER_LIMIT +
-        ((uint64_t)SOURCE_PROGRAM_OWNER_LIMIT * 8 * 1024 * 1024) / (sizeof(CompileAllocation) + 1);
-    size_t capacity = 512;
-    while ((uint64_t)(capacity / 2) < records) {
-        CHECK(capacity <= SIZE_MAX / 2); capacity *= 2;
-    }
-    return capacity;
-}
-
 typedef struct SourceProgramOwner { XrXirCompileContext context; XrCompileResourceStats baseline; } SourceProgramOwner;
 static SourceProgramOwner source_program_owners[SOURCE_PROGRAM_OWNER_LIMIT];
 static size_t source_program_owner_count;
-/* Separate semantic probes own separate finite graphs; all transitions of a
- * given graph derive the original artifact context and retain its ledger. */
-static inline const XrXirCompileContext *source_program_owner(uint64_t allocated, uint64_t work) {
+/* Separate semantic probes own separate memory graphs; all transitions of a
+ * given graph derive the original artifact context and retain its memory owner. */
+static inline const XrXirCompileContext *source_program_owner(XrCompileResourceLimits limits) {
     CHECK(source_program_owner_count < SOURCE_PROGRAM_OWNER_LIMIT);
-    CHECK(allocated <= UINT64_C(64)*1024*1024 && work <= UINT64_C(128000000));
     SourceProgramOwner *o=&source_program_owners[source_program_owner_count++];
-    XrCompileResourceLimits caps={allocated,UINT64_C(8)*1024*1024,work};
-    CHECK(xr_compile_resources_new(&caps,&o->context.resources)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_compile_resources_new(&limits,&o->context.resources)==XR_COMPILE_RESOURCE_OK);
     o->context.limits=xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_stats(o->context.resources,&o->baseline)==XR_COMPILE_RESOURCE_OK);
     return &o->context;
 }
 static inline void source_program_owners_free(void) {
-    uint64_t max_allocated=0,max_peak=0,max_work=0;
+    uint64_t max_allocated=0,max_peak=0,max_allocations=0;
     for(size_t i=0;i<source_program_owner_count;++i) {
         SourceProgramOwner *o=&source_program_owners[i];XrCompileResourceStats stats={0};
         CHECK(xr_compile_resources_stats(o->context.resources,&stats)==XR_COMPILE_RESOURCE_OK);
-        CHECK(stats.live_bytes==o->baseline.live_bytes);
-        fprintf(stderr,"Source compiler owner %zu: allocated=%llu peak=%llu work=%llu; final live=%llu\n",
+        CHECK(stats.held_bytes==o->baseline.held_bytes);
+        fprintf(stderr,"Source compiler owner %zu: allocated=%llu peak=%llu allocations=%llu; final held=%llu\n",
             i,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,
-            (unsigned long long)stats.work,(unsigned long long)stats.live_bytes);
+            (unsigned long long)stats.allocation_count,(unsigned long long)stats.held_bytes);
         if(stats.allocated_bytes>max_allocated)max_allocated=stats.allocated_bytes;
         if(stats.peak_bytes>max_peak)max_peak=stats.peak_bytes;
-        if(stats.work>max_work)max_work=stats.work;
+        if(stats.allocation_count>max_allocations)max_allocations=stats.allocation_count;
         xr_compile_resources_release(o->context.resources);*o=(SourceProgramOwner){0};
     }
     CHECK(!source_program_compile_live && !source_program_compile_bytes);
-    fprintf(stderr,"Source program compiler: %zu finite owners, max allocated=%llu peak=%llu work=%llu; physical=0/0\n",
-        source_program_owner_count,(unsigned long long)max_allocated,(unsigned long long)max_peak,(unsigned long long)max_work);
+    fprintf(stderr,"Source program compiler: %zu memory owners, max allocated=%llu peak=%llu allocations=%llu; physical=0/0\n",
+        source_program_owner_count,(unsigned long long)max_allocated,(unsigned long long)max_peak,(unsigned long long)max_allocations);
     fprintf(stderr,"Source compiler observer: actual peak blocks=%zu bytes=%zu table=%zu; final physical=0/0\n",
         source_program_compile_peak_live,source_program_compile_peak_bytes,source_program_compile_peak_capacity);
     xr_free(source_program_compile_allocations); source_program_compile_allocations=NULL;

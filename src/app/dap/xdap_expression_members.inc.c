@@ -12,7 +12,6 @@
 static bool expression_member_project(ExpressionState *state,const AstNode *node) {
     const AstNode *fields[128],*root=node;uint32_t count=0,groups=0;
     while (root && (root->type==AST_MEMBER_ACCESS || root->type==AST_GROUPING)) {
-        if (!expression_member_work(state,1)) return false;
         if (root->type==AST_GROUPING) { ++groups;root=root->as.grouping; }
         else {
             if (count==128) { state->status=XR_XIR_BUDGET;return false; }
@@ -43,7 +42,6 @@ static bool expression_member_project(ExpressionState *state,const AstNode *node
         if (expression_member_token(state,root->line,root->column,root->as.variable.name,&begin) &&
             expression_member_token(state,last->name_span.line,last->name_span.column,last->name,&end)) {
             for (uint32_t i=0;i<groups;++i) {
-                if (!expression_member_work(state,1)) break;
                 if (!begin || state->tokens[begin-1].kind!=TK_LPAREN) { state->status=XR_XIR_BAD_STRUCTURE;break; }
                 --begin;
             }
@@ -65,7 +63,6 @@ static XrXirStatus expression_members_rewrite(ExpressionState *state,XdapJsonWri
     for (uint32_t i=0;i<state->projection_count;++i) {
         uint32_t at=i;
         while (at) {
-            if (!expression_member_work(state,1)) return state->status;
             if (state->projections[order[at-1]].begin<=state->projections[i].begin) break;
             order[at]=order[at-1];--at;
         }

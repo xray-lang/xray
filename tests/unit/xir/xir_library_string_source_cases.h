@@ -35,12 +35,12 @@ static void string_literal_boundaries(bool grow) {
     CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);CHECK(string_literal_operation(&owner.context,&fixture)==XR_XIR_OK);
     XrCompileResourceStats required=library_compile_stats(&owner.context);library_compile_owner_drop(&owner);
     for(unsigned mode=0;mode<6;++mode){XrCompileResourceLimits caps=library_compile_limits;
-        if(!grow){caps.allocated_bytes=required.allocated_bytes;if(mode==1)--caps.allocated_bytes;if(mode==2)caps.work=1;}
-        else {if(mode==1)caps.work=required.work-1;if(mode==2)caps.allocated_bytes=required.allocated_bytes-1;}
+        if(mode==1)caps.memory_limit=required.peak_bytes-1;
+        if(mode==2)caps.memory_limit=required.peak_bytes+1;
         CHECK(library_compile_owner_new(&owner,&caps)==XR_XIR_OK);fixture.mode=mode<3?0:mode;
         if(!grow&&mode==3){fixture.mode=0;source_program_compile_fail_at=source_program_compile_attempts;source_program_compile_injected=false;}
         XrXirStatus status=string_literal_operation(&owner.context,&fixture);source_program_compile_fail_at=SIZE_MAX;
-        XrXirStatus expected=mode==0?XR_XIR_OK:(!grow&&mode==3)?XR_XIR_OUT_OF_MEMORY:mode==5?XR_XIR_BAD_STRUCTURE:XR_XIR_BUDGET;
+        XrXirStatus expected=(mode==0||mode==2)?XR_XIR_OK:mode==1?XR_XIR_MEMORY_LIMIT:(!grow&&mode==3)?XR_XIR_OUT_OF_MEMORY:mode==5?XR_XIR_BAD_STRUCTURE:XR_XIR_BUDGET;
         CHECK(status==expected);if(!grow&&mode==3)CHECK(source_program_compile_injected);library_compile_owner_drop(&owner);
     }
     fixture.mode=0;library_compile_operation_cases(grow?"String literal growth17":"String literal empty",string_literal_operation,&fixture);

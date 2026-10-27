@@ -11,7 +11,7 @@
 static XrXirSourceResult prelude_endian_check(const XrXirCompileContext *context,
     const XrXirLibraryCatalog *catalog,const char *file,bool text) {
     XrCompilerSession *session=NULL;XrXirSourceResult result={0};
-    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,file,&authority,context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,catalog};
     XrXirSourceDiagnostic diagnostic={0};XrXirStatus status;
@@ -33,7 +33,7 @@ static XrXirSourceResult prelude_endian_check(const XrXirCompileContext *context
     return result;
 }
 static void prelude_endian_refusal(const XrXirCompileContext *context,const XrXirLibraryCatalog *catalog) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/endian_refuse.xr",&authority,
         context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,catalog};

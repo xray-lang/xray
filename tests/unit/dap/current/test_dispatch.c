@@ -54,12 +54,12 @@ static uint32_t event_count(const char *event) {
 }
 int main(void) {
     xr_test_suppress_dialogs();XrXirCompileContext context={0};
-    XrCompileResourceLimits limits={67108864,8388608,128000000};
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,8388608,true};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig compiler_config={context,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,
         xr_source_compile_default_manifest_limits()};XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
-    CHECK(xr_source_compiler_new(&compiler_config,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
+    CHECK(xr_source_compiler_new(&compiler_config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
     XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};XrXirDomain *domain=NULL;
     CHECK(xr_xir_domain_new_budgeted(1048576,&budget,&domain)==XR_XIR_VALUE_OK);
     XdapAdapterConfig config={.observer_metadata=domain,.write=capture_message,.context=&capture,.message_limit=16384};
@@ -114,6 +114,6 @@ int main(void) {
     CHECK(xdap_adapter_closed(adapter));capture.reentry=false;CHECK(xdap_adapter_free(adapter)==XR_XIR_CALL_READY);
     xr_source_compile_diagnostic_free(&diagnostic);CHECK(!xr_xir_domain_budget_stats(domain).metadata_live);xr_xir_domain_drop(domain);
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
-    CHECK(after.live_bytes==baseline.live_bytes);xr_compile_resources_release(context.resources);CHECK(!runtime_live && !runtime_bytes);
+    CHECK(after.held_bytes==baseline.held_bytes);xr_compile_resources_release(context.resources);CHECK(!runtime_live && !runtime_bytes);
     puts("Real DAP JSON launch/configure/function stop/stack/variables/disassembly/step/output/lifetime: PASS");return 0;
 }

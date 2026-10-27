@@ -12,7 +12,7 @@ static bool source_call_spread_field_plans(SourceContext *ctx,AstNode *node,
     SourceExpressionPlan **plans,uint32_t limit,uint32_t *at,uint32_t depth) {
     if (!at || *at>limit || (limit && !plans))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"call field plan vector is inconsistent");
-    if (!node || !source_work(ctx,node)) return false;
+    if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"call field planning depth exhausted");
     if (node->type==AST_GROUPING)
         return source_call_spread_field_plans(ctx,node->as.grouping,plans,limit,at,depth+1);
@@ -27,7 +27,7 @@ static bool source_call_spread_field_plans(SourceContext *ctx,AstNode *node,
     const TupleLiteralNode *tuple=&node->as.tuple_literal;
     for (int i=0;i<tuple->count;++i) {
         AstNode *child=tuple->elements[i];
-        if (!child || !source_work(ctx,child)) return false;
+        if (!child || !((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (child->type==AST_SPREAD_EXPR) {
             if (!source_call_spread_field_plans(ctx,child->as.spread_expr.expr,plans,limit,at,depth+1)) return false;
         } else {
@@ -55,7 +55,7 @@ static bool source_call_spread_context(SourceContext *ctx,SourceCallSpread *spre
     SourceTuplePrefix *prefix=source_recipe_storage(ctx,1,sizeof(*prefix));
     if (!fields || !prefix) return false;
     for (uint32_t f=0;f<spread->count;++f) {
-        if (!source_work(ctx,literal->syntax)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         fields[f]=formal->argument_contexts[spread->first+f+formal->parameter_offset];
     }
     *prefix=(SourceTuplePrefix){NULL,spread->count,false,XR_XIR_UNIT,fields,spread->field_plans};

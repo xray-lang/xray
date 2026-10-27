@@ -33,7 +33,7 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     if (!module->declarations) return XR_XIR_OK;
     if (!module->declarations->functions) return XR_XIR_BAD_STRUCTURE;
     const XrXirFunctionIdentity *identity = &module->declarations->functions[index];
-    if (!xir_compile_work(budget,1)) return XR_XIR_BUDGET;
+
     if (identity->method_kind > XR_XIR_MATERIALIZER ||
         (!!identity->nominal_owner != (identity->method_kind != XR_XIR_NON_MEMBER)))
         return XR_XIR_BAD_STRUCTURE;
@@ -61,7 +61,7 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
         receiver->nominal.declaration != owner || receiver->nominal.argument_count != count ||
         (count && !receiver->nominal.arguments)) return XR_XIR_BAD_TYPE;
     if (!xir_effect_evidence_is_closed(module)) {
-        if (!xir_compile_work(budget,count)) return XR_XIR_BUDGET;
+
         for (uint32_t a = 0; a < count; ++a)
             if (receiver->nominal.arguments[a] != (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a))
                 return XR_XIR_BAD_TYPE;
@@ -89,16 +89,16 @@ XR_FUNC XrXirStatus xr_xir_compile_declarations_active(const XrXirCompileContext
     if(status!=XR_XIR_OK)return status;
     active[d->root_module]=1;
     for(uint32_t i=d->module_count;i>0;--i) {
-        if(!xir_compile_work(context,1))return XR_XIR_BUDGET;
+
         uint32_t id=order[i-1];if(!active[id])continue;
         const XrXirSourceModule *module=&d->modules[id];
         for(uint32_t dep=0;dep<module->dependency_count;++dep) {
-            if(!xir_compile_work(context,1))return XR_XIR_BUDGET;
+
             active[module->dependencies[dep]]=1;
         }
     }
     for(uint32_t i=0;i<d->module_count;++i) {
-        if(!xir_compile_work(context,1))return XR_XIR_BUDGET;
+
         uint32_t id=order[i];if(active[id])order[(*count)++]=id;
     }
     return XR_XIR_OK;
@@ -114,8 +114,6 @@ bool xr_xir_module_imports(const XrXirDeclarations *d, uint32_t from, uint32_t t
 XrXirStatus xr_xir_compile_declarations_order(const XrXirCompileContext *compile_context, const XrXirDeclarations *d, uint32_t *order) {
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
-    XrXirCompileContext compile_state = *compile_context;
-    XrXirCompileContext *work = &compile_state;
     if (!d || !order || !d->module_count || !d->modules) return XR_XIR_BAD_STRUCTURE;
     uint32_t *result = xir_compile_calloc(compile_context, d->module_count, sizeof(*result), &allocation_status);
     uint8_t *done = xir_compile_calloc(compile_context, d->module_count, 1, &allocation_status);
@@ -124,20 +122,20 @@ XrXirStatus xr_xir_compile_declarations_order(const XrXirCompileContext *compile
     for (uint32_t step = 0; step < d->module_count; ++step) {
         uint32_t best = UINT32_MAX;
         for (uint32_t m = 0; m < d->module_count; ++m) {
-            if (!xir_compile_work(work, 1)) { status = XR_XIR_BUDGET; goto finish; }
+
             if (done[m]) continue;
             bool ready = true;
             const XrXirSourceModule *module = &d->modules[m];
             if((module->name_length && !module->name) || module->dependency_count>d->module_count ||
                 (module->dependency_count && !module->dependencies)){status=XR_XIR_BAD_STRUCTURE;goto finish;}
             for (uint32_t i = 0; i < module->dependency_count; ++i) {
-                if (!xir_compile_work(work, 1)) { status = XR_XIR_BUDGET; goto finish; }
+
                 uint32_t dependency=module->dependencies[i];
                 if(dependency>=d->module_count){status=XR_XIR_BAD_STRUCTURE;goto finish;}
                 if (!done[dependency]) ready = false;
             }
             if (ready) {
-                if (!xir_compile_work(work, module->name_length)) { status = XR_XIR_BUDGET; goto finish; }
+
                 if (best == UINT32_MAX || module_name_compare(module, &d->modules[best]) < 0) best = m;
             }
         }
@@ -148,19 +146,16 @@ XrXirStatus xr_xir_compile_declarations_order(const XrXirCompileContext *compile
  finish:
     if (status == XR_XIR_OK) {
         size_t bytes = (size_t)d->module_count * sizeof(*result);
-        if (!xir_compile_work(compile_context, bytes)) status = XR_XIR_BUDGET;
-        else memcpy(order, result, bytes);
+        memcpy(order, result, bytes);
     }
     xr_compile_resources_free(result);
     xr_compile_resources_free(done);
     return status;
 }
-static XrXirStatus declaration_modules(const XrXirDeclarations *d, uint32_t functions,
-                                       const XrXirCompileContext *work) {
+static XrXirStatus declaration_modules(const XrXirDeclarations *d, uint32_t functions) {
     for (uint32_t m = 0; m < d->module_count; ++m) {
         const XrXirSourceModule *module = &d->modules[m];
-        if (!(module->name_length + (uint64_t) module->dependency_count * 4 <= SIZE_MAX) ||
-            !xir_compile_work(work, module->name_length + (uint64_t) module->dependency_count + m + 1))
+        if (!(module->name_length + (uint64_t) module->dependency_count * 4 <= SIZE_MAX))
             return XR_XIR_BUDGET;
         if (module->lexical_scope > d->module_count ||
             (module->lexical_scope && (module->lexical_scope == m + 1 ||
@@ -175,14 +170,14 @@ static XrXirStatus declaration_modules(const XrXirDeclarations *d, uint32_t func
             (d->functions[module->initializer].promises & XR_XIR_FUNCTION_GENERATOR) ||
             d->functions[module->initializer].nominal_owner || module->initializer == d->entry_function) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p = 0; p < m; ++p) {
-            if (!xir_compile_work(work, module->name_length)) return XR_XIR_BUDGET;
+
             if (module_name_compare(module, &d->modules[p]) == 0) return XR_XIR_BAD_STRUCTURE;
         }
         for (uint32_t i = 0; i < module->dependency_count; ++i) {
             uint32_t target = module->dependencies[i];
             if (target >= d->module_count || target == m) return XR_XIR_BAD_STRUCTURE;
             for (uint32_t p = 0; p < i; ++p) {
-                if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
+
                 if (module->dependencies[p] == target) return XR_XIR_BAD_STRUCTURE;
             }
         }
@@ -201,8 +196,7 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
     uint64_t fixed = sizeof(*d) + (uint64_t) d->module_count * sizeof(*d->modules) +
         (uint64_t) functions * sizeof(*d->functions) + (uint64_t) d->slot_count * sizeof(*d->slots) +
         (uint64_t) d->literal_count * sizeof(*d->literals);
-    if (fixed > SIZE_MAX || !(fixed <= SIZE_MAX) ||
-        !xir_compile_work(work, (uint64_t) d->module_count + functions + d->slot_count + d->literal_count))
+    if ((fixed > SIZE_MAX) || (!(fixed <= SIZE_MAX)))
         return XR_XIR_BUDGET;
     if (!d->module_count || d->module_count > functions || !d->modules || !d->functions ||
         (kind == XR_XIR_PROGRAM ? (d->root_module >= d->module_count || d->entry_function >= functions) :
@@ -223,10 +217,10 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
     if (kind == XR_XIR_PROGRAM && (d->functions[d->entry_function].module != d->root_module ||
         d->functions[d->entry_function].nominal_owner || d->functions[d->entry_function].test_role ||
         (d->functions[d->entry_function].promises & XR_XIR_FUNCTION_GENERATOR))) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = declaration_modules(d, functions, work);
+    XrXirStatus status = declaration_modules(d, functions);
     if (status != XR_XIR_OK) return status;
     for (uint32_t m=0;m<d->module_count;++m) {
-        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
         if (d->modules[m].storage>XR_XIR_MODULE_BIRTH_STORAGE ||
             (d->modules[m].storage==XR_XIR_MODULE_BIRTH_STORAGE &&
                 (kind!=XR_XIR_PROGRAM || m==d->root_module))) return XR_XIR_BAD_STRUCTURE;
@@ -240,7 +234,7 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
             if (identity->module != parent->module || identity->nominal_owner != parent->nominal_owner ||
                 identity->member_access != parent->member_access) return XR_XIR_BAD_STRUCTURE;
             for (uint32_t m = 0; m < d->module_count; ++m) {
-                if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
+
                 if (d->modules[m].initializer == i) return XR_XIR_BAD_STRUCTURE;
             }
         }
@@ -255,7 +249,7 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
         XrXirLiteral name = table->declarations ? table->declarations[owner - 1].module :
             table->identities[owner - 1].module;
         const XrXirSourceModule *module = &d->modules[d->functions[i].module];
-        if (!xir_compile_work(work, name.length)) return XR_XIR_BUDGET;
+
         if (!name.bytes || name.length != module->name_length || memcmp(name.bytes, module->name, name.length)) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t i = 0; i < d->slot_count; ++i) {
@@ -273,8 +267,7 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
     }
     for (uint32_t i = 0; i < d->literal_count; ++i) {
         const XrXirLiteral *literal = &d->literals[i];
-        if (!xir_compile_work(work, literal->length))
-            return XR_XIR_BUDGET;
+
         if ((literal->length && !literal->bytes) ||
             xr_utf8_core_scan_strict((const uint8_t *) literal->bytes, literal->length).error != XR_UTF8_OK)
             return XR_XIR_BAD_STRUCTURE;
@@ -309,7 +302,7 @@ XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile
 
     if (!output) return XR_XIR_BAD_STRUCTURE;
     if (!source) { *output = NULL; return XR_XIR_OK; }
-    if (!xir_compile_work(compile_context, (uint64_t)source->module_count + source->literal_count + 1)) return XR_XIR_BUDGET;
+
     XrXirDeclarations *copy = xir_compile_calloc(compile_context, 1, sizeof(*copy), &allocation_status);
     if (!copy) return allocation_status;
     *copy = *source;

@@ -16,17 +16,17 @@ static XrXirStatus view_access_entry_origin(ViewAccess *a,const XrXirViewLoanOri
         event->value>=a->body->parameter_count || event->repeated_phi ||
         !view_flags_at(a->resolver->check.module->types,a->resolver->check.flags,event->type)) return XR_XIR_OK;
     for (uint32_t p=0;p<event->choice_count;++p) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         if (event->choices[p].block>=a->body->block_count) return XR_XIR_BAD_STRUCTURE;
         if (a->repeated[event->choices[p].block]) return XR_XIR_OK;
     }
     *input=true;return XR_XIR_OK;
 }
-static XrXirStatus view_access_entry_selections(ViewAccess *a,const uint32_t *left,uint32_t left_count,
+static XrXirStatus view_access_entry_selections(const uint32_t *left,uint32_t left_count,
     const uint32_t *right,uint32_t right_count,bool *separate) {
     *separate=false;uint32_t common=left_count<right_count?left_count:right_count;
     for (uint32_t p=0;p<common;++p) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         if (left[p]!=right[p]) {*separate=true;break;}
     }
     return XR_XIR_OK;
@@ -37,7 +37,7 @@ static XrXirStatus view_access_entry_pair(ViewAccess *a,const XrXirViewLoanOrigi
     if (status==XR_XIR_OK) status=view_access_entry_origin(a,right,&r);
     if (status!=XR_XIR_OK || !l || !r) return status;
     if (left->value!=right->value) {*safe=true;return XR_XIR_OK;}
-    return view_access_entry_selections(a,left->selection,left->selection_count,
+    return view_access_entry_selections(left->selection,left->selection_count,
         right->selection,right->selection_count,safe);
 }
 static XrXirStatus view_access_entry_root_type(ViewAccess *a,const XrXirViewRootEvent *event,
@@ -49,7 +49,7 @@ static XrXirStatus view_access_entry_root_type(ViewAccess *a,const XrXirViewRoot
     const XrXirTypes *types=a->resolver->check.module->types;
     *type=a->body->parameters[event->root_value];
     for (uint32_t p=0;p<event->selection_count;++p) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         const XrXirTypeNode *node=xr_xir_type_node(types,*type);uint32_t field=event->selection[p];
         if (!node) return XR_XIR_BAD_TYPE;
         if (field==UINT32_MAX) {
@@ -67,7 +67,7 @@ static XrXirStatus view_access_entry_cell(ViewAccess *a,const XrXirViewRootEvent
         event->root_value>=a->body->parameter_count || event->step_count || event->selection_count ||
         event->opaque_suffix || event->dynamic_identity ||
         !xr_xir_type_is_cell(a->resolver->check.module->types,a->body->parameters[event->root_value])) return XR_XIR_OK;
-    if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
     XrXirCellProofRole role=a->cells->role(a->cells->owner,a->function,event->root_value);
     *input=role==XR_XIR_CELL_PROOF_SCOPED_REF || role==XR_XIR_CELL_PROOF_LEXICAL_CLEANUP;return XR_XIR_OK;
 }
@@ -89,6 +89,6 @@ static XrXirStatus view_access_entry_regions(ViewAccess *a,const XrXirViewRootEv
      * preserves that relation without equating scopes or physical roots. */
     XR_CHECK(left->root_function==right->root_function,"compatible input regions belong to one actual callee entry");
     if (left->root_value!=right->root_value) {*safe=true;return XR_XIR_OK;}
-    return view_access_entry_selections(a,left->selection,left->selection_count,
+    return view_access_entry_selections(left->selection,left->selection_count,
         right->selection,right->selection_count,safe);
 }

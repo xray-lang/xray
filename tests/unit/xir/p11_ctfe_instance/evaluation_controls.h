@@ -17,7 +17,7 @@ static void evaluation_digest(XrXirCheckedPacket *packet) {
 }
 static void evaluation_wire_controls(XrXirCompileContext *context,const XrXirArtifact *checked,XrXirCheckedPacket *packet) {
     uint8_t prefix[32]={0};memcpy(prefix,"XRCEV\0\0\0",8);
-    evaluation_u32(prefix+8,1);evaluation_u32(prefix+12,75);evaluation_u32(prefix+16,2);
+    evaluation_u32(prefix+8,1);evaluation_u32(prefix+12,XR_XIR_CHECKED_CONTRACT);evaluation_u32(prefix+16,2);
     uint64_t payload=packet->length-64;for (unsigned i=0;i<8;++i) prefix[24+i]=(uint8_t)(payload>>(8*i));
     CHECK(!memcmp(prefix,packet->bytes,32));
     uint8_t root[12];const XirEvaluationRoot *selection=&checked->module.provenance->evaluation;
@@ -34,7 +34,7 @@ static void evaluation_wire_controls(XrXirCompileContext *context,const XrXirArt
     memcpy(ordinary.bytes+64,packet->bytes+76,packet->length-76);evaluation_digest(&ordinary);
     XrCompileResourceStats before=stats(context);
     CHECK(xr_xir_compile_checked_read(context,ordinary.bytes,ordinary.length,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out);
-    CHECK(stats(context).live_bytes==before.live_bytes);xr_xir_compile_checked_packet_free(&ordinary);
+    CHECK(stats(context).held_bytes==before.held_bytes);xr_xir_compile_checked_packet_free(&ordinary);
 }
 static void evaluation_controls(void) {
     XrXirCompileContext context;context_new(&context);XrXirArtifact *checked=NULL,*lowered=NULL,*out=NULL;

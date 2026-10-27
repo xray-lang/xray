@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
         return 2;
     }
     int result = 1;
-    XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrCompileResources *resources = NULL;
     XrCompilerSession *session = NULL;
     XrModuleIdentityAuthority authority = {0};
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
     XrLirLowerFailure lower_failure = {0};
     XrLirCOutput output = {0};
     if (xr_compile_resources_new(&limits, &resources) != XR_COMPILE_RESOURCE_OK ||
-        xr_compile_session_new(resources, &session) != XR_COMPILER_SESSION_OK ||
+        xr_compile_session_new(resources, &session) != XR_COMPILE_RESOURCE_OK ||
         xr_compile_module_identity_script_authority_from_source(resources, argv[1],
             &authority, &authority_root) != XR_MODULE_OK) {
         fputs("cannot prepare source compilation\n", stderr);
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
     session = NULL;
     xr_compile_resources_free(authority_root);
     authority_root = NULL;
-    XrLirCRequest request = {lowered.module, lowered.entry, resources, argv[1]};
+    XrLirCRequest request = {lowered.module, lowered.entry, resources, argv[1], NULL};
     XrLirCDiagnostic diagnostic;
     if (xr_lir_emit_c(&request, &output, &diagnostic) != XR_LIR_C_OK) {
         fprintf(stderr, "C emission: %s\n", diagnostic.message);

@@ -33,19 +33,23 @@ struct XrCliToolchainUpdate {
 };
 static XrCliToolchainUpdateStatus update_resource_status(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK ? XR_CLI_TOOLCHAIN_UPDATE_OK :
-        status==XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_TOOLCHAIN_UPDATE_BUDGET :
+        status==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_CLI_TOOLCHAIN_UPDATE_MEMORY_LIMIT :
+        status==XR_COMPILE_RESOURCE_OVERFLOW ? XR_CLI_TOOLCHAIN_UPDATE_OVERFLOW :
         status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY : XR_CLI_TOOLCHAIN_UPDATE_INVALID;
 }
 static XrCliToolchainUpdateStatus update_fail(XrCliToolchainUpdate *owner, XrCliToolchainUpdateStatus status) {
-    if(status==XR_CLI_TOOLCHAIN_UPDATE_BUDGET || status==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY)
-        status=update_resource_status(xr_compile_state_fail(owner->state,status==XR_CLI_TOOLCHAIN_UPDATE_BUDGET ?
-            XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY));
+    XrCompileResourceStatus resource=XR_COMPILE_RESOURCE_OK;
+    if (status==XR_CLI_TOOLCHAIN_UPDATE_MEMORY_LIMIT) resource=XR_COMPILE_RESOURCE_MEMORY_LIMIT;
+    else if (status==XR_CLI_TOOLCHAIN_UPDATE_OVERFLOW) resource=XR_COMPILE_RESOURCE_OVERFLOW;
+    else if (status==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY) resource=XR_COMPILE_RESOURCE_OUT_OF_MEMORY;
+    if (resource!=XR_COMPILE_RESOURCE_OK) status=update_resource_status(xr_compile_state_fail(owner->state,resource));
     if (owner->view.first_error == XR_CLI_TOOLCHAIN_UPDATE_OK) owner->view.first_error = status;
     return owner->view.first_error;
 }
 static XrCliToolchainUpdateStatus update_io_status(XrOsIoStatus status) {
     return status == XR_OS_IO_OK ? XR_CLI_TOOLCHAIN_UPDATE_OK :
-        status == XR_OS_IO_BUDGET ? XR_CLI_TOOLCHAIN_UPDATE_BUDGET :
+        status == XR_OS_IO_MEMORY_LIMIT ? XR_CLI_TOOLCHAIN_UPDATE_MEMORY_LIMIT :
+        status == XR_OS_IO_OVERFLOW ? XR_CLI_TOOLCHAIN_UPDATE_OVERFLOW :
         status == XR_OS_IO_OUT_OF_MEMORY ? XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY :
         status == XR_OS_IO_NOT_FOUND ? XR_CLI_TOOLCHAIN_UPDATE_UNRESOLVED :
         status == XR_OS_IO_UNSUPPORTED ? XR_CLI_TOOLCHAIN_UPDATE_UNSUPPORTED :
@@ -54,40 +58,37 @@ static XrCliToolchainUpdateStatus update_io_status(XrOsIoStatus status) {
 static bool update_io(XrCliToolchainUpdate *owner, XrOsIoStatus status) {
     return update_fail(owner, update_io_status(status)) == XR_CLI_TOOLCHAIN_UPDATE_OK;
 }
-static bool update_work(XrCliToolchainUpdate *owner, uint64_t units) {
-    return owner->view.first_error == XR_CLI_TOOLCHAIN_UPDATE_OK &&
-        update_io(owner, owner->policy.work(owner->policy.context, units));
-}
 static XrCliToolchainUpdateStatus update_config_status(XrCliToolchainConfigStatus status) {
     return status == XR_CLI_TOOLCHAIN_CONFIG_OK ? XR_CLI_TOOLCHAIN_UPDATE_OK :
         status == XR_CLI_TOOLCHAIN_CONFIG_BUDGET ? XR_CLI_TOOLCHAIN_UPDATE_BUDGET :
         status == XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY ? XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY :
+        status == XR_CLI_TOOLCHAIN_CONFIG_MEMORY_LIMIT ? XR_CLI_TOOLCHAIN_UPDATE_MEMORY_LIMIT :
+        status == XR_CLI_TOOLCHAIN_CONFIG_OVERFLOW ? XR_CLI_TOOLCHAIN_UPDATE_OVERFLOW :
         status == XR_CLI_TOOLCHAIN_CONFIG_IO ? XR_CLI_TOOLCHAIN_UPDATE_IO :
         status == XR_CLI_TOOLCHAIN_CONFIG_UNRESOLVED ? XR_CLI_TOOLCHAIN_UPDATE_UNRESOLVED : XR_CLI_TOOLCHAIN_UPDATE_INVALID;
 }
 static bool update_copy(XrCliToolchainUpdate *owner, const char *input, size_t limit, char **output) {
     if (!input) return true;
     size_t length = 0;
-    while (update_work(owner, 1)) {
+    while (owner->view.first_error == XR_CLI_TOOLCHAIN_UPDATE_OK) {
         if (!input[length]) break;
         if (++length > limit) { update_fail(owner, XR_CLI_TOOLCHAIN_UPDATE_INVALID); return false; }
     }
     if (owner->view.first_error != XR_CLI_TOOLCHAIN_UPDATE_OK) return false;
     if (!length) { update_fail(owner, XR_CLI_TOOLCHAIN_UPDATE_INVALID); return false; }
-    if (!update_io(owner, owner->policy.alloc(owner->policy.context, length + 1, (void **)output)) ||
-        !update_work(owner, length + 1)) return false;
+    if (!(update_io(owner, owner->policy.alloc(owner->policy.context, length + 1, (void **)output)))) return false;
     memcpy(*output, input, length + 1); return true;
 }
 static bool update_length(XrCliToolchainUpdate *owner, const char *text, size_t *output) {
     size_t length = 0;
-    while (update_work(owner,1)) {
+    while (owner->view.first_error == XR_CLI_TOOLCHAIN_UPDATE_OK) {
         if (!text[length]) { *output = length; return true; }
         if (++length > XR_PATH_LIMIT_MAX_PATH) { update_fail(owner,XR_CLI_TOOLCHAIN_UPDATE_INVALID); return false; }
     }
     return false;
 }
 static bool update_equal(XrCliToolchainUpdate *owner, const char *left, const char *right, bool *output) {
-    for (size_t i = 0; update_work(owner,2); ++i) {
+    for (size_t i = 0; owner->view.first_error == XR_CLI_TOOLCHAIN_UPDATE_OK; ++i) {
         if (left[i] != right[i]) { *output = false; return true; }
         if (!left[i]) { *output = true; return true; }
     }
@@ -96,34 +97,33 @@ static bool update_equal(XrCliToolchainUpdate *owner, const char *left, const ch
 static bool update_target(XrCliToolchainUpdate *owner) {
     if (!owner->target) return owner->request.reset;
     size_t length = 0;
-    if (!update_length(owner,owner->target,&length) ||
-        !update_work(owner,1 + length + sizeof(XrToolchainTarget))) return false;
+    if (!(update_length(owner,owner->target,&length))) return false;
     XrToolchainTarget target; char error[256];
     if (xtc_target_parse(owner->target,&target,error,sizeof(error))) return true;
     update_fail(owner, XR_CLI_TOOLCHAIN_UPDATE_INVALID); return false;
 }
 static bool update_append(XrCliToolchainUpdate *owner, const char *text, size_t length) {
+    if (owner->view.first_error != XR_CLI_TOOLCHAIN_UPDATE_OK) return false;
     if (length > UPDATE_BYTES - owner->length) { update_fail(owner, XR_CLI_TOOLCHAIN_UPDATE_INVALID); return false; }
     size_t needed = owner->length + length;
     if (needed > owner->capacity) {
         size_t capacity = owner->capacity ? owner->capacity : 512;
-        while (capacity < needed) { if (!update_work(owner,1)) return false; capacity *= 2; }
+        while (capacity < needed) {  capacity *= 2; }
         XrCompileResourceStatus status = xr_compile_resources_resize(owner->resources, (void **)&owner->bytes, capacity);
         if (status != XR_COMPILE_RESOURCE_OK) {
-            update_fail(owner, status == XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_TOOLCHAIN_UPDATE_BUDGET :
-                status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY : XR_CLI_TOOLCHAIN_UPDATE_INVALID);
+            update_fail(owner,update_resource_status(status));
             return false;
         }
         owner->capacity = capacity;
     }
-    if (!update_work(owner, length)) return false;
+
     memcpy(owner->bytes + owner->length, text, length); owner->length = needed; return true;
 }
 #define UPDATE_TEXT(owner,text) update_append(owner,text,sizeof(text)-1)
 static bool update_string(XrCliToolchainUpdate *owner, const char *text) {
     static const char hex[] = "0123456789abcdef";
     if (!UPDATE_TEXT(owner,"\"")) return false;
-    for (size_t i = 0; update_work(owner, 1); ++i) {
+    for (size_t i = 0; owner->view.first_error == XR_CLI_TOOLCHAIN_UPDATE_OK; ++i) {
         unsigned char c = (unsigned char)text[i];
         if (!c) return UPDATE_TEXT(owner,"\"");
         if (c == '"' || c == '\\') {
@@ -179,7 +179,9 @@ static bool update_serialize(XrCliToolchainUpdate *owner) {
     XrTomlParseStatus status = xtoml_parse_owned(&owner->policy,(const char *)owner->bytes,owner->length,&limits,&parsed);
     xtoml_owned_free(parsed);
     if (status != XR_TOML_PARSE_OK) {
-        update_fail(owner,status == XR_TOML_PARSE_BUDGET ? XR_CLI_TOOLCHAIN_UPDATE_BUDGET :
+        update_fail(owner,status == XR_TOML_PARSE_LIMIT ? XR_CLI_TOOLCHAIN_UPDATE_BUDGET :
+            status == XR_TOML_PARSE_MEMORY_LIMIT ? XR_CLI_TOOLCHAIN_UPDATE_MEMORY_LIMIT :
+            status == XR_TOML_PARSE_OVERFLOW ? XR_CLI_TOOLCHAIN_UPDATE_OVERFLOW :
             status == XR_TOML_PARSE_OUT_OF_MEMORY ? XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY : XR_CLI_TOOLCHAIN_UPDATE_INVALID);
         return false;
     }
@@ -214,6 +216,8 @@ static bool update_directories(XrCliToolchainUpdate *owner) {
 static bool update_publication(XrCliToolchainUpdate *owner, XtcXirPublicationStatus status) {
     return update_fail(owner,status == XTC_XIR_PUBLICATION_OK ? XR_CLI_TOOLCHAIN_UPDATE_OK :
         status == XTC_XIR_PUBLICATION_BUDGET ? XR_CLI_TOOLCHAIN_UPDATE_BUDGET :
+        status == XTC_XIR_PUBLICATION_MEMORY_LIMIT ? XR_CLI_TOOLCHAIN_UPDATE_MEMORY_LIMIT :
+        status == XTC_XIR_PUBLICATION_OVERFLOW ? XR_CLI_TOOLCHAIN_UPDATE_OVERFLOW :
         status == XTC_XIR_PUBLICATION_OUT_OF_MEMORY ? XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY :
         status == XTC_XIR_PUBLICATION_INVALID ? XR_CLI_TOOLCHAIN_UPDATE_INVALID :
         status == XTC_XIR_PUBLICATION_UNRESOLVED ? XR_CLI_TOOLCHAIN_UPDATE_UNRESOLVED :
@@ -257,11 +261,11 @@ XR_FUNC XrCliToolchainUpdateStatus xr_cli_toolchain_update_new(XrCompileState *s
     }
     if (okay) {
         size_t length = 0;
-        okay = update_length(owner,owner->path,&length) && update_work(owner,length + 6) &&
+        okay = update_length(owner,owner->path,&length) &&
             update_io(owner,owner->policy.alloc(owner->policy.context,length + 6,(void **)&owner->lock_path));
         if (okay) { memcpy(owner->lock_path,owner->path,length); memcpy(owner->lock_path+length,".lock",6); }
     }
-    if (okay) { owner->view.path = owner->path; *output = owner; return XR_CLI_TOOLCHAIN_UPDATE_OK; }
+    if (okay && owner->view.first_error == XR_CLI_TOOLCHAIN_UPDATE_OK) { owner->view.path = owner->path; *output = owner; return XR_CLI_TOOLCHAIN_UPDATE_OK; }
     XrCliToolchainUpdateStatus failure = owner->view.first_error;
     (void)xr_cli_toolchain_update_close(&owner); return failure;
 #endif

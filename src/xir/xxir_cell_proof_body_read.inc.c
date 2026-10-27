@@ -12,38 +12,38 @@
 static XrXirStatus cell_proof_raw_head(const XrXirCompileContext *context,const void *owner,
     uint32_t f,XrXirCellProofBodyHead *output) {
     const XrXirModule *module=owner;
-    if (!module || !output || f>=module->function_count || !module->functions) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_context_valid(context) || !module || !output || f>=module->function_count || !module->functions) return XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *function=&module->functions[f];
-    if (!xir_compile_work(context,8+sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=(XrXirCellProofBodyHead){function->parameters,function->parameter_count,function->result,
         function->instruction_count,function->operands,function->operand_count};return XR_XIR_OK;
 }
 static XrXirStatus cell_proof_raw_instruction(const XrXirCompileContext *context,const void *owner,
     uint32_t f,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
     const XrXirModule *module=owner;
-    if (!module || !storage || !output || f>=module->function_count || !module->functions ||
+    if (!xir_compile_context_valid(context) || !module || !storage || !output || f>=module->function_count || !module->functions ||
         i>=module->functions[f].instruction_count || !module->functions[f].instructions) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,3+sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=&module->functions[f].instructions[i];return XR_XIR_OK;
 }
 static XrXirStatus cell_proof_raw_type(const XrXirCompileContext *context,const void *owner,
     uint32_t f,uint32_t value,XrXirType *output) {
     const XrXirModule *module=owner;
-    if (!module || !output || f>=module->function_count || !module->functions) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_context_valid(context) || !module || !output || f>=module->function_count || !module->functions) return XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *function=&module->functions[f];
     if (value>=(uint64_t)function->parameter_count+function->instruction_count ||
         (value<function->parameter_count ? !function->parameters : !function->instructions)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,2+sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=xr_xir_operand_type(function,value);return XR_XIR_OK;
 }
 static XrXirStatus cell_proof_raw_shape(const XrXirCompileContext *context,const void *owner,
     uint32_t f,uint32_t i,XrXirCellProofInstructionShape *output) {
     const XrXirModule *module=owner;
-    if (!module || !output || f>=module->function_count || !module->functions ||
+    if (!xir_compile_context_valid(context) || !module || !output || f>=module->function_count || !module->functions ||
         i>=module->functions[f].instruction_count || !module->functions[f].instructions)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirInstruction *operation=&module->functions[f].instructions[i];
-    if (!xir_compile_work(context,3+sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=(XrXirCellProofInstructionShape){operation->op,operation->type};return XR_XIR_OK;
 }
 static XrXirCellProofBodyRead cell_proof_raw_body(const XrXirCompileContext *context,const XrXirModule *module) {
@@ -68,7 +68,7 @@ static bool cell_proof_raw_current(CellProofBuild *build) {
     if (!cell_proof_body_valid(build->context,body) || !module ||
         (module->function_count && !module->functions))
         return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
-    if (!cell_proof_work(build,6)) return false;
+    if (!((build)->status == XR_XIR_OK)) return false;
     if (body->domain.types!=module->types || body->domain.declarations!=module->declarations ||
         body->domain.generics!=module->generics || body->domain.defaults!=module->defaults ||
         body->domain.function_count!=module->function_count)
@@ -81,7 +81,7 @@ static bool cell_proof_head(CellProofBuild *build,uint32_t f,XrXirCellProofBodyH
     XrXirCellProofBodyHead head={0};
     XrXirStatus status=build->body->head(build->context,build->body->owner,f,&head);
     if (status!=XR_XIR_OK) return cell_proof_error(build,f,UINT32_MAX,status);
-    if (!cell_proof_work(build,6)) return false;
+    if (!((build)->status == XR_XIR_OK)) return false;
     if ((head.parameter_count && !head.parameters) || (head.operand_count && !head.operands) ||
         (uint64_t)head.parameter_count+head.instruction_count>UINT32_MAX)
         return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
@@ -90,7 +90,7 @@ static bool cell_proof_head(CellProofBuild *build,uint32_t f,XrXirCellProofBodyH
 static const XrXirInstruction *cell_proof_instruction(CellProofBuild *build,uint32_t f,uint32_t i,
     XrXirInstruction *storage) {
     if (build->status!=XR_XIR_OK) return NULL;
-    if (!cell_proof_work(build,sizeof(const XrXirInstruction *))) return NULL;
+    if (!((build)->status == XR_XIR_OK)) return NULL;
     const XrXirInstruction *operation=NULL;
     XrXirStatus status=build->body->instruction(build->context,build->body->owner,f,i,storage,&operation);
     if (status!=XR_XIR_OK) {cell_proof_error(build,f,i,status);return NULL;}
@@ -112,7 +112,7 @@ static bool cell_proof_run(CellProofBuild *build,const XrXirCellProofBodyHead *h
         return cell_proof_error(build,f,first,XR_XIR_BAD_STRUCTURE);
     XrXirStatus status=build->body->range(build->context,build->body,cursor,output);
     if (status!=XR_XIR_OK) return cell_proof_error(build,f,first,status);
-    if (!cell_proof_work(build,7)) return false;
+    if (!((build)->status == XR_XIR_OK)) return false;
     if (output->first!=first || !output->count || output->count>head->instruction_count-first ||
         cursor->function!=f || cursor->next!=first+output->count || output->varying&~UINT32_C(1023) ||
         output->operation.op<=XR_XIR_INVALID || output->operation.op>=XR_XIR_OP_COUNT)
@@ -146,7 +146,7 @@ static bool cell_proof_run_shape(CellProofBuild *build,const XrXirCellProofRunCu
     if (!cursor || !run || !output || i<run->first || i-run->first>=run->count ||
         cursor->next!=run->first+run->count || !build->body->range_shape)
         return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
-    if (!cell_proof_work(build,sizeof(*output))) return false;
+    if (!((build)->status == XR_XIR_OK)) return false;
     if (i==run->first) {
         *output=(XrXirCellProofInstructionShape){run->operation.op,run->operation.type};return true;
     }
@@ -162,12 +162,12 @@ static bool cell_proof_shape(CellProofBuild *build,uint32_t f,uint32_t i,
     XrXirCellProofInstructionShape *output) {
     if (build->status!=XR_XIR_OK || !output) return false;
     XrXirCellProofInstructionShape shape={0};
-    if (!cell_proof_work(build,sizeof(shape))) return false;
+    if (!((build)->status == XR_XIR_OK)) return false;
     XrXirStatus status=build->body->shape(build->context,build->body->owner,f,i,&shape);
     if (status!=XR_XIR_OK) return cell_proof_error(build,f,i,status);
     if (shape.op<=XR_XIR_INVALID || shape.op>=XR_XIR_OP_COUNT)
         return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
-    if (!cell_proof_work(build,sizeof(*output))) return false;
+    if (!((build)->status == XR_XIR_OK)) return false;
     *output=shape;return true;
 }
 static XrXirType cell_proof_type(CellProofBuild *build,uint32_t f,uint32_t value) {
@@ -186,26 +186,26 @@ static uint32_t cell_proof_operand_count(CellProofBuild *build,uint32_t f,
         build->body->domain.declarations &&
         (build->body->domain.declarations->functions[f].promises & XR_XIR_FUNCTION_GENERATOR)!=0,op);
 }
-static bool cell_proof_compare_bytes(const XrXirCompileContext *context,const void *a,const void *b,
+static bool cell_proof_compare_bytes(const void *a,const void *b,
     size_t count,size_t stride,XrXirStatus *status) {
     if (!!a!=!!count || !!b!=!!count || (stride && count>SIZE_MAX/stride)) {*status=XR_XIR_BAD_STRUCTURE;return false;}
     size_t bytes=count*stride;
-    if (!xir_compile_work(context,bytes)) {*status=XR_XIR_BUDGET;return false;}
+
     if (bytes && memcmp(a,b,bytes)) {*status=XR_XIR_BAD_STRUCTURE;return false;}
     return true;
 }
 /* Counts are matched before any borrowed owned-array slice is read. Every
  * function record is compared by its real fields, never by C padding bytes. */
-static XrXirStatus cell_proof_matches(const XrXirCompileContext *context,
+static XrXirStatus cell_proof_matches(
     const XrXirCellProvenance *stored,const XrXirCellProvenance *fresh) {
-    if (!xir_compile_work(context,8)) return XR_XIR_BUDGET;
+
     if (stored->function_count!=fresh->function_count || stored->value_count!=fresh->value_count ||
         stored->scope_count!=fresh->scope_count || stored->class_count!=fresh->class_count ||
         stored->project_count!=fresh->project_count || stored->class_dependency_count!=fresh->class_dependency_count ||
         (!!stored->functions!=!!fresh->function_count)) return XR_XIR_BAD_STRUCTURE;
     size_t words=0;
     for (uint32_t f=0;f<fresh->function_count;++f) {
-        if (!xir_compile_work(context,13)) return XR_XIR_BUDGET;
+
         const CellProofFunction *a=&stored->functions[f],*b=&fresh->functions[f];
         if (a->begin!=b->begin || a->count!=b->count || a->parameters!=b->parameters ||
             a->scope_begin!=b->scope_begin || a->scopes!=b->scopes || a->words!=b->words ||
@@ -217,17 +217,17 @@ static XrXirStatus cell_proof_matches(const XrXirCompileContext *context,
         words+=(size_t)b->stored*b->words;
     }
     XrXirStatus status=XR_XIR_OK;
-    if (!cell_proof_compare_bytes(context,stored->origins,fresh->origins,fresh->value_count,1,&status) ||
-        !cell_proof_compare_bytes(context,stored->roles,fresh->roles,fresh->value_count,1,&status) ||
-        !cell_proof_compare_bytes(context,stored->tracked,fresh->tracked,fresh->value_count,1,&status) ||
-        !cell_proof_compare_bytes(context,stored->value_functions,fresh->value_functions,fresh->value_count,sizeof(uint32_t),&status) ||
-        !cell_proof_compare_bytes(context,stored->scope_parameters,fresh->scope_parameters,fresh->scope_count,sizeof(uint32_t),&status) ||
-        !cell_proof_compare_bytes(context,stored->dependencies,fresh->dependencies,words,sizeof(uint64_t),&status) ||
-        !cell_proof_compare_bytes(context,stored->class_dependencies,fresh->class_dependencies,fresh->class_dependency_count,sizeof(uint64_t),&status))
+    if (!cell_proof_compare_bytes(stored->origins,fresh->origins,fresh->value_count,1,&status) ||
+        !cell_proof_compare_bytes(stored->roles,fresh->roles,fresh->value_count,1,&status) ||
+        !cell_proof_compare_bytes(stored->tracked,fresh->tracked,fresh->value_count,1,&status) ||
+        !cell_proof_compare_bytes(stored->value_functions,fresh->value_functions,fresh->value_count,sizeof(uint32_t),&status) ||
+        !cell_proof_compare_bytes(stored->scope_parameters,fresh->scope_parameters,fresh->scope_count,sizeof(uint32_t),&status) ||
+        !cell_proof_compare_bytes(stored->dependencies,fresh->dependencies,words,sizeof(uint64_t),&status) ||
+        !cell_proof_compare_bytes(stored->class_dependencies,fresh->class_dependencies,fresh->class_dependency_count,sizeof(uint64_t),&status))
         return status;
     if (!!stored->class_roots!=!!fresh->class_count) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t r=0;r<fresh->class_count;++r) {
-        if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+
         if (stored->class_roots[r].place!=fresh->class_roots[r].place ||
             stored->class_roots[r].value!=fresh->class_roots[r].value) return XR_XIR_BAD_STRUCTURE;
     }
@@ -240,7 +240,7 @@ static XrXirStatus cell_proof_matches(const XrXirCompileContext *context,
 static bool cell_proof_raw_pass(CellProofBuild *build,uint32_t f,
     const XrXirCellProofBodyHead *head,const XrXirInstruction **output) {
     *output=NULL;
-    if (!cell_proof_work(build,1)) return false;
+    if (!((build)->status == XR_XIR_OK)) return false;
     const XrXirCellProofBodyRead *read=build->body;
     if (read->head!=cell_proof_raw_head || read->instruction!=cell_proof_raw_instruction ||
         read->type!=cell_proof_raw_type || read->shape!=cell_proof_raw_shape || read->span || read->range)
@@ -249,7 +249,7 @@ static bool cell_proof_raw_pass(CellProofBuild *build,uint32_t f,
     if (!module || !head || f>=module->function_count || !module->functions)
         return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
     XirMetadataDomain actual=xir_metadata_domain_from_module(module);
-    if (!cell_proof_work(build,20+sizeof(*output))) return false;
+    if (!((build)->status == XR_XIR_OK)) return false;
     if (actual.types!=read->domain.types || actual.declarations!=read->domain.declarations ||
         actual.generics!=read->domain.generics || actual.defaults!=read->domain.defaults ||
         actual.function_count!=read->domain.function_count || read->resources!=build->context->resources)
@@ -266,9 +266,9 @@ static bool cell_proof_raw_pass(CellProofBuild *build,uint32_t f,
  * or source mutation can grow its physical instruction array in that walk. */
 static const XrXirInstruction *cell_proof_pass_instruction(CellProofBuild *build,
     uint32_t f,uint32_t i,const XrXirInstruction *raw,XrXirInstruction *storage) {
-    if (!cell_proof_work(build,1)) return NULL;
+    if (!((build)->status == XR_XIR_OK)) return NULL;
     if (!raw) return cell_proof_instruction(build,f,i,storage);
-    if (!cell_proof_work(build,sizeof(const XrXirInstruction *))) return NULL;
+    if (!((build)->status == XR_XIR_OK)) return NULL;
     const XrXirInstruction *op=&raw[i];
     if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) {
         cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);return NULL;
@@ -277,9 +277,9 @@ static const XrXirInstruction *cell_proof_pass_instruction(CellProofBuild *build
 }
 static bool cell_proof_pass_shape(CellProofBuild *build,uint32_t f,uint32_t i,
     const XrXirInstruction *raw,XrXirCellProofInstructionShape *output) {
-    if (!cell_proof_work(build,1)) return false;
+    if (!((build)->status == XR_XIR_OK)) return false;
     if (!raw) return cell_proof_shape(build,f,i,output);
-    if (!cell_proof_work(build,2+sizeof(XrXirOp)+sizeof(*output))) return false;
+    if (!((build)->status == XR_XIR_OK)) return false;
     XrXirOp opcode=raw[i].op;
     if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT)
         return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);

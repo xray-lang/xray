@@ -88,16 +88,17 @@ typedef enum XrTomlParseStatus {
     XR_TOML_PARSE_INVALID,
     XR_TOML_PARSE_LIMIT,
     XR_TOML_PARSE_OUT_OF_MEMORY,
-    XR_TOML_PARSE_BUDGET,
+    XR_TOML_PARSE_OVERFLOW,
     XR_TOML_PARSE_IO,
-    XR_TOML_PARSE_BAD_ARGUMENT
+    XR_TOML_PARSE_BAD_ARGUMENT,
+    XR_TOML_PARSE_MEMORY_LIMIT
 } XrTomlParseStatus;
 
 /* Policy and limits are mandatory. All DOM blocks and temporary buffers use the
  * same policy; their private headers retain the allocation policy for release.
  * Compile-ledger blocks keep that ledger alive through the final free. Other
- * policy contexts must outlive their blocks. Work and cumulative allocations
- * are never refunded. Failure preserves output and frees the partial DOM. */
+ * policy contexts must outlive their blocks. Failure preserves output and
+ * frees the partial DOM. Byte and nesting limits guard the local grammar. */
 XR_FUNC XrTomlParseStatus xtoml_parse_owned(const XrOsIoPolicy *policy,
     const char *data, size_t len, const XrTomlParseLimits *limits, XrTomlValue **output);
 XR_FUNC void xtoml_owned_free(XrTomlValue *value);

@@ -14,9 +14,13 @@
 #include <string.h>
 static XrXirStatus predicate_copy(XdapAdapter *s,const XdapJsonNode *node,char **output) {
     if (!node || !node->length) return XR_XIR_OK;
-    if (xr_compile_resources_work(s->resources,node->length+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     char *text=NULL;XrCompileResourceStatus allocated=xr_compile_resources_alloc(s->resources,node->length+1,(void **)&text);
-    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+        allocated==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        allocated==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_OVERFLOW :
+        allocated==XR_COMPILE_RESOURCE_CANCELLED ? XR_XIR_CANCELLED :
+        allocated==XR_COMPILE_RESOURCE_DEADLINE ? XR_XIR_DEADLINE :
+        allocated==XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE : XR_XIR_BAD_STRUCTURE;
     memcpy(text,node->text,node->length);text[node->length]=0;*output=text;return XR_XIR_OK;
 }
 /* Escaped braces are literal. Every interpolation is one complete, admitted
@@ -46,7 +50,6 @@ XR_FUNC XrXirStatus xdap_predicate_prepare(XdapAdapter *s,const XdapRequest *req
     XrXirStatus status=test && test->length ? xdap_expression_validate(s->compiler,test->text,test->length) : XR_XIR_OK;
     if (status!=XR_XIR_OK) return status;
     if (message) {
-        if (xr_compile_resources_work(s->resources,message->length)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
         for (size_t cursor=0;cursor<message->length;) {
             size_t begin=0,bytes=0;status=predicate_span(message->text,message->length,&cursor,&begin,&bytes);
             if (status==XR_XIR_UNRESOLVED) continue;
@@ -65,7 +68,6 @@ static XrXirStatus predicate_evaluate(XdapAdapter *s,const char *text,size_t len
     XdapExpressionRequest request={s->compiler,&lexical,text,length,s->config.message_limit,NULL};return xdap_expression_evaluate(&request,output);
 }
 static XrXirStatus predicate_log(XdapAdapter *s,const XdapBreakpointPredicate *predicate,XdapJsonWriter *text) {
-    if (xr_compile_resources_work(s->resources,predicate->log_length)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     for (size_t cursor=0;cursor<predicate->log_length;) {
         if (text->status!=XR_XIR_OK) return text->status;
         size_t at=cursor,begin=0,bytes=0;XrXirStatus status=predicate_span(predicate->log,predicate->log_length,&cursor,&begin,&bytes);
@@ -84,7 +86,9 @@ static XrXirStatus predicate_log(XdapAdapter *s,const XdapBreakpointPredicate *p
 XR_FUNC XrXirStatus xdap_predicates_probe(XdapAdapter *s,bool *visible) {
     if (!s || !s->snapshot || !visible) return XR_XIR_BAD_STRUCTURE;
     XirVmDebugStopCause cause={0};XrXirValueStatus observed=xir_vm_debug_snapshot_cause(s->snapshot,&cause);
-    if (observed!=XR_XIR_VALUE_OK) return observed==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+    if (observed!=XR_XIR_VALUE_OK) return observed==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+        observed==XR_XIR_VALUE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        observed==XR_XIR_VALUE_OVERFLOW ? XR_XIR_OVERFLOW : observed==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
     bool show=cause.unfiltered;uint32_t total=s->function_breakpoint_count+s->source_breakpoint_count;
     if (total<32 && (cause.groups>>total)) return XR_XIR_BAD_STRUCTURE;
     XdapJsonWriter text=xdap_json_writer(s->resources,s->config.message_limit);XrXirStatus status=XR_XIR_OK;

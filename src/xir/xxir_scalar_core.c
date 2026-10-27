@@ -60,7 +60,6 @@ XR_FUNC XrXirRunStatus xir_scalar_core_edge(XirScalarCoreRun *run, uint32_t inst
     const XrXirFunction *function = run->function;
     uint32_t low = 0, high = function->block_count;
     while (low + 1 < high) {
-        if (!xir_scalar_core_work(run, 1)) return XR_XIR_RUN_STEP_LIMIT;
         uint32_t middle = low + (high - low) / 2;
         if (function->blocks[middle].first <= instruction) low = middle;
         else high = middle;
@@ -70,14 +69,11 @@ XR_FUNC XrXirRunStatus xir_scalar_core_edge(XirScalarCoreRun *run, uint32_t inst
         const XrXirInstruction *phi = &function->instructions[end];
         uint32_t source = UINT32_MAX;
         for (uint32_t a = 0; a < phi->args[1]; a += 2) {
-            if (!xir_scalar_core_work(run, 1)) return XR_XIR_RUN_STEP_LIMIT;
             if (function->operands[phi->args[0] + a] == low) {
-                if (!xir_scalar_core_work(run, 1)) return XR_XIR_RUN_STEP_LIMIT;
                 source = function->operands[phi->args[0] + a + 1]; break;
             }
         }
         if (source == UINT32_MAX) return XR_XIR_RUN_BAD_ARTIFACT;
-        if (!xir_scalar_core_work(run, 2)) return XR_XIR_RUN_STEP_LIMIT;
         uint32_t scratch = run->layout->offsets[function->parameter_count + end] + 8;
         int64_t value = xr_xir_scalar_load(run->frame, run->layout->offsets[source]);
         if (xr_xir_type_is_owned(run->module->types, phi->type)) {
@@ -88,7 +84,6 @@ XR_FUNC XrXirRunStatus xir_scalar_core_edge(XirScalarCoreRun *run, uint32_t inst
         ++end;
     }
     for (uint32_t i = first; i < end; ++i) {
-        if (!xir_scalar_core_work(run, 3)) return XR_XIR_RUN_STEP_LIMIT;
         const XrXirInstruction *phi = &function->instructions[i];
         uint32_t destination = run->layout->offsets[function->parameter_count + i];
         XrXirValue value = {(uint32_t) phi->type, 0, xr_xir_scalar_load(run->frame, destination + 8)};

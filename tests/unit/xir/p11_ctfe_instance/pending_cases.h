@@ -14,7 +14,7 @@ static XrXirStatus pending_generated_source(XrXirCompileContext *context,XrXirAr
     XrXirStatus status=comptime_instances_operation(context,comptime_instances_text("nested"),&stage,
         comptime_instances_limits(),XR_XIR_CTFE_MAX_CALL_DEPTH,false);
     XirCtfeInstanceView views[2]={0};XirSourceComptimeBinding actual[2]={0};
-    if (status==XR_XIR_OK) status=literal_ctfe_status(xr_xir_compile_source_comptime_instances_view(&stage,views,actual,2));
+    if (status==XR_XIR_OK) status=p11_xir_from_ctfe(xr_xir_compile_source_comptime_instances_view(&stage,views,actual,2));
     XrXirConstruction *construction=NULL;
     if (status==XR_XIR_OK) {
         const XrXirArtifact *source=views[0].definition;

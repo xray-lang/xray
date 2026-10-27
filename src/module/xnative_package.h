@@ -274,8 +274,8 @@ typedef struct XrNativePackagePlan {
 /* Owners retain the exact allocation policy in private aligned storage. */
 typedef enum XrManifestStatus {
     XR_MANIFEST_OK, XR_MANIFEST_NOT_FOUND, XR_MANIFEST_INVALID,
-    XR_MANIFEST_BAD_ARGUMENT, XR_MANIFEST_LIMIT, XR_MANIFEST_BUDGET,
-    XR_MANIFEST_OUT_OF_MEMORY, XR_MANIFEST_IO, XR_MANIFEST_UNSUPPORTED
+    XR_MANIFEST_BAD_ARGUMENT, XR_MANIFEST_LIMIT, XR_MANIFEST_OVERFLOW,
+    XR_MANIFEST_OUT_OF_MEMORY, XR_MANIFEST_IO, XR_MANIFEST_UNSUPPORTED, XR_MANIFEST_MEMORY_LIMIT
 } XrManifestStatus;
 typedef struct XrManifestDiagnostic { char message[256]; } XrManifestDiagnostic;
 

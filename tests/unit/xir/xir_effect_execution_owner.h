@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xir_effect_execution_owner.h - Whole-graph finite ledgers and compiler physical owners
+ * xir_effect_execution_owner.h - Independent compiler memory and physical owners
  */
 #ifndef XIR_EFFECT_EXECUTION_OWNER_H
 #define XIR_EFFECT_EXECUTION_OWNER_H
@@ -66,32 +66,30 @@ static void effects_compile_free(void *pointer) {
 typedef struct EffectsSourceOwner { XrXirCompileContext context; XrCompileResourceStats baseline; } EffectsSourceOwner;
 static EffectsSourceOwner effects_source_owners[512];
 static size_t effects_source_owner_count;
-/* Separate semantic probes own separate finite graphs; all transitions of a
- * given graph derive the original artifact context and retain its ledger. */
-static inline const XrXirCompileContext *effects_source_owner(uint64_t allocated, uint64_t work) {
+/* Separate semantic probes own independent ordinary memory. Each artifact
+ * retains the same real owner through every compiler transition. */
+static inline const XrXirCompileContext *effects_source_owner(void) {
     CHECK(effects_source_owner_count < 512);
-    CHECK(allocated <= UINT64_C(64)*1024*1024 && work <= UINT64_C(128000000));
     EffectsSourceOwner *o=&effects_source_owners[effects_source_owner_count++];
-    XrCompileResourceLimits caps={allocated,UINT64_C(8)*1024*1024,work};
+    XrCompileResourceLimits caps={.memory_mode=XR_COMPILE_MEMORY_ORDINARY,.profile_allocations=true};
     CHECK(xr_compile_resources_new(&caps,&o->context.resources)==XR_COMPILE_RESOURCE_OK);
     o->context.limits=xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_stats(o->context.resources,&o->baseline)==XR_COMPILE_RESOURCE_OK);
     return &o->context;
 }
 static inline void effects_source_owners_free(void) {
-    uint64_t max_allocated=0,max_peak=0,max_work=0;
+    uint64_t max_allocated=0,max_peak=0;
     for(size_t i=0;i<effects_source_owner_count;++i) {
         EffectsSourceOwner *o=&effects_source_owners[i];XrCompileResourceStats stats={0};
         CHECK(xr_compile_resources_stats(o->context.resources,&stats)==XR_COMPILE_RESOURCE_OK);
-        CHECK(stats.live_bytes==o->baseline.live_bytes);
+        CHECK(stats.held_bytes==o->baseline.held_bytes);
         if(stats.allocated_bytes>max_allocated)max_allocated=stats.allocated_bytes;
         if(stats.peak_bytes>max_peak)max_peak=stats.peak_bytes;
-        if(stats.work>max_work)max_work=stats.work;
         xr_compile_resources_release(o->context.resources);*o=(EffectsSourceOwner){0};
     }
     CHECK(!effects_compile_live && !effects_compile_bytes);
-    fprintf(stderr,"effects Source compiler: %zu finite owners, max allocated=%llu peak=%llu work=%llu; physical=0/0\n",
-        effects_source_owner_count,(unsigned long long)max_allocated,(unsigned long long)max_peak,(unsigned long long)max_work);
+    fprintf(stderr,"effects Source compiler: %zu ordinary owners, max profiled turnover=%llu peak held=%llu; physical=0/0\n",
+        effects_source_owner_count,(unsigned long long)max_allocated,(unsigned long long)max_peak);
     effects_source_owner_count=0;
 }
 #endif // XIR_EFFECT_EXECUTION_OWNER_H

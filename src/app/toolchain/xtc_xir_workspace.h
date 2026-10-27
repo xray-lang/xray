@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xtc_xir_workspace.h - Private temporary subtree ownership on one ledger
+ * xtc_xir_workspace.h - Private temporary subtree ownership on one memory owner
  */
 #ifndef XTC_XIR_WORKSPACE_H
 #define XTC_XIR_WORKSPACE_H
@@ -15,7 +15,7 @@ typedef enum XtcXirWorkspaceStatus {
     XTC_XIR_WORKSPACE_OK, XTC_XIR_WORKSPACE_INVALID, XTC_XIR_WORKSPACE_UNRESOLVED,
     XTC_XIR_WORKSPACE_UNSUPPORTED, XTC_XIR_WORKSPACE_BUDGET, XTC_XIR_WORKSPACE_OUT_OF_MEMORY,
     XTC_XIR_WORKSPACE_IO, XTC_XIR_WORKSPACE_IDENTITY_MISMATCH, XTC_XIR_WORKSPACE_REPARSE,
-    XTC_XIR_WORKSPACE_PENDING
+    XTC_XIR_WORKSPACE_PENDING, XTC_XIR_WORKSPACE_MEMORY_LIMIT, XTC_XIR_WORKSPACE_OVERFLOW
 } XtcXirWorkspaceStatus;
 typedef struct XtcXirWorkspaceLimits { uint32_t path_bytes, depth, enum_bytes; } XtcXirWorkspaceLimits;
 typedef struct XtcXirWorkspaceRequest {
@@ -25,7 +25,7 @@ typedef struct XtcXirWorkspaceRequest {
 typedef struct XtcXirWorkspacePaths { const char *root, *input, *output; } XtcXirWorkspacePaths;
 typedef struct XtcXirWorkspaceDiagnostic { XtcXirWorkspaceStatus status; uint32_t os_error; } XtcXirWorkspaceDiagnostic;
 
-/* Copies and preallocates on the mandatory original ledger without disk I/O.
+/* Copies and preallocates through the supplied memory owner without disk I/O.
  * Output must be NULL and remains unchanged on failure. Calls are serial.
  * Limits include the root in depth; enum_bytes must hold one NTFS name. */
 XR_FUNC XtcXirWorkspaceStatus xtc_xir_workspace_new(XrCompileResources *resources,
@@ -41,8 +41,8 @@ XR_FUNC const XtcXirWorkspaceDiagnostic *xtc_xir_workspace_diagnostic(const XtcX
 /* Caller must first complete all processes and release borrowed leases.
  * Deletes ordinary descendants of the original private root, never follows a
  * reparse point, and only unlinks the named entry of a regular hard link.
- * No new heap or ledger work is needed. Each explicit OS call and existing
- * lease-owner release consumes one step; the latter's internal ancestor cleanup
+ * No new heap allocation or memory admission is needed. Each explicit OS call
+ * and existing lease-owner release consumes one step; the latter's internal ancestor cleanup
  * is indivisible. A positive finite step_limit is not a real-time deadline.
  * PENDING/errors retain all remaining responsibility for retry. OK frees/nulls;
  * read the sticky first diagnostic before closing. NULL is already closed. */

@@ -25,7 +25,7 @@ static void emit_path_receiver(CBuffer *buffer, const XrXirFunction *function,
             op->op == XR_XIR_STRUCT_SET, op->op == XR_XIR_STRUCT_SET ? op->immediate : args[1]);
     }
     for (;;) {
-        if (!emit_work(buffer, 1)) return;
+        if (!((buffer)->status == XR_XIR_OK)) return;
         XrXirPlaceKind kind = xr_xir_place_kind(function, id);
         if (kind != XR_XIR_PLACE_FIELD && kind != XR_XIR_PLACE_INDEX) break;
         if (!begin) { emit_reject(buffer, XR_XIR_BAD_LAYOUT); return; }

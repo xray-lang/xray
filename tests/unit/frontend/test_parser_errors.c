@@ -85,13 +85,13 @@ static void expression_modes(XrCompilerSession *session) {
     xr_program_destroy(program);
 }
 int main(void) {
-    const XrCompileResourceLimits limits = {32 * 1024 * 1024, 8 * 1024 * 1024, 32 * 1024 * 1024};
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, 8 * 1024 * 1024, true};
     XrCompileResources *resources = NULL;
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_resources_new(&limits,&resources) == XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats baseline = {0};
     CHECK(xr_compile_resources_stats(resources,&baseline) == XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_session_new(resources,&session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources,&session) == XR_COMPILE_RESOURCE_OK);
     clause_states(session);
     expression_modes(session);
     const char *sources[] = {
@@ -118,7 +118,7 @@ int main(void) {
     xr_compile_session_free(session);
     XrCompileResourceStats stats = {0};
     CHECK(xr_compile_resources_stats(resources,&stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.live_bytes == baseline.live_bytes);
+    CHECK(stats.held_bytes == baseline.held_bytes);
     xr_compile_resources_release(resources);
     printf("error clause states, propagation modes and %zu format roundtrips passed\n",sizeof(sources)/sizeof(sources[0]));
     return 0;

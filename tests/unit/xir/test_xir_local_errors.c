@@ -84,11 +84,11 @@ static void local_execute(XrXirSourceProduct *product,const char *name,int64_t e
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
 }
 static void local_case(const LocalErrorCase *test) {
-    XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};XrXirCompileContext context={0};
+    XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats before={0},after={0};
     CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"local-errors",NULL};
     XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
@@ -111,7 +111,7 @@ static void local_case(const LocalErrorCase *test) {
     }
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
-    CHECK(after.live_bytes==before.live_bytes);xr_compile_resources_release(context.resources);
+    CHECK(after.held_bytes==before.held_bytes);xr_compile_resources_release(context.resources);
 }
 int main(void) {
     xr_test_suppress_dialogs();

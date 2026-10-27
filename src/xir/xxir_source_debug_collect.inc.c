@@ -14,7 +14,7 @@ static XrXirStatus source_debug_publish(SourceContext *ctx,XrXirSourceResult *ou
     XrXirSourceDebugFunction *functions=source_alloc(ctx,module->function_count,sizeof(*functions));
     if (module->function_count && !functions) return ctx->diagnostic.status;
     for (uint32_t f=0;f<ctx->function_count;++f) {
-        if (!source_work_units(ctx,NULL,sizeof(*functions))) return ctx->diagnostic.status;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return ctx->diagnostic.status;
         if (module->functions[f].parameter_count!=ctx->functions[f].parameter_count ||
             module->functions[f].instruction_count!=ctx->functions[f].instruction_count)
             return XR_XIR_BAD_STRUCTURE;
@@ -27,7 +27,7 @@ static XrXirStatus source_debug_publish(SourceContext *ctx,XrXirSourceResult *ou
     }
     uint32_t expected=module->function_count;
     for (const SourceGeneratedDebug *row=ctx->generated_debug;row;row=row->next) {
-        if (!source_work_units(ctx,NULL,sizeof(*functions))) return ctx->diagnostic.status;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return ctx->diagnostic.status;
         if (expected<=ctx->function_count || row->function.function!=--expected ||
             row->function.parameter_count!=module->functions[expected].parameter_count ||
             row->function.instruction_count!=module->functions[expected].instruction_count)
@@ -39,7 +39,7 @@ static XrXirStatus source_debug_publish(SourceContext *ctx,XrXirSourceResult *ou
     if (ctx->slot_count && !globals) return ctx->diagnostic.status;
     for (uint32_t m=0;m<(uint32_t)ctx->graph->spec_count;++m) {
         for (const SourceName *name=ctx->names[m];name;name=name->next) {
-            if (!source_work_units(ctx,NULL,sizeof(*name))) return ctx->diagnostic.status;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return ctx->diagnostic.status;
             if ((name->kind!=SOURCE_SLOT && name->kind!=SOURCE_UNIT_SLOT) || !name->declaration) continue;
             if (name->index>=ctx->slot_count || globals[name->index].declaration) return XR_XIR_BAD_STRUCTURE;
             globals[name->index]=(XrXirSourceDebugGlobal){name->declaration,name->index};
@@ -47,7 +47,7 @@ static XrXirStatus source_debug_publish(SourceContext *ctx,XrXirSourceResult *ou
     }
     uint32_t count=0;
     for (uint32_t s=0;s<ctx->slot_count;++s) {
-        if (!source_work_units(ctx,NULL,sizeof(*globals))) return ctx->diagnostic.status;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return ctx->diagnostic.status;
         if (globals[s].declaration) globals[count++]=globals[s];
     }
     XrXirSourceDebugView debug={functions,module->function_count,count ? globals : NULL,count};

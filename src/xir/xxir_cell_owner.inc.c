@@ -126,8 +126,8 @@ XR_FUNC XrXirValueStatus xr_xir_cell_projection_steps(const XrXirValue *value,
     XrXirValueAdmission *admission,uint32_t *output) {
     if (!output || !admission || !admission->arena || !admission->domain || !admission_domain_current(admission))
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (admission->work<64 || !xr_xir_domain_work(admission->domain,64)) return XR_XIR_VALUE_LIMIT;
-    admission->work-=64;
+    if (!admission_is_compile(admission) && (admission->work<64 || !xr_xir_domain_work(admission->domain,64))) return XR_XIR_VALUE_LIMIT;
+    if (!admission_is_compile(admission)) admission->work-=64;
     const XirCell *cell=cell_owner(value);
     if (!cell || cell->object.arena!=admission->arena || cell->object.domain!=admission->domain)
         return XR_XIR_VALUE_BAD_ARGUMENT;

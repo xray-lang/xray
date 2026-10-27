@@ -92,7 +92,7 @@ static bool probe_file_import(ModuleWork *work, XrModuleResolver *resolver, cons
     const char *relative, const XrModuleIdentityAuthority *authority, const char *importer_logical, char **output) {
     XrOsIoPolicy policy = xr_compile_io_policy(work->resources);
     const char *suffixes[] = {".xr","/index.xr"}; char path[XR_PATH_MAX];
-    for (unsigned i = 0; i < 2 && module_work(work,1); ++i) {
+    for (unsigned i = 0; i < 2 && ((work)->status == XR_MODULE_OK); ++i) {
         if (!module_format_buffer(work,path,sizeof(path),"%s/%s%s",base,relative,suffixes[i])) return false;
         if (resolver->overlay) {
             const XrModuleOverlayEntry *entry = NULL;
@@ -107,8 +107,7 @@ static bool probe_file_import(ModuleWork *work, XrModuleResolver *resolver, cons
 }
 static bool descriptor(ModuleWork *work, const char *name) {
     const XrStdlibSourceDescriptor *result = NULL;
-    if (work->status == XR_MODULE_OK) module_io(work,
-        xr_stdlib_source_descriptor_work(work,module_io_charge,name,&result));
+    if (work->status == XR_MODULE_OK) result=xr_stdlib_source_descriptor(name);
     return result != NULL;
 }
 static bool stdlib_submodule_path(ModuleWork *work, const char *path, char *name, size_t capacity) {
@@ -117,7 +116,7 @@ static bool stdlib_submodule_path(ModuleWork *work, const char *path, char *name
     if (!module_copy(work,name,path,(size_t)(slash-path))) return false;
     name[slash-path] = 0;
     bool first = true;
-    for (const char *p = path; module_work(work,1); ++p) {
+    for (const char *p = path; (work)->status == XR_MODULE_OK; ++p) {
         if (!*p) break;
         if (*p == '/') { if (first) return false; first = true; continue; }
         bool letter = (*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || *p == '_';
@@ -216,12 +215,12 @@ static void resolve_package(ModuleWork *work, XrModuleResolver *resolver, const 
     if (!version_valid || module_length(work,locked->checksum) != 71 || !module_prefix(work,locked->checksum,"sha256:")) {
         module_status(work,XR_MODULE_INVALID); return;
     }
-    for (size_t i = 7; i < 71 && module_work(work,1); ++i)
+    for (size_t i = 7; i < 71 && ((work)->status == XR_MODULE_OK); ++i)
         if (!isxdigit((unsigned char)locked->checksum[i])) { module_status(work,XR_MODULE_INVALID); return; }
-    if (!module_work(work,1)) return;
+    if (!((work)->status == XR_MODULE_OK)) return;
     const char *home = getenv("HOME");
 #ifdef XR_OS_WINDOWS
-    if (!home && module_work(work,1)) home = getenv("USERPROFILE");
+    if (!home && ((work)->status == XR_MODULE_OK)) home = getenv("USERPROFILE");
 #endif
     if (!home) { module_status(work,XR_MODULE_INVALID); return; }
     char archive[XR_PATH_MAX], package_root[XR_PATH_MAX], coordinate[256];
@@ -236,7 +235,7 @@ static void resolve_package(ModuleWork *work, XrModuleResolver *resolver, const 
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_PACKAGE,coordinate,root};
     if (module_authority(work,&authority)) {
         const char *entries[] = {"src/main.xr","main.xr",NULL}; char path[XR_PATH_MAX]; bool found = false;
-        for (unsigned i = 0; i < 3 && module_work(work,1); ++i) {
+        for (unsigned i = 0; i < 3 && ((work)->status == XR_MODULE_OK); ++i) {
             if (!(i == 2 ? module_format_buffer(work,path,sizeof(path),"%s/%s.xr",root,name) :
                 module_format_buffer(work,path,sizeof(path),"%s/%s",root,entries[i]))) break;
             if(overlay_named_select(work,resolver,&authority,path,out)) {found=true;break;}

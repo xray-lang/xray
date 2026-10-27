@@ -36,7 +36,7 @@ static bool source_tuple_spread_value(SourceContext *ctx, AstNode *node,
     if (!plan) return false;
     SourceExpressionPlan *literal = plan;
     while (literal->syntax->type == AST_GROUPING && literal->left) {
-        if (!source_work(ctx, literal->syntax)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         literal = literal->left;
     }
     if (context && literal->syntax->type == AST_TUPLE_LITERAL) {
@@ -90,7 +90,7 @@ static bool source_tuple_expand(SourceContext *ctx, AstNode *node, SourceTupleEl
     if (!types || !source_copy_bytes(ctx, source, types, signature->parameters, arity * sizeof(*types))) return false;
     for (uint32_t f = 0; f < arity; ++f) {
         SourceValue field;
-        if (!source_work(ctx, source) ||
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) ||
             !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_TUPLE_FIELD, types[f].type,
                 {tuple.id}, {0}, f, {0}}, &field) ||
             !source_tuple_append(ctx, source, elements, field, false)) return false;
@@ -120,7 +120,7 @@ static bool source_tuple_expanded_literal(SourceContext *ctx, AstNode *node,
     for (int i = 0; i < literal->count; ++i) {
         AstNode *child = literal->elements[i];
         if (!child) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "Tuple literal entry is missing");
-        if (!source_work(ctx, child)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (child->type == AST_SPREAD_EXPR) {
             if (!source_tuple_expand(ctx, child, &elements)) return false;
         } else {
@@ -141,7 +141,7 @@ static bool source_tuple_expanded_literal(SourceContext *ctx, AstNode *node,
     if (!types || !payloads) return false;
     uint32_t payload_count = 0;
     for (uint32_t f = 0; f < elements.count; ++f) {
-        if (!source_work(ctx, node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         types[f] = (XrXirCallableParameter){elements.values[f].type, 0};
         if (elements.values[f].type != XR_XIR_UNIT) payloads[payload_count++] = elements.values[f];
     }

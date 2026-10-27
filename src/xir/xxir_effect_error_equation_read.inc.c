@@ -10,6 +10,12 @@
  *   Current Input defines every transfer. Proposed block entries and call
  *   summaries remain operands whose closure and rootedness require proof.
  */
+typedef struct EffectErrorPredecessors {
+    uint64_t rows[64],local_writes;
+    uint32_t function,blocks;
+    bool ready;
+} EffectErrorPredecessors;
+
 typedef struct EffectErrorEquationRead {
     EffectBodyRequest body;
     EffectBodyFunctionHead head;
@@ -17,6 +23,7 @@ typedef struct EffectErrorEquationRead {
     const EffectErrorAtom *atoms;
     uint32_t context,function,atom_count,words,rank_limit;
     const void *owner;
+    const EffectErrorPredecessors *predecessors;
     XrXirStatus (*entry)(const struct EffectErrorEquationRead *,uint32_t,uint32_t,uint32_t,uint64_t *);
     XrXirStatus (*call)(const struct EffectErrorEquationRead *,uint32_t,uint32_t,uint64_t *);
     XrXirStatus (*result)(const struct EffectErrorEquationRead *,uint32_t,uint32_t,uint64_t *);
@@ -39,7 +46,7 @@ static XrXirStatus error_equation_current_opcode(const EffectErrorEquationRead *
     if(status==XR_XIR_OK) status=effect_body_run_word(&read->body.read,ref,instruction,0,&opcode);
     if(status!=XR_XIR_OK) return status;
     if(opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(read->work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=(XrXirOp)opcode;return XR_XIR_OK;
 }
 
@@ -49,7 +56,7 @@ static inline XrXirStatus error_equation_operation(const EffectErrorEquationRead
     XrXirStatus status=effect_body_request_instruction(&read->body,read->function,i,storage,&actual);
     if (status==XR_XIR_OK && !actual) return XR_XIR_BAD_STRUCTURE;
     if (status==XR_XIR_OK && actual!=storage) {
-        if (!xir_compile_work(read->work,sizeof(*storage))) return XR_XIR_BUDGET;
+
         *storage=*actual;
     }
     return status;
@@ -77,7 +84,7 @@ static inline XrXirStatus error_equation_root(const EffectErrorEquationRead *rea
     uint32_t value,uint32_t *output) {
     uint64_t values=(uint64_t)read->head.parameter_count+read->head.instruction_count;
     for (uint64_t walked=0;walked<=values;++walked) {
-        if (!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
         if (value>=values) return XR_XIR_BAD_STRUCTURE;
         if (value<read->head.parameter_count) { *output=value;return XR_XIR_OK; }
         XrXirInstruction op;
@@ -98,7 +105,7 @@ static inline XrXirStatus error_equation_type_word(const EffectErrorEquationRead
     if (type==XR_XIR_ERROR || (node && node->kind==XR_XIR_TYPE_TASK)) {
         if (!word) result=UINT64_C(2);
     } else for (uint32_t a=0;a<read->atom_count;++a) {
-        if (!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
         if (read->atoms[a].type==type && (a+2)/64==word)
             result|=UINT64_C(1)<<((a+2)%64);
     }
@@ -123,11 +130,45 @@ static inline XrXirStatus error_equation_value(const EffectErrorEquationRead *re
         if (status!=XR_XIR_OK) return status;
         if (!active) { *output=0;return XR_XIR_OK; }
         bool cell=xr_xir_type_is_cell(read->body.domain.types,type),follow=false;
-        while (cursor>first) {
+
+        uint32_t floor=first;
+        if(!cell && read->predecessors) {
+
+            const EffectErrorPredecessors *index=read->predecessors;
+            if(index->ready && index->function==read->function && index->blocks==read->head.block_count &&
+                index->blocks<=64 && !(index->local_writes&(UINT64_C(1)<<block))) {
+                /* Without local assignments, only this value's actual definition
+                 * can change its incoming row. Copies still follow their source
+                 * at the original cursor, and PHIs still consume the entry. */
+
+                if(value>=read->head.parameter_count && value-read->head.parameter_count>=first &&
+                    value-read->head.parameter_count<cursor) {
+                    floor=value-read->head.parameter_count;cursor=floor+1;
+                } else cursor=first;
+            }
+        }
+        while (cursor>floor) {
             uint32_t i=--cursor;XrXirInstruction op;
-            status=error_equation_operation(read,i,&op);
+            if(read->body.current && effect_body_request_sequence_owned(&read->body)) {
+                const EffectBodyRun *ref=NULL;uint32_t opcode=XR_XIR_INVALID;
+                status=effect_body_current_record(&read->body,read->function,i,&ref);
+                if(status==XR_XIR_OK) status=effect_body_run_word(&read->body.read,ref,i,0,&opcode);
+                if(status!=XR_XIR_OK) return status;
+                if(opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+
+                if(cell && error_equation_invalidates_cells((XrXirOp)opcode))
+                    return error_equation_type_word(read,type,word,output);
+                bool writes=opcode==XR_XIR_LOCAL_WRITE || opcode==XR_XIR_OWNED_LOCAL_WRITE ||
+                    opcode==XR_XIR_SCALAR_LOCAL_WRITE || (cell && opcode==XR_XIR_CELL_WRITE);
+                if(!writes && (value!=(uint64_t)read->head.parameter_count+i || opcode==XR_XIR_PHI))
+                    continue;
+                /* The selected run belongs to this same read. Reconstruct every
+                 * column without repeating its directory search; no run pointer
+                 * escapes this iteration or survives a transfer callback. */
+                status=effect_body_instruction_ref_value(&read->body.read,ref,i,&op);
+            } else status=error_equation_operation(read,i,&op);
             if (status!=XR_XIR_OK) return status;
-            if (!xir_compile_work(read->work,8)) return XR_XIR_BUDGET;
+
             if (cell && error_equation_invalidates_cells(op.op))
                 return error_equation_type_word(read,type,word,output);
             if (cell && op.op==XR_XIR_CELL_WRITE) {
@@ -162,7 +203,7 @@ static inline XrXirStatus error_equation_value(const EffectErrorEquationRead *re
             if (op.op==XR_XIR_ENUM_NEW) {
                 uint64_t result=0;
                 for (uint32_t a=0;a<read->atom_count;++a) {
-                    if (!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
                     if (read->atoms[a].type==op.type && read->atoms[a].variant==(uint32_t)op.immediate &&
                         (a+2)/64==word) result|=UINT64_C(1)<<((a+2)%64);
                 }
@@ -236,7 +277,7 @@ static inline XrXirStatus error_equation_filter_mask(const EffectErrorEquationRe
     if (status==XR_XIR_OK) status=error_equation_root(read,filter->value,&right);
     if (status!=XR_XIR_OK || left!=right) return status;
     for (uint32_t a=0;a<read->atom_count;++a) {
-        if (!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+
         const EffectErrorAtom *atom=&read->atoms[a];
         if ((a+2)/64!=word || atom->variant==XR_XIR_ERROR_SYMBOLIC_VARIANT) continue;
         bool match=atom->type==filter->type && (filter->variant<0 || atom->variant==(uint64_t)filter->variant);
@@ -253,6 +294,31 @@ typedef struct EffectErrorEdgeRead {
     EffectErrorEdgeKind kind;
 } EffectErrorEdgeRead;
 
+/* Edge identity consumes only these three physical columns. The current view
+ * has framed every column; filters, Phi inputs and contributing transfers keep
+ * their complete readers. No projected value outlives this classification. */
+static XrXirStatus error_equation_edge_identity(const EffectErrorEquationRead *read,
+    uint32_t instruction,uint32_t side,XrXirInstruction *terminal) {
+    const EffectBodyRequest *body=&read->body;
+    if(!body->current || !effect_body_request_sequence_owned(body))
+        return error_equation_operation(read,instruction,terminal);
+    if(!terminal || !body->owner || !body->domain.types ||
+        read->function>=body->domain.function_count)
+        return XR_XIR_BAD_STRUCTURE;
+
+    if(body->current->work!=read->work) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyRun *ref=NULL;uint32_t opcode=XR_XIR_INVALID;
+    XrXirStatus status=effect_body_current_record(body,read->function,instruction,&ref);
+    if(status==XR_XIR_OK) status=effect_body_run_word(&body->read,ref,instruction,0,&opcode);
+    if(status!=XR_XIR_OK) return status;
+    if(opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+
+    terminal->op=(XrXirOp)opcode;
+    status=effect_body_run_word(&body->read,ref,instruction,2,&terminal->args[0]);
+    if(status==XR_XIR_OK)
+        status=effect_body_run_word(&body->read,ref,instruction,4+side,&terminal->targets[side]);
+    return status;
+}
 /* Coordinates name an actual Input edge, never an arbitrary state transfer.
  * Source reachability and positive support remain separate proof obligations. */
 static inline XrXirStatus error_equation_edge_classify(const EffectErrorEquationRead *read,
@@ -268,7 +334,7 @@ static inline XrXirStatus error_equation_edge_classify(const EffectErrorEquation
         return from->panic && from->panic==edge->to && edge->cursor>=from->first && edge->cursor<end?
             XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     if(edge->kind>EFFECT_ERROR_EDGE_ALTERNATE || edge->cursor!=end) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=error_equation_operation(read,end-1,terminal);
+    XrXirStatus status=error_equation_edge_identity(read,end-1,(uint32_t)edge->kind,terminal);
     if(status!=XR_XIR_OK) return status;
     bool alternate=edge->kind==EFFECT_ERROR_EDGE_ALTERNATE;
     if(terminal->op==XR_XIR_JUMP || terminal->op==XR_XIR_CLEANUP_REGISTER ||
@@ -314,7 +380,7 @@ static inline XrXirStatus error_equation_edge_possible(const EffectErrorEquation
     *possible=false;
     for(uint32_t word=0;word<read->words;++word) {
         uint64_t row=0;
-        if(!xir_compile_work(read->work,1)) return XR_XIR_BUDGET;
+
         if(exceptional) {
             if(terminal.op==XR_XIR_TASK_AWAIT || terminal.op==XR_XIR_ITERATOR_HAS_NEXT ||
                 terminal.op==XR_XIR_ITERATOR_NEXT || terminal.op==XR_XIR_ITERATOR_NTH)
@@ -330,8 +396,27 @@ static inline XrXirStatus error_equation_edge_possible(const EffectErrorEquation
 
 /* Phi inputs read the same filtered predecessor snapshot. No earlier Phi
  * assignment can replace a later one's source, including self and back edges. */
-static inline XrXirStatus error_equation_edge_word(const EffectErrorEquationRead *read,
-    const EffectErrorEdgeRead *edge,uint32_t value,uint32_t word,uint64_t *output,bool *possible) {
+typedef struct EffectErrorEdgeValueRead {
+    uint32_t value,word;
+    const EffectErrorEquationRead *eligible;
+} EffectErrorEdgeValueRead;
+
+/* Eligibility belongs only to this destination in the calling current walk.
+ * It never classifies a Phi source, transfer result or independently read RHS. */
+static inline XrXirStatus error_equation_edge_word_read(const EffectErrorEquationRead *read,
+    const EffectErrorEdgeRead *edge,const EffectErrorEdgeValueRead *query,uint64_t *output,bool *possible) {
+    if(!read || !query) return XR_XIR_BAD_STRUCTURE;
+
+    uint32_t value=query->value,word=query->word;
+    if(query->eligible) {
+
+        const EffectBodyCurrentRead *current=read->body.current;
+        if(query->eligible!=read || !current || current->material!=read->body.owner ||
+            current->work!=read->work || read->body.read.owner!=read->work ||
+            read->body.head!=effect_body_owned_head || read->body.instruction!=effect_body_owned_instruction ||
+            read->body.type!=effect_body_owned_type || read->body.shape!=effect_body_owned_shape ||
+            read->body.read.execution != NULL) return XR_XIR_BAD_STRUCTURE;
+    }
     EffectErrorFilterRead filter;
     XrXirStatus status=error_equation_edge_possible(read,edge,&filter,possible);
     if(status!=XR_XIR_OK) return status;
@@ -354,7 +439,7 @@ static inline XrXirStatus error_equation_edge_word(const EffectErrorEquationRead
                     phi.args[1]>read->head.operand_count-phi.args[0]) return XR_XIR_BAD_STRUCTURE;
                 uint32_t matches=0;
                 for(uint32_t p=0;p<phi.args[1];p+=2) {
-                    if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
                     if(read->head.operands[phi.args[0]+p]==edge->from) {
                         source=read->head.operands[phi.args[0]+p+1];++matches;
                     }
@@ -363,9 +448,18 @@ static inline XrXirStatus error_equation_edge_word(const EffectErrorEquationRead
             }
         }
     }
-    bool active=false;XrXirType type=XR_XIR_UNIT;
-    status=error_equation_membership(read,value,&active,&type);
-    if(status!=XR_XIR_OK) return status;
-    if(!active) { *output=0;return XR_XIR_OK; }
+
+    if(!query->eligible) {
+        bool active=false;XrXirType type=XR_XIR_UNIT;
+        status=error_equation_membership(read,value,&active,&type);
+        if(status!=XR_XIR_OK) return status;
+        if(!active) { *output=0;return XR_XIR_OK; }
+    }
     return error_equation_edge_source(read,edge,&filter,source,word,output);
+}
+static inline XrXirStatus error_equation_edge_word(const EffectErrorEquationRead *read,
+    const EffectErrorEdgeRead *edge,uint32_t value,uint32_t word,uint64_t *output,bool *possible) {
+
+    EffectErrorEdgeValueRead query={value,word,NULL};
+    return error_equation_edge_word_read(read,edge,&query,output,possible);
 }

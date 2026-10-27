@@ -13,10 +13,11 @@
 #ifndef XXIR_CTFE_H
 #define XXIR_CTFE_H
 #include "xxir.h"
+#include "../base/xcompile_request.h"
 
 #define XR_XIR_CTFE_MAX_STEPS UINT64_C(65536)
 #define XR_XIR_CTFE_MAX_FRAME_BYTES UINT64_C(65536)
-/* Persistent result keys must include this policy and all request/ledger limits.
+/* Persistent result keys must include this policy and all actual evaluation and memory limits.
  * A result accepted with a larger ceiling grants no smaller-budget cache hit. */
 #define XR_XIR_CTFE_OUTPUT_POLICY_VERSION UINT32_C(2)
 #define XR_XIR_CTFE_MAX_OUTPUT_BYTES (UINT64_C(8)*1024*1024)
@@ -24,11 +25,13 @@
 typedef enum XrXirCtfeStatus {
     XR_XIR_CTFE_OK, XR_XIR_CTFE_BAD_ARGUMENT, XR_XIR_CTFE_BAD_ARTIFACT,
     XR_XIR_CTFE_PROFILE, XR_XIR_CTFE_IDENTITY, XR_XIR_CTFE_NOT_LEAF,
-    XR_XIR_CTFE_BUDGET, XR_XIR_CTFE_OUT_OF_MEMORY, XR_XIR_CTFE_STEP_LIMIT,
+    XR_XIR_CTFE_COMPLEXITY_LIMIT, XR_XIR_CTFE_OUT_OF_MEMORY, XR_XIR_CTFE_STEP_LIMIT,
     XR_XIR_CTFE_FRAME_LIMIT, XR_XIR_CTFE_OUTPUT_LIMIT,
     XR_XIR_CTFE_DIVIDE_BY_ZERO, XR_XIR_CTFE_NUMERIC_RANGE,
     XR_XIR_CTFE_DEPTH_LIMIT, XR_XIR_CTFE_NOT_SUPPORTED, XR_XIR_CTFE_NULL_UNWRAP, XR_XIR_CTFE_BOUNDS, XR_XIR_CTFE_UNCAUGHT_ERROR,
-    XR_XIR_CTFE_ASSERTION_FAILURE, XR_XIR_CTFE_MATCH_FAILURE, XR_XIR_CTFE_CLEANUP_PANIC
+    XR_XIR_CTFE_ASSERTION_FAILURE, XR_XIR_CTFE_MATCH_FAILURE, XR_XIR_CTFE_CLEANUP_PANIC,
+    XR_XIR_CTFE_MEMORY_LIMIT, XR_XIR_CTFE_OVERFLOW, XR_XIR_CTFE_CANCELLED,
+    XR_XIR_CTFE_DEADLINE, XR_XIR_CTFE_CLOCK_FAILURE
 } XrXirCtfeStatus;
 typedef struct XrXirCtfeLimits { uint64_t steps, frame_bytes, output_bytes; } XrXirCtfeLimits;
 typedef struct XrXirCtfeRequest {
@@ -40,21 +43,16 @@ typedef struct XrXirCtfeRequest {
     const XrXirValue *arguments;
     uint32_t argument_count;
     XrXirCtfeLimits limits;
+    /* Borrowed only until this synchronous evaluation returns. Nested calls
+     * share it; no Value, Domain, Artifact or retained result stores it. */
+    XrCompileRequestControl *control;
 } XrXirCtfeRequest;
 
-/* Dynamic marks a variable receiving span; internal caches also count callable
- * capture graphs. Public shapes admit exportable data only. Pure arrays are primitive/
- * String leaves or only Array wrappers, for which Value skips deep admission. */
-typedef struct XrXirCtfeTypeShape { uint64_t work;bool dynamic,pure_arrays; } XrXirCtfeTypeShape;
-/* Metadata cost only: no Value borrow, identity or execution authority. */
-XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_shape(const XrXirCompileContext *context,
-    const XrXirTypes *types,XrXirType type,XrXirCtfeTypeShape *output);
-
 /* Receive a closed compiler value family from its structurally verified pool.
- * This ledger-owned iterative admission accepts primitive/String/Unit and
+ * This memory-owned iterative admission accepts primitive/String/Unit and
  * immutable Tuple/Nullable/Array and declared struct/enum data. Finite storage
  * handles may close recursive metadata; inline cycles, pure Array cycles and
- * authority-bearing fields refuse. Actual value visits pay separately and
+ * authority-bearing fields refuse. Actual value graphs are admitted separately and
  * no execution permission follows. Failure preserves caller metadata. */
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_admit(const XrXirCompileContext *context,
     const XrXirTypes *types, XrXirType type);
@@ -68,29 +66,29 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_admit(const XrXirCompileContext
  * receive independent bounded snapshots after complete cross-arena type matching. Private storage
  * remains inside the bounded admitted opcode graph. Local
  * writes produce Unit without a result slot. Every call repeats full artifact
- * verification on its original compiler ledger; root/effect flags never grant
+ * verification on its original compiler memory owner; root/effect flags never grant
  * purity. Limits may deny all resources and must not exceed the fixed ceilings.
- * Float operations use the existing integer-only IEEE kernel and prepay a
- * fixed-width work reserve on the original ledger. Canonical f32/f64 values
+ * Float operations use the existing integer-only IEEE kernel and bounded local
+ * workspaces. Canonical f32/f64 values
  * export four/eight target bytes; numeric conversion range errors preserve output.
  * Output must be canonical Unit. Failure preserves it, and consumed compiler
- * allocation/work is never refunded. Output bytes measure target logical storage,
+ * temporary memory is released on every failure. Output bytes measure target logical storage,
  * not the host carrier size. No source syntax, calls or runtime fallback is implied. */
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request,
     XrXirValue *output);
 /* Direct calls execute only a fully checked admitted-value reachable closure,
- * including frame-owned locals and private Cells on the compiler ledger.
+ * including frame-owned locals and private Cells on the compiler memory owner.
  * Internal ref/lexical cleanup parameters require fresh producer roles and
  * authentic frame loans. Static cleanup targets join the complete closure;
  * frontiers retire after child return and pending returns retain snapshots.
  * Numeric/CFG execution uses the common kernel. Depth
- * and live activation bytes bound the whole stack; steps/work are never reset
+ * and live activation bytes bound the whole stack; steps are never reset
  * on a callee or refunded on return. Admission includes unused reachable body
  * operations and does not derive determinism from any ROOT/effect flags.
  * Borrowed inputs stay live during this synchronous call. All failures preserve
  * canonical Unit output. String exports own their compiler storage and measure
  * UTF-8 bytes. Comparison/search use ordinary Unicode index and byte-order rules,
- * prepay scan/table work and report NUMERIC_RANGE on invalid starts. Immutable
+ * report NUMERIC_RANGE on invalid starts. Immutable
  * Tuple/Nullable/Array and admitted struct/enum exports retain their actual type
  * arena and active fields. External Cell/Function and other identity arguments, Function
  * exports remain unadmitted. Internal PanicInfo values originate only at real

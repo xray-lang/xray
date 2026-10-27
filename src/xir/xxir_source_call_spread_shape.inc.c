@@ -20,7 +20,7 @@ static SourceName *source_call_spread_function(SourceContext *ctx,AstNode *calle
 /* Shape facts reserve operands only. Completion checks the real tuple type
  * and every declaration, conversion and access through the ordinary plan. */
 static bool source_call_spread_shape(SourceContext *ctx,AstNode *node,uint32_t depth,uint32_t *arity) {
-    if (!node || !source_work(ctx,node)) return false;
+    if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"call spread shape depth exhausted");
     if (node->type==AST_GROUPING) return source_call_spread_shape(ctx,node->as.grouping,depth+1,arity);
     if (node->type==AST_TUPLE_LITERAL) {
@@ -32,7 +32,7 @@ static bool source_call_spread_shape(SourceContext *ctx,AstNode *node,uint32_t d
             AstNode *field=tuple->elements[f];uint32_t count=1;
             if (!field) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"call spread Tuple entry is missing");
             if (field->type==AST_SPREAD_EXPR && !source_call_spread_shape(ctx,field->as.spread_expr.expr,depth+1,&count)) return false;
-            if (!source_work(ctx,field) || count>65536-*arity)
+            if (!((ctx)->diagnostic.status == XR_XIR_OK) || count>65536-*arity)
                 return source_fail(ctx,node,XR_XIR_BUDGET,"call expanded arity exhausted");
             *arity+=count;
         }
@@ -45,7 +45,7 @@ static bool source_call_spread_shape(SourceContext *ctx,AstNode *node,uint32_t d
         uint32_t claims=source_fact_depth(ctx,binding);
         if (ctx->diagnostic.status!=XR_XIR_OK) return false;
         for (uint32_t c=0;c<claims && xr_xir_type_is_nullable(&ctx->types,ground.type);++c) {
-            if (!source_work(ctx,node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             ground.type=xr_xir_nullable_element(&ctx->types,ground.type);
         }
     }
@@ -60,14 +60,14 @@ static bool source_call_spread_shape(SourceContext *ctx,AstNode *node,uint32_t d
                 XrXirType *types=source_alloc(ctx,parameters,sizeof(*types));
                 if (!types) return false;
                 for (uint32_t p=0;p<parameters;++p)
-                    if (!source_work(ctx,node) || !source_type(ctx,call->type_args[p],&types[p])) return false;
+                    if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx,call->type_args[p],&types[p])) return false;
                 if (!source_substitute(ctx,&(SourceSubstitution){types,parameters},result,0,&result)) return false;
             } else if ((uint32_t)result>=XR_XIR_TYPE_PARAMETER_BASE &&
                 (uint32_t)result-XR_XIR_TYPE_PARAMETER_BASE<parameters) {
                 const XrXirFunction *function=&ctx->functions[binding->index];
                 uint32_t count=call->arg_count>0 ? (uint32_t)call->arg_count : 0;
                 for (uint32_t a=0;a<count && a<function->parameter_count;++a) {
-                    if (!source_work(ctx,node)) return false;
+                    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                     if (function->parameters[a]==result && call->arguments[a]->type!=AST_SPREAD_EXPR)
                         return source_call_spread_shape(ctx,call->arguments[a],depth+1,arity);
                 }

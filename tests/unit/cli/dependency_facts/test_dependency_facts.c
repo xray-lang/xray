@@ -39,32 +39,30 @@ static void observed_free(void *p) {
 #undef xr_free
 #endif
 
-static const XrCompileResourceLimits unlimited = {UINT64_MAX,UINT64_MAX,UINT64_MAX};
+static const XrCompileResourceLimits unlimited = {XR_COMPILE_MEMORY_ORDINARY,0,true};
 static const XrDependencyLimits shape = {1024 * 1024,32768,4096};
 static const char *const arguments[] = {"C:\\tools\\compiler.exe", "-c", "C:\\src\\a.c"};
-static size_t all_oom, all_work;
+static size_t all_oom;
 static void reset(void);
-static XrJsonCursorStatus cursor_charge(void *context,uint64_t units) {
-    return xr_compile_resources_work(context,units)==XR_COMPILE_RESOURCE_OK ? XR_JSON_CURSOR_OK : XR_JSON_CURSOR_BUDGET;
-}
-static void cursor_fixed_work(void) {
+
+static void cursor_plain_grammar(void) {
     reset();
     XrCompileResources *r=NULL; CHECK(xr_compile_resources_new(&unlimited,&r)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats before,after; CHECK(xr_compile_resources_stats(r,&before)==XR_COMPILE_RESOURCE_OK);
-    XrJsonCursor json=xr_json_cursor_make(NULL,0,r,cursor_charge);
+    XrJsonCursor json=xr_json_cursor_make(NULL,0);
     CHECK(xr_json_cursor_equal(&json,"a","a"));
-    CHECK(xr_compile_resources_stats(r,&after)==XR_COMPILE_RESOURCE_OK && after.work-before.work==4);
     char source[]="\"\\u0061\""; const char *text=NULL;
-    json=xr_json_cursor_make(source,8,r,cursor_charge); before=after;
+    json=xr_json_cursor_make(source,8);
     CHECK(xr_json_cursor_string(&json,1,&text) && !strcmp(text,"a"));
-    CHECK(xr_compile_resources_stats(r,&after)==XR_COMPILE_RESOURCE_OK && after.work-before.work==11);
-    xr_compile_resources_release(r);
-    XrCompileResourceLimits budget=unlimited;budget.work=1;
-    r=NULL;CHECK(xr_compile_resources_new(&budget,&r)==XR_COMPILE_RESOURCE_OK);
-    json=xr_json_cursor_make(NULL,0,r,cursor_charge);
-    CHECK(!xr_json_cursor_equal(&json,(const char *)(uintptr_t)1,(const char *)(uintptr_t)1));
-    CHECK(json.status==XR_JSON_CURSOR_BUDGET);
-    xr_compile_resources_release(r);
+    CHECK(xr_compile_resources_stats(r,&after)==XR_COMPILE_RESOURCE_OK && !memcmp(&before,&after,sizeof(before)));
+    char failed[]="\"bad\\uD800\"";text="preserved";
+    json=xr_json_cursor_make(failed,sizeof(failed)-1);
+    CHECK(!xr_json_cursor_string(&json,32,&text) && json.status==XR_JSON_CURSOR_INVALID && !strcmp(text,"preserved"));
+    uint8_t byte=0xa5;CHECK(!xr_json_cursor_byte(&json,&byte) && byte==0xa5);
+    CHECK(!xr_json_cursor_equal(&json,"a","a") && json.status==XR_JSON_CURSOR_INVALID);
+    json=xr_json_cursor_make(NULL,1);CHECK(json.status==XR_JSON_CURSOR_INVALID);
+    CHECK(!xr_json_cursor_byte(&json,&byte) && byte==0xa5);
+    xr_compile_resources_release(r);reset();
 }
 static char *read_file(const char *directory, const char *name, size_t *length) {
     char path[4096]; CHECK(snprintf(path,sizeof(path),"%s/%s",directory,name)>0);
@@ -82,7 +80,7 @@ static void reset(void) {
 static void stats(XrCompileResources *r, XrCompileResourceStats *s) {
     CHECK(xr_compile_resources_stats(r,s)==XR_COMPILE_RESOURCE_OK);
 #ifndef DEPENDENCY_PRODUCTION
-    CHECK(s->live_bytes==physical && s->allocated_bytes==total && s->peak_bytes==peak);
+    CHECK(s->held_bytes==physical && s->allocated_bytes==total && s->peak_bytes==peak);
 #endif
 }
 static XrXirTargetStatus trial(const XrDependencyInput *input, XrDependencyLimits limits,
@@ -90,7 +88,8 @@ static XrXirTargetStatus trial(const XrDependencyInput *input, XrDependencyLimit
     *measured=(XrCompileResourceStats){0};
     XrCompileResources *r=NULL; XrDependencyFacts *f=NULL;
     XrCompileResourceStatus rs=xr_compile_resources_new(budget,&r);
-    if (rs!=XR_COMPILE_RESOURCE_OK) return rs==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_TARGET_OUT_OF_MEMORY : XR_XIR_TARGET_BUDGET;
+    if (rs!=XR_COMPILE_RESOURCE_OK) return rs==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_TARGET_OUT_OF_MEMORY :
+        rs==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_TARGET_MEMORY_LIMIT : XR_XIR_TARGET_OVERFLOW;
     XrXirTargetStatus result=xtc_dependencies_parse(r,input,limits,&f);
     if (result==XR_XIR_TARGET_OK) {
         CHECK(f && xtc_dependencies_resources(f)==r && xtc_dependencies_status(f)==XR_XIR_TARGET_OK);
@@ -105,38 +104,23 @@ static XrXirTargetStatus trial(const XrDependencyInput *input, XrDependencyLimit
 #endif
     return result;
 }
-static void boundaries(const XrDependencyInput *input, bool every_work) {
-    XrCompileResourceStats baseline={0}, used={0}; reset();
+static void boundaries(const XrDependencyInput *input) {
+    XrCompileResourceStats baseline={0},used={0};reset();
     CHECK(trial(input,shape,&unlimited,&baseline)==XR_XIR_TARGET_OK);
 #ifndef DEPENDENCY_PRODUCTION
     size_t count=allocation_calls;
     for (size_t i=0;i<count;++i) {
-        reset(); fail_at=i;
+        reset();fail_at=i;
         CHECK(trial(input,shape,&unlimited,&used)==XR_XIR_TARGET_OUT_OF_MEMORY);
-        CHECK(allocation_calls==i+1 && !physical); ++all_oom;
+        CHECK(allocation_calls==i+1 && !physical);++all_oom;
     }
 #endif
-    for (unsigned axis=0;axis<3;++axis) {
-        uint64_t bound=axis==0 ? baseline.allocated_bytes : axis==1 ? baseline.peak_bytes : baseline.work;
-        for (unsigned minus=0;minus<2;++minus) {
-            XrCompileResourceLimits budget=unlimited;
-            if (axis==0) budget.allocated_bytes=bound-minus;
-            if (axis==1) budget.live_bytes=bound-minus;
-            if (axis==2) budget.work=bound-minus;
-            reset(); CHECK(trial(input,shape,&budget,&used)==(minus ? XR_XIR_TARGET_BUDGET : XR_XIR_TARGET_OK));
-        }
+    for (unsigned minus=0;minus<2;++minus) {
+        XrCompileResourceLimits budget={XR_COMPILE_MEMORY_FINITE,baseline.peak_bytes-minus,true};
+        reset();CHECK(trial(input,shape,&budget,&used)==(minus ? XR_XIR_TARGET_MEMORY_LIMIT : XR_XIR_TARGET_OK));
     }
-    uint64_t step=baseline.work/100+1;
-    for (uint64_t cut=every_work ? baseline.work : 0;
-        every_work ? cut!=0 : cut<baseline.work;) {
-        XrCompileResourceLimits budget=unlimited; budget.work=cut; reset();
-        if(every_work) --budget.work;
-        CHECK(trial(input,shape,&budget,&used)==XR_XIR_TARGET_BUDGET); ++all_work;
-        if(every_work) {CHECK(used.work<cut);cut=used.work;} else cut+=step;
-    }
-    printf("format=%d work=%llu allocated=%llu peak=%llu work-cut-step=%llu\n",input->format,
-        (unsigned long long)baseline.work,(unsigned long long)baseline.allocated_bytes,
-        (unsigned long long)baseline.peak_bytes,(unsigned long long)(every_work ? 0 : step));
+    printf("format=%d held-peak=%llu optional-turnover=%llu\n",input->format,
+        (unsigned long long)baseline.peak_bytes,(unsigned long long)baseline.allocated_bytes);
 }
 static void captured(const char *directory, const char *name, XrDependencyFormat format, uint32_t count) {
     char rawname[64], expectname[64];
@@ -167,7 +151,7 @@ static void captured(const char *directory, const char *name, XrDependencyFormat
     } else CHECK(!xtc_dependencies_target(f));
     xtc_dependencies_free(f);
     bytes=read_file(directory,rawname,&length); input.bytes=(uint8_t *)bytes;
-    boundaries(&input,format==XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE);
+    boundaries(&input);
     if(format==XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE) {
         for(size_t n=0;n<length;++n) {
             input.length=n;XrCompileResourceStats used;reset();
@@ -186,14 +170,14 @@ static void expect(XrDependencyFormat format, const char *bytes, XrXirTargetStat
     if(actual!=expected) fprintf(stderr,"expected %d got %d: %s\n",expected,actual,bytes);
     CHECK(actual==expected);
 }
-static void rejection_and_work(void) {
+static void rejection_and_memory(void) {
     static const char good[]="{\"Version\":\"1.2\",\"Data\":{\"Source\":\"C:/源/\\ud83d\\ude00.c\",\"ProvidedModule\":\"\",\"Includes\":[\"C:/a.h\",\"C:/b.h\",\"C:/c.h\",\"C:/d.h\",\"C:/e.h\",\"C:/f.h\",\"C:/g.h\",\"C:/h.h\",\"C:/i.h\"]}}";
     static const char make[]="C:\\out\\a.obj: \\\r\n C:\\src\\a.c \\\r\n C:\\has\\ space\\a.h\r\n";
     static const char link[]="正在搜索库\r\n    正在搜索 C:\\has space\\a.lib:\r\n已完成库搜索\r\n";
     const char *samples[]={good,make,link};
     for(unsigned i=0;i<3;++i) {
         XrDependencyInput input={(XrDependencyFormat)i,(const uint8_t *)samples[i],strlen(samples[i]),arguments,3};
-        boundaries(&input,true);
+        boundaries(&input);
     }
     expect(XR_DEPENDENCY_MSVC_SOURCE_1_2,"{\"Version\":\"1.3\",\"Data\":{}}",XR_XIR_TARGET_UNSUPPORTED);
     expect(XR_DEPENDENCY_MSVC_SOURCE_1_2,"{\"Version\":\"1.2\",\"Version\":\"1.2\"}",XR_XIR_TARGET_INVALID);
@@ -227,9 +211,7 @@ static void rejection_and_work(void) {
         XrDependencyInput invalid={XR_DEPENDENCY_MSVC_SOURCE_1_2,(const uint8_t *)early[i],strlen(early[i]),arguments,3};
         reset();CHECK(trial(&invalid,shape,&unlimited,&early_stats[i])==XR_XIR_TARGET_INVALID);
     }
-    /* Each suffix byte is copied once, decoded with one read/write, counted
-     * once, and UTF-8 validated once. The invalid-character scan has stopped. */
-    CHECK(early_stats[1].work-early_stats[0].work==5*10);
+    CHECK(early_stats[0].held_bytes>0 && early_stats[1].held_bytes>0);
     XrDependencyInput input={XR_DEPENDENCY_MSVC_SOURCE_1_2,(const uint8_t *)good,strlen(good),arguments,3};
     for (size_t length=1;length<strlen(good);++length) {
         input.length=length; XrCompileResourceStats used; reset();
@@ -262,16 +244,16 @@ static void rejection_and_work(void) {
     XrDependencyFacts *canary=(XrDependencyFacts *)(uintptr_t)1;
     CHECK(xtc_dependencies_parse(r,&input,shape,&canary)==XR_XIR_TARGET_INVALID && canary==(XrDependencyFacts *)(uintptr_t)1);
     xr_compile_resources_release(r);
-    /* Reusing the original owner never refreshes cumulative allocation. */
+    /* Released blocks restore resident capacity on the same real owner. */
     reset(); XrCompileResourceStats baseline;
     CHECK(trial(&input,shape,&unlimited,&baseline)==XR_XIR_TARGET_OK);
-    XrCompileResourceLimits once=unlimited; once.allocated_bytes=baseline.allocated_bytes;
+    XrCompileResourceLimits once=unlimited; once.memory_mode=XR_COMPILE_MEMORY_FINITE; once.memory_limit=baseline.peak_bytes;
     reset();r=NULL;CHECK(xr_compile_resources_new(&once,&r)==XR_COMPILE_RESOURCE_OK);
     XrDependencyFacts *first=NULL,*second=NULL;
     CHECK(xtc_dependencies_parse(r,&input,shape,&first)==XR_XIR_TARGET_OK);
     xtc_dependencies_free(first);
-    CHECK(xtc_dependencies_parse(r,&input,shape,&second)==XR_XIR_TARGET_BUDGET && !second);
-    xr_compile_resources_release(r);
+    CHECK(xtc_dependencies_parse(r,&input,shape,&second)==XR_XIR_TARGET_OK && second);
+    xtc_dependencies_free(second);xr_compile_resources_release(r);
 }
 static size_t rsp_ascii(const char *text, uint8_t *bytes) {
     bytes[0]=0xff;bytes[1]=0xfe;size_t length=2;
@@ -325,31 +307,28 @@ static void rsp_rejections(const char *directory) {
     const char *response[]={"link.exe","@C:/args.rsp"};input.argv=response;input.argc=2;
     XrCompileResourceStats used;reset();CHECK(trial(&input,shape,&unlimited,&used)==XR_XIR_TARGET_UNSUPPORTED);
     input.argv=arguments;input.argc=3;
-    XrCompileResourceLimits zero=unlimited;zero.work=0;bytes[0]=0;
-    reset();CHECK(trial(&input,shape,&zero,&used)==XR_XIR_TARGET_BUDGET);
+    bytes[0]=0;reset();CHECK(trial(&input,shape,&unlimited,&used)==XR_XIR_TARGET_INVALID);
     reset();XrCompileResources *r=NULL;CHECK(xr_compile_resources_new(&unlimited,&r)==XR_COMPILE_RESOURCE_OK);
     XrDependencyFacts *sentinel=(XrDependencyFacts *)(uintptr_t)1;
     CHECK(xtc_dependencies_parse(r,&input,shape,&sentinel)==XR_XIR_TARGET_INVALID&&sentinel==(XrDependencyFacts *)(uintptr_t)1);
     xr_compile_resources_release(r);
 }
-static void rsp_work_and_lifetime(void) {
+static void rsp_memory_and_lifetime(void) {
     uint8_t bytes[128];size_t length=rsp_ascii("\"C:/a\"\r\n",bytes);
     XrCompileResourceStats base=rsp_expect(bytes,length,shape,XR_XIR_TARGET_OK);
     length=rsp_ascii("\"C:/aa\"\r\n",bytes);
     XrCompileResourceStats longer=rsp_expect(bytes,length,shape,XR_XIR_TARGET_OK);
-    /* One extra ASCII unit adds two copied/read UTF-16 bytes and one UTF-8
-     * byte written, counted, validated and checked as a path character. */
-    CHECK(longer.work-base.work==8);
+    CHECK(longer.held_bytes>=base.held_bytes);
     length=rsp_ascii("\"C:/a\"\r\n",bytes);bytes[10]=0xe9;
-    longer=rsp_expect(bytes,length,shape,XR_XIR_TARGET_OK);CHECK(longer.work-base.work==4);
+    longer=rsp_expect(bytes,length,shape,XR_XIR_TARGET_OK);CHECK(longer.held_bytes>=base.held_bytes);
     bytes[10]=0x2d;bytes[11]=0x4e;
-    longer=rsp_expect(bytes,length,shape,XR_XIR_TARGET_OK);CHECK(longer.work-base.work==8);
+    longer=rsp_expect(bytes,length,shape,XR_XIR_TARGET_OK);CHECK(longer.held_bytes>=base.held_bytes);
     length=rsp_ascii("\"C:/aa\"\r\n",bytes);bytes[10]=0x3d;bytes[11]=0xd8;bytes[12]=0;bytes[13]=0xde;
-    longer=rsp_expect(bytes,length,shape,XR_XIR_TARGET_OK);CHECK(longer.work-base.work==16);
+    longer=rsp_expect(bytes,length,shape,XR_XIR_TARGET_OK);CHECK(longer.held_bytes>=base.held_bytes);
     XrDependencyLimits unicode_limit={length,7,1};rsp_expect(bytes,length,unicode_limit,XR_XIR_TARGET_OK);
     --unicode_limit.path_bytes;rsp_expect(bytes,length,unicode_limit,XR_XIR_TARGET_BUDGET);
     XrDependencyInput input={XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE,bytes,length,arguments,3};
-    boundaries(&input,true);
+    boundaries(&input);
     char executable[]="C:/tools/link.exe",option[]="/NODEFAULTLIB";
     const char *argv[]={executable,option};input.argv=argv;input.argc=2;
     reset();XrCompileResources *r=NULL;CHECK(xr_compile_resources_new(&unlimited,&r)==XR_COMPILE_RESOURCE_OK);
@@ -359,21 +338,21 @@ static void rsp_work_and_lifetime(void) {
     xr_compile_resources_release(r);
     CHECK(!strcmp(xtc_dependencies_record(owner,0)->path,"C:/\xf0\x9f\x98\x80"));
     CHECK(xtc_dependencies_record(owner,0)->offset==4&&xtc_dependencies_count(owner)==1&&!xtc_dependencies_target(owner));
-    stats(xtc_dependencies_resources(owner),&after);CHECK(before.work==after.work);
+    stats(xtc_dependencies_resources(owner),&after);CHECK(!memcmp(&before,&after,sizeof(before)));
     xtc_dependencies_free(owner);reset();
     length=rsp_ascii("\"C:/a\"\r\n",bytes);
     input=(XrDependencyInput){XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE,bytes,length,arguments,3};
-    XrCompileResourceLimits once=unlimited;once.allocated_bytes=base.allocated_bytes;
+    XrCompileResourceLimits once=unlimited;once.memory_mode=XR_COMPILE_MEMORY_FINITE;once.memory_limit=base.peak_bytes;
     r=NULL;CHECK(xr_compile_resources_new(&once,&r)==XR_COMPILE_RESOURCE_OK);
     owner=NULL;CHECK(xtc_dependencies_parse(r,&input,shape,&owner)==XR_XIR_TARGET_OK);
     xtc_dependencies_free(owner);owner=NULL;
-    CHECK(xtc_dependencies_parse(r,&input,shape,&owner)==XR_XIR_TARGET_BUDGET&&!owner);
+    CHECK(xtc_dependencies_parse(r,&input,shape,&owner)==XR_XIR_TARGET_OK&&owner);xtc_dependencies_free(owner);
     xr_compile_resources_release(r);reset();
-    printf("RSP independent UTF-16/UTF-8 work deltas, producer lifetime and malformed frames PASS\n");
+    printf("RSP UTF-16/UTF-8 paths, producer lifetime and malformed frames PASS\n");
 }
 int main(int argc,char **argv) {
     CHECK(argc==2);
-    cursor_fixed_work();
+    cursor_plain_grammar();
     captured(argv[1],"msvc",XR_DEPENDENCY_MSVC_SOURCE_1_2,229);
     captured(argv[1],"clang",XR_DEPENDENCY_WINDOWS_MAKE,182);
     captured(argv[1],"zig",XR_DEPENDENCY_WINDOWS_MAKE,182);
@@ -382,8 +361,8 @@ int main(int argc,char **argv) {
     captured(argv[1],"clang-fullpath",XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE,12);
     captured(argv[1],"zig-fullpath",XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE,12);
     captured(argv[1],"unicode-fullpath",XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE,6);
-    rsp_rejections(argv[1]);rsp_work_and_lifetime();
-    rejection_and_work(); reset();
-    printf("dependency facts passed; actual OOM=%zu; work cutoffs=%zu\n",all_oom,all_work);
+    rsp_rejections(argv[1]);rsp_memory_and_lifetime();
+    rejection_and_memory(); reset();
+    printf("dependency facts passed; actual OOM=%zu\n",all_oom);
     return 0;
 }

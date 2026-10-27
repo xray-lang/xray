@@ -60,9 +60,9 @@ static XrXirStatus effect_context_arguments(EffectContextResolved *resolved,
     if (request->argument_count && !arguments) return resolved->terms.status;
     for (uint32_t a=0;a<request->argument_count;++a) {
         if (local) {
-            if (!xir_compile_work(resolved->terms.remaining,1)) return XR_XIR_BUDGET;
+
             arguments[a]=request->arguments[a];
-        } else status=effect_terms_import_child(&resolved->terms,cache,request->actual_types->count,
+        } else status=effect_terms_import_child(cache,request->actual_types->count,
             request->arguments[a],&arguments[a]);
         if (status!=XR_XIR_OK) return status;
         if (xr_xir_type_span(&resolved->terms.types,arguments[a])) resolved->known=false;
@@ -145,7 +145,7 @@ static XrXirStatus effect_context_requirement(EffectContextResolved *resolved,
     XrXirType *complete=count ? effect_terms_alloc(&resolved->terms,count,sizeof(*complete)) : NULL;
     if (count && !complete) return resolved->terms.status;
     for (uint32_t a=0;a<count;++a) {
-        if (!xir_compile_work(resolved->terms.remaining,1)) return XR_XIR_BUDGET;
+
         complete[a]=a<witness.argument_count ? witness.arguments[a] :
             call->arguments[parent+a-witness.argument_count];
     }
@@ -231,7 +231,7 @@ static XrXirStatus effect_context_resolve_in(EffectTerms *pool,
     const XrXirGeneric *generic=request->source->generics ? &request->source->generics[request->function] : NULL;
     if (!family || request->argument_count!=(generic ? generic->parameter_count : 0))
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(pool->remaining,sizeof(*output))) return XR_XIR_BUDGET;
+
     EffectContextResolved resolved={.terms=*pool,.resources=pool->remaining->resources,
         .function=request->function,.instruction=request->instruction,.target=UINT32_MAX,
         .family=family,.known=true};

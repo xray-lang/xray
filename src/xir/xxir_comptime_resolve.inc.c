@@ -19,7 +19,12 @@ static XrXirStatus resolution_status(XrXirDiagnostic *diagnostic,XrXirStatus sta
 static XrXirStatus resolution_ctfe_status(XrXirCtfeStatus status) {
     if (status==XR_XIR_CTFE_OK) return XR_XIR_OK;
     if (status==XR_XIR_CTFE_OUT_OF_MEMORY) return XR_XIR_OUT_OF_MEMORY;
-    if (status==XR_XIR_CTFE_BUDGET || status==XR_XIR_CTFE_STEP_LIMIT || status==XR_XIR_CTFE_FRAME_LIMIT ||
+    if (status==XR_XIR_CTFE_MEMORY_LIMIT) return XR_XIR_MEMORY_LIMIT;
+    if (status==XR_XIR_CTFE_OVERFLOW) return XR_XIR_OVERFLOW;
+    if (status==XR_XIR_CTFE_CANCELLED) return XR_XIR_CANCELLED;
+    if (status==XR_XIR_CTFE_DEADLINE) return XR_XIR_DEADLINE;
+    if (status==XR_XIR_CTFE_CLOCK_FAILURE) return XR_XIR_CLOCK_FAILURE;
+    if (status==XR_XIR_CTFE_COMPLEXITY_LIMIT || status==XR_XIR_CTFE_STEP_LIMIT || status==XR_XIR_CTFE_FRAME_LIMIT ||
         status==XR_XIR_CTFE_OUTPUT_LIMIT || status==XR_XIR_CTFE_DEPTH_LIMIT) return XR_XIR_BUDGET;
     if (status==XR_XIR_CTFE_PROFILE) return XR_XIR_BAD_LAYOUT;
     if (status==XR_XIR_CTFE_BAD_ARGUMENT || status==XR_XIR_CTFE_BAD_ARTIFACT || status==XR_XIR_CTFE_IDENTITY)
@@ -50,7 +55,7 @@ static XrXirStatus resolution_execute(const XirComptimeResolveRequest *request,c
         const XrXirProvenance *proof=checked->module.provenance;const XirEvaluationRoot *root=&proof->evaluation;
         site=(XrXirComptimeSite){proof->origins[root->caller].function,root->instruction,proof->origins[root->callee].function};
         XirCtfeInstanceBatchRequest execute={checked,&root->callee,1,request->target,request->limits,request->call_depth};
-        uint32_t failed=UINT32_MAX;XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_instance_batch_at(&execute,&batch,&failed);
+        uint32_t failed=UINT32_MAX;XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_instance_batch_at(&execute,request->control,&batch,&failed);
         status=resolution_ctfe_status(evaluated);
         if (status!=XR_XIR_OK && failure) {
             failure->status=evaluated;failure->root_local=failed==0;
@@ -60,7 +65,7 @@ static XrXirStatus resolution_execute(const XirComptimeResolveRequest *request,c
             *diagnostic=(XrXirDiagnostic){status,site.caller,UINT32_MAX,site.instruction,XR_XIR_DIAGNOSTIC_NONE};
     }
     if (status==XR_XIR_OK) {
-        XirLiteralRequest receiving={&checked->context,batch,1};
+        XirLiteralRequest receiving={&checked->context,batch,1,request->control};
         status=literal_receive(&receiving,&site,&literal,diagnostic,source_owner);
     }
     if (status==XR_XIR_OK) status=resolution_bind(&literal,&site,output,diagnostic);
@@ -94,7 +99,7 @@ static XrXirStatus source_comptime_resolve(const XirComptimeResolveRequest *requ
         if (status==XR_XIR_OK) { xr_xir_compile_artifact_free(current);current=next; }
         else xr_xir_compile_artifact_free(next);
     }
-    if (status==XR_XIR_OK && !xir_compile_work(&input->context,sizeof(*output))) status=XR_XIR_BUDGET;
+
     if (status==XR_XIR_OK) { *output=current;current=NULL; }
     xr_xir_compile_artifact_free(current);return resolution_status(diagnostic,status);
 }

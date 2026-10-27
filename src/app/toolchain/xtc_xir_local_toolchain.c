@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xtc_xir_local_toolchain.c - One ledger for discovery and SDK admission
+ * xtc_xir_local_toolchain.c - Controlled memory for discovery and SDK admission
  */
 #include "xtc_xir_local_toolchain.h"
 #include "xtc_xir_file_lease.h"
@@ -35,13 +35,9 @@ static bool local_fail(XtcXirLocalToolchain *owner, XtcXirLocalStatus status,
 }
 static XtcXirLocalStatus local_resource_status(XrCompileResourceStatus status) {
     return status == XR_COMPILE_RESOURCE_OK ? XTC_XIR_LOCAL_OK :
-        status == XR_COMPILE_RESOURCE_BUDGET ? XTC_XIR_LOCAL_BUDGET :
+        status == XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XTC_XIR_LOCAL_MEMORY_LIMIT :
+        status == XR_COMPILE_RESOURCE_OVERFLOW ? XTC_XIR_LOCAL_OVERFLOW :
         status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XTC_XIR_LOCAL_OUT_OF_MEMORY : XTC_XIR_LOCAL_INVALID;
-}
-static bool local_work(XtcXirLocalToolchain *owner, uint64_t units) {
-    if (owner->diagnostic.status != XTC_XIR_LOCAL_OK) return false;
-    XrCompileResourceStatus status = xr_compile_resources_work(owner->resources, units);
-    return status == XR_COMPILE_RESOURCE_OK || local_fail(owner, local_resource_status(status), XTC_XIR_LOCAL_RESOURCE, status);
 }
 static void *local_allocate(XtcXirLocalToolchain *owner, size_t bytes) {
     if (owner->diagnostic.status != XTC_XIR_LOCAL_OK) return NULL;
@@ -53,7 +49,8 @@ static void *local_allocate(XtcXirLocalToolchain *owner, size_t bytes) {
 static bool local_io(XtcXirLocalToolchain *owner, XrOsIoStatus status) {
     if (status == XR_OS_IO_OK) return true;
     XtcXirLocalStatus mapped = status == XR_OS_IO_NOT_FOUND ? XTC_XIR_LOCAL_UNRESOLVED :
-        status == XR_OS_IO_BUDGET ? XTC_XIR_LOCAL_BUDGET :
+        status == XR_OS_IO_MEMORY_LIMIT ? XTC_XIR_LOCAL_MEMORY_LIMIT :
+        status == XR_OS_IO_OVERFLOW ? XTC_XIR_LOCAL_OVERFLOW :
         status == XR_OS_IO_OUT_OF_MEMORY ? XTC_XIR_LOCAL_OUT_OF_MEMORY :
         status == XR_OS_IO_UNSUPPORTED ? XTC_XIR_LOCAL_UNSUPPORTED :
         status == XR_OS_IO_BAD_ARGUMENT ? XTC_XIR_LOCAL_INVALID : XTC_XIR_LOCAL_IO;
@@ -61,7 +58,7 @@ static bool local_io(XtcXirLocalToolchain *owner, XrOsIoStatus status) {
 }
 static bool local_length(XtcXirLocalToolchain *owner, const char *text, size_t *length) {
     size_t n = 0;
-    while (local_work(owner, 1)) {
+    while (owner->diagnostic.status == XTC_XIR_LOCAL_OK) {
         if (!text[n]) { *length = n; return true; }
         if (++n > XR_PATH_LIMIT_MAX_PATH) return local_fail(owner, XTC_XIR_LOCAL_BUDGET, XTC_XIR_LOCAL_SELF, 0);
     }
@@ -69,13 +66,19 @@ static bool local_length(XtcXirLocalToolchain *owner, const char *text, size_t *
 }
 static char *local_copy(XtcXirLocalToolchain *owner, const char *text, size_t length) {
     char *copy = local_allocate(owner, length + 1);
-    if (copy && local_work(owner, length + 1)) { memcpy(copy, text, length); copy[length] = 0; return copy; }
+    if (copy) { memcpy(copy, text, length); copy[length] = 0; return copy; }
     xr_compile_resources_free(copy); return NULL;
 }
 static bool local_keep(XtcXirLocalToolchain *owner, char *text, const char **output) {
     if (!text) return false;
-    if (owner->count == 32) local_fail(owner, XTC_XIR_LOCAL_BUDGET, XTC_XIR_LOCAL_SELF, 0);
-    if (!local_work(owner, 2 * sizeof(text) + sizeof(owner->count))) { xr_compile_resources_free(text); return false; }
+    if (owner->diagnostic.status != XTC_XIR_LOCAL_OK) {
+        xr_compile_resources_free(text); return false;
+    }
+    if (owner->count >= 32) {
+        local_fail(owner, XTC_XIR_LOCAL_BUDGET, XTC_XIR_LOCAL_SELF, 0);
+        xr_compile_resources_free(text); return false;
+    }
+
     owner->strings[owner->count++] = text; *output = text; return true;
 }
 static bool local_lease_status(XtcXirLocalToolchain *owner, XrXirTargetStatus status) {
@@ -83,6 +86,8 @@ static bool local_lease_status(XtcXirLocalToolchain *owner, XrXirTargetStatus st
     return local_fail(owner, status == XR_XIR_TARGET_UNRESOLVED ? XTC_XIR_LOCAL_UNRESOLVED :
         status == XR_XIR_TARGET_BUDGET ? XTC_XIR_LOCAL_BUDGET :
         status == XR_XIR_TARGET_OUT_OF_MEMORY ? XTC_XIR_LOCAL_OUT_OF_MEMORY :
+        status == XR_XIR_TARGET_MEMORY_LIMIT ? XTC_XIR_LOCAL_MEMORY_LIMIT :
+        status == XR_XIR_TARGET_OVERFLOW ? XTC_XIR_LOCAL_OVERFLOW :
         status == XR_XIR_TARGET_UNSUPPORTED ? XTC_XIR_LOCAL_UNSUPPORTED :
         status == XR_XIR_TARGET_IO ? XTC_XIR_LOCAL_IO : XTC_XIR_LOCAL_INVALID,
         XTC_XIR_LOCAL_FILESYSTEM, status);
@@ -107,9 +112,9 @@ static bool local_path(XtcXirLocalToolchain *owner, const char *path, bool direc
     if (okay && directory) {
         size_t length = 0; okay = local_length(owner, absolute, &length);
         while (okay && length > 3) {
-            okay = local_work(owner, 1);
+
             if (!okay || (absolute[length-1] != '/' && absolute[length-1] != '\\')) break;
-            okay = local_work(owner, 1); if (okay) absolute[--length] = 0;
+            absolute[--length] = 0;
         }
     }
     XrFsStat stat = {0};
@@ -137,6 +142,8 @@ static bool local_process(XtcXirLocalToolchain *owner, const XrProcessSpec *spec
     if (status != XTC_PROCESS_OK) {
         XtcXirLocalStatus mapped = status == XTC_PROCESS_BUDGET ? XTC_XIR_LOCAL_BUDGET :
             status == XTC_PROCESS_OUT_OF_MEMORY ? XTC_XIR_LOCAL_OUT_OF_MEMORY :
+            status == XTC_PROCESS_MEMORY_LIMIT ? XTC_XIR_LOCAL_MEMORY_LIMIT :
+            status == XTC_PROCESS_OVERFLOW ? XTC_XIR_LOCAL_OVERFLOW :
             status == XTC_PROCESS_TIMEOUT ? XTC_XIR_LOCAL_TIMEOUT :
             status == XTC_PROCESS_UNRESOLVED ? XTC_XIR_LOCAL_UNRESOLVED :
             status == XTC_PROCESS_UNSUPPORTED ? XTC_XIR_LOCAL_UNSUPPORTED :
@@ -166,6 +173,8 @@ static bool local_sdk_load(XtcXirLocalToolchain *owner, const char *root, size_t
         if (status != XR_XIR_SDK_OK) okay = local_fail(owner,
             status == XR_XIR_SDK_BUDGET ? XTC_XIR_LOCAL_BUDGET :
             status == XR_XIR_SDK_OUT_OF_MEMORY ? XTC_XIR_LOCAL_OUT_OF_MEMORY :
+        status == XR_XIR_SDK_MEMORY_LIMIT ? XTC_XIR_LOCAL_MEMORY_LIMIT :
+        status == XR_XIR_SDK_OVERFLOW ? XTC_XIR_LOCAL_OVERFLOW :
             status == XR_XIR_SDK_IO ? XTC_XIR_LOCAL_IO :
             status == XR_XIR_SDK_UNRESOLVED ? XTC_XIR_LOCAL_UNRESOLVED :
             status == XR_XIR_SDK_UNSUPPORTED ? XTC_XIR_LOCAL_UNSUPPORTED : XTC_XIR_LOCAL_INVALID,

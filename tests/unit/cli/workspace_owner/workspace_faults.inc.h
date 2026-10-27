@@ -19,40 +19,7 @@ static void *workspace_physical_malloc(size_t bytes) {
 }
 #undef xr_malloc
 #define xr_malloc workspace_physical_malloc
-#define xr_compile_resources_work workspace_real_work
-#define xr_compile_resources_alloc workspace_real_alloc
-#define xr_compile_resources_calloc workspace_real_calloc
-#define xr_compile_resources_resize workspace_real_resize
 #include "../../xir/xir_sdk_resource_test.h"
-#undef xr_compile_resources_work
-#undef xr_compile_resources_alloc
-#undef xr_compile_resources_calloc
-#undef xr_compile_resources_resize
-static bool record_work;
-static uint64_t work_edges[65536];
-static size_t work_count;
-static XrCompileResourceStatus workspace_record_work(XrCompileResources *r, XrCompileResourceStatus result) {
-    (void)sdk_fixture_malloc; (void)sdk_fixture_free;
-    if (record_work && result == XR_COMPILE_RESOURCE_OK) {
-        XrCompileResourceStats stats = sdk_stats(r);
-        if (!work_count || work_edges[work_count - 1] != stats.work) {
-            CHECK(work_count < 65536); work_edges[work_count++] = stats.work;
-        }
-    }
-    return result;
-}
-XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *r, uint64_t units) {
-    return workspace_record_work(r, workspace_real_work(r, units));
-}
-XR_FUNC XrCompileResourceStatus xr_compile_resources_alloc(XrCompileResources *r, size_t n, void **out) {
-    return workspace_record_work(r, workspace_real_alloc(r, n, out));
-}
-XR_FUNC XrCompileResourceStatus xr_compile_resources_calloc(XrCompileResources *r, size_t n, size_t size, void **out) {
-    return workspace_record_work(r, workspace_real_calloc(r, n, size, out));
-}
-XR_FUNC XrCompileResourceStatus xr_compile_resources_resize(XrCompileResources *r, void **p, size_t n) {
-    return workspace_record_work(r, workspace_real_resize(r, p, n));
-}
 #ifndef WORKSPACE_PRODUCTION
 static size_t io_count, io_fail_at = SIZE_MAX;
 static DWORD io_error = ERROR_ACCESS_DENIED;

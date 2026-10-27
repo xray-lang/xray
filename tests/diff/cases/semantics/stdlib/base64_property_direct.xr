@@ -77,11 +77,11 @@ print(aggregate == 544432900)
 var roundtripOk = true
 for (var length = 0; length <= 96; length++) {
     var input = fuzzBytes(length, 97 + length)
-    var standard = base64.decode(base64.encode(input[:]))
+    var standard = try base64.decode(base64.encode(input[:]))
     if (!sameBytes(input, standard)) { roundtripOk = false }
 
     var encodedUrl = base64.encode(input[:], urlEncodeOptions())
-    var decodedUrl = base64.decode(encodedUrl, urlDecodeOptions())
+    var decodedUrl = try base64.decode(encodedUrl, urlDecodeOptions())
     if (!sameBytes(input, decodedUrl)) { roundtripOk = false }
 }
 print(roundtripOk)

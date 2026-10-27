@@ -432,14 +432,16 @@ static void repl_failure(ReplState *state,XrSourceStatus status,XrSourceDiagnost
         if(info.path)fprintf(stderr,"%s:%d:%d: %s\n",info.path,info.line,info.column,info.message);
         else fprintf(stderr,"Error: %s\n",info.message);
     } else xr_cli_error("repl","%s",repl_status_text(status));
-    if(status==XR_SOURCE_BUDGET || status==XR_SOURCE_OUT_OF_MEMORY || status==XR_SOURCE_LIMIT ||
+    if(status==XR_SOURCE_MEMORY_LIMIT || status==XR_SOURCE_OUT_OF_MEMORY || status==XR_SOURCE_LIMIT ||
         status==XR_SOURCE_IO || status==XR_SOURCE_BAD_STATE || status==XR_SOURCE_EXECUTION_FAILED)state->failed=true;
 }
 static bool repl_open(ReplState *state,XrSourceRepl **output) {
-    XrSourceCompilerOptions compiler;XrSourceCallOptions runtime;
-    XrSourceStatus status=xray_source_compiler_options_init(&compiler,sizeof(compiler));
-    if(status==XR_SOURCE_OK)status=xray_source_call_options_init(&runtime,sizeof(runtime));
-    if(status==XR_SOURCE_OK)status=xray_source_repl_new(&compiler,state->namespace_id,&runtime,output);
+    XrSourceCompileOptions compiler=xray_source_compile_options_default();XrSourceCallOptions runtime;
+    XrSourceExecutionOptions policy=xray_source_execution_options_default();XrSourceExecution *execution=NULL;
+    XrSourceStatus status=xray_source_call_options_init(&runtime,sizeof(runtime));
+    if(status==XR_SOURCE_OK)status=xray_source_execution_new(&policy,&execution);
+    if(status==XR_SOURCE_OK)status=xray_source_repl_new(&compiler,execution,state->namespace_id,&runtime,output);
+    xray_source_execution_free(execution);
     if(status!=XR_SOURCE_OK)repl_failure(state,status,NULL);
     return status==XR_SOURCE_OK;
 }

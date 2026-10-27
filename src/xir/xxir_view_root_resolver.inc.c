@@ -16,7 +16,7 @@ static XrXirStatus view_root_symbolic_slot(ViewRootQuery *q,uint32_t slot,ViewOr
     for (uint32_t f=0;f<c->module->function_count;++f) {
         const XrXirFunction *body=c->module->functions+f;
         for (uint32_t i=0;i<body->instruction_count;++i) {
-            if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
             const XrXirInstruction *op=body->instructions+i;uint32_t value=UINT32_MAX;
             if (op->op==XR_XIR_SLOT_INIT && (uint32_t)op->immediate==slot)
                 value=op->args[0];
@@ -25,7 +25,7 @@ static XrXirStatus view_root_symbolic_slot(ViewRootQuery *q,uint32_t slot,ViewOr
                 if (slot<first || slot-first>=count) continue;
                 uint32_t operand=0;
                 for (uint32_t p=first;p<slot;++p) {
-                    if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
                     operand+=d->slots[p].type!=XR_XIR_UNIT;
                 }
                 if (operand>=op->args[1]) return XR_XIR_BAD_STRUCTURE;
@@ -66,7 +66,7 @@ XR_FUNC XrXirStatus xir_compile_view_root_resolver_new(const XrXirCompileContext
 typedef struct ViewRootForward { XrXirViewRootVisitor visitor; void *user; uint32_t count; } ViewRootForward;
 static XrXirStatus view_root_forward(void *user,const XrXirCompileContext *context,const XrXirViewRootEvent *event) {
     ViewRootForward *forward=user;
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
     if (forward->count==UINT32_MAX) return XR_XIR_BUDGET;++forward->count;
     return forward->visitor?forward->visitor(forward->user,context,event):XR_XIR_OK;
 }
@@ -79,14 +79,14 @@ static XrXirStatus view_root_request(ViewRootCheck *c,const XirViewRootRequest *
         (request->instruction!=UINT32_MAX && request->instruction>=body->instruction_count)) return XR_XIR_BAD_STRUCTURE;
     c->location=(XrXirDiagnostic){XR_XIR_OK,request->function,UINT32_MAX,request->instruction,XR_XIR_DIAGNOSTIC_NONE};
     for (uint32_t b=0;b<body->block_count;++b) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         if (request->instruction>=body->blocks[b].first &&
             request->instruction-body->blocks[b].first<body->blocks[b].count) c->location.block=b;
     }
     XrXirType type=xr_xir_operand_type(body,request->value);
     if (!request->selection_count && xr_xir_place_kind(body,request->value)!=XR_XIR_PLACE_NONE) return XR_XIR_OK;
     for (uint32_t i=0;i<request->selection_count;++i) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         const XrXirTypeNode *node=xr_xir_type_node(c->module->types,type);uint32_t field=request->selection[i];
         if (!node) return XR_XIR_BAD_TYPE;
         if (field==UINT32_MAX) {

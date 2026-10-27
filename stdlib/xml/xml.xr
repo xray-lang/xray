@@ -379,45 +379,45 @@ fn _numericEntity(name: string) -> string? {
 
 fn _indentText(level: i64, spaces: i64) -> string {
     if (spaces <= 0 || level <= 0) { return "" }
-    var out = StringBuilder()
-    for (var i = 0; i < level * spaces; i++) { out.append(" ") }
-    return out.toString()
+    var out = ""
+    for (var i = 0; i < level * spaces; i++) { out += " " }
+    return out
 }
 
 fn _escapeText(value: string) -> string {
-    var out = StringBuilder()
+    var out = ""
     for (var i = 0; i < len(value); i++) {
         var c = value.slice(i, (i) + 1)
         if (c == "<") {
-            out.append("&lt;")
+            out += "&lt;"
         } else if (c == ">") {
-            out.append("&gt;")
+            out += "&gt;"
         } else if (c == "&") {
-            out.append("&amp;")
+            out += "&amp;"
         } else {
-            out.append(c)
+            out += c
         }
     }
-    return out.toString()
+    return out
 }
 
 fn _escapeAttr(value: string) -> string {
-    var out = StringBuilder()
+    var out = ""
     for (var i = 0; i < len(value); i++) {
         var c = value.slice(i, (i) + 1)
         if (c == "<") {
-            out.append("&lt;")
+            out += "&lt;"
         } else if (c == ">") {
-            out.append("&gt;")
+            out += "&gt;"
         } else if (c == "&") {
-            out.append("&amp;")
+            out += "&amp;"
         } else if (c == "\"") {
-            out.append("&quot;")
+            out += "&quot;"
         } else {
-            out.append(c)
+            out += c
         }
     }
-    return out.toString()
+    return out
 }
 
 // ===== Node helpers =====
@@ -462,16 +462,16 @@ fn _textOf(node: XmlNode) -> string {
 }
 
 fn _directText(kids: Array<XmlNode>) -> string {
-    var out = StringBuilder()
+    var out = ""
     for (child in kids) {
         var piece = match (child) {
             XmlNode.Text { content: s }  -> s,
             XmlNode.CData { content: s } -> s,
             _                -> ""
         }
-        out.append(piece)
+        out += piece
     }
-    return out.toString()
+    return out
 }
 
 // ===== Parser =====
@@ -571,7 +571,7 @@ class XmlParser {
     }
 
     decodeEntities(value: string) -> string {
-        var out = StringBuilder()
+        var out = ""
         var i = 0
         while (i < len(value)) {
             var c = value.slice(i, (i) + 1)
@@ -582,15 +582,15 @@ class XmlParser {
                 }
                 if (j < len(value) && value.slice(j, (j) + 1) == ";") {
                     var name = value.slice(i + 1, j)
-                    out.append(this.decodeEntity(name))
+                    out += this.decodeEntity(name)
                     i = j + 1
                     continue
                 }
             }
-            out.append(c)
+            out += c
             i = i + 1
         }
-        return out.toString()
+        return out
     }
 
     skipProcessingInstruction() {
@@ -855,95 +855,95 @@ fn _parse(data: string, options: XmlOptions) -> XmlParser {
 // ===== Serializer =====
 
 fn _serializeChildren(kids: Array<XmlNode>, config: XmlWriteOptions, level: i64, depth: i64) -> string {
-    var out = StringBuilder()
+    var out = ""
     for (var i = 0; i < len(kids); i++) {
-        out.append(_serializeNode(kids[i], config, level, depth + 1))
+        out += _serializeNode(kids[i], config, level, depth + 1)
     }
-    return out.toString()
+    return out
 }
 
 fn _serializeElement(name: XmlName, attrs: Array<XmlAttribute>, kids: Array<XmlNode>,
                      config: XmlWriteOptions, level: i64, depth: i64) -> string {
     var tag = _qualifiedName(name)
     if (len(tag) == 0) { return "" }
-    var out = StringBuilder()
-    out.append(_indentText(level, config.indent))
-    out.append("<")
-    out.append(tag)
+    var out = ""
+    out += _indentText(level, config.indent)
+    out += "<"
+    out += tag
 
     for (var i = 0; i < len(attrs); i++) {
         var a = attrs[i]
-        out.append(" ")
-        out.append(_qualifiedName(a.name))
-        out.append("=\"")
-        out.append(_escapeAttr(a.value))
-        out.append("\"")
+        out += " "
+        out += _qualifiedName(a.name)
+        out += "=\""
+        out += _escapeAttr(a.value)
+        out += "\""
     }
 
     if (len(kids) > 0) {
-        out.append(">")
+        out += ">"
         var textOnly = false
         if (len(kids) == 1) { textOnly = _isTextNode(kids[0]) }
         if (textOnly) {
-            out.append(_escapeText(_textOf(kids[0])))
+            out += _escapeText(_textOf(kids[0]))
         } else {
-            if (config.indent > 0) { out.append("\n") }
+            if (config.indent > 0) { out += "\n" }
             for (var i = 0; i < len(kids); i++) {
-                out.append(_serializeNode(kids[i], config, level + 1, depth + 1))
+                out += _serializeNode(kids[i], config, level + 1, depth + 1)
             }
-            out.append(_indentText(level, config.indent))
+            out += _indentText(level, config.indent)
         }
-        out.append("</")
-        out.append(tag)
-        out.append(">")
+        out += "</"
+        out += tag
+        out += ">"
     } else {
-        out.append("/>")
+        out += "/>"
     }
-    if (depth > 0 && config.indent > 0) { out.append("\n") }
-    return out.toString()
+    if (depth > 0 && config.indent > 0) { out += "\n" }
+    return out
 }
 
 fn _serializeText(value: string, config: XmlWriteOptions, level: i64) -> string {
-    var out = StringBuilder()
-    out.append(_indentText(level, config.indent))
-    out.append(_escapeText(value))
-    if (config.indent > 0) { out.append("\n") }
-    return out.toString()
+    var out = ""
+    out += _indentText(level, config.indent)
+    out += _escapeText(value)
+    if (config.indent > 0) { out += "\n" }
+    return out
 }
 
 fn _serializeComment(value: string, config: XmlWriteOptions, level: i64) -> string {
-    var out = StringBuilder()
-    out.append(_indentText(level, config.indent))
-    out.append("<!--")
-    out.append(value)
-    out.append("-->")
-    if (config.indent > 0) { out.append("\n") }
-    return out.toString()
+    var out = ""
+    out += _indentText(level, config.indent)
+    out += "<!--"
+    out += value
+    out += "-->"
+    if (config.indent > 0) { out += "\n" }
+    return out
 }
 
 fn _serializeCData(value: string, config: XmlWriteOptions, level: i64) -> string {
-    var out = StringBuilder()
-    out.append(_indentText(level, config.indent))
-    out.append("<![CDATA[")
-    out.append(value)
-    out.append("]]>")
-    if (config.indent > 0) { out.append("\n") }
-    return out.toString()
+    var out = ""
+    out += _indentText(level, config.indent)
+    out += "<![CDATA["
+    out += value
+    out += "]]>"
+    if (config.indent > 0) { out += "\n" }
+    return out
 }
 
 fn _serializePI(instructionTarget: string, data: string, config: XmlWriteOptions,
                 level: i64) -> string {
-    var out = StringBuilder()
-    out.append(_indentText(level, config.indent))
-    out.append("<?")
-    out.append(instructionTarget)
+    var out = ""
+    out += _indentText(level, config.indent)
+    out += "<?"
+    out += instructionTarget
     if (len(data) > 0) {
-        out.append(" ")
-        out.append(data)
+        out += " "
+        out += data
     }
-    out.append("?>")
-    if (config.indent > 0) { out.append("\n") }
-    return out.toString()
+    out += "?>"
+    if (config.indent > 0) { out += "\n" }
+    return out
 }
 
 fn _serializeNode(node: XmlNode, config: XmlWriteOptions, level: i64, depth: i64) -> string {
@@ -994,17 +994,17 @@ export fn parseFile(path: Path, options: XmlOptions = XML_DEFAULT_OPTIONS) -> Xm
 
 export fn stringify(node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS) -> string {
     var config = options
-    var out = StringBuilder()
+    var out = ""
     if (config.declaration) {
         var encoding = config.encoding
         if (len(encoding) == 0) { encoding = "UTF-8" }
-        out.append("<?xml version=\"1.0\" encoding=\"")
-        out.append(encoding)
-        out.append("\"?>")
-        if (config.indent > 0) { out.append("\n") }
+        out += "<?xml version=\"1.0\" encoding=\""
+        out += encoding
+        out += "\"?>"
+        if (config.indent > 0) { out += "\n" }
     }
-    out.append(_serializeNode(node, config, 0, 0))
-    return out.toString()
+    out += _serializeNode(node, config, 0, 0)
+    return out
 }
 
 export fn writeFile(path: Path, node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS) -> bool {

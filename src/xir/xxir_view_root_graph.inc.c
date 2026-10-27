@@ -53,10 +53,10 @@ static void view_root_set_drop(ViewRootCheck *c,ViewOriginSet *set) {
 }
 static XrXirStatus view_root_find(ViewRootCheck *c,ViewOriginPair key,bool *found) {
     *found=false;if (!c->captured.slot_count) return XR_XIR_OK;
-    if (!xir_compile_work(c->context,3)) return XR_XIR_BUDGET;
+
     uint32_t at=view_origin_hash(key.first,key.second)&(c->captured.slot_count-1u);
     while (c->captured.slots[at]) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         ViewOriginPair p=c->captured.pairs[c->captured.slots[at]-1u];
         if (p.first==key.first && p.second==key.second) {*found=true;break;}
         at=(at+1u)&(c->captured.slot_count-1u);
@@ -72,7 +72,7 @@ static XrXirStatus view_root_target(ViewRootCheck *c,uint32_t f,const XrXirInstr
     if (op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_INVOKE_INDIRECT) return XR_XIR_OK;
     const XrXirFunction *body=&c->module->functions[f];uint32_t value=(uint32_t)op->immediate;
     for (uint32_t depth=0;value>=body->parameter_count && depth<body->instruction_count;++depth) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         const XrXirInstruction *producer=&body->instructions[value-body->parameter_count];
         if (producer->op==XR_XIR_FUNCTION_REF) {*target=(uint32_t)producer->immediate;*prefix=producer->args[1];break;}
         if (producer->op!=XR_XIR_COPY && producer->op!=XR_XIR_OWNED_RETAIN && producer->op!=XR_XIR_FUNCTION_WEAKEN) break;
@@ -89,14 +89,14 @@ static XrXirStatus view_root_edges(ViewRootCheck *c,bool fill) {
     for (uint32_t f=0;f<c->module->function_count;++f) {
         const XrXirFunction *body=&c->module->functions[f];
         for (uint32_t i=0;i<body->instruction_count;++i) {
-            if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
             const XrXirInstruction *op=&body->instructions[i];uint32_t target,prefix;
             XrXirStatus status=view_root_target(c,f,op,&target,&prefix);if (status!=XR_XIR_OK) return status;
             if (target==UINT32_MAX) continue;
             if (target>=c->module->function_count || prefix>c->module->functions[target].parameter_count ||
                 op->args[1]>c->module->functions[target].parameter_count-prefix) return XR_XIR_BAD_STRUCTURE;
             for (uint32_t p=0;p<op->args[1];++p) {
-                if (!xir_compile_work(c->context,3)) return XR_XIR_BUDGET;
+
                 if (!view_root_tracked(c,c->module->functions[target].parameters[prefix+p])) continue;
                 if (count==UINT32_MAX) return XR_XIR_BUDGET;
                 if (fill) {
@@ -113,7 +113,7 @@ static XrXirStatus view_root_edges(ViewRootCheck *c,bool fill) {
 static XrXirStatus view_root_graph(ViewRootCheck *c) {
     uint64_t parameters=0,functions=c->module->function_count;
     for (uint32_t f=0;f<functions;++f) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         parameters+=c->module->functions[f].parameter_count;
     }
     if (parameters>UINT32_MAX || functions*3u+1u+parameters>SIZE_MAX/sizeof(uint32_t)) return XR_XIR_BUDGET;
@@ -127,12 +127,12 @@ static XrXirStatus view_root_graph(ViewRootCheck *c) {
     c->candidates=c->captures+functions;c->heads=c->candidates+functions;
     uint32_t offset=0;
     for (uint32_t f=0;f<functions;++f) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         c->offsets[f]=offset;offset+=c->module->functions[f].parameter_count;
     }
     c->offsets[functions]=offset;
-    for (uint32_t p=0;p<offset;++p) {if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;c->heads[p]=UINT32_MAX;}
-    status=view_origin_candidates(c->context,c->module,c->flags,c->captures,c->candidates);
+    for (uint32_t p=0;p<offset;++p) {c->heads[p]=UINT32_MAX;}
+    status=view_origin_candidates(c->module,c->flags,c->captures,c->candidates);
     if (status==XR_XIR_OK) status=view_root_edges(c,false);
     uint64_t edge_bytes=(uint64_t)c->edge_count*sizeof(*c->edges);
     if (status!=XR_XIR_OK) return status;

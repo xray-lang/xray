@@ -44,7 +44,7 @@ typedef struct XrDependencyFacts XrDependencyFacts;
 /* No I/O, implicit cwd, role inference, deduplication or completeness claim.
  * Inputs are copied; paths preserve spelling and occurrence order. Any '@'
  * in captured argv is unsupported. This says nothing about internal response
- * files. Limits constrain shape; all actual allocation and work use resources.
+ * files. Limits constrain shape; resources own all actual resident allocations.
  * FULLPATH_RSP accepts a UTF-16LE BOM and quoted absolute paths, each followed
  * by CRLF. Options and response references are unsupported. LINK_INPUT offsets
  * refer to the first path code unit in the original byte frame. This explicit

@@ -53,8 +53,8 @@ def main():
         'embedded-nul': ('print("before\\0after")\nprint("before\\u{0}after")\n',
                          (0, b'before\x00after\nbefore\x00after\n', b'')),
         'error': ('enum Failure { Failed { text:string, code:i64, real:f64 } }\n'
-                  'fn fail() { throw Failure.Failed { text:"owned"+"-error", code:-7, real:1.5 } }\n'
-                  'print("before")\nfail()\n',
+                  'fn fail() throws(Failure) { throw Failure.Failed { text:"owned"+"-error", code:-7, real:1.5 } }\n'
+                  'print("before")\ntry fail()\n',
                   (1, b'before\n', b'[Uncaught Error] Failure.Failed("owned-error", -7, 1.5)\n')),
         'panic': ('assert(false, "run"+"-panic")\n',
                   (1, b'', b'[Uncaught Panic] E0445: run-panic\n')),
@@ -115,7 +115,7 @@ def main():
         injected = run(name, [*flags, entry], None, executable=args.injected)
         assert injected.returncode == 0, records[-1]
         assert injected.stdout == oracle[1] + (
-            b'RUN_OWNER: selected resource policy, five phase OOM boundaries, one ledger, budget and physical zero PASS\n'), records[-1]
+            b'RUN_OWNER: selected resource policy, five phase OOM boundaries, one memory owner, held refusal and physical zero PASS\n'), records[-1]
         assert b'AddressSanitizer' not in injected.stderr and b'runtime error:' not in injected.stderr, records[-1]
     print('Run Source owner: typed command inputs, owned Program, exact output/status, OOM and resource policy PASS')
 

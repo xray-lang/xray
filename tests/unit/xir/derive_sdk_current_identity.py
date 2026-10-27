@@ -33,8 +33,26 @@ def main():
         facts=Path(temporary)/'facts';prepare(facts)
         rows=json.loads((facts/'EXPECTED.json').read_text())['rows']
     current_rows=rows
-    assert len(current_rows)==381 and len({row['id'] for row in current_rows})==381
-    previous_current_rows=[row for row in current_rows if row['id']!=3710]
+    assert len(current_rows)==380 and len({row['id'] for row in current_rows})==380
+    # Retired wire images retain their independently declared resource layout.
+    # These fixed historical facts never enter the current ABI derivation.
+    historical_resources={}
+    for base,name,size,fields in [
+        (2500,'XrCompileResourceLimits',24,['allocated_bytes','live_bytes','work']),
+        (2600,'XrCompileResourceStats',40,['allocation_count','allocated_bytes','live_bytes','peak_bytes','work']),
+    ]:
+        historical_resources[base]={'id':base,'name':name+'.size','value':size,'expression':'sizeof('+name+')'}
+        historical_resources[base+1]={'id':base+1,'name':name+'.align','value':8,'expression':'_Alignof('+name+')'}
+        for index,field in enumerate(fields):
+            identifier=base+2+index
+            historical_resources[identifier]={'id':identifier,'name':name+'.'+field+'.offset','value':index*8,
+                'expression':'offsetof('+name+','+field+')'}
+    frozen_rows=[]
+    for row in current_rows:
+        frozen_rows.append(historical_resources.get(row['id'],row))
+        if row['id']==2605:frozen_rows.append(historical_resources[2606])
+    assert len(frozen_rows)==381 and len({row['id'] for row in frozen_rows})==381
+    previous_current_rows=[row for row in frozen_rows if row['id']!=3710]
     parents=json.loads(Path(__file__).with_name('sdk_historical_shared_parents.json').read_text())
     rows=[row for row in previous_current_rows if row['id']<4600]
     assert len(rows)==362
@@ -129,29 +147,39 @@ def main():
     for symbol,data in [('current_sdk_kat_preimage',historical_image),('current_sdk_kat_file_digest',historical_file),('current_sdk_kat_digest',historical_digest)]:
         match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',historical_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete historical32/91 bytes changed'
-    prior_slot_image,prior_slot_file,prior_slot_digest=current_preimage(current_rows,96,30,35,36,36)
+    prior_slot_image,prior_slot_file,prior_slot_digest=current_preimage(frozen_rows,96,30,35,36,36)
     prior_slot_text=Path(__file__).with_name('sdk_previous36_96_identity_golden.h').read_text(encoding='utf-8')
     for symbol,data in [('current_sdk_kat_preimage',prior_slot_image),('current_sdk_kat_file_digest',prior_slot_file),('current_sdk_kat_digest',prior_slot_digest)]:
         match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',prior_slot_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete predecessor36/96 bytes changed'
-    prior_bytes_image,prior_bytes_file,prior_bytes_digest=current_preimage(current_rows,97,30,35,37,36)
+    prior_bytes_image,prior_bytes_file,prior_bytes_digest=current_preimage(frozen_rows,97,30,35,37,36)
     assert prior_bytes_digest.hex()=='8bc0ef960bfb32df930e20c8fce81adad1248b4227ff7ba34056f68b60226b84'
     prior_bytes_text=Path(__file__).with_name('sdk_current_identity_golden.h').read_text(encoding='utf-8')
     for symbol,data in [('previous37_97_sdk_kat_preimage',prior_bytes_image),('previous37_97_sdk_kat_file_digest',prior_bytes_file),('previous37_97_sdk_kat_digest',prior_bytes_digest)]:
         match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',prior_bytes_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete predecessor37/97 bytes changed'
-    image,file_digest,digest=current_preimage(current_rows,98,30,35,37,36)
+    prior_new_resources_image,prior_new_resources_file,prior_new_resources_digest=current_preimage(current_rows,98,30,35,37,36)
+    prior_new_resources_text=Path(__file__).with_name('sdk_current_identity_golden.h').read_text(encoding='utf-8')
+    for symbol,data in [('previous37_new_resources_sdk_kat_preimage',prior_new_resources_image),('previous37_new_resources_sdk_kat_file_digest',prior_new_resources_file),('previous37_new_resources_sdk_kat_digest',prior_new_resources_digest)]:
+        match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',prior_new_resources_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete prior37 new-resource bytes changed'
+    image,file_digest,digest=current_preimage(current_rows,98,30,35,38,36)
+    prior_resources_image,prior_resources_file,prior_resources_digest=current_preimage(frozen_rows,98,30,35,37,36)
+    assert len(prior_resources_image)==3338
+    assert prior_resources_digest.hex()=='8fd650c91daccdcad55f6bf8c40b5f4e2f9ed9611d721eff0c26321e84adeca1'
     identity_offset=len(b'xray:xir-runtime-sdk:v1')+4
     assert image[:identity_offset]==previous_image[:identity_offset]
     old_current_image,_,_=current_preimage(old_rows,75,25)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(37,98,30,35,36)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(38,98,30,35,36)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
-    assert len(image)==3338 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
+    assert len(image)==3330 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest
     output='/* Independent current SDK framing and natural Windows C layout facts. */\n'
     for name,data in (('current_sdk_kat_preimage',image),('current_sdk_kat_file_digest',file_digest),('current_sdk_kat_digest',digest),
-            ('previous37_97_sdk_kat_preimage',prior_bytes_image),('previous37_97_sdk_kat_file_digest',prior_bytes_file),('previous37_97_sdk_kat_digest',prior_bytes_digest)):
+            ('previous37_97_sdk_kat_preimage',prior_bytes_image),('previous37_97_sdk_kat_file_digest',prior_bytes_file),('previous37_97_sdk_kat_digest',prior_bytes_digest),
+            ('previous_resource_sdk_kat_preimage',prior_resources_image),('previous_resource_sdk_kat_file_digest',prior_resources_file),('previous_resource_sdk_kat_digest',prior_resources_digest),
+            ('previous37_new_resources_sdk_kat_preimage',prior_new_resources_image),('previous37_new_resources_sdk_kat_file_digest',prior_new_resources_file),('previous37_new_resources_sdk_kat_digest',prior_new_resources_digest)):
         output+='static const uint8_t '+name+'[] = {\n'
         for at in range(0,len(data),16):output+='    '+','.join('0x'+format(x,'02x') for x in data[at:at+16])+',\n'
         output+='};\n'

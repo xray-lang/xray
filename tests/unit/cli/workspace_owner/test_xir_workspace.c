@@ -63,9 +63,11 @@ static XrCompileResourceStats run(const char *parent, const XrCompileResourceLim
     XrCompileResources *resources = NULL; XtcXirWorkspace *owner = NULL;
     XrCompileResourceStatus admitted = xr_compile_resources_new(limits, &resources);
     if (admitted != XR_COMPILE_RESOURCE_OK) {
-        CHECK(admitted == (expected == XTC_XIR_WORKSPACE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY));
+        CHECK(admitted == (expected == XTC_XIR_WORKSPACE_MEMORY_LIMIT ? XR_COMPILE_RESOURCE_MEMORY_LIMIT :
+            expected == XTC_XIR_WORKSPACE_OVERFLOW ? XR_COMPILE_RESOURCE_OVERFLOW : XR_COMPILE_RESOURCE_OUT_OF_MEMORY));
         CHECK(!runtime_live && !runtime_bytes); return (XrCompileResourceStats){0};
     }
+    uint64_t baseline = sdk_stats(resources).held_bytes;
     XtcXirWorkspaceRequest request = request_for(parent);
     XtcXirWorkspaceStatus status = xtc_xir_workspace_new(resources, &request, &owner);
     if (status == XTC_XIR_WORKSPACE_OK) status = xtc_xir_workspace_create(owner);
@@ -74,7 +76,9 @@ static XrCompileResourceStats run(const char *parent, const XrCompileResourceLim
     XrCompileResourceStats stats = sdk_stats(resources);
     size_t attempts = runtime_attempts;
     drain(&owner, 1);
-    CHECK(runtime_attempts == attempts && sdk_stats(resources).work == stats.work);
+    XrCompileResourceStats closed = sdk_stats(resources);
+    CHECK(runtime_attempts == attempts && closed.allocation_count == stats.allocation_count &&
+        closed.allocated_bytes == stats.allocated_bytes && closed.held_bytes == baseline);
     xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes);
 #ifndef WORKSPACE_PRODUCTION
     CHECK(!owner_handle_count);
@@ -91,9 +95,6 @@ static void basics(const char *parent) {
     CHECK(xtc_xir_workspace_create(owner) == XTC_XIR_WORKSPACE_INVALID);
     char original[8192]; strcpy_s(original, sizeof(original), xtc_xir_workspace_paths(owner)->root);
     descendants(owner);
-    XrCompileResourceStats stats = sdk_stats(resources);
-    CHECK(xr_compile_resources_work(resources, UINT64_MAX - stats.work) == XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_resources_work(resources, 1) == XR_COMPILE_RESOURCE_BUDGET);
     size_t attempts = runtime_attempts; runtime_fail_at = attempts;
     xr_compile_resources_release(resources);
     drain(&owner, 1);
@@ -101,7 +102,7 @@ static void basics(const char *parent) {
     CHECK(runtime_attempts == attempts && !runtime_live && !runtime_bytes);
     CHECK(GetFileAttributesA(original) == INVALID_FILE_ATTRIBUTES);
     CHECK(xtc_xir_workspace_close(&owner, 1) == XTC_XIR_WORKSPACE_OK);
-    puts("exhausted-ledger nested TEMP cleanup, producer death, step=1, disk/heap/handles PASS");
+    puts("allocator-denied nested TEMP cleanup, producer death, step=1, disk/heap/handles PASS");
 }
 static void compiler_transaction(const char *parent) {
     XrCompileResources *resources = sdk_ledger(&sdk_unlimited); XtcXirWorkspace *owner = NULL;
@@ -114,16 +115,13 @@ static void compiler_transaction(const char *parent) {
     printf("compiler_root=%s\ncompiler_input=%s\ncompiler_output=%s\n", paths->root, paths->input, paths->output);
     fflush(stdout); CHECK(getchar() == 'c');
     path_join(path, sizeof(path), paths->output, "compiler-unrecorded.tmp"); CHECK(GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES);
-    XrCompileResourceStats stats = sdk_stats(resources);
-    CHECK(xr_compile_resources_work(resources, UINT64_MAX - stats.work) == XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_resources_work(resources, 1) == XR_COMPILE_RESOURCE_BUDGET);
     size_t attempts = runtime_attempts; runtime_fail_at = attempts;
     xr_compile_resources_release(resources); drain(&owner, 1); runtime_fail_at = SIZE_MAX;
     CHECK(attempts == runtime_attempts && !runtime_live && !runtime_bytes);
 #ifndef WORKSPACE_PRODUCTION
     CHECK(!owner_handle_count);
 #endif
-    puts("real compiler unregistered output cleanup after BUDGET PASS");
+    puts("real compiler unregistered output cleanup after producer death and allocator denial PASS");
 }
 static void arguments_and_depth(const char *parent) {
     XrCompileResources *resources = sdk_ledger(&sdk_unlimited); XtcXirWorkspace *owner = NULL;
@@ -157,31 +155,33 @@ static void arguments_and_depth(const char *parent) {
     path_join(file, sizeof(file), xtc_xir_workspace_paths(owner)->input, "leaf.c"); write_file(file, "leaf uses reserved file frame\n");
     XrCompileResourceStats stats = sdk_stats(resources);
     CHECK(xtc_xir_workspace_close(&owner, 1000) == XTC_XIR_WORKSPACE_BUDGET && owner);
-    CHECK(sdk_stats(resources).work == stats.work && xtc_xir_workspace_status(owner) == XTC_XIR_WORKSPACE_BUDGET);
+    CHECK(sdk_stats(resources).allocation_count == stats.allocation_count &&
+        sdk_stats(resources).allocated_bytes == stats.allocated_bytes &&
+        xtc_xir_workspace_status(owner) == XTC_XIR_WORKSPACE_BUDGET);
     CHECK(RemoveDirectoryA(path)); drain(&owner, 1); xr_compile_resources_release(resources); CHECK(!runtime_live);
     puts("argument/output preservation, no-I/O new, copied producer text, directory depth bound PASS");
 }
-static void cumulative(const char *parent) {
+static void memory_owner_reuse(const char *parent) {
+    XrCompileResourceStats measured = run(parent, &sdk_unlimited, XTC_XIR_WORKSPACE_OK, false);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, measured.peak_bytes, true};
+    XrCompileResources *resources = sdk_ledger(&limits);
+    uint64_t baseline = sdk_stats(resources).held_bytes;
     XtcXirWorkspaceRequest request = request_for(parent);
-    XrCompileResources *resources = sdk_ledger(&sdk_unlimited);
-    uint64_t initial = sdk_stats(resources).work, first = 0;
     for (unsigned i = 0; i < 2; ++i) {
         XtcXirWorkspace *owner = NULL;
         CHECK(xtc_xir_workspace_new(resources, &request, &owner) == XTC_XIR_WORKSPACE_OK);
-        CHECK(xtc_xir_workspace_create(owner) == XTC_XIR_WORKSPACE_OK); drain(&owner, 1);
-        if (!i) first = sdk_stats(resources).work;
-    }
-    uint64_t total = sdk_stats(resources).work; CHECK(total == initial + 2 * (first - initial));
-    xr_compile_resources_release(resources);
-    XrCompileResourceLimits limit = sdk_unlimited; limit.work = total - 1; resources = sdk_ledger(&limit);
-    for (unsigned i = 0; i < 2; ++i) {
-        XtcXirWorkspace *owner = NULL;
-        XtcXirWorkspaceStatus result = xtc_xir_workspace_new(resources, &request, &owner);
-        if (result == XTC_XIR_WORKSPACE_OK) result = xtc_xir_workspace_create(owner);
-        CHECK(result == (i ? XTC_XIR_WORKSPACE_BUDGET : XTC_XIR_WORKSPACE_OK)); drain(&owner, 1);
+        CHECK(xtc_xir_workspace_create(owner) == XTC_XIR_WORKSPACE_OK);
+        void *rejected = NULL;
+        size_t attempts = runtime_attempts;
+        CHECK(limits.memory_limit <= SIZE_MAX);
+        CHECK(xr_compile_resources_alloc(resources, (size_t)limits.memory_limit, &rejected) ==
+            XR_COMPILE_RESOURCE_MEMORY_LIMIT && !rejected);
+        CHECK(runtime_attempts == attempts && xtc_xir_workspace_status(owner) == XTC_XIR_WORKSPACE_OK);
+        drain(&owner, 1);
+        CHECK(runtime_attempts == attempts && sdk_stats(resources).held_bytes == baseline);
     }
     xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes);
-    puts("two successive owners consume the original cumulative ledger PASS");
+    puts("two successive owners reuse held memory after precise admission refusal; allocation-free close PASS");
 }
 #ifndef WORKSPACE_PRODUCTION
 static void release_running_leases(XtcXirWorkspace *owner) {
@@ -320,30 +320,23 @@ static void hardlink(const char *parent) {
 }
 #endif
 static void resources_matrix(const char *parent) {
-    record_physical = record_work = true; physical_total = physical_peak = work_count = 0; runtime_attempts = 0;
+    record_physical = true; physical_total = physical_peak = 0; runtime_attempts = 0;
     XrCompileResourceStats stats = run(parent, &sdk_unlimited, XTC_XIR_WORKSPACE_OK, false);
-    record_physical = record_work = false; size_t allocations = runtime_attempts, edges = work_count;
+    record_physical = false; size_t allocations = runtime_attempts;
     CHECK(stats.allocated_bytes == physical_total && stats.peak_bytes == physical_peak);
     for (size_t n = 0; n < allocations; ++n) {
         runtime_attempts = 0; runtime_fail_at = n;
         run(parent, &sdk_unlimited, XTC_XIR_WORKSPACE_OUT_OF_MEMORY, false); runtime_fail_at = SIZE_MAX;
     }
-    XrCompileResourceLimits exact = {stats.allocated_bytes, stats.peak_bytes, stats.work};
+    CHECK(stats.peak_bytes > 0 && stats.peak_bytes < UINT64_MAX);
+    XrCompileResourceLimits exact = {XR_COMPILE_MEMORY_FINITE, stats.peak_bytes, true};
     run(parent, &exact, XTC_XIR_WORKSPACE_OK, false);
-    for (unsigned axis = 0; axis < 3; ++axis) {
-        XrCompileResourceLimits limited = exact;
-        if (axis == 0) --limited.allocated_bytes;
-        if (axis == 1) --limited.live_bytes;
-        if (axis == 2) --limited.work;
-        run(parent, &limited, XTC_XIR_WORKSPACE_BUDGET, false);
-    }
-    for (size_t i = 0; i < edges; ++i) {
-        XrCompileResourceLimits limited = sdk_unlimited; limited.work = work_edges[i] - 1;
-        run(parent, &limited, XTC_XIR_WORKSPACE_BUDGET, false);
-    }
-    printf("allocations=%zu real OOM; work_edges=%zu; allocated=%llu peak=%llu work=%llu; physical oracle PASS\n",
-        allocations, edges, (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.peak_bytes,
-        (unsigned long long)stats.work);
+    --exact.memory_limit;
+    run(parent, &exact, XTC_XIR_WORKSPACE_MEMORY_LIMIT, false);
+    exact.memory_limit += 2;
+    run(parent, &exact, XTC_XIR_WORKSPACE_OK, false);
+    printf("allocations=%zu real OOM; held peak minus1/exact/plus1; allocated=%llu peak=%llu; physical oracle PASS\n",
+        allocations, (unsigned long long)stats.allocated_bytes, (unsigned long long)stats.peak_bytes);
 }
 #ifndef WORKSPACE_PRODUCTION
 static void os_matrix(const char *parent) {
@@ -370,6 +363,7 @@ static void os_matrix(const char *parent) {
 }
 #endif
 int main(int argc, char **argv) {
+    (void)sdk_fixture_malloc; (void)sdk_fixture_free;
     CHECK(argc == 2 || argc == 3); DWORD before = native_random_boundary();
     if (argc == 3) {
 #ifndef WORKSPACE_PRODUCTION
@@ -385,7 +379,7 @@ int main(int argc, char **argv) {
     }
     printf("initial handles=%lu\n", before);
     basics(argv[1]); printf("after basics handles=%lu\n", handle_count());
-    arguments_and_depth(argv[1]); cumulative(argv[1]);
+    arguments_and_depth(argv[1]); memory_owner_reuse(argv[1]);
     resources_matrix(argv[1]);
     printf("after resources handles=%lu\n", handle_count());
 #ifndef WORKSPACE_PRODUCTION

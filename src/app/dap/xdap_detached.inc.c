@@ -20,7 +20,6 @@ static XrXirOutputStatus detached_output(void *context,const XrXirOutputGroup *g
     return target->output.write ? target->output.write(target->output.context,group) : XR_XIR_OUTPUT_BAD_ARGUMENT;
 }
 static XrXirStatus detached_clock(XdapDetached *target,uint64_t *output) {
-    if (xr_compile_resources_work(target->resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     int64_t now=-1;
     if (!target->time.clock || target->time.clock(target->time.context,XR_XIR_CLOCK_MONOTONIC,&now)!=XR_XIR_TIME_OK || now<0)
         return XR_XIR_IO;
@@ -92,7 +91,6 @@ XR_FUNC XrXirCallStatus xdap_detached_free(XdapDetached *target) {
     xr_xir_call_result_drop(&target->outcome);xr_compile_resources_free(target);return status;
 }
 static XrXirStatus dispatch_prepare_end(XdapAdapter *s,XdapJsonWriter *event) {
-    if (xr_compile_resources_work(s->resources,11)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     *event=xdap_json_writer(s->resources,s->config.message_limit);
     XDAP_TEXT(event,"{\"seq\":");xdap_json_unsigned(event,INT32_MAX);
     XDAP_TEXT(event,",\"type\":\"event\",\"event\":\"terminated\"}");return event->status;

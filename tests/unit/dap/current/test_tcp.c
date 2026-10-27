@@ -89,10 +89,10 @@ static size_t socket_failure(unsigned mode,size_t fail) {
     else {
         CHECK(status==XR_XIR_OUT_OF_MEMORY && sites>fail && !message && length==777);
         XrCompileResourceStats spent={0};CHECK(xr_compile_resources_stats(owner,&spent)==XR_COMPILE_RESOURCE_OK);
-        if (!mode) { CHECK(!io && spent.live_bytes==baseline.live_bytes);CHECK(xdap_tcp_new(owner,0,8192,&io)==XR_XIR_OK); }
+        if (!mode) { CHECK(!io && spent.held_bytes==baseline.held_bytes);CHECK(xdap_tcp_new(owner,0,8192,&io)==XR_XIR_OK); }
         else { CHECK(read_message(io,&message,&length,&eof)==XR_XIR_OK);CHECK(message && length==body); }
         XrCompileResourceStats retry={0};CHECK(xr_compile_resources_stats(owner,&retry)==XR_COMPILE_RESOURCE_OK);
-        CHECK(retry.work>=spent.work && retry.allocated_bytes>=spent.allocated_bytes);
+        CHECK(retry.allocated_bytes>=spent.allocated_bytes);
     }
     if (message) for (size_t i=0;i<length;++i) CHECK(message[i]=='a');
     xr_compile_resources_free(message);if (peer!=XR_INVALID_SOCKET) CHECK(!xr_closesocket(peer));

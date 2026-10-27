@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xstring_pool.c - Metered compile-time string interning with atomic publication
+ * xstring_pool.c - Owned compile-time string interning with atomic publication
  */
 #include "xstring_pool.h"
 #include "../../base/xarena.h"
@@ -34,8 +34,9 @@ XR_FUNC bool xr_string_pool_matches(const XrCompileStringPool *pool,
            xr_compiler_arena_matches_state(arena, state);
 }
 
-static bool pool_work(XrCompileStringPool *pool, size_t units) {
-    return xr_compile_state_work(pool->state, units) == XR_COMPILE_RESOURCE_OK;
+static bool pool_poll(XrCompileStringPool *pool,XrCompileRequestControl *request) {
+    XrCompileResourceStatus status=xr_compile_request_control_poll(request);
+    return xr_compile_state_fail(pool->state,status)==XR_COMPILE_RESOURCE_OK;
 }
 
 static void *pool_allocate(XrCompileStringPool *pool, size_t count, size_t size) {
@@ -62,20 +63,22 @@ XR_FUNC XrCompileResourceStatus xr_compile_string_pool_open(
     return XR_COMPILE_RESOURCE_OK;
 }
 
-static bool pool_rehash(XrCompileStringPool *pool) {
+static bool pool_rehash(XrCompileStringPool *pool,XrCompileRequestControl *request) {
     if (pool->capacity > SIZE_MAX / 2) {
-        xr_compile_state_fail(pool->state, XR_COMPILE_RESOURCE_BUDGET);
+        xr_compile_state_fail(pool->state, XR_COMPILE_RESOURCE_OVERFLOW);
         return false;
     }
     size_t capacity = pool->capacity * 2;
     PoolEntry *fresh = pool_allocate(pool, capacity, sizeof(*fresh));
     if (!fresh) return false;
     for (size_t i = 0; i < pool->capacity; ++i) {
-        if (!pool_work(pool, 1)) return false;
+        if(request && (i&4095u)==0 && !pool_poll(pool,request))return false;
+
         if (!pool->buckets[i].hash) continue;
-        size_t slot = pool->buckets[i].hash & (capacity - 1);
+        size_t slot = pool->buckets[i].hash & (capacity - 1),probes=0;
         for (;;) {
-            if (!pool_work(pool, 1)) return false;
+            if(request && (probes++&4095u)==0 && !pool_poll(pool,request))return false;
+
             if (!fresh[slot].hash) break;
             slot = (slot + 1) & (capacity - 1);
         }
@@ -87,27 +90,29 @@ static bool pool_rehash(XrCompileStringPool *pool) {
     return true;
 }
 
-static const char *pool_intern(XrCompileStringPool *pool, const char *str, size_t length) {
+static const char *pool_intern(XrCompileStringPool *pool, const char *str, size_t length,XrCompileRequestControl *request) {
     if (!pool || xr_compile_state_status(pool->state) != XR_COMPILE_RESOURCE_OK) return NULL;
     if ((!str && length) || length == SIZE_MAX) {
-        xr_compile_state_fail(pool->state, length == SIZE_MAX ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        xr_compile_state_fail(pool->state, length == SIZE_MAX ? XR_COMPILE_RESOURCE_OVERFLOW : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
         return NULL;
     }
-    if (pool->count >= pool->capacity - pool->capacity / 4 && !pool_rehash(pool)) return NULL;
+    if (pool->count >= pool->capacity - pool->capacity / 4 && !pool_rehash(pool,request)) return NULL;
     uint32_t hash = UINT32_C(2166136261);
     for (size_t i = 0; i < length; ++i) {
-        if (!pool_work(pool, 1)) return NULL;
+        if(request && (i&4095u)==0 && !pool_poll(pool,request))return NULL;
+
         hash = (hash ^ (uint8_t) str[i]) * UINT32_C(16777619);
     }
     if (!hash) hash = 1;
-    size_t slot = hash & (pool->capacity - 1);
+    size_t slot = hash & (pool->capacity - 1),probes=0;
     for (;;) {
-        if (!pool_work(pool, 1)) return NULL;
+        if(request && (probes++&4095u)==0 && !pool_poll(pool,request))return NULL;
+
         PoolEntry *entry = &pool->buckets[slot];
         if (!entry->hash) {
             char *copy = xr_arena_strndup(pool->arena, str ? str : "", length);
             if (xr_compiler_arena_capture_status(pool->arena, pool->state) != XR_COMPILE_RESOURCE_OK) return NULL;
-            if (!pool_work(pool, sizeof(*entry))) return NULL;
+
             *entry = (PoolEntry) {hash, copy, length};
             ++pool->count;
             return copy;
@@ -115,7 +120,8 @@ static const char *pool_intern(XrCompileStringPool *pool, const char *str, size_
         if (entry->hash == hash && entry->len == length) {
             size_t i = 0;
             for (; i < length; ++i) {
-                if (!pool_work(pool, 2)) return NULL;
+                if(request && (i&4095u)==0 && !pool_poll(pool,request))return NULL;
+
                 if (entry->str[i] != str[i]) break;
             }
             if (i == length) return entry->str;
@@ -124,15 +130,15 @@ static const char *pool_intern(XrCompileStringPool *pool, const char *str, size_
     }
 }
 
-XR_FUNC const char *xr_string_pool_intern(XrCompileStringPool *pool, const char *str) {
+XR_FUNC const char *xr_string_pool_intern(XrCompileStringPool *pool, const char *str,XrCompileRequestControl *request) {
     if (!pool) return NULL;
     size_t length = 0;
     if (xr_compile_state_string_length(pool->state, str, &length) != XR_COMPILE_RESOURCE_OK) return NULL;
-    return pool_intern(pool, str, length);
+    return pool_intern(pool, str, length,request);
 }
 
-XR_FUNC const char *xr_string_pool_intern_len(XrCompileStringPool *pool, const char *str, size_t length) {
-    return pool_intern(pool, str, length);
+XR_FUNC const char *xr_string_pool_intern_len(XrCompileStringPool *pool, const char *str, size_t length,XrCompileRequestControl *request) {
+    return pool_intern(pool, str, length,request);
 }
 
 XR_FUNC size_t xr_string_pool_count(const XrCompileStringPool *pool) {

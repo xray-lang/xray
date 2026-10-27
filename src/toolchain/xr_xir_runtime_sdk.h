@@ -17,7 +17,8 @@
 typedef enum XrXirRuntimeSdkStatus {
     XR_XIR_SDK_OK = 0, XR_XIR_SDK_INVALID = 1, XR_XIR_SDK_UNRESOLVED = 2,
     XR_XIR_SDK_BUDGET = 3, XR_XIR_SDK_OUT_OF_MEMORY = 4,
-    XR_XIR_SDK_IO = 5, XR_XIR_SDK_UNSUPPORTED = 6
+    XR_XIR_SDK_IO = 5, XR_XIR_SDK_UNSUPPORTED = 6,
+    XR_XIR_SDK_MEMORY_LIMIT = 7, XR_XIR_SDK_OVERFLOW = 8
 } XrXirRuntimeSdkStatus;
 typedef struct XrXirRuntimeSdk XrXirRuntimeSdk;
 typedef struct XrXirRuntimeSdkRequest {
@@ -31,22 +32,24 @@ typedef struct XrXirRuntimeSdkFacts {
     uint32_t architecture, object_format, hosted, c_dialect, crt, sanitizers;
     uint32_t allocator, assertions, build_provider, abi_recipe_version, closure_recipe_version;
     uint32_t file_count;
-    uint64_t file_bytes, metadata_bytes, work_used;
+    uint64_t file_bytes, metadata_bytes;
     uint8_t identity[32];
 } XrXirRuntimeSdkFacts;
 /* Requests are borrowed synchronously; resources are mandatory and shared with
  * other compiler stages. Failure preserves output, which must initially be NULL.
  * Blocks keep resources alive after the producer releases its external reference.
  * The consumer must keep the SDK alive until compiler and linker have exited.
- * Facts report this load's cumulative allocation/work deltas, never limits. */
+ * metadata_bytes reports this SDK's resident requested allocation capacity:
+ * its body plus SdkMemory headers/payloads, excluding shared-owner blocks and
+ * the memory allocator's own headers. It is neither a quota nor turnover. */
 XR_FUNC XrXirRuntimeSdkStatus xr_xir_runtime_sdk_load(const XrXirRuntimeSdkRequest *request,
     XrXirRuntimeSdk **output);
 XR_FUNC const XrXirRuntimeSdkFacts *xr_xir_runtime_sdk_facts(const XrXirRuntimeSdk *sdk);
 /* Borrow the owner's original ledger; NULL is returned for a NULL owner.
- * This query does not allocate, scan or consume work. */
+ * This query does not allocate or scan. */
 XR_FUNC XrCompileResources *xr_xir_runtime_sdk_resources(const XrXirRuntimeSdk *sdk);
 XR_FUNC const char *xr_xir_runtime_sdk_root(const XrXirRuntimeSdk *sdk);
-/* Lookup charges comparisons to the same ledger. Success borrows a path; failure
+/* Lookup compares immutable admitted metadata. Success borrows a path; failure
  * preserves output, which must initially be NULL. Unknown paths are UNRESOLVED. */
 XR_FUNC XrXirRuntimeSdkStatus xr_xir_runtime_sdk_file(const XrXirRuntimeSdk *sdk,
     const char *relative_path, const char **output);

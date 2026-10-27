@@ -18,7 +18,7 @@ static bool source_path_nodes(SourceContext *ctx, AstNode *node, AstNode **steps
     uint32_t *count, SourceName **root) {
     *count = 0; *root = NULL;
     while (node && (node->type == AST_MEMBER_ACCESS || node->type == AST_INDEX_GET)) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (*count >= 128 - ctx->depth)
             return source_fail(ctx,node,XR_XIR_BUDGET,"source place depth exhausted");
         steps[(*count)++] = node;
@@ -51,7 +51,7 @@ static bool source_path_type(SourceContext *ctx, AstNode *node, XrXirType *type)
             *type = XR_XIR_UNIT;
             const char *name = step->as.member_access.name;
             for (uint32_t f = 0; f < decl->field_count; ++f) {
-                if (!source_work(ctx,step)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 const XrXirNominalField *field = &decl->fields[f];
                 if (source_text_size(ctx, name) == field->name.length && source_span_same(ctx, NULL, name, field->name.bytes, field->name.length)) {
                     if (!source_substitute(ctx,&substitution,field->type,0,type)) return false;
@@ -96,7 +96,7 @@ static bool source_value_place_mode(SourceContext *ctx, AstNode *node, SourceVal
         if (narrowed) {
             uint32_t prefix=source_fact_depth(ctx,root);
             for (uint32_t layer=0;layer<prefix;++layer)
-                if (!source_work(ctx,node) || !source_unwrap_value(ctx,node,handle,&handle)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_unwrap_value(ctx,node,handle,&handle)) return false;
         }
         if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_OBJECT_PLACE,root_type,{handle.id,0},{0},0,{0}},place)) return false;
     } else {
@@ -175,7 +175,7 @@ static bool source_reference_effects(SourceContext *ctx, AstNode *node, SourceRe
     *output = NULL;
     if (!source_path_nodes(ctx,node,steps,&count,&root)) return false;
     for (uint32_t step = 0; step < count; ++step) {
-        if (!source_work(ctx,steps[step])) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (steps[step]->type == AST_INDEX_GET) ++selectors;
     }
     if (!selectors) return true;

@@ -26,7 +26,7 @@ static bool source_root_join_type(SourceContext *ctx, XrXirType left,
     if (!xr_xir_callable_flags_join(a->flags,b->flags,&joined.flags))
         return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"inferred callable flow has invalid bounds");
     for (uint32_t p = 0; p < a->parameter_count; ++p) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (a->parameters[p].type != b->parameters[p].type || a->parameters[p].mode != b->parameters[p].mode)
             return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"inferred callable parameters must remain exact");
     }
@@ -73,11 +73,11 @@ static bool source_root_group(SourceContext *ctx, uint32_t f, uint32_t i, bool *
     uint32_t first = op->op == XR_XIR_PHI ? 1 : 0, step = op->op == XR_XIR_PHI ? 2 : 1;
     XrXirType common = source_root_operand(ctx,f,source_root_join_origin(ctx,f,body->operands[op->args[0] + first]));
     for (uint32_t a = first + step; a < op->args[1]; a += step) {
-        if (!source_work(ctx,NULL) || !source_root_join_type(ctx,common,
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_root_join_type(ctx,common,
             source_root_operand(ctx,f,source_root_join_origin(ctx,f,body->operands[op->args[0] + a])),&common)) return false;
     }
     for (uint32_t a = first; a < op->args[1]; a += step) {
-        if (!source_work(ctx,NULL) || !source_root_copy_bound(ctx,f,body->operands[op->args[0] + a],common,changed))
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_root_copy_bound(ctx,f,body->operands[op->args[0] + a],common,changed))
             return source_fail(ctx,NULL,ctx->diagnostic.status == XR_XIR_OK ? XR_XIR_BAD_TYPE : ctx->diagnostic.status,
                 "joined callable input has no admitted normalization");
     }
@@ -95,7 +95,7 @@ static bool source_root_cell(SourceContext *ctx, uint32_t f, uint32_t i, bool *c
     uint32_t id = body->parameter_count + i;
     XrXirType common = source_root_operand(ctx,f,source_root_join_origin(ctx,f,op->args[0]));
     for (uint32_t a = 0; a < body->instruction_count; ++a) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirInstruction *write = &body->instructions[a];
         if (write->op == XR_XIR_CELL_WRITE && write->args[0] == id &&
             !source_root_join_type(ctx,common,source_root_operand(ctx,f,
@@ -104,7 +104,7 @@ static bool source_root_cell(SourceContext *ctx, uint32_t f, uint32_t i, bool *c
     if (!source_root_copy_bound(ctx,f,op->args[0],common,changed))
         return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"inferred cell initializer cannot share its bound");
     for (uint32_t a = 0; a < body->instruction_count; ++a) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirInstruction *write = &body->instructions[a];
         if (write->op == XR_XIR_CELL_WRITE && write->args[0] == id &&
             !source_root_copy_bound(ctx,f,write->args[1],common,changed))
@@ -122,7 +122,7 @@ static bool source_root_bottom_type(SourceContext *ctx, XrXirType original,
     const XrXirTypeNode *node = xr_xir_type_node(&ctx->types,original);
     *output = original;
     if (!node) return true;
-    if (!source_work(ctx,NULL) || depth >= 128)
+    if (!((ctx)->diagnostic.status == XR_XIR_OK) || depth >= 128)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"inferred capture nesting exhausted");
     XrXirTypeNode bottom = *node;
     if (bottom.kind == XR_XIR_TYPE_CALLABLE) {
@@ -150,7 +150,7 @@ static bool source_root_capture_join(SourceContext *ctx, XrXirType left,
     if (left == right || xr_xir_type_is_callable(&ctx->types,left))
         return source_root_join_type(ctx,left,right,output);
     const XrXirTypeNode *a = xr_xir_type_node(&ctx->types,left), *b = xr_xir_type_node(&ctx->types,right);
-    if (!source_work(ctx,NULL) || depth >= 128)
+    if (!((ctx)->diagnostic.status == XR_XIR_OK) || depth >= 128)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"capture shape join exhausted");
     if (!a || !b || a->kind != b->kind || a->parameter_count != b->parameter_count ||
         (a->kind != XR_XIR_TYPE_CELL && a->kind != XR_XIR_TYPE_ARRAY &&

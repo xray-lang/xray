@@ -96,7 +96,7 @@ static XrXirStatus effect_capture_barrier(EffectCaptureRead *read,const EffectCa
     if(table && (op->args[0]>node->head.operand_count || count>node->head.operand_count-op->args[0])) return XR_XIR_BAD_STRUCTURE;
     if(!table && count>sizeof(op->args)/sizeof(op->args[0])) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t p=0;p<count;++p) {
-        if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
         uint32_t value=table?node->head.operands[op->args[0]+p]:op->args[p],kind=0;
         if(value>=node->values) return XR_XIR_BAD_STRUCTURE;
         /* Kind and descriptor come from the same current SSA lookup. No emit
@@ -159,7 +159,7 @@ static XrXirStatus effect_capture_parameters(EffectCaptureRead *read,const Effec
              * needs a descending actual cause; presence itself grants no origin. */
             bool present=false;const uint64_t *input=read->final->nodes[node->node].input+(uint64_t)p*node->basis.row_words;
             for(uint32_t w=0;w<node->basis.origin_words;++w) {
-                if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
                 if(input[w]) present=true;
             }
             if(present) {
@@ -183,7 +183,7 @@ static XrXirStatus effect_capture_reference(EffectCaptureRead *read,const Effect
     uint32_t instruction,const XrXirInstruction *op) {
     uint32_t body=read->final->nodes[node->node].body,site=UINT32_MAX;
     for(uint32_t s=0;s<read->final->site_count;++s) {
-        if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
         if(read->final->sites[s].function==body && read->final->sites[s].instruction==instruction) {
             if(site!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;site=s;
         }
@@ -204,7 +204,7 @@ static XrXirStatus effect_capture_reference(EffectCaptureRead *read,const Effect
     status=effect_body_request_head(&read->body,reference->target,&target);if(status!=XR_XIR_OK) return status;
     if(op->args[0]>node->head.operand_count || reference->captures>node->head.operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t p=0;p<reference->captures;++p) {
-        if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+
         uint32_t source=node->head.operands[op->args[0]+p],kind=0;
         status=effect_capture_kind(read,node,source,&kind,NULL);if(status!=XR_XIR_OK) return status;
         uint64_t binding=node->basis.origin_words+((uint64_t)reference->binding+p)*

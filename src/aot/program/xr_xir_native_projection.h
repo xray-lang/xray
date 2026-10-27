@@ -33,13 +33,13 @@ typedef struct XrXirNativeProjectionFacts {
  * ledger. The product and its context may be destroyed after this returns. */
 XR_FUNC XrXirStatus xr_compile_native_projection_prepare(const XrXirNativeProjectionRequest *request,
     XrXirNativeProjection **output, XrXirDiagnostic *diagnostic);
-/* Immutable borrows last until owner_free. Queries consume no work. */
+/* Immutable borrows last until owner_free. Queries allocate nothing. */
 XR_FUNC const XrXirCompileContext *xr_compile_native_projection_context(const XrXirNativeProjection *owner);
 XR_FUNC const XrXirNativeProjectionSource *xr_compile_native_projection_source(const XrXirNativeProjection *owner);
 XR_FUNC const XrXirNativeProjectionFacts *xr_compile_native_projection_facts(const XrXirNativeProjection *owner);
 /* Bind already independently validated toolchain facts without allocating,
- * verifying the product again or emitting C again. This charges the owner's
- * original ledger. Failure preserves all output bytes and the immutable owner;
+ * verifying the product again or emitting C again. Failure preserves all
+ * output bytes and the immutable owner;
  * the identity alone grants no SDK, Target or execution authority. */
 XR_FUNC XrXirStatus xr_compile_native_projection_bind(const XrXirNativeProjection *owner,
     const XrToolchainBinding *binding, XrXirNativeInput *output);

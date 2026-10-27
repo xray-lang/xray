@@ -27,7 +27,7 @@ static XrXirStatus effect_invocation_publication_write(const XrXirCompileContext
         XrXirStatus status=effect_invocation_selected_witness(work,certificate,function,selected[domain],&witness);
         if (status!=XR_XIR_OK) return status;
         bool symbolic=false;
-        if (!xir_compile_work(work,sizeof(EffectInvocationProjectedCause))) return XR_XIR_BUDGET;
+
         const EffectInvocationProjectedCause projected={selected[domain],&witness};
         status=effect_invocation_public_transform(work,certificate,function,&projected,
             &result->witnesses[(size_t)domain*result->count+function],&symbolic);
@@ -76,18 +76,18 @@ static XrXirStatus effect_invocation_publication_match(const XrXirCompileContext
         uint32_t selected[4];
         status=effect_invocation_projection_domains(work,certificate,f,0,4,selected);
         if (status!=XR_XIR_OK) break;
-        if (!xir_compile_work(work,4)) { status=XR_XIR_BUDGET;break; }
+
         for (uint32_t domain=0;domain<4 && status==XR_XIR_OK;++domain) {
             size_t at=(size_t)domain*result->count+f;
-            if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
+
             XrXirRootEffectWitness witness,expected;bool symbolic=false;
             status=effect_invocation_selected_witness(work,certificate,f,selected[domain],&witness);
             if (status!=XR_XIR_OK) break;
-            if (!xir_compile_work(work,sizeof(EffectInvocationProjectedCause))) { status=XR_XIR_BUDGET;break; }
+
             const EffectInvocationProjectedCause cause={selected[domain],&witness};
             status=effect_invocation_public_transform(work,certificate,f,&cause,&expected,&symbolic);
             if (status!=XR_XIR_OK) break;
-            if (!xir_compile_work(work,5)) { status=XR_XIR_BUDGET;break; }
+
             if (!effect_invocation_witness_equal(&expected,&result->witnesses[at])) status=XR_XIR_BAD_STRUCTURE;
         }
     }
@@ -112,9 +112,7 @@ static XrXirStatus effect_invocation_publication_commit(const XrXirCompileContex
         return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_invocation_publication_match(work,fresh,result);
     if (status!=XR_XIR_OK) return status;
-    uint64_t bytes=(uint64_t)count*(sizeof(XrXirRootFormula)+sizeof(XrXirRootEffects)+2+
-        2*sizeof(XrXirRootEffectWitness))+3*sizeof(void *);
-    if (!xir_compile_work(work,bytes)) return XR_XIR_BUDGET;
+
     EffectInvocationCertificate *old=effects->invocations;
     const EffectFinalFunctions *old_result=effects->result_borrow;
     for (uint32_t f=0;f<count;++f) {
@@ -155,7 +153,7 @@ static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
         graph->material->resources!=work->resources || !graph->material->declared)) status=XR_XIR_BAD_STRUCTURE;
     if (status==XR_XIR_OK && declared) {
         status=effect_invocation_bounds_copy_physical(work,declared,graph->physical,&temporary);
-        if (status==XR_XIR_OK && !xir_compile_work(work,2)) status=XR_XIR_BUDGET;
+
         if (status==XR_XIR_OK) {
             effect_invocation_bounds_free(graph->material->declared);
             graph->material->declared=temporary;temporary=NULL;
@@ -165,13 +163,13 @@ static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
         dense->functions!=module->functions || &dense->terms.types!=module->types ||
         &dense->uses!=effects)) status=XR_XIR_BAD_STRUCTURE;
     EffectBodyRequest body={0};
-    if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(body))) status=XR_XIR_BUDGET;
+
     if (status==XR_XIR_OK) status=effect_invocation_collect(work,module,effects,graph,
         graph->material->declared,&body);
     EffectInvocationDriverInput input={work,&body,effects,graph,
         status==XR_XIR_OK?graph->material->declared:NULL,dense};
     EffectInvocationProjectionSink sink;
-    if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(sink))) status=XR_XIR_BUDGET;
+
     if (status==XR_XIR_OK) {
         sink=(EffectInvocationProjectionSink){work->resources,module->function_count,
             &publication,effect_invocation_publication_write};
@@ -180,7 +178,7 @@ static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
     /* The raw boundary remains inside this whole operation, after the
      * last projection callback and before any public result changes. */
     if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,module,certificate->body);
-    if (status==XR_XIR_OK && !xir_compile_work(work,2)) status=XR_XIR_BUDGET;
+
     if (status==XR_XIR_OK) status=effect_invocation_publication_commit(work,effects,&certificate);
     if (status==XR_XIR_OK) {
         /* Construction ownership has moved through seal to this certificate.
@@ -209,11 +207,11 @@ static XrXirStatus effect_invocation_effect_edge_mask(const XrXirCompileContext 
 /* The last expansion still visits every actual body and edge. A stable
  * round may retain only this operation's already sealed summary, after exact
  * correspondence with its independently owned input copy has been checked. */
-static XrXirStatus effect_context_dense_bytes(const XrXirCompileContext *context,
+static XrXirStatus effect_context_dense_bytes(
     const void *left,const void *right,uint64_t count,size_t size) {
     if (!size || count>SIZE_MAX/size || count*size==UINT64_MAX || (count && (!left || !right)))
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,count*size+1)) return XR_XIR_BUDGET;
+
     return !count || !memcmp(left,right,(size_t)count*size)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
@@ -223,26 +221,26 @@ static XrXirStatus effect_context_dense_body_match(const XrXirCompileContext *co
     const XrXirFunction *actual=&dense->functions[index];
     const EffectBodyFunction *sealed=&certificate->body->functions[index];
     const EffectOrdinaryNode *node=&dense->nodes[index];const XrXirOrigin *origin=&certificate->origins[index];
-    if (!xir_compile_work(context,10)) return XR_XIR_BUDGET;
+
     if (actual->name_length!=sealed->name_length || actual->parameter_count!=sealed->parameter_count ||
         actual->result!=sealed->result || actual->instruction_count!=sealed->instruction_count ||
         actual->operand_count!=sealed->operand_count || actual->block_count!=sealed->block_count ||
         node->declaration!=origin->function || node->argument_count!=origin->argument_count ||
         node->owner!=certificate->owners[index]) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_context_dense_bytes(context,actual->name,sealed->name,actual->name_length,1);
-    if (status==XR_XIR_OK) status=effect_context_dense_bytes(context,actual->parameters,sealed->parameters,
+    XrXirStatus status=effect_context_dense_bytes(actual->name,sealed->name,actual->name_length,1);
+    if (status==XR_XIR_OK) status=effect_context_dense_bytes(actual->parameters,sealed->parameters,
         actual->parameter_count,sizeof(*actual->parameters));
-    if (status==XR_XIR_OK) status=effect_context_dense_bytes(context,node->physical_types,sealed->parameters,
+    if (status==XR_XIR_OK) status=effect_context_dense_bytes(node->physical_types,sealed->parameters,
         actual->parameter_count,sizeof(*actual->parameters));
     if (status==XR_XIR_OK) {
-        EffectBodyRead read=effect_body_compile_read(context);
+        EffectBodyRead read=(EffectBodyRead){.owner=context};
         status=effect_body_records_match(&read,sealed,actual);
     }
-    if (status==XR_XIR_OK) status=effect_context_dense_bytes(context,actual->operands,sealed->operands,
+    if (status==XR_XIR_OK) status=effect_context_dense_bytes(actual->operands,sealed->operands,
         actual->operand_count,sizeof(*actual->operands));
-    if (status==XR_XIR_OK) status=effect_context_dense_bytes(context,actual->blocks,sealed->blocks,
+    if (status==XR_XIR_OK) status=effect_context_dense_bytes(actual->blocks,sealed->blocks,
         actual->block_count,sizeof(*actual->blocks));
-    if (status==XR_XIR_OK) status=effect_context_dense_bytes(context,node->arguments,origin->arguments,
+    if (status==XR_XIR_OK) status=effect_context_dense_bytes(node->arguments,origin->arguments,
         node->argument_count,sizeof(*node->arguments));
     const EffectInvocationFunctionBounds *bounds=&owner->declared->functions[index];
     const EffectInvocationFunctionBounds *copied=&certificate->declared->functions[index];
@@ -251,7 +249,7 @@ static XrXirStatus effect_context_dense_body_match(const XrXirCompileContext *co
         bounds->count!=copied->count || bounds->count>values ||
         (!!bounds->bounds!=!!bounds->count) || (!!copied->bounds!=!!copied->count))) status=XR_XIR_BAD_STRUCTURE;
     for (uint32_t v=0;v<bounds->count && status==XR_XIR_OK;++v) {
-        if (!xir_compile_work(context,4)) { status=XR_XIR_BUDGET;break; }
+
         if (bounds->bounds[v].value!=copied->bounds[v].value ||
             bounds->bounds[v].mask!=copied->bounds[v].mask ||
             bounds->bounds[v].callable!=copied->bounds[v].callable) status=XR_XIR_BAD_STRUCTURE;

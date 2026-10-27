@@ -25,7 +25,7 @@ static XrXirStatus input_storage(const XrXirCompileContext *context,
     if (!memory || (uintptr_t)memory%alignment) return XR_XIR_BAD_STRUCTURE;
     XrCompileResourceStatus status=xr_compile_resources_allocation(context->resources,memory,bytes);
     return status==XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        status==XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+        XR_XIR_BAD_STRUCTURE;
 }
 static XrXirStatus input_artifact_storage(const XrXirCompileContext *context,
     const XrXirArtifact *artifact) {
@@ -93,7 +93,7 @@ XR_FUNC XrXirStatus xir_program_input_read(const XrXirCompileContext *context,
     XrXirProgramPacket physical=*packet;
     uint8_t identity[32];
     if (physical.length>UINT64_MAX-64) return XR_XIR_BUDGET;
-    if (!xir_compile_work(context,physical.length+32)) return XR_XIR_BUDGET;
+
     xr_sha256(physical.bytes,physical.length,identity);
     if (memcmp(identity,physical.identity,sizeof(identity))) return XR_XIR_BAD_STRUCTURE;
     XrXirArtifact *artifact=NULL;XrXirProgramInput *input=NULL;
@@ -104,8 +104,7 @@ XR_FUNC XrXirStatus xir_program_input_read(const XrXirCompileContext *context,
     if (status==XR_XIR_OK && (*output || packet->bytes!=physical.bytes || packet->length!=physical.length ||
         packet->identity!=physical.identity)) status=XR_XIR_BAD_STRUCTURE;
     if (status==XR_XIR_OK) {
-        if (!xir_compile_work(context,physical.length+64)) status=XR_XIR_BUDGET;
-        else {
+        {
             uint8_t current[32];xr_sha256(physical.bytes,physical.length,current);
             if (memcmp(current,identity,sizeof(current)) || memcmp(current,physical.identity,sizeof(current)))
                 status=XR_XIR_BAD_STRUCTURE;

@@ -53,14 +53,14 @@ static XrXirStatus effect_capture_edge_active(const EffectCaptureRead *read,uint
     if(!read->actuals) return effect_capture_edge_active_current(read,selected,rank,active);
     EffectCaptureActualRead *view=read->actuals;
     if(selected>=view->edges || selected>=XR_COUNTOF(view->origin_known)) return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(read->work,sizeof(unsigned char))) return XR_XIR_BUDGET;
+
     if(view->origin_known[selected]) {
-        if(!xir_compile_work(read->work,sizeof(*rank)+sizeof(*active))) return XR_XIR_BUDGET;
+
         *rank=view->origin_rank[selected];*active=view->origin_present[selected];return XR_XIR_OK;
     }
     XrXirStatus status=effect_capture_edge_active_current(read,selected,rank,active);
     if(status!=XR_XIR_OK) return status;
-    if(!xir_compile_work(read->work,sizeof(*rank)+sizeof(*active)+sizeof(unsigned char))) return XR_XIR_BUDGET;
+
     view->origin_rank[selected]=*rank;view->origin_present[selected]=*active;view->origin_known[selected]=1;
     return XR_XIR_OK;
 }
@@ -85,7 +85,7 @@ static XrXirStatus effect_capture_argument_bound(const EffectCaptureRead *read,
     if(status!=XR_XIR_OK || role!=XR_XIR_EFFECT_PARAMETER_FIXED) return status;
     bool ref=false;
     for(uint32_t p=0;p<signature->parameter_count;++p) {
-        if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
         if(signature->parameters[p].mode==XR_PARAM_REF) ref=true;
     }
     actual->mask=signature->flags&(XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED);
@@ -150,7 +150,7 @@ static XrXirStatus effect_capture_actual_current(const EffectCaptureRead *read,u
         status=effect_capture_argument_bound(read,edge,parameter,actual.captured || edge->latent,&actual);
         if(status!=XR_XIR_OK) return status;
     }
-    if(!xir_compile_work(read->work,sizeof(actual))) return XR_XIR_BUDGET;
+
     *output=actual;return XR_XIR_OK;
 }
 /* The table holds current source coordinates and rank facts, never an edge
@@ -166,14 +166,14 @@ static XrXirStatus effect_capture_actual(const EffectCaptureRead *read,uint32_t 
             parameter>=view->offsets[selected+1]-view->offsets[selected] || view->offsets[selected+1]>XR_COUNTOF(view->values))
             return XR_XIR_BAD_STRUCTURE;
         uint32_t at=view->offsets[selected]+parameter;
-        if(!xir_compile_work(read->work,sizeof(unsigned char))) return XR_XIR_BUDGET;
+
         if(view->known[at]) {
-            if(!xir_compile_work(read->work,sizeof(*output))) return XR_XIR_BUDGET;
+
             *output=view->values[at];return XR_XIR_OK;
         }
         XrXirStatus status=effect_capture_actual_current(read,selected,parameter,output);
         if(status!=XR_XIR_OK) return status;
-        if(!xir_compile_work(read->work,sizeof(*output)+sizeof(unsigned char))) return XR_XIR_BUDGET;
+
         view->values[at]=*output;view->known[at]=1;return XR_XIR_OK;
     }
     return effect_capture_actual_current(read,selected,parameter,output);
@@ -184,7 +184,7 @@ static XrXirStatus effect_capture_actuals_read(EffectCaptureRead *read,EffectCap
     if(read->final->edge_count>=XR_COUNTOF(output->offsets)) return XR_XIR_OK;
     uint32_t count=0;output->offsets[0]=0;
     for(uint32_t e=0;e<read->final->edge_count;++e) {
-        if(!xir_compile_work(read->work,3+sizeof(uint32_t))) return XR_XIR_BUDGET;
+
         const EffectInvocationEdge *edge=&read->final->edges[e];
         EffectCaptureNode storage={0};const EffectCaptureNode *target=NULL;
         XrXirStatus status=effect_capture_node_borrow(read,edge->target,&storage,&target);
@@ -192,7 +192,7 @@ static XrXirStatus effect_capture_actuals_read(EffectCaptureRead *read,EffectCap
         if(target->head.parameter_count>XR_COUNTOF(output->values)-count) return XR_XIR_OK;
         count+=target->head.parameter_count;output->offsets[e+1]=count;
     }
-    if(!xir_compile_work(read->work,sizeof(output->known)+sizeof(output->origin_known))) return XR_XIR_BUDGET;
+
     memset(output->known,0,sizeof(output->known));memset(output->origin_known,0,sizeof(output->origin_known));
     output->edges=read->final->edge_count;return XR_XIR_OK;
 }
@@ -206,7 +206,7 @@ static XrXirStatus effect_capture_nonleaf(const EffectCaptureRead *read,const Ef
     EffectCaptureFact key={actual->node,actual->value,actual->first,0,0};uint32_t at=0;
     XrXirStatus status=effect_capture_lower(read,&key,&at);if(status!=XR_XIR_OK) return status;
     for(;at<read->final->capture.count;++at) {
-        if(!xir_compile_work(read->work,6)) return XR_XIR_BUDGET;
+
         const EffectCaptureFact *fact=&read->final->capture.facts[at];
         if(fact->node!=actual->node || fact->value!=actual->value || fact->word<actual->first ||
             fact->word-actual->first>=node->basis.origin_words) break;
@@ -345,7 +345,7 @@ static XrXirStatus effect_capture_edge_complete(const EffectCaptureRead *read,ui
     for(uint32_t p=0;p<target->head.parameter_count;++p) {
         EffectCaptureActual actual={0};status=effect_capture_actual(read,selected,p,&actual);if(status!=XR_XIR_OK) return status;
         for(uint32_t w=0;w<target->basis.row_words;++w) {
-            if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
             uint64_t expected=0;status=effect_capture_argument_word(read,target,&actual,w,&expected);
             if(status==XR_XIR_UNRESOLVED) return XR_XIR_OK;
             if(status!=XR_XIR_OK) return status;
@@ -369,7 +369,7 @@ static XrXirStatus effect_capture_results(EffectCaptureRead *read,uint32_t selec
     if(status!=XR_XIR_OK || !active) return status;
     for(uint32_t i=0;i<caller->head.instruction_count;++i) {
         if(read->selected && caller->head.parameter_count+i!=read->selected->value) continue;
-        if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
         XrXirInstruction storage;const XrXirInstruction *op=NULL;
         status=effect_body_request_operation(&read->body,read->final->nodes[edge->caller].body,i,&storage,&op);
         if(status!=XR_XIR_OK) return status;
@@ -388,7 +388,7 @@ static XrXirStatus effect_capture_results(EffectCaptureRead *read,uint32_t selec
             bool returned=signature && !signature->parameter_span &&
                 (signature->flags&XR_XIR_CALLABLE_ROOT_MASK)==XR_XIR_CALLABLE_ROOT_NONE;
             for(uint32_t p=0;signature && p<signature->parameter_count;++p) {
-                if(!xir_compile_work(read->work,1)) return XR_XIR_BUDGET;
+
                 if(!xr_xir_callable_parameter_storage_valid(read->body.domain.types,&signature->parameters[p])) return XR_XIR_BAD_TYPE;
                 if(signature->parameters[p].mode!=XR_PARAM_READ) returned=false;
             }
@@ -399,7 +399,7 @@ static XrXirStatus effect_capture_results(EffectCaptureRead *read,uint32_t selec
             status=effect_capture_lower(read,&key,&at);if(status!=XR_XIR_OK) return status;
             uint64_t distance=UINT64_MAX;
             for(;at<read->final->capture.count;++at) {
-                if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+
                 const EffectCaptureFact *fact=&read->final->capture.facts[at];
                 if(fact->node!=edge->target || fact->value!=target->values || fact->word>=target->basis.origin_words) break;
                 if(fact->rank<distance) distance=fact->rank;
@@ -435,7 +435,7 @@ static XrXirStatus effect_capture_results(EffectCaptureRead *read,uint32_t selec
 }
 static XrXirStatus effect_capture_edge_clauses(EffectCaptureRead *read,uint32_t e) {
     if(e>=read->final->edge_count) return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
     const EffectInvocationEdge *edge=&read->final->edges[e];
     if(edge->caller>=read->final->count || edge->target>=read->final->count ||
         read->final->nodes[edge->caller].root!=read->final->nodes[edge->target].root) return XR_XIR_BAD_STRUCTURE;
@@ -476,7 +476,7 @@ static XrXirStatus effect_capture_edges(EffectCaptureRead *read) {
 static XrXirStatus effect_capture_frontier(const EffectCaptureRead *read,uint32_t node,
     uint32_t instruction,uint32_t producer,bool latent) {
     for(uint32_t e=0;e<read->final->edge_count;++e) {
-        if(!xir_compile_work(read->work,5)) return XR_XIR_BUDGET;
+
         const EffectInvocationEdge *edge=&read->final->edges[e];
         if(edge->caller==node && edge->instruction==instruction && edge->producer==producer && edge->latent==latent)
             return XR_XIR_OK;
@@ -502,7 +502,7 @@ static XrXirStatus effect_capture_frontiers(const EffectCaptureRead *read) {
             EffectCaptureFact key={n,value,0,0,0};uint32_t at=0;
             status=effect_capture_lower(read,&key,&at);if(status!=XR_XIR_OK) return status;
             for(;at<read->final->capture.count;++at) {
-                if(!xir_compile_work(read->work,5)) return XR_XIR_BUDGET;
+
                 const EffectCaptureFact *fact=&read->final->capture.facts[at];
                 if(fact->node!=n || fact->value!=value || fact->word>=node.basis.origin_words) break;
                 uint64_t bit=(uint64_t)fact->word*64+fact->bit;
@@ -517,7 +517,7 @@ static XrXirStatus effect_capture_inputs_match(const EffectCaptureRead *read) {
     for(uint32_t n=0;n<read->final->count;++n) {
         EffectCaptureNode node={0};XrXirStatus status=effect_capture_node(read,n,&node);if(status!=XR_XIR_OK) return status;
         for(uint32_t p=0;p<node.head.parameter_count;++p) for(uint32_t w=0;w<node.basis.row_words;++w) {
-            if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
             uint64_t bits=0;status=effect_capture_word(read,(EffectCaptureFact){n,node.values+1+p,w,0,0},&bits);
             if(status!=XR_XIR_OK) return status;
             if(bits!=read->final->nodes[n].input[(uint64_t)p*node.basis.row_words+w]) return XR_XIR_BAD_STRUCTURE;
@@ -526,14 +526,14 @@ static XrXirStatus effect_capture_inputs_match(const EffectCaptureRead *read) {
     for(uint32_t e=0;e<read->final->edge_count;++e) {
         const EffectInvocationEdge *edge=&read->final->edges[e];bool first=true,complete=false;
         for(uint32_t p=0;p<e;++p) {
-            if(!xir_compile_work(read->work,5)) return XR_XIR_BUDGET;
+
             const EffectInvocationEdge *other=&read->final->edges[p];
             if(edge->caller==other->caller && edge->instruction==other->instruction && edge->latent==other->latent &&
                 edge->producer==other->producer && read->final->nodes[edge->target].body==read->final->nodes[other->target].body) first=false;
         }
         if(!first) continue;
         for(uint32_t p=e;p<read->final->edge_count && !complete;++p) {
-            if(!xir_compile_work(read->work,5)) return XR_XIR_BUDGET;
+
             const EffectInvocationEdge *other=&read->final->edges[p];
             if(edge->caller!=other->caller || edge->instruction!=other->instruction || edge->latent!=other->latent ||
                 edge->producer!=other->producer || read->final->nodes[edge->target].body!=read->final->nodes[other->target].body) continue;

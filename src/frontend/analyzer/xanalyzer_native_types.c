@@ -349,7 +349,6 @@ static const NativeTypeMapping type_mappings[] = {
     {"Map", XR_TID_MAP, TYPE_NAME_MAP},
     {"Set", XR_TID_SET, TYPE_NAME_SET},
     {"BigInt", XR_TID_BIGINT, TYPE_NAME_BIGINT},
-    {"StringBuilder", XR_TID_STRINGBUILDER, TYPE_NAME_STRINGBUILDER},
     {"Iterator", XR_TID_ITERATOR, TYPE_NAME_ITERATOR},
     {"Channel", XR_TID_CHANNEL, TYPE_NAME_CHANNEL},
     {"PanicInfo", XR_TID_PANIC_INFO, TYPE_NAME_PANIC_INFO},
@@ -388,7 +387,6 @@ static XaBuiltinMember native_integer_members[MAX_MEMBERS_PER_TYPE];
 static XaBuiltinMember native_float_members[MAX_MEMBERS_PER_TYPE];
 static XaBuiltinMember native_boolean_members[MAX_MEMBERS_PER_TYPE];
 static XaBuiltinMember native_rune_members[MAX_MEMBERS_PER_TYPE];
-static XaBuiltinMember native_string_builder_members[MAX_MEMBERS_PER_TYPE];
 static XaBuiltinType compiler_builtin_json_namespace;
 static XaBuiltinType compiler_builtin_corolocal;
 static xr_once_t native_types_once = XR_ONCE_INITIALIZER;
@@ -521,11 +519,6 @@ static void load_native_value_declaration(uint32_t id, XrTypeId type, XaBuiltinM
                 source->result != XR_NATIVE_TERM_U32 &&
                 source->result != XR_NATIVE_TERM_UNIT ?
                 XA_BUILTIN_RETURN_FRESH : XA_BUILTIN_RETURN_UNKNOWN;
-            if (source->operation == XR_NATIVE_OPERATION_STRING_BUILDER_APPEND ||
-                source->operation == XR_NATIVE_OPERATION_STRING_BUILDER_CLEAR)
-                member->return_ownership = XA_BUILTIN_RETURN_RECEIVER;
-            else if (source->operation == XR_NATIVE_OPERATION_STRING_BUILDER_TO_STRING)
-                member->return_ownership = XA_BUILTIN_RETURN_UNKNOWN;
         }
     }
     native_builtin_types[type] = (XaBuiltinType) {declaration->name,
@@ -545,8 +538,6 @@ static void xa_native_types_init_once(void) {
     load_native_value_declaration(XR_NATIVE_DECLARATION_FLOAT, XR_TID_F64, native_float_members);
     load_native_value_declaration(XR_NATIVE_DECLARATION_BOOLEAN, XR_TID_BOOL, native_boolean_members);
     load_native_value_declaration(XR_NATIVE_DECLARATION_RUNE, XR_TID_RUNE, native_rune_members);
-    load_native_value_declaration(XR_NATIVE_DECLARATION_STRING_BUILDER, XR_TID_STRINGBUILDER,
-                                  native_string_builder_members);
 
     /* Inject the few type members whose Xray schema is projected by the
      * stdlib metadata generator rather than indexed by XrTypeId. */
@@ -615,7 +606,6 @@ static const TidObjMapping tid_obj_map[] = {
     {XR_TID_MAP, XR_TMAP},
     {XR_TID_SET, XR_TSET},
     {XR_TID_BIGINT, XR_TINSTANCE},
-    {XR_TID_STRINGBUILDER, XR_TINSTANCE},
     {XR_TID_CHANNEL, XR_TCHANNEL},
     {XR_TID_THREAD, XR_TTHREAD},
     {XR_TID_PANIC_INFO, XR_TINSTANCE},
@@ -634,8 +624,6 @@ static XrClass *xa_native_protocol_core_class(XrVMRuntime *X, XrTypeId tid,
     switch (tid) {
         case XR_TID_BIGINT:
             return core->bigintClass;
-        case XR_TID_STRINGBUILDER:
-            return core->stringBuilderClass;
         case XR_TID_ITERATOR:
             return core->iteratorClass;
         case XR_TID_PANIC_INFO:

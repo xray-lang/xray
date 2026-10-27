@@ -19,7 +19,7 @@ static XrXirStatus spec_materialization_construction(SpecContext *c,
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *body=&module->functions[f];
         for (uint32_t i=0;i<body->instruction_count;++i) {
-            if (!spec_work(c,4)) return c->diagnostic.status;
+            if (!((c)->diagnostic.status == XR_XIR_OK)) return c->diagnostic.status;
             const XrXirInstruction *op=&body->instructions[i];
             if (op->op==XR_XIR_CALL && c->identities[op->immediate].method_kind==XR_XIR_MATERIALIZER) {
                 if (count==UINT32_MAX) return XR_XIR_BUDGET;
@@ -34,7 +34,7 @@ static XrXirStatus spec_materialization_construction(SpecContext *c,
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *body=&module->functions[f];
         for (uint32_t i=0;i<body->instruction_count;++i) {
-            if (!spec_work(c,260)) return c->diagnostic.status;
+            if (!((c)->diagnostic.status == XR_XIR_OK)) return c->diagnostic.status;
             const XrXirInstruction *op=&body->instructions[i];
             if (op->op!=XR_XIR_CALL || c->identities[op->immediate].method_kind!=XR_XIR_MATERIALIZER) continue;
             uint32_t caller=c->instances[f].declaration,callee=c->instances[op->immediate].declaration;

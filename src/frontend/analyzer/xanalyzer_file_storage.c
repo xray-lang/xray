@@ -28,7 +28,7 @@ static XrCompileResourceStatus invalid(XaAnalyzer *analyzer) {
 }
 static XrCompileResourceStatus accept_io(XaAnalyzer *analyzer, XrOsIoStatus status) {
     return xr_compile_state_fail(file_state(analyzer), status == XR_OS_IO_OK ? XR_COMPILE_RESOURCE_OK :
-        status == XR_OS_IO_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
+        status == XR_OS_IO_OVERFLOW ? XR_COMPILE_RESOURCE_BUDGET :
         status == XR_OS_IO_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
 }
 static bool ready(XaAnalyzer *analyzer) {

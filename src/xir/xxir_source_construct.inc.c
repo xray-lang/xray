@@ -20,7 +20,7 @@ static bool source_slot_facts_prepare(SourceContext *ctx,XrXirSlotFacts *output)
         if (source_owned_checked(&ctx->graph->specs[m])) continue;
         ctx->module=m;
         for (const SourceName *name=ctx->names[m];name;name=name->next) {
-            if (!source_work(ctx,name->node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (name->kind!=SOURCE_SLOT && name->kind!=SOURCE_UNIT_SLOT) continue;
             uint32_t slot=name->index;
             if (slot>=ctx->slot_count)
@@ -38,7 +38,7 @@ static bool source_slot_facts_prepare(SourceContext *ctx,XrXirSlotFacts *output)
     }
     ctx->module=previous_module;
     for (uint32_t s=0;s<ctx->slot_count;++s) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!ctx->slot_fact_present[s] || ctx->slot_facts[s].slot!=s)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source complete slot fact is absent");
     }
@@ -51,7 +51,7 @@ static bool source_construction_prepare(SourceContext *ctx) {
     XrXirConstructionRow *rows=count ? source_alloc(ctx,count,sizeof(*rows)) : NULL;
     if (count && !rows) return false;
     for (uint32_t n=0; n<count; ++n) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirNominalDeclaration *nominal=&ctx->nominals.declarations[n];
         rows[n].field_count=nominal->field_count;
         uint32_t *fields=nominal->field_count ? source_alloc(ctx,nominal->field_count,sizeof(*fields)) : NULL;
@@ -64,7 +64,7 @@ static bool source_construction_prepare(SourceContext *ctx) {
             rows[n].default_initializer=function+1;
         }
         for (uint32_t f=0; f<nominal->field_count; ++f) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             uint32_t function=ctx->nominal_defaults[n] ? ctx->nominal_defaults[n][f] : 0;
             if (function>=ctx->function_count)
                 return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source field construction target is invalid");

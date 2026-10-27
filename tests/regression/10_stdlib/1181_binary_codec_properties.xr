@@ -3,12 +3,13 @@
 import base64
 import encoding
 import {
+    Base64Error,
     Base64Alphabet,
     Base64DecodeOptions,
     Base64EncodeOptions,
     Base64PaddingPolicy
 } from base64
-import { Utf16DecodeOptions, Utf16EncodeOptions } from encoding
+import { HexError, Utf16Error, Utf16DecodeOptions, Utf16EncodeOptions } from encoding
 
 const ALL_BYTES_HEX = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
 
@@ -94,31 +95,31 @@ fn test_base64_independent_all_byte_aggregate() {
 }
 
 @test
-fn test_base64_deterministic_roundtrip_fuzz() {
+fn test_base64_deterministic_roundtrip_fuzz() throws(Base64Error) {
     for (var length = 0; length <= 128; length++) {
         var input = fuzzBytes(length, 97 + length)
-        var standard = base64.decode(base64.encode(input[:]))
+        var standard = try base64.decode(base64.encode(input[:]))
         assert(sameBytes(input, standard))
 
         var encodedUrl = base64.encode(input[:], urlEncodeOptions())
-        var decodedUrl = base64.decode(encodedUrl, urlDecodeOptions())
+        var decodedUrl = try base64.decode(encodedUrl, urlDecodeOptions())
         assert(sameBytes(input, decodedUrl))
     }
 }
 
 @test
-fn test_hex_full_byte_kat() {
+fn test_hex_full_byte_kat() throws(HexError) {
     var allBytes = Array<u8>(256)
     for (var i = 0; i < 256; i++) { allBytes[i] = i as u8 }
     assertEqual(encoding.hexEncode(allBytes[:]), ALL_BYTES_HEX)
-    assert(sameBytes(encoding.hexDecode(ALL_BYTES_HEX), allBytes))
+    assert(sameBytes(try encoding.hexDecode(ALL_BYTES_HEX), allBytes))
 }
 
 @test
-fn test_hex_deterministic_roundtrip_fuzz() {
+fn test_hex_deterministic_roundtrip_fuzz() throws(HexError) {
     for (var length = 0; length <= 128; length++) {
         var input = fuzzBytes(length, 193 + length)
-        var decoded = encoding.hexDecode(encoding.hexEncode(input[:]))
+        var decoded = try encoding.hexDecode(encoding.hexEncode(input[:]))
         assert(sameBytes(input, decoded))
     }
 }
@@ -168,7 +169,7 @@ fn test_utf8_scalar_boundaries() {
 }
 
 @test
-fn test_utf16_supplementary_kat_and_roundtrip() {
+fn test_utf16_supplementary_kat_and_roundtrip() throws(Utf16Error) {
     var text = "A😀𝄞"
     var le = encoding.utf16Encode(text)
     assertEqual(len(le), 10)
@@ -182,12 +183,12 @@ fn test_utf16_supplementary_kat_and_roundtrip() {
     assertEqual(le[7], 0xD8)
     assertEqual(le[8], 0x1E)
     assertEqual(le[9], 0xDD)
-    assertEqual(encoding.utf16Decode(le[:]), text)
+    assertEqual(try encoding.utf16Decode(le[:]), text)
 
     var be = encoding.utf16Encode(text, utf16EncodeOptions(Endian.BE))
     assertEqual(be[0], 0x00)
     assertEqual(be[1], 0x41)
     assertEqual(be[2], 0xD8)
     assertEqual(be[3], 0x3D)
-    assertEqual(encoding.utf16Decode(be[:], utf16DecodeOptions(Endian.BE)), text)
+    assertEqual(try encoding.utf16Decode(be[:], utf16DecodeOptions(Endian.BE)), text)
 }

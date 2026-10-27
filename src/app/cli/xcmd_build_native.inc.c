@@ -47,10 +47,6 @@ static int build_native_prepare(XrCompileState *state, const XrCliInvocation *in
     const char *provider = xr_cli_opt_string(&inv->options, "toolchain", NULL);
     for (size_t i = 0; !provider && i < preferences->count; ++i) {
         const XrCliToolchainPreference *preference = &preferences->preferences[i];
-        XrCompileResourceStatus work = xr_compile_state_work(state, 7);
-        if (work != XR_COMPILE_RESOURCE_OK) {
-            xr_cli_toolchain_config_free(config); return XR_CLI_EXIT_FAIL;
-        }
         if (strcmp(preference->target, "native")) continue;
         if (preference->selector != XR_TOOLCHAIN_SELECTOR_AUTO &&
             preference->selector != XR_TOOLCHAIN_SELECTOR_MSVC &&

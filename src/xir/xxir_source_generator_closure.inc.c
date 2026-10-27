@@ -8,7 +8,7 @@
  */
 static bool source_generator_closure_captures(SourceContext *ctx,AstNode *node,const SourceCaptureScan *scan) {
     for(const SourceCapture *p=scan->captures;p;p=p->next) {
-        if(!source_work(ctx,node)) return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t declaration=p->source->declaration;
         if(p->source->mutable && declaration && declaration<=ctx->query.declaration_count &&
             ctx->query.declarations[declaration-1].kind==XR_XIR_SOURCE_PARAMETER)

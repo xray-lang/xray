@@ -35,7 +35,7 @@ XR_FUNC void xr_xir_type_match_scratch_free(XrXirTypeMatchScratch *scratch) {
 static XrXirStatus type_match_stack_claim(const XrXirCompileContext *context,
     XrXirTypeMatchScratch *scratch, uint32_t count, TypeMatchMemory **output,XirReadScratch *read) {
     for (TypeMatchMemory *memory = scratch->memory; memory; memory = memory->next) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         if (!memory->claimed && memory->capacity >= count) {
             memory->claimed = true;
             *output = memory;
@@ -61,9 +61,7 @@ static XrXirStatus type_match_stack_grow(const XrXirCompileContext *context,
     XrXirStatus status = type_match_stack_claim(context, scratch, capacity, &next,read);
     if (status != XR_XIR_OK) return status;
     uint64_t bytes = (uint64_t)used * sizeof(*next->frames);
-    if (!xir_compile_work(context, bytes)) {
-        next->claimed = false; return XR_XIR_BUDGET;
-    }
+
     memcpy(next->frames, (*current)->frames, (size_t)bytes);
     (*current)->claimed = false; *current = next;
     return XR_XIR_OK;
@@ -84,7 +82,7 @@ static XrXirStatus type_match_run(const XrXirCompileContext *context,
 static XrXirStatus type_match_pair(TypeMatchContext *c, XrXirType expected,
                                   XrXirType actual, TypeMatchFrame *frame) {
     frame->from = NULL;
-    if (!xir_compile_work(c->remaining, 1)) return XR_XIR_BUDGET;
+
 
     uint32_t id = (uint32_t) expected;
     if (!c->count && c->source_types == c->types && expected == actual) return XR_XIR_OK;

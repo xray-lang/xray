@@ -71,7 +71,7 @@ static bool source_import_selectors(SourceContext *ctx,SourceName *binding) {
     if(!target)return false;
     const ImportStmtNode *decl=&binding->node->as.import_stmt;
     for(int i=0;i<decl->member_count;++i) {
-        if(!source_work(ctx,binding->node))return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
         const ImportMember *member=&decl->members[i];
         const char *local=member->alias?member->alias:member->name;
         if(!source_text_same(ctx,binding->node,local,binding->name))continue;

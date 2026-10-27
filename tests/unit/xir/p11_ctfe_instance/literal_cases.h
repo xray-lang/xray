@@ -21,13 +21,13 @@ static XirCtfeInstanceBatch *literal_batch(XrXirCompileContext *context,const ch
         CHECK(xr_xir_compile_source_comptime_instances_view(&stage,views,rows,2)==XR_XIR_CTFE_OK);
         uint32_t functions[2]={views[0].instance_function,views[1].instance_function};
         XirCtfeInstanceBatchRequest request=instance_batch_request(views[0].checked,functions,2);XirCtfeInstanceBatch *batch=NULL;
-        CHECK(xr_xir_compile_ctfe_instance_batch(&request,&batch)==XR_XIR_CTFE_OK && batch);
+        CHECK(xr_xir_compile_ctfe_instance_batch(&request,NULL,&batch)==XR_XIR_CTFE_OK && batch);
         xr_xir_compile_source_comptime_instances_free(&stage);return batch;
     }
     XrXirArtifact *closed=instance_source(context,kind);
     uint32_t functions[2]={instance_named(closed,kind,0),instance_named(closed,kind,1)};
     XirCtfeInstanceBatchRequest request=instance_batch_request(closed,functions,2);XirCtfeInstanceBatch *batch=NULL;
-    CHECK(xr_xir_compile_ctfe_instance_batch(&request,&batch)==XR_XIR_CTFE_OK && batch);
+    CHECK(xr_xir_compile_ctfe_instance_batch(&request,NULL,&batch)==XR_XIR_CTFE_OK && batch);
     xr_xir_compile_artifact_free(closed);return batch;
 }
 static void literal_template(const XrXirModule *before,const XrXirModule *after) {
@@ -66,7 +66,7 @@ static void literal_normal(const char *kind) {
     if (!strcmp(kind,"nested")) {
         CHECK(instance_argument_absent(views[0].checked,views[0].checked->module.provenance->origins[views[0].instance_function].arguments[0]));
     }
-    XirLiteralRequest request={&context,batch,2};XirLiteralDefinitions result={0};XrXirDiagnostic diagnostic={0};
+    XirLiteralRequest request={&context,batch,2,NULL};XirLiteralDefinitions result={0};XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_instance_literals(&request,&result,&diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"Literal %s status=%u f=%u b=%u i=%u\n",kind,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK && result.definition && result.count==2);

@@ -14,7 +14,8 @@ typedef struct XtcXirPublication XtcXirPublication;
 typedef enum XtcXirPublicationStatus {
     XTC_XIR_PUBLICATION_OK, XTC_XIR_PUBLICATION_INVALID, XTC_XIR_PUBLICATION_UNRESOLVED,
     XTC_XIR_PUBLICATION_UNSUPPORTED, XTC_XIR_PUBLICATION_BUDGET,
-    XTC_XIR_PUBLICATION_OUT_OF_MEMORY, XTC_XIR_PUBLICATION_IO, XTC_XIR_PUBLICATION_PENDING
+    XTC_XIR_PUBLICATION_OUT_OF_MEMORY, XTC_XIR_PUBLICATION_IO, XTC_XIR_PUBLICATION_PENDING,
+    XTC_XIR_PUBLICATION_MEMORY_LIMIT, XTC_XIR_PUBLICATION_OVERFLOW
 } XtcXirPublicationStatus;
 typedef enum XtcXirPublicationPhase {
     XTC_XIR_PUBLICATION_NEW, XTC_XIR_PUBLICATION_WRITING, XTC_XIR_PUBLICATION_READY,
@@ -40,7 +41,7 @@ typedef struct XtcXirPublicationDiagnostic {
     bool published, cleanup_pending;
 } XtcXirPublicationDiagnostic;
 
-/* Normalize and reserve memory on the mandatory original ledger. There are no
+/* Normalize and reserve memory through the supplied memory owner. There are no
  * directory writes. Output must be NULL and remains unchanged on failure. */
 XR_FUNC XtcXirPublicationStatus xtc_xir_publication_new(XrCompileResources *resources,
     const XtcXirPublicationRequest *request, XtcXirPublication **output);
@@ -54,7 +55,7 @@ XR_FUNC XtcXirPublicationStatus xtc_xir_publication_write(XtcXirPublication *own
 XR_FUNC XtcXirPublicationStatus xtc_xir_publication_commit(XtcXirPublication *owner);
 XR_FUNC XtcXirPublicationPhase xtc_xir_publication_phase(const XtcXirPublication *owner);
 XR_FUNC const XtcXirPublicationDiagnostic *xtc_xir_publication_diagnostic(const XtcXirPublication *owner);
-/* No allocation or work admission. PENDING retains the owner and every cleanup
+/* No allocation or memory admission. PENDING retains the owner and every cleanup
  * responsibility for retry. OK frees/nulls. Published output is never deleted.
  * Recoverable cleanup never exits; callers must retain pending owners. The
  * ancestor-lease dependency retains its existing fatal invariant checks. */

@@ -19,7 +19,7 @@ static XrXirStatus error_marker_reserve_nodes(const XrXirCompileContext *work,Ef
     if((uint64_t)capacity>SIZE_MAX/sizeof(*markers->nodes)) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;ErrorMarkerNode *nodes=xir_compile_alloc(work,(size_t)capacity*sizeof(*nodes),&status);
     if(!nodes) return status;
-    if(!xir_compile_work(work,(uint64_t)markers->count*sizeof(*nodes))) { xr_compile_resources_free(nodes);return XR_XIR_BUDGET; }
+
     if(markers->count) memcpy(nodes,markers->nodes,(size_t)markers->count*sizeof(*nodes));
     xr_compile_resources_free(markers->nodes);markers->nodes=nodes;markers->capacity=capacity;return XR_XIR_OK;
 }
@@ -30,7 +30,7 @@ static XrXirStatus error_marker_reserve_roots(const XrXirCompileContext *work,Ef
     if((uint64_t)capacity>SIZE_MAX/sizeof(*markers->roots)) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;ErrorMarkerRoot *roots=xir_compile_alloc(work,(size_t)capacity*sizeof(*roots),&status);
     if(!roots) return status;
-    if(!xir_compile_work(work,(uint64_t)markers->root_count*sizeof(*roots))) { xr_compile_resources_free(roots);return XR_XIR_BUDGET; }
+
     if(markers->root_count) memcpy(roots,markers->roots,(size_t)markers->root_count*sizeof(*roots));
     xr_compile_resources_free(markers->roots);markers->roots=roots;markers->root_capacity=capacity;return XR_XIR_OK;
 }
@@ -39,7 +39,7 @@ static XrXirStatus error_marker_append(const XrXirCompileContext *work,const Eff
     XrXirStatus status=error_marker_reserve_nodes(work,markers);if(status!=XR_XIR_OK) return status;
     uint32_t index=markers->count,reference=UINT32_MAX;
     for(uint32_t i=0;i<index;++i) {
-        if(!xir_compile_work(work,sizeof(request->goal))) return XR_XIR_BUDGET;
+
         if(error_marker_goal_equal(&request->goal,&markers->nodes[i].goal)) { reference=i;break; }
     }
     ErrorMarkerNode node={.goal=request->goal,.parent=request->parent,.ordinal=request->ordinal,.reference=reference};
@@ -50,7 +50,7 @@ static XrXirStatus error_marker_append(const XrXirCompileContext *work,const Eff
         ErrorMarkerRule rule;status=error_marker_rule(work,proof,&request->goal,&rule);if(status!=XR_XIR_OK) return status;
         if(rule.terminal) { node.end=index+1;node.value=rule.value; }
     }
-    if(!xir_compile_work(work,sizeof(node)+sizeof(*output))) return XR_XIR_BUDGET;
+
     markers->nodes[index]=node;++markers->count;*output=index;return XR_XIR_OK;
 }
 static XrXirStatus error_marker_push(const XrXirCompileContext *work,ErrorMarkerFrame **frames,
@@ -61,11 +61,11 @@ static XrXirStatus error_marker_push(const XrXirCompileContext *work,ErrorMarker
         if((uint64_t)count>SIZE_MAX/sizeof(**frames)) return XR_XIR_BUDGET;
         XrXirStatus status=XR_XIR_OK;ErrorMarkerFrame *next=xir_compile_alloc(work,(size_t)count*sizeof(*next),&status);
         if(!next) return status;
-        if(!xir_compile_work(work,(uint64_t)depth*sizeof(*next))) { xr_compile_resources_free(next);return XR_XIR_BUDGET; }
+
         if(depth) memcpy(next,*frames,(size_t)depth*sizeof(*next));
         xr_compile_resources_free(*frames);*frames=next;*capacity=count;
     }
-    if(!xir_compile_work(work,sizeof(**frames))) return XR_XIR_BUDGET;
+
     (*frames)[depth]=(ErrorMarkerFrame){node,UINT32_MAX};return XR_XIR_OK;
 }
 static XrXirStatus error_marker_tree(const XrXirCompileContext *work,const EffectErrorFinite *proof,
@@ -75,7 +75,7 @@ static XrXirStatus error_marker_tree(const XrXirCompileContext *work,const Effec
     if(!markers->nodes[root].end) { status=error_marker_push(work,&frames,&capacity,depth,root);if(status==XR_XIR_OK) ++depth; }
     while(status==XR_XIR_OK && depth) {
         ErrorMarkerFrame *frame=&frames[depth-1];uint32_t index=frame->node;
-        if(!xir_compile_work(work,6)) { status=XR_XIR_BUDGET;break; }
+
         if(frame->last!=UINT32_MAX) {
             const ErrorMarkerNode *child=&markers->nodes[frame->last];
             if(!child->end) { status=XR_XIR_BAD_STRUCTURE;break; }
@@ -120,7 +120,7 @@ static XrXirStatus error_marker_build(const XrXirCompileContext *work,const Effe
             ErrorMarkerAppend request={.goal=error_marker_type_goal(f,ERROR_MARKER_ERROR,proof->atoms[a].type),
                 .parent=UINT32_MAX,.ordinal=markers->root_count};uint32_t first=UINT32_MAX;
             status=error_marker_append(work,proof,markers,&request,&first);if(status!=XR_XIR_OK) break;
-            if(!xir_compile_work(work,sizeof(ErrorMarkerRoot))) { status=XR_XIR_BUDGET;break; }
+
             markers->roots[markers->root_count++]=(ErrorMarkerRoot){f,a,first};
             status=error_marker_tree(work,proof,markers,first);if(status!=XR_XIR_OK) break;
             if(!markers->nodes[first].value) break;

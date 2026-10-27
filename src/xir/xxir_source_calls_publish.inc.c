@@ -11,7 +11,7 @@ static XrXirStatus source_calls_publish(SourceContext *ctx,XrXirSourceSnapshot *
     XrXirSourceFunctionRange *functions=count?source_alloc(ctx,count,sizeof(*functions)):NULL;
     if(count&&!functions)return ctx->diagnostic.status;
     for(uint32_t i=0;i<ctx->function_count;++i) {
-        if(!source_work(ctx,NULL))return ctx->diagnostic.status;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return ctx->diagnostic.status;
         const SourceFunction *body=&ctx->bodies[i];
         const AstNode *node=body->node;
         if(!source_query_callable(ctx,body->declaration)||!node)continue;

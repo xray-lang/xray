@@ -9,61 +9,37 @@
  * KEY CONCEPT:
  *   A name selects a sealed declaration; the actual Instance grants execution.
  */
-static XrSourceStatus api_xir_status(XrXirStatus status) {
-    return status==XR_XIR_OK ? XR_SOURCE_OK : status==XR_XIR_OUT_OF_MEMORY ? XR_SOURCE_OUT_OF_MEMORY :
-        status==XR_XIR_BUDGET ? XR_SOURCE_BUDGET : status==XR_XIR_UNSUPPORTED ? XR_SOURCE_UNSUPPORTED : XR_SOURCE_INVALID;
-}
-static XrSourceStatus api_named_entry(XrSourceProgram *program,const char *name,size_t length,
+static XrSourceStatus api_named_entry(XrSourceArtifact *program,const char *name,size_t length,
     uint32_t argument_count,uint32_t *output) {
     if(!program || !name || !length || !output)return XR_SOURCE_BAD_ARGUMENT;
     if(length>UINT32_MAX)return XR_SOURCE_LIMIT;
-    XrSourceStatus status=api_resource(xr_compile_resources_work(program->resources,length));
+    XrSourceStatus status=api_ready_vm(program);
     if(status!=XR_SOURCE_OK)return status;
     if(memchr(name,0,length))return XR_SOURCE_BAD_ARGUMENT;
-    XrXirSourceProductPacketView packet={0};
-    XrXirStatus read=xr_xir_compile_source_product_packet(program->product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet);
-    const XrXirCompileContext *context=xr_xir_compile_source_product_context(program->product);
-    XrXirArtifact *closed=NULL;
-    if(read==XR_XIR_OK)read=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&closed,NULL);
-    status=api_xir_status(read);
     uint32_t selected=UINT32_MAX;
-    if(status==XR_SOURCE_OK) {
-        const XrXirModule *module=xr_xir_compile_artifact_module(closed);
-        const XrXirDeclarations *declarations=module->declarations;
-        for(uint32_t f=0;f<module->function_count;++f) {
-            status=api_resource(xr_compile_resources_work(program->resources,1));
-            if(status!=XR_SOURCE_OK)break;
-            const XrXirFunctionIdentity *identity=&declarations->functions[f];
-            const XrXirFunction *function=&module->functions[f];
-            if(identity->module!=declarations->root_module || !identity->exported ||
-                identity->method_kind!=XR_XIR_NON_MEMBER || identity->cleanup_owner || function->name_length!=length)continue;
-            status=api_resource(xr_compile_resources_work(program->resources,length));
-            if(status!=XR_SOURCE_OK)break;
-            if(memcmp(function->name,name,length))continue;
-            if(selected!=UINT32_MAX){status=XR_SOURCE_INVALID;break;}
-            if(function->parameter_count!=argument_count){status=XR_SOURCE_BAD_ARGUMENT;break;}
-            selected=f;
-        }
-        if(status==XR_SOURCE_OK && selected==UINT32_MAX)status=XR_SOURCE_NOT_FOUND;
+    for(uint32_t f=0;f<program->name_count;++f) {
+        const ApiNamedEntry *entry=&program->names[f];
+        if(entry->length!=length || memcmp(entry->name,name,length))continue;
+        if(selected!=UINT32_MAX)return XR_SOURCE_INVALID;
+        if(entry->arguments!=argument_count)return XR_SOURCE_BAD_ARGUMENT;
+        selected=entry->entry;
     }
-    xr_xir_compile_artifact_free(closed);
-    if(status==XR_SOURCE_OK)*output=selected;
-    return status;
+    if(selected==UINT32_MAX)return XR_SOURCE_NOT_FOUND;
+    *output=selected;return XR_SOURCE_OK;
 }
 XRAY_API XrSourceStatus xray_source_invocation_init(XrSourceInvocation *invocation,size_t size) {
     if(!invocation || size!=sizeof(*invocation))return XR_SOURCE_BAD_ARGUMENT;
     *invocation=(XrSourceInvocation){.api_version=XRAY_SOURCE_INVOCATION_VERSION,.struct_size=sizeof(*invocation)};
     return XR_SOURCE_OK;
 }
-static XrSourceStatus api_arguments(XrSourceProgram *program,const XrSourceValue *const *values,
+static XrSourceStatus api_arguments(XrCompileResources *resources,const XrSourceValue *const *values,
     size_t count,XrXirValue **arguments) {
+    if(!resources)return XR_SOURCE_BAD_ARGUMENT;
     if(count>UINT32_MAX || count>SIZE_MAX/sizeof(**arguments))return XR_SOURCE_LIMIT;
     if(count && !values)return XR_SOURCE_BAD_ARGUMENT;
     XrSourceStatus status=XR_SOURCE_OK;
     if(count) {
-        status=api_resource(xr_compile_resources_calloc(program->resources,count,sizeof(**arguments),(void **)arguments));
-        if(status!=XR_SOURCE_OK)return status;
-        status=api_resource(xr_compile_resources_work(program->resources,(uint64_t)count*sizeof(**arguments)));
+        status=api_resource(xr_compile_resources_calloc(resources,count,sizeof(**arguments),(void **)arguments));
         if(status!=XR_SOURCE_OK)return status;
         for(uint32_t i=0;i<count;++i) {
             const XrSourceValue *value=values[i];
@@ -74,31 +50,38 @@ static XrSourceStatus api_arguments(XrSourceProgram *program,const XrSourceValue
     }
     return status;
 }
-static XrSourceStatus api_invocation_entry(XrSourceProgram *program,const XrSourceInvocation *invocation,
+typedef struct ApiInvocation {
+    XrSourceArtifact *program;
+    XrCompileResources *resources;
+    const XrSourceInvocation *input;
+} ApiInvocation;
+static XrSourceStatus api_invocation_entry(const ApiInvocation *request,
     ApiEntry *entry,XrXirValue **arguments) {
+    XrSourceArtifact *program=request->program;
+    const XrSourceInvocation *invocation=request->input;
     if(!invocation || invocation->api_version!=XRAY_SOURCE_INVOCATION_VERSION ||
         invocation->struct_size!=sizeof(*invocation))return XR_SOURCE_BAD_ARGUMENT;
     if(invocation->argument_count>UINT32_MAX || invocation->argument_count>SIZE_MAX/sizeof(**arguments))return XR_SOURCE_LIMIT;
     if(invocation->argument_count && !invocation->arguments)return XR_SOURCE_BAD_ARGUMENT;
     uint32_t ordinal=UINT32_MAX,count=(uint32_t)invocation->argument_count;
     XrSourceStatus status=api_named_entry(program,invocation->name,invocation->name_length,count,&ordinal);
-    if(status==XR_SOURCE_OK)status=api_arguments(program,invocation->arguments,count,arguments);
+    if(status==XR_SOURCE_OK)status=api_arguments(request->resources,invocation->arguments,count,arguments);
     if(status!=XR_SOURCE_OK)return status;
-    *entry=(ApiEntry){program,ordinal,*arguments,count};return XR_SOURCE_OK;
+    *entry=(ApiEntry){program,request->resources,ordinal,*arguments,count};return XR_SOURCE_OK;
 }
-XRAY_API XrSourceStatus xray_source_invoke_begin(XrSourceProgram *program,const XrSourceInvocation *invocation,
+XRAY_API XrSourceStatus xray_source_invoke_begin(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,
     const XrSourceCallOptions *options,XrSourceCall **output) {
-    if(!program || !output || *output)return XR_SOURCE_BAD_ARGUMENT;
+    if(!execution || !program || !output || *output)return XR_SOURCE_BAD_ARGUMENT;
     XrSourceStatus status=api_options_admit(options);ApiEntry entry={0};XrXirValue *arguments=NULL;
-    if(status==XR_SOURCE_OK)status=api_invocation_entry(program,invocation,&entry,&arguments);
+    if(status==XR_SOURCE_OK)status=api_invocation_entry(&(ApiInvocation){program,execution->resources,invocation},&entry,&arguments);
     if(status==XR_SOURCE_OK)status=api_call_begin_entry(&entry,options,output);
     xr_compile_resources_free(arguments);return status;
 }
-XRAY_API XrSourceStatus xray_source_invoke(XrSourceProgram *program,const XrSourceInvocation *invocation,
+XRAY_API XrSourceStatus xray_source_invoke(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,
     const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
-    if(!program || !output || *output)return XR_SOURCE_BAD_ARGUMENT;
+    if(!execution || !program || !output || *output)return XR_SOURCE_BAD_ARGUMENT;
     XrSourceStatus status=api_options_admit(options);ApiEntry entry={0};XrXirValue *arguments=NULL;
-    if(status==XR_SOURCE_OK)status=api_invocation_entry(program,invocation,&entry,&arguments);
+    if(status==XR_SOURCE_OK)status=api_invocation_entry(&(ApiInvocation){program,execution->resources,invocation},&entry,&arguments);
     if(status==XR_SOURCE_OK)status=api_execute_entry(&entry,options,output,failure);
     xr_compile_resources_free(arguments);return status;
 }

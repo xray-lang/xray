@@ -15,7 +15,7 @@
 /* Construction metadata is checked before ordinary instruction validation. */
 static XrXirStatus comptime_body_storage(const XrXirCompileContext *context,const XrXirModule *module) {
     for (uint32_t f=0;f<module->function_count;++f) {
-        if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+
         const XrXirFunction *function=&module->functions[f];
         if (!!function->instructions!=!!function->instruction_count) return XR_XIR_BAD_STRUCTURE;
         if (function->instruction_count>context->limits.instructions) return XR_XIR_BUDGET;
@@ -34,12 +34,12 @@ static XrXirStatus comptime_provider_verify(const XrXirCompileContext *context,
         module->generics[provider].argument_count || provider==module->declarations->entry_function)
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t m=0;m<module->declarations->module_count;++m) {
-        if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
         if (module->declarations->modules[m].initializer==provider) return XR_XIR_BAD_STRUCTURE;
     }
     XrXirStatus status=materialization_data_type(context,module->types,body->result);
     for (uint32_t i=0;status==XR_XIR_OK && i<body->instruction_count;++i) {
-        if (!xir_compile_work(context,sizeof(XrXirInstruction))) return XR_XIR_BUDGET;
+
         const XrXirInstruction *op=&body->instructions[i];
         if (!materialization_opcode(op->op)) return XR_XIR_BAD_TYPE;
         XrXirType type=op->type;
@@ -62,7 +62,7 @@ XR_FUNC XrXirStatus xir_comptime_verify(const XrXirCompileContext *context,
     XrXirStatus storage=comptime_body_storage(context,module);
     if (storage!=XR_XIR_OK) return storage;
     for (uint32_t s=0;s<table->site_count;++s) {
-        if (!xir_compile_work(context,sizeof(XrXirComptimeSite)+16)) return XR_XIR_BUDGET;
+
         const XrXirComptimeSite *site=&table->sites[s];
         if (site->caller>=module->function_count || site->helper>=module->function_count) return XR_XIR_BAD_STRUCTURE;
         const XrXirFunction *caller=&module->functions[site->caller],*helper=&module->functions[site->helper];
@@ -80,13 +80,13 @@ XR_FUNC XrXirStatus xir_comptime_verify(const XrXirCompileContext *context,
             return XR_XIR_BAD_STRUCTURE;
         /* A lexical thunk receives the caller's complete ordered binders. */
         for (uint32_t a=0;a<count;++a) {
-            if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
             if (actual->arguments[op->type_arguments[0]+a]!=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a))
                 return XR_XIR_BAD_TYPE;
         }
     }
     for (uint32_t b=0;b<table->binding_count;++b) {
-        if (!xir_compile_work(context,sizeof(XrXirComptimeBinding)+8)) return XR_XIR_BUDGET;
+
         const XrXirComptimeBinding *row=&table->bindings[b];
         const XrXirComptimeSite *site=&table->sites[row->site];
         const XrXirGeneric *generic=&module->generics[site->helper];
@@ -94,7 +94,7 @@ XR_FUNC XrXirStatus xir_comptime_verify(const XrXirCompileContext *context,
         XrXirStatus status=comptime_provider_verify(context,module,site->helper,row->provider);
         if (status!=XR_XIR_OK) return status;
         for (uint32_t a=0;a<row->argument_count;++a) {
-            if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
             if (!xr_xir_type_in_context(module,site->helper,row->arguments[a]) || xr_xir_type_span(module->types,row->arguments[a])) return XR_XIR_BAD_TYPE;
             XrXirProofContext proof={module,{XR_XIR_CONTEXT_CLOSED,0,0}};
             XrXirConstraintUse use={module,{XR_XIR_CONTEXT_FUNCTION,site->helper,0},a,row->arguments,row->argument_count};
@@ -106,7 +106,7 @@ XR_FUNC XrXirStatus xir_comptime_verify(const XrXirCompileContext *context,
         if (status!=XR_XIR_OK) return status;
         for (uint32_t previous=b;previous && table->bindings[previous-1].site==row->site;) {
             const XrXirComptimeBinding *other=&table->bindings[--previous];bool same=other->argument_count==row->argument_count;
-            if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
             for (uint32_t a=0;same && a<row->argument_count;++a) {
                 status=xr_xir_compile_type_substitution_matches_between(context,module->types,module->types,NULL,0,other->arguments[a],row->arguments[a]);
                 if (status==XR_XIR_BAD_TYPE) same=false;else if (status!=XR_XIR_OK) return status;
@@ -116,11 +116,11 @@ XR_FUNC XrXirStatus xir_comptime_verify(const XrXirCompileContext *context,
     }
     /* A helper's complete use inventory prevents unbound runtime references. */
     for (uint32_t f=0;f<module->function_count;++f) for (uint32_t i=0;i<module->functions[f].instruction_count;++i) {
-        if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
         const XrXirInstruction *op=&module->functions[f].instructions[i];
         if (!xr_xir_op_references_function(op->op)) continue;
         for (uint32_t s=0;s<table->site_count;++s) {
-            if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+
             if (op->immediate==table->sites[s].helper && (f!=table->sites[s].caller || i!=table->sites[s].instruction))
                 return XR_XIR_BAD_STRUCTURE;
         }

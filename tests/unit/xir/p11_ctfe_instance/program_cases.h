@@ -18,9 +18,8 @@ static const char *program_text(const char *kind) {
     return comptime_instances_text(kind);
 }
 static XrXirStatus program_source(XrXirCompileContext *context,const char *text,XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic) {
-    XrCompilerSession *session=NULL;XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK) return created==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
-        created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+    XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK) return p11_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"program-comptime",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,strlen(text)};
@@ -94,7 +93,7 @@ static void program_controls(void) {
     if (diagnostic.line!=2 || !strstr(diagnostic.message,"division by zero"))
         fprintf(stderr,"Public failed selection %d:%d %s\n",diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(!output.checked && !output.snapshot && diagnostic.line==2 && strstr(diagnostic.message,"division by zero"));
-    CHECK(stats(&context).live_bytes==before.live_bytes);xr_compile_resources_release(context.resources);
+    CHECK(stats(&context).held_bytes==before.held_bytes);xr_compile_resources_release(context.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     fprintf(stderr,"Public comptime actual failed generic selection maps to original second source line without execution retry physical0\n");
 }

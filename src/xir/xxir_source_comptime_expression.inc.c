@@ -17,7 +17,6 @@ struct SourceComptimeSite {
     SourceExpectedType expected;
     XrXirValue value;
     uint32_t result_arity;
-    uint64_t result_work;
 };
 typedef struct SourceComptimeScope {
     uint32_t function,module,depth,alternatives;
@@ -40,6 +39,14 @@ static void source_comptime_restore(SourceContext *ctx,const SourceComptimeScope
     ctx->facts=scope->facts;ctx->epochs=scope->epochs;ctx->active_expression=scope->active;
     ctx->effect_argument=scope->argument;ctx->loop=scope->loop;ctx->type_scope=scope->types;
     ctx->returned=scope->returned;
+}
+static bool source_comptime_failure(SourceContext *ctx,AstNode *node,XrXirCtfeStatus status);
+static XrXirStatus source_comptime_value_status(XrXirValueStatus status) {
+    return status==XR_XIR_VALUE_OK?XR_XIR_OK:
+        status==XR_XIR_VALUE_OOM?XR_XIR_OUT_OF_MEMORY:
+        status==XR_XIR_VALUE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:
+        status==XR_XIR_VALUE_OVERFLOW?XR_XIR_OVERFLOW:
+        status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
 }
 #include "xxir_source_comptime_tuple.inc.c"
 
@@ -64,22 +71,22 @@ static bool source_comptime_body(SourceContext *ctx,AstNode *site,SourceExpected
     if (!unit_block && !source_plan_expression(ctx,child,expected,&value)) return false;
     if (!source_comptime_result_type(ctx,child,value.type))
         return source_fail(ctx,site,XR_XIR_BAD_TYPE,"comptime result must belong to an admitted closed value family");
-    if (!source_work_units(ctx,child,sizeof(value.type)+sizeof(ctx->returned))) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     ctx->functions[ctx->function].result=value.type;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.type==XR_XIR_UNIT?0:value.id,0},{0},0,{0}},NULL)) return false;
     ctx->returned=true;return finish_body(ctx);
 }
-static bool source_comptime_open_body(SourceContext *ctx,AstNode *node,uint32_t function,bool *open) {
+static bool source_comptime_open_body(SourceContext *ctx,uint32_t function,bool *open) {
     const XrXirFunction *body=&ctx->functions[function];
     const XrXirGeneric *generic=&ctx->generics[function];
-    if (!source_work_units(ctx,node,2)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     *open=xr_xir_type_span(&ctx->types,body->result)!=0;
     for (uint32_t i=0;i<body->instruction_count;++i) {
-        if (!source_work_units(ctx,node,2)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (xr_xir_type_span(&ctx->types,body->instructions[i].type)) *open=true;
     }
     for (uint32_t t=0;t<generic->argument_count;++t) {
-        if (!source_work_units(ctx,node,2)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (xr_xir_type_span(&ctx->types,generic->arguments[t])) *open=true;
     }
     return true;
@@ -88,9 +95,7 @@ static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpecte
     uint32_t outer=ctx->function;
     if (ctx->function_count>=ctx->function_capacity || ctx->comptime_count>=ctx->comptime_capacity)
         return source_fail(ctx,node,XR_XIR_BUDGET,"comptime function inventory exhausted");
-    uint64_t lexical_bytes=sizeof(ctx->bodies[outer].type_owner)+sizeof(ctx->bodies[outer].generic_owner)+
-        sizeof(ctx->bodies[outer].type_parameters)+sizeof(ctx->bodies[outer].type_parameter_count);
-    if (!source_work_units(ctx,node,3*sizeof(SourceComptimeScope)+sizeof(XrXirFunction)+sizeof(XrXirFunctionIdentity)+sizeof(SourceName)+4*sizeof(uint32_t)+sizeof(AstNode *)+sizeof(XrXirSourceType)+lexical_bytes)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     SourceComptimeScope saved=source_comptime_scope(ctx);
     uint32_t f=ctx->function_count++;
     char *name=source_alloc(ctx,32,1);
@@ -110,7 +115,7 @@ static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpecte
     ctx->bodies[f].generic_owner=ctx->bodies[outer].generic_owner;
     ctx->bodies[f].type_parameters=ctx->bodies[outer].type_parameters;
     ctx->bodies[f].type_parameter_count=ctx->bodies[outer].type_parameter_count;
-    if (!source_work_units(ctx,node,2*sizeof(XrXirGeneric))) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     ctx->generics[f]=(XrXirGeneric){ctx->generics[outer].constraints,ctx->generics[outer].parameter_count,
         NULL,0,ctx->generics[outer].parameter_kinds};
     ctx->function=f;ctx->locals=ctx->scope=NULL;ctx->facts=NULL;ctx->epochs=NULL;
@@ -122,7 +127,7 @@ static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpecte
     if (ok) ok=source_query_syntax_role(ctx,declaration.declaration,XR_XIR_SOURCE_SYNTAX_CLOSURE,0);
     if (ok) ok=source_comptime_body(ctx,node,expected);
     bool open=false;
-    if (ok) ok=source_comptime_open_body(ctx,node,f,&open);
+    if (ok) ok=source_comptime_open_body(ctx,f,&open);
     if (ok && !open) {
         ctx->generics[f].constraints=NULL;ctx->generics[f].parameter_count=0;ctx->generics[f].parameter_kinds=NULL;
     }
@@ -140,7 +145,7 @@ static bool source_comptime_expected_same(SourceContext *ctx,AstNode *node,Sourc
         XrXirType *arguments=count?source_alloc(ctx,count,sizeof(*arguments)):NULL;
         if (count && !arguments) return false;
         for (uint32_t i=0;i<count;++i) {
-            if (!source_work_units(ctx,node,sizeof(*arguments))) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             arguments[i]=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+i);
         }
         XrXirStatus status=xr_xir_compile_type_substitution_matches_between(&ctx->compile,
@@ -155,7 +160,7 @@ static bool source_comptime_call(SourceContext *ctx,AstNode *node,uint32_t helpe
     XrXirType *arguments=count?source_alloc(ctx,count,sizeof(*arguments)):NULL;
     if (count && !arguments) return false;
     for (uint32_t a=0;a<count;++a) {
-        if (!source_work_units(ctx,node,sizeof(*arguments))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         arguments[a]=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a);
     }
     if (count && !source_type_arguments(ctx,node,arguments,count,&call)) return false;
@@ -166,18 +171,18 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
     if (!source_comptime_thunk(ctx,node,expected,&helper)) return false;
     uint32_t declaration=ctx->bodies[owner].declaration;
     for (const SourceComptimeSite *previous=ctx->comptime_sites;previous;previous=previous->next) {
-        if (!source_work_units(ctx,node,4)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (previous->syntax==node && previous->module==module && previous->owner==owner)
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime occurrence was lowered twice");
     }
     SourceComptimeSite *site=source_alloc(ctx,1,sizeof(*site));
-    if (!site || !source_work_units(ctx,node,sizeof(*site)+sizeof(ctx->comptime_sites)+sizeof(ctx->comptime_count)+2)) return false;
-    *site=(SourceComptimeSite){ctx->comptime_sites,node,module,owner,declaration,helper,expected,{0},0,0};
+    if (!site || !((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+    *site=(SourceComptimeSite){ctx->comptime_sites,node,module,owner,declaration,helper,expected,{0},0};
     ctx->comptime_sites=site;++ctx->comptime_count;
     if (!ctx->comptime_input) return source_comptime_call(ctx,node,helper,value);
     const SourceComptimeSite *matched=NULL;
     for (const SourceComptimeSite *original=ctx->comptime_input;original;original=original->next) {
-        if (!source_work_units(ctx,node,8)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (original->syntax==node && original->module==module && original->owner==owner && original->declaration==declaration && original->helper==helper &&
             source_comptime_expected_same(ctx,node,original->expected,expected)) {
             if (matched) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime occurrence is ambiguous");
@@ -185,24 +190,23 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
         }
     }
     if (matched && ctx->generics[helper].parameter_count) {
-        if (!source_work_units(ctx,node,sizeof(ctx->comptime_matched))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         ++ctx->comptime_matched;return source_comptime_call(ctx,node,helper,value);
     }
-    if (!matched || !source_comptime_result_value(ctx,node,&matched->value,matched->result_arity,matched->result_work))
+    if (!matched || !source_comptime_result_value(ctx,node,&matched->value,matched->result_arity))
         return source_fail(ctx,node,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,"comptime occurrence or canonical result changed");
     const XrXirTypeArena *arena=NULL;
     if (matched->result_arity) {
-        if (!source_work_units(ctx,node,(uint64_t)matched->result_arity*16)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         arena=xr_xir_value_arena(&matched->value);
     }
     if (!source_comptime_type_matches(ctx,node,xr_xir_compile_type_arena_types(arena),
         (XrXirType)matched->value.type,ctx->functions[helper].result))
         return source_fail(ctx,node,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,"comptime occurrence changed its result type");
-    if (!source_work_units(ctx,node,sizeof(site->value)+sizeof(site->result_arity)+sizeof(site->result_work)+sizeof(ctx->comptime_matched))) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     site->result_arity=matched->result_arity;
-    site->result_work=matched->result_work;
     if (matched->value.type==XR_XIR_STRING || matched->result_arity) {
-        if (!source_work_units(ctx,node,(uint64_t)matched->result_arity*16)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirValueStatus copied=xr_xir_value_copy(&matched->value,&site->value);
         if (copied!=XR_XIR_VALUE_OK) return source_fail(ctx,node,
             copied==XR_XIR_VALUE_LIMIT || copied==XR_XIR_VALUE_REFCOUNT_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE,

@@ -29,7 +29,7 @@ static XrXirOutputStatus group(void *context, const XrXirOutputGroup *value) {
     return xr_xir_output_render(&((Output *)context)->sink, value);
 }
 int main(void) {
-    XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrXirCompileContext context = {NULL, xr_xir_compile_default_limits()};
     CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
     XrXirProgram *program = NULL;

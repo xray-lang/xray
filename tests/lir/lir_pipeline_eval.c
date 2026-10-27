@@ -261,7 +261,7 @@ static XrLirLowered source_lower(Eval *e, const char *path, XrCompileResources *
     XrModuleIdentityAuthority authority = {0}; char *authority_root = NULL;
     XrXirSourceResult source = {0}; XrXirArtifact *closed = NULL;
     XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceFailure failure = {0};
-    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(resources, &session) == XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_module_identity_script_authority_from_source(resources, path,
         &authority, &authority_root) == XR_MODULE_OK);
     XrXirCompileContext context = {.resources = resources, .limits = xr_xir_compile_default_limits()};
@@ -408,7 +408,7 @@ int main(int argc, char **argv) {
     uint64_t count = (uint64_t)warmups + runs; CHECK(count <= SIZE_MAX);
     Sample *samples = array((size_t)count, sizeof(*samples));
     Eval e = {.frequency = clock_frequency()};
-    XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
     char *expected_path = NULL;
@@ -420,7 +420,7 @@ int main(int argc, char **argv) {
     XrLirFunctionView root;
     OK(xr_lir_function_view(lowered.module, lowered.entry, &root));
     CHECK(root.result == XR_LIR_I64 && !root.parameter_count);
-    XrLirCRequest request = {lowered.module, lowered.entry, resources, argv[1]};
+    XrLirCRequest request = {lowered.module, lowered.entry, resources, argv[1], NULL};
     XrLirCOutput output = {0}; XrLirCDiagnostic diagnostic = {0};
     uint64_t start = clock_ticks();
     CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_OK);

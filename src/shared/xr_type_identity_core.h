@@ -31,7 +31,7 @@ typedef enum XrTypeIdentityCoreKind {
     XR_TYPE_IDENTITY_CORE_INSTANCE = 17,
     XR_TYPE_IDENTITY_CORE_OBJECT = 18,
     XR_TYPE_IDENTITY_CORE_BIGINT = 19,
-    XR_TYPE_IDENTITY_CORE_STRINGBUILDER = 20,
+    /* Representation identity 20 is retired and must not be reassigned. */
     XR_TYPE_IDENTITY_CORE_CHANNEL = 21,
     XR_TYPE_IDENTITY_CORE_REGEX = 22,
     XR_TYPE_IDENTITY_CORE_DATETIME = 23,
@@ -71,7 +71,6 @@ static inline uint8_t xr_type_identity_core_eval_impl(XrTypeIdentityCoreKind kin
         case XR_TYPE_IDENTITY_CORE_INSTANCE:
         case XR_TYPE_IDENTITY_CORE_OBJECT:
         case XR_TYPE_IDENTITY_CORE_BIGINT:
-        case XR_TYPE_IDENTITY_CORE_STRINGBUILDER:
         case XR_TYPE_IDENTITY_CORE_CHANNEL:
         case XR_TYPE_IDENTITY_CORE_REGEX:
         case XR_TYPE_IDENTITY_CORE_DATETIME:

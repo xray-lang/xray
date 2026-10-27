@@ -18,7 +18,7 @@ static void literal_receiving_resources(void) {
     context.limits=xr_xir_compile_default_limits();
     XrCompileResources *same=context.resources;
     XirCtfeInstanceBatch *batch=literal_batch(&context,"text");
-    XirLiteralRequest request={&context,batch,2};XirLiteralDefinitions result={0};
+    XirLiteralRequest request={&context,batch,2,NULL};XirLiteralDefinitions result={0};
     size_t first=source_fixture_compile_attempts;
     CHECK(xr_xir_compile_instance_literals(&request,&result,NULL)==XR_XIR_OK);
     size_t sites=source_fixture_compile_attempts-first;CHECK(sites && result.count==2);
@@ -33,13 +33,13 @@ static void literal_receiving_resources(void) {
             fprintf(stderr,"Literal receiving FI point=%zu/%zu status=%u\n",fault+1,sites,(unsigned)status);
         CHECK(status==XR_XIR_OUT_OF_MEMORY && source_fixture_compile_injected && literal_empty(&result));
         CHECK(source_fixture_compile_attempts==first+fault+1);
-        CHECK(context.resources==same && stats(&context).live_bytes==before.live_bytes);
+        CHECK(context.resources==same && stats(&context).held_bytes==before.held_bytes);
         CHECK(source_fixture_compile_live==live && source_fixture_compile_bytes==bytes);
         source_fixture_compile_fail_at=SIZE_MAX;
         CHECK(xr_xir_compile_instance_literals(&request,&result,NULL)==XR_XIR_OK && result.count==2);
         CHECK(result.definition->context.resources==same);
         xr_xir_compile_instance_literals_free(&result);
-        CHECK(stats(&context).live_bytes==before.live_bytes);
+        CHECK(stats(&context).held_bytes==before.held_bytes);
         CHECK(source_fixture_compile_live==live && source_fixture_compile_bytes==bytes);
         if (!(fault%256) || fault+1==sites)
             fprintf(stderr,"Literal receiving FI actual=%zu/%zu same-owner/retry/live\n",fault+1,sites);

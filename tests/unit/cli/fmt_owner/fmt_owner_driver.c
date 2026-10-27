@@ -13,17 +13,15 @@
 #undef xr_compile_resources_new
 #undef xr_compile_resources_release
 static XrCompileResourceStats recorded;
-static unsigned ledger_count;
+static unsigned memory_owners;
 XR_FUNC XrCompileResourceStatus xr_compile_resources_new(const XrCompileResourceLimits *limits,XrCompileResources **out) {
-    CHECK(limits->allocated_bytes==UINT64_MAX && limits->live_bytes==UINT64_MAX && limits->work==UINT64_MAX);
-    ++ledger_count; XrCompileResourceLimits bound=*limits; const char *value;
-    if((value=getenv("XR_FMT_TEST_WORK")))bound.work=strtoull(value,NULL,10);
-    if((value=getenv("XR_FMT_TEST_ALLOCATED")))bound.allocated_bytes=strtoull(value,NULL,10);
-    if((value=getenv("XR_FMT_TEST_LIVE")))bound.live_bytes=strtoull(value,NULL,10);
+    CHECK(limits->memory_mode==XR_COMPILE_MEMORY_ORDINARY && limits->memory_limit==0);
+    ++memory_owners; XrCompileResourceLimits bound=*limits;bound.profile_allocations=true;const char *value;
+    if((value=getenv("XR_FMT_TEST_HELD"))){bound.memory_mode=XR_COMPILE_MEMORY_FINITE;bound.memory_limit=strtoull(value,NULL,10);}
     return fmt_real_new(&bound,out);
 }
 XR_FUNC void xr_compile_resources_release(XrCompileResources *owner) {
-    if(owner && owner->stats.allocated_bytes>=recorded.allocated_bytes)recorded=owner->stats;
+    if(owner && owner->stats.peak_bytes>=recorded.peak_bytes)recorded=owner->stats;
     fmt_real_release(owner);
 }
 extern bool fmt_dir_open_failure,fmt_dir_next_failure;
@@ -62,7 +60,6 @@ int wmain(int argc,wchar_t **wide) {
 #if FMT_INJECTED
     DWORD before_handles=winapi_control(),after_handles=0;
     inject();
-    record_work=getenv("XR_FMT_TEST_RECORD_WORK")!=NULL;
 #endif
     XrWinPathStatus status;
     char **argv=xr_win_utf16_arguments(argc,wide,&status);
@@ -76,10 +73,9 @@ int wmain(int argc,wchar_t **wide) {
     CHECK(!live_allocations);
     CHECK(GetProcessHandleCount(GetCurrentProcess(),&after_handles) && after_handles==before_handles);
     fprintf(stderr,"FMT_HANDLES before=%lu after=%lu\n",before_handles,after_handles);
-    fprintf(stderr,"FMT_STATS allocations=%zu io=%zu work=%llu allocated=%llu peak=%llu ledgers=%u live=%zu\n",
-        allocation_attempts,io_attempts,(unsigned long long)recorded.work,(unsigned long long)recorded.allocated_bytes,
-        (unsigned long long)recorded.peak_bytes,ledger_count,live_allocations);
-    if(record_work){fprintf(stderr,"FMT_WORK");for(size_t i=0;i<work_count;++i)fprintf(stderr," %llu",(unsigned long long)work_points[i]);fprintf(stderr,"\n");}
+    fprintf(stderr,"FMT_STATS allocations=%zu io=%zu allocated=%llu peak=%llu owners=%u live=%zu\n",
+        allocation_attempts,io_attempts,(unsigned long long)recorded.allocated_bytes,
+        (unsigned long long)recorded.peak_bytes,memory_owners,live_allocations);
 #endif
     return result;
 }

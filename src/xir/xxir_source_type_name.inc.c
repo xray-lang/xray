@@ -48,7 +48,7 @@ static bool source_type_name_error(SourceContext *ctx,AstNode *node,XrXirType er
 /* `top` is the operand's own type: an Array reports just "Array", while inside arguments it shows its element. */
 static bool source_type_name_collect(SourceContext *ctx, AstNode *node, XrXirType type, bool top, uint32_t depth,
     SourceTypeName *name) {
-    if (!source_work(ctx, node)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (depth > 32) return source_fail(ctx, node, XR_XIR_BUDGET, "type name nesting exhausted");
     if (type == XR_XIR_ERROR)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Error type name is not admitted");

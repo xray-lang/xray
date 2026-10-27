@@ -9,7 +9,7 @@
 static bool source_implementation_applications(SourceContext *ctx) {
     uint32_t count = 0;
     for (SourceLibraryUnit *unit=ctx->library_units; unit; unit=unit->next) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (unit->implementations.count>UINT32_MAX-count)
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"imported implementation count exhausted");
         count+=unit->implementations.count;
@@ -17,13 +17,13 @@ static bool source_implementation_applications(SourceContext *ctx) {
     for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
         if (owner->checked_library) continue;
-        if (!source_work(ctx,owner->node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceNominalDeclaration declaration;
         if (!source_nominal_declaration(ctx,owner->node,&declaration)) return false;
         if (declaration.interface_count < 0 || (declaration.interface_count && !declaration.interfaces))
             return source_fail(ctx,owner->node,XR_XIR_BAD_STRUCTURE,"implemented interface applications are malformed");
         for (int i=0;i<declaration.interface_count;++i) {
-            if (!source_work(ctx,owner->node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (ctx->nominals.declarations[d].kind==XR_XIR_NOMINAL_CLASS &&
                 source_sendable_marker(ctx,declaration.interfaces[i])) continue;
             if (count==UINT32_MAX) return source_fail(ctx,owner->node,XR_XIR_BUDGET,"implementation count exhausted");
@@ -36,7 +36,7 @@ static bool source_implementation_applications(SourceContext *ctx) {
     uint32_t next = 0;
     for (SourceLibraryUnit *unit=ctx->library_units; unit; unit=unit->next) {
         for (uint32_t i=0; i<unit->implementations.count; ++i) {
-            if (!source_work_units(ctx,NULL,sizeof(*records))) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             records[next++]=unit->implementations.records[i];
         }
     }
@@ -53,14 +53,14 @@ static bool source_implementation_applications(SourceContext *ctx) {
             (uint32_t)declaration.parameter_count,declaration.parameter_count ? owner->declaration : 0,0};
         uint32_t first = next;
         for (int i = 0; i < declaration.interface_count && ok; ++i) {
-            if (!source_work(ctx,owner->node)) {ok=false;break;}
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) {ok=false;break;}
             if (ctx->nominals.declarations[d].kind==XR_XIR_NOMINAL_CLASS &&
                 source_sendable_marker(ctx,declaration.interfaces[i])) continue;
             XrXirImplementation *record = &records[next++]; record->nominal_declaration = d;
             ok = source_interface_application(ctx,owner->node,declaration.interfaces[i],&record->interface);
             for (uint32_t earlier = first; earlier + 1 < next && ok; ++earlier) {
                 bool same = false;
-                ok = source_constraint_same(ctx,owner->node,&records[earlier].interface,&record->interface,&same);
+                ok = source_constraint_same(ctx,&records[earlier].interface,&record->interface,&same);
                 if (ok && same) ok = source_fail(ctx,owner->node,XR_XIR_BAD_TYPE,"duplicate explicit implementation");
             }
         }
@@ -93,7 +93,7 @@ static bool source_implementation_signature(SourceContext *ctx, AstNode *node,
     XrXirType *types = count ? source_alloc(ctx,count,sizeof(*types)) : NULL;
     if (count && !types) return false;
     for (uint32_t p = 0; p < count; ++p) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         types[p] = p < parent ? binding->requirement.arguments[p] :
             (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + nominal_count + p-parent);
     }
@@ -121,7 +121,7 @@ static bool source_implementation_bindings(SourceContext *ctx, XrXirImplementati
     for (uint32_t r = 0; r < count; ++r) {
         const XrXirInterfaceRequirement *requirement = xr_xir_interface_closure_requirement(closure,r);
         char *name = source_alloc(ctx,(uint64_t)requirement->name.length + 1,1);
-        if (!name || !source_work(ctx,owner->node)) goto done;
+        if (!name || !((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         if (!source_copy_bytes(ctx, owner->node, name, requirement->name.bytes, requirement->name.length)) goto done;
         SourceName *method = find_name(ctx,ctx->nominal_methods[owner->index],name);
         if (!method) { source_fail(ctx,owner->node,XR_XIR_BAD_TYPE,"explicit implementation is missing a method"); goto done; }

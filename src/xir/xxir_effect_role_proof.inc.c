@@ -17,7 +17,7 @@ static XrXirStatus effect_role_value_count(EffectRoleCheck *check,uint32_t f,uin
     const EffectBodyFunction *head=&check->material->functions[f];bool callable=false;
     if (effect_body_variable_roles(check->material)) {
         for (uint32_t p=0;p<head->parameter_count;++p) {
-            if (!xir_compile_work(check->work,3)) return XR_XIR_BUDGET;
+
             callable|=xr_xir_callable_signature(check->material->domain.types,head->parameters[p])!=NULL;
         }
     }
@@ -43,7 +43,7 @@ static XrXirStatus effect_role_proof_geometry(EffectRoleCheck *check) {
     if (status!=XR_XIR_OK) return status;
     uint64_t first=0,formal=0;
     for (uint32_t f=0;f<check->functions;++f) {
-        if (!xir_compile_work(check->work,8)) return XR_XIR_BUDGET;
+
         uint32_t count=0;status=effect_role_value_count(check,f,&count);if (status!=XR_XIR_OK) return status;
         const EffectBodyFunction *head=&check->material->functions[f];const EffectRoleFunction *row=&proof->rows[f];
         if (row->parameters!=head->parameter_count || row->instructions!=head->instruction_count ||
@@ -66,7 +66,7 @@ static XrXirStatus effect_role_target(EffectRoleCheck *check,uint32_t f,uint32_t
     }
     if (action!=EFFECT_ROLE_CALLEE) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t callee=0;callee<proof->functions;++callee) {
-        if (!xir_compile_work(check->work,3)) return XR_XIR_BUDGET;
+
         const EffectRoleFunction *row=&proof->rows[callee];
         if (target<row->formal_first || target-row->formal_first>=row->parameters) continue;
         if (row->count) *node=row->first+target-row->formal_first;
@@ -99,7 +99,7 @@ static XrXirStatus effect_role_build_edge(EffectRoleCheck *check,uint32_t source
     uint32_t origin=proof->rows[check->function].first+source;
     if (origin>=proof->total || (node!=UINT32_MAX && node>=proof->total)) return XR_XIR_BAD_STRUCTURE;
     if (seed) {
-        if (!xir_compile_work(check->work,sizeof(EffectRoleFact))) return XR_XIR_BUDGET;
+
         effect_role_fact_join(&proof->facts[origin],seed,1,check->instruction,check->ordinal-1);return XR_XIR_OK;
     }
     if (builder->used==builder->capacity) {
@@ -109,32 +109,30 @@ static XrXirStatus effect_role_build_edge(EffectRoleCheck *check,uint32_t source
         if (!fresh) return status;
         status=effect_role_proof_geometry(check);
         if (status!=XR_XIR_OK) { xr_compile_resources_free(fresh);return status; }
-        if (!xir_compile_work(check->work,(uint64_t)builder->used*sizeof(*fresh)+3*sizeof(void *))) {
-            xr_compile_resources_free(fresh);return XR_XIR_BUDGET;
-        }
+
         if (builder->used) memcpy(fresh,builder->edges,(size_t)builder->used*sizeof(*fresh));
         xr_compile_resources_free(builder->edges);builder->edges=fresh;builder->capacity=(uint32_t)capacity;
         status=effect_role_proof_geometry(check);if (status!=XR_XIR_OK) return status;
     }
-    if (!xir_compile_work(check->work,sizeof(EffectRoleReverse)+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+
     builder->edges[builder->used]=(EffectRoleReverse){origin,builder->heads[node],check->instruction,check->ordinal-1};
     builder->heads[node]=builder->used++;return XR_XIR_OK;
 }
 static XrXirStatus effect_role_build_closure(EffectRoleBuilder *builder) {
-    EffectRoleProof *proof=builder->proof;const XrXirCompileContext *work=builder->check.work;
+    EffectRoleProof *proof=builder->proof;
     uint32_t front=0,back=0,pending=0;
     for (uint32_t n=0;n<proof->total;++n) {
-        if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
         if (!proof->facts[n].level) continue;
         builder->queue[back]=n;back=back+1==proof->total?0:back+1;++pending;builder->pending[n]=1;
     }
     while (pending) {
-        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+
         uint32_t target=builder->queue[front];front=front+1==proof->total?0:front+1;--pending;builder->pending[target]=0;
         EffectRoleFact fact=proof->facts[target];
         if (!fact.distance || fact.distance>proof->total) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t e=builder->heads[target];e!=UINT32_MAX;) {
-            if (!xir_compile_work(work,6+sizeof(EffectRoleFact))) return XR_XIR_BUDGET;
+
             if (e>=builder->used) return XR_XIR_BAD_STRUCTURE;
             EffectRoleReverse edge=builder->edges[e];
             if (edge.source>=proof->total || (edge.next!=UINT32_MAX && edge.next>=e)) return XR_XIR_BAD_STRUCTURE;
@@ -166,7 +164,7 @@ static XrXirStatus effect_role_verify_edge(EffectRoleCheck *check,uint32_t sourc
         if (node>=proof->total) return XR_XIR_BAD_STRUCTURE;
         required=proof->facts[node];
     }
-    if (!xir_compile_work(check->work,8)) return XR_XIR_BUDGET;
+
     if (!verify->support) return fact.level>=required.level?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     verify->found=true;
     return origin==verify->wanted && required.level && fact.level==required.level &&
@@ -183,7 +181,7 @@ static XrXirStatus effect_role_proof_match(const XrXirCompileContext *work,
         status=effect_body_request_head(&request,f,&head);if (status!=XR_XIR_OK) return status;
         const EffectRoleFunction *row=&proof->rows[f];
         for (uint32_t v=0;v<count;++v) {
-            if (!xir_compile_work(work,sizeof(EffectRoleFact)+3)) return XR_XIR_BUDGET;
+
             EffectRoleFact fact=proof->facts[row->first+v];
             if (fact.level>2 || (fact.level?(!fact.distance || fact.distance>proof->total):
                 (fact.distance || fact.instruction || fact.ordinal))) return XR_XIR_BAD_STRUCTURE;
@@ -224,7 +222,7 @@ static XrXirStatus effect_role_proof_build(const XrXirCompileContext *work,
     for (uint32_t f=0;status==XR_XIR_OK && f<check->functions;++f) {
         uint32_t count=0;status=effect_role_value_count(check,f,&count);
         if (status!=XR_XIR_OK) break;
-        if (count>UINT32_MAX-first || !xir_compile_work(work,sizeof(EffectRoleFunction))) { status=XR_XIR_BUDGET;break; }
+        if (count>UINT32_MAX-first) { status=XR_XIR_BUDGET;break; }
         const EffectBodyFunction *head=&material->functions[f];
         proof->rows[f]=(EffectRoleFunction){head->parameter_count,head->instruction_count,first,count,formal};
         first+=count;formal+=head->parameter_count;
@@ -238,7 +236,7 @@ static XrXirStatus effect_role_proof_build(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) status=effect_role_proof_geometry(check);
     if (status==XR_XIR_OK) builder.pending=xir_compile_calloc(work,proof->total,sizeof(*builder.pending),&status);
     if (status==XR_XIR_OK) status=effect_role_proof_geometry(check);
-    if (status==XR_XIR_OK && !xir_compile_work(work,(uint64_t)proof->total*sizeof(*builder.heads))) status=XR_XIR_BUDGET;
+
     if (status==XR_XIR_OK) for (uint32_t n=0;n<proof->total;++n) builder.heads[n]=UINT32_MAX;
     check->receiver=&builder;check->emit=effect_role_build_edge;
     for (uint32_t f=0;status==XR_XIR_OK && f<check->functions;++f) {
@@ -247,7 +245,7 @@ static XrXirStatus effect_role_proof_build(const XrXirCompileContext *work,
         status=effect_body_request_head(&request,f,&head);if (status!=XR_XIR_OK) break;
         check->active_head=&head;check->active_function=f;
         for (uint32_t p=0;p<head.parameter_count;++p) {
-            if (!xir_compile_work(work,3+sizeof(EffectRoleFact))) { status=XR_XIR_BUDGET;break; }
+
             if (!xr_xir_callable_signature(material->domain.types,head.parameters[p]))
                 proof->facts[proof->rows[f].first+p]=(EffectRoleFact){2,1,UINT32_MAX,UINT32_MAX};
         }

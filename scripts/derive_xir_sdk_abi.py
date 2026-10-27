@@ -50,9 +50,9 @@ STRUCTURES = [
  (2300, 'XrXirCompileLimits', [('functions','u32'),('parameters','u32'),('blocks','u32'),
                             ('instructions','u32'),('frame_bytes','u64')]),
  (2400, 'XrXirCompileContext', [('resources','ptr'),('limits','XrXirCompileLimits')]),
- (2500, 'XrCompileResourceLimits', [('allocated_bytes','u64'),('live_bytes','u64'),('work','u64')]),
- (2600, 'XrCompileResourceStats', [('allocation_count','u64'),('allocated_bytes','u64'),
-                                ('live_bytes','u64'),('peak_bytes','u64'),('work','u64')]),
+ (2500, 'XrCompileResourceLimits', [('memory_mode','enum'),('memory_limit','u64'),('profile_allocations','bool')]),
+ (2600, 'XrCompileResourceStats', [('held_bytes','u64'),('peak_bytes','u64'),
+                                ('allocation_count','u64'),('allocated_bytes','u64')]),
 ]
 SCALARS = [
  (1,'pointer.size',8,'sizeof(void *)'),(2,'pointer.align',8,'_Alignof(void *)'),
@@ -189,6 +189,11 @@ def prepare(output: Path) -> None:
                         'u32/int/enum align4, bool align1; declaration field sequence copied '
                         'from actual versioned runtime headers. Never from a compiler probe output.'}
     (output/'EXPECTED.json').write_text(json.dumps(document,indent=2)+'\n',encoding='utf-8',newline='\n')
+    definition = '/* Fixed semantic field IDs; values are measured by the compiling provider. */\n'
+    for row in rows:
+        expression = '1u' if row['id'] == 16 else row['expression']
+        definition += f'XR_XIR_SDK_ABI({row["id"]}, {expression})\n'
+    (output/'xr_xir_runtime_sdk_abi.def').write_text(definition,encoding='utf-8',newline='\n')
     source = '#include "xir/xxir_program.h"\n#include "xir/xxir_instance_hash.h"\n#include "xir/xxir_class_observation.h"\n#include "xir/xxir_atomic.h"\n#include "xir/xxir_nominal.h"\n#include "xir/xxir_output.h"\n#include "execution/xr_xir_host_execution.h"\n#include <limits.h>\n#include <float.h>\n#include <stdio.h>\n' + OBSERVER_PROTOTYPES + HASH_PROTOTYPES + 'int main(void) { const uint32_t endian=1; puts("[");\n' + OBSERVER_LINKS + HASH_LINKS
     for index, row in enumerate(rows):
         tail = ',' if index+1 < len(rows) else ''

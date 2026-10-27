@@ -17,6 +17,7 @@
 #define XMCP_TOOLS_INTERNAL_H
 
 #include "../../base/xdefs.h"
+#include "../../base/xcompile_request.h"
 #include "../../base/xjson.h"
 #include "xmcp_registry.h"
 #include <stdbool.h>
@@ -62,7 +63,10 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_stdlib_search(struct XmcpServer *s, const Xm
 XR_FUNC XrJsonValue *xmcp_tool_xray_definition(struct XmcpServer *s, const XmcpCallContext *ctx,
                                                XrJsonValue *args);
 
-XR_FUNC XrJsonValue *xmcp_tool_source_definition(XrJsonValue *arguments);
+XR_FUNC XrJsonValue *xmcp_tool_source_definition(struct XmcpServer *server, XrJsonValue *arguments);
+/* One stack-owned control is borrowed only until this tool request returns. */
+XR_FUNC XrCompileResourceStatus xmcp_request_control_init(const struct XmcpServer *server,
+    uint64_t timeout_ns, XrCompileRequestControl *control);
 
 /* ---- Schema builders (forward decls used by TOOL_TABLE) ---------------- */
 

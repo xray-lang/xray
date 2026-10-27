@@ -60,8 +60,8 @@ static XrXirValueStatus storage_pack_walk(StoragePack *pack,
     XrXirType type=pack->type;
     bool pending = true;
     while (pending || pack->depth) {
-        if (!pack->admission->work) return XR_XIR_VALUE_LIMIT;
-        --pack->admission->work;
+        if (!admission_is_compile(pack->admission) && (!pack->admission->work)) return XR_XIR_VALUE_LIMIT;
+        if (!admission_is_compile(pack->admission)) --pack->admission->work;
         if (pending) pending = false;
         else {
             StoragePackFrame *frame = &pack->frames[pack->depth - 1];
@@ -152,7 +152,7 @@ static XrXirValueStatus storage_pack_copy(StoragePack *pack,
     uint64_t owners = 0;
     while (status == XR_XIR_VALUE_OK) {
         StorageSpan leaf = {0}; bool found = false;
-        status = storage_cursor_next(&cursor, pack->frames ? &pack->admission->work : NULL, &leaf, &found);
+        status = storage_cursor_next(&cursor, pack->frames && !admission_is_compile(pack->admission) ? &pack->admission->work : NULL, &leaf, &found);
         if (status != XR_XIR_VALUE_OK || !found) break;
         XrXirValue value = {0}, owned = {0};
         if (!storage_leaf_value(pack->admission->arena,leaf.type,leaf.bytes,sizeof(uint64_t),&value)) {

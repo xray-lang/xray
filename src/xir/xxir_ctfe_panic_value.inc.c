@@ -15,7 +15,6 @@ _Static_assert(XR_XIR_PANIC_MESSAGE_CAPACITY<=128,"panic message reserve must co
 static XrXirCtfeStatus ctfe_panic_value_step(ScalarRun *run,VmState *vm,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[vm->instruction];
     if (ctfe_frame_spare(state)<512) return XR_XIR_CTFE_FRAME_LIMIT;
-    if (!scalar_compile_work(run,1024)) return XR_XIR_CTFE_BUDGET;
     XrXirValue info=ctfe_nominal_operand(run,op->args[0]),result={0};XrXirCtfeStatus status=XR_XIR_CTFE_OK;
     if (op->op==XR_XIR_PANIC_CODE) {
         XrXirFaultDetail detail={0};

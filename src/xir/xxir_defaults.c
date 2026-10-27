@@ -21,10 +21,6 @@
 #include "xxir_implementation.h"
 #include "../base/xmalloc.h"
 
-static bool defaults_spend(XrXirCompileContext *b, uint64_t amount) {
-    if (!xir_compile_work(b, amount)) return false;
-     return true;
-}
 XR_FUNC XrXirStatus xir_metadata_default_lookup(const XrXirCompileContext *compile_context, const XirMetadataDomain *m, uint32_t owner, uint32_t ordinal, const XrXirDefaultBinding **out) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
@@ -35,7 +31,7 @@ XR_FUNC XrXirStatus xir_metadata_default_lookup(const XrXirCompileContext *compi
     const XrXirDefaultTable *t=m->defaults;
     if (!t->count || !t->records) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i=0;i<t->count;++i) {
-        if (!defaults_spend(b,1)) return XR_XIR_BUDGET;
+
         const XrXirDefaultBinding *a=&t->records[i];
         if (a->owner==owner && a->ordinal==ordinal) { *out=a; return XR_XIR_OK; }
     }
@@ -60,7 +56,7 @@ XR_FUNC XrXirStatus xr_xir_compile_default_helper(const XrXirCompileContext *com
     if (!m->defaults) { *out = false; return XR_XIR_OK; }
     if (!m->defaults->count || !m->defaults->records) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i=0;i<m->defaults->count;++i) {
-        if (!defaults_spend(b,1)) return XR_XIR_BUDGET;
+
         if (m->defaults->records[i].function==function) { *out=true; return XR_XIR_OK; }
     }
     *out = false; return XR_XIR_OK;
@@ -81,14 +77,14 @@ static XrXirStatus default_signature(const XrXirModule *m,const XrXirDefaultBind
         if (!!fc->interfaces!=!!fc->interface_count || !!hc->interfaces!=!!hc->interface_count)
             return XR_XIR_BAD_STRUCTURE;
         for(uint32_t j=0;j<fc->interface_count;++j) {
-            if(!defaults_spend(b,1)) return XR_XIR_BUDGET;
+
             if(fc->interfaces[j].declaration!=hc->interfaces[j].declaration) return XR_XIR_BAD_TYPE;
         }
         XrXirStatus s=xr_xir_compile_constraint_records_match(b, m->types, *fc, m->types, *hc, n);
         if (s!=XR_XIR_OK) return s;
     }
     uint64_t bytes=(uint64_t)n*sizeof(XrXirType);
-    if (bytes>SIZE_MAX ||(bytes > SIZE_MAX) || !defaults_spend(b,n)) return XR_XIR_BUDGET;
+    if ((bytes>SIZE_MAX) || (bytes > SIZE_MAX)) return XR_XIR_BUDGET;
 
     XrXirType *args=n?xir_compile_alloc(b, (size_t)bytes, &allocation_status):NULL;
     if (n && !args) {  return allocation_status; }
@@ -107,7 +103,7 @@ XR_FUNC XrXirStatus xr_xir_compile_defaults_verify(const XrXirCompileContext *co
     const XrXirDeclarations *d=m->declarations;
     if (!t->count || !t->records || !d || !d->functions || !m->functions || !d->modules || !d->module_count) return XR_XIR_BAD_STRUCTURE;
     uint64_t bytes=sizeof(*t)+(uint64_t)t->count*sizeof(*t->records);
-    if ((bytes > SIZE_MAX) || !defaults_spend(b,t->count)) return XR_XIR_BUDGET;
+    if (bytes > SIZE_MAX) return XR_XIR_BUDGET;
 
     for (uint32_t i=0;i<t->count;++i) {
         const XrXirDefaultBinding *a=&t->records[i];
@@ -127,20 +123,20 @@ XR_FUNC XrXirStatus xr_xir_compile_defaults_verify(const XrXirCompileContext *co
         if ((i+1==t->count || t->records[i+1].owner!=a->owner) && a->ordinal+1!=f->parameter_count)
             return XR_XIR_BAD_STRUCTURE;
         for (uint32_t j=0;j<t->count;++j) {
-            if (!defaults_spend(b,1)) return XR_XIR_BUDGET;
+
             if ((i!=j && t->records[j].function==a->function) || t->records[j].owner==a->function)
                 return XR_XIR_BAD_STRUCTURE;
         }
         for (uint32_t j=0;j<d->module_count;++j) {
-            if (!defaults_spend(b,1)) return XR_XIR_BUDGET;
+
             if (d->modules[j].initializer==a->function || d->modules[j].initializer==a->owner)
                 return XR_XIR_BAD_STRUCTURE;
         }
         const XrXirImplementationTable *it=d->implementations;
         for (uint32_t j=0;it && j<it->count;++j) {
-            if (!defaults_spend(b,1)) return XR_XIR_BUDGET;
+
             for (uint32_t k=0;k<it->records[j].binding_count;++k) {
-                if (!defaults_spend(b,1)) return XR_XIR_BUDGET;
+
                 if (it->records[j].bindings[k].function==a->function) return XR_XIR_BAD_STRUCTURE;
             }
         }
@@ -163,7 +159,7 @@ XR_FUNC XrXirStatus xr_xir_compile_default_call_verify(const XrXirCompileContext
     if (!a || a->owner>=m->function_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirDeclarations *d=m->declarations;
     const XrXirFunctionIdentity *f=&d->functions[a->owner],*c=&d->functions[caller];
-    if(!defaults_spend(b,d->modules[c->module].dependency_count)) return XR_XIR_BUDGET;
+
     if ((f->member_access && c->nominal_owner!=f->nominal_owner) ||
         !xr_xir_module_imports(d,c->module,f->module) || (!xr_xir_module_same_scope(d,c->module,f->module) && !f->exported))
         return XR_XIR_BAD_STRUCTURE;

@@ -23,9 +23,8 @@ static const char *comptime_instances_text(const char *kind) {
 }
 static XrXirStatus comptime_instances_operation(XrXirCompileContext *context,const char *text,
     XirSourceComptimeInstances *output,XrXirCtfeLimits limits,uint32_t depth,bool public_source) {
-    XrCompilerSession *session=NULL;XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK) return created==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
-        created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+    XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK) return p11_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"comptime-instances",NULL};
     XrXirSourceRequest source={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,strlen(text)};XrXirSourceDiagnostic diagnostic={0};
@@ -82,7 +81,7 @@ static void comptime_instances_controls(void) {
         if (!axis) limits.steps=0;else if (axis==1) limits.frame_bytes=0;else if (axis==2) limits.output_bytes=0;else depth=0;
         XrCompileResourceStats before=stats(&context);
         CHECK(comptime_instances_operation(&context,text,&result,limits,depth,false)==XR_XIR_BUDGET && !result.owner && !result.count);
-        CHECK(stats(&context).live_bytes==before.live_bytes);
+        CHECK(stats(&context).held_bytes==before.held_bytes);
     }
     const char *capture="fn make<T>(value:T)->T{return comptime value}\nexport fn run()->i64{return make<i64>(42)}\n";
     CHECK(comptime_instances_operation(&context,capture,&result,original,XR_XIR_CTFE_MAX_CALL_DEPTH,false)==XR_XIR_BAD_VALUE && !result.owner);
@@ -95,9 +94,6 @@ static void comptime_instances_controls(void) {
     memset(views,0,sizeof(views));memset(bindings,0,sizeof(bindings));
     CHECK(xr_xir_compile_source_comptime_instances_view(&result,views,bindings,2)==XR_XIR_CTFE_BAD_ARTIFACT && !views[0].checked && !views[1].checked);
     *argument=saved;CHECK(xr_xir_compile_source_comptime_instances_view(&result,views,bindings,2)==XR_XIR_CTFE_OK);
-    XrCompileResourceStats used=stats(&context);CHECK(xr_compile_resources_work(context.resources,caps.work-used.work)==XR_COMPILE_RESOURCE_OK);
-    memset(views,0,sizeof(views));memset(bindings,0,sizeof(bindings));
-    CHECK(xr_xir_compile_source_comptime_instances_view(&result,views,bindings,2)==XR_XIR_CTFE_BUDGET && !views[0].checked);
     size_t attempts=source_fixture_compile_attempts;xr_xir_compile_source_comptime_instances_free(&result);xr_compile_resources_release(context.resources);
     CHECK(source_fixture_compile_attempts==attempts && !source_fixture_compile_live && !source_fixture_compile_bytes);
 }

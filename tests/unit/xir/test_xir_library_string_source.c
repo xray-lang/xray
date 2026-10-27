@@ -34,7 +34,7 @@
 
 static void string_library_packet(const XrXirCompileContext *context,const char *name, const char *expected, XrXirCheckedPacket *packet) {
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_SOURCE_FIXTURES,name)>0);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_LIBRARY,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
@@ -102,7 +102,7 @@ static void string_source_case(unsigned reverse,const char *output_path) {
     for(unsigned i=0;i<3;++i){memset(buffers[i],0,lengths[i]);xr_free(buffers[i]);}
     memset(inputs,0,sizeof(inputs));memset(names,0,sizeof(names));memset(catalog_root,0,sizeof(catalog_root));
     for(unsigned i=0;i<5;++i){memset(replay_bytes[i],0,replay_inputs[i].length);free(replay_bytes[i]);}
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compiler.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compiler.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compiler.context,NULL,NULL,XR_XIR_PROGRAM,catalog};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     if(!reverse)library_string_source_negatives(&request);
@@ -124,11 +124,12 @@ int main(int argc,char **argv) {
     CHECK(argc==1||argc==2);
     if(argc==2&&!strcmp(argv[1],"--literal-owner")){
         LibraryCompileOwner owner={0};
-        const XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
+        const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,true};
         StringLiteralFixture fixture={true,0};
         CHECK(library_compile_owner_new(&owner,&limits)==XR_XIR_OK);
         CHECK(string_literal_operation(&owner.context,&fixture)==XR_XIR_OK);
-        library_compile_owner_drop(&owner);library_compile_observer_free();
+        library_compile_owner_drop(&owner);
+        string_literal_boundaries(false);string_literal_boundaries(true);library_compile_observer_free();
         puts("Source-owned literal growth and retirement PASS");return 0;
     }
     library_string_source_boundaries();library_string_growth_boundaries();

@@ -9,7 +9,7 @@
 static uint32_t source_root_slot_owner(SourceContext *ctx, uint32_t function, uint32_t value) {
     const XrXirFunction *body = &ctx->functions[function];
     for (uint32_t step = 0; step < body->instruction_count; ++step) {
-        if (!source_work(ctx,NULL)) return UINT32_MAX;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return UINT32_MAX;
         if (value < body->parameter_count || value - body->parameter_count >= body->instruction_count)
             return UINT32_MAX;
         const XrXirInstruction *op = &body->instructions[value - body->parameter_count];
@@ -26,7 +26,7 @@ static bool source_root_slot_initial(SourceContext *ctx, uint32_t function,
     if (!ctx->slots[slot].mutable) return true;
     const XrXirFunction *body = &ctx->functions[function];
     for (uint32_t step = 0; step < body->instruction_count; ++step) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (owner < body->parameter_count || owner - body->parameter_count >= body->instruction_count) break;
         const XrXirInstruction *op = &body->instructions[owner - body->parameter_count];
         if (op->op == XR_XIR_CELL_NEW) { *value = op->args[0]; return true; }
@@ -37,7 +37,7 @@ static bool source_root_slot_initial(SourceContext *ctx, uint32_t function,
 }
 static bool source_root_slot_link(SourceContext *ctx, SourceRootFlow *flow,
     uint32_t function, uint32_t slot, uint32_t value, uint32_t *at) {
-    if (!source_work(ctx,NULL)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     flow->slots[*at] = (SourceRootSlotEdge){function,value,flow->slot_heads[slot]};
     flow->slot_heads[slot] = (*at)++;
     const XrXirFunction *body = &ctx->functions[function];
@@ -53,7 +53,7 @@ static bool source_root_slots_prepare(SourceContext *ctx) {
     uint64_t count = 0;
     for (uint32_t f = 0; f < ctx->function_count; ++f)
         for (uint32_t i = 0; i < ctx->functions[f].instruction_count; ++i) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             const XrXirInstruction *op = &ctx->functions[f].instructions[i];
             if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_CELL_WRITE) ++count;
             else if (op->op == XR_XIR_SLOT_GROUP_INIT) count += op->args[1];
@@ -71,7 +71,7 @@ static bool source_root_slots_prepare(SourceContext *ctx) {
          * original syntax did not enter this Source equation construction. */
         if (source_owned_checked(&ctx->graph->specs[m])) continue;
         for (SourceName *name = ctx->names[m]; name; name = name->next) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if ((name->kind == SOURCE_SLOT || name->kind == SOURCE_UNIT_SLOT) && name->index < ctx->slot_count)
                 flow->slot_names[name->index] = name;
         }
@@ -80,7 +80,7 @@ static bool source_root_slots_prepare(SourceContext *ctx) {
     for (uint32_t f = 0; f < ctx->function_count; ++f) {
         const XrXirFunction *body = &ctx->functions[f];
         for (uint32_t i = 0; i < body->instruction_count; ++i) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             const XrXirInstruction *op = &body->instructions[i];
             if (op->op == XR_XIR_SLOT_INIT) {
                 uint32_t slot = (uint32_t)op->immediate;
@@ -116,12 +116,12 @@ static bool source_root_slots_prepare(SourceContext *ctx) {
 static bool source_root_slots(SourceContext *ctx, bool *changed) {
     SourceRootFlow *flow = ctx->root_flow;
     for (uint32_t slot = 0; slot < ctx->slot_count; ++slot) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceName *name = flow->slot_names[slot];
         if (!name || !name->inferred || !source_root_type(ctx,name->type,0)) continue;
         XrXirType common = XR_XIR_UNIT;
         for (uint32_t e = flow->slot_heads[slot]; e != UINT32_MAX; e = flow->slots[e].next) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             SourceRootSlotEdge edge = flow->slots[e];
             XrXirType type = source_root_operand(ctx,edge.function,source_root_join_origin(ctx,edge.function,edge.value));
             if (common == XR_XIR_UNIT) common = type;
@@ -129,7 +129,7 @@ static bool source_root_slots(SourceContext *ctx, bool *changed) {
         }
         if (common == XR_XIR_UNIT) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"inferred slot has no initializer identity");
         for (uint32_t e = flow->slot_heads[slot]; e != UINT32_MAX; e = flow->slots[e].next) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             SourceRootSlotEdge edge = flow->slots[e];
             if (!source_root_copy_bound(ctx,edge.function,edge.value,common,changed))
                 return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"slot input cannot share its inferred bound");

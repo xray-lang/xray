@@ -22,7 +22,7 @@ static XrXirStatus channel_uses(const Graph *graph,const XrXirFunction *function
     if (status!=XR_XIR_OK) return status;
     XrXirType element=xr_xir_channel_element(types,receiver);
     if (op->op==XR_XIR_CHANNEL_TRY_SEND || op->op==XR_XIR_CHANNEL_TRY_RECV || op->op==XR_XIR_CHANNEL_RECV || timed) {
-        if (!xir_compile_work(&context->remaining,40)) return XR_XIR_BUDGET;
+
         if ((op->op==XR_XIR_CHANNEL_TRY_SEND || op->op==XR_XIR_CHANNEL_SEND_TIMEOUT) ? !xr_xir_nominal_native_send_result(types,op->type) : !xr_xir_nominal_native_recv(types,op->type,element))
             return XR_XIR_BAD_TYPE;
         status=type_use_context(context,context->location.function,op->type);

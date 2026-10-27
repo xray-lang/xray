@@ -38,8 +38,9 @@ static void task_error_fixture_new(TaskErrorFixture *f) {
     const XrXirType safe_types[] = {XR_XIR_I64, XR_XIR_STRING}, bad_type = (XrXirType)256;
     const XrXirTypeNode nodes[] = {{.kind = XR_XIR_TYPE_NOMINAL},
         {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {1, NULL, 0, safe_types, 2}},
-        {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {2, NULL, 0, &bad_type, 1}}};
-    const XrXirTypes types = {nodes, 3, &table, NULL};
+        {.kind = XR_XIR_TYPE_NOMINAL, .nominal = {2, NULL, 0, &bad_type, 1}},
+        {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64, .result = XR_XIR_ERROR}};
+    const XrXirTypes types = {nodes, 4, &table, NULL};
     const XrXirCallEntry entries[] = {
         {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT, 0, task_test_init, NULL, NULL, 0, 0},
         {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_I64, sizeof(TaskErrorState), task_test_error,
@@ -52,13 +53,32 @@ static void task_error_fixture_new(TaskErrorFixture *f) {
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
         entries, 3, &declarations, {&f->base.witness, task_test_code_drop}, &types, {0}};
     XrXirArtifact *proof = NULL;
-    CHECK(native_metadata_fixture(&f->base.compiler.context, &spec, &proof) == XR_XIR_OK);
+    /* This native callback can throw both declared enums, including the unsafe
+     * negative case. Its real declaration uses the public Error upper bound. */
+    XrXirInstruction code[3][2] = {0}; XrXirFunction functions[3] = {0};
+    const XrXirBlock block = {0, 2, 0, 0};
+    const char *names[] = {"init", "throwing", "panic"};
+    for (uint32_t i = 0; i < 3; ++i) {
+        code[i][0] = (XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}};
+        code[i][1] = (XrXirInstruction){XR_XIR_MATCH_FAIL,XR_XIR_UNIT,{0},{0},0,{0}};
+        functions[i] = (XrXirFunction){names[i],(uint32_t)strlen(names[i]),entries[i].parameters,
+            entries[i].parameter_count,entries[i].result,&block,1,code[i],2,NULL,0,
+            i == 1 ? XR_XIR_ERROR : XR_XIR_NEVER};
+    }
+    XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirArtifact *checked = NULL, *closed = NULL;
+    CHECK(xir_fixture_check(&f->base.compiler.context,&module,&checked,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&spec.target,&proof,NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(checked);
     const XrXirModule *lowered = xr_xir_compile_artifact_module(proof);
+    CHECK(lowered->functions[1].error_type == XR_XIR_ERROR);
     spec.types = lowered->types; spec.declarations = lowered->declarations;
-    const XrXirTypeNode task_node = {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64};
-    const XrXirTypes task_types = {&task_node, 1, NULL, NULL};
-    CHECK(xr_xir_compile_type_arena_new(&f->base.compiler.context, &task_types, &f->base.arena) == XR_XIR_VALUE_OK);
     CHECK(task_owned_program_take(&f->base.compiler.context,&spec,&proof,&f->base.program)==XR_XIR_OK && !proof);
+    f->base.arena = f->base.program->arena;
+    CHECK(f->base.arena && xr_xir_compile_type_arena_retain(f->base.arena));
+    const XrXirTypeNode *task_type = xr_xir_type_node(f->base.program->types,(XrXirType)259);
+    CHECK(task_type && task_type->kind == XR_XIR_TYPE_TASK && task_type->result == XR_XIR_ERROR);
 }
 static XrXirValueStatus task_error_expected(const XrXirCallResult *result, uint32_t mode, XrXirDomain *domain) {
     if (mode == 3) { CHECK(result->status == XR_XIR_CALL_BAD_STATE && !result->value.type); return XR_XIR_VALUE_OK; }
@@ -84,7 +104,7 @@ static void task_runtime_errors(void) {
         XrXirTaskExecutor *executor = NULL; CHECK(task_test_executor_new(&config, &executor) == XR_XIR_CALL_READY);
         XrXirCallRequest request = {.entry = 1, .arguments = NULL, .count = 0,
             .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL}; XrXirValue handle = {0};
-        CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &request, &handle) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)259, &request, &handle) == XR_XIR_CALL_READY);
         while (xr_xir_task_executor_poll(executor, 1) == XR_XIR_CALL_READY) { }
         XrXirCallResult result = {0};
         XrXirCallStatus copied = xr_xir_task_copy_outcome(&handle, &result);
@@ -126,7 +146,7 @@ static XrXirCallStatus task_error_operation(TaskErrorFixture *f, uint64_t work_l
     if (status == XR_XIR_CALL_READY) {
         XrXirCallRequest request = {.entry = 1, .arguments = NULL, .count = 0,
             .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL};
-        status = xr_xir_task_executor_spawn(executor, (XrXirType)256, &request, &handle);
+        status = xr_xir_task_executor_spawn(executor, (XrXirType)259, &request, &handle);
     }
     if (status == XR_XIR_CALL_READY) {
         do { status = xr_xir_task_executor_poll(executor, 1); } while (status == XR_XIR_CALL_READY);
@@ -175,7 +195,7 @@ static void task_error_work_boundary(void) {
         XrXirTaskExecutor *executor = NULL; CHECK(task_test_executor_new(&config, &executor) == XR_XIR_CALL_READY);
         XrXirCallRequest request = {.entry = 1, .arguments = NULL, .count = 0,
             .cell_role = (XrXirCellRoleResolver)0, .cell_context = NULL}; XrXirValue handle = {0};
-        CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)256, &request, &handle) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_task_executor_spawn(executor, (XrXirType)259, &request, &handle) == XR_XIR_CALL_READY);
         while (xr_xir_task_executor_poll(executor, 1) == XR_XIR_CALL_READY) { }
         CHECK(xr_xir_task_executor_free(executor, NULL) == XR_XIR_CALL_READY);
         xr_xir_domain_drop(domain);

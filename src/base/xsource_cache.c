@@ -20,18 +20,11 @@ static void source_file_close(XrSourceFile *file) {
     xr_compile_state_free(file->lines);
 }
 
-static bool cache_work(const XrSourceCache *cache, bool compiling, uint64_t amount) {
-    return !compiling || xr_compile_state_work(cache->state, amount) == XR_COMPILE_RESOURCE_OK;
-}
-
-/* One lookup algorithm with an explicit execution domain, never a NULL policy. */
-static const XrSourceFile *find_file(const XrSourceCache *cache, const char *path, bool compiling) {
+static const XrSourceFile *find_file(const XrSourceCache *cache, const char *path) {
     if (!cache || !path) return NULL;
     for (int i = 0; i < cache->file_count; ++i) {
-        if (!cache_work(cache, compiling, 1)) return NULL;
         const char *a = cache->files[i].path, *b = path;
         for (;;) {
-            if (!cache_work(cache, compiling, 2)) return NULL;
             unsigned char left = (unsigned char) *a++, right = (unsigned char) *b++;
             if (left != right) break;
             if (!left) return &cache->files[i];
@@ -43,25 +36,22 @@ static const XrSourceFile *find_file(const XrSourceCache *cache, const char *pat
 static XrCompileResourceStatus parse_lines(XrCompileState *state, XrSourceFile *file) {
     int count = 1;
     for (const char *p = file->content;; ++p) {
-        if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) return xr_compile_state_status(state);
         char c = *p;
         if (!c) break;
         if (c == '\n') {
-            if (count == INT_MAX) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+            if (count == INT_MAX) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OVERFLOW);
             ++count;
         }
     }
     void *memory = NULL;
-    if ((size_t) count > SIZE_MAX / sizeof(char *)) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+    if ((size_t) count > SIZE_MAX / sizeof(char *)) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OVERFLOW);
     XrCompileResourceStatus status = xr_compile_state_alloc(state, (size_t) count * sizeof(char *), &memory);
     if (status != XR_COMPILE_RESOURCE_OK) return status;
     file->lines = memory;
     const char *start = file->content;
     for (const char *p = start;; ++p) {
-        if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) return xr_compile_state_status(state);
         char c = *p;
         if (c == '\n' || !c) {
-            if (xr_compile_state_work(state, sizeof(char *)) != XR_COMPILE_RESOURCE_OK) return xr_compile_state_status(state);
             file->lines[file->line_count++] = (char *) start;
             if (!c) break;
             start = p + 1;
@@ -103,7 +93,7 @@ XrCompileResourceStatus xr_compile_source_cache_add(XrSourceCache *cache, const 
     XrCompileResourceStatus status = xr_compile_state_status(state);
     if (status != XR_COMPILE_RESOURCE_OK) return status;
     if (!path || !content) return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
-    if (find_file(cache, path, true)) return XR_COMPILE_RESOURCE_OK;
+    if (find_file(cache, path)) return XR_COMPILE_RESOURCE_OK;
     if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return xr_compile_state_status(state);
     XrSourceFile file = {0};
     status = xr_compile_state_strdup(state, path, &file.path);
@@ -114,12 +104,12 @@ XrCompileResourceStatus xr_compile_source_cache_add(XrSourceCache *cache, const 
     if (status != XR_COMPILE_RESOURCE_OK) goto failure;
     if (cache->file_count == cache->file_capacity) {
         if (cache->file_capacity > INT_MAX / 2) {
-            status = xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+            status = xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OVERFLOW);
             goto failure;
         }
         int capacity = cache->file_capacity ? cache->file_capacity * 2 : 4;
         if ((size_t) capacity > SIZE_MAX / sizeof(XrSourceFile)) {
-            status = xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+            status = xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OVERFLOW);
             goto failure;
         }
         void *memory = cache->files;
@@ -138,7 +128,7 @@ failure:
 }
 
 const char *xr_runtime_source_cache_get_line(const XrSourceCache *cache, const char *path, int line) {
-    const XrSourceFile *file = find_file(cache, path, false);
+    const XrSourceFile *file = find_file(cache, path);
     return file && line >= 1 && line <= file->line_count ? file->lines[line - 1] : NULL;
 }
 

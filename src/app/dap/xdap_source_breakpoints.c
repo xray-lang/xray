@@ -24,11 +24,9 @@ static XrXirStatus source_module(const XdapLaunch *launch,const char *text,size_
         const XdapCodeModule *module=&launch->modules[m];
         const char *candidate=identity ? module->identity : module->path;
         size_t bytes=identity ? module->identity_length : module->path_length;
-        if (xr_compile_resources_work(launch->resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
         if (!candidate || bytes!=length) continue;
         bool same=true;
         for (size_t i=0;i<length;++i) {
-            if (xr_compile_resources_work(launch->resources,2)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
             if (identity ? candidate[i]!=text[i] : source_path_byte((unsigned char)candidate[i])!=source_path_byte((unsigned char)text[i])) {
                 same=false;break;
             }
@@ -47,7 +45,6 @@ static XrXirStatus source_rules(const XdapLaunch *launch,const SourceSelection *
     XrXirVmDebugRule *output,uint32_t capacity,uint32_t *count,XrXirSourceDebugPoint *resolved) {
     XrXirSourceDebugPoint best={0};XrXirVmDebugRule fresh[32]={{0}};uint32_t matches=0;
     if (capacity>32 || !count || !resolved || (capacity && !output)) return XR_XIR_BAD_STRUCTURE;
-    if (xr_compile_resources_work(launch->resources,sizeof(fresh))!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     for (uint32_t f=0;f<launch->function_count;++f) {
         const XdapCodeFunction *function=&launch->functions[f];
         if (function->module!=selection->module) continue;
@@ -75,8 +72,6 @@ static XrXirStatus source_rules(const XdapLaunch *launch,const SourceSelection *
         if (matches==capacity) return XR_XIR_BUDGET;
         fresh[matches]=selection->rule;fresh[matches++].location=(XrXirVmDebugLocation){f,at};
     }
-    if (xr_compile_resources_work(launch->resources,(uint64_t)matches*sizeof(*output)+sizeof(*count)+sizeof(*resolved))!=XR_COMPILE_RESOURCE_OK)
-        return XR_XIR_BUDGET;
     if (matches) { memcpy(output,fresh,(size_t)matches*sizeof(*output));*resolved=best; }
     *count=matches;return XR_XIR_OK;
 }
@@ -86,7 +81,6 @@ XR_FUNC XrXirStatus xdap_breakpoints_collect(const XdapLaunch *launch,const Xdap
         (set->function_count && (!set->functions || !set->function_rules)) || (set->source_count && !set->sources))
         return XR_XIR_BAD_STRUCTURE;
     XrXirVmDebugRule fresh[32]={{0}};uint32_t used=0;
-    if (xr_compile_resources_work(launch->resources,sizeof(fresh))!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     for (uint32_t i=0;i<set->function_count;++i) {
         XdapFunctionSelection selection={set->functions[i],strlen(set->functions[i]),set->function_rules[i]};
         selection.rule.group=i+1;uint32_t found=0;
@@ -105,8 +99,6 @@ XR_FUNC XrXirStatus xdap_breakpoints_collect(const XdapLaunch *launch,const Xdap
         if (status!=XR_XIR_OK) return status;
         used+=found;
     }
-    if (xr_compile_resources_work(launch->resources,(uint64_t)used*sizeof(*output)+sizeof(*count))!=XR_COMPILE_RESOURCE_OK)
-        return XR_XIR_BUDGET;
     if (used) memcpy(output,fresh,(size_t)used*sizeof(*output));*count=used;return XR_XIR_OK;
 }
 static XrXirStatus source_coordinate(const XdapRequest *request,uint32_t node,uint64_t fallback,uint32_t *output) {
@@ -118,9 +110,13 @@ static XrXirStatus source_coordinate(const XdapRequest *request,uint32_t node,ui
 }
 static XrXirStatus source_identity_copy(XdapAdapter *s,uint32_t module,char **output) {
     const XdapCodeModule *source=&s->launch->modules[module];char *identity=NULL;
-    if (xr_compile_resources_work(s->resources,source->identity_length+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     XrCompileResourceStatus allocated=xr_compile_resources_alloc(s->resources,source->identity_length+1,(void **)&identity);
-    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+        allocated==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        allocated==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_OVERFLOW :
+        allocated==XR_COMPILE_RESOURCE_CANCELLED ? XR_XIR_CANCELLED :
+        allocated==XR_COMPILE_RESOURCE_DEADLINE ? XR_XIR_DEADLINE :
+        allocated==XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE : XR_XIR_BAD_STRUCTURE;
     memcpy(identity,source->identity,source->identity_length+1);*output=identity;return XR_XIR_OK;
 }
 static XrXirStatus source_request_point(XdapAdapter *s,const XdapRequest *request,uint32_t item,uint32_t module,
@@ -179,11 +175,7 @@ XR_FUNC XrXirStatus xdap_dispatch_source_breakpoints(XdapAdapter *s,const XdapRe
     if (status!=XR_XIR_OK && status!=XR_XIR_UNRESOLVED) return status;
     const XdapCodeModule *matched=module==UINT32_MAX ? NULL : &s->launch->modules[module];
     XdapSourceBreakpoint fresh[32]={{0}};uint32_t kept=0,used=0;bool replaced[32]={0};
-    if (xr_compile_resources_work(s->resources,sizeof(fresh)+sizeof(replaced))!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     for (uint32_t i=0;i<s->source_breakpoint_count;++i) {
-        size_t bytes=s->source_breakpoints[i].identity_length;
-        if (bytes>UINT64_MAX/2 || xr_compile_resources_work(s->resources,(uint64_t)bytes*2+1)!=XR_COMPILE_RESOURCE_OK)
-            return XR_XIR_BUDGET;
         replaced[i]=source_same_module(&s->source_breakpoints[i],matched);
         if (!replaced[i]) fresh[kept++]=s->source_breakpoints[i];
     }
@@ -217,7 +209,9 @@ XR_FUNC XrXirStatus xdap_dispatch_source_breakpoints(XdapAdapter *s,const XdapRe
             status=xdap_dispatch_response(s,request,false,NULL,"Native instruction breakpoints are unsupported");
             xdap_json_writer_free(&response);goto done;
         }
-        if (admitted!=XR_XIR_VALUE_OK) status=XR_XIR_BUDGET;
+        if (admitted!=XR_XIR_VALUE_OK) status=admitted==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+            admitted==XR_XIR_VALUE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+            admitted==XR_XIR_VALUE_OVERFLOW ? XR_XIR_OVERFLOW : XR_XIR_BUDGET;
     }
     if (status==XR_XIR_OK) {
         for (uint32_t i=0;i<s->source_breakpoint_count;++i)

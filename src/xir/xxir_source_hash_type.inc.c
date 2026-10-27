@@ -13,7 +13,7 @@
 static bool source_native_hash_declaration(SourceContext *ctx,
     const XrNativeTypeDeclaration *native, uint32_t *output) {
     for (uint32_t i = 0; i < ctx->query.declaration_count; ++i) {
-        if (!source_work(ctx, NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirSourceDeclaration *record = &ctx->query.declarations[i];
         if (record->kind == XR_XIR_SOURCE_TYPE && record->native_identity == native->id) {
             *output = record->id; return true;
@@ -40,7 +40,7 @@ static bool source_native_hash_declaration(SourceContext *ctx,
     record->native_identity = native->id; record->exported = true;
     record->generic_parameter_count = native->parameter_count; record->generic_constraints = constraints;
     for (uint32_t p = 0; p < native->parameter_count; ++p) {
-        if (!source_work(ctx, NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceName parameter = {0}; parameter.name = source_owned_text(ctx, native->parameter_names[p]);
         if (!parameter.name || !source_query_declare(ctx, &parameter, XR_XIR_SOURCE_TYPE_PARAMETER,
             declaration, (XrXirSourceRange) {module, 0, 0, 0, 0})) return false;

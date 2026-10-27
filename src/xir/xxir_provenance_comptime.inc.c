@@ -30,7 +30,7 @@ static XrXirStatus provenance_comptime_match(ProvenanceMatch *c,const XrXirOrigi
 static XrXirStatus provenance_evaluation_root(ProvenanceMatch *c) {
     if (c->instance->kind!=XR_XIR_EVIDENCE_EVALUATION) return XR_XIR_OK;
     const XirEvaluationRoot *root=&c->instance->evaluation;
-    if (!xir_compile_work(c->remaining,sizeof(*root)+8)) return XR_XIR_BUDGET;
+
     if (root->caller>=c->count || root->callee>=c->count ||
         root->instruction>=c->destination->functions[root->caller].instruction_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirOrigin *caller=&c->origins[root->caller],*callee=&c->origins[root->callee];

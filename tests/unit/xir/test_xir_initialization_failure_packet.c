@@ -24,7 +24,7 @@ int main(int argc,char **argv){
  bool generate_only=argc==3;
  if(generate_only){CHECK(!strcmp(argv[1],"--generate-only"));++argv;--argc;}
  CHECK(argc==1||argc==2);CHECK(argc==1 || strcmp(argv[1],"--generate-only"));
- const XrXirCompileContext compile=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+ const XrXirCompileContext compile=*effects_source_owner();
 FILE *file=fopen(XR_CHECKED_FIXTURE,"rb");
 CHECK(file&&!fseek(file,0,SEEK_END));
 long size=ftell(file);

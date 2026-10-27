@@ -1,5 +1,10 @@
 # Compiler resource ownership has no executor or stdlib dependency.
-add_library(xray_compile_resources STATIC xcompile_resources.c)
+add_library(xray_compile_resources STATIC xcompile_resources.c xcompile_request.c)
+if(WIN32)
+    target_sources(xray_compile_resources PRIVATE ../os/win/time_win.c)
+else()
+    target_sources(xray_compile_resources PRIVATE ../os/unix/time_unix.c)
+endif()
 target_compile_features(xray_compile_resources PUBLIC c_std_11)
 target_include_directories(xray_compile_resources PUBLIC "${CMAKE_CURRENT_LIST_DIR}/..")
 set_target_properties(xray_compile_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)

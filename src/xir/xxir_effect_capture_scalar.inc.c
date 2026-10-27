@@ -42,23 +42,23 @@ static XrXirStatus effect_capture_scalar_domain(const EffectCaptureRead *read,bo
     }
     for(uint32_t f=0;f<effect_body_count(material);++f) {
         const EffectBodyFunction *head=&material->functions[f];
-        if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
         if(!effect_capture_scalar_type(head->result)) return XR_XIR_OK;
         for(uint32_t p=0;p<head->parameter_count;++p) {
-            if(!xir_compile_work(read->work,1)) return XR_XIR_BUDGET;
+
             if(!effect_capture_scalar_type(head->parameters[p])) return XR_XIR_OK;
         }
         if(material->generics) {
-            if(!xir_compile_work(read->work,1)) return XR_XIR_BUDGET;
+
             if(material->generics[f].parameter_count) return XR_XIR_OK;
         }
         EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
-        if(!xir_compile_work(read->work,sizeof(cursor))) return XR_XIR_BUDGET;
+
         for(uint32_t r=0;r<head->run_count;++r) {
             const EffectBodyRun *run=NULL;
             XrXirStatus status=effect_body_range_ref(&read->body.read,head,&cursor,&run);
             if(status!=XR_XIR_OK) return status;
-            if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
             bool writes=run->base.op==XR_XIR_LOCAL_WRITE || run->base.op==XR_XIR_SCALAR_LOCAL_WRITE ||
                 run->base.op==XR_XIR_OWNED_LOCAL_WRITE;
             uint32_t points=(run->mask&(writes?UINT32_C(7):UINT32_C(3)))?run->count:1;
@@ -80,6 +80,6 @@ static XrXirStatus effect_capture_scalar_domain(const EffectCaptureRead *read,bo
         }
         if(cursor.first!=head->instruction_count || cursor.run!=head->run_count) return XR_XIR_BAD_STRUCTURE;
     }
-    if(!xir_compile_work(read->work,sizeof(*scalar))) return XR_XIR_BUDGET;
+
     *scalar=true;return XR_XIR_OK;
 }

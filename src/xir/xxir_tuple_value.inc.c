@@ -14,8 +14,8 @@ static XrXirValueStatus xr_xir_tuple_new_graph_operation(XrXirType type, const X
         xr_xir_compile_type_arena_types(admission->arena),type);
     if (!node || node->parameter_span || node->parameter_count!=count || !node->parameters)
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (count>admission->work) return XR_XIR_VALUE_LIMIT;
-    admission->work-=count;
+    if (!admission_is_compile(admission) && (count>admission->work)) return XR_XIR_VALUE_LIMIT;
+    if (!admission_is_compile(admission)) admission->work-=count;
     for (uint32_t i=0;i<count;++i) {
         if (node->parameters[i].type==XR_XIR_UNIT) {
             if (!unit_value(&fields[i])) return XR_XIR_VALUE_BAD_ARGUMENT;

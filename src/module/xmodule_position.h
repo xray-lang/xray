@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xmodule_position.h - Metered source diagnostic display coordinates
+ * xmodule_position.h - Exact source diagnostic display coordinates
  *
  * KEY CONCEPT:
  *   Exact compiler byte positions project while their actual text is alive.
@@ -16,7 +16,7 @@
 typedef struct XrModuleSourcePosition {uint32_t line,column;} XrModuleSourcePosition;
 /* One-based compiler bytes to zero-based UTF-16. CRLF is one editor line;
  * standalone CR advances the editor row while retaining compiler byte rules.
- * No allocation; invalid boundaries or resource failure preserve output. */
-XR_FUNC XrModuleStatus xr_compile_module_source_position(XrCompileResources *resources,
+ * No allocation; invalid boundaries preserve output. */
+XR_FUNC XrModuleStatus xr_module_source_position(
     const char *text,size_t length,int line,int column,XrModuleSourcePosition *out);
 #endif // XMODULE_POSITION_H

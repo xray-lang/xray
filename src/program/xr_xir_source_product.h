@@ -98,6 +98,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
 XR_FUNC const XrXirSourceProductFacts *xr_xir_compile_source_product_facts(const XrXirSourceProduct *product);
 /* The borrowed context is the owner's actual ledger, including after VM take. */
 XR_FUNC const XrXirCompileContext *xr_xir_compile_source_product_context(const XrXirSourceProduct *product);
+/* Borrows the authentic immutable Lowered module consumed by VM preparation.
+ * Valid only before successful VM take and while the product stays alive.
+ * This is a typed owned view, not another serialized receive or validation. */
+XR_FUNC const XrXirModule *xr_xir_compile_source_product_module(const XrXirSourceProduct *product);
+
 /* Root-module roles use actual closed function indexes. Entries and names are
  * product-owned on its original ledger, survive VM transfer and producer
  * destruction, and are borrowed until product free. They confer no authority. */
@@ -119,10 +124,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_verify(const XrXirSourceProduc
 XR_FUNC XrXirStatus xr_xir_compile_source_product_vm_take(XrXirSourceProduct *product,
     XrXirProgram **output);
 /* Before VM transfer only. The owner's exact target and closed packet digest
- * feed ordinary scalar CTFE admission on its original cumulative ledger.
+ * feed ordinary scalar CTFE admission on its original controlled memory owner. Control is borrowed only during this
+ * synchronous call and is never retained in the product or result.
  * This grants no runtime, root, native or mutation authority. */
 XR_FUNC XrXirCtfeStatus xr_xir_compile_source_product_scalar(const XrXirSourceProduct *,uint32_t,
-    const XrXirValue *,uint32_t,XrXirCtfeLimits,XrXirValue *);
+    const XrXirValue *,uint32_t,XrXirCtfeLimits,XrCompileRequestControl *,XrXirValue *);
 XR_FUNC XrXirStatus xr_xir_compile_source_product_emit(const XrXirSourceProduct *product,
     const char *prefix,size_t byte_limit,XrXirCSource *output);
 /* Same-source dependency observation remains owned after executable transfer. */

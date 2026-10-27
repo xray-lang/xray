@@ -117,7 +117,7 @@ static XrType *xa_freestanding_reject_owned_static_member(XaInferContext *ctx, A
     const char *type_name = object->as.variable.name;
     if (!type_name)
         return NULL;
-    if (strcmp(type_name, "Array") != 0 && strcmp(type_name, "StringBuilder") != 0)
+    if (strcmp(type_name, "Array") != 0)
         return NULL;
 
     char feature[160];
@@ -183,7 +183,6 @@ static bool xa_type_has_len_query(XrType *type) {
     return type && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_SLICE(type) || XR_TYPE_IS_STRING(type) ||
                     XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET ||
                     type->kind == XR_KIND_FIXED_ARRAY || type->kind == XR_KIND_CHANNEL ||
-                    xr_type_is_builtin_named_class(type, "StringBuilder") ||
                     xr_type_is_builtin_named_class(type, "Buffer"));
 }
 
@@ -4242,9 +4241,8 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
      *
      * A user class of the same name shadows the builtin (xprelude_runtime.h documents
      * the Rust prelude rule), so it has to be resolved through the ordinary
-     * class path below. Bypassing that would type `StringBuilder(3)` as the
-     * builtin even where `class StringBuilder { }` is in scope, and every
-     * later builtin-vs-user-class distinction would already have lost. */
+     * class path below. Bypassing that would attach a builtin representation
+     * to an ordinary user class and lose its declaration identity. */
     if (ne->class_name && !ne->module_name &&
         !xa_class_name_shadowed_by_user_class(ctx, ne->class_name)) {
         XrVMRuntime *X = ctx->analyzer->isolate;
@@ -4343,8 +4341,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
             bt = xr_type_new(X, XR_KIND_CHANNEL);
             if (bt)
                 bt->container.element_type = ta[0];
-        } else if (strcmp(cn, "StringBuilder") == 0) {
-            bt = xr_type_new_named_instance(X, "StringBuilder");
+
         } else if (strcmp(cn, "Atomic") == 0) {
             XrType *et = tac >= 1 ? ta[0] : NULL;
             if (!et && ne->arg_count > 0 && ne->arguments[0]) {
@@ -5873,8 +5870,7 @@ bool xa_boundary_transfer_type_needs_explicit(const XrType *type) {
         case XR_KIND_STRUCT_OBJECT:
             return true;
         case XR_KIND_INSTANCE:
-            return xa_type_declares_weak_field(type) ||
-                   xr_type_is_builtin_named_class(type, "StringBuilder");
+            return xa_type_declares_weak_field(type);
         case XR_KIND_TUPLE:
             for (uint16_t i = 0; i < type->tuple.element_count; i++) {
                 if (xa_boundary_transfer_type_needs_explicit(type->tuple.element_types[i]))

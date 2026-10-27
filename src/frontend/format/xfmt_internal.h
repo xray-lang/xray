@@ -41,10 +41,9 @@ typedef struct XrFmtContext {
     XrFmtConfig configuration;
     const XrFmtConfig *config;
     XrCompileState *state;
+    XrFmtStatus local_status;
 } XrFmtContext;
 
-XR_FUNC bool xfmt_work(XrFmtContext *ctx, uint64_t units);
-XR_FUNC bool xfmt_step(XrFmtContext *ctx);
 XR_FUNC bool xfmt_healthy(const XrFmtContext *ctx);
 XR_FUNC void xfmt_fail(XrFmtContext *ctx, XrCompileResourceStatus status);
 XR_FUNC void *xfmt_alloc_array(XrFmtContext *ctx, size_t count, size_t size);

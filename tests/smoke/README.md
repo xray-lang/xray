@@ -38,16 +38,19 @@ paths use `#xray-N` to identify the Nth Xray fence.
   output disappeared. A gap that succeeds must be reviewed, given an output
   oracle, and promoted to `pass` with its native companion in the same change.
 
-There is one explicit pending-path boundary: all initial `build-run` companions
-are `gap`, with `Task328 P2`, `deferred`, and null exit/diagnostic fields. They
-report **NOT_RUN**, `executed: false`, no commands, and a separate `not_run`
-count. This is the requested framework for the future direct-C path; the gate
-does not claim to execute or qualify it. When that path reaches the product CLI,
-remove the deferrals, set `expect` to `pass` and `exit_code` to 0, remove the
-`gap` object, and run the existing build/execute/oracle comparison. If a native
-case still fails, record its actual exit-1 rejection and first diagnostic;
-removing only `deferred` is not a valid manifest update.
-Ordinary `run`/`check` gaps cannot be deferred.
+The current five native companions exercise the actual direct-C CLI build path.
+They record an exact exit-1 invocation-profile rejection, empty stdout and no
+published executable on this Windows provider. They are executed `gap` cases;
+native program execution has not been reached, and no native functional pass
+is claimed. The original VM/native output oracles remain shared. Promote a
+companion only after its real build and executable match that full oracle.
+
+The base64 VM entry now passes its original `import base64; print(1)` oracle.
+This checks module import, not the complete encoding/decoding property cases.
+The crypto gap location follows the unchanged `HEX_DIGITS.slice` expression
+after Builder removal; encoding advances past admitted `bytes()` to the
+existing unsupported `runes()` contract. Both remain exact feature gaps,
+with unchanged algorithms, outputs, exit codes and classification rules.
 
 Separate fresh Windows observation on 2026-10-21 at `6856eb80a`: the existing
 legacy `xray build` path built and ran hello, control_flow, and the time import
@@ -57,8 +60,8 @@ record. It is not evidence that the new direct-C path has been implemented.
 The summary counts actual `pass` results, not accepted known failures:
 
 ```text
-smoke: demos 2/22 stdlib 1/29 readme 0/6 native 0/3
-smoke gate: pass=3 gap=57 fail=0 not_run=3
+smoke: demos 3/23 stdlib 2/29 readme 0/6 native 0/5
+smoke gate: pass=5 gap=58 fail=0 not_run=0
 ```
 
 Each invocation writes a current `results.json` and a fresh log directory under

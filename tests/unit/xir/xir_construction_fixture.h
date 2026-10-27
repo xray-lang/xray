@@ -43,7 +43,6 @@ static inline XrXirStatus xir_fixture_module_construction(const XrXirCompileCont
     if (!count) { *output=nominal;return XR_XIR_OK; }
     XrXirSlotFact *rows=xir_compile_calloc(context,count,sizeof(*rows),&status);
     for (uint32_t s=0;rows && s<count;++s) {
-        if (!xir_compile_work(context,sizeof(*rows))) { status=XR_XIR_BUDGET;break; }
         rows[s]=(XrXirSlotFact){s,"fixture",7,0};
     }
     XrXirSlotFacts slots={rows,count};

@@ -40,9 +40,9 @@ static void decimal_work_prefixes(void) {
     }
     DecimalCounter exact={complete.spent,0};XrDecimalWork work={&exact,decimal_charge,false};
     CHECK(xr_decimal_float_text_work(&work,text,sizeof(text)-1,64,&bits)==XR_DECIMAL_OK && exact.spent==complete.spent);
-    XrDecimalWork runtime=xr_decimal_runtime_work();bits=42;
-    CHECK(xr_decimal_float_text_work(&runtime,"1_0",3,64,&bits)==XR_DECIMAL_INVALID && bits==42);
-    CHECK(xr_decimal_float_parse_work(&runtime,"1_0",3,64,&bits)==XR_DECIMAL_OK && bits==UINT64_C(0x4024000000000000));
+    bits=42;
+    CHECK(xr_decimal_float_text_work(NULL,"1_0",3,64,&bits)==XR_DECIMAL_INVALID && bits==42);
+    CHECK(xr_decimal_float_parse_work(NULL,"1_0",3,64,&bits)==XR_DECIMAL_OK && bits==UINT64_C(0x4024000000000000));
     DecimalCounter empty={0,0};XrDecimalWork refused={&empty,decimal_charge,false};bits=42;
     CHECK(xr_decimal_float_text_work(&refused,"0",(size_t)INT32_MAX+1u,64,&bits)==XR_DECIMAL_WORK_LIMIT &&
         refused.failed && !empty.spent && bits==42);

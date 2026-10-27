@@ -10,9 +10,9 @@
  *   An active cleanup is proved by its registration edge, never by a body name.
  */
 static XrXirStatus cleanup_ancestor(const Graph *graph, const XrXirFunction *function,
-    uint32_t from, uint32_t to, XrXirCompileContext *remaining) {
+    uint32_t from, uint32_t to) {
     while (from != to && from) {
-        if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+
         if (from > function->instruction_count ||
             function->instructions[from - 1].op != XR_XIR_CLEANUP_REGISTER) return XR_XIR_BAD_STRUCTURE;
         uint32_t parent = function->blocks[graph->owner[from - 1]].frontier;
@@ -29,7 +29,7 @@ static XrXirStatus cleanup_frontiers(const Graph *graph, const XrXirFunction *fu
         const XrXirBlock *block = &function->blocks[b];
         uint32_t frontier = block->frontier, last = block->first + block->count - 1;
         context->location.instruction = last;
-        if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+
         if (frontier) {
             if (frontier > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
             const XrXirInstruction *registration = &function->instructions[frontier - 1];
@@ -46,14 +46,14 @@ static XrXirStatus cleanup_frontiers(const Graph *graph, const XrXirFunction *fu
         } else if (end->op == XR_XIR_CLEANUP_LEAVE || end->op == XR_XIR_CLEANUP_ERROR) {
             uint32_t target = (uint32_t)end->immediate;
             if (function->blocks[end->targets[0]].frontier != target) return XR_XIR_BAD_STRUCTURE;
-            XrXirStatus status = cleanup_ancestor(graph, function, frontier, target, &context->remaining);
+            XrXirStatus status = cleanup_ancestor(graph, function, frontier, target);
             if (status != XR_XIR_OK) return status;
         } else for (uint32_t e = 0; e < op_rules[end->op].edges; ++e) {
             if (function->blocks[end->targets[e]].frontier != frontier) return XR_XIR_BAD_STRUCTURE;
         }
         if (block->panic) {
             XrXirStatus status = cleanup_ancestor(graph, function, frontier,
-                function->blocks[block->panic].frontier, &context->remaining);
+                function->blocks[block->panic].frontier);
             if (status != XR_XIR_OK) return status;
         }
     }

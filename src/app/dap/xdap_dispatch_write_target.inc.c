@@ -20,14 +20,12 @@ static bool inspect_write_index(const XdapJsonNode *name,uint64_t *output) {
 static XrXirStatus inspect_write_child(XdapAdapter *s,const XdapValueRef *parent,const XdapJsonNode *name,
     XrXirValuePathStep steps[128],XdapValueOrigin *output,XrXirValue *expected) {
     if (!parent->origin.epoch || parent->origin.epoch!=s->stop_epoch) return XR_XIR_BAD_TYPE;
-    if (xr_compile_resources_work(s->resources,name->length+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     uint64_t first=0,end=parent->shape.children;
     if (parent->shape.indexed) {
         if (!inspect_write_index(name,&first) || first>=end) return XR_XIR_UNRESOLVED;
         end=first+1;
     }
     for (uint64_t i=first;i<end;++i) {
-        if (xr_compile_resources_work(s->resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
         XdapValueView view={&parent->value,s->config.observer_metadata,s->snapshot,parent->frame};
         XrXirValue child={0};XdapValueChildInfo info={0};
         XrXirStatus status=inspect_write_status(xdap_value_child(&view,i,&child,&info));

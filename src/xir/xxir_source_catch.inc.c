@@ -65,7 +65,7 @@ static bool source_catch_pattern(SourceContext *ctx, AstNode *root, XrXirType *t
         if (!alternatives[i] || !source_match_pattern(ctx, alternatives[i], *type, &arm->patterns[i], 0) ||
             !source_pattern_bindings(ctx, &arm->patterns[i], arm, i, 0)) return false;
         for (SourceName *symbol = arm->bindings; symbol; symbol = symbol->next) {
-            if (!source_work(ctx, alternatives[i])) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (symbol->index != i + 1)
                 return source_fail(ctx, alternatives[i], XR_XIR_BAD_TYPE, "alternative is missing a common binding");
         }
@@ -76,7 +76,7 @@ static bool source_catch_pattern(SourceContext *ctx, AstNode *root, XrXirType *t
  * pattern bindings name a placeholder that no published graph can reference. */
 static bool source_catch_placeholders(SourceContext *ctx, const SourceMatchArm *arm) {
     for (SourceName *symbol = arm->bindings; symbol; symbol = symbol->next)
-        if (!source_work(ctx, symbol->node) ||
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) ||
             !source_match_bind(ctx, symbol, (SourceValue){UINT32_MAX, symbol->type})) return false;
     return true;
 }
@@ -152,7 +152,7 @@ static bool source_catch_join(SourceContext *ctx, uint32_t *joins, uint32_t *cou
 static bool source_catch_accept(SourceContext *ctx,XrCatchClause *clause,uint32_t instruction) {
     SourceFunction *body=&ctx->bodies[ctx->function];
     if (instruction>=body->count) return source_fail(ctx,clause->body,XR_XIR_BAD_STRUCTURE,"catch acceptance lacks an instruction");
-    if (!source_work_units(ctx,clause->body,sizeof(XrXirSourceDebugPoint))) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     XrXirSourceDebugPoint *point=&body->recipes[instruction].debug;
     if (!point->statement) {
         if (clause->body->node_id==UINT32_MAX) return source_fail(ctx,clause->body,XR_XIR_BUDGET,"catch source identity exhausted");
@@ -179,7 +179,7 @@ static bool source_catch_dispatch(SourceContext *ctx,const SourceCatchDispatch *
     for (int i = 0; i < attempt->catch_count; ++i) {
         XrCatchClause *clause = attempt->catch_clauses[i];
         if (clause->is_panic) continue;
-        if (!source_work(ctx,clause->body)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (consumed) {
             if (!source_dead_catch(ctx,clause,&patterns[i],types[i],checkpoint)) return false;
             continue;
@@ -205,7 +205,7 @@ static bool source_catch_dispatch(SourceContext *ctx,const SourceCatchDispatch *
             uint32_t next = body->block_count;
             body->recipes[branch].instruction.targets[1] = next;
             for (SourceMatchFailure *failure = failures; failure; failure = failure->next) {
-                if (!source_work(ctx,clause->body)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 body->recipes[failure->instruction].instruction.targets[failure->target] = next;
             }
             if (!begin_block(ctx)) return false;
@@ -232,7 +232,7 @@ static bool source_panic_handler(SourceContext *ctx, XrCatchClause *clause, uint
             clause->var_name ? XR_XIR_PANIC_INFO : XR_XIR_UNIT,{0},{0},0,{0}},&caught) ||
         !source_catch_body(ctx,clause,NULL,caught,NULL,NULL) || !source_catch_join(ctx,joins,count)) return false;
     for (uint32_t b = first; b < end; ++b) {
-        if (!source_work(ctx,clause->body)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!body->blocks[b].block.panic) body->blocks[b].block.panic = handler;
     }
     return true;
@@ -280,7 +280,7 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
     bool ordinary = false;
     for (int i = 0; i < attempt->catch_count; ++i) {
         XrCatchClause *clause = attempt->catch_clauses[i]; types[i] = XR_XIR_ERROR;
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!clause || !clause->body || (clause->pattern && (clause->var_name || clause->is_panic)))
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"malformed catch clause");
         if (!source_catch_binding_name(ctx,clause)) return false;
@@ -341,7 +341,7 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
         if (!inputs) return false;
         uint32_t at = handler.count;
         for (SourceErrorEdge *edge = handler.edges; edge; edge = edge->next) {
-            if (!source_work(ctx,node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             body->recipes[edge->jump].instruction.targets[0] = target;
             --at;edge->input=at;inputs[at*2] = (SourceValue){edge->block,XR_XIR_UNIT}; inputs[at*2+1] = edge->value;
         }

@@ -105,7 +105,7 @@ XR_FUNC XrXirStatus xir_effects_class_access(const XrXirEffects *effects,
             owner->nodes[request->node].body!=request->caller))) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_runtime_work(&request->read,12);
     if (status!=XR_XIR_OK) return status;
-    EffectBodyRead read=effect_body_runtime_read(&request->read);XrXirInstruction op;
+    EffectBodyRead read=(EffectBodyRead){.execution=&request->read};XrXirInstruction op;
     status=effect_body_instruction_get(&read,body,request->instruction,&op);
     if (status!=XR_XIR_OK) return status;
     if (!effect_class_access_opcode(op.op,request->kind)) return XR_XIR_BAD_STRUCTURE;

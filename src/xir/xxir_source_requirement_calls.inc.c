@@ -13,7 +13,7 @@
 #include "xxir_type_inference.h"
 static bool source_reify_type(SourceContext *ctx, AstNode *site,
     const XrXirTypes *pool, XrXirType input, XrXirType *output) {
-    if (!source_work(ctx,site)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     const XrXirTypeNode *found = xr_xir_type_node(pool,input);
     if (!found) { *output = input; return true; }
     if (ctx->depth >= 128) return source_fail(ctx,site,XR_XIR_BUDGET,"requirement type depth exhausted");
@@ -64,7 +64,7 @@ static bool source_requirement_prove(SourceContext *ctx, AstNode *node,
     XrXirModule module = source_module_view(ctx,&declarations);
     XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
     for (uint32_t p = 0; p < own; ++p) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirConstraintUse use = {&module,
             {XR_XIR_CONTEXT_INTERFACE_METHOD,application.declaration,member},parent+p,types,count};
         XrXirStatus status = xr_xir_compile_constraints_prove(&ctx->compile, &context, &use);
@@ -98,7 +98,7 @@ static bool source_requirement_select(SourceContext *ctx, AstNode *node,
     size_t length = source_text_size(ctx, name);
     for (uint32_t r = 0; r < xr_xir_interface_closure_requirement_count(closure); ++r) {
         const XrXirInterfaceRequirement *requirement = xr_xir_interface_closure_requirement(closure,r);
-        if (!source_work(ctx,node)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         if (length == requirement->name.length && source_span_same(ctx, NULL, name, requirement->name.bytes, length))
             if (!selected) selected = requirement;
     }
@@ -136,7 +136,7 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     if (!source_call_storage(ctx,count,(uint64_t)formal.parameter_count+1,&storage)) goto done;
     XrXirType *types=storage.types;
     for (uint32_t p = 0; p < parent; ++p) {
-        if (!source_work(ctx,node)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         types[p] = application.arguments[p];
     }
     SourceSubstitution substitution = {types,count};
@@ -145,7 +145,7 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     SourceCallPlan plan = {SOURCE_CALL_REQUIREMENT,{application.arguments,parent},substitution,NULL,
         formal.parameters,formal.result,result_context,arguments,0,1,NULL,NULL};
     SourceCallSyntax syntax;
-    if (!source_call_syntax(ctx,node,&syntax) || !source_call_expand(ctx,node,&syntax,&plan,formal.parameter_count)) goto done;
+    if (!source_call_syntax(ctx,node,&syntax) || !source_call_expand(ctx,&syntax,&plan,formal.parameter_count)) goto done;
     if ((uint32_t)syntax.arg_count!=formal.parameter_count) {
         source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method argument arity mismatch"); goto done;
     }

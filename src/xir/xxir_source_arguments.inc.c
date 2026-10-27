@@ -16,7 +16,7 @@ static bool source_default_binding_add(SourceContext *ctx, AstNode *node,
     uint32_t count = ctx->defaults.count, position = 0;
     const XrXirDefaultBinding *old = ctx->defaults.records;
     for (; position < count; ++position) {
-        if (!source_work(ctx, node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (old[position].owner > owner ||
             (old[position].owner == owner && old[position].ordinal >= ordinal)) break;
     }
@@ -32,11 +32,11 @@ static bool source_default_binding_add(SourceContext *ctx, AstNode *node,
 
         records = source_alloc(ctx, capacity, sizeof(*records));
         if (!records) return false;
-        if (!source_work_units(ctx, node, (uint64_t)count * sizeof(*records))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (count) memcpy(records, old, (size_t)count * sizeof(*records));
         ctx->default_capacity = capacity;
     }
-    if (!source_work_units(ctx, node, moved * sizeof(*records))) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (moved) memmove(records + position + 1, records + position, (size_t)moved * sizeof(*records));
     records[position] = (XrXirDefaultBinding){XR_XIR_DEFAULT_PARAMETER, owner, ordinal, helper};
     ctx->defaults = (XrXirDefaultTable){records, count + 1};
@@ -54,7 +54,7 @@ static bool source_argument_arity(SourceContext *ctx, AstNode *node, uint32_t in
     if (supplied > count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "too many call arguments");
     for (uint32_t p = supplied; p < count; ++p) {
         const XrXirDefaultBinding *binding = NULL;
-        if (!source_work(ctx, node) || !source_default_binding_get(ctx, node, index, p, &binding)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_default_binding_get(ctx, node, index, p, &binding)) return false;
         if (!binding) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "missing required call argument");
     }
     return true;
@@ -65,7 +65,7 @@ static bool source_argument_default(SourceContext *ctx, AstNode *node, uint32_t 
     if (!source_default_binding_get(ctx, node, index, parameter, &binding)) return false;
     if (!binding) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "parameter default binding is missing");
     XrXirInstruction op = {XR_XIR_CALL_DEFAULT, XR_XIR_UNIT, {0}, {index, parameter}, 0, {0}};
-    return source_work(ctx, node) &&
+    return ((ctx)->diagnostic.status == XR_XIR_OK) &&
         source_substitute(ctx, substitution, ctx->functions[index].parameters[parameter], 0, &op.type) &&
         source_type_arguments(ctx, node, substitution->types, substitution->count, &op) && source_recipe_record(ctx, op, value);
 }
@@ -85,7 +85,7 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
         } else continue;
         bool seen = false;
         for (uint32_t p = 0; p < count; ++p) {
-            if (!source_work(ctx, node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             AstNode *expression = parameters[p]->default_value;
             if (!expression) {
                 if (seen) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "default parameters must be a trailing suffix");

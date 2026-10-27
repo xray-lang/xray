@@ -53,7 +53,7 @@ XR_FUNC void *ast_alloc_array(XrCompilerSession *session, size_t elem_size, size
         return NULL;
     if (!elem_size || count > SIZE_MAX / elem_size) {
         xr_compile_state_fail(xr_compile_session_compile_state(session),
-            !elem_size ? XR_COMPILE_RESOURCE_BAD_ARGUMENT : XR_COMPILE_RESOURCE_BUDGET);
+            !elem_size ? XR_COMPILE_RESOURCE_BAD_ARGUMENT : XR_COMPILE_RESOURCE_OVERFLOW);
         return NULL;
     }
     return ast_alloc(session, elem_size * count);
@@ -68,7 +68,7 @@ XR_FUNC char *ast_strdup(XrCompilerSession *session, const char *s) {
         xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BAD_ARGUMENT);
         return NULL;
     }
-    return (char *) xr_string_pool_intern(pool, s);
+    return (char *) xr_string_pool_intern(pool, s,xr_compile_session_request(session));
 }
 
 XR_FUNC char *ast_strndup(XrCompilerSession *session, const char *text, size_t length) {
@@ -78,7 +78,7 @@ XR_FUNC char *ast_strndup(XrCompilerSession *session, const char *text, size_t l
         xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BAD_ARGUMENT);
         return NULL;
     }
-    return (char *) xr_string_pool_intern_len(pool, text, length);
+    return (char *) xr_string_pool_intern_len(pool, text, length,xr_compile_session_request(session));
 }
 
 XR_FUNC void *ast_array_grow(XrCompilerSession *session, const void *old, size_t element,
@@ -91,10 +91,6 @@ XR_FUNC void *ast_array_grow(XrCompilerSession *session, const void *old, size_t
     if (!memory) return NULL;
     if (!ast_copy(session, memory, old, old_count * element)) return NULL;
     return memory;
-}
-
-XR_FUNC bool ast_work(XrCompilerSession *session, size_t units) {
-    return xr_compile_state_work(xr_compile_session_compile_state(session), units) == XR_COMPILE_RESOURCE_OK;
 }
 
 XR_FUNC bool ast_copy(XrCompilerSession *session, void *destination, const void *source, size_t bytes) {
@@ -169,7 +165,7 @@ AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value, si
     node->as.literal.source_form = source_form;
     if (length == SIZE_MAX || (!value && length)) {
         xr_compile_state_fail(xr_compile_session_compile_state(session),
-            length == SIZE_MAX ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+            length == SIZE_MAX ? XR_COMPILE_RESOURCE_OVERFLOW : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
         return NULL;
     }
     node->as.literal.string_length = length;
@@ -178,7 +174,7 @@ AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value, si
         xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BAD_ARGUMENT);
         return NULL;
     }
-    node->as.literal.raw_value.string_val = xr_string_pool_intern_len(pool, value ? value : "", length);
+    node->as.literal.raw_value.string_val = xr_string_pool_intern_len(pool, value ? value : "", length,xr_compile_session_request(session));
     if (!node->as.literal.raw_value.string_val) return NULL;
     return node;
 }
@@ -356,7 +352,7 @@ void xr_ast_program_add(XrCompilerSession *session, AstNode *program, AstNode *s
      * about a second declaration-container node. */
     if (stmt && stmt != program && stmt->type == AST_PROGRAM) {
         for (int i = 0; i < stmt->as.program.count; i++) {
-            if (!ast_work(session, 1)) return;
+
             xr_ast_program_add(session, program, stmt->as.program.statements[i]);
             if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return;
         }
@@ -372,7 +368,7 @@ void xr_ast_program_add(XrCompilerSession *session, AstNode *program, AstNode *s
     if (program->as.program.count == program->as.program.capacity) {
         int old_capacity = program->as.program.capacity;
         if (old_capacity > INT_MAX / 2) {
-            xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BUDGET);
+            xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_OVERFLOW);
             return;
         }
         int new_capacity = old_capacity < INITIAL_CAPACITY ? INITIAL_CAPACITY : old_capacity * 2;
@@ -389,7 +385,7 @@ void xr_ast_program_add(XrCompilerSession *session, AstNode *program, AstNode *s
     }
 
     // Add statement
-    if (!ast_work(session, sizeof(*program->as.program.statements))) return;
+
     program->as.program.statements[program->as.program.count++] = stmt;
 }
 
@@ -420,7 +416,7 @@ void xr_ast_block_add(XrCompilerSession *session, AstNode *block, AstNode *stmt)
     if (block->as.block.count == block->as.block.capacity) {
         int old_capacity = block->as.block.capacity;
         if (old_capacity > INT_MAX / 2) {
-            xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BUDGET);
+            xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_OVERFLOW);
             return;
         }
         int new_capacity = old_capacity < INITIAL_CAPACITY ? INITIAL_CAPACITY : old_capacity * 2;
@@ -437,7 +433,7 @@ void xr_ast_block_add(XrCompilerSession *session, AstNode *block, AstNode *stmt)
     }
 
     // Add statement
-    if (!ast_work(session, sizeof(*block->as.block.statements))) return;
+
     block->as.block.statements[block->as.block.count++] = stmt;
 }
 
@@ -828,7 +824,7 @@ AstNode *xr_ast_call_expr(XrCompilerSession *session, AstNode *callee, AstNode *
         } while (0);
         for (int i = 0; i < arg_count; i++) {
             XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_PLAIN;
-            if (!ast_work(session, sizeof(node->as.call_expr.arg_accesses[i]))) return NULL;
+
             node->as.call_expr.arg_accesses[i] =
                 xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_PLAIN;
         }
@@ -879,7 +875,7 @@ AstNode *xr_ast_call_expr_generic(XrCompilerSession *session, AstNode *callee, A
         } while (0);
         for (int i = 0; i < arg_count; i++) {
             XrCallArgAccess access = arg_accesses ? arg_accesses[i] : XR_CALL_ARG_PLAIN;
-            if (!ast_work(session, sizeof(node->as.call_expr.arg_accesses[i]))) return NULL;
+
             node->as.call_expr.arg_accesses[i] =
                 xr_call_arg_access_is_valid(access) ? access : XR_CALL_ARG_PLAIN;
         }

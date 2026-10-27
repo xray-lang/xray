@@ -41,7 +41,7 @@ static void source_synthetic_promise_case(const XrXirSourceRequest *request) {
 static void source_qualified_vm(XrXirArtifact *checked, const char *output, bool strict) {
     const XrXirCompileContext context=*xr_xir_compile_artifact_context(checked);
     const XrXirModule *input = xr_xir_compile_artifact_module(checked);
-    uint32_t weakenings = 0, root_only = 0, same_bound = 0, captured_bound = 0;
+    uint32_t weakenings = 0, root_only = 0, same_bound = 0, captured_bound = 0, qualified = 0;
     for (uint32_t f = 0; f < input->function_count; ++f) {
         const XrXirFunction *function = &input->functions[f];
         const char *callbacks[] = {"dynamic", "weaken", "literalDefault", "namedDefault", "effectDefault"};
@@ -80,7 +80,7 @@ static void source_qualified_vm(XrXirArtifact *checked, const char *output, bool
         }
     }
     if (strict) CHECK(weakenings==1);
-    else CHECK(!weakenings && root_only>0 && same_bound>0 && captured_bound==2);
+    else CHECK(qualified==5 && !weakenings && root_only>0 && same_bound>0 && captured_bound==2);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); checked = NULL;

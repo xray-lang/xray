@@ -147,7 +147,7 @@ static char *extract_quoted_path(Parser *parser) {
     char *path = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
     if (!xr_parser_healthy(parser)) return NULL;
     do { if (!ast_copy(parser->compiler_session, path, payload.bytes, payload.length)) return NULL; } while (0);
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; path[payload.length] = '\0'; } while (0);
+    do { path[payload.length] = '\0'; } while (0);
 
     return path;
 }
@@ -207,7 +207,7 @@ static char *extract_default_alias(Parser *parser, const char *module_name) {
 
     // Find last path separator
     const char *last_sep = NULL;
-    for (const char *p = module_name; xr_parser_step(parser) && (p < name_end); ++p) {
+    for (const char *p = module_name; xr_parser_healthy(parser) && (p < name_end); ++p) {
         char value = xr_parser_read_byte(parser, p);
         if (!xr_parser_healthy(parser)) return NULL;
         if (value == '/') last_sep = p;
@@ -218,7 +218,7 @@ static char *extract_default_alias(Parser *parser, const char *module_name) {
 
     // Remove .xr extension
     const char *ext = NULL;
-    for (const char *p = name_start; xr_parser_step(parser) && (name_end - p >= 3); ++p) {
+    for (const char *p = name_start; xr_parser_healthy(parser) && (name_end - p >= 3); ++p) {
         int comparison = xr_parser_compare_bytes(parser, p, ".xr", 3);
         if (!xr_parser_healthy(parser)) return NULL;
         if (!comparison) { ext = p; break; }
@@ -236,14 +236,14 @@ static char *extract_default_alias(Parser *parser, const char *module_name) {
     char *alias = (char *) ast_alloc(parser->compiler_session, (size_t) name_len + 1);
     if (!xr_parser_healthy(parser)) return NULL;
     do { if (!ast_copy(parser->compiler_session, alias, name_start, name_len)) return NULL; } while (0);
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; alias[name_len] = '\0'; } while (0);
+    do { alias[name_len] = '\0'; } while (0);
 
     // Convert illegal characters to underscore (e.g. my-utils -> my_utils)
-    for (int i = 0; xr_parser_step(parser) && (i < name_len); i++) {
+    for (int i = 0; xr_parser_healthy(parser) && (i < name_len); i++) {
         char value = xr_parser_read_byte(parser, alias + i);
         if (!xr_parser_healthy(parser)) return NULL;
         if (value == '-' || value == '.') {
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; alias[i] = '_'; } while (0);
+            do { alias[i] = '_'; } while (0);
         }
     }
 
@@ -296,7 +296,7 @@ static bool parse_import_members(Parser *parser, ImportMember **out_members, int
             if (!xr_parser_healthy(parser)) return false;
         } while (0);
         do { if (!ast_copy(parser->compiler_session, members[count].name, parser->previous.start, name_len)) return false; } while (0);
-        if (!ast_work(parser->compiler_session, 1)) return false;
+
         members[count].name[name_len] = '\0';
         members[count].alias = NULL;
 
@@ -453,7 +453,7 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
             do { if (!ast_copy(parser->compiler_session, alias, parser->previous.start, parser->previous.length)) return NULL; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; alias[parser->previous.length] = '\0'; } while (0);
+            do { alias[parser->previous.length] = '\0'; } while (0);
         } else {
             // Auto-extract alias from module path
             do {
@@ -527,7 +527,7 @@ if (from_is_quoted) {
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
     do { if (!ast_copy(parser->compiler_session, from_path, parser->previous.start, from_len)) return NULL; } while (0);
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; from_path[from_len] = '\0'; } while (0);
+    do { from_path[from_len] = '\0'; } while (0);
 }
 
 // xr_ast_export_reexport strdups from_path; release our copy.
@@ -573,7 +573,7 @@ static AstNode *parse_reexport_members(Parser *parser, int line, int column) {
         char *name = (char *) ast_alloc(parser->compiler_session, (size_t) len + 1);
         if (!xr_parser_healthy(parser)) return NULL;
         do { if (!ast_copy(parser->compiler_session, name, parser->previous.start, len)) return NULL; } while (0);
-        do { if (!ast_work(parser->compiler_session, 1)) return NULL; name[len] = '\0'; } while (0);
+        do { name[len] = '\0'; } while (0);
         members[count].name = name;
         members[count].alias = NULL;
 
@@ -591,7 +591,7 @@ static AstNode *parse_reexport_members(Parser *parser, int line, int column) {
             char *alias = (char *) ast_alloc(parser->compiler_session, (size_t) len + 1);
             if (!xr_parser_healthy(parser)) return NULL;
             do { if (!ast_copy(parser->compiler_session, alias, parser->previous.start, len)) return NULL; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; alias[len] = '\0'; } while (0);
+            do { alias[len] = '\0'; } while (0);
             members[count].alias = alias;
         }
 
@@ -641,7 +641,7 @@ if (xr_parser_check_name(parser, "from")) {
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
         do { if (!ast_copy(parser->compiler_session, from_path, parser->previous.start, path_len)) return NULL; } while (0);
-        do { if (!ast_work(parser->compiler_session, 1)) return NULL; from_path[path_len] = '\0'; } while (0);
+        do { from_path[path_len] = '\0'; } while (0);
     }
     AstNode *node = xr_ast_export_reexport(parser->compiler_session, from_path,
                                            from_is_quoted, members, count, false, line);

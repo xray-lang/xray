@@ -30,6 +30,6 @@ static XrXirStatus effect_body_runs_retain(const XrXirCompileContext *work,
     if (owner->references==UINT32_MAX) return XR_XIR_BUDGET;
     /* Prepay the acquisition and its unavoidable later release before
      * publishing any alias. Neither cumulative bytes nor work are refunded. */
-    if (!xir_compile_work(work,5*sizeof(owner->references)+sizeof(void *)+3)) return XR_XIR_BUDGET;
+
     ++owner->references;return XR_XIR_OK;
 }

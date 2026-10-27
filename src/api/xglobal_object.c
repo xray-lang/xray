@@ -119,8 +119,6 @@ bool xr_global_register_all_core_classes(XrGlobalObject *global, XrVMRuntime *is
 
     REG_OR_FAIL(CLASS_NAME_ENUM, core->enumClass);
 
-    REG_OR_FAIL(TYPE_NAME_STRINGBUILDER, core->stringBuilderClass);
-
 #undef REG_OR_FAIL
     return true;
 }

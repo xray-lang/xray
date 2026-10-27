@@ -39,7 +39,9 @@ static XrXirCallStatus task_core_error_admit(XrXirTaskExecutor *executor,
      * Read that header directly instead of repeating an uncharged graph walk. */
     const XirNominalValue *record=(const XirNominalValue *)(uintptr_t)error->payload;
     if (record->object.arena!=program->arena ||
-        !xr_xir_type_is_enum(program->types,record->object.type)) return XR_XIR_CALL_BAD_STATE;
+        !xr_xir_type_is_enum(program->types,record->object.type) ||
+        !xr_xir_compile_type_arena_enum_sendable(program->arena,record->object.type))
+        return XR_XIR_CALL_BAD_STATE;
     return xr_xir_error_bound_accepts(record->object.type,declared) ?
         XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
 }

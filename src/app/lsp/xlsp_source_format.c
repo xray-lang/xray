@@ -56,8 +56,8 @@ XR_FUNC XrXirStatus xlsp_source_format_json(XrCompileResources *resources,const 
     memcpy(uri,document->uri,document->uri_length);uri[document->uri_length]=0;
     status=xlsp_source_buffer_new(resources,document->text,document->length,(int)document->version,&buffer);if(status!=XR_XIR_OK)goto done;
     if(!document->length)goto publish;
-    XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);
-    if(opened!=XR_COMPILER_SESSION_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+    XrCompileResourceStatus opened=xr_compile_session_new(resources,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
     XrParseStatus parsed=xr_compile_parse_with_trivia(session,xlsp_source_buffer_text(buffer),uri,NULL,&ast);
     if(parsed==XR_PARSE_SYNTAX)goto publish;
     if(parsed!=XR_PARSE_OK){status=parsed==XR_PARSE_BUDGET?XR_XIR_BUDGET:parsed==XR_PARSE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}

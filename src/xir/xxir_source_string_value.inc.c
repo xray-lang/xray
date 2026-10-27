@@ -13,7 +13,7 @@ static bool source_string_value_reference(SourceContext *ctx,AstNode *node,
     const XrNativeMemberDeclaration *member,XrXirType result) {
     uint32_t declaration=0;
     for(uint32_t i=0;i<ctx->query.declaration_count;++i) {
-        if(!source_work(ctx,node)) return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirSourceDeclaration *row=&ctx->query.declarations[i];
         if(row->kind==XR_XIR_SOURCE_MEMBER && row->parent==ctx->string_declaration &&
             row->native_identity==member->id) {declaration=row->id;break;}
@@ -25,7 +25,7 @@ static bool source_string_value_reference(SourceContext *ctx,AstNode *node,
             source_alloc(ctx,member->parameter_count,sizeof(*parameters)):NULL;
         if(!symbol.name || !signature || (member->parameter_count && !parameters)) return false;
         for(uint32_t p=0;p<member->parameter_count;++p) {
-            if(!source_work(ctx,node)) return false;
+            if(!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             parameters[p]=(XrXirSourceType){XR_XIR_STRING,0,true};
         }
         XrXirSourceRange range={ctx->string_module,(int)member->line,(int)member->column,

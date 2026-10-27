@@ -5,11 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcompile_resources.c - Physical compiler allocation accounting
+ * xcompile_resources.c - Physical compiler memory ownership and admission
  *
  * KEY CONCEPT:
- *   Cumulative allocation and work never decrease. Live bytes decrease only
- *   after free, while allocation headers keep the shared ledger alive.
+ *   Live blocks retain their owner, including all allocation metadata.
+ *   Finite admission bounds held bytes, never cumulative allocation turnover.
  */
 #include "xcompile_resources.h"
 #include "xchecks.h"
@@ -24,10 +24,7 @@ struct XrCompileResources {
     XrCompileResourceStats stats;
     uint64_t references;
     CompileAllocation *allocations;
-    XrCompileCancelPoll cancel_poll;
-    const void *cancel_context;
     atomic_bool locked;
-    bool cancelled;
 };
 
 /* Every caller already owns a reference while waiting for this lock. */
@@ -44,10 +41,10 @@ static void compile_unlock(XrCompileResources *resources) {
 }
 
 static bool compile_release_locked(XrCompileResources *resources) {
-    XR_CHECK(resources->references, "A live compiler ledger must have an owner");
+    XR_CHECK(resources->references, "A live compiler memory owner must have a reference");
     if (--resources->references) return false;
-    XR_CHECK(!resources->allocations, "The last ledger reference has no live payload registry");
-    XR_CHECK(resources->stats.live_bytes == sizeof(*resources), "Outstanding compiler allocations retain their ledger");
+    XR_CHECK(!resources->allocations, "The last memory reference has no live payload registry");
+    XR_CHECK(resources->stats.held_bytes == sizeof(*resources), "Outstanding compiler blocks retain their owner");
     return true;
 }
 
@@ -72,25 +69,29 @@ union CompileAllocation {
     CompileMaxAlignment alignment;
 };
 
-_Static_assert(sizeof(size_t) <= sizeof(uint64_t), "Allocation sizes must fit the ledger");
+_Static_assert(sizeof(size_t) <= sizeof(uint64_t), "Allocation sizes must fit memory accounting");
 _Static_assert(sizeof(CompileAllocation) % _Alignof(CompileMaxAlignment) == 0,
     "Allocation payload must preserve fundamental alignment");
 
+static uint64_t compile_saturated_add(uint64_t value, uint64_t added) {
+    return added > UINT64_MAX - value ? UINT64_MAX : value + added;
+}
+
 XR_FUNC XrCompileResourceStatus xr_compile_resources_new(
     const XrCompileResourceLimits *limits, XrCompileResources **output) {
-    if (!limits || !output || *output) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    if (sizeof(XrCompileResources) > limits->allocated_bytes ||
-        sizeof(XrCompileResources) > limits->live_bytes || !limits->work)
-        return XR_COMPILE_RESOURCE_BUDGET;
+    if (!limits || !output || *output ||
+        (limits->memory_mode != XR_COMPILE_MEMORY_ORDINARY && limits->memory_mode != XR_COMPILE_MEMORY_FINITE) ||
+        (limits->memory_mode == XR_COMPILE_MEMORY_ORDINARY && limits->memory_limit))
+        return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    if (limits->memory_mode == XR_COMPILE_MEMORY_FINITE && sizeof(XrCompileResources) > limits->memory_limit)
+        return XR_COMPILE_RESOURCE_MEMORY_LIMIT;
     XrCompileResources *resources = xr_malloc(sizeof(*resources));
     if (!resources) return XR_COMPILE_RESOURCE_OUT_OF_MEMORY;
     resources->limits = *limits;
-    resources->stats = (XrCompileResourceStats) {1, sizeof(*resources), sizeof(*resources), sizeof(*resources), 1};
+    resources->stats = (XrCompileResourceStats) {sizeof(*resources), sizeof(*resources),
+        limits->profile_allocations ? 1 : 0, limits->profile_allocations ? sizeof(*resources) : 0};
     resources->references = 1;
     resources->allocations = NULL;
-    resources->cancel_poll = NULL;
-    resources->cancel_context = NULL;
-    resources->cancelled = false;
     atomic_init(&resources->locked, false);
     *output = resources;
     return XR_COMPILE_RESOURCE_OK;
@@ -99,7 +100,7 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_new(
 XR_FUNC XrCompileResourceStatus xr_compile_resources_retain(XrCompileResources *resources) {
     if (!resources) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     compile_lock(resources);
-    XrCompileResourceStatus status = XR_COMPILE_RESOURCE_BUDGET;
+    XrCompileResourceStatus status = XR_COMPILE_RESOURCE_OVERFLOW;
     if (resources->references != UINT64_MAX) {
         ++resources->references;
         status = XR_COMPILE_RESOURCE_OK;
@@ -126,82 +127,27 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_stats(
     return XR_COMPILE_RESOURCE_OK;
 }
 
-static bool compile_cancelled_locked(XrCompileResources *resources) {
-    if (resources->cancel_poll && !resources->cancelled)
-        resources->cancelled = resources->cancel_poll(resources->cancel_context);
-    return resources->cancelled;
-}
-
-XR_FUNC XrCompileResourceStatus xr_compile_resources_begin_cancel(XrCompileResources *resources,
-    XrCompileCancelPoll poll, const void *context) {
-    if (!resources || !poll) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    compile_lock(resources);
-    XrCompileResourceStatus status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    if (!resources->cancel_poll) {
-        resources->cancel_poll = poll;
-        resources->cancel_context = context;
-        resources->cancelled = false;
-        status = XR_COMPILE_RESOURCE_OK;
-    }
-    compile_unlock(resources);
-    return status;
-}
-
-XR_FUNC XrCompileResourceStatus xr_compile_resources_end_cancel(XrCompileResources *resources,
-    XrCompileCancelPoll poll, const void *context) {
-    if (!resources || !poll) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    compile_lock(resources);
-    XrCompileResourceStatus status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    if (resources->cancel_poll == poll && resources->cancel_context == context) {
-        status = compile_cancelled_locked(resources) ? XR_COMPILE_RESOURCE_CANCELLED : XR_COMPILE_RESOURCE_OK;
-        resources->cancel_poll = NULL;
-        resources->cancel_context = NULL;
-        resources->cancelled = false;
-    }
-    compile_unlock(resources);
-    return status;
-}
-
-static XrCompileResourceStatus compile_work_locked(XrCompileResources *resources, uint64_t units) {
-    if (compile_cancelled_locked(resources)) return XR_COMPILE_RESOURCE_CANCELLED;
-    if (units > resources->limits.work - resources->stats.work) return XR_COMPILE_RESOURCE_BUDGET;
-    resources->stats.work += units;
-    return XR_COMPILE_RESOURCE_OK;
-}
-
-XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *resources, uint64_t units) {
-    if (!resources) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    compile_lock(resources);
-    XrCompileResourceStatus status = compile_work_locked(resources, units);
-    compile_unlock(resources);
-    return status;
-}
-
-static XrCompileResourceStatus compile_allocation_storage(XrCompileResources *resources,
-    const void *memory, size_t bytes) {
-    if (!resources || !memory || !bytes) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+/* Only trusted live allocation headers are followed. Proposed addresses are
+ * compared numerically and never read or used to locate preceding storage. */
+static CompileAllocation *compile_find_locked(XrCompileResources *resources,
+    const void *memory, size_t bytes, bool exact) {
     uintptr_t address = (uintptr_t)memory;
-    XrCompileResourceStatus status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    compile_lock(resources);
-    for (const CompileAllocation *allocation = resources->allocations; allocation;
-         allocation = allocation->info.next) {
-        status = compile_work_locked(resources, 1);
-        if (status != XR_COMPILE_RESOURCE_OK) break;
-        uintptr_t start = (uintptr_t)(allocation + 1);
-        if (address == start && address >= start && address - start <= allocation->info.bytes &&
-            bytes <= allocation->info.bytes - (size_t)(address - start)) {
-            status = XR_COMPILE_RESOURCE_OK;
-            break;
-        }
-        status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    for (CompileAllocation *allocation = resources->allocations; allocation; allocation = allocation->info.next) {
+        uintptr_t begin = (uintptr_t)(allocation + 1);
+        if (exact && address != begin) continue;
+        if (address >= begin && address - begin < allocation->info.bytes &&
+            bytes <= allocation->info.bytes - (size_t)(address - begin)) return allocation;
     }
-    compile_unlock(resources);
-    return status;
+    return NULL;
 }
 
 XR_FUNC XrCompileResourceStatus xr_compile_resources_allocation(XrCompileResources *resources,
     const void *memory, size_t bytes) {
-    return compile_allocation_storage(resources, memory, bytes);
+    if (!resources || !memory || !bytes) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    compile_lock(resources);
+    bool found = compile_find_locked(resources, memory, bytes, true) != NULL;
+    compile_unlock(resources);
+    return found ? XR_COMPILE_RESOURCE_OK : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
 }
 
 XR_FUNC XrCompileResourceStatus xr_compile_resources_scan_delimiter(XrCompileResources *resources,
@@ -209,91 +155,52 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_scan_delimiter(XrCompileRes
     if (!resources || (!source && length) || length > 64 || !advanced || !found)
         return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     size_t position = 0;
-    bool matched = false;
-    XrCompileResourceStatus status = XR_COMPILE_RESOURCE_OK;
-    compile_lock(resources);
-    while (position < length) {
-        status = compile_work_locked(resources, 1);
-        if (status != XR_COMPILE_RESOURCE_OK) break;
-        unsigned char value = (unsigned char) source[position];
-        if (value == delimiter) { matched = true; break; }
-        status = compile_work_locked(resources, 1);
-        if (status != XR_COMPILE_RESOURCE_OK) break;
-        ++position;
-    }
-    if (status == XR_COMPILE_RESOURCE_OK) {
-        *advanced = position;
-        *found = matched;
-    }
-    compile_unlock(resources);
-    return status;
-}
-
-/* Only trusted live allocation headers are followed. A proposed payload
- * address is compared numerically and is never read or used to find a header. */
-XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *resources,
-    const void *memory, size_t bytes) {
-    if (!resources || !memory || !bytes) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    uintptr_t address = (uintptr_t)memory;
-    compile_lock(resources);
-    XrCompileResourceStatus status = compile_work_locked(resources, 1);
-    bool contained = false;
-    for (const CompileAllocation *allocation = resources->allocations;
-         allocation && status == XR_COMPILE_RESOURCE_OK; allocation = allocation->info.next) {
-        status = compile_work_locked(resources, 6);
-        if (status != XR_COMPILE_RESOURCE_OK) break;
-        uintptr_t begin = (uintptr_t)(allocation + 1);
-        if (address >= begin && address - begin < allocation->info.bytes &&
-            bytes <= allocation->info.bytes - (address - begin)) {
-            contained = true;
-            /* The live registry follows query locality. Its order depends on
-             * allocation/query identity, never on the allocator's addresses. */
-            if (allocation->info.previous) {
-                status=compile_work_locked(resources,6);
-                if (status!=XR_COMPILE_RESOURCE_OK) break;
-                CompileAllocation *hit=(CompileAllocation *)allocation;
-                hit->info.previous->info.next=hit->info.next;
-                if (hit->info.next) hit->info.next->info.previous=hit->info.previous;
-                hit->info.previous=NULL;hit->info.next=resources->allocations;
-                resources->allocations->info.previous=hit;resources->allocations=hit;
-            }
-            break;
-        }
-    }
-    if (status == XR_COMPILE_RESOURCE_OK && !contained) status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    compile_unlock(resources);
-    return status;
-}
-
-static XrCompileResourceStatus compile_allocation_admit_locked(
-    XrCompileResources *resources, size_t bytes, uint64_t payload_work) {
-    if (compile_cancelled_locked(resources)) return XR_COMPILE_RESOURCE_CANCELLED;
-    if (bytes > SIZE_MAX - sizeof(CompileAllocation)) return XR_COMPILE_RESOURCE_BUDGET;
-    size_t charged = sizeof(CompileAllocation) + bytes;
-    uint64_t remaining_work = resources->limits.work - resources->stats.work;
-    if (charged > resources->limits.allocated_bytes - resources->stats.allocated_bytes ||
-        charged > resources->limits.live_bytes - resources->stats.live_bytes ||
-        !remaining_work || payload_work > remaining_work - 1 ||
-        resources->references == UINT64_MAX || resources->stats.allocation_count == UINT64_MAX)
-        return XR_COMPILE_RESOURCE_BUDGET;
+    while (position < length && (unsigned char)source[position] != delimiter) ++position;
+    *advanced = position;
+    *found = position < length;
     return XR_COMPILE_RESOURCE_OK;
 }
 
-XR_FUNC XrCompileResourceStatus xr_compile_resources_admit(XrCompileResources *resources,
-    size_t bytes, uint64_t payload_work) {
+XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *resources,
+    const void *memory, size_t bytes) {
+    if (!resources || !memory || !bytes) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    compile_lock(resources);
+    CompileAllocation *hit = compile_find_locked(resources, memory, bytes, false);
+    if (hit && hit->info.previous) {
+        hit->info.previous->info.next = hit->info.next;
+        if (hit->info.next) hit->info.next->info.previous = hit->info.previous;
+        hit->info.previous = NULL;
+        hit->info.next = resources->allocations;
+        resources->allocations->info.previous = hit;
+        resources->allocations = hit;
+    }
+    compile_unlock(resources);
+    return hit ? XR_COMPILE_RESOURCE_OK : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+}
+
+static XrCompileResourceStatus compile_allocation_admit_locked(XrCompileResources *resources, size_t bytes) {
+    if (bytes > SIZE_MAX - sizeof(CompileAllocation)) return XR_COMPILE_RESOURCE_OVERFLOW;
+    size_t charged = sizeof(CompileAllocation) + bytes;
+    if (charged > UINT64_MAX - resources->stats.held_bytes || resources->references == UINT64_MAX)
+        return XR_COMPILE_RESOURCE_OVERFLOW;
+    if (resources->limits.memory_mode == XR_COMPILE_MEMORY_FINITE &&
+        charged > resources->limits.memory_limit - resources->stats.held_bytes)
+        return XR_COMPILE_RESOURCE_MEMORY_LIMIT;
+    return XR_COMPILE_RESOURCE_OK;
+}
+
+XR_FUNC XrCompileResourceStatus xr_compile_resources_admit(XrCompileResources *resources, size_t bytes) {
     if (!resources || !bytes) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     compile_lock(resources);
-    XrCompileResourceStatus status = compile_allocation_admit_locked(resources, bytes, payload_work);
+    XrCompileResourceStatus status = compile_allocation_admit_locked(resources, bytes);
     compile_unlock(resources);
     return status;
 }
 
-static XrCompileResourceStatus compile_allocate_locked(
-    XrCompileResources *resources, size_t bytes, size_t payload_work, void **output) {
-    XrCompileResourceStatus status = compile_allocation_admit_locked(resources, bytes, payload_work);
+static XrCompileResourceStatus compile_allocate_locked(XrCompileResources *resources, size_t bytes, void **output) {
+    XrCompileResourceStatus status = compile_allocation_admit_locked(resources, bytes);
     if (status != XR_COMPILE_RESOURCE_OK) return status;
     size_t charged = sizeof(CompileAllocation) + bytes;
-    ++resources->stats.work;
     CompileAllocation *allocation = xr_malloc(charged);
     if (!allocation) return XR_COMPILE_RESOURCE_OUT_OF_MEMORY;
     allocation->info.resources = resources;
@@ -303,11 +210,13 @@ static XrCompileResourceStatus compile_allocate_locked(
     if (resources->allocations) resources->allocations->info.previous = allocation;
     resources->allocations = allocation;
     ++resources->references;
-    ++resources->stats.allocation_count;
-    resources->stats.allocated_bytes += charged;
-    resources->stats.live_bytes += charged;
-    if (resources->stats.live_bytes > resources->stats.peak_bytes)
-        resources->stats.peak_bytes = resources->stats.live_bytes;
+    if (resources->limits.profile_allocations) {
+        resources->stats.allocation_count = compile_saturated_add(resources->stats.allocation_count, 1);
+        resources->stats.allocated_bytes = compile_saturated_add(resources->stats.allocated_bytes, charged);
+    }
+    resources->stats.held_bytes += charged;
+    if (resources->stats.held_bytes > resources->stats.peak_bytes)
+        resources->stats.peak_bytes = resources->stats.held_bytes;
     *output = allocation + 1;
     return XR_COMPILE_RESOURCE_OK;
 }
@@ -316,7 +225,7 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_alloc(
     XrCompileResources *resources, size_t bytes, void **output) {
     if (!resources || !bytes || !output || *output) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     compile_lock(resources);
-    XrCompileResourceStatus status = compile_allocate_locked(resources, bytes, 0, output);
+    XrCompileResourceStatus status = compile_allocate_locked(resources, bytes, output);
     compile_unlock(resources);
     return status;
 }
@@ -324,13 +233,12 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_alloc(
 XR_FUNC XrCompileResourceStatus xr_compile_resources_calloc(
     XrCompileResources *resources, size_t count, size_t size, void **output) {
     if (!resources || !count || !size || !output || *output) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    if (count > SIZE_MAX / size) return XR_COMPILE_RESOURCE_BUDGET;
+    if (count > SIZE_MAX / size) return XR_COMPILE_RESOURCE_OVERFLOW;
     size_t bytes = count * size;
     void *memory = NULL;
     compile_lock(resources);
-    XrCompileResourceStatus status = compile_allocate_locked(resources, bytes, bytes, &memory);
+    XrCompileResourceStatus status = compile_allocate_locked(resources, bytes, &memory);
     if (status == XR_COMPILE_RESOURCE_OK) {
-        resources->stats.work += bytes;
         memset(memory, 0, bytes);
         *output = memory;
     }
@@ -340,18 +248,18 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_calloc(
 
 static bool compile_free_locked(XrCompileResources *resources, CompileAllocation *allocation) {
     size_t charged = sizeof(*allocation) + allocation->info.bytes;
-    XR_CHECK(resources->stats.live_bytes >= charged, "Compiler live bytes must cover the released allocation");
+    XR_CHECK(resources->stats.held_bytes >= charged, "Held compiler bytes cover the released block");
     if (allocation->info.previous) allocation->info.previous->info.next = allocation->info.next;
     else resources->allocations = allocation->info.next;
     if (allocation->info.next) allocation->info.next->info.previous = allocation->info.previous;
     xr_free(allocation);
-    resources->stats.live_bytes -= charged;
+    resources->stats.held_bytes -= charged;
     return compile_release_locked(resources);
 }
 
 XR_FUNC void xr_compile_resources_free(void *memory) {
     if (!memory) return;
-    CompileAllocation *allocation = (CompileAllocation *) memory - 1;
+    CompileAllocation *allocation = (CompileAllocation *)memory - 1;
     XrCompileResources *resources = allocation->info.resources;
     compile_lock(resources);
     bool last = compile_free_locked(resources, allocation);
@@ -363,10 +271,13 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_resize(
     XrCompileResources *resources, void **memory, size_t bytes) {
     if (!resources || !memory) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     if (!*memory) return bytes ? xr_compile_resources_alloc(resources, bytes, memory) : XR_COMPILE_RESOURCE_OK;
-    CompileAllocation *allocation = (CompileAllocation *) *memory - 1;
-    if (allocation->info.resources != resources) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    compile_lock(resources);
+    CompileAllocation *allocation = compile_find_locked(resources, *memory, 1, true);
+    if (!allocation) {
+        compile_unlock(resources);
+        return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    }
     if (!bytes) {
-        compile_lock(resources);
         bool last = compile_free_locked(resources, allocation);
         *memory = NULL;
         compile_unlock(resources);
@@ -374,16 +285,17 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_resize(
         return XR_COMPILE_RESOURCE_OK;
     }
     size_t old_bytes = allocation->info.bytes;
-    if (old_bytes == bytes) return XR_COMPILE_RESOURCE_OK;
+    if (old_bytes == bytes) {
+        compile_unlock(resources);
+        return XR_COMPILE_RESOURCE_OK;
+    }
     size_t copied = old_bytes < bytes ? old_bytes : bytes;
     void *replacement = NULL;
-    compile_lock(resources);
-    XrCompileResourceStatus status = compile_allocate_locked(resources, bytes, copied, &replacement);
+    XrCompileResourceStatus status = compile_allocate_locked(resources, bytes, &replacement);
     if (status == XR_COMPILE_RESOURCE_OK) {
-        resources->stats.work += copied;
         memcpy(replacement, *memory, copied);
         bool last = compile_free_locked(resources, allocation);
-        XR_CHECK(!last, "The resized allocation retains its compiler ledger");
+        XR_CHECK(!last, "The replacement block retains its compiler memory owner");
         *memory = replacement;
     }
     compile_unlock(resources);

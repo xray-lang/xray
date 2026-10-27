@@ -31,13 +31,16 @@ static void observed_free(void *memory) { if(memory){CHECK(live);--live;}xr_free
 #undef xr_free
 static unsigned resource_calls, source_calls;
 static XrCompileResourceLimits overridden;
+static bool override_limits;
 static XrCompileResourceStats last_stats;
 static size_t phases[3];
 static XrCompileResources *original;
 static XrCompileResourceStatus observed_new(const XrCompileResourceLimits *limits,XrCompileResources **output) {
     ++resource_calls;phases[0]=attempts;
-    CHECK(limits->allocated_bytes==UINT64_MAX && limits->live_bytes==UINT64_MAX && limits->work==UINT64_MAX);
-    XrCompileResourceStatus status=xr_compile_resources_new(overridden.work?&overridden:limits,output);
+    CHECK(limits->memory_mode==XR_COMPILE_MEMORY_ORDINARY && limits->memory_limit==0 && !limits->profile_allocations);
+    XrCompileResourceLimits actual=override_limits?overridden:*limits;
+    actual.profile_allocations=true;
+    XrCompileResourceStatus status=xr_compile_resources_new(&actual,output);
     if(status==XR_COMPILE_RESOURCE_OK) original=*output;
     return status;
 }
@@ -86,20 +89,16 @@ static void verify_boundaries(XrCliInvocation *inv) {
     const char **saved=inv->positionals;
     inv->positionals=twice;inv->positional_count=2;
     CHECK(checked_call(inv)==0);
-    CHECK(last_stats.work>single.work && last_stats.allocated_bytes>single.allocated_bytes);
-    overridden=xr_source_compile_default_resource_limits();overridden.work=single.work;
-    CHECK(checked_call(inv)==1);
+    CHECK(last_stats.allocated_bytes>single.allocated_bytes);
+    overridden=(XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,single.peak_bytes,true};override_limits=true;
+    CHECK(checked_call(inv)==0);
     inv->positionals=saved;inv->positional_count=1;
     CHECK(checked_call(inv)==0);
-    overridden.work=single.work-1;CHECK(checked_call(inv)==1);
-    overridden=xr_source_compile_default_resource_limits();
-    overridden.allocated_bytes=single.allocated_bytes;CHECK(checked_call(inv)==0);
-    --overridden.allocated_bytes;CHECK(checked_call(inv)==1);
-    overridden=xr_source_compile_default_resource_limits();
-    overridden.live_bytes=single.peak_bytes;CHECK(checked_call(inv)==0);
-    --overridden.live_bytes;CHECK(checked_call(inv)==1);
-    overridden=(XrCompileResourceLimits){0};
-    printf("CHECK_OWNER: one ledger, %zu real allocations, OOM boundaries, allocated/live/work exact/minus-one and cumulative two-file rejection, physical zero PASS\n",count);
+    CHECK(overridden.memory_limit>0 && overridden.memory_limit<UINT64_MAX);
+    --overridden.memory_limit;CHECK(checked_call(inv)==1);
+    overridden.memory_limit+=2;CHECK(checked_call(inv)==0);
+    override_limits=false;overridden=(XrCompileResourceLimits){0};
+    printf("CHECK_OWNER: one memory owner, %zu real allocations, OOM boundaries, held peak exact/minus/plus-one and two-file reuse, physical zero PASS\n",count);
 }
 #endif
 static int drive(int argc,char **argv) {

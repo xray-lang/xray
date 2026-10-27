@@ -13,7 +13,7 @@
 static bool source_null_syntax(SourceContext *ctx,const AstNode *node) {
     uint32_t depth=0;
     while (node && node->type==AST_GROUPING) {
-        if (!source_work(ctx,(AstNode *)node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (++depth>=128) return source_fail(ctx,(AstNode *)node,XR_XIR_BUDGET,"null grouping depth exhausted");
         node=node->as.grouping;
     }
@@ -26,7 +26,7 @@ static bool source_null_literal(SourceContext *ctx,const SourceExpressionPlan *p
 static bool source_null_discard(SourceContext *ctx,SourceExpressionPlan *plan) {
     uint32_t depth=0;
     while (plan) {
-        if (!source_work(ctx,plan->syntax)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         plan->state=SOURCE_TERM_DISCARDED;
         if (plan->syntax->type!=AST_GROUPING) return plan->syntax->type==AST_LITERAL_NULL;
         if (++depth>=128) return source_fail(ctx,plan->syntax,XR_XIR_BUDGET,"null grouping depth exhausted");
@@ -102,7 +102,7 @@ static bool source_coalesce(SourceContext *ctx,AstNode *node,SourceExpectedType 
             element=plan->read_declared;
             uint32_t consumed=plan->read_prefix-plan->read_claims;
             for (uint32_t layer=0;layer<=consumed;++layer) {
-                if (!source_work(ctx,node)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 if (!xr_xir_type_is_nullable(&ctx->types,element))
                     return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"nullable claim has no declared layer");
                 element=xr_xir_nullable_element(&ctx->types,element);

@@ -338,6 +338,31 @@ class NativeDeclarations(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     schema.render_iterator_identity(root)
 
+    def test_retired_native_declaration_identity_cannot_be_reintroduced(self):
+        retired = """// @native-type id=16
+class StringBuilder {
+    // @native-operation STRING_BUILDER_APPEND allocation=may_heap failures=allocation,retain,limit ownership=owned
+    append(value: string | rune | i64 | f64 | bool | null) -> StringBuilder
+    // @native-operation STRING_BUILDER_TO_STRING allocation=no_heap failures=retain,limit ownership=owned
+    toString() -> string
+    // @native-operation STRING_BUILDER_CLEAR allocation=no_heap failures=retain,limit ownership=owned
+    clear() -> StringBuilder
+}
+"""
+        forged_binding = '\nXR_BUILTIN_PRELUDE_TYPE("StringBuilder", 0, XR_TINSTANCE, SIMPLE)\n'
+        for prelude in (self.prelude, self.prelude + forged_binding):
+            with self.subTest(forged_binding=prelude != self.prelude):
+                with self.assertRaises(ValueError):
+                    schema.parse_source(retired, prelude)
+
+    def test_projection_omits_retired_class_and_keeps_range(self):
+        outputs = schema.render(ROOT)
+        prelude = outputs['src/shared/xprelude_source.inc.c']
+        declarations = outputs['src/shared/xnative_declarations.inc.c']
+        self.assertNotIn('class StringBuilder', prelude)
+        self.assertNotIn('xray-native:prelude/StringBuilder', declarations)
+        self.assertIn('class Range', prelude)
+
     def test_generation_preserves_unchanged_outputs(self):
         with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
             root = Path(directory)
@@ -345,7 +370,7 @@ class NativeDeclarations(unittest.TestCase):
                              'stdlib/types/coroutine.xr', 'stdlib/types/channel.xr', 'stdlib/types/iterator.xr',
                              'stdlib/types/i64.xr', 'stdlib/types/f64.xr', 'stdlib/types/bool.xr',
                              'stdlib/types/rune.xr', 'stdlib/types/map.xr', 'stdlib/types/set.xr',
-                             'stdlib/types/stringbuilder.xr', 'stdlib/prelude/builtin_symbols.def']:
+                             'stdlib/prelude/range.xr', 'stdlib/prelude/builtin_symbols.def']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())

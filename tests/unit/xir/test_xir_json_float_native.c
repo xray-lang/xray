@@ -16,7 +16,7 @@
 XR_DATA const XrXirProgramSpec json_float_program;
 XR_DATA const uint32_t json_float_selection[3];
 int main(void) {
-    XrXirCompileContext context={0};const XrCompileResourceLimits caps={67108864,8388608,128000000};
+    XrXirCompileContext context={0};const XrCompileResourceLimits caps={XR_COMPILE_MEMORY_FINITE,8388608,true};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();
     XrXirProgram *program=NULL;XrXirStatus status=xr_xir_compile_program_seal(&context,&json_float_program,&program);

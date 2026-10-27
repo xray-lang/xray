@@ -70,12 +70,12 @@ static XrXirStatus on_type_lex(OnTypeWork *w) {
     char *prefix=NULL;XrCompilerSession *session=NULL;XrArena arena={0};
     XrXirStatus status=on_type_resource(xr_compile_resources_alloc(w->resources,w->prefix+1,(void **)&prefix));if(status!=XR_XIR_OK)goto done;
     status=on_type_work(w,w->prefix+1);if(status!=XR_XIR_OK)goto done;memcpy(prefix,w->text,w->prefix);prefix[w->prefix]=0;
-    XrCompilerSessionStatus opened=xr_compile_session_new(w->resources,&session);
-    if(opened!=XR_COMPILER_SESSION_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+    XrCompileResourceStatus opened=xr_compile_session_new(w->resources,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
     XrCompileState *state=xr_compile_session_compile_state(session);XrArenaBacking backing;
     if(xr_compiler_arena_state_backing(state,&backing)!=XR_ARENA_OK){status=XR_XIR_BAD_STRUCTURE;goto done;}
     (void)xr_arena_open(&arena,XR_ARENA_SEGMENT_SIZE,&backing);status=on_type_resource(xr_compiler_arena_capture_status(&arena,state));if(status!=XR_XIR_OK)goto done;
-    Scanner scanner={0};status=on_type_resource(xr_compile_scanner_open(&scanner,state,&arena,prefix));if(status!=XR_XIR_OK)goto done;
+    Scanner scanner={0};status=on_type_resource(xr_compile_scanner_open(&scanner,state,&arena,prefix,NULL));if(status!=XR_XIR_OK)goto done;
     uint64_t depth=0;bool unmatched=false,closing=false;Token last={0};size_t last_start=0;
     for(;;) {
         Token token=xr_scanner_scan(&scanner);status=on_type_resource(xr_compile_state_status(state));if(status!=XR_XIR_OK)goto done;

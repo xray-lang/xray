@@ -17,7 +17,8 @@ static XrSourceCompileStatus paths_status(XrOsIoStatus status) {
     case XR_OS_IO_OK: return XR_SOURCE_COMPILE_OK;
     case XR_OS_IO_NOT_FOUND: return XR_SOURCE_COMPILE_NOT_FOUND;
     case XR_OS_IO_BAD_ARGUMENT: return XR_SOURCE_COMPILE_BAD_ARGUMENT;
-    case XR_OS_IO_BUDGET: return XR_SOURCE_COMPILE_BUDGET;
+    case XR_OS_IO_OVERFLOW: return XR_SOURCE_COMPILE_BUDGET;
+    case XR_OS_IO_MEMORY_LIMIT: return XR_SOURCE_COMPILE_MEMORY_LIMIT;
     case XR_OS_IO_OUT_OF_MEMORY: return XR_SOURCE_COMPILE_OUT_OF_MEMORY;
     case XR_OS_IO_UNSUPPORTED: return XR_SOURCE_COMPILE_UNSUPPORTED;
     default: return XR_SOURCE_COMPILE_IO;
@@ -79,7 +80,7 @@ static void paths_select_stdlib(XrIoContext *io,char **output,XrStdlibOrigin *or
     XrOsIoStatus queried = xr_os_io_environment_get(io->policy, "XRAY_STDLIB_PATH", &override);
     if (queried != XR_OS_IO_NOT_FOUND) io_status(io, queried);
     if (io->status != XR_OS_IO_OK) goto cleanup;
-    if (override && !io_work(io, 1)) goto cleanup;
+    if (override && !((io)->status == XR_OS_IO_OK)) goto cleanup;
     detail->stage = XR_SOURCE_PATH_STDLIB;
     if (override && override[0]) {
         char *candidate = override; override = NULL;
@@ -151,7 +152,7 @@ XR_FUNC XrSourceCompileStatus xr_source_paths(XrCompileResources *resources,
     XrSourcePaths owned = {0};
     bool wrong_kind = false;
     detail.stage = XR_SOURCE_PATH_ENTRY;
-    if (!io_work(&io, 1)) goto cleanup;
+    if (!((&io)->status == XR_OS_IO_OK)) goto cleanup;
     if (!entry_spelling[0]) { io_status(&io, XR_OS_IO_BAD_ARGUMENT); goto cleanup; }
     io_status(&io, xr_realpath_owned(&policy, entry_spelling, &owned.entry));
     if (io.status == XR_OS_IO_OK) {

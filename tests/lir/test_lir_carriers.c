@@ -199,7 +199,7 @@ static void observe(XrLirModule *m, XrLirType type, bool report) {
     CHECK(backedges == 1 && returns == 1 && limits == 1 && increments == 1 && initial == 1);
 }
 static XrCompileResources *resources_new(void) {
-    XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX}; XrCompileResources *resources = NULL;
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false}; XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK); return resources;
 }
 static XrRbcProgram *program_new(XrLirModule *m, uint32_t ordinal) {
@@ -274,7 +274,7 @@ static void reject_float_operations(void) {
         } else ret(m, b, value);
         OK(xr_lir_module_finish(m, NULL)); OK(xr_lir_verify(m, NULL));
         XrCompileResources *r = resources_new(); XrLirCOutput out = {0}; XrLirCDiagnostic diagnostic;
-        XrLirCRequest request = {.module = m, .entry = f, .resources = r, .translation_unit = "float-frontier.c"};
+        XrLirCRequest request = {.module = m, .entry = f, .resources = r, .translation_unit = "float-frontier.c", .control = NULL};
         CHECK(xr_lir_emit_c(&request, &out, &diagnostic) == XR_LIR_C_UNSUPPORTED);
         CHECK(!out.bytes && !out.length && diagnostic.source.line == 3);
         xr_lir_module_destroy(m); xr_compile_resources_release(r);
@@ -282,7 +282,7 @@ static void reject_float_operations(void) {
 }
 static void emit_c(XrLirModule *m, const char *path) {
     XrLirFunction root; OK(xr_lir_function_at(m, 0, &root)); XrCompileResources *resources = resources_new();
-    XrLirCRequest request = {.module = m, .entry = root, .resources = resources, .translation_unit = path};
+    XrLirCRequest request = {.module = m, .entry = root, .resources = resources, .translation_unit = path, .control = NULL};
     XrLirFunctionView view; OK(xr_lir_function_view(m, root, &view));
     XrRbcProgram *helper = view.result == XR_LIR_F64 ? program_new(m, 1) : NULL;
     XrLirCOutput out = {0}; CHECK(xr_lir_emit_c(&request, &out, NULL) == XR_LIR_C_OK);
@@ -343,7 +343,7 @@ static void emit_negation(XrLirModule *m, const char *path, bool output) {
     }
     XrCompileResources *resources = resources_new(); XrLirCOutput out = {0};
     XrLirCRequest request = {.module = m, .entry = root, .resources = resources,
-        .translation_unit = path ? path : "native-negation.c"};
+        .translation_unit = path ? path : "native-negation.c", .control = NULL};
     CHECK(xr_lir_emit_c(&request, &out, NULL) == XR_LIR_C_OK && out.entry_result == XR_LIR_F64);
     xr_lir_module_destroy(m); xr_compile_resources_release(resources);
     CHECK(diagnostic.line == 7 && !strcmp(diagnostic.path, "negation.xr"));
@@ -367,7 +367,7 @@ static void unselected_negation(bool integer_root) {
     ret(m, b, constant(m, b, type, 0)); OK(xr_lir_module_finish(m, NULL));
     XrCompileResources *resources = resources_new(); XrLirCOutput out = {0};
     XrLirCRequest request = {.module = m, .entry = root, .resources = resources,
-        .translation_unit = "unselected-negation.c"};
+        .translation_unit = "unselected-negation.c", .control = NULL};
     CHECK(xr_lir_emit_c(&request, &out, NULL) == XR_LIR_C_OK);
     CHECK(!strstr(out.bytes, "FENV_ACCESS") && !strstr(out.bytes, "fenv_access"));
     CHECK(integer_root ? !strstr(out.bytes, "double") : strstr(out.bytes, "double") != NULL);
@@ -394,7 +394,7 @@ static void test_frontier(void) {
     for (size_t i = 0; i < sizeof(native_rejected) / sizeof(*native_rejected); ++i) {
         XrLirModule *m = transport(native_rejected[i]); XrLirFunction root; OK(xr_lir_function_at(m, 0, &root));
         XrCompileResources *resources = resources_new(); XrLirCOutput out = {0}; XrLirCDiagnostic diagnostic;
-        XrLirCRequest request = {.module = m, .entry = root, .resources = resources, .translation_unit = "frontier.c"};
+        XrLirCRequest request = {.module = m, .entry = root, .resources = resources, .translation_unit = "frontier.c", .control = NULL};
         CHECK(xr_lir_emit_c(&request, &out, &diagnostic) == XR_LIR_C_UNSUPPORTED);
         CHECK(diagnostic.status == XR_LIR_C_UNSUPPORTED && !out.bytes && !out.length);
         xr_lir_module_destroy(m); xr_compile_resources_release(resources);

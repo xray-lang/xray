@@ -8,7 +8,7 @@
  */
 static bool query_type_literal_same(SourceQueryCopy *copy,XrXirLiteral literal,const char *text) {
     size_t length=query_length(copy,text);
-    return literal.bytes&&length&&length-1==literal.length&&query_work(copy,literal.length)&&
+    return literal.bytes&&length&&length-1==literal.length&&((copy)->status == XR_XIR_OK)&&
         !memcmp(literal.bytes,text,literal.length);
 }
 static bool query_type_contains(XrXirSourceRange outer,XrXirSourceRange inner) {
@@ -45,7 +45,7 @@ static XrXirStatus query_type_facts_validate(SourceQueryCopy *copy,const XrXirSo
         xir_compile_calloc(&copy->snapshot->context,interface_count,1,&copy->status):NULL;
     XrXirStatus status=copy->status;
     for(uint32_t i=0;i<facts->declaration_count&&status==XR_XIR_OK;++i){
-        if(!query_work(copy,sizeof(facts->declarations[i]))){status=copy->status;break;}
+        if(!((copy)->status == XR_XIR_OK)){status=copy->status;break;}
         const XrXirSourceTypeFact *fact=&facts->declarations[i];XrXirSourceRange range=fact->range;
         status=query_type_identity(copy,fact,i);if(status!=XR_XIR_OK)break;
         if(fact->kind!=XR_XIR_SOURCE_TYPE_NONE){uint8_t *seen=fact->kind==XR_XIR_SOURCE_TYPE_INTERFACE?interfaces:nominals;
@@ -65,7 +65,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_type_facts_copy(XrXirSourceSn
     if(status!=XR_XIR_OK)return status;
     SourceQueryMemory *previous=snapshot->memory;XrXirSourceTypeFacts owned=*facts;
     owned.declarations=query_copy(&copy,facts->declarations,facts->declaration_count,sizeof(*facts->declarations));
-    (void)query_work(&copy,sizeof(owned)+sizeof(snapshot->type_facts_ready));
+    (void)((&copy)->status == XR_XIR_OK);
     if(copy.status!=XR_XIR_OK){while(snapshot->memory!=previous){SourceQueryMemory *next=snapshot->memory->next;
         xr_compile_resources_free(snapshot->memory);snapshot->memory=next;}return copy.status;}
     snapshot->type_facts=owned;snapshot->type_facts_ready=true;return XR_XIR_OK;

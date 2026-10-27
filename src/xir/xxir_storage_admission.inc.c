@@ -17,9 +17,11 @@ static XrXirValueStatus storage_admission_begin(const XrXirValue *value,
     if (!owned_carrier_type((XrXirType)value->type)) return XR_XIR_VALUE_OK;
     const XirObject *owner=object_pointer(value);
     if (!owner->arena || admission->arena==owner->arena) return XR_XIR_VALUE_OK;
-    uint64_t work=xir_type_arena_lookup_work(admission->arena);
-    if (work>admission->work || !xr_xir_domain_work(admission->domain,work)) return XR_XIR_VALUE_LIMIT;
-    admission->work-=work;local->work=admission->work;
+    if (!admission_is_compile(admission)) {
+        uint64_t work=xir_type_arena_lookup_work(admission->arena);
+        if (work>admission->work || !xr_xir_domain_work(admission->domain,work)) return XR_XIR_VALUE_LIMIT;
+        admission->work-=work;local->work=admission->work;
+    }
     XrXirType expected;
     if (!xir_type_arena_local_type(admission->arena,owner->arena,(XrXirType)value->type,&expected) ||
         !xr_xir_value_argument(value,admission->arena,expected)) return XR_XIR_VALUE_BAD_ARGUMENT;

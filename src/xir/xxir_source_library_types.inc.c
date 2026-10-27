@@ -26,13 +26,13 @@ static bool source_library_declaration_inventory(SourceContext *ctx, uint32_t mo
     const XrXirNominalTable *nt=library->types->nominals;
     const XrXirInterfaceTable *it=library->types->interfaces;
     for (uint32_t n=0; nt && n<nt->count; ++n) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!source_library_literal_same(ctx,nt->declarations[n].module,owner->name,owner->name_length)) continue;
         if (*nominals==UINT32_MAX) return source_fail(ctx,NULL,XR_XIR_BUDGET,"library nominal inventory exhausted");
         ++*nominals;
     }
     for (uint32_t i=0; it && i<it->count; ++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!source_library_literal_same(ctx,it->declarations[i].module,owner->name,owner->name_length)) continue;
         if (*interfaces==UINT32_MAX) return source_fail(ctx,NULL,XR_XIR_BUDGET,"library interface inventory exhausted");
         ++*interfaces;
@@ -41,7 +41,7 @@ static bool source_library_declaration_inventory(SourceContext *ctx, uint32_t mo
 }
 static SourceLibraryUnit *source_library_unit(SourceContext *ctx, const XrXirModule *library) {
     for (SourceLibraryUnit *u=ctx->library_units; u; u=u->next) {
-        if (!source_work(ctx,NULL)) return NULL;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
         if (u->library==library) return u;
     }
     return NULL;
@@ -49,7 +49,7 @@ static SourceLibraryUnit *source_library_unit(SourceContext *ctx, const XrXirMod
 static uint32_t source_library_declaration_module(SourceContext *ctx,
     const SourceLibraryUnit *unit, XrXirLiteral module) {
     for (uint32_t m=0; m<(uint32_t)ctx->graph->spec_count; ++m) {
-        if (!source_work(ctx,NULL)) return UINT32_MAX;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return UINT32_MAX;
         const XrModuleSpec *spec=&ctx->graph->specs[m];
         if (!source_owned_checked(spec) || source_owned_artifact(spec)!=unit->artifact) continue;
         const XrXirSourceModule *owner=&unit->library->declarations->modules[source_owned_module(spec)];
@@ -85,11 +85,11 @@ static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
     if ((nt && nt->count && !unit->nominals) || (it && it->count && !unit->interfaces) ||
         (unit->type_count && !unit->types)) return false;
     for (uint32_t t=0; t<unit->type_count; ++t) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         unit->types[t]=(XrXirType)UINT32_MAX;
     }
     for (uint32_t n=0; nt && n<nt->count; ++n) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirNominalDeclaration *in=&nt->declarations[n];
         uint32_t m=source_library_declaration_module(ctx,unit,in->module);
         /* This bounded slice requires the unit's declaration closure to lie in
@@ -116,7 +116,7 @@ static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
         ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration-1].native_identity=in->native.native_id;
     }
     for (uint32_t i=0; it && i<it->count; ++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirInterfaceDeclaration *in=&it->declarations[i];
         uint32_t m=source_library_declaration_module(ctx,unit,in->module);
         if (m==UINT32_MAX) return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"library interface declaration is outside selected module closure");
@@ -139,7 +139,7 @@ static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
 }
 static bool source_library_type(SourceContext *ctx, const SourceLibraryUnit *unit,
     XrXirType input, XrXirType *output) {
-    if (!source_work(ctx,NULL)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     uint32_t t=(uint32_t)input;
     if (t>=XR_XIR_CONSTRUCTED_TYPE_BASE && t<XR_XIR_CONSTRUCTED_TYPE_LIMIT) {
         t-=XR_XIR_CONSTRUCTED_TYPE_BASE;
@@ -165,7 +165,7 @@ static bool source_library_applications(SourceContext *ctx,const SourceLibraryUn
     XrXirInterfaceApplication *applications=count ? source_alloc(ctx,count,sizeof(*applications)) : NULL;
     if (count && !applications) return false;
     for (uint32_t a=0; a<count; ++a) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (input[a].declaration>=unit->library->types->interfaces->count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library interface application is not mapped");
         applications[a].declaration=unit->interfaces[input[a].declaration];
@@ -181,7 +181,7 @@ static bool source_library_constraints(SourceContext *ctx,const SourceLibraryUni
     XrXirConstraint *constraints=count ? source_alloc(ctx,count,sizeof(*constraints)) : NULL;
     if (count && !constraints) return false;
     for (uint32_t p=0; p<count; ++p) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         constraints[p].markers=input[p].markers;
         constraints[p].interface_count=input[p].interface_count;
         if (!source_library_applications(ctx,unit,input[p].interfaces,input[p].interface_count,
@@ -197,7 +197,7 @@ static void source_library_query_type(SourceContext *ctx,uint32_t declaration,
 static bool source_library_intern_types(SourceContext *ctx, SourceLibraryUnit *unit) {
     const XrXirTypes *pool=unit->library->types;
     for (uint32_t t=0; t<unit->type_count; ++t) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirTypeNode *in=&pool->nodes[t]; XrXirTypeNode out=*in;
         out.parameters=NULL;out.nominal.arguments=NULL;out.nominal.fields=NULL;
         out.nominal.field_count=0;
@@ -236,7 +236,7 @@ static bool source_library_declaration_constraints(SourceContext *ctx,SourceLibr
     const XrXirNominalTable *nominals=unit->library->types->nominals;
     const XrXirInterfaceTable *interfaces=unit->library->types->interfaces;
     for (uint32_t n=0; nominals && n<nominals->count; ++n) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t target=unit->nominals[n];
         XrXirNominalDeclaration *to=(XrXirNominalDeclaration *)&ctx->nominals.declarations[target];
         const XrXirNominalDeclaration *from=&nominals->declarations[n];
@@ -245,7 +245,7 @@ static bool source_library_declaration_constraints(SourceContext *ctx,SourceLibr
         query->generic_parameter_count=to->parameter_count;query->generic_constraints=to->constraints;
     }
     for (uint32_t i=0; interfaces && i<interfaces->count; ++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t target=unit->interfaces[i];
         XrXirInterfaceDeclaration *to=(XrXirInterfaceDeclaration *)&ctx->interfaces.declarations[target];
         const XrXirInterfaceDeclaration *from=&interfaces->declarations[i];
@@ -267,7 +267,7 @@ static bool source_library_variants(SourceContext *ctx,SourceName *owner,
     uint32_t *ids=source_alloc(ctx,(uint64_t)input->variant_count+3,sizeof(*ids));
     if (!variants || !ids) return false;
     for (uint32_t v=0; v<input->variant_count; ++v) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirNominalVariant *from=&input->variants[v];
         char *name=source_library_name(ctx,from->name);
         if (!name) return false;
@@ -286,12 +286,12 @@ static bool source_library_enum_query(SourceContext *ctx,SourceName *owner) {
     if (record->kind!=XR_XIR_NOMINAL_ENUM) return true;
     uint32_t *ids=ctx->nominal_variants[owner->index];
     for (uint32_t v=0; v<record->variant_count; ++v) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         source_library_query_type(ctx,ids[v],owner->type,owner->declaration);
     }
     const char *names[]={"ordinal","name","toString"};
     for (uint32_t i=0; i<3; ++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceName symbol={0};symbol.name=source_owned_text(ctx,names[i]);
         symbol.type=i ? XR_XIR_STRING : XR_XIR_I64;
         if (!symbol.name || !source_query_declare(ctx,&symbol,XR_XIR_SOURCE_INTRINSIC,owner->declaration,
@@ -305,7 +305,7 @@ static bool source_library_fields(SourceContext *ctx, SourceLibraryUnit *unit) {
     if (!unit->library->types) return true;
     const XrXirNominalTable *table=unit->library->types->nominals;
     for (uint32_t n=0; table && n<table->count; ++n) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t target=unit->nominals[n];SourceName *symbol=ctx->nominal_sources[target];
         ctx->module=symbol->module;ctx->function=symbol->module;
         const XrXirNominalDeclaration *in=&table->declarations[n];
@@ -318,7 +318,7 @@ static bool source_library_fields(SourceContext *ctx, SourceLibraryUnit *unit) {
         uint32_t *defaults=count ? source_alloc(ctx,count,sizeof(*defaults)) : NULL;
         if (count && (!fields || !types || !members || !defaults)) return false;
         for (uint32_t f=0; f<count; ++f) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             char *name=source_library_name(ctx,in->fields[f].name);
             if (!name || !source_library_type(ctx,unit,in->fields[f].type,&types[f])) return false;
             fields[f]=(XrXirNominalField){{name,in->fields[f].name.length},types[f],in->fields[f].flags};
@@ -328,7 +328,7 @@ static bool source_library_fields(SourceContext *ctx, SourceLibraryUnit *unit) {
             if (in->kind==XR_XIR_NOMINAL_ENUM) {
                 bool found=false;
                 for (uint32_t v=0; v<in->variant_count; ++v) {
-                    if (!source_work(ctx,NULL)) return false;
+                    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                     const XrXirNominalVariant *variant=&in->variants[v];
                     if (f>=variant->field_begin && f-variant->field_begin<variant->field_count) {
                         parent=ctx->nominal_variants[target][v];found=true;break;
@@ -347,7 +347,7 @@ static bool source_library_fields(SourceContext *ctx, SourceLibraryUnit *unit) {
         XrXirType *arguments=in->parameter_count ? source_alloc(ctx,in->parameter_count,sizeof(*arguments)) : NULL;
         if (in->parameter_count && !arguments) return false;
         for (uint32_t a=0; a<in->parameter_count; ++a) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             arguments[a]=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a);
         }
         type.nominal=(XrXirNominalType){target,arguments,in->parameter_count,types,count};
@@ -367,7 +367,7 @@ static bool source_library_interfaces(SourceContext *ctx, SourceLibraryUnit *uni
     if (!unit->library->types) return true;
     const XrXirInterfaceTable *table=unit->library->types->interfaces;
     for (uint32_t i=0; table && i<table->count; ++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t target=unit->interfaces[i];SourceName *owner=ctx->interface_sources[target];
         ctx->module=owner->module;ctx->function=owner->module;
         const XrXirInterfaceDeclaration *in=&table->declarations[i];
@@ -379,7 +379,7 @@ static bool source_library_interfaces(SourceContext *ctx, SourceLibraryUnit *uni
         ctx->interface_member_declarations[target]=ids;
         out->methods=methods;out->method_count=count;
         for (uint32_t m=0; m<count; ++m) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             methods[m]=in->methods[m];
             char *name=source_library_name(ctx,in->methods[m].name);
             if (!name || !source_library_type(ctx,unit,in->methods[m].signature,&methods[m].signature)) return false;
@@ -401,7 +401,7 @@ static bool source_library_interfaces(SourceContext *ctx, SourceLibraryUnit *uni
             source_library_query_type(ctx,member->declaration,signature->result,generic_owner);
             XrXirSourceType *parameters=(XrXirSourceType *)query->parameters;
             for (uint32_t p=0; p<signature->parameter_count; ++p) {
-                if (!source_work(ctx,NULL)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 parameters[p].generic_owner=xr_xir_type_span(&ctx->types,signature->parameters[p].type) ? generic_owner : 0;
             }
         }

@@ -15,7 +15,8 @@ typedef enum XrCliToolchainUpdateStatus {
     XR_CLI_TOOLCHAIN_UPDATE_OK, XR_CLI_TOOLCHAIN_UPDATE_INVALID,
     XR_CLI_TOOLCHAIN_UPDATE_BUDGET, XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY,
     XR_CLI_TOOLCHAIN_UPDATE_UNRESOLVED, XR_CLI_TOOLCHAIN_UPDATE_IO,
-    XR_CLI_TOOLCHAIN_UPDATE_UNSUPPORTED, XR_CLI_TOOLCHAIN_UPDATE_PENDING
+    XR_CLI_TOOLCHAIN_UPDATE_UNSUPPORTED, XR_CLI_TOOLCHAIN_UPDATE_PENDING,
+    XR_CLI_TOOLCHAIN_UPDATE_MEMORY_LIMIT, XR_CLI_TOOLCHAIN_UPDATE_OVERFLOW
 } XrCliToolchainUpdateStatus;
 typedef struct XrCliToolchainUpdateRequest {
     const char *path, *target, *compiler, *zig;
@@ -32,7 +33,7 @@ typedef struct XrCliToolchainUpdateView {
 } XrCliToolchainUpdateView;
 
 /* Windows implementation. Copies and validates the entire borrowed request on
- * the mandatory original ledger, without writing or locking files. The default
+ * the mandatory original memory owner, without writing or locking files. The default
  * locator is resolved now. Failure preserves the initially NULL output. The
  * original caller state is retained and owns sticky resource failure across
  * construction, nested config reads and later retries on the same state. */
@@ -44,10 +45,10 @@ XR_FUNC XrCliToolchainUpdateStatus xr_cli_toolchain_update_new(XrCompileState *,
  * durability or CAS against writers that ignore the lock. The lock file stays
  * in place for cooperating processes. Failures preserve old config/output until
  * the actual commit; the owner retains cleanup responsibility on every result.
- * Calls and views require caller exclusion. No budget or work is refunded. */
+ * Calls and views require caller exclusion. Physical memory is released during cleanup. */
 XR_FUNC XrCliToolchainUpdateStatus xr_cli_toolchain_update_execute(XrCliToolchainUpdate *);
 XR_FUNC const XrCliToolchainUpdateView *xr_cli_toolchain_update_view(const XrCliToolchainUpdate *);
-/* No new allocation/work. PENDING retains owner, lock and publication cleanup
+/* No new allocation. PENDING retains owner, lock and publication cleanup
  * for retry; OK frees/nulls. A NULL handle is already closed. */
 XR_FUNC XrCliToolchainUpdateStatus xr_cli_toolchain_update_close(XrCliToolchainUpdate **);
 #endif // XCLI_TOOLCHAIN_UPDATE_H

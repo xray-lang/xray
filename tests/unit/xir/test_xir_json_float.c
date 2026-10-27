@@ -25,7 +25,7 @@ static XrXirCompileContext json_float_context(void) {
 typedef struct JsonFloatSource {const char *text,*logical;XrXirLinkageKind kind;const XrXirLibraryCatalog *catalog;} JsonFloatSource;
 static XrXirStatus json_float_source_check(const XrXirCompileContext *context,const JsonFloatSource *source,
     XrXirSourceResult *result,XrXirSourceDiagnostic *diagnostic) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_JSON_FLOAT_WORK};char path[1024];
     CHECK(snprintf(path,sizeof(path),"%s/%s",XR_JSON_FLOAT_WORK,source->logical)>0);
     XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,source->kind,source->catalog};
@@ -38,7 +38,7 @@ static XrXirSourceResult json_float_source(const XrXirCompileContext *context,co
     XrXirStatus status=json_float_source_check(context,source,&result,&diagnostic);
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
     fprintf(stderr,"JSON floating %s Source%u %d:%d %s spent=%llu/%llu/%llu\n",source->logical,status,diagnostic.line,diagnostic.column,
-        diagnostic.message,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,(unsigned long long)stats.work);
+        diagnostic.message,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,(unsigned long long)stats.allocation_count);
     if(status!=XR_XIR_OK) {
         CHECK(!result.checked && !result.snapshot);xr_xir_compile_source_result_free(&result);
         /* The strict positive fixture aborts after discarding its caller setup. */
@@ -66,7 +66,7 @@ static XrXirLibraryCatalog *json_float_catalog(const XrXirCompileContext *contex
     XrXirLibraryCatalog *catalog=NULL;XrXirStatus status=xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog);
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
     fprintf(stderr,"JSON floating Catalog modules%u status%u spent=%llu/%llu/%llu\n",count,status,
-        (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,(unsigned long long)stats.work);
+        (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,(unsigned long long)stats.allocation_count);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);memset(bindings,0xa5,sizeof(bindings));
     memset(&input,0xa5,sizeof(input));xr_xir_compile_source_result_free(source);
     if(status!=XR_XIR_OK) {
@@ -151,9 +151,9 @@ static void json_float_catalog_state_boundaries(void) {
         xr_xir_compile_library_catalog_free(catalog);
         memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
         XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
-        CHECK(after.live_bytes==baseline.live_bytes && !runtime_live && !runtime_bytes);
-        fprintf(stderr,"JSON floating Catalog state case%zu type%u mutable%u status%u expected%u work%llu; live baseline restored\n",
-            i,(unsigned)logical,(unsigned)cases[i].mutable,status,cases[i].expected,(unsigned long long)after.work);
+        CHECK(after.held_bytes==baseline.held_bytes && !runtime_live && !runtime_bytes);
+        fprintf(stderr,"JSON floating Catalog state case%zu type%u mutable%u status%u expected%u allocations%llu; held baseline restored\n",
+            i,(unsigned)logical,(unsigned)cases[i].mutable,status,cases[i].expected,(unsigned long long)after.allocation_count);
         CHECK(status==cases[i].expected);
     }
     JsonFloatSource exported={"export const stored:f32=1.0\n","exported-state.xr",XR_XIR_LIBRARY,NULL};
@@ -204,8 +204,8 @@ int main(int argc,char **argv) {
     XrXirProgram *program=NULL;XrXirStatus status=xr_xir_compile_vm_program_take(&lowered,&program);
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     fprintf(stderr,"JSON floating Program status%u before=%llu/%llu/%llu after=%llu/%llu/%llu\n",status,
-        (unsigned long long)before.allocated_bytes,(unsigned long long)before.peak_bytes,(unsigned long long)before.work,
-        (unsigned long long)after.allocated_bytes,(unsigned long long)after.peak_bytes,(unsigned long long)after.work);
+        (unsigned long long)before.allocated_bytes,(unsigned long long)before.peak_bytes,(unsigned long long)before.allocation_count,
+        (unsigned long long)after.allocated_bytes,(unsigned long long)after.peak_bytes,(unsigned long long)after.allocation_count);
     if(status!=XR_XIR_OK) {
         CHECK(!program && lowered);xr_xir_compile_artifact_free(lowered);xr_compile_resources_release(context.resources);
         CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);

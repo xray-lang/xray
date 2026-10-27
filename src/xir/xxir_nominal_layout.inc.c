@@ -10,23 +10,23 @@
  *   Active paths reject infinite values; completed nodes permit shared fields.
  */
 typedef struct NominalLayoutFrame { uint32_t index, next; } NominalLayoutFrame;
-static XrXirStatus nominal_field_visibility(const XrXirTypes *types, XrXirCompileContext *budget) {
+static XrXirStatus nominal_field_visibility(const XrXirTypes *types) {
     const XrXirNominalTable *table = types->nominals;
     if (!table->declarations) return XR_XIR_OK;
     for (uint32_t i = 0; i < table->count; ++i) {
         const XrXirNominalDeclaration *d = &table->declarations[i];
         for (uint32_t f = 0; f < d->field_count; ++f) {
-            if (!nominal_charge(budget, 0, 1)) return XR_XIR_BUDGET;
+
             const XrXirTypeNode *node = xr_xir_type_node(types, d->fields[f].type);
             while (node && node->kind == XR_XIR_TYPE_NULLABLE) {
-                if (!nominal_charge(budget, 0, 1)) return XR_XIR_BUDGET;
+
                 node = xr_xir_type_node(types, node->element);
             }
             if (!node || node->kind != XR_XIR_TYPE_NOMINAL) continue;
             const XrXirNominalDeclaration *target = &table->declarations[node->nominal.declaration];
             if (target->exported) continue;
             bool same = false;
-            XrXirStatus status = nominal_same_name(d->module, target->module, budget, &same);
+            XrXirStatus status = nominal_same_name(d->module, target->module, &same);
             if (status != XR_XIR_OK) return status;
             if (!same) return XR_XIR_BAD_TYPE;
         }
@@ -36,10 +36,10 @@ static XrXirStatus nominal_field_visibility(const XrXirTypes *types, XrXirCompil
 static XrXirStatus nominal_layout_verify(const XrXirTypes *types, XrXirCompileContext *budget) {
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!types->nominals) return XR_XIR_OK;
-    XrXirStatus status = nominal_field_visibility(types, budget);
+    XrXirStatus status = nominal_field_visibility(types);
     if (status != XR_XIR_OK || !types->count) return status;
     uint64_t stack_bytes = (uint64_t) types->count * sizeof(NominalLayoutFrame);
-    if (!nominal_charge(budget, stack_bytes + types->count, types->count)) return XR_XIR_BUDGET;
+    if (!((stack_bytes + types->count) <= SIZE_MAX)) return XR_XIR_BUDGET;
     NominalLayoutFrame *stack = xir_compile_alloc(budget, (size_t) (stack_bytes + types->count), &allocation_status);
     if (!stack) return allocation_status;
     unsigned char *state = (unsigned char *) stack + (size_t) stack_bytes;
@@ -57,7 +57,7 @@ static XrXirStatus nominal_layout_verify(const XrXirTypes *types, XrXirCompileCo
                 &types->nominals->declarations[node->declaration] : NULL;
             uint32_t count = nullable ? 1 : d ? d->field_count : node->field_count;
             if (frame->next == count) { state[frame->index] = 2; --depth; continue; }
-            if (!nominal_charge(budget, 0, 1)) { status = XR_XIR_BUDGET; break; }
+
             XrXirType field = nullable ? type_node->element : d ? d->fields[frame->next].type : node->fields[frame->next];
             ++frame->next;
             const XrXirTypeNode *child = xr_xir_type_node(types, field);

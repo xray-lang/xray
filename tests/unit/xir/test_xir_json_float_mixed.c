@@ -46,7 +46,7 @@ static XrXirArtifact *float_mixed_lower(const XrXirCompileContext *context) {
     CHECK(status==XR_XIR_OK);return lowered;
 }
 static void float_mixed(unsigned direction) {
-    XrXirCompileContext context={0};const XrCompileResourceLimits caps={67108864,8388608,128000000};
+    XrXirCompileContext context={0};const XrCompileResourceLimits caps={XR_COMPILE_MEMORY_FINITE,8388608,true};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();unsigned released=float_mixed_releases;
     XrXirArtifact *artifact=float_mixed_lower(&context);const XrXirModule *module=xr_xir_compile_artifact_module(artifact);

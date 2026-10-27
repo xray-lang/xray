@@ -21,7 +21,7 @@ static bool source_library_materializations(SourceContext *ctx,const SourceLibra
     if (!rows) return false;
     uint32_t next=0;
     for (uint32_t i=0;i<count;++i) {
-        if (!source_work_units(ctx,NULL,2*sizeof(*rows))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirMaterializationBinding *from=xr_xir_compile_construction_materialization(unit->construction,i);
         if (!from || from->caller>=map->function_count || from->function>=map->function_count ||
             !unit->library->types || !unit->library->types->nominals || from->nominal>=unit->library->types->nominals->count)

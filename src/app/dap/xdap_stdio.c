@@ -44,7 +44,13 @@ XR_FUNC void xdap_stdio_free(XdapStdio *io) {
 XR_FUNC XrXirStatus xdap_stdio_new(XrCompileResources *resources,size_t limit,XdapStdio **output) {
     if (!resources || !output || *output || !limit || limit>1048576) return XR_XIR_BAD_STRUCTURE;
     XdapStdio *io=NULL;XrCompileResourceStatus allocated=xr_compile_resources_calloc(resources,1,sizeof(*io),(void **)&io);
-    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+        allocated==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        allocated==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_OVERFLOW :
+        allocated==XR_COMPILE_RESOURCE_CANCELLED ? XR_XIR_CANCELLED :
+        allocated==XR_COMPILE_RESOURCE_DEADLINE ? XR_XIR_DEADLINE :
+        allocated==XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE :
+        XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=XR_XIR_OK;
 #ifdef XR_OS_WINDOWS
     status=stdio_platform_open();

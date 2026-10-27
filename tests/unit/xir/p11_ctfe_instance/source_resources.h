@@ -19,9 +19,8 @@ static SourceReceivingFixture source_receiving_fixture(const char *kind,unsigned
 }
 static XrXirStatus source_receiving_operation(XrXirCompileContext *context,const char *kind,
     const SourceReceivingFixture *fixture,XirSourceInstanceConstants *output) {
-    XrCompilerSession *session=NULL;XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK) return created==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
-        created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+    XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK) return p11_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"instance-constant",NULL};
     XrXirSourceRequest source={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText text={NULL,instance_source_text(),strlen(instance_source_text())};
@@ -39,7 +38,7 @@ static InstanceCost source_receiving_cost(const char *kind,const SourceReceiving
     size_t first=source_fixture_compile_attempts;XirSourceInstanceConstants result={0};
     CHECK(source_receiving_operation(&context,kind,fixture,&result)==XR_XIR_OK && result.count==2);
     XrCompileResourceStats after=stats(&context);
-    InstanceCost cost={after.work-before.work,after.allocated_bytes-before.allocated_bytes,source_fixture_compile_attempts-first};
+    InstanceCost cost={after.allocated_bytes-before.allocated_bytes,source_fixture_compile_attempts-first};
     xr_xir_compile_source_instance_constants_free(&result);if (complete) *complete=stats(&context);
     xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);return cost;
 }
@@ -54,19 +53,14 @@ static void source_receiving_faults(const char *kind,unsigned ordinal,bool prefi
         XrXirStatus status=source_receiving_operation(&context,kind,&fixture,&result);
         if (status!=XR_XIR_OUT_OF_MEMORY) fprintf(stderr,"Source instance FI %s[%u] point=%zu/%zu status=%u\n",kind,ordinal,fault,cost.sites,status);
         CHECK(status==XR_XIR_OUT_OF_MEMORY && source_fixture_compile_injected && source_fixture_compile_attempts==first+fault+1);
-        CHECK(!result.source.checked && !result.source.snapshot && !result.functions && !result.count && stats(&context).live_bytes==before.live_bytes);
-        source_fixture_compile_fail_at=SIZE_MAX;XrCompileResourceStats failed=stats(&context);
-        bool exhausted=cost.work>caps.work-failed.work || cost.allocated>caps.allocated_bytes-failed.allocated_bytes;
+        CHECK(!result.source.checked && !result.source.snapshot && !result.functions && !result.count && stats(&context).held_bytes==before.held_bytes);
+        source_fixture_compile_fail_at=SIZE_MAX;
         status=source_receiving_operation(&context,kind,&fixture,&result);
-        CHECK(status==(exhausted?XR_XIR_BUDGET:XR_XIR_OK));
-        if (exhausted) {
-            CHECK(!result.source.checked && !result.functions && !result.count);
-            CHECK(source_receiving_operation(&context,kind,&fixture,&result)==XR_XIR_BUDGET);
-        } else {
+        CHECK(status==XR_XIR_OK);
+         {
             CHECK(result.count==2 && result.source.checked && result.source.snapshot && result.functions[0]!=result.functions[1]);
-            CHECK(stats(&context).work-failed.work==cost.work && stats(&context).allocated_bytes-failed.allocated_bytes==cost.allocated);
         }
-        xr_xir_compile_source_instance_constants_free(&result);CHECK(context.resources==same && stats(&context).live_bytes==before.live_bytes);
+        xr_xir_compile_source_instance_constants_free(&result);CHECK(context.resources==same && stats(&context).held_bytes==before.held_bytes);
         xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
         if (!(trial%256) || trial+1==trials) fprintf(stderr,"Source instance FI %s[%u] actual=%zu/%zu same original owner/retry/live physical0\n",kind,ordinal,fault+1,cost.sites);
     }
@@ -75,22 +69,21 @@ static void source_receiving_faults(const char *kind,unsigned ordinal,bool prefi
 static void source_receiving_bounds(const char *kind,unsigned ordinal) {
     SourceReceivingFixture fixture=source_receiving_fixture(kind,ordinal);XrCompileResourceStats used={0};
     (void)source_receiving_cost(kind,&fixture,&used);
-    for (unsigned axis=0;axis<3;++axis) for (unsigned minus=0;minus<2;++minus) {
+    for (unsigned minus=0;minus<2;++minus) {
         XrCompileResourceLimits limits=caps;
-        if (!axis) limits.work=used.work-minus;else if (axis==1) limits.allocated_bytes=used.allocated_bytes-minus;
-        else limits.live_bytes=used.peak_bytes-minus;
+        limits.memory_limit=used.peak_bytes-minus;
         XrXirCompileContext context={0};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
         context.limits=xr_xir_compile_default_limits();XrCompileResourceStats before=stats(&context);XirSourceInstanceConstants result={0};
         XrXirStatus status=source_receiving_operation(&context,kind,&fixture,&result);
-        if (status!=(minus?XR_XIR_BUDGET:XR_XIR_OK)) fprintf(stderr,"Source instance bound %s[%u] axis=%u minus=%u status=%u\n",kind,ordinal,axis,minus,status);
-        CHECK(status==(minus?XR_XIR_BUDGET:XR_XIR_OK));xr_xir_compile_source_instance_constants_free(&result);
-        CHECK(stats(&context).live_bytes==before.live_bytes);
+        if (status!=(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK)) fprintf(stderr,"Source instance bound %s[%u] minus=%u status=%u\n",kind,ordinal,minus,status);
+        CHECK(status==(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));xr_xir_compile_source_instance_constants_free(&result);
+        CHECK(stats(&context).held_bytes==before.held_bytes);
         if (minus) {
-            CHECK(source_receiving_operation(&context,kind,&fixture,&result)==XR_XIR_BUDGET);
-            CHECK(!result.source.checked && !result.functions && stats(&context).live_bytes==before.live_bytes);
+            CHECK(source_receiving_operation(&context,kind,&fixture,&result)==XR_XIR_MEMORY_LIMIT);
+            CHECK(!result.source.checked && !result.functions && stats(&context).held_bytes==before.held_bytes);
         }
         xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     }
-    fprintf(stderr,"Source instance bounds %s[%u] threeaxes exact/minus1 original-owner physical0 work=%llu allocated=%llu peak=%llu\n",
-        kind,ordinal,(unsigned long long)used.work,(unsigned long long)used.allocated_bytes,(unsigned long long)used.peak_bytes);
+    fprintf(stderr,"Source instance bounds %s[%u] held exact/minus1 original-owner physical0 allocated=%llu peak=%llu\n",
+        kind,ordinal,(unsigned long long)used.allocated_bytes,(unsigned long long)used.peak_bytes);
 }

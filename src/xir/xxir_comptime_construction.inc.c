@@ -24,23 +24,23 @@ static XrXirStatus comptime_storage_shape(const XrXirCompileContext *context,con
     if (!table->site_count && !table->binding_count) return XR_XIR_OK;
     uint64_t bytes=(uint64_t)table->site_count*sizeof(*table->sites)+(uint64_t)table->binding_count*sizeof(*table->bindings);
     if (bytes>SIZE_MAX) return XR_XIR_BUDGET;
-    XrXirStatus status=xir_compile_resource_status(xr_compile_resources_admit(context->resources,bytes,bytes));
+    XrXirStatus status=xir_compile_resource_status(xr_compile_resources_admit(context->resources,(size_t)bytes));
     if (status!=XR_XIR_OK) return status;
     for (uint32_t s=0;s<table->site_count;++s) {
-        if (!xir_compile_work(context,sizeof(*table->sites)+4)) return XR_XIR_BUDGET;
+
         const XrXirComptimeSite *site=&table->sites[s];
         if (site->caller==site->helper || (s && (table->sites[s-1].caller>site->caller ||
             (table->sites[s-1].caller==site->caller && table->sites[s-1].instruction>=site->instruction)))) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t b=0;b<table->binding_count;++b) {
-        if (!xir_compile_work(context,sizeof(*table->bindings)+4)) return XR_XIR_BUDGET;
+
         const XrXirComptimeBinding *row=&table->bindings[b];
         if (row->site>=table->site_count || !row->argument_count || !row->arguments) return XR_XIR_BAD_STRUCTURE;
         bytes=(uint64_t)row->argument_count*sizeof(*row->arguments);
         if (bytes>SIZE_MAX) return XR_XIR_BUDGET;
-        status=xir_compile_resource_status(xr_compile_resources_admit(context->resources,bytes,bytes));
+        status=xir_compile_resource_status(xr_compile_resources_admit(context->resources,(size_t)bytes));
         if (status!=XR_XIR_OK) return status;
-        if (!xir_compile_work(context,bytes*2+4)) return XR_XIR_BUDGET;
+
         if (b && xir_comptime_key_order(&table->bindings[b-1],row)>=0) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
@@ -57,7 +57,7 @@ static XrXirStatus comptime_storage_copy(const XrXirCompileContext *context,cons
         output->bindings=xir_compile_calloc(context,source->binding_count,sizeof(*source->bindings),&status);
         if (!output->bindings) return status;output->binding_count=source->binding_count;
         for (uint32_t b=0;b<source->binding_count;++b) {
-            if (!xir_compile_work(context,sizeof(*source->bindings))) return XR_XIR_BUDGET;
+
             XrXirComptimeBinding *to=&((XrXirComptimeBinding *)output->bindings)[b];
             *to=source->bindings[b];to->arguments=NULL;
             to->arguments=xir_compile_copy(context,source->bindings[b].arguments,(size_t)to->argument_count*sizeof(*to->arguments),&status);
@@ -82,15 +82,15 @@ XR_FUNC const XrXirComptimeSite *xir_comptime_site(const XrXirConstruction *owne
 XR_FUNC XrXirStatus xir_comptime_select(const XrXirCompileContext *context,const XrXirConstruction *owner,
     const XirComptimeSelection *input,const XrXirComptimeBinding **output) {
     if (!input || !input->source || !owner || !output || *output || (input->argument_count && !input->arguments)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
     if (!owner->comptime.site_count) return XR_XIR_OK;
-    if (!xir_compile_work(context,256)) return XR_XIR_BUDGET;
+
     const XrXirComptimeSite *site=xir_comptime_site(owner,input->caller,input->instruction);
     if (!site) return XR_XIR_OK;
     uint32_t ordinal=(uint32_t)(site-owner->comptime.sites);
     const XrXirComptimeBinding *found=NULL;
     for (uint32_t b=0;b<owner->comptime.binding_count;++b) {
-        if (!xir_compile_work(context,sizeof(XrXirComptimeBinding))) return XR_XIR_BUDGET;
+
         const XrXirComptimeBinding *row=&owner->comptime.bindings[b];
         if (row->site!=ordinal || row->argument_count!=input->argument_count) continue;
         bool same=true;

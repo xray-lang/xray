@@ -22,7 +22,7 @@ static bool source_enum_text_literal(SourceContext *ctx, AstNode *node,
     size_t prefix = 0;
     if (qualified) {
         if (!source_copy_bytes(ctx,node,bytes,description->name.bytes,description->name.length) ||
-            !source_work(ctx,node)) return false;
+            !((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         prefix = description->name.length; bytes[prefix++] = '.';
     }
     if (!source_copy_bytes(ctx,node,bytes+prefix,name->bytes,name->length)) return false;
@@ -48,7 +48,7 @@ static bool source_enum_text(SourceContext *ctx, AstNode *node, SourceValue rece
         !source_enum_text_literal(ctx, node, &description, count - 1, qualified, value)) return false;
     for (uint32_t variant = 0; variant + 1 < count; ++variant) {
         SourceValue ordinal, condition, selected;
-        if (!source_work(ctx, node) ||
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) ||
             !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, variant, {0}}, &ordinal) ||
             !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_EQ_INT, XR_XIR_BOOL, {tag.id,ordinal.id}, {0}, 0, {0}}, &condition)) return false;
         SourceFunction *body = &ctx->bodies[ctx->function];

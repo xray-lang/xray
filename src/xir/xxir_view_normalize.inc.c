@@ -31,7 +31,7 @@ static XrXirStatus view_normalize_group(const XrXirCompileContext *context,
     const XrXirViewLiveEvent *event,ViewDropPlan **output,bool entry,uint32_t result) {
     uint32_t count=0;const XrXirViewLiveSet *before=&event->before,*after=&event->after;
     for (uint32_t i=0;i<before->count;++i) {
-        if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
         bool dead=entry ? !view_normalize_has(before,i) :
             !view_normalize_has(after,i) && (view_normalize_has(before,i) || before->values[i]==result);
         count+=dead;
@@ -44,7 +44,7 @@ static XrXirStatus view_normalize_group(const XrXirCompileContext *context,
     if (!plan) return status;
     *output=plan;plan->count=count;plan->values=(uint32_t *)(plan+1);count=0;
     for (uint32_t i=0;i<before->count;++i) {
-        if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
+
         bool dead=entry ? !view_normalize_has(before,i) :
             !view_normalize_has(after,i) && (view_normalize_has(before,i) || before->values[i]==result);
         if (dead) plan->values[count++]=before->values[i];
@@ -75,7 +75,7 @@ static XrXirStatus view_normalize_visit(void *user,const XrXirCompileContext *co
     if (event->kind==XR_XIR_VIEW_LIVE_ENTRY) {
         const XrXirBlock *block=f->blocks+event->block;uint32_t at=block->first;
         while (at<block->first+block->count && f->instructions[at].op==XR_XIR_PHI) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;++at;
+            ++at;
         }
         if (at<block->first+block->count) {
             XrXirOp op=f->instructions[at].op;
@@ -135,18 +135,18 @@ XR_FUNC XrXirStatus xir_compile_view_relocate(const XrXirCompileContext *context
         !s->instructions || !s->blocks || !d->instructions || !d->blocks) return XR_XIR_BAD_STRUCTURE;
     uint32_t start=r->boundaries[r->first_instruction];ViewLive counts={.module=r->module,.function=s};
     for (uint32_t i=start;i<d->instruction_count;++i) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         XrXirInstruction *op=(XrXirInstruction *)d->instructions+i;
         if (xr_xir_op_uses_operand_table(op->op)) {
             for (uint32_t p=0;p<op->args[1];++p) {
-                if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
                 if (op->op==XR_XIR_PHI && !(p%2u)) continue;
                 if (!view_relocate_value(r,(uint32_t *)d->operands+op->args[0]+p)) return XR_XIR_BAD_STRUCTURE;
             }
         } else {
             uint32_t count=view_live_operands(&counts,op);
             for (uint32_t p=0;p<count;++p) {
-                if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
                 if (!view_relocate_value(r,op->args+p)) return XR_XIR_BAD_STRUCTURE;
             }
         }
@@ -163,7 +163,7 @@ XR_FUNC XrXirStatus xir_compile_view_relocate(const XrXirCompileContext *context
         }
     }
     for (uint32_t b=r->first_block;b<s->block_count;++b) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         XrXirBlock *block=(XrXirBlock *)d->blocks+b;const XrXirBlock *old=s->blocks+b;
         block->first=r->boundaries[old->first];block->count=r->boundaries[old->first+old->count]-block->first;
         if (!view_relocate_instruction(r,&block->frontier,true)) return XR_XIR_BAD_STRUCTURE;
@@ -175,7 +175,7 @@ static XrXirStatus view_normalize_allocate(const XrXirCompileContext *context,
     if (!plan->before) return XR_XIR_OK;
     uint64_t groups=0,operands=source->operand_count;
     for (uint32_t i=0;i<source->instruction_count;++i) for (uint32_t side=0;side<2;++side) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         ViewDropPlan *p=side?plan->after[i]:plan->before[i];if (!p) continue;
         ++groups;operands+=p->count;
     }
@@ -195,10 +195,10 @@ static XrXirStatus view_normalize_allocate(const XrXirCompileContext *context,
     row->boundaries=xir_compile_alloc(context,((size_t)source->instruction_count+1u)*sizeof(*row->boundaries),&status);
     return status;
 }
-static XrXirStatus view_normalize_drop(const XrXirCompileContext *context,ViewDropPlan *plan,
+static XrXirStatus view_normalize_drop(ViewDropPlan *plan,
     XirViewNormalizedFunction *row,uint32_t *instructions,uint32_t *operands) {
     if (!plan) return XR_XIR_OK;
-    if (!xir_compile_work(context,(uint64_t)plan->count+1u)) return XR_XIR_BUDGET;
+
     row->instructions[(*instructions)++]=(XrXirInstruction){.op=XR_XIR_VIEW_CLEANUP,.args={*operands,plan->count}};
     memcpy(row->operands+*operands,plan->values,(size_t)plan->count*sizeof(*plan->values));*operands+=plan->count;
     return XR_XIR_OK;
@@ -211,17 +211,17 @@ static XrXirStatus view_normalize_body(const XrXirCompileContext *context,
     uint32_t count=0,operands=0;
     for (uint32_t p=0;p<source->parameter_count;++p) row->values[p]=p;
     for (uint32_t i=0;i<source->instruction_count;++i) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-        row->boundaries[i]=count;status=view_normalize_drop(context,plan->before[i],row,&count,&operands);
+
+        row->boundaries[i]=count;status=view_normalize_drop(plan->before[i],row,&count,&operands);
         if (status!=XR_XIR_OK) return status;
         row->values[source->parameter_count+i]=source->parameter_count+count;
         XrXirInstruction op=source->instructions[i];
         if (xr_xir_op_uses_operand_table(op.op)) {
-            if (!xir_compile_work(context,op.args[1])) return XR_XIR_BUDGET;
+
             if (op.args[1]) memcpy(row->operands+operands,source->operands+op.args[0],(size_t)op.args[1]*sizeof(*row->operands));
             op.args[0]=op.args[1]?operands:0;operands+=op.args[1];
         }
-        row->instructions[count++]=op;status=view_normalize_drop(context,plan->after[i],row,&count,&operands);
+        row->instructions[count++]=op;status=view_normalize_drop(plan->after[i],row,&count,&operands);
         if (status!=XR_XIR_OK) return status;
     }
     row->boundaries[source->instruction_count]=count;
@@ -241,7 +241,7 @@ static XrXirStatus view_normalize_verified(const XrXirCompileContext *context,
         bool preserved=false;status=view_normalize_preserved(&builder,f,&preserved);
         if (status!=XR_XIR_OK) return status;
         for (uint32_t i=0;i<module->functions[f].instruction_count;++i) {
-            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
             if (!preserved && module->functions[f].instructions[i].op==XR_XIR_VIEW_CLEANUP)
                 return XR_XIR_BAD_STAGE;
         }

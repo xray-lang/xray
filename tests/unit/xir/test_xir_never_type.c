@@ -560,7 +560,7 @@ static void check_imported_default(const XrXirCompileContext *work,bool wide) {
     CHECK(snprintf(root,sizeof(root),"%s/root.xr",absolute)>0);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request={session,library,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_LIBRARY,NULL};
     char producer[]="export fn raw()->i64{return 7}\n";
     XrXirSourceText input={"lib.xr",producer,sizeof(producer)-1};
@@ -582,7 +582,7 @@ static void check_imported_default(const XrXirCompileContext *work,bool wide) {
     XrXirLibraryCatalog *catalog=NULL;
     CHECK(xr_xir_compile_library_catalog_new_v2(work,&library_input,1,&catalog)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILE_RESOURCE_OK);
     request.session=session;request.entry_path=root;request.linkage_kind=XR_XIR_PROGRAM;request.libraries=catalog;
     char consumer[]="import {raw} from \"./lib\"\n"
         "export fn fromDefault(x:i64=try raw())->i64{return x}\ntry fromDefault()\n";
@@ -611,7 +611,7 @@ static void check_source_transport(const XrXirCompileContext *work) {
     CHECK(snprintf(root,sizeof(root),"%s/root.xr",absolute)>0);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request={session,library,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_LIBRARY,NULL};
     size_t text_length=0;char *text=source_transport_text(&text_length);
     XrXirSourceText input={"lib.xr",text,text_length};
@@ -636,7 +636,7 @@ static void check_source_transport(const XrXirCompileContext *work) {
     memset(packet.bytes,0xa5,packet.length);
     xr_xir_compile_checked_packet_free(&packet);
 
-    CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILE_RESOURCE_OK);
     request.session=session;request.entry_path=root;request.linkage_kind=XR_XIR_PROGRAM;request.libraries=catalog;
     char consumer[]="import {withDefault,withCall,Box,raw,probeMakeAdder} from \"./lib\"\n"
         "export fn answer()->i64{return withDefault()+withCall()+Box().value}\n"
@@ -694,7 +694,7 @@ static void check_catch_binding_names(const XrXirCompileContext *work) {
             "enum Fault { Bad }\nfn caller() {\n    try {} %s {}\n}\n",cases[i].clause);
         CHECK(length>0 && (size_t)length<sizeof(text));
         XrCompilerSession *session=NULL;
-        CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILER_SESSION_OK);
+        CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrXirSourceRequest request={session,root,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_LIBRARY,NULL};
         XrXirSourceText input={"root.xr",text,(size_t)length};
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
@@ -720,7 +720,7 @@ static void check_catch_binding_names(const XrXirCompileContext *work) {
 
 int main(void) {
     xr_test_suppress_dialogs();
-    XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
+    XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};
     XrXirCompileContext work={0};
     CHECK(xr_compile_resources_new(&limits,&work.resources)==XR_COMPILE_RESOURCE_OK);
     work.limits=xr_xir_compile_default_limits();

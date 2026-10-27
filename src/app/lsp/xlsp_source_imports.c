@@ -79,7 +79,7 @@ static XrXirStatus imports_token(XrCompilerSession *session,const XlspSourceBuff
     if(xr_compiler_arena_state_backing(state,&backing)!=XR_ARENA_OK)return XR_XIR_BAD_STRUCTURE;
     (void)xr_arena_open(&arena,XR_ARENA_SEGMENT_SIZE,&backing);
     status=imports_resource(xr_compiler_arena_capture_status(&arena,state));
-    if(status==XR_XIR_OK)status=imports_resource(xr_compile_scanner_open(&scanner,state,&arena,text+offset));
+    if(status==XR_XIR_OK)status=imports_resource(xr_compile_scanner_open(&scanner,state,&arena,text+offset,NULL));
     if(status!=XR_XIR_OK)goto done;
     Token token=xr_scanner_scan(&scanner);
     if(token.start!=text+offset||token.type!=(node->type==AST_IMPORT_STMT?TK_IMPORT:TK_EXPORT)){status=XR_XIR_BAD_STRUCTURE;goto done;}
@@ -111,8 +111,8 @@ XR_FUNC XrXirStatus xlsp_source_imports_build(XrCompileResources *r,const XlspSo
     if(!r||!document||!document->text||!document->uri||!out||*out)return XR_XIR_BAD_STRUCTURE;
     XlspSourceImports *owner=NULL;XlspSourceBuffer *buffer=NULL;XlspSyntaxSnapshot *syntax=NULL;XrCompilerSession *session=NULL;
     XrXirStatus status=xlsp_source_buffer_new(r,document->text,document->length,0,&buffer);if(status!=XR_XIR_OK)goto done;
-    XrCompilerSessionStatus opened=xr_compile_session_new(r,&session);
-    if(opened!=XR_COMPILER_SESSION_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+    XrCompileResourceStatus opened=xr_compile_session_new(r,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
     XrParseStatus parsed=xlsp_source_syntax_build(session,document,&syntax);
     if(parsed!=XR_PARSE_OK){status=parsed==XR_PARSE_BUDGET?XR_XIR_BUDGET:parsed==XR_PARSE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
         parsed==XR_PARSE_SYNTAX||parsed==XR_PARSE_RECOVERED?XR_XIR_UNRESOLVED:XR_XIR_BAD_STRUCTURE;goto done;}

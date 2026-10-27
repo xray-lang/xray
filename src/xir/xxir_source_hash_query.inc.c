@@ -13,19 +13,19 @@ static bool source_hash_query_intern(SourceContext *ctx,SourceHashQueryTypes *qu
     XrXirTypeNode node,XrXirType *output) {
     uint32_t span=xr_xir_type_span(query->types,node.kind==XR_XIR_TYPE_CALLABLE?node.result:node.element);
     for (uint32_t p=0;p<node.parameter_count;++p) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t child=xr_xir_type_span(query->types,node.parameters[p].type);
         if (child>span) span=child;
     }
     node.parameter_span=span;
     for (uint32_t i=0;i<query->types->count;++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirTypeNode *old=&query->types->nodes[i];
         if (old->kind!=node.kind || old->element!=node.element || old->result!=node.result ||
             old->flags!=node.flags || old->parameter_count!=node.parameter_count) continue;
         bool same=true;
         for (uint32_t p=0;p<node.parameter_count;++p) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (old->parameters[p].type!=node.parameters[p].type ||
                 old->parameters[p].mode!=node.parameters[p].mode) same=false;
         }

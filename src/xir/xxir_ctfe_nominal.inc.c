@@ -32,7 +32,7 @@ static XrXirCtfeStatus ctfe_nominal_step(ScalarRun *run,VmState *vm,CtfeOwnedSta
     bool create=op->op==XR_XIR_STRUCT_NEW || op->op==XR_XIR_ENUM_NEW;
     XrXirValue receiver={0},result={0};XrXirType type=op->type;
     if (!create) { receiver=ctfe_nominal_operand(run,op->args[0]);type=(XrXirType)receiver.type; }
-    XrXirCtfeStatus status=ctfe_validation_work(run,state,type);if (status!=XR_XIR_CTFE_OK) return status;
+    XrXirCtfeStatus status=ctfe_value_type_admit(run,state,type);if (status!=XR_XIR_CTFE_OK) return status;
     XrXirValueAdmission admission=ctfe_value_admission(state);
     XrXirValueStatus value_status=XR_XIR_VALUE_OK;
     if (create) {
@@ -41,17 +41,16 @@ static XrXirCtfeStatus ctfe_nominal_step(ScalarRun *run,VmState *vm,CtfeOwnedSta
         if (!node) return XR_XIR_CTFE_BAD_ARTIFACT;
         const XrXirNominalVariant *variant=op->op==XR_XIR_ENUM_NEW?ctfe_enum_variant_info(run->module->types,node,(uint32_t)op->immediate):NULL;
         if (op->op==XR_XIR_ENUM_NEW && (!variant || variant->field_count!=count)) return XR_XIR_CTFE_BAD_ARTIFACT;
-        if (!scalar_compile_work(run,(uint64_t)count*(2*sizeof(XrXirValue)+4))) return XR_XIR_CTFE_BUDGET;
         for (uint32_t i=0;i<count;++i) {
             vm->arguments[i]=ctfe_nominal_operand(run,run->function->operands[op->args[0]+i]);
-            status=ctfe_admission_work(run,state,&vm->arguments[i]);if (status!=XR_XIR_CTFE_OK) return status;
+            status=ctfe_value_graph_admit(run,state,&vm->arguments[i]);if (status!=XR_XIR_CTFE_OK) return status;
         }
         value_status=op->op==XR_XIR_STRUCT_NEW?xr_xir_struct_new(type,count?vm->arguments:NULL,count,&admission,&result):
             xr_xir_enum_new(type,(uint32_t)op->immediate,count?vm->arguments:NULL,count,&admission,&result);
     } else if (op->op==XR_XIR_ENUM_TAG) {
         uint32_t variant=0;value_status=xr_xir_enum_variant(&receiver,&variant);result=(XrXirValue){XR_XIR_I64,0,variant};
     } else {
-        status=ctfe_admission_work(run,state,&receiver);if (status!=XR_XIR_CTFE_OK) return status;
+        status=ctfe_value_graph_admit(run,state,&receiver);if (status!=XR_XIR_CTFE_OK) return status;
         value_status=op->op==XR_XIR_STRUCT_GET?xr_xir_struct_get(&receiver,(uint32_t)op->immediate,&admission,&result):
             xr_xir_enum_get(&receiver,(uint32_t)op->immediate,op->args[1],&admission,&result);
     }

@@ -23,7 +23,7 @@ typedef struct SourceCallSyntax {
 } SourceCallSyntax;
 static bool source_call_syntax(SourceContext *ctx,AstNode *node,SourceCallSyntax *output) {
     *output=(SourceCallSyntax){0};
-    if (!node || !source_work(ctx,node)) return false;
+    if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (node->type==AST_CALL_EXPR) {
         const CallExprNode *call=&node->as.call_expr;
         if (call->default_arg_count)
@@ -123,7 +123,7 @@ static bool source_call_observe(SourceContext *ctx,AstNode *node,XrXirInferenceS
 }
 /* A ref argument transports the binding's stable Cell owner. The common
  * call admission establishes actual exclusive access after argument preparation. */
-static bool source_reference_argument_syntax(SourceContext *ctx, AstNode *node, uint32_t index,
+static bool source_reference_argument_syntax(SourceContext *ctx, uint32_t index,
     const bool *references, const SourceReferencePlan *plan,const SourceCallSyntax *call,SourceValue *value) {
     AstNode *argument=source_call_argument_syntax(call,index);
     if (source_call_argument_access(call,index)!=XR_CALL_ARG_REF)
@@ -138,7 +138,7 @@ static bool source_reference_argument_syntax(SourceContext *ctx, AstNode *node, 
         (!symbol->mutable && !object_field) || symbol->construction)
         return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref argument requires a mutable stored binding");
     for (uint32_t earlier=0;earlier<index;++earlier) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         AstNode *previous=source_call_argument_syntax(call,earlier);
         if (argument->type==AST_VARIABLE && references[earlier] && previous->type==AST_VARIABLE &&
             visible_name(ctx,previous->as.variable.name)==symbol)
@@ -151,11 +151,11 @@ static bool source_reference_argument_syntax(SourceContext *ctx, AstNode *node, 
 }
 /* Earlier argument effects invalidate only later argument planning. Values
  * still complete once in source order, and already read SSA values stay valid. */
-static bool source_call_collect_arguments(SourceContext *ctx,AstNode *node,const SourceCallPlan *plan,
+static bool source_call_collect_arguments(SourceContext *ctx,const SourceCallPlan *plan,
     const SourceCallSyntax *call,SourceCallArgumentPlan *arguments,bool *references) {
     if (call->expanded) {
         for (uint32_t a=0;a<(uint32_t)call->arg_count;++a) {
-            if (!source_work(ctx,node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             arguments[a]=call->expanded->entries[a].plan;
             references[a]=call->expanded->entries[a].reference;
         }
@@ -163,7 +163,7 @@ static bool source_call_collect_arguments(SourceContext *ctx,AstNode *node,const
     }
     SourceFact *facts=ctx->facts;SourceEpoch *epochs=ctx->epochs;bool ok=true;
     for (uint32_t a=0;ok && a<(uint32_t)call->arg_count;++a) {
-        if (!source_work(ctx,node)) {ok=false;break;}
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) {ok=false;break;}
         uint32_t parameter=a+plan->parameter_offset;
         references[a]=(plan->family==SOURCE_CALL_FUNCTION || plan->family==SOURCE_CALL_INDIRECT) &&
             xr_xir_type_is_cell(&ctx->types,plan->function_parameters[parameter]);
@@ -200,7 +200,7 @@ static bool source_call_complete_argument(SourceContext *ctx,AstNode *node,
     XrXirType formal=source_call_parameter_type(plan,parameter);
     if (references[a]) {
         SourceValue *reference=&plan->values[a+plan->value_offset];
-        if (!source_reference_argument_syntax(ctx,node,a,references,arguments[a].reference,call,reference)) return false;
+        if (!source_reference_argument_syntax(ctx,a,references,arguments[a].reference,call,reference)) return false;
         if (inferred && !source_call_observe(ctx,node,state,formal,reference->type,requirement)) return false;
         return true;
     }
@@ -256,12 +256,12 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node,
         if (status!=XR_XIR_OK) return source_fail(ctx,node,status,
             requirement ? "method inference could not begin" : "direct call inference could not begin");
     } else for (uint32_t p=0;p<own;++p)
-        if (!source_work(ctx,node) || !source_type(ctx,call->type_args[p],&types[prefix+p])) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx,call->type_args[p],&types[prefix+p])) return false;
     uint32_t argument_count=(uint32_t)call->arg_count;
     SourceCallArgumentPlan *arguments=argument_count ? source_recipe_storage(ctx,argument_count,sizeof(*arguments)) : NULL;
     bool *references=argument_count ? source_recipe_storage(ctx,argument_count,sizeof(*references)) : NULL;
     if (argument_count && (!arguments || !references)) goto done;
-    if (!source_call_collect_arguments(ctx,node,plan,call,arguments,references)) goto done;
+    if (!source_call_collect_arguments(ctx,plan,call,arguments,references)) goto done;
     if (inferred) {
         /* Nullable evidence fixes an ordinary binder before narrower values
          * acquire their conversion recipes. This visits types only: all value
@@ -272,7 +272,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node,
             uint32_t parameter=a+plan->parameter_offset;
             XrXirType formal=source_call_parameter_type(plan,parameter);
             uint32_t id=(uint32_t)formal;
-            if (!source_work(ctx,node)) goto done;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
             if (!argument->type_ready || !xr_xir_type_is_nullable(&ctx->types,argument->ground_type) ||
                 id<XR_XIR_TYPE_PARAMETER_BASE+prefix || id>=XR_XIR_TYPE_PARAMETER_BASE+count) continue;
             if (!source_call_observe(ctx,node,state,formal,argument->ground_type,requirement)) goto done;
@@ -336,7 +336,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node,
     }
     /* The call's borrow begins after every argument value has completed. */
     for (uint32_t a=0;a<argument_count;++a) if (references[a]) {
-        if (!source_work(ctx,node)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         SourceName *binding=source_ref_binding(ctx,source_call_argument_syntax(call,a));
         if (!binding || !source_fact_push(ctx,binding,0)) goto done;
     }
@@ -360,7 +360,7 @@ static bool source_call_conversions(SourceContext *ctx, AstNode *node, const Sou
     SourceConversionRecipe *recipes=NULL;
     bool ok=false;
     for (uint32_t p=0;p<request->count;++p) {
-        if (!source_work(ctx,node)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         XrXirType expected;
         if (request->family==SOURCE_CALL_FUNCTION) {
             if (!source_substitute(ctx,&request->substitution,request->formals[p],0,&expected)) goto done;
@@ -385,7 +385,7 @@ static bool source_call_conversions(SourceContext *ctx, AstNode *node, const Sou
         if (recipes) recipes[p-first]=recipe;
     }
     for (uint32_t p=first;p<request->count;++p) {
-        if (!source_work(ctx,node)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         SourceValue *value=&request->values[p+request->value_offset];
         if (!source_conversion_emit(ctx,&recipes[p-first],value)) goto done;
         if (value->type!=recipes[p-first].target) {

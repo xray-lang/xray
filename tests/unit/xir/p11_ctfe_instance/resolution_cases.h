@@ -9,7 +9,7 @@
 #include "xir/xxir_comptime_resolve_internal.h"
 static XirComptimeResolveRequest resolution_request(const XrXirArtifact *source) {
     return (XirComptimeResolveRequest){source,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
-        {XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},XR_XIR_CTFE_MAX_CALL_DEPTH};
+        {XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},XR_XIR_CTFE_MAX_CALL_DEPTH,NULL};
 }
 static XrXirStatus resolution_changed_source(XrXirCompileContext *context,XrXirArtifact **output,unsigned mode) {
     bool trap=mode!=0;XrXirArtifact *source=NULL;XrXirStatus status=pending_source(context,"scalar",mode==1?1:0,&source);

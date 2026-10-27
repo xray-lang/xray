@@ -19,7 +19,7 @@ static bool effect_cell_body_adapter_valid(const XrXirCompileContext *work,
     return xir_compile_context_valid(work) && adapter && xir_compile_context_valid(adapter->work) &&
         adapter->work->resources==work->resources && adapter->request.owner &&
         adapter->request.read.owner==adapter->work &&
-        adapter->request.read.consume==effect_body_compile_consume &&
+        adapter->request.read.execution == NULL &&
         adapter->request.head && adapter->request.instruction && adapter->request.type && adapter->request.shape &&
         adapter->request.domain.types;
 }
@@ -27,7 +27,7 @@ static XrXirStatus effect_cell_body_head(const XrXirCompileContext *work,const v
     uint32_t f,XrXirCellProofBodyHead *output) {
     const EffectCellBodyAdapter *adapter=owner;
     if (!effect_cell_body_adapter_valid(work,adapter) || !output) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,11)) return XR_XIR_BUDGET;
+
     /* The canonical owner can write the six consumed fields directly. Keep
      * every complete-head storage check, including unused name and blocks,
      * without constructing and copying an unused intermediate full head. */
@@ -41,14 +41,14 @@ static XrXirStatus effect_cell_body_head(const XrXirCompileContext *work,const v
             (head->block_count && !head->blocks) || (head->operand_count && !head->operands) ||
             (head->instruction_count && (!head->runs || !head->run_count)) ||
             head->run_count>head->run_capacity) return XR_XIR_BAD_STRUCTURE;
-        if (!xir_compile_work(work,17+sizeof(*output))) return XR_XIR_BUDGET;
+
         *output=(XrXirCellProofBodyHead){head->parameters,head->parameter_count,head->result,
             head->instruction_count,head->operands,head->operand_count};return XR_XIR_OK;
     }
     EffectBodyFunctionHead head={0};
     XrXirStatus status=effect_body_request_head(&adapter->request,f,&head);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(work,6+sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=(XrXirCellProofBodyHead){head.parameters,head.parameter_count,head.result,
         head.instruction_count,head.operands,head.operand_count};return XR_XIR_OK;
 }
@@ -56,34 +56,34 @@ static XrXirStatus effect_cell_body_instruction(const XrXirCompileContext *work,
     uint32_t f,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
     const EffectCellBodyAdapter *adapter=owner;
     if (!effect_cell_body_adapter_valid(work,adapter) || !storage || !output) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,11)) return XR_XIR_BUDGET;
+
     const XrXirInstruction *operation=NULL;
     XrXirStatus status=effect_body_request_instruction(&adapter->request,f,i,storage,&operation);
     if (status!=XR_XIR_OK) return status;
     if (!operation) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,1+sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=operation;return XR_XIR_OK;
 }
 static XrXirStatus effect_cell_body_type(const XrXirCompileContext *work,const void *owner,
     uint32_t f,uint32_t value,XrXirType *output) {
     const EffectCellBodyAdapter *adapter=owner;
     if (!effect_cell_body_adapter_valid(work,adapter) || !output) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,11)) return XR_XIR_BUDGET;
+
     XrXirType type=XR_XIR_UNIT;
     XrXirStatus status=effect_body_request_type(&adapter->request,f,value,&type);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=type;return XR_XIR_OK;
 }
 static XrXirStatus effect_cell_body_shape(const XrXirCompileContext *work,const void *owner,
     uint32_t f,uint32_t i,XrXirCellProofInstructionShape *output) {
     const EffectCellBodyAdapter *adapter=owner;
     if (!effect_cell_body_adapter_valid(work,adapter) || !output) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,11+sizeof(EffectBodyInstructionShape))) return XR_XIR_BUDGET;
+
     EffectBodyInstructionShape shape={0};
     XrXirStatus status=effect_body_request_shape(&adapter->request,f,i,&shape);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=(XrXirCellProofInstructionShape){shape.op,shape.type};return XR_XIR_OK;
 }
 /* A prefix is an unfinished inventory, never a complete body proof. Count
@@ -104,10 +104,10 @@ static XrXirStatus effect_cell_body_span(const XrXirCompileContext *work,const v
         (!count && first!=function->instruction_count) || cursor->next>first ||
         cursor->run>function->run_count || function->run_count>function->instruction_count ||
         function->run_count>function->run_capacity) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,14+sizeof(*cursor))) return XR_XIR_BUDGET;
+
     XrXirCellProofSpanCursor current=*cursor;
     while (current.run<function->run_count) {
-        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
         const EffectBodyRun *ref;
         XrXirStatus status=effect_body_run_ref(&adapter->request.read,function,current.run,current.next,&ref);
         if (status!=XR_XIR_OK) return status;
@@ -119,18 +119,18 @@ static XrXirStatus effect_cell_body_span(const XrXirCompileContext *work,const v
         if (count && current.next==first) {
             if (ref->count!=count || (ref->mask&UINT32_C(3))) return XR_XIR_BAD_TYPE;
             if (ref->base.op<=XR_XIR_INVALID || ref->base.op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-            if (!xir_compile_work(work,2+sizeof(current.shape))) return XR_XIR_BUDGET;
+
             current.shape=(XrXirCellProofInstructionShape){(XrXirOp)ref->base.op,(XrXirType)ref->base.type};
         } else if (current.next>=first || ref->count>first-current.next) return XR_XIR_BAD_STRUCTURE;
-        if (!xir_compile_work(work,2+sizeof(current.next)+sizeof(current.run))) return XR_XIR_BUDGET;
+
         current.next+=ref->count;++current.run;
         if (count && current.next==first+count) {
-            if (!xir_compile_work(work,sizeof(*cursor))) return XR_XIR_BUDGET;
+
             *cursor=current;return XR_XIR_OK;
         }
     }
     if (count || current.next!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,sizeof(*cursor))) return XR_XIR_BUDGET;
+
     *cursor=current;return XR_XIR_OK;
 }
 
@@ -165,7 +165,7 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     const EffectBodyFunction *function=&body->functions[cursor->function];
     if (cursor->next>function->instruction_count || cursor->run>function->run_count ||
         (!cursor->run && cursor->next)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,18+sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
+
     EffectBodyRecordCursor position={cursor->next,cursor->run,UINT32_MAX};
     const EffectBodyRun *ref;
     XrXirStatus status=effect_body_range_ref(&adapter->request.read,function,&position,&ref);
@@ -173,7 +173,7 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     status=effect_body_instruction_ref_prepare(&adapter->request.read,ref,ref->first,false);
     if (status!=XR_XIR_OK) return status;
     XrXirInstruction operation=effect_body_instruction_words_value(&ref->base,NULL,ref->mask,ref->delta,0);
-    if (!xir_compile_work(work,sizeof(*output)+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+
     *output=(XrXirCellProofRun){ref->first,ref->count,ref->mask,operation};
     cursor->next=position.first;cursor->run=position.run;return XR_XIR_OK;
 }
@@ -203,7 +203,7 @@ static XrXirStatus effect_cell_body_range_ref(const XrXirCompileContext *work,
     const EffectBodyFunction *function=&body->functions[cursor->function];
     if (!cursor->run || cursor->run>function->run_count || cursor->next>function->instruction_count ||
         first>i || i>=cursor->next) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,20+sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
+
     EffectBodyRecordCursor position={first,cursor->run-1,first};
     const EffectBodyRun *ref;
     XrXirStatus status=effect_body_record_cursor_ref(&adapter->request.read,function,i,&position,&ref);
@@ -236,17 +236,17 @@ static XrXirStatus effect_cell_body_range_shape(const XrXirCompileContext *work,
     status=effect_body_run_word(&adapter->request.read,ref,i,1,&type);
     if (status!=XR_XIR_OK) return status;
     if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=(XrXirCellProofInstructionShape){(XrXirOp)opcode,(XrXirType)type};return XR_XIR_OK;
 }
 
 static XrXirStatus effect_cell_body_bind(const XrXirCompileContext *work,
     const EffectBodyRequest *request,EffectCellBodyAdapter *adapter,XrXirCellProofBodyRead *output) {
     if (!xir_compile_context_valid(work) || !request || !adapter || !output || !request->owner ||
-        request->read.owner!=work || request->read.consume!=effect_body_compile_consume ||
+        request->read.owner!=work || request->read.execution != NULL ||
         !request->domain.types || !request->head || !request->instruction || !request->type || !request->shape)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,10+sizeof(*adapter)+sizeof(*output))) return XR_XIR_BUDGET;
+
     *adapter=(EffectCellBodyAdapter){work,*request};
     *output=(XrXirCellProofBodyRead){request->domain,work->resources,adapter,
         effect_cell_body_head,effect_cell_body_instruction,effect_cell_body_type,effect_cell_body_shape,
@@ -274,7 +274,7 @@ static inline XrXirStatus effect_cell_body_request(const XrXirCompileContext *wo
         if (!effect_body_material_shape(body) || body->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
         domain=body->domain;
     } else return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,10)) return XR_XIR_BUDGET;
+
     if (request->domain.types!=domain.types || request->domain.declarations!=domain.declarations ||
         request->domain.generics!=domain.generics || request->domain.defaults!=domain.defaults ||
         request->domain.function_count!=domain.function_count) return XR_XIR_BAD_STRUCTURE;

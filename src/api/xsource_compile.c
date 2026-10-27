@@ -29,12 +29,28 @@ XR_FUNC XrTomlParseLimits xr_source_compile_default_manifest_limits(void) {
     return (XrTomlParseLimits){UINT64_C(1) << 20, 64};
 }
 
+static XrSourceCompileStatus source_resource_status(XrCompileResourceStatus status) {
+    switch(status) {
+    case XR_COMPILE_RESOURCE_OK:return XR_SOURCE_COMPILE_OK;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT:return XR_SOURCE_COMPILE_MEMORY_LIMIT;
+    case XR_COMPILE_RESOURCE_OVERFLOW:return XR_SOURCE_COMPILE_OVERFLOW;
+    case XR_COMPILE_RESOURCE_OUT_OF_MEMORY:return XR_SOURCE_COMPILE_OUT_OF_MEMORY;
+    case XR_COMPILE_RESOURCE_CANCELLED:return XR_SOURCE_COMPILE_CANCELLED;
+    case XR_COMPILE_RESOURCE_DEADLINE:return XR_SOURCE_COMPILE_DEADLINE;
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE:return XR_SOURCE_COMPILE_CLOCK_FAILURE;
+    default:return XR_SOURCE_COMPILE_BAD_ARGUMENT;
+    }
+}
 static XrSourceCompileStatus source_io_status(XrOsIoStatus status) {
     switch (status) {
     case XR_OS_IO_OK: return XR_SOURCE_COMPILE_OK;
     case XR_OS_IO_NOT_FOUND: return XR_SOURCE_COMPILE_NOT_FOUND;
     case XR_OS_IO_BAD_ARGUMENT: return XR_SOURCE_COMPILE_BAD_ARGUMENT;
-    case XR_OS_IO_BUDGET: return XR_SOURCE_COMPILE_BUDGET;
+    case XR_OS_IO_OVERFLOW: return XR_SOURCE_COMPILE_OVERFLOW;
+    case XR_OS_IO_MEMORY_LIMIT: return XR_SOURCE_COMPILE_MEMORY_LIMIT;
+    case XR_OS_IO_CANCELLED: return XR_SOURCE_COMPILE_CANCELLED;
+    case XR_OS_IO_DEADLINE: return XR_SOURCE_COMPILE_DEADLINE;
+    case XR_OS_IO_CLOCK_FAILURE: return XR_SOURCE_COMPILE_CLOCK_FAILURE;
     case XR_OS_IO_OUT_OF_MEMORY: return XR_SOURCE_COMPILE_OUT_OF_MEMORY;
     case XR_OS_IO_UNSUPPORTED: return XR_SOURCE_COMPILE_UNSUPPORTED;
     default: return XR_SOURCE_COMPILE_IO;
@@ -47,7 +63,8 @@ static XrSourceCompileStatus source_manifest_status(XrManifestStatus status) {
     case XR_MANIFEST_INVALID: return XR_SOURCE_COMPILE_INVALID;
     case XR_MANIFEST_BAD_ARGUMENT: return XR_SOURCE_COMPILE_BAD_ARGUMENT;
     case XR_MANIFEST_LIMIT: return XR_SOURCE_COMPILE_LIMIT;
-    case XR_MANIFEST_BUDGET: return XR_SOURCE_COMPILE_BUDGET;
+    case XR_MANIFEST_OVERFLOW: return XR_SOURCE_COMPILE_OVERFLOW;
+    case XR_MANIFEST_MEMORY_LIMIT: return XR_SOURCE_COMPILE_MEMORY_LIMIT;
     case XR_MANIFEST_OUT_OF_MEMORY: return XR_SOURCE_COMPILE_OUT_OF_MEMORY;
     case XR_MANIFEST_IO: return XR_SOURCE_COMPILE_IO;
     case XR_MANIFEST_UNSUPPORTED: return XR_SOURCE_COMPILE_UNSUPPORTED;
@@ -59,17 +76,14 @@ static XrSourceCompileStatus source_xir_status(XrXirStatus status) {
     case XR_XIR_OK: return XR_SOURCE_COMPILE_OK;
     case XR_XIR_BUDGET: return XR_SOURCE_COMPILE_BUDGET;
     case XR_XIR_OUT_OF_MEMORY: return XR_SOURCE_COMPILE_OUT_OF_MEMORY;
+    case XR_XIR_MEMORY_LIMIT: return XR_SOURCE_COMPILE_MEMORY_LIMIT;
+    case XR_XIR_OVERFLOW: return XR_SOURCE_COMPILE_OVERFLOW;
+    case XR_XIR_CANCELLED: return XR_SOURCE_COMPILE_CANCELLED;
+    case XR_XIR_DEADLINE: return XR_SOURCE_COMPILE_DEADLINE;
+    case XR_XIR_CLOCK_FAILURE: return XR_SOURCE_COMPILE_CLOCK_FAILURE;
     case XR_XIR_IO: return XR_SOURCE_COMPILE_IO;
     case XR_XIR_UNRESOLVED: return XR_SOURCE_COMPILE_NOT_FOUND;
     default: return XR_SOURCE_COMPILE_REJECTED;
-    }
-}
-static XrSourceCompileStatus source_session_status(XrCompilerSessionStatus status) {
-    switch (status) {
-    case XR_COMPILER_SESSION_OK: return XR_SOURCE_COMPILE_OK;
-    case XR_COMPILER_SESSION_BUDGET: return XR_SOURCE_COMPILE_BUDGET;
-    case XR_COMPILER_SESSION_OUT_OF_MEMORY: return XR_SOURCE_COMPILE_OUT_OF_MEMORY;
-    default: return XR_SOURCE_COMPILE_BAD_ARGUMENT;
     }
 }
 static bool source_catalog_matches(const XrSourceCompileRequest *request) {
@@ -86,7 +100,7 @@ static bool source_catalog_matches(const XrSourceCompileRequest *request) {
 static bool source_absolute(XrIoContext *io, const char *path) {
     unsigned char prefix[3] = {0};
     for (size_t i = 0; i < sizeof(prefix); ++i) {
-        if (!io_work(io, 1)) return false;
+        if (!((io)->status == XR_OS_IO_OK)) return false;
         prefix[i] = (unsigned char)path[i];
         if (!prefix[i]) break;
     }
@@ -159,14 +173,9 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_build(
     }
     if (status == XR_SOURCE_COMPILE_OK) {
         detail.stage = XR_SOURCE_COMPILE_SESSION;
-        if (owns_session) detail.session_status = xr_compile_session_new(request->context->resources, &session);
-        else {
-            XrCompileResourceStatus state = xr_compile_session_resource_status(session);
-            detail.session_status = state == XR_COMPILE_RESOURCE_OK ? XR_COMPILER_SESSION_OK :
-                state == XR_COMPILE_RESOURCE_BUDGET ? XR_COMPILER_SESSION_BUDGET :
-                state == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_COMPILER_SESSION_OUT_OF_MEMORY : XR_COMPILER_SESSION_BAD_ARGUMENT;
-        }
-        status = source_session_status(detail.session_status);
+        detail.session_status=owns_session ? xr_compile_session_new(request->context->resources,&session) :
+            xr_compile_session_resource_status(session);
+        status=source_resource_status(detail.session_status);
     }
     if (status == XR_SOURCE_COMPILE_OK) {
         detail.stage = XR_SOURCE_COMPILE_PRODUCT;
@@ -196,12 +205,6 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_build(
     xr_compile_resources_free(entry);
     if (status == XR_SOURCE_COMPILE_OK) *output = product;
 rejected:
-    if (request && request->session &&
-        (status == XR_SOURCE_COMPILE_BUDGET || status == XR_SOURCE_COMPILE_OUT_OF_MEMORY)) {
-        XrCompileResourceStatus failed = xr_compile_state_fail(xr_compile_session_compile_state(request->session),
-            status == XR_SOURCE_COMPILE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
-        status = failed == XR_COMPILE_RESOURCE_BUDGET ? XR_SOURCE_COMPILE_BUDGET : XR_SOURCE_COMPILE_OUT_OF_MEMORY;
-    }
     detail.status = status;
     if (diagnostic) *diagnostic = detail;
     else xr_source_compile_diagnostic_free(&detail);
@@ -264,6 +267,11 @@ XR_FUNC const char *xr_source_compile_status_name(XrSourceCompileStatus status) 
     case XR_SOURCE_COMPILE_INVALID: return "invalid";
     case XR_SOURCE_COMPILE_LIMIT: return "limit";
     case XR_SOURCE_COMPILE_BUDGET: return "budget";
+    case XR_SOURCE_COMPILE_MEMORY_LIMIT: return "memory_limit";
+    case XR_SOURCE_COMPILE_OVERFLOW: return "overflow";
+    case XR_SOURCE_COMPILE_CANCELLED: return "cancelled";
+    case XR_SOURCE_COMPILE_DEADLINE: return "deadline";
+    case XR_SOURCE_COMPILE_CLOCK_FAILURE: return "clock_failure";
     case XR_SOURCE_COMPILE_OUT_OF_MEMORY: return "out-of-memory";
     case XR_SOURCE_COMPILE_IO: return "io";
     case XR_SOURCE_COMPILE_UNSUPPORTED: return "unsupported";

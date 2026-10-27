@@ -24,13 +24,13 @@ static XrXirStatus layout_storage(const XrXirCompileContext *context,
     if (count > SIZE_MAX / element) return XR_XIR_BUDGET;
     XrCompileResourceStatus status=xr_compile_resources_extent(context->resources,memory,count*element);
     return status==XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        status==XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+        XR_XIR_BAD_STRUCTURE;
 }
 static XrXirStatus layout_raw_head(const XrXirCompileContext *context,
     const void *owner,uint32_t f,XirInputFunctionHead *output) {
     const XrXirModule *module=owner;
-    if (!module || !output || !module->functions || f>=module->function_count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,sizeof(*output))) return XR_XIR_BUDGET;
+    if (!xir_compile_context_valid(context) || !module || !output || !module->functions || f>=module->function_count) return XR_XIR_BAD_STRUCTURE;
+
     const XrXirFunction *function=&module->functions[f];
     *output=(XirInputFunctionHead){function->name,function->name_length,function->parameters,
         function->parameter_count,function->result,function->blocks,function->block_count,
@@ -41,10 +41,10 @@ static XrXirStatus layout_raw_instruction(const XrXirCompileContext *context,
     const void *owner,uint32_t f,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
     const XrXirModule *module=owner;
     (void)storage;
-    if (!module || !output || !module->functions || f>=module->function_count ||
+    if (!xir_compile_context_valid(context) || !module || !output || !module->functions || f>=module->function_count ||
         !module->functions[f].instructions || i>=module->functions[f].instruction_count)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
     *output=&module->functions[f].instructions[i];return XR_XIR_OK;
 }
 static XirLayoutInput layout_raw_input(const XrXirModule *module) {
@@ -71,7 +71,7 @@ static XrXirStatus layout_path_capacity(const LayoutInputRequest *request,
     const XirInputFunctionHead *head,uint32_t function,uint32_t *capacity) {
     *capacity=0;
     for (uint32_t i=0;i<head->instruction_count;++i) {
-        if (!xir_compile_work(request->context,1)) return XR_XIR_BUDGET;
+
         XrXirInstruction storage;const XrXirInstruction *op=NULL;
         XrXirStatus status=request->input->instruction(request->context,request->input->owner,
             function,i,&storage,&op);
@@ -94,7 +94,7 @@ static XrXirStatus layout_path_capacity(const LayoutInputRequest *request,
                 cell_root=slot.place==XR_XIR_PLACE_CELL;
                 break;
             }
-            if (!xir_compile_work(request->context,1)) return XR_XIR_BUDGET;
+
             if (depth==head->instruction_count) return XR_XIR_BAD_VALUE;
             ++depth;
             XrXirInstruction parent_storage;const XrXirInstruction *parent=NULL;

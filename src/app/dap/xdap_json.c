@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xdap_json.c - Metered DAP JSON receiving and serialization
+ * xdap_json.c - Owned DAP JSON receiving and serialization
  */
 #include "xdap_json.h"
 #include "../../base/xjson_cursor.h"
@@ -19,12 +19,9 @@ typedef struct JsonReceiver {
 } JsonReceiver;
 static XrXirStatus json_resource(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        status==XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET :
+        status==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        status==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_OVERFLOW :
         status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;
-}
-static XrJsonCursorStatus json_work(void *context,uint64_t work) {
-    return xr_compile_resources_work(context,work)==XR_COMPILE_RESOURCE_OK ?
-        XR_JSON_CURSOR_OK : XR_JSON_CURSOR_BUDGET;
 }
 static bool json_fail(JsonReceiver *p,XrJsonCursorStatus status) {
     return xr_json_cursor_fail(&p->cursor,status);
@@ -91,7 +88,7 @@ static bool json_children(JsonReceiver *p,uint32_t parent,uint32_t depth,bool ob
             if (!xr_json_cursor_string(c,128,&key) || !xr_json_cursor_length(c,key,&key_length) ||
                 !xr_json_cursor_take(c,':')) return false;
             for (uint32_t i=p->document.nodes[parent].first;i;i=p->document.nodes[i].next) {
-                if (!xr_json_cursor_work(c,1)) return false;
+
                 if (xr_json_cursor_equal(c,key,p->document.nodes[i].key)) return json_fail(p,XR_JSON_CURSOR_INVALID);
                 if (c->status!=XR_JSON_CURSOR_OK) return false;
             }
@@ -143,12 +140,10 @@ XR_FUNC XrXirStatus xdap_json_parse(XrCompileResources *resources,const char *by
     p.document.capacity=(uint32_t)capacity;
     XrXirStatus status=json_resource(xr_compile_resources_alloc(resources,length+1,(void **)&p.document.bytes));
     if (status!=XR_XIR_OK) goto done;
-    status=json_resource(xr_compile_resources_work(resources,length));
-    if (status!=XR_XIR_OK) goto done;
     memcpy(p.document.bytes,bytes,length);p.document.bytes[length]=0;
     status=json_resource(xr_compile_resources_calloc(resources,capacity+1,sizeof(*p.document.nodes),(void **)&p.document.nodes));
     if (status!=XR_XIR_OK) goto done;
-    p.cursor=xr_json_cursor_make(p.document.bytes,length,resources,json_work);
+    p.cursor=xr_json_cursor_make(p.document.bytes,length);
     if (!json_value(&p,1,&p.document.root) || !xr_json_cursor_space(&p.cursor) || p.cursor.cursor!=p.cursor.end) {
         status=p.cursor.status==XR_JSON_CURSOR_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;goto done;
     }
@@ -159,9 +154,9 @@ done:
 XR_FUNC XrXirStatus xdap_json_member(const XdapJsonDocument *d,uint32_t object,const char *key,uint32_t *output) {
     if (!d || !d->resources || !d->nodes || !object || object>d->count ||
         d->nodes[object].kind!=XDAP_JSON_OBJECT || !key || !output) return XR_XIR_BAD_STRUCTURE;
-    XrJsonCursor c=xr_json_cursor_make(NULL,0,d->resources,json_work);
+    XrJsonCursor c=xr_json_cursor_make(NULL,0);
     for (uint32_t i=d->nodes[object].first;i;i=d->nodes[i].next) {
-        if (!xr_json_cursor_work(&c,1)) return XR_XIR_BUDGET;
+
         if (xr_json_cursor_equal(&c,d->nodes[i].key,key)) { *output=i;return XR_XIR_OK; }
         if (c.status!=XR_JSON_CURSOR_OK) return XR_XIR_BUDGET;
     }
@@ -171,7 +166,7 @@ XR_FUNC XrXirStatus xdap_json_u64(const XdapJsonDocument *d,uint32_t index,uint6
     if (!d || !d->resources || !d->nodes || !index || index>d->count || !output) return XR_XIR_BAD_STRUCTURE;
     const XdapJsonNode *n=&d->nodes[index];
     if (n->kind!=XDAP_JSON_NUMBER || !n->integer || !n->length || n->text[0]=='-') return XR_XIR_BAD_STRUCTURE;
-    XrJsonCursor c=xr_json_cursor_make((char *)n->text,n->length,d->resources,json_work);uint64_t number=0;
+    XrJsonCursor c=xr_json_cursor_make((char *)n->text,n->length);uint64_t number=0;
     if (!xr_json_cursor_u64(&c,&number) || c.cursor!=c.end)
         return c.status==XR_JSON_CURSOR_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
     *output=number;return XR_XIR_OK;
@@ -183,7 +178,7 @@ XR_FUNC XrXirStatus xdap_json_i64(const XdapJsonDocument *d,uint32_t index,int64
     bool negative=n->text[0]=='-';size_t first=negative ? 1 : 0;uint64_t value=0;
     uint64_t limit=negative ? UINT64_C(1)<<63 : INT64_MAX;
     for (size_t i=first;i<n->length;++i) {
-        if (xr_compile_resources_work(d->resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+
         uint32_t digit=(uint8_t)n->text[i]-'0';
         if (digit>9 || value>(limit-digit)/10) return XR_XIR_BAD_STRUCTURE;
         value=value*10+digit;
@@ -194,7 +189,7 @@ XR_FUNC XrXirStatus xdap_json_i64(const XdapJsonDocument *d,uint32_t index,int64
 XR_FUNC XrXirStatus xdap_json_equal(const XdapJsonDocument *d,uint32_t index,const char *expected,bool *output) {
     if (!d || !d->resources || !d->nodes || !index || index>d->count || !expected || !output ||
         d->nodes[index].kind!=XDAP_JSON_STRING) return XR_XIR_BAD_STRUCTURE;
-    XrJsonCursor c=xr_json_cursor_make(NULL,0,d->resources,json_work);
+    XrJsonCursor c=xr_json_cursor_make(NULL,0);
     bool equal=xr_json_cursor_equal(&c,d->nodes[index].text,expected);
     if (c.status!=XR_JSON_CURSOR_OK) return XR_XIR_BUDGET;
     *output=equal;return XR_XIR_OK;
@@ -219,21 +214,13 @@ XR_FUNC bool xdap_json_text(XdapJsonWriter *w,const char *bytes,size_t length) {
         if (w->status!=XR_XIR_OK) return false;
         w->capacity=capacity;
     }
-    w->status=json_resource(xr_compile_resources_work(w->resources,length));
-    if (w->status!=XR_XIR_OK) return false;
     if (length) memcpy(w->bytes+w->length,bytes,length);
     w->length+=length;w->bytes[w->length]=0;return true;
 }
-static int json_utf8_read(void *context,const uint8_t *address,uint8_t *output) {
-    XdapJsonWriter *w=context;
-    w->status=json_resource(xr_compile_resources_work(w->resources,1));
-    if (w->status!=XR_XIR_OK) return 0;
-    *output=*address;return 1;
-}
 XR_FUNC bool xdap_json_quote(XdapJsonWriter *w,const char *bytes,size_t length) {
     if (!w || w->status!=XR_XIR_OK || (!bytes && length)) return false;
-    XrUtf8ScanResult scan;
-    if (!xr_utf8_core_scan_strict_read((const uint8_t *)bytes,length,json_utf8_read,w,&scan) || scan.error!=XR_UTF8_OK) {
+    XrUtf8ScanResult scan=xr_utf8_core_scan_strict((const uint8_t *)bytes,length);
+    if (scan.error!=XR_UTF8_OK) {
         if (w->status==XR_XIR_OK) w->status=XR_XIR_BAD_STRUCTURE;
         return false;
     }

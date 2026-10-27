@@ -20,6 +20,8 @@ static bool workspace_target(XtcXirWorkspace *owner, XrXirTargetStatus status) {
     case XR_XIR_TARGET_UNRESOLVED: result = XTC_XIR_WORKSPACE_UNRESOLVED; break;
     case XR_XIR_TARGET_UNSUPPORTED: result = XTC_XIR_WORKSPACE_UNSUPPORTED; break;
     case XR_XIR_TARGET_BUDGET: result = XTC_XIR_WORKSPACE_BUDGET; break;
+    case XR_XIR_TARGET_MEMORY_LIMIT: result = XTC_XIR_WORKSPACE_MEMORY_LIMIT; break;
+    case XR_XIR_TARGET_OVERFLOW: result = XTC_XIR_WORKSPACE_OVERFLOW; break;
     case XR_XIR_TARGET_OUT_OF_MEMORY: result = XTC_XIR_WORKSPACE_OUT_OF_MEMORY; break;
     case XR_XIR_TARGET_IO: result = XTC_XIR_WORKSPACE_IO; break;
     default: break;
@@ -46,7 +48,6 @@ static bool workspace_identity_equal(const FILE_ID_INFO *a, const FILE_ID_INFO *
     return a->VolumeSerialNumber == b->VolumeSerialNumber && !memcmp(a->FileId.Identifier, b->FileId.Identifier, 16);
 }
 static bool workspace_identify(XtcXirWorkspace *owner, WorkspaceNode *node) {
-    if (!workspace_work(owner, 1 + sizeof(node->identity))) return false;
     if (!GetFileInformationByHandleEx(node->created, FileIdInfo, &node->identity, sizeof(node->identity))) {
         workspace_error(owner, GetLastError()); return false;
     }
@@ -57,12 +58,10 @@ static HANDLE workspace_parent_handle(XtcXirWorkspace *owner, uint32_t index) {
 }
 static bool workspace_anchor(XtcXirWorkspace *owner, uint32_t index) {
     WorkspaceNode *node = &owner->nodes[index];
-    if (!workspace_work(owner, 1 + sizeof(node->anchor))) return false;
     NTSTATUS status = workspace_named_open(workspace_parent_handle(owner, index), node->name, node->name_bytes,
         FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES, FILE_OPEN, &node->anchor);
     if (status < 0) { workspace_error(owner, RtlNtStatusToDosError(status)); return false; }
     FILE_ID_INFO identity = {0};
-    if (!workspace_work(owner, 1 + sizeof(identity) * 3)) return false;
     if (!GetFileInformationByHandleEx(node->anchor, FileIdInfo, &identity, sizeof(identity))) {
         workspace_error(owner, GetLastError()); return false;
     }
@@ -80,7 +79,6 @@ static bool workspace_paths_make(XtcXirWorkspace *owner) {
     if (root_length + 7 > owner->limits.path_bytes) {
         workspace_fail(owner, XTC_XIR_WORKSPACE_BUDGET, 0); return false;
     }
-    if (!workspace_work(owner, 3 * (root_length + 8) + 37 * sizeof(wchar_t))) return false;
     char *root = owner->text, *input = root + owner->limits.path_bytes + 1;
     char *output = input + owner->limits.path_bytes + 1;
     memcpy(root, parent, length);
@@ -95,7 +93,6 @@ static XtcXirWorkspaceStatus workspace_create_windows(XtcXirWorkspace *owner) {
     if (!workspace_target(owner, xtc_xir_file_lease_directory_open(owner->resources, owner->parent, &owner->parent_lease)))
         return owner->diagnostic.status;
     const XtcXirDirectoryFacts *parent = xtc_xir_file_lease_directory_facts(owner->parent_lease);
-    if (!workspace_work(owner, 1 + sizeof(owner->parent_handle))) return owner->diagnostic.status;
     owner->parent_handle = CreateFileW(parent->native_path, FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
         FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
@@ -103,19 +100,16 @@ static XtcXirWorkspaceStatus workspace_create_windows(XtcXirWorkspace *owner) {
         owner->parent_handle = NULL; return workspace_error(owner, GetLastError());
     }
     FILE_ID_INFO identity = {0};
-    if (!workspace_work(owner, 1 + sizeof(identity) * 3)) return owner->diagnostic.status;
     if (!GetFileInformationByHandleEx(owner->parent_handle, FileIdInfo, &identity, sizeof(identity)))
         return workspace_error(owner, GetLastError());
     if (identity.VolumeSerialNumber != parent->volume || memcmp(identity.FileId.Identifier, parent->file_id, 16))
         return workspace_fail(owner, XTC_XIR_WORKSPACE_IDENTITY_MISMATCH, 0);
     wchar_t filesystem[16] = {0};
-    if (!workspace_work(owner, 1 + sizeof(filesystem) + 10 * sizeof(wchar_t))) return owner->diagnostic.status;
     if (!GetVolumeInformationByHandleW(owner->parent_handle, NULL, 0, NULL, NULL, NULL, filesystem, 16))
         return workspace_error(owner, GetLastError());
     if (memcmp(filesystem, L"NTFS", 5 * sizeof(wchar_t))) return workspace_fail(owner, XTC_XIR_WORKSPACE_UNSUPPORTED, 0);
     for (uint32_t attempt = 0; attempt < 16; ++attempt) {
         uint8_t nonce[16]; WorkspaceNode *node = &owner->nodes[0];
-        if (!workspace_work(owner, 1 + sizeof(nonce) + sizeof(node->name))) return owner->diagnostic.status;
         NTSTATUS random = BCryptGenRandom(NULL, nonce, sizeof(nonce), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
         if (random < 0) return workspace_error(owner, RtlNtStatusToDosError(random));
         memcpy(node->name, L"xray-", 5 * sizeof(wchar_t));
@@ -124,7 +118,7 @@ static XtcXirWorkspaceStatus workspace_create_windows(XtcXirWorkspace *owner) {
             node->name[6 + i * 2] = L"0123456789abcdef"[nonce[i] & 15];
         }
         node->name[37] = 0; node->name_bytes = 74;
-        if (!workspace_paths_make(owner) || !workspace_work(owner, 1 + sizeof(*node))) return owner->diagnostic.status;
+        if (!workspace_paths_make(owner)) return owner->diagnostic.status;
         NTSTATUS made = workspace_named_open(owner->parent_handle, node->name, node->name_bytes,
             FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES, FILE_CREATE, &node->created);
         if (made >= 0) { node->exists = true; break; }
@@ -134,10 +128,8 @@ static XtcXirWorkspaceStatus workspace_create_windows(XtcXirWorkspace *owner) {
     for (uint32_t i = 0; i < 3; ++i) {
         WorkspaceNode *node = &owner->nodes[i];
         if (i) {
-            if (!workspace_work(owner, sizeof(*node))) return owner->diagnostic.status;
             node->name_bytes = (USHORT)(i == 1 ? 10 : 12);
             memcpy(node->name, i == 1 ? L"input" : L"output", node->name_bytes + sizeof(wchar_t));
-            if (!workspace_work(owner, 1)) return owner->diagnostic.status;
             NTSTATUS made = workspace_named_open(owner->nodes[0].anchor, node->name, node->name_bytes,
                 FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES, FILE_CREATE, &node->created);
             if (made < 0) return workspace_error(owner, RtlNtStatusToDosError(made));
@@ -148,14 +140,12 @@ static XtcXirWorkspaceStatus workspace_create_windows(XtcXirWorkspace *owner) {
         if (!workspace_target(owner, xtc_xir_file_lease_directory_open(owner->resources, path, &node->lease)))
             return owner->diagnostic.status;
         const XtcXirDirectoryFacts *facts = xtc_xir_file_lease_directory_facts(node->lease);
-        if (!workspace_work(owner, sizeof(identity) * 2)) return owner->diagnostic.status;
         if (facts->volume != node->identity.VolumeSerialNumber || memcmp(facts->file_id, node->identity.FileId.Identifier, 16))
             return workspace_fail(owner, XTC_XIR_WORKSPACE_IDENTITY_MISMATCH, 0);
         /* Retain the root's original no-delete handle until cleanup. The
          * independent anchor permits the later identity-checked DELETE open;
          * it alone does not prevent renaming this private root. */
         if (i) {
-            if (!workspace_work(owner, 1)) return owner->diagnostic.status;
             if (!CloseHandle(node->created)) return workspace_error(owner, GetLastError());
             node->created = NULL;
         }

@@ -284,9 +284,9 @@ static void test_owned_metadata(void) {
 }
 static void emit_c(XrLirModule *m, const char *path) {
     XrLirFunction root; OK(xr_lir_function_at(m, 0, &root));
-    XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX}; XrCompileResources *resources = NULL;
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false}; XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
-    XrLirCRequest request = {.module = m, .entry = root, .resources = resources, .translation_unit = path};
+    XrLirCRequest request = {.module = m, .entry = root, .resources = resources, .translation_unit = path, .control = NULL};
     XrLirCOutput out = {0}; CHECK(xr_lir_emit_c(&request, &out, NULL) == XR_LIR_C_OK);
     xr_compile_resources_release(resources); xr_lir_module_destroy(m);
     FILE *file = fopen(path, "wb"); CHECK(file && fwrite(out.bytes, 1, out.length, file) == out.length);

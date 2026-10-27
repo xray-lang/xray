@@ -20,7 +20,7 @@
 static void evaluation_transport(Fixture *fixture) {
     XrXirCompileContext *context = &fixture->context;
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "predicate-evaluation", NULL};
     XrXirSourceRequest source_request = {.session = session, .authority = &authority,
         .context = context, .linkage_kind = XR_XIR_PROGRAM};

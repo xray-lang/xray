@@ -7,13 +7,12 @@
  * xjson_cursor.c - In-place closed-schema JSON lexical operations
  *
  * KEY CONCEPT:
- *   Reads and writes charge the caller's cumulative ledger; only known members exist.
+ *   Reads and writes stay within the admitted span; only known members exist.
  */
 #include "xjson_cursor.h"
-XR_FUNC XrJsonCursor xr_json_cursor_make(char *bytes, size_t length,
-    void *context, XrJsonCursorWork work) {
-    bool valid = work && (bytes || !length) && length <= PTRDIFF_MAX;
-    XrJsonCursor json = {bytes, bytes, valid && bytes ? bytes + length : NULL, context, work,
+XR_FUNC XrJsonCursor xr_json_cursor_make(char *bytes, size_t length) {
+    bool valid = (bytes || !length) && length <= PTRDIFF_MAX;
+    XrJsonCursor json = {bytes, bytes, valid && bytes ? bytes + length : NULL,
         valid ? XR_JSON_CURSOR_OK : XR_JSON_CURSOR_INVALID};
     return json;
 }
@@ -21,30 +20,28 @@ XR_FUNC bool xr_json_cursor_fail(XrJsonCursor *json, XrJsonCursorStatus status) 
     if (json->status == XR_JSON_CURSOR_OK) json->status = status;
     return false;
 }
-XR_FUNC bool xr_json_cursor_work(XrJsonCursor *json, uint64_t work) {
-    if (json->status != XR_JSON_CURSOR_OK) return false;
-    XrJsonCursorStatus status = json->work(json->context, work);
-    if (status != XR_JSON_CURSOR_OK) return xr_json_cursor_fail(json, status);
-    return true;
-}
 XR_FUNC bool xr_json_cursor_length(XrJsonCursor *json, const char *text, size_t *output) {
+    if (json->status != XR_JSON_CURSOR_OK) return false;
+    if (!text || !output) return xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID);
     for (size_t length = 0;; ++length) {
-        if (!xr_json_cursor_work(json, 1)) return false;
         if (!text[length]) { *output = length; return true; }
     }
 }
 XR_FUNC bool xr_json_cursor_peek(XrJsonCursor *json, uint8_t *output) {
-    if (json->cursor == json->end) return xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID);
-    if (!xr_json_cursor_work(json, 1)) return false;
+    if (json->status != XR_JSON_CURSOR_OK) return false;
+    if (!output || json->cursor == json->end) return xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID);
+
     *output = (uint8_t)*json->cursor; return true;
 }
 XR_FUNC bool xr_json_cursor_byte(XrJsonCursor *json, uint8_t *output) {
-    if (json->cursor == json->end) return xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID);
-    if (!xr_json_cursor_work(json, 1)) return false;
+    if (json->status != XR_JSON_CURSOR_OK) return false;
+    if (!output || json->cursor == json->end) return xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID);
+
     *output = (uint8_t)*json->cursor++;
     return true;
 }
 XR_FUNC bool xr_json_cursor_space(XrJsonCursor *json) {
+    if (json->status != XR_JSON_CURSOR_OK) return false;
     while (json->cursor != json->end) {
         uint8_t byte = 0;
         if (!xr_json_cursor_peek(json, &byte)) return false;
@@ -54,13 +51,15 @@ XR_FUNC bool xr_json_cursor_space(XrJsonCursor *json) {
     return json->status == XR_JSON_CURSOR_OK;
 }
 XR_FUNC bool xr_json_cursor_take(XrJsonCursor *json, char token) {
+    if (json->status != XR_JSON_CURSOR_OK) return false;
     uint8_t actual = 0;
     return xr_json_cursor_space(json) && xr_json_cursor_byte(json, &actual) &&
         (actual == (uint8_t)token || xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID));
 }
 XR_FUNC bool xr_json_cursor_equal(XrJsonCursor *json, const char *left, const char *right) {
+    if (json->status != XR_JSON_CURSOR_OK) return false;
+    if (!left || !right) return xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID);
     for (;;) {
-        if (!xr_json_cursor_work(json, 2)) return false;
         uint8_t a = (uint8_t)*left++, b = (uint8_t)*right++;
         if (a != b) return false;
         if (!a) return true;
@@ -127,13 +126,13 @@ static bool xr_json_cursor_utf8(XrJsonCursor *json, uint8_t first, uint32_t *out
     return true;
 }
 XR_FUNC bool xr_json_cursor_string(XrJsonCursor *json, size_t limit, const char **output) {
+    if (json->status != XR_JSON_CURSOR_OK) return false;
     if (!xr_json_cursor_take(json, '"')) return false;
     char *begin = json->cursor, *write = begin;
     for (;;) {
         uint8_t byte = 0;
         if (!xr_json_cursor_byte(json, &byte)) return false;
         if (byte == '"') {
-            if (!xr_json_cursor_work(json, 1)) return false;
             *write = 0; *output = begin; return true;
         }
         if (byte < 32) return xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID);
@@ -153,12 +152,12 @@ XR_FUNC bool xr_json_cursor_string(XrJsonCursor *json, size_t limit, const char 
         size_t bytes = code < 0x80 ? 1u : code < 0x800 ? 2u : code < 0x10000 ? 3u : 4u;
         if ((size_t)(write - begin) > limit || bytes > limit - (size_t)(write - begin))
             return xr_json_cursor_fail(json, XR_JSON_CURSOR_BUDGET);
-        if (!xr_json_cursor_work(json, bytes)) return false;
         xr_json_cursor_encode(code, write);
         write += bytes;
     }
 }
 XR_FUNC bool xr_json_cursor_u64(XrJsonCursor *json, uint64_t *output) {
+    if (json->status != XR_JSON_CURSOR_OK) return false;
     uint8_t peek = 0;
     if (!xr_json_cursor_space(json) || !xr_json_cursor_peek(json, &peek) ||
         peek < '0' || peek > '9') return xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID);
@@ -181,6 +180,7 @@ XR_FUNC bool xr_json_cursor_u64(XrJsonCursor *json, uint64_t *output) {
 }
 XR_FUNC bool xr_json_cursor_key(XrJsonCursor *json, const char *const *names, uint32_t count,
     uint64_t *seen, uint32_t *ordinal) {
+    if (json->status != XR_JSON_CURSOR_OK) return false;
     if (!names || !seen || !ordinal || count > 64)
         return xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID);
     const char *key = NULL;
@@ -198,6 +198,7 @@ XR_FUNC bool xr_json_cursor_key(XrJsonCursor *json, const char *const *names, ui
     return xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID);
 }
 XR_FUNC bool xr_json_cursor_member_end(XrJsonCursor *json, bool *more) {
+    if (json->status != XR_JSON_CURSOR_OK) return false;
     if (!xr_json_cursor_space(json) || json->cursor == json->end)
         return xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID);
     uint8_t token = 0;

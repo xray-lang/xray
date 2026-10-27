@@ -12,6 +12,7 @@
 #include "xir/xxir_error.h"
 #include "xir/xxir_enum.h"
 #include "xir/xxir_type_arena.h"
+#include "xir/xxir_program_internal.h"
 typedef struct InitModules {uint32_t root,base,failing,prelude;} InitModules;
 static InitModules init_modules;
 static void init_module_roles(const XrXirDeclarations *declarations){
@@ -24,6 +25,41 @@ static void init_module_roles(const XrXirDeclarations *declarations){
   if(decl->name_length==strlen(names[role])&&!memcmp(decl->name,names[role],decl->name_length)){CHECK(ids[role]==UINT32_MAX);ids[role]=m;}}
  for(unsigned role=0;role<4;++role)CHECK(ids[role]!=UINT32_MAX);
  CHECK(declarations->root_module==ids[0]);init_modules=(InitModules){ids[0],ids[1],ids[2],ids[3]};
+}
+enum {INIT_PUBLISHED,INIT_FAILING_ANNOUNCED,INIT_UNREACHABLE,INIT_NEVER_REACHED,
+    INIT_COUNTER,INIT_RETAINED,INIT_BASE_ANNOUNCED,INIT_SLOT_COUNT,INIT_PUBLICATION_COUNT=5};
+static uint32_t init_publications[INIT_PUBLICATION_COUNT];
+/* Named print initializers are Unit slots. Their publication is separate from
+ * the three state/payload slots, and both kinds require reverse retirement. */
+static void init_program_shape(const XrXirProgram *program){
+    CHECK(program&&program->permissions&&program->permissions->input&&program->permissions->input->artifact);
+    const XrXirArtifact *input=program->permissions->input->artifact;
+    const XrXirModule *module=xr_xir_compile_artifact_module(input);
+    const XrXirSlotFacts *facts=xr_xir_compile_construction_slots(xr_xir_compile_artifact_construction(input));
+    CHECK(module&&module->declarations&&facts&&facts->rows&&facts->count==INIT_SLOT_COUNT);
+    CHECK(module->declarations->slot_count==INIT_SLOT_COUNT&&module->declarations->slots);
+    static const char *const names[]={"published","announced","unreachable","neverReached","counter","retained","announced"};
+    static const XrXirType types[]={XR_XIR_STRING,XR_XIR_UNIT,XR_XIR_I64,XR_XIR_UNIT,XR_XIR_UNIT,XR_XIR_STRING,XR_XIR_UNIT};
+    const uint32_t modules[]={init_modules.failing,init_modules.failing,init_modules.failing,init_modules.failing,
+        init_modules.base,init_modules.base,init_modules.base};
+    uint32_t slots[INIT_SLOT_COUNT]={0},seen=0,positions=0;
+    for(uint32_t row=0;row<facts->count;++row){
+        const XrXirSlotFact *fact=&facts->rows[row];CHECK(fact->slot<INIT_SLOT_COUNT&&!fact->exported);
+        CHECK(!(positions&(1u<<fact->slot)));positions|=1u<<fact->slot;
+        const XrXirSlot *slot=&module->declarations->slots[fact->slot];CHECK(!slot->mutable);
+        uint32_t matched=UINT32_MAX;
+        for(uint32_t role=0;role<INIT_SLOT_COUNT;++role){
+            if(slot->module==modules[role]&&fact->name_length==strlen(names[role])&&
+                !memcmp(fact->name,names[role],fact->name_length)){CHECK(matched==UINT32_MAX);matched=role;}
+        }
+        CHECK(matched<INIT_SLOT_COUNT&&!(seen&(1u<<matched)));seen|=1u<<matched;slots[matched]=fact->slot;
+        if(matched==INIT_COUNTER){const XrXirTypeNode *node=xr_xir_type_node(module->types,slot->type);
+            CHECK(node&&node->kind==XR_XIR_TYPE_ATOMIC&&node->element==XR_XIR_I64);
+        }else CHECK(slot->type==types[matched]);
+    }
+    CHECK(seen==(1u<<INIT_SLOT_COUNT)-1u&&positions==(1u<<INIT_SLOT_COUNT)-1u);
+    static const uint32_t prefix[]={INIT_COUNTER,INIT_RETAINED,INIT_BASE_ANNOUNCED,INIT_PUBLISHED,INIT_FAILING_ANNOUNCED};
+    for(uint32_t i=0;i<INIT_PUBLICATION_COUNT;++i)init_publications[i]=slots[prefix[i]];
 }
 typedef struct InitTrace {uint32_t output,begins,ready,published,released,stack[16],module_begins[4],module_ready[4];bool reject;} InitTrace;
 static void init_ready_prefix(const InitTrace *trace){
@@ -42,7 +78,8 @@ static void init_trace(void *context,XrXirLifecycleEvent event,uint32_t index){
     InitTrace *trace=context;
     if(event==XR_XIR_MODULE_BEGIN){CHECK(index<4);++trace->begins;++trace->module_begins[index];}
     else if(event==XR_XIR_MODULE_READY){CHECK(index<4);++trace->ready;++trace->module_ready[index];}
-    else if(event==XR_XIR_SLOT_PUBLISHED){CHECK(trace->published<16);trace->stack[trace->published++]=index;}
+    else if(event==XR_XIR_SLOT_PUBLISHED){CHECK(trace->published<16&&trace->published<INIT_PUBLICATION_COUNT);
+        CHECK(index==init_publications[trace->published]);trace->stack[trace->published++]=index;}
     else {CHECK(event==XR_XIR_SLOT_RELEASED&&trace->released<trace->published);
         CHECK(index==trace->stack[trace->published-1-trace->released++]);}
 }
@@ -59,18 +96,19 @@ static void init_failure_value(const XrXirValue *error){
     CHECK(count.type==XR_XIR_I64&&count.payload==41);xr_xir_value_drop(&text);xr_xir_value_drop(&count);xr_xir_domain_drop(reader);
 }
 static void init_pair(XrXirProgram *program,uint32_t entry,XrXirValue held[3]){
+    init_program_shape(program);
     XrXirInstance *instances[2]={0};InitTrace traces[2]={{0}};XrXirInstanceResult paused[2];
     for(unsigned i=0;i<2;++i){XrXirInstanceConfig c; CHECK(xr_xir_instance_config_init(&c, sizeof(c)) == XR_XIR_CALL_READY);c.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, init_output, &traces[i]};c.trace=init_trace;c.trace_context=&traces[i];
         CHECK(xr_xir_instance_new(program,&c,&instances[i])==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instances[i],entry,NULL,0)==XR_XIR_CALL_READY);
         paused[i]=xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);CHECK(paused[i].outcome.status==XR_XIR_CALL_SUSPENDED);
         fprintf(stderr,"init observed instance%u output%u begins%u ready%u published%u released%u\n",i,traces[i].output,traces[i].begins,traces[i].ready,traces[i].published,traces[i].released);
-        CHECK(traces[i].output==2&&traces[i].begins==3&&traces[i].ready==2&&!traces[i].released);init_ready_prefix(&traces[i]);
+        CHECK(traces[i].output==2&&traces[i].begins==3&&traces[i].ready==2&&traces[i].published==INIT_PUBLICATION_COUNT&&!traces[i].released);init_ready_prefix(&traces[i]);
         CHECK(xr_xir_instance_start(instances[i],entry,NULL,0)==XR_XIR_CALL_BUSY);
     }
     for(unsigned i=0;i<2;++i){CHECK(xr_xir_instance_resume(instances[i],paused[i].epoch,paused[i].outcome.wake)==XR_XIR_CALL_READY);
         XrXirInstanceResult failed=xr_xir_instance_poll_bounded(instances[i], UINT64_MAX);CHECK(failed.outcome.status==XR_XIR_CALL_THROWN);init_failure_value(&failed.outcome.value);
-        CHECK(traces[i].released==traces[i].published&&traces[i].published==3&&traces[i].output==2&&traces[i].ready==2);init_ready_prefix(&traces[i]);
+        CHECK(traces[i].released==traces[i].published&&traces[i].published==INIT_PUBLICATION_COUNT&&traces[i].output==2&&traces[i].ready==2);init_ready_prefix(&traces[i]);
         if(!i)CHECK(xr_xir_instance_state(instances[1])==XR_XIR_INSTANCE_INITIALIZING&&!traces[1].released);
         for(unsigned n=0;n<3;++n){CHECK(xr_xir_instance_start(instances[i],entry,NULL,0)==XR_XIR_CALL_THROWN);
             CHECK(xr_xir_instance_poll_bounded(instances[i], UINT64_MAX).outcome.status==XR_XIR_CALL_THROWN&&traces[i].output==2);}

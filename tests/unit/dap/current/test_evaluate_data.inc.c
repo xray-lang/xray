@@ -114,7 +114,7 @@ static size_t evaluate_data_fault(const EvaluateDataCase *test,size_t fail) {
     CHECK(adapter->snapshot==snapshot && adapter->stop_epoch==epoch && !adapter->running && !adapter->value_count && !capture.count);
     CHECK(runtime_live==allocations && runtime_bytes==bytes);
     CHECK(xr_compile_resources_stats(fixture.ledger,&after)==XR_COMPILE_RESOURCE_OK);
-    CHECK(after.live_bytes==before.live_bytes && after.work>before.work && after.allocated_bytes>=before.allocated_bytes);
+    CHECK(after.held_bytes==before.held_bytes && after.allocated_bytes>=before.allocated_bytes);
     evaluate_dispose(&fixture);return sites;
 }
 static void evaluate_data_failures(bool resources) {

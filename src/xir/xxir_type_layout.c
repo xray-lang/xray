@@ -45,7 +45,7 @@ XrXirStatus xr_xir_compile_layout(const XrXirCompileContext *compile_context,
     if (!layout || !target || target->architecture != XR_XIR_ARCH_X86_64 ||
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         context < XR_XIR_LAYOUT_STORAGE || context > XR_XIR_LAYOUT_FRAME) return XR_XIR_BAD_LAYOUT;
-    if (!xir_compile_work(compile_context, 1)) return XR_XIR_BUDGET;
+
     if (!xr_xir_type_node(types, type)) return xr_xir_builtin_layout(type, target, context, layout);
     if (!xr_xir_type_is_owned(types, type) || xr_xir_type_span(types, type) ||
         (xr_xir_type_is_nominal(types, type) && !xr_xir_type_is_class(types, type) &&
@@ -68,7 +68,7 @@ static XrXirStatus storage_layouts_into(const XrXirCompileContext *compile_conte
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         count != (types ? types->count : 0) || (count != 0) != (layouts != NULL)) return XR_XIR_BAD_LAYOUT;
     XrXirCompileContext budget = *remaining;
-    if (!xir_compile_work(&budget, count)) return XR_XIR_BUDGET;
+
 
     bool nominal = false;
     for (uint32_t i = 0; i < count; ++i) {
@@ -117,7 +117,7 @@ XrXirStatus xr_xir_compile_storage_layouts(const XrXirCompileContext *context,
     if (!count) return storage_layouts_into(context, types, target, layouts, count);
     uint64_t fields = 0;
     for (uint32_t i = 0; i < count; ++i) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         if (!!layouts[i].field_count != !!layouts[i].field_offsets) return XR_XIR_BAD_LAYOUT;
         if (layouts[i].field_count > SIZE_MAX / sizeof(uint32_t) - fields) return XR_XIR_BUDGET;
         fields += layouts[i].field_count;
@@ -133,8 +133,7 @@ XrXirStatus xr_xir_compile_storage_layouts(const XrXirCompileContext *context,
             offset += layouts[i].field_count;
         }
         status = storage_layouts_into(context, types, target, result, count);
-        uint64_t copy_bytes = (uint64_t)count * sizeof(*result) + fields * sizeof(*offsets);
-        if (status == XR_XIR_OK && !xir_compile_work(context, copy_bytes)) status = XR_XIR_BUDGET;
+
         if (status == XR_XIR_OK) for (uint32_t i = 0; i < count; ++i) {
             uint32_t *destination = (uint32_t *)layouts[i].field_offsets;
             if (result[i].field_count) memcpy(destination, result[i].field_offsets,

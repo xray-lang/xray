@@ -25,7 +25,7 @@ static XrXirStatus effect_invocation_class_input(const EffectInvocationFlow *flo
         (uint64_t)flow->basis.fn_words+flow->basis.cell_words) return XR_XIR_BAD_STRUCTURE;
     uint32_t mask=0;
     for (uint32_t w=0;w<flow->basis.row_words;++w) {
-        if (!xir_compile_work(flow->read->work,3)) return XR_XIR_BUDGET;
+
         uint64_t permitted=0;
         if (w>=flow->basis.fn_words) {
             uint32_t c=w-flow->basis.fn_words;
@@ -48,7 +48,7 @@ static XrXirStatus effect_invocation_class_encode(EffectInvocationFlow *flow,
     uint32_t mask,uint64_t *output) {
     if (!output || !mask || (mask&~EFFECT_CLASS_VALID) || !(mask&EFFECT_CLASS_KNOWN))
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(flow->read->work,3)) return XR_XIR_BUDGET;
+
     for (uint32_t bit=0;bit<3;++bit) {
         uint32_t flag=bit==0?EFFECT_CLASS_ROOT:bit==1?EFFECT_CLASS_UNKNOWN:EFFECT_CLASS_KNOWN;
         if (!(mask&flag)) continue;
@@ -74,9 +74,9 @@ static XrXirStatus effect_invocation_class_source(EffectInvocationFlow *flow,
     if (type_status!=XR_XIR_OK) return type_status;
     if (!xr_xir_type_is_class(flow->body.domain.types,actual_type)) return XR_XIR_BAD_STRUCTURE;
     uint32_t at=0;const EffectInvocationRead *owner=flow->read;
-    XrXirStatus status=effect_invocation_class_find(owner->work,effect_invocation_class_discovery(owner,flow->node),source,&at);
+    XrXirStatus status=effect_invocation_class_find(effect_invocation_class_discovery(owner,flow->node),source,&at);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
+
     const EffectInvocationClassDiscovery *rows=effect_invocation_class_discovery(owner,flow->node);
     if(!rows) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationClassFact fact=rows->facts[at];
@@ -98,7 +98,7 @@ static XrXirStatus effect_invocation_capture_class(EffectInvocationFlow *flow,
     if(status==XR_XIR_UNRESOLVED && owner->roles.construction) return XR_XIR_OK;
     if(status!=XR_XIR_OK) return status;
     for(uint32_t bit=0;bit<3;++bit) {
-        if(!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+
         uint32_t flag=bit==0?EFFECT_CLASS_ROOT:bit==1?EFFECT_CLASS_UNKNOWN:EFFECT_CLASS_KNOWN;
         if(!(mask&flag)) continue;
         uint32_t index=flow->basis.parameters+bit;uint64_t bit_mask=UINT64_C(1)<<(index%64);
@@ -161,12 +161,12 @@ static XrXirStatus effect_invocation_class_call(EffectInvocationFlow *flow,
         const EffectBodyFunctionSignature *target=&target_head;
         /* A concrete use can still name an open result-only template. Its
          * absent execution edge does not prove a complete pure Class source. */
-        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+
         if (xr_xir_type_span(flow->body.domain.types,target->result)) {
             sources->mask=EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN;return XR_XIR_OK;
         }
         for (uint32_t p=0;p<target->parameter_count;++p) {
-            if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+
             if (xr_xir_type_span(flow->body.domain.types,target->parameters[p])) {
                 sources->mask=EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN;return XR_XIR_OK;
             }
@@ -174,7 +174,7 @@ static XrXirStatus effect_invocation_class_call(EffectInvocationFlow *flow,
     }
     uint32_t matches=0,walked=0;
     for (uint32_t e=owner->final->nodes[flow->node].edge_head;e!=UINT32_MAX;e=owner->final->edges[e].next) {
-        if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
+
         if (e>=owner->final->edge_count || ++walked>owner->final->edge_count) return XR_XIR_BAD_STRUCTURE;
         EffectInvocationEdge edge=owner->final->edges[e];
         if (edge.instruction!=frontier || edge.latent) continue;
@@ -208,7 +208,7 @@ static XrXirStatus effect_invocation_class_writes(EffectInvocationFlow *flow,
     XrXirStatus sequence=effect_body_request_sequence_begin(&flow->body,&cursor);
     if (sequence!=XR_XIR_OK) return sequence;
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
-        if (!xir_compile_work(flow->read->work,1)) return XR_XIR_BUDGET;
+
         XrXirInstruction body_op_3;const XrXirInstruction *write=NULL;
         XrXirStatus body_read_3=effect_body_request_sequence_operation(&flow->body,
             flow->read->final->nodes[flow->node].body,i,&cursor,&body_op_3,&write);
@@ -278,7 +278,7 @@ static XrXirStatus effect_invocation_class_return(EffectInvocationFlow *flow,
     XrXirStatus sequence=effect_body_request_sequence_begin(&flow->body,&cursor);
     if (sequence!=XR_XIR_OK) return sequence;
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
-        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+
         XrXirInstruction body_op_5;const XrXirInstruction *op=NULL;
         XrXirStatus body_read_5=effect_body_request_sequence_operation(&flow->body,
             flow->read->final->nodes[flow->node].body,i,&cursor,&body_op_5,&op);
@@ -296,7 +296,7 @@ static XrXirStatus effect_invocation_class_return(EffectInvocationFlow *flow,
     if(!flow->owner || owner!=&flow->owner->read) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationClassDiscovery *node=&flow->owner->states[flow->node].classes;
     EffectInvocationClassFact fact={.mask=node->return_mask,.rank=node->return_rank};
-    XrXirStatus status=effect_invocation_class_fact_join(flow->owner,&fact,sources.mask,rank,limit,changed);
+    XrXirStatus status=effect_invocation_class_fact_join(&fact,sources.mask,rank,limit,changed);
     if (status==XR_XIR_OK) {
         node->return_mask=fact.mask;node->return_rank=fact.rank;
     }
@@ -308,7 +308,7 @@ static XrXirStatus effect_invocation_class_step(EffectInvocationFlow *flow,
     if (!changed || flow->node>=flow->read->final->count) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationRead *owner=flow->read;
     if (!owner->class_enabled) return XR_XIR_OK;
-    if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
     const EffectInvocationClassDiscovery *rows=effect_invocation_class_discovery(owner,flow->node);
     if (!rows) return XR_XIR_BAD_STRUCTURE;
     if (!rows->count &&
@@ -321,7 +321,7 @@ static XrXirStatus effect_invocation_class_step(EffectInvocationFlow *flow,
         if(!flow->owner || owner!=&flow->owner->read) return XR_XIR_BAD_STRUCTURE;
         uint32_t count=flow->owner->states[flow->node].classes.count;
         for (uint32_t c=0;c<count;++c) {
-            if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
             uint32_t value=flow->owner->states[flow->node].classes.facts[c].value;
             EffectInvocationClassSources sources={0};
             status=effect_invocation_class_value(flow,value,&sources);
@@ -329,7 +329,7 @@ static XrXirStatus effect_invocation_class_step(EffectInvocationFlow *flow,
             if (!sources.complete || !sources.mask) continue;
             uint64_t rank=sources.mask==EFFECT_CLASS_KNOWN ? sources.maximum+1 : 0;
             if (rank>limit || (sources.mask==EFFECT_CLASS_KNOWN && !rank)) return XR_XIR_BAD_STRUCTURE;
-            status=effect_invocation_class_fact_join(flow->owner,&flow->owner->states[flow->node].classes.facts[c],
+            status=effect_invocation_class_fact_join(&flow->owner->states[flow->node].classes.facts[c],
                 sources.mask,rank,limit,&again);
             if (status!=XR_XIR_OK) return status;
         }
@@ -349,15 +349,15 @@ static XrXirStatus effect_invocation_class_step(EffectInvocationFlow *flow,
 static XrXirStatus effect_invocation_class_residual(EffectInvocationWorkspace *owner,
     bool *again) {
     if (!again || !owner || owner->pending) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(owner->read.work,1)) return XR_XIR_BUDGET;
+
     *again=false;if (!owner->read.class_enabled) return XR_XIR_OK;
     uint64_t limit=0;XrXirStatus status=effect_invocation_class_rank_limit(&owner->read,&limit);
     for (uint32_t n=0;status==XR_XIR_OK && n<owner->final.count;++n) {
         EffectInvocationClassDiscovery *node=&owner->states[n].classes;bool changed=false;
         for (uint32_t c=0;c<node->count;++c) {
-            if (!xir_compile_work(owner->read.work,1)) { status=XR_XIR_BUDGET;break; }
+
             if (node->facts[c].mask) continue;
-            status=effect_invocation_class_fact_join(owner,&node->facts[c],
+            status=effect_invocation_class_fact_join(&node->facts[c],
                 EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN,0,limit,&changed);
             if (status!=XR_XIR_OK) break;
         }
@@ -365,8 +365,7 @@ static XrXirStatus effect_invocation_class_residual(EffectInvocationWorkspace *o
         if (status==XR_XIR_OK) status=effect_invocation_head(&owner->read,owner->final.nodes[n].body,&head);
         if (status==XR_XIR_OK && xr_xir_type_is_class(owner->read.body.domain.types,head.result) &&
             !node->return_mask && !head.instruction_count) {
-            if (!xir_compile_work(owner->read.work,2)) status=XR_XIR_BUDGET;
-            else { node->return_mask=EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN;changed=true; }
+            { node->return_mask=EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN;changed=true; }
         }
         if (status==XR_XIR_OK && changed) {
             status=effect_invocation_enqueue_precision(owner,n);*again=true;

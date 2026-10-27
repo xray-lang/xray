@@ -29,21 +29,19 @@ static XrXirStatus effect_terms_seed(EffectTerms *pool, const XrXirTypes *source
     XrXirTypeNode *nodes = source->count ? effect_terms_alloc(pool,source->count,sizeof(*nodes)) : NULL;
     if (source->count && !nodes) return pool->status;
     for (uint32_t i=0;i<source->count;++i) {
-        if (!xir_compile_work(pool->remaining,1+2*sizeof(XrXirTypeNode))) return XR_XIR_BUDGET;
+
         XrXirTypeNode node=source->nodes[i];
         if (node.parameter_count) {
             XrXirCallableParameter *parameters=effect_terms_alloc(pool,node.parameter_count,sizeof(*parameters));
             if (!parameters) return pool->status;
-            if (!xir_compile_work(pool->remaining,(uint64_t)node.parameter_count*sizeof(*parameters)))
-                return XR_XIR_BUDGET;
+
             memcpy(parameters,node.parameters,(size_t)node.parameter_count*sizeof(*parameters));
             node.parameters=parameters;
         }
         if (node.nominal.argument_count) {
             XrXirType *arguments=effect_terms_alloc(pool,node.nominal.argument_count,sizeof(*arguments));
             if (!arguments) return pool->status;
-            if (!xir_compile_work(pool->remaining,(uint64_t)node.nominal.argument_count*sizeof(*arguments)))
-                return XR_XIR_BUDGET;
+
             memcpy(arguments,node.nominal.arguments,(size_t)node.nominal.argument_count*sizeof(*arguments));
             node.nominal.arguments=arguments;
         }
@@ -61,9 +59,9 @@ static XrXirStatus effect_terms_seed(EffectTerms *pool, const XrXirTypes *source
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_terms_import_child(EffectTerms *pool,
+static XrXirStatus effect_terms_import_child(
     const XrXirType *cache, uint32_t before, XrXirType input, XrXirType *output) {
-    if (!xir_compile_work(pool->remaining,1)) return XR_XIR_BUDGET;
+
     uint32_t id=(uint32_t)input;
     if (id>=XR_XIR_CONSTRUCTED_TYPE_BASE && id<XR_XIR_CONSTRUCTED_TYPE_LIMIT) {
         uint32_t index=id-XR_XIR_CONSTRUCTED_TYPE_BASE;
@@ -83,7 +81,7 @@ static XrXirStatus effect_terms_import(EffectTerms *pool,
     XrXirType *cache=source->count ? effect_terms_alloc(pool,source->count,sizeof(*cache)) : NULL;
     if (source->count && !cache) return pool->status;
     for (uint32_t i=0;i<source->count;++i) {
-        if (!xir_compile_work(pool->remaining,1+sizeof(XrXirTypeNode))) return XR_XIR_BUDGET;
+
         XrXirTypeNode node=source->nodes[i];
         XrXirStatus status=XR_XIR_OK;
         if (node.kind==XR_XIR_TYPE_CALLABLE || node.kind==XR_XIR_TYPE_TUPLE) {
@@ -92,24 +90,24 @@ static XrXirStatus effect_terms_import(EffectTerms *pool,
             if (node.parameter_count && !parameters) return pool->status;
             for (uint32_t p=0;p<node.parameter_count && status==XR_XIR_OK;++p) {
                 parameters[p].mode=node.parameters[p].mode;
-                status=effect_terms_import_child(pool,cache,i,node.parameters[p].type,&parameters[p].type);
+                status=effect_terms_import_child(cache,i,node.parameters[p].type,&parameters[p].type);
             }
             node.parameters=parameters;
             if (status==XR_XIR_OK && node.kind==XR_XIR_TYPE_CALLABLE)
-                status=effect_terms_import_child(pool,cache,i,node.result,&node.result);
+                status=effect_terms_import_child(cache,i,node.result,&node.result);
             if (status==XR_XIR_OK && node.kind==XR_XIR_TYPE_CALLABLE)
-                status=effect_terms_import_child(pool,cache,i,node.element,&node.element);
+                status=effect_terms_import_child(cache,i,node.element,&node.element);
         } else if (node.kind==XR_XIR_TYPE_NOMINAL) {
             XrXirType *arguments=node.nominal.argument_count ?
                 effect_terms_alloc(pool,node.nominal.argument_count,sizeof(*arguments)) : NULL;
             if (node.nominal.argument_count && !arguments) return pool->status;
             for (uint32_t a=0;a<node.nominal.argument_count && status==XR_XIR_OK;++a)
-                status=effect_terms_import_child(pool,cache,i,node.nominal.arguments[a],&arguments[a]);
+                status=effect_terms_import_child(cache,i,node.nominal.arguments[a],&arguments[a]);
             node.nominal.arguments=arguments;
         } else {
-            status=effect_terms_import_child(pool,cache,i,node.element,&node.element);
+            status=effect_terms_import_child(cache,i,node.element,&node.element);
             if (status==XR_XIR_OK && (node.kind==XR_XIR_TYPE_MAP || node.kind==XR_XIR_TYPE_TASK || node.kind==XR_XIR_TYPE_ITERATOR))
-                status=effect_terms_import_child(pool,cache,i,node.result,&node.result);
+                status=effect_terms_import_child(cache,i,node.result,&node.result);
         }
         if (status!=XR_XIR_OK) return status;
         cache[i]=effect_term_intern(pool,node);

@@ -8,13 +8,12 @@
  */
 #include "../../shared/xr_core_intrinsic.h"
 static bool expression_intrinsic_visible(ExpressionState *state,const char *name) {
-    const XdapLexicalView *view=state->request->lexical;XrCompileResources *resources=view->launch->resources;
+    const XdapLexicalView *view=state->request->lexical;
     if (view->function->function>=view->launch->function_count) { state->status=XR_XIR_BAD_STRUCTURE;return false; }
     uint32_t module=view->launch->functions[view->function->function].module;
     if (module>=view->launch->module_count) { state->status=XR_XIR_BAD_STRUCTURE;return false; }
     uint32_t query_module=view->launch->modules[module].query_module;size_t bytes=strlen(name)+1;
     for (uint32_t b=view->environment;b;) {
-        if (xr_compile_resources_work(resources,bytes)!=XR_COMPILE_RESOURCE_OK) { state->status=XR_XIR_BUDGET;return false; }
         if (b>view->function->binding_count) { state->status=XR_XIR_BAD_STRUCTURE;return false; }
         const XrXirSourceDebugBinding *binding=&view->function->bindings[b-1];
         if (!binding->declaration || binding->declaration>view->source->declaration_count || binding->parent>=b) {
@@ -25,7 +24,6 @@ static bool expression_intrinsic_visible(ExpressionState *state,const char *name
         b=binding->parent;
     }
     for (uint32_t i=0;i<view->source->declaration_count;++i) {
-        if (xr_compile_resources_work(resources,bytes+1)!=XR_COMPILE_RESOURCE_OK) { state->status=XR_XIR_BUDGET;return false; }
         const XrXirSourceDeclaration *declaration=&view->source->declarations[i];
         if (declaration->range.module!=query_module || declaration->kind==XR_XIR_SOURCE_INTRINSIC ||
             !declaration->name || strncmp(declaration->name,name,bytes)) continue;
@@ -35,7 +33,6 @@ static bool expression_intrinsic_visible(ExpressionState *state,const char *name
             (declaration->kind==XR_XIR_SOURCE_BINDING || declaration->kind==XR_XIR_SOURCE_PARAMETER)) continue;
         uint32_t scope=view->function->declaration;
         for (uint32_t depth=0;;++depth) {
-            if (xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK) { state->status=XR_XIR_BUDGET;return false; }
             if (declaration->parent==scope) { state->status=XR_XIR_BAD_TYPE;return false; }
             if (!scope) break;
             if (scope>view->source->declaration_count || depth>=view->source->declaration_count) {
@@ -53,8 +50,6 @@ static XrXirStatus expression_intrinsic_proof(const ExpressionState *state,const
     if (!view || !view->complete || !context) return XR_XIR_BAD_STRUCTURE;
     uint32_t matched=0;const char identity[]="xray-core:prelude";
     for (uint32_t i=0;i<view->reference_count;++i) {
-        if (xr_compile_resources_work(context->resources,sizeof(XrXirSourceReference)+sizeof(identity))!=XR_COMPILE_RESOURCE_OK)
-            return XR_XIR_BUDGET;
         const XrXirSourceReference *reference=&view->references[i];
         if (reference->access!=XR_XIR_SOURCE_CALL) continue;
         if (!reference->target || reference->target>view->declaration_count) return XR_XIR_BAD_STRUCTURE;

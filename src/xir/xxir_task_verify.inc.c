@@ -20,7 +20,7 @@ static XrXirStatus task_go_shape(const XrXirModule *module, const XrXirInstructi
         if (!xr_xir_task_result_shape(module->types, function->result))
             return XR_XIR_UNSUPPORTED;
         for (uint32_t p = 0; p < function->parameter_count; ++p) {
-            if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+
             if (!xr_xir_task_parameter_supported(module->types, function->parameters[p]))
                 return XR_XIR_UNSUPPORTED;
         }
@@ -31,7 +31,7 @@ static XrXirStatus task_go_shape(const XrXirModule *module, const XrXirInstructi
     if (status==XR_XIR_OK) status=xr_xir_compile_type_markers_prove(remaining,&proof,function->error_type,
         XR_XIR_CONSTRAINT_ERROR | XR_XIR_CONSTRAINT_SENDABLE);
     for (uint32_t p = 0; status == XR_XIR_OK && p < function->parameter_count; ++p) {
-        if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+
         status = xr_xir_compile_type_markers_prove(remaining, &proof, function->parameters[p],
             XR_XIR_CONSTRAINT_SENDABLE);
     }

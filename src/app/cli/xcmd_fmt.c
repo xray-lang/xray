@@ -7,7 +7,7 @@
  * xcmd_fmt.c - Owned syntax formatting and atomic file publication
  */
 #include "xcli.h"
-#include "../../api/xsource_compile.h"
+#include "../../base/xresource_limits.h"
 #include "../../base/xfileio.h"
 #include "../../base/xio_policy.inc.h"
 #include "../../frontend/format/xfmt.h"
@@ -41,15 +41,21 @@ static void fmt_failure(FmtWork *work, int result, bool stop) {
 }
 static void fmt_io_failure(FmtWork *work, const char *path, XrOsIoStatus status) {
     fprintf(stderr,"xray fmt: %s: I/O status=%u\n",path,(unsigned)status);
-    bool internal = status == XR_OS_IO_OUT_OF_MEMORY || status == XR_OS_IO_BAD_ARGUMENT;
+    bool internal = status == XR_OS_IO_OUT_OF_MEMORY || status == XR_OS_IO_BAD_ARGUMENT ||
+        status == XR_OS_IO_CLOCK_FAILURE;
     fmt_failure(work,internal ? XR_CLI_EXIT_INTERNAL :
         status == XR_OS_IO_UNSUPPORTED ? XR_CLI_EXIT_UNAVAILABLE : XR_CLI_EXIT_FAIL,
-        internal || status == XR_OS_IO_BUDGET);
+        internal || status == XR_OS_IO_OVERFLOW || status == XR_OS_IO_MEMORY_LIMIT ||
+        status == XR_OS_IO_CANCELLED || status == XR_OS_IO_DEADLINE);
 }
 static bool fmt_resource(FmtWork *work, XrCompileResourceStatus status, const char *path) {
     if (status == XR_COMPILE_RESOURCE_OK) return true;
-    fmt_io_failure(work,path,status == XR_COMPILE_RESOURCE_BUDGET ? XR_OS_IO_BUDGET :
-        status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_OS_IO_OUT_OF_MEMORY : XR_OS_IO_BAD_ARGUMENT);
+    fmt_io_failure(work,path,status == XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_OS_IO_MEMORY_LIMIT :
+        status == XR_COMPILE_RESOURCE_OVERFLOW ? XR_OS_IO_OVERFLOW :
+        status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_OS_IO_OUT_OF_MEMORY :
+        status == XR_COMPILE_RESOURCE_CANCELLED ? XR_OS_IO_CANCELLED :
+        status == XR_COMPILE_RESOURCE_DEADLINE ? XR_OS_IO_DEADLINE :
+        status == XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_OS_IO_CLOCK_FAILURE : XR_OS_IO_BAD_ARGUMENT);
     return false;
 }
 static int fmt_publication_exit(XtcXirPublicationStatus status) {
@@ -71,6 +77,7 @@ static bool fmt_publish(FmtWork *work, const char *path, const XrFmtOutput *outp
         fprintf(stderr,"xray fmt: %s: publication status=%u stage=%u published=%u os=%u\n",
             path,(unsigned)status,d?(unsigned)d->stage:0,d?(unsigned)d->published:0,d?d->os_error:0);
         fmt_failure(work,fmt_publication_exit(status),status == XTC_XIR_PUBLICATION_BUDGET ||
+            status == XTC_XIR_PUBLICATION_MEMORY_LIMIT || status == XTC_XIR_PUBLICATION_OVERFLOW ||
             status == XTC_XIR_PUBLICATION_OUT_OF_MEMORY || status == XTC_XIR_PUBLICATION_INVALID);
     }
     for (unsigned attempt=0;attempt<8;++attempt) {
@@ -93,7 +100,6 @@ static void fmt_file(FmtWork *work, const char *path) {
     XrOsIoStatus io=xr_os_io_read_regular_file(&work->policy,path,SIZE_MAX-1,&source,&length);
     if(io!=XR_OS_IO_OK) { fmt_io_failure(work,path,io); goto cleanup; }
     for(size_t i=0;i<length;++i) {
-        if(!fmt_resource(work,xr_compile_state_work(work->state,1),path)) goto cleanup;
         if(!source[i]) {
             fprintf(stderr,"xray fmt: %s: source contains a NUL byte\n",path);
             fmt_failure(work,XR_CLI_EXIT_FAIL,false); goto cleanup;
@@ -102,32 +108,33 @@ static void fmt_file(FmtWork *work, const char *path) {
     void *terminated=source;
     XrCompileResourceStatus resized=xr_compile_resources_resize(work->resources,&terminated,length+1);
     source=terminated;
-    if(!fmt_resource(work,resized,path) || !fmt_resource(work,xr_compile_state_work(work->state,1),path)) goto cleanup;
+    if(!fmt_resource(work,resized,path)) goto cleanup;
     source[length]=0;
-    XrCompilerSessionStatus opened=xr_compile_session_new(work->resources,&session);
-    if(opened!=XR_COMPILER_SESSION_OK) {
-        fmt_resource(work,opened==XR_COMPILER_SESSION_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
-            opened==XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT,path);
+    XrCompileResourceStatus opened=xr_compile_session_new(work->resources,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK) {
+        fmt_resource(work,opened,path);
         goto cleanup;
     }
     XrParseStatus parsed=xr_compile_parse_with_trivia(session,(const char *)source,path,NULL,&ast);
     if(parsed!=XR_PARSE_OK) {
         fprintf(stderr,"xray fmt: %s: parser status=%u\n",path,(unsigned)parsed);
-        bool internal=parsed==XR_PARSE_BAD_ARGUMENT || parsed==XR_PARSE_OUT_OF_MEMORY;
-        fmt_failure(work,internal ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL,internal || parsed==XR_PARSE_BUDGET);
+        bool internal=parsed==XR_PARSE_BAD_ARGUMENT || parsed==XR_PARSE_OUT_OF_MEMORY || parsed==XR_PARSE_CLOCK_FAILURE;
+        fmt_failure(work,internal ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL,internal || parsed==XR_PARSE_BUDGET ||
+            parsed==XR_PARSE_MEMORY_LIMIT || parsed==XR_PARSE_OVERFLOW || parsed==XR_PARSE_CANCELLED || parsed==XR_PARSE_DEADLINE);
         goto cleanup;
     }
     XrFmtStatus formatted=xr_compile_format_ast(xr_compile_session_compile_state(session),ast,&work->config,&output);
     if(formatted!=XR_FMT_OK) {
         fprintf(stderr,"xray fmt: %s: formatter status=%u\n",path,(unsigned)formatted);
-        fmt_failure(work,formatted==XR_FMT_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL,true);
+        bool refused=formatted==XR_FMT_BUDGET || formatted==XR_FMT_MEMORY_LIMIT || formatted==XR_FMT_OVERFLOW ||
+            formatted==XR_FMT_CANCELLED || formatted==XR_FMT_DEADLINE;
+        fmt_failure(work,refused ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL,true);
         goto cleanup;
     }
     xr_program_destroy(ast); ast=NULL;
     xr_compile_session_free(session); session=NULL;
     bool changed=length!=output.length;
     if(!changed) {
-        if(!fmt_resource(work,xr_compile_state_work(work->state,length),path)) goto cleanup;
         changed=memcmp(source,output.text,length)!=0;
     }
     if(changed) {
@@ -141,23 +148,21 @@ cleanup:
     xr_program_destroy(ast); xr_compile_session_free(session);
     xr_compile_format_output_free(&output); xr_compile_resources_free(source);
 }
-static bool fmt_name_equal(FmtWork *work, const char *name, const char *word) {
+static bool fmt_name_equal(const char *name, const char *word) {
     for(;;) {
-        if(!fmt_resource(work,xr_compile_state_work(work->state,2),"directory entry")) return false;
         unsigned char a=(unsigned char)*name++, b=(unsigned char)*word++;
         if(a!=b) return false;
         if(!a) return true;
     }
 }
-static bool fmt_skip_directory(FmtWork *work,const char *name) {
-    if(!fmt_resource(work,xr_compile_state_work(work->state,1),"directory entry")) return true;
-    return name[0]=='.' || fmt_name_equal(work,name,"node_modules") || fmt_name_equal(work,name,"build") ||
-        fmt_name_equal(work,name,"build-asan") || fmt_name_equal(work,name,"build-release");
+static bool fmt_skip_directory(const char *name) {
+    return name[0]=='.' || fmt_name_equal(name,"node_modules") || fmt_name_equal(name,"build") ||
+        fmt_name_equal(name,"build-asan") || fmt_name_equal(name,"build-release");
 }
 static bool fmt_source_name(FmtWork *work,const char *name) {
     size_t length=0;
     if(!fmt_resource(work,xr_compile_state_string_length(work->state,name,&length),"directory entry")) return false;
-    return length>=4 && fmt_name_equal(work,name+length-3,".xr");
+    return length>=4 && fmt_name_equal(name+length-3,".xr");
 }
 static bool fmt_push_directory(FmtWork *work,FmtDirectory **top,char *path) {
     FmtDirectory *frame=NULL;
@@ -185,7 +190,7 @@ static void fmt_directory(FmtWork *work,const char *path) {
             if(status!=XR_OS_IO_END) fmt_io_failure(work,top->path,status);
             fmt_pop_directory(&top); continue;
         }
-        if(entry.is_dir ? fmt_skip_directory(work,entry.name) : !fmt_source_name(work,entry.name)) continue;
+        if(entry.is_dir ? fmt_skip_directory(entry.name) : !fmt_source_name(work,entry.name)) continue;
         if(work->stopped) break;
         char *child=NULL;
         status=xr_path_join_owned(&work->policy,top->path,entry.name,&child);
@@ -249,7 +254,7 @@ XR_FUNC int cmd_fmt(const XrCliInvocation *inv) {
 
 
     FmtWork work={0}; work.config=config; work.check_only=check_only; work.verbose=verbose;
-    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
+    XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
     XrCompileResourceStatus status=xr_compile_resources_new(&limits,&work.resources);
     if(!fmt_resource(&work,status,"request")) return work.result;
     work.policy=xr_compile_io_policy(work.resources);

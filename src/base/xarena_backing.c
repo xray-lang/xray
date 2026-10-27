@@ -24,12 +24,6 @@ static void arena_system_free(void *context, void *memory) {
     xr_free(memory);
 }
 
-static XrArenaStatus arena_system_work(void *context, uint64_t units) {
-    (void) context;
-    (void) units;
-    return XR_ARENA_OK;
-}
-
 static XrArenaStatus arena_system_retain(void *context) {
     (void) context;
     return XR_ARENA_OK;
@@ -41,5 +35,5 @@ static void arena_system_release(void *context) {
 
 XR_FUNC XrArenaBacking xr_arena_system_backing(void) {
     return (XrArenaBacking) {NULL, arena_system_alloc, arena_system_free,
-        arena_system_work, arena_system_retain, arena_system_release};
+        arena_system_retain, arena_system_release};
 }

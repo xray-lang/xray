@@ -13,12 +13,16 @@
 #define XXIR_VIEW_ACCESS_INTERNAL_H
 #include "xxir.h"
 #include "xxir_cell_provenance_internal.h"
+#include "xxir_effect_contract_internal.h"
 /* Borrowed only during the composite verifier call. The opaque owner and
  * reader come from the common Cell producer for this exact immutable module,
  * never from caller-provided role bits. No fact escapes as entry authority. */
 typedef struct XirViewAccessCells {
     const XrXirCellProvenance *owner;
     XrXirCellProofRole (*role)(const XrXirCellProvenance *,uint32_t,uint32_t);
+    /* Only the composite verifier installs this live lexical owner. An absent
+     * scope leaves default access unresolved; it is never a caller promise. */
+    XirEffectDefaultAccessScope *default_access;
 } XirViewAccessCells;
 /* Requires ordinary type/structure/SSA, return-origin and affine admission of
  * the immutable generation. Recomputes actual may-owned state, scope ancestry,

@@ -74,7 +74,6 @@ XR_FUNC char *ast_strdup(XrCompilerSession *session, const char *s);
 XR_FUNC char *ast_strndup(XrCompilerSession *session, const char *text, size_t length);
 XR_FUNC void *ast_array_grow(XrCompilerSession *session, const void *old, size_t element,
                              size_t old_count, size_t new_count);
-XR_FUNC bool ast_work(XrCompilerSession *session, size_t units);
 XR_FUNC bool ast_copy(XrCompilerSession *session, void *destination, const void *source, size_t bytes);
 
 // Arena-based dynamic-array push: doubles capacity by reallocating into the
@@ -89,7 +88,7 @@ XR_FUNC bool ast_copy(XrCompilerSession *session, void *destination, const void 
         }                                                                           \
         if ((count) == (cap)) {                                                     \
             if ((cap) > INT_MAX / 2) {                                             \
-                xr_compile_state_fail((parser)->state, XR_COMPILE_RESOURCE_BUDGET); \
+                xr_compile_state_fail((parser)->state, XR_COMPILE_RESOURCE_OVERFLOW); \
                 break;                                                              \
             }                                                                       \
             int _capacity = (cap) ? (cap) * 2 : 4;                                 \
@@ -99,7 +98,6 @@ XR_FUNC bool ast_copy(XrCompilerSession *session, void *destination, const void 
             (arr) = _grown;                                                         \
             (cap) = _capacity;                                                      \
         }                                                                           \
-        if (!ast_work(_session, sizeof(*(arr)))) break;                             \
         (arr)[(count)++] = (item);                                                  \
     } while (0)
 
@@ -117,7 +115,6 @@ typedef struct ParsedIntLiteral {
 
 XR_FUNC ParsedIntLiteral xr_parser_integer_literal(Parser *parser, const char *start, int length);
 
-XR_FUNC bool xr_parser_step(const Parser *parser);
 XR_FUNC int xr_parser_grow_capacity(Parser *parser, int old);
 XR_FUNC char *xr_parser_token_string(Parser *parser, const Token *token);
 XR_FUNC char xr_parser_read_byte(const Parser *parser, const char *address);

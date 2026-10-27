@@ -6260,8 +6260,7 @@ static bool xa_len_type_supported(XrType *type) {
             if (info)
                 return false;
             return class_name &&
-                   (strcmp(class_name, "StringBuilder") == 0 || strcmp(class_name, "Buffer") == 0 ||
-                    strcmp(class_name, "Range") == 0);
+                   (strcmp(class_name, "Buffer") == 0 || strcmp(class_name, "Range") == 0);
         }
         default:
             return false;

@@ -14,7 +14,7 @@
 #include "xir/xxir_type_arena.h"
 
 static XrXirArtifact *import_lower(XrXirCompileContext *context,const char *text) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"foreign-data",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,strlen(text)};XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
@@ -66,7 +66,7 @@ static const char *import_text(const char *kind) {
     return !strcmp(kind,"array")?array_text:!strcmp(kind,"tuple")?tuple_text:
         !strcmp(kind,"nullable")?nullable_text:!strcmp(kind,"enum")?enum_text:!strcmp(kind,"empty")?empty_text:nominal_text;
 }
-static void import_normal(const char *kind,bool runtime,bool exhausted) {
+static void import_normal(const char *kind,bool runtime) {
     const char *text=import_text(kind);
     XrXirCompileContext producer,receiver;context_new(&producer);context_new(&receiver);
     char producer_text[2048];
@@ -89,20 +89,15 @@ static void import_normal(const char *kind,bool runtime,bool exhausted) {
         for (unsigned i=0;i<2;++i) { CHECK(xr_xir_array_push(&place,&values[i],&admission)==XR_XIR_VALUE_OK);xr_xir_value_drop(&values[i]); }
         xr_xir_value_drop(&input);input=array;
     }
-    for (uint64_t prefix=0;prefix<=64;++prefix) {
-        XrCompileResources *query=NULL;CHECK(xr_compile_resources_new(&caps,&query)==XR_COMPILE_RESOURCE_OK);
-        XrCompileResourceStats initial={0};CHECK(xr_compile_resources_stats(query,&initial)==XR_COMPILE_RESOURCE_OK);
-        CHECK(initial.work<=caps.work-prefix && xr_compile_resources_work(query,caps.work-prefix-initial.work)==XR_COMPILE_RESOURCE_OK);
-        const XrXirTypeArena *arena=NULL;
-        XrXirValueStatus observed=xr_xir_compile_value_arena_borrow(query,&input,&arena);
-        CHECK(observed==(prefix==64?XR_XIR_VALUE_OK:XR_XIR_VALUE_LIMIT));
-        CHECK((arena!=NULL)==(prefix==64));
-        if (prefix<64) CHECK(xr_xir_compile_value_arena_borrow(query,&input,&arena)==XR_XIR_VALUE_LIMIT && !arena);
-        else { XrCompileResourceStats paid={0};CHECK(xr_compile_resources_stats(query,&paid)==XR_COMPILE_RESOURCE_OK && paid.work==caps.work && paid.allocation_count==initial.allocation_count); }
-        xr_compile_resources_release(query);
-    }
+    XrCompileResources *query=NULL;CHECK(xr_compile_resources_new(&caps,&query)==XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats initial={0},observed={0};
+    CHECK(xr_compile_resources_stats(query,&initial)==XR_COMPILE_RESOURCE_OK);
+    const XrXirTypeArena *borrowed=NULL;
+    CHECK(xr_xir_compile_value_arena_borrow(query,&input,&borrowed)==XR_XIR_VALUE_OK && borrowed==xr_xir_value_arena(&input));
+    CHECK(xr_compile_resources_stats(query,&observed)==XR_COMPILE_RESOURCE_OK && observed.held_bytes==initial.held_bytes &&
+        observed.allocation_count==initial.allocation_count);
+    xr_compile_resources_release(query);
     XrCompileResourceStats before=stats(&producer);
-    if (exhausted) { CHECK(xr_compile_resources_work(producer.resources,caps.work-before.work)==XR_COMPILE_RESOURCE_OK);before=stats(&producer); }
     XrXirCtfeCallRequest pass=import_request(target,"pass",&input);
     XrXirValue result={0};
     for (unsigned leaf=0;leaf<2;++leaf) {
@@ -115,12 +110,11 @@ static void import_normal(const char *kind,bool runtime,bool exhausted) {
         xr_xir_value_drop(&answer);
         if (!strcmp(kind,"array")) {
             const XrXirTypeArena *arena=xr_xir_value_arena(&result);XrXirDomain *domain=NULL;
-            CHECK(xr_compile_resources_work(receiver.resources,4096)==XR_COMPILE_RESOURCE_OK);
             CHECK(xr_xir_compile_value_domain_borrow(receiver.resources,&result,arena,&domain)==XR_XIR_VALUE_OK);
             XrXirValueAdmission admission={.arena=arena,.domain=domain,.work=1000000,.scratch_bytes=65536};int64_t capacity=0;
             CHECK(xr_xir_array_capacity(&result,&admission,&capacity)==XR_XIR_VALUE_OK && (!runtime || capacity==7));
         }
-        CHECK(stats(&producer).work==before.work && stats(&producer).allocated_bytes==before.allocated_bytes);
+        CHECK(stats(&producer).held_bytes==before.held_bytes && stats(&producer).allocated_bytes==before.allocated_bytes);
         if (!leaf) xr_xir_value_drop(&result);
     }
     xr_xir_value_drop(&input);xr_xir_domain_drop(foreign);xr_xir_compile_artifact_free(origin);xr_compile_resources_release(producer.resources);
@@ -147,7 +141,7 @@ static void import_nominal_mismatch(void) {
         XrXirCtfeStatus status=leaf?xr_xir_compile_ctfe_leaf(&request.evaluation,&output):xr_xir_compile_ctfe_calls(&request,&output);
         fprintf(stderr,"Different nominal leaf=%u status=%u\n",leaf,status);
         CHECK(status==XR_XIR_CTFE_BAD_ARGUMENT && !output.type && !output.reserved && !output.payload);
-        CHECK(stats(&receiver).live_bytes==before.live_bytes);
+        CHECK(stats(&receiver).held_bytes==before.held_bytes);
     }
     xr_xir_value_drop(&input);xr_xir_compile_artifact_free(origin);xr_xir_compile_artifact_free(target);
     xr_compile_resources_release(producer.resources);xr_compile_resources_release(receiver.resources);
@@ -169,7 +163,7 @@ static void import_faults(const char *kind,bool prefix) {
             size_t first=source_fixture_compile_attempts;XrCompileResourceStats baseline=stats(&receiver);
             CHECK(import_evaluate(&request,mode!=0,&output)==XR_XIR_CTFE_OK);
             sites=source_fixture_compile_attempts-first;CHECK(sites && xr_xir_value_valid(&output));xr_xir_value_drop(&output);
-            CHECK(stats(&receiver).live_bytes==baseline.live_bytes);
+            CHECK(stats(&receiver).held_bytes==baseline.held_bytes);
             xr_xir_compile_artifact_free(target);xr_compile_resources_release(receiver.resources);
         }
         size_t trials=prefix?(sites==1?1:2):sites;
@@ -183,14 +177,14 @@ static void import_faults(const char *kind,bool prefix) {
             XrXirCtfeStatus status=import_evaluate(&request,mode!=0,&output);
             CHECK(status==XR_XIR_CTFE_OUT_OF_MEMORY && source_fixture_compile_injected);
             CHECK(source_fixture_compile_attempts==first+fault+1 && !output.type && !output.reserved && !output.payload);
-            source_fixture_compile_fail_at=SIZE_MAX;CHECK(stats(&receiver).live_bytes==baseline.live_bytes);
+            source_fixture_compile_fail_at=SIZE_MAX;CHECK(stats(&receiver).held_bytes==baseline.held_bytes);
             CHECK(import_evaluate(&request,mode!=0,&output)==XR_XIR_CTFE_OK);
             XrXirCtfeCallRequest measure=import_request(target,"measure",&output);XrXirValue answer={0};
             CHECK(xr_xir_compile_ctfe_calls(&measure,&answer)==XR_XIR_CTFE_OK && answer.payload==42);
-            xr_xir_value_drop(&answer);xr_xir_value_drop(&output);CHECK(stats(&receiver).live_bytes==baseline.live_bytes);
+            xr_xir_value_drop(&answer);xr_xir_value_drop(&output);CHECK(stats(&receiver).held_bytes==baseline.held_bytes);
             xr_xir_compile_artifact_free(target);xr_compile_resources_release(receiver.resources);
             CHECK(source_fixture_compile_live==blocks && source_fixture_compile_bytes==bytes);
-            CHECK(!memcmp(&input,&unchanged,sizeof(input)) && stats(&producer).work==producer_stats.work);
+            CHECK(!memcmp(&input,&unchanged,sizeof(input)) && stats(&producer).held_bytes==producer_stats.held_bytes);
         }
         fprintf(stderr,"Foreign %s leaf=%u actualFI=%zu selected=%zu %s same-owner retry42/live/source-owner unchanged\n",
             kind,mode,sites,trials,prefix?"FIRST_LAST_ONLY":"COMPLETE_ALL_ORDINALS");
@@ -206,9 +200,9 @@ int XR_IMPORT_MAIN(int argc,char **argv) {
         import_faults(argv[1],!strcmp(argv[2],"--prefix"));return 0;
     }
     CHECK(argc==2 || argc==3);bool runtime=argc==3 && !strcmp(argv[2],"--runtime");
-    bool exhausted=argc==3 && !strcmp(argv[2],"--exhausted");CHECK(argc==2 || runtime || exhausted);
+    CHECK(argc==2 || runtime);
     if (!strcmp(argv[1],"mismatch")) { import_nominal_mismatch();return 0; }
     CHECK(!strcmp(argv[1],"array") || !strcmp(argv[1],"tuple") || !strcmp(argv[1],"nominal") ||
         !strcmp(argv[1],"nullable") || !strcmp(argv[1],"enum") || !strcmp(argv[1],"empty"));
-    import_normal(argv[1],runtime,exhausted);return 0;
+    import_normal(argv[1],runtime);return 0;
 }

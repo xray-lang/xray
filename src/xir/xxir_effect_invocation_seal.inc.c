@@ -47,7 +47,7 @@ static XrXirStatus effect_invocation_role(const EffectInvocationRead *read,
         function>=effect_body_count(read->final->material) ||
         parameter>=read->final->material->functions[function].parameter_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t kind=UINT32_MAX;
-    if (!xir_compile_work(read->work,6+sizeof(*output))) return XR_XIR_BUDGET;
+
     if (read->roles.construction) {
         const XrXirFunctionEffectContract *contract=&effect_contracts_read(read->roles.construction)[function];
         if (contract->parameter_count!=read->final->material->functions[function].parameter_count ||
@@ -77,7 +77,7 @@ static XrXirStatus effect_invocation_read_open(const XrXirCompileContext *work,
         final->physical->count!=effect_body_count(final->material) || !final->physical->functions ||
         !final->nodes || final->count>final->capacity || final->edge_count>final->edge_capacity ||
         (final->edge_count && !final->edges)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,sizeof(*read))) return XR_XIR_BUDGET;
+
     *read=(EffectInvocationRead){.work=work,.roles={.sealed=certificate},.declared=certificate->declared,.final=final,
         .body=effect_body_owned_request(work,final->material)};
     read->producer_enabled=final->site_count!=0;
@@ -91,23 +91,21 @@ static XrXirStatus effect_invocation_read_open(const XrXirCompileContext *work,
     const EffectInvocationNode *nodes=final->nodes;const EffectInvocationEdge *links=final->edges;
     const EffectBodyMaterial *material=final->material;const EffectPhysicalDomain *physical=final->physical;
     const uint32_t *roots=final->roots,*root_spaces=final->root_spaces;
-    if (!xir_compile_work(work,6*sizeof(void *)+4*sizeof(uint32_t))) return XR_XIR_BUDGET;
+
     if ((uint64_t)count*sizeof(*read->consumers)>SIZE_MAX) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     read->consumers=xir_compile_alloc(work,(size_t)count*sizeof(*read->consumers),&status);
     if (!read->consumers) return status;
     /* The allocator may change the descriptor. Frozen local extents qualify
      * only this request's allocation, never a callback's later dimensions. */
-    if (!xir_compile_work(work,10)) status=XR_XIR_BUDGET;
-    else if (final->count!=count || final->edge_count!=edges ||
+    if (final->count!=count || final->edge_count!=edges ||
         final->capacity!=capacity || final->edge_capacity!=edge_capacity ||
         final->nodes!=nodes || final->edges!=links || final->material!=material || final->physical!=physical ||
         final->roots!=roots || final->root_spaces!=root_spaces) status=XR_XIR_BAD_STRUCTURE;
-    if (status==XR_XIR_OK && !xir_compile_work(work,(uint64_t)count*sizeof(*read->consumers)))
-        status=XR_XIR_BUDGET;
+
     if (status==XR_XIR_OK) for (uint32_t n=0;n<count;++n) read->consumers[n]=UINT32_MAX;
     for (uint32_t e=0;e<edges && status==XR_XIR_OK;++e) {
-        if (!xir_compile_work(work,5)) { status=XR_XIR_BUDGET;break; }
+
         const EffectInvocationEdge *edge=&final->edges[e];
         if (edge->caller>=count || edge->target>=count ||
             edge->consumer_next!=read->consumers[edge->target]) { status=XR_XIR_BAD_STRUCTURE;break; }
@@ -181,7 +179,7 @@ static void *effect_invocation_copy(EffectTerms *terms,const void *source,
     if (!source) { terms->status=XR_XIR_BAD_STRUCTURE;return NULL; }
     void *copy=effect_terms_reserve(terms,count,size);
     if (!copy) return NULL;
-    if (!xir_compile_work(terms->remaining,count*size)) { terms->status=XR_XIR_BUDGET;return NULL; }
+
     memcpy(copy,source,(size_t)count*size);return copy;
 }
 
@@ -192,7 +190,7 @@ static XrXirStatus effect_invocation_bind_bodies(EffectInvocationCertificate *ce
     EffectBodyMaterial *body=owner->final.material;
     if (!effect_body_material_shape(body) || body->resources!=certificate->resources ||
         owner->final.physical!=body->physical || owner->final.cells!=body->cells) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(certificate->terms.remaining,5)) return XR_XIR_BUDGET;
+
     certificate->body=body;certificate->terms.types=body->terms.types;
     certificate->terms.capacity=body->terms.capacity;
     certificate->declarations=body->declarations;certificate->generics=body->generics;
@@ -211,7 +209,7 @@ static XrXirStatus effect_invocation_bind_bounds(EffectInvocationCertificate *ce
         domain->resources!=work->resources || domain->count!=source->count ||
         (domain->count && !domain->functions)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<source->count;++f) {
-        if (!xir_compile_work(work,10)) return XR_XIR_BUDGET;
+
         const EffectBodyFunction *function=&certificate->body->functions[f];
         const EffectInvocationFunctionBounds *body=&source->functions[f];
         const EffectPhysicalFunction *physical=&domain->functions[f];
@@ -222,20 +220,20 @@ static XrXirStatus effect_invocation_bind_bounds(EffectInvocationCertificate *ce
             physical->capacity>values || !!physical->records!=!!physical->capacity) return XR_XIR_BAD_STRUCTURE;
         uint32_t at=0,previous=0;
         for (uint32_t r=0;r<physical->count;++r) {
-            if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+
             EffectPhysicalRecord record=physical->records[r];
             if (!record.mask || record.value>=values || (r && record.value<=previous)) return XR_XIR_BAD_STRUCTURE;
             previous=record.value;
             if (!(record.mask&EFFECT_PHYSICAL_CALLABLE)) continue;
             if (at>=body->count) return XR_XIR_BAD_STRUCTURE;
             const EffectInvocationValueBound *bound=&body->bounds[at++];
-            if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
             if (bound->value!=record.value || !bound->callable || bound->mask&~
                 (XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED)) return XR_XIR_BAD_STRUCTURE;
         }
         if (at!=body->count) return XR_XIR_BAD_STRUCTURE;
     }
-    if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
     certificate->declared=certificate->body->declared;return XR_XIR_OK;
 }
 
@@ -252,8 +250,7 @@ static XrXirStatus effect_invocation_copy_origins(EffectInvocationCertificate *c
     if (count && (!certificate->origins || !certificate->owners))
         return terms->status;
     for (uint32_t f=0;f<count;++f) {
-        if (!xir_compile_work(terms->remaining,sizeof(XrXirOrigin)+sizeof(uint32_t)))
-            return XR_XIR_BUDGET;
+
         XrXirOrigin origin={.function=f};uint32_t parent=UINT32_MAX;
         if (dense) {
             EffectOrdinaryNode node=dense->nodes[f];origin.function=node.declaration;
@@ -286,7 +283,7 @@ static XrXirStatus effect_invocation_certificate_terms(const XrXirCompileContext
         record->formula.terms!=record->storage || target->limit!=record->capacity ||
         record->formula.constant_mask!=certificate->final->nodes[
             certificate->final->roots[function]].intrinsic_mask) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,6+sizeof(EffectInvocationTermSource))) return XR_XIR_BUDGET;
+
     const EffectInvocationTermSource source={work,certificate->final,
         &certificate->final->role_proof,NULL};
     uint32_t actual=0;
@@ -301,15 +298,15 @@ static XrXirStatus effect_invocation_local_result_shape(const XrXirCompileContex
     if (!xir_compile_context_valid(work) || !owner || !result ||
         result->resources!=work->resources || !result->functions || !owner->material)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+
     uint32_t count=effect_body_count(owner->material);
     return result->count==count && result->capacity==count && !result->term_count?
         XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
-static XrXirStatus effect_invocation_local_result_row(const XrXirCompileContext *work,
+static XrXirStatus effect_invocation_local_result_row(
     const EffectFinalFunctions *result,uint32_t f,const EffectInvocationLocalInput *input) {
-    if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
+
     const EffectFinalFunction *actual=&result->functions[f];
     uint32_t mask=(input->facts.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
         (input->facts.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
@@ -326,7 +323,7 @@ static XrXirStatus effect_invocation_local_result_match(const XrXirCompileContex
     XrXirStatus status=effect_invocation_local_result_shape(work,owner,result);
     if (status!=XR_XIR_OK) return status;
     for (uint32_t f=0;f<result->count;++f) {
-        status=effect_invocation_local_result_row(work,result,f,&inputs[f]);
+        status=effect_invocation_local_result_row(result,f,&inputs[f]);
         if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
@@ -358,8 +355,8 @@ static XrXirStatus effect_invocation_local_certificate_match(const XrXirCompileC
                 proof=effect_invocation_local_result_shape(work,certificate->final,result);
         }
         if (proof==XR_XIR_OK)
-            proof=effect_invocation_local_node_match(work,certificate->final,f,&input);
-        if (proof==XR_XIR_OK) proof=effect_invocation_local_result_row(work,result,f,&input);
+            proof=effect_invocation_local_node_match(certificate->final,f,&input);
+        if (proof==XR_XIR_OK) proof=effect_invocation_local_result_row(result,f,&input);
         if (proof!=XR_XIR_OK && proof!=XR_XIR_BAD_STRUCTURE) return proof;
     }
     if (proof==XR_XIR_OK) *local=true;
@@ -375,7 +372,7 @@ static XrXirStatus effect_invocation_input_seed(const XrXirCompileContext *work,
     EffectInvocationPrimitive primitive={0};
     XrXirStatus status=effect_invocation_primitive_read(work,body,function,&primitive);
     if(status!=XR_XIR_OK) return status;
-    if(!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=primitive.facts;return XR_XIR_OK;
 }
 
@@ -387,7 +384,7 @@ static XrXirStatus effect_invocation_input_seeds_match(const XrXirCompileContext
         !summary->functions || !final->roots || !final->nodes || !final->count || final->count>final->capacity)
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<count;++f) {
-        if (!xir_compile_work(work,6)) return XR_XIR_BUDGET;
+
         if (final->roots[f]>=final->count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationNode *node=&final->nodes[final->roots[f]];
         if (node->body!=f) return XR_XIR_BAD_STRUCTURE;
@@ -402,7 +399,7 @@ static XrXirStatus effect_invocation_input_seeds_match(const XrXirCompileContext
     /* Each genuine environment executes the same body's primitive Input.
      * An intact symbolic root cannot qualify a different erased call key. */
     for (uint32_t n=0;n<final->count;++n) {
-        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+
         const EffectInvocationNode *node=&final->nodes[n];
         if (node->body>=count) return XR_XIR_BAD_STRUCTURE;
         if (final->roots[node->body]==n) continue;
@@ -441,8 +438,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
             owner->node_index || owner->node_index_capacity)
             status=XR_XIR_BAD_STRUCTURE;
         for (uint32_t f=0;status==XR_XIR_OK && f<owner->final.count;++f) {
-            if (!xir_compile_work(work,3)) status=XR_XIR_BUDGET;
-            else if (owner->read.consumers[f]!=UINT32_MAX || !owner->states[f].expanded || owner->states[f].queued)
+            if (owner->read.consumers[f]!=UINT32_MAX || !owner->states[f].expanded || owner->states[f].queued)
                 status=XR_XIR_BAD_STRUCTURE;
         }
         if (status==XR_XIR_OK) status=effect_invocation_local_equations_match(work,&owner->final,local_inputs);
@@ -471,8 +467,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
          * Publish only initialized spans while charging their actual clearing. */
         certificate->final=xir_compile_calloc(work,1,sizeof(*certificate->final),&status);
         if (status==XR_XIR_OK) *certificate->final=owner->final;
-        if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(certificate->final->summary)+2*sizeof(void *)))
-            status=XR_XIR_BUDGET;
+
         if (status==XR_XIR_OK) {
             certificate->final->summary=*staged;
             result=&certificate->final->summary;*request->result=result;summary_moved=true;
@@ -490,8 +485,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         }
         if (status==XR_XIR_OK) status=effect_invocation_certificate_project(work,certificate,result,sink);
     }
-    if (status==XR_XIR_OK && !xir_compile_work(work,9+sizeof(*request->result)+
-        sizeof(owner->edge_index)+sizeof(owner->edge_index_capacity))) status=XR_XIR_BUDGET;
+
     if (status==XR_XIR_OK && (!owner->graph || owner->graph->material!=certificate->body ||
         (!owner->graph->physical_owned && owner->effects->generation!=certificate->body)))
         status=XR_XIR_BAD_STRUCTURE;
@@ -533,7 +527,7 @@ static inline XrXirStatus effect_invocation_result_read_new(const XrXirCompileCo
         certificate->resources!=work->resources ||
         certificate->final->material!=certificate->body || !output || *output)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,sizeof(EffectInvocationTermSource))) return XR_XIR_BUDGET;
+
     const EffectInvocationTermSource source={work,certificate->final,
         &certificate->final->role_proof,NULL};
     return effect_invocation_result_new(&source,output);
@@ -544,7 +538,7 @@ static XrXirStatus effect_invocation_certificate_result_match(const XrXirCompile
     if (!xir_compile_context_valid(work) || !certificate || !certificate->final ||
         certificate->resources!=work->resources ||
         certificate->final->material!=certificate->body) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,sizeof(EffectInvocationTermSource))) return XR_XIR_BUDGET;
+
     const EffectInvocationTermSource source={work,certificate->final,
         &certificate->final->role_proof,NULL};
     bool local=false;

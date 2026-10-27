@@ -23,7 +23,6 @@
 #include "xmap.h"
 #include "../../base/xutf8.h"
 #include "../xstrbuf.h"
-#include "xstringbuilder.h"
 #include "../core/xr_runtime_core.h"
 #include "../xisolate_api.h"
 #include "../../base/xchecks.h"
@@ -1102,49 +1101,7 @@ XrString *xr_string_byte_at(XrVMRuntime *iso, XrString *str, xr_Integer index) {
     return xr_string_new(iso, &c, 1);
 }
 
-// translate - Unicode char mapping (UTF-8 aware)
-XrString *xr_string_translate(XrVMRuntime *iso, XrString *str, XrMap *table) {
-    if (!iso || !str)
-        return NULL;
-    if (!table)
-        return str;
-    if (str->length == 0)
-        return str;
-
-    // Use StringBuilder (replacement may change length)
-    XrStringBuilder *sb = xr_stringbuilder_new(NULL);
-    if (!sb)
-        return NULL;
-
-    size_t pos = 0;
-    while (pos < str->length) {
-        // Get current UTF-8 char length
-        size_t char_len = xr_utf8_rune_size((unsigned char) str->data[pos]);
-        if (char_len == 0 || pos + char_len > str->length) {
-            // Invalid UTF-8, treat as single byte
-            char_len = 1;
-        }
-
-        // Create current char as a local probe key; map lookup compares by content.
-        XrString *key = xr_string_new(iso, str->data + pos, char_len);
-        bool found = false;
-        XrValue key_value = xr_string_value(key);
-        XrValue val = xr_map_get(table, key_value, &found);
-        xr_rc_release_value(xr_current_coro_heap(), key_value);
-
-        if (found && XR_IS_STRING(val)) {
-            XrString *replacement = XR_TO_STRING(val);
-            xr_stringbuilder_append_str(sb, replacement);
-        } else {
-            // No mapping, keep original
-            xr_stringbuilder_append_cstr(sb, str->data + pos, char_len);
-        }
-
-        pos += char_len;
-    }
-
-    return xr_stringbuilder_to_string(sb);
-}
+#include "xstring_translate.inc.c"
 
 // Note: join method moved to xarray.c (array.join(delimiter))
 

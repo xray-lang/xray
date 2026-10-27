@@ -21,7 +21,7 @@ typedef struct ExpressionReceive {
 static XrXirStatus expression_receive_work(ExpressionReceive *receiver,uint64_t units) {
     if (units>receiver->admission.work) return XR_XIR_BUDGET;
     receiver->admission.work-=units;
-    return xr_compile_resources_work(receiver->state->request->lexical->launch->resources,units)==XR_COMPILE_RESOURCE_OK ? XR_XIR_OK : XR_XIR_BUDGET;
+    return XR_XIR_OK;
 }
 static XrXirStatus expression_receive_type(ExpressionReceive *receiver,const XrXirTypes *source,
     XrXirType from,XrXirType to,uint32_t depth) {
@@ -51,7 +51,7 @@ static XrXirStatus expression_receive_node(ExpressionReceive *receiver,const XrX
     status=expression_value_status(xdap_value_shape(&view,&shape));if (status!=XR_XIR_OK) return status;
     if ((node->kind==XR_XIR_TYPE_NULLABLE && shape.children>1) ||
         (node->kind==XR_XIR_TYPE_TUPLE && shape.children!=node->parameter_count)) return XR_XIR_BAD_TYPE;
-    if (shape.children>SIZE_MAX/sizeof(XrXirValue)) return XR_XIR_BUDGET;
+    if (shape.children>SIZE_MAX/sizeof(XrXirValue)) return XR_XIR_OVERFLOW;
     uint64_t bytes=shape.children*sizeof(XrXirValue);status=expression_receive_work(receiver,bytes);
     if (status!=XR_XIR_OK) return status;
     XrCompileResources *resources=receiver->state->request->lexical->launch->resources;XrXirValue *fields=NULL;

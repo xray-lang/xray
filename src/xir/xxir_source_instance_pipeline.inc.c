@@ -9,7 +9,7 @@
 static bool source_instance_selected(SourceContext *ctx,const XrXirArtifact *closed,
     const XirSourceInstanceSelection *selection,uint32_t *output) {
     const XrXirModule *module=&closed->module;const XrXirProvenance *proof=module->provenance;
-    if (!source_work_units(ctx,NULL,sizeof(XrXirOrigin)+16)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (!proof || !xir_effect_kind_is_closed(proof->kind) || !proof->source || !proof->origins ||
         proof->count!=module->function_count || selection->definition>=proof->source->module.function_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"instance selection has no actual generic definition");
@@ -35,15 +35,15 @@ static void source_instance_receive(SourceContext *ctx,XrXirSourceResult *output
     for (uint32_t i=0;ctx->diagnostic.status==XR_XIR_OK && i<count;++i) {
         if (!source_instance_selected(ctx,closed,&request->selections[i],&functions[i])) break;
     }
-    if (ctx->diagnostic.status==XR_XIR_OK && source_work_units(ctx,NULL,sizeof(XirCtfeInstanceBatchRequest))) {
+    if (ctx->diagnostic.status==XR_XIR_OK && ((ctx)->diagnostic.status == XR_XIR_OK)) {
         XirCtfeInstanceBatchRequest evaluation={closed,functions,count,request->target,request->limits,request->call_depth};
-        XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_instance_batch(&evaluation,&owner);
+        XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_instance_batch(&evaluation,ctx->request,&owner);
         if (evaluated==XR_XIR_CTFE_OK) evaluated=xr_xir_compile_ctfe_instance_batch_views(owner,views,count);
         if (evaluated!=XR_XIR_CTFE_OK) source_comptime_failure(ctx,NULL,evaluated);
     }
-    if (ctx->diagnostic.status==XR_XIR_OK && source_work_units(ctx,NULL,sizeof(SourceContext)+sizeof(SourceInstanceBatch))) {
+    if (ctx->diagnostic.status==XR_XIR_OK && ((ctx)->diagnostic.status == XR_XIR_OK)) {
         SourceInstanceBatch batch={views,providers,count};SourceContext received={0};
-        received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
+        received.request=ctx->request;received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
         received.manifests=ctx->manifests;received.prelude_module=ctx->prelude_module;received.core_factory=ctx->core_factory;
         received.remaining_blocks=ctx->remaining_blocks;received.remaining_instructions=ctx->remaining_instructions;
         received.instance_constants=&batch;

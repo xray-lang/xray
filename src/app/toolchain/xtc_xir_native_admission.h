@@ -14,7 +14,8 @@ typedef enum XtcXirNativeAdmissionStatus {
     XTC_XIR_ADMISSION_OK, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_UNRESOLVED,
     XTC_XIR_ADMISSION_UNSUPPORTED, XTC_XIR_ADMISSION_MISMATCH,
     XTC_XIR_ADMISSION_BUDGET, XTC_XIR_ADMISSION_OUT_OF_MEMORY,
-    XTC_XIR_ADMISSION_IO
+    XTC_XIR_ADMISSION_IO, XTC_XIR_ADMISSION_MEMORY_LIMIT,
+    XTC_XIR_ADMISSION_OVERFLOW
 } XtcXirNativeAdmissionStatus;
 typedef enum XtcXirNativeAdmissionDomain {
     XTC_XIR_ADMISSION_SELF, XTC_XIR_ADMISSION_RESOURCE,
@@ -38,7 +39,7 @@ typedef struct XtcXirNativeAdmissionDiagnostic {
  * runs, source emission or file reopens occur here. Output must initially be NULL
  * and is preserved on failure. A failed output read keeps Operation's first error
  * and FAILED state. Other admission failures do not change that owner.
- * The result independently owns its context and bytes. The caller must finish
+ * The result independently retains its memory allocation and bytes. The caller must finish
  * operation close, preserving it on PENDING, before publishing/executing bytes. */
 XR_FUNC XtcXirNativeAdmissionStatus xtc_xir_native_admit(
     XtcXirNativeOperation *operation, const XrXirNativeProjection *projection,

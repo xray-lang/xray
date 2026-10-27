@@ -8,7 +8,7 @@
  */
 static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,SourceExpectedType *output) {
     *output=(SourceExpectedType){false,XR_XIR_UNIT, false, false};
-    if (!node || !source_work(ctx,node)) return node==NULL;
+    if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return node==NULL;
     if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"ground type collection depth exhausted");
     if (node->type==AST_GROUPING) return source_ground_type(ctx,node->as.grouping,depth+1,output);
     if (node->type==AST_COMPTIME_EXPR) {
@@ -133,7 +133,7 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     }
     const XrXirNominalDeclaration *declaration=&ctx->nominals.declarations[owner];
     for (uint32_t f=0;f<declaration->field_count;++f) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirNominalField *field=&declaration->fields[f];
         const char *name=member->as.member_access.name;
         if (source_text_size(ctx, name)!=field->name.length || !source_span_same(ctx, NULL, name, field->name.bytes, field->name.length)) continue;

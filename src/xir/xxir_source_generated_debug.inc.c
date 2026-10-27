@@ -24,7 +24,7 @@ static bool source_generated_debug_receive(SourceContext *owner,const SourceCont
             body->handler_count || body->route_count)
             return source_fail(owner,NULL,XR_XIR_BAD_STRUCTURE,"generated debug body lost its sealed observations");
         for (uint32_t i=0;i<body->count;++i) {
-            if (!source_work_units(owner,NULL,sizeof(*body->debug_points))) return false;
+            if (!((owner)->diagnostic.status == XR_XIR_OK)) return false;
             const XrXirSourceDebugPoint *point=&body->debug_points[i];
             if (point->statement || point->flags || point->environment)
                 return source_fail(owner,NULL,XR_XIR_BAD_STRUCTURE,"generated debug body borrowed source identities");

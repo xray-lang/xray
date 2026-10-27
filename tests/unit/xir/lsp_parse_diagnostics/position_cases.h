@@ -19,7 +19,7 @@ static void diagnostic_positions(void) {
     for(size_t i=0;i<sizeof(cases)/sizeof(*cases);++i) {
         XrCompileResources *resources=sdk_ledger(&limits);XrCompileResourceStats before=sdk_stats(resources);
         XrModuleSourcePosition point={99,77};
-        CHECK(xr_compile_module_source_position(resources,cases[i].text,cases[i].length,cases[i].line,cases[i].column,&point)==cases[i].status);
+        CHECK(xr_module_source_position(cases[i].text,cases[i].length,cases[i].line,cases[i].column,&point)==cases[i].status);
         if(cases[i].status==XR_MODULE_OK)CHECK(point.line==cases[i].row&&point.column==cases[i].units);
         else CHECK(point.line==99&&point.column==77);
         XrCompileResourceStats after=sdk_stats(resources);
@@ -31,7 +31,7 @@ static void diagnostic_positions(void) {
         XrCompileResourceLimits cut=limits;cut.work=(uint64_t)(7+delta);
         XrCompileResources *resources=sdk_ledger(&cut);XrModuleSourcePosition point={99,77};
         XrCompileResourceStats before=sdk_stats(resources);
-        XrModuleStatus status=xr_compile_module_source_position(resources,"a\xf0\x9f\x98\x80" "b",6,1,6,&point);
+        XrModuleStatus status=xr_module_source_position("a\xf0\x9f\x98\x80" "b",6,1,6,&point);
         CHECK(status==(delta<0?XR_MODULE_BUDGET:XR_MODULE_OK));
         if(delta<0)CHECK(point.line==99&&point.column==77);else CHECK(point.line==0&&point.column==3);
         XrCompileResourceStats after=sdk_stats(resources);

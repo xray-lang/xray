@@ -35,7 +35,11 @@ void xr_parser_diagnostic_fail(Parser *parser, XrParseStatus status) {
 static XrParseStatus parse_resource_status(XrCompileState *state) {
     switch (xr_compile_state_status(state)) {
         case XR_COMPILE_RESOURCE_OK: return XR_PARSE_OK;
-        case XR_COMPILE_RESOURCE_BUDGET: return XR_PARSE_BUDGET;
+        case XR_COMPILE_RESOURCE_MEMORY_LIMIT:return XR_PARSE_MEMORY_LIMIT;
+        case XR_COMPILE_RESOURCE_OVERFLOW:return XR_PARSE_OVERFLOW;
+        case XR_COMPILE_RESOURCE_CANCELLED:return XR_PARSE_CANCELLED;
+        case XR_COMPILE_RESOURCE_DEADLINE:return XR_PARSE_DEADLINE;
+        case XR_COMPILE_RESOURCE_CLOCK_FAILURE:return XR_PARSE_CLOCK_FAILURE;
         case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_PARSE_OUT_OF_MEMORY;
         default: return XR_PARSE_BAD_ARGUMENT;
     }
@@ -114,7 +118,7 @@ static XrParseStatus parser_init(Parser *output, XrCompilerSession *session, con
         return parse_resource_status(state);
     local.type_scope = xr_parser_type_scope_new(&local, NULL);
     if (local.type_scope &&
-        xr_compile_scanner_open_source(&local.scanner, state, arena, source, trivia) == XR_COMPILE_RESOURCE_OK &&
+        xr_compile_scanner_open_source(&local.scanner, state, arena, source, trivia,xr_compile_session_request(session)) == XR_COMPILE_RESOURCE_OK &&
         xr_compile_state_copy(state, output, &local, sizeof(local)) == XR_COMPILE_RESOURCE_OK)
         return XR_PARSE_OK;
     xr_compile_parser_close(&local);
@@ -148,7 +152,7 @@ static AstNode *parse_body(Parser *parser, bool expression, bool trivia) {
     }
     while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_EOF)) {
         if (parser->max_errors > 0 && parser->error_count >= parser->max_errors) break;
-        if (xr_compile_state_work(parser->state, 1) != XR_COMPILE_RESOURCE_OK) return NULL;
+        if(xr_compile_session_poll(parser->compiler_session)!=XR_COMPILE_RESOURCE_OK)return NULL;
         if (parser->panic_mode) {
             xr_parser_synchronize(parser);
             if (!xr_parser_healthy(parser) || xr_parser_check(parser, TK_EOF)) break;

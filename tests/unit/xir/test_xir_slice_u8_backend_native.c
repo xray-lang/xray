@@ -27,7 +27,7 @@ static void slice_owner_free(void *pointer) {
 }
 static XrXirProgram *slice_build(unsigned mode) {
     CHECK(mode>=1 && mode<=3);
-    XrXirCompileContext context={0};const XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
+    XrXirCompileContext context={0};const XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();
     const XrXirProgramSpec *native=&slice_u8_program;XrXirArtifact *checked=NULL,*code=NULL;

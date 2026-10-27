@@ -48,7 +48,7 @@ static bool catch_pattern_names_variants(Parser *parser, AstNode *pattern) {
     }
     if (count <= 0 || !alternatives)
         return false;
-    for (int i = 0; xr_parser_step(parser) && i < count; i++) {
+    for (int i = 0; xr_parser_healthy(parser) && i < count; i++) {
         AstNode *alternative = alternatives[i];
         if (!alternative)
             return false;
@@ -159,7 +159,7 @@ AstNode *xr_parse_try_statement(Parser *parser) {
                     if (!xr_parser_healthy(parser)) return NULL;
                 } while (0);
                 do { if (!ast_copy(parser->compiler_session, var_name, parser->current.start, parser->current.length)) return NULL; } while (0);
-                do { if (!ast_work(parser->compiler_session, 1)) return NULL; var_name[parser->current.length] = '\0'; } while (0);
+                do { var_name[parser->current.length] = '\0'; } while (0);
                 var_line = parser->current.line;
                 var_column = parser->current.column;
                 do {

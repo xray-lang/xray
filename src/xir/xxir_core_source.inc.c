@@ -89,7 +89,7 @@ static char *source_core_text(SourceContext *ctx, const char *input, size_t leng
         source_fail(ctx,NULL,XR_XIR_BUDGET,"core source text size exhausted"); return NULL;
     }
     char *output=source_alloc(ctx,length+1,1);
-    if (!output || !source_copy_bytes(ctx,NULL,output,input,length) || !source_work(ctx,NULL)) return NULL;
+    if (!output || !source_copy_bytes(ctx,NULL,output,input,length) || !((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
     output[length]=0; return output;
 }
 static char *source_core_string(SourceContext *ctx, const char *input) {
@@ -170,7 +170,7 @@ static bool source_core_query(SourceContext *ctx, const SourceContext *core, uin
             (core->query.declarations[d].type_parameter_kinds && !original.type_parameter_kinds) ||
             (core->query.declarations[d].signature && !original.signature)) return false;
         for (uint32_t p=0;p<original.parameter_count;++p) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             XrXirSourceType *parameters=(XrXirSourceType *)original.parameters;
             parameters[p]=source_core_query_type(parameters[p],first,action);
         }
@@ -216,12 +216,12 @@ static bool source_core_function_copy(SourceContext *ctx, const XrXirModule *mod
         (original->parameter_count && !function->parameters) ||
         (original->operand_count && !function->operands)) return false;
     for (uint32_t p=0;p<function->parameter_count;++p) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirType *parameters=(XrXirType *)function->parameters;
         if (parameters[p]==XR_XIR_CONSTRUCTED_TYPE_BASE) parameters[p]=map.action;
     }
     for (uint32_t i=0;i<original->instruction_count;++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (instructions[i].op==XR_XIR_CONST_STRING) instructions[i].immediate+=map.literal;
         if (instructions[i].type==XR_XIR_CONSTRUCTED_TYPE_BASE) instructions[i].type=map.action;
     }
@@ -268,7 +268,7 @@ static bool source_core_install_identity(SourceContext *ctx,const XrXirSourceMod
         const unsigned char *bytes=(const unsigned char *)(part ? original->name : root);
         size_t segment_length=part ? original->name_length : count;
         for(size_t i=0;i<segment_length;++i) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             identity[at++]=hex[bytes[i]>>4];identity[at++]=hex[bytes[i]&15];
         }
         if (!part) identity[at++]='.';
@@ -343,18 +343,19 @@ static bool source_core_install(SourceContext *ctx, const SourceContext *core,
  * ordinary checking then qualifies the internally bound executable body. */
 static bool source_core_load(SourceContext *ctx, AstNode *site) {
     SourceContext core={0};
-    core.compile=ctx->compile; core.linkage_kind=XR_XIR_LIBRARY; core.core_factory=true;
+    core.compile=ctx->compile; core.request=ctx->request; core.linkage_kind=XR_XIR_LIBRARY; core.core_factory=true;
     core.remaining_blocks=core.compile.limits.blocks;
     core.remaining_instructions=core.compile.limits.instructions;
     XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus opened=xr_compile_session_new(ctx->compile.resources,&session);
+    XrCompileResourceStatus opened=xr_compile_session_new(ctx->compile.resources,&session);
     XrModuleResolverConfig config={0};
     XrModuleResolver *resolver=NULL;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,XIR_CORE_SOURCE_NAMESPACE,NULL};
     XrXirSourceResult result={0};
     char *error=NULL;
-    if (opened!=XR_COMPILER_SESSION_OK) source_fail(&core,NULL,opened==XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET :
-        opened==XR_COMPILER_SESSION_BAD_ARGUMENT ? XR_XIR_BAD_STRUCTURE : XR_XIR_OUT_OF_MEMORY,
+    if (opened==XR_COMPILE_RESOURCE_OK && core.request)
+        opened=xr_compile_session_bind_request(session,core.request);
+    if (opened!=XR_COMPILE_RESOURCE_OK) source_fail(&core,NULL,xir_compile_resource_status(opened),
         "core source session allocation failed");
     else {
         XrModuleStatus status=xr_compile_module_resolver_new(ctx->compile.resources,&config,&resolver);
@@ -390,7 +391,7 @@ static SourceName *source_core_assertion(SourceContext *ctx, AstNode *site, uint
     if (!symbol) return NULL;
     XrXirSourceModule *module=&ctx->modules[ctx->module];
     for (uint32_t d=0;d<module->dependency_count;++d) {
-        if (!source_work(ctx,site)) return NULL;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
         if (module->dependencies[d]==symbol->module) return symbol;
     }
     uint32_t *dependencies=source_alloc(ctx,(size_t)module->dependency_count+1,sizeof(*dependencies));

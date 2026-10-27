@@ -15,9 +15,9 @@ extern "C" {
 typedef struct XrSourceInstance XrSourceInstance;
 /* Serialized owner of one real Instance. Initialization, module slots, callable
  * authority and all runtime/output limits persist across calls. Options and
- * callbacks are fixed here; callback context must live until drop. Program and
- * Compiler may die after success. Output must be NULL and is preserved on error. */
-XRAY_API XrSourceStatus xray_source_instance_new(XrSourceProgram *,
+ * callbacks are fixed here; callback context must live until drop. Artifact and
+ * Execution handles may die after success. Output must be NULL and is preserved on error. */
+XRAY_API XrSourceStatus xray_source_instance_new(XrSourceExecution *, XrSourceArtifact *,
     const XrSourceCallOptions *, XrSourceInstance **);
 /* Exactly one active Call is allowed. It uses the ordinary poll/wait/resume/
  * cancel/take/drop APIs. Dropping it cancels and drains its actual task group,

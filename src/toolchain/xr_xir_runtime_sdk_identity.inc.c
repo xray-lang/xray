@@ -11,26 +11,30 @@
  */
 static bool sdk_identity_bytes(XrJsonCursor *json, XrSHA256Context *hash,
     const void *bytes, size_t length) {
-    if (!xr_json_cursor_work(json, length)) return false;
+    if (json->status != XR_JSON_CURSOR_OK) return false;
+
     xr_sha256_update(hash, bytes, length);
     return true;
 }
 static bool sdk_identity_integer(XrJsonCursor *json, XrSHA256Context *hash,
     uint64_t value, uint32_t width) {
+    if (json->status != XR_JSON_CURSOR_OK) return false;
     uint8_t bytes[8];
-    if (!xr_json_cursor_work(json, width)) return false;
+
     for (uint32_t i = 0; i < width; ++i) bytes[i] = (uint8_t)(value >> (i * 8));
     return sdk_identity_bytes(json, hash, bytes, width);
 }
 static bool sdk_identity_string(XrJsonCursor *json, XrSHA256Context *hash, const char *text) {
+    if (json->status != XR_JSON_CURSOR_OK) return false;
     size_t length = 0;
     if (!xr_json_cursor_length(json, text, &length)) return false;
     return sdk_identity_integer(json, hash, length, 4) && sdk_identity_bytes(json, hash, text, length);
 }
 static bool sdk_identity(XrJsonCursor *json, XrXirSdkManifest *manifest) {
+    if (json->status != XR_JSON_CURSOR_OK) return false;
     static const char domain[] = "xray:xir-runtime-sdk:v1";
     XrSHA256Context hash;
-    if (!xr_json_cursor_work(json, 1)) return false;
+
     xr_sha256_init(&hash);
     if (!sdk_identity_bytes(json, &hash, domain, sizeof(domain) - 1)) return false;
     for (uint32_t i = 0; i < 17; ++i)
@@ -53,7 +57,7 @@ static bool sdk_identity(XrJsonCursor *json, XrXirSdkManifest *manifest) {
     }
     if (!sdk_identity_integer(json, &hash, 1, 4) ||
         !sdk_identity_string(json, &hash, "kernel32")) return false;
-    if (!xr_json_cursor_work(json, 1)) return false;
+
     xr_sha256_final(&hash, manifest->digest);
     return true;
 }

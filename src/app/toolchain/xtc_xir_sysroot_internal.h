@@ -59,7 +59,6 @@ struct XrXirImageCollector {
     XtcXirHashProofCache *proof_cache;
 };
 XR_FUNC bool xtc_xir_target_fail(XrXirTargetSnapshot *snapshot, XrXirTargetStatus status);
-XR_FUNC bool xtc_xir_target_work(XrXirTargetSnapshot *snapshot, uint64_t work);
 XR_FUNC void *xtc_xir_target_allocate(XrXirTargetSnapshot *snapshot, size_t bytes);
 XR_FUNC char *xtc_xir_target_text(XrXirTargetSnapshot *snapshot, const char *text);
 XR_FUNC bool xtc_xir_target_length(XrXirTargetSnapshot *snapshot, const char *text, size_t *length);

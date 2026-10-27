@@ -26,7 +26,7 @@ static XrXirStatus tuple_uses(const Graph *graph, const XrXirFunction *function,
         if (op->type!=member.type) return XR_XIR_BAD_TYPE;
         return role_operand(function,graph,context,instruction,0,type);
     }
-    if (!xir_compile_work(&context->remaining,node->parameter_count)) return XR_XIR_BUDGET;
+
     uint32_t payloads=0;
     for (uint32_t p=0; p<node->parameter_count; ++p) {
         XrXirFieldDescription member={0};

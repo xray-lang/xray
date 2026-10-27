@@ -9,7 +9,7 @@
 static XrXirStatus invoke_edges(const Graph *graph, const XrXirFunction *function,
     VerifyContext *context) {
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
-        if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+
         const XrXirInstruction *op = &function->instructions[i];
         if (op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_INVOKE_DEFAULT ||
             (op->op == XR_XIR_TASK_AWAIT || op->op == XR_XIR_ITERATOR_HAS_NEXT || op->op == XR_XIR_ITERATOR_NEXT || op->op == XR_XIR_ITERATOR_NTH || op->op == XR_XIR_ITERATOR_CLOSE)) {

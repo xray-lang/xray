@@ -40,7 +40,7 @@ XrXirStatus xr_xir_compile_type_constraints(const XrXirCompileContext *compile_c
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
-    if (!remaining || !xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+    if (!(remaining)) return XR_XIR_BUDGET;
 
     if (!module || function >= module->function_count || constraints.interface_count || constraints.interfaces ||
         constraints.markers & ~XR_XIR_CONSTRAINT_MASK ||
@@ -76,11 +76,10 @@ XrXirStatus xr_xir_compile_generics_structure_verify(const XrXirCompileContext *
         const XrXirGeneric *g = &module->generics[f];
         if (g->parameter_count > 65536 || g->parameter_count > remaining->limits.parameters) return XR_XIR_BUDGET;
         remaining->limits.parameters -= g->parameter_count;
-        uint64_t count = (uint64_t) g->parameter_count + g->argument_count;
         uint64_t bytes = (uint64_t) g->parameter_count * sizeof(*g->constraints) +
             (uint64_t) g->argument_count * sizeof(*g->arguments) +
             (g->parameter_kinds ? (uint64_t)g->parameter_count * sizeof(*g->parameter_kinds) : 0);
-        if (bytes > SIZE_MAX ||!xir_compile_work(remaining, count + 1)) return XR_XIR_BUDGET;
+        if (bytes > SIZE_MAX) return XR_XIR_BUDGET;
 
         if ((g->parameter_count != 0) != (g->constraints != NULL) ||
             (g->argument_count != 0) != (g->arguments != NULL)) return XR_XIR_BAD_STRUCTURE;
@@ -126,7 +125,7 @@ XrXirStatus xr_xir_compile_generics_clone(const XrXirCompileContext *compile_con
 
     if (!module || !output) return XR_XIR_BAD_STRUCTURE;
     if (!module->generics) { *output = NULL; return XR_XIR_OK; }
-    if (!xir_compile_work(compile_context, module->function_count)) return XR_XIR_BUDGET;
+
     XrXirGeneric *copy = xir_compile_calloc(compile_context, module->function_count, sizeof(*copy), &allocation_status);
     if (!copy) return allocation_status;
     for (uint32_t f = 0; f < module->function_count; ++f) {

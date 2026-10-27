@@ -284,29 +284,30 @@ fn _utf8Width(value: rune) -> i64 {
     return 4
 }
 
-fn _appendRune(state: ref _CsvState, field: ref StringBuilder, value: rune,
+fn _appendRune(state: ref _CsvState, field: ref string, value: rune,
                options: CsvParseOptions) {
-    field.append(value)
+    field += "${value}"
     state.currentFieldBytes = state.currentFieldBytes + _utf8Width(value)
     _checkFieldLimit(state, options)
 }
 
-fn _appendText(state: ref _CsvState, field: ref StringBuilder, value: string,
+fn _appendText(state: ref _CsvState, field: ref string, value: string,
                options: CsvParseOptions) {
-    field.append(value)
+    field += value
     state.currentFieldBytes = state.currentFieldBytes + len(value.bytes())
     _checkFieldLimit(state, options)
 }
 
-fn _finishField(state: ref _CsvState, options: CsvParseOptions, field: ref StringBuilder) {
+fn _finishField(state: ref _CsvState, options: CsvParseOptions, field: ref string) {
     if (options.maxColumns > 0 && state.currentColumn + 1 > options.maxColumns) {
         throw CsvError.ColumnLimitExceeded { limit: options.maxColumns }
     }
-    var value = field.toString()
+    // Copy the current value before the next field resets the accumulator.
+    var value = field
     if (options.trimFields) { value = text.trim(value) }
     state.currentRow.push(value)
     state.currentColumn = state.currentColumn + 1
-    field.clear()
+    field = ""
     state.currentFieldBytes = 0
 }
 
@@ -404,7 +405,7 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
         state.expectedColumns = len(state.document.headers)
     }
 
-    var field = StringBuilder()
+    var field = ""
     var parserState = STATE_FIELD_START
     var iter = data.runes()
     var hasPending = false
@@ -564,32 +565,32 @@ fn _needsQuoting(value: string, options: CsvWriteOptions) -> bool {
     return previous == ' ' || previous == '\t'
 }
 
-fn _writeField(out: ref StringBuilder, value: string, options: CsvWriteOptions) {
+fn _writeField(out: ref string, value: string, options: CsvWriteOptions) {
     if (!_needsQuoting(value, options)) {
-        out.append(value)
+        out += value
         return
     }
-    out.append(options.quoteChar)
+    out += "${options.quoteChar}"
     var prefixMode = options.escapeChar != options.quoteChar
     var iter = value.runes()
     while (iter.hasNext()) {
         var c = iter.next()
         if (c == options.quoteChar || (prefixMode && c == options.escapeChar)) {
-            out.append(options.escapeChar)
-            out.append(c)
+            out += "${options.escapeChar}"
+            out += "${c}"
         } else {
-            out.append(c)
+            out += "${c}"
         }
     }
-    out.append(options.quoteChar)
+    out += "${options.quoteChar}"
 }
 
-fn _writeRow(out: ref StringBuilder, row: Array<string>, options: CsvWriteOptions) {
+fn _writeRow(out: ref string, row: Array<string>, options: CsvWriteOptions) {
     for (var i = 0; i < len(row); i++) {
-        if (i > 0) { out.append(options.delimiter) }
+        if (i > 0) { out += "${options.delimiter}" }
         _writeField(ref out, row[i], options)
     }
-    out.append(options.linebreak)
+    out += options.linebreak
 }
 
 // stringify accepts only CsvDocument and never guesses how arbitrary values
@@ -597,12 +598,12 @@ fn _writeRow(out: ref StringBuilder, row: Array<string>, options: CsvWriteOption
 export fn stringify(document: CsvDocument, options: CsvWriteOptions? = null) -> string {
     var resolved = options == null ? defaultWriteOptions() : options!
     _validateWriteOptions(resolved)
-    var out = StringBuilder()
+    var out = ""
     if (len(document.headers) > 0) {
         _writeRow(ref out, document.headers, resolved)
     }
     for (row in document.rows) {
         _writeRow(ref out, row, resolved)
     }
-    return out.toString()
+    return out
 }

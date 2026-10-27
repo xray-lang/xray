@@ -91,7 +91,7 @@ static char *pattern_copy_token(Parser *parser, const Token *tok) {
     if (!buf)
         return NULL;
     do { if (!ast_copy(parser->compiler_session, buf, tok->start, (size_t) tok->length)) return NULL; } while (0);
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; buf[tok->length] = '\0'; } while (0);
+    do { buf[tok->length] = '\0'; } while (0);
     return buf;
 }
 
@@ -440,7 +440,7 @@ static AstNode *parse_pattern_single_inner(Parser *parser) {
             if (!buf)
                 return NULL;
             do { if (!ast_copy(parser->compiler_session, buf, name_tok.start, name_tok.length)) return NULL; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; buf[name_tok.length] = '\0'; } while (0);
+            do { buf[name_tok.length] = '\0'; } while (0);
             binding_name = buf;
         }
         return xr_ast_pattern_type(parser->compiler_session, type, binding_name, line);

@@ -37,13 +37,13 @@ static bool source_member_place(SourceContext *ctx, AstNode *node, AstNode *obje
         !source_struct_field(ctx,node,member->place.type,name,access,&member->field,&member->type)) return false;
     return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_FIELD_PLACE,member->type,{member->place.id},{0},member->field,{0}},&member->place);
 }
-static bool source_member_read(SourceContext *ctx, AstNode *node, const SourceMemberPlace *member, SourceValue *value) {
-    if (member->constructor) return source_constructor_read(ctx, node, member->field, value);
+static bool source_member_read(SourceContext *ctx, const SourceMemberPlace *member, SourceValue *value) {
+    if (member->constructor) return source_constructor_read(ctx, member->field, value);
     if (member->identity) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CLASS_GET,member->type,{member->place.id},{0},member->field,{0}},value);
     return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_PLACE_READ,member->type,{member->place.id},{0},0,{0}},value);
 }
-static bool source_member_store(SourceContext *ctx, AstNode *node, const SourceMemberPlace *member, SourceValue value) {
-    if (member->constructor) return source_constructor_store(ctx, node, member->field, value);
+static bool source_member_store(SourceContext *ctx, const SourceMemberPlace *member, SourceValue value) {
+    if (member->constructor) return source_constructor_store(ctx, member->field, value);
     if (member->identity) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CLASS_SET,XR_XIR_UNIT,{member->place.id,value.id},{0},member->field,{0}},NULL);
     return source_recipe_record(ctx, (XrXirInstruction){XR_XIR_PLACE_WRITE, XR_XIR_UNIT, {member->place.id, value.id}, {0}, 0, {0}}, NULL);
 }
@@ -54,18 +54,18 @@ static bool source_struct_set(SourceContext *ctx, AstNode *node, SourceValue *va
     if (!source_member_place(ctx, node, set->object, set->member, 1, &member) ||
         !source_plan_expression(ctx, set->value, (SourceExpectedType){member.type != XR_XIR_UNIT,member.type, false, false}, value)) return false;
     if (value->type != member.type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field assignment type mismatch");
-    return source_member_store(ctx, node, &member, *value);
+    return source_member_store(ctx, &member, *value);
 }
 static bool source_member_compound(SourceContext *ctx, AstNode *node, AstNodeType operation, SourceValue *value) {
     CompoundAssignmentNode *assignment = &node->as.compound_assignment;
     SourceMemberPlace member = {0}; SourceValue left, right;
     bool shift = operation == AST_BINARY_LSHIFT || operation == AST_BINARY_RSHIFT;
     if (!source_member_place(ctx, node, assignment->object, assignment->name, 3, &member) ||
-        !source_member_read(ctx, node, &member, &left) ||
+        !source_member_read(ctx, &member, &left) ||
         !source_plan_expression(ctx, assignment->value, (SourceExpectedType){shift ? XR_XIR_UNIT : member.type != XR_XIR_UNIT,shift ? XR_XIR_UNIT : member.type, false, false}, &right) ||
         !source_binary_apply(ctx, node, operation, left, right, value)) return false;
     if (value->type != member.type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "compound assignment cannot narrow its result");
-    return source_member_store(ctx, node, &member, *value);
+    return source_member_store(ctx, &member, *value);
 }
 static bool source_compound(SourceContext *ctx, AstNode *node, SourceValue *value) {
     CompoundAssignmentNode *assignment = &node->as.compound_assignment;
@@ -101,7 +101,7 @@ static bool source_compound(SourceContext *ctx, AstNode *node, SourceValue *valu
  * cannot rebind the receiver. Calls and member getters keep ordinary ordering. */
 static bool source_string_append_rhs(SourceContext *ctx, AstNode *node, unsigned depth) {
     if (!node || depth >= 64) return false;
-    if (!source_work(ctx, node)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (node->type == AST_LITERAL_STRING) return true;
     if (node->type == AST_LITERAL_INT || node->type == AST_LITERAL_FLOAT ||
         node->type == AST_LITERAL_TRUE || node->type == AST_LITERAL_FALSE || node->type == AST_LITERAL_RUNE)

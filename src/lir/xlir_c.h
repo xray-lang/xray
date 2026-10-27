@@ -14,7 +14,7 @@
 #ifndef XLIR_C_H
 #define XLIR_C_H
 #include "xlir.h"
-#include "../base/xcompile_resources.h"
+#include "../base/xcompile_request.h"
 
 typedef enum XrLirCStatus {
     XR_LIR_C_OK,
@@ -23,7 +23,11 @@ typedef enum XrLirCStatus {
     XR_LIR_C_UNSUPPORTED,
     XR_LIR_C_OUT_OF_MEMORY,
     XR_LIR_C_BUDGET,
-    XR_LIR_C_CANCELLED
+    XR_LIR_C_CANCELLED,
+    XR_LIR_C_MEMORY_LIMIT,
+    XR_LIR_C_OVERFLOW,
+    XR_LIR_C_DEADLINE,
+    XR_LIR_C_CLOCK_FAILURE
 } XrLirCStatus;
 
 typedef struct XrLirCRequest {
@@ -31,6 +35,7 @@ typedef struct XrLirCRequest {
     XrLirFunction entry;
     XrCompileResources *resources;
     const char *translation_unit;
+    XrCompileRequestControl *control;
 } XrLirCRequest;
 
 typedef struct XrLirCOutput {
@@ -50,7 +55,12 @@ typedef struct XrLirCDiagnostic {
  * only the selected direct-call closure. Inputs are borrowed synchronously.
  * Diagnostics borrow source paths until module destruction. Output must be
  * empty; failure publishes no text. Successful text owns its resource block
- * independently of the module and the caller's ledger reference. Every TU
+ * independently of the module and the caller's memory-owner reference. Control
+ * is optional and borrowed only during this call; NULL disables request polling.
+ * A supplied control shares its existing absolute deadline without resetting it.
+ * Callbacks must keep all borrowed inputs live and unchanged. Polls occur at IR
+ * traversal and validation boundaries, including immediately before publication.
+ * Neither output nor its memory owner retains the control or parent request. Every TU
  * passes the mandatory existing W1-W4 ICE boundary before publication.
  * xray_lir_entry has no parameters and keeps entry_result as its C result type.
  * With an output dependency it establishes the standalone runtime scope before

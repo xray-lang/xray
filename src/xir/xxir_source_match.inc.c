@@ -35,10 +35,10 @@ static bool source_match_prepare(SourceContext *ctx, SourceExpressionPlan *plan)
     if (!prepared->guards || !prepared->values) return false;
     SourceName *saved=ctx->locals,*scope=ctx->scope;bool ready=true;XrXirType result=XR_XIR_UNIT;
     for (uint32_t i=0;i<prepared->count;++i) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         ctx->locals=saved;ctx->scope=saved;
         for (SourceName *symbol=prepared->arms[i].bindings;symbol;symbol=symbol->next) {
-            if (!source_work(ctx,symbol->node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             SourceName *bound=source_recipe_storage(ctx,1,sizeof(*bound));
             if (!bound) return false;
             *bound=*symbol;bound->next=ctx->locals;ctx->locals=bound;
@@ -91,7 +91,7 @@ static bool source_pattern_integer_value(SourceContext *ctx, XrXirType type, uin
 static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern,
     SourceValue receiver, bool test, SourceMatchFailure **failures, uint32_t depth) {
     if (!pattern) return true;
-    if (!source_work(ctx,pattern->node)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (depth>=128) return source_fail(ctx,pattern->node,XR_XIR_BUDGET,"pattern generation depth exhausted");
     if (pattern->binding) return source_match_bind(ctx,pattern->symbol,receiver);
     if (pattern->any) return true;
@@ -120,7 +120,7 @@ static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern
     if (pattern->array) return source_match_array_payload(ctx,pattern,receiver,test,failures);
     if (pattern->product) {
         for (uint32_t i=0;i<pattern->count;++i) {
-            if (!source_work(ctx,pattern->node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             SourceMatchPattern *child=pattern->fields[i];
             if (!child || (child->any && !child->binding)) continue;
             SourceValue value;
@@ -138,7 +138,7 @@ static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern
             !source_match_test(ctx,condition,true,failures)) return false;
     }
     for (uint32_t i=0;i<pattern->count;++i) {
-        if (!source_work(ctx,pattern->node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceMatchPattern *child=pattern->fields[i];
         if (!child || (child->any && !child->binding)) continue;
         SourceValue value;

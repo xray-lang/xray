@@ -48,9 +48,9 @@ TEST(product_profiles_install_exact_authority_and_reject_missing_profile) {
                 XR_ORIGINAL_REPL_STDLIB,xr_source_compile_default_manifest_limits()};
             XrSourceCompiler *rejected=NULL;XrCompileResourceStats before={0},after={0};
             ASSERT_EQ_INT(xr_compile_resources_stats(missing.context.resources,&before),XR_COMPILE_RESOURCE_OK);
-            ASSERT_EQ_INT(xr_source_compiler_new(&missing,&rejected,NULL),XR_SOURCE_COMPILE_UNSUPPORTED);ASSERT_NULL(rejected);
+            ASSERT_EQ_INT(xr_source_compiler_new(&missing,NULL,&rejected,NULL),XR_SOURCE_COMPILE_UNSUPPORTED);ASSERT_NULL(rejected);
             missing.target=xr_xir_host_target();missing.target.abi_version=0;
-            ASSERT_EQ_INT(xr_source_compiler_new(&missing,&rejected,NULL),XR_SOURCE_COMPILE_UNSUPPORTED);ASSERT_NULL(rejected);
+            ASSERT_EQ_INT(xr_source_compiler_new(&missing,NULL,&rejected,NULL),XR_SOURCE_COMPILE_UNSUPPORTED);ASSERT_NULL(rejected);
             ASSERT_EQ_INT(xr_compile_resources_stats(missing.context.resources,&after),XR_COMPILE_RESOURCE_OK);
             ASSERT_TRUE(!memcmp(&before,&after,sizeof(before)));
         }

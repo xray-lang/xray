@@ -17,7 +17,7 @@ static void instance_source_receiving(const char *kind,unsigned ordinal) {
     XirSourceInstanceSelection selections[2]={{origin->function,selected},
         {origin->function,instance_named(original,kind,1-ordinal)}};
     xr_xir_compile_artifact_free(original);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"instance-constant",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText text={NULL,instance_source_text(),strlen(instance_source_text())};

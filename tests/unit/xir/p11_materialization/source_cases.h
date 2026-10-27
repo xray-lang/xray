@@ -20,11 +20,11 @@ static void source_faults(unsigned mode) {
         source_fixture_compile_injected=false;source_fixture_compile_fail_at=start+fault;
         CHECK(source_operation(&context,mode,XR_XIR_PROGRAM,&output)==XR_XIR_OUT_OF_MEMORY);
         CHECK(!output.checked && !output.snapshot && source_fixture_compile_injected);
-        CHECK(source_fixture_compile_attempts==start+fault+1 && stats(&context).live_bytes==baseline.live_bytes);
-        source_fixture_compile_fail_at=SIZE_MAX;XrCompileResourceStats failed=stats(&context);
+        CHECK(source_fixture_compile_attempts==start+fault+1 && stats(&context).held_bytes==baseline.held_bytes);
+        source_fixture_compile_fail_at=SIZE_MAX;
         CHECK(source_operation(&context,mode,XR_XIR_PROGRAM,&output)==XR_XIR_OK && output.checked);
         xr_xir_compile_source_result_free(&output);
-        CHECK(context.resources==same && stats(&context).live_bytes==baseline.live_bytes && stats(&context).work>=failed.work);
+        CHECK(context.resources==same && stats(&context).held_bytes==baseline.held_bytes);
         xr_compile_resources_release(context.resources);
         CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
         if (!(fault%128) || fault+1==sites) fprintf(stderr,"Private materialization whole Source FI=%zu/%zu same-owner retry/live\n",fault+1,sites);
@@ -57,7 +57,7 @@ static void source_library_case(bool fresh) {
     XrXirStatus status=xr_xir_compile_library_catalog_new_v2(&context,&input,1,&catalog);
     if (status!=XR_XIR_OK) fprintf(stderr,"Materializer library catalog status=%u\n",(unsigned)status);
     CHECK(status==XR_XIR_OK && catalog);xr_xir_compile_checked_packet_free(&packet);memset(bindings,0xa5,sizeof(bindings));
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request={session,MATERIALIZATION_ROOT "/consumer.xr",&authority,&context,NULL,NULL,XR_XIR_PROGRAM,catalog};
     char text[256];
     CHECK(snprintf(text,sizeof(text),"import {run} from \"./root\";import {Outer} from \"./private\";export fn answer()->i64{%s}",

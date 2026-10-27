@@ -29,7 +29,7 @@ static XrXirStatus effect_invocation_forest_types(const XrXirCompileContext *wor
         contexts->terms.types.count);
     effect_terms_free(&comparison);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(work,sizeof(output->types))) return XR_XIR_BUDGET;
+
     output->types=certificate->terms.types;return XR_XIR_OK;
 }
 
@@ -44,7 +44,7 @@ static XrXirStatus effect_invocation_forest_record(const XrXirCompileContext *wo
     const EffectContextForest *forest,const EffectInvocationCertificate *certificate,
     uint32_t function,const EffectInvocationForestProjection *request,EffectContextCauseValue *output) {
     if (!request || !request->selection || request->domain>=4) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,10)) return XR_XIR_BUDGET;
+
     uint32_t domain=request->domain;
     const uint32_t *selection=request->selection;
     uint32_t n=certificate->final->roots[function];
@@ -54,7 +54,7 @@ static XrXirStatus effect_invocation_forest_record(const XrXirCompileContext *wo
     if (status!=XR_XIR_OK) return status;
     status=effect_invocation_projection_result_match(work,certificate,function,domain,atom,&selected_witness);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(work,sizeof(EffectInvocationProjectedCause))) return XR_XIR_BUDGET;
+
     const EffectInvocationProjectedCause projected={atom,&selected_witness};
     XrXirRootEffectWitness witness={0};bool symbolic=false;
     status=effect_invocation_public_transform(work,certificate,function,&projected,&witness,&symbolic);
@@ -74,14 +74,14 @@ static XrXirStatus effect_invocation_forest_record(const XrXirCompileContext *wo
     if (witness.distance && witness.cause==XR_XIR_ROOT_CAUSE_CALL &&
         witness.instruction<certificate->body->functions[function].instruction_count &&
         forest->requirements[function] && forest->requirements[function][witness.instruction]) {
-        EffectBodyRead read=effect_body_compile_read(work);XrXirInstruction decoded;
+        EffectBodyRead read=(EffectBodyRead){.owner=work};XrXirInstruction decoded;
         status=effect_body_instruction_get(&read,&certificate->body->functions[function],witness.instruction,&decoded);
         if (status!=XR_XIR_OK) return status;
         if (decoded.op!=XR_XIR_CALL)
             return XR_XIR_BAD_STRUCTURE;
         witness.cause=XR_XIR_ROOT_CAUSE_REQUIREMENT;
     }
-    if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=(EffectContextCauseValue){witness,next,parameter_owner,(uint8_t)domain,
         (uint8_t)(2+(domain&1))};
     return XR_XIR_OK;
@@ -99,7 +99,7 @@ static XrXirStatus effect_invocation_forest_admit(const XrXirCompileContext *wor
         if (status!=XR_XIR_OK) return status;
         for (uint32_t domain=0;domain<4;++domain) {
             EffectContextCauseValue value;
-            if (!xir_compile_work(work,sizeof(EffectInvocationForestProjection))) return XR_XIR_BUDGET;
+
             EffectInvocationForestProjection request={&selected[domain],domain};
             status=effect_invocation_forest_record(work,forest,certificate,f,&request,&value);
             if (status!=XR_XIR_OK) return status;
@@ -136,7 +136,7 @@ static XrXirStatus effect_invocation_forest_values(const XrXirCompileContext *wo
         status=effect_role_range(work,requirements,head->instruction_count,sizeof(*requirements));
         if(status!=XR_XIR_OK) return status;
     }
-    if(!xir_compile_work(work,sizeof(EffectContextRootValue))) return XR_XIR_BUDGET;
+
     XrXirRootEffects facts;
     status=effect_invocation_certificate_facts(work,certificate,function,&facts);
     if(status!=XR_XIR_OK) return status;
@@ -144,16 +144,16 @@ static XrXirStatus effect_invocation_forest_values(const XrXirCompileContext *wo
     XrXirRootEffectWitness *witnesses[2]={&value.root,&value.unresolved};
     for(uint32_t domain=0;domain<2;++domain) {
         XrXirRootEffectWitness *witness=witnesses[domain];
-        if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
         if(!witness->distance || witness->cause!=XR_XIR_ROOT_CAUSE_CALL ||
             witness->instruction>=head->instruction_count || !requirements || !requirements[witness->instruction]) continue;
-        EffectBodyRead read=effect_body_compile_read(work);XrXirInstruction operation;
+        EffectBodyRead read=(EffectBodyRead){.owner=work};XrXirInstruction operation;
         status=effect_body_instruction_get(&read,head,witness->instruction,&operation);
         if(status!=XR_XIR_OK) return status;
         if(operation.op!=XR_XIR_CALL) return XR_XIR_BAD_STRUCTURE;
         witness->cause=XR_XIR_ROOT_CAUSE_REQUIREMENT;
     }
-    if(!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=value;return XR_XIR_OK;
 }
 
@@ -178,7 +178,7 @@ static XrXirStatus effect_invocation_forest_match(const XrXirCompileContext *wor
         const EffectBodyFunction *body=&certificate->body->functions[f];
         uint32_t scope=certificate->generics?certificate->generics[f].parameter_count:0;
         if (scope>XR_XIR_TYPE_PARAMETER_LIMIT-XR_XIR_TYPE_PARAMETER_BASE) { status=XR_XIR_BAD_STRUCTURE;break; }
-        if (!xir_compile_work(work,8)) { status=XR_XIR_BUDGET;break; }
+
         if (node->declaration!=origin->function || node->owner!=certificate->owners[f] ||
             node->argument_count!=origin->argument_count || node->parameter_count!=body->parameter_count ||
             node->constant_mask!=certificate->final->nodes[certificate->final->roots[f]].intrinsic_mask) { status=XR_XIR_BAD_STRUCTURE;break; }
@@ -186,7 +186,7 @@ static XrXirStatus effect_invocation_forest_match(const XrXirCompileContext *wor
             status=effect_terms_domain_type(&comparison,&certificate->terms.types,
                 node->arguments[a],origin->arguments[a],scope);
         for (uint32_t p=0;p<node->parameter_count && status==XR_XIR_OK;++p) {
-            if (!xir_compile_work(work,1)) { status=XR_XIR_BUDGET;break; }
+
             status=effect_terms_domain_type(&comparison,&certificate->terms.types,
                 node->physical_types[p],body->parameters[p],scope);
         }
@@ -214,7 +214,7 @@ static XrXirStatus effect_invocation_forest_trace(const XrXirCompileContext *wor
         if (!step->distance || step->cause!=XR_XIR_ROOT_CAUSE_CALL) continue;
         bool found=false,requirement=false;
         for (uint32_t f=0;f<forest->count;++f) {
-            if (!xir_compile_work(work,3)) { status=XR_XIR_BUDGET;break; }
+
             if (forest->nodes[f].declaration!=step->function) continue;
             if (step->instruction>=forest->invocations->body->functions[f].instruction_count) {
                 status=XR_XIR_BAD_STRUCTURE;break;

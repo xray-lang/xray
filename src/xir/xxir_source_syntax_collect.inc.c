@@ -21,7 +21,7 @@ static XrXirSourceRange source_query_name_span(SourceContext *ctx,XrNameSpan spa
 }
 static XrXirSourceRange source_query_token_range(SourceContext *ctx,AstNode *node) {
     while(node&&(node->type==AST_CALL_EXPR||node->type==AST_ENUM_CONSTRUCT)) {
-        if(!source_work(ctx,node))return (XrXirSourceRange){ctx->module,0,0,0,0};
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return (XrXirSourceRange){ctx->module,0,0,0,0};
         node=node->type==AST_CALL_EXPR?node->as.call_expr.callee:node->as.enum_construct.variant_path;
     }
     if(node&&node->type==AST_MEMBER_ACCESS&&node->as.member_access.name_span.line)

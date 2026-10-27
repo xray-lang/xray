@@ -116,26 +116,15 @@ static XrXirStatus effect_body_ordinary_record_parent(const XrXirCompileContext 
     const EffectBodyOrdinaryInput *input,EffectBodyMaterial **output);
 static XrXirStatus effect_body_ordinary_record_index(const XrXirCompileContext *work,
     const EffectBodyOrdinaryInput *input,uint32_t function,uint32_t *output);
+/* Memory identity and execution read policy are distinct borrowed inputs.
+ * Compiler reads carry no accounting callback or cumulative work allowance. */
 typedef struct EffectBodyRead {
-    const void *owner;
-    bool (*consume)(const void *owner,uint64_t units);
+    const XrXirCompileContext *owner;
+    const XirEffectRuntimeRead *execution;
 } EffectBodyRead;
 
-static inline bool effect_body_compile_consume(const void *owner,uint64_t units) {
-    return xir_compile_work((const XrXirCompileContext *)owner,units);
-}
-static inline EffectBodyRead effect_body_compile_read(const XrXirCompileContext *work) {
-    return (EffectBodyRead){work,effect_body_compile_consume};
-}
-static inline bool effect_body_runtime_consume(const void *owner,uint64_t units) {
-    const XirEffectRuntimeRead *read=owner;
+static inline bool effect_body_execution_work(const XirEffectRuntimeRead *read,uint64_t units) {
     return read && read->work && read->work(read->owner,units);
-}
-static inline EffectBodyRead effect_body_runtime_read(const XirEffectRuntimeRead *read) {
-    return (EffectBodyRead){read,effect_body_runtime_consume};
-}
-static inline bool effect_body_read_work(const EffectBodyRead *read,uint64_t units) {
-    return read && read->consume && read->consume(read->owner,units);
 }
 static inline uint32_t effect_body_count(const EffectBodyMaterial *body) {
     return body->domain.function_count;
@@ -217,7 +206,7 @@ static XrXirStatus effect_body_initial_roles_match(const XrXirCompileContext *wo
     const EffectBodyFunction *head=&body->functions[function];
     if (head->parameter_count && (!head->parameters || !head->initial_roles)) return XR_XIR_BAD_STRUCTURE;
     if (body->ordinary_identities) {
-        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+
         EffectBodyOrdinaryIdentity id=body->ordinary_identities[function];
         if (id.declaration>=body->ordinary_source_count ||
             (id.owner!=UINT32_MAX && id.owner>=effect_body_count(body)) || !body->declarations ||
@@ -225,7 +214,7 @@ static XrXirStatus effect_body_initial_roles_match(const XrXirCompileContext *wo
             (id.owner==UINT32_MAX?0:id.owner+1)) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t p=0;p<head->parameter_count;++p) {
-        if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
         uint32_t role=effect_body_variable_roles(body) &&
             xr_xir_callable_signature(body->domain.types,head->parameters[p]) ?
             XR_XIR_EFFECT_PARAMETER_VARIABLE:XR_XIR_EFFECT_PARAMETER_FIXED;

@@ -50,7 +50,7 @@ static XrXirStatus effect_control_run_seed(const EffectBodyRequest *input,uint32
         if(status!=XR_XIR_OK) return status;
         if(!run->mask || (!(run->mask&UINT32_C(1)) &&
             effect_seed_opcode(op.op,&projection)==EFFECT_SEED_LOCAL)) points=1;
-        if(!effect_body_read_work(&input->read,2+sizeof(*aggregate))) return XR_XIR_BUDGET;
+        if(!(((&input->read)->execution ? effect_body_execution_work((&input->read)->execution, 2+sizeof(*aggregate)) : xir_compile_context_valid((&input->read)->owner)))) return XR_XIR_BUDGET;
         if(local.suspend>aggregate->suspend) aggregate->suspend=local.suspend;
     }
     return XR_XIR_OK;

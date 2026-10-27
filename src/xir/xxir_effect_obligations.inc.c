@@ -28,11 +28,11 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
     }
     bool present = templated || module->declarations->implementations != NULL;
     for (uint32_t f = 0; f < module->function_count; ++f) {
-        if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+
         uint32_t owner = module->declarations->functions[f].cleanup_owner;
         if (module->declarations->functions[f].promises & XR_XIR_FUNCTION_NO_SUSPEND) present = true;
         for (uint32_t i = 0; i < module->functions[f].instruction_count; ++i) {
-            if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+
             XrXirOp op = module->functions[f].instructions[i].op;
             if (op == XR_XIR_GO || op == XR_XIR_TASK_AWAIT || op == XR_XIR_FUNCTION_REF ||
                 op==XR_XIR_GENERATOR_NEW || op==XR_XIR_ITERATOR_HAS_NEXT || (op==XR_XIR_ITERATOR_NEXT || op==XR_XIR_ITERATOR_NTH || op==XR_XIR_ITERATOR_CLOSE)) present = true;
@@ -45,7 +45,7 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
             const XrXirGeneric *body = &module->generics[f], *parent = &module->generics[owner - 1];
             if (body->parameter_count != parent->parameter_count) return XR_XIR_BAD_TYPE;
             for (uint32_t p = 0; p < body->parameter_count; ++p) {
-                if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+
                 XrXirStatus status = xr_xir_compile_constraint_records_match(remaining, module->types, body->constraints[p], module->types, parent->constraints[p], body->parameter_count);
                 if (status != XR_XIR_OK) return status;
             }
@@ -60,7 +60,7 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
     for (uint32_t f = 0; status == XR_XIR_OK && f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         for (uint32_t i = 0; status == XR_XIR_OK && i < function->instruction_count; ++i) {
-            if (!xir_compile_work(remaining, 1)) { status = XR_XIR_BUDGET; break; }
+
             const XrXirInstruction *op = &function->instructions[i];
             if (op->op != XR_XIR_GO) continue;
             status = xr_xir_effects_go_safe(facts, (uint32_t)op->immediate);
@@ -77,7 +77,7 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
         }
     }
     for (uint32_t f = 0; status == XR_XIR_OK && f < module->function_count; ++f) {
-        if (!xir_compile_work(remaining, 1)) { status = XR_XIR_BUDGET; break; }
+
         bool cleanup = module->declarations->functions[f].cleanup_owner != 0;
         if (!cleanup && !(module->declarations->functions[f].promises & XR_XIR_FUNCTION_NO_SUSPEND)) continue;
         if (cleanup && xr_xir_effects_task_creation(facts, f) != XR_XIR_EFFECT_NONE) {
@@ -99,7 +99,7 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
                 diagnostic->instruction = witness->instruction;
                 const XrXirFunction *function = &module->functions[f];
                 for (uint32_t b = 0; b < function->block_count; ++b) {
-                    if (!xir_compile_work(remaining, 1)) { status = XR_XIR_BUDGET; break; }
+
                     XrXirBlock block = function->blocks[b];
                     if (witness->instruction >= block.first && witness->instruction - block.first < block.count) {
                         diagnostic->block = b; break;

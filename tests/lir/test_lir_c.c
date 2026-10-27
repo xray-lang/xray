@@ -298,7 +298,7 @@ static void build(const char *name) {
     OK(xr_lir_module_finish(module, NULL));
 }
 static XrCompileResources *resources(void) {
-    XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrCompileResources *r = NULL;
     CHECK(xr_compile_resources_new(&limits, &r) == XR_COMPILE_RESOURCE_OK);
     return r;
@@ -306,7 +306,7 @@ static XrCompileResources *resources(void) {
 static void emit(const char *name, const char *path) {
     build(name);
     XrCompileResources *r = resources();
-    XrLirCRequest request = {module, root, r, "scalar-test"};
+    XrLirCRequest request = {module, root, r, "scalar-test", NULL};
     XrLirCOutput output = {0};
     XrLirCDiagnostic diagnostic = {0};
     XrLirCStatus status = xr_lir_emit_c(&request, &output, &diagnostic);
@@ -380,7 +380,7 @@ static void reject_division(unsigned kind, XrLirOp op) {
     }
     OK(xr_lir_module_finish(module, NULL));
     XrCompileResources *r = resources();
-    XrLirCRequest request = {module, root, r, "rejected"};
+    XrLirCRequest request = {module, root, r, "rejected", NULL};
     XrLirCOutput output = {0};
     XrLirCDiagnostic diagnostic;
     CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_UNSUPPORTED);

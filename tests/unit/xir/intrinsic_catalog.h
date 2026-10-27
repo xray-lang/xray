@@ -57,7 +57,7 @@ static void intrinsic_catalog_invalid(const XrXirCompileContext *context,
 
 static Fixture intrinsic_catalog_fixture(void) {
     Fixture fixture = {0};
-    XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     CHECK(xr_compile_resources_new(&limits, &fixture.context.resources) == XR_COMPILE_RESOURCE_OK);
     fixture.context.limits = xr_xir_compile_default_limits();
     char directory[XR_TEST_PATH_MAX] = "intrinsic-catalog-XXXXXX";
@@ -70,7 +70,7 @@ static Fixture intrinsic_catalog_fixture(void) {
     CHECK(length > 0 && (size_t)length < sizeof(root));
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(fixture.context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(fixture.context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request = {.session = session, .entry_path = library, .authority = &authority,
         .context = &fixture.context, .linkage_kind = XR_XIR_LIBRARY};
     const char *body = strstr(source_text, "\nprint(");
@@ -107,7 +107,7 @@ static Fixture intrinsic_catalog_fixture(void) {
     CHECK(status == XR_XIR_OK && catalog);
     memset(packet.bytes, 0xa5, packet.length);
     xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_compile_session_new(fixture.context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(fixture.context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     request.session = session;
     request.entry_path = root;
     request.linkage_kind = XR_XIR_PROGRAM;

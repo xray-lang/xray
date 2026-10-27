@@ -121,13 +121,13 @@ static XrXirStatus rename_identifier(RenameWork *w,const char *name,size_t lengt
     if(!name||!length||length>INT32_MAX)return XR_XIR_BAD_STRUCTURE;
     XlspSourceBuffer *buffer=NULL;XrCompilerSession *session=NULL;XrArena arena={0};
     XrXirStatus status=xlsp_source_buffer_new(w->resources,name,length,0,&buffer);if(status!=XR_XIR_OK)goto done;
-    XrCompilerSessionStatus opened=xr_compile_session_new(w->resources,&session);
-    if(opened!=XR_COMPILER_SESSION_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+    XrCompileResourceStatus opened=xr_compile_session_new(w->resources,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
     XrCompileState *state=xr_compile_session_compile_state(session);XrArenaBacking backing;
     if(xr_compiler_arena_state_backing(state,&backing)!=XR_ARENA_OK){status=XR_XIR_BAD_STRUCTURE;goto done;}
     (void)xr_arena_open(&arena,XR_ARENA_SEGMENT_SIZE,&backing);status=rename_resource(xr_compiler_arena_capture_status(&arena,state));if(status!=XR_XIR_OK)goto done;
     Scanner scanner={0};const char *text=xlsp_source_buffer_text(buffer);
-    status=rename_resource(xr_compile_scanner_open(&scanner,state,&arena,text));if(status!=XR_XIR_OK)goto done;
+    status=rename_resource(xr_compile_scanner_open(&scanner,state,&arena,text,NULL));if(status!=XR_XIR_OK)goto done;
     Token token=xr_scanner_scan(&scanner),end=xr_scanner_scan(&scanner);
     status=rename_resource(xr_compile_state_status(state));if(status!=XR_XIR_OK)goto done;
     if(token.type!=TK_NAME||token.start!=text||token.length!=(int)length||end.type!=TK_EOF){status=XR_XIR_BAD_STRUCTURE;goto done;}

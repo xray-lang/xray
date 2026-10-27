@@ -12,7 +12,7 @@ static SourceName *source_interface_name(SourceContext *ctx, AstNode *node, cons
     int count = 0;
     XrGenericParam **parameters = source_type_parameters(ctx, &count);
     for (int p = 0; p < count; ++p) {
-        if (!source_work(ctx, node)) return NULL;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
         if (source_text_same(ctx, NULL, parameters[p]->name, name)) {
             source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface requirement names a type parameter"); return NULL;
         }
@@ -46,7 +46,7 @@ static bool source_interface_reference(SourceContext *ctx, const XrTypeRef *ref,
     /* Constraints can be checked more than once. One written token keeps one
      * binding/target observation, independently of semantic replay. */
     for (uint32_t i = 0; i < ctx->query.reference_count; ++i) {
-        if (!source_work(ctx, NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirSourceReference *existing = &ctx->query.references[i];
         if (existing->range.module == range.module && existing->range.line == range.line &&
             existing->range.column == range.column && existing->range.end_line == range.end_line &&
@@ -77,20 +77,20 @@ static bool source_interface_application(SourceContext *ctx, AstNode *node,
     XrXirType *arguments = count ? source_alloc(ctx, count, sizeof(*arguments)) : NULL;
     if (count && !arguments) return false;
     for (uint32_t a = 0; a < count; ++a) {
-        if (!source_work(ctx, node) || !source_type(ctx, ref->children[a], &arguments[a])) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx, ref->children[a], &arguments[a])) return false;
         if (arguments[a] == XR_XIR_UNIT || xr_xir_type_is_cell(&ctx->types, arguments[a]))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface argument must be an admitted value type");
     }
     *output = (XrXirInterfaceApplication){index, arguments, count};
     return source_interface_reference(ctx, ref, binding, target);
 }
-static bool source_constraint_same(SourceContext *ctx, AstNode *node,
+static bool source_constraint_same(SourceContext *ctx,
     const XrXirInterfaceApplication *a, const XrXirInterfaceApplication *b, bool *same) {
     *same = false;
-    if (!source_work(ctx, node)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (a->declaration != b->declaration || a->argument_count != b->argument_count) return true;
     for (uint32_t p = 0; p < a->argument_count; ++p) {
-        if (!source_work(ctx, node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (a->arguments[p] != b->arguments[p]) return true;
     }
     *same = true; return true;
@@ -134,7 +134,7 @@ static bool source_parameter_constraints(SourceContext *ctx, AstNode *node,
         source_alloc(ctx, (uint32_t)parameter->constraint_count, sizeof(*applications)) : NULL;
     if (parameter->constraint_count && !applications) return false;
     for (int i = 0; i < parameter->constraint_count; ++i) {
-        if (!source_work(ctx, node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrTypeRef *ref = parameter->constraints[i];
         if (ref && ref->kind == XR_TREF_NAMED && !ref->nchildren && ref->name) {
             uint32_t marker = source_text_same(ctx, NULL, ref->name, "Sendable") ? XR_XIR_CONSTRAINT_SENDABLE :
@@ -146,7 +146,7 @@ static bool source_parameter_constraints(SourceContext *ctx, AstNode *node,
         bool duplicate = false;
         for (uint32_t a = 0; a < result.interface_count; ++a) {
             bool same;
-            if (!source_constraint_same(ctx, node, &applications[a], &application, &same)) return false;
+            if (!source_constraint_same(ctx, &applications[a], &application, &same)) return false;
             if (same) { duplicate = true; break; }
         }
         if (!duplicate) applications[result.interface_count++] = application;
@@ -168,10 +168,10 @@ static bool source_constraint_conjunction(SourceContext *ctx, AstNode *node,
         bool duplicate = false;
         for (uint32_t p = 0; p < result.interface_count; ++p) {
             bool same;
-            if (!source_constraint_same(ctx,node,&applications[p],application,&same)) return false;
+            if (!source_constraint_same(ctx,&applications[p],application,&same)) return false;
             if (same) { duplicate = true; break; }
         }
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!duplicate) applications[result.interface_count++] = *application;
     }
     result.interfaces = result.interface_count ? applications : NULL;

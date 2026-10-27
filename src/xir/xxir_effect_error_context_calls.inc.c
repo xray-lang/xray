@@ -17,7 +17,7 @@ static XrXirStatus error_finite_call_summary(const EffectErrorEquationRead *equa
         if(status!=XR_XIR_OK) return status;
         if(!word && !source) result|=row&UINT64_C(3);
         for(uint32_t bit=0;bit<64;++bit) {
-            if(!xir_compile_work(read->work,1)) return XR_XIR_BUDGET;
+
             uint64_t index=(uint64_t)source*64+bit;
             if(index<2 || !(row&(UINT64_C(1)<<bit))) continue;
             if(index-2>=proof->atom_count) return XR_XIR_BAD_STRUCTURE;
@@ -39,7 +39,7 @@ static XrXirStatus error_finite_call_summary(const EffectErrorEquationRead *equa
                 if(status!=XR_XIR_OK) return status;
                 bool found=false;
                 for(uint32_t a=0;a<proof->atom_count;++a) {
-                    if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
                     if(proof->atoms[a].type!=actual || proof->atoms[a].variant!=atom->variant) continue;
                     if((a+2)/64==word) result|=UINT64_C(1)<<((a+2)%64);
                     found=true;
@@ -62,14 +62,14 @@ static XrXirStatus error_finite_call(const EffectErrorEquationRead *equation,
     uint64_t result=0;bool present=false;
     uint32_t node=proof->rows[equation->context].node,walked=0;
     for(uint32_t e=final->nodes[node].edge_head;e!=UINT32_MAX;e=final->edges[e].next) {
-        if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+
         if(e>=final->edge_count || ++walked>final->edge_count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationEdge *edge=&final->edges[e];
         if((edge->latent && !transport) || edge->instruction!=instruction) continue;
         bool matched=false;status=effect_final_error_edge_matches(read->work,proof->material,final,e,&matched);
         if(status!=XR_XIR_OK) return status;
         if(!matched) continue;
-        uint32_t target=UINT32_MAX;status=error_finite_node_context(read->work,proof,edge->target,false,&target);
+        uint32_t target=UINT32_MAX;status=error_finite_node_context(proof,edge->target,false,&target);
         if(status!=XR_XIR_OK) return status;
         uint64_t contribution=0;
         status=error_finite_call_summary(equation,&op,instruction,target,word,&contribution);
@@ -126,7 +126,7 @@ static XrXirStatus error_finite_result(const EffectErrorEquationRead *equation,
     uint32_t node=proof->rows[equation->context].node,walked=0;
     uint64_t result=0;bool present=false;
     for(uint32_t e=final->nodes[node].edge_head;e!=UINT32_MAX;e=final->edges[e].next) {
-        if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+
         if(e>=final->edge_count || ++walked>final->edge_count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationEdge *edge=&final->edges[e];
         if(edge->instruction!=instruction) continue;
@@ -138,7 +138,7 @@ static XrXirStatus error_finite_result(const EffectErrorEquationRead *equation,
         uint64_t contribution=0;
         if(returned) {
             uint32_t target=UINT32_MAX;
-            status=error_finite_node_context(read->work,proof,edge->target,true,&target);
+            status=error_finite_node_context(proof,edge->target,true,&target);
             if(status==XR_XIR_OK)
                 status=error_finite_call_summary(equation,&op,instruction,target,word,&contribution);
         } else status=error_equation_type_word(equation,result_type,word,&contribution);

@@ -29,7 +29,7 @@ static void observe_free(void *pointer) {
 #include "base/xcompile_resources.c"
 #pragma pop_macro("xr_free")
 #pragma pop_macro("xr_malloc")
-static XrCompileResourceLimits caps(void) { return (XrCompileResourceLimits){8388608,4194304,128000000}; }
+static XrCompileResourceLimits caps(void) { return (XrCompileResourceLimits){.memory_mode=XR_COMPILE_MEMORY_ORDINARY,.profile_allocations=true}; }
 static XrXirCompileContext owner_new(XrCompileResourceLimits limits) {
     CHECK(!live && !live_bytes);XrXirCompileContext c={0};
     CHECK(xr_compile_resources_new(&limits,&c.resources)==XR_COMPILE_RESOURCE_OK);
@@ -39,6 +39,6 @@ static XrCompileResourceStats stats(const XrXirCompileContext *c) {
     XrCompileResourceStats s={0};CHECK(xr_compile_resources_stats(c->resources,&s)==XR_COMPILE_RESOURCE_OK);return s;
 }
 static void owner_free(XrXirCompileContext *c,uint64_t baseline) {
-    CHECK(stats(c).live_bytes==baseline);xr_compile_resources_release(c->resources);
+    CHECK(stats(c).held_bytes==baseline);xr_compile_resources_release(c->resources);
     *c=(XrXirCompileContext){0};CHECK(!live && !live_bytes);
 }

@@ -265,11 +265,11 @@ int main(int argc, char **argv) {
     } else {
         XrLirFunction root;
         OK(xr_lir_function_at(module, ordinal, &root));
-        XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
         XrCompileResources *resources = NULL;
         CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
         XrLirCRequest request = {.module = module, .entry = root,
-            .resources = resources, .translation_unit = argv[2]};
+            .resources = resources, .translation_unit = argv[2], .control = NULL};
         XrLirCOutput output = {0};
         CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_OK);
         xr_compile_resources_release(resources);

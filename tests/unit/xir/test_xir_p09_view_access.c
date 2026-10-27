@@ -67,7 +67,7 @@ static void access_base(AccessFixture *f,uint32_t kind) {
     f->nodes[11]=(XrXirTypeNode){.kind=XR_XIR_TYPE_TUPLE,.parameters=f->nested,.parameter_count=2};
     f->nodes[12]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)A_TUPLE};
     f->call=(XrXirCallableParameter){(XrXirType)A_OPTIONAL_MUT,XR_PARAM_READ};
-    f->nodes[13]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=&f->call,.parameter_count=1,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+    f->nodes[13]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.element=XR_XIR_NEVER,.parameters=&f->call,.parameter_count=1,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
     f->nodes[14]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)A_MUT_PAIR};
     f->single_field[0]=(XrXirCallableParameter){XR_XIR_UNIT,XR_PARAM_READ};
     f->single_field[1]=(XrXirCallableParameter){(XrXirType)A_OPTIONAL_MUT,XR_PARAM_READ};
@@ -105,6 +105,8 @@ static void access_base(AccessFixture *f,uint32_t kind) {
         f->other[0]=(XrXirInstruction){.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)A_CALLABLE,.immediate=0};
         f->functions[1].instruction_count=2;f->single[0].count=2;
     }
+    for (uint32_t i=0;i<3;++i) f->functions[i].error_type=XR_XIR_NEVER;
+    if (kind==64) f->functions[2].error_type=XR_XIR_ERROR;
     f->callee=(XrXirType)(kind==25?A_MUT:A_SHARED);f->functions[2].parameters=&f->callee;f->functions[2].parameter_count=1;
     f->source=(XrXirSourceModule){.name="root",.name_length=4,.initializer=1};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
@@ -872,7 +874,7 @@ static XrXirStatus access_scoped_check(const XrXirCompileContext *context,const 
     CHECK(xir_compile_view_may_owned_function_scoped(&tiny,&f->module,0,access_scoped_visit,&s,NULL)==XR_XIR_BUDGET);
     CHECK(!s.events && attempts==first);
     XrXirStatus status=xir_compile_view_may_owned_function_scoped(context,&f->module,0,access_scoped_visit,&s,NULL);
-    if (status==XR_XIR_BUDGET || status==XR_XIR_OUT_OF_MEMORY) return status;
+    if (status==XR_XIR_BUDGET || status==XR_XIR_MEMORY_LIMIT || status==XR_XIR_OUT_OF_MEMORY) return status;
     CHECK(status==XR_XIR_UNSUPPORTED && s.events==1 && live_bytes==s.baseline_bytes && live==s.baseline_count);
     s.stop=false;s.events=0;
     status=xir_compile_view_may_owned_function_scoped(context,&f->module,0,access_scoped_visit,&s,NULL);
@@ -886,9 +888,9 @@ static XrXirStatus access_sequence(const XrXirCompileContext *context,uint32_t k
     stage="ordinary";
     status=xir_compile_view_prepare_ordinary(context,&f.module,construction,&diagnostic);
     if (status==XR_XIR_OK) {stage="return origins";status=xir_compile_view_return_origins_verified(context,&f.module,&diagnostic);}
-    if (f.prefix_expected && status!=XR_XIR_BUDGET && status!=XR_XIR_OUT_OF_MEMORY) CHECK(status==XR_XIR_OK);
+    if (f.prefix_expected && status!=XR_XIR_BUDGET && status!=XR_XIR_MEMORY_LIMIT && status!=XR_XIR_OUT_OF_MEMORY) CHECK(status==XR_XIR_OK);
     if (status==XR_XIR_OK) {stage="affine";status=xir_compile_view_affine_verified(context,&f.module,&diagnostic);}
-    if (status==XR_XIR_BUDGET || status==XR_XIR_OUT_OF_MEMORY) goto done;
+    if (status==XR_XIR_BUDGET || status==XR_XIR_MEMORY_LIMIT || status==XR_XIR_OUT_OF_MEMORY) goto done;
     if (f.prefix_expected!=XR_XIR_OK) {
         CHECK(status==f.prefix_expected && diagnostic.function==0 && diagnostic.instruction==f.bad);goto done;
     }
@@ -901,7 +903,7 @@ static XrXirStatus access_sequence(const XrXirCompileContext *context,uint32_t k
     stage="access";
     status=kind>=112 && kind<116?xir_compile_view_cell_access_verified(context,&f.module,&diagnostic):
         xir_compile_view_access_verified(context,&f.module,&diagnostic);
-    if (status!=XR_XIR_BUDGET && status!=XR_XIR_OUT_OF_MEMORY) {
+    if (status!=XR_XIR_BUDGET && status!=XR_XIR_MEMORY_LIMIT && status!=XR_XIR_OUT_OF_MEMORY) {
         if (status!=f.expected || (status!=XR_XIR_OK && diagnostic.instruction!=f.bad))
             fprintf(stderr,"access kind=%u actual=%u at %u/%u/%u expected=%u instruction=%u\n",kind,status,diagnostic.function,diagnostic.block,diagnostic.instruction,f.expected,f.bad);
         CHECK(status==f.expected);if (status!=XR_XIR_OK) CHECK(diagnostic.function==0 && diagnostic.instruction==f.bad);
@@ -909,32 +911,38 @@ static XrXirStatus access_sequence(const XrXirCompileContext *context,uint32_t k
 done:
     if (kind==71 && fail_at==SIZE_MAX && status!=f.expected) {
         XrCompileResourceStats s=stats(context);
-        fprintf(stderr,"access DAG stage=%s status=%u at %u/%u/%u allocated=%llu peak=%llu work=%llu frame=%llu\n",
-            stage,status,diagnostic.function,diagnostic.block,diagnostic.instruction,(unsigned long long)s.allocated_bytes,
-            (unsigned long long)s.peak_bytes,(unsigned long long)s.work,(unsigned long long)context->limits.frame_bytes);
+        fprintf(stderr,"access DAG stage=%s status=%u at %u/%u/%u held=%llu peak=%llu frame=%llu\n",
+            stage,status,diagnostic.function,diagnostic.block,diagnostic.instruction,(unsigned long long)s.held_bytes,
+            (unsigned long long)s.peak_bytes,(unsigned long long)context->limits.frame_bytes);
     }
     CHECK(!memcmp(before,&f,sizeof(f)));xr_xir_compile_construction_free(construction);return status;
 }
 static void access_resources(uint32_t kind,bool normal) {
     AccessFixture fixture;access_case(&fixture,kind);XrXirStatus expected=fixture.expected;
-    XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;size_t first=attempts;
-    CHECK(access_sequence(&c,kind)==expected);size_t points=attempts-first;XrCompileResourceStats measured=stats(&c);
+    XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).held_bytes;size_t first=attempts;
+    XrXirStatus initial=access_sequence(&c,kind);
+    if (initial!=expected) fprintf(stderr,"access initial kind=%u status=%u expected=%u\n",kind,initial,expected);
+    CHECK(initial==expected);size_t points=attempts-first;XrCompileResourceStats measured=stats(&c);
     CHECK(points && points<4096);CHECK(access_sequence(&c,kind)==expected);owner_free(&c,baseline);
     if (!normal) for (size_t p=0;p<points;++p) {
-        c=owner_new(caps());baseline=stats(&c).live_bytes;fail_at=attempts+p;injected=false;
+        c=owner_new(caps());baseline=stats(&c).held_bytes;fail_at=attempts+p;injected=false;
         XrXirStatus status=access_sequence(&c,kind);fail_at=SIZE_MAX;
         if (status!=XR_XIR_OUT_OF_MEMORY || !injected) fprintf(stderr,"access kind=%u FI=%zu/%zu status=%u\n",kind,p,points,status);
         CHECK(status==XR_XIR_OUT_OF_MEMORY && injected);owner_free(&c,baseline);
     }
-    if (!normal) for (uint32_t axis=0;axis<3;++axis) for (uint32_t delta=0;delta<3;++delta) {
-        XrCompileResourceLimits limits=caps();uint64_t *bound=axis==0?&limits.allocated_bytes:axis==1?&limits.live_bytes:&limits.work;
-        *bound=(axis==0?measured.allocated_bytes:axis==1?measured.peak_bytes:measured.work)+delta-1u;
-        c=owner_new(limits);baseline=stats(&c).live_bytes;CHECK(access_sequence(&c,kind)==(delta?expected:XR_XIR_BUDGET));owner_free(&c,baseline);
+    if (!normal) for (uint32_t delta=0;delta<3;++delta) {
+        XrCompileResourceLimits limits=caps();limits.memory_mode=XR_COMPILE_MEMORY_FINITE;
+        limits.memory_limit=measured.peak_bytes+delta-1u;
+        c=owner_new(limits);baseline=stats(&c).held_bytes;
+        CHECK(access_sequence(&c,kind)==(delta?expected:XR_XIR_MEMORY_LIMIT));
+        if (delta) CHECK(access_sequence(&c,kind)==expected);
+        owner_free(&c,baseline);
     }
-    printf("View access kind=%u: %zu allocation points owner2/physical0%s PASS\n",kind,points,normal?"":"/all actual failures/three axes exact+minus1+plus1");
+    printf("View access kind=%u: %zu allocation points owner2/physical0%s PASS\n",kind,points,
+        normal?"":"/all physical failures/held exact+minus1+plus1/reuse");
 }
 static bool access_frame_accepts(uint32_t kind,uint64_t bytes,XrXirStatus expected) {
-    XrXirCompileContext context=owner_new(caps());uint64_t baseline=stats(&context).live_bytes;
+    XrXirCompileContext context=owner_new(caps());uint64_t baseline=stats(&context).held_bytes;
     context.limits.frame_bytes=bytes;XrXirStatus status=access_sequence(&context,kind);
     CHECK(status==expected || status==XR_XIR_BUDGET);owner_free(&context,baseline);return status==expected;
 }
@@ -962,7 +970,7 @@ static void access_root_model_dump(void) {
     for (uint32_t index=0;index<A_CASES-148u+2u;++index) {
         uint32_t kind=index==0?120:index==1?134:index+146u;
         AccessFixture fixture;access_case(&fixture,kind);
-        XrXirCompileContext context=owner_new(caps());uint64_t baseline=stats(&context).live_bytes;
+        XrXirCompileContext context=owner_new(caps());uint64_t baseline=stats(&context).held_bytes;
         XrXirStatus status=access_sequence(&context,kind);owner_free(&context,baseline);
         const XrXirFunction *f=fixture.functions;
         printf("%s{\"kind\":%u,\"status\":%u,\"bad\":%u,\"parameters\":[",index?",":"",kind,status,fixture.bad);
@@ -981,9 +989,11 @@ static void access_root_model_dump(void) {
     }
     puts("]}");
 }
+#include "xir_view_access_default_access_cases.h"
 int main(int argc,char **argv) {
     if (argc==2 && !strcmp(argv[1],"--root-model")) {access_root_model_dump();return 0;}
     bool normal=argc==2 && !strcmp(argv[1],"--normal");CHECK(argc==1 || normal);setvbuf(stdout,NULL,_IONBF,0);
+    default_access_cases(normal);
     for (uint32_t kind=0;kind<A_CASES;++kind) access_resources(kind,normal);
     for (uint32_t kind=148;kind<A_CASES;++kind) access_frame_boundary(kind);
     puts("Proven conflicts reject, unresolved epochs stay explicit, and Source execution remains closed");return 0;

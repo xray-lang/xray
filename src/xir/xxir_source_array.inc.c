@@ -14,7 +14,7 @@ static const XrNativeMemberDeclaration *source_array_member(SourceContext *ctx,
     if (!source_native_array_declaration(ctx)) return NULL;
     const XrNativeTypeDeclaration *array = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
     const XrNativeMemberDeclaration *member = source_native_member(ctx,array,name);
-    if (!source_work(ctx, node)) return NULL;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
     if (!member || !member->is_public || member->operation == XR_NATIVE_OPERATION_NONE) {
         source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array member has no admitted value-operation contract");
         return NULL;
@@ -48,7 +48,7 @@ static bool source_array_member_reference(SourceContext *ctx, AstNode *node,
         XrXirSourceType *parameters = member->parameter_count ? source_alloc(ctx, member->parameter_count, sizeof(*parameters)) : NULL;
         if (member->parameter_count && !parameters) return false;
         for (uint32_t p = 0; p < member->parameter_count; ++p) {
-            if (!source_work(ctx, node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             parameters[p] = source_array_schema_type(ctx, member->parameters[p].type);
         }
         XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
@@ -60,7 +60,7 @@ static bool source_array_member_reference(SourceContext *ctx, AstNode *node,
         record->exported = true; record->mutable = member->receiver == XR_NATIVE_RECEIVER_REF;
         record->generic_parent = ctx->array_declaration; record->generic_parent_count = 1;
         for(uint32_t p=0;p<member->parameter_count;++p) {
-            if(!source_work(ctx,node))return false;
+            if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
             SourceName parameter={0};parameter.name=source_owned_text(ctx,member->parameters[p].name);
             if(!parameter.name||!source_query_declare(ctx,&parameter,XR_XIR_SOURCE_PARAMETER,symbol.declaration,
                 (XrXirSourceRange){ctx->array_module,0,0,0,0}))return false;
@@ -150,7 +150,7 @@ static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpect
     if (expected.present && !xr_xir_type_is_array(&ctx->types, expected.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal cannot satisfy a non-Array context");
     for (int i = 0; i < literal->count; ++i) {
-        if (!source_work(ctx,literal->elements[i])) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (literal->elements[i] && literal->elements[i]->type == AST_SPREAD_EXPR)
             return source_array_spread_literal(ctx,node,expected,value);
     }
@@ -320,10 +320,10 @@ static bool source_length(SourceContext *ctx, AstNode *node,
     if (!source_array_receiver(ctx, call->arguments[0], NULL, false, &array)) return false;
     uint32_t view_kind=0;XrXirType view_element=XR_XIR_UNIT;
     bool view=source_view_shape(ctx,array.type,&view_kind,&view_element);
-    bool builder=source_stringbuilder_type(ctx,array.type),range=source_range_is(ctx,array.type);
+    bool range=source_range_is(ctx,array.type);
     if(ctx->diagnostic.status!=XR_XIR_OK) return false;
     if (array.type != XR_XIR_STRING && !xr_xir_type_is_array(&ctx->types, array.type) &&
-        !xr_xir_type_is_map(&ctx->types, array.type) && !xr_xir_type_is_set(&ctx->types, array.type) && !view && !builder && !range)
+        !xr_xir_type_is_map(&ctx->types, array.type) && !xr_xir_type_is_set(&ctx->types, array.type) && !view && !range)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "len receiver family is not admitted");
     if (!ctx->length_declaration) {
         XrXirSourceQueryModule *modules = source_query_append(ctx, ctx->query.modules,
@@ -344,7 +344,7 @@ static bool source_length(SourceContext *ctx, AstNode *node,
         record->type = (XrXirSourceType) {XR_XIR_I64, 0, true};
         record->parameters = parameter; record->parameter_count = 1;
     }
-    return (range?source_range_length(ctx,node,array,value):builder?source_stringbuilder_length(ctx,node,array,value):source_recipe_record(ctx, (XrXirInstruction) {view ? XR_XIR_VIEW_LEN : array.type == XR_XIR_STRING ? XR_XIR_STRING_LEN : xr_xir_type_is_array(&ctx->types, array.type) ? XR_XIR_ARRAY_LEN : XR_XIR_HASH_LEN, XR_XIR_I64, {array.id, 0}, {0}, 0, {0}}, value)) &&
+    return (range?source_range_length(ctx,node,array,value):source_recipe_record(ctx, (XrXirInstruction) {view ? XR_XIR_VIEW_LEN : array.type == XR_XIR_STRING ? XR_XIR_STRING_LEN : xr_xir_type_is_array(&ctx->types, array.type) ? XR_XIR_ARRAY_LEN : XR_XIR_HASH_LEN, XR_XIR_I64, {array.id, 0}, {0}, 0, {0}}, value)) &&
         source_query_target_token_reference(ctx,call->callee,
             ctx->length_declaration, XR_XIR_SOURCE_CALL);
 }

@@ -25,7 +25,7 @@ static XrXirStatus declaration_callable_root_read(void *data,XirEffectContextSco
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
-            if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+
             const XrXirInstruction *op = &function->instructions[i];
             if (op->op != XR_XIR_FUNCTION_REF) continue;
             const XrXirTypeNode *signature = xr_xir_callable_signature(module->types, op->type);
@@ -45,7 +45,7 @@ static XrXirStatus declaration_callable_root_read(void *data,XirEffectContextSco
     for (uint32_t r = 0; table && r < table->count; ++r) {
         const XrXirImplementation *record = &table->records[r];
         for (uint32_t b = 0; b < record->binding_count; ++b) {
-            if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+
             const XrXirImplementationBinding *binding = &record->bindings[b];
             const XrXirInterfaceTable *interfaces = module->types ? module->types->interfaces : NULL;
             if (!interfaces || binding->requirement.declaration >= interfaces->count ||
@@ -71,7 +71,7 @@ static XrXirStatus declaration_callable_root_read(void *data,XirEffectContextSco
 static XrXirStatus declaration_callable_root_verify(const XrXirModule *module,
     const XrXirEffects *effects,XrXirCompileContext *remaining,XrXirDiagnostic *diagnostic) {
     DeclarationCallableRootCheck check={module,effects,remaining,diagnostic};
-    if (!xir_compile_work(remaining,sizeof(check))) return XR_XIR_BUDGET;
+
     return xir_effects_context_available(remaining,effects) ?
         xir_effects_context_operation(remaining,effects,module,module->types,
             declaration_callable_root_read,&check) : declaration_callable_root_read(&check,NULL);

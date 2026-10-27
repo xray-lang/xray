@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xtc_xir_invocation.c - Same-ledger native observations and positive leases
+ * xtc_xir_invocation.c - Same-owner native observations and positive leases
  *
  * KEY CONCEPT:
  *   Replaying frozen commands checks observed inputs while their positive
@@ -71,13 +71,10 @@ static bool invocation_fail(XrXirInvocation *owner, XrXirInvocationStatus status
 }
 static bool invocation_resource(XrXirInvocation *owner, XrCompileResourceStatus status) {
     if (status == XR_COMPILE_RESOURCE_OK) return true;
-    return invocation_fail(owner, status == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_INVOCATION_BUDGET :
+    return invocation_fail(owner, status == XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_INVOCATION_MEMORY_LIMIT :
+        status == XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_INVOCATION_OVERFLOW :
         status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_INVOCATION_OUT_OF_MEMORY :
         XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_RESOURCE, status);
-}
-static bool invocation_work(XrXirInvocation *owner, uint64_t amount) {
-    return owner->status == XR_XIR_INVOCATION_OK &&
-        invocation_resource(owner, xr_compile_resources_work(owner->context.resources, amount));
 }
 static bool invocation_io(XrXirInvocation *owner, XrOsIoStatus status) {
     if (status == XR_OS_IO_OK) return true;
@@ -85,7 +82,8 @@ static bool invocation_io(XrXirInvocation *owner, XrOsIoStatus status) {
     switch (status) {
     case XR_OS_IO_NOT_FOUND: mapped = XR_XIR_INVOCATION_UNRESOLVED; break;
     case XR_OS_IO_UNSUPPORTED: mapped = XR_XIR_INVOCATION_UNSUPPORTED; break;
-    case XR_OS_IO_BUDGET: mapped = XR_XIR_INVOCATION_BUDGET; break;
+    case XR_OS_IO_MEMORY_LIMIT: mapped = XR_XIR_INVOCATION_MEMORY_LIMIT; break;
+    case XR_OS_IO_OVERFLOW: mapped = XR_XIR_INVOCATION_OVERFLOW; break;
     case XR_OS_IO_OUT_OF_MEMORY: mapped = XR_XIR_INVOCATION_OUT_OF_MEMORY; break;
     case XR_OS_IO_IO: mapped = XR_XIR_INVOCATION_IO; break;
     default: mapped = XR_XIR_INVOCATION_INVALID; break;
@@ -100,6 +98,8 @@ static XrXirInvocationStatus invocation_target_status(XrXirTargetStatus status) 
     case XR_XIR_TARGET_UNSUPPORTED: mapped = XR_XIR_INVOCATION_UNSUPPORTED; break;
     case XR_XIR_TARGET_BUDGET: mapped = XR_XIR_INVOCATION_BUDGET; break;
     case XR_XIR_TARGET_OUT_OF_MEMORY: mapped = XR_XIR_INVOCATION_OUT_OF_MEMORY; break;
+    case XR_XIR_TARGET_MEMORY_LIMIT: mapped = XR_XIR_INVOCATION_MEMORY_LIMIT; break;
+    case XR_XIR_TARGET_OVERFLOW: mapped = XR_XIR_INVOCATION_OVERFLOW; break;
     case XR_XIR_TARGET_IO: mapped = XR_XIR_INVOCATION_IO; break;
     default: mapped = XR_XIR_INVOCATION_INVALID; break;
     }
@@ -117,6 +117,8 @@ static bool invocation_process(XrXirInvocation *owner, XrProcessStatus status) {
     case XTC_PROCESS_UNSUPPORTED: mapped = XR_XIR_INVOCATION_UNSUPPORTED; break;
     case XTC_PROCESS_BUDGET: mapped = XR_XIR_INVOCATION_BUDGET; break;
     case XTC_PROCESS_OUT_OF_MEMORY: mapped = XR_XIR_INVOCATION_OUT_OF_MEMORY; break;
+        case XTC_PROCESS_MEMORY_LIMIT: mapped = XR_XIR_INVOCATION_MEMORY_LIMIT; break;
+        case XTC_PROCESS_OVERFLOW: mapped = XR_XIR_INVOCATION_OVERFLOW; break;
     case XTC_PROCESS_TIMEOUT: mapped = XR_XIR_INVOCATION_TIMEOUT; break;
     case XTC_PROCESS_CANCELLED: mapped = XR_XIR_INVOCATION_CANCELLED; break;
     case XTC_PROCESS_IO: mapped = XR_XIR_INVOCATION_IO; break;
@@ -132,6 +134,8 @@ static bool invocation_sdk(XrXirInvocation *owner, XrXirRuntimeSdkStatus status)
     case XR_XIR_SDK_UNSUPPORTED: mapped = XR_XIR_INVOCATION_UNSUPPORTED; break;
     case XR_XIR_SDK_BUDGET: mapped = XR_XIR_INVOCATION_BUDGET; break;
     case XR_XIR_SDK_OUT_OF_MEMORY: mapped = XR_XIR_INVOCATION_OUT_OF_MEMORY; break;
+    case XR_XIR_SDK_MEMORY_LIMIT: mapped = XR_XIR_INVOCATION_MEMORY_LIMIT; break;
+    case XR_XIR_SDK_OVERFLOW: mapped = XR_XIR_INVOCATION_OVERFLOW; break;
     case XR_XIR_SDK_IO: mapped = XR_XIR_INVOCATION_IO; break;
     default: mapped = XR_XIR_INVOCATION_INVALID; break;
     }
@@ -154,7 +158,7 @@ static XrXirTargetStatus invocation_images_new(XrXirInvocation *owner,XrXirImage
 static bool invocation_same(XrXirInvocation *owner, const char *a, const char *b, bool *same) {
     if (!a || !b) return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
     for (;;) {
-        if (!invocation_work(owner, 2)) return false;
+
         unsigned char left = (unsigned char)*a++, right = (unsigned char)*b++;
         if (left != right || !left) { *same = left == right; return true; }
     }
@@ -167,7 +171,7 @@ static bool invocation_expect(XrXirInvocation *owner, const char *actual, const 
 static bool invocation_bytes(XrXirInvocation *owner, const void *a, const void *b, size_t length) {
     const uint8_t *left = a, *right = b;
     for (size_t i = 0; i < length; ++i) {
-        if (!invocation_work(owner, 2)) return false;
+
         if (left[i] != right[i]) return invocation_fail(owner, XR_XIR_INVOCATION_REPLAY_MISMATCH,
             XR_XIR_INVOCATION_SELF, 0);
     }
@@ -176,7 +180,7 @@ static bool invocation_bytes(XrXirInvocation *owner, const void *a, const void *
 static bool invocation_length(XrXirInvocation *owner, const char *text, size_t *length) {
     if (!text) return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
     for (size_t i = 0;; ++i) {
-        if (!invocation_work(owner, 1)) return false;
+
         unsigned char byte = (unsigned char)text[i];
         if (!byte) { *length = i; return true; }
         if (i >= owner->limits.dependencies.path_bytes)
@@ -184,7 +188,7 @@ static bool invocation_length(XrXirInvocation *owner, const char *text, size_t *
     }
 }
 static bool invocation_copy(XrXirInvocation *owner, void *destination, const void *source, size_t bytes) {
-    if (!invocation_work(owner, bytes)) return false;
+    if (owner->status != XR_XIR_INVOCATION_OK) return false;
     memcpy(destination, source, bytes); return true;
 }
 static bool invocation_file_reserve(XrXirInvocation *owner) {
@@ -195,7 +199,7 @@ static bool invocation_file_reserve(XrXirInvocation *owner) {
             owner->capacity ? owner->capacity * 2 : 16;
         if (capacity > owner->limits.files) capacity = owner->limits.files;
         if ((uint64_t)capacity * sizeof(*owner->files) > SIZE_MAX)
-            return invocation_fail(owner, XR_XIR_INVOCATION_BUDGET, XR_XIR_INVOCATION_SELF, 0);
+            return invocation_fail(owner, XR_XIR_INVOCATION_OVERFLOW, XR_XIR_INVOCATION_SELF, 0);
         if (!invocation_resource(owner, xr_compile_resources_resize(owner->context.resources,
             (void **)&owner->files, (size_t)capacity * sizeof(*owner->files)))) return false;
         owner->capacity = capacity;
@@ -205,7 +209,7 @@ static bool invocation_file_reserve(XrXirInvocation *owner) {
 static bool invocation_file_publish(XrXirInvocation *owner, XrXirInvocationStage stage,
     XrXirInvocationFileKind kind, const char *path, uint64_t length, const uint8_t *digest,
     XtcXirFileLease *lease) {
-    if (!invocation_file_reserve(owner) || !invocation_work(owner, sizeof(InvocationFile) + 32)) return false;
+    if (!(invocation_file_reserve(owner))) return false;
     InvocationFile *file = &owner->files[owner->facts.file_count];
     *file = (InvocationFile){{stage, kind, path, length, {0}}, lease};
     memcpy(file->facts.digest, digest, sizeof(file->facts.digest));
@@ -231,10 +235,10 @@ static bool invocation_platform(void) {
 static bool invocation_join_argument(XrXirInvocation *owner, const char *actual,
     const char *prefix, const char *suffix) {
     while (true) {
-        if (!invocation_work(owner, 1)) return false;
+
         unsigned char part = (unsigned char)*prefix++;
         if (!part) break;
-        if (!invocation_work(owner, 1)) return false;
+
         if ((unsigned char)*actual++ != part)
             return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
     }
@@ -289,8 +293,8 @@ static bool invocation_compile_recipe(XrXirInvocation *owner,
         if (!invocation_length(owner, owner->prefix, &length)) return false;
         char symbol[73];
         if (length > 64) return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
-        if (!invocation_copy(owner, symbol, owner->prefix, length) ||
-            !invocation_copy(owner, symbol + length, "_program", sizeof("_program"))) return false;
+        if (!invocation_copy(owner,  symbol, owner->prefix, length) ||
+            !invocation_copy(owner,  symbol + length, "_program", sizeof("_program"))) return false;
         if (!invocation_join_argument(owner, view->argv[26], "/DXIR_SDK_PROGRAM_SYMBOL=", symbol)) return false;
     }
     return invocation_expect(owner, view->cwd, request->input_directory) && invocation_environment(owner, view, request);
@@ -314,7 +318,7 @@ static bool invocation_link_recipe(XrXirInvocation *owner, const XrXirInvocation
     for (unsigned i = 0; i < 5; ++i)
         if (!invocation_expect(owner, view->argv[9 + i], sdk_libraries[i])) return false;
     for (uint32_t i = 0; i < request->library_count; ++i) {
-        if (!invocation_work(owner, sizeof(request->libraries[i].kind))) return false;
+
         if (request->libraries[i].kind != XR_XIR_INVOCATION_CRT && request->libraries[i].kind != XR_XIR_INVOCATION_SYSTEM)
             return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
         if (!invocation_expect(owner, view->argv[14 + i], request->libraries[i].path)) return false;
@@ -339,7 +343,7 @@ static bool invocation_child_path(XrXirInvocation *owner, const char *path, cons
             invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
     unsigned char last = 0;
     for (size_t i = parent_length + 1; i < length; ++i) {
-        if (!invocation_work(owner, 1)) return false;
+
         unsigned char byte = (unsigned char)path[i];
         if (byte < 32 || byte == '/' || byte == '\\' || byte == ':' || byte == '*' || byte == '?' ||
             byte == '"' || byte == '<' || byte == '>' || byte == '|')
@@ -368,7 +372,7 @@ static bool invocation_disjoint_directories(XrXirInvocation *owner) {
     for (unsigned i = 0; i < 2; ++i) {
         if (!facts[i]) return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
         for (;;) {
-            if (!invocation_work(owner, sizeof(wchar_t))) return false;
+
             if (!facts[i]->native_path[lengths[i]]) break;
             if (++lengths[i] > INT_MAX)
                 return invocation_fail(owner, XR_XIR_INVOCATION_BUDGET, XR_XIR_INVOCATION_SELF, 0);
@@ -377,14 +381,14 @@ static bool invocation_disjoint_directories(XrXirInvocation *owner) {
     unsigned shorter = lengths[0] <= lengths[1] ? 0 : 1, longer = shorter ^ 1;
     size_t common = lengths[shorter];
     if (!common) return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
-    if (!invocation_work(owner, 2 * common * sizeof(wchar_t) + 1)) return false;
+
     int order = CompareStringOrdinal(facts[shorter]->native_path, (int)common,
         facts[longer]->native_path, (int)common, TRUE);
     if (!order) return invocation_io(owner, io_windows_status(GetLastError()));
     if (order != CSTR_EQUAL) return true;
     if (lengths[0] == lengths[1])
         return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
-    if (!invocation_work(owner, 2 * sizeof(wchar_t))) return false;
+
     wchar_t last = facts[shorter]->native_path[common - 1], next = facts[longer]->native_path[common];
     return (last != L'\\' && last != L'/' && next != L'\\' && next != L'/') ||
         invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
@@ -419,11 +423,11 @@ static bool invocation_create(XrXirInvocation *owner, const XrXirInvocationReque
     if (request->launcher_length > owner->limits.artifact_bytes)
         return invocation_fail(owner, XR_XIR_INVOCATION_BUDGET, XR_XIR_INVOCATION_SELF, 0);
     uint8_t launcher_digest[32]; XrSHA256Context hash;
-    if (!invocation_work(owner, 1)) return false;
+
     xr_sha256_init(&hash);
-    if (!invocation_work(owner, request->launcher_length)) return false;
+
     xr_sha256_update(&hash, request->launcher, request->launcher_length);
-    if (!invocation_work(owner, 1)) return false;
+
     xr_sha256_final(&hash, launcher_digest);
     for (unsigned i = 0; i < 8; ++i) {
         owner->diagnostic.stage = i >= 6 ? XR_XIR_INVOCATION_LINK : (XrXirInvocationStage)(i % 2);
@@ -482,13 +486,13 @@ static bool invocation_report(XrXirInvocation *owner, const char *path, unsigned
 static bool invocation_file_find(XrXirInvocation *owner, const XtcXirFileFacts *facts,
     unsigned stage, XrXirInvocationFileKind kind, uint32_t *index) {
     for (uint32_t i = 0; i < owner->facts.file_count; ++i) {
-        if (!invocation_work(owner, sizeof(owner->files[i].facts.stage) + sizeof(owner->files[i].facts.kind))) return false;
+
         const XrXirInvocationFile *file = &owner->files[i].facts;
         if (file->stage != (XrXirInvocationStage)stage || file->kind != kind) continue;
         bool same = false;
         if (!invocation_same(owner, facts->path, file->path, &same)) return false;
         if (!same) continue;
-        if (!invocation_work(owner, 2 * sizeof(uint64_t))) return false;
+
         if (facts->length != file->length)
             return invocation_fail(owner, XR_XIR_INVOCATION_REPLAY_MISMATCH, XR_XIR_INVOCATION_SELF, 0);
         if (!invocation_bytes(owner, facts->digest, file->digest, 32)) return false;
@@ -504,7 +508,7 @@ static bool invocation_compile_inputs(XrXirInvocation *owner, const XrDependency
         file_count, 1, (void **)&seen))) return false;
     bool source_seen = false;
     for (uint32_t i = 0; owner->status == XR_XIR_INVOCATION_OK && i < count; ++i) {
-        if (!invocation_work(owner, 1)) break;
+
         const XrDependencyRecord *record = xtc_dependencies_record(report, i);
         if (!record || (record->kind != XR_DEPENDENCY_SOURCE && record->kind != XR_DEPENDENCY_HEADER)) {
             invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0); break;
@@ -521,7 +525,7 @@ static bool invocation_compile_inputs(XrXirInvocation *owner, const XrDependency
                 okay = invocation_fail(owner, XR_XIR_INVOCATION_REPLAY_MISMATCH, XR_XIR_INVOCATION_SELF, 0);
             else okay = invocation_file_add(owner, (XrXirInvocationStage)stage, kind, &lease);
         }
-        if (okay && replay && invocation_work(owner, 1)) seen[index] = 1;
+        if (okay && replay) seen[index] = 1;
         if (okay && kind == XR_XIR_INVOCATION_SOURCE) source_seen = true;
         xtc_xir_file_lease_free(lease);
         if (!okay) break;
@@ -529,7 +533,7 @@ static bool invocation_compile_inputs(XrXirInvocation *owner, const XrDependency
     if (owner->status == XR_XIR_INVOCATION_OK && !source_seen)
         invocation_fail(owner, XR_XIR_INVOCATION_REPLAY_MISMATCH, XR_XIR_INVOCATION_SELF, 0);
     if (replay) for (uint32_t i = 0; owner->status == XR_XIR_INVOCATION_OK && i < file_count; ++i) {
-        if (!invocation_work(owner, sizeof(owner->files[i].facts.stage) + sizeof(owner->files[i].facts.kind) + 1)) break;
+
         const XrXirInvocationFile *file = &owner->files[i].facts;
         if (file->stage == (XrXirInvocationStage)stage &&
             (file->kind == XR_XIR_INVOCATION_SOURCE || file->kind == XR_XIR_INVOCATION_HEADER) && !seen[i])
@@ -547,7 +551,7 @@ static bool invocation_link_inputs(XrXirInvocation *owner, const XrDependencyFac
     if (!invocation_resource(owner, xr_compile_resources_calloc(owner->context.resources,
         owner->facts.file_count, 1, (void **)&seen))) return false;
     for (uint32_t i = 0; owner->status == XR_XIR_INVOCATION_OK && i < count; ++i) {
-        if (!invocation_work(owner, 1)) break;
+
         const XrDependencyRecord *record = xtc_dependencies_record(report, i);
         if (!record || record->kind != XR_DEPENDENCY_LINK_INPUT) {
             invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0); break;
@@ -557,7 +561,7 @@ static bool invocation_link_inputs(XrXirInvocation *owner, const XrDependencyFac
         const XtcXirFileFacts *facts = xtc_xir_file_lease_facts(actual);
         bool matched = false;
         for (uint32_t j = 0; owner->status == XR_XIR_INVOCATION_OK && j < owner->facts.file_count; ++j) {
-            if (!invocation_work(owner, 1 + sizeof(owner->files[j].facts.kind))) break;
+
             const XrXirInvocationFile *other = &owner->files[j].facts;
             if (other->kind != XR_XIR_INVOCATION_OBJECT && other->kind != XR_XIR_INVOCATION_SDK_ARCHIVE &&
                 other->kind != XR_XIR_INVOCATION_CRT && other->kind != XR_XIR_INVOCATION_SYSTEM) continue;
@@ -565,11 +569,11 @@ static bool invocation_link_inputs(XrXirInvocation *owner, const XrDependencyFac
             bool same = false;
             bool okay = invocation_same(owner, facts->path, other->path, &same);
             if (okay && same) {
-                okay = invocation_work(owner, 2 * sizeof(uint64_t));
+
                 if (okay && facts->length != other->length)
                     okay = invocation_fail(owner, XR_XIR_INVOCATION_REPLAY_MISMATCH, XR_XIR_INVOCATION_SELF, 0);
                 if (okay) okay = invocation_bytes(owner, facts->digest, other->digest, 32);
-                if (okay && invocation_work(owner, 1)) { seen[j] = 1; matched = true; }
+                if (okay) { seen[j] = 1; matched = true; }
             }
             if (!okay || same) break;
         }
@@ -593,7 +597,7 @@ static bool invocation_image_inputs(XrXirInvocation *owner, const XrXirImageColl
             bool same = false;
             if (!invocation_same(owner, image->path, other->path, &same)) return false;
             if (!same) continue;
-            if (!invocation_work(owner, 2 * (sizeof(uint32_t) + sizeof(uint64_t)))) return false;
+
             if (image->kind_mask != other->kind_mask || image->length != other->length)
                 return invocation_fail(owner, XR_XIR_INVOCATION_REPLAY_MISMATCH, XR_XIR_INVOCATION_SELF, 0);
             if (!invocation_bytes(owner, image->digest, other->digest, 32)) return false;
@@ -618,7 +622,7 @@ static bool invocation_run_process(XrXirInvocation *owner, const XrXirInvocation
     if (okay) okay = invocation_target(owner, xtc_xir_images_seal(images));
     for (uint32_t i = 0; okay && i < xtc_xir_images_count(images); ++i)
         okay = invocation_profile_contains(owner, xtc_xir_images_file(images, i)->path, true);
-    if (okay && invocation_work(owner, 1)) ++owner->facts.completed_runs;
+    if (okay) ++owner->facts.completed_runs;
     return okay && owner->status == XR_XIR_INVOCATION_OK;
 }
 static bool invocation_stage(XrXirInvocation *owner, const XrXirInvocationRequest *request, unsigned stage) {
@@ -656,7 +660,7 @@ static bool invocation_arguments(XrXirInvocation *owner, const XrProcessView *vi
     for (size_t i = 0; i < view->argc; ++i) {
         const char *argument = view->argv[i];
         for (;;) {
-            if (!invocation_work(owner, 1)) return false;
+
             unsigned char byte = (unsigned char)*argument++;
             if (!byte) break;
             if (byte == '@') return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
@@ -674,12 +678,12 @@ static bool invocation_prepare(XrXirInvocation *owner, const XrXirInvocationRequ
         if (!invocation_sdk(owner, xr_xir_runtime_sdk_file(request->sdk, paths[i], &sdk_libraries[i]))) return false;
     const XrXirNativeProjectionFacts *facts = xr_compile_native_projection_facts(request->projection);
     const XrXirRuntimeSdkFacts *sdk = xr_xir_runtime_sdk_facts(request->sdk);
-    if (!invocation_copy(owner, &owner->facts.projection, facts, sizeof(*facts)) ||
-        !invocation_copy(owner, &owner->facts.sdk, sdk, sizeof(*sdk))) return false;
+    if (!invocation_copy(owner,  &owner->facts.projection, facts, sizeof(*facts)) ||
+        !invocation_copy(owner,  &owner->facts.sdk, sdk, sizeof(*sdk))) return false;
     size_t length = 0;
     if (!invocation_length(owner, facts->prefix, &length)) return false;
     if (!invocation_resource(owner, xr_compile_resources_alloc(owner->context.resources,
-        length + 1, (void **)&owner->prefix)) || !invocation_copy(owner, owner->prefix, facts->prefix, length + 1)) return false;
+        length + 1, (void **)&owner->prefix)) || !invocation_copy(owner,  owner->prefix, facts->prefix, length + 1)) return false;
     owner->facts.projection.prefix = owner->prefix;
     for (unsigned i = 0; i < 3; ++i) {
         owner->diagnostic.stage = (XrXirInvocationStage)i;
@@ -704,7 +708,7 @@ static bool invocation_provider_index(XrXirInvocation *owner, unsigned stage, ui
     uint32_t selected = 0, count = xtc_xir_images_count(images);
     for (uint32_t i = 0; i < count; ++i) {
         const XrXirImageFile *image = xtc_xir_images_file(images, i);
-        if (!invocation_work(owner, sizeof(image->kind_mask))) return false;
+
         if (!(image->kind_mask & XR_XIR_IMAGE_EXE)) continue;
         bool same = false;
         if (!invocation_profile_equal(owner, image->path, owner->commands[stage].executable, &same)) return false;
@@ -725,20 +729,20 @@ static bool invocation_provider_read(XrXirInvocation *owner, unsigned stage, uin
     void *bytes = NULL; size_t length = 0;
     if (!invocation_target(owner, xtc_xir_images_read(owner->images[stage], index, limit, &bytes, &length))) return false;
     XtcXirPeVersion version;
-    XtcXirPeVersionStatus parsed = xtc_xir_pe_version_parse(owner->context.resources, bytes, length, &version);
+    XtcXirPeVersionStatus parsed = xtc_xir_pe_version_parse(bytes, length, &version);
     xr_compile_resources_free(bytes);
     if (parsed != XTC_XIR_PE_VERSION_OK) {
-        XrXirInvocationStatus status = parsed == XTC_XIR_PE_VERSION_BUDGET ? XR_XIR_INVOCATION_BUDGET :
+        XrXirInvocationStatus status = parsed == XTC_XIR_PE_VERSION_COMPLEXITY_LIMIT ? XR_XIR_INVOCATION_BUDGET :
             parsed == XTC_XIR_PE_VERSION_NOT_FOUND ? XR_XIR_INVOCATION_UNRESOLVED :
             parsed == XTC_XIR_PE_VERSION_UNSUPPORTED ? XR_XIR_INVOCATION_UNSUPPORTED : XR_XIR_INVOCATION_INVALID;
         return invocation_fail(owner, status, XR_XIR_INVOCATION_PE_VERSION, parsed);
     }
     const XrXirImageFile *image = xtc_xir_images_file(owner->images[stage], index);
-    return invocation_copy(owner, &output->path, &image->path, sizeof(output->path)) &&
-        invocation_copy(owner, &output->length, &image->length, sizeof(output->length)) &&
-        invocation_copy(owner, output->digest, image->digest, sizeof(output->digest)) &&
-        invocation_copy(owner, &output->version, &version, sizeof(version)) &&
-        invocation_copy(owner, &output->observed_image_index, &index, sizeof(index));
+    return invocation_copy(owner,  &output->path, &image->path, sizeof(output->path)) &&
+        invocation_copy(owner,  &output->length, &image->length, sizeof(output->length)) &&
+        invocation_copy(owner,  output->digest, image->digest, sizeof(output->digest)) &&
+        invocation_copy(owner,  &output->version, &version, sizeof(version)) &&
+        invocation_copy(owner,  &output->observed_image_index, &index, sizeof(index));
 }
 static bool invocation_provider_versions(XrXirInvocation *owner) {
     uint32_t selected[3];
@@ -748,19 +752,18 @@ static bool invocation_provider_versions(XrXirInvocation *owner) {
     const XrXirImageFile *generated = xtc_xir_images_file(owner->images[0], selected[0]);
     const XrXirImageFile *launcher = xtc_xir_images_file(owner->images[1], selected[1]);
     bool same = false;
-    if (!invocation_profile_equal(owner, generated->path, launcher->path, &same) ||
-        !invocation_work(owner, 2 * sizeof(uint64_t))) return false;
+    if (!(invocation_profile_equal(owner, generated->path, launcher->path, &same))) return false;
     if (!same || generated->length != launcher->length)
         return invocation_fail(owner, XR_XIR_INVOCATION_REPLAY_MISMATCH, XR_XIR_INVOCATION_SELF, 0);
     if (!invocation_bytes(owner, generated->digest, launcher->digest, sizeof(generated->digest))) return false;
     /* Both original collectors keep the matching file and its ancestors leased.
      * Read the compiler once, without reopening or releasing either stage. */
-    if (!invocation_work(owner, sizeof(XrXirInvocationProviderFacts))) return false;
+
     XrXirInvocationProviderFacts result = {0};
     if (!invocation_provider_read(owner, 0, selected[0], &result.compiler) ||
         !invocation_provider_read(owner, 2, selected[2], &result.linker) ||
-        !invocation_copy(owner, &result.launcher_compiler_image_index, &selected[1], sizeof(selected[1]))) return false;
-    return invocation_copy(owner, &owner->provider, &result, sizeof(result));
+        !invocation_copy(owner,  &result.launcher_compiler_image_index, &selected[1], sizeof(selected[1]))) return false;
+    return invocation_copy(owner,  &owner->provider, &result, sizeof(result));
 }
 #else
 static bool invocation_provider_versions(XrXirInvocation *owner) {
@@ -783,7 +786,7 @@ static bool invocation_finish(XrXirInvocation *owner) {
                 image->path, image->length, image->digest, NULL)) return false;
         }
     }
-    if (!invocation_provider_versions(owner) || !invocation_work(owner, sizeof(owner->facts.kind))) return false;
+    if (!(invocation_provider_versions(owner))) return false;
     owner->facts.kind = XR_XIR_INVOCATION_LOCKED_REPLAY_FACTS;
     return true;
 }
@@ -819,14 +822,16 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
     if (allocated != XR_COMPILE_RESOURCE_OK) {
         initial.domain = XR_XIR_INVOCATION_RESOURCE; initial.code = allocated;
         if (diagnostic) *diagnostic = initial;
-        return allocated == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_INVOCATION_OUT_OF_MEMORY : XR_XIR_INVOCATION_BUDGET;
+        return allocated == XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_INVOCATION_MEMORY_LIMIT :
+            allocated == XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_INVOCATION_OVERFLOW :
+            allocated == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_INVOCATION_OUT_OF_MEMORY : XR_XIR_INVOCATION_INVALID;
     }
     owner->context.resources = context->resources;
     owner->diagnostic = initial;
     owner->diagnostic.code = XR_XIR_INVOCATION_OK;
     owner->io = xr_compile_io_policy(context->resources);
-    bool okay = invocation_copy(owner, &owner->context, context, sizeof(*context)) &&
-        invocation_copy(owner, &owner->limits, &request->limits, sizeof(request->limits));
+    bool okay = invocation_copy(owner,  &owner->context, context, sizeof(*context)) &&
+        invocation_copy(owner,  &owner->limits, &request->limits, sizeof(request->limits));
 #ifdef XR_OS_WINDOWS
     if(okay)okay=invocation_target(owner,xtc_xir_hash_proof_cache_new(context->resources,
         request->limits.files,&owner->proof_cache));
@@ -848,7 +853,7 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
     for (unsigned stage = 0; okay && stage < 2; ++stage) okay = invocation_stage(owner, request, stage);
     if (okay) okay = invocation_stage(owner, request, 2);
     if (okay) okay = invocation_finish(owner);
-    if (okay) okay = invocation_work(owner, sizeof(owner));
+
     XrXirInvocationStatus status = owner->status;
     if (diagnostic) *diagnostic = owner->diagnostic;
     if (okay) *output = owner;

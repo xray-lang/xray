@@ -14,37 +14,33 @@
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
-static bool identity_charge(void *owner, uint64_t count) {
-    return xr_compile_resources_work(owner,count) == XR_COMPILE_RESOURCE_OK;
-}
-static XrModuleStatus identity_failure(const XrModuleIdentityWork *work) {
+static XrModuleStatus identity_failure(const XrModuleIdentityScan *work) {
     return work->status == XR_MODULE_OK ? XR_MODULE_INVALID : work->status;
 }
-static size_t identity_text_length(XrModuleIdentityWork *work, const char *text) {
+static size_t identity_text_length(XrModuleIdentityScan *work, const char *text) {
     size_t length = 0;
     if (!xr_module_identity_length(work,text,&length) && work->status == XR_MODULE_OK) work->status = XR_MODULE_INVALID;
     return length;
 }
-static void *identity_alloc(XrCompileResources *owner, XrModuleIdentityWork *work, size_t size) {
+static void *identity_alloc(XrCompileResources *owner, XrModuleIdentityScan *work, size_t size) {
     if (work->status != XR_MODULE_OK) return NULL;
     void *result = NULL;
     XrCompileResourceStatus status = xr_compile_resources_alloc(owner,size,&result);
-    if (status != XR_COMPILE_RESOURCE_OK) work->status = status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ?
-        XR_MODULE_OUT_OF_MEMORY : status == XR_COMPILE_RESOURCE_BUDGET ? XR_MODULE_BUDGET : XR_MODULE_INVALID;
+    if (status != XR_COMPILE_RESOURCE_OK) work->status = xr_module_status_from_resource(status);
     return result;
 }
-static char *identity_copy(XrCompileResources *owner, XrModuleIdentityWork *work, const char *text) {
+static char *identity_copy(XrCompileResources *owner, XrModuleIdentityScan *work, const char *text) {
     size_t length = identity_text_length(work,text);
     if (length == SIZE_MAX) { work->status = XR_MODULE_BUDGET; return NULL; }
     char *copy = identity_alloc(owner,work,length+1);
     if (!copy) return NULL;
-    if (!xr_module_identity_work(work,length+1)) { xr_compile_resources_free(copy); return NULL; }
+    if (!((work)->status == XR_MODULE_OK)) { xr_compile_resources_free(copy); return NULL; }
     memcpy(copy,text,length+1); return copy;
 }
-static size_t decimal_digits(XrModuleIdentityWork *work, size_t value) {
+static size_t decimal_digits(XrModuleIdentityScan *work, size_t value) {
     size_t digits = 1;
     while (value >= 10) {
-        if (!xr_module_identity_work(work,1)) return 0;
+        if (!((work)->status == XR_MODULE_OK)) return 0;
         value /= 10;
         digits++;
     }
@@ -58,7 +54,7 @@ static bool checked_add(size_t *total, size_t value) {
     return true;
 }
 
-static char *normalize_path(XrCompileResources *resources, XrModuleIdentityWork *work, const char *path) {
+static char *normalize_path(XrCompileResources *resources, XrModuleIdentityScan *work, const char *path) {
     if (!path || !path[0])
         return NULL;
     size_t length = identity_text_length(work,path);
@@ -66,21 +62,21 @@ static char *normalize_path(XrCompileResources *resources, XrModuleIdentityWork 
     char *normalized = identity_alloc(resources,work,length + 1);
     if (!normalized)
         return NULL;
-    if (!xr_module_identity_work(work,length+1)) { xr_compile_resources_free(normalized); return NULL; }
+    if (!((work)->status == XR_MODULE_OK)) { xr_compile_resources_free(normalized); return NULL; }
     for (size_t i = 0; i < length; i++)
         normalized[i] = path[i] == '\\' ? '/' : path[i];
     normalized[length] = '\0';
     while (length > 1) {
-        if (!xr_module_identity_work(work,1)) { xr_compile_resources_free(normalized); return NULL; }
+        if (!((work)->status == XR_MODULE_OK)) { xr_compile_resources_free(normalized); return NULL; }
         if (normalized[length - 1] != '/') break;
         normalized[--length] = '\0';
     }
     return normalized;
 }
 
-static bool path_prefix_equal(XrModuleIdentityWork *work, const char *source, const char *root, size_t length) {
+static bool path_prefix_equal(XrModuleIdentityScan *work, const char *source, const char *root, size_t length) {
     for (size_t i = 0; i < length; i++) {
-        if (!xr_module_identity_work(work,1)) return false;
+        if (!((work)->status == XR_MODULE_OK)) return false;
 #ifdef XR_OS_WINDOWS
         if (tolower((unsigned char) source[i]) != tolower((unsigned char) root[i]))
             return false;
@@ -109,7 +105,7 @@ static const char *identity_kind_name(XrModuleIdentityKind kind) {
     }
 }
 
-static XrModuleStatus build_framed_identity(XrCompileResources *resources, XrModuleIdentityWork *work, const char *prefix, const char *first, const char *middle,
+static XrModuleStatus build_framed_identity(XrCompileResources *resources, XrModuleIdentityScan *work, const char *prefix, const char *first, const char *middle,
                                   const char *second, char **identity_out) {
     size_t first_length = identity_text_length(work,first);
     size_t second_length = middle ? identity_text_length(work,second) : 0;
@@ -128,7 +124,7 @@ static XrModuleStatus build_framed_identity(XrCompileResources *resources, XrMod
     if (!size_valid) return XR_MODULE_BUDGET;
     char *identity = identity_alloc(resources,work,identity_length + 1);
     if (!identity) return work->status;
-    if (!xr_module_identity_work(work,identity_length+1)) { xr_compile_resources_free(identity); return work->status; }
+    if (!((work)->status == XR_MODULE_OK)) { xr_compile_resources_free(identity); return work->status; }
     int written = middle ? snprintf(identity, identity_length + 1, "%s%zu:%s%s%zu:%s", prefix,
                                     first_length, first, middle, second_length, second)
                          : snprintf(identity, identity_length + 1, "%s%zu:%s", prefix,
@@ -144,7 +140,7 @@ static XrModuleStatus build_framed_identity(XrCompileResources *resources, XrMod
 XR_FUNC XrModuleStatus xr_compile_module_identity_from_logical(XrCompileResources *resources, const XrModuleIdentityAuthority *authority,
                                              const char *logical_path, char **identity_out) {
     if (!resources || !identity_out) return XR_MODULE_INVALID;
-    XrModuleIdentityWork work = {resources,identity_charge,XR_MODULE_OK};
+    XrModuleIdentityScan work = {XR_MODULE_OK};
     if (!xr_module_identity_authority_walk(&work,authority)) return identity_failure(&work);
 
     const char *namespace_id = authority->namespace_id ? authority->namespace_id : "";
@@ -183,7 +179,7 @@ XR_FUNC XrModuleStatus xr_compile_module_identity_from_logical(XrCompileResource
     if (!size_valid) return XR_MODULE_BUDGET;
     char *identity = identity_alloc(resources,&work,identity_length + 1);
     if (!identity) return work.status;
-    if (!xr_module_identity_work(&work,identity_length+1)) { xr_compile_resources_free(identity); return work.status; }
+    if (!((&work)->status == XR_MODULE_OK)) { xr_compile_resources_free(identity); return work.status; }
     int written = snprintf(identity, identity_length + 1,
                            "module-id-v1:kind=%zu:%s:namespace=%zu:%s:path=%zu:%s", kind_length,
                            kind_name, namespace_length, namespace_id, relative_length,
@@ -201,7 +197,7 @@ XR_FUNC XrModuleStatus xr_compile_module_identity_from_source(XrCompileResources
     const XrModuleIdentityAuthority *authority, const char *source_path, char **identity_out, char **logical_out) {
     if (!resources || !authority || !identity_out || !logical_out || identity_out == logical_out)
         return XR_MODULE_INVALID;
-    XrModuleIdentityWork work = {resources,identity_charge,XR_MODULE_OK};
+    XrModuleIdentityScan work = {XR_MODULE_OK};
     if (!xr_module_identity_absolute(&work,authority->physical_root) ||
         !xr_module_identity_absolute(&work,source_path) || !xr_module_identity_authority_walk(&work,authority) ||
         authority->kind == XR_MODULE_IDENTITY_MEMORY) return identity_failure(&work);
@@ -237,7 +233,7 @@ XR_FUNC XrModuleStatus xr_compile_module_identity_script_authority_from_source(X
     status = xr_module_status_from_io(xr_path_dirname_owned(&policy,source,&root));
     xr_compile_resources_free(source);
     if (status != XR_MODULE_OK) return status;
-    XrModuleIdentityWork work = {resources,identity_charge,XR_MODULE_OK};
+    XrModuleIdentityScan work = {XR_MODULE_OK};
     if (!xr_module_identity_absolute(&work,root)) {
         xr_compile_resources_free(root); return identity_failure(&work);
     }

@@ -19,11 +19,11 @@ static bool source_interface_declare(SourceContext *ctx, AstNode *node) {
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface declaration contract is not admitted");
     for (int p = 0; p < declaration->type_param_count; ++p) {
         const XrGenericParam *parameter = declaration->type_params[p];
-        if (!source_work(ctx, node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!parameter || !parameter->name || !*parameter->name)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface type parameter is malformed");
         for (int earlier = 0; earlier < p; ++earlier) {
-            if (!source_work(ctx, node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (source_text_same(ctx, NULL, parameter->name, declaration->type_params[earlier]->name))
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate interface type parameter");
         }
@@ -80,12 +80,12 @@ static bool source_interface_method_scope(SourceContext *ctx, SourceName *owner,
     XrGenericParam **parameters = count ? source_alloc(ctx,count,sizeof(*parameters)) : NULL;
     if (count && !parameters) return false;
     for (uint32_t p = 0; p < count; ++p) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrGenericParam *parameter = p < prefix ? parent->type_params[p] : method->type_params[p-prefix];
         if (!parameter || !parameter->name || !*parameter->name)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method type parameter is malformed");
         for (uint32_t earlier = 0; earlier < p; ++earlier) {
-            if (!source_work(ctx,node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (source_text_same(ctx, NULL, parameter->name, parameters[earlier]->name))
                 return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method type parameter duplicates or shadows a parameter");
         }
@@ -105,7 +105,7 @@ static bool source_interface_method_query(SourceContext *ctx, SourceName *owner,
     XrXirSourceType *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
     if (count && !parameters) return false;
     for (uint32_t p = 0; p < count; ++p) {
-        if (!source_work(ctx, owner->node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         parameters[p] = source_query_type(ctx, callable->parameters[p].type);
     }
     uint32_t id = ctx->interface_member_declarations[owner->index][member];
@@ -117,7 +117,7 @@ static bool source_interface_method_query(SourceContext *ctx, SourceName *owner,
     XrXirConstraint *constraints = total ? source_alloc(ctx,total,sizeof(*constraints)) : NULL;
     if (total && !constraints) return false;
     for (uint32_t p = 0; p < total; ++p) {
-        if (!source_work(ctx,owner->node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         constraints[p] = p < parent->parameter_count ? parent->constraints[p] :
             method->constraints[p-parent->parameter_count];
     }
@@ -155,13 +155,13 @@ static bool source_interface_method(SourceContext *ctx, SourceName *owner,
     if (count && !parameters) return false;
     for (uint32_t p = 0; p < count; ++p) {
         XrParamNode *parameter = method->params[p];
-        if (!source_work(ctx, node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!parameter || !parameter->name || !*parameter->name || source_text_same(ctx, NULL, parameter->name, "this") ||
             !parameter->type || parameter->passing_mode != XR_PARAM_READ || parameter->pattern ||
             parameter->is_rest || parameter->default_value)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface method parameter contract is not admitted");
         for (uint32_t earlier = 0; earlier < p; ++earlier) {
-            if (!source_work(ctx, node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (source_text_same(ctx, NULL, parameter->name, method->params[earlier]->name))
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate interface method parameter");
         }
@@ -185,10 +185,10 @@ static bool source_interface_signature(SourceContext *ctx, SourceName *owner) {
     if ((parents && !applications) || (methods && (!members || !identities))) return false;
     ctx->interface_member_declarations[owner->index] = identities;
     for (uint32_t p = 0; p < parents; ++p)
-        if (!source_work(ctx, owner->node) ||
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) ||
             !source_interface_application(ctx, owner->node, declaration->extends[p], &applications[p])) return false;
     for (uint32_t m = 0; m < methods; ++m)
-        if (!source_work(ctx, owner->node) || !source_interface_method(ctx, owner, m, &members[m])) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_interface_method(ctx, owner, m, &members[m])) return false;
     XrXirInterfaceDeclaration *record = (XrXirInterfaceDeclaration *)&ctx->interfaces.declarations[owner->index];
     record->parents = applications; record->parent_count = parents; record->methods = members; record->method_count = methods;
     return true;

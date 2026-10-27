@@ -17,7 +17,7 @@ static bool source_borrow_value(SourceContext *ctx, AstNode *node, uint32_t *val
     const SourceFunction *body = &ctx->bodies[ctx->function];
     const XrXirFunction *function = &ctx->functions[ctx->function];
     for (;;) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (*value < function->parameter_count) {
             *type = function->parameters[*value]; *producer = NULL; return true;
         }

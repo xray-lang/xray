@@ -31,12 +31,12 @@ typedef struct SourceFixture {
 } SourceFixture;
 
 static SourceFixture source_fixture(const char *text) {
-    XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrXirCompileContext context = {0};
     CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
     context.limits = xr_xir_compile_default_limits();
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "lir-lowering", NULL};
     XrXirSourceRequest request = {.session = session,
                                   .authority = &authority,

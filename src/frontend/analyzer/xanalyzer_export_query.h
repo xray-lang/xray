@@ -22,7 +22,7 @@ static inline bool xa_accept_export_io(XaAnalyzer *analyzer, XrOsIoStatus status
         return false;
     if (status == XR_OS_IO_OK)
         return true;
-    XrCompileResourceStatus failure = status == XR_OS_IO_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
+    XrCompileResourceStatus failure = status == XR_OS_IO_OVERFLOW ? XR_COMPILE_RESOURCE_BUDGET :
         status == XR_OS_IO_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     (void) xr_compile_state_fail(xr_compile_session_compile_state(analyzer->compiler_session), failure);
     return false;
@@ -53,7 +53,7 @@ static inline bool xa_export_text_equal(XrIoContext *io, const char *left,
         return false;
     bool equal = false;
     if (left_length == right_length) {
-        if (!io_work(io, left_length))
+        if (!((io)->status == XR_OS_IO_OK))
             return false;
         equal = !memcmp(left, right, left_length);
     }

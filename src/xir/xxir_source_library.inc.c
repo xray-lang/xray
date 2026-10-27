@@ -35,7 +35,7 @@ static bool source_library_view(SourceContext *ctx,uint32_t module,
     }
     const XrXirSourceModule *view = &d->modules[resource->checked_module];
     size_t length = source_text_size(ctx,spec->canonical);
-    if (!source_work(ctx,NULL)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (view->name_length != length || spec->dep_count < 0 ||
         (uint32_t)spec->dep_count != view->dependency_count ||
         resource->dependency_count != view->dependency_count ||
@@ -43,13 +43,13 @@ static bool source_library_view(SourceContext *ctx,uint32_t module,
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library module view disagrees with its declaration");
     }
     for (size_t byte = 0; byte < length; ++byte) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (view->name[byte] != spec->canonical[byte]) {
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library module identity is invalid");
         }
     }
     for (uint32_t e = 0; e < view->dependency_count; ++e) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrModuleResourceBinding *edge = resource->dependencies[e];
         int target = spec->dep_indices[e];
         if (!edge || edge->checked != artifact || edge->checked_module != view->dependencies[e] ||
@@ -74,7 +74,7 @@ static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t modu
     const XrXirConstruction *construction=xr_xir_compile_artifact_construction(artifact);
     XrXirStatus status=xr_xir_compile_verify_v2(&ctx->compile, library, construction, NULL);
     if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library verification failed");return NULL;}
-    status=library_catalog_shape(library,construction,&ctx->compile);
+    status=library_catalog_shape(library,construction);
     if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library import subset is not admitted");return NULL;}
     return source_library_view(ctx,module,artifact,library)?library:NULL;
 }
@@ -95,7 +95,7 @@ static const XrXirModule *source_owned_module_view(SourceContext *ctx,uint32_t m
 static bool source_library_first(SourceContext *ctx, uint32_t module) {
     const XrXirArtifact *artifact=source_owned_artifact(&ctx->graph->specs[module]);
     for (uint32_t prior = 0; prior < module; ++prior) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (source_owned_checked(&ctx->graph->specs[prior]) &&
             source_owned_artifact(&ctx->graph->specs[prior])==artifact) return false;
     }
@@ -105,7 +105,7 @@ static bool source_library_group_first(SourceContext *ctx,uint32_t module) {
     const XrXirArtifact *artifact=source_owned_artifact(&ctx->graph->specs[module]);
     if(!artifact) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library resource is missing");
     for(uint32_t prior=0;prior<module;++prior) {
-        if(!source_work(ctx,NULL)) return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrModuleSpec *spec=&ctx->graph->specs[prior];
         if(spec->representation==XR_MODULE_CHECKED_LIBRARY && source_owned_artifact(spec)==artifact) return false;
     }
@@ -126,12 +126,12 @@ static bool source_library_inventory(SourceContext *ctx, uint32_t module,
     }
     uint32_t total = 0;
     for (uint32_t f = 0; f < library->function_count; ++f) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (d->functions[f].module == source_module &&
             f != d->modules[source_module].initializer) ++total;
     }
     for (uint32_t s=0; s<d->slot_count; ++s) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (d->slots[s].module!=source_module) continue;
         if (*slots==UINT32_MAX)
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"library slot inventory exhausted");
@@ -156,7 +156,7 @@ static bool source_library_group_inventory(SourceContext *ctx,uint32_t *function
     const XrXirModule *library=source_library_module(ctx,first);
     if(!library) return false;
     for(uint32_t m=first;m<(uint32_t)ctx->graph->spec_count;++m) {
-        if(!source_work(ctx,NULL)) return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrModuleSpec *spec=&ctx->graph->specs[m];
         if(spec->representation!=XR_MODULE_CHECKED_LIBRARY || source_owned_artifact(spec)!=artifact) continue;
         ctx->module=m;
@@ -210,12 +210,12 @@ static bool source_library_map(SourceContext *ctx, const XrXirModule *library,
     map.functions = source_scratch(ctx,library->function_count,sizeof(*map.functions),false);
     if (!map.modules || !map.functions) goto failed;
     for (uint32_t m = 0; m < map.module_count; ++m) {
-        if (!source_work(ctx,NULL)) goto failed;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto failed;
         map.modules[m] = UINT32_MAX;
     }
     const XrXirArtifact *artifact=source_owned_artifact(&ctx->graph->specs[module]);
     for (uint32_t m = 0; m < (uint32_t)ctx->graph->spec_count; ++m) {
-        if (!source_work(ctx,NULL)) goto failed;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto failed;
         const XrModuleSpec *spec = &ctx->graph->specs[m];
         if (!source_owned_checked(spec) || source_owned_artifact(spec)!=artifact) continue;
         uint32_t source_module=source_owned_module(spec);
@@ -226,7 +226,7 @@ static bool source_library_map(SourceContext *ctx, const XrXirModule *library,
     }
     uint32_t next = first;
     for (uint32_t f = 0; f < map.function_count; ++f) {
-        if (!source_work(ctx,NULL)) goto failed;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto failed;
         uint32_t owner = d->functions[f].module;
         if (owner >= map.module_count) { source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library function owner is invalid"); goto failed; }
         uint32_t target = map.modules[owner];
@@ -246,7 +246,7 @@ failed:
 
 static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMap *map,
     const XrXirInstruction *original, XrXirInstruction *output) {
-    if (!source_work(ctx,NULL)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     XrXirInstruction result = *original;
     if (!source_library_type(ctx,map->unit,original->type,&result.type)) return false;
     switch (result.op) {
@@ -303,7 +303,7 @@ static bool source_library_bound_helper(SourceContext *ctx, const XrXirModule *l
     *bound = false;
     if (!library->defaults) return true;
     for (uint32_t i = 0; i < library->defaults->count; ++i) {
-        if (!source_work(ctx, NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (library->defaults->records[i].function == function) {
             *bound = true;
             return true;
@@ -350,7 +350,7 @@ static bool source_library_effect(SourceContext *ctx, const XrXirModule *library
     uint32_t source, uint32_t target) {
     const XrXirProvenance *evidence = library->provenance;
     if (!evidence) return true;
-    if (!source_work(ctx,NULL)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (evidence->kind != XR_XIR_EVIDENCE_TEMPLATE)
         return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"library effect template is required");
     if (evidence->contract_count != library->function_count ||
@@ -371,7 +371,7 @@ static bool source_library_effect(SourceContext *ctx, const XrXirModule *library
         (original->formula.term_count && !owned->formula.terms) ||
         (original->value_count && !owned->values) ||
         (original->binding_count && !owned->bindings)) return false;
-    if (!source_work(ctx,NULL)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     for (uint32_t v=0; v<owned->value_count; ++v)
         if (!source_library_type(ctx,map->unit,original->values[v].declared_type,
             &((XrXirRootValueIdentity *)owned->values)[v].declared_type)) return false;
@@ -385,11 +385,11 @@ static bool source_library_function_query(SourceContext *ctx,uint32_t declaratio
     source_library_query_type(ctx,declaration,function->result,declaration);
     source_library_query_type(ctx,declaration,function->error_type,declaration);
     XrXirSourceDeclaration *query=(XrXirSourceDeclaration *)&ctx->query.declarations[declaration-1];
-    if (!source_work(ctx,NULL)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     query->checked_receiver_count=ctx->identities[ctx->function].method_kind==XR_XIR_READ_METHOD ? 1u : 0u;
     XrXirSourceType *parameters=(XrXirSourceType *)query->parameters;
     for (uint32_t p=0; p<function->parameter_count; ++p) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirType shown=function->parameters[p];
         if (xr_xir_type_is_cell(&ctx->types,shown)) shown=xr_xir_cell_element(&ctx->types,shown);
         parameters[p].generic_owner=xr_xir_type_span(&ctx->types,shown) ? declaration : 0;
@@ -468,14 +468,14 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
                 (is_static && source_text_same(ctx,NULL,name,"variants")))
                 return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"library method conflicts with enum builtin member");
             for (uint32_t v=0; v<declaration->variant_count; ++v) {
-                if (!source_work(ctx,NULL)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 XrXirLiteral variant=declaration->variants[v].name;
                 if (variant.length==original->name_length &&
                     source_span_same(ctx,NULL,variant.bytes,name,variant.length))
                     return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"library method conflicts with enum variant");
             }
         } else for (uint32_t field=0; field<declaration->field_count; ++field) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             XrXirLiteral field_name=declaration->fields[field].name;
             if (field_name.length==original->name_length &&
                 source_span_same(ctx,NULL,field_name.bytes,name,field_name.length))
@@ -542,7 +542,7 @@ static bool source_library_initializers(SourceContext *ctx, const XrXirModule *l
     const SourceLibraryMap *map) {
     const XrXirNominalTable *table=library->types ? library->types->nominals : NULL;
     for (uint32_t n=0; table && n<table->count; ++n) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t target=map->unit->nominals[n];
         const XrXirNominalDeclaration *from=&table->declarations[n];
         const XrXirConstructionRow *row=xr_xir_compile_construction_row(map->unit->construction,n);
@@ -555,7 +555,7 @@ static bool source_library_initializers(SourceContext *ctx, const XrXirModule *l
                 return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library implicit constructor is not mapped");
         }
         for (uint32_t field=0; field<row->field_count; ++field) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (!row->field_initializers[field]) continue;
             uint32_t f=row->field_initializers[field]-1;
             if (f>=map->function_count || map->functions[f]==UINT32_MAX)
@@ -575,7 +575,7 @@ static bool source_library_implementations(SourceContext *ctx,const XrXirModule 
     XrXirImplementation *records=source_alloc(ctx,input->count,sizeof(*records));
     if (!records) return false;
     for (uint32_t i=0; i<input->count; ++i) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirImplementation *from=&input->records[i];
         if (!library->types->nominals || from->nominal_declaration>=library->types->nominals->count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library implementation owner is not mapped");
@@ -583,19 +583,19 @@ static bool source_library_implementations(SourceContext *ctx,const XrXirModule 
         to->nominal_declaration=map->unit->nominals[from->nominal_declaration];
         const XrXirInterfaceApplication *application=NULL;
         if (!source_library_applications(ctx,map->unit,&from->interface,1,&application)) return false;
-        if (!source_work_units(ctx,NULL,sizeof(*application))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         to->interface=*application;
         XrXirImplementationBinding *bindings=from->binding_count ?
             source_alloc(ctx,from->binding_count,sizeof(*bindings)) : NULL;
         if (from->binding_count && !bindings) return false;
         to->bindings=bindings;to->binding_count=from->binding_count;
         for (uint32_t b=0; b<from->binding_count; ++b) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             const XrXirImplementationBinding *binding=&from->bindings[b];
             if (binding->function>=map->function_count || map->functions[binding->function]==UINT32_MAX)
                 return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library witness function is outside selected closure");
             if (!source_library_applications(ctx,map->unit,&binding->requirement,1,&application)) return false;
-            if (!source_work_units(ctx,NULL,sizeof(*application))) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             bindings[b].requirement=*application;
             bindings[b].member=binding->member;bindings[b].function=map->functions[binding->function];
         }
@@ -609,7 +609,7 @@ static bool source_library_implementations(SourceContext *ctx,const XrXirModule 
 static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
     const SourceLibraryMap *map) {
     for (uint32_t m=0;m<map->module_count;++m) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (map->modules[m]==UINT32_MAX) continue;
         /* Only an actual Checked Program contributes a former root. Catalog
          * Libraries cannot carry the birth requirement at their own admission. */
@@ -623,14 +623,14 @@ static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
     }
     if (!source_library_slots(ctx,library,map) || !source_library_literals(ctx, library, map)) return false;
     for (uint32_t f = 0; f < library->function_count; ++f) {
-        if (!source_work(ctx, NULL) || !source_library_function(ctx, library, map, f)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_library_function(ctx, library, map, f)) return false;
     }
     if (!source_library_initializers(ctx,library,map) || !source_library_materializations(ctx,map) ||
         !source_library_comptime(ctx,map) ||
         !source_library_implementations(ctx,library,map)) return false;
     if (!library->defaults) return true;
     for (uint32_t i = 0; i < library->defaults->count; ++i) {
-        if (!source_work(ctx, NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirDefaultBinding *binding = &library->defaults->records[i];
         if (binding->owner >= map->function_count || binding->function >= map->function_count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library default binding identity is invalid");

@@ -5,11 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcompile_resources.h - Shared cumulative compiler allocation and work limits
+ * xcompile_resources.h - Owned compiler memory and explicit finite admission
  *
  * KEY CONCEPT:
- *   Every allocation retains its ledger until physical release, including
- *   allocations transferred beyond the lifetime of the producing scope.
+ *   Live blocks retain their memory owner independently of request state.
+ *   Limits cover held allocation bytes; optional turnover statistics saturate.
  */
 #ifndef XCOMPILE_RESOURCES_H
 #define XCOMPILE_RESOURCES_H
@@ -21,113 +21,74 @@ typedef struct XrCompileResources XrCompileResources;
 typedef enum XrCompileResourceStatus {
     XR_COMPILE_RESOURCE_OK,
     XR_COMPILE_RESOURCE_BAD_ARGUMENT,
-    XR_COMPILE_RESOURCE_BUDGET,
+    XR_COMPILE_RESOURCE_MEMORY_LIMIT,
     XR_COMPILE_RESOURCE_OUT_OF_MEMORY,
-    XR_COMPILE_RESOURCE_CANCELLED
+    XR_COMPILE_RESOURCE_OVERFLOW,
+    XR_COMPILE_RESOURCE_CANCELLED,
+    XR_COMPILE_RESOURCE_DEADLINE,
+    XR_COMPILE_RESOURCE_CLOCK_FAILURE
 } XrCompileResourceStatus;
 
-typedef bool (*XrCompileCancelPoll)(const void *context);
+typedef enum XrCompileMemoryMode {
+    XR_COMPILE_MEMORY_ORDINARY,
+    XR_COMPILE_MEMORY_FINITE
+} XrCompileMemoryMode;
 
 typedef struct XrCompileResourceLimits {
-    uint64_t allocated_bytes, live_bytes, work;
+    XrCompileMemoryMode memory_mode;
+    uint64_t memory_limit;
+    bool profile_allocations;
 } XrCompileResourceLimits;
 
 typedef struct XrCompileResourceStats {
-    uint64_t allocation_count, allocated_bytes, live_bytes, peak_bytes, work;
+    uint64_t held_bytes, peak_bytes;
+    uint64_t allocation_count, allocated_bytes;
 } XrCompileResourceStats;
 
-/* Zero limits grant no resources. The ledger allocation itself is charged.
- * Concurrent calls require a live reference throughout each call, including
- * while waiting. Publish references with caller synchronization; retain cannot
- * revive a pointer racing its final release. Blocks also retain their ledger.
- * Payload access, a block's resize/free, and output slots require caller exclusion.
- * Accounting and physical allocation/free are serialized internally; allocator
- * callbacks must not re-enter this ledger. No fairness or lock-free guarantee. */
+/* Ordinary mode requires memory_limit == 0 and imposes no memory quota.
+ * Finite mode counts this owner, headers, alignment padding and all live blocks;
+ * zero cannot create an owner. Statistics describe requested controlled blocks,
+ * not allocator internals, stack storage or process RSS. Turnover counters are
+ * zero when profiling is disabled and saturate without refusing allocations.
+ * Concurrent calls require a live reference, including while waiting. Retain
+ * cannot revive a pointer racing final release. Publish with caller exclusion.
+ * Payload access, resize/free and output slots require caller exclusion.
+ * Physical allocation/free is serialized; allocator callbacks cannot re-enter. */
 XR_FUNC XrCompileResourceStatus xr_compile_resources_new(
     const XrCompileResourceLimits *limits, XrCompileResources **output);
 XR_FUNC XrCompileResourceStatus xr_compile_resources_retain(XrCompileResources *resources);
 XR_FUNC void xr_compile_resources_release(XrCompileResources *resources);
 XR_FUNC XrCompileResourceStatus xr_compile_resources_stats(
     const XrCompileResources *resources, XrCompileResourceStats *output);
-/* Charge actual operations before starting them. Failed stages never refund work. */
-XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *resources, uint64_t units);
 
-/* Prove a nonempty range lies within one live payload of this ledger without
- * dereferencing the candidate address or its prefix. Each live allocation
- * examined consumes one work unit; no allocation or payload access occurs.
- * Headers, foreign and freed storage do not qualify. Success is a current
- * extent observation, not a pin, allocation generation or semantic authority;
- * the caller must exclude
- * payload mutation, resize and free throughout the subsequent read. */
+/* Inspect only registered live headers, never a proposed pointer or its prefix.
+ * Extent accepts an interior nonempty range; allocation requires its start.
+ * Foreign, freed and out-of-range addresses fail. Success is not a pin or an
+ * allocation generation: exclude mutation, resize/free throughout later access. */
 XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *resources,
     const void *memory, size_t bytes);
-
-/* Prove a releasable payload starts at this address and contains at least bytes.
- * Interior ranges remain valid extents but cannot transfer allocation ownership.
- * This has the same charging and exclusion rules as the extent observation. */
 XR_FUNC XrCompileResourceStatus xr_compile_resources_allocation(XrCompileResources *resources,
     const void *memory, size_t bytes);
-/* Bind one compound operation's borrowed cancellation context. The poll must
- * not allocate, block, throw, or re-enter this ledger; it runs under its lock.
- * Keep context alive until the matching end call. Nested or mismatched scopes
- * fail without replacing the active binding. A true poll latches cancellation.
- * End polls once more, detaches, and returns CANCELLED when latched. Neither
- * operation resets counters or limits. Retain/stats/free remain available.
- * A compound owner must give the end result precedence over nested failures;
- * nested domain adapters can use their ordinary failure category to unwind. */
-XR_FUNC XrCompileResourceStatus xr_compile_resources_begin_cancel(XrCompileResources *resources,
-    XrCompileCancelPoll poll, const void *context);
-XR_FUNC XrCompileResourceStatus xr_compile_resources_end_cancel(XrCompileResources *resources,
-    XrCompileCancelPoll poll, const void *context);
+/* Advisory memory admission reserves nothing and performs no allocation. */
+XR_FUNC XrCompileResourceStatus xr_compile_resources_admit(XrCompileResources *resources, size_t bytes);
 
-/* Check one prospective payload allocation and its specified payload work at
- * this instant, without allocating, charging, or reserving resources. Actual
- * allocators must still perform their own admission and charge exactly once;
- * a successful check does not guarantee a later allocation can succeed. The
- * caller must keep its ledger reference alive throughout this call. */
-XR_FUNC XrCompileResourceStatus xr_compile_resources_admit(XrCompileResources *resources,
-    size_t bytes, uint64_t payload_work);
-
-/* Scan at most 64 readable source bytes while holding the ledger lock. Each
- * byte read consumes one work unit before access. Each non-delimiter byte
- * additionally consumes one unit before advancing. A found delimiter is not
- * advanced over; absent delimiters advance length bytes. Empty input needs no
- * work and permits NULL source. No trailing NUL is required. Failure preserves
- * both outputs, while any work for completed reads/advances remains consumed.
- * Source, outputs and their lifetime require caller exclusion; the call retains
- * no source pointer. The caller must hold a live ledger reference throughout. */
+/* Scan at most 64 caller-owned readable bytes. Empty input permits NULL.
+ * A matching delimiter is not advanced over. Failure preserves both outputs. */
 XR_FUNC XrCompileResourceStatus xr_compile_resources_scan_delimiter(XrCompileResources *resources,
     const char *source, size_t length, unsigned char delimiter, size_t *advanced, bool *found);
-
-/* Check a nonempty byte range against this ledger's current live payloads.
- * Foreign, interior-out-of-range, released and arbitrary addresses are rejected
- * without reading through the proposed pointer or its preceding bytes. Interior
- * ranges are accepted only when completely contained in one actual allocation.
- * One work unit admits the query and six are charged per live header examined.
- * A successful non-head match consumes six more units before moving that actual
- * live registration to the head. Failed or budget-rejected queries never change
- * the registry order, and completed work remains consumed. No allocation, callback or payload read
- * occurs. The check reserves nothing: payload access, resize/free and its lifetime
- * still require caller exclusion and a live ledger reference throughout. */
-XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *resources,
-    const void *memory, size_t bytes);
-
-/* Outputs must be empty and payload sizes nonzero. Failure preserves output.
- * Actual allocator calls consume one work unit, including failed calls.
- * Zeroing additionally consumes payload bytes. Headers and alignment padding
- * count as allocation bytes, but are not fictitious algorithm work. */
+/* Sizes are nonzero and outputs empty. Failure preserves output. */
 XR_FUNC XrCompileResourceStatus xr_compile_resources_alloc(
     XrCompileResources *resources, size_t bytes, void **output);
 XR_FUNC XrCompileResourceStatus xr_compile_resources_calloc(
     XrCompileResources *resources, size_t count, size_t size, void **output);
-/* A non-NULL block must belong to this ledger. A size change allocates the new
- * block before freeing the old block and charges actual copied bytes as work.
- * Zero frees the block; equal sizes do nothing. Failure preserves the old block. */
+/* A non-NULL block must start in this owner's live registry. Replacement is
+ * allocated before copying/freeing, so finite admission includes both blocks.
+ * Zero frees; equal sizes do nothing. Failure preserves the original block. */
 XR_FUNC XrCompileResourceStatus xr_compile_resources_resize(
     XrCompileResources *resources, void **memory, size_t bytes);
-/* Only this allocator's starting pointers are valid; NULL is a no-op.
- * Blocks retain the ledger without requiring an additional caller retain.
- * The payload supports max_align_t alignment, not over-aligned objects. */
+/* This is not a pointer probe: only a live starting pointer returned by this
+ * allocator is valid. NULL is a no-op. Blocks retain their owner, and payload
+ * alignment supports fundamental types, not over-aligned objects. */
 XR_FUNC void xr_compile_resources_free(void *memory);
 
 #endif // XCOMPILE_RESOURCES_H

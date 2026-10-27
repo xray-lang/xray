@@ -16,13 +16,13 @@
 #include "base/xcompile_resources.c"
 #include "base/xcompile_state.h"
 static size_t launch_fault(size_t fail) {
-    XrCompileResources *resources=NULL;XrCompileResourceLimits limits={67108864,8388608,128000000};
+    XrCompileResources *resources=NULL;XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,8388608,true};
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig config={{resources,xr_xir_compile_default_limits()},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
-    CHECK(xr_source_compiler_new(&config,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
+    CHECK(xr_source_compiler_new(&config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
     xr_source_compile_diagnostic_free(&diagnostic);
     XrXirDomain *domain=NULL;XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};
     CHECK(xr_xir_domain_new_budgeted(1048576,&budget,&domain)==XR_XIR_VALUE_OK);
@@ -51,12 +51,12 @@ static size_t launch_fault(size_t fail) {
         CHECK(status==(sticky ? XR_XIR_OUT_OF_MEMORY : XR_XIR_OK));
         CHECK(sticky ? !launch : launch!=NULL);
         XrCompileResourceStats retry={0};CHECK(xr_compile_resources_stats(resources,&retry)==XR_COMPILE_RESOURCE_OK);
-        CHECK(retry.allocated_bytes>=spent.allocated_bytes && retry.work>=spent.work);
+        CHECK(retry.allocated_bytes>=spent.allocated_bytes);
     }
     CHECK(xdap_launch_free(launch)==XR_XIR_CALL_READY);xr_source_compile_diagnostic_free(&diagnostic);
     xr_source_compiler_free(compiler);CHECK(!xr_xir_domain_budget_stats(domain).metadata_live);xr_xir_domain_drop(domain);
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK);
-    CHECK(after.live_bytes==baseline.live_bytes);xr_compile_resources_release(resources);
+    CHECK(after.held_bytes==baseline.held_bytes);xr_compile_resources_release(resources);
     CHECK(!runtime_live && !runtime_bytes);return sites;
 }
 int main(int argc,char **argv) {
@@ -68,14 +68,14 @@ int main(int argc,char **argv) {
         return 0;
     }
     CHECK(argc==1);
-    XrXirCompileContext context={0};XrCompileResourceLimits limits={67108864,8388608,128000000};
+    XrXirCompileContext context={0};XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,8388608,true};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats baseline={0};
     CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig config={context,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,
         xr_source_compile_default_manifest_limits()};
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
-    CHECK(xr_source_compiler_new(&config,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
+    CHECK(xr_source_compiler_new(&config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
     const char text[]="fn leaf(value:i64)->string {\n"
         "    var observed=value*2\n"
         "    const text=\"owned\\0value\"\n"
@@ -187,7 +187,7 @@ int main(int argc,char **argv) {
     xr_xir_vm_debug_snapshot_drop(snapshot);xr_source_compile_diagnostic_free(&diagnostic);
     CHECK(!xr_xir_domain_budget_stats(domain).metadata_live);xr_xir_domain_drop(domain);
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
-    CHECK(after.live_bytes==baseline.live_bytes);xr_compile_resources_release(context.resources);
+    CHECK(after.held_bytes==baseline.held_bytes);xr_compile_resources_release(context.resources);
     CHECK(!runtime_live && !runtime_bytes);
     puts("Canonical SourceCompiler/Closed packet/observed VM launch, owned sealed Source instruction maps and producer death: PASS");return 0;
 }

@@ -1472,7 +1472,7 @@ static XaSymbol *xa_resolve_export_lookup(XaAnalyzer *analyzer, XrHashMap *expor
     void *value = NULL;
     XrOsIoStatus queried = xr_hashmap_owned_get(exports, name, &value);
     XrCompileResourceStatus status = queried == XR_OS_IO_OK ? XR_COMPILE_RESOURCE_OK :
-        queried == XR_OS_IO_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
+        queried == XR_OS_IO_OVERFLOW ? XR_COMPILE_RESOURCE_BUDGET :
         queried == XR_OS_IO_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     if (xr_compile_state_fail(state, status) != XR_COMPILE_RESOURCE_OK) return NULL;
     return value;

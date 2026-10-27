@@ -196,7 +196,7 @@ static DWORD handles(void) { DWORD result; CHECK(GetProcessHandleCount(GetCurren
 static XrCompileResources *ledger(XrCompileResourceLimits limits) {
     XrCompileResources *r = NULL; CHECK(xr_compile_resources_new(&limits, &r) == XR_COMPILE_RESOURCE_OK); return r;
 }
-static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+static const XrCompileResourceLimits unlimited = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
 static void spec_init(XrProcessSpec *s, const char *mode) {
     xtc_process_spec_init(s, executable, 3000); s->cwd = directory; s->argv[1] = mode;
 }
@@ -214,7 +214,7 @@ static XrProcessView frozen_view(const XrToolchainProcess *process) {
     CHECK(xtc_process_view(process, &view) == XTC_PROCESS_OK);
     CHECK(xr_compile_resources_stats(resources, &after) == XR_COMPILE_RESOURCE_OK);
     CHECK(before.allocation_count == after.allocation_count && before.allocated_bytes == after.allocated_bytes &&
-        before.live_bytes == after.live_bytes && before.peak_bytes == after.peak_bytes && before.work == after.work);
+        before.held_bytes == after.held_bytes && before.peak_bytes == after.peak_bytes);
     CHECK(view.executable && view.cwd && view.argc && view.argc < XTC_PROCESS_MAX_ARGS && !view.argv[view.argc]);
     return view;
 }
@@ -310,7 +310,7 @@ static void sdk_target_process(const char *root) {
     xtc_process_spec_init(&spec, saved->executable, saved->timeout_ms); spec.output_limit = (size_t)saved->output_limit; spec.argv[1] = saved->argv[1]; spec.cwd = saved->cwd;
     CHECK(xtc_process_prepare(r, &spec, &owner) == XTC_PROCESS_OK);
     XrCompileResourceStats stats; CHECK(xr_compile_resources_stats(r, &stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.live_bytes > xr_xir_runtime_sdk_facts(sdk)->metadata_bytes);
+    CHECK(stats.held_bytes > xr_xir_runtime_sdk_facts(sdk)->metadata_bytes);
     xr_compile_resources_release(r);
     CHECK(xr_xir_runtime_sdk_facts(sdk)->file_count == sizeof(sdk_recipe_files) / sizeof(sdk_recipe_files[0]));
     memset(&request, 0xCD, sizeof(request)); memset(&spec, 0xCD, sizeof(spec));
@@ -350,6 +350,21 @@ static void os_failures(void) {
     printf("process startup OS failures: %zu IO + %zu OOM; read, peek, exit and wait IO\n", count, count);
 }
 
+static void inherited_process_warmup(void) {
+    wchar_t path[32768], command[32780];
+    CHECK(GetModuleFileNameW(NULL, path, 32768));
+    for (unsigned round = 0; round < 2; ++round) {
+        CHECK(swprintf(command, 32780, L"\"%ls\" --exit", path) > 0);
+        STARTUPINFOW startup = {0}; startup.cb = sizeof(startup);
+        PROCESS_INFORMATION child = {0};
+        /* Inherited process startup initializes Windows' cached registry state. */
+        CHECK(CreateProcessW(path, command, NULL, NULL, FALSE, CREATE_NO_WINDOW,
+            NULL, NULL, &startup, &child));
+        CHECK(WaitForSingleObject(child.hProcess, 5000) == WAIT_OBJECT_0);
+        DWORD code = 1; CHECK(GetExitCodeProcess(child.hProcess, &code) && !code);
+        CHECK(CloseHandle(child.hThread) && CloseHandle(child.hProcess));
+    }
+}
 static void unicode_environment(void) {
     const wchar_t *names[] = {L"XR_OWNED_测试", L"XR OWNED SPACE"};
     wchar_t previous[2][32768]; DWORD lengths[2];
@@ -543,31 +558,39 @@ static void concurrent_waiters(void) {
 }
 static void cumulative_requests(void) {
     XrProcessSpec spec; spec_init(&spec, "--exit"); XrProcessResult result = {0};
-    XrCompileResources *r = ledger(unlimited); XrToolchainProcessContext context = {r, XTC_PROCESS_OK};
-    XrCompileResourceStats initial; CHECK(xr_compile_resources_stats(r, &initial) == XR_COMPILE_RESOURCE_OK);
-    CHECK(xtc_process_request_run(&context, &spec, &result, NULL, 0) == XTC_PROCESS_OK);
-    xtc_process_result_free(&result); XrCompileResourceStats first;
-    CHECK(xr_compile_resources_stats(r, &first) == XR_COMPILE_RESOURCE_OK);
-    xr_compile_resources_release(r); CHECK(!live);
-    XrCompileResourceLimits limits = unlimited; limits.allocated_bytes = initial.allocated_bytes + (first.allocated_bytes - initial.allocated_bytes) * 2 - 1;
+    XrCompileResources *r = ledger(unlimited); XrCompileResourceStats used;
+    XrToolchainProcessContext context = {r, XTC_PROCESS_OK};
+    for (unsigned i = 0; i < 3; ++i) {
+        CHECK(xtc_process_request_run(&context, &spec, &result, NULL, 0) == XTC_PROCESS_OK);
+        xtc_process_result_free(&result);
+    }
+    CHECK(xr_compile_resources_stats(r, &used) == XR_COMPILE_RESOURCE_OK);
+    uint64_t peak = used.peak_bytes;
+    xr_compile_resources_release(r); CHECK(!live && !physical_handles);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, peak, true};
     r = ledger(limits); context = (XrToolchainProcessContext){r, XTC_PROCESS_OK};
-    CHECK(xtc_process_request_run(&context, &spec, &result, NULL, 0) == XTC_PROCESS_OK);
-    xtc_process_result_free(&result);
-    CHECK(xtc_process_request_run(&context, &spec, &result, NULL, 0) == XTC_PROCESS_BUDGET);
+    for (unsigned i = 0; i < 3; ++i) {
+        CHECK(xtc_process_request_run(&context, &spec, &result, NULL, 0) == XTC_PROCESS_OK);
+        xtc_process_result_free(&result);
+    }
+    xr_compile_resources_release(r); CHECK(!live && !physical_bytes && !physical_handles);
+    limits.memory_limit = sizeof(XrToolchainProcess);
+    r = ledger(limits); context = (XrToolchainProcessContext){r, XTC_PROCESS_OK};
+    CHECK(xtc_process_request_run(&context, &spec, &result, NULL, 0) == XTC_PROCESS_MEMORY_LIMIT);
     size_t os_before = os_attempts, allocation_before = attempts;
-    CHECK(xtc_process_request_run(&context, &spec, &result, NULL, 0) == XTC_PROCESS_BUDGET);
+    CHECK(xtc_process_request_run(&context, &spec, &result, NULL, 0) == XTC_PROCESS_MEMORY_LIMIT);
     CHECK(os_attempts == os_before && attempts == allocation_before);
     CHECK(!result.stdout_bytes.data && !result.stderr_bytes.data);
     xr_compile_resources_release(r); CHECK(!live && !physical_bytes && !physical_handles);
 }
 
-static void capture_idle_work(void) {
+static void capture_idle(void) {
     XrCompileResources *r = ledger(unlimited); XtcCapture capture = {0}; XrPipe pipe;
     CHECK(xr_pipe_create(&pipe, NULL) == 0); XrCompileResourceStats before, after;
     CHECK(xr_compile_resources_stats(r, &before) == XR_COMPILE_RESOURCE_OK);
     for (unsigned i = 0; i < 20; ++i) CHECK(process_capture_read(r, pipe.read, &capture) == XTC_PROCESS_OK);
     CHECK(xr_compile_resources_stats(r, &after) == XR_COMPILE_RESOURCE_OK);
-    CHECK(after.work - before.work == 20 && after.allocated_bytes == before.allocated_bytes);
+    CHECK(!memcmp(&before, &after, sizeof(before)));
     CHECK(!capture.eof); CHECK(!xr_pipe_close(pipe.write));
     CHECK(process_capture_read(r, pipe.read, &capture) == XTC_PROCESS_OK && capture.eof);
     CHECK(!xr_pipe_close(pipe.read)); xr_compile_resources_release(r); CHECK(!live && !physical_handles);
@@ -619,16 +642,11 @@ static void budgets(void) {
     XrCompileResourceStats stats;
     CHECK(xtc_process_prepare(r, &s, &p) == XTC_PROCESS_OK);
     CHECK(xr_compile_resources_stats(r, &stats) == XR_COMPILE_RESOURCE_OK);
-    uint64_t expected = 2 + sizeof(s.completion_policy) + sizeof(XrToolchainProcess) + 3 * (uint64_t)(strlen(executable) + strlen(directory) + strlen(executable) + strlen("--child")) + 4 * 3;
-    CHECK(stats.work == expected);
     xtc_process_free(p); xr_compile_resources_release(r);
-    for (unsigned field = 0; field < 3; ++field) for (unsigned less = 0; less < 2; ++less) {
-        XrCompileResourceLimits limits = unlimited;
-        if (!field) limits.allocated_bytes = stats.allocated_bytes - less;
-        if (field == 1) limits.live_bytes = stats.peak_bytes - less;
-        if (field == 2) limits.work = stats.work - less;
+    for (unsigned less = 0; less < 2; ++less) {
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, stats.peak_bytes - less, true};
         r = ledger(limits); p = NULL;
-        CHECK(xtc_process_prepare(r, &s, &p) == (less ? XTC_PROCESS_BUDGET : XTC_PROCESS_OK));
+        CHECK(xtc_process_prepare(r, &s, &p) == (less ? XTC_PROCESS_MEMORY_LIMIT : XTC_PROCESS_OK));
         xtc_process_free(p); xr_compile_resources_release(r); CHECK(!live);
     }
 }
@@ -670,10 +688,11 @@ int main(int argc, char **argv) {
     CHECK(xr_proc_self_exe_path(executable, sizeof(executable)) == 0);
     CHECK(GetCurrentDirectoryA(sizeof(directory), directory));
     DWORD initial = handles(); basic(); DWORD after_spawn = handles(); missing_inputs();
+    inherited_process_warmup();
     CHECK(!physical_handles); DWORD before = handles();
     printf("OS handle samples: initial=%lu first-spawn=%lu first-missing-input=%lu\n", initial, after_spawn, before);
     basic(); failures(); descendants(); os_failures(); bad_requests(); missing_inputs();
-    capture_idle_work(); budgets(); oom(); unicode_environment(); snapshot_failures();
+    capture_idle(); budgets(); oom(); unicode_environment(); snapshot_failures();
     detached_group_flag(); runtime_program_paths(); concurrent_waiters(); cumulative_requests();
 #ifdef XTC_TEST_SDK
     if (argc == 3 && !strcmp(argv[1], "--sdk")) sdk_target_process(argv[2]);

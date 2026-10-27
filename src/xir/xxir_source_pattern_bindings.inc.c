@@ -17,13 +17,13 @@ typedef struct SourceMatchArm {
 static bool source_pattern_bindings(SourceContext *ctx, SourceMatchPattern *pattern,
     SourceMatchArm *arm, uint32_t alternative, uint32_t depth) {
     if (!pattern) return true;
-    if (!source_work(ctx,pattern->node)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (depth>=128) return source_fail(ctx,pattern->node,XR_XIR_BUDGET,"pattern binding depth exhausted");
     if (pattern->binding) {
         AstNode *node=pattern->binding; const char *name=node->as.variable.name;
         SourceName *symbol=arm->bindings;
         for (;symbol;symbol=symbol->next) {
-            if (!source_work(ctx,node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (source_text_same(ctx, NULL, symbol->name, name)) break;
         }
         if (!alternative) {
@@ -63,7 +63,7 @@ static bool source_match_normalize_arms(SourceContext *ctx, AstNode *node, XrXir
     if (!arms) return false;
     for (uint32_t i=0;i<count;++i) {
         AstNode *arm=match->arms[i];
-        if (!source_work(ctx,arm)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!arm || arm->type!=AST_MATCH_ARM || !arm->as.match_arm.pattern)
             return source_fail(ctx,arm,XR_XIR_BAD_STRUCTURE,"invalid match arm");
         AstNode *pattern=arm->as.match_arm.pattern;
@@ -85,7 +85,7 @@ static bool source_match_normalize_arms(SourceContext *ctx, AstNode *node, XrXir
             if (!source_match_pattern(ctx,pattern,type,&arms[i].patterns[j],0) ||
                 !source_pattern_bindings(ctx,&arms[i].patterns[j],&arms[i],j,0)) return false;
             for (SourceName *p=arms[i].bindings;p;p=p->next) {
-                if (!source_work(ctx,pattern)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 if (p->index!=j+1) return source_fail(ctx,pattern,XR_XIR_BAD_TYPE,"alternative is missing a common binding");
             }
             if (!arm->guard) rows[row_count++]=&arms[i].patterns[j];

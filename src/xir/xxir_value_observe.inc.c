@@ -31,7 +31,7 @@ static XrXirValueStatus value_observe_child_operation(const XrXirValue *value,co
     bool nullable=step->kind==XR_XIR_PATH_NULLABLE_VALUE && xr_xir_type_is_nullable(types,(XrXirType)value->type);
     bool enumeration=step->kind==XR_XIR_PATH_ENUM_FIELD && xr_xir_type_is_enum(types,(XrXirType)value->type);
     if (!indexed && !field && !tuple && !nullable && !enumeration) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!value_observe_work(admission,value_observe_header_work(types,(XrXirType)value->type))) return XR_XIR_VALUE_LIMIT;
+    if ((!admission_is_compile(admission) && !value_observe_work(admission,value_observe_header_work(types,(XrXirType)value->type)))) return XR_XIR_VALUE_LIMIT;
     if (!xr_xir_value_argument(value,admission->arena,(XrXirType)value->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirArray *array=indexed ? (XirArray *)object_pointer(value) : NULL;
     XirNominalValue *record=field || enumeration ? (XirNominalValue *)object_pointer(value) : NULL;
@@ -43,12 +43,12 @@ static XrXirValueStatus value_observe_child_operation(const XrXirValue *value,co
         *fault=(XrXirFaultDetail){XR_XIR_PANIC_BOUNDS,0,step->selector,(int64_t)count};return XR_XIR_VALUE_BOUNDS;
     }
     if (indexed) {
-        if (!value_observe_work(admission,value_observe_header_work(types,array->element))) return XR_XIR_VALUE_LIMIT;
+        if ((!admission_is_compile(admission) && !value_observe_work(admission,value_observe_header_work(types,array->element)))) return XR_XIR_VALUE_LIMIT;
         StorageSpan span={array->element,array_slot(array,(size_t)step->selector)};
         return storage_unpack_operation_mode(span,admission,output,false,true);
     }
     const XrXirValue *child=tuple ? &ordered->fields[step->selector] : nullable ? payload : &record->fields[step->selector];
-    if (!value_observe_work(admission,value_observe_header_work(types,(XrXirType)child->type))) return XR_XIR_VALUE_LIMIT;
+    if ((!admission_is_compile(admission) && !value_observe_work(admission,value_observe_header_work(types,(XrXirType)child->type)))) return XR_XIR_VALUE_LIMIT;
     /* Unit is valid stored data but is deliberately not a call argument. */
     if (child->type==XR_XIR_UNIT ? !unit_value(child) :
         !xr_xir_value_argument(child,admission->arena,(XrXirType)child->type)) return XR_XIR_VALUE_BAD_ARGUMENT;

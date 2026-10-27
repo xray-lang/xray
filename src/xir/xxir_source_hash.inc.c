@@ -7,7 +7,7 @@
  * xxir_source_hash.inc.c - Governed hash construction, queries and mutations
  */
 static const XrNativeTypeDeclaration *source_hash_native(SourceContext *ctx, XrXirType type) {
-    if (!source_work(ctx, NULL)) return NULL;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
     return xr_native_declaration_by_id(xr_xir_type_is_map(&ctx->types, type) ?
         XR_NATIVE_DECLARATION_MAP : xr_xir_type_is_set(&ctx->types, type) ? XR_NATIVE_DECLARATION_SET : 0);
 }
@@ -73,7 +73,7 @@ static bool source_hash_reference(SourceContext *ctx, AstNode *node,
     uint32_t parent = 0, declaration = 0;
     if (!source_native_hash_declaration(ctx, native, &parent)) return false;
     for (uint32_t i = 0; i < ctx->query.declaration_count; ++i) {
-        if (!source_work(ctx, node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirSourceDeclaration *record = (XrXirSourceDeclaration *)&ctx->query.declarations[i];
         if (record->kind == XR_XIR_SOURCE_MEMBER && record->parent == parent && record->native_identity == member->id) {
             declaration = record->id; break;
@@ -89,7 +89,7 @@ static bool source_hash_reference(SourceContext *ctx, AstNode *node,
         XrXirSourceType *parameters = member->parameter_count ? source_alloc(ctx, member->parameter_count, sizeof(*parameters)) : NULL;
         if (member->parameter_count && !parameters) return false;
         for (uint32_t p = 0; p < member->parameter_count; ++p) {
-            if (!source_work(ctx, node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             parameters[p] = source_hash_schema(ctx, member->parameters[p].type, parent, NULL);
         }
         const char *signature = source_owned_text(ctx, member->signature);
@@ -106,7 +106,7 @@ static bool source_hash_reference(SourceContext *ctx, AstNode *node,
 static bool source_hash_query_types(SourceContext *ctx) {
     SourceHashQueryTypes query={0};
     for (uint32_t i = 0; i < ctx->query.declaration_count; ++i) {
-        if (!source_work(ctx, NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirSourceDeclaration *record = (XrXirSourceDeclaration *)&ctx->query.declarations[i];
         if (record->kind != XR_XIR_SOURCE_MEMBER || !record->parent || record->parent > ctx->query.declaration_count) continue;
         const XrXirSourceDeclaration *parent = &ctx->query.declarations[record->parent - 1];
@@ -124,7 +124,7 @@ static bool source_hash_query_types(SourceContext *ctx) {
         if (!record->type.known) return false;
         XrXirSourceType *parameters = (XrXirSourceType *)record->parameters;
         for (uint32_t p = 0; p < record->parameter_count; ++p) {
-            if (!source_work(ctx, NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             parameters[p] = source_hash_schema(ctx, native->members[record->native_identity - 1].parameters[p].type, record->parent, &query);
             if (!parameters[p].known) return false;
         }
@@ -222,7 +222,7 @@ static bool source_hash_literal(SourceContext *ctx, AstNode *node, SourceExpecte
     SourceValue *operands = count ? source_alloc(ctx, (size_t)count * width, sizeof(*operands)) : NULL;
     if (count && !operands) return false;
     for (int i = 0; i < count; ++i) {
-        if (!source_work(ctx, node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceValue *entry = &operands[(uint32_t)i * width];
         if (!source_plan_expression(ctx, keys[i], (SourceExpectedType){expected.present || i != 0, key, false, expected.inferred}, entry)) return false;
         if (!i && !expected.present) key = entry->type;

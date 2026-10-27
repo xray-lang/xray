@@ -26,18 +26,17 @@ XRAY_API XrSourceStatus xray_source_invocation_init(XrSourceInvocation *, size_t
  * begin retains their real data before returning. Each call owns a fresh
  * Instance and runs ordinary initialization. Names do not confer access to
  * private/library functions, methods or templates. Exact parameter types and
- * Domain/call permissions are checked by that Instance. Lookup, packet
- * validation and temporary argument storage spend the Program's original
- * cumulative compiler ledger; all runtime limits and wait/cancel rules remain.
- * The Program may die after begin succeeds. Failure preserves the output. */
-XRAY_API XrSourceStatus xray_source_invoke_begin(XrSourceProgram *, const XrSourceInvocation *,
+ * Domain/call permissions are checked by that Instance. Lookup reads immutable prepared entry names. Temporary argument storage
+ * belongs to the execution owner; runtime limits and wait/cancel rules remain.
+ * The Artifact and Execution handles may die after begin succeeds. Failure preserves the output. */
+XRAY_API XrSourceStatus xray_source_invoke_begin(XrSourceExecution *, XrSourceArtifact *, const XrSourceInvocation *,
     const XrSourceCallOptions *, XrSourceCall **);
-XRAY_API XrSourceStatus xray_source_invoke(XrSourceProgram *, const XrSourceInvocation *,
+XRAY_API XrSourceStatus xray_source_invoke(XrSourceExecution *, XrSourceArtifact *, const XrSourceInvocation *,
     const XrSourceCallOptions *, XrSourceResult **, XrSourceEvent *failure);
 /* Copies the real outcome, including Error/Panic and every owned value/arena.
  * Copying data grants no callable, Task or Instance execution permission.
  * The source and its producer may be freed after success. Output must be NULL;
- * refusal leaves it unchanged. Allocation uses the original compiler ledger. */
+ * refusal leaves it unchanged. Allocation uses the source result's execution memory owner. */
 XRAY_API XrSourceStatus xray_source_result_copy(const XrSourceResult *, XrSourceResult **);
 /* Require a returned outcome of the exact type; refusal preserves output.
  * Bool writes zero or one. F64 preserves all runtime binary64 bits. */

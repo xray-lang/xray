@@ -88,13 +88,7 @@ static bool compiler_standalone_graph_view(const XrCompilerContext *ctx, AstNode
     spec_out->authority.kind = kind;
     spec_out->status = XR_MODSPEC_RESOLVED;
     if (ctx->source_content) {
-        XrCompileResourceStatus status = xr_compile_module_source_fingerprint(
-            xr_compile_session_resources(ctx->compiler_session), ctx->source_content,
-            &spec_out->source_content_fingerprint);
-        if (status != XR_COMPILE_RESOURCE_OK) {
-            (void) xr_compile_state_fail(xr_compile_session_compile_state(ctx->compiler_session), status);
-            return false;
-        }
+        xr_module_source_fingerprint(ctx->source_content, &spec_out->source_content_fingerprint);
     }
 
     memset(view_out, 0, sizeof(*view_out));

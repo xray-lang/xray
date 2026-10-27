@@ -70,7 +70,7 @@ XR_FUNC XrXirStatus xr_xir_compile_class_field_verify(const XrXirCompileContext 
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *budget = &compile_state;
     if (!budget) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
+
     bool leaf=false;XrXirStatus status=class_field_leaf(types,type,&leaf);
     if (status!=XR_XIR_OK || leaf) return status;
     uint32_t count=types->count;
@@ -83,7 +83,7 @@ XR_FUNC XrXirStatus xr_xir_compile_class_field_verify(const XrXirCompileContext 
     uint32_t index=(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE;
     status=class_field_frame(types,index,&frames[0]);states[index]=1;
     while(status==XR_XIR_OK && depth) {
-        if (!xir_compile_work(budget, 1)) {status=XR_XIR_BUDGET;break;}
+
         ClassFieldFrame *frame=&frames[depth-1];
         if (frame->next==frame->count) {states[frame->index]=2;--depth;continue;}
         const XrXirTypeNode *node=&types->nodes[frame->index];uint32_t field=frame->next++;

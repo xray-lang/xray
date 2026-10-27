@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xdap_framed.c - Cumulative framing shared by owned host byte streams
+ * xdap_framed.c - Bounded framing shared by owned host byte streams
  */
 #include "xdap_framed.h"
 #include "../../base/xframing.h"
@@ -21,7 +21,11 @@ struct XdapFramed {
 static XrXirStatus framed_resource(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
         status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
-        status==XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+        status==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        status==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_OVERFLOW :
+        status==XR_COMPILE_RESOURCE_CANCELLED ? XR_XIR_CANCELLED :
+        status==XR_COMPILE_RESOURCE_DEADLINE ? XR_XIR_DEADLINE :
+        status==XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE : XR_XIR_BAD_STRUCTURE;
 }
 static bool framed_header_name(const char *bytes,size_t length) {
     static const char name[]="content-length";
@@ -82,9 +86,6 @@ XR_FUNC XrXirStatus xdap_framed_new(XrCompileResources *resources,size_t limit,c
 static XrXirStatus framed_extract(XdapFramed *io,char **output,size_t *length) {
     if (io->content<0) {
         size_t scanned=io->length>256 ? 256 : io->length;
-        /* Pay the bounded separator/field comparisons and strict line scan. */
-        XrXirStatus status=framed_resource(xr_compile_resources_work(io->resources,scanned*16));
-        if (status!=XR_XIR_OK) return status;
         size_t header=0;int content=-1;
         XrFrameStatus parsed=xr_frame_parse(io->bytes,scanned,&header,&content);
         if (parsed==XR_FRAME_ERROR || (content<0 && io->length>=256)) return XR_XIR_BAD_STRUCTURE;
@@ -97,8 +98,6 @@ static XrXirStatus framed_extract(XdapFramed *io,char **output,size_t *length) {
     if (io->length<total) return XR_XIR_OK;
     char *message=NULL;XrXirStatus status=framed_resource(xr_compile_resources_alloc(io->resources,(size_t)io->content+1,(void **)&message));
     if (status!=XR_XIR_OK) return status;
-    status=framed_resource(xr_compile_resources_work(io->resources,io->length));
-    if (status!=XR_XIR_OK) { xr_compile_resources_free(message);return status; }
     memcpy(message,io->bytes+io->header,(size_t)io->content);message[io->content]=0;
     size_t remaining=io->length-total;memmove(io->bytes,io->bytes+total,remaining);
     *length=(size_t)io->content;*output=message;io->length=remaining;io->header=0;io->content=-1;
@@ -119,7 +118,6 @@ XR_FUNC XrXirStatus xdap_framed_read(XdapFramed *io,char **output,size_t *length
     size_t count=0;status=io->stream.read(io->stream.context,io->bytes+io->length,io->capacity-io->length,&count,&io->eof);
     if (status!=XR_XIR_OK) return status;
     if (count>io->capacity-io->length) return XR_XIR_BAD_STRUCTURE;
-    status=framed_resource(xr_compile_resources_work(io->resources,count));if (status!=XR_XIR_OK) return status;
     io->length+=count;status=framed_extract(io,output,length);
     if (status==XR_XIR_OK && !*output && io->eof) { *eof=true;if (io->length) status=XR_XIR_IO; }
     return status;
@@ -129,9 +127,7 @@ XR_FUNC XrXirStatus xdap_framed_write(void *context,const char *bytes,size_t len
     if (!io || (!bytes && length) || length>io->limit) return XR_XIR_BAD_STRUCTURE;
     char header[64];int size=xr_frame_write_header(header,sizeof(header),length);
     if (size<0) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=framed_resource(xr_compile_resources_work(io->resources,length+(uint32_t)size));
-    if (status!=XR_XIR_OK) return status;
-    status=io->stream.write(io->stream.context,header,(size_t)size);if (status!=XR_XIR_OK) return status;
+    XrXirStatus status=io->stream.write(io->stream.context,header,(size_t)size);if (status!=XR_XIR_OK) return status;
     return io->stream.write(io->stream.context,bytes,length);
 }
 XR_FUNC XrXirStatus xdap_framed_wait(XdapFramed *io,uint32_t milliseconds) {

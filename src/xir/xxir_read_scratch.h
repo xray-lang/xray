@@ -35,7 +35,7 @@ static inline XrXirStatus xir_read_scratch_begin(const XrXirCompileContext *work
         return XR_XIR_BAD_STRUCTURE;
     scratch->required=0;
     for(XirReadScratchBlock *block=scratch->memory;block;block=block->next) {
-        if(!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
         if(block->claimed) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
@@ -48,10 +48,10 @@ static inline void *xir_read_scratch_alloc(const XrXirCompileContext *work,XirRe
         *status=XR_XIR_BAD_STRUCTURE;return NULL;
     }
     for(XirReadScratchBlock *block=scratch->memory;block;block=block->next) {
-        if(!xir_compile_work(work,1)) { *status=XR_XIR_BUDGET;return NULL; }
+
         if(block->claimed || block->bytes<bytes) continue;
         void *memory=block+1;
-        if(clear && !xir_compile_work(work,bytes)) { *status=XR_XIR_BUDGET;return NULL; }
+
         block->claimed=true;
         if(clear) memset(memory,0,bytes);
         return memory;

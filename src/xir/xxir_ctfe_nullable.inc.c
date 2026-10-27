@@ -7,8 +7,8 @@
  * xxir_ctfe_nullable.inc.c - Compiler-owned active payload operations
  *
  * KEY CONCEPT:
- *   Existing Value operations own each typed sum. Admission pays the complete
- *   finite type shape; equality prepays active String spans before comparison.
+ *   Existing Value operations own each typed sum. Complete family admission
+ *   preserves active payload types and refuses unsupported authority.
  */
 #include "xxir_equal.h"
 static bool ctfe_nullable_opcode(const XrXirInstruction *op) {
@@ -19,7 +19,7 @@ static XrXirCtfeStatus ctfe_nullable_step(ScalarRun *run,uint32_t *cursor,CtfeOw
     const XrXirInstruction *op=&run->function->instructions[*cursor];XrXirValue result={0};
     bool create=op->op==XR_XIR_F64_TRY_PARSE || op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME;
     XrXirType type=create?op->type:xr_xir_operand_type(run->function,op->args[0]);
-    XrXirCtfeStatus status=ctfe_validation_work(run,state,type);
+    XrXirCtfeStatus status=ctfe_value_type_admit(run,state,type);
     if (status!=XR_XIR_CTFE_OK) return status;
     XrXirValueAdmission admission=ctfe_value_admission(state);
     XrXirValueStatus value_status=XR_XIR_VALUE_OK;
@@ -33,7 +33,7 @@ static XrXirCtfeStatus ctfe_nullable_step(ScalarRun *run,uint32_t *cursor,CtfeOw
             if (element!=XR_XIR_UNIT) payload=(XrXirValue){(uint32_t)element,0,
                 xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]])};
         }
-        status=ctfe_admission_work(run,state,&payload);if (status!=XR_XIR_CTFE_OK) return status;
+        status=ctfe_value_graph_admit(run,state,&payload);if (status!=XR_XIR_CTFE_OK) return status;
         value_status=xr_xir_nullable_new(type,op->op==XR_XIR_NULLABLE_SOME?&payload:NULL,&admission,&result);
     } else {
         XrXirValue receiver={(uint32_t)type,0,xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]])};
@@ -44,7 +44,7 @@ static XrXirCtfeStatus ctfe_nullable_step(ScalarRun *run,uint32_t *cursor,CtfeOw
             else {
                 if (!some) return XR_XIR_CTFE_NULL_UNWRAP;
                 if (op->type==XR_XIR_ERROR) {
-                    status=ctfe_validation_work(run,state,op->type);if (status!=XR_XIR_CTFE_OK) return status;
+                    status=ctfe_value_type_admit(run,state,op->type);if (status!=XR_XIR_CTFE_OK) return status;
                 }
                 value_status=xr_xir_value_copy(payload,&result);
             }

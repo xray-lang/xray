@@ -13,7 +13,6 @@ static XrXirArtifact *literal_runtime_callers(XrXirCompileContext *context,const
     XrXirGeneric *generics=xir_compile_calloc(context,count+2,sizeof(*generics),&status);
     XrXirFunctionEffectContract *contracts=xir_compile_calloc(context,count+2,sizeof(*contracts),&status);
     CHECK(status==XR_XIR_OK && functions && identities && generics && contracts);
-    CHECK(xir_compile_work(context,(uint64_t)count*(sizeof(*functions)+sizeof(*identities)+sizeof(*generics)+sizeof(*contracts))));
     memcpy(functions,module->functions,(size_t)count*sizeof(*functions));
     memcpy(identities,module->declarations->functions,(size_t)count*sizeof(*identities));
     memcpy(generics,module->generics,(size_t)count*sizeof(*generics));

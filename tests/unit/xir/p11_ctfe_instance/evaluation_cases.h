@@ -33,7 +33,7 @@ static void evaluation_normal(const char *kind) {
     CHECK(xir_evaluation_read(&context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK && received->evaluation_only==1);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(checked);checked=NULL;
     XirCtfeInstanceBatchRequest request=instance_batch_request(received,&root,1);XirCtfeInstanceBatch *owner=NULL;
-    XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_instance_batch(&request,&owner);
+    XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_instance_batch(&request,NULL,&owner);
     if (evaluated!=XR_XIR_CTFE_OK) fprintf(stderr,"Evaluation %s CTFE status%u\n",kind,evaluated);
     CHECK(evaluated==XR_XIR_CTFE_OK && owner);xr_xir_compile_artifact_free(received);
     XirCtfeInstanceView view={0};CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,&view,1)==XR_XIR_CTFE_OK);
@@ -43,7 +43,7 @@ static void evaluation_normal(const char *kind) {
     if (!strcmp(kind,"scalar") || !strcmp(kind,"builtin") || !strcmp(kind,"call") || !strcmp(kind,"nested-unbound"))
         CHECK(view.value->type==XR_XIR_I64 && view.value->payload==42);
     if (!strcmp(kind,"unit")) CHECK(!view.value->type && !view.value->reserved && !view.value->payload);
-    XirLiteralDefinitions literals={0};XirLiteralRequest literal={&context,owner,1};
+    XirLiteralDefinitions literals={0};XirLiteralRequest literal={&context,owner,1,NULL};
     CHECK(xr_xir_compile_instance_literals(&literal,&literals,NULL)==XR_XIR_OK && literals.count==1);
     CHECK(xr_xir_compile_artifact_verify(literals.definition,NULL)==XR_XIR_OK);
     CHECK(literals.definition->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE && !literals.definition->evaluation_only);

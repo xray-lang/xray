@@ -10,6 +10,7 @@
 #include "test_dispatch.c"
 #undef main
 #include "app/dap/xdap_dispatch_internal.h"
+#include "app/dap/xdap_expression.h"
 typedef struct EvaluateFixture { XdapAdapter *adapter;XrCompileResources *ledger;XrXirDomain *domain;XrCompileResourceStats baseline; } EvaluateFixture;
 static XrXirStatus evaluate_write(void *context,const char *bytes,size_t length) {
     Capture *out=context;CHECK(out->count<128 && length<sizeof(out->messages[0].bytes));
@@ -17,13 +18,13 @@ static XrXirStatus evaluate_write(void *context,const char *bytes,size_t length)
     message->size=length;++out->seq;return XR_XIR_OK;
 }
 static EvaluateFixture evaluate_open(const char *file) {
-    EvaluateFixture fixture={0};memset(&capture,0,sizeof(capture));XrCompileResourceLimits limits={67108864,8388608,128000000};
+    EvaluateFixture fixture={0};memset(&capture,0,sizeof(capture));XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,8388608,true};
     CHECK(xr_compile_resources_new(&limits,&fixture.ledger)==XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_stats(fixture.ledger,&fixture.baseline)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig source={{fixture.ledger,xr_xir_compile_default_limits()},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
-    CHECK(xr_source_compiler_new(&source,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);xr_source_compile_diagnostic_free(&diagnostic);
+    CHECK(xr_source_compiler_new(&source,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);xr_source_compile_diagnostic_free(&diagnostic);
     XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};
     CHECK(xr_xir_domain_new_budgeted(1048576,&budget,&fixture.domain)==XR_XIR_VALUE_OK);
     XdapAdapterConfig config={.observer_metadata=fixture.domain,.write=evaluate_write,.context=&capture,.message_limit=16384};
@@ -39,7 +40,7 @@ static EvaluateFixture evaluate_open(const char *file) {
 static void evaluate_finish(EvaluateFixture *fixture) {
     CHECK(!xr_xir_domain_budget_stats(fixture->domain).metadata_live);xr_xir_domain_drop(fixture->domain);
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(fixture->ledger,&after)==XR_COMPILE_RESOURCE_OK);
-    CHECK(after.live_bytes==fixture->baseline.live_bytes);xr_compile_resources_release(fixture->ledger);CHECK(!runtime_live && !runtime_bytes);
+    CHECK(after.held_bytes==fixture->baseline.held_bytes);xr_compile_resources_release(fixture->ledger);CHECK(!runtime_live && !runtime_bytes);
 }
 static void evaluate_dispose(EvaluateFixture *fixture) { CHECK(xdap_adapter_free(fixture->adapter)==XR_XIR_CALL_READY);evaluate_finish(fixture); }
 static void evaluate_start(XdapAdapter *adapter) {
@@ -54,9 +55,9 @@ static void evaluate_context(XdapAdapter *adapter,const char *expression,uint32_
     if (requested!=XR_XIR_OK) fprintf(stderr,"Evaluate request [%s] status=%d\n",expression,(int)requested);
     if (requested!=XR_XIR_OK) {
         XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(adapter->resources,&stats)==XR_COMPILE_RESOURCE_OK);
-        fprintf(stderr,"Evaluate work=%llu allocated=%llu live=%llu peak=%llu\n",
-            (unsigned long long)stats.work,(unsigned long long)stats.allocated_bytes,
-            (unsigned long long)stats.live_bytes,(unsigned long long)stats.peak_bytes);
+        fprintf(stderr,"Evaluate allocated=%llu held=%llu peak=%llu\n",
+            (unsigned long long)stats.allocated_bytes,
+            (unsigned long long)stats.held_bytes,(unsigned long long)stats.peak_bytes);
     }
     CHECK(requested==XR_XIR_OK);
     XrJsonValue *last=capture.count ? xjson_parse(capture.messages[capture.count-1].bytes,capture.messages[capture.count-1].size) : NULL;
@@ -69,8 +70,29 @@ static void evaluate_context(XdapAdapter *adapter,const char *expression,uint32_
 static void evaluate_request(XdapAdapter *adapter,const char *expression,uint32_t frame,const char *expected) {
     evaluate_context(adapter,expression,frame,expected,NULL);
 }
+static void evaluate_length_boundary(EvaluateFixture *fixture) {
+    XdapAdapter *adapter=fixture->adapter;XdapLexicalView lexical={0};
+    CHECK(xdap_lexical_open(adapter->launch,adapter->snapshot,0,&lexical)==XR_XIR_OK);
+    char single='1';const char short_text[]="1";const char *inputs[]={&single,short_text};
+    XrXirVmDebugSnapshot *snapshot=adapter->snapshot;uint64_t epoch=adapter->stop_epoch;
+    for (uint32_t i=0;i<2;++i) {
+        XdapExpressionRequest request={adapter->compiler,&lexical,inputs[i],SIZE_MAX,adapter->config.message_limit,NULL};
+        struct {uint64_t before;XrXirValue value;uint64_t after;} output={UINT64_C(0x12345678),{0},UINT64_C(0x87654321)},preserved=output;
+        XrCompileResourceStats held={0},after={0};CHECK(xr_compile_resources_stats(fixture->ledger,&held)==XR_COMPILE_RESOURCE_OK);
+        size_t attempts_before=runtime_attempts;
+        CHECK(xdap_expression_evaluate(&request,&output.value)==XR_XIR_OVERFLOW);
+        CHECK(!memcmp(&output,&preserved,sizeof(output)) && runtime_attempts==attempts_before);
+        CHECK(xr_compile_resources_stats(fixture->ledger,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==held.held_bytes);
+        CHECK(adapter->snapshot==snapshot && adapter->stop_epoch==epoch && !adapter->running);
+    }
+    XdapExpressionRequest valid={adapter->compiler,&lexical,short_text,sizeof(short_text)-1,adapter->config.message_limit,NULL};
+    XrXirValue value={0};CHECK(xdap_expression_evaluate(&valid,&value)==XR_XIR_OK && value.type==XR_XIR_I64 && value.payload==1);
+    xr_xir_value_drop(&value);CHECK(adapter->snapshot==snapshot && adapter->stop_epoch==epoch && !adapter->running);
+    puts("Actual paused-frame evaluate: single-byte/short NUL text SIZE_MAX OVERFLOW, unchanged output/held/epoch, valid retry PASS");
+}
 static void evaluate_normal(void) {
     EvaluateFixture fixture=evaluate_open(XR_DAP_CALL_FIXTURE);XdapAdapter *adapter=fixture.adapter;evaluate_start(adapter);
+    evaluate_length_boundary(&fixture);
     if (adapter->depth!=3) fprintf(stderr,"Original call stack depth=%u\n",adapter->depth);
     CHECK(adapter->depth==3);uint32_t inner=adapter->frames[0].handle,outer=adapter->frames[1].handle;
     for (uint32_t i=0;i<2;++i) {
@@ -138,7 +160,7 @@ static size_t evaluate_fault(size_t fail) {
     CHECK(adapter->snapshot==snapshot && adapter->stop_epoch==epoch && !adapter->running && !adapter->value_count);
     CHECK(runtime_live==live && runtime_bytes==bytes);
     CHECK(xr_compile_resources_stats(fixture.ledger,&after)==XR_COMPILE_RESOURCE_OK);
-    CHECK(after.live_bytes==before.live_bytes && after.work>before.work && after.allocated_bytes>=before.allocated_bytes);
+    CHECK(after.held_bytes==before.held_bytes && after.allocated_bytes>=before.allocated_bytes);
     evaluate_dispose(&fixture);return sites;
 }
 #include "test_evaluate_data.inc.c"

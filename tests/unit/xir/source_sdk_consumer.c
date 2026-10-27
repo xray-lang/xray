@@ -13,11 +13,6 @@
 #include <threads.h>
 #include <time.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
-_Static_assert(XRAY_SOURCE_API_VERSION == 2, "Source API version");
-_Static_assert(sizeof(XrSourceCompilerOptions) == 48, "compiler options ABI");
-_Static_assert(offsetof(XrSourceCompilerOptions, wait_size) == 8, "wait size ABI");
-_Static_assert(offsetof(XrSourceCompilerOptions, allocated_bytes) == 16, "compiler limits ABI");
-_Static_assert(offsetof(XrSourceCompilerOptions, stdlib_path) == 40, "stdlib path ABI");
 _Static_assert(sizeof(XrSourceText) == 32, "text ABI");
 _Static_assert(sizeof(XrSourceDiagnosticInfo) == 32, "diagnostic ABI");
 _Static_assert(sizeof(XrSourceEvent) == 24, "event ABI");
@@ -33,45 +28,61 @@ static XrSourceWriteStatus capture(void *context, XrSourceOutputStream stream, c
     CHECK(stream == XR_SOURCE_STDOUT && length <= sizeof(out->bytes) - out->length);
     memcpy(out->bytes + out->length, bytes, length); out->length += length; return XR_SOURCE_WRITE_OK;
 }
-static XrSourceCompiler *compiler_new(const char *stdlib) {
-    XrSourceCompilerOptions options;
-    CHECK(xray_source_compiler_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
-    CHECK(options.api_version == 2 && options.struct_size == 48 && options.wait_size == 40);
-    options.stdlib_path = stdlib; options.allocated_bytes = UINT64_C(64) << 20;
-    options.live_bytes = UINT64_C(8) << 20; options.work = UINT64_C(128000000);
-    XrSourceCompiler *compiler = NULL;
-    CHECK(xray_source_compiler_new(&options, &compiler) == XR_SOURCE_OK && compiler); return compiler;
+static XrSourceCompileOptions compile_options(const char *stdlib) {
+    XrSourceCompileOptions options=xray_source_compile_options_default();
+    CHECK(options.target==XR_SOURCE_TARGET_VM && options.memory_mode==XR_SOURCE_MEMORY_ORDINARY);
+    options.stdlib_path=stdlib;return options;
 }
-static XrSourceProgram *compile(XrSourceCompiler *compiler, char *bytes) {
+static XrSourceStatus execute_owned(XrSourceArtifact *artifact,const XrSourceCallOptions *options,
+    XrSourceResult **result,XrSourceEvent *failure) {
+    XrSourceExecutionOptions policy=xray_source_execution_options_default();
+    XrSourceExecution *execution=NULL;
+    XrSourceStatus status=xray_source_execution_new(&policy,&execution);
+    if(status==XR_SOURCE_OK)status=xray_source_artifact_execute(execution,artifact,options,result,failure);
+    xray_source_execution_free(execution);return status;
+}
+static XrSourceStatus begin_owned(XrSourceArtifact *artifact,const XrSourceCallOptions *options,
+    XrSourceCall **call) {
+    XrSourceExecutionOptions policy=xray_source_execution_options_default();
+    XrSourceExecution *execution=NULL;
+    XrSourceStatus status=xray_source_execution_new(&policy,&execution);
+    if(status==XR_SOURCE_OK)status=xray_source_artifact_begin(execution,artifact,options,call);
+    xray_source_execution_free(execution);return status;
+}
+static XrSourceArtifact *compile(const XrSourceCompileOptions *compiler, char *bytes, const char *case_name) {
     XrSourceText text = {NULL, "installed-embedding", bytes, strlen(bytes)};
-    XrSourceProgram *program = NULL; XrSourceDiagnostic *diagnostic = NULL;
-    XrSourceStatus status = xray_source_compile_text(compiler, &text, &program, &diagnostic);
+    XrSourceArtifact *program = NULL; XrSourceDiagnostic *diagnostic = NULL;
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text=text};
+    XrSourceFailure failure={0};
+    XrSourceStatus status = xray_source_build(&input, compiler, &program, &failure, &diagnostic);
+    if (status != XR_SOURCE_OK || !program || diagnostic)
+        fprintf(stderr, "[sdk-compile-failure] case=%s status=%u\n", case_name, (unsigned)status);
     if (diagnostic) { XrSourceDiagnosticInfo info; CHECK(xray_source_diagnostic_info(diagnostic, &info) == XR_SOURCE_OK); fprintf(stderr, "%s\n", info.message); }
     CHECK(status == XR_SOURCE_OK && program && !diagnostic); memset(bytes, '!', strlen(bytes)); return program;
 }
 static void checked_program(const char *stdlib) {
-    XrSourceCompiler *compiler = compiler_new(stdlib);
+    XrSourceCompileOptions compiler = compile_options(stdlib);
     char source[] = "import time as Clock\nimport \"std/io/output\" as Output\n"
         "Output.writeStdout(\"A\\0B\")\nconst begin=Clock.nanos()\nClock.sleep(1)\n"
         "print(Clock.nanos()-begin>=1000000)\n";
-    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceArtifact *program = compile(&compiler, source, __func__);
     Output out = {0}; XrSourceCallOptions options;
     CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
     options.write = capture; options.context = &out;
     XrSourceResult *result = NULL; XrSourceEvent failure = {0};
-    CHECK(xray_source_execute(program, &options, &result, &failure) == XR_SOURCE_OK && result);
-    xray_source_program_free(program); XrSourceEvent event;
+    CHECK(execute_owned(program, &options, &result, &failure) == XR_SOURCE_OK && result);
+    xray_source_artifact_free(program); XrSourceEvent event;
     CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_RETURNED);
     int64_t value = -1; CHECK(xray_source_result_i64(result, &value) == XR_SOURCE_OK && value == 0);
     CHECK(out.length == 8 && !memcmp(out.bytes, "A\0Btrue\n", 8)); xray_source_result_free(result);
 }
 static void detached_cancellation(const char *stdlib) {
-    XrSourceCompiler *compiler = compiler_new(stdlib);
+    XrSourceCompileOptions compiler = compile_options(stdlib);
     char source[] = "var n:i64=0\nwhile(true){ n+=1 }\n";
-    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceArtifact *program = compile(&compiler, source, __func__);
     XrSourceCallOptions options; CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
-    XrSourceCall *call = NULL; CHECK(xray_source_call_begin(program, &options, &call) == XR_SOURCE_OK);
-    xray_source_program_free(program); XrSourceEvent event = {0};
+    XrSourceCall *call = NULL; CHECK(begin_owned(program, &options, &call) == XR_SOURCE_OK);
+    xray_source_artifact_free(program); XrSourceEvent event = {0};
     CHECK(xray_source_call_poll(call, 1, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_READY);
     CHECK(xray_source_call_cancel(call) == XR_SOURCE_OK);
     for (size_t steps = 0; event.state == XR_SOURCE_RUN_READY; ++steps) {
@@ -86,11 +97,11 @@ static void detached_cancellation(const char *stdlib) {
     xray_source_result_free(result);
 }
 static void owned_panic(const char *stdlib) {
-    XrSourceCompiler *compiler = compiler_new(stdlib); char source[] = "assert(false,\"p\\0中z\")\n";
-    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceCompileOptions compiler = compile_options(stdlib); char source[] = "assert(false,\"p\\0中z\")\n";
+    XrSourceArtifact *program = compile(&compiler, source, __func__);
     XrSourceCallOptions options; CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
-    XrSourceResult *result = NULL; CHECK(xray_source_execute(program, &options, &result, NULL) == XR_SOURCE_OK);
-    xray_source_program_free(program); XrSourceEvent event;
+    XrSourceResult *result = NULL; CHECK(execute_owned(program, &options, &result, NULL) == XR_SOURCE_OK);
+    xray_source_artifact_free(program); XrSourceEvent event;
     CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_PANICKED);
     const char *bytes = NULL; size_t length = 0;
     CHECK(xray_source_result_bytes(result, &bytes, &length) == XR_SOURCE_OK);
@@ -116,13 +127,13 @@ static void library_methods(const char *stdlib) {
         "42 -42 -0x2a 7 -42 42.0\ntrue 9223372036854775807 -9223372036854775808 true\n1 63 "
         "0 72057594037927936 2 2\n2.5 -2 -3 -2 -3 false -2.5 true false 65 A\nA\0B A\0BA\0B tr"
         "ue true true 2 5\n";
-    XrSourceCompiler *compiler = compiler_new(stdlib);
-    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceCompileOptions compiler = compile_options(stdlib);
+    XrSourceArtifact *program = compile(&compiler, source, __func__);
     Output out = {0}; XrSourceCallOptions options;
     CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
     options.write = capture; options.context = &out;
-    XrSourceResult *result = NULL; CHECK(xray_source_execute(program, &options, &result, NULL) == XR_SOURCE_OK && result);
-    xray_source_program_free(program); XrSourceEvent event;
+    XrSourceResult *result = NULL; CHECK(execute_owned(program, &options, &result, NULL) == XR_SOURCE_OK && result);
+    xray_source_artifact_free(program); XrSourceEvent event;
     CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_RETURNED);
     CHECK(out.length == sizeof(expected) - 1 && !memcmp(out.bytes, expected, sizeof(expected) - 1));
     xray_source_result_free(result);
@@ -143,14 +154,14 @@ static void generic_initializers(const char *stdlib) {
         "var original=[11,22]; const value=tagged<i64>(7,original); original[0]=99\n"
         "print(number(value),count<i64>(value),first<i64>(value),original[0])\n";
     const char expected[] = "A\0\xe4\xb8\xad\xf0\x9f\x98\x80" "0\n7 2 11 99\n";
-    XrSourceCompiler *compiler = compiler_new(stdlib);
-    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceCompileOptions compiler = compile_options(stdlib);
+    XrSourceArtifact *program = compile(&compiler, source, __func__);
     Output out = {0}; XrSourceCallOptions options;
     CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
     options.write = capture; options.context = &out;
     XrSourceResult *result = NULL;
-    CHECK(xray_source_execute(program, &options, &result, NULL) == XR_SOURCE_OK && result);
-    xray_source_program_free(program); XrSourceEvent event;
+    CHECK(execute_owned(program, &options, &result, NULL) == XR_SOURCE_OK && result);
+    xray_source_artifact_free(program); XrSourceEvent event;
     CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_RETURNED);
     CHECK(out.length == sizeof(expected)-1 && !memcmp(out.bytes, expected, sizeof(expected)-1));
     int64_t code = -1; CHECK(xray_source_result_i64(result, &code) == XR_SOURCE_OK && code == 0);
@@ -178,16 +189,16 @@ static void compiler_constants(const char *stdlib) {
     const char expected_second[] = "9 B\0\xe4\xb8\xad\n";
     const char *expected[] = {expected_first,expected_second};
     const size_t lengths[] = {sizeof(expected_first)-1,sizeof(expected_second)-1};
-    XrSourceCompiler *compiler = compiler_new(stdlib);
-    XrSourceProgram *programs[] = {compile(compiler, first),NULL};
-    programs[1] = compile(compiler, second); xray_source_compiler_free(compiler);
+    XrSourceCompileOptions compiler = compile_options(stdlib);
+    XrSourceArtifact *programs[] = {compile(&compiler, first, __func__),NULL};
+    programs[1] = compile(&compiler, second, __func__);
     for (size_t i=0;i<2;++i) {
         Output out = {0}; XrSourceCallOptions options;
         CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
         options.write = capture; options.context = &out;
         XrSourceResult *result = NULL;
-        CHECK(xray_source_execute(programs[i], &options, &result, NULL) == XR_SOURCE_OK && result);
-        xray_source_program_free(programs[i]); XrSourceEvent event;
+        CHECK(execute_owned(programs[i], &options, &result, NULL) == XR_SOURCE_OK && result);
+        xray_source_artifact_free(programs[i]); XrSourceEvent event;
         CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_RETURNED);
         CHECK(out.length == lengths[i] && !memcmp(out.bytes, expected[i], lengths[i]));
         xray_source_result_free(result);
@@ -202,30 +213,30 @@ static void typed_tasks(const char *stdlib) {
         "fn w_f32()->f32{return 1.5}\nfn w_f64()->f64{return 1.5}\n"
         "fn w_rune()->rune{return 'x'}\nfn w_i64()->i64{return -42}\n"
         "fn w_bool()->bool{return true}\nfn w_string()->string{return \"A\\0B\"}\nfn w_unit(){}\n"
-        "const t_i8=go w_i8();print(await t_i8);print(await t_i8)\n"
-        "const t_i16=go w_i16();print(await t_i16);print(await t_i16)\n"
-        "const t_i32=go w_i32();print(await t_i32);print(await t_i32)\n"
-        "const t_u8=go w_u8();print(await t_u8);print(await t_u8)\n"
-        "const t_u16=go w_u16();print(await t_u16);print(await t_u16)\n"
-        "const t_u32=go w_u32();print(await t_u32);print(await t_u32)\n"
-        "const t_u64=go w_u64();print(await t_u64);print(await t_u64)\n"
-        "const t_f32=go w_f32();print(await t_f32);print(await t_f32)\n"
-        "const t_f64=go w_f64();print(await t_f64);print(await t_f64)\n"
-        "const t_rune=go w_rune();print(await t_rune);print(await t_rune)\n"
-        "const t_i64=go w_i64();print(await t_i64);print(await t_i64)\n"
-        "const t_bool=go w_bool();print(await t_bool);print(await t_bool)\n"
-        "const t_string=go w_string();print(await t_string);print(await t_string)\n"
-        "const t_unit=go w_unit();await t_unit;await t_unit;print(\"unit\")\n";
+        "const t_i8=go w_i8();print(try await t_i8);print(try await t_i8)\n"
+        "const t_i16=go w_i16();print(try await t_i16);print(try await t_i16)\n"
+        "const t_i32=go w_i32();print(try await t_i32);print(try await t_i32)\n"
+        "const t_u8=go w_u8();print(try await t_u8);print(try await t_u8)\n"
+        "const t_u16=go w_u16();print(try await t_u16);print(try await t_u16)\n"
+        "const t_u32=go w_u32();print(try await t_u32);print(try await t_u32)\n"
+        "const t_u64=go w_u64();print(try await t_u64);print(try await t_u64)\n"
+        "const t_f32=go w_f32();print(try await t_f32);print(try await t_f32)\n"
+        "const t_f64=go w_f64();print(try await t_f64);print(try await t_f64)\n"
+        "const t_rune=go w_rune();print(try await t_rune);print(try await t_rune)\n"
+        "const t_i64=go w_i64();print(try await t_i64);print(try await t_i64)\n"
+        "const t_bool=go w_bool();print(try await t_bool);print(try await t_bool)\n"
+        "const t_string=go w_string();print(try await t_string);print(try await t_string)\n"
+        "const t_unit=go w_unit();try await t_unit;try await t_unit;print(\"unit\")\n";
     const char expected[] = "-128\n-128\n-32768\n-32768\n-2147483648\n-2147483648\n"
         "255\n255\n65535\n65535\n4294967295\n4294967295\n"
         "18446744073709551615\n18446744073709551615\n1.5\n1.5\n1.5\n1.5\n"
         "x\nx\n-42\n-42\ntrue\ntrue\nA\0B\nA\0B\nunit\n";
-    XrSourceCompiler *compiler = compiler_new(stdlib);
-    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+    XrSourceCompileOptions compiler = compile_options(stdlib);
+    XrSourceArtifact *program = compile(&compiler, source, __func__);
     XrSourceCallOptions options; CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
     Output out = {{0}, 0}; options.write = capture; options.context = &out;
-    XrSourceResult *result = NULL; CHECK(xray_source_execute(program, &options, &result, NULL) == XR_SOURCE_OK);
-    xray_source_program_free(program); XrSourceEvent event;
+    XrSourceResult *result = NULL; CHECK(execute_owned(program, &options, &result, NULL) == XR_SOURCE_OK);
+    xray_source_artifact_free(program); XrSourceEvent event;
     CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_RETURNED);
     CHECK(out.length == sizeof(expected) - 1 && !memcmp(out.bytes, expected, sizeof(expected) - 1));
     xray_source_result_free(result);
@@ -239,15 +250,15 @@ static XrSourceEvent poll_state(XrSourceCall *call) {
     CHECK(0); return event;
 }
 static void timer_waits(const char *stdlib) {
-    XrSourceCompiler *compiler = compiler_new(stdlib);
+    XrSourceCompileOptions compiler = compile_options(stdlib);
     char source[] = "import time\nfn worker()->i64{time.sleep(3);return 43}\n"
-        "fn main()->i64{return await go worker()}\nprint(main())\n";
-    XrSourceProgram *program = compile(compiler, source); xray_source_compiler_free(compiler);
+        "fn main() throws(Error)->i64{return try await go worker()}\nprint(try main())\n";
+    XrSourceArtifact *program = compile(&compiler, source, __func__);
     Output out = {0}; XrSourceCallOptions options;
     CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
     options.write = capture; options.context = &out;
-    XrSourceCall *call = NULL; CHECK(xray_source_call_begin(program, &options, &call) == XR_SOURCE_OK);
-    xray_source_program_free(program);
+    XrSourceCall *call = NULL; CHECK(begin_owned(program, &options, &call) == XR_SOURCE_OK);
+    xray_source_artifact_free(program);
     XrSourceEvent event = poll_state(call);
     CHECK(event.state == XR_SOURCE_RUN_SUSPENDED && event.epoch && event.wake && !out.length);
     XrSourceWait wait = {XR_SOURCE_WAIT_TASK, 91, &event, 92, 93};
@@ -274,63 +285,68 @@ typedef struct TaskCase { const char *name, *source, *expected; size_t length; }
 static const TaskCase task_cases[] = {
     TASK_CASE("scalar-control",
         "fn worker()->string { Coro.yield(); return \"control\\0é\" }\n"
-        "fn calculate() { const task:Task<string> = go worker(); const first=await task;"
-        " assert(first==\"control\\0é\"); print(await task) }\ncalculate()\n",
+        "fn calculate() throws(Error) { const task:Task<string> = go worker(); const first=try await task;"
+        " assert(first==\"control\\0é\"); print(try await task) }\ntry calculate()\n",
         "control\0é\n"),
     TASK_CASE("array-i64",
         "fn worker()->Array<i64> { Coro.yield(); return [17,29] }\n"
-        "fn calculate() { const task:Task<Array<i64>> = go worker(); var first=await task;"
-        " first[0]=101; assert(first[0]==101); const next=await task; print(next[0]); print(next[1]) }\ncalculate()\n",
+        "fn calculate() throws(Error) { const task:Task<Array<i64>> = go worker(); var first=try await task;"
+        " first[0]=101; assert(first[0]==101); const next=try await task; print(next[0]); print(next[1]) }\ntry calculate()\n",
         "17\n29\n"),
     TASK_CASE("nested-array-string",
         "fn worker()->Array<Array<string>> { Coro.yield(); return [[\"a\\0b\",\"é😀\"],[\"tail\"]] }\n"
-        "fn calculate() { const task:Task<Array<Array<string>>> = go worker(); var first=await task;"
-        " first[0][0]=\"changed\"; assert(first[0][0]==\"changed\"); const next=await task;"
-        " print(next[0][0]); print(next[0][1]); print(next[1][0]) }\ncalculate()\n",
+        "fn calculate() throws(Error) { const task:Task<Array<Array<string>>> = go worker(); var first=try await task;"
+        " first[0][0]=\"changed\"; assert(first[0][0]==\"changed\"); const next=try await task;"
+        " print(next[0][0]); print(next[0][1]); print(next[1][0]) }\ntry calculate()\n",
         "a\0b\né😀\ntail\n"),
     TASK_CASE("nullable-i64",
         "fn worker()->i64? { Coro.yield(); return -17 }\n"
-        "fn calculate() { const task:Task<i64?> = go worker(); const first=await task;"
-        " assert(first! == -17); const next=await task; print(next!) }\ncalculate()\n",
+        "fn calculate() throws(Error) { const task:Task<i64?> = go worker(); const first=try await task;"
+        " assert(first! == -17); const next=try await task; print(next!) }\ntry calculate()\n",
         "-17\n"),
     TASK_CASE("nullable-array",
         "fn worker()->Array<i64>? { Coro.yield(); return [17,29] }\n"
-        "fn calculate() { const task:Task<Array<i64>?> = go worker(); const first=await task;"
-        " assert(first![0]==17); const next=await task; print(next![1]) }\ncalculate()\n",
+        "fn calculate() throws(Error) { const task:Task<Array<i64>?> = go worker(); const first=try await task;"
+        " assert(first![0]==17); const next=try await task; print(next![1]) }\ntry calculate()\n",
         "29\n"),
     TASK_CASE("tuple-string",
         "fn worker()->(i64,string) { Coro.yield(); return (-17,\"t\\0é\") }\n"
-        "fn calculate() { const task:Task<(i64,string)> = go worker(); const first=await task;"
-        " assert(first.0 == -17); const next=await task; print(next.0); print(next.1) }\ncalculate()\n",
+        "fn calculate() throws(Error) { const task:Task<(i64,string)> = go worker(); const first=try await task;"
+        " assert(first.0 == -17); const next=try await task; print(next.0); print(next.1) }\ntry calculate()\n",
         "-17\nt\0é\n"),
     TASK_CASE("enum-array",
         "enum Choice { Empty, Selected { values:Array<i64> } }\n"
         "fn worker()->Choice { Coro.yield(); return Choice.Selected{values:[17,29]} }\n"
-        "fn calculate() { const task:Task<Choice> = go worker(); const first=await task;"
+        "fn calculate() throws(Error) { const task:Task<Choice> = go worker(); const first=try await task;"
         " print(match(first){Choice.Empty -> 0, Choice.Selected{values} -> values[0]});"
-        " const next=await task; print(match(next){Choice.Empty -> 0, Choice.Selected{values} -> values[1]}) }\ncalculate()\n",
+        " const next=try await task; print(match(next){Choice.Empty -> 0, Choice.Selected{values} -> values[1]}) }\ntry calculate()\n",
         "17\n29\n"),
     TASK_CASE("atomic-shared",
         "fn worker()->Atomic<i64> { Coro.yield(); return Atomic<i64>(17) }\n"
-        "fn calculate() { const task:Task<Atomic<i64>> = go worker(); const first=await task;"
-        " print(first.fetchAdd(5)); const next=await task; print(next.load()) }\ncalculate()\n",
+        "fn calculate() throws(Error) { const task:Task<Atomic<i64>> = go worker(); const first=try await task;"
+        " print(first.fetchAdd(5)); const next=try await task; print(next.load()) }\ntry calculate()\n",
         "17\n22\n"),
     TASK_CASE("task-nested",
         "fn leaf()->i64 { Coro.yield(); return 29 }\n"
         "fn worker()->Task<i64> { Coro.yield(); return go leaf() }\n"
-        "fn calculate() { const task:Task<Task<i64>> = go worker(); const first=await task;"
-        " const next=await task; print(await first); print(await next) }\ncalculate()\n",
+        "fn calculate() throws(Error) { const task:Task<Task<i64>> = go worker(); const first=try await task;"
+        " const next=try await task; print(try await first); print(try await next) }\ntry calculate()\n",
         "29\n29\n")
 };
 static int constructed_task_case(const TaskCase *test, const char *stdlib, size_t ordinal) {
-    XrSourceCompiler *compiler = compiler_new(stdlib);
+    XrSourceCompileOptions compiler = compile_options(stdlib);
     char source[2048]; size_t length = strlen(test->source);
     CHECK(length < sizeof(source)); memcpy(source, test->source, length);
     XrSourceText text = {NULL, test->name, source, length};
-    XrSourceProgram *program = NULL; XrSourceDiagnostic *diagnostic = NULL;
-    XrSourceStatus status = xray_source_compile_text(compiler, &text, &program, &diagnostic);
+    XrSourceArtifact *program = NULL; XrSourceDiagnostic *diagnostic = NULL;
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text=text};
+    XrSourceFailure failure={0};
+    XrSourceStatus status = xray_source_build(&input, &compiler, &program, &failure, &diagnostic);
+    if (status != XR_SOURCE_OK || !program || diagnostic)
+        fprintf(stderr, "[sdk-compile-failure] case=constructed_tasks/%s status=%u\n",
+            test->name, (unsigned)status);
     memset(source, '!', sizeof(source));
-    xray_source_compiler_free(compiler);
+
     if (status != XR_SOURCE_OK) {
         CHECK(!program && diagnostic); XrSourceDiagnosticInfo info;
         CHECK(xray_source_diagnostic_info(diagnostic, &info) == XR_SOURCE_OK);
@@ -344,8 +360,8 @@ static int constructed_task_case(const TaskCase *test, const char *stdlib, size_
     CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
     options.write = capture; options.context = &out;
     XrSourceCall *call = NULL;
-    CHECK(xray_source_call_begin(program, &options, &call) == XR_SOURCE_OK && call);
-    xray_source_program_free(program);
+    CHECK(begin_owned(program, &options, &call) == XR_SOURCE_OK && call);
+    xray_source_artifact_free(program);
     XrSourceEvent event = {0}; size_t steps = 0;
     for (;;) {
         CHECK(steps++ < 4096);

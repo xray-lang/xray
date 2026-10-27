@@ -21,7 +21,6 @@
 #include "../xisolate_api.h"
 #include "../../base/xmalloc.h"
 #include "../value/xvalue.h"
-#include "xstringbuilder_builtins.h"
 #include "xenum.h"
 #include "../value/xtype_names.h"
 #include "../object/xpanic_info.h"
@@ -110,8 +109,6 @@ void xr_core_init(XrVMRuntime *X) {
     X->core->cfunctionClass = xr_class_new(X, TYPE_NAME_CFUNCTION, X->core->functionClass);
 
     X->core->enumClass = xr_class_new(X, CLASS_NAME_ENUM, X->core->objectClass);
-
-    xr_stringbuilder_register_class(X);
 
     // Process class with fields
     {

@@ -51,7 +51,7 @@ static bool xi_lower_native_result(XiLower *l, XrManifestStatus status) {
     if (status == XR_MANIFEST_OK && xr_compile_state_status(state) == XR_COMPILE_RESOURCE_OK)
         return true;
     if (status != XR_MANIFEST_OK)
-        (void) xr_compile_state_fail(state, status == XR_MANIFEST_BUDGET || status == XR_MANIFEST_LIMIT
+        (void) xr_compile_state_fail(state, status == XR_MANIFEST_OVERFLOW || status == XR_MANIFEST_LIMIT
             ? XR_COMPILE_RESOURCE_BUDGET : status == XR_MANIFEST_OUT_OF_MEMORY
             ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
     l->had_error = true;

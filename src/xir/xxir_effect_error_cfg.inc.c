@@ -20,7 +20,7 @@ static XrXirStatus error_cfg_enqueue(ErrorFlow *flow,uint32_t block) {
     if(count==1){flow->reachable[block]|=ERROR_BLOCK_PENDING;return XR_XIR_OK;}
     if(!flow->queue)return XR_XIR_BAD_STRUCTURE;
     if(flow->pending>=count || flow->back>=count)return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(flow->remaining,3+sizeof(*flow->queue)))return XR_XIR_BUDGET;
+
     flow->queue[flow->back]=block;
     flow->back=flow->back+1==count?0:flow->back+1;
     ++flow->pending;flow->reachable[block]|=ERROR_BLOCK_PENDING;return XR_XIR_OK;
@@ -32,7 +32,7 @@ static XrXirStatus error_cfg_solve(ErrorFlow *flow,const uint8_t *zero_copy) {
     while(status==XR_XIR_OK && !flow->restart &&
         (count==1?(flow->reachable[0]&ERROR_BLOCK_PENDING)!=0:flow->pending!=0)) {
         uint32_t block=0;
-        if(!xir_compile_work(flow->remaining,count==1?1u:3u)){status=XR_XIR_BUDGET;break;}
+
         if(count!=1) {
             if(flow->front>=count){status=XR_XIR_BAD_STRUCTURE;break;}
             block=flow->queue[flow->front];

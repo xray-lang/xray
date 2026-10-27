@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_compile_memory.h - Typed allocation and work for compiler algorithms
+ * xxir_compile_memory.h - Typed allocation for compiler algorithms
  *
  * KEY CONCEPT:
  *   Helpers preserve the first failure and never select an allocation domain.
@@ -20,14 +20,14 @@ static inline bool xir_compile_context_valid(const XrXirCompileContext *context)
 static inline XrXirStatus xir_compile_resource_status(XrCompileResourceStatus status) {
     switch (status) {
     case XR_COMPILE_RESOURCE_OK: return XR_XIR_OK;
-    case XR_COMPILE_RESOURCE_BUDGET: return XR_XIR_BUDGET;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: return XR_XIR_MEMORY_LIMIT;
+    case XR_COMPILE_RESOURCE_OVERFLOW: return XR_XIR_OVERFLOW;
+    case XR_COMPILE_RESOURCE_CANCELLED: return XR_XIR_CANCELLED;
+    case XR_COMPILE_RESOURCE_DEADLINE: return XR_XIR_DEADLINE;
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE: return XR_XIR_CLOCK_FAILURE;
     case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_XIR_OUT_OF_MEMORY;
     default: return XR_XIR_BAD_STRUCTURE;
     }
-}
-static inline bool xir_compile_work(const XrXirCompileContext *context, uint64_t units) {
-    return xir_compile_context_valid(context) &&
-        xr_compile_resources_work(context->resources, units) == XR_COMPILE_RESOURCE_OK;
 }
 static inline void *xir_compile_alloc(const XrXirCompileContext *context, size_t bytes,
     XrXirStatus *status) {
@@ -53,9 +53,7 @@ static inline void *xir_compile_copy(const XrXirCompileContext *context, const v
     if (!source) { *status = XR_XIR_BAD_STRUCTURE; return NULL; }
     void *memory = xir_compile_alloc(context, bytes, status);
     if (!memory) return NULL;
-    if (!xir_compile_work(context, bytes)) {
-        xr_compile_resources_free(memory); *status = XR_XIR_BUDGET; return NULL;
-    }
+
     memcpy(memory, source, bytes);
     return memory;
 }

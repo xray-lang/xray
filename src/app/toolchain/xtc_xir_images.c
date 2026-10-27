@@ -14,6 +14,8 @@ static XrOsProcStatus images_process_status(XrXirTargetStatus status) {
     switch (status) {
     case XR_XIR_TARGET_OK: return XR_PROC_OK;
     case XR_XIR_TARGET_BUDGET: return XR_PROC_BUDGET;
+    case XR_XIR_TARGET_MEMORY_LIMIT: return XR_PROC_MEMORY_LIMIT;
+    case XR_XIR_TARGET_OVERFLOW: return XR_PROC_OVERFLOW;
     case XR_XIR_TARGET_OUT_OF_MEMORY: return XR_PROC_OUT_OF_MEMORY;
     case XR_XIR_TARGET_UNRESOLVED: return XR_PROC_UNRESOLVED;
     case XR_XIR_TARGET_UNSUPPORTED: return XR_PROC_UNSUPPORTED;
@@ -35,7 +37,8 @@ XR_FUNC XrXirTargetStatus xtc_xir_images_new(XrCompileResources *resources, XrXi
     void *memory = NULL;
     XrCompileResourceStatus status = xr_compile_resources_calloc(resources, 1, sizeof(XrXirImageCollector), &memory);
     if (status != XR_COMPILE_RESOURCE_OK)
-        return status == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_TARGET_BUDGET :
+        return status==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_TARGET_MEMORY_LIMIT :
+        status==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_TARGET_OVERFLOW :
             status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_TARGET_OUT_OF_MEMORY : XR_XIR_TARGET_INVALID;
     XrXirImageCollector *images = memory;
     images->storage.resources = resources;
@@ -48,7 +51,7 @@ XR_FUNC XrXirTargetStatus xtc_xir_images_new_with_proof(XrCompileResources *reso
     XrXirImageCollector *images=NULL;
     XrXirTargetStatus status=xtc_xir_images_new(resources,&images);
     if(status!=XR_XIR_TARGET_OK)return status;
-    if(!xtc_xir_target_work(&images->storage,sizeof(images->proof_cache))) {
+    if(images->storage.status != XR_XIR_TARGET_OK) {
         status=images->storage.status;xtc_xir_images_free(images);return status;
     }
     images->proof_cache=cache;*output=images;return XR_XIR_TARGET_OK;
@@ -73,12 +76,12 @@ XR_FUNC XrXirTargetStatus xtc_xir_images_seal(XrXirImageCollector *images) {
         bool hashed_ok=xtc_xir_sysroot_hash(&images->storage,image->lease,&hashed);
 #endif
         if (!hashed_ok ||
-            !xtc_xir_target_work(&images->storage, sizeof(*files))) break;
+            images->storage.status != XR_XIR_TARGET_OK) break;
         files[index] = (XrXirImageFile){image->path, image->kind_mask, hashed.length, {0}};
         memcpy(files[index].digest, hashed.digest, sizeof(hashed.digest));
         ++index;
     }
-    if (images->storage.status == XR_XIR_TARGET_OK && xtc_xir_target_work(&images->storage, 1)) {
+    if (images->storage.status == XR_XIR_TARGET_OK) {
         images->files = files; images->sealed = true;
     }
     return images->storage.status;
@@ -101,7 +104,7 @@ XR_FUNC XrXirTargetStatus xtc_xir_images_read(XrXirImageCollector *images,
     if (images->storage.status != XR_XIR_TARGET_OK) return images->storage.status;
     XtcXirImage *image = images->images;
     for (uint32_t at = 0; at <= index; ++at) {
-        if (!xtc_xir_target_work(&images->storage, 1)) return images->storage.status;
+        if (images->storage.status != XR_XIR_TARGET_OK) return images->storage.status;
         if (!image) { xtc_xir_target_fail(&images->storage, XR_XIR_TARGET_INVALID); return images->storage.status; }
         if (at != index) image = image->next;
     }

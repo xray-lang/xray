@@ -14,11 +14,11 @@ static XrXirStatus effect_invocation_iterator_obligation_row(EffectInvocationFlo
     uint32_t opaque=flow->read->final->site_count+flow->basis.parameters;
     bool symbolic=false;*mask=0;*deferred=false;
     for (uint32_t p=0;p<flow->basis.parameters;++p) {
-        if (!xir_compile_work(flow->read->work,1)) return XR_XIR_BUDGET;
+
         uint32_t bit=flow->read->final->site_count+p;
         if (row[bit/64]&(UINT64_C(1)<<(bit%64))) symbolic=true;
     }
-    if (!xir_compile_work(flow->read->work,4)) return XR_XIR_BUDGET;
+
     if ((row[opaque/64]&(UINT64_C(1)<<(opaque%64))) ||
         (!complete && !symbolic)) *mask=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     *deferred=symbolic;return XR_XIR_OK;
@@ -41,12 +41,11 @@ static XrXirStatus effect_invocation_iterator_obligation(EffectInvocationFlow *f
 static XrXirStatus effect_invocation_iterator_edges_read(EffectInvocationFlow *flow,
     uint32_t instruction,const XrXirInstruction *op,const EffectInvocationClosureView *supplied,uint32_t *matches) {
     const EffectInvocationRead *owner=flow->read;
-    if (!xir_compile_work(owner->work,(uint64_t)owner->final->site_count*sizeof(*matches)))
-        return XR_XIR_BUDGET;
+
     if (owner->final->site_count) memset(matches,0,(size_t)owner->final->site_count*sizeof(*matches));
     uint32_t walked=0;
     for (uint32_t e=owner->final->nodes[flow->node].edge_head;e!=UINT32_MAX;e=owner->final->edges[e].next) {
-        if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
         if (e>=owner->final->edge_count || ++walked>owner->final->edge_count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationEdge edge=owner->final->edges[e];
         if (edge.instruction!=instruction) continue;
@@ -58,7 +57,7 @@ static XrXirStatus effect_invocation_iterator_edges_read(EffectInvocationFlow *f
     const uint64_t *row=supplied?supplied->row:effect_invocation_row(flow,op->args[0]);
     if (!row) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t s=0;s<owner->final->site_count;++s) {
-        if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
         if (!!(row[s/64]&(UINT64_C(1)<<(s%64)))!=(matches[s]==1)) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
@@ -74,7 +73,7 @@ static XrXirStatus effect_invocation_iterator_record(EffectInvocationFlow *flow,
     if (!owner || flow->read!=&owner->read || flow->node>=owner->final.count)
         return XR_XIR_BAD_STRUCTURE;
     EffectInvocationNode *node=&owner->final.nodes[flow->node];bool changed=false;
-    if (!xir_compile_work(flow->read->work,5)) return XR_XIR_BUDGET;
+
     if ((mask&~node->local_mask) || (deferred && !(effect_invocation_node_row(node,EFFECT_INVOCATION_CONTEXTS,true)
         [instruction/64]&(UINT64_C(1)<<(instruction%64))))) changed=true;
     node->local_mask|=mask;node->intrinsic_mask|=mask;
@@ -90,12 +89,12 @@ static XrXirStatus effect_invocation_iterator_record(EffectInvocationFlow *flow,
             instruction,UINT32_MAX,UINT32_MAX,0};
         EffectInvocationCause *local=&effect_invocation_local_causes(node)[atom];
         if (local->witness.cause && !effect_root_cause_before(&witness,&local->witness)) continue;
-        if (!xir_compile_work(flow->read->work,2*sizeof(*local))) return XR_XIR_BUDGET;
+
         *local=(EffectInvocationCause){witness,UINT32_MAX,UINT32_MAX,0};node->causes[atom]=*local;
     }
     if (!changed) return XR_XIR_OK;
     for (uint32_t e=owner->read.consumers[flow->node];e!=UINT32_MAX;e=owner->final.edges[e].consumer_next) {
-        if (!xir_compile_work(flow->read->work,1)) return XR_XIR_BUDGET;
+
         if (e>=owner->final.edge_count || owner->final.edges[e].target!=flow->node) return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status=effect_invocation_enqueue(owner,owner->final.edges[e].caller);
         if (status!=XR_XIR_OK) return status;
@@ -105,7 +104,7 @@ static XrXirStatus effect_invocation_iterator_record(EffectInvocationFlow *flow,
 
 /* An actual opcode and its typed operand span establish whether this body
  * has a pending Iterator input at all. Absence needs no origin workspace. */
-static XrXirStatus effect_invocation_iterator_call_candidate(const EffectInvocationRead *owner,
+static XrXirStatus effect_invocation_iterator_call_candidate(
     const EffectBodyRequest *request,uint32_t body,const XrXirInstruction *op,bool *output) {
     *output=false;
     if (op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE &&
@@ -117,7 +116,7 @@ static XrXirStatus effect_invocation_iterator_call_candidate(const EffectInvocat
     if (op->args[0]>head.operand_count || op->args[1]>head.operand_count-op->args[0] ||
         !head.operands) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t p=0;p<op->args[1];++p) {
-        if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
         XrXirType type=0;status=effect_body_request_type(request,body,head.operands[op->args[0]+p],&type);
         if (status!=XR_XIR_OK) return status;
         if (effect_physical_iterator(request->domain.types,type)) *output=true;
@@ -135,7 +134,7 @@ static XrXirStatus effect_invocation_iterator_presence(const EffectInvocationRea
     const EffectPhysicalFunction *physical=&owner->final->physical->functions[body];
     if (physical->count>physical->capacity || (physical->count && !physical->records)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t r=0;r<physical->count;++r) {
-        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+
         uint32_t mask=physical->records[r].mask;
         *advances|=(mask&EFFECT_PHYSICAL_ITERATOR_ADVANCE)!=0;
         if ((mask&EFFECT_PHYSICAL_ITERATOR_ADVANCE)!=0) {*present=true;continue;}
@@ -144,7 +143,7 @@ static XrXirStatus effect_invocation_iterator_presence(const EffectInvocationRea
         uint32_t i=physical->records[r].value-physical->parameters;
         XrXirInstruction storage;const XrXirInstruction *op=NULL;
         XrXirStatus status=effect_body_request_operation(request,body,i,&storage,&op);
-        if (status==XR_XIR_OK) status=effect_invocation_iterator_call_candidate(owner,request,body,op,present);
+        if (status==XR_XIR_OK) status=effect_invocation_iterator_call_candidate(request,body,op,present);
         if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
@@ -160,7 +159,7 @@ static XrXirStatus effect_invocation_iterator_flow_read(EffectInvocationFlow *fl
         if (!matches) return status;
     }
         for (uint32_t r=0;status==XR_XIR_OK && r<physical->count;++r) {
-            if (!xir_compile_work(owner->work,1)) {status=XR_XIR_BUDGET;break;}
+
             const EffectPhysicalRecord record=physical->records[r];
             bool advance=(record.mask&EFFECT_PHYSICAL_ITERATOR_ADVANCE)!=0;
             if (!advance && !(record.mask&EFFECT_PHYSICAL_INVOCATION)) continue;

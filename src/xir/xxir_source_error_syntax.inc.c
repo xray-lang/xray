@@ -32,7 +32,7 @@ static bool source_error_clause(SourceErrorSyntax *scan, const XrThrowsClause *c
 
 static bool source_error_type(const XrTypeRef *type, void *pointer) {
     SourceErrorSyntax *scan = pointer;
-    if (!source_work(scan->ctx, scan->node) || !source_error_clause(scan, &type->throws_clause))
+    if (!((scan->ctx)->diagnostic.status == XR_XIR_OK) || !source_error_clause(scan, &type->throws_clause))
         return false;
     return scan->ctx->diagnostic.status == XR_XIR_OK;
 }

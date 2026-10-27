@@ -11,6 +11,8 @@
 #include <string.h>
 static XrXirStatus dispatch_value(XrXirValueStatus status) {
     return status==XR_XIR_VALUE_OK ? XR_XIR_OK : status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+        status==XR_XIR_VALUE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        status==XR_XIR_VALUE_OVERFLOW ? XR_XIR_OVERFLOW :
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
 }
 XR_FUNC XrXirStatus xdap_dispatch_send_prepared(XdapAdapter *s,XdapJsonWriter *message) {
@@ -43,7 +45,6 @@ XR_FUNC XrXirStatus xdap_dispatch_prepare_response(XdapAdapter *s,const XdapRequ
 }
 XR_FUNC XrXirStatus xdap_dispatch_stage_response(XdapAdapter *s,const XdapRequest *request,bool success,
     const XdapJsonWriter *body,const char *error,XdapJsonWriter *output) {
-    if (xr_compile_resources_work(s->resources,11)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     return dispatch_prepare_sequence(s,request,success,body,error,INT32_MAX,output);
 }
 XR_FUNC XrXirStatus xdap_dispatch_send_staged(XdapAdapter *s,XdapJsonWriter *message) {
@@ -115,13 +116,23 @@ XR_FUNC XrXirStatus xdap_adapter_new(XrSourceCompiler **compiler,const XdapAdapt
     XdapAdapter *s=NULL;XrCompileResourceStatus allocated=xr_compile_resources_calloc(context->resources,1,sizeof(*s),(void **)&s);
     if (allocated!=XR_COMPILE_RESOURCE_OK) {
         xr_xir_domain_drop(config->observer_metadata);
-        return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+        return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+        allocated==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        allocated==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_OVERFLOW :
+        allocated==XR_COMPILE_RESOURCE_CANCELLED ? XR_XIR_CANCELLED :
+        allocated==XR_COMPILE_RESOURCE_DEADLINE ? XR_XIR_DEADLINE :
+        allocated==XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE : XR_XIR_BAD_STRUCTURE;
     }
     s->compiler=*compiler;s->resources=context->resources;s->config=*config;s->seq=1;s->next_handle=1;s->next_watch_id=1;
     allocated=xr_compile_resources_calloc(context->resources,1,sizeof(*s->execution),(void **)&s->execution);
     if (allocated!=XR_COMPILE_RESOURCE_OK) {
         xr_compile_resources_free(s);xr_xir_domain_drop(config->observer_metadata);
-        return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+        return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+        allocated==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        allocated==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_OVERFLOW :
+        allocated==XR_COMPILE_RESOURCE_CANCELLED ? XR_XIR_CANCELLED :
+        allocated==XR_COMPILE_RESOURCE_DEADLINE ? XR_XIR_DEADLINE :
+        allocated==XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE : XR_XIR_BAD_STRUCTURE;
     }
     s->execution->resources=s->resources;s->execution->adapter=s;
     s->execution->output=config->instance.output;s->execution->time=config->instance.time;
@@ -306,7 +317,6 @@ static XrXirStatus dispatch_pause(XdapAdapter *s,const XdapRequest *r,uint64_t t
     if (observed==XR_XIR_VALUE_UNSUPPORTED)
         return xdap_dispatch_response(s,r,false,NULL,"Complete thread observation requires admitted VM ingress");
     if (observed!=XR_XIR_VALUE_OK) return dispatch_value(observed);
-    if (xr_compile_resources_work(s->resources,count)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     bool found=false;for (uint32_t i=0;i<count;++i) if (ids[i]==thread) found=true;
     if (!found) return xdap_dispatch_response(s,r,false,NULL,"No active thread");
     XdapJsonWriter response={0};XrXirStatus status=xdap_dispatch_prepare_response(s,r,true,NULL,NULL,&response);
@@ -400,7 +410,6 @@ done:
     xdap_json_document_free(&r.document);s->busy=false;return status;
 }
 static XrXirStatus dispatch_clock(XdapAdapter *s,uint64_t *output) {
-    if (xr_compile_resources_work(s->resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     const XrXirTimeProvider *time=&s->config.instance.time;int64_t now=-1;
     if (!time->clock || time->clock(time->context,XR_XIR_CLOCK_MONOTONIC,&now)!=XR_XIR_TIME_OK || now<0) return XR_XIR_IO;
     *output=(uint64_t)now;return XR_XIR_OK;

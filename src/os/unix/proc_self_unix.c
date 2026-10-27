@@ -22,7 +22,7 @@
 
 static int proc_self_utf8_read(void *context, const uint8_t *address, uint8_t *output) {
     XrIoContext *io = context;
-    if (!io_work(io, 1)) return 0;
+    if (!((io)->status == XR_OS_IO_OK)) return 0;
     *output = *address;
     return 1;
 }
@@ -36,14 +36,14 @@ static bool proc_self_utf8(XrIoContext *io, const char *text, size_t *length) {
 
 static XrOsIoStatus proc_self_executable(char *buffer, size_t capacity) {
 #if defined(XR_OS_MACOS)
-    if (capacity > UINT32_MAX) return XR_OS_IO_BUDGET;
+    if (capacity > UINT32_MAX) return XR_OS_IO_OVERFLOW;
     uint32_t size = (uint32_t)capacity;
-    return _NSGetExecutablePath(buffer, &size) == 0 ? XR_OS_IO_OK : XR_OS_IO_BUDGET;
+    return _NSGetExecutablePath(buffer, &size) == 0 ? XR_OS_IO_OK : XR_OS_IO_OVERFLOW;
 #elif defined(XR_OS_LINUX)
     ssize_t count = readlink("/proc/self/exe", buffer, capacity);
     if (count < 0) return io_errno_status(errno);
     if (!count) return XR_OS_IO_IO;
-    if ((size_t)count >= capacity) return XR_OS_IO_BUDGET;
+    if ((size_t)count >= capacity) return XR_OS_IO_OVERFLOW;
     buffer[count] = 0;
     return XR_OS_IO_OK;
 #else
@@ -56,7 +56,7 @@ XR_FUNC XrOsIoStatus xr_os_io_self_exe_path(const XrOsIoPolicy *policy, char **o
     if (!io_policy_valid(policy) || !output || *output) return XR_OS_IO_BAD_ARGUMENT;
     XrIoContext io = {policy, XR_OS_IO_OK};
     char *raw = io_alloc(&io, XR_PATH_MAX), *result = NULL;
-    if (raw && io_work(&io, 1 + XR_PATH_MAX))
+    if (raw && ((&io)->status == XR_OS_IO_OK))
         io_status(&io, proc_self_executable(raw, XR_PATH_MAX));
     size_t length = 0;
     if (io.status == XR_OS_IO_OK) (void)proc_self_utf8(&io, raw, &length);
@@ -82,10 +82,10 @@ XR_FUNC XrOsIoStatus xr_os_io_environment_get(const XrOsIoPolicy *policy,
     if (!proc_self_utf8(&io, name, &length)) return io.status;
     if (!length) return XR_OS_IO_BAD_ARGUMENT;
     for (size_t i = 0; i < length; ++i) {
-        if (!io_work(&io, 1)) return io.status;
+        if (!((&io)->status == XR_OS_IO_OK)) return io.status;
         if (name[i] == '=') return XR_OS_IO_BAD_ARGUMENT;
     }
-    if (!io_work(&io, 1)) return io.status;
+    if (!((&io)->status == XR_OS_IO_OK)) return io.status;
     const char *value = getenv(name);
     if (!value) return XR_OS_IO_NOT_FOUND;
     if (!proc_self_utf8(&io, value, &length)) return io.status;

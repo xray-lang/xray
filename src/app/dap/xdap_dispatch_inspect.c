@@ -14,6 +14,8 @@
 #include <string.h>
 static XrXirStatus inspect_observation_status(XrXirValueStatus status) {
     return status==XR_XIR_VALUE_OK ? XR_XIR_OK : status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+        status==XR_XIR_VALUE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        status==XR_XIR_VALUE_OVERFLOW ? XR_XIR_OVERFLOW :
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
 }
 static XrXirStatus inspect_finish(XdapAdapter *s,const XdapRequest *r,XdapJsonWriter *body) {
@@ -30,7 +32,6 @@ static bool inspect_position(XdapAdapter *s,XdapJsonWriter *w,uint32_t function,
         w->status=XR_XIR_BAD_STRUCTURE;return false;
     }
     char position[32];uint64_t address=(uint64_t)s->launch->functions[function].first+instruction;
-    if (xr_compile_resources_work(w->resources,sizeof(position))!=XR_COMPILE_RESOURCE_OK) { w->status=XR_XIR_BUDGET;return false; }
     int count=snprintf(position,sizeof(position),"%llu",(unsigned long long)address);
     return count>0 && (size_t)count<sizeof(position) && xdap_json_quote(w,position,(size_t)count);
 }
@@ -119,7 +120,6 @@ static XrXirStatus inspect_scopes(XdapAdapter *s,const XdapRequest *r) {
         const XrXirSourceView *source=xr_xir_compile_source_product_view(s->launch->source);
         if (!debug || !source || info.function>=s->launch->function_count) return XR_XIR_BAD_STRUCTURE;
         uint32_t module=s->launch->functions[info.function].module;if (module>=s->launch->module_count) return XR_XIR_BAD_STRUCTURE;
-        if (xr_compile_resources_work(s->resources,debug->global_count)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
         for (uint32_t g=0;g<debug->global_count;++g) {
             const XrXirSourceDeclaration *declaration=&source->declarations[debug->globals[g].declaration-1];
             if (declaration->range.module==s->launch->modules[module].query_module) { globals=true;break; }
@@ -154,10 +154,12 @@ static bool inspect_value(XdapJsonWriter *body,const XrXirValue *value) {
 static XrXirStatus inspect_reference(XdapAdapter *s,const XrXirValue *value,uint32_t frame,const XdapValueOrigin *origin,uint32_t *handle,XdapValueShape *shape) {
     XdapValueView view={value,s->config.observer_metadata,s->snapshot,frame};XrXirValueStatus status=xdap_value_shape(&view,shape);
     if (status!=XR_XIR_VALUE_OK) return status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+        status==XR_XIR_VALUE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        status==XR_XIR_VALUE_OVERFLOW ? XR_XIR_OVERFLOW :
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
     *handle=0;if (!shape->children) return XR_XIR_OK;
     uint32_t depth=origin ? origin->path.count : 0;
-    if (depth>128 || xr_compile_resources_work(s->resources,(uint64_t)s->value_count*(depth+1))!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+    if (depth>128) return XR_XIR_BUDGET;
     for (uint32_t i=0;i<s->value_count;++i) {
         const XdapValueRef *ref=&s->values[i];
         if (ref->frame==frame && ref->value.type==value->type && ref->value.payload==value->payload && inspect_origin_equal(&ref->origin,origin)) {
@@ -166,7 +168,9 @@ static XrXirStatus inspect_reference(XdapAdapter *s,const XrXirValue *value,uint
     }
     if (s->value_count==128 || s->next_handle==INT32_MAX) return XR_XIR_BUDGET;
     XdapValueRef candidate={0};status=xr_xir_value_copy(value,&candidate.value);
-    if (status!=XR_XIR_VALUE_OK) return status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    if (status!=XR_XIR_VALUE_OK) return status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+        status==XR_XIR_VALUE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        status==XR_XIR_VALUE_OVERFLOW ? XR_XIR_OVERFLOW : XR_XIR_BUDGET;
     XrXirStatus copied=inspect_origin_copy(s,origin,&candidate.origin);
     if (copied!=XR_XIR_OK) { xdap_value_ref_drop(&candidate);return copied; }
     candidate.handle=s->next_handle++;candidate.frame=frame;candidate.shape=*shape;
@@ -209,7 +213,9 @@ static XrXirStatus inspect_children(XdapAdapter *s,const XdapRequest *r,const Xd
                 xdap_json_writer_free(&body);inspect_rollback_values(s,before);
                 return xdap_dispatch_response(s,r,false,NULL,"Typed child observation is unavailable");
             }
-            body.status=status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;break;
+            body.status=status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+        status==XR_XIR_VALUE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        status==XR_XIR_VALUE_OVERFLOW ? XR_XIR_OVERFLOW : XR_XIR_BUDGET;break;
         }
         XrXirValuePathStep steps[128];XdapValueOrigin origin={0};
         body.status=inspect_origin_child(s,ref,&child,steps,&origin);
@@ -253,8 +259,6 @@ static XrXirStatus inspect_variables(XdapAdapter *s,const XdapRequest *r) {
 static XrXirStatus inspect_address(const XdapRequest *r,uint32_t reference,uint32_t *output) {
     const XdapJsonNode *node=&r->document.nodes[reference];
     if (node->kind!=XDAP_JSON_STRING || !node->length || node->length>10) return XR_XIR_BAD_STRUCTURE;
-    if (xr_compile_resources_work(r->document.resources,node->length+sizeof(*output))!=XR_COMPILE_RESOURCE_OK)
-        return XR_XIR_BUDGET;
     size_t at=0;uint32_t base=10,value=0;
     if (node->length>=2 && node->text[0]=='0' && node->text[1]=='x') { base=16;at=2; }
     if (at==node->length) return XR_XIR_BAD_STRUCTURE;
@@ -271,7 +275,6 @@ static XrXirStatus inspect_address(const XdapRequest *r,uint32_t reference,uint3
 static bool inspect_symbol(XdapJsonWriter *body,const XdapCodeFunction *code) {
     size_t length=0;
     for (;;) {
-        if (xr_compile_resources_work(body->resources,1)!=XR_COMPILE_RESOURCE_OK) { body->status=XR_XIR_BUDGET;return false; }
         if (!code->name[length]) break;
         ++length;
     }
@@ -303,13 +306,11 @@ static XrXirStatus inspect_disassemble(XdapAdapter *s,const XdapRequest *r) {
     uint32_t function=0,previous_module=UINT32_MAX;
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);XDAP_TEXT(&body,"{\"instructions\":[");
     for (uint64_t i=0;i<count;++i) {
-        if (xr_compile_resources_work(s->resources,384)!=XR_COMPILE_RESOURCE_OK) { body.status=XR_XIR_BUDGET;break; }
         int64_t at=(int64_t)instruction+displacement+(int64_t)i;
         char address[32],description[384];int address_size=snprintf(address,sizeof(address),"%lld",(long long)at);
         bool valid=at>=0 && (uint64_t)at<s->launch->instruction_count;int text_size=0;
         if (valid) {
             while (function<s->launch->function_count) {
-                if (xr_compile_resources_work(s->resources,1)!=XR_COMPILE_RESOURCE_OK) { body.status=XR_XIR_BUDGET;break; }
                 const XdapCodeFunction *code=&s->launch->functions[function];
                 if ((uint64_t)at>=code->first && (uint64_t)at-code->first<code->instructions) break;
                 ++function;

@@ -99,7 +99,7 @@ int main(int argc,char **argv) {
         if(!variant)sites=argument_attachment(resources,syntax,failures);
         XlspSourceCallArguments *owner=NULL;CHECK(xlsp_source_syntax_arguments(syntax,&owner)==XR_XIR_OK);
         if(!variant) {
-            XrFingerprint fingerprint={{0}};CHECK(xr_compile_module_source_fingerprint(resources,argument_text,&fingerprint)==XR_COMPILE_RESOURCE_OK);
+            XrFingerprint fingerprint={{0}};xr_module_source_fingerprint(argument_text,&fingerprint);
             CHECK(!memcmp(&fingerprint,&xlsp_source_call_arguments_view(owner)->fingerprint,sizeof(fingerprint)));
         }
         CHECK(xlsp_source_syntax_arguments(syntax,&owner)==XR_XIR_BAD_STRUCTURE);

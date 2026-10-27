@@ -55,7 +55,7 @@ static XrXirStatus effect_body_advertisements_function(EffectBodyAdvertisementBu
     const XrXirFunction *body=&builder->source->functions[function];
     uint64_t values=(uint64_t)body->parameter_count+body->instruction_count;
     if (values>UINT32_MAX) return XR_XIR_BUDGET;
-    if (!xir_compile_work(builder->work,6)) return XR_XIR_BUDGET;
+
     builder->bounds->functions[function].values=(uint32_t)values;
     if (builder->refinement) builder->instructions=builder->refinement->functions[function].instructions;
     bool instance=builder->source->provenance && xir_effect_kind_is_closed(builder->source->provenance->kind);
@@ -79,11 +79,11 @@ static XrXirStatus effect_body_advertisements_append(EffectBodyAdvertisementBuil
         EffectInvocationValueBound *fresh=xir_compile_alloc(builder->work,(size_t)capacity*sizeof(*fresh),&status);
         if (!fresh) return status;
         uint64_t bytes=(uint64_t)function->count*sizeof(*fresh);
-        if (!xir_compile_work(builder->work,bytes+2)) { xr_compile_resources_free(fresh);return XR_XIR_BUDGET; }
+
         if (bytes) memcpy(fresh,function->bounds,(size_t)bytes);
         xr_compile_resources_free(function->bounds);function->bounds=fresh;builder->capacity=capacity;
     }
-    if (!xir_compile_work(builder->work,sizeof(record)+1)) return XR_XIR_BUDGET;
+
     function->bounds[function->count++]=record;return XR_XIR_OK;
 }
 static XrXirStatus effect_body_advertisements_value(EffectBodyAdvertisementBuilder *builder,
@@ -92,7 +92,7 @@ static XrXirStatus effect_body_advertisements_value(EffectBodyAdvertisementBuild
         function>=builder->bounds->count || value>=builder->bounds->functions[function].values)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirModule *module=builder->source;const XrXirFunction *body=&module->functions[function];
-    if (!xir_compile_work(builder->work,3)) return XR_XIR_BUDGET;
+
     XrXirType declared=actual;EffectInvocationValueBound record={0};XrXirStatus status=XR_XIR_OK;
     const XrXirProvenance *instance=module->provenance;
     if (instance && xir_effect_kind_is_closed(instance->kind)) {
@@ -117,7 +117,7 @@ static XrXirStatus effect_body_advertisements_value(EffectBodyAdvertisementBuild
             uint32_t instruction=value-body->parameter_count;
             request.declared=original->instructions[instruction].type;
             if (contract && builder->identity<contract->value_count) {
-                if (!xir_compile_work(builder->work,2)) return XR_XIR_BUDGET;
+
                 const XrXirRootValueIdentity *identity=&contract->values[builder->identity];
                 if (identity->instruction<instruction) return XR_XIR_BAD_STRUCTURE;
                 if (identity->instruction==instruction) { request.declared=identity->declared_type;++builder->identity; }
@@ -166,15 +166,15 @@ static XrXirStatus effect_body_advertisements_span(EffectBodyAdvertisementBuilde
         actual!=XR_XIR_F64 && actual!=XR_XIR_RUNE) || xr_xir_callable_signature(builder->source->types,actual))
         return XR_XIR_BAD_TYPE;
     if (!effect_body_advertisements_span_ready(builder,f)) {
-        if (!xir_compile_work(builder->work,7)) return XR_XIR_BUDGET;
+
         for (uint32_t i=0;i<count;++i) {
-            if (!xir_compile_work(builder->work,1)) return XR_XIR_BUDGET;
+
             XrXirStatus status=effect_body_advertisements_value(builder,f,value+i,actual);
             if (status!=XR_XIR_OK) return status;
         }
         return XR_XIR_OK;
     }
-    if (!xir_compile_work(builder->work,7+sizeof(builder->next))) return XR_XIR_BUDGET;
+
     builder->next+=count;
     if (builder->next==builder->bounds->functions[f].values) { ++builder->function;builder->open=false; }
     return XR_XIR_OK;
@@ -184,6 +184,6 @@ static XrXirStatus effect_body_advertisements_finish(EffectBodyAdvertisementBuil
     if (!input || !*input || !output || *output) return XR_XIR_BAD_STRUCTURE;
     EffectBodyAdvertisementBuilder *builder=*input;
     if (builder->open || builder->function!=builder->bounds->count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(builder->work,2)) return XR_XIR_BUDGET;
+
     *output=builder->bounds;builder->bounds=NULL;*input=NULL;effect_body_advertisements_free(builder);return XR_XIR_OK;
 }

@@ -14,8 +14,8 @@ static XrXirValueStatus xr_xir_nullable_new_graph_operation(XrXirType type,
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena), type);
     if (!node || node->kind != XR_XIR_TYPE_NULLABLE || node->parameter_span)
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!admission->work) return XR_XIR_VALUE_LIMIT;
-    --admission->work;
+    if (!admission_is_compile(admission) && (!admission->work)) return XR_XIR_VALUE_LIMIT;
+    if (!admission_is_compile(admission)) --admission->work;
     XrXirValueStatus status = payload ? xr_xir_value_admit(payload, node->element, admission) : XR_XIR_VALUE_OK;
     if (status != XR_XIR_VALUE_OK) return status;
     size_t bytes = sizeof(XirNominalValue) + (payload ? sizeof(XrXirValue) : 0);
@@ -69,10 +69,10 @@ static XrXirValueStatus nullable_decimal_parse(const XrXirValue *text, XrXirType
     if (!admission || !admission->arena || !text || !unit_value(output) ||
         xr_xir_nullable_element(xr_xir_compile_type_arena_types(admission->arena), type) != XR_XIR_F64)
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!nullable_decimal_work(admission, sizeof(*text))) return XR_XIR_VALUE_LIMIT;
+    if ((!admission_is_compile(admission) && !nullable_decimal_work(admission, sizeof(*text)))) return XR_XIR_VALUE_LIMIT;
     if (!xr_xir_string_view(text, &bytes, &length) || length > UINT32_MAX) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrDecimalWork work = {admission, nullable_decimal_work, false}; uint64_t bits = 0;
-    XrDecimalStatus status = xr_decimal_float_text_work(&work, bytes, length, 64, &bits);
+    XrDecimalStatus status = xr_decimal_float_text_work(admission_is_compile(admission)?NULL:&work, bytes, length, 64, &bits);
     if (status == XR_DECIMAL_WORK_LIMIT) return XR_XIR_VALUE_LIMIT;
     XrXirValue payload = {XR_XIR_F64, 0, 0}; memcpy(&payload.payload, &bits, sizeof(bits));
     return xr_xir_nullable_new_graph_operation(type, status == XR_DECIMAL_OK ? &payload : NULL, admission, output);

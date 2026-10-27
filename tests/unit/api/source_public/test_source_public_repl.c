@@ -37,14 +37,18 @@ static XrSourceWriteStatus collect(void *context,XrSourceOutputStream stream,con
     memcpy(trace->bytes+trace->count,bytes,count);trace->count+=count;++trace->callbacks;return XR_SOURCE_WRITE_OK;
 }
 static XrSourceRepl *open_repl(Trace *trace,size_t output_limit) {
-    XrSourceCompilerOptions compiler;XrSourceCallOptions runtime;
-    CHECK(xray_source_compiler_options_init(&compiler,sizeof(compiler))==XR_SOURCE_OK);
+    XrSourceCompileOptions compiler=xray_source_compile_options_default();
+    XrSourceExecutionOptions policy=xray_source_execution_options_default();
+    XrSourceExecution *execution=NULL;
+    CHECK(xray_source_execution_new(&policy,&execution)==XR_SOURCE_OK && execution);
+    XrSourceCallOptions runtime;
     CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
     compiler.stdlib_path=XR_PUBLIC_STDLIB;runtime.write=collect;runtime.context=trace;runtime.output_byte_limit=output_limit;
     XrSourceRepl *owner=NULL;
-    CHECK(xray_source_repl_new(&compiler,"",&runtime,&owner)!=XR_SOURCE_OK && !owner);
-    CHECK(xray_source_repl_new(&compiler,namespace_id,&runtime,&owner)==XR_SOURCE_OK && owner);
-    CHECK(xray_source_repl_new(&compiler,namespace_id,&runtime,&owner)==XR_SOURCE_BAD_ARGUMENT && owner);
+    CHECK(xray_source_repl_new(&compiler,execution,"",&runtime,&owner)!=XR_SOURCE_OK && !owner);
+    CHECK(xray_source_repl_new(&compiler,execution,namespace_id,&runtime,&owner)==XR_SOURCE_OK && owner);
+    CHECK(xray_source_repl_new(&compiler,execution,namespace_id,&runtime,&owner)==XR_SOURCE_BAD_ARGUMENT && owner);
+    xray_source_execution_free(execution);
     trace->owner=owner;return owner;
 }
 static XrSourceStatus begin(XrSourceRepl *owner,const char *source,XrSourceDiagnostic **diagnostic) {
@@ -168,5 +172,5 @@ int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--write-class-history")){class_binding_write_history();return 0;}
     CHECK(argc==1);
     history();cancellation();typed_results();display_limit();metadata_inspection();
-    puts("public Source REPL: real Compiler/Catalog, exact AST, paired publication, old closures, rollback, cumulative output, owned survivors, reentry and cancel/defer PASS");return 0;
+    puts("public Source REPL: independent requests/Catalog, exact AST, paired publication, old closures, rollback, cumulative output, owned survivors, reentry and cancel/defer PASS");return 0;
 }

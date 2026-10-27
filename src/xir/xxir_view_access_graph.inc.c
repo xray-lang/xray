@@ -37,7 +37,7 @@ static void *view_access_allocate(ViewAccess *a,uint64_t bytes,XrXirStatus *stat
     ViewRootCheck *c=&a->resolver->check;
     if (bytes>SIZE_MAX || c->reserved>c->context->limits.frame_bytes ||
         bytes>c->context->limits.frame_bytes-c->reserved) {*status=XR_XIR_BUDGET;return NULL;}
-    if (!xir_compile_work(c->context,bytes)) {*status=XR_XIR_BUDGET;return NULL;}
+
     void *p=xir_compile_calloc(c->context,1,(size_t)bytes,status);if (p) c->reserved+=bytes;return p;
 }
 static void view_access_release(ViewAccess *a,void *p,uint64_t bytes) {
@@ -60,13 +60,13 @@ static XrXirStatus view_access_function_new(ViewAccess *a,uint32_t function) {
     XrXirStatus status=XR_XIR_OK;a->cache=view_access_allocate(a,bytes,&status);if (!a->cache) return status;
     a->function_bytes=bytes;a->queue=(uint32_t *)(a->cache+values);a->seen=(uint8_t *)(a->queue+blocks);a->repeated=a->seen+blocks;
     for (uint32_t start=0;start<blocks;++start) {
-        if (!xir_compile_work(c->context,blocks)) return XR_XIR_BUDGET;
+
         memset(a->seen,0,(size_t)blocks);uint32_t head=0,tail=1;a->queue[0]=start;a->seen[start]=1;
         while (head<tail && !a->repeated[start]) {
             uint32_t b=a->queue[head++];const XrXirBlock *block=a->body->blocks+b;
             const XrXirInstruction *term=a->body->instructions+block->first+block->count-1u;
             for (uint32_t e=0;e<3;++e) {
-                if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
                 if (e<2?e>=view_access_rules[term->op].edges:!block->panic) continue;
                 uint32_t target=e<2?term->targets[e]:block->panic;
                 if (target==start) {a->repeated[start]=1;break;}
@@ -83,7 +83,7 @@ static XrXirStatus view_access_stable(ViewAccess *a,uint32_t value,bool *stable)
     *stable=value<a->body->parameter_count;if (*stable) return XR_XIR_OK;
     uint32_t instruction=value-a->body->parameter_count;
     for (uint32_t b=0;b<a->body->block_count;++b) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         const XrXirBlock *block=a->body->blocks+b;
         if (instruction>=block->first && instruction-block->first<block->count) {*stable=!a->repeated[b];return XR_XIR_OK;}
     }
@@ -94,7 +94,7 @@ static XrXirStatus view_access_prefix_scope(ViewAccess *a,uint32_t value,bool *c
     if (value<a->body->parameter_count) return XR_XIR_OK;
     uint32_t producer=value-a->body->parameter_count;
     for (uint32_t b=0;b<a->body->block_count;++b) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         const XrXirBlock *block=a->body->blocks+b;
         if (a->instruction<block->first || a->instruction-block->first>=block->count) continue;
         /* No CFG edge can replace a direct producer between these two points.

@@ -20,7 +20,7 @@ int main(int argc,char **argv) {
     if (!bytes) {fclose(file);return 4;}
     size_t actual=fread(bytes,1,(size_t)length,file);int closed=fclose(file);
     if (actual!=(size_t)length || closed) {xr_free(bytes);return 5;}
-    XrCompileResourceLimits limits={16777216,16777216,UINT64_C(1)<<30};
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,UINT64_C(16777216),false};
     XrCompileResources *resources=NULL;
     if (xr_compile_resources_new(&limits,&resources)!=XR_COMPILE_RESOURCE_OK) {xr_free(bytes);return 4;}
     XrXirRuntimeSdkRequest request={argv[1],bytes,(size_t)length,resources};

@@ -24,14 +24,14 @@ static XrXirStatus error_finite_grow(const XrXirCompileContext *work,EffectError
     uint32_t count=proof->count,old_capacity=proof->capacity,capacity=old_capacity?old_capacity*2:32;
     if((uint64_t)capacity>SIZE_MAX/sizeof(*proof->facts)) return XR_XIR_BUDGET;
     EffectErrorFiniteFact *old=proof->facts;
-    *current=(EffectErrorFiniteView){0};XrXirStatus status=XR_XIR_OK;
+    error_finite_view_reset(current);XrXirStatus status=XR_XIR_OK;
     EffectErrorFiniteFact *facts=xir_compile_alloc(work,(size_t)capacity*sizeof(*facts),&status);
     if(!facts) return status;
     status=error_finite_geometry(work,proof);
     if(status==XR_XIR_OK && (proof->facts!=old || proof->count!=count || proof->capacity!=old_capacity))
         status=XR_XIR_BAD_STRUCTURE;
     if(status==XR_XIR_OK) status=effect_role_range(work,facts,capacity,sizeof(*facts));
-    if(status==XR_XIR_OK && !xir_compile_work(work,(uint64_t)count*sizeof(*facts))) status=XR_XIR_BUDGET;
+
     if(status!=XR_XIR_OK) { xr_compile_resources_free(facts);return status; }
     if(count) memcpy(facts,old,(size_t)count*sizeof(*facts));
     if(old) {
@@ -51,8 +51,7 @@ static XrXirStatus error_finite_insert(const XrXirCompileContext *work,EffectErr
     XrXirStatus status=error_finite_lower(&read,coordinate,&at);if(status!=XR_XIR_OK) return status;
     if(at<proof->count && proof->facts[at].coordinate==coordinate) return XR_XIR_OK;
     if(proof->count==proof->capacity) { *paused=true;return XR_XIR_OK; }
-    if(!xir_compile_work(work,(uint64_t)(proof->count-at)*sizeof(*proof->facts)+sizeof(*proof->facts)))
-        return XR_XIR_BUDGET;
+
     memmove(proof->facts+at+1,proof->facts+at,(size_t)(proof->count-at)*sizeof(*proof->facts));
     proof->facts[at]=(EffectErrorFiniteFact){coordinate,rank};++proof->count;*changed=true;return XR_XIR_OK;
 }
@@ -60,14 +59,20 @@ typedef struct ErrorFiniteDerive {
     EffectErrorFinite *proof;
     uint32_t rank;
     bool *changed,full;
+    uint64_t walked,resume;
 } ErrorFiniteDerive;
-static XrXirStatus error_finite_derive_coordinate(const EffectErrorFiniteRead *read,
+static XrXirStatus error_finite_derive_coordinate(EffectErrorFiniteRead *read,const EffectErrorEquationRead *equation,
     uint32_t function,uint64_t coordinate,void *owner,bool *paused) {
-    ErrorFiniteDerive *derive=owner;uint64_t result=0;uint32_t bits=0;
+    ErrorFiniteDerive *derive=owner;
+
+    if(derive->walked==UINT64_MAX) return XR_XIR_BAD_STRUCTURE;
+    ++derive->walked;
+    if(derive->walked<=derive->resume) return XR_XIR_OK;
+    uint64_t result=0;uint32_t bits=0;
     /* Earlier equations in this walk already have strictly smaller ranks.
      * Read their current facts without waiting for another complete sweep. */
-    if(!xir_compile_work(read->work,sizeof(EffectErrorFiniteRead))) return XR_XIR_BUDGET;
-    EffectErrorFiniteRead current=*read;current.limit=derive->rank;read=&current;
+
+    read->limit=derive->rank;
     const EffectErrorFiniteRow *row=&read->proof->rows[function];
     /* Reachability is a monotone Boolean equation. A true fact from an earlier
      * rank cannot gain another bit, so construction need not derive it again.
@@ -77,7 +82,7 @@ static XrXirStatus error_finite_derive_coordinate(const EffectErrorFiniteRead *r
         XrXirStatus prior=error_finite_word(read,coordinate,1,&reached);
         if(prior!=XR_XIR_OK || reached) return prior;
     }
-    XrXirStatus status=error_finite_rhs(read,function,coordinate,&result,&bits);
+    XrXirStatus status=error_finite_rhs_walk(read,equation,function,coordinate,&result,&bits);
     if(status!=XR_XIR_OK) return status;
     uint32_t count=derive->proof->count;
     for(uint32_t bit=0;bit<bits;++bit) if(result&(UINT64_C(1)<<bit)) {
@@ -86,14 +91,15 @@ static XrXirStatus error_finite_derive_coordinate(const EffectErrorFiniteRead *r
         if(*paused) { derive->full=true;break; }
     }
     if(derive->proof->count!=count) {
-        if(derive->rank==UINT32_MAX-1 || !xir_compile_work(read->work,sizeof(derive->rank))) return XR_XIR_BUDGET;
+        if(derive->rank==UINT32_MAX-1) return XR_XIR_BUDGET;
         ++derive->rank;
     }
     return XR_XIR_OK;
 }
 static XrXirStatus error_finite_derive(const XrXirCompileContext *work,EffectErrorFinite *proof) {
-    bool changed=true;EffectErrorFiniteView current={0};
-    ErrorFiniteDerive derive={proof,1,&changed,false};
+    bool changed=true;EffectErrorFiniteView current;error_finite_view_reset(&current);
+
+    ErrorFiniteDerive derive={.proof=proof,.rank=1,.changed=&changed};
     /* Every growing equation advances the witness rank. A complete stable
      * sweep still closes loops and recursive calls, and the independent
      * receiver still checks closure and strict lower-rank support. */
@@ -103,15 +109,26 @@ static XrXirStatus error_finite_derive(const XrXirCompileContext *work,EffectErr
             XrXirStatus status=XR_XIR_OK;
             if(!current.work) status=error_finite_view_open(work,proof,&current);
             if(status!=XR_XIR_OK) return status;
+
+            derive.walked=0;
             {
                 EffectErrorFiniteRead read={proof,work,derive.rank,&current};bool empty=false;
                 status=error_finite_walk(&read,f,error_finite_derive_coordinate,&derive,&empty);
             }
             if(status!=XR_XIR_OK) return status;
             if(derive.full) {
+
+                if(!derive.walked) return XR_XIR_BAD_STRUCTURE;
+                derive.resume=derive.walked-1;
+                /* Only a scheduling ordinal survives growth. Callback changes
+                 * may move the domain, so a complete fresh sweep must follow. */
+                changed=true;
                 status=error_finite_grow(work,proof,&current);if(status!=XR_XIR_OK) return status;
                 derive.full=false;
-            } else ++f;
+            } else {
+
+                derive.resume=0;++f;
+            }
         }
     }
     return XR_XIR_OK;
@@ -136,7 +153,7 @@ static XrXirStatus error_finite_construct(const XrXirCompileContext *work,const 
     proof->atom_count=outcomes->atom_count;proof->words=outcomes->words;proof->functions=functions;
     proof->invocations=certificate->final;
     if(types) {
-        if(!xir_compile_work(work,2*sizeof(*types))) { error_finite_release(proof);return XR_XIR_BUDGET; }
+
         proof->terms=*types;*types=(EffectTerms){0};
     } else {
         const XrXirTypes *domain=material->domain.types;
@@ -162,7 +179,7 @@ static XrXirStatus error_finite_construct(const XrXirCompileContext *work,const 
         if(values>UINT32_MAX || at>UINT64_MAX-summary || head->block_count>UINT64_MAX-at-summary ||
             rows>(UINT64_MAX-at-summary-head->block_count)/summary) { status=XR_XIR_BUDGET;break; }
         uint64_t size=head->block_count+rows*summary+summary;
-        if(!xir_compile_work(work,sizeof(*proof->rows))) { status=XR_XIR_BUDGET;break; }
+
         uint32_t returned=proof->contextual && f>=proof->invocations->count;
         proof->rows[f]=(EffectErrorFiniteRow){at,at+size,head->block_count,(uint32_t)values,node,returned};at+=size;
     }
@@ -200,7 +217,7 @@ static XrXirStatus error_finite_outcomes_project(const XrXirCompileContext *work
         for(uint32_t word=0;word<proof->words;++word) {
             uint64_t row=0;status=error_finite_word(&read,proof->rows[f].end-(uint64_t)proof->words*64+
                 (uint64_t)word*64,64,&row);if(status!=XR_XIR_OK) return status;
-            if(!xir_compile_work(work,sizeof(row))) return XR_XIR_BUDGET;
+
             outcomes->errors[(size_t)f*proof->words+word]=row;
             if(!word) {
                 if(row&1) throws=XR_XIR_EFFECT_UNKNOWN;
@@ -208,7 +225,7 @@ static XrXirStatus error_finite_outcomes_project(const XrXirCompileContext *work
             } else if(row) throws=XR_XIR_EFFECT_MAY;
         }
         if(f<proof->functions) {
-            if(!xir_compile_work(work,sizeof(throws))) return XR_XIR_BUDGET;
+
             outcomes->functions[f].throws=throws;
         }
     }
@@ -233,7 +250,7 @@ static XrXirStatus error_finite_outcomes_match(const XrXirCompileContext *work,
         for(uint32_t word=0;word<proof->words;++word) {
             uint64_t row=0;status=error_finite_word(&read,proof->rows[f].end-(uint64_t)proof->words*64+
                 (uint64_t)word*64,64,&row);if(status!=XR_XIR_OK) return status;
-            if(!xir_compile_work(work,6)) return XR_XIR_BUDGET;
+
             if(row!=outcomes->errors[(size_t)f*proof->words+word]) return XR_XIR_BAD_STRUCTURE;
             if(!word) {
                 if(row&1) throws=XR_XIR_EFFECT_UNKNOWN;

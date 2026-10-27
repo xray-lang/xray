@@ -31,18 +31,18 @@ typedef struct DependencyParser {
 static XrJsonCursorStatus dependency_resource(XrCompileResourceStatus status) {
     switch (status) {
     case XR_COMPILE_RESOURCE_OK: return XR_JSON_CURSOR_OK;
-    case XR_COMPILE_RESOURCE_BUDGET: return XR_JSON_CURSOR_BUDGET;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: return XR_JSON_CURSOR_MEMORY_LIMIT;
+    case XR_COMPILE_RESOURCE_OVERFLOW: return XR_JSON_CURSOR_OVERFLOW;
     case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_JSON_CURSOR_OUT_OF_MEMORY;
     default: return XR_JSON_CURSOR_INVALID;
     }
-}
-static XrJsonCursorStatus dependency_work(void *context, uint64_t units) {
-    return dependency_resource(xr_compile_resources_work(context, units));
 }
 static XrXirTargetStatus dependency_status(XrJsonCursorStatus status) {
     switch (status) {
     case XR_JSON_CURSOR_OK: return XR_XIR_TARGET_OK;
     case XR_JSON_CURSOR_BUDGET: return XR_XIR_TARGET_BUDGET;
+    case XR_JSON_CURSOR_MEMORY_LIMIT: return XR_XIR_TARGET_MEMORY_LIMIT;
+    case XR_JSON_CURSOR_OVERFLOW: return XR_XIR_TARGET_OVERFLOW;
     case XR_JSON_CURSOR_OUT_OF_MEMORY: return XR_XIR_TARGET_OUT_OF_MEMORY;
     case XR_JSON_CURSOR_UNSUPPORTED: return XR_XIR_TARGET_UNSUPPORTED;
     default: return XR_XIR_TARGET_INVALID;
@@ -51,15 +51,9 @@ static XrXirTargetStatus dependency_status(XrJsonCursorStatus status) {
 static bool dependency_fail(DependencyParser *p, XrJsonCursorStatus status) {
     return xr_json_cursor_fail(&p->json, status);
 }
-static int dependency_read(void *context, const uint8_t *address, uint8_t *output) {
-    DependencyParser *p = context;
-    if (!xr_json_cursor_work(&p->json, 1)) return 0;
-    *output = *address; return 1;
-}
 static bool dependency_utf8(DependencyParser *p, const char *text, size_t length) {
-    XrUtf8ScanResult result;
-    if (!xr_utf8_core_scan_strict_read((const uint8_t *)text, length,
-        dependency_read, p, &result)) return false;
+    if (p->json.status != XR_JSON_CURSOR_OK) return false;
+    XrUtf8ScanResult result = xr_utf8_core_scan_strict((const uint8_t *)text, length);
     return result.error == XR_UTF8_OK || dependency_fail(p, XR_JSON_CURSOR_INVALID);
 }
 static bool dependency_separator(uint8_t byte) { return byte == '/' || byte == '\\'; }
@@ -71,12 +65,12 @@ static bool dependency_path(DependencyParser *p, const char *path) {
     if (!dependency_utf8(p, path, length)) return false;
     /* Windows file paths cannot contain control bytes or a non-drive colon. */
     for (size_t i = 0; i < length; ++i) {
-        if (!xr_json_cursor_work(&p->json, 1)) return false;
+
         uint8_t c = (uint8_t)path[i];
         if (c < 32 || c == '"' || (c == ':' && i != 1))
             return dependency_fail(p, XR_JSON_CURSOR_INVALID);
     }
-    if (!xr_json_cursor_work(&p->json, length < 3 ? length : 3)) return false;
+
     uint8_t first = (uint8_t)path[0], second = length > 1 ? (uint8_t)path[1] : 0;
     uint8_t third = length > 2 ? (uint8_t)path[2] : 0;
     if (length >= 3 && ((first >= 'a' && first <= 'z') ||
@@ -84,13 +78,13 @@ static bool dependency_path(DependencyParser *p, const char *path) {
     if (length >= 5 && dependency_separator(first) && dependency_separator(second)) {
         size_t i = 2, start = i;
         for (; i < length; ++i) {
-            if (!xr_json_cursor_work(&p->json, 1)) return false;
+
             if (dependency_separator((uint8_t)path[i])) break;
         }
         if (i == start || i == length) return dependency_fail(p, XR_JSON_CURSOR_INVALID);
         start = ++i;
         for (; i < length; ++i) {
-            if (!xr_json_cursor_work(&p->json, 1)) return false;
+
             if (dependency_separator((uint8_t)path[i])) break;
         }
         if (i > start) return true;
@@ -107,13 +101,13 @@ static bool dependency_append(DependencyParser *p, const char *path, size_t offs
         if (!capacity) capacity = 8;
         if (capacity > p->limits.records) capacity = p->limits.records;
         size_t bytes = (size_t)capacity * sizeof(*f->records);
-        if (bytes / sizeof(*f->records) != capacity) return dependency_fail(p, XR_JSON_CURSOR_BUDGET);
+        if (bytes / sizeof(*f->records) != capacity) return dependency_fail(p, XR_JSON_CURSOR_OVERFLOW);
         XrJsonCursorStatus status = dependency_resource(xr_compile_resources_resize(
             f->resources, (void **)&f->records, bytes));
         if (status != XR_JSON_CURSOR_OK) return dependency_fail(p, status);
         f->capacity = capacity;
     }
-    if (!xr_json_cursor_work(&p->json, sizeof(*f->records))) return false;
+
     f->records[f->count++] = (XrDependencyRecord){path, offset, kind};
     return true;
 }
@@ -175,13 +169,13 @@ static bool dependency_json(DependencyParser *p) {
 }
 static bool dependency_put(DependencyParser *p, uint8_t byte) {
     if (p->text_used == p->text_capacity) return dependency_fail(p, XR_JSON_CURSOR_BUDGET);
-    if (!xr_json_cursor_work(&p->json, 1)) return false;
+
     p->facts->text[p->text_used++] = (char)byte; return true;
 }
 static bool dependency_look(DependencyParser *p, size_t ahead, uint8_t *byte) {
     if ((size_t)(p->json.end - p->json.cursor) <= ahead)
         return dependency_fail(p, XR_JSON_CURSOR_INVALID);
-    if (!xr_json_cursor_work(&p->json, 1)) return false;
+
     *byte = (uint8_t)p->json.cursor[ahead]; return true;
 }
 static bool dependency_make_gap(DependencyParser *p, bool *ended) {
@@ -250,14 +244,14 @@ static bool dependency_make(DependencyParser *p) {
     }
     return p->facts->count != 0 || dependency_fail(p, XR_JSON_CURSOR_INVALID);
 }
-static bool dependency_prefix(DependencyParser *p, const char *line, const char *prefix,
+static bool dependency_prefix(const char *line, const char *prefix,
     size_t *consumed) {
     size_t i = 0;
     for (;;) {
-        if (!xr_json_cursor_work(&p->json, 1)) return false;
+
         char expected = prefix[i];
         if (!expected) { *consumed = i; return true; }
-        if (!xr_json_cursor_work(&p->json, 1)) return false;
+
         if (line[i] != expected) return false;
         ++i;
     }
@@ -278,7 +272,7 @@ static bool dependency_libraries(DependencyParser *p) {
             if (!c || c == '\n') return dependency_fail(p, XR_JSON_CURSOR_INVALID);
             ++length;
         }
-        if (!xr_json_cursor_work(&p->json, 1)) return false;
+
         line[length] = 0;
         if (!length) continue;
         if (xr_json_cursor_equal(&p->json, line, "正在搜索库")) {
@@ -290,12 +284,12 @@ static bool dependency_libraries(DependencyParser *p) {
             searching = false; ++blocks; continue;
         }
         size_t prefix;
-        if (!dependency_prefix(p, line, "    正在搜索 ", &prefix))
+        if (!dependency_prefix(line, "    正在搜索 ", &prefix))
             return dependency_fail(p, XR_JSON_CURSOR_UNSUPPORTED);
-        if (!searching || length <= prefix || !xr_json_cursor_work(&p->json, 1))
+        if (!searching || length <= prefix)
             return dependency_fail(p, XR_JSON_CURSOR_INVALID);
         if (line[length - 1] != ':') return dependency_fail(p, XR_JSON_CURSOR_INVALID);
-        if (!xr_json_cursor_work(&p->json, 1)) return false;
+
         line[length - 1] = 0;
         if (!dependency_append(p, line + prefix, offset + prefix, XR_DEPENDENCY_LIBRARY_SEARCH)) return false;
         ++block_records;
@@ -349,11 +343,11 @@ static bool dependency_rsp(DependencyParser *p) {
         }
         if (!dependency_put(p, 0) || !dependency_rsp_take(p, '\r') || !dependency_rsp_take(p, '\n')) return false;
         const char *path = p->facts->text + begin;
-        if (!xr_json_cursor_work(&p->json, 1)) return false;
+
         char first = path[0];
         if (first == '-') return dependency_fail(p, XR_JSON_CURSOR_UNSUPPORTED);
         if (first == '/') {
-            if (!xr_json_cursor_work(&p->json, 1)) return false;
+
             if (path[1] != '/') return dependency_fail(p, XR_JSON_CURSOR_UNSUPPORTED);
         }
         if (!dependency_append(p, path, offset, XR_DEPENDENCY_LINK_INPUT)) return false;
@@ -362,12 +356,12 @@ static bool dependency_rsp(DependencyParser *p) {
 }
 static bool dependency_arguments(DependencyParser *p, const XrDependencyInput *input) {
     for (uint32_t i = 0; i < input->argc; ++i) {
-        if (!xr_json_cursor_work(&p->json, 1)) return false;
+
         const char *arg = input->argv[i];
         if (!arg) return dependency_fail(p, XR_JSON_CURSOR_INVALID);
         size_t length = 0;
         for (;;) {
-            if (!xr_json_cursor_work(&p->json, 1)) return false;
+
             uint8_t byte = (uint8_t)arg[length];
             if (byte == '@') return dependency_fail(p, XR_JSON_CURSOR_UNSUPPORTED);
             if (!byte) break;
@@ -387,7 +381,7 @@ XR_FUNC XrXirTargetStatus xtc_dependencies_parse(XrCompileResources *resources,
         return XR_XIR_TARGET_UNSUPPORTED;
     if (input->length > limits.frame_bytes || input->length > PTRDIFF_MAX) return XR_XIR_TARGET_BUDGET;
     DependencyParser p = {0}; p.limits = limits;
-    p.json = xr_json_cursor_make(NULL, 0, resources, dependency_work);
+    p.json = xr_json_cursor_make(NULL, 0);
     if (!dependency_arguments(&p, input)) return dependency_status(p.json.status);
     XrCompileResourceStatus status = xr_compile_resources_calloc(resources, 1,
         sizeof(*p.facts), (void **)&p.facts);
@@ -395,7 +389,7 @@ XR_FUNC XrXirTargetStatus xtc_dependencies_parse(XrCompileResources *resources,
     p.facts->resources = resources;
     status = xr_compile_resources_alloc(resources, input->length + 1, (void **)&p.facts->bytes);
     if (status != XR_COMPILE_RESOURCE_OK) dependency_fail(&p, dependency_resource(status));
-    if (p.json.status == XR_JSON_CURSOR_OK && xr_json_cursor_work(&p.json, input->length + 1)) {
+    if (p.json.status == XR_JSON_CURSOR_OK) {
         memcpy(p.facts->bytes, input->bytes, input->length); p.facts->bytes[input->length] = 0;
         p.json.begin = p.json.cursor = p.facts->bytes; p.json.end = p.json.begin + input->length;
         if (input->format == XR_DEPENDENCY_WINDOWS_MAKE || input->format == XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE) {
@@ -403,12 +397,13 @@ XR_FUNC XrXirTargetStatus xtc_dependencies_parse(XrCompileResources *resources,
             /* A UTF-16 code unit needs at most three UTF-8 bytes. Quotes and
              * CRLF leave more room than the terminating byte for each path. */
             if (input->format == XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE) {
-                if (input->length / 2 > (SIZE_MAX - 1) / 3) dependency_fail(&p, XR_JSON_CURSOR_BUDGET);
+                if (input->length / 2 > (SIZE_MAX - 1) / 3) dependency_fail(&p, XR_JSON_CURSOR_OVERFLOW);
                 else p.text_capacity = (input->length / 2) * 3 + 1;
             }
-            status = p.json.status == XR_JSON_CURSOR_OK ? xr_compile_resources_alloc(resources,
-                p.text_capacity, (void **)&p.facts->text) : XR_COMPILE_RESOURCE_BUDGET;
-            if (status != XR_COMPILE_RESOURCE_OK) dependency_fail(&p, dependency_resource(status));
+            if (p.json.status == XR_JSON_CURSOR_OK) {
+                status = xr_compile_resources_alloc(resources, p.text_capacity, (void **)&p.facts->text);
+                if (status != XR_COMPILE_RESOURCE_OK) dependency_fail(&p, dependency_resource(status));
+            }
         }
         if (p.json.status == XR_JSON_CURSOR_OK) {
             if (input->format == XR_DEPENDENCY_MSVC_SOURCE_1_2) dependency_json(&p);

@@ -20,7 +20,7 @@ static XrXirStatus binding_source(XrXirCompileContext *context,XrXirArtifact **o
     XrXirCtfeStatus queried=xr_xir_compile_source_comptime_instances_view(&stage,views,actual,2);
     if (queried!=XR_XIR_CTFE_OK) {
         xr_xir_compile_source_comptime_instances_free(&stage);
-        return queried==XR_XIR_CTFE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:queried==XR_XIR_CTFE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+        return p11_xir_from_ctfe(queried);
     }
     CHECK(views[0].definition==views[1].definition && views[0].value->payload==42 && views[1].value->payload==42);
     const XrXirArtifact *original=views[0].definition;uint32_t count=original->module.function_count;
@@ -28,9 +28,6 @@ static XrXirStatus binding_source(XrXirCompileContext *context,XrXirArtifact **o
     XrXirFunctionIdentity *identities=status==XR_XIR_OK?xir_compile_calloc(context,count+1,sizeof(*identities),&status):NULL;
     XrXirGeneric *generics=status==XR_XIR_OK?xir_compile_calloc(context,count+1,sizeof(*generics),&status):NULL;
     if (status!=XR_XIR_OK) goto done;
-    if (!xir_compile_work(context,(uint64_t)count*(sizeof(*functions)+sizeof(*identities)+sizeof(*generics)))) {
-        status=XR_XIR_BUDGET;goto done;
-    }
     memcpy(functions,original->module.functions,(size_t)count*sizeof(*functions));
     memcpy(identities,original->module.declarations->functions,(size_t)count*sizeof(*identities));
     memcpy(generics,original->module.generics,(size_t)count*sizeof(*generics));
@@ -117,7 +114,7 @@ static void binding_controls(void) {
             CHECK(status==XR_XIR_OK && checked);status=xr_xir_compile_specialize(checked,&closed,NULL);
             CHECK(status==XR_XIR_BAD_TYPE && !closed);
         } else CHECK(status!=XR_XIR_OK && !checked);
-        xr_xir_compile_artifact_free(checked);CHECK(stats(&context).live_bytes==before.live_bytes);
+        xr_xir_compile_artifact_free(checked);CHECK(stats(&context).held_bytes==before.held_bytes);
         xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     }
 }

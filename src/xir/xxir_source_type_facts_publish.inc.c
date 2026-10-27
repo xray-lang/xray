@@ -8,7 +8,7 @@
  */
 static bool source_type_fact(SourceContext *ctx,XrXirSourceTypeFact *facts,const SourceName *name,
     XrXirSourceTypeKind kind,uint32_t index) {
-    if(!source_work(ctx,NULL))return false;
+    if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
     if(!name||!name->declaration)return true;
     if(name->declaration>ctx->query.declaration_count||
         ctx->query.declarations[name->declaration-1].kind!=XR_XIR_SOURCE_TYPE)

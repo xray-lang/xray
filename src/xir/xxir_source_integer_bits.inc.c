@@ -55,7 +55,7 @@ static bool source_bits_byteswap(SourceContext *ctx,SourceValue bits,SourceValue
     const int64_t masks[]={INT64_C(0x00ff00ff00ff00ff),INT64_C(0x0000ffff0000ffff),INT64_C(0xffffffff)};
     for (unsigned stage=0;stage<3;++stage) {
         SourceValue mask,amount,left,right;
-        if (!source_work(ctx,NULL) || !source_bits_constant(ctx,XR_XIR_U64,masks[stage],&mask) ||
+        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_bits_constant(ctx,XR_XIR_U64,masks[stage],&mask) ||
             !source_bits_constant(ctx,XR_XIR_I64,(int64_t)(8u<<stage),&amount) ||
             !source_bits_binary(ctx,XR_XIR_SHR_INT,bits,amount,&right) ||
             !source_bits_binary(ctx,XR_XIR_AND_INT,right,mask,&right) ||
@@ -73,7 +73,7 @@ static bool source_integer_bits(SourceContext *ctx,XrNativeOperation operation,
     if (operation==XR_NATIVE_OPERATION_INTEGER_LEADING_ZEROS) {
         for (int64_t count=1;count<=32;count*=2) {
             SourceValue shifted;
-            if (!source_work(ctx,NULL) || !source_bits_shift(ctx,bits,count,&shifted) ||
+            if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_bits_shift(ctx,bits,count,&shifted) ||
                 !source_bits_binary(ctx,XR_XIR_OR_INT,bits,shifted,&bits)) return false;
         }
         SourceValue total,popcount;

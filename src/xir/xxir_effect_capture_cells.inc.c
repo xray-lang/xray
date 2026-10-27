@@ -48,17 +48,17 @@ static XrXirStatus effect_capture_cell(EffectCaptureRead *read,const EffectCaptu
         if(status!=XR_XIR_OK) return status;
     }
     for(uint32_t w=0;w<full.word_count;++w) {
-        if(!xir_compile_work(read->work,1)) return XR_XIR_BUDGET;
+
         uint64_t bits=full.dependencies[w];
         while(bits) {
-            if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
             uint64_t index=(uint64_t)w*64+(uint32_t)__builtin_ctzll(bits);bits&=bits-1;
             if(index>=full.root_count) return XR_XIR_BAD_STRUCTURE;
             status=effect_capture_cell_subject(read,node,value,&full.roots[index]);if(status!=XR_XIR_OK) return status;
         }
     }
     for(uint32_t bit=0;bit<view.parameter_count;++bit) {
-        if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
         if(!(view.dependencies[bit/64]&(UINT64_C(1)<<(bit%64)))) continue;
         uint32_t parameter=view.parameters[bit],kind=0;
         if(parameter>=node->head.parameter_count) return XR_XIR_BAD_STRUCTURE;
@@ -92,7 +92,7 @@ static XrXirStatus effect_capture_class_intrinsic(EffectCaptureRead *read,const 
             if(status!=XR_XIR_OK) return status;
             opaque=xr_xir_type_span(read->body.domain.types,target.result)!=0;
             for(uint32_t p=0;p<target.parameter_count;++p) {
-                if(!xir_compile_work(read->work,1)) return XR_XIR_BUDGET;
+
                 if(xr_xir_type_span(read->body.domain.types,target.parameters[p])) opaque=true;
             }
         }
@@ -116,7 +116,7 @@ static XrXirStatus effect_capture_class_proposals(EffectCaptureRead *read,
     if(frame!=XR_XIR_OK) return frame;
     for(uint32_t n=0;n<read->final->count;++n) {
         const EffectInvocationClassDiscovery *source=&discovery->states[n].classes;
-        if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
         if(!source->count && !source->return_mask) continue;
         EffectCaptureNode node={0};XrXirStatus status=effect_capture_node(read,n,&node);if(status!=XR_XIR_OK) return status;
         status=effect_role_range(read->work,source->facts,source->count,sizeof(*source->facts));
@@ -156,7 +156,7 @@ static XrXirStatus effect_capture_callable_cell_local(EffectCaptureRead *read,
     if(status!=XR_XIR_OK) return status;
     bool escaped=false;
     for(uint32_t i=0;i<node->head.instruction_count;++i) {
-        if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+
         XrXirInstruction decoded;const XrXirInstruction *op=NULL;
         status=effect_body_request_sequence_operation(&read->body,body,i,&cursor,&decoded,&op);
         if(status!=XR_XIR_OK) return status;
@@ -167,7 +167,7 @@ static XrXirStatus effect_capture_callable_cell_local(EffectCaptureRead *read,
             (count && !node->head.operands))) return XR_XIR_BAD_STRUCTURE;
         if(!table && count>XR_COUNTOF(op->args)) return XR_XIR_BAD_STRUCTURE;
         for(uint32_t a=0;a<count;++a) {
-            if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+
             if(op->op==XR_XIR_PHI && !(a&1)) continue;
             uint32_t value=table?node->head.operands[op->args[0]+a]:op->args[a];
             if(value!=cell) continue;
@@ -190,7 +190,7 @@ static XrXirStatus effect_capture_callable_cell(EffectCaptureRead *read,
     status=effect_body_request_sequence_begin(&read->body,&cursor);
     if(status!=XR_XIR_OK) return status;
     for(uint32_t i=0;i<node->head.instruction_count;++i) {
-        if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+
         XrXirInstruction decoded;const XrXirInstruction *op=NULL;
         status=effect_body_request_sequence_operation(&read->body,body,i,&cursor,&decoded,&op);
         if(status!=XR_XIR_OK) return status;

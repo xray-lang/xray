@@ -134,8 +134,8 @@ static void ordinary_missing_slot(const XrXirCompileContext *context,const Ordin
 }
 
 static void ordinary_case(bool root) {
-    /* A finite allowance is admission, never an exact consumption oracle. */
-    XrCompileResourceLimits caps={8388608,4194304,8000000};
+    /* Ordinary functional admission retains no cumulative allocation quota. */
+    XrCompileResourceLimits caps={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};
     XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();

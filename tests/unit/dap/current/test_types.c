@@ -33,7 +33,7 @@ static void types_open(TypeFixture *fixture,const char *text,bool at_return) {
     XrSourceCompilerConfig source={{fixture->resources,xr_xir_compile_default_limits()},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
     XrSourceCompileDiagnostic diagnostic={0};
-    CHECK(xr_source_compiler_new(&source,&fixture->compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
+    CHECK(xr_source_compiler_new(&source,NULL,&fixture->compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
     xr_source_compile_diagnostic_free(&diagnostic);
     XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};
     CHECK(xr_xir_domain_new_budgeted(1048576,&budget,&fixture->domain)==XR_XIR_VALUE_OK);

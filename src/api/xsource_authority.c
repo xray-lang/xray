@@ -31,7 +31,7 @@ static XrManifestStatus authority_status(XrOsIoStatus status) {
     switch(status) {
     case XR_OS_IO_OK:return XR_MANIFEST_OK;
     case XR_OS_IO_NOT_FOUND:return XR_MANIFEST_NOT_FOUND;
-    case XR_OS_IO_BUDGET:return XR_MANIFEST_BUDGET;
+    case XR_OS_IO_OVERFLOW:return XR_MANIFEST_OVERFLOW;
     case XR_OS_IO_OUT_OF_MEMORY:return XR_MANIFEST_OUT_OF_MEMORY;
     case XR_OS_IO_BAD_ARGUMENT:return XR_MANIFEST_BAD_ARGUMENT;
     case XR_OS_IO_UNSUPPORTED:return XR_MANIFEST_UNSUPPORTED;
@@ -40,7 +40,7 @@ static XrManifestStatus authority_status(XrOsIoStatus status) {
 }
 static bool authority_absolute(XrIoContext *io, const char *path) {
     size_t length=0;if(!io_length(io,path,&length)||!length)return false;
-    if(!io_work(io,length<3?length:3))return false;
+    if(!((io)->status == XR_OS_IO_OK))return false;
     unsigned char first=(unsigned char)path[0],second=length>1?(unsigned char)path[1]:0,third=length>2?(unsigned char)path[2]:0;
 #ifdef XR_OS_WINDOWS
     return (length>=2&&(first=='/'||first=='\\')&&(second=='/'||second=='\\')) ||
@@ -52,7 +52,7 @@ static bool authority_absolute(XrIoContext *io, const char *path) {
 }
 static bool authority_equal(XrIoContext *io, const char *a, const char *b, bool *equal) {
     for(;;) {
-        if(!io_work(io,2))return false;
+        if(!((io)->status == XR_OS_IO_OK))return false;
         char x=*a++,y=*b++;if(x!=y||!x){*equal=x==y;return true;}
     }
 }
@@ -71,7 +71,7 @@ XR_FUNC XrOsIoStatus xr_source_find_project_root(const XrOsIoPolicy *policy,
             XrOsIoStatus probe=xr_file_probe_owned(policy,candidate,true);
             if(probe==XR_OS_IO_OK) {
                 io_free(&io,candidate);
-                if(io_work(&io,1)){*output=current;current=NULL;}
+                if((&io)->status == XR_OS_IO_OK){*output=current;current=NULL;}
                 break;
             }
             if(probe!=XR_OS_IO_NOT_FOUND)io_status(&io,probe);
@@ -90,7 +90,7 @@ XR_FUNC XrOsIoStatus xr_source_find_project_root(const XrOsIoPolicy *policy,
 #ifdef XR_OS_WINDOWS
 static bool authority_stem(XrIoContext *io,const char *stem,const char *reserved,size_t size) {
     for(size_t i=0;i<size;++i) {
-        if(!io_work(io,2)||stem[i]!=reserved[i])return false;
+        if(!((io)->status == XR_OS_IO_OK)||stem[i]!=reserved[i])return false;
     }
     return true;
 }
@@ -111,7 +111,7 @@ static bool authority_entry_path(XrIoContext *io, const char *path) {
 #endif
     size_t components = 0;
     for (size_t i = start; i <= length; ++i) {
-        if (!io_work(io,1)) return false;
+        if (!((io)->status == XR_OS_IO_OK)) return false;
         unsigned char c = (unsigned char)path[i];
         bool separator = c == '/';
 #ifdef XR_OS_WINDOWS
@@ -130,7 +130,7 @@ static bool authority_entry_path(XrIoContext *io, const char *path) {
          * source-module identity. Reject rather than guess OS aliasing. */
         char stem[4] = {0}; size_t stem_size = 0;
         while (stem_size < size && stem_size < sizeof(stem) && path[start+stem_size] != '.') {
-            if (!io_work(io,1)) return false;
+            if (!((io)->status == XR_OS_IO_OK)) return false;
             unsigned char x = (unsigned char)path[start+stem_size];
             stem[stem_size++] = (char)(x >= 'a' && x <= 'z' ? x - 'a' + 'A' : x);
         }
@@ -179,7 +179,7 @@ static XrOsIoStatus authority_virtual_entry(XrIoContext *io, const char *entry,
     size_t prefix = 0;
     if (io->status == XR_OS_IO_OK && io_length(io,directory,&prefix)) {
         const char *tail = entry + prefix;
-        if (io_work(io,1) && (*tail == '/' || *tail == '\\')) ++tail;
+        if (((io)->status == XR_OS_IO_OK) && (*tail == '/' || *tail == '\\')) ++tail;
         if (io->status == XR_OS_IO_OK) io_status(io,xr_path_join_owned(io->policy,canonical,tail,&joined));
     }
     if (io->status == XR_OS_IO_OK) {
@@ -199,12 +199,12 @@ XR_FUNC void xr_source_authority_close(XrSourceAuthority *authority) {
 }
 static XrManifestStatus authority_validate_text(XrIoContext *io,const XrSourceEntryInput *input,
     XrSourceAuthority *authority,const XrSourceAuthorityDiagnostics *diagnostics) {
-    if(input->length==SIZE_MAX)return XR_MANIFEST_BUDGET;
+    if(input->length==SIZE_MAX)return XR_MANIFEST_OVERFLOW;
     size_t line=1,line_start=0;
     for(size_t i=0;i<input->length;++i) {
-        if(!io_work(io,1))return authority_status(io->status);
+        if(!((io)->status == XR_OS_IO_OK))return authority_status(io->status);
         if(!input->text[i]) {
-            if(line>INT_MAX || i-line_start>=INT_MAX)return XR_MANIFEST_BUDGET;
+            if(line>INT_MAX || i-line_start>=INT_MAX)return XR_MANIFEST_OVERFLOW;
             XrXirSourceDiagnostic *detail=diagnostics?diagnostics->source:NULL;
             if(detail) {
                 static const char message[]="source text contains an embedded NUL";
@@ -271,20 +271,20 @@ XR_FUNC XrManifestStatus xr_source_authority_open_input(const XrXirCompileContex
         const XrModuleIdentityAuthority *entry_authority=xr_source_authority_entry(authority);
         XrModuleStatus module=xr_compile_module_identity_from_source(context->resources,entry_authority,
             authority->entry_path,&identity,&logical);
-        status=module==XR_MODULE_OK?XR_MANIFEST_OK:module==XR_MODULE_BUDGET?XR_MANIFEST_BUDGET:
+        status=module==XR_MODULE_OK?XR_MANIFEST_OK:module==XR_MODULE_BUDGET?XR_MANIFEST_OVERFLOW:
             module==XR_MODULE_OUT_OF_MEMORY?XR_MANIFEST_OUT_OF_MEMORY:XR_MANIFEST_INVALID;
         if(status==XR_MANIFEST_OK && input->kind==XR_SOURCE_ENTRY_TEXT) {
             status=authority_validate_text(&io,input,authority,diagnostics);
             if(status!=XR_MANIFEST_OK)goto done;
             XrModuleOverlayInput entry={*entry_authority,logical,authority->entry_path,input->text,input->length};
             module=xr_compile_module_overlay_new(context->resources,&entry,1,&authority->overlay);
-            status=module==XR_MODULE_OK?XR_MANIFEST_OK:module==XR_MODULE_BUDGET?XR_MANIFEST_BUDGET:
+            status=module==XR_MODULE_OK?XR_MANIFEST_OK:module==XR_MODULE_BUDGET?XR_MANIFEST_OVERFLOW:
                 module==XR_MODULE_OUT_OF_MEMORY?XR_MANIFEST_OUT_OF_MEMORY:XR_MANIFEST_INVALID;
         }
     }
     if(status==XR_MANIFEST_OK) {
         if (input->kind != XR_SOURCE_ENTRY_TEXT) { authority->logical_path=logical; logical=NULL; }
-        if(io_work(&io,1)){*output=authority;authority=NULL;}
+        if((&io)->status == XR_OS_IO_OK){*output=authority;authority=NULL;}
         else status=authority_status(io.status);
     }
 done:

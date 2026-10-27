@@ -17,7 +17,7 @@ static void emit_view_aggregate(CBuffer *buffer,const XrXirFunction *function,
     uint32_t count=tuple?tuple->parameter_count:1,payload=0;
     append(buffer," { XrXirValueStatus status=XR_XIR_VALUE_OK;\n"
         " for (uint32_t i=0;i<%uu;++i) state->arguments[i]=(XrXirValue){0};\n",count+1u);
-    for (uint32_t i=0;i<count && emit_work(buffer,1);++i) {
+    for (uint32_t i=0;i<count && ((buffer)->status == XR_XIR_OK);++i) {
         uint32_t id=emit_view_field_operand(function,op,tuple,i,&payload);if (id==UINT32_MAX) continue;
         append(buffer," if (status==XR_XIR_VALUE_OK) { XrXirValue source=");emit_value(buffer,function,layout,id);
         if (emit_borrowed_flags(buffer,xr_xir_operand_type(function,id))&XR_XIR_VIEW_MUTABLE)
@@ -28,7 +28,7 @@ static void emit_view_aggregate(CBuffer *buffer,const XrXirFunction *function,
     append(buffer," if (status==XR_XIR_VALUE_OK) status=xr_xir_call_view_aggregate(view,(XrXirOp)%uu,"
         "(XrXirType)%uu,state->arguments,%uu,state->arguments+%u);\n",(uint32_t)op->op,(uint32_t)op->type,count,count);
     payload=0;
-    for (uint32_t i=0;i<count && emit_work(buffer,1);++i) {
+    for (uint32_t i=0;i<count && ((buffer)->status == XR_XIR_OK);++i) {
         uint32_t id=emit_view_field_operand(function,op,tuple,i,&payload);if (id==UINT32_MAX) continue;
         if (emit_borrowed_flags(buffer,xr_xir_operand_type(function,id))&XR_XIR_VIEW_MUTABLE)
             append(buffer," if (status!=XR_XIR_VALUE_OK && state->arguments[%u].type)\n"

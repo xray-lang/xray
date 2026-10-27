@@ -14,11 +14,11 @@ static bool source_comptime_table_sites(SourceContext *ctx,const XrXirComptimeTa
     uint32_t count,XrXirComptimeSite *sites,uint32_t total) {
     uint32_t next=0;
     for (uint32_t t=0;t<count;++t) for (uint32_t s=0;s<tables[t].site_count;++s) {
-        if (!source_work_units(ctx,NULL,sizeof(*sites))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirComptimeSite row=tables[t].sites[s];uint32_t at=next;
         if (next==total) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"comptime site inventory grew");
         while (at) {
-            if (!source_work_units(ctx,NULL,2*sizeof(*sites))) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             const XrXirComptimeSite *prior=&sites[at-1];
             if (prior->caller==row.caller && prior->instruction==row.instruction)
                 return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"comptime site coordinate is duplicated");
@@ -33,23 +33,23 @@ static bool source_comptime_table_rows(SourceContext *ctx,const XrXirComptimeTab
     uint32_t count,const XrXirComptimeSite *sites,uint32_t site_count,XrXirComptimeBinding *rows,uint32_t total) {
     uint32_t next=0;
     for (uint32_t t=0;t<count;++t) for (uint32_t b=0;b<tables[t].binding_count;++b) {
-        if (!source_work_units(ctx,NULL,sizeof(*rows))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirComptimeBinding row=tables[t].bindings[b];
         if (row.site>=tables[t].site_count || next==total)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"comptime binding has no original site");
         const XrXirComptimeSite *original=&tables[t].sites[row.site];row.site=UINT32_MAX;
         for (uint32_t s=0;s<site_count;++s) {
-            if (!source_work_units(ctx,NULL,2*sizeof(*sites))) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (sites[s].caller==original->caller && sites[s].instruction==original->instruction && sites[s].helper==original->helper) row.site=s;
         }
         if (row.site==UINT32_MAX) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"comptime binding lost its relocated site");
         uint32_t at=next;
         while (at) {
-            if (!source_work_units(ctx,NULL,4+2*(uint64_t)row.argument_count+2*(uint64_t)rows[at-1].argument_count)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             int order=xir_comptime_key_order(&rows[at-1],&row);
             if (!order) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"comptime ordered key is duplicated");
             if (order<0) break;
-            if (!source_work_units(ctx,NULL,sizeof(*rows))) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             rows[at]=rows[at-1];--at;
         }
         rows[at]=row;++next;
@@ -60,7 +60,7 @@ static bool source_comptime_table_merge(SourceContext *ctx,const XrXirComptimeTa
     uint32_t count,XrXirComptimeTable *output) {
     uint32_t site_count=0,binding_count=0;
     for (uint32_t t=0;t<count;++t) {
-        if (!source_work_units(ctx,NULL,sizeof(*tables))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (site_count>ctx->compile.limits.instructions || tables[t].site_count>ctx->compile.limits.instructions-site_count ||
             binding_count>ctx->compile.limits.instructions || tables[t].binding_count>ctx->compile.limits.instructions-binding_count)
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"comptime merged inventory exhausted");
@@ -76,7 +76,7 @@ static bool source_comptime_table_merge(SourceContext *ctx,const XrXirComptimeTa
 static bool source_library_comptime_table(SourceContext *ctx,XrXirComptimeTable *output) {
     uint32_t count=0;
     for (SourceLibraryUnit *unit=ctx->library_units;unit;unit=unit->next) {
-        if (!source_work_units(ctx,NULL,sizeof(count))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (count==ctx->compile.limits.functions) return source_fail(ctx,NULL,XR_XIR_BUDGET,"library comptime owner inventory exhausted");
         ++count;
     }
@@ -84,7 +84,7 @@ static bool source_library_comptime_table(SourceContext *ctx,XrXirComptimeTable 
     if (count && !tables) return false;
     uint32_t next=0;
     for (SourceLibraryUnit *unit=ctx->library_units;unit;unit=unit->next) {
-        if (!source_work_units(ctx,NULL,sizeof(*tables))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         tables[next++]=unit->comptime;
     }
     return source_comptime_table_merge(ctx,tables,count,output);

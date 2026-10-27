@@ -58,9 +58,9 @@ static XrCompileResources *g_resources;
 static XrCompilerSession *g_session;
 static void setup(void) {
     if (g_session) return;
-    XrCompileResourceLimits limits = {UINT64_C(1073741824),UINT64_C(268435456),UINT64_C(8589934592)};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,true};
     ASSERT_EQ_INT(xr_compile_resources_new(&limits, &g_resources), XR_COMPILE_RESOURCE_OK);
-    ASSERT_EQ_INT(xr_compile_session_new(g_resources, &g_session), XR_COMPILER_SESSION_OK);
+    ASSERT_EQ_INT(xr_compile_session_new(g_resources, &g_session), XR_COMPILE_RESOURCE_OK);
 }
 static void teardown(void) {
     xr_compile_session_free(g_session); g_session = NULL;

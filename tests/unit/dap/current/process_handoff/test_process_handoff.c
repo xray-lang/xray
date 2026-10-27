@@ -16,8 +16,16 @@
 #ifdef XDAP_PROCESS_INJECTED
 static unsigned handoff_os_fail,release_queries,release_updates;
 static DWORD creation_flags;
+static XrProcId *reentry_owner;
+static void handoff_reenter(void) {
+    if (!reentry_owner) return;
+    XrProcId *owner=reentry_owner;reentry_owner=NULL;XrProcId held=*owner;int code=-99;
+    CHECK(xr_proc_release(owner)==XR_PROC_INVALID_ARGUMENT && *owner==held);
+    CHECK(xr_proc_close(held)==-1 && xr_proc_kill_tree(held,9)==-1);
+    CHECK(xr_proc_try_wait(held,&code)==XR_PROC_WAIT_ERROR && code==-99);
+}
 static BOOL handoff_query(HANDLE job,JOBOBJECTINFOCLASS kind,LPVOID data,DWORD size,LPDWORD written) {
-    ++release_queries;
+    ++release_queries;handoff_reenter();
     if (handoff_os_fail==1) { handoff_os_fail=0;SetLastError(ERROR_READ_FAULT);return FALSE; }
     return QueryInformationJobObject(job,kind,data,size,written);
 }
@@ -133,12 +141,12 @@ static int handoff_frontend(char **argv) {
     char line[64];int n=snprintf(line,sizeof(line),"%llu\n",(unsigned long long)worker);CHECK(n>0 && (size_t)n<sizeof(line));
     handoff_write(GetStdHandle(STD_OUTPUT_HANDLE),line,(size_t)n);
     CHECK(WaitForSingleObject(transfer,30000)==WAIT_OBJECT_0);
-    XrProcId old=worker;XrProcMemory memory=xr_proc_system_memory();
+    XrProcId old=worker;
     if (!strcmp(argv[5],"close")) CHECK(!xr_proc_close(worker));
     else {
-        CHECK(xr_proc_release(&worker,&memory)==XR_PROC_OK && worker==XR_PROC_INVALID);
+        CHECK(xr_proc_release(&worker)==XR_PROC_OK && worker==XR_PROC_INVALID);
         CHECK(xr_proc_close(old)==-1 && xr_proc_kill_tree(old,9)==-1 && xr_proc_try_wait(old,NULL)==XR_PROC_WAIT_ERROR);
-        CHECK(xr_proc_release(&worker,&memory)==XR_PROC_INVALID_ARGUMENT);
+        CHECK(xr_proc_release(&worker)==XR_PROC_INVALID_ARGUMENT);
     }
     CHECK(CloseHandle(ready) && CloseHandle(transfer));
     handoff_write(GetStdHandle(STD_OUTPUT_HANDLE),"transferred\n",12);
@@ -165,70 +173,37 @@ static void handoff_frontend_death(const char *mode) {
     printf("real frontend=%s worker=%s output UTF8/NUL channels exact PASS\n",mode,!strcmp(mode,"close")?"terminated":"completed23");
 }
 
-typedef struct HandoffPolicy {
-    XrProcId *owner;
-    XrProcMemory memory;
-    uint64_t remaining,charged,last;
-    unsigned calls,allocations;
-    bool reenter;
-} HandoffPolicy;
-static XrOsProcStatus handoff_alloc(void *context,size_t size,void **output) {
-    HandoffPolicy *policy=context;++policy->allocations;void *p=xr_malloc(size);
-    if (!p) return XR_PROC_OUT_OF_MEMORY;*output=p;return XR_PROC_OK;
-}
-static void handoff_free(void *context,void *p) { (void)context;xr_free(p); }
-static XrOsProcStatus handoff_work(void *context,uint64_t units) {
-    HandoffPolicy *policy=context;++policy->calls;policy->last=units;
-    if (policy->reenter) {
-        int code=-99;XrProcId held=*policy->owner;
-        CHECK(xr_proc_release(policy->owner,&policy->memory)==XR_PROC_INVALID_ARGUMENT && *policy->owner==held);
-        CHECK(xr_proc_close(held)==-1 && xr_proc_kill_tree(held,9)==-1);
-        CHECK(xr_proc_try_wait(held,&code)==XR_PROC_WAIT_ERROR && code==-99);
-    }
-    if (units>policy->remaining) return XR_PROC_BUDGET;
-    policy->remaining-=units;policy->charged+=units;return XR_PROC_OK;
-}
-static uint64_t handoff_local(unsigned failure,uint64_t allowance,bool reenter) {
+static void handoff_local(unsigned failure,bool reenter) {
     HandoffCase c;handoff_events(&c);XrProcId pid=handoff_spawn(&c,"--worker","",true),held=pid;
     CHECK(WaitForSingleObject(c.events[0],30000)==WAIT_OBJECT_0);
     HANDLE worker=OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,FALSE,(DWORD)pid);CHECK(worker);
-    HandoffPolicy policy={.owner=&pid,.remaining=allowance,.reenter=reenter};
-    policy.memory=(XrProcMemory){&policy,handoff_alloc,handoff_free,handoff_work};
 #ifdef XDAP_PROCESS_INJECTED
-    handoff_os_fail=failure;unsigned queries=release_queries,updates=release_updates;
+    handoff_os_fail=failure;reentry_owner=reenter ? &pid : NULL;
 #else
-    CHECK(!failure);
+    CHECK(!failure);(void)reenter;
 #endif
-    XrOsProcStatus status=xr_proc_release(&pid,&policy.memory);CHECK(policy.calls==1 && !policy.allocations);
-    uint64_t fee=policy.last;
+    XrOsProcStatus status=xr_proc_release(&pid);
+#ifdef XDAP_PROCESS_INJECTED
+    CHECK(!reentry_owner);
+#endif
     if (status!=XR_PROC_OK) {
-        CHECK(status==(failure?XR_PROC_IO:XR_PROC_BUDGET) && WaitForSingleObject(worker,0)==WAIT_TIMEOUT);
+        CHECK(status==XR_PROC_IO && WaitForSingleObject(worker,0)==WAIT_TIMEOUT);
         if (failure>=3) {
-            CHECK(pid==XR_PROC_INVALID && policy.charged==fee && policy.calls==1);
+            CHECK(pid==XR_PROC_INVALID);
             CHECK(xr_proc_close(held)==-1 && xr_proc_try_wait(held,NULL)==XR_PROC_WAIT_ERROR);
         } else {
             CHECK(pid==held);int sentinel=-99;
             CHECK(xr_proc_try_wait(pid,&sentinel)==XR_PROC_WAIT_RUNNING && sentinel==-99);
-            if (failure) {
-                CHECK(policy.charged==fee && xr_proc_release(&pid,&policy.memory)==XR_PROC_OK);
-                CHECK(policy.calls==2 && policy.charged==2*fee && !policy.allocations);
-            } else {
-#ifdef XDAP_PROCESS_INJECTED
-                CHECK(release_queries==queries && release_updates==updates);
-#endif
-                CHECK(!xr_proc_close(pid));pid=XR_PROC_INVALID;
-            }
+            CHECK(xr_proc_release(&pid)==XR_PROC_OK);
         }
     }
     CHECK(pid==XR_PROC_INVALID);
-    if (status==XR_PROC_OK || failure) {
-        CHECK(SetEvent(c.events[1]) && WaitForSingleObject(worker,30000)==WAIT_OBJECT_0);
-        DWORD result=0;CHECK(GetExitCodeProcess(worker,&result) && result==23);
-    }
+    CHECK(SetEvent(c.events[1]) && WaitForSingleObject(worker,30000)==WAIT_OBJECT_0);
+    DWORD result=0;CHECK(GetExitCodeProcess(worker,&result) && result==23);
     CHECK(!xr_pipe_close(c.output.write) && !xr_pipe_close(c.error.write));c.output.write=c.error.write=XR_PIPE_INVALID;
-    handoff_output(c.output.read,status==XR_PROC_OK || failure?output_bytes:"",status==XR_PROC_OK || failure?(sizeof(output_bytes)-1):0);
-    handoff_output(c.error.read,status==XR_PROC_OK || failure?error_bytes:"",status==XR_PROC_OK || failure?(sizeof(error_bytes)-1):0);
-    CHECK(CloseHandle(worker));handoff_cleanup(&c);return fee;
+    handoff_output(c.output.read,output_bytes,sizeof(output_bytes)-1);
+    handoff_output(c.error.read,error_bytes,sizeof(error_bytes)-1);
+    CHECK(CloseHandle(worker));handoff_cleanup(&c);
 }
 static XrOsProcStatus handoff_image(void *context,const XrProcImageEvent *event) {
     (void)context;CHECK(event && event->file_handle);return XR_PROC_OK;
@@ -246,17 +221,16 @@ static void handoff_owner_controls(void) {
     const char *argv[]={executable,"--passive",NULL};
     XrProcSpawnOptions options={.memory=xr_proc_system_memory(),.no_console_window=true};
     XrProcId pid=XR_PROC_INVALID;CHECK(xr_proc_spawn(executable,argv,&options,&pid)==XR_PROC_OK);
-    XrProcId held=pid;HandoffPolicy policy={.owner=&pid,.remaining=UINT64_MAX};
-    policy.memory=(XrProcMemory){&policy,handoff_alloc,handoff_free,handoff_work};
-    CHECK(xr_proc_release(&pid,&policy.memory)==XR_PROC_INVALID_ARGUMENT && pid==held && !policy.calls);
+    XrProcId held=pid;
+    CHECK(xr_proc_release(&pid)==XR_PROC_INVALID_ARGUMENT && pid==held);
     int result=-99;CHECK(!xr_proc_wait(pid,&result) && result==19);
-    CHECK(xr_proc_release(&pid,&policy.memory)==XR_PROC_INVALID_ARGUMENT && pid==held && !policy.calls);
+    CHECK(xr_proc_release(&pid)==XR_PROC_INVALID_ARGUMENT && pid==held);
     options.new_process_group=true;pid=XR_PROC_INVALID;
     CHECK(xr_proc_spawn(executable,argv,&options,&pid)==XR_PROC_OK && !xr_proc_wait(pid,&result) && result==19);
-    CHECK(xr_proc_try_wait(pid,NULL)==XR_PROC_WAIT_ERROR && xr_proc_release(&pid,&policy.memory)==XR_PROC_OK && pid==XR_PROC_INVALID);
+    CHECK(xr_proc_try_wait(pid,NULL)==XR_PROC_WAIT_ERROR && xr_proc_release(&pid)==XR_PROC_OK && pid==XR_PROC_INVALID);
     options.image_mode=XR_PROC_IMAGES_WINDOWS_TREE;options.image_observer=(XrProcImageObserver){NULL,handoff_image};
-    CHECK(xr_proc_spawn(executable,argv,&options,&pid)==XR_PROC_OK);held=pid;unsigned calls=policy.calls;
-    CHECK(xr_proc_release(&pid,&policy.memory)==XR_PROC_UNSUPPORTED && pid==held && policy.calls==calls);
+    CHECK(xr_proc_spawn(executable,argv,&options,&pid)==XR_PROC_OK);held=pid;
+    CHECK(xr_proc_release(&pid)==XR_PROC_UNSUPPORTED && pid==held);
     CHECK(!xr_proc_close(pid));
     puts("ordinary/consumed owner refusal, waited group release and observed-group unsupported preserve owner PASS");
 }
@@ -268,26 +242,26 @@ int main(int argc,char **argv) {
     bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
     DWORD handles=0,after=0,cold=0,samples[5]={0};CHECK(GetProcessHandleCount(GetCurrentProcess(),&cold));
     handoff_platform_warmup();CHECK(GetProcessHandleCount(GetCurrentProcess(),&handles));
-    XrProcMemory memory=xr_proc_system_memory();XrProcId invalid=XR_PROC_INVALID;
-    CHECK(xr_proc_release(NULL,&memory)==XR_PROC_INVALID_ARGUMENT);
-    CHECK(xr_proc_release(&invalid,&memory)==XR_PROC_INVALID_ARGUMENT && invalid==XR_PROC_INVALID);
-    invalid=(XrProcId)GetCurrentProcessId();CHECK(xr_proc_release(&invalid,&memory)==XR_PROC_INVALID_ARGUMENT && invalid==(XrProcId)GetCurrentProcessId());
+    XrProcId invalid=XR_PROC_INVALID;
+    CHECK(xr_proc_release(NULL)==XR_PROC_INVALID_ARGUMENT);
+    CHECK(xr_proc_release(&invalid)==XR_PROC_INVALID_ARGUMENT && invalid==XR_PROC_INVALID);
+    invalid=(XrProcId)GetCurrentProcessId();CHECK(xr_proc_release(&invalid)==XR_PROC_INVALID_ARGUMENT && invalid==(XrProcId)GetCurrentProcessId());
     handoff_owner_controls();
     CHECK(GetProcessHandleCount(GetCurrentProcess(),&samples[0]));
     handoff_frontend_death("close");handoff_frontend_death("exit");handoff_frontend_death("kill");
     CHECK(GetProcessHandleCount(GetCurrentProcess(),&samples[1]));
-    uint64_t fee=handoff_local(0,UINT64_MAX,true);CHECK(fee>0);
+    handoff_local(0,true);
     CHECK(GetProcessHandleCount(GetCurrentProcess(),&samples[2]));
-    CHECK(handoff_local(0,fee,false)==fee && handoff_local(0,fee-1,false)==fee);
+    handoff_local(0,false);
 #ifdef XDAP_PROCESS_INJECTED
-    CHECK(handoff_local(1,UINT64_MAX,true)==fee);
-    if (resources) for (unsigned failure=2;failure<=4;++failure) CHECK(handoff_local(failure,UINT64_MAX,true)==fee);
+    handoff_local(1,true);
+    if (resources) for (unsigned failure=2;failure<=4;++failure) handoff_local(failure,true);
     for (unsigned i=0;i<XR_PROC_MAX_LIVE;++i) CHECK(!g_live[i].pid);
 #endif
     CHECK(GetProcessHandleCount(GetCurrentProcess(),&samples[3]));
     fprintf(stderr,"handle samples cold=%lu baseline=%lu controls=%lu frontend=%lu local=%lu final=%lu; warmup uses no release\n",
         cold,handles,samples[0],samples[1],samples[2],samples[3]);
     CHECK(GetProcessHandleCount(GetCurrentProcess(),&after) && handles==after);
-    printf("owned job release: fee=%llu exact/minus-one, no allocation, reentry refusal, same-policy IO retry, frontend PID death and handle0; OS injection=%s PASS\n",
-        (unsigned long long)fee,resources?"ALL_RELEASE_OS_BOUNDARIES":"QUERY_ONLY");return 0;
+    printf("owned job release: no allocation, reentry refusal, OS IO retry, frontend PID death and handle0; OS injection=%s PASS\n",
+        resources?"ALL_RELEASE_OS_BOUNDARIES":"QUERY_ONLY");return 0;
 }

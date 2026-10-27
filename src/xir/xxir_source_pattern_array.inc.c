@@ -6,7 +6,7 @@
  *
  * xxir_source_pattern_array.inc.c - Length-tested Array bindings and owned tails
  */
-static bool source_pattern_array_tail(SourceContext *,AstNode *,SourceValue,SourceValue,SourceValue *);
+static bool source_pattern_array_tail(SourceContext *,SourceValue,SourceValue,SourceValue *);
 static bool source_pattern_array(SourceContext *ctx,AstNode *node,XrXirType type,
     SourceMatchPattern *out,uint32_t depth) {
     PatternArrayNode *array=&node->as.pattern_array;
@@ -25,7 +25,7 @@ static bool source_pattern_array(SourceContext *ctx,AstNode *node,XrXirType type
     if (out->count && !out->fields) return false;
     XrXirType element=xr_xir_array_element(&ctx->types,type);
     for (uint32_t i=0;i<out->array_prefix;++i) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         AstNode *syntax=array->patterns[i];
         if (!syntax) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Array pattern element is missing");
         if (syntax->type!=AST_PATTERN_WILDCARD && !source_pattern_binding(syntax))
@@ -56,7 +56,7 @@ static bool source_match_array_payload(SourceContext *ctx,SourceMatchPattern *pa
     }
     /* The length branch dominates every element read and tail construction. */
     for (uint32_t i=0;i<pattern->array_prefix;++i) {
-        if (!source_work(ctx,pattern->node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceMatchPattern *child=pattern->fields[i];
         if (!child->binding) continue;
         SourceValue index,value;
@@ -66,7 +66,7 @@ static bool source_match_array_payload(SourceContext *ctx,SourceMatchPattern *pa
     }
     if (pattern->count>pattern->array_prefix) {
         SourceMatchPattern *tail=pattern->fields[pattern->array_prefix];SourceValue value;
-        if (!source_pattern_array_tail(ctx,pattern->node,receiver,prefix,&value) ||
+        if (!source_pattern_array_tail(ctx,receiver,prefix,&value) ||
             !source_match_bind(ctx,tail->symbol,value)) return false;
     }
     return true;

@@ -34,8 +34,7 @@ static XrXirStatus task_owned_program_take(const XrXirCompileContext *context,
         CHECK(input==retained && input->artifact==original && !*output &&
             *artifact==original && witness->code_releases==releases);
         CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
-        CHECK(after.live_bytes==before.live_bytes && after.allocated_bytes==before.allocated_bytes &&
-            after.work>=before.work);
+        CHECK(after.held_bytes==before.held_bytes && after.allocated_bytes==before.allocated_bytes);
         spec->abi_version=abi;++task_receive_checks;
     }
     status=xir_program_receive(context,spec,&input,NULL,output);

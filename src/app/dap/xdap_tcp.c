@@ -10,15 +10,11 @@
 #include "../../os/os_net.h"
 #include "../../execution/xr_xir_host_time.h"
 struct XdapTcp {
-    XrCompileResources *resources;
     XdapFramed *framed;
     xr_socket_t listener,peer;
     uint32_t port;
     bool startup,failed;
 };
-static XrXirStatus tcp_work(XdapTcp *io) {
-    return xr_compile_resources_work(io->resources,1)==XR_COMPILE_RESOURCE_OK ? XR_XIR_OK : XR_XIR_BUDGET;
-}
 static bool tcp_selectable(xr_socket_t socket_fd) {
 #ifdef XR_OS_WINDOWS
     return socket_fd!=XR_INVALID_SOCKET;
@@ -26,9 +22,9 @@ static bool tcp_selectable(xr_socket_t socket_fd) {
     return socket_fd>=0 && socket_fd<FD_SETSIZE;
 #endif
 }
-static XrXirStatus tcp_ready(XdapTcp *io,xr_socket_t socket_fd,bool write,uint32_t milliseconds) {
+static XrXirStatus tcp_ready(xr_socket_t socket_fd,bool write,uint32_t milliseconds) {
     if (!tcp_selectable(socket_fd)) return XR_XIR_IO;
-    XrXirStatus status=tcp_work(io);if (status!=XR_XIR_OK) return status;
+
     fd_set fds;FD_ZERO(&fds);FD_SET(socket_fd,&fds);
     struct timeval timeout={(long)(milliseconds/1000),(long)((milliseconds%1000)*1000)};
     /* Winsock ignores nfds. Keep the native-width socket value intact. */
@@ -41,7 +37,7 @@ static XrXirStatus tcp_ready(XdapTcp *io,xr_socket_t socket_fd,bool write,uint32
     return ready>=0 || xr_get_socket_error()==XR_EINTR ? XR_XIR_OK : XR_XIR_IO;
 }
 static XrXirStatus tcp_read_bytes(void *context,char *bytes,size_t capacity,size_t *length,bool *eof) {
-    XdapTcp *io=context;XrXirStatus status=tcp_work(io);if (status!=XR_XIR_OK) return status;
+    XdapTcp *io=context;
     if (io->peer==XR_INVALID_SOCKET) {
         xr_socket_t peer=accept(io->listener,NULL,NULL);
         if (peer==XR_INVALID_SOCKET) return xr_socket_err_is_again(xr_get_socket_error()) || xr_get_socket_error()==XR_EINTR ? XR_XIR_OK : XR_XIR_IO;
@@ -58,17 +54,16 @@ static XrXirStatus tcp_read_bytes(void *context,char *bytes,size_t capacity,size
     if (received<0) return xr_socket_err_is_again(xr_get_socket_error()) || xr_get_socket_error()==XR_EINTR ? XR_XIR_OK : XR_XIR_IO;
     *length=(size_t)received;*eof=received==0;return XR_XIR_OK;
 }
-static XrXirStatus tcp_clock(XdapTcp *io,uint64_t *output) {
-    XrXirStatus status=tcp_work(io);if (status!=XR_XIR_OK) return status;
+static XrXirStatus tcp_clock(uint64_t *output) {
+
     XrXirTimeProvider time={0};xr_xir_host_time_provider(&time);int64_t now=0;
     if (!time.clock || time.clock(time.context,XR_XIR_CLOCK_MONOTONIC,&now)!=XR_XIR_TIME_OK || now<0) return XR_XIR_IO;
     *output=(uint64_t)now;return XR_XIR_OK;
 }
 static XrXirStatus tcp_write_bytes(void *context,const char *bytes,size_t length) {
     XdapTcp *io=context;if (io->peer==XR_INVALID_SOCKET) return XR_XIR_IO;
-    uint64_t start=0;XrXirStatus status=tcp_clock(io,&start);if (status!=XR_XIR_OK) return status;
+    uint64_t start=0;XrXirStatus status=tcp_clock(&start);if (status!=XR_XIR_OK) return status;
     while (length) {
-        status=tcp_work(io);if (status!=XR_XIR_OK) return status;
         size_t chunk=length>65536 ? 65536 : length;
 #ifdef XR_OS_WINDOWS
         ssize_t written=xr_socket_send(io->peer,bytes,chunk);
@@ -81,14 +76,14 @@ static XrXirStatus tcp_write_bytes(void *context,const char *bytes,size_t length
         if (written>0) { bytes+=written;length-=(size_t)written; }
         else if (!written || (!xr_socket_err_is_again(xr_get_socket_error()) && xr_get_socket_error()!=XR_EINTR)) return XR_XIR_IO;
         if (!length) return XR_XIR_OK;
-        uint64_t now=0;status=tcp_clock(io,&now);if (status!=XR_XIR_OK) return status;
+        uint64_t now=0;status=tcp_clock(&now);if (status!=XR_XIR_OK) return status;
         if (now<start || now-start>=UINT64_C(1000000000)) return XR_XIR_IO;
-        status=tcp_ready(io,io->peer,true,10);if (status!=XR_XIR_OK) return status;
+        status=tcp_ready(io->peer,true,10);if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }
 static XrXirStatus tcp_wait_bytes(void *context,uint32_t milliseconds) {
-    XdapTcp *io=context;return tcp_ready(io,io->peer!=XR_INVALID_SOCKET ? io->peer : io->listener,false,milliseconds);
+    XdapTcp *io=context;return tcp_ready(io->peer!=XR_INVALID_SOCKET ? io->peer : io->listener,false,milliseconds);
 }
 XR_FUNC void xdap_tcp_free(XdapTcp *io) {
     if (!io) return;
@@ -103,8 +98,13 @@ XR_FUNC XrXirStatus xdap_tcp_new(XrCompileResources *resources,uint32_t port,siz
     return XR_XIR_UNSUPPORTED;
 #endif
     XdapTcp *io=NULL;XrCompileResourceStatus allocated=xr_compile_resources_calloc(resources,1,sizeof(*io),(void **)&io);
-    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
-    io->resources=resources;io->listener=io->peer=XR_INVALID_SOCKET;
+    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+        allocated==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        allocated==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_OVERFLOW :
+        allocated==XR_COMPILE_RESOURCE_CANCELLED ? XR_XIR_CANCELLED :
+        allocated==XR_COMPILE_RESOURCE_DEADLINE ? XR_XIR_DEADLINE :
+        allocated==XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE : XR_XIR_BAD_STRUCTURE;
+    io->listener=io->peer=XR_INVALID_SOCKET;
     XrXirStatus status=XR_XIR_IO;
     if (xr_winsock_init()) goto failed;
     io->startup=true;io->listener=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);

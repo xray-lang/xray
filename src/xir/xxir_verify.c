@@ -175,7 +175,7 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
         const XrXirGeneric *owner = &module->generics[caller_id];
         if (op->type_arguments[1] != owner->parameter_count) return XR_XIR_BAD_TYPE;
         for (uint32_t a = 0; a < owner->parameter_count; ++a) {
-            if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+
             if (owner->arguments[op->type_arguments[0] + a] != (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + a))
                 return XR_XIR_BAD_TYPE;
         }
@@ -227,8 +227,7 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
         if (!xr_xir_module_same_scope(d,caller_module,callee_module) && !d->functions[op->immediate].exported && !materializer) {
             bool source_visible = false;
             XrXirStatus status = instance_call_visibility(module, caller_id,
-                (uint32_t)(op - function->instructions), (uint32_t)op->immediate,
-                remaining, &source_visible);
+                (uint32_t)(op - function->instructions), (uint32_t)op->immediate, &source_visible);
             if (status != XR_XIR_OK) return status;
             if (!source_visible) return XR_XIR_BAD_STRUCTURE;
         }
@@ -249,7 +248,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     XrXirStatus declared = declaration_instruction(function, op, module);
     if (declared != XR_XIR_OK) return declared;
     if(op->op==XR_XIR_SLOT_GROUP_INIT) {
-        XrXirStatus grouped=slot_group_shape(function,op,module,remaining);
+        XrXirStatus grouped=slot_group_shape(function,op,module);
         if(grouped!=XR_XIR_OK)return grouped;
     }
     bool range = xr_xir_op_uses_operand_table(op->op);
@@ -387,7 +386,7 @@ static XrXirStatus type_use_context(VerifyContext *context, uint32_t function, X
  * Naming and access remain ordered with the function's structural checks. */
 static XrXirStatus signature_type_use_context(VerifyContext *context, uint32_t function,
     XrXirType type, bool constraints_proved) {
-    if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+
     if (!constraints_proved) return type_use_context(context, function, type);
     if (xir_effect_evidence_is_closed(context->module) || context->literal_type_names) return XR_XIR_OK;
     return xr_xir_compile_type_access_scratch(&context->remaining, context->module,
@@ -422,13 +421,11 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
         return XR_XIR_BAD_TYPE;
     XrXirStatus visibility = signature_type_use_context(context, function_id, function->result, signature_constraints_proved);
     if (visibility != XR_XIR_OK) return visibility;
-    if (!xir_compile_work(&context->remaining, function->name_length))
-        return XR_XIR_BUDGET;
+
     if (memchr(function->name, 0, function->name_length))
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t p = 0; p < function->parameter_count; ++p) {
-        if (!xir_compile_work(&context->remaining, 1))
-            return XR_XIR_BUDGET;
+
         if (!xr_xir_type_in_context(context->module, function_id, function->parameters[p]))
             return XR_XIR_BAD_TYPE;
         visibility = signature_type_use_context(context, function_id, function->parameters[p], signature_constraints_proved);
@@ -449,25 +446,15 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
         end += block->count;
         for (uint32_t i = block->first; i < end; ++i) {
             context->location.instruction = i;
-            if (!xir_compile_work(&context->remaining, 1))
-                return XR_XIR_BUDGET;
+
             const XrXirInstruction *op = &function->instructions[i];
             visibility = type_use_context(context, function_id, op->type);
             if (visibility != XR_XIR_OK) return visibility;
-            if ((xr_xir_op_references_function(op->op)) && context->module->declarations) {
-                const XrXirDeclarations *d = context->module->declarations;
-                uint32_t caller = (uint32_t) (function - context->module->functions);
-                if (!xir_compile_work(&context->remaining, d->modules[d->functions[caller].module].dependency_count))
-                    return XR_XIR_BUDGET;
-            }
-            if (op->op == XR_XIR_FUNCTION_REF && op->immediate >= 0 &&
-                (uint64_t) op->immediate < context->module->function_count &&
-                !xir_compile_work(&context->remaining, context->module->functions[op->immediate].parameter_count))
-                return XR_XIR_BUDGET;
+
             XrXirStatus status = instruction_shape(function, op, stage, context->module, &context->remaining);
             if (status != XR_XIR_OK)
                 return status;
-            if (xr_xir_op_uses_type_arguments(op->op) && !xir_compile_work(&context->remaining, op->type_arguments[1])) return XR_XIR_BUDGET;
+
             if (xr_xir_op_uses_type_arguments(op->op) && op->type_arguments[1]) {
                 if (op->type_arguments[0] != type_end) return XR_XIR_BAD_STRUCTURE;
                 type_end += op->type_arguments[1];
@@ -498,7 +485,7 @@ static XrXirStatus graph_allocate(Graph *graph, const XrXirFunction *function,
         return XR_XIR_BUDGET;
     /* Wider arrays come first for alignment. A new function gets no facts
      * from its predecessor, even when their storage has the same shape. */
-    if (!xir_compile_work(&context->remaining, 2)) return XR_XIR_BUDGET;
+
     if (bytes > context->graph_capacity) {
         xr_compile_resources_free(context->graph_storage);
         context->graph_storage = NULL; context->graph_capacity = 0;
@@ -520,9 +507,7 @@ static XrXirStatus graph_allocate(Graph *graph, const XrXirFunction *function,
     /* Only these bytes are read before current graph construction writes them.
      * Every owner, edge, nonentry dominator and meet row is assigned in full.
      * The entry queue slot and all words of its dominator row start afresh. */
-    uint64_t initialization = blocks + (uint64_t)graph->words * sizeof(*graph->dominators) +
-        sizeof(*graph->queue);
-    if (!xir_compile_work(&context->remaining, initialization)) return XR_XIR_BUDGET;
+
     memset(graph->reachable, 0, (size_t)blocks);
     memset(graph->dominators, 0, (size_t)graph->words * sizeof(*graph->dominators));
     graph->queue[0] = 0;
@@ -534,15 +519,13 @@ static const XrXirInstruction *terminator(const XrXirFunction *function, uint32_
     return &function->instructions[range->first + range->count - 1];
 }
 
-static XrXirStatus graph_connect(Graph *graph, const XrXirFunction *function,
-                               VerifyContext *context) {
+static XrXirStatus graph_connect(Graph *graph, const XrXirFunction *function) {
     uint32_t edge = 0;
     for (uint32_t b = 0; b < function->block_count; ++b)
         graph->head[b] = graph->fault_head[b] = UINT32_MAX;
     for (uint32_t b = 0; b < function->block_count; ++b) {
         const XrXirBlock *block = &function->blocks[b];
-        if (!xir_compile_work(&context->remaining, (uint64_t) block->count + 1))
-            return XR_XIR_BUDGET;
+
         for (uint32_t i = block->first; i < block->first + block->count; ++i)
             graph->owner[i] = b;
         const XrXirInstruction *op = terminator(function, b);
@@ -561,8 +544,7 @@ static XrXirStatus graph_connect(Graph *graph, const XrXirFunction *function,
     uint32_t front = 0, count = 1;
     graph->reachable[0] = 1;
     while (front < count) {
-        if (!xir_compile_work(&context->remaining, 1))
-            return XR_XIR_BUDGET;
+
         uint32_t block = graph->queue[front++];
         const XrXirInstruction *op = terminator(function, block);
         for (uint32_t i = 0; i <= op_rules[op->op].edges; ++i) {
@@ -582,58 +564,50 @@ static XrXirStatus graph_connect(Graph *graph, const XrXirFunction *function,
  * for DFS colors and the queue for an active stack followed by finished
  * reverse postorder. The two regions never overlap, and no fact escapes this
  * function's scratch storage or survives the next graph allocation. */
-static XrXirStatus graph_reverse_postorder(Graph *graph, const XrXirFunction *function,
-                                         VerifyContext *context) {
-    if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+static XrXirStatus graph_reverse_postorder(Graph *graph, const XrXirFunction *function) {
+
     if (function->block_count <= 2) return XR_XIR_OK;
-    if (!xir_compile_work(&context->remaining, 2 * sizeof(uint32_t) + sizeof(uint8_t)))
-        return XR_XIR_BUDGET;
+
     uint32_t top = 1, write = function->block_count;
     graph->reachable[0] = 2;
     for (;;) {
-        if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+
         if (!top) break;
-        if (!xir_compile_work(&context->remaining, 2 + sizeof(uint32_t) + sizeof(void *)))
-            return XR_XIR_BUDGET;
+
         if (top > write) return XR_XIR_BAD_STRUCTURE;
         uint32_t block = graph->queue[top - 1];
         if (block >= function->block_count) return XR_XIR_BAD_STRUCTURE;
         const XrXirInstruction *op = terminator(function, block);
         uint32_t target = 0;
         for (uint32_t i = 0; i <= op_rules[op->op].edges; ++i) {
-            if (!xir_compile_work(&context->remaining, 3 + sizeof(uint32_t) + sizeof(uint8_t)))
-                return XR_XIR_BUDGET;
+
             target = i < op_rules[op->op].edges ? op->targets[i] : function->blocks[block].panic;
             if (target >= function->block_count) return XR_XIR_BAD_STRUCTURE;
             if (target && graph->reachable[target] == 1) break;
             target = 0;
         }
         if (target) {
-            if (!xir_compile_work(&context->remaining, 2 + sizeof(uint32_t) + sizeof(uint8_t)))
-                return XR_XIR_BUDGET;
+
             if (top >= write) return XR_XIR_BAD_STRUCTURE;
             graph->reachable[target] = 2;
             graph->queue[top++] = target;
         } else {
-            if (!xir_compile_work(&context->remaining, 3 + sizeof(uint32_t) + sizeof(uint8_t)))
-                return XR_XIR_BUDGET;
+
             --top;
             graph->queue[--write] = block;
             graph->reachable[block] = 3;
         }
     }
-    if (!xir_compile_work(&context->remaining, 2)) return XR_XIR_BUDGET;
+
     return !write && !graph->queue[0] ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
 }
 
-static XrXirStatus graph_dominators(Graph *graph, const XrXirFunction *function,
-                                  VerifyContext *context) {
-    XrXirStatus status = graph_reverse_postorder(graph, function, context);
+static XrXirStatus graph_dominators(Graph *graph, const XrXirFunction *function) {
+    XrXirStatus status = graph_reverse_postorder(graph, function);
     if (status != XR_XIR_OK) return status;
     graph->dominators[0] = 1;
     for (uint32_t b = 1; b < function->block_count; ++b) {
-        if (!xir_compile_work(&context->remaining, graph->words))
-            return XR_XIR_BUDGET;
+
         for (uint32_t w = 0; w < graph->words; ++w)
             graph->dominators[(size_t) b * graph->words + w] = UINT64_MAX;
     }
@@ -641,28 +615,24 @@ static XrXirStatus graph_dominators(Graph *graph, const XrXirFunction *function,
     do {
         changed = false;
         for (uint32_t position = 1; position < function->block_count; ++position) {
-            if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+
             uint32_t b = position;
             if (function->block_count > 2) {
-                if (!xir_compile_work(&context->remaining, 3 + sizeof(uint32_t)))
-                    return XR_XIR_BUDGET;
+
                 b = graph->queue[position];
                 if (!b || b >= function->block_count) return XR_XIR_BAD_STRUCTURE;
             }
-            if (!xir_compile_work(&context->remaining, (uint64_t) graph->words * 2))
-                return XR_XIR_BUDGET;
+
             for (uint32_t w = 0; w < graph->words; ++w)
                 graph->meet[w] = UINT64_MAX;
             for (uint32_t edge = graph->head[b]; edge != UINT32_MAX; edge = graph->next[edge]) {
-                if (!xir_compile_work(&context->remaining, graph->words))
-                    return XR_XIR_BUDGET;
+
                 size_t offset = (size_t) graph->predecessor[edge] * graph->words;
                 for (uint32_t w = 0; w < graph->words; ++w)
                     graph->meet[w] &= graph->dominators[offset + w];
             }
             for (uint32_t edge = graph->fault_head[b]; edge != UINT32_MAX; edge = graph->next[edge]) {
-                if (!xir_compile_work(&context->remaining, graph->words))
-                    return XR_XIR_BUDGET;
+
                 uint32_t from = graph->predecessor[edge];
                 size_t offset = (size_t) from * graph->words;
                 for (uint32_t w = 0; w < graph->words; ++w)
@@ -726,7 +696,7 @@ static XrXirStatus phi_uses(const Graph *graph, const XrXirFunction *function,
     const XrXirInstruction *op = &function->instructions[index];
     uint32_t block = graph->owner[index], predecessors = 0, previous = UINT32_MAX;
     for (uint32_t edge = graph->head[block]; edge != UINT32_MAX; edge = graph->next[edge]) {
-        if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+
         uint32_t from = graph->predecessor[edge];
         if (from != previous) ++predecessors;
         previous = from;
@@ -734,7 +704,7 @@ static XrXirStatus phi_uses(const Graph *graph, const XrXirFunction *function,
     if (op->args[1] / 2 != predecessors) return XR_XIR_BAD_STRUCTURE;
     previous = UINT32_MAX;
     for (uint32_t a = 0; a < op->args[1]; a += 2) {
-        if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+
         uint32_t from = function->operands[op->args[0] + a];
         uint32_t value = function->operands[op->args[0] + a + 1];
         if (from >= function->block_count || (a && from <= previous)) return XR_XIR_BAD_STRUCTURE;
@@ -755,7 +725,7 @@ static XrXirStatus phi_uses(const Graph *graph, const XrXirFunction *function,
 static XrXirStatus place_write_authority(const XrXirFunction *function,
     VerifyContext *context, uint32_t id) {
     for (;;) {
-        if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+
         XrXirPlaceKind place = xr_xir_place_kind(function, id);
         if (place == XR_XIR_PLACE_NONE) return XR_XIR_BAD_VALUE;
         const XrXirInstruction *op = &function->instructions[id - function->parameter_count];
@@ -822,7 +792,7 @@ static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
     if (op->op == XR_XIR_ARRAY_GET && op->type != element) return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_ARRAY_RESERVE && op->type != array) return XR_XIR_BAD_TYPE;
     uint32_t count = operand_count(function, op, context->module);
-    if (!xir_compile_work(&context->remaining, count)) return XR_XIR_BUDGET;
+
     for (uint32_t a = 0; a < count; ++a) {
         XrXirType expected = a ? element : array;
         if (op->op == XR_XIR_CELL_PLACE) expected = cell;
@@ -858,7 +828,7 @@ static XrXirStatus struct_uses(const Graph *graph, const XrXirFunction *function
         if (status != XR_XIR_OK) return status;
     }
     uint32_t count = construct ? fields : 1;
-    if (!xir_compile_work(&context->remaining, count)) return XR_XIR_BUDGET;
+
     for (uint32_t i = 0; i < count; ++i) {
         uint32_t field = construct ? i : (uint32_t) op->immediate;
         uint32_t value = construct ? function->operands[op->args[0] + i] : op->args[write ? 1 : 0];
@@ -898,7 +868,7 @@ static XrXirStatus class_uses(const Graph *graph, const XrXirFunction *function,
         if (status != XR_XIR_OK) return status;
     }
     uint32_t count = construct ? fields : 1;
-    if (!xir_compile_work(&context->remaining, count)) return XR_XIR_BUDGET;
+
     for (uint32_t i = 0; i < count; ++i) {
         uint32_t field = construct ? i : (uint32_t) op->immediate;
         uint32_t value = construct ? function->operands[op->args[0] + i] : op->args[write ? 1 : 0];
@@ -944,7 +914,7 @@ static XrXirStatus graph_specialized_uses(const Graph *graph,const XrXirFunction
     if(op->op==XR_XIR_SLOT_GROUP_INIT) {
         uint64_t packed=(uint64_t)op->immediate;
         uint32_t first=(uint32_t)(packed>>32),count=(uint32_t)packed,payload=0;
-        if(!xir_compile_work(&context->remaining,count))return XR_XIR_BUDGET;
+
         for(uint32_t field=0;field<count;++field) {
             XrXirType type=context->module->declarations->slots[first+field].type;
             if(type==XR_XIR_UNIT)continue;
@@ -1119,8 +1089,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
         context->location.block = graph->owner[i];
         context->location.instruction = i;
-        if (!xir_compile_work(&context->remaining, 1))
-            return XR_XIR_BUDGET;
+
         const XrXirInstruction *op = &function->instructions[i];
         bool handled=false;
         XrXirStatus specialized=graph_specialized_uses(graph,function,context,i,&handled);
@@ -1144,7 +1113,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             if (status != XR_XIR_OK) return status;
         }
         uint32_t count = operand_count(function, op, context->module);
-        if (!xir_compile_work(&context->remaining, count)) return XR_XIR_BUDGET;
+
         for (uint32_t a = 0; a < count; ++a) {
             XrXirType operand_type = indirect ? indirect->parameters[a].type : expected;
             if (op->op == XR_XIR_CALL_INTRINSIC &&
@@ -1206,9 +1175,9 @@ static XrXirStatus verify_function(const XrXirFunction *function, XrXirStage sta
     Graph graph = {0};
     status = graph_allocate(&graph, function, context);
     if (status == XR_XIR_OK)
-        status = graph_connect(&graph, function, context);
+        status = graph_connect(&graph, function);
     if (status == XR_XIR_OK)
-        status = graph_dominators(&graph, function, context);
+        status = graph_dominators(&graph, function);
     if (status == XR_XIR_OK)
         status = invoke_edges(&graph, function, context);
     if (status == XR_XIR_OK)
@@ -1233,13 +1202,12 @@ static XrXirStatus verify_nominal_modules(const XrXirModule *module, XrXirCompil
         bool found = false;
         for (uint32_t m = 0; m < module->declarations->module_count; ++m) {
             const XrXirSourceModule *owner = &module->declarations->modules[m];
-            uint64_t cost = owner->name_length == name.length ? (uint64_t) name.length + 1 : 1;
-            if (!xir_compile_work(remaining, cost)) return XR_XIR_BUDGET;
+
             if (owner->name_length == name.length && !memcmp(owner->name, name.bytes, name.length)) {
                 const XrXirNominalNativeRecord *native = table->declarations ?
                     &table->declarations[i].native : &table->identities[i].native;
                 if (native->native_id) {
-                    if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+
                     const XrXirFunction *initializer = &module->functions[owner->initializer];
                     if (initializer->parameter_count || initializer->result != XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
                 }
@@ -1268,7 +1236,7 @@ static XrXirStatus verify_provenance(const XrXirModule *module, XrXirCompileCont
     if (p->source->module.stage != XR_XIR_CHECKED ||
         p->source->module.linkage_kind != XR_XIR_PROGRAM) return XR_XIR_BAD_STAGE;
     uint64_t bytes = sizeof(*p) + (uint64_t)p->count * sizeof(*p->origins);
-    if (!(bytes <= SIZE_MAX) || !xir_compile_work(remaining, p->count)) return XR_XIR_BUDGET;
+    if (!(bytes <= SIZE_MAX)) return XR_XIR_BUDGET;
     for (uint32_t i = 0; i < p->count; ++i) {
         bytes = (uint64_t)p->origins[i].argument_count * sizeof(XrXirType);
         if (!(bytes <= SIZE_MAX)) return XR_XIR_BUDGET;
@@ -1282,8 +1250,7 @@ static XrXirStatus verify_signature_structure(const XrXirModule *module, XrXirCo
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         if (!!function->parameters != !!function->parameter_count) { status = XR_XIR_BAD_STRUCTURE; break; }
-        if (function->parameter_count > remaining->limits.parameters ||
-            !xir_compile_work(remaining,(uint64_t)function->parameter_count + 1)) { status = XR_XIR_BUDGET; break; }
+        if (function->parameter_count > remaining->limits.parameters) { status = XR_XIR_BUDGET; break; }
         uint32_t count = module->generics ? module->generics[f].parameter_count : 0;
         status = xr_xir_compile_type_expression_shape_scratch(remaining, module->types, function->result, count, &scratch);
         for (uint32_t p = 0; p < function->parameter_count && status == XR_XIR_OK; ++p) {
@@ -1303,8 +1270,7 @@ static XrXirStatus verify_metadata_parameter_count(const XrXirModule *module, Xr
     XrXirStatus status = xr_xir_compile_types_parameter_count(context, module->types, &total);
     if (status != XR_XIR_OK) return status;
     if (module->generics) for (uint32_t f = 0; f < module->function_count; ++f) {
-        if (!xir_compile_work(context, 1) ||
-            module->generics[f].parameter_count > context->limits.parameters - total) return XR_XIR_BUDGET;
+        if (module->generics[f].parameter_count > context->limits.parameters - total) return XR_XIR_BUDGET;
         total += module->generics[f].parameter_count;
     }
     context->limits.parameters -= total;
@@ -1357,8 +1323,7 @@ static XrXirStatus structure_verify_ordinary(VerifyContext *context,const XrXirC
     if (status == XR_XIR_OK) {
         status = xr_xir_compile_module_constraints_verify(&context->remaining, module);
         if (status == XR_XIR_OK && (module->types || module->generics)) {
-            if (!xir_compile_work(&context->remaining, 1)) status = XR_XIR_BUDGET;
-            else signature_constraints_proved = true;
+            signature_constraints_proved = true;
         }
     }
     if (status == XR_XIR_OK && module->declarations) {
@@ -1377,10 +1342,7 @@ static XrXirStatus structure_verify_ordinary(VerifyContext *context,const XrXirC
     if (status == XR_XIR_OK) {
         for (uint32_t f = 0; f < module->function_count; ++f) {
             context->location = (XrXirDiagnostic) {XR_XIR_OK, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
-            if (!xir_compile_work(&context->remaining, 1)) {
-                status = XR_XIR_BUDGET;
-                break;
-            }
+
             if (module->declarations && module->declarations->functions[f].test_role &&
                 (module->functions[f].parameter_count || module->functions[f].result != XR_XIR_UNIT ||
                  (module->generics && module->generics[f].parameter_count))) {
@@ -1406,25 +1368,36 @@ XR_FUNC XrXirStatus xir_compile_view_prepare_ordinary(const XrXirCompileContext 
     xir_type_scratch_free(&context.pending);xr_xir_constraint_scratch_free(&context.scratch);
     context.location.status=status;if (diagnostic) *diagnostic=context.location;return status;
 }
+typedef struct ViewCellAccessOperation {
+    XrXirCellProvenance *owner;
+    XrXirCompileContext remaining;
+    XirViewAccessCells cells;
+    uint64_t bytes;
+    const XrXirModule *module;
+    XrXirDiagnostic *diagnostic;
+} ViewCellAccessOperation;
+static XrXirStatus view_cell_access_operation(void *data,const XrXirCompileContext *remaining,
+    XirEffectDefaultAccessScope *scope) {
+    ViewCellAccessOperation *held=data;held->cells.default_access=scope;
+    XrXirStatus status=xir_compile_view_access_cells_verified(remaining,held->module,&held->cells,held->diagnostic);
+    held->cells.default_access=NULL;return status;
+}
 XR_FUNC XrXirStatus xir_compile_view_cell_access_verified(const XrXirCompileContext *context,
     const XrXirModule *module,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !module) return XR_XIR_BAD_STRUCTURE;
-    struct {
-        XrXirCellProvenance *owner;
-        XrXirCompileContext remaining;
-        XirViewAccessCells cells;
-        uint64_t bytes;
-    } held={0};
+    ViewCellAccessOperation held={.module=module,.diagnostic=diagnostic};
     uint64_t fixed=sizeof(held)+12u*sizeof(uint64_t);
-    if (context->limits.frame_bytes<fixed || !xir_compile_work(context,fixed)) return XR_XIR_BUDGET;
+    if (context->limits.frame_bytes<fixed) return XR_XIR_BUDGET;
     XrXirStatus status=xr_xir_compile_cell_provenance_verified(context,module,&held.owner,diagnostic);
     if (status==XR_XIR_OK && !held.owner) status=XR_XIR_BAD_STRUCTURE;
-    if (status==XR_XIR_OK) status=cell_proof_resident_bytes(context,held.owner,&held.bytes);
+    if (status==XR_XIR_OK) status=cell_proof_resident_bytes(held.owner,&held.bytes);
     if (status==XR_XIR_OK && held.bytes>context->limits.frame_bytes-fixed) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) {
         held.remaining=*context;held.remaining.limits.frame_bytes-=fixed+held.bytes;
-        held.cells=(XirViewAccessCells){held.owner,xr_xir_cell_provenance_role};
-        status=xir_compile_view_access_cells_verified(&held.remaining,module,&held.cells,diagnostic);
+        held.cells=(XirViewAccessCells){.owner=held.owner,.role=xr_xir_cell_provenance_role};
+        status=module->defaults && module->defaults->count ?
+            xir_effects_default_access_operation(&held.remaining,module,view_cell_access_operation,&held):
+            xir_compile_view_access_cells_verified(&held.remaining,module,&held.cells,diagnostic);
     }
     xr_xir_compile_cell_provenance_free(held.owner);return status;
 }

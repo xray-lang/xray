@@ -13,22 +13,9 @@
 #include <stdarg.h>
 #include <string.h>
 typedef struct ModuleWork { XrCompileResources *resources; XrModuleStatus status; } ModuleWork;
-static inline XrModuleStatus module_resource_status(XrCompileResourceStatus status) {
-    return status == XR_COMPILE_RESOURCE_OK ? XR_MODULE_OK :
-        status == XR_COMPILE_RESOURCE_BUDGET ? XR_MODULE_BUDGET :
-        status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_MODULE_OUT_OF_MEMORY : XR_MODULE_INVALID;
-}
 static inline bool module_status(ModuleWork *work, XrModuleStatus status) {
     if (work->status == XR_MODULE_OK) work->status = status;
     return work->status == XR_MODULE_OK;
-}
-static inline bool module_work(ModuleWork *work, uint64_t count) {
-    return work->status == XR_MODULE_OK && module_status(work,
-        module_resource_status(xr_compile_resources_work(work->resources,count)));
-}
-static inline bool module_charge(void *context, uint64_t count) { return module_work(context,count); }
-static inline XrOsIoStatus module_io_charge(void *context, uint64_t count) {
-    return module_work(context,count) ? XR_OS_IO_OK : XR_OS_IO_BUDGET;
 }
 static inline bool module_io(ModuleWork *work, XrOsIoStatus status) {
     return module_status(work,xr_module_status_from_io(status));
@@ -36,23 +23,23 @@ static inline bool module_io(ModuleWork *work, XrOsIoStatus status) {
 static inline void *module_alloc(ModuleWork *work, size_t bytes) {
     void *out = NULL;
     if (work->status == XR_MODULE_OK) module_status(work,
-        module_resource_status(xr_compile_resources_alloc(work->resources,bytes,&out)));
+        xr_module_status_from_resource(xr_compile_resources_alloc(work->resources,bytes,&out)));
     return out;
 }
 static inline void *module_calloc(ModuleWork *work, size_t count, size_t size) {
     void *out = NULL;
     if (work->status == XR_MODULE_OK) module_status(work,
-        module_resource_status(xr_compile_resources_calloc(work->resources,count,size,&out)));
+        xr_module_status_from_resource(xr_compile_resources_calloc(work->resources,count,size,&out)));
     return out;
 }
 static inline bool module_resize(ModuleWork *work, void **pointer, size_t bytes) {
     return work->status == XR_MODULE_OK && module_status(work,
-        module_resource_status(xr_compile_resources_resize(work->resources,pointer,bytes)));
+        xr_module_status_from_resource(xr_compile_resources_resize(work->resources,pointer,bytes)));
 }
 static inline size_t module_length(ModuleWork *work, const char *text) {
     if (!text) { module_status(work,XR_MODULE_INVALID); return 0; }
     size_t i = 0;
-    while (module_work(work,1)) {
+    while ((work)->status == XR_MODULE_OK) {
         if (!text[i]) return i;
         if (i == SIZE_MAX-1) { module_status(work,XR_MODULE_BUDGET); break; }
         ++i;
@@ -60,7 +47,7 @@ static inline size_t module_length(ModuleWork *work, const char *text) {
     return 0;
 }
 static inline bool module_copy(ModuleWork *work, void *dest, const void *source, size_t length) {
-    if (!module_work(work,length)) return false;
+    if (!((work)->status == XR_MODULE_OK)) return false;
     if (length) memcpy(dest,source,length); return true;
 }
 static inline char *module_dup(ModuleWork *work, const char *text) {
@@ -72,7 +59,7 @@ static inline char *module_dup(ModuleWork *work, const char *text) {
 }
 static inline bool module_equal(ModuleWork *work, const char *a, const char *b) {
     if (!a || !b) return a == b;
-    for (size_t i = 0; module_work(work,2); ++i) {
+    for (size_t i = 0; (work)->status == XR_MODULE_OK; ++i) {
         char first = a[i], second = b[i];
         if (first != second) return false;
         if (!first) return true;
@@ -81,15 +68,15 @@ static inline bool module_equal(ModuleWork *work, const char *a, const char *b) 
 }
 static inline bool module_prefix(ModuleWork *work, const char *text, const char *prefix) {
     if (!text || !prefix) return false;
-    for (size_t i = 0; module_work(work,1); ++i) {
+    for (size_t i = 0; (work)->status == XR_MODULE_OK; ++i) {
         char expected = prefix[i];
         if (!expected) return true;
-        if (!module_work(work,1) || text[i] != expected) return false;
+        if (!((work)->status == XR_MODULE_OK) || text[i] != expected) return false;
     }
     return false;
 }
 static inline const char *module_find_char(ModuleWork *work, const char *text, char character) {
-    for (size_t i = 0; module_work(work,1); ++i) {
+    for (size_t i = 0; (work)->status == XR_MODULE_OK; ++i) {
         char current = text[i];
         if (current == character) return text+i;
         if (!current) return NULL;
@@ -97,7 +84,7 @@ static inline const char *module_find_char(ModuleWork *work, const char *text, c
     return NULL;
 }
 static inline bool module_authority(ModuleWork *work, const XrModuleIdentityAuthority *authority) {
-    XrModuleIdentityWork scan = {work,module_charge,XR_MODULE_OK};
+    XrModuleIdentityScan scan = {XR_MODULE_OK};
     bool valid = xr_module_identity_authority_walk(&scan,authority);
     if (!valid && work->status == XR_MODULE_OK) module_status(work,
         scan.status == XR_MODULE_OK ? XR_MODULE_INVALID : scan.status);
@@ -108,14 +95,14 @@ static inline bool module_authority(ModuleWork *work, const XrModuleIdentityAuth
 static inline size_t module_format_pass(ModuleWork *work, char *out, size_t capacity,
     const char *format, va_list args) {
     size_t n = 0;
-    for (size_t i = 0; module_work(work,1); ++i) {
+    for (size_t i = 0; (work)->status == XR_MODULE_OK; ++i) {
         char c = format[i]; if (!c) break;
         if (c == '%') {
-            if (!module_work(work,1)) break;
+            if (!((work)->status == XR_MODULE_OK)) break;
             if (format[++i] != 's') { module_status(work,XR_MODULE_INVALID); break; }
             const char *text = va_arg(args,const char *);
             if (!text) { module_status(work,XR_MODULE_INVALID); break; }
-            for (size_t j = 0; module_work(work,1); ++j) {
+            for (size_t j = 0; (work)->status == XR_MODULE_OK; ++j) {
                 if (!text[j]) break;
                 if (n == SIZE_MAX-1 || (out && n+1 >= capacity)) { module_status(work,XR_MODULE_BUDGET); break; }
                 if (out) out[n] = text[j]; ++n;
@@ -125,7 +112,7 @@ static inline size_t module_format_pass(ModuleWork *work, char *out, size_t capa
             if (out) out[n] = c; ++n;
         }
     }
-    if (out && module_work(work,1)) out[n] = 0;
+    if (out && ((work)->status == XR_MODULE_OK)) out[n] = 0;
     return n;
 }
 static inline bool module_format_buffer(ModuleWork *work, char *out, size_t capacity, const char *format, ...) {

@@ -11,13 +11,16 @@ static XrXirStatus inspect_lexical(XdapAdapter *s,const XdapRequest *r,uint32_t 
     if (status!=XR_XIR_OK && status!=XR_XIR_UNRESOLVED) return status;
     uint32_t size=0,*bindings=NULL;
     for (uint32_t b=view.environment;b;b=view.function->bindings[b-1].parent) {
-        if (xr_compile_resources_work(s->resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
         ++size;
     }
     if (size) {
-        if (xr_compile_resources_work(s->resources,(uint64_t)size*2*sizeof(*bindings))!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
         XrCompileResourceStatus allocated=xr_compile_resources_alloc(s->resources,(size_t)size*sizeof(*bindings),(void **)&bindings);
-        if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+        if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+        allocated==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        allocated==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_OVERFLOW :
+        allocated==XR_COMPILE_RESOURCE_CANCELLED ? XR_XIR_CANCELLED :
+        allocated==XR_COMPILE_RESOURCE_DEADLINE ? XR_XIR_DEADLINE :
+        allocated==XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE : XR_XIR_BAD_STRUCTURE;
     }
     uint32_t at=0;
     for (uint32_t b=view.environment;b;b=view.function->bindings[b-1].parent) bindings[at++]=b;
@@ -25,19 +28,20 @@ static XrXirStatus inspect_lexical(XdapAdapter *s,const XdapRequest *r,uint32_t 
     uint32_t shown=0,before=s->value_count;uint64_t ordinal=0;
     for (uint32_t i=size;i && body.status==XR_XIR_OK;--i) {
         const XrXirSourceDebugBinding *binding=&view.function->bindings[bindings[i-1]-1];
-        const char *text=view.source->declarations[binding->declaration-1].name;size_t bytes=strlen(text);
+        const char *text=view.source->declarations[binding->declaration-1].name;
         bool hidden=false;
         for (uint32_t newer=0;newer<i-1;++newer) {
             const XrXirSourceDebugBinding *candidate=&view.function->bindings[bindings[newer]-1];
             const char *name=view.source->declarations[candidate->declaration-1].name;
-            if (xr_compile_resources_work(s->resources,(uint64_t)bytes+2)!=XR_COMPILE_RESOURCE_OK) { body.status=XR_XIR_BUDGET;break; }
             if (!strcmp(text,name)) { hidden=true;break; }
         }
         if (hidden || body.status!=XR_XIR_OK) continue;
         XrXirValue value={0};const char *name=NULL;size_t length=0;
         XrXirValueStatus copied=xdap_lexical_read(&view,bindings[i-1],&value,&name,&length);
         if (copied==XR_XIR_VALUE_BAD_ARGUMENT || copied==XR_XIR_VALUE_UNSUPPORTED) continue;
-        if (copied!=XR_XIR_VALUE_OK) { body.status=copied==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;break; }
+        if (copied!=XR_XIR_VALUE_OK) { body.status=copied==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+        copied==XR_XIR_VALUE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        copied==XR_XIR_VALUE_OVERFLOW ? XR_XIR_OVERFLOW : copied==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;break; }
         if (ordinal++<start || (count && shown>=count)) { xr_xir_value_drop(&value);continue; }
         if (shown++) XDAP_TEXT(&body,",");
         XdapValueOrigin origin={view.epoch,view.frame_id,binding->value,{0},false};

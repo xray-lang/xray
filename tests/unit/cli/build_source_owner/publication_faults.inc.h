@@ -1,14 +1,12 @@
-/* Real ledger and Win32 failures; no substitute publisher or filesystem. */
+/* Real memory-owner and Win32 failures; no substitute publisher or filesystem. */
 #include "base/xmalloc.h"
 #include <bcrypt.h>
 static size_t allocation_attempts, fail_allocation=SIZE_MAX, live_allocations;
 static size_t io_attempts, fail_io=SIZE_MAX;
 static DWORD injected_error=ERROR_ACCESS_DENIED;
-static bool record_work, collision, zero_write, short_write, fail_disposition, force_flush_failure;
+static bool collision, zero_write, short_write, fail_disposition, force_flush_failure;
 static size_t close_attempts, fail_close=SIZE_MAX;
 static bool permanent_close;
-static uint64_t work_points[32768];
-static size_t work_count;
 static void *publication_test_malloc(size_t bytes) {
     if(allocation_attempts++==fail_allocation)return NULL;
     void *memory=xr_malloc(bytes);if(memory)++live_allocations;return memory;
@@ -20,15 +18,9 @@ static void publication_test_free(void *memory) {
 #undef xr_free
 #define xr_malloc publication_test_malloc
 #define xr_free publication_test_free
-#define xr_compile_resources_work publication_real_work
 #include "base/xcompile_resources.c"
-#undef xr_compile_resources_work
 #undef xr_malloc
 #undef xr_free
-XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *owner,uint64_t units) {
-    if(record_work && units){CHECK(work_count<32768);work_points[work_count++]=owner->stats.work+units;}
-    return publication_real_work(owner,units);
-}
 static bool publication_fault(void) {
     if(io_attempts++!=fail_io)return false;
     SetLastError(injected_error);return true;

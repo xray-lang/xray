@@ -44,7 +44,7 @@ static void prelude_query(const XrXirSourceResult *result,bool generated) {
 }
 static XrXirSourceResult prelude_check(const XrXirCompileContext *context,const char *file,
     const XrXirLibraryCatalog *catalog) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,file,&authority,context,NULL,NULL,XR_XIR_PROGRAM,catalog};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
@@ -113,7 +113,7 @@ int main(int argc,char **argv) {
         XrXirArtifact *owned=NULL;CHECK(prelude_roundtrip(&compiler.context,result.checked,&owned)==XR_XIR_OK);
         xr_xir_compile_source_result_free(&result);xr_test_prelude_run(&compiler.context,owned);
     }
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compiler.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compiler.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     const char *negative[]={XR_SOURCE_FIXTURES "/foreign_variant.xr",XR_SOURCE_FIXTURES "/foreign_ordering.xr"};
     for (unsigned n=0;n<2;++n) {
         XrXirSourceRequest request={session,negative[n],&authority,&compiler.context,NULL,NULL,XR_XIR_PROGRAM,catalog};

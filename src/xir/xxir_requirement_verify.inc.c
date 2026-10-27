@@ -13,16 +13,15 @@
  * This only replaces export visibility; complete provenance checking still
  * proves every substitution, operand and effect binding before publication. */
 static XrXirStatus instance_call_visibility(const XrXirModule *module,
-    uint32_t caller, uint32_t instruction, uint32_t target,
-    XrXirCompileContext *budget, bool *authorized) {
+    uint32_t caller, uint32_t instruction, uint32_t target, bool *authorized) {
     *authorized = false;
-    if (!xir_compile_work(budget, 8)) return XR_XIR_BUDGET;
+
     if (!xir_effect_evidence_is_closed(module)) return XR_XIR_OK;
     const XrXirProvenance *p = module->provenance;
     if (!p->source || !p->origins || p->count != module->function_count ||
         caller >= p->count || target >= p->count) return XR_XIR_BAD_STRUCTURE;
     const XrXirModule *source = &p->source->module;
-    if (!xir_compile_work(budget, 12)) return XR_XIR_BUDGET;
+
     if (source->stage != XR_XIR_CHECKED || source->linkage_kind != XR_XIR_PROGRAM ||
         (source->provenance && source->provenance->kind != XR_XIR_EVIDENCE_TEMPLATE) ||
         !source->functions || !source->function_count ||
@@ -32,7 +31,7 @@ static XrXirStatus instance_call_visibility(const XrXirModule *module,
     uint32_t to_id = p->origins[target].function;
     const XrXirFunction *from = &source->functions[from_id];
     const XrXirFunction *actual = &module->functions[caller];
-    if (!xir_compile_work(budget, 10)) return XR_XIR_BUDGET;
+
     if (!from->instructions || !actual->instructions ||
         instruction >= from->instruction_count || instruction >= actual->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
@@ -44,7 +43,7 @@ static XrXirStatus instance_call_visibility(const XrXirModule *module,
         return XR_XIR_BAD_STRUCTURE;
     const XrXirDeclarations *before = source->declarations;
     const XrXirDeclarations *after = module->declarations;
-    if (!xir_compile_work(budget, 16)) return XR_XIR_BUDGET;
+
     if (!before || !after || !before->functions || !after->functions ||
         !before->modules || !after->modules || !before->module_count ||
         before->module_count != after->module_count) return XR_XIR_BAD_STRUCTURE;
@@ -58,12 +57,12 @@ static XrXirStatus instance_call_visibility(const XrXirModule *module,
         (origin_target->member_access && origin_caller->nominal_owner != origin_target->nominal_owner))
         return XR_XIR_BAD_STRUCTURE;
     const XrXirSourceModule *owner = &before->modules[caller_module];
-    if (!xir_compile_work(budget, 2)) return XR_XIR_BUDGET;
+
     if (!!owner->dependencies != !!owner->dependency_count ||
         owner->dependency_count > before->module_count) return XR_XIR_BAD_STRUCTURE;
     bool imported = caller_module == target_module;
     for (uint32_t i = 0; i < owner->dependency_count; ++i) {
-        if (!xir_compile_work(budget, 2)) return XR_XIR_BUDGET;
+
         if (owner->dependencies[i] >= before->module_count) return XR_XIR_BAD_STRUCTURE;
         if (owner->dependencies[i] == target_module) imported = true;
     }

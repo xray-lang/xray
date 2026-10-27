@@ -46,7 +46,7 @@ static XrXirStatus effect_role_group(EffectRoleCheck *check,EffectRoleIndex *use
         first=(uint32_t)chosen;limit=first+1;check->ordinal=check->selected;
     }
     for (uint32_t a=first;a<limit;a+=step) {
-        if (!xir_compile_work(check->work,3)) return XR_XIR_BUDGET;
+
         XrXirStatus status=effect_role_value(check,uses,head->operands[op->args[0]+a],destination,action);
         if (status!=XR_XIR_OK) return status;
     }
@@ -65,7 +65,7 @@ static XrXirStatus effect_role_call(EffectRoleCheck *check,EffectRoleIndex *uses
         end=begin+1;check->ordinal=begin*width;
     }
     for (uint32_t p=begin;p<end;++p) {
-        if (!xir_compile_work(check->work,4)) return XR_XIR_BUDGET;
+
         uint32_t actual=head->operands[op->args[0]+p];
         XrXirStatus status=effect_role_value(check,uses,actual,check->proof->rows[target].formal_first+p,EFFECT_ROLE_CALLEE);
         if (status==XR_XIR_OK && op->op==XR_XIR_FUNCTION_REF)
@@ -138,7 +138,7 @@ static XrXirStatus effect_role_opaque(EffectRoleCheck *check,EffectRoleIndex *us
         begin=check->selected;count=begin+1;check->ordinal=begin;
     }
     for (uint32_t a=begin;a<count;++a) {
-        if (!xir_compile_work(check->work,1)) return XR_XIR_BUDGET;
+
         XrXirStatus status=effect_role_value(check,uses,op->args[a],0,EFFECT_ROLE_FIXED);
         if (status!=XR_XIR_OK) return status;
     }

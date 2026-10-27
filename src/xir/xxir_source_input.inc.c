@@ -67,7 +67,7 @@ static bool source_graph_fail(SourceContext *ctx,XrModuleStatus status,const cha
 }
 static bool source_include_corpus(SourceContext *ctx, SourceInput input, char **error) {
     for (size_t i = 0; i < input.included_count; ++i) {
-        if (!source_work(ctx, NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (input.included[i] >= input.overlay_count)
             return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "source corpus index is invalid");
         const XrModuleOverlayInput *source = &input.overlays[input.included[i]];
@@ -111,6 +111,8 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, "source request is incomplete"); goto done;
     }
     ctx.compile = *request->context;
+    ctx.request = xr_compile_session_request(request->session);
+    if (!source_request_poll(&ctx, NULL)) goto done;
     ctx.semantic_output=input.capture ? &input.capture->semantic : NULL;
     ctx.binding_readers=input.binding_readers;
     ctx.interactive=input.interactive;ctx.type_query=input.type_query;ctx.module_scope=input.module_scope;
@@ -148,7 +150,7 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
         if (!terminated) goto done;
         size_t line=1,line_start=0;
         for (size_t i = 0; i < length; ++i) {
-            if (!source_work(&ctx, NULL)) goto done;
+            if (!(i % 4096) && !source_request_poll(&ctx, NULL)) goto done;
             if (!text[i]) {
                 source_input_nul(&ctx,request->entry_path,line,i-line_start+1,failure);goto done;
             }
@@ -196,8 +198,10 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, error ? error : "module graph is not an acyclic source closure"); goto done;
     }
     if(!source_repl_select_tail(&ctx))goto done;
+    if (!source_request_poll(&ctx, NULL)) goto done;
     semantic_started = true;
     source_construct(&ctx, &result);
+    if (!source_request_poll(&ctx, NULL)) goto done;
     if (comptime_instances) source_comptime_instances_prepare(&ctx,result.checked,comptime_instances->request,comptime_instances->output);
     else {
         source_comptime_receive(&ctx, &result);
@@ -310,7 +314,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_instance_constants(const XirSourceInst
     SourceInput input={.supplied=request->text!=NULL,.text=request->text?*request->text:(XrXirSourceText){0},
         .overlays=request->overlays,.overlay_count=request->overlay_count,.instances=&operation};
     status=source_check_input(request->source,input,&result.source,diagnostic,NULL);
-    if (status==XR_XIR_OK && !xir_compile_work(request->source->context,sizeof(*output))) status=XR_XIR_BUDGET;
+
     if (status!=XR_XIR_OK) {
         xr_xir_compile_source_instance_constants_free(&result);
         if (diagnostic) diagnostic->status=status;
@@ -326,10 +330,9 @@ XR_FUNC XrXirStatus xr_xir_compile_prelude_library(const XrXirCompileContext *co
         return XR_XIR_BAD_STRUCTURE;
     }
     XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&session);
-    if (opened!=XR_COMPILER_SESSION_OK) {
-        XrXirStatus status=opened==XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET :
-            opened==XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;
+    XrCompileResourceStatus opened=xr_compile_session_new(context->resources,&session);
+    if (opened!=XR_COMPILE_RESOURCE_OK) {
+        XrXirStatus status=xir_compile_resource_status(opened);
         if (diagnostic) *diagnostic=(XrXirSourceDiagnostic){.status=status};
         return status;
     }
@@ -337,11 +340,7 @@ XR_FUNC XrXirStatus xr_xir_compile_prelude_library(const XrXirCompileContext *co
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_LIBRARY,NULL};
     size_t length=0;
     while (true) {
-        if (!xir_compile_work(context,1)) {
-            xr_compile_session_free(session);
-            if (diagnostic) *diagnostic=(XrXirSourceDiagnostic){.status=XR_XIR_BUDGET};
-            return XR_XIR_BUDGET;
-        }
+
         if (!xir_prelude_source.text[length]) break;
         if (length==SIZE_MAX-1) {
             xr_compile_session_free(session);
@@ -355,7 +354,7 @@ XR_FUNC XrXirStatus xr_xir_compile_prelude_library(const XrXirCompileContext *co
     XrXirStatus status=source_check_input(&request,input,&result,diagnostic,NULL);
     if (status==XR_XIR_OK) {
         bool admitted=false;
-        status=library_prelude_module(context,xr_xir_compile_artifact_module(result.checked),0,&admitted);
+        status=library_prelude_module(xr_xir_compile_artifact_module(result.checked),0,&admitted);
         if (status==XR_XIR_OK && !admitted) status=XR_XIR_BAD_STRUCTURE;
     }
     if (diagnostic) diagnostic->status=status;

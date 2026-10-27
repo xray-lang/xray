@@ -21,7 +21,7 @@ static XrXirStatus owner_path_edges(ViewOwnerPath *p,uint32_t b,bool *changed) {
         if (status==XR_XIR_OK && e<2) status=affine_phi_edge(a,b,target,false);
         if (status!=XR_XIR_OK) return status;
         for (uint32_t w=0;w<a->words;++w) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             uint64_t *input=a->inputs+(size_t)target*a->words+w,meet=*input|a->edge[w];
             if (*input!=meet) {*input=meet;*changed=true;}
         }
@@ -33,14 +33,14 @@ static XrXirStatus owner_path_phase(ViewOwnerPath *p,uint32_t start,uint32_t sto
     XrXirStatus status=owner_path_walk(p,start,stop,true,&repeated);if (status!=XR_XIR_OK) return status;
     if (stop!=UINT32_MAX && !a->reachable[stop]) return XR_XIR_OK;
     uint64_t cells=(uint64_t)a->function->block_count*a->words;
-    if (!xir_compile_work(a->context,cells)) return XR_XIR_BUDGET;
+
     memset(a->inputs,0,(size_t)cells*sizeof(*a->inputs));
     status=affine_copy(a,a->inputs+(size_t)start*a->words,a->initial);if (status!=XR_XIR_OK) return status;
     bool changed=true;
     while (changed) {
         changed=false;
         for (uint32_t b=0;b<a->function->block_count;++b) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             if (!a->reachable[b] || b==stop) continue;a->location.block=b;
             status=view_may_transfer(&p->may,b,false);
             if (status==XR_XIR_OK) status=owner_path_edges(p,b,&changed);if (status!=XR_XIR_OK) return status;
@@ -60,7 +60,7 @@ static XrXirStatus owner_path_result(ViewOwnerPath *p,bool *possible) {
     status=owner_path_phase(p,start,UINT32_MAX,&reached);if (status!=XR_XIR_OK) return status;
     uint32_t block=UINT32_MAX;
     for (uint32_t b=0;b<a->function->block_count;++b) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         const XrXirBlock *body=a->function->blocks+b;
         if (p->request->instruction>=body->first && p->request->instruction-body->first<body->count) block=b;
     }
@@ -68,7 +68,7 @@ static XrXirStatus owner_path_result(ViewOwnerPath *p,bool *possible) {
     if (!a->reachable[block]) return XR_XIR_OK;
     status=affine_copy(a,a->current,a->inputs+(size_t)block*a->words);
     for (uint32_t i=a->function->blocks[block].first;i<p->request->instruction && status==XR_XIR_OK;++i) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;status=affine_instruction(a,i,false);
+        status=affine_instruction(a,i,false);
     }
     if (status==XR_XIR_OK) *possible=affine_has(a->current,affine_index(a,p->request->owner));return status;
 }

@@ -11,26 +11,26 @@ static XirNominalValue ***arena_empty_variants(ArenaNominalCursor *c,
     if (!types || !types->nominals || c->status != XR_XIR_VALUE_OK) return NULL;
     bool found = false;
     for (uint32_t i = 0; i < types->count; ++i) {
-        if (!arena_nominal_work(c, 1)) return NULL;
+        if (!((c)->status == XR_XIR_VALUE_OK)) return NULL;
         if (xr_xir_type_is_enum(types, (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i))) found = true;
     }
     if (!found) return NULL;
     XirNominalValue ***map = arena_nominal_span(c, types->count, sizeof(*map), _Alignof(XirNominalValue **));
     for (uint32_t i = 0; i < types->count && c->status == XR_XIR_VALUE_OK; ++i) {
-        if (!arena_nominal_work(c, 1)) break;
-        if (map && arena_nominal_work(c, sizeof(*map))) map[i] = NULL;
+        if (!((c)->status == XR_XIR_VALUE_OK)) break;
+        if (map && ((c)->status == XR_XIR_VALUE_OK)) map[i] = NULL;
         XrXirType type = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i);
         if (!xr_xir_type_is_enum(types, type)) continue;
         const XrXirNominalIdentity *identity = &types->nominals->identities[types->nodes[i].nominal.declaration];
         XirNominalValue **variants = arena_nominal_span(c, identity->variant_count,
             sizeof(*variants), _Alignof(XirNominalValue *));
-        if (map && arena_nominal_work(c, sizeof(*map))) map[i] = variants;
+        if (map && ((c)->status == XR_XIR_VALUE_OK)) map[i] = variants;
         for (uint32_t v = 0; v < identity->variant_count && c->status == XR_XIR_VALUE_OK; ++v) {
-            if (!arena_nominal_work(c, 1)) break;
-            if (variants && arena_nominal_work(c, sizeof(*variants))) variants[v] = NULL;
+            if (!((c)->status == XR_XIR_VALUE_OK)) break;
+            if (variants && ((c)->status == XR_XIR_VALUE_OK)) variants[v] = NULL;
             if (identity->variants[v].field_count) continue;
             XirNominalValue *value = arena_nominal_span(c, 1, sizeof(*value), _Alignof(XirNominalValue));
-            if (value && arena_nominal_work(c, sizeof(*value) + sizeof(*variants))) {
+            if (value && ((c)->status == XR_XIR_VALUE_OK)) {
                 atomic_init(&value->object.references, 1);
                 value->object.domain = NULL; value->object.arena = arena;
                 value->object.type = type; value->object.kind = XR_XIR_TYPE_NOMINAL;

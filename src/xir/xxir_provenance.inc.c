@@ -35,13 +35,13 @@ XR_FUNC void xr_xir_compile_provenance_free(XrXirProvenance *provenance) {
 static XrXirStatus provenance_vector_shape(const XrXirCompileContext *context,
     const void *data, uint32_t count, size_t element_size) {
     if ((uint64_t)count > SIZE_MAX / element_size) return XR_XIR_BUDGET;
-    if (!xir_compile_work(context, 3)) return XR_XIR_BUDGET;
+
     if (!!data != !!count) return XR_XIR_BAD_STRUCTURE;
     if (!count) return XR_XIR_OK;
     /* Every vector is copied into a new block. Check its physical lower bound
      * before inspecting a resource-impossible borrowed record array. */
     size_t bytes = (size_t)count * element_size;
-    return xir_compile_resource_status(xr_compile_resources_admit(context->resources,bytes,bytes));
+    return xir_compile_resource_status(xr_compile_resources_admit(context->resources,(size_t)bytes));
 }
 
 static XrXirStatus provenance_contract_storage_shape(const XrXirCompileContext *context,
@@ -61,7 +61,7 @@ static XrXirStatus provenance_contract_storage_shape(const XrXirCompileContext *
 static XrXirStatus provenance_storage_shape(const XrXirCompileContext *context,
     const XrXirProvenance *source) {
     if (!source) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context, 8)) return XR_XIR_BUDGET;
+
     if (source->kind!=XR_XIR_EVIDENCE_EVALUATION &&
         (source->evaluation.caller || source->evaluation.instruction || source->evaluation.callee)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status;
@@ -72,7 +72,7 @@ static XrXirStatus provenance_storage_shape(const XrXirCompileContext *context,
             sizeof(*source->contracts));
         if (status != XR_XIR_OK) return status;
         for (uint32_t f = 0; f < source->contract_count; ++f) {
-            if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
             status = provenance_contract_storage_shape(context, &source->contracts[f]);
             if (status != XR_XIR_OK) return status;
         }
@@ -90,7 +90,7 @@ static XrXirStatus provenance_storage_shape(const XrXirCompileContext *context,
     if (module->provenance && module->provenance->kind != XR_XIR_EVIDENCE_TEMPLATE)
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f = 0; f < source->count; ++f) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
+
         const XrXirOrigin *origin = &source->origins[f];
         if (origin->function >= module->function_count) return XR_XIR_BAD_STRUCTURE;
         status = provenance_vector_shape(context, origin->arguments, origin->argument_count,
@@ -105,9 +105,7 @@ static XrXirStatus provenance_storage_shape(const XrXirCompileContext *context,
 static bool provenance_contract_clone(const XrXirCompileContext *context,
     const XrXirFunctionEffectContract *from, XrXirFunctionEffectContract *to,
     XrXirStatus *allocation_status) {
-    if (!xir_compile_work(context, sizeof(*from))) {
-        *allocation_status = XR_XIR_BUDGET; return false;
-    }
+
     to->parameter_count = from->parameter_count;
     to->formula.constant_mask = from->formula.constant_mask;
     to->formula.term_count = from->formula.term_count;
@@ -133,9 +131,7 @@ static bool provenance_origins_clone(const XrXirCompileContext *context,
     if (!to->origins) return false;
     to->count = from->count;
     for (uint32_t f = 0; f < from->count; ++f) {
-        if (!xir_compile_work(context, sizeof(*from->origins))) {
-            *allocation_status = XR_XIR_BUDGET; return false;
-        }
+
         const XrXirOrigin *origin = &from->origins[f];
         XrXirOrigin *copy = &to->origins[f];
         copy->function = origin->function;
@@ -157,10 +153,10 @@ static XrXirProvenance *provenance_clone(const XrXirCompileContext *context,
     if (*allocation_status != XR_XIR_OK) return NULL;
     XrXirProvenance *copy = xir_compile_calloc(context, 1, sizeof(*copy), allocation_status);
     if (!copy) return NULL;
-    if (!xir_compile_work(context, 1)) { *allocation_status = XR_XIR_BUDGET; goto failed; }
+
     copy->kind = source->kind;
     if (source->kind==XR_XIR_EVIDENCE_EVALUATION) {
-        if (!xir_compile_work(context,sizeof(source->evaluation))) { *allocation_status=XR_XIR_BUDGET;goto failed; }
+
         copy->evaluation=source->evaluation;
     }
     if (source->kind == XR_XIR_EVIDENCE_TEMPLATE) {
@@ -200,7 +196,7 @@ static XrXirStatus provenance_copy_source(const XrXirCompileContext *context,
             xr_xir_compile_verify_v2(context,&source->source->module,source->source->construction,NULL);
         if (status != XR_XIR_OK) return status;
         for (uint32_t f = 0; f < source->count; ++f) {
-            if (!xir_compile_work(context, 2)) return XR_XIR_BUDGET;
+
             uint32_t declaration = source->origins[f].function;
             uint32_t arity = source->source->module.generics ?
                 source->source->module.generics[declaration].parameter_count : 0;

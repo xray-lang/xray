@@ -10,7 +10,7 @@ static void emit_hash_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination, uint32_t index) {
     append(buffer, "        { XrXirValue value = {0}; XrXirFaultDetail fault = {0};\n");
     if (op->op == XR_XIR_MAP_NEW || op->op == XR_XIR_SET_NEW) {
-        for (uint32_t i = 0; i < op->args[1] && emit_work(buffer, 1); ++i) {
+        for (uint32_t i = 0; i < op->args[1] && ((buffer)->status == XR_XIR_OK); ++i) {
             append(buffer, "        state->arguments[%u] = ", i);
             emit_value(buffer, function, layout, function->operands[op->args[0] + i]);
             append(buffer, ";\n");

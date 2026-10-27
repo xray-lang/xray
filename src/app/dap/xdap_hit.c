@@ -10,7 +10,6 @@
 static bool hit_space(char c) { return c==' ' || c=='\t'; }
 XR_FUNC XrXirStatus xdap_hit_parse(XrCompileResources *resources,const char *bytes,size_t length,XrXirVmDebugRule *output) {
     if (!resources || (!bytes && length) || !output || length>64) return XR_XIR_BAD_STRUCTURE;
-    if (xr_compile_resources_work(resources,length+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     XrXirVmDebugRule rule=*output;rule.hit_kind=XR_XIR_VM_DEBUG_HIT_ALWAYS;rule.hit_value=0;
     size_t at=0;while (at<length && hit_space(bytes[at])) ++at;
     if (at==length) { *output=rule;return XR_XIR_OK; }

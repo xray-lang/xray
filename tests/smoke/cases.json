@@ -14,12 +14,11 @@
       "path": "demos/01-basics/control_flow.xr",
       "mode": "build-run",
       "expect": "gap",
-      "exit_code": null,
+      "exit_code": 1,
       "stdout": "tests/smoke/expected/control_flow.txt",
       "gap": {
         "feature": "Task328 P2",
-        "first_diagnostic": null,
-        "deferred": "Task328 P2 direct-C path is not integrated; legacy native output is not its acceptance evidence"
+        "first_diagnostic": "XR_BUILD_6007: native transaction failed (status=3 domain=6 code=3 os=0 stage=0 pass=0 child=0 invocation_domain=0 invocation_code=0)"
       }
     },
     {
@@ -47,12 +46,11 @@
       "path": "demos/01-basics/hello.xr",
       "mode": "build-run",
       "expect": "gap",
-      "exit_code": null,
+      "exit_code": 1,
       "stdout": "tests/smoke/expected/hello.txt",
       "gap": {
         "feature": "Task328 P2",
-        "first_diagnostic": null,
-        "deferred": "Task328 P2 direct-C path is not integrated; legacy native output is not its acceptance evidence"
+        "first_diagnostic": "XR_BUILD_6007: native transaction failed (status=3 domain=6 code=3 os=0 stage=0 pass=0 child=0 invocation_domain=0 invocation_code=0)"
       }
     },
     {
@@ -256,7 +254,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F04",
-        "first_diagnostic": "stdlib/crypto/crypto.xr:97:31: error: string member has no admitted value-operation contract"
+        "first_diagnostic": "stdlib/crypto/crypto.xr:97:27: error: string member has no admitted value-operation contract"
       }
     },
     {
@@ -359,13 +357,9 @@
       "id": "stdlib/base64/base64.xr",
       "path": "stdlib/base64/base64.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F04",
-        "first_diagnostic": "stdlib/base64/base64.xr:73:31: error: string member has no admitted value-operation contract"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/cluster/cluster.xr",
@@ -400,7 +394,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F04",
-        "first_diagnostic": "stdlib/crypto/crypto.xr:97:31: error: string member has no admitted value-operation contract"
+        "first_diagnostic": "stdlib/crypto/crypto.xr:97:27: error: string member has no admitted value-operation contract"
       }
     },
     {
@@ -436,7 +430,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F04",
-        "first_diagnostic": "stdlib/encoding/encoding.xr:26:35: error: string member has no admitted value-operation contract"
+        "first_diagnostic": "stdlib/encoding/encoding.xr:183:23: error: string member has no admitted value-operation contract"
       }
     },
     {
@@ -644,12 +638,11 @@
       "path": "stdlib/time/time.xr",
       "mode": "build-run",
       "expect": "gap",
-      "exit_code": null,
+      "exit_code": 1,
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task328 P2",
-        "first_diagnostic": null,
-        "deferred": "Task328 P2 direct-C path is not integrated; legacy native output is not its acceptance evidence"
+        "first_diagnostic": "XR_BUILD_6007: native transaction failed (status=3 domain=6 code=3 os=0 stage=0 pass=0 child=0 invocation_domain=0 invocation_code=0)"
       }
     },
     {
@@ -725,12 +718,23 @@
       "path": "demos/07-advanced/readonly_byte_slice.xr",
       "mode": "build-run",
       "expect": "gap",
-      "exit_code": null,
+      "exit_code": 1,
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task328 P2",
-        "first_diagnostic": null,
-        "deferred": "Task328 P2 direct-C path is not integrated; legacy native output is not its acceptance evidence"
+        "first_diagnostic": "XR_BUILD_6007: native transaction failed (status=3 domain=6 code=3 os=0 stage=0 pass=0 child=0 invocation_domain=0 invocation_code=0)"
+      }
+    },
+    {
+      "id": "native:stdlib/base64/base64.xr",
+      "path": "stdlib/base64/base64.xr",
+      "mode": "build-run",
+      "expect": "gap",
+      "exit_code": 1,
+      "stdout": "tests/smoke/expected/one.txt",
+      "gap": {
+        "feature": "Task328 P2",
+        "first_diagnostic": "XR_BUILD_6007: native transaction failed (status=3 domain=6 code=3 os=0 stage=0 pass=0 child=0 invocation_domain=0 invocation_code=0)"
       }
     }
   ]

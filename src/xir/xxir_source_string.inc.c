@@ -11,12 +11,16 @@
  */
 #include "xxir_intrinsic.h"
 
+static bool source_string_bytes_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
+    const XrNativeMemberDeclaration *member,SourceValue *value);
+static bool source_string_value_reference(SourceContext *ctx,AstNode *node,
+    const XrNativeMemberDeclaration *member,XrXirType result);
 static bool source_string_value_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
     const XrNativeMemberDeclaration *member,SourceValue *value);
 static bool source_string_declaration(SourceContext *ctx) {
     if (ctx->string_declaration) return true;
     const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
-    if (!source_work(ctx, NULL)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (!source_native_admit(ctx,native)) return false;
     XrXirSourceQueryModule *modules = source_query_append(ctx, ctx->query.modules,
         &ctx->query.module_count, &ctx->query_module_capacity, sizeof(*modules));
@@ -92,7 +96,9 @@ static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue re
     if (!source_string_declaration(ctx)) return false;
     const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
     const XrNativeMemberDeclaration *member = source_native_member(ctx,native,call->callee->as.member_access.name);
-    if (!source_work(ctx, node)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+    if (member && member==xr_native_declaration_member(native,"bytes"))
+        return source_string_bytes_call(ctx,node,receiver,member,value);
     if (member && (member->operation==XR_NATIVE_OPERATION_STRING_COPY_BYTES ||
         member->operation==XR_NATIVE_OPERATION_STRING_REPLACE || member->operation==XR_NATIVE_OPERATION_STRING_REPLACE_ALL))
         return source_string_value_call(ctx,node,receiver,member,value);

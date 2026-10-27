@@ -10,14 +10,19 @@
 #include "test_expression.c"
 #undef main
 #include "api/xsource_compiler.h"
+typedef struct ProductCancel { uint32_t calls; } ProductCancel;
+static bool product_cancel(const void *context) {
+    ProductCancel *cancel=(ProductCancel *)context;
+    return ++cancel->calls==2;
+}
 static size_t product_expression(size_t fail,bool boolean) {
-    XrCompileResources *resources=NULL;XrCompileResourceLimits limits={67108864,8388608,128000000};
+    XrCompileResources *resources=NULL;XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,8388608,true};
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig config={{resources,xr_xir_compile_default_limits()},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
-    CHECK(xr_source_compiler_new(&config,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);xr_source_compile_diagnostic_free(&diagnostic);
+    CHECK(xr_source_compiler_new(&config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);xr_source_compile_diagnostic_free(&diagnostic);
     const char *text=boolean ? "const evaluator = fn(value:i64) { return value==40 && value<42 }\n" :
         "const evaluator = fn(value:i64) { return value+2 }\n";
     XrSourceCompilerText input={NULL,"dap-expression-product",text,strlen(text)};XrXirSourceProduct *product=NULL;
@@ -39,7 +44,7 @@ static size_t product_expression(size_t fail,bool boolean) {
     XrXirValue argument={XR_XIR_I64,0,40},output={0};XrXirCtfeLimits budget={65536,65536,8};
     XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(resources,&before)==XR_COMPILE_RESOURCE_OK);
     size_t begin=runtime_attempts;runtime_fail_at=fail==SIZE_MAX ? SIZE_MAX : begin+fail;
-    XrXirCtfeStatus status=xr_xir_compile_source_product_scalar(product,selected,&argument,1,budget,&output);
+    XrXirCtfeStatus status=xr_xir_compile_source_product_scalar(product,selected,&argument,1,budget,NULL,&output);
     size_t sites=runtime_attempts-begin;runtime_fail_at=SIZE_MAX;
     if (fail==SIZE_MAX) {
         if (status!=XR_XIR_CTFE_OK) fprintf(stderr,"Product boolean=%u CTFE status=%u\n",boolean,status);
@@ -47,14 +52,30 @@ static size_t product_expression(size_t fail,bool boolean) {
     }
     else CHECK(status==XR_XIR_CTFE_OUT_OF_MEMORY && sites>fail && !output.type && !output.payload);
     CHECK(argument.type==XR_XIR_I64 && argument.payload==40);
-    CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK && after.live_bytes==before.live_bytes &&
-        after.work>before.work && after.allocated_bytes>=before.allocated_bytes);
+    CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes &&
+        after.allocated_bytes>=before.allocated_bytes);
     xr_xir_value_drop(&output);
-    CHECK(xr_xir_compile_source_product_scalar(product,selected,&argument,0,budget,&output)==XR_XIR_CTFE_BAD_ARGUMENT && !output.type && !output.payload);
+    if (fail==SIZE_MAX && !boolean) {
+        ProductCancel cancel={0};XrCompileRequestControl control={0};
+        XrCompileRequestOptions options={.cancel_poll=product_cancel,.cancel_context=&cancel};
+        CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+        CHECK(xr_xir_compile_source_product_scalar(product,selected,&argument,1,budget,&control,&output)==XR_XIR_CTFE_CANCELLED);
+        CHECK(cancel.calls==2 && !output.type && !output.payload && control.status==XR_COMPILE_RESOURCE_CANCELLED);
+        CHECK(xr_xir_compile_source_product_scalar(product,selected,&argument,1,budget,&control,&output)==XR_XIR_CTFE_CANCELLED && cancel.calls==2);
+        XrCompileRequestControl deadline={0};options=(XrCompileRequestOptions){.deadline_mode=XR_COMPILE_DEADLINE_AFTER,.timeout_ns=0};
+        CHECK(xr_compile_request_control_init(&options,&deadline)==XR_COMPILE_RESOURCE_OK);
+        CHECK(xr_xir_compile_source_product_scalar(product,selected,&argument,1,budget,&deadline,&output)==XR_XIR_CTFE_DEADLINE);
+        CHECK(!output.type && !output.payload && deadline.status==XR_COMPILE_RESOURCE_DEADLINE);
+        CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);
+        CHECK(xr_xir_compile_source_product_scalar(product,selected,&argument,1,budget,NULL,&output)==XR_XIR_CTFE_OK && output.type==XR_XIR_I64 && output.payload==42);
+        xr_xir_value_drop(&output);
+        puts("Producer-dead scalar: second-poll cancellation, sticky first failure, real expired deadline and independent NULL-control retry PASS");
+    }
+    CHECK(xr_xir_compile_source_product_scalar(product,selected,&argument,0,budget,NULL,&output)==XR_XIR_CTFE_BAD_ARGUMENT && !output.type && !output.payload);
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK && program);
-    CHECK(xr_xir_compile_source_product_scalar(product,selected,&argument,1,budget,&output)==XR_XIR_CTFE_BAD_ARGUMENT && !output.type && !output.payload);
+    CHECK(xr_xir_compile_source_product_scalar(product,selected,&argument,1,budget,NULL,&output)==XR_XIR_CTFE_BAD_ARGUMENT && !output.type && !output.payload);
     xr_xir_compile_source_product_free(product);xr_xir_compile_program_drop(program);
-    CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK && after.live_bytes==baseline.live_bytes);
+    CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==baseline.held_bytes);
     xr_compile_resources_release(resources);CHECK(!runtime_live && !runtime_bytes);return sites;
 }
 int main(int argc,char **argv) {

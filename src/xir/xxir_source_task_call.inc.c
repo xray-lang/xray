@@ -17,7 +17,7 @@ static bool source_go_target(SourceContext *ctx, AstNode *node, SourceName **bin
     AstNode *callee = call->as.call_expr.callee;
     for (uint32_t depth = 0; callee && callee->type == AST_GROUPING; ++depth) {
         if (depth >= 128) return source_fail(ctx, node, XR_XIR_BUDGET, "go declaration path depth exhausted");
-        if (!source_work(ctx, callee)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         callee = callee->as.grouping;
     }
     *binding = NULL; *target = NULL;
@@ -42,7 +42,7 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
     SourceCallSyntax syntax;
     if (!source_call_syntax(ctx, call, &syntax)) return false;
     for (int a = 0; a < syntax.arg_count; ++a) {
-        if (!source_work(ctx, node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (syntax.arg_accesses && syntax.arg_accesses[a] != XR_CALL_ARG_PLAIN)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "go argument access mode is not admitted");
     }
@@ -50,7 +50,7 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
     XrXirType expected = context.type;
     for (uint32_t depth = 0; context.present && xr_xir_type_is_nullable(&ctx->types, expected); ++depth) {
         if (depth >= 128) return source_fail(ctx, node, XR_XIR_BUDGET, "go result context depth exhausted");
-        if (!source_work(ctx, node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         expected = xr_xir_nullable_element(&ctx->types, expected);
     }
     const XrXirTypeNode *task_context = context.present ? xr_xir_type_node(&ctx->types, expected) : NULL;
@@ -77,7 +77,7 @@ static bool source_task_result_hint(SourceContext *ctx, SourceExpressionPlan *pl
     SourceExpectedType context, uint32_t depth) {
     if (!context.present) return true;
     if (!plan) return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "Task result plan is missing");
-    if (!source_work(ctx, plan->syntax)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (depth >= 128) return source_fail(ctx, plan->syntax, XR_XIR_BUDGET, "Task result inference depth exhausted");
     switch (plan->syntax->type) {
     case AST_GO_EXPR: case AST_CALL_EXPR: case AST_MATCH_EXPR:

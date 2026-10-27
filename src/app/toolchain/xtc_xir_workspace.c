@@ -60,23 +60,16 @@ static XtcXirWorkspaceStatus workspace_fail(XtcXirWorkspace *owner, XtcXirWorksp
 }
 static XtcXirWorkspaceStatus workspace_resource_status(XrCompileResourceStatus status) {
     return status == XR_COMPILE_RESOURCE_OK ? XTC_XIR_WORKSPACE_OK :
-        status == XR_COMPILE_RESOURCE_BUDGET ? XTC_XIR_WORKSPACE_BUDGET :
+        status == XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XTC_XIR_WORKSPACE_MEMORY_LIMIT :
+        status == XR_COMPILE_RESOURCE_OVERFLOW ? XTC_XIR_WORKSPACE_OVERFLOW :
         status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XTC_XIR_WORKSPACE_OUT_OF_MEMORY : XTC_XIR_WORKSPACE_INVALID;
 }
 static bool workspace_resource(XtcXirWorkspace *owner, XrCompileResourceStatus status) {
     if (status == XR_COMPILE_RESOURCE_OK) return true;
     workspace_fail(owner, workspace_resource_status(status), 0); return false;
 }
-static bool workspace_work(XtcXirWorkspace *owner, uint64_t units) {
-    return workspace_resource(owner, xr_compile_resources_work(owner->resources, units));
-}
-static int workspace_utf8_read(void *context, const uint8_t *address, uint8_t *out) {
-    if (!workspace_work(context, 1)) return 0;
-    *out = *address; return 1;
-}
 static bool workspace_length(XtcXirWorkspace *owner, const char *text, size_t *length) {
     for (size_t i = 0;; ++i) {
-        if (!workspace_work(owner, 1)) return false;
         if (!text[i]) { *length = i; return true; }
         if (i == owner->limits.path_bytes) { workspace_fail(owner, XTC_XIR_WORKSPACE_BUDGET, 0); return false; }
     }
@@ -100,19 +93,16 @@ XR_FUNC XtcXirWorkspaceStatus xtc_xir_workspace_new(XrCompileResources *resource
     XrCompileResourceStatus status = xr_compile_resources_calloc(resources, 1, sizeof(*owner), (void **)&owner);
     if (status != XR_COMPILE_RESOURCE_OK) return workspace_resource_status(status);
     owner->resources = resources;
-    if (!workspace_work(owner, sizeof(request->limits))) goto failed;
     owner->limits = request->limits;
     size_t length = 0;
     if (!workspace_length(owner, request->absolute_parent, &length)) goto failed;
-    if (length < 3 || !workspace_work(owner, 3)) goto invalid;
+    if (length < 3) goto invalid;
     const char *p = request->absolute_parent;
     if (!((p[0] >= 'A' && p[0] <= 'Z') || (p[0] >= 'a' && p[0] <= 'z')) || p[1] != ':' ||
         (p[2] != '/' && p[2] != '\\')) goto invalid;
-    XrUtf8ScanResult scan;
-    if (!xr_utf8_core_scan_strict_read((const uint8_t *)p, length, workspace_utf8_read, owner, &scan)) goto failed;
+    XrUtf8ScanResult scan = xr_utf8_core_scan_strict((const uint8_t *)p, length);
     if (scan.error != XR_UTF8_OK) goto invalid;
-    if (!workspace_resource(owner, xr_compile_resources_alloc(resources, length + 1, (void **)&owner->parent)) ||
-        !workspace_work(owner, length + 1)) goto failed;
+    if (!workspace_resource(owner, xr_compile_resources_alloc(resources, length + 1, (void **)&owner->parent))) goto failed;
     memcpy(owner->parent, p, length + 1);
     if (!workspace_resource(owner, xr_compile_resources_calloc(resources, 3,
         (size_t)owner->limits.path_bytes + 1, (void **)&owner->text)) ||
@@ -121,7 +111,6 @@ XR_FUNC XtcXirWorkspaceStatus xtc_xir_workspace_new(XrCompileResources *resource
     if (!workspace_resource(owner, xr_compile_resources_calloc(resources, (size_t)owner->limits.depth + 1,
         sizeof(*owner->frames), (void **)&owner->frames))) goto failed;
 #endif
-    if (!workspace_work(owner, sizeof(*output))) goto failed;
     *output = owner; return XTC_XIR_WORKSPACE_OK;
 invalid:
     workspace_fail(owner, XTC_XIR_WORKSPACE_INVALID, 0);

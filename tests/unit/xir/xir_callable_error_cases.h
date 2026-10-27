@@ -433,7 +433,7 @@ static void callable_error_library(const XrXirCompileContext *work,bool nested) 
     xr_sha256(packet.bytes,packet.length,library_input.sha256);
     XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new_v2(work,&library_input,1,&catalog)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request={session,root,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,catalog};
     char text[128];CHECK(snprintf(text,sizeof(text),"import {entry} from \"./lib\"\nvar f=entry<%s>()\ntry f()\n",nested?"i64":"Error")>0);
     XrXirSourceText input={"root.xr",text,strlen(text)};

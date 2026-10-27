@@ -312,17 +312,17 @@ export class CookieJar {
 
     getHeader(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0) -> string? {
         var now = _cookieNow(nowSeconds)
-        var out = StringBuilder()
+        var out = ""
         var first = true
         for (var i = 0; i < len(this.cookies); i++) {
             var c = this.cookies[i]
             if (!c.matches(domain, path, isSecure, now)) { continue }
-            if (!first) { out.append("; ") }
-            out.append(c.serialize())
+            if (!first) { out += "; " }
+            out += c.serialize()
             first = false
         }
         if (first) { return null }
-        return out.toString()
+        return out
     }
 
     cleanup(nowSeconds: i64 = 0) {
@@ -486,20 +486,20 @@ fn _guessMimeType(filename: string) -> string {
 }
 
 fn _headerParam(s: string) -> string {
-    var out = StringBuilder()
+    var out = ""
     for (var i = 0; i < len(s); i++) {
         var c = s.runes().nth(i)
         if (c == "\"") {
-            out.append("\\\"")
+            out += "\\\""
         } else if (c == "\\") {
-            out.append("\\\\")
+            out += "\\\\"
         } else if (c == "\r" || c == "\n") {
-            out.append("_")
+            out += "_"
         } else {
-            out.append(c)
+            out += "${c}"
         }
     }
-    return out.toString()
+    return out
 }
 
 fn _routeMethodKey(method: string) -> string {
@@ -561,12 +561,12 @@ fn _routePatternIsStatic(pattern: string) -> bool {
 }
 
 fn _joinRouteTail(segs: Array<string>, start: i64) -> string {
-    var out = StringBuilder()
+    var out = ""
     for (var i = start; i < len(segs); i++) {
-        if (i > start) { out.append("/") }
-        out.append(segs[i])
+        if (i > start) { out += "/" }
+        out += segs[i]
     }
-    return out.toString()
+    return out
 }
 
 fn _matchRoutePath(pattern: string, path: string) -> Map<string, string>? {
@@ -858,12 +858,12 @@ fn _serverResponseHead(response: HttpResponse, keepAlive: bool) -> string? {
     if (len(reason) == 0) { reason = _statusReason(response.status) }
     if (!_headerValueValid(reason)) { return null }
 
-    var out = StringBuilder()
-    out.append("HTTP/1.1 ")
-    out.append(string(response.status))
-    out.append(" ")
-    out.append(reason)
-    out.append("\r\n")
+    var out = ""
+    out += "HTTP/1.1 "
+    out += string(response.status)
+    out += " "
+    out += reason
+    out += "\r\n"
 
     var hasContentType = false
     var pairs = response.headers.entries()
@@ -879,8 +879,8 @@ fn _serverResponseHead(response: HttpResponse, keepAlive: bool) -> string? {
     if (!hasContentType) { _appendHeader(ref out, "Content-Type", "application/octet-stream") }
     _appendHeader(ref out, "Content-Length", string(len(response.body)))
     _appendHeader(ref out, "Connection", keepAlive ? "keep-alive" : "close")
-    out.append("\r\n")
-    return out.toString()
+    out += "\r\n"
+    return out
 }
 
 fn _serverWriteHttpResponse(conn: NetConn, response: HttpResponse, keepAlive: bool) -> bool {
@@ -1156,38 +1156,38 @@ export class FormData {
     }
 
     build() -> MultipartBody {
-        var out = StringBuilder()
+        var out = ""
         for (var i = 0; i < len(this.fields); i++) {
             var field = this.fields[i]
-            out.append("--")
-            out.append(this.boundary)
-            out.append("\r\n")
+            out += "--"
+            out += this.boundary
+            out += "\r\n"
 
             if (field.kind == "text") {
-                out.append("Content-Disposition: form-data; name=\"")
-                out.append(_headerParam(field.name))
-                out.append("\"\r\n\r\n")
-                out.append(field.value)
+                out += "Content-Disposition: form-data; name=\""
+                out += _headerParam(field.name)
+                out += "\"\r\n\r\n"
+                out += field.value
             } else {
-                out.append("Content-Disposition: form-data; name=\"")
-                out.append(_headerParam(field.name))
-                out.append("\"; filename=\"")
-                out.append(_headerParam(field.filename))
-                out.append("\"\r\n")
-                out.append("Content-Type: ")
-                out.append(field.contentType)
-                out.append("\r\n\r\n")
-                out.append(field.value)
+                out += "Content-Disposition: form-data; name=\""
+                out += _headerParam(field.name)
+                out += "\"; filename=\""
+                out += _headerParam(field.filename)
+                out += "\"\r\n"
+                out += "Content-Type: "
+                out += field.contentType
+                out += "\r\n\r\n"
+                out += field.value
             }
-            out.append("\r\n")
+            out += "\r\n"
         }
 
-        out.append("--")
-        out.append(this.boundary)
-        out.append("--\r\n")
+        out += "--"
+        out += this.boundary
+        out += "--\r\n"
 
         return MultipartBody(
-            out.toString(),
+            out,
             "multipart/form-data; boundary=" + this.boundary
         )
     }
@@ -1427,11 +1427,11 @@ fn _reservedResponseHeader(name: string) -> bool {
            n == "trailer"
 }
 
-fn _appendHeader(out: ref StringBuilder, name: string, value: string) {
-    out.append(name)
-    out.append(": ")
-    out.append(value)
-    out.append("\r\n")
+fn _appendHeader(out: ref string, name: string, value: string) {
+    out += name
+    out += ": "
+    out += value
+    out += "\r\n"
 }
 
 fn _trimLineEnd(line: string) -> string {
@@ -2471,7 +2471,7 @@ export fn parseChunkedBody(
 ) -> ChunkedBody? {
     var pos = 0
     var total = 0
-    var body = StringBuilder()
+    var body = ""
 
     while (true) {
         var lineEnd = _byteCrlfIndex(raw, pos)
@@ -2491,7 +2491,7 @@ export fn parseChunkedBody(
                 if (line == null) { return null }
                 pos = trailerEnd + 2
                 if (len(line!) == 0) {
-                    return ChunkedBody(body.toString(), trailers, pos)
+                    return ChunkedBody(body, trailers, pos)
                 }
 
                 var parsed = _parseHeaderLine(line!)
@@ -2507,7 +2507,7 @@ export fn parseChunkedBody(
         if (pos + size! + 2 > len(raw.bytes())) { return null }
         var chunk = _byteSlice(raw, pos, pos + size!)
         if (chunk == null) { return null }
-        body.append(chunk!)
+        body += chunk!
         pos = pos + size!
         if (!_byteCrlfAt(raw, pos)) { return null }
         pos = pos + 2
@@ -2792,11 +2792,11 @@ export fn requestText(
         }
     }
 
-    var out = StringBuilder()
-    out.append(m!)
-    out.append(" ")
-    out.append(p!)
-    out.append(" HTTP/1.1\r\n")
+    var out = ""
+    out += m!
+    out += " "
+    out += p!
+    out += " HTTP/1.1\r\n"
 
     for (var i = 0; i < len(custom); i++) {
         _appendHeader(ref out, custom[i].0, custom[i].1)
@@ -2814,9 +2814,9 @@ export fn requestText(
     if (len(body.bytes()) > 0 && !hasContentLength) {
         _appendHeader(ref out, "Content-Length", string(len(body.bytes())))
     }
-    out.append("\r\n")
-    out.append(body)
-    return out.toString()
+    out += "\r\n"
+    out += body
+    return out
 }
 fn _statusReason(status: i64) -> string {
     if (status == 100) { return "Continue" }
@@ -2918,19 +2918,19 @@ export fn responseText(
         }
     }
 
-    var out = StringBuilder()
-    out.append("HTTP/1.1 ")
-    out.append(string(status))
-    out.append(" ")
-    out.append(_statusReason(status))
-    out.append("\r\n")
+    var out = ""
+    out += "HTTP/1.1 "
+    out += string(status)
+    out += " "
+    out += _statusReason(status)
+    out += "\r\n"
     _appendHeader(ref out, "Content-Type", ct)
     _appendHeader(ref out, "Content-Length", string(len(body.bytes())))
     for (var i = 0; i < len(custom); i++) {
         _appendHeader(ref out, custom[i].0, custom[i].1)
     }
     _appendHeader(ref out, "Connection", keepAlive ? "keep-alive" : "close")
-    out.append("\r\n")
-    out.append(body)
-    return out.toString()
+    out += "\r\n"
+    out += body
+    return out
 }

@@ -8,7 +8,7 @@
  */
 #include "xxir_source_throw.inc.c"
 static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
-    if (!node || !source_work(ctx, node)) return false;
+    if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (ctx->returned) return source_unreachable_statement(ctx, node);
     switch (node->type) {
     case AST_DEFER_STMT: return source_defer(ctx, node);
@@ -91,6 +91,7 @@ static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
     }
 }
 static bool statement(SourceContext *ctx, AstNode *node, bool top) {
+    if (!source_request_poll(ctx, node)) return false;
     XrXirSourceDebugPoint saved=ctx->debug_point;
     uint32_t function=ctx->debug_function;
     bool entry=ctx->debug_entry,jump_entry=ctx->debug_jump_entry;
@@ -98,7 +99,7 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     ctx->debug_entry=false;ctx->debug_jump_entry=false;
     XrXirSourceRange range=source_query_range(ctx,node,NULL);
     if (node && node->type!=AST_BLOCK && node->type!=AST_TRY_CATCH && range.line>0 && range.column>0) {
-        if (node->node_id==UINT32_MAX || !source_work_units(ctx,node,sizeof(ctx->debug_point))) {
+        if (node->node_id==UINT32_MAX || !((ctx)->diagnostic.status == XR_XIR_OK)) {
             ctx->debug_point=saved;ctx->debug_function=function;
             ctx->debug_entry=entry;ctx->debug_jump_entry=jump_entry;
             return source_fail(ctx,node,XR_XIR_BUDGET,"source statement identity exhausted");

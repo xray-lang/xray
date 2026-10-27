@@ -47,7 +47,7 @@ static XrCompileResourceStatus invalid_registry(XaSymbolRegistry *registry) {
 }
 static XrCompileResourceStatus capture_io(XaSymbolRegistry *registry,XrOsIoStatus status) {
     XrCompileResourceStatus failure=status==XR_OS_IO_OK ? XR_COMPILE_RESOURCE_OK :
-        status==XR_OS_IO_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
+        status==XR_OS_IO_OVERFLOW ? XR_COMPILE_RESOURCE_BUDGET :
         status==XR_OS_IO_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     return xr_compile_state_fail(registry_state(registry),failure);
 }

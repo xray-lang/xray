@@ -35,7 +35,7 @@ static bool source_range_type(SourceContext *ctx,AstNode *node,XrXirType *type) 
     SourceName *name=source_prelude_name(ctx,"Range");
     if(!name || name->kind!=SOURCE_NOMINAL || name->module+1!=ctx->prelude_module)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"canonical Range is outside this module's authority");
-    XrXirStatus status=library_range_record(&ctx->compile,&ctx->nominals.declarations[name->index]);
+    XrXirStatus status=library_range_record(&ctx->nominals.declarations[name->index]);
     if(status!=XR_XIR_OK) return source_fail(ctx,node,status,"canonical Range fields are invalid");
     *type=name->type;return true;
 }

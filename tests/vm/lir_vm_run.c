@@ -19,7 +19,7 @@
 #include <stdio.h>
 
 static XrRbcProgram *compile_file(const char *path) {
-    XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrXirCompileContext context = {0};
     XrCompilerSession *session = NULL;
     XrModuleIdentityAuthority authority = {0};
@@ -33,7 +33,7 @@ static XrRbcProgram *compile_file(const char *path) {
     XrRbcProgram *program = NULL;
     XrRbcCompileDiagnostic bytecode_diagnostic = {0};
     if (xr_compile_resources_new(&limits, &context.resources) != XR_COMPILE_RESOURCE_OK ||
-        xr_compile_session_new(context.resources, &session) != XR_COMPILER_SESSION_OK ||
+        xr_compile_session_new(context.resources, &session) != XR_COMPILE_RESOURCE_OK ||
         xr_compile_module_identity_script_authority_from_source(context.resources, path,
             &authority, &root) != XR_MODULE_OK) {
         fprintf(stderr, "lir_vm_run: cannot prepare source input: %s\n", path);

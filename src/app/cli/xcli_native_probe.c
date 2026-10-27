@@ -19,7 +19,6 @@ struct XrCliNativeProbe {
     XrCompileResources *resources;
     XtcXirLocalToolchain *local;
     XtcXirNativeOperation *operation;
-    XrSourceCompiler *compiler;
     XrXirSourceProduct *product;
     XrXirNativeProjection *projection;
     XrXirNativeArtifact *artifact;
@@ -33,21 +32,21 @@ struct XrCliNativeProbe {
 };
 static XrCliNativeProbeStatus probe_resource(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK ? XR_CLI_NATIVE_PROBE_OK :
-        status==XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_NATIVE_PROBE_BUDGET :
+        status==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_CLI_NATIVE_PROBE_MEMORY_LIMIT :
+        status==XR_COMPILE_RESOURCE_OVERFLOW ? XR_CLI_NATIVE_PROBE_OVERFLOW :
         status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY : XR_CLI_NATIVE_PROBE_INVALID;
 }
 static bool probe_fail(XrCliNativeProbe *owner,XrCliNativeProbeStatus status,
     const char *code,const char *stage,unsigned detail,int nested) {
     if (!owner->report.failure.code) {
+        if (status==XR_CLI_NATIVE_PROBE_MEMORY_LIMIT) code="PROBE_MEMORY_LIMIT";
+        else if (status==XR_CLI_NATIVE_PROBE_OVERFLOW) code="PROBE_OVERFLOW";
+        else if (status==XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY) code="PROBE_OUT_OF_MEMORY";
         owner->status=status;owner->report.failure.code=code;owner->report.failure.stage=stage;
         snprintf(owner->report.failure.message,sizeof(owner->report.failure.message),
             "%s failed (status=%u detail=%d)",stage,detail,nested);
     }
     owner->report.ready=false;return false;
-}
-static bool probe_work(XrCliNativeProbe *owner,uint64_t units) {
-    XrCompileResourceStatus status=xr_compile_resources_work(owner->resources,units);
-    return status==XR_COMPILE_RESOURCE_OK || probe_fail(owner,probe_resource(status),"PROBE_BUDGET","probe-work",(unsigned)status,0);
 }
 static void probe_report_reset(XrCliNativeProbe *owner) {
     XrCliNativeProbeFailure previous=owner->report.previous;
@@ -66,7 +65,6 @@ static void probe_source_free(XrCliNativeProbe *owner) {
     xr_compile_native_artifact_free(owner->artifact);owner->artifact=NULL;
     xr_compile_native_projection_owner_free(owner->projection);owner->projection=NULL;
     xr_xir_compile_source_product_free(owner->product);owner->product=NULL;
-    xr_source_compiler_free(owner->compiler);owner->compiler=NULL;
     xr_source_compile_diagnostic_free(&owner->source_diagnostic);
     xr_source_stdlib_path_free(&owner->stdlib);
 }
@@ -74,21 +72,26 @@ static bool probe_source(XrCliNativeProbe *owner) {
     if (owner->projection) return true;
     XrSourcePathsDiagnostic path={0};XrSourceCompileStatus status=xr_source_stdlib_path(owner->resources,&owner->stdlib,&path);
     xr_source_paths_diagnostic_free(&path);
+    XrSourceCompiler *compiler=NULL;
     XrSourceCompilerConfig config={{owner->resources,xr_xir_compile_default_limits()},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->stdlib.path,xr_source_compile_default_manifest_limits()};
-    if (status==XR_SOURCE_COMPILE_OK) status=xr_source_compiler_new(&config,&owner->compiler,&owner->source_diagnostic);
+    if (status==XR_SOURCE_COMPILE_OK) status=xr_source_compiler_new(&config,NULL,&compiler,&owner->source_diagnostic);
     const XrSourceCompilerText text={NULL,"xray-toolchain-probe","print(42)\n",10};
-    if (status==XR_SOURCE_COMPILE_OK) status=xr_source_compiler_build_text(owner->compiler,&text,&owner->product,&owner->source_diagnostic);
+    if (status==XR_SOURCE_COMPILE_OK) status=xr_source_compiler_build_text(compiler,&text,&owner->product,&owner->source_diagnostic);
+    xr_source_compiler_free(compiler);
     if (status!=XR_SOURCE_COMPILE_OK) {
-        XrCliNativeProbeStatus mapped=status==XR_SOURCE_COMPILE_BUDGET ? XR_CLI_NATIVE_PROBE_BUDGET :
-            status==XR_SOURCE_COMPILE_OUT_OF_MEMORY ? XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY : XR_CLI_NATIVE_PROBE_INTEGRITY;
+        XrCliNativeProbeStatus mapped=status==XR_SOURCE_COMPILE_OUT_OF_MEMORY ? XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY :
+            status==XR_SOURCE_COMPILE_MEMORY_LIMIT ? XR_CLI_NATIVE_PROBE_MEMORY_LIMIT :
+            status==XR_SOURCE_COMPILE_OVERFLOW ? XR_CLI_NATIVE_PROBE_OVERFLOW : XR_CLI_NATIVE_PROBE_INTEGRITY;
         return probe_fail(owner,mapped,"COMPILE_PROBE_FAILED","source-program",(unsigned)status,(int)owner->source_diagnostic.stage);
     }
     XrXirNativeProjectionRequest project={owner->product,"xray_toolchain_probe",UINT64_C(64)<<20};
     XrXirStatus projected=xr_compile_native_projection_prepare(&project,&owner->projection,NULL);
     if (projected==XR_XIR_OK) return true;
     XrCliNativeProbeStatus mapped=projected==XR_XIR_BUDGET ? XR_CLI_NATIVE_PROBE_BUDGET :
-        projected==XR_XIR_OUT_OF_MEMORY ? XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY : XR_CLI_NATIVE_PROBE_INTEGRITY;
+        projected==XR_XIR_OUT_OF_MEMORY ? XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY :
+            projected==XR_XIR_MEMORY_LIMIT ? XR_CLI_NATIVE_PROBE_MEMORY_LIMIT :
+            projected==XR_XIR_OVERFLOW ? XR_CLI_NATIVE_PROBE_OVERFLOW : XR_CLI_NATIVE_PROBE_INTEGRITY;
     return probe_fail(owner,mapped,"COMPILE_PROBE_FAILED","native-projection",(unsigned)projected,0);
 }
 static bool probe_execute(XrCliNativeProbe *owner) {
@@ -98,7 +101,7 @@ static bool probe_execute(XrCliNativeProbe *owner) {
     if (!facts || facts->completed_runs!=6 || !link || link->env_count>XTC_PROCESS_MAX_ENV)
         return probe_fail(owner,XR_CLI_NATIVE_PROBE_INTEGRITY,"PROBE_INPUT_INVALID","native-run-input",0,0);
     for (uint32_t i=0;i<facts->file_count;++i) {
-        if (!probe_work(owner,1)) return false;
+
         const XrXirInvocationFile *file=xtc_xir_native_operation_file(owner->operation,i);
         if (file && file->kind==XR_XIR_INVOCATION_OUTPUT) {
             if (output) return probe_fail(owner,XR_CLI_NATIVE_PROBE_INTEGRITY,"PROBE_INPUT_INVALID","native-run-input",0,0);
@@ -117,16 +120,18 @@ static bool probe_execute(XrCliNativeProbe *owner) {
         !memcmp(result.stdout_bytes.data,"42\n",3) && !result.stderr_bytes.length;
     if (!okay) {
         XrCliNativeProbeStatus mapped=status==XTC_PROCESS_BUDGET ? XR_CLI_NATIVE_PROBE_BUDGET :
-            status==XTC_PROCESS_OUT_OF_MEMORY ? XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY : XR_CLI_NATIVE_PROBE_INTEGRITY;
+            status==XTC_PROCESS_OUT_OF_MEMORY ? XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY :
+            status==XTC_PROCESS_MEMORY_LIMIT ? XR_CLI_NATIVE_PROBE_MEMORY_LIMIT :
+            status==XTC_PROCESS_OVERFLOW ? XR_CLI_NATIVE_PROBE_OVERFLOW : XR_CLI_NATIVE_PROBE_INTEGRITY;
         probe_fail(owner,mapped,"RUN_PROBE_FAILED","native-run",(unsigned)status,result.exit_code);
     }
     xtc_process_result_free(&result);xtc_process_free(process);return okay;
 }
-static bool probe_hex(XrCliNativeProbe *owner,const uint8_t bytes[32],char output[65]) {
-    if (!probe_work(owner,161)) return false;
+static void probe_hex(const uint8_t bytes[32],char output[65]) {
+
     static const char hex[]="0123456789abcdef";
     for (unsigned i=0;i<32;++i) { output[i*2]=hex[bytes[i]>>4];output[i*2+1]=hex[bytes[i]&15]; }
-    output[64]=0;return true;
+    output[64]=0;
 }
 static bool probe_observe(XrCliNativeProbe *owner) {
     XtcXirNativeAdmissionDiagnostic diagnostic={0};
@@ -134,7 +139,9 @@ static bool probe_observe(XrCliNativeProbe *owner) {
         xtc_xir_local_toolchain_sdk(owner->local),UINT64_C(64)<<20,&owner->artifact,&diagnostic);
     if (admitted!=XTC_XIR_ADMISSION_OK) {
         XrCliNativeProbeStatus mapped=admitted==XTC_XIR_ADMISSION_BUDGET ? XR_CLI_NATIVE_PROBE_BUDGET :
-            admitted==XTC_XIR_ADMISSION_OUT_OF_MEMORY ? XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY : XR_CLI_NATIVE_PROBE_INTEGRITY;
+            admitted==XTC_XIR_ADMISSION_OUT_OF_MEMORY ? XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY :
+            admitted==XTC_XIR_ADMISSION_MEMORY_LIMIT ? XR_CLI_NATIVE_PROBE_MEMORY_LIMIT :
+            admitted==XTC_XIR_ADMISSION_OVERFLOW ? XR_CLI_NATIVE_PROBE_OVERFLOW : XR_CLI_NATIVE_PROBE_INTEGRITY;
         return probe_fail(owner,mapped,"ABI_MISMATCH","native-admission",(unsigned)admitted,diagnostic.code);
     }
     const XrXirInvocationProviderFacts *provider=xtc_xir_native_operation_provider(owner->operation);
@@ -143,9 +150,8 @@ static bool probe_observe(XrCliNativeProbe *owner) {
     const XtcXirLocalToolchainView *local=xtc_xir_local_toolchain_view(owner->local);
     if (!provider || !sdk || !native || !local)
         return probe_fail(owner,XR_CLI_NATIVE_PROBE_INTEGRITY,"PROBE_INPUT_INVALID","provider-facts",0,0);
-    if (!probe_work(owner,sizeof(owner->report.version)*2+3*32+2*sizeof(uint64_t)) ||
-        !probe_hex(owner,sdk->identity,owner->report.runtime) ||
-        !probe_hex(owner,native->id.bytes,owner->report.fingerprint)) return false;
+    probe_hex(sdk->identity,owner->report.runtime);
+    probe_hex(native->id.bytes,owner->report.fingerprint);
     uint32_t expected=XR_TOOLCHAIN_BINDING_PROVIDER_MSVC;
     if (native->input.toolchain.provider!=expected)
         return probe_fail(owner,XR_CLI_NATIVE_PROBE_INTEGRITY,"ABI_MISMATCH","provider-binding",0,0);
@@ -163,6 +169,8 @@ static bool probe_attempt(XrCliNativeProbe *owner,const XrCliNativeProbeRequest 
         owner->retryable=found==XTC_XIR_LOCAL_UNRESOLVED && diagnostic.stage!=XTC_XIR_LOCAL_SDK;
         XrCliNativeProbeStatus mapped=found==XTC_XIR_LOCAL_BUDGET ? XR_CLI_NATIVE_PROBE_BUDGET :
             found==XTC_XIR_LOCAL_OUT_OF_MEMORY ? XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY :
+            found==XTC_XIR_LOCAL_MEMORY_LIMIT ? XR_CLI_NATIVE_PROBE_MEMORY_LIMIT :
+            found==XTC_XIR_LOCAL_OVERFLOW ? XR_CLI_NATIVE_PROBE_OVERFLOW :
             owner->retryable ? XR_CLI_NATIVE_PROBE_UNAVAILABLE : XR_CLI_NATIVE_PROBE_INTEGRITY;
         return probe_fail(owner,mapped,diagnostic.stage==XTC_XIR_LOCAL_SDK ? "SDK_UNAVAILABLE" :
             "TOOLCHAIN_NOT_FOUND",
@@ -193,6 +201,8 @@ static bool probe_attempt(XrCliNativeProbe *owner,const XrCliNativeProbeRequest 
     }
     XrCliNativeProbeStatus mapped=status==XTC_XIR_NATIVE_BUDGET ? XR_CLI_NATIVE_PROBE_BUDGET :
         status==XTC_XIR_NATIVE_OUT_OF_MEMORY ? XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY :
+            status==XTC_XIR_NATIVE_MEMORY_LIMIT ? XR_CLI_NATIVE_PROBE_MEMORY_LIMIT :
+            status==XTC_XIR_NATIVE_OVERFLOW ? XR_CLI_NATIVE_PROBE_OVERFLOW :
         owner->retryable ? XR_CLI_NATIVE_PROBE_UNAVAILABLE : XR_CLI_NATIVE_PROBE_INTEGRITY;
     probe_fail(owner,mapped,"COMPILE_PROBE_FAILED","native-transaction",(unsigned)status,d ? d->code : 0);
     if (d) snprintf(owner->report.failure.message,sizeof(owner->report.failure.message),
@@ -208,15 +218,12 @@ XR_FUNC XrCliNativeProbeStatus xr_cli_native_probe_new(XrCompileResources *resou
     if (status!=XR_COMPILE_RESOURCE_OK) return probe_resource(status);
     owner->resources=resources;probe_report_reset(owner);*output=owner;return XR_CLI_NATIVE_PROBE_OK;
 }
-XR_FUNC XrCliNativeProbeStatus xr_cli_native_probe_resolve(XrCompileResources *resources,
-    const XrCliNativeProbeOptions *options,XrCliNativeProbeRequest *output) {
-    if (!resources || !options || !options->preferences || !options->target || !output ||
+XR_FUNC XrCliNativeProbeStatus xr_cli_native_probe_resolve(const XrCliNativeProbeOptions *options,XrCliNativeProbeRequest *output) {
+    if (!options || !options->preferences || !options->target || !output ||
         (options->preferences->count && !options->preferences->preferences)) return XR_CLI_NATIVE_PROBE_INVALID;
     const XrCliToolchainConfigView *view=options->preferences;
     const XrCliToolchainPreference *preference=NULL;
     for (size_t i=0;i<view->count;++i) {
-        XrCompileResourceStatus work=xr_compile_resources_work(resources,7);
-        if (work!=XR_COMPILE_RESOURCE_OK) return probe_resource(work);
         if (!strcmp(view->preferences[i].target,options->target)) { preference=&view->preferences[i];break; }
     }
     XrCliNativeProbeRequest selected={XR_TOOLCHAIN_SELECTOR_AUTO,options->compiler,view->allow_fallback};
@@ -227,8 +234,6 @@ XR_FUNC XrCliNativeProbeStatus xr_cli_native_probe_resolve(XrCompileResources *r
     if (!selected.compiler && preference && (selected.selector==preference->selector ||
         (selected.selector==XR_TOOLCHAIN_SELECTOR_AUTO && preference->selector==XR_TOOLCHAIN_SELECTOR_MSVC)))
         selected.compiler=preference->compiler;
-    XrCompileResourceStatus work=xr_compile_resources_work(resources,sizeof(selected));
-    if (work!=XR_COMPILE_RESOURCE_OK) return probe_resource(work);
     *output=selected;return XR_CLI_NATIVE_PROBE_OK;
 }
 XR_FUNC XrCliNativeProbeStatus xr_cli_native_probe_run(XrCliNativeProbe *owner,const XrCliNativeProbeRequest *request) {
@@ -256,8 +261,6 @@ XR_FUNC XrCliNativeProbeStatus xr_cli_native_probe_check_inputs(const XrCliNativ
     const XrXirInvocationProviderFacts *provider,const XrXirRuntimeSdkFacts *sdk) {
     if (!owner || !owner->ran || owner->status!=XR_CLI_NATIVE_PROBE_OK || !owner->report.ready || !provider || !sdk)
         return XR_CLI_NATIVE_PROBE_INVALID;
-    XrCompileResourceStatus work=xr_compile_resources_work(owner->resources,6+2*sizeof(uint64_t)+3*32);
-    if (work!=XR_COMPILE_RESOURCE_OK) return probe_resource(work);
     bool same=(provider->compiler.length==owner->compiler_length) & (provider->linker.length==owner->linker_length);
     same&=!memcmp(provider->compiler.digest,owner->compiler_digest,32);
     same&=!memcmp(provider->linker.digest,owner->linker_digest,32);

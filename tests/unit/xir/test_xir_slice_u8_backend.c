@@ -25,14 +25,17 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "slice_u8_backend_cases.h"
+#include "slice_u8_local_storage_cases.h"
+#include "slice_u8_scalar_slot_cases.h"
 #include "../test_win_compat.h"
+#define SLICE_STRING_BYTES_SOURCE "export fn string_bytes()->i64{var text:string=\"h\\0é\";const v:Slice<u8>=text.bytes();if(len(v)!=4 || v[0]!=104 || v[1]!=0 || v[2]!=195 || v[3]!=169){return -31};var empty=\"\";const e:Slice<u8>=empty.bytes();if(len(e)!=0){return -32};var root=\"x\";const first:Slice<u8>=root.bytes();const byte=first[0];root=\"y\";const second:Slice<u8>=root.bytes();if(byte!=120 || second[0]!=121){return -33};return 1}\n"
 #define SLICE_INVOKE_CLEANUP_SOURCE \
     "enum CleanupError{Failed}\n" \
     "fn cleanup_scalar()->i64{return 7}\n" \
     "fn invoke_cleanup(fail:bool)->i64{var root:Array<u8>=[8];const v:Slice<u8>=root[0:1];" \
     "try{const n=cleanup_scalar();if(fail){throw CleanupError.Failed};return len(v)+n}catch(CleanupError.Failed){root=[9];return 11}}\n"
-static const char library_text[]="export fn read(v:Slice<u8>)->i64{if(v[0]!=8){return -10};return len(v)}\nexport fn readFunction()->fn(Slice<u8>)->i64{return read}\nexport fn ignored(a:Array<u8>){const v:Slice<u8>=a[1:2]}\nexport fn run()->i64{var a:Array<u8>=[7,8,9];const v:Slice<u8>=a[1:2];const copy=v;const reader=readFunction();const n=reader(copy);ignored(a);a=[40];return n}\n";
-static const char source_text[]=SLICE_INVOKE_CLEANUP_SOURCE "export fn read(v:Slice<u8>)->i64{if(v[0]!=8){return -10};return len(v)}\nexport fn readFunction()->fn(Slice<u8>)->i64{return read}\nexport fn ignored(a:Array<u8>){const v:Slice<u8>=a[1:2]}\nexport fn run()->i64{if(invoke_cleanup(false)!=8){return -20};if(invoke_cleanup(true)!=11){return -21};var a:Array<u8>=[7,8,9];const v:Slice<u8>=a[1:2];const copy=v;const reader=readFunction();const n=reader(copy);ignored(a);a=[40];return n}\nexport fn receiver()->i64{return run()}\n";
+static const char library_text[]=SLICE_STRING_BYTES_SOURCE "export fn read(v:Slice<u8>)->i64{if(v[0]!=8){return -10};return len(v)}\nexport fn readFunction()->fn(Slice<u8>)->i64{return read}\nexport fn ignored(a:Array<u8>){const v:Slice<u8>=a[1:2]}\nexport fn run()->i64{if(string_bytes()!=1){return -23};var a:Array<u8>=[7,8,9];const v:Slice<u8>=a[1:2];const copy=v;const reader=readFunction();const n=reader(copy);ignored(a);a=[40];return n}\n";
+static const char source_text[]=SLICE_STRING_BYTES_SOURCE SLICE_INVOKE_CLEANUP_SOURCE "export fn read(v:Slice<u8>)->i64{if(v[0]!=8){return -10};return len(v)}\nexport fn readFunction()->fn(Slice<u8>)->i64{return read}\nexport fn ignored(a:Array<u8>){const v:Slice<u8>=a[1:2]}\nexport fn run()->i64{if(string_bytes()!=1){return -23};if(invoke_cleanup(false)!=8){return -20};if(invoke_cleanup(true)!=11){return -21};var a:Array<u8>=[7,8,9];const v:Slice<u8>=a[1:2];const copy=v;const reader=readFunction();const n=reader(copy);ignored(a);a=[40];return n}\nexport fn receiver()->i64{return run()}\n";
 static uint32_t named(const XrXirModule *module,const char *name) {
     for (uint32_t f=0;f<module->function_count;++f)
         if (module->functions[f].name_length==strlen(name) &&
@@ -42,7 +45,7 @@ static uint32_t named(const XrXirModule *module,const char *name) {
 static XrXirStatus source_check(const XrXirCompileContext *context,const char *text,
     XrXirSourceResult *result,XrXirSourceDiagnostic *diagnostic,XrXirLinkageKind linkage) {
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"readonly-byte-backend",NULL};
     XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=linkage};
     XrXirSourceText input={NULL,text,strlen(text)};
@@ -117,8 +120,33 @@ static void snapshot_debug(const XrXirSourceResult *source,bool local_source,boo
     }
 }
 
+static void local_storage_query_check(const XrXirCompileContext *context,const XrXirSourceResult *source,
+    bool local_probes) {
+    const XrXirModule *storage_module=xr_xir_compile_artifact_module(source->checked);
+    const XrXirSourceView *storage_query=xr_xir_compile_source_snapshot_view(source->snapshot);
+    const char *const mutable_names[]={"localView","alias"};
+    for(uint32_t n=0;n<sizeof(mutable_names)/sizeof(mutable_names[0]);++n) {
+        CHECK(local_probes);
+        bool found=false;
+        for(uint32_t q=0;q<storage_query->declaration_count;++q) {
+            const XrXirSourceDeclaration *row=storage_query->declarations+q;
+            if(strcmp(row->name,mutable_names[n]))continue;
+            CHECK(row->kind==XR_XIR_SOURCE_BINDING && row->mutable && row->type.known);
+            uint32_t flags=0;CHECK(xr_xir_compile_view_type_flags(context,storage_module->types,row->type.type,&flags)==XR_XIR_OK && flags);
+            found=true;
+        }
+        CHECK(found);
+    }
+    for(uint32_t t=0;t<storage_module->types->count;++t) {
+        const XrXirTypeNode *node=storage_module->types->nodes+t;
+        if(node->kind!=XR_XIR_TYPE_CELL)continue;
+        uint32_t flags=0;CHECK(xr_xir_compile_view_type_flags(context,storage_module->types,node->element,&flags)==XR_XIR_OK && !flags);
+    }
+}
+
 static XrXirArtifact *replay_source(const XrXirCompileContext *context,
     XrXirSourceResult *source,uint8_t identity[32],bool local_source) {
+    /* Imported Checked libraries do not invent local Source query rows. */
     inspect(xr_xir_compile_artifact_module(source->checked));snapshot_debug(source,local_source,true);
     XrXirCheckedPacket packet={0};XrXirArtifact *read=NULL,*closed=NULL;
     CHECK(xr_xir_compile_checked_write(source->checked,&packet,NULL)==XR_XIR_OK);
@@ -140,6 +168,20 @@ static XrXirArtifact *fixture(const XrXirCompileContext *context,uint8_t identit
     XrXirStatus status=source_check(context,source_text,&source,&diagnostic,XR_XIR_PROGRAM);
     if (status!=XR_XIR_OK) fprintf(stderr,"Source %u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==XR_XIR_OK && source.checked && source.snapshot);
+    const XrXirSourceView *query=xr_xir_compile_source_snapshot_view(source.snapshot);
+    bool bytes=false;
+    for (uint32_t i=0;i<query->declaration_count;++i) {
+        const XrXirSourceDeclaration *row=query->declarations+i;
+        if (row->native_identity!=18 || row->kind!=XR_XIR_SOURCE_MEMBER) continue;
+        CHECK(row->parent && row->parent<=query->declaration_count);
+        const XrXirSourceDeclaration *parent=query->declarations+row->parent-1;
+        if (parent->native_identity!=2) continue;
+        const XrXirTypeNode *type=xr_xir_type_node(xr_xir_compile_artifact_module(source.checked)->types,row->type.type);
+        CHECK(!strcmp(row->name,"bytes") && !strcmp(row->signature,"() -> Slice<u8>") &&
+            !row->parameter_count && row->type.known && type && type->kind==XR_XIR_TYPE_SLICE && type->element==XR_XIR_U8);
+        bytes=true;
+    }
+    CHECK(bytes);
     return replay_source(context,&source,identity,true);
 }
 
@@ -159,7 +201,7 @@ static XrXirArtifact *cold_fixture(const XrXirCompileContext *context,uint8_t id
     CHECK(snprintf(root,sizeof(root),"%s/root.xr",absolute)>0);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request={.session=session,.entry_path=library,.authority=&authority,
         .context=context,.linkage_kind=XR_XIR_LIBRARY};
     char input_text[sizeof(library_text)];
@@ -177,7 +219,7 @@ static XrXirArtifact *cold_fixture(const XrXirCompileContext *context,uint8_t id
     if (status!=XR_XIR_OK) fprintf(stderr,"slice Catalog status=%u\n",status);
     CHECK(status==XR_XIR_OK && catalog);
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     request.session=session;request.entry_path=root;request.linkage_kind=XR_XIR_PROGRAM;request.libraries=catalog;
     const char consumer[]= "import {run} from \"./lib\"\n" SLICE_INVOKE_CLEANUP_SOURCE
         "export fn receiver()->i64{if(invoke_cleanup(false)!=8){return -20};if(invoke_cleanup(true)!=11){return -21};return run()}";
@@ -362,13 +404,224 @@ static void observed_cases(const XrXirCompileContext *context) {
         observed_view(context,cases[live],"second","two",1,live?4:17);
     }
 }
+static void string_bytes_rejections(const XrXirCompileContext *context) {
+    static const char *const rejected[]={
+        "export fn run()->i64{var s=\"a\";const v:Slice<u8>=s.bytes(1);return len(v)}",
+        "export fn run()->i64{var s=\"a\";const v:MutSlice<u8>=s.bytes();return len(v)}",
+        "export fn run()->i64{var s=\"a\";const v:Slice<u8>=s.bytes();v[0]=0;return len(v)}",
+        "export fn run()->i64{var s=\"a\";const v:Slice<u8>=s.bytes();s=\"b\";return v[0] as i64}",
+        "export fn run(s:string)->Slice<u8>{return s.bytes()}"
+    };
+    for (uint32_t i=0;i<sizeof(rejected)/sizeof(rejected[0]);++i) {
+        XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+        XrXirStatus status=source_check(context,rejected[i],&source,&diagnostic,XR_XIR_PROGRAM);
+        fprintf(stderr,"bytes refusal%u status=%u: %s\n",i,status,diagnostic.message);
+        CHECK(status==(i==3 ? XR_XIR_BAD_VALUE : XR_XIR_BAD_TYPE) && diagnostic.status==status && !source.checked && !source.snapshot);
+        CHECK(strstr(diagnostic.message,i==0 ? "bytes requires its exact lowered readonly String declaration" :
+            i==1 ? "expression cannot satisfy its declared type" : i==2 ? "value mutation requires a mutable named root" : "view lifetime normalization"));
+        xr_xir_compile_source_result_free(&source);
+    }
+}
+static XrXirArtifact *local_storage_positive(const XrXirCompileContext *context) {
+    const char text[]=SLICE_LOCAL_STORAGE_SOURCE
+        "export fn storage_receiver()->i64{if(local_storage_probes(true)!=1 || local_storage_probes(false)!=1){return 0};return 1}";
+    XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    XrXirStatus status=source_check(context,text,&source,&diagnostic,XR_XIR_PROGRAM);
+    if(status!=XR_XIR_OK)fprintf(stderr,"local storage positive %u: %s\n",status,diagnostic.message);
+    CHECK(status==XR_XIR_OK && source.checked && source.snapshot);
+    local_storage_query_check(context,&source,true);
+    XrXirCheckedPacket packet={0};XrXirArtifact *checked=NULL,*closed=NULL;
+    CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&source);
+    CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
+    memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    return closed;
+}
+static void local_storage_emit(const XrXirArtifact *closed,const char *path) {
+    XrXirArtifact *code=lower(closed);XrXirCSource output={0};
+    uint32_t target=named(xr_xir_compile_artifact_module(code),"storage_receiver");
+    CHECK(xr_xir_compile_emit_c(code,"local_storage",(size_t)UINT64_C(16)<<20,&output)==XR_XIR_OK);
+    CHECK(strstr(output.text,"xr_xir_call_view_operation") && !strstr(output.text,"({"));
+    FILE *file=fopen(path,"wb");CHECK(file && fwrite(output.text,1,output.length,file)==output.length);
+    CHECK(fprintf(file,"\nconst uint32_t local_storage_run=%u;\n",target)>0);
+    CHECK(!fclose(file));xr_xir_compile_c_source_free(&output);xr_xir_compile_artifact_free(code);
+}
+static void local_storage_execution(const XrXirCompileContext *context) {
+    XrXirArtifact *closed=local_storage_positive(context),*code=lower(closed);xr_xir_compile_artifact_free(closed);
+    uint32_t target=named(xr_xir_compile_artifact_module(code),"storage_receiver");
+    XrXirProgram *program=take_vm(&code);slice_program_case(program,target);
+}
+static void scalar_slot_ordinary_guards(const XrXirCompileContext *context,const XrXirSourceResult *source) {
+    const XrXirModule *module=xr_xir_compile_artifact_module(source->checked);
+    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(source->checked);
+    XrXirDiagnostic diagnostic={0};CHECK(xir_compile_view_prepare_ordinary(context,module,construction,&diagnostic)==XR_XIR_OK);
+    uint32_t init=module->declarations->modules[0].initializer,other=named(module,"other_initializer"),site=UINT32_MAX;
+    const XrXirFunction *body=module->functions+init;
+    for(uint32_t i=0;i<body->instruction_count;++i) if(body->instructions[i].op==XR_XIR_SLOT_INIT)site=i;
+    CHECK(site!=UINT32_MAX && other!=init);
+    XrXirSourceModule modules[2]={module->declarations->modules[0],module->declarations->modules[0]};
+    XrXirSlot slot=module->declarations->slots[0];XrXirDeclarations declarations=*module->declarations;
+    XrXirModule changed=*module;changed.declarations=&declarations;declarations.modules=modules;declarations.slots=&slot;
+    slot.mutable=0;
+    CHECK(xir_compile_view_prepare_ordinary(context,&changed,construction,&diagnostic)==XR_XIR_BAD_TYPE);
+    slot=module->declarations->slots[0];
+    modules[0].initializer=other;
+    XrXirStatus status=xir_compile_view_prepare_ordinary(context,&changed,construction,&diagnostic);
+    fprintf(stderr,"scalar slot nonowning initializer status=%u at %u/%u/%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction);
+    CHECK(status==XR_XIR_BAD_STRUCTURE && diagnostic.function==init && diagnostic.instruction==site);
+    modules[0]=module->declarations->modules[0];
+    XrXirFunctionIdentity *identities=NULL;XrXirFunction *functions=NULL;XrXirInstruction *ops=NULL;
+    CHECK(xr_compile_resources_calloc(context->resources,module->function_count,sizeof(*identities),(void **)&identities)==XR_COMPILE_RESOURCE_OK);
+    memcpy(identities,module->declarations->functions,(size_t)module->function_count*sizeof(*identities));declarations.functions=identities;
+    modules[1].name="scalar-other";modules[1].name_length=12;modules[1].initializer=other;modules[1].dependencies=NULL;modules[1].dependency_count=0;
+    declarations.module_count=2;identities[other].module=1;
+    CHECK(xir_compile_view_prepare_ordinary(context,&changed,construction,&diagnostic)==XR_XIR_OK);
+    slot.module=1;
+    status=xir_compile_view_prepare_ordinary(context,&changed,construction,&diagnostic);
+    fprintf(stderr,"scalar slot cross module status=%u at %u/%u/%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction);
+    CHECK(status==XR_XIR_BAD_STRUCTURE && diagnostic.function==init && diagnostic.instruction==site);
+    slot=module->declarations->slots[0];declarations=*module->declarations;changed=*module;
+    CHECK(xr_compile_resources_calloc(context->resources,module->function_count,sizeof(*functions),(void **)&functions)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_compile_resources_calloc(context->resources,body->instruction_count,sizeof(*ops),(void **)&ops)==XR_COMPILE_RESOURCE_OK);
+    memcpy(functions,module->functions,(size_t)module->function_count*sizeof(*functions));memcpy(ops,body->instructions,(size_t)body->instruction_count*sizeof(*ops));
+    changed.functions=functions;functions[init].instructions=ops;
+    uint32_t primitive=UINT32_MAX;
+    for(uint32_t i=0;i<site;++i)if(ops[i].type==XR_XIR_I64)primitive=body->parameter_count+i;
+    CHECK(primitive!=UINT32_MAX);ops[site].args[0]=primitive;
+    status=xir_compile_view_prepare_ordinary(context,&changed,construction,&diagnostic);
+    fprintf(stderr,"scalar slot wrong payload status=%u at %u/%u/%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction);
+    CHECK(status==XR_XIR_BAD_TYPE && diagnostic.function==init && diagnostic.instruction==site);
+    xr_compile_resources_free(ops);xr_compile_resources_free(functions);xr_compile_resources_free(identities);
+}
+static XrXirArtifact *scalar_slot_source(const XrXirCompileContext *context,uint32_t kind) {
+    CHECK(kind<sizeof(scalar_slot_cases)/sizeof(scalar_slot_cases[0]));
+    XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    XrXirStatus status=source_check(context,scalar_slot_cases[kind].source,&source,&diagnostic,XR_XIR_PROGRAM);
+    if(status!=XR_XIR_OK)fprintf(stderr,"scalar slot Source%u status=%u: %s\n",kind,status,diagnostic.message);
+    CHECK(status==XR_XIR_OK && source.checked && source.snapshot);
+    const XrXirModule *module=xr_xir_compile_artifact_module(source.checked);
+    const XrXirDeclarations *d=module->declarations;CHECK(d->slot_count==1 && d->module_count==1);
+    const XrXirSlot *slot=d->slots;
+    CHECK(slot->mutable && slot->module==0 && xr_xir_type_is_cell(module->types,slot->type) && xr_xir_cell_element(module->types,slot->type)==scalar_slot_cases[kind].element);
+    const XrXirSlotFacts *facts=xr_xir_compile_construction_slots(xr_xir_compile_artifact_construction(source.checked));
+    CHECK(facts && facts->count==1 && facts->rows[0].slot==0 && facts->rows[0].name_length==6 && !memcmp(facts->rows[0].name,"scalar",6));
+    const XrXirFunction *init=module->functions+d->modules[0].initializer;bool publication=false,view=false;
+    for(uint32_t i=0;i<init->instruction_count;++i) {
+        const XrXirInstruction *op=init->instructions+i;view|=op->op==XR_XIR_VIEW_NEW;
+        if(op->op==XR_XIR_SLOT_INIT){CHECK(!op->immediate && xr_xir_operand_type(init,op->args[0])==slot->type);publication=true;}
+    }
+    CHECK(publication && view);
+    if(!kind)scalar_slot_ordinary_guards(context,&source);
+    XrXirCheckedPacket packet={0};XrXirArtifact *checked=NULL,*closed=NULL;
+    CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&source);
+    CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
+    memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);return closed;
+}
+static void scalar_slot_non_scalar_refusals(const XrXirCompileContext *context) {
+    const char *const sources[]={
+        "var scalar:string=\"abc\"\n" SCALAR_SLOT_VIEW_LOOP "export fn storage_receiver()->i64{return 1}",
+        "var scalar:Array<u8>=[1]\n" SCALAR_SLOT_VIEW_LOOP "export fn storage_receiver()->i64{return 1}"
+    };
+    for(uint32_t k=0;k<sizeof(sources)/sizeof(sources[0]);++k) {
+        XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+        XrXirStatus status=source_check(context,sources[k],&source,&diagnostic,XR_XIR_PROGRAM);
+        fprintf(stderr,"non scalar publication Source%u status=%u: %s\n",k,status,diagnostic.message);
+        CHECK(status==XR_XIR_UNRESOLVED && diagnostic.status==status && strstr(diagnostic.message,"(SLOT_INIT)"));
+        CHECK(!source.checked && !source.snapshot);xr_xir_compile_source_result_free(&source);
+    }
+}
+static void scalar_slot_execution(const XrXirCompileContext *context) {
+    scalar_slot_non_scalar_refusals(context);
+    for(uint32_t k=0;k<sizeof(scalar_slot_cases)/sizeof(scalar_slot_cases[0]);++k) {
+        XrXirArtifact *closed=scalar_slot_source(context,k),*code=lower(closed);xr_xir_compile_artifact_free(closed);
+        uint32_t target=named(xr_xir_compile_artifact_module(code),"storage_receiver");
+        XrXirProgram *program=take_vm(&code);slice_program_case(program,target);
+    }
+}
+static void local_storage_owned_capture(const XrXirCompileContext *context) {
+    XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    CHECK(source_check(context,local_storage_owned_capture_text,&source,&diagnostic,XR_XIR_PROGRAM)==XR_XIR_OK);
+    const XrXirSourceView *query=xr_xir_compile_source_snapshot_view(source.snapshot);bool found=false;
+    for(uint32_t q=0;q<query->declaration_count;++q) if(!strcmp(query->declarations[q].name,"owned")) {
+        CHECK(query->declarations[q].mutable && query->declarations[q].type.type==XR_XIR_STRING);found=true;
+    }
+    CHECK(found);XrXirCheckedPacket packet={0};XrXirArtifact *checked=NULL,*closed=NULL;
+    CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&source);
+    CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
+    memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    XrXirArtifact *code=lower(closed);xr_xir_compile_artifact_free(closed);
+    uint32_t target=named(xr_xir_compile_artifact_module(code),"capture_probe");
+    XrXirProgram *program=take_vm(&code);slice_program_case(program,target);
+}
+static void local_storage_rejections(const XrXirCompileContext *context) {
+    for(uint32_t i=0;i<sizeof(local_storage_refusals)/sizeof(local_storage_refusals[0]);++i) {
+        const LocalStorageRefusal *row=local_storage_refusals+i;
+        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+        XrXirStatus status=source_check(context,row->source,&result,&diagnostic,XR_XIR_PROGRAM);
+        fprintf(stderr,"local storage refusal%u status=%u: %s\n",i,status,diagnostic.message);
+        CHECK(status==row->status && diagnostic.status==status && strstr(diagnostic.message,row->message));
+        CHECK(!result.checked && !result.snapshot);xr_xir_compile_source_result_free(&result);
+    }
+}
+static XrXirStatus local_storage_attempt(const XrXirCompileContext *context,XrXirSourceResult *result) {
+    XrCompilerSession *session=NULL;
+    XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if(created!=XR_COMPILE_RESOURCE_OK) {
+        CHECK(created==XR_COMPILE_RESOURCE_OUT_OF_MEMORY || created==XR_COMPILE_RESOURCE_MEMORY_LIMIT);
+        return created==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_MEMORY_LIMIT;
+    }
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"local-storage-resource",NULL};
+    XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirSourceText input={NULL,local_storage_resource_text,sizeof(local_storage_resource_text)-1};
+    XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
+    XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,result,&diagnostic,&failure);
+    xr_compile_session_free(session);xr_xir_compile_source_failure_free(&failure);return status;
+}
+static void local_storage_resources(void) {
+    XrCompileResourceLimits caps={.memory_mode=XR_COMPILE_MEMORY_ORDINARY,.profile_allocations=true};
+    XrXirCompileContext context={0};context.limits=xr_xir_compile_default_limits();
+    CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats baseline={0},stats={0};CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
+    XrXirSourceResult result={0};size_t start=effects_compile_attempts;
+    CHECK(local_storage_attempt(&context,&result)==XR_XIR_OK);
+    size_t sites=effects_compile_attempts-start;
+    CHECK(xr_compile_resources_stats(context.resources,&stats)==XR_COMPILE_RESOURCE_OK);uint64_t peak=stats.peak_bytes;
+    xr_xir_compile_source_result_free(&result);
+    for(size_t i=0;i<sites;++i) {
+        effects_compile_fail_at=effects_compile_attempts+i;effects_compile_injected=false;
+        XrXirStatus status=local_storage_attempt(&context,&result);effects_compile_fail_at=SIZE_MAX;
+        CHECK(effects_compile_injected && status==XR_XIR_OUT_OF_MEMORY && !result.checked && !result.snapshot);
+        xr_xir_compile_source_result_free(&result);
+        CHECK(xr_compile_resources_stats(context.resources,&stats)==XR_COMPILE_RESOURCE_OK && stats.held_bytes==baseline.held_bytes);
+    }
+    CHECK(local_storage_attempt(&context,&result)==XR_XIR_OK);xr_xir_compile_source_result_free(&result);
+    context.limits.frame_bytes=1;
+    CHECK(local_storage_attempt(&context,&result)==XR_XIR_BUDGET && !result.checked && !result.snapshot);
+    xr_xir_compile_source_result_free(&result);xr_compile_resources_release(context.resources);
+    for(unsigned minus=0;minus<2;++minus) {
+        caps.memory_mode=XR_COMPILE_MEMORY_FINITE;caps.memory_limit=peak-minus;context.limits=xr_xir_compile_default_limits();context.resources=NULL;
+        CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
+        CHECK(local_storage_attempt(&context,&result)==(minus ? XR_XIR_MEMORY_LIMIT : XR_XIR_OK));
+        xr_xir_compile_source_result_free(&result);CHECK(xr_compile_resources_stats(context.resources,&stats)==XR_COMPILE_RESOURCE_OK && stats.held_bytes==baseline.held_bytes);
+        xr_compile_resources_release(context.resources);
+    }
+    CHECK(!effects_compile_live && !effects_compile_bytes);
+    fprintf(stderr,"local borrowed storage: physical OOM sites=%zu held peak=%llu exact/minus1 MEMORY_LIMIT, independent frame BUDGET, same-owner retry and physical0\n",sites,(unsigned long long)peak);
+}
 int main(int argc,char **argv) {
-    XrXirCompileContext context={0};const XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
+    XrXirCompileContext context={0};const XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();uint8_t identity[32];XrXirArtifact *closed=NULL;
-    if (argc==3 && !strcmp(argv[1],"--emit")) {closed=cold_fixture(&context,identity);emit(closed,argv[2]);}
+    if (argc==2 && !strcmp(argv[1],"--local-storage-resources")) {xr_compile_resources_release(context.resources);local_storage_resources();return 0;}
+    if(argc==3 && !strcmp(argv[1],"--emit-scalar-slot")) {closed=scalar_slot_source(&context,0);local_storage_emit(closed,argv[2]);}
+    else if(argc==3 && !strcmp(argv[1],"--emit-local-storage")) {closed=local_storage_positive(&context);local_storage_emit(closed,argv[2]);}
+    else if (argc==3 && !strcmp(argv[1],"--emit")) {closed=cold_fixture(&context,identity);emit(closed,argv[2]);}
     else {
-        CHECK(argc==1);observed_cases(&context);
+        CHECK(argc==1);string_bytes_rejections(&context);local_storage_rejections(&context);local_storage_owned_capture(&context);local_storage_execution(&context);scalar_slot_execution(&context);observed_cases(&context);
         closed=fixture(&context,identity);strict_normalization(&context,closed);
         XrXirArtifact *code=lower(closed);const XrXirModule *module=xr_xir_compile_artifact_module(code);
         uint32_t run=named(module,"receiver");SliceHostCases host=host_cases(module);
@@ -380,5 +633,6 @@ int main(int argc,char **argv) {
         slice_host_rejections(program,&host);slice_program_case(program,run);
     }
     xr_xir_compile_artifact_free(closed);xr_compile_resources_release(context.resources);
+    CHECK(!effects_compile_live && !effects_compile_bytes);
     puts("Readonly byte views: real Source, VM, snapshot and cold receiving passed");return 0;
 }

@@ -285,7 +285,7 @@ typedef struct {
 } ShallowCompletionCtx;
 
 static XrXirStatus completion_index_io(XrOsIoStatus status) {
-    return status==XR_OS_IO_OK?XR_XIR_OK:status==XR_OS_IO_BUDGET?XR_XIR_BUDGET:
+    return status==XR_OS_IO_OK?XR_XIR_OK:status==XR_OS_IO_OVERFLOW?XR_XIR_BUDGET:
         status==XR_OS_IO_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
 }
 static XrJsonValue *completion_index_failed(XrLspServer *server,XrJsonValue *items,XrHashMap *seen,XrXirStatus status) {
@@ -1131,8 +1131,6 @@ static XlspBuiltinType type_to_builtin_bucket(XrType *type) {
         return XLSP_TYPE_JSON;
     if (xr_type_is_builtin_named_class(type, "BigInt"))
         return XLSP_TYPE_BIGINT;
-    if (xr_type_is_builtin_named_class(type, "StringBuilder"))
-        return XLSP_TYPE_STRINGBUILDER;
     if (xr_type_is_builtin_named_class(type, "PanicInfo"))
         return XLSP_TYPE_PANIC_INFO;
     if (xr_type_is_builtin_named_class(type, "Task"))

@@ -25,7 +25,7 @@ static XrXirStatus view_may_allocate(ViewMayOwner *m) {
     uint64_t values=(uint64_t)f->parameter_count+f->instruction_count,count=0;
     if (values>UINT32_MAX) return XR_XIR_BUDGET;
     for (uint32_t v=0;v<(uint32_t)values;++v) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         count+=affine_owner(a,v);
     }
     if (!count) return XR_XIR_OK;
@@ -39,20 +39,20 @@ static XrXirStatus view_may_allocate(ViewMayOwner *m) {
     m->extra=xir_compile_calloc(a->context,1,(size_t)extra,&status);if (!m->extra) return status;
     m->before=m->extra;m->panic=m->before+a->words;m->values=(uint32_t *)(m->panic+a->words);
     for (uint32_t v=0;v<(uint32_t)values;++v) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         if (a->indices[v]!=UINT32_MAX) m->values[a->indices[v]]=v;
     }
     /* The strict checker starts at top for intersection. This analysis starts
      * at bottom for union and must not retain that strict initialization. */
     for (uint32_t b=0;b<f->block_count;++b) for (uint32_t w=0;w<a->words;++w) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         a->inputs[(size_t)b*a->words+w]=b?0:a->initial[w];
     }
     return affine_reachable(a);
 }
 static XrXirStatus view_may_emit(ViewMayOwner *m,XrXirViewOwnerEvent *event) {
     AffineCheck *a=&m->affine;
-    if (!xir_compile_work(a->context,sizeof(*event))) return XR_XIR_BUDGET;
+
     event->function=a->location.function;event->block=a->location.block;
     event->before.values=event->after.values=m->values;
     event->before.count=event->after.count=a->count;event->before.words=event->after.words=a->words;
@@ -70,11 +70,11 @@ static XrXirStatus view_may_transfer(ViewMayOwner *m,uint32_t b,bool emit) {
     }
     const XrXirBlock *block=a->function->blocks+b;
     for (uint32_t i=block->first;i<block->first+block->count;++i) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         if (emit) {status=affine_copy(a,m->before,a->current);if (status!=XR_XIR_OK) return status;}
         status=affine_instruction(a,i,false);if (status!=XR_XIR_OK) return status;
         for (uint32_t w=0;w<a->words;++w) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             m->panic[w]|=a->current[w];
         }
         if (emit) {
@@ -89,7 +89,7 @@ static XrXirStatus view_may_edges(ViewMayOwner *m,uint32_t b,bool emit,bool *cha
     AffineCheck *a=&m->affine;const XrXirBlock *block=a->function->blocks+b;
     uint32_t last=block->first+block->count-1u;const XrXirInstruction *term=a->function->instructions+last;
     for (uint32_t e=0;e<3;++e) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         if (e<2?e>=affine_rules[term->op].edges:!block->panic) continue;
         uint32_t target=e<2?term->targets[e]:block->panic;
         XrXirStatus status=affine_copy(a,a->edge,e<2?a->current:m->panic);
@@ -101,7 +101,7 @@ static XrXirStatus view_may_edges(ViewMayOwner *m,uint32_t b,bool emit,bool *cha
                 .before={.bits=a->current},.after={.bits=a->edge}};
             status=view_may_emit(m,&event);if (status!=XR_XIR_OK) return status;
         } else for (uint32_t w=0;w<a->words;++w) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             uint64_t *input=a->inputs+(size_t)target*a->words+w,meet=*input|a->edge[w];
             if (*input!=meet) {*input=meet;*changed=true;}
         }
@@ -115,7 +115,7 @@ static XrXirStatus view_may_function(ViewMayOwner *m) {
     while (changed) {
         changed=false;
         for (uint32_t b=0;b<a->function->block_count;++b) {
-            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
             if (!a->reachable[b]) continue;
             status=view_may_transfer(m,b,false);
             if (status==XR_XIR_OK) status=view_may_edges(m,b,false,&changed);
@@ -124,7 +124,7 @@ static XrXirStatus view_may_function(ViewMayOwner *m) {
     }
     if (!m->visitor) return XR_XIR_OK;
     for (uint32_t b=0;b<a->function->block_count;++b) {
-        if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+
         if (!a->reachable[b]) continue;
         status=view_may_transfer(m,b,true);
         if (status==XR_XIR_OK) status=view_may_edges(m,b,true,NULL);
@@ -141,7 +141,7 @@ XR_FUNC XrXirStatus xir_compile_view_may_owned_verified(const XrXirCompileContex
     uint8_t *flags=NULL;XrXirStatus status=xir_compile_view_flags_new(context,module->types,&flags);
     if (status!=XR_XIR_OK || !flags) return status;
     for (uint32_t f=0;f<module->function_count;++f) {
-        if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
+
         ViewMayOwner m={.affine={.context=context,.module=module,.function=module->functions+f,.types=flags,
             .location={XR_XIR_OK,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}},.visitor=visitor,.user=user};
         status=view_may_function(&m);

@@ -90,7 +90,7 @@ static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner
             all_safe&=decision==VIEW_ACCESS_SAFE;all_blocked&=decision==VIEW_ACCESS_BLOCKED;any=true;continue;
         }
         for (ViewAccessOrigin *l=left;l;l=l->next) {
-            bool compatible=false;status=view_access_compatible(a,&l->event,&r->event,&compatible);
+            bool compatible=false;status=view_access_compatible(&l->event,&r->event,&compatible);
             if (status!=XR_XIR_OK) return status;if (!compatible) continue;
             /* An owner contains its own admitted input subtree or Mut leaf.
              * Every other leaf still participates, including local children. */
@@ -114,7 +114,7 @@ static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner
 static XrXirStatus view_access_use(ViewAccess *a,const XrXirViewOwnerSet *owners,uint32_t value,bool writable,bool view,bool *blocked) {
     if (blocked) *blocked=false;
     for (uint32_t p=0;p<owners->count;++p) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         if (!(owners->bits[p/64]&(UINT64_C(1)<<(p%64)))) continue;
         XrXirStatus status=view_access_owner(a,value,owners->values[p],writable,view,blocked);
         if (status!=XR_XIR_OK) return status;
@@ -129,7 +129,7 @@ static XrXirStatus view_access_constructor(ViewAccess *a,uint32_t value) {
         const XrXirViewRootEvent *event=&p->event;
         unresolved|=event->opaque_suffix || event->dynamic_identity || event->kind==XR_XIR_VIEW_ROOT_UNRESOLVED || event->kind==XR_XIR_VIEW_ROOT_MODULE;
         for (uint32_t i=0;i<event->step_count;++i) {
-            if (!xir_compile_work(a->resolver->check.context,1)) {status=XR_XIR_BUDGET;break;}
+
             unresolved|=xr_xir_type_is_class(a->resolver->check.module->types,event->steps[i].container);
         }
     }
@@ -163,7 +163,7 @@ static XrXirStatus view_access_binding(ViewAccess *a,const XrXirInstruction *op,
      * Borrowed local transfers still require their separate availability proof. */
     if (view_flags_at(c->module->types,c->flags,op->type)) return XR_XIR_UNRESOLVED;
     for (uint32_t p=0;p<view_access_operands(a,op);++p) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         if (view_flags_at(c->module->types,c->flags,xr_xir_operand_type(a->body,op->args[p]))) return XR_XIR_UNRESOLVED;
     }
     return XR_XIR_OK;
@@ -173,6 +173,23 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
     const XrXirTypes *types=a->resolver->check.module->types;const uint8_t *flags=a->resolver->check.flags;
     uint32_t result=a->body->parameter_count+event->instruction;
     bool binding=false;XrXirStatus bound=view_access_binding(a,op,&binding);if (binding) return bound;
+    if (op->op==XR_XIR_SLOT_INIT) {
+        const XrXirDeclarations *d=a->resolver->check.module->declarations;
+        if (d && d->slots && d->modules && d->functions && op->immediate>=0 &&
+            (uint64_t)op->immediate<d->slot_count && a->function<a->resolver->check.module->function_count) {
+            const XrXirSlot *slot=d->slots+(uint32_t)op->immediate;
+            XrXirType payload=xr_xir_operand_type(a->body,op->args[0]);
+            if (slot->mutable && slot->type==payload && slot->module<d->module_count &&
+                d->functions[a->function].module==slot->module &&
+                d->modules[slot->module].initializer==a->function && xr_xir_type_is_cell(types,payload)) {
+                XrXirType scalar=xr_xir_cell_element(types,payload);
+                /* Publishing scalar storage does not access another referent.
+                 * Ordinary IR, Cell origin and runtime publication checks retain authority. */
+                if (scalar==XR_XIR_BOOL || scalar==XR_XIR_RUNE || xr_xir_type_is_number(scalar))
+                    return XR_XIR_OK;
+            }
+        }
+    }
     if (view_access_structural(op->op)) return XR_XIR_OK;
     if (op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW) {
         uint32_t source=a->body->operands[op->args[0]];bool sub=op->op==XR_XIR_VIEW_REBORROW;
@@ -184,13 +201,20 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
         return view_access_use(a,&event->before,source,op->op==XR_XIR_VIEW_SET,true,NULL);
     }
     bool call=op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT;
-    if (op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT || op->op==XR_XIR_CALL_REQUIREMENT)
-        return XR_XIR_UNRESOLVED;
+    if (op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
+        if (!a->cells || !a->cells->default_access || view_flags_at(types,flags,op->type))
+            return XR_XIR_UNRESOLVED;
+        /* Declaration identity is not SSA input. The scope authenticates the
+         * actual helper closure without retiring any caller loan or epoch. */
+        return xir_effects_default_access_site(a->cells->default_access,
+            a->resolver->check.context,a->function,event->instruction);
+    }
+    if (op->op==XR_XIR_CALL_REQUIREMENT) return XR_XIR_UNRESOLVED;
     if (((op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT) || op->op==XR_XIR_INVOKE_RESULT) && view_flags_at(types,flags,op->type)) {
         XrXirStatus status=view_access_constructor(a,result);if (status!=XR_XIR_OK) return status;
     }
     for (uint32_t p=0;p<view_access_operands(a,op);++p) {
-        if (!xir_compile_work(a->resolver->check.context,1)) return XR_XIR_BUDGET;
+
         uint32_t value=xr_xir_op_uses_operand_table(op->op)?a->body->operands[op->args[0]+p]:op->args[p];
         XrXirType type=xr_xir_operand_type(a->body,value);uint32_t borrowed=view_flags_at(types,flags,type);
         bool cell=xr_xir_type_is_cell(types,type),object=xr_xir_type_is_class(types,type);
@@ -228,7 +252,7 @@ static XrXirStatus view_access_function_needed(ViewAccess *a,uint32_t function,b
     uint64_t values=(uint64_t)body->parameter_count+body->instruction_count;
     if (values>UINT32_MAX) return XR_XIR_BUDGET;
     for (uint32_t v=0;v<(uint32_t)values;++v) {
-        if (!xir_compile_work(c->context,1)) return XR_XIR_BUDGET;
+
         *needed|=view_flags_at(c->module->types,c->flags,xr_xir_operand_type(body,v))!=0;
     }
     return XR_XIR_OK;
@@ -239,7 +263,7 @@ static XrXirStatus view_access_check(const XrXirCompileContext *context,
         return XR_XIR_BAD_STRUCTURE;
     bool needed=false;
     if (module->types) for (uint32_t i=0;i<module->types->count;++i) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         uint32_t kind=module->types->nodes[i].kind;needed|=kind==XR_XIR_TYPE_SLICE || kind==XR_XIR_TYPE_MUT_SLICE;
     }
     if (!needed) return XR_XIR_OK;

@@ -23,11 +23,11 @@ def main():
         'error': (
             'enum Detail { Message { text:string } }\n'
             'enum Failure { Failed { detail:Detail, code:i64, ok:bool, real:f64 } }\n'
-            'fn fail() { throw Failure.Failed { detail:Detail.Message { text:"owned"+"-error" }, '
-            'code:-7, ok:true, real:1.5 } }\nprint("before")\nfail()\n',
+            'fn fail() throws(Failure) { throw Failure.Failed { detail:Detail.Message { text:"owned"+"-error" }, '
+            'code:-7, ok:true, real:1.5 } }\nprint("before")\ntry fail()\n',
             b'before\n', b'[Uncaught Error] Failure.Failed(Detail.Message("owned-error"), -7, true, 1.5)\n', 1),
         'panic': ('assert(false, "public"+"-panic")\n', b'', b'[Uncaught Panic] E0445: public-panic\n', 1),
-        'empty': ('enum EmptyError { Failed }\nfn fail() { throw EmptyError.Failed }\nfail()\n',
+        'empty': ('enum EmptyError { Failed }\nfn fail() throws(EmptyError) { throw EmptyError.Failed }\ntry fail()\n',
                   b'', b'[Uncaught Error] EmptyError.Failed\n', 1),
         'fatal': ('fn bad() { defer { assert(false, "cleanup") } }\nbad()\n', b'',
                   b'E0443: error escaped a defer body: E0445: cleanup\n'
@@ -35,8 +35,8 @@ def main():
     }
     long_message = 'long-owned-' + 'x' * 5003
     programs['long_error'] = (
-        'enum Failure { Failed { text:string } }\nfn fail() { throw Failure.Failed { text:"' +
-        long_message + '" } }\nfail()\n', b'',
+        'enum Failure { Failed { text:string } }\nfn fail() throws(Failure) { throw Failure.Failed { text:"' +
+        long_message + '" } }\ntry fail()\n', b'',
         b'[Uncaught Error] Failure.Failed("' + long_message.encode() + b'")\n', 1)
     programs['long_panic'] = ('assert(false, "' + long_message + '")\n', b'',
         b'[Uncaught Panic] E0445: ' + long_message.encode() + b'\n', 1)

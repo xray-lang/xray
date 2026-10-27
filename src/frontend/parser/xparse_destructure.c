@@ -22,7 +22,7 @@ static char *copy_token_string(Parser *parser, Token *token) {
     char *str = (char *) ast_alloc(parser->compiler_session, (size_t) token->length + 1);
     if (!xr_parser_healthy(parser)) return NULL;
     do { if (!ast_copy(parser->compiler_session, str, token->start, token->length)) return NULL; } while (0);
-    do { if (!ast_work(parser->compiler_session, 1)) return NULL; str[token->length] = '\0'; } while (0);
+    do { str[token->length] = '\0'; } while (0);
     return str;
 }
 
@@ -355,7 +355,7 @@ XrDestructurePattern *convert_array_literal_to_pattern(Parser *parser,
         parser->compiler_session, sizeof(XrDestructurePattern *), (size_t) count);
     if (!xr_parser_healthy(parser)) return NULL;
 
-    for (int i = 0; xr_parser_step(parser) && (i < count); i++) {
+    for (int i = 0; xr_parser_healthy(parser) && (i < count); i++) {
         AstNode *element = array_literal->as.array_literal.elements[i];
 
         // Check if element is variable reference
@@ -393,7 +393,7 @@ XrDestructurePattern *convert_tuple_literal_to_pattern(Parser *parser,
         parser->compiler_session, sizeof(XrDestructurePattern *), (size_t) count);
     if (!xr_parser_healthy(parser)) return NULL;
 
-    for (int i = 0; xr_parser_step(parser) && (i < count); i++) {
+    for (int i = 0; xr_parser_healthy(parser) && (i < count); i++) {
         AstNode *element = tuple_literal->as.tuple_literal.elements[i];
         if (element->type == AST_VARIABLE) {
             do {
@@ -429,7 +429,7 @@ XrDestructurePattern *convert_object_literal_to_pattern(Parser *parser,
     if (!xr_parser_healthy(parser)) return NULL;
     bool all_shorthand = true;
 
-    for (int i = 0; xr_parser_step(parser) && (i < count); i++) {
+    for (int i = 0; xr_parser_healthy(parser) && (i < count); i++) {
         AstNode *key_node = object_literal->as.object_literal.keys[i];
         AstNode *value_node = object_literal->as.object_literal.values[i];
 

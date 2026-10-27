@@ -15,7 +15,7 @@ static XrXirStatus effect_role_range(const XrXirCompileContext *work,
     if (!memory || !width || count>SIZE_MAX/width) return XR_XIR_BAD_STRUCTURE;
     XrCompileResourceStatus status=xr_compile_resources_extent(work->resources,memory,(size_t)count*width);
     return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:
-        status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+        XR_XIR_BAD_STRUCTURE;
 }
 static bool effect_role_same_head(const EffectBodyFunctionHead *a,const EffectBodyFunction *b) {
     return a->name==b->name && a->name_length==b->name_length &&
@@ -30,7 +30,7 @@ static XrXirStatus effect_role_material_frame(const XrXirCompileContext *work,
     for (const EffectBodyMaterial *body=material;body;body=body->backbone) {
         if (depth++==3) return XR_XIR_BAD_STRUCTURE;
         status=effect_role_range(work,body,1,sizeof(*body));if (status!=XR_XIR_OK) return status;
-        if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
         if (body->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
         if (body->overlay) {
             status=effect_role_range(work,body->overlay,1,sizeof(*body->overlay));
@@ -59,7 +59,7 @@ static XrXirStatus effect_role_frame(EffectRoleCheck *check) {
         if (status!=XR_XIR_OK) return status;
     }
     for (uint32_t f=0;f<functions;++f) {
-        if (!xir_compile_work(work,12)) return XR_XIR_BUDGET;
+
         const EffectBodyFunction *head=&material->functions[f];uint32_t count=head->parameter_count;
         if (head->run_count>head->run_capacity ||
             (head->instruction_count && (!head->runs || !head->run_count))) return XR_XIR_BAD_STRUCTURE;

@@ -10,7 +10,7 @@
 
 static XrManifestStatus native_resource_status(XrCompileResourceStatus status) {
     return status == XR_COMPILE_RESOURCE_OK ? XR_MANIFEST_OK :
-        status == XR_COMPILE_RESOURCE_BUDGET ? XR_MANIFEST_BUDGET :
+        status == XR_COMPILE_RESOURCE_BUDGET ? XR_MANIFEST_OVERFLOW :
         status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_MANIFEST_OUT_OF_MEMORY : XR_MANIFEST_BAD_ARGUMENT;
 }
 
@@ -53,7 +53,7 @@ XR_FUNC XrManifestStatus xa_analyzer_find_native_symbol(XaAnalyzer *analyzer,
     const XrNativeSymbol *symbol = NULL;
     XrManifestStatus status = xr_native_package_find_symbol_owned(plan, name, &symbol);
     if (status != XR_MANIFEST_OK) {
-        XrCompileResourceStatus failure = status == XR_MANIFEST_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
+        XrCompileResourceStatus failure = status == XR_MANIFEST_OVERFLOW ? XR_COMPILE_RESOURCE_BUDGET :
             status == XR_MANIFEST_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
         (void) xr_compile_state_fail(xr_compile_session_compile_state(analyzer->compiler_session), failure);
         return status;
@@ -81,7 +81,7 @@ static XrManifestStatus native_operation_result(XaAnalyzer *analyzer, XrManifest
     bool semantic_rejection) {
     if (status == XR_MANIFEST_OK || (status == XR_MANIFEST_INVALID && semantic_rejection))
         return status;
-    XrCompileResourceStatus failure = status == XR_MANIFEST_BUDGET || status == XR_MANIFEST_LIMIT
+    XrCompileResourceStatus failure = status == XR_MANIFEST_OVERFLOW || status == XR_MANIFEST_LIMIT
         ? XR_COMPILE_RESOURCE_BUDGET : status == XR_MANIFEST_OUT_OF_MEMORY
         ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     (void) xr_compile_state_fail(xr_compile_session_compile_state(analyzer->compiler_session), failure);

@@ -40,7 +40,7 @@ static XrXirStatus effect_final_input_select_begin(const EffectBodyRequest *body
     if(!cursor || selection<EFFECT_FINAL_SELECT_REFERENCE || selection>EFFECT_FINAL_SELECT_BARRIER ||
         !effect_body_request_sequence_owned(body)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_body_request_sequence_binding(body);if(status!=XR_XIR_OK) return status;
-    if(!effect_body_read_work(&body->read,sizeof(*cursor))) return XR_XIR_BUDGET;
+    if(!(((&body->read)->execution ? effect_body_execution_work((&body->read)->execution, sizeof(*cursor)) : xir_compile_context_valid((&body->read)->owner)))) return XR_XIR_BUDGET;
     *cursor=(EffectFinalInputSelect){.cursor={0,0,UINT32_MAX},.selection=selection};return XR_XIR_OK;
 }
 /* The returned ordinal and full operation live only in the enclosing read.

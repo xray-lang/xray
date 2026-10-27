@@ -20,13 +20,11 @@ static XrXirCtfeStatus ctfe_cleanup_step(CtfeCallExecution *execution,const XrXi
         if (status==XR_XIR_CTFE_OK && op->op==XR_XIR_CLEANUP_REGISTER) frame->state.frontier=registration;
         return status;
     }
-    if (!scalar_compile_work(&frame->run,3*sizeof(uint32_t)+sizeof(bool))) return XR_XIR_CTFE_BUDGET;
     frame->state.exit_target=(uint32_t)op->immediate;frame->state.exit_block=op->targets[0];frame->state.leaving=true;
     return XR_XIR_CTFE_OK;
 }
 static XrXirCtfeStatus ctfe_cleanup_continue(CtfeCallExecution *execution,XrXirValue *output,bool *done) {
     CtfeCallFrame *frame=execution->top;const XrXirFunction *body=frame->run.function;
-    if (!scalar_compile_work(&frame->run,64)) return XR_XIR_CTFE_BUDGET;
     if (frame->state.frontier==frame->state.exit_target) {
         if (frame->exit_kind==CTFE_EXIT_PANIC) return ctfe_panic_continue(execution,done);
         if (frame->exit_kind==CTFE_EXIT_ERROR) return ctfe_error_unwind(execution,done);
@@ -41,7 +39,6 @@ static XrXirCtfeStatus ctfe_cleanup_continue(CtfeCallExecution *execution,XrXirV
         return XR_XIR_CTFE_BAD_ARTIFACT;
     uint32_t at=frame->state.frontier-1,low=0,high=body->block_count;
     while (low+1<high) {
-        if (!scalar_compile_work(&frame->run,2)) return XR_XIR_CTFE_BUDGET;
         uint32_t middle=low+(high-low)/2;if (body->blocks[middle].first<=at) low=middle;else high=middle;
     }
     const XrXirInstruction *registration=&body->instructions[at];

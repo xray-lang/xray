@@ -4,13 +4,13 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * source_limits.h - Invalid and exhausted requests preserve the original owner
+ * source_limits.h - Invalid CTFE requests preserve the original owner
  */
 static void source_receiving_limits(void) {
     SourceReceivingFixture fixture=source_receiving_fixture("scalar",0);
     for (unsigned axis=0;axis<5;++axis) {
         XrXirCompileContext context;context_new(&context);XrCompilerSession *session=NULL;
-        CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+        CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"instance-constant",NULL};
         XrXirSourceRequest source={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
         XrXirSourceText text={NULL,instance_source_text(),strlen(instance_source_text())};
@@ -32,7 +32,7 @@ static void source_receiving_limits(void) {
         CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     }
     XrXirCompileContext context;context_new(&context);XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"instance-constant",NULL};
     XrXirSourceRequest source={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText text={NULL,instance_source_text(),strlen(instance_source_text())};
@@ -57,10 +57,6 @@ static void source_receiving_limits(void) {
     selection.function=function;source.linkage_kind=XR_XIR_LIBRARY;
     CHECK(xr_xir_compile_source_instance_constants(&original,&result,&diagnostic)==XR_XIR_BAD_TYPE && !result.source.checked);
     source.linkage_kind=XR_XIR_PROGRAM;
-    XrCompileResourceStats used=stats(&context);
-    CHECK(xr_compile_resources_work(context.resources,caps.work-used.work)==XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_xir_compile_source_instance_constants(&original,&result,&diagnostic)==XR_XIR_BUDGET && !result.source.checked && !result.functions);
-    CHECK(xr_xir_compile_source_instance_constants(&original,&result,&diagnostic)==XR_XIR_BUDGET && !result.source.checked && !result.functions);
     size_t attempts=source_fixture_compile_attempts;xr_compile_session_free(session);xr_compile_resources_release(context.resources);
     CHECK(source_fixture_compile_attempts==attempts && !source_fixture_compile_live && !source_fixture_compile_bytes);
 }

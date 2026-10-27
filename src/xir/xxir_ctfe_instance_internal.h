@@ -8,7 +8,7 @@
  *
  * KEY CONCEPT:
  *   A closed instance, its original substitution and one freshly evaluated
- *   result share the original compiler ledger. Borrowing grants no permission.
+ *   result share the original compiler memory owner. Borrowing grants no permission.
  */
 #ifndef XXIR_CTFE_INSTANCE_INTERNAL_H
 #define XXIR_CTFE_INSTANCE_INTERNAL_H
@@ -42,10 +42,10 @@ typedef struct XirCtfeInstanceBatchRequest {
 /* Only genuine zero-runtime-argument generic instances qualify. This entry
  * independently receives actual Checked bytes, lowers and executes the common
  * evaluator every time. It cannot accept a caller-supplied value or PASS hint.
- * All work and allocation belong to checked's original finite compiler ledger.
+ * All controlled allocation belongs to checked's original memory owner.
  * Failure preserves an empty output and never refunds consumed resources. */
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance(
-    const XirCtfeInstanceRequest *request,XirCtfeInstanceResult **output);
+    const XirCtfeInstanceRequest *request,XrCompileRequestControl *control,XirCtfeInstanceResult **output);
 
 /* The caller keeps owner alive and excludes mutation throughout the borrow.
  * Both owned artifacts undergo complete current verification before publication,
@@ -59,11 +59,11 @@ XR_FUNC void xr_xir_compile_ctfe_instance_free(XirCtfeInstanceResult *owner);
  * evaluates every genuine instance under its own execution limits. Selection
  * storage remains immutable until return. Failure publishes no owner. */
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch(
-    const XirCtfeInstanceBatchRequest *request,XirCtfeInstanceBatch **output);
+    const XirCtfeInstanceBatchRequest *request,XrCompileRequestControl *control,XirCtfeInstanceBatch **output);
 /* Same ownership and admission. The index starts at UINT32_MAX and reports
  * the actual failed selection. Global admission and success preserve it. */
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch_at(
-    const XirCtfeInstanceBatchRequest *request,XirCtfeInstanceBatch **output,uint32_t *failed_index);
+    const XirCtfeInstanceBatchRequest *request,XrCompileRequestControl *control,XirCtfeInstanceBatch **output,uint32_t *failed_index);
 /* Complete current correspondence is checked once during this synchronous
  * borrow, followed by every real definition and result. All count views must
  * initially be zero; a failure publishes none. No validation hint survives. */

@@ -24,16 +24,18 @@ fn _hexVal(c: i64) -> i64 {
 export fn hexEncode(data: Slice<u8>) -> string {
     var src = data
     var alphabet: Slice<u8> = HEX.bytes()
-    var out = StringBuilder()
+    var out = ""
     for (var i = 0; i < len(src); i++) {
         var b = src[i] as i64
-        out.append(rune((alphabet[b >> 4] as i64))!)
-        out.append(rune((alphabet[b & 15] as i64))!)
+        var _encodedRune0 = rune((alphabet[b >> 4] as i64))!
+        out += "${_encodedRune0}"
+        var _encodedRune1 = rune((alphabet[b & 15] as i64))!
+        out += "${_encodedRune1}"
     }
-    return out.toString()
+    return out
 }
 
-export fn hexDecode(hex: string) -> Array<u8> {
+export fn hexDecode(hex: string) throws(HexError) -> Array<u8> {
     var src: Slice<u8> = hex.bytes()
     var n = len(src)
     if (n % 2 != 0) { throw HexError.OddLength { length: n } }
@@ -230,7 +232,7 @@ fn putUtf8(out: ref Array<u8>, oi: i64, cp: i64) -> i64 {
 
 // Decode UTF-16 bytes to a string. Auto-detects a leading BOM (FE FF = BE,
 // FF FE = LE); without a BOM the options byte order selects byte order.
-export fn utf16Decode(data: Slice<u8>, options: Utf16DecodeOptions = Utf16DecodeOptions()) -> string {
+export fn utf16Decode(data: Slice<u8>, options: Utf16DecodeOptions = Utf16DecodeOptions()) throws(Utf16Error) -> string {
     var n = len(data)
     if (n % 2 != 0) { throw Utf16Error.OddByteLength { length: n } }
 

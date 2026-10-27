@@ -68,13 +68,12 @@ XR_FUNC XrXirStatus xir_vm_debug_source_map(XrXirVmDebug *debug,const XrXirCompi
     if (source->function_count!=module->function_count || source->function_count==UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
     uint64_t instructions=0,throws=0,handlers=0,routes=0,selectors=0;
     for (uint32_t f=0;f<source->function_count;++f) {
-        if (xr_compile_resources_work(context->resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
         const XrXirSourceDebugFunction *function=&source->functions[f];
         if (function->function!=f || function->parameter_count!=module->functions[f].parameter_count ||
             function->instruction_count!=module->functions[f].instruction_count ||
             function->throw_count>function->instruction_count || (!!function->throw_count!=!!function->throw_sites) ||
             (function->throw_count && !function->points)) return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus checked=source_debug_handler_validate(context->resources,function,&module->functions[f]);
+        XrXirStatus checked=source_debug_handler_validate(function,&module->functions[f]);
         if (checked!=XR_XIR_OK) return checked;
         instructions+=function->instruction_count;throws+=function->throw_count;
         handlers+=function->handler_count;routes+=function->route_count;
@@ -85,12 +84,10 @@ XR_FUNC XrXirStatus xir_vm_debug_source_map(XrXirVmDebug *debug,const XrXirCompi
     uint64_t offsets=((uint64_t)source->function_count+1)*sizeof(uint32_t);
     uint64_t bytes=offsets*4+instructions*sizeof(DebugSourcePoint)+throws*sizeof(XrXirSourceDebugThrow)+
         handlers*sizeof(DebugSourceHandler)+routes*sizeof(XrXirSourceDebugRoute)+selectors*sizeof(XrXirSourceDebugSelector);
-    uint64_t work=bytes+instructions*(sizeof(XrXirSourceDebugPoint)+1)+throws*sizeof(XrXirSourceDebugThrow)+
-        handlers*sizeof(XrXirSourceDebugHandler)+routes*sizeof(XrXirSourceDebugRoute)+selectors*sizeof(XrXirSourceDebugSelector);
-    if (bytes>SIZE_MAX || xr_compile_resources_work(context->resources,work)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+    if (bytes>SIZE_MAX) return XR_XIR_OVERFLOW;
     void *memory=NULL;
     XrCompileResourceStatus allocated=xr_compile_resources_alloc(context->resources,(size_t)bytes,&memory);
-    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    if (allocated!=XR_COMPILE_RESOURCE_OK) return xir_compile_resource_status(allocated);
     uint32_t *starts=memory,*throw_starts=(uint32_t *)((unsigned char *)memory+(size_t)offsets);
     uint32_t *handler_starts=(uint32_t *)((unsigned char *)memory+(size_t)offsets*2);
     uint32_t *route_starts=(uint32_t *)((unsigned char *)memory+(size_t)offsets*3);

@@ -74,7 +74,6 @@ typedef struct XrayCoreClasses {
     XrClass *tupleClassesSmall[32];
 
     // Utility
-    XrClass *stringBuilderClass;
     XrClass *processClass;
 } XrayCoreClasses;
 

@@ -35,14 +35,14 @@
 #include "xir/xxir_type_inference.c"
 #include "xir/xxir_source.c"
 static void init_compiler_faults(void){
- size_t sites=0;uint64_t max_allocated=0,max_work=0,max_peak=0;
+ size_t sites=0;uint64_t max_allocated=0,max_peak=0;
  for(size_t pass=0;pass<=sites;++pass){
   const size_t global_blocks=effects_compile_live,global_bytes=effects_compile_bytes;
   XrXirCompileContext compile={0};compile.limits=xr_xir_compile_default_limits();
-  const XrCompileResourceLimits caps={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+  const XrCompileResourceLimits caps={.memory_mode=XR_COMPILE_MEMORY_ORDINARY,.profile_allocations=true};
   CHECK(xr_compile_resources_new(&caps,&compile.resources)==XR_COMPILE_RESOURCE_OK);
   XrCompileResourceStats initial={0};CHECK(xr_compile_resources_stats(compile.resources,&initial)==XR_COMPILE_RESOURCE_OK);
-  XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILER_SESSION_OK);
+  XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILE_RESOURCE_OK);
   XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
   XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compile,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
   effects_compile_attempts=0;effects_compile_injected=false;effects_compile_fail_at=pass?pass-1:SIZE_MAX;
@@ -52,12 +52,12 @@ static void init_compiler_faults(void){
   else {if(status!=XR_XIR_OUT_OF_MEMORY)fprintf(stderr,"compiler ordinal %zu/%zu: %u %s\n",pass,sites,status,diagnostic.message);CHECK(effects_compile_injected&&status==XR_XIR_OUT_OF_MEMORY&&!result.checked&&!result.snapshot);}
   effects_compile_fail_at=SIZE_MAX;xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
   XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(compile.resources,&stats)==XR_COMPILE_RESOURCE_OK);
-  CHECK(stats.live_bytes==initial.live_bytes);
+  CHECK(stats.held_bytes==initial.held_bytes);
   if(stats.allocated_bytes>max_allocated)max_allocated=stats.allocated_bytes;
-  if(stats.work>max_work)max_work=stats.work;if(stats.peak_bytes>max_peak)max_peak=stats.peak_bytes;
+  if(stats.peak_bytes>max_peak)max_peak=stats.peak_bytes;
   xr_compile_resources_release(compile.resources);CHECK(effects_compile_live==global_blocks&&effects_compile_bytes==global_bytes);
  }
- printf("sticky initialization source %zu real Source-check OOM ordinals; max allocated=%llu peak=%llu work=%llu; every physical baseline restored\n",sites,(unsigned long long)max_allocated,(unsigned long long)max_peak,(unsigned long long)max_work);
+ printf("sticky initialization source %zu real Source-check OOM ordinals; max profiled turnover=%llu peak held=%llu; every physical baseline restored\n",sites,(unsigned long long)max_allocated,(unsigned long long)max_peak);
 }
 XR_FUNC void xr_test_initialization_source_run(XrXirArtifact **checked,bool fault_sweeps);
 XR_FUNC size_t xr_test_initialization_runtime_live(void);
@@ -66,8 +66,8 @@ int main(int argc,char **argv){
  bool generate_only=argc==3;
  if(generate_only){CHECK(!strcmp(argv[1],"--generate-only"));++argv;--argc;}
  CHECK(argc==1 || (argc==2 && strcmp(argv[1],"--generate-only")));
- CHECK(argc==1||argc==2);const XrXirCompileContext compile=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
- XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILER_SESSION_OK);
+ CHECK(argc==1||argc==2);const XrXirCompileContext compile=*effects_source_owner();
+ XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILE_RESOURCE_OK);
  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
  XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compile,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
  XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};

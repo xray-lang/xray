@@ -21,7 +21,7 @@ static bool source_library_comptime(SourceContext *ctx,const SourceLibraryMap *m
     if ((input->site_count && (!ordinals || !sites)) || (input->binding_count && !rows)) return false;
     uint32_t site_count=0,binding_count=0;
     for (uint32_t i=0;i<input->site_count;++i) {
-        if (!source_work_units(ctx,NULL,sizeof(*sites)+sizeof(*ordinals))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirComptimeSite *from=&input->sites[i];ordinals[i]=UINT32_MAX;
         if (from->caller>=map->function_count || from->helper>=map->function_count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library comptime function is outside its inventory");
@@ -32,7 +32,7 @@ static bool source_library_comptime(SourceContext *ctx,const SourceLibraryMap *m
         sites[site_count++]=(XrXirComptimeSite){map->functions[from->caller],from->instruction,map->functions[from->helper]};
     }
     for (uint32_t i=0;i<input->binding_count;++i) {
-        if (!source_work_units(ctx,NULL,sizeof(*rows))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirComptimeBinding *from=&input->bindings[i];
         if (from->site>=input->site_count || from->provider>=map->function_count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library comptime binding is outside its inventory");

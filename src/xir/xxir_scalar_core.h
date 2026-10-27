@@ -23,9 +23,6 @@ typedef struct XirScalarCoreRun {
 } XirScalarCoreRun;
 typedef enum XirScalarCoreActionKind { XIR_SCALAR_CONTINUE, XIR_SCALAR_RETURN } XirScalarCoreActionKind;
 typedef struct XirScalarCoreAction { XirScalarCoreActionKind kind;XrXirValue value; } XirScalarCoreAction;
-static inline bool xir_scalar_core_work(const XirScalarCoreRun *run,uint64_t units) {
-    return !run->compile_resources || xr_compile_resources_work(run->compile_resources,units)==XR_COMPILE_RESOURCE_OK;
-}
 /* Dispatch classification grants no execution permission. Both consumers admit
  * the complete current Artifact and the real function/layout first. */
 static inline bool xir_scalar_core_opcode(XrXirOp op) {

@@ -7,7 +7,7 @@
  * xr_xir_runtime_sdk_json.inc.c - Allocation-free closed bundle JSON decoder
  *
  * KEY CONCEPT:
- *   Reads and writes charge the caller's cumulative ledger; only known members exist.
+ *   Reads and decoded writes stay within the owned manifest; only known members exist.
  */
 #include "xr_xir_runtime_sdk_internal.h"
 #include "../base/xjson_cursor.h"
@@ -15,23 +15,18 @@
 static XrXirRuntimeSdkStatus sdk_resource_status(XrCompileResourceStatus status) {
     switch (status) {
     case XR_COMPILE_RESOURCE_OK: return XR_XIR_SDK_OK;
-    case XR_COMPILE_RESOURCE_BUDGET: return XR_XIR_SDK_BUDGET;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: return XR_XIR_SDK_MEMORY_LIMIT;
+    case XR_COMPILE_RESOURCE_OVERFLOW: return XR_XIR_SDK_OVERFLOW;
     case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_XIR_SDK_OUT_OF_MEMORY;
     default: return XR_XIR_SDK_INVALID;
-    }
-}
-static XrJsonCursorStatus sdk_cursor_charge(void *context, uint64_t work) {
-    switch (xr_compile_resources_work(context, work)) {
-    case XR_COMPILE_RESOURCE_OK: return XR_JSON_CURSOR_OK;
-    case XR_COMPILE_RESOURCE_BUDGET: return XR_JSON_CURSOR_BUDGET;
-    case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_JSON_CURSOR_OUT_OF_MEMORY;
-    default: return XR_JSON_CURSOR_INVALID;
     }
 }
 static XrXirRuntimeSdkStatus sdk_cursor_status(XrJsonCursorStatus status) {
     switch (status) {
     case XR_JSON_CURSOR_OK: return XR_XIR_SDK_OK;
     case XR_JSON_CURSOR_BUDGET: return XR_XIR_SDK_BUDGET;
+    case XR_JSON_CURSOR_MEMORY_LIMIT: return XR_XIR_SDK_MEMORY_LIMIT;
+    case XR_JSON_CURSOR_OVERFLOW: return XR_XIR_SDK_OVERFLOW;
     case XR_JSON_CURSOR_OUT_OF_MEMORY: return XR_XIR_SDK_OUT_OF_MEMORY;
     case XR_JSON_CURSOR_UNSUPPORTED: return XR_XIR_SDK_UNSUPPORTED;
     default: return XR_XIR_SDK_INVALID;
@@ -64,7 +59,7 @@ static bool sdk_json_digest(XrJsonCursor *json, uint8_t output[32]) {
     if (!xr_json_cursor_length(json, text, &length)) return false;
     if (length != 64) return xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID);
     for (uint32_t i = 0; i < 64; ++i) {
-        if (!xr_json_cursor_work(json, 1)) return false;
+
         uint8_t byte = (uint8_t)text[i];
         uint32_t digit = byte >= '0' && byte <= '9' ? (uint32_t)(byte - '0') :
             byte >= 'a' && byte <= 'f' ? (uint32_t)(byte - 'a' + 10) : 16u;
@@ -127,19 +122,20 @@ static bool sdk_json_prefix(XrJsonCursor *json, const XrXirSdkManifest *manifest
         xr_json_cursor_equal(json, manifest->abi_recipe, "xray:xir-runtime-abi-measurements:v1") &&
         xr_json_cursor_equal(json, manifest->closure_recipe, "xray:xir-runtime-recipe:windows-x86_64-hosted:v1");
 }
-static XrXirRuntimeSdkStatus sdk_json_parse(char *bytes, size_t length, XrCompileResources *resources,
+static XrXirRuntimeSdkStatus sdk_json_parse(char *bytes, size_t length,
     XrXirSdkManifest *manifest, size_t *failure_offset) {
     static const char *const names[] = {"schema", "wire", "semantic", "value_abi", "call_abi",
         "program_abi", "architecture", "object_format", "hosted", "c_dialect", "crt",
         "sanitizers", "allocator", "assertions", "build_provider", "abi_recipe_version",
         "closure_recipe_version", "target_triple", "abi_recipe", "closure_recipe",
         "abi_measurements", "files", "system_libraries"};
-    if (!bytes || !manifest || !length || !resources) return XR_XIR_SDK_INVALID;
+    if (!bytes || !manifest || !length) return XR_XIR_SDK_INVALID;
     if (length > XR_XIR_SDK_MANIFEST_LIMIT) return XR_XIR_SDK_BUDGET;
-    XrJsonCursor json = xr_json_cursor_make(bytes, length, resources, sdk_cursor_charge);
+    XrJsonCursor json = xr_json_cursor_make(bytes, length);
     uint64_t seen = 0;
     bool more = true;
-    if (!xr_json_cursor_work(&json, sizeof(*manifest))) return sdk_cursor_status(json.status);
+
+    if (json.status != XR_JSON_CURSOR_OK) return sdk_cursor_status(json.status);
     memset(manifest, 0, sizeof(*manifest));
     if (!xr_json_cursor_take(&json, '{')) more = false;
     while (more && json.status == XR_JSON_CURSOR_OK) {

@@ -8,13 +8,14 @@
  */
 static XrXirStatus inspect_write_status(XrXirValueStatus status) {
     return status==XR_XIR_VALUE_OK ? XR_XIR_OK : status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+        status==XR_XIR_VALUE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        status==XR_XIR_VALUE_OVERFLOW ? XR_XIR_OVERFLOW :
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
 }
 static XrXirStatus inspect_write_binding(const XdapLexicalView *lexical,const XdapJsonNode *name,uint32_t *operand,XrXirValue *expected) {
     for (uint32_t b=lexical->environment;b;b=lexical->function->bindings[b-1].parent) {
         const XrXirSourceDebugBinding *binding=&lexical->function->bindings[b-1];
         const char *text=lexical->source->declarations[binding->declaration-1].name;size_t bytes=strlen(text);
-        if (xr_compile_resources_work(lexical->launch->resources,(uint64_t)bytes+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
         if (bytes!=name->length || memcmp(text,name->text,bytes)) continue;
         if (!(binding->flags&XR_XIR_SOURCE_DEBUG_CELL)) return XR_XIR_BAD_TYPE;
         const char *read_name=NULL;size_t length=0;

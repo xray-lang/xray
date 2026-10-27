@@ -13,6 +13,7 @@
 #include "xmcp_json.h"
 #include "xmcp_tools_internal.h"
 #include "xmcp_source.h"
+#include "xmcp_server.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -25,7 +26,7 @@ static XrJsonValue *source_definition_result(const char *symbol, const char *con
     return s;
 }
 
-XR_FUNC XrJsonValue *xmcp_tool_source_definition(XrJsonValue *arguments) {
+XR_FUNC XrJsonValue *xmcp_tool_source_definition(XmcpServer *server, XrJsonValue *arguments) {
     XrJsonValue *text = xjson_get(arguments, "code");
     XrJsonValue *identity = xjson_get(arguments, "moduleId");
     XrJsonValue *name = xjson_get(arguments, "symbol");
@@ -37,10 +38,13 @@ XR_FUNC XrJsonValue *xmcp_tool_source_definition(XrJsonValue *arguments) {
     XrCompileResourceLimits limits = xmcp_source_default_limits();
     XrXirCompileContext context = {NULL, xr_xir_compile_default_limits()};
     XmcpSourceOwner owner = {0};
-    XrCompileResourceStatus created = xr_compile_resources_new(&limits, &context.resources);
-    XmcpSourceRequest request = {text->as.string, text->string_len, identity->as.string, &context};
+    XrCompileRequestControl control = {0};
+    XrCompileResourceStatus created = xmcp_request_control_init(server, 0, &control);
+    if (created == XR_COMPILE_RESOURCE_OK) created = xr_compile_request_control_poll(&control);
+    if (created == XR_COMPILE_RESOURCE_OK) created = xr_compile_resources_new(&limits, &context.resources);
+    XmcpSourceRequest request = {text->as.string, text->string_len, identity->as.string, &context, &control};
     XrXirStatus status = created == XR_COMPILE_RESOURCE_OK ? xmcp_source_check(&request, &owner) :
-        created == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+        xmcp_source_resource_status(created);
     const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(owner.result.snapshot);
     const XrXirSourceDeclaration *selected = NULL;
     uint32_t matches = 0;
@@ -50,6 +54,7 @@ XR_FUNC XrJsonValue *xmcp_tool_source_definition(XrJsonValue *arguments) {
             if (d->name && !strcmp(d->name, name->as.string)) { selected = d; ++matches; }
         }
     }
+    if (status == XR_XIR_OK) status = xmcp_source_resource_status(xr_compile_request_control_poll(&control));
     bool complete = status == XR_XIR_OK && view && view->complete;
     bool found = complete && matches == 1;
     const char *message = !complete ? owner.diagnostic.message[0] ? owner.diagnostic.message :

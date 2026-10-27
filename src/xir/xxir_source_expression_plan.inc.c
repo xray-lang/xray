@@ -7,7 +7,7 @@
  * xxir_source_expression_plan.inc.c - Collected expression plans with read provenance
  */
 static bool source_plan_soft_numeric(SourceContext *ctx,SourceExpressionPlan *plan,bool *soft) {
-    if (!source_work(ctx,plan->syntax)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     *soft=plan->integer.present || plan->decimal.node || plan->syntax->type==AST_TERNARY;
     if (*soft || !plan->left) return true;
     bool left=false,right=false;
@@ -29,7 +29,7 @@ static bool source_plan_numeric_prepare(SourceContext *ctx,SourceExpressionPlan 
 static bool source_plan_binary_prepare(SourceContext *ctx,SourceExpressionPlan *plan,SourceExpectedType hint,bool defaults) {
     if (plan->syntax->type==AST_TERNARY && plan->left && plan->right) {
         if (plan->conditional) return true;
-        if (!source_work(ctx,plan->syntax)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!source_plan_binary_prepare(ctx,plan->left,hint,defaults) ||
             !source_plan_numeric_prepare(ctx,plan->left,hint,defaults) ||
             !source_plan_binary_prepare(ctx,plan->right,hint,defaults) ||
@@ -52,7 +52,7 @@ static bool source_plan_binary_prepare(SourceContext *ctx,SourceExpressionPlan *
      * Only declared arithmetic, bitwise and comparison nodes take an operator recipe. */
     if (plan->syntax->type<AST_BINARY_ADD || plan->syntax->type>AST_BINARY_GE) return true;
     if (plan->binary || !plan->left || !plan->right) return true;
-    if (!source_work(ctx,plan->syntax)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     SourceExpressionPlan *left=plan->left,*right=plan->right;
     bool left_literal=left->integer.present || left->decimal.node;
     bool right_literal=right->integer.present || right->decimal.node;
@@ -79,7 +79,7 @@ static bool source_plan_binary_prepare(SourceContext *ctx,SourceExpressionPlan *
 }
 #include "xxir_source_ground_type.inc.c"
 static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *node, SourceExpectedType context) {
-    if (!node || !source_work(ctx,node)) return NULL;
+    if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
     SourceFunction *body=&ctx->bodies[ctx->function];
     if (body->region_sealed || body->expression_count==UINT32_MAX) {
         source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"expression region is not open"); return NULL;
@@ -109,8 +109,7 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
         plan->binding=visible_name(ctx,node->as.new_expr.module_name ?
             node->as.new_expr.module_name : node->as.new_expr.class_name);
         if(!plan->binding && !node->as.new_expr.module_name &&
-            (source_text_same(ctx,node,node->as.new_expr.class_name,"StringBuilder") ||
-             source_text_same(ctx,node,node->as.new_expr.class_name,"Range")))
+            source_text_same(ctx,node,node->as.new_expr.class_name,"Range"))
             plan->binding=source_prelude_lookup(ctx,node->as.new_expr.class_name);
     } else if (node->type==AST_CALL_EXPR && node->as.call_expr.callee && node->as.call_expr.callee->type==AST_VARIABLE) {
         plan->binding=visible_name(ctx,node->as.call_expr.callee->as.variable.name);
@@ -311,6 +310,7 @@ static bool source_plan_complete(SourceContext *ctx, SourceExpressionPlan *plan,
     return result;
 }
 static bool source_plan_expression(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
+    if (!source_request_poll(ctx, node)) return false;
     SourceExpressionPlan *plan=source_plan_collect(ctx,node,context);
     return plan && source_plan_complete(ctx,plan,value);
 }
@@ -320,7 +320,7 @@ static bool source_plan_discard(SourceContext *ctx,uint32_t first) {
     for (SourceExpressionStorage *storage=body->expressions;storage;storage=storage->next) {
         for (uint32_t e=storage->count;e;--e) {
             SourceExpressionPlan *plan=&storage->expressions[e-1];
-            if (!source_work(ctx,plan->syntax)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (plan->identity<first) return true;
             if (plan->owner!=ctx->function || (plan->state!=SOURCE_TERM_GROUND && plan->state!=SOURCE_TERM_DISCARDED))
                 return source_fail(ctx,plan->syntax,XR_XIR_BAD_STRUCTURE,"uncompleted expression cannot be discarded");

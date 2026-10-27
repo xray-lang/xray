@@ -13,19 +13,17 @@
 extern "C" {
 #endif
 typedef struct XrSourceAst XrSourceAst;
-/* Parses once on this compiler's cumulative ledger. The AST copies the input
- * and locator, and may outlive the compiler. Parsing grants no authority to
- * execute or import. Only successful parsing publishes the initially empty
- * AST output; an optional diagnostic is owned independently. */
-XRAY_API XrSourceStatus xray_source_parse_text(XrSourceCompiler *, const XrSourceText *,
-    XrSourceAst **, XrSourceDiagnostic **);
-/* Borrows the exact owning tree from the same compiler. Ordinary authority,
- * imports, checking, specialization, lowering and Program admission still run.
- * No entry bytes are reparsed or written to disk. The AST remains owned on
- * every return; a successful Program outlives both AST and compiler. Output
- * owner pointers must be empty and remain unchanged on refusal. */
-XRAY_API XrSourceStatus xray_source_compile_ast(XrSourceCompiler *, const XrSourceAst *,
-    XrSourceProgram **, XrSourceDiagnostic **);
+/* Parses one independent request. The AST copies input and locator, owns its
+ * parser arena, and survives request destruction. Parsing grants no execution
+ * or import authority. Failure facts remain available without allocation. */
+XRAY_API XrSourceStatus xray_source_parse(const XrSourceText *, const XrSourceCompileOptions *,
+    XrSourceAst **, XrSourceFailure *, XrSourceDiagnostic **);
+/* Borrows the immutable owning syntax through an independent build request.
+ * Imports, checking, specialization, lowering and target preparation complete
+ * before a ready Artifact is published. The entry is never reparsed or written
+ * to disk. Artifact, AST and request storage have independent lifetimes. */
+XRAY_API XrSourceStatus xray_source_build_ast(const XrSourceAst *, const XrSourceCompileOptions *,
+    XrSourceArtifact **, XrSourceFailure *, XrSourceDiagnostic **);
 XRAY_API void xray_source_ast_free(XrSourceAst *);
 #ifdef __cplusplus
 }

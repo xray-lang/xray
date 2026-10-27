@@ -11,7 +11,7 @@
  */
 static SourceName *find_name(SourceContext *ctx, SourceName *names, const char *name) {
     for (SourceName *p = names; p; p = p->next) {
-        if (!source_work(ctx, p->node)) return NULL;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
         if (source_text_same(ctx, NULL, p->name, name)) return p;
     }
     return NULL;
@@ -44,7 +44,7 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
         if (value_span > span) span = value_span;
     }
     for (uint32_t p = 0; p < node.parameter_count; ++p) {
-        if (!source_work(ctx, NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!node.parameters[p].type && node.kind != XR_XIR_TYPE_TUPLE)
             return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "callable parameter must be a value type");
         uint32_t component = xr_xir_type_span(&ctx->types, node.parameters[p].type);
@@ -53,25 +53,25 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
     node.parameter_span = span;
     if (node.kind == XR_XIR_TYPE_NOMINAL) {
         for (uint32_t a = 0; a < node.nominal.argument_count; ++a) {
-            if (!source_work(ctx, NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             uint32_t component = xr_xir_type_span(&ctx->types, node.nominal.arguments[a]);
             if (component > node.parameter_span) node.parameter_span = component;
         }
     }
     for (uint32_t i = 0; i < ctx->types.count; ++i) {
         const XrXirTypeNode *s = &ctx->types.nodes[i];
-        if (!source_work(ctx, NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (s->kind != node.kind || s->element != node.element || s->parameter_count != node.parameter_count ||
             s->result != node.result || s->flags != node.flags) continue;
         if (node.kind == XR_XIR_TYPE_NOMINAL && (s->nominal.declaration != node.nominal.declaration ||
             s->nominal.argument_count != node.nominal.argument_count)) continue;
         bool same = true;
         for (uint32_t a = 0; a < node.nominal.argument_count; ++a) {
-            if (!source_work(ctx, NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (s->nominal.arguments[a] != node.nominal.arguments[a]) same = false;
         }
         for (uint32_t p = 0; p < node.parameter_count; ++p) {
-            if (!source_work(ctx, NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (s->parameters[p].type != node.parameters[p].type ||
                 s->parameters[p].mode != node.parameters[p].mode) same = false;
         }

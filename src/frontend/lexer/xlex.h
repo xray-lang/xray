@@ -18,6 +18,7 @@
 #include <stdbool.h>
 #include "../../base/xdefs.h"
 #include "../../base/xcompile_state.h"
+#include "../../base/xcompile_request.h"
 #include "../../base/xarena.h"
 
 // ============================================================================
@@ -165,7 +166,7 @@ typedef enum {
     TK_USIZE,
     // None of the uppercase native type names are lexer keywords any
     // more. Array / BigInt / Channel / DateTime / Json / Map /
-    // Range / Regex / Set / StringBuilder all reach the parser as plain
+    // Range / Regex / Set all reach the parser as plain
     // TK_NAME tokens and resolve through the prelude symbol table — see
     // module/xprelude_runtime.h. Channel additionally gets a contextual
     // intercept in xr_parse_variable so that `Channel(...)` still
@@ -273,6 +274,8 @@ typedef struct Token {
 // All tokens and trivia borrow this exact arena; copies borrow the same owner.
 typedef struct Scanner {
     XrCompileState *state;
+    XrCompileRequestControl *request; /* Borrowed only while this scanner is live. */
+    size_t poll_bytes;
     XrArena *arena;
     const char *source;            // source code string
     const char *start;             // current token start position
@@ -292,11 +295,11 @@ typedef struct Scanner {
 // Scanner functions
 // Scans a fragment that begins inside a larger text (an interpolation, an
 // editor prefix, an expression). A leading U+FEFF is an ordinary character.
-XR_FUNC XrCompileResourceStatus xr_compile_scanner_open(Scanner *scanner, XrCompileState *state, XrArena *arena, const char *source);
+XR_FUNC XrCompileResourceStatus xr_compile_scanner_open(Scanner *scanner, XrCompileState *state, XrArena *arena, const char *source, XrCompileRequestControl *request);
 // Scans a complete source text. A leading UTF-8 byte-order mark (EF BB BF) is
 // skipped: tokens, lines and columns start after it, while token pointers stay
 // in the caller's buffer, so byte offsets remain file-relative.
-XR_FUNC XrCompileResourceStatus xr_compile_scanner_open_source(Scanner *scanner, XrCompileState *state, XrArena *arena, const char *source, bool collect_trivia);
+XR_FUNC XrCompileResourceStatus xr_compile_scanner_open_source(Scanner *scanner, XrCompileState *state, XrArena *arena, const char *source, bool collect_trivia, XrCompileRequestControl *request);
 XR_FUNC Token xr_scanner_scan(Scanner *scanner);
 
 // Try to scan regex literal when expecting expression

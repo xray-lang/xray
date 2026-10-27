@@ -12,9 +12,13 @@
 
 static XrXirStatus function_name_copy(XdapAdapter *s,const char *source,char **output) {
     size_t length=strlen(source);char *name=NULL;
-    if (xr_compile_resources_work(s->resources,length+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     XrCompileResourceStatus allocated=xr_compile_resources_alloc(s->resources,length+1,(void **)&name);
-    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+        allocated==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        allocated==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_OVERFLOW :
+        allocated==XR_COMPILE_RESOURCE_CANCELLED ? XR_XIR_CANCELLED :
+        allocated==XR_COMPILE_RESOURCE_DEADLINE ? XR_XIR_DEADLINE :
+        allocated==XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE : XR_XIR_BAD_STRUCTURE;
     memcpy(name,source,length+1);*output=name;return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xdap_dispatch_function_breakpoints(XdapAdapter *s,const XdapRequest *r) {
@@ -65,7 +69,9 @@ XR_FUNC XrXirStatus xdap_dispatch_function_breakpoints(XdapAdapter *s,const Xdap
             status=xdap_dispatch_response(s,r,false,NULL,"Native instruction breakpoints are unsupported");
             goto done;
         }
-        if (admitted!=XR_XIR_VALUE_OK) status=XR_XIR_BUDGET;
+        if (admitted!=XR_XIR_VALUE_OK) status=admitted==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+            admitted==XR_XIR_VALUE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+            admitted==XR_XIR_VALUE_OVERFLOW ? XR_XIR_OVERFLOW : XR_XIR_BUDGET;
     }
     if (status==XR_XIR_OK) {
         for (uint32_t i=0;i<s->function_breakpoint_count;++i) {

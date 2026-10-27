@@ -25,13 +25,13 @@ static bool source_struct_defaultability(SourceContext *ctx) {
         for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
             SourceName *symbol = ctx->nominal_sources[d];
             if (symbol->checked_library) continue;
-            if (!source_work(ctx, symbol->node)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             XrXirNominalKind kind = (XrXirNominalKind) ctx->nominals.declarations[d].kind;
             if ((kind != XR_XIR_NOMINAL_STRUCT && kind != XR_XIR_NOMINAL_CLASS) || ctx->nominal_defaultable[d]) continue;
             bool explicit_constructor = false;
             ClassDeclNode *source = symbol->node->type == AST_CLASS_DECL ? &symbol->node->as.class_decl : &symbol->node->as.struct_decl;
             for (int m = 0; m < source->method_count; ++m) {
-                if (!source_work(ctx, source->methods[m])) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 if (source->methods[m]->type == AST_METHOD_DECL && source->methods[m]->as.method_decl.is_constructor) explicit_constructor = true;
             }
             if (explicit_constructor) continue;
@@ -39,7 +39,7 @@ static bool source_struct_defaultability(SourceContext *ctx) {
             bool available = true;
             for (uint32_t f = 0; f < decl->field_count; ++f) {
                 AstNode *field = source->fields[f];
-                if (!source_work(ctx, field)) return false;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 if (!field->as.field_decl.initializer && !source_type_defaultable(ctx, decl->fields[f].type)) {
                     available = false; break;
                 }
@@ -57,7 +57,7 @@ static bool source_struct_constructors(SourceContext *ctx, uint32_t *next) {
     for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
         SourceName *symbol = ctx->nominal_sources[d];
         if (symbol->checked_library) continue;
-        if (!source_work(ctx, symbol->node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!ctx->nominal_defaultable[d]) continue;
         if (*next >= ctx->first_closure)
             return source_fail(ctx, symbol->node, XR_XIR_BAD_STRUCTURE, "default constructor function inventory mismatch");
@@ -74,7 +74,7 @@ static bool source_struct_constructors(SourceContext *ctx, uint32_t *next) {
     return true;
 }
 static bool source_default_value(SourceContext *ctx, AstNode *node, XrXirType type, SourceValue *value) {
-    if (!source_work(ctx, node)) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (type == XR_XIR_UNIT) {
         *value = (SourceValue){UINT32_MAX, XR_XIR_UNIT}; return true;
     }
@@ -105,7 +105,7 @@ static bool source_struct_constructor_body(SourceContext *ctx) {
     if (decl->field_count && !fields) return false;
     for (uint32_t f = 0; f < decl->field_count; ++f) {
         AstNode *field = source->fields[f];
-        if (!source_work(ctx, field)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t function = ctx->nominal_defaults[d][f];
         if (function) {
             const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, symbol->type);

@@ -101,8 +101,8 @@ XrXirStatus xlsp_source_open_prepare(const XrXirCompileContext *context,const Xl
     o->resources=context->resources;o->uri_length=input->uri_length;o->diagnostic_version=(int)input->version;
     status=xlsp_source_buffer_new(context->resources,input->text,input->length,(int)input->version,&o->buffer);
     if(status!=XR_XIR_OK)goto done;
-    XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&session);
-    if(opened!=XR_COMPILER_SESSION_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
+    XrCompileResourceStatus opened=xr_compile_session_new(context->resources,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK){status=opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
     XrParseStatus parsed=xlsp_source_syntax_build(session,input,&o->syntax);
     if(parsed!=XR_PARSE_OK&&parsed!=XR_PARSE_RECOVERED){status=parsed==XR_PARSE_BUDGET?XR_XIR_BUDGET:parsed==XR_PARSE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;}
     xr_compile_session_free(session);session=NULL;

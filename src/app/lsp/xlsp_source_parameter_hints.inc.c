@@ -143,8 +143,7 @@ XR_FUNC XrXirStatus xlsp_source_parameter_hints(const XlspSourceSnapshot *s,cons
         if(same){ctx.text=&s->texts[i];break;}
     }
     if(!ctx.text||ctx.text->version!=input->version||ctx.text->length!=input->source_length)return XR_XIR_BAD_STRUCTURE;
-    XrFingerprint fingerprint={{0}};status=lsp_resource_status(xr_compile_module_source_fingerprint(s->resources,ctx.text->text,&fingerprint));
-    if(status!=XR_XIR_OK)return status;
+    XrFingerprint fingerprint={{0}};xr_module_source_fingerprint(ctx.text->text,&fingerprint);
     status=lsp_work(s,sizeof(fingerprint));if(status!=XR_XIR_OK)return status;
     if(memcmp(&fingerprint,&input->fingerprint,sizeof(fingerprint)))return XR_XIR_BAD_STRUCTURE;
     for(size_t i=0;i<input->count;++i){status=parameter_hint_call(&ctx,&input->calls[i]);if(status!=XR_XIR_OK)goto done;}

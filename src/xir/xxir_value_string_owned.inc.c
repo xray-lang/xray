@@ -48,20 +48,24 @@ static XrXirValueStatus owned_string_plan_size(const XirOwnedStringInputs *input
 static XrXirValueStatus owned_string_plan(XrXirValueAdmission *admission,
     const XirOwnedStringInputs *input,XirOwnedStringPlan *plan) {
     size_t length=input->text->length,pattern=input->search->length;
-    uint64_t calls=input->all && pattern && pattern<=length?(uint64_t)(length/pattern)+2:1,work=0;
-    if(!xir_string_owned_search_work(length,pattern,calls,input->all?2:1,&work) ||
-        !xir_string_owned_add_work(&work,pattern,1) || !owned_string_work(admission,work))
-        return XR_XIR_VALUE_LIMIT;
+    if(!admission_is_compile(admission)) {
+        uint64_t calls=input->all && pattern && pattern<=length?(uint64_t)(length/pattern)+2:1,work=0;
+        if(!xir_string_owned_search_work(length,pattern,calls,input->all?2:1,&work) ||
+            !xir_string_owned_add_work(&work,pattern,1) || !owned_string_work(admission,work))
+            return XR_XIR_VALUE_LIMIT;
+    }
     plan->bytes=xr_string_core_replace_plan(input->text->bytes,length,input->search->bytes,pattern,
         input->replacement->bytes,input->replacement->length,input->all);
     return owned_string_plan_size(input,plan);
 }
 static XrXirValueStatus owned_string_fill(XrXirValueAdmission *admission,
     const XirOwnedStringInputs *input,const XirOwnedStringPlan *plan,XirString *output) {
-    uint64_t work=0;
-    if(!xir_string_owned_search_work(input->text->length,input->search->length,plan->bytes.count,1,&work) ||
-        !xir_string_owned_add_work(&work,plan->bytes.len,1) || !owned_string_work(admission,work))
-        return XR_XIR_VALUE_LIMIT;
+    if(!admission_is_compile(admission)) {
+        uint64_t work=0;
+        if(!xir_string_owned_search_work(input->text->length,input->search->length,plan->bytes.count,1,&work) ||
+            !xir_string_owned_add_work(&work,plan->bytes.len,1) || !owned_string_work(admission,work))
+            return XR_XIR_VALUE_LIMIT;
+    }
     size_t written=xr_string_core_replace_write(output->bytes,input->text->bytes,input->text->length,
         input->search->bytes,input->search->length,input->replacement->bytes,input->replacement->length,
         plan->bytes,input->all);
@@ -94,7 +98,7 @@ static XrXirValueStatus owned_string_bytes_graph(const XrXirValue *receiver,XrXi
         return XR_XIR_VALUE_BAD_ARGUMENT;
     const XirString *text=NULL;XrXirValueStatus status=owned_string_input(admission,receiver,&text);
     if(status!=XR_XIR_VALUE_OK) return status;
-    if(!owned_string_work(admission,(uint64_t)text->length+1)) return XR_XIR_VALUE_LIMIT;
+    if((!admission_is_compile(admission) && !owned_string_work(admission,(uint64_t)text->length+1))) return XR_XIR_VALUE_LIMIT;
     size_t capacity=0;
     if(!array_capacity(text->length,stride,&capacity)) return XR_XIR_VALUE_LIMIT;
     XirArray *array=NULL;status=array_allocate(type,capacity,admission,&array);

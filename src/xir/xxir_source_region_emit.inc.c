@@ -91,15 +91,15 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     if (cells && !map) goto done;
     uint32_t *blocks=map ? map+value_count : NULL,*layout=blocks ? blocks+body->block_count : NULL;
     for (uint32_t i=0;i<value_count;++i) {
-        if (!source_work(ctx,NULL)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         map[i]=i<parameters ? i : UINT32_MAX;
     }
     for (uint32_t b=0;b<body->block_count;++b) {
-        if (!source_work(ctx,NULL)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         blocks[b]=layout[b]=UINT32_MAX;
     }
     for (uint32_t b=0;b<body->block_count;++b) {
-        if (!source_work(ctx,NULL)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         SourceBlockRecipe *recipe=&body->blocks[b];
         if (recipe->owner!=ctx->function || recipe->identity>=body->block_count ||
             recipe->runtime>=body->block_count || blocks[recipe->identity]!=UINT32_MAX || layout[recipe->runtime]!=UINT32_MAX) goto invalid;
@@ -107,7 +107,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     }
     uint32_t original_end=0;
     for (uint32_t i=0;i<body->count;++i) {
-        if (!source_work(ctx,NULL)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         const XrXirInstruction *op=&body->recipes[i].instruction;
         if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) goto invalid;
         if (xr_xir_op_uses_operand_table(op->op)) {
@@ -119,11 +119,11 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     if (original_end!=body->operand_count) goto invalid;
     uint32_t emitted=0;
     for (uint32_t b=0;b<body->block_count;++b) {
-        if (!source_work(ctx,NULL)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         XrXirBlock block=body->blocks[layout[b]].block;
         if (block.first>body->count || block.count>body->count-block.first || block.count>body->count-emitted) goto invalid;
         for (uint32_t a=0;a<block.count;++a) {
-        if (!source_work(ctx,NULL)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
             SourceInstructionRecipe *recipe=&body->recipes[block.first+a];
             if (recipe->owner!=ctx->function || recipe->value<parameters || recipe->value>=value_count || map[recipe->value]!=UINT32_MAX) goto invalid;
             map[recipe->value]=parameters+emitted++;
@@ -132,15 +132,15 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     if (emitted!=body->count) goto invalid;
     SourceRegionOutput views={0};
     if (!source_region_output_allocate(ctx,body,&views)) goto done;
-    if (!source_work_units(ctx,NULL,(uint64_t)body->count*sizeof(*views.points))) goto done;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
     XrXirInstruction *instructions=views.instructions;
     XrXirBlock *emitted_blocks=views.blocks;
     uint32_t *operands=views.operands;
-    if (!source_work_units(ctx,NULL,(uint64_t)body->operand_count*sizeof(*operands))) goto done;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
     if (body->operand_count) memcpy(operands,body->operands,body->operand_count*sizeof(*operands));
     emitted=0;
     for (uint32_t b=0;b<body->block_count;++b) {
-        if (!source_work(ctx,NULL)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         XrXirBlock block=body->blocks[layout[b]].block;
         if (block.first>body->count || block.count>body->count-block.first) goto invalid;
         if (block.panic && !source_region_id(blocks,body->block_count,block.panic,&block.panic)) goto invalid;
@@ -155,10 +155,10 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     if (seal && body->count && !root_values) goto done;
     uint32_t operand_end=0;emitted=0;
     for (uint32_t b=0;b<body->block_count;++b) {
-        if (!source_work(ctx,NULL)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
       XrXirBlock block=body->blocks[layout[b]].block;
       for (uint32_t i=block.first;i<block.first+block.count;++i) {
-        if (!source_work(ctx,NULL)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         XrXirInstruction op=body->recipes[i].instruction;
         if (op.op<=XR_XIR_INVALID || op.op>=XR_XIR_OP_COUNT) goto invalid;
         SourceRecipeRole role=source_recipe_roles[op.op];
@@ -167,7 +167,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
                 op.args[1]>body->operand_count-operand_end) goto invalid;
             uint32_t original=op.args[0];op.args[0]=op.args[1] ? operand_end : 0;
             for (uint32_t a=0;a<op.args[1];++a) {
-        if (!source_work(ctx,NULL)) goto done;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
                 uint32_t id=body->operands[original+a];
                 bool block_id=op.op==XR_XIR_PHI && !(a%2);
                 if (block_id ? !source_region_id(blocks,body->block_count,id,&operands[operand_end+a]) :
@@ -189,12 +189,12 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
                 count=xr_xir_cell_payload_operands(&ctx->types,cell,op.op);
             }
             for (uint32_t a=0;a<count;++a) {
-                if (!source_work(ctx,NULL)) goto done;
+                if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
                 if (!source_region_value(map,value_count,op.args[a],&op.args[a],seal)) goto invalid;
             }
         }
         for (uint32_t e=0;e<role.edges;++e) {
-            if (!source_work(ctx,NULL)) goto done;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
             if (!source_region_id(blocks,body->block_count,op.targets[e],&op.targets[e])) goto invalid;
         }
         if (op.op==XR_XIR_INVOKE_RESULT || op.op==XR_XIR_INVOKE_ERROR || op.op==XR_XIR_INVOKE_DISCARD ||

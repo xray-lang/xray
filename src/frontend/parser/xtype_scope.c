@@ -18,9 +18,12 @@ struct XrTypeScope {
 static XrTypeScopeStatus type_scope_status(XrCompileResourceStatus status) {
     switch (status) {
         case XR_COMPILE_RESOURCE_OK: return XR_TYPE_SCOPE_OK;
-        case XR_COMPILE_RESOURCE_CANCELLED:
         case XR_COMPILE_RESOURCE_BAD_ARGUMENT: return XR_TYPE_SCOPE_BAD_ARGUMENT;
-        case XR_COMPILE_RESOURCE_BUDGET: return XR_TYPE_SCOPE_BUDGET;
+        case XR_COMPILE_RESOURCE_MEMORY_LIMIT: return XR_TYPE_SCOPE_MEMORY_LIMIT;
+        case XR_COMPILE_RESOURCE_OVERFLOW: return XR_TYPE_SCOPE_OVERFLOW;
+        case XR_COMPILE_RESOURCE_CANCELLED: return XR_TYPE_SCOPE_CANCELLED;
+        case XR_COMPILE_RESOURCE_DEADLINE: return XR_TYPE_SCOPE_DEADLINE;
+        case XR_COMPILE_RESOURCE_CLOCK_FAILURE: return XR_TYPE_SCOPE_CLOCK_FAILURE;
         case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_TYPE_SCOPE_OUT_OF_MEMORY;
     }
     return XR_TYPE_SCOPE_BAD_ARGUMENT;
@@ -33,15 +36,15 @@ static XrTypeAlias *find_local(XrTypeScope *scope, const char *name) {
         return NULL;
     }
     for (XrTypeAlias *alias = scope->aliases; alias; alias = alias->next) {
-        if (xr_compile_state_work(scope->state, 1) != XR_COMPILE_RESOURCE_OK) return NULL;
+
         size_t i = 0;
         for (;;) {
-            if (xr_compile_state_work(scope->state, 2) != XR_COMPILE_RESOURCE_OK) return NULL;
+
             char left = alias->name[i], right = name[i];
             if (left != right) break;
             if (!right) return alias;
             if (i == SIZE_MAX - 1) {
-                xr_compile_state_fail(scope->state, XR_COMPILE_RESOURCE_BUDGET);
+                xr_compile_state_fail(scope->state, XR_COMPILE_RESOURCE_OVERFLOW);
                 return NULL;
             }
             ++i;
@@ -109,7 +112,7 @@ XR_FUNC XrTypeScopeStatus xr_compile_type_scope_define(XrTypeScope *scope, const
 
 XR_FUNC XrTypeAlias *xr_type_scope_lookup(XrTypeScope *scope, const char *name) {
     for (XrTypeScope *current = scope; current; current = current->parent) {
-        if (xr_compile_state_work(current->state, 1) != XR_COMPILE_RESOURCE_OK) return NULL;
+
         XrTypeAlias *alias = find_local(current, name);
         if (alias || xr_compile_state_status(current->state) != XR_COMPILE_RESOURCE_OK) return alias;
     }

@@ -55,7 +55,7 @@ static int clone_wide(UINT page, DWORD flags, LPCCH input, int length, LPWSTR ou
 #undef xr_free
 #endif
 
-static const XrCompileResourceLimits unlimited = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+static const XrCompileResourceLimits unlimited = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
 static char executable[32768], original_cwd[32768];
 static wchar_t original_directory[32768], first_environment[65536], second_environment[65536];
 static unsigned old_events, new_events;
@@ -157,7 +157,7 @@ static void invalid_outputs(void) {
     xtc_process_free(source); xr_compile_resources_release(resources); physical_zero();
 }
 static void run_lifetime(bool observed) {
-    const XrCompileResourceLimits finite={64 * 1024 * 1024,8 * 1024 * 1024,128000000};
+    const XrCompileResourceLimits finite={XR_COMPILE_MEMORY_FINITE,8 * 1024 * 1024,true};
     XrCompileResources *resources = ledger(prepare_completion==XR_PROC_COMPLETE_ROOT ? finite : unlimited);
     XrToolchainProcess *source = prepare(resources, observed), *copy = NULL;
     CHECK(SetEnvironmentStringsW(second_environment)); wchar_t changed_directory[32768];
@@ -191,71 +191,38 @@ static void run_lifetime(bool observed) {
 }
 
 #if defined(CLONE_INJECTED)
-typedef struct Expected { uint64_t work, bytes, allocations; uint64_t ends[8192]; size_t count; } Expected;
-static void operation(Expected *e, uint64_t cost) { e->work += cost; CHECK(e->count < 8192); e->ends[e->count++] = e->work; }
-static void allocation(Expected *e, size_t size) { e->bytes += sizeof(CompileAllocation) + size; ++e->allocations; operation(e, 1); }
-static void text_operations(Expected *e, const char *text) {
-    size_t bytes = strlen(text) + 1; for (size_t i = 0; i < bytes; ++i) operation(e, 1);
-    allocation(e, bytes); operation(e, bytes);
-}
-static Expected expected_clone(const XrToolchainProcess *source) {
-    Expected e = {0}; e.bytes = sizeof(CompileAllocation) + sizeof(XrToolchainProcess); e.allocations = 1;
-    operation(&e, 1 + sizeof(XrToolchainProcess));
-    operation(&e, sizeof(XrCompileResources *) + 3 * sizeof(size_t) + sizeof(uint32_t) + sizeof(XrProcImageMode) + sizeof(XrProcImageObserver) + sizeof(XrProcCompletionPolicy));
-    text_operations(&e, source->spec.executable); text_operations(&e, source->spec.cwd);
-    for (size_t i = 0; i < source->argc; ++i) text_operations(&e, source->spec.argv[i]);
-    for (size_t i = 0; i < source->spec.env_count; ++i) {
-        text_operations(&e, source->spec.env_keys[i]); text_operations(&e, source->spec.env_values[i]);
-        operation(&e, sizeof(int)); size_t bytes = (wcslen(source->wide_keys[i]) + 1) * sizeof(wchar_t);
-        allocation(&e, bytes); operation(&e, bytes);
-    }
-    return e;
-}
-static void allocation_and_work(void) {
+static void allocation_and_memory(void) {
     XrCompileResources *resources = ledger(unlimited); XrToolchainProcess *source = prepare(resources, true), *copy = NULL;
-    Expected e = expected_clone(source); XrCompileResourceStats base = stats(resources); size_t start = attempts;
+    XrCompileResourceStats base = stats(resources); size_t start = attempts;
     CHECK(xtc_process_clone_observed(source, &observer, &copy) == XTC_PROCESS_OK);
-    XrCompileResourceStats after = stats(resources);
-    CHECK(after.work - base.work == e.work && after.allocated_bytes - base.allocated_bytes == e.bytes);
-    CHECK(after.live_bytes - base.live_bytes == e.bytes && after.allocation_count - base.allocation_count == e.allocations);
-    CHECK(attempts - start == e.allocations); same_view(source, copy, true);
-    xtc_process_free(copy); copy = NULL; CHECK(stats(resources).live_bytes == base.live_bytes);
-    for (size_t point = 0; point < e.allocations; ++point) {
-        XrToolchainProcess unchanged = *source; uint64_t work = stats(resources).work;
-        fail_at = attempts + point;
+    XrCompileResourceStats after = stats(resources); size_t count = attempts - start;
+    CHECK(count && after.held_bytes > base.held_bytes);
+    same_view(source, copy, true); xtc_process_free(copy); copy = NULL;
+    CHECK(stats(resources).held_bytes == base.held_bytes);
+    for (size_t point = 0; point < count; ++point) {
+        XrToolchainProcess unchanged = *source; fail_at = attempts + point;
         CHECK(xtc_process_clone_observed(source, &observer, &copy) == XTC_PROCESS_OUT_OF_MEMORY && !copy);
-        CHECK(!memcmp(source, &unchanged, sizeof(unchanged)) && stats(resources).live_bytes == base.live_bytes);
-        CHECK(stats(resources).work > work); fail_at = SIZE_MAX;
+        CHECK(!memcmp(source, &unchanged, sizeof(unchanged)) && stats(resources).held_bytes == base.held_bytes);
+        fail_at = SIZE_MAX;
     }
     xtc_process_free(source); xr_compile_resources_release(resources); physical_zero();
-    for (unsigned axis = 0; axis < 3; ++axis) for (unsigned minus = 0; minus < 2; ++minus) {
-        XrCompileResourceLimits limits = unlimited;
-        if (axis == 0) limits.allocated_bytes = base.allocated_bytes + e.bytes - minus;
-        if (axis == 1) limits.live_bytes = base.live_bytes + e.bytes - minus;
-        if (axis == 2) limits.work = base.work + e.work - minus;
+    for (unsigned minus = 0; minus < 2; ++minus) {
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, after.peak_bytes - minus, true};
         resources = ledger(limits); source = prepare(resources, true);
-        CHECK(xtc_process_clone_observed(source, &observer, &copy) == (minus ? XTC_PROCESS_BUDGET : XTC_PROCESS_OK));
-        if (minus) { CHECK(!copy); CHECK(xtc_process_clone_observed(source, &observer, &copy) == XTC_PROCESS_BUDGET && !copy); }
-        else { CHECK(copy); xtc_process_free(copy); copy = NULL; }
+        CHECK(xtc_process_clone_observed(source, &observer, &copy) == (minus ? XTC_PROCESS_MEMORY_LIMIT : XTC_PROCESS_OK));
+        if (minus) { CHECK(!copy); CHECK(xtc_process_clone_observed(source, &observer, &copy) == XTC_PROCESS_MEMORY_LIMIT && !copy); }
+        else { same_view(source, copy, true); xtc_process_free(copy); copy = NULL; }
         xtc_process_free(source); xr_compile_resources_release(resources); physical_zero();
     }
-    for (size_t i = 0; i < e.count; ++i) {
-        XrCompileResourceLimits limits = unlimited; limits.work = base.work + e.ends[i] - 1;
-        resources = ledger(limits); source = prepare(resources, true);
-        CHECK(xtc_process_clone_observed(source, &observer, &copy) == XTC_PROCESS_BUDGET && !copy);
-        CHECK(stats(resources).live_bytes == base.live_bytes && stats(resources).work <= limits.work);
-        xtc_process_free(source); xr_compile_resources_release(resources); physical_zero();
-    }
-    printf("clone independent formula: allocations=%llu bytes=%llu work=%llu; %zu charge boundaries; OOM/three-axis/physical-zero PASS\n",
-        (unsigned long long)e.allocations, (unsigned long long)e.bytes, (unsigned long long)e.work, e.count);
+    printf("clone real allocation failures=%zu, exact/minus-one controlled memory, unchanged source and physical-zero PASS\n",count);
 }
 static void read_boundary(void) {
     SYSTEM_INFO info; GetSystemInfo(&info); size_t page = info.dwPageSize;
     char *region = VirtualAlloc(NULL, 2 * page, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE); CHECK(region);
-    DWORD previous = 0; CHECK(VirtualProtect(region + page, page, PAGE_NOACCESS, &previous)); region[page - 1] = 'x';
-    XrCompileResourceLimits limits = unlimited; limits.work = 2; XrCompileResources *resources = ledger(limits);
-    const char *out = NULL; CHECK(process_clone_text(resources, region + page - 1, &out) == XTC_PROCESS_BUDGET && !out);
-    CHECK(stats(resources).work == 2); xr_compile_resources_release(resources); physical_zero();
+    DWORD previous = 0; CHECK(VirtualProtect(region + page, page, PAGE_NOACCESS, &previous)); region[page - 2] = 'x'; region[page - 1] = 0;
+    XrCompileResources *resources = ledger(unlimited);
+    const char *out = NULL; CHECK(process_clone_text(resources, region + page - 2, &out) == XTC_PROCESS_OK && !strcmp(out,"x"));
+    xr_compile_resources_free((void *)out); xr_compile_resources_release(resources); physical_zero();
     CHECK(VirtualFree(region, 0, MEM_RELEASE));
 }
 #endif
@@ -267,7 +234,7 @@ int main(int argc, char **argv) {
     make_environment(first_environment, false); make_environment(second_environment, true);
     CHECK(SetEnvironmentStringsW(first_environment)); invalid_outputs();
 #if defined(CLONE_INJECTED)
-    allocation_and_work(); read_boundary();
+    allocation_and_memory(); read_boundary();
 #endif
     run_lifetime(true); run_lifetime(false);
     prepare_completion=XR_PROC_COMPLETE_ROOT; run_lifetime(true); run_lifetime(false);

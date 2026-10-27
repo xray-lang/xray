@@ -42,9 +42,9 @@ static XrXirStatus prelude_source_operation(const XrXirCompileContext *context,v
         status=xr_xir_compile_library_catalog_new_v2(context,fixture->inputs,fixture->count,&catalog);
         if (status!=XR_XIR_OK) goto done;
     }
-    XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK) {
-        status=created==XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY; goto done;
+    XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK) {
+        status=library_compile_resource_status(created); goto done;
     }
     XrXirSourceRequest request={session,fixture->entry,&fixture->authority,context,NULL,NULL,fixture->kind,catalog};
     status=xr_xir_compile_source_check(&request,&result,NULL,NULL);
@@ -113,13 +113,13 @@ static void prelude_catalog_source_no_fallback(const XrXirCompileContext *contex
      * adversarial boundary fixture is not a replacement Catalog or Source shim. */
     name[0]='X';XrCompileResourceStats before=library_compile_stats(context);
     for (unsigned repeat=0;repeat<2;++repeat) {
-        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
         XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/original_array_error_invoke_root.xr",&authority,
             context,NULL,NULL,XR_XIR_PROGRAM,catalog};XrXirSourceResult result={0};
         CHECK(xr_xir_compile_source_check(&request,&result,NULL,NULL)==XR_XIR_BAD_STRUCTURE && !result.checked && !result.snapshot);
         xr_compile_session_free(session);XrCompileResourceStats after=library_compile_stats(context);
-        CHECK(after.allocated_bytes>=before.allocated_bytes && after.work>before.work && after.live_bytes==before.live_bytes);
+        CHECK(after.allocated_bytes>=before.allocated_bytes && after.held_bytes==before.held_bytes);
         before=after;
     }
     name[0]='C';

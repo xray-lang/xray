@@ -22,13 +22,15 @@ typedef struct ExpressionData {
 } ExpressionData;
 static XrXirStatus expression_data_status(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
-        status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+        status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+        status==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        status==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_OVERFLOW :
+        status==XR_COMPILE_RESOURCE_CANCELLED ? XR_XIR_CANCELLED :
+        status==XR_COMPILE_RESOURCE_DEADLINE ? XR_XIR_DEADLINE :
+        status==XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE : XR_XIR_BAD_STRUCTURE;
 }
 static bool expression_data_name(XdapJsonWriter *text,uint32_t id) {
     char name[32];
-    if (xr_compile_resources_work(text->resources,sizeof(name))!=XR_COMPILE_RESOURCE_OK) {
-        text->status=XR_XIR_BUDGET;return false;
-    }
     int length=snprintf(name,sizeof(name),"_dap_observed_%u",id);
     if (length<=0 || (size_t)length>=sizeof(name)) { text->status=XR_XIR_BAD_STRUCTURE;return false; }
     return xdap_json_text(text,name,(size_t)length);
@@ -40,9 +42,6 @@ static XrXirStatus expression_data_id(ExpressionData *data,uint32_t *output) {
         uint32_t candidate=data->next++;XdapJsonWriter name=xdap_json_writer(data->parameters.resources,64);
         expression_data_name(&name,candidate);bool collision=false;
         for (uint32_t i=0;i<state->count && name.status==XR_XIR_OK;++i) {
-            if (xr_compile_resources_work(name.resources,name.length+1)!=XR_COMPILE_RESOURCE_OK) {
-                name.status=XR_XIR_BUDGET;break;
-            }
             if (state->bindings[i].length==name.length &&
                 !memcmp(state->bindings[i].name,name.bytes,name.length)) collision=true;
         }
@@ -58,7 +57,8 @@ static XrXirStatus expression_data_argument(ExpressionData *data,const XrXirValu
         uint32_t capacity=data->capacity ? data->capacity*2 : 8;
         if (capacity<data->capacity || capacity>context->limits.parameters) capacity=context->limits.parameters;
         uint64_t bytes=(uint64_t)capacity*sizeof(*data->arguments);
-        if (capacity<=data->count || bytes>SIZE_MAX) return XR_XIR_BUDGET;
+        if (capacity<=data->count) return XR_XIR_BUDGET;
+        if (bytes>SIZE_MAX) return XR_XIR_OVERFLOW;
         void *memory=data->arguments;
         XrXirStatus status=expression_data_status(xr_compile_resources_resize(context->resources,
             &memory,(size_t)bytes));

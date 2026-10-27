@@ -62,8 +62,7 @@ XR_FUNC XrXirStatus xr_xir_compile_comptime_pending(const XrXirArtifact *definit
     if (unexpected) status=XR_XIR_BAD_STRUCTURE;
     if (status==XR_XIR_OK && point.found) status=pending_definition_receive(owner,&point,diagnostic);
     if (status==XR_XIR_OK && point.found) {
-        if (!xir_compile_work(&owner->context,sizeof(*owner)+sizeof(*output))) status=XR_XIR_BUDGET;
-        else {
+        {
             owner->site=point.site;owner->count=point.count;owner->arguments=point.arguments;
             point.arguments=NULL;*output=owner;owner=NULL;
         }
@@ -80,15 +79,14 @@ XR_FUNC XrXirStatus xr_xir_compile_comptime_pending_view(const XirComptimePendin
     XrXirCheckedPacket current={0};SpecPendingPoint point={0};XrXirArtifact *unexpected=NULL;
     XrXirStatus status=xr_xir_compile_checked_write(owner->definition,&current,diagnostic);
     if (status==XR_XIR_OK) {
-        if (!xir_compile_work(&owner->context,(uint64_t)current.length+sizeof(owner->site))) status=XR_XIR_BUDGET;
-        else if (current.length!=owner->packet.length || !owner->packet.bytes || memcmp(current.bytes,owner->packet.bytes,current.length)) status=XR_XIR_BAD_STRUCTURE;
+        if (current.length!=owner->packet.length || !owner->packet.bytes || memcmp(current.bytes,owner->packet.bytes,current.length)) status=XR_XIR_BAD_STRUCTURE;
     }
     if (status==XR_XIR_OK) status=spec_run(owner->definition,&unexpected,diagnostic,&point,NULL,NULL);
     if (status==XR_XIR_OK && (!point.found || point.count!=owner->count || point.site.caller!=owner->site.caller ||
         point.site.instruction!=owner->site.instruction || point.site.helper!=owner->site.helper || unexpected)) status=XR_XIR_BAD_STRUCTURE;
     for (uint32_t a=0;status==XR_XIR_OK && a<owner->count;++a)
         status=xr_xir_compile_type_substitution_matches_between(&owner->context,point.types,owner->definition->module.types,NULL,0,point.arguments[a],owner->arguments[a]);
-    if (status==XR_XIR_OK && !xir_compile_work(&owner->context,sizeof(*output))) status=XR_XIR_BUDGET;
+
     if (status==XR_XIR_OK) *output=(XirComptimePendingView){owner->definition,owner->definition->module.types,owner->site,owner->arguments,owner->count};
     xr_xir_compile_artifact_free(unexpected);pending_point_free(&point);xr_xir_compile_checked_packet_free(&current);
     return pending_status(diagnostic,status);

@@ -54,21 +54,30 @@ static void c_error(LirC *c, XrLirCStatus status, const char *message) {
 static bool c_resource(LirC *c, XrCompileResourceStatus status) {
     if (status == XR_COMPILE_RESOURCE_OK)
         return c->status == XR_LIR_C_OK;
-    XrLirCStatus mapped = status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_LIR_C_OUT_OF_MEMORY
-        : status == XR_COMPILE_RESOURCE_CANCELLED ? XR_LIR_C_CANCELLED
-        : status == XR_COMPILE_RESOURCE_BUDGET ? XR_LIR_C_BUDGET : XR_LIR_C_BAD_ARGUMENT;
+    XrLirCStatus mapped;
+    switch (status) {
+        case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: mapped = XR_LIR_C_OUT_OF_MEMORY; break;
+        case XR_COMPILE_RESOURCE_MEMORY_LIMIT: mapped = XR_LIR_C_MEMORY_LIMIT; break;
+        case XR_COMPILE_RESOURCE_OVERFLOW: mapped = XR_LIR_C_OVERFLOW; break;
+        case XR_COMPILE_RESOURCE_CANCELLED: mapped = XR_LIR_C_CANCELLED; break;
+        case XR_COMPILE_RESOURCE_DEADLINE: mapped = XR_LIR_C_DEADLINE; break;
+        case XR_COMPILE_RESOURCE_CLOCK_FAILURE: mapped = XR_LIR_C_CLOCK_FAILURE; break;
+        default: mapped = XR_LIR_C_BAD_ARGUMENT; break;
+    }
     c_error(c, mapped, "C emission resource operation failed");
     return false;
 }
-static bool c_work(LirC *c, uint64_t units) {
-    return c->status == XR_LIR_C_OK &&
-        c_resource(c, xr_compile_resources_work(c->request->resources, units));
+static bool c_request_poll(LirC *c) {
+    if (c->status != XR_LIR_C_OK)
+        return false;
+    return !c->request->control ||
+        c_resource(c, xr_compile_request_control_poll(c->request->control));
 }
 static void c_bytes(LirC *c, const char *bytes, size_t length) {
-    if (!c_work(c, length))
+    if (c->status != XR_LIR_C_OK)
         return;
     if (length > SIZE_MAX - c->length - 1) {
-        c_error(c, XR_LIR_C_BUDGET, "C text exceeds machine capacity");
+        c_error(c, XR_LIR_C_OVERFLOW, "C text exceeds machine capacity");
         return;
     }
     size_t required = c->length + length + 1;
@@ -132,8 +141,6 @@ static void c_function_name(LirC *c, uint32_t id) {
 static void c_value(LirC *c, uint32_t id) {
     XR_DCHECK(id && id <= c->view.value_count, "operand belongs to this function");
     for (uint32_t p = 0; p < c->view.parameter_count; ++p) {
-        if (!c_work(c, 1))
-            return;
         if (c->view.parameters[p] == id) {
             c_format(c, "p%" PRIu32, p);
             return;
@@ -175,12 +182,15 @@ static void c_visit(LirC *c, uint32_t id) {
     }
 }
 static bool c_has_division(LirC *c) {
-    for (uint32_t b = 0; b < c->view.block_count && c_work(c, 1); ++b) {
+    for (uint32_t b = 0; b < c->view.block_count && c->status == XR_LIR_C_OK; ++b) {
         XrLirBlock block;
         XrLirBlockView view;
         xr_lir_block_at(c->request->module, c->function, b, &block);
         xr_lir_block_view(c->request->module, block, &view);
-        for (uint32_t i = 0; i < view.instruction_count && c_work(c, 1); ++i) {
+        c->block = block.id;
+        if (!c_request_poll(c))
+            return false;
+        for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
             XrLirInstructionView v;
             xr_lir_instruction_view(c->request->module, block, i, &v);
             if (v.op == XR_LIR_DIV || v.op == XR_LIR_REM)
@@ -199,12 +209,15 @@ static void c_prepare_divisors(LirC *c) {
                                                   (size_t)c->view.value_count + 1, 1, &facts)))
         return;
     c->fixed_divisors = facts;
-    for (uint32_t b = 0; b < c->view.block_count && c_work(c, 1); ++b) {
+    for (uint32_t b = 0; b < c->view.block_count && c->status == XR_LIR_C_OK; ++b) {
         XrLirBlock block;
         XrLirBlockView view;
         xr_lir_block_at(c->request->module, c->function, b, &block);
         xr_lir_block_view(c->request->module, block, &view);
-        for (uint32_t i = 0; i < view.instruction_count && c_work(c, 1); ++i) {
+        c->block = block.id;
+        if (!c_request_poll(c))
+            return;
+        for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
             XrLirInstructionView v;
             xr_lir_instruction_view(c->request->module, block, i, &v);
             if (v.op == XR_LIR_CONST && v.type == XR_LIR_I64 && v.bits)
@@ -213,6 +226,8 @@ static void c_prepare_divisors(LirC *c) {
     }
 }
 static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
+    if (!c_request_poll(c))
+        return;
     c_scalar(c, v->type);
     switch (v->op) {
         case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
@@ -247,7 +262,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
 static void c_admit(LirC *c) {
     uint32_t count = xr_lir_function_count(c->request->module);
     if ((uint64_t) count * sizeof(uint32_t) > SIZE_MAX) {
-        c_error(c, XR_LIR_C_BUDGET, "C function closure exceeds machine capacity");
+        c_error(c, XR_LIR_C_OVERFLOW, "C function closure exceeds machine capacity");
         return;
     }
     void *queue = NULL, *seen = NULL;
@@ -259,33 +274,37 @@ static void c_admit(LirC *c) {
         return;
     c->seen = seen;
     c_visit(c, c->request->entry.id);
-    for (uint32_t cursor = 0; cursor < c->closure_count && c_work(c, 1); ++cursor) {
+    for (uint32_t cursor = 0; cursor < c->closure_count && c->status == XR_LIR_C_OK; ++cursor) {
         xr_compile_resources_free(c->fixed_divisors);
         c->fixed_divisors = NULL;
         c->block = c->instruction = 0;
         c->source = (XrLirSource) {0};
         c->function = (XrLirFunction) {c->request->module, c->closure[cursor]};
         xr_lir_function_view(c->request->module, c->function, &c->view);
+        if (!c_request_poll(c))
+            return;
         if (c->view.kind == XR_LIR_FUNCTION_EXTERNAL) {
             c->runtime = true;
             continue;
         }
         c_scalar(c, c->view.result);
-        for (uint32_t p = 0; p < c->view.parameter_count && c_work(c, 1); ++p)
+        for (uint32_t p = 0; p < c->view.parameter_count && c->status == XR_LIR_C_OK; ++p)
             c_scalar(c, c->view.parameter_types[p]);
         if (c->view.value_count >= UINT32_C(8388607))
             c_error(c, XR_LIR_C_UNSUPPORTED, "C temporary index exceeds the W4 limit");
         if (c->status == XR_LIR_C_OK)
             c_prepare_divisors(c);
-        for (uint32_t b = 0; b < c->view.block_count && c_work(c, 1); ++b) {
+        for (uint32_t b = 0; b < c->view.block_count && c->status == XR_LIR_C_OK; ++b) {
             XrLirBlock block;
             XrLirBlockView view;
             xr_lir_block_at(c->request->module, c->function, b, &block);
             xr_lir_block_view(c->request->module, block, &view);
             c->block = block.id;
-            for (uint32_t p = 0; p < view.parameter_count && c_work(c, 1); ++p)
+            if (!c_request_poll(c))
+                return;
+            for (uint32_t p = 0; p < view.parameter_count && c->status == XR_LIR_C_OK; ++p)
                 c_scalar(c, c_value_type(c, view.parameters[p]));
-            for (uint32_t i = 0; i < view.instruction_count && c_work(c, 1); ++i) {
+            for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
                 c->instruction = i + 1;
@@ -297,7 +316,7 @@ static void c_admit(LirC *c) {
 }
 static void c_path(LirC *c, const XrLirSource *source) {
     c_text(c, "\"");
-    for (size_t n = 0; n < source->path_length && c_work(c, 1); ++n) {
+    for (size_t n = 0; n < source->path_length && c->status == XR_LIR_C_OK; ++n) {
         unsigned char byte = (unsigned char) source->path[n];
         if (byte == '"' || byte == '\\')
             c_format(c, "\\%c", byte);
@@ -314,15 +333,20 @@ static void c_locations(LirC *c) {
     uint32_t id = 0;
     if (c->location_count)
         c_text(c, "static const XrtSourceLocation xrl_locations[] = {\n");
-    for (uint32_t n = 0; n < c->closure_count && c_work(c, 1); ++n) {
+    for (uint32_t n = 0; n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
         c->function = (XrLirFunction) {c->request->module, c->closure[n]};
         xr_lir_function_view(c->request->module, c->function, &c->view);
-        for (uint32_t b = 0; b < c->view.block_count && c_work(c, 1); ++b) {
+        if (!c_request_poll(c))
+            return;
+        for (uint32_t b = 0; b < c->view.block_count && c->status == XR_LIR_C_OK; ++b) {
             XrLirBlock block;
             XrLirBlockView view;
             xr_lir_block_at(c->request->module, c->function, b, &block);
             xr_lir_block_view(c->request->module, block, &view);
-            for (uint32_t i = 0; i < view.instruction_count && c_work(c, 1); ++i) {
+            c->block = block.id;
+            if (!c_request_poll(c))
+                return;
+            for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
                 if (!c_print_call(c, &v) || !c_located(&v.source))
@@ -355,7 +379,7 @@ static void c_signature(LirC *c, bool definition) {
     c_text(c, "(");
     if (!c->view.parameter_count)
         c_text(c, "void");
-    for (uint32_t p = 0; p < c->view.parameter_count && c_work(c, 1); ++p) {
+    for (uint32_t p = 0; p < c->view.parameter_count && c->status == XR_LIR_C_OK; ++p) {
         if (p)
             c_text(c, ", ");
         c_format(c, "%s p%" PRIu32, c_type(c->view.parameter_types[p]), p);
@@ -363,9 +387,11 @@ static void c_signature(LirC *c, bool definition) {
     c_text(c, definition ? ") {\n" : ");\n");
 }
 static void c_declarations(LirC *c) {
-    for (uint32_t id = 1; id <= c->view.value_count && c_work(c, 1); ++id) {
+    for (uint32_t id = 1; id <= c->view.value_count && c->status == XR_LIR_C_OK; ++id) {
+        if (!c_request_poll(c))
+            return;
         bool parameter = false;
-        for (uint32_t p = 0; p < c->view.parameter_count && c_work(c, 1); ++p)
+        for (uint32_t p = 0; p < c->view.parameter_count && c->status == XR_LIR_C_OK; ++p)
             parameter |= c->view.parameters[p] == id;
         if (!parameter) {
             c_format(c, "    %s v%" PRIu32 ";\n", c_type(c_value_type(c, id)), id);
@@ -377,7 +403,7 @@ static void c_declarations(LirC *c) {
     XR_DCHECK(c->scratch < UINT32_C(8388608), "expression storage remains visible to W4");
     c_format(c, "    uint64_t v%" PRIu32 ";\n", c->scratch);
     c_format(c, "    (void)&v%" PRIu32 ";\n", c->scratch);
-    for (uint32_t p = 0; p < c->view.parameter_count && c_work(c, 1); ++p)
+    for (uint32_t p = 0; p < c->view.parameter_count && c->status == XR_LIR_C_OK; ++p)
         c_format(c, "    (void)p%" PRIu32 ";\n", p);
 }
 static void c_reconstruct(LirC *c, XrLirType type, uint32_t result) {
@@ -433,7 +459,7 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge) {
     xr_lir_block_view(c->request->module, target, &block);
     XR_DCHECK(block.parameter_count == edge->argument_count, "validated edge matches its target");
     c_text(c, "    {\n");
-    for (uint32_t a = 0; a < edge->argument_count && c_work(c, 1); ++a) {
+    for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a) {
         uint64_t temp = (uint64_t) c->scratch + 1 + a;
         if (temp >= UINT32_C(8388608)) {
             c_error(c, XR_LIR_C_UNSUPPORTED, "C edge temporary index exceeds the W4 limit");
@@ -443,12 +469,14 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge) {
         c_value(c, edge->arguments[a]);
         c_text(c, ";\n");
     }
-    for (uint32_t a = 0; a < edge->argument_count && c_work(c, 1); ++a)
+    for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a)
         c_format(c, "        v%" PRIu32 " = v%" PRIu32 ";\n", block.parameters[a],
                  c->scratch + 1 + a);
     c_format(c, "        goto bb%" PRIu32 ";\n    }\n", edge->target);
 }
 static void c_instruction(LirC *c, const XrLirInstructionView *v) {
+    if (!c_request_poll(c))
+        return;
     static const char *const predicates[] = {NULL, "==", "!=", "<", "<=", ">", ">="};
     switch (v->op) {
         case XR_LIR_CONST:
@@ -498,7 +526,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             else
                 c_function_name(c, v->callee);
             c_text(c, "(");
-            for (uint32_t a = 0; a < v->operand_count && c_work(c, 1); ++a) {
+            for (uint32_t a = 0; a < v->operand_count && c->status == XR_LIR_C_OK; ++a) {
                 if (a)
                     c_text(c, ", ");
                 c_value(c, v->operands[a]);
@@ -587,29 +615,35 @@ static void c_emit(LirC *c, XrLirType root_result) {
             "#if defined(__clang__)\n#pragma STDC FENV_ACCESS ON\n"
             "#elif defined(_MSC_VER)\n#pragma fenv_access(on)\n#endif\n#endif\n\n");
     c_locations(c);
-    for (uint32_t n = 0; n < c->closure_count && c_work(c, 1); ++n) {
+    for (uint32_t n = 0; n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
         c->function = (XrLirFunction) {c->request->module, c->closure[n]};
         xr_lir_function_view(c->request->module, c->function, &c->view);
+        if (!c_request_poll(c))
+            return;
         if (c->view.kind == XR_LIR_FUNCTION_EXTERNAL)
             continue;
         c_signature(c, false);
     }
-    for (uint32_t n = 0; n < c->closure_count && c_work(c, 1); ++n) {
+    for (uint32_t n = 0; n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
         c->function = (XrLirFunction) {c->request->module, c->closure[n]};
         xr_lir_function_view(c->request->module, c->function, &c->view);
+        if (!c_request_poll(c))
+            return;
         if (c->view.kind == XR_LIR_FUNCTION_EXTERNAL)
             continue;
         c_signature(c, true);
         c_declarations(c);
         c_format(c, "    goto bb%" PRIu32 ";\n", c->view.entry);
-        for (uint32_t b = 0; b < c->view.block_count && c_work(c, 1); ++b) {
+        for (uint32_t b = 0; b < c->view.block_count && c->status == XR_LIR_C_OK; ++b) {
             XrLirBlock block;
             XrLirBlockView view;
             xr_lir_block_at(c->request->module, c->function, b, &block);
             xr_lir_block_view(c->request->module, block, &view);
             c->block = block.id;
+            if (!c_request_poll(c))
+                return;
             c_format(c, "bb%" PRIu32 ": ;\n", block.id);
-            for (uint32_t i = 0; i < view.instruction_count && c_work(c, 1); ++i) {
+            for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
                 c->instruction = i + 1;
@@ -644,6 +678,8 @@ XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *request, XrLirCOutput *o
         c_error(&c, XR_LIR_C_BAD_ARGUMENT, "C emission requires empty output and a no-argument root");
         return c.status;
     }
+    if (!c_request_poll(&c))
+        return c.status;
     XrLirDiagnostic invalid;
     XrLirStatus status = xr_lir_verify(request->module, &invalid);
     if (status != XR_LIR_OK) {
@@ -655,21 +691,31 @@ XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *request, XrLirCOutput *o
                 invalid.message);
         return c.status;
     }
+    if (!c_request_poll(&c))
+        return c.status;
     c_admit(&c);
     if (c.status == XR_LIR_C_OK)
         c_emit(&c, entry.result);
-    if (c.status == XR_LIR_C_OK) {
+    if (c_request_poll(&c)) {
         XiCgenVerifyStatus verified = xr_compile_cgen_verify_output_or_ice(request->resources,
             c.text, c.length, request->translation_unit);
         if (verified != XI_CGEN_VERIFY_PASSED) {
-            XrCompileResourceStatus observed = xr_compile_resources_work(request->resources, 0);
-            c_error(&c, observed == XR_COMPILE_RESOURCE_CANCELLED ? XR_LIR_C_CANCELLED
-                    : verified == XI_CGEN_VERIFY_OUT_OF_MEMORY ? XR_LIR_C_OUT_OF_MEMORY
-                    : verified == XI_CGEN_VERIFY_BUDGET ? XR_LIR_C_BUDGET : XR_LIR_C_BAD_ARGUMENT,
-                    "C output verifier could not complete");
+            XrLirCStatus mapped;
+            switch (verified) {
+                case XI_CGEN_VERIFY_OUT_OF_MEMORY: mapped = XR_LIR_C_OUT_OF_MEMORY; break;
+                case XI_CGEN_VERIFY_MEMORY_LIMIT: mapped = XR_LIR_C_MEMORY_LIMIT; break;
+                case XI_CGEN_VERIFY_OVERFLOW: mapped = XR_LIR_C_OVERFLOW; break;
+                case XI_CGEN_VERIFY_BUDGET: mapped = XR_LIR_C_BUDGET; break;
+                case XI_CGEN_VERIFY_CANCELLED: mapped = XR_LIR_C_CANCELLED; break;
+                case XI_CGEN_VERIFY_DEADLINE: mapped = XR_LIR_C_DEADLINE; break;
+                case XI_CGEN_VERIFY_CLOCK_FAILURE: mapped = XR_LIR_C_CLOCK_FAILURE; break;
+                default: mapped = XR_LIR_C_BAD_ARGUMENT; break;
+            }
+            c_error(&c, mapped, "C output verifier could not complete");
         }
     }
-    if (c.status == XR_LIR_C_OK) {
+
+    if (c_request_poll(&c)) {
         *output = (XrLirCOutput) {c.text, c.length, entry.result};
         c.text = NULL;
     }

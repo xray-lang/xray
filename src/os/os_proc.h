@@ -7,7 +7,7 @@
  *
  * os_proc.h - Cross-platform process spawning and introspection.
  *
- * The sole process owner accepts an explicit allocation/work policy and either
+ * The sole process owner accepts an explicit allocation policy and either
  * a complete environment or an explicit inherited environment with overrides.
  * Compiler callers freeze inputs before spawning; execution callers choose
  * their runtime policy. Neither domain silently acquires the other's budget.
@@ -51,7 +51,8 @@ typedef enum XrProcWaitResult {
 
 typedef enum XrOsProcStatus {
     XR_PROC_OK, XR_PROC_INVALID_ARGUMENT, XR_PROC_UNRESOLVED, XR_PROC_BUDGET,
-    XR_PROC_OUT_OF_MEMORY, XR_PROC_IO, XR_PROC_UNSUPPORTED
+    XR_PROC_OUT_OF_MEMORY, XR_PROC_IO, XR_PROC_UNSUPPORTED,
+    XR_PROC_MEMORY_LIMIT, XR_PROC_OVERFLOW
 } XrOsProcStatus;
 
 /* Callbacks are mandatory. The context is borrowed during spawn, and until
@@ -62,7 +63,6 @@ typedef struct XrProcMemory {
     void *context;
     XrOsProcStatus (*alloc)(void *context, size_t bytes, void **output);
     void (*free)(void *context, void *memory);
-    XrOsProcStatus (*work)(void *context, uint64_t units);
 } XrProcMemory;
 XR_FUNC XrProcMemory xr_proc_system_memory(void);
 XR_FUNC XrOsProcStatus xr_proc_last_error(void);
@@ -140,10 +140,9 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
 /* Only an owned new_process_group request can be closed. */
 XR_FUNC int xr_proc_close(XrProcId pid);
 /* Release an owned non-observed Windows group without terminating its leader
- * or descendants. Serialize all operations on that group. The mandatory memory
- * policy is borrowed only for this call; release allocates nothing and charges
- * work before querying or changing job limits. Callback reentry cannot wait,
- * close, kill the group or release it again.
+ * or descendants. Serialize all operations on that group. Release allocates
+ * nothing. Its reservation refuses competing or reentrant wait, close, kill
+ * and release until the OS job-policy transaction settles.
  *
  * Failure before commit preserves *owner and the complete group. At commit the
  * kill-on-close policy is revoked and *owner becomes XR_PROC_INVALID. A later
@@ -151,7 +150,7 @@ XR_FUNC int xr_proc_close(XrProcId pid);
  * has been released and must not be aborted as though the transfer had failed.
  * Success does not grant another owner or a waitable PID. Image-observed groups
  * and POSIX release are unsupported and preserve *owner. */
-XR_FUNC XrOsProcStatus xr_proc_release(XrProcId *owner, const XrProcMemory *memory);
+XR_FUNC XrOsProcStatus xr_proc_release(XrProcId *owner);
 
 // Wait for the child identified by `pid` to exit. Blocks until the
 // child terminates. On a clean exit, writes the child's exit status

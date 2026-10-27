@@ -42,8 +42,6 @@ static size_t terminate_calls, root_exit_continues, child_exit_continues;
 static bool fail_terminate, mismatch_accounting;
 static DWORD pending_exit_pid;
 static bool fail_root_continue;
-static XrCompileResources *exhaust_at_root;
-static uint64_t exhaust_work_limit;
 static uint64_t sleep_ns, debug_wait_ns, pipe_ns, poll_ns, child_cpu_100ns;
 static size_t sleeps, idle_polls;
 
@@ -97,13 +95,6 @@ static BOOL debug_continue(DWORD pid,DWORD tid,DWORD status) {
     BOOL okay=ContinueDebugEvent(pid,tid,status);
     if (okay && pid==pending_exit_pid) {
         if (pid==root_pid) ++root_exit_continues; else ++child_exit_continues;
-        if (pid==root_pid && exhaust_at_root) {
-            XrCompileResourceStats used;
-            CHECK(xr_compile_resources_stats(exhaust_at_root,&used)==XR_COMPILE_RESOURCE_OK);
-            CHECK(used.work<=exhaust_work_limit);
-            CHECK(xr_compile_resources_work(exhaust_at_root,exhaust_work_limit-used.work)==XR_COMPILE_RESOURCE_OK);
-            exhaust_at_root=NULL;
-        }
         pending_exit_pid=0;
     }
     return okay;
@@ -185,7 +176,7 @@ static XrProcWaitResult measured_poll(XrProcId pid,int *code) {
 #undef QueryInformationJobObject
 
 static char executable[32768], directory[32768], dll_path[32768];
-static const XrCompileResourceLimits unlimited={UINT64_MAX,UINT64_MAX,UINT64_MAX};
+static const XrCompileResourceLimits unlimited={XR_COMPILE_MEMORY_ORDINARY,0,true};
 typedef struct ImageRecord { struct ImageRecord *next; HANDLE file; DWORD pid; bool dll; } ImageRecord;
 typedef struct Observation {
     XrCompileResources *resources;
@@ -214,7 +205,7 @@ static XrOsProcStatus observe_image(void *context, const XrProcImageEvent *event
     if (o->thread_checks && !o->checked_threads) {
         reentry_check(o,event);
         XrProcSpawnOptions options={0};
-        options.memory=(XrProcMemory){o->resources,process_allocate,process_release,process_charge};
+        options.memory=(XrProcMemory){o->resources,process_allocate,process_release};
         options.new_process_group=true; options.image_mode=XR_PROC_IMAGES_WINDOWS_TREE;
         options.image_observer=(XrProcImageObserver){o,observe_image};
         XrProcId child=XR_PROC_INVALID; const char *args[]={executable,"--plain",NULL};
@@ -222,25 +213,19 @@ static XrOsProcStatus observe_image(void *context, const XrProcImageEvent *event
         o->checked_threads=true;
     }
     if (o->exhaust) {
-        /* A real consuming observer exhausts the shared work quota before the
-         * cleanup phase. No ledger limit is mutated or refreshed. */
-        volatile uint8_t scratch[256];
-        for (size_t i=0;;++i) {
-            if (xr_compile_resources_work(o->resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_PROC_BUDGET;
-            scratch[i%sizeof(scratch)]=(uint8_t)i;
-        }
+        void *memory=NULL;
+        XrCompileResourceStatus status=xr_compile_resources_alloc(o->resources,8 * 1024 * 1024,&memory);
+        CHECK(status==XR_COMPILE_RESOURCE_MEMORY_LIMIT && !memory);
+        return XR_PROC_MEMORY_LIMIT;
     }
     if (o->reject!=XR_PROC_OK) return o->reject;
-    XrCompileResourceStatus rs=xr_compile_resources_work(o->resources,1);
-    if (rs!=XR_COMPILE_RESOURCE_OK) return XR_PROC_BUDGET;
+    XrCompileResourceStatus rs;
     BY_HANDLE_FILE_INFORMATION info;
     CHECK(GetFileInformationByHandle((HANDLE)event->file_handle,&info));
     void *memory=NULL;
     rs=xr_compile_resources_alloc(o->resources,sizeof(ImageRecord),&memory);
-    if (rs!=XR_COMPILE_RESOURCE_OK) return rs==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_PROC_OUT_OF_MEMORY : XR_PROC_BUDGET;
+    if (rs!=XR_COMPILE_RESOURCE_OK) return process_os_resource(rs);
     ImageRecord *r=memory;
-    rs=xr_compile_resources_work(o->resources,sizeof(*r)+1);
-    if (rs!=XR_COMPILE_RESOURCE_OK) { xr_compile_resources_free(r); return XR_PROC_BUDGET; }
     memset(r,0,sizeof(*r));
     if (!DuplicateHandle(GetCurrentProcess(),(HANDLE)event->file_handle,GetCurrentProcess(),&r->file,0,FALSE,DUPLICATE_SAME_ACCESS)) {
         xr_compile_resources_free(r); return xr_proc_last_error();
@@ -294,7 +279,6 @@ static void reset_faults(void) {
     CHECK(!physical && !allocation_count && !image_handle_count);
     calls=wait_calls=continue_calls=0;
     command_completion=XR_PROC_COMPLETE_TREE; fail_terminate=fail_root_continue=mismatch_accounting=false;
-    exhaust_at_root=NULL; exhaust_work_limit=0;
     terminate_calls=root_exit_continues=child_exit_continues=0; pending_exit_pid=0;
     fail_at=fail_wait_at=fail_continue_at=SIZE_MAX;
     null_image=fail_assign=fail_resume=fail_accounting=fail_image_close=false;
@@ -309,7 +293,7 @@ static XrProcessStatus trial(const char *mode, const XrCompileResourceLimits *li
     XrCompileResourceStats *out) {
     XrCompileResources *r=NULL;
     XrCompileResourceStatus rs=xr_compile_resources_new(limits,&r);
-    if (rs!=XR_COMPILE_RESOURCE_OK) return rs==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XTC_PROCESS_OUT_OF_MEMORY : XTC_PROCESS_BUDGET;
+    if (rs!=XR_COMPILE_RESOURCE_OK) return process_resource(rs);
     Observation o={0}; o.resources=r; o.reject=reject;
     XrProcessResult result={0}, sentinel=result;
     result.exit_code=1234; result.duration_ms=9876; sentinel=result;
@@ -319,7 +303,7 @@ static XrProcessStatus trial(const char *mode, const XrCompileResourceLimits *li
         xtc_process_result_free(&result);
     } else CHECK(!memcmp(&result,&sentinel,sizeof(result)));
     CHECK(xr_compile_resources_stats(r,out)==XR_COMPILE_RESOURCE_OK);
-    CHECK(out->live_bytes==physical);
+    CHECK(out->held_bytes==physical);
     release_images(&o);
     CHECK(allocation_count==1);
     xr_compile_resources_release(r);
@@ -378,13 +362,17 @@ static void root_executable_oracle(Observation *observation) {
     CHECK(root_exit_continues==1 && child_exit_continues+1==observation->executables && terminate_calls>=1);
 }
 static void root_completion(void) {
-    const XrCompileResourceLimits finite={64 * 1024 * 1024,8 * 1024 * 1024,128000000};
+    const XrCompileResourceLimits finite={XR_COMPILE_MEMORY_FINITE,8 * 1024 * 1024,true};
     const char *modes[]={"--root-long-closed","--root-long-pipes","--root-nonzero"};
     for (unsigned i=0;i<3;++i) {
         reset_faults(); command_completion=XR_PROC_COMPLETE_ROOT;
         XrCompileResources *r=NULL; CHECK(xr_compile_resources_new(&finite,&r)==XR_COMPILE_RESOURCE_OK);
         Observation o={0}; o.resources=r; XrProcessResult result={0};
-        CHECK(command(modes[i],&o,&result)==XTC_PROCESS_OK && result.exit_code==(i==2 ? 77 : 0));
+        XrProcessStatus status=command(modes[i],&o,&result);
+        fprintf(stderr,"root fixture %s status=%s exit=%d rootContinued=%zu childContinued=%zu\n",
+            modes[i],xtc_process_status_name(status),result.exit_code,root_exit_continues,child_exit_continues);
+        if (result.stderr_bytes.length) fwrite(result.stderr_bytes.data,1,result.stderr_bytes.length,stderr);
+        CHECK(status==XTC_PROCESS_OK && result.exit_code==(i==2 ? 77 : 0));
         root_executable_oracle(&o);
         /* Native invocation rejects the nonzero root before publishing reports. */
         xtc_process_result_free(&result); release_images(&o); xr_compile_resources_release(r);
@@ -404,18 +392,7 @@ static void root_completion(void) {
             (fault==5 || fault==7) ? XTC_PROCESS_UNSUPPORTED : XTC_PROCESS_IO;
         CHECK(trial("--root-long-pipes",&finite,fault==5 ? XR_PROC_UNSUPPORTED : XR_PROC_OK,&used)==expected);
     }
-    reset_faults(); command_completion=XR_PROC_COMPLETE_ROOT;
-    XrCompileResourceLimits small=finite; small.work=1000; XrCompileResourceStats used;
-    CHECK(trial("--root-long-pipes",&small,XR_PROC_OK,&used)==XTC_PROCESS_BUDGET);
-    reset_faults(); command_completion=XR_PROC_COMPLETE_ROOT;
-    XrCompileResources *r=NULL; CHECK(xr_compile_resources_new(&finite,&r)==XR_COMPILE_RESOURCE_OK);
-    Observation o={0}; o.resources=r; XrProcessResult result={0},sentinel=result;
-    result.exit_code=1234; result.duration_ms=9876; sentinel=result;
-    exhaust_at_root=r; exhaust_work_limit=finite.work;
-    CHECK(command("--root-long-pipes",&o,&result)==XTC_PROCESS_BUDGET && !memcmp(&result,&sentinel,sizeof(result)));
-    CHECK(root_exit_continues==1 && xr_compile_resources_stats(r,&used)==XR_COMPILE_RESOURCE_OK && used.work==finite.work);
-    release_images(&o); xr_compile_resources_release(r); CHECK(!physical && !allocation_count && !image_handle_count);
-    reset_faults(); puts("root completion: closed/inherited pipes, exits, terminate/accounting/Continue/cancel/timeout/observer/budget PASS");
+    reset_faults(); puts("root completion: closed/inherited pipes, exits, terminate/accounting/Continue/cancel/timeout/observer PASS");
 }
 
 static void failures(void) {
@@ -438,30 +415,25 @@ static void failures(void) {
             }
         }
     }
-    const XrOsProcStatus rejects[]={XR_PROC_BUDGET,XR_PROC_OUT_OF_MEMORY,XR_PROC_IO,XR_PROC_UNSUPPORTED};
-    const XrProcessStatus expected[]={XTC_PROCESS_BUDGET,XTC_PROCESS_OUT_OF_MEMORY,XTC_PROCESS_IO,XTC_PROCESS_UNSUPPORTED};
-    for (unsigned i=0;i<4;++i) { reset_faults(); CHECK(trial("--plain",&unlimited,rejects[i],&out)==expected[i]); }
+    const XrOsProcStatus rejects[]={XR_PROC_BUDGET,XR_PROC_OUT_OF_MEMORY,XR_PROC_IO,XR_PROC_UNSUPPORTED,XR_PROC_MEMORY_LIMIT,XR_PROC_OVERFLOW};
+    const XrProcessStatus expected[]={XTC_PROCESS_BUDGET,XTC_PROCESS_OUT_OF_MEMORY,XTC_PROCESS_IO,XTC_PROCESS_UNSUPPORTED,XTC_PROCESS_MEMORY_LIMIT,XTC_PROCESS_OVERFLOW};
+    for (unsigned i=0;i<sizeof(rejects)/sizeof(*rejects);++i) { reset_faults(); CHECK(trial("--plain",&unlimited,rejects[i],&out)==expected[i]); }
     reset_faults(); cancellation=cancel_events;
     CHECK(trial("--sleep",&unlimited,XR_PROC_OK,&out)==XTC_PROCESS_CANCELLED);
     reset_faults(); command_timeout=80;
     CHECK(trial("--sleep",&unlimited,XR_PROC_OK,&out)==XTC_PROCESS_TIMEOUT);
     reset_faults(); CHECK(trial("--plain",&unlimited,XR_PROC_OK,&out)==XTC_PROCESS_OK);
-    size_t count=calls; printf("plain work=%llu peak=%llu\n",(unsigned long long)out.work,(unsigned long long)out.peak_bytes);
+    size_t count=calls; printf("plain peak=%llu\n",(unsigned long long)out.peak_bytes);
     for (size_t i=0;i<count;++i) {
         reset_faults(); fail_at=i;
         XrProcessStatus s=trial("--plain",&unlimited,XR_PROC_OK,&out);
         CHECK(s==XTC_PROCESS_OUT_OF_MEMORY && calls==i+1);
     }
     printf("image allocation failures: %zu; event IO/OOM: 32; startup/NULL/close/query: 5\n",count);
-    const uint64_t work_limits[]={1,1000,4000,8000};
-    for (unsigned i=0;i<sizeof(work_limits)/sizeof(*work_limits);++i) {
-        reset_faults(); XrCompileResourceLimits small=unlimited; small.work=work_limits[i];
-        CHECK(trial("--plain",&small,XR_PROC_OK,&out)==XTC_PROCESS_BUDGET);
-        CHECK(out.work<=small.work);
-    }
+
 }
 
-typedef struct PolicyReentry { XrCompileResources *resources; bool from_work, entered; } PolicyReentry;
+typedef struct PolicyReentry { XrCompileResources *resources; bool entered; } PolicyReentry;
 static XrOsProcStatus accept_image(void *context,const XrProcImageEvent *event) { (void)context; (void)event; return XR_PROC_OK; }
 static void policy_reenter(PolicyReentry *p) {
     p->entered=true;
@@ -474,19 +446,16 @@ static void policy_reenter(PolicyReentry *p) {
     CHECK(status==XR_PROC_INVALID_ARGUMENT && pid==XR_PROC_INVALID);
 }
 static XrOsProcStatus policy_allocate(void *context,size_t size,void **out) {
-    PolicyReentry *p=context; if (!p->from_work && !p->entered) policy_reenter(p);
+    PolicyReentry *p=context; if (!p->entered) policy_reenter(p);
     return process_allocate(p->resources,size,out);
 }
 static void policy_release(void *context,void *memory) { PolicyReentry *p=context; process_release(p->resources,memory); }
-static XrOsProcStatus policy_work(void *context,uint64_t units) {
-    PolicyReentry *p=context; if (p->from_work && !p->entered) policy_reenter(p);
-    return process_charge(p->resources,units);
-}
+
 static void policy_reentry(void) {
-    for (unsigned kind=0;kind<2;++kind) {
+    for (unsigned kind=0;kind<1;++kind) {
         reset_faults(); XrCompileResources *r=NULL; CHECK(xr_compile_resources_new(&unlimited,&r)==XR_COMPILE_RESOURCE_OK);
-        PolicyReentry p={r,kind!=0,false}; XrProcSpawnOptions options={0};
-        options.memory=(XrProcMemory){&p,policy_allocate,policy_release,policy_work};
+        PolicyReentry p={r,false}; XrProcSpawnOptions options={0};
+        options.memory=(XrProcMemory){&p,policy_allocate,policy_release};
         options.complete_environment=true; options.new_process_group=true;
         options.image_mode=XR_PROC_IMAGES_WINDOWS_TREE; options.image_observer.observe=accept_image;
         const char *args[]={executable,"--plain",NULL}; XrProcId pid=XR_PROC_INVALID;
@@ -502,11 +471,10 @@ static void policy_reentry(void) {
 static void boundaries_and_lifetime(void) {
     reset_faults(); XrCompileResourceStats baseline,used;
     CHECK(trial("--plain",&unlimited,XR_PROC_IO,&baseline)==XTC_PROCESS_IO);
-    for (unsigned axis=0;axis<2;++axis) for (unsigned less=0;less<2;++less) {
+    for (unsigned less=0;less<2;++less) {
         reset_faults(); XrCompileResourceLimits limits=unlimited;
-        if (axis) limits.live_bytes=baseline.peak_bytes-less;
-        else limits.allocated_bytes=baseline.allocated_bytes-less;
-        CHECK(trial("--plain",&limits,XR_PROC_IO,&used)==(less ? XTC_PROCESS_BUDGET : XTC_PROCESS_IO));
+        limits.memory_mode=XR_COMPILE_MEMORY_FINITE; limits.memory_limit=baseline.peak_bytes-less;
+        CHECK(trial("--plain",&limits,XR_PROC_IO,&used)==(less ? XTC_PROCESS_MEMORY_LIMIT : XTC_PROCESS_IO));
     }
     reset_faults(); fail_continue_at=0;
     CHECK(trial("--plain",&unlimited,XR_PROC_BUDGET,&used)==XTC_PROCESS_BUDGET);
@@ -529,25 +497,9 @@ static XrOsProcStatus reject_image(void *context,const XrProcImageEvent *event) 
     (void)event; ++*(unsigned *)context; return XR_PROC_IO;
 }
 static void exact_dispatch_and_sticky_output(void) {
-    /* One dispatch plus all 64 PID slots: this expected operation count is
-     * independent of measured process timing and ledger statistics. */
-    for (unsigned less=0;less<2;++less) {
-        reset_faults(); XrCompileResourceLimits limits=unlimited; limits.work=1+65-less;
-        XrCompileResources *r=NULL; CHECK(xr_compile_resources_new(&limits,&r)==XR_COMPILE_RESOURCE_OK);
-        ProcDebug d={0}; d.memory=(XrProcMemory){r,process_allocate,process_release,process_charge};
-        d.pids[0]=42; d.event.dwProcessId=42; d.event.dwDebugEventCode=CREATE_THREAD_DEBUG_EVENT;
-        XrOsProcStatus expected=less ? XR_PROC_BUDGET : XR_PROC_OK;
-        CHECK(proc_debug_dispatch(&d,false)==expected);
-        CHECK(d.dispatched==!less && d.pids[0]==42);
-        XrCompileResourceStats used; CHECK(xr_compile_resources_stats(r,&used)==XR_COMPILE_RESOURCE_OK);
-        CHECK(used.work==(less ? 1 : 66));
-        CHECK(proc_debug_dispatch(&d,false)==expected);
-        CHECK(xr_compile_resources_stats(r,&used)==XR_COMPILE_RESOURCE_OK && used.work==(less ? 1 : 66));
-        xr_compile_resources_release(r); CHECK(!physical);
-    }
     reset_faults(); XrCompileResources *r=NULL; CHECK(xr_compile_resources_new(&unlimited,&r)==XR_COMPILE_RESOURCE_OK);
     unsigned observed=0; XrProcSpawnOptions options={0};
-    options.memory=(XrProcMemory){r,process_allocate,process_release,process_charge};
+    options.memory=(XrProcMemory){r,process_allocate,process_release};
     options.complete_environment=true; options.new_process_group=true; options.image_mode=XR_PROC_IMAGES_WINDOWS_TREE;
     options.image_observer=(XrProcImageObserver){&observed,reject_image};
     const char *args[]={executable,"--plain",NULL}; XrProcId pid=XR_PROC_INVALID;
@@ -561,9 +513,9 @@ static void exact_dispatch_and_sticky_output(void) {
     XrCompileResourceStats used,after; CHECK(xr_compile_resources_stats(r,&used)==XR_COMPILE_RESOURCE_OK);
     CHECK(xr_proc_pump_images(pid,&result)==XR_PROC_IO && !memcmp(&result,&before,sizeof(result)) && observed==1);
     CHECK(xr_proc_close(pid)==0);
-    CHECK(xr_compile_resources_stats(r,&after)==XR_COMPILE_RESOURCE_OK && used.work==after.work);
+    CHECK(xr_compile_resources_stats(r,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes < used.held_bytes);
     xr_compile_resources_release(r); CHECK(!physical && !image_handle_count);
-    puts("dispatch formula=65; sticky output and cleanup without new work passed");
+    puts("sticky output, one observer invocation and physical cleanup passed");
 }
 
 static void persistent_cleanup(void) {
@@ -587,11 +539,11 @@ static void thread_and_budget(void) {
     CHECK(command("--plain",&o,&result)==XTC_PROCESS_OK && o.checked_threads);
     xtc_process_result_free(&result); release_images(&o); xr_compile_resources_release(r);
     CHECK(!physical && !image_handle_count);
-    reset_faults(); XrCompileResourceLimits limits=unlimited; limits.work=100000;
+    reset_faults(); XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,8 * 1024 * 1024,true};
     r=NULL; CHECK(xr_compile_resources_new(&limits,&r)==XR_COMPILE_RESOURCE_OK);
     o=(Observation){0}; o.resources=r; o.exhaust=true;
-    CHECK(command("--plain",&o,&result)==XTC_PROCESS_BUDGET && !result.stdout_bytes.data);
-    XrCompileResourceStats used; CHECK(xr_compile_resources_stats(r,&used)==XR_COMPILE_RESOURCE_OK && used.work==limits.work);
+    CHECK(command("--plain",&o,&result)==XTC_PROCESS_MEMORY_LIMIT && !result.stdout_bytes.data);
+    XrCompileResourceStats used; CHECK(xr_compile_resources_stats(r,&used)==XR_COMPILE_RESOURCE_OK && used.held_bytes < limits.memory_limit);
     release_images(&o); xr_compile_resources_release(r); CHECK(!physical && !image_handle_count);
 }
 static int load_twice(const char *path) {

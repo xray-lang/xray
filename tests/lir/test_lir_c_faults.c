@@ -13,6 +13,16 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "os/os_time.h"
+#include "../unit/xir/xir_sdk_resource_test.h"
+static bool clock_override, clock_at_publication;
+static uint64_t clock_now, publication_clock;
+static uint64_t request_clock(void) {
+    return clock_override ? clock_now : xr_time_monotonic_ns();
+}
+#define xr_time_monotonic_ns request_clock
+#include "base/xcompile_request.c"
+#undef xr_time_monotonic_ns
 static bool fail_workspace, fail_text, fail_divisors, corrupt_text, injected;
 static bool *cancel_at_publication;
 static XrCompileResourceStatus workspace_allocate(XrCompileResources *r, size_t n, void **out) {
@@ -39,6 +49,8 @@ static XrCompileResourceStatus text_resize(XrCompileResources *r, void **out, si
 }
 static XiCgenVerifyStatus publication_verify(XrCompileResources *r, const char *text, size_t length,
                                               const char *name) {
+    if (clock_at_publication)
+        clock_now = publication_clock;
     if (cancel_at_publication)
         *cancel_at_publication = true;
     if (corrupt_text) {
@@ -59,7 +71,130 @@ static XiCgenVerifyStatus publication_verify(XrCompileResources *r, const char *
 
 static bool cancel_now(const void *context) { return *(const bool *) context; }
 
+static void refusal(XrLirCRequest *request, XrLirCStatus expected) {
+    XrLirCOutput output = {0};
+    XrLirCDiagnostic diagnostic;
+    uint64_t held = sdk_stats(request->resources).held_bytes;
+    CHECK(xr_lir_emit_c(request, &output, &diagnostic) == expected);
+    CHECK(!output.bytes && !output.length && !output.entry_result);
+    CHECK(diagnostic.status == expected && sdk_stats(request->resources).held_bytes == held);
+}
+static void control_boundaries(XrLirCRequest *request) {
+    bool cancelled = true;
+    XrCompileRequestOptions options = {cancel_now, &cancelled, XR_COMPILE_DEADLINE_NONE, 0};
+    {
+        XrCompileRequestControl control = {0};
+        CHECK(xr_compile_request_control_init(&options, &control) == XR_COMPILE_RESOURCE_OK);
+        request->control = &control;
+        refusal(request, XR_LIR_C_CANCELLED);
+        CHECK(control.status == XR_COMPILE_RESOURCE_CANCELLED);
+        request->control = NULL;
+    }
+    {
+        XrCompileRequestControl control = {0};
+        cancelled = false; cancel_at_publication = &cancelled;
+        CHECK(xr_compile_request_control_init(&options, &control) == XR_COMPILE_RESOURCE_OK);
+        request->control = &control;
+        refusal(request, XR_LIR_C_CANCELLED);
+        CHECK(cancelled && control.status == XR_COMPILE_RESOURCE_CANCELLED);
+        cancel_at_publication = NULL; request->control = NULL;
+    }
+    options = (XrCompileRequestOptions){NULL, NULL, XR_COMPILE_DEADLINE_AFTER, 0};
+    {
+        XrCompileRequestControl control = {0};
+        CHECK(xr_compile_request_control_init(&options, &control) == XR_COMPILE_RESOURCE_OK);
+        request->control = &control;
+        size_t attempts = runtime_attempts;
+        refusal(request, XR_LIR_C_DEADLINE);
+        CHECK(runtime_attempts == attempts && control.status == XR_COMPILE_RESOURCE_DEADLINE);
+        request->control = NULL;
+    }
+    clock_override = true;
+    options.timeout_ns = 5;
+    {
+        XrCompileRequestControl control = {0};
+        clock_now = 1000;
+        CHECK(xr_compile_request_control_init(&options, &control) == XR_COMPILE_RESOURCE_OK);
+        CHECK(control.deadline_ns == 1005);
+        request->control = &control;
+        clock_at_publication = true; publication_clock = control.deadline_ns;
+        refusal(request, XR_LIR_C_DEADLINE);
+        CHECK(control.deadline_ns == 1005 && control.status == XR_COMPILE_RESOURCE_DEADLINE);
+        clock_at_publication = false; request->control = NULL;
+    }
+    {
+        XrCompileRequestControl control = {0};
+        clock_now = 0;
+        CHECK(xr_compile_request_control_init(&options, &control) == XR_COMPILE_RESOURCE_CLOCK_FAILURE);
+        CHECK(!control.initialized && !control.has_deadline && !control.deadline_ns);
+        clock_now = 1000;
+        CHECK(xr_compile_request_control_init(&options, &control) == XR_COMPILE_RESOURCE_OK);
+        request->control = &control;
+        clock_at_publication = true; publication_clock = 0;
+        refusal(request, XR_LIR_C_CLOCK_FAILURE);
+        CHECK(control.status == XR_COMPILE_RESOURCE_CLOCK_FAILURE);
+        clock_at_publication = false; request->control = NULL;
+    }
+    {
+        XrCompileRequestControl control = {0};
+        clock_now = UINT64_MAX - 2;
+        CHECK(xr_compile_request_control_init(&options, &control) == XR_COMPILE_RESOURCE_OVERFLOW);
+        CHECK(!control.initialized && !control.deadline_ns);
+    }
+    clock_override = false;
+    void *overflow = NULL;
+    LirC c = {.request = request};
+    CHECK(!c_resource(&c, xr_compile_resources_calloc(request->resources, SIZE_MAX, 2, &overflow)));
+    CHECK(c.status == XR_LIR_C_OVERFLOW && !overflow);
+    puts("real request cancellation, final publication deadline/clock failure, absolute deadline and overflow PASS");
+}
+static XrLirCOutput memory_boundaries(XrLirCRequest *request) {
+    XrLirCOutput output = {0};
+    XrCompileResources *original = request->resources;
+    uint64_t baseline = sdk_stats(original).held_bytes;
+    runtime_attempts = 0;
+    CHECK(xr_lir_emit_c(request, &output, NULL) == XR_LIR_C_OK);
+    size_t sites = runtime_attempts;
+    XrCompileResourceStats measured = sdk_stats(original);
+    CHECK(sites && measured.peak_bytes > baseline);
+    xr_lir_c_output_free(&output);
+    CHECK(sdk_stats(original).held_bytes == baseline);
+    for (size_t i = 0; i < sites; ++i) {
+        runtime_attempts = 0; runtime_fail_at = i;
+        refusal(request, XR_LIR_C_OUT_OF_MEMORY);
+        CHECK(runtime_attempts > i);
+        runtime_fail_at = SIZE_MAX;
+    }
+    CHECK(measured.peak_bytes > 0 && measured.peak_bytes < UINT64_MAX);
+    for (int adjustment = -1; adjustment <= 1; ++adjustment) {
+        uint64_t limit = measured.peak_bytes;
+        if (adjustment < 0) --limit;
+        if (adjustment > 0) ++limit;
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, limit, true};
+        XrCompileResources *finite = sdk_ledger(&limits);
+        request->resources = finite;
+        if (adjustment < 0) refusal(request, XR_LIR_C_MEMORY_LIMIT);
+        else {
+            CHECK(xr_lir_emit_c(request, &output, NULL) == XR_LIR_C_OK);
+            xr_lir_c_output_free(&output);
+        }
+        xr_compile_resources_release(finite);
+    }
+    request->resources = original;
+    bool *context = xr_malloc(sizeof(*context)); CHECK(context); *context = false;
+    XrCompileRequestControl *control = xr_calloc(1, sizeof(*control)); CHECK(control);
+    XrCompileRequestOptions options = {cancel_now, context, XR_COMPILE_DEADLINE_NONE, 0};
+    CHECK(xr_compile_request_control_init(&options, control) == XR_COMPILE_RESOURCE_OK);
+    request->control = control;
+    CHECK(xr_lir_emit_c(request, &output, NULL) == XR_LIR_C_OK);
+    memset(control, 0xa5, sizeof(*control)); memset(context, 0xa5, sizeof(*context));
+    xr_free(control); xr_free(context); request->control = NULL;
+    printf("actual C controlled allocator OOM sites=%zu; held peak=%llu minus1/exact/plus1 PASS\n",
+        sites, (unsigned long long)measured.peak_bytes);
+    return output;
+}
 int main(int argc, char **argv) {
+    (void)sdk_fixture_malloc; (void)sdk_fixture_free;
     CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--ice")));
     XrLirModule *module = NULL;
     XrLirFunction entry;
@@ -83,10 +218,9 @@ int main(int argc, char **argv) {
     XrLirInstruction ret = {.op = XR_LIR_RET, .type = XR_LIR_UNIT, .operands = &value, .operand_count = 1};
     CHECK(xr_lir_set_terminator(module, block, &ret) == XR_LIR_OK);
     CHECK(xr_lir_module_finish(module, NULL) == XR_LIR_OK);
-    XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
-    XrCompileResources *resources = NULL;
-    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
-    XrLirCRequest request = {module, entry, resources, "publication-fault"};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
+    XrCompileResources *resources = sdk_ledger(&limits);
+    XrLirCRequest request = {module, entry, resources, "publication-fault", NULL};
     XrLirCOutput output = {0};
     XrLirCDiagnostic diagnostic;
     if (argc == 2) {
@@ -107,20 +241,15 @@ int main(int argc, char **argv) {
         CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_OK);
         xr_lir_c_output_free(&output);
     }
-    bool cancelled = true;
-    CHECK(xr_compile_resources_begin_cancel(resources, cancel_now, &cancelled) == XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_CANCELLED);
-    CHECK(!output.bytes && !output.length);
-    CHECK(xr_compile_resources_end_cancel(resources, cancel_now, &cancelled) == XR_COMPILE_RESOURCE_CANCELLED);
-    cancelled = false;
-    cancel_at_publication = &cancelled;
-    CHECK(xr_compile_resources_begin_cancel(resources, cancel_now, &cancelled) == XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_CANCELLED);
-    CHECK(!output.bytes && !output.length && diagnostic.status == XR_LIR_C_CANCELLED);
-    CHECK(xr_compile_resources_end_cancel(resources, cancel_now, &cancelled) == XR_COMPILE_RESOURCE_CANCELLED);
-    cancel_at_publication = NULL;
+    control_boundaries(&request);
+    output = memory_boundaries(&request);
     xr_lir_module_destroy(module);
     xr_compile_resources_release(resources);
+    memset(&request, 0xa5, sizeof(request));
+    CHECK(strstr(output.bytes, "xray_lir_entry(void)") && output.entry_result == XR_LIR_I64);
+    xr_lir_c_output_free(&output);
+    CHECK(!output.bytes && !output.length && !output.entry_result && !runtime_live && !runtime_bytes);
     puts("representative C workspace/text failures and cancellation passed");
+    puts("output survives module, caller memory reference, control/context destruction; physical zero PASS");
     return 0;
 }

@@ -67,10 +67,19 @@ def main():
     parser.add_argument('--worker-generator')
     parser.add_argument('--key-path-generator')
     args=parser.parse_args();root=Path(__file__).resolve().parents[3];bundle=Path(args.bundle)
+    manifest=json.loads((bundle/'sdk_manifest.json').read_text(encoding='utf-8'))
+    if not isinstance(manifest,dict) or type(manifest.get('crt')) is not int or manifest['crt']!=2:
+        raise ValueError('Native SDK consumer requires MD CRT')
     lease=subprocess.Popen([args.lease,str(bundle),str(bundle/'sdk_manifest.json')],
                            stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding='utf-8')
     try:
-        ready=lease.stdout.readline().strip().split();assert ready[0]=='READY' and ready[1:3]==['29','2'],ready
+        versions=re.findall(r'^#define XR_XIR_VALUE_ABI_VERSION\s+(\d+)u?\s*$',
+                            (root/'src/xir/xxir_value.h').read_text(encoding='utf-8'),re.M)
+        if len(versions)!=1:raise ValueError('unique same-source Value ABI definition required')
+        ready=lease.stdout.readline().strip().split()
+        if len(ready)!=4 or ready[0]!='READY':
+            raise RuntimeError('SDK lease did not publish a valid READY record: '+repr(ready))
+        assert ready[1:3]==[str(int(versions[0])),'2'],ready
         sdk=Path(lease.stdout.readline().strip());libraries=[lease.stdout.readline().strip() for _ in range(5)]
         assert sdk.is_dir() and all(Path(name).is_file() for name in libraries)
         with native_workspace(args.provider) as work:
@@ -203,8 +212,19 @@ def main():
                 assert checked([str(executable)]).replace(b'\r\n',b'\n')==b'map-key-path-sdk-ok\n'
                 print(args.provider+' All eight typed Map key path graphs: actual Source/C11 + admitted archives + authenticated suspension and owned late results PASS',flush=True)
     finally:
-        lease.stdin.write('q');lease.stdin.flush()
-        _,error=lease.communicate(timeout=10);assert not lease.returncode,error
+        primary_failure=sys.exc_info()[0] is not None
+        timed_out=False
+        try:
+            _,lease_error=lease.communicate(input='q' if lease.poll() is None else None,timeout=10)
+        except subprocess.TimeoutExpired:
+            timed_out=True
+            lease.kill()
+            _,lease_error=lease.communicate()
+        if timed_out or lease.returncode:
+            message=('SDK lease retirement timed out' if timed_out else
+                     'SDK lease exited '+str(lease.returncode))+': '+lease_error.strip()
+            if primary_failure:print(message,file=sys.stderr)
+            else:raise RuntimeError(message)
 
 
 if __name__=='__main__':main()

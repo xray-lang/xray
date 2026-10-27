@@ -65,7 +65,7 @@ def main():
         sdk_native_consumers.link(args, abi_exe, [str(abi_object)], libraries)
         actual = json.loads(run('abi', [str(abi_exe)]))
         expected = json.loads((output/'abi/EXPECTED.json').read_text())['rows']
-        assert actual == [dict(id=row['id'], value=row['value']) for row in expected] and len(actual) == 220
+        assert actual == [dict(id=row['id'], value=row['value']) for row in expected] and len(actual) == 380
         launcher_object = output/'launcher.obj'
         sdk_native_consumers.compile_source(args, sdk, launcher, launcher_object, 'host_fixture_program')
         for record in json.loads((cases/'vm-record.json').read_text()):
@@ -88,7 +88,7 @@ def main():
                     del os.environ['NO_COLOR']
                 else:
                     os.environ['NO_COLOR'] = saved
-        print(args.provider+': SDK-owned main, 220 ABI facts and all byte-exact programs PASS')
+        print(args.provider+': SDK-owned main, 380 ABI facts and all byte-exact programs PASS')
     finally:
         if lease.poll() is None:
             lease.stdin.write('q'); lease.stdin.flush()

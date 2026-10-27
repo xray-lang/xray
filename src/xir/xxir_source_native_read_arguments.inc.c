@@ -19,7 +19,7 @@ static bool source_native_read_arguments(SourceContext *ctx,AstNode *node,
     if (syntax.type_arg_count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,diagnostic);
     for (uint32_t p=0;p<maximum;++p) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (xr_xir_type_is_cell(&ctx->types,parameters[p]))
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"native READ arguments cannot grant a ref contract");
     }
@@ -28,7 +28,7 @@ static bool source_native_read_arguments(SourceContext *ctx,AstNode *node,
      * declaration callee's type substitution. */
     SourceCallPlan plan={SOURCE_CALL_NATIVE,{0},{0},parameters,NULL,XR_XIR_UNIT,
         {0},values,0,0,NULL,NULL};
-    if (!source_call_expand(ctx,node,&syntax,&plan,maximum)) return false;
+    if (!source_call_expand(ctx,&syntax,&plan,maximum)) return false;
     if ((uint32_t)syntax.arg_count<minimum || (uint32_t)syntax.arg_count>maximum)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,diagnostic);
     if (!source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
@@ -44,7 +44,7 @@ static bool source_native_variadic_read_arguments(SourceContext *ctx,AstNode *no
     if (syntax.type_arg_count) return source_fail(ctx,node,XR_XIR_BAD_TYPE,diagnostic);
     SourceCallPlan plan={SOURCE_CALL_VARIADIC_READ,{0},{0},&parameter,NULL,XR_XIR_UNIT,
         {0},NULL,0,0,NULL,NULL};
-    if (!source_call_expand(ctx,node,&syntax,&plan,65536)) return false;
+    if (!source_call_expand(ctx,&syntax,&plan,65536)) return false;
     uint32_t count=(uint32_t)syntax.arg_count;
     plan.values=count ? source_recipe_storage(ctx,count,sizeof(*plan.values)) : NULL;
     if (count && !plan.values) return false;

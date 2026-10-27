@@ -40,7 +40,7 @@ static void bits_ids(const XrXirModule *module,uint32_t selection[6]) {
 
 static XrXirStatus bits_check(const XrXirCompileContext *context,const char *text,const char *logical,
     XrXirLinkageKind kind,const XrXirLibraryCatalog *catalog,XrXirSourceResult *result) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_LIBRARY_INTEGER_BITS_WORK};char path[1024];
     int size=snprintf(path,sizeof(path),"%s/%s",XR_LIBRARY_INTEGER_BITS_WORK,logical);CHECK(size>0 && (size_t)size<sizeof(path));
     FILE *absent=fopen(path,"rb");CHECK(!absent);

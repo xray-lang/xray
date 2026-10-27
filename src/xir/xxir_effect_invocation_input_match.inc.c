@@ -49,7 +49,7 @@ static XrXirStatus effect_invocation_arguments_match(EffectInvocationFlow *flow,
     if (status==XR_XIR_OK && words && (!input || !target->input)) status=XR_XIR_BAD_STRUCTURE;
     bool same=true;
     for (size_t w=0;status==XR_XIR_OK && w<(size_t)words;++w) {
-        if (!xir_compile_work(owner->work,2)) { status=XR_XIR_BUDGET;break; }
+
         if (input[w]!=target->input[w]) same=false;
     }
     xr_compile_resources_free(input);if (status==XR_XIR_OK) *matched=same;return status;

@@ -42,7 +42,7 @@ static void emit_atomic_step(CBuffer *buffer, const XrXirFunction *function,
         append(buffer, ";\n");
         if (count) {
             append(buffer, "        XrXirValue operands[%u] = {", count);
-            for (uint32_t i = 0; i < count && emit_work(buffer, 1); ++i) {
+            for (uint32_t i = 0; i < count && ((buffer)->status == XR_XIR_OK); ++i) {
                 if (i) append(buffer, ", ");
                 emit_value(buffer, function, layout, ids[i + 1]);
             }

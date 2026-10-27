@@ -29,7 +29,7 @@ static void range_file(const char *logical,const void *bytes,size_t size) {
 }
 static XrXirStatus range_check(const XrXirCompileContext *context,const char *text,const char *logical,
     XrXirLinkageKind kind,const XrXirLibraryCatalog *catalog,XrXirSourceResult *result) {
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_RANGE_VALUE_WORK};char path[1024];
     int length=snprintf(path,sizeof(path),"%s/%s",XR_RANGE_VALUE_WORK,logical);CHECK(length>0 && (size_t)length<sizeof(path));
     XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,kind,catalog};

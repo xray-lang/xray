@@ -572,10 +572,10 @@ void xr_module_system_init_with_script(XrVMRuntime *isolate, const char *script_
         if (status == XR_OS_IO_OK) {
             const XrTomlParseLimits limits = {SIZE_MAX, 128};
             XrManifestStatus manifest = xr_project_load_owned(&policy, dir, &limits, &registry->project, NULL);
-            if (manifest == XR_MANIFEST_BUDGET || manifest == XR_MANIFEST_OUT_OF_MEMORY)
-                xr_compile_state_fail(state, manifest == XR_MANIFEST_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
-        } else if (status == XR_OS_IO_BUDGET || status == XR_OS_IO_OUT_OF_MEMORY)
-            xr_compile_state_fail(state, status == XR_OS_IO_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+            if (manifest == XR_MANIFEST_OVERFLOW || manifest == XR_MANIFEST_OUT_OF_MEMORY)
+                xr_compile_state_fail(state, manifest == XR_MANIFEST_OVERFLOW ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+        } else if (status == XR_OS_IO_OVERFLOW || status == XR_OS_IO_OUT_OF_MEMORY)
+            xr_compile_state_fail(state, status == XR_OS_IO_OVERFLOW ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
         xr_compile_resources_free(dir);
         xr_compile_resources_free(absolute);
     }

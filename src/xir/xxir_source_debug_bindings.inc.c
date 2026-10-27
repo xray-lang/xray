@@ -9,7 +9,7 @@
 static bool source_debug_environment(SourceContext *ctx,uint32_t *output) {
     uint32_t count=0,parent=0;
     for (SourceName *name=ctx->locals;name;name=name->next) {
-        if (!source_work_units(ctx,NULL,sizeof(*name))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if ((!source_local_name(name) || !source_name_ready(name)) && name->kind!=SOURCE_PENDING) continue;
         if (!name->declaration) continue;
         if (count==ctx->debug_name_capacity) {
@@ -24,7 +24,7 @@ static bool source_debug_environment(SourceContext *ctx,uint32_t *output) {
     }
     SourceFunction *body=&ctx->bodies[ctx->function];
     while (count) {
-        if (!source_work_units(ctx,NULL,sizeof(XrXirSourceDebugBinding))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceName *name=ctx->debug_names[--count];
         uint32_t flags=name->kind==SOURCE_PENDING ? XR_XIR_SOURCE_DEBUG_UNAVAILABLE :
             name->kind==SOURCE_UNIT_LOCAL ? XR_XIR_SOURCE_DEBUG_UNIT :

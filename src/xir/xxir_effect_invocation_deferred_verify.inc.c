@@ -32,14 +32,14 @@ static XrXirStatus effect_invocation_deferred_match(EffectInvocationFlow *flow,
     uint32_t bit=owner->final->site_count+record->parameter;
     const uint64_t *descriptor=effect_invocation_row(flow,(uint32_t)op->immediate);
     if (!descriptor) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
     if (!(descriptor[bit/64]&(UINT64_C(1)<<(bit%64)))) return XR_XIR_BAD_STRUCTURE;
     uint64_t *actual=NULL;flow->instruction=record->instruction;
     status=effect_invocation_deferred_arguments(flow,record->instruction,signature,&actual);
     uint64_t words=(uint64_t)record->count*flow->basis.row_words;
     if (status==XR_XIR_OK && words>SIZE_MAX/sizeof(*actual)) status=XR_XIR_BUDGET;
     for (size_t w=0;status==XR_XIR_OK && w<(size_t)words;++w) {
-        if (!xir_compile_work(owner->work,2)) { status=XR_XIR_BUDGET;break; }
+
         if (record->arguments[w]!=actual[w]) status=XR_XIR_BAD_STRUCTURE;
     }
     xr_compile_resources_free(actual);return status;
@@ -57,7 +57,7 @@ static XrXirStatus effect_invocation_deferred_frontiers(EffectInvocationFlow *fl
     XrXirStatus sequence=effect_body_request_sequence_begin(&flow->body,&cursor);
     if (sequence!=XR_XIR_OK) return sequence;
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
-        if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+
         XrXirInstruction body_op_2;const XrXirInstruction *op=NULL;
         XrXirStatus body_read_2=effect_body_request_sequence_operation(&flow->body,
             flow->read->final->nodes[flow->node].body,i,&cursor,&body_op_2,&op);
@@ -75,12 +75,12 @@ static XrXirStatus effect_invocation_deferred_frontiers(EffectInvocationFlow *fl
         const uint64_t *descriptor=effect_invocation_row(flow,(uint32_t)op->immediate);
         if (!descriptor) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p=0;p<flow->basis.parameters;++p) {
-            if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
             uint32_t bit=owner->final->site_count+p;
             if (!(descriptor[bit/64]&(UINT64_C(1)<<(bit%64)))) continue;
             uint32_t selected=UINT32_MAX;
             for (uint32_t d=0;d<owner->final->deferred_count;++d) {
-                if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+
                 const EffectInvocationDeferred *record=&owner->final->deferred_calls[d];
                 if (record->node!=flow->node || record->instruction!=i || record->parameter!=p) continue;
                 if (selected!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
@@ -106,7 +106,7 @@ static XrXirStatus effect_invocation_deferred_needed(const EffectInvocationRead 
     uint64_t values=(uint64_t)head.parameter_count+head.instruction_count;
     bool needed=false;EffectInvocationFlow flow={.read=owner,.node=n,.body=effect_invocation_body(owner)};
     for (uint32_t i=0;i<head.instruction_count && node->local_deferred;++i) {
-        if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+
         if (!(contexts[i/64]&(UINT64_C(1)<<(i%64)))) continue;
         XrXirInstruction storage;const XrXirInstruction *op=NULL;
         status=effect_invocation_operation(owner,node->body,i,&storage,&op);
@@ -131,14 +131,14 @@ static XrXirStatus effect_invocation_deferred_verify(const EffectInvocationRead 
         owner->final->deferred_count>owner->final->deferred_capacity ||
         (owner->final->deferred_count && !owner->final->deferred_calls)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t d=0;d<owner->final->deferred_count;++d) {
-        if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+
         const EffectInvocationDeferred *record=&owner->final->deferred_calls[d];
         if (record->node>=owner->final->count || !owner->final->nodes[record->node].local_deferred)
             return XR_XIR_BAD_STRUCTURE;
     }
     uint32_t matched=0;
     for (uint32_t n=0;n<owner->final->count;++n) {
-        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+
         bool needed=false;XrXirStatus status=effect_invocation_deferred_needed(owner,n,&needed);
         if (status!=XR_XIR_OK) return status;
         if (!needed) continue;
@@ -165,13 +165,13 @@ static XrXirStatus effect_invocation_result_match_source(const EffectInvocationT
     for (uint32_t f=0;f<result->count && status==XR_XIR_OK;++f) {
         const EffectFinalFunction *record=&result->functions[f];
         const XrXirRootFormula *formula=&record->formula;
-        if (!xir_compile_work(source->work,6)) { status=XR_XIR_BUDGET;break; }
+
         if (source->equations->roots[f]>=source->equations->count || formula->term_count!=record->capacity ||
             !!record->storage!=!!record->capacity || formula->terms!=record->storage ||
             formula->constant_mask!=source->equations->nodes[source->equations->roots[f]].intrinsic_mask) {
             status=XR_XIR_BAD_STRUCTURE;break;
         }
-        if (!xir_compile_work(source->work,sizeof(EffectInvocationTermTarget))) { status=XR_XIR_BUDGET;break; }
+
         const EffectInvocationTermTarget target={record->capacity,0,0,NULL};uint32_t count=0;
         status=effect_invocation_result_terms(source,f,NULL,record->storage,&target,&count);
         if (status==XR_XIR_OK && count!=record->capacity) status=XR_XIR_BAD_STRUCTURE;
@@ -185,7 +185,7 @@ static XrXirStatus effect_invocation_result_match(EffectInvocationWorkspace *own
     const EffectFinalFunctions *result) {
     if (!owner || !xir_compile_context_valid(owner->read.work) || !owner->effects ||
         !effect_contracts_read(owner->effects)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(owner->read.work,sizeof(EffectInvocationTermSource))) return XR_XIR_BUDGET;
+
     const EffectInvocationTermSource source={owner->read.work,&owner->final,NULL,owner->effects};
     return effect_invocation_result_match_source(&source,result);
 }

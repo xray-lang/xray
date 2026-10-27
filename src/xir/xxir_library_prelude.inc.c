@@ -12,26 +12,25 @@
 #include "xxir_prelude_source_internal.h"
 #include "xxir_interface.h"
 #include "xxir_implementation.h"
-static XrXirStatus library_prelude_literal(const XrXirCompileContext *context,
+static XrXirStatus library_prelude_literal(
     XrXirLiteral actual,const char *expected,bool *equal) {
     size_t length=0;
     while (true) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         if (!expected[length]) break;
         if (length==SIZE_MAX-1) return XR_XIR_BUDGET;
         ++length;
     }
-    if (!xir_compile_work(context,length)) return XR_XIR_BUDGET;
+
     *equal=actual.length==length && !memcmp(actual.bytes,expected,length); return XR_XIR_OK;
 }
-#include "xxir_library_stringbuilder.inc.c"
-static XrXirStatus library_range_record(const XrXirCompileContext *context,const XrXirNominalDeclaration *record) {
+static XrXirStatus library_range_record(const XrXirNominalDeclaration *record) {
     if(record->kind!=XR_XIR_NOMINAL_CLASS || record->exported!=1 || record->parameter_count ||
         record->variant_count || record->flags || record->native.native_id || record->field_count!=4 || !record->fields)
         return XR_XIR_BAD_STRUCTURE;
     const char *names[]={"start","end","_step","_inclusive"};
     for(uint32_t f=0;f<4;++f) {
-        bool equal=false;XrXirStatus status=library_prelude_literal(context,record->fields[f].name,names[f],&equal);
+        bool equal=false;XrXirStatus status=library_prelude_literal(record->fields[f].name,names[f],&equal);
         if(status!=XR_XIR_OK) return status;
         if(!equal || record->fields[f].flags!=(uint32_t)(f<2?0:XR_XIR_FIELD_PRIVATE) ||
             record->fields[f].type!=(f==3?XR_XIR_BOOL:XR_XIR_I64)) return XR_XIR_BAD_STRUCTURE;
@@ -141,7 +140,7 @@ static const XrXirBlock library_range_count_blocks[]={
     {57,1,0,0},
     {58,2,0,0},
 };
-static XrXirStatus library_range_body(const XrXirCompileContext *context,const XrXirModule *module,
+static XrXirStatus library_range_body(const XrXirModule *module,
     const XrXirFunction *body,bool init,XrXirType owner) {
     const XrXirInstruction *expected=init?library_range_init_ops:library_range_count_ops;
     const XrXirBlock *blocks=init?library_range_init_blocks:library_range_count_blocks;
@@ -152,13 +151,13 @@ static XrXirStatus library_range_body(const XrXirCompileContext *context,const X
     if(body->instruction_count!=count || body->block_count!=block_count || body->operand_count!=(init?4u:0u))
         return XR_XIR_BAD_STRUCTURE;
     for(uint32_t b=0;b<block_count;++b) {
-        if(!xir_compile_work(context,sizeof(*blocks))) return XR_XIR_BUDGET;
+
         const XrXirBlock *actual=&body->blocks[b];
         if(actual->first!=blocks[b].first || actual->count!=blocks[b].count || actual->panic || actual->frontier)
             return XR_XIR_BAD_STRUCTURE;
     }
     for(uint32_t i=0;i<count;++i) {
-        if(!xir_compile_work(context,sizeof(*expected))) return XR_XIR_BUDGET;
+
         const XrXirInstruction *a=&body->instructions[i],*e=&expected[i];
         bool type=a->type==e->type;
         if(e->op==XR_XIR_CLASS_NEW) type=a->type==owner;
@@ -169,18 +168,18 @@ static XrXirStatus library_range_body(const XrXirCompileContext *context,const X
             a->type_arguments[0] || a->type_arguments[1]) return XR_XIR_BAD_STRUCTURE;
     }
     for(uint32_t o=0;o<body->operand_count;++o) {
-        if(!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         if(body->operands[o]!=12+o) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
 }
-static XrXirStatus library_range_function(const XrXirCompileContext *context,const XrXirModule *module,
+static XrXirStatus library_range_function(const XrXirModule *module,
     uint32_t function,uint32_t declaration,uint32_t *seen) {
     const XrXirFunctionIdentity *identity=&module->declarations->functions[function];
     const XrXirFunction *body=&module->functions[function];
     bool init=false,count=false;
-    XrXirStatus status=library_prelude_literal(context,(XrXirLiteral){body->name,body->name_length},"init",&init);
-    if(status==XR_XIR_OK) status=library_prelude_literal(context,(XrXirLiteral){body->name,body->name_length},"count",&count);
+    XrXirStatus status=library_prelude_literal((XrXirLiteral){body->name,body->name_length},"init",&init);
+    if(status==XR_XIR_OK) status=library_prelude_literal((XrXirLiteral){body->name,body->name_length},"count",&count);
     if(status!=XR_XIR_OK) return status;
     uint32_t role=init?1u:count?2u:0;
     if(!role || (*seen&role) || identity->nominal_owner!=declaration+1 ||
@@ -195,49 +194,42 @@ static XrXirStatus library_range_function(const XrXirCompileContext *context,con
         owner->nominal.declaration!=declaration || owner->nominal.argument_count || owner->nominal.field_count!=4 ||
         (init && (body->parameters[0]!=XR_XIR_I64 || body->parameters[1]!=XR_XIR_I64 || body->parameters[2]!=XR_XIR_BOOL)) ||
         (!init && body->result!=XR_XIR_I64)) return XR_XIR_BAD_STRUCTURE;
-    status=library_range_body(context,module,body,init,owner_type);
+    status=library_range_body(module,body,init,owner_type);
     if(status==XR_XIR_OK) *seen|=role;
     return status;
 }
-static XrXirStatus library_prelude_module(const XrXirCompileContext *context,
+static XrXirStatus library_prelude_module(
     const XrXirModule *module,uint32_t ordinal,bool *output) {
     const XrXirDeclarations *d=module->declarations;
     if (!d || ordinal>=d->module_count || !output) return XR_XIR_BAD_STRUCTURE;
     const XrXirSourceModule *view=&d->modules[ordinal]; bool canonical=false;
-    XrXirStatus status=library_prelude_literal(context,(XrXirLiteral){view->name,view->name_length},XIR_PRELUDE_CANONICAL,&canonical);
+    XrXirStatus status=library_prelude_literal((XrXirLiteral){view->name,view->name_length},XIR_PRELUDE_CANONICAL,&canonical);
     if (status!=XR_XIR_OK) return status;
     if (!canonical) { *output=false; return XR_XIR_OK; }
     bool governed=false;
-    status=library_governed_ordering_module(context,module,ordinal,&governed);
+    status=library_governed_ordering_module(module,ordinal,&governed);
     if (status!=XR_XIR_OK) return status;
     if (!governed || view->dependency_count || !module->types || !module->types->nominals)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirNominalTable *table=module->types->nominals; uint32_t owned=0;
-    uint32_t seen[sizeof(xir_prelude_enums)/sizeof(*xir_prelude_enums)]={0},builder=UINT32_MAX,range=UINT32_MAX;
+    uint32_t seen[sizeof(xir_prelude_enums)/sizeof(*xir_prelude_enums)]={0},range=UINT32_MAX;
     if (xir_prelude_source.enum_count!=sizeof(seen)/sizeof(*seen)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i=0;i<table->count;++i) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         const XrXirNominalDeclaration *record=&table->declarations[i]; bool owner=false;
-        status=library_prelude_literal(context,record->module,XIR_PRELUDE_CANONICAL,&owner);
+        status=library_prelude_literal(record->module,XIR_PRELUDE_CANONICAL,&owner);
         if (status!=XR_XIR_OK) return status;
         if (!owner) continue;
         ++owned; uint32_t match=UINT32_MAX;
-        bool is_builder=false;status=library_prelude_literal(context,record->name,"StringBuilder",&is_builder);
-        if(status!=XR_XIR_OK) return status;
-        if(is_builder) {
-            if(builder!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-            status=library_builder_record(context,record);if(status!=XR_XIR_OK) return status;
-            builder=i;continue;
-        }
-        bool is_range=false;status=library_prelude_literal(context,record->name,"Range",&is_range);
+        bool is_range=false;status=library_prelude_literal(record->name,"Range",&is_range);
         if(status!=XR_XIR_OK) return status;
         if(is_range) {
             if(range!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-            status=library_range_record(context,record);if(status!=XR_XIR_OK) return status;
+            status=library_range_record(record);if(status!=XR_XIR_OK) return status;
             range=i;continue;
         }
         for (uint32_t e=0;e<xir_prelude_source.enum_count;++e) {
-            bool equal=false; status=library_prelude_literal(context,record->name,xir_prelude_source.enums[e].name,&equal);
+            bool equal=false; status=library_prelude_literal(record->name,xir_prelude_source.enums[e].name,&equal);
             if (status!=XR_XIR_OK) return status;
             if (equal) match=e;
         }
@@ -249,14 +241,14 @@ static XrXirStatus library_prelude_module(const XrXirCompileContext *context,
             return XR_XIR_BAD_STRUCTURE;
         if (expected->field_count) {
             bool field_name=false;
-            status=library_prelude_literal(context,record->fields[0].name,"value",&field_name);
+            status=library_prelude_literal(record->fields[0].name,"value",&field_name);
             if (status!=XR_XIR_OK) return status;
             if (!field_name || record->fields[0].flags || record->fields[0].type!=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE ||
                 record->constraints[0].markers || record->constraints[0].interface_count) return XR_XIR_BAD_STRUCTURE;
         }
         if (record->native.native_id!=expected->native_id || record->variant_count!=expected->variant_count)
             return XR_XIR_BAD_STRUCTURE;
-        if (!xir_compile_work(context,sizeof(record->native.source_fingerprint))) return XR_XIR_BUDGET;
+
         for (size_t byte=0;byte<sizeof(record->native.source_fingerprint);++byte) {
             uint8_t wanted=expected->native_id ? xir_prelude_source.input_sha256[byte] : 0;
             if (record->native.source_fingerprint[byte]!=wanted) return XR_XIR_BAD_STRUCTURE;
@@ -264,44 +256,43 @@ static XrXirStatus library_prelude_module(const XrXirCompileContext *context,
         uint32_t begin=0;
         for (uint32_t v=0;v<expected->variant_count;++v) {
             const XrXirNominalVariant *variant=&record->variants[v]; bool equal=false;
-            status=library_prelude_literal(context,variant->name,expected->variants[v],&equal);
+            status=library_prelude_literal(variant->name,expected->variants[v],&equal);
             if (status!=XR_XIR_OK) return status;
             uint32_t count=expected->field_count && !v ? 1u : 0u;
             if (!equal || variant->field_begin!=begin || variant->field_count!=count) return XR_XIR_BAD_STRUCTURE;
             begin+=count;
         }
     }
-    if (owned!=xir_prelude_source.enum_count+2 || builder==UINT32_MAX || range==UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+    if (owned!=xir_prelude_source.enum_count+1 || range==UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t e=0;e<xir_prelude_source.enum_count;++e) if (!seen[e]) return XR_XIR_BAD_STRUCTURE;
     const XrXirImplementationTable *implementations=d->implementations;
     for (uint32_t i=0;implementations && i<implementations->count;++i) {
         bool owner=false;
-        status=library_prelude_literal(context,
+        status=library_prelude_literal(
             table->declarations[implementations->records[i].nominal_declaration].module,XIR_PRELUDE_CANONICAL,&owner);
         if (status!=XR_XIR_OK) return status;
         if (owner) return XR_XIR_BAD_STRUCTURE;
     }
     const XrXirInterfaceTable *interfaces=module->types->interfaces;
     for (uint32_t i=0;interfaces && i<interfaces->count;++i) {
-        bool owner=false; status=library_prelude_literal(context,interfaces->declarations[i].module,XIR_PRELUDE_CANONICAL,&owner);
+        bool owner=false; status=library_prelude_literal(interfaces->declarations[i].module,XIR_PRELUDE_CANONICAL,&owner);
         if (status!=XR_XIR_OK) return status;
         if (owner) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t s=0;s<d->slot_count;++s) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         if (d->slots[s].module==ordinal) return XR_XIR_BAD_STRUCTURE;
     }
-    uint32_t builder_methods=0,range_methods=0;
+    uint32_t range_methods=0;
     for (uint32_t f=0;f<module->function_count;++f) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
         if (d->functions[f].module==ordinal && f!=view->initializer) {
-            status=d->functions[f].nominal_owner==range+1 ?
-                library_range_function(context,module,f,range,&range_methods) :
-                library_builder_function(context,module,f,builder,&builder_methods);
+            if(d->functions[f].nominal_owner!=range+1) return XR_XIR_BAD_STRUCTURE;
+            status=library_range_function(module,f,range,&range_methods);
             if(status!=XR_XIR_OK) return status;
         }
     }
-    if(builder_methods!=15 || range_methods!=3) return XR_XIR_BAD_STRUCTURE;
+    if(range_methods!=3) return XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *initializer=&module->functions[view->initializer];
     if (initializer->parameter_count || initializer->result!=XR_XIR_UNIT ||
         initializer->block_count!=1 || initializer->instruction_count!=1 || initializer->operand_count ||

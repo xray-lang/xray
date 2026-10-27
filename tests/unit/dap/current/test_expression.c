@@ -15,25 +15,25 @@
 #include "../../xir/xir_runtime_allocations.h"
 #include "base/xcompile_resources.c"
 static size_t expression_fault(size_t fail) {
-    XrCompileResources *resources=NULL;XrCompileResourceLimits limits={67108864,8388608,128000000};
+    XrCompileResources *resources=NULL;XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,8388608,true};
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(resources,&baseline)==XR_COMPILE_RESOURCE_OK);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     size_t begin=runtime_attempts;runtime_fail_at=fail==SIZE_MAX ? SIZE_MAX : begin+fail;AstNode *program=NULL;
     XrParseStatus status=xr_compile_parse_expression_string(session,"1; print(2)","<debug-expression>",&program);
     size_t sites=runtime_attempts-begin;runtime_fail_at=SIZE_MAX;
     CHECK(!program && !xr_compile_session_current_arena(session));
     if (fail==SIZE_MAX) CHECK(status==XR_PARSE_SYNTAX);else CHECK(status==XR_PARSE_OUT_OF_MEMORY && sites>fail);
     xr_compile_session_free(session);XrCompileResourceStats after={0};
-    CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK && after.live_bytes==baseline.live_bytes);
+    CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==baseline.held_bytes);
     xr_compile_resources_release(resources);CHECK(!runtime_live && !runtime_bytes);return sites;
 }
 int main(int argc,char **argv) {
     bool full=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || full);
-    xr_test_suppress_dialogs();XrCompileResources *resources=NULL;XrCompileResourceLimits limits={67108864,8388608,128000000};
+    xr_test_suppress_dialogs();XrCompileResources *resources=NULL;XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,8388608,true};
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(resources,&baseline)==XR_COMPILE_RESOURCE_OK);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     const char *accepted[]={"1+2","value == 2","(value+1)*2\n", "true && !false /* trailing comment */"};
     for (uint32_t i=0;i<sizeof(accepted)/sizeof(*accepted);++i) {
         AstNode *program=NULL;CHECK(xr_compile_parse_expression_string(session,accepted[i],"<debug-expression>",&program)==XR_PARSE_OK);
@@ -47,7 +47,7 @@ int main(int argc,char **argv) {
         CHECK(status==XR_PARSE_SYNTAX && !program);CHECK(!xr_compile_session_current_arena(session));
     }
     xr_compile_session_free(session);XrCompileResourceStats after={0};
-    CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK && after.live_bytes==baseline.live_bytes);
+    CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==baseline.held_bytes);
     xr_compile_resources_release(resources);CHECK(!runtime_live && !runtime_bytes);
     size_t sites=expression_fault(SIZE_MAX);CHECK(sites);
     if (full) for (size_t i=0;i<sites;++i) expression_fault(i);

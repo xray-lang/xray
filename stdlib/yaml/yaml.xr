@@ -506,23 +506,23 @@ fn _codepointString(cp: i64) -> string {
 }
 
 fn _decodeDoubleQuotedBody(body: string) -> string {
-    var out = StringBuilder()
+    var out = ""
     var i = 0
     while (i < len(body)) {
         var c = body.slice(i, (i) + 1)
         if (c != "\\") {
-            out.append(c)
+            out += c
             i = i + 1
             continue
         }
         i = i + 1
         if (i >= len(body)) { break }
         var esc = body.slice(i, (i) + 1)
-        if (esc == "n") { out.append("\n") }
-        else if (esc == "t") { out.append("\t") }
-        else if (esc == "r") { out.append("\r") }
-        else if (esc == "\"") { out.append("\"") }
-        else if (esc == "\\") { out.append("\\") }
+        if (esc == "n") { out += "\n" }
+        else if (esc == "t") { out += "\t" }
+        else if (esc == "r") { out += "\r" }
+        else if (esc == "\"") { out += "\"" }
+        else if (esc == "\\") { out += "\\" }
         else if (esc == "u" || esc == "U") {
             var digits = 4
             if (esc == "U") { digits = 8 }
@@ -536,13 +536,13 @@ fn _decodeDoubleQuotedBody(body: string) -> string {
                 }
                 cp = cp * 16 + _hexValue(body.slice(i, (i) + 1))
             }
-            if (ok) { out.append(_codepointString(cp)) }
+            if (ok) { out += _codepointString(cp) }
         } else {
-            out.append(esc)
+            out += esc
         }
         i = i + 1
     }
-    return out.toString()
+    return out
 }
 
 fn _parseQuotedLiteral(raw: string) -> string {
@@ -666,15 +666,15 @@ class YamlFlowParser {
 
     parseQuoted() -> string {
         var quote = this.advance()
-        var out = StringBuilder()
+        var out = ""
         var escape = false
         while (!this.atEnd()) {
             var c = this.advance()
             if (quote == "\"" && escape) {
-                if (c == "n") { out.append("\n") }
-                else if (c == "t") { out.append("\t") }
-                else if (c == "r") { out.append("\r") }
-                else if (c == "\"" || c == "\\") { out.append(c) }
+                if (c == "n") { out += "\n" }
+                else if (c == "t") { out += "\t" }
+                else if (c == "r") { out += "\r" }
+                else if (c == "\"" || c == "\\") { out += c }
                 else if (c == "u" || c == "U") {
                     var digits = 4
                     if (c == "U") { digits = 8 }
@@ -687,9 +687,9 @@ class YamlFlowParser {
                         }
                         cp = cp * 16 + _hexValue(this.advance())
                     }
-                    if (ok) { out.append(_codepointString(cp)) }
+                    if (ok) { out += _codepointString(cp) }
                 } else {
-                    out.append(c)
+                    out += c
                 }
                 escape = false
                 continue
@@ -698,10 +698,10 @@ class YamlFlowParser {
                 escape = true
                 continue
             }
-            if (c == quote) { return out.toString() }
-            out.append(c)
+            if (c == quote) { return out }
+            out += c
         }
-        return out.toString()
+        return out
     }
 
     parseKey() -> string {
@@ -901,26 +901,26 @@ class YamlParser {
             this.index = this.index + 1
         }
 
-        var out = StringBuilder()
+        var out = ""
         if (style == "|") {
             for (var i = 0; i < len(parts); i++) {
-                if (i > 0) { out.append("\n") }
-                out.append(parts[i])
+                if (i > 0) { out += "\n" }
+                out += parts[i]
             }
         } else {
             for (var i = 0; i < len(parts); i++) {
                 var part = parts[i]
                 if (len(part) == 0) {
-                    out.append("\n")
+                    out += "\n"
                 } else {
-                    var current = out.toString()
-                    if (len(current) > 0 && !current.endsWith("\n")) { out.append(" ") }
-                    out.append(part)
+                    var current = out
+                    if (len(current) > 0 && !current.endsWith("\n")) { out += " " }
+                    out += part
                 }
             }
         }
-        if (chomp != "-" && len(parts) > 0) { out.append("\n") }
-        return out.toString()
+        if (chomp != "-" && len(parts) > 0) { out += "\n" }
+        return out
     }
 
     parseMappingLineInto(mapping: ref YamlMapping, content: string, indent: i64) {
@@ -1088,25 +1088,25 @@ fn _firstError(parser: YamlParser, strict: bool) -> YamlDiagnostic? {
 // ===== Serializer =====
 
 fn _indent(level: i64, spaces: i64) -> string {
-    var out = StringBuilder()
-    for (var i = 0; i < level * spaces; i++) { out.append(" ") }
-    return out.toString()
+    var out = ""
+    for (var i = 0; i < level * spaces; i++) { out += " " }
+    return out
 }
 
 fn _quoteString(s: string) -> string {
-    var out = StringBuilder()
-    out.append("\"")
+    var out = ""
+    out += "\""
     for (var i = 0; i < len(s); i++) {
         var c = s.slice(i, (i) + 1)
-        if (c == "\"") { out.append("\\\"") }
-        else if (c == "\\") { out.append("\\\\") }
-        else if (c == "\n") { out.append("\\n") }
-        else if (c == "\r") { out.append("\\r") }
-        else if (c == "\t") { out.append("\\t") }
-        else { out.append(c) }
+        if (c == "\"") { out += "\\\"" }
+        else if (c == "\\") { out += "\\\\" }
+        else if (c == "\n") { out += "\\n" }
+        else if (c == "\r") { out += "\\r" }
+        else if (c == "\t") { out += "\\t" }
+        else { out += c }
     }
-    out.append("\"")
-    return out.toString()
+    out += "\""
+    return out
 }
 
 fn _keyText(key: string) -> string {
@@ -1122,7 +1122,7 @@ fn _keyText(key: string) -> string {
 
 fn _base64Encode(bytes: Array<u8>) -> string {
     var table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-    var out = StringBuilder()
+    var out = ""
     var n = len(bytes)
     var i = 0
     while (i + 3 <= n) {
@@ -1130,29 +1130,29 @@ fn _base64Encode(bytes: Array<u8>) -> string {
         var b1 = (bytes[i + 1] as i64)
         var b2 = (bytes[i + 2] as i64)
         var v = (b0 << 16) | (b1 << 8) | b2
-        out.append(table.slice((v >> 18) & 63, ((v >> 18) & 63) + 1))
-        out.append(table.slice((v >> 12) & 63, ((v >> 12) & 63) + 1))
-        out.append(table.slice((v >> 6) & 63, ((v >> 6) & 63) + 1))
-        out.append(table.slice(v & 63, (v & 63) + 1))
+        out += table.slice((v >> 18) & 63, ((v >> 18) & 63) + 1)
+        out += table.slice((v >> 12) & 63, ((v >> 12) & 63) + 1)
+        out += table.slice((v >> 6) & 63, ((v >> 6) & 63) + 1)
+        out += table.slice(v & 63, (v & 63) + 1)
         i = i + 3
     }
     var rem = n - i
     if (rem == 1) {
         var b0 = (bytes[i] as i64)
         var v = b0 << 16
-        out.append(table.slice((v >> 18) & 63, ((v >> 18) & 63) + 1))
-        out.append(table.slice((v >> 12) & 63, ((v >> 12) & 63) + 1))
-        out.append("==")
+        out += table.slice((v >> 18) & 63, ((v >> 18) & 63) + 1)
+        out += table.slice((v >> 12) & 63, ((v >> 12) & 63) + 1)
+        out += "=="
     } else if (rem == 2) {
         var b0 = (bytes[i] as i64)
         var b1 = (bytes[i + 1] as i64)
         var v = (b0 << 16) | (b1 << 8)
-        out.append(table.slice((v >> 18) & 63, ((v >> 18) & 63) + 1))
-        out.append(table.slice((v >> 12) & 63, ((v >> 12) & 63) + 1))
-        out.append(table.slice((v >> 6) & 63, ((v >> 6) & 63) + 1))
-        out.append("=")
+        out += table.slice((v >> 18) & 63, ((v >> 18) & 63) + 1)
+        out += table.slice((v >> 12) & 63, ((v >> 12) & 63) + 1)
+        out += table.slice((v >> 6) & 63, ((v >> 6) & 63) + 1)
+        out += "="
     }
-    return out.toString()
+    return out
 }
 
 fn _boolText(b: bool) -> string {
@@ -1197,41 +1197,41 @@ fn _isBlockValue(value: YamlValue) -> bool {
 }
 
 fn _emitSequence(items: Array<YamlValue>, level: i64, indent: i64) -> string {
-    var out = StringBuilder()
+    var out = ""
     for (var i = 0; i < len(items); i++) {
         var item = items[i]
-        out.append(_indent(level, indent))
-        out.append("-")
+        out += _indent(level, indent)
+        out += "-"
         if (_isBlockValue(item)) {
-            out.append("\n")
-            out.append(_emitValue(item, level + 1, indent))
+            out += "\n"
+            out += _emitValue(item, level + 1, indent)
         } else {
-            out.append(" ")
-            out.append(_scalarText(item))
-            out.append("\n")
+            out += " "
+            out += _scalarText(item)
+            out += "\n"
         }
     }
-    return out.toString()
+    return out
 }
 
 fn _emitMapping(mapping: YamlMapping, level: i64, indent: i64) -> string {
-    var out = StringBuilder()
+    var out = ""
     for (var i = 0; i < len(mapping.keys); i++) {
         var key = mapping.keys[i]
         var item = mapping.values[i]
-        out.append(_indent(level, indent))
-        out.append(_keyText(key))
-        out.append(":")
+        out += _indent(level, indent)
+        out += _keyText(key)
+        out += ":"
         if (_isBlockValue(item)) {
-            out.append("\n")
-            out.append(_emitValue(item, level + 1, indent))
+            out += "\n"
+            out += _emitValue(item, level + 1, indent)
         } else {
-            out.append(" ")
-            out.append(_scalarText(item))
-            out.append("\n")
+            out += " "
+            out += _scalarText(item)
+            out += "\n"
         }
     }
-    return out.toString()
+    return out
 }
 
 fn _emitValue(value: YamlValue, level: i64, indent: i64) -> string {

@@ -28,12 +28,12 @@
 #define XIR_OK(call) CHECK((call) == XR_XIR_OK)
 
 static XrXirSourceResult compile_text(const char *text) {
-    XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrXirCompileContext context = {0};
     CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
     context.limits = xr_xir_compile_default_limits();
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "lir-source-input", NULL};
     XrXirSourceRequest request = {.session = session,
                                   .authority = &authority,
@@ -167,12 +167,12 @@ static void lowered_origin_rejected(void) {
 }
 
 static void evaluation_origin_rejected(void) {
-    XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrXirCompileContext context = {0};
     CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
     context.limits = xr_xir_compile_default_limits();
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "lir-evaluation-input", NULL};
     XrXirSourceRequest source_request = {.session = session,
                                          .authority = &authority,

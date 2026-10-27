@@ -26,7 +26,7 @@ static bool target_environment_key(XrXirTargetSnapshot *snapshot, const char *ke
     TargetEnvironmentKey *output) {
     size_t length=0;bool reserved=false;
     for (;;++length) {
-        if (!xtc_xir_target_work(snapshot,1))return false;
+        if (snapshot->status != XR_XIR_TARGET_OK)return false;
         unsigned char byte=(unsigned char)key[length];
         if (!byte)break;
         if (byte=='=') {
@@ -35,19 +35,20 @@ static bool target_environment_key(XrXirTargetSnapshot *snapshot, const char *ke
         }
     }
     if (!length||(reserved&&length==1))return xtc_xir_target_fail(snapshot,XR_XIR_TARGET_INVALID);
-    if (length>=INT_MAX||length>SIZE_MAX/sizeof(wchar_t)-1)
-        return xtc_xir_target_fail(snapshot,XR_XIR_TARGET_BUDGET);
+    if (length>=INT_MAX) return xtc_xir_target_fail(snapshot,XR_XIR_TARGET_BUDGET);
+    if (length>SIZE_MAX/sizeof(wchar_t)-1)
+        return xtc_xir_target_fail(snapshot,XR_XIR_TARGET_OVERFLOW);
     /* UTF-8 bytes bound UTF-16 units, so one actual conversion needs no sizing
      * call. The saved UTF-16 key belongs to this snapshot's existing ledger. */
     wchar_t *wide=xtc_xir_target_allocate(snapshot,(length+1)*sizeof(*wide));
-    if (!wide||!xtc_xir_target_work(snapshot,length+1))return false;
+    if (!wide||snapshot->status != XR_XIR_TARGET_OK)return false;
     int units=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,key,(int)length,wide,(int)length);
     if (!units)return target_environment_error(snapshot,GetLastError());
     *output=(TargetEnvironmentKey){wide,units};return true;
 }
 static bool target_same_key(XrXirTargetSnapshot *snapshot, const TargetEnvironmentKey *a,
     const TargetEnvironmentKey *b, bool *same) {
-    if (!xtc_xir_target_work(snapshot,((uint64_t)a->length+(uint64_t)b->length)*sizeof(wchar_t)+1))return false;
+    if (snapshot->status != XR_XIR_TARGET_OK)return false;
     int result=CompareStringOrdinal(a->text,a->length,b->text,b->length,TRUE);
     if (!result)return target_environment_error(snapshot,GetLastError());
     *same=result==CSTR_EQUAL;return true;
@@ -57,7 +58,8 @@ static bool target_same_key(XrXirTargetSnapshot *snapshot, const TargetEnvironme
 static XrXirTargetStatus target_resource_status(XrCompileResourceStatus status) {
     switch (status) {
     case XR_COMPILE_RESOURCE_OK: return XR_XIR_TARGET_OK;
-    case XR_COMPILE_RESOURCE_BUDGET: return XR_XIR_TARGET_BUDGET;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT: return XR_XIR_TARGET_MEMORY_LIMIT;
+    case XR_COMPILE_RESOURCE_OVERFLOW: return XR_XIR_TARGET_OVERFLOW;
     case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_XIR_TARGET_OUT_OF_MEMORY;
     default: return XR_XIR_TARGET_INVALID;
     }
@@ -66,15 +68,10 @@ XR_FUNC bool xtc_xir_target_fail(XrXirTargetSnapshot *snapshot, XrXirTargetStatu
     if (snapshot->status == XR_XIR_TARGET_OK) snapshot->status = status;
     return false;
 }
-XR_FUNC bool xtc_xir_target_work(XrXirTargetSnapshot *snapshot, uint64_t work) {
-    if (snapshot->status != XR_XIR_TARGET_OK) return false;
-    XrXirTargetStatus status = target_resource_status(xr_compile_resources_work(snapshot->resources, work));
-    return status == XR_XIR_TARGET_OK || xtc_xir_target_fail(snapshot, status);
-}
 XR_FUNC void *xtc_xir_target_allocate(XrXirTargetSnapshot *snapshot, size_t bytes) {
     if (snapshot->status != XR_XIR_TARGET_OK) return NULL;
     if (bytes > SIZE_MAX - sizeof(XtcXirMemory)) {
-        xtc_xir_target_fail(snapshot, XR_XIR_TARGET_BUDGET); return NULL;
+        xtc_xir_target_fail(snapshot, XR_XIR_TARGET_OVERFLOW); return NULL;
     }
     void *allocation = NULL;
     XrXirTargetStatus status = target_resource_status(xr_compile_resources_calloc(snapshot->resources,
@@ -87,39 +84,39 @@ XR_FUNC void *xtc_xir_target_allocate(XrXirTargetSnapshot *snapshot, size_t byte
 XR_FUNC bool xtc_xir_target_length(XrXirTargetSnapshot *snapshot, const char *text, size_t *length) {
     if (!text) return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID);
     for (size_t i = 0; i < XTC_XIR_TARGET_TEXT_LIMIT; ++i) {
-        if (!xtc_xir_target_work(snapshot, 1)) return false;
+        if (snapshot->status != XR_XIR_TARGET_OK) return false;
         if (!text[i]) { *length = i; return true; }
     }
     return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_BUDGET);
 }
 XR_FUNC bool xtc_xir_target_compare(XrXirTargetSnapshot *snapshot, const char *a, const char *b, int *order) {
     for (;;) {
-        if (!xtc_xir_target_work(snapshot, 2)) return false;
+        if (snapshot->status != XR_XIR_TARGET_OK) return false;
         unsigned char left = (unsigned char)*a++, right = (unsigned char)*b++;
         if (left != right || !left) { *order = (int)left - (int)right; return true; }
     }
 }
 XR_FUNC char *xtc_xir_target_text(XrXirTargetSnapshot *snapshot, const char *text) {
     size_t length;
-    if (!xtc_xir_target_length(snapshot, text, &length) || !xtc_xir_target_work(snapshot, length)) return NULL;
+    if (!xtc_xir_target_length(snapshot, text, &length) || snapshot->status != XR_XIR_TARGET_OK) return NULL;
     if (!xr_utf8_validate(text, length)) { xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID); return NULL; }
     char *copy = xtc_xir_target_allocate(snapshot, length + 1);
-    if (copy && xtc_xir_target_work(snapshot, length + 1)) memcpy(copy, text, length + 1);
+    if (copy && snapshot->status == XR_XIR_TARGET_OK) memcpy(copy, text, length + 1);
     else return NULL;
     return copy;
 }
 /* This description follows the process drive-absolute domain without probing
- * the filesystem. Each prefix byte is charged before it is inspected. */
+ * the filesystem. The owned text has already passed the path-size bound. */
 static char *target_command_path(XrXirTargetSnapshot *snapshot, const char *input) {
     char *text = xtc_xir_target_text(snapshot, input);
-    if (!text || !xtc_xir_target_work(snapshot, 1)) return NULL;
+    if (!text || snapshot->status != XR_XIR_TARGET_OK) return NULL;
     unsigned char first = (unsigned char)text[0];
     if (!((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z'))) {
         xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID); return NULL;
     }
-    if (!xtc_xir_target_work(snapshot, 1)) return NULL;
+    if (snapshot->status != XR_XIR_TARGET_OK) return NULL;
     if (text[1] != ':') { xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID); return NULL; }
-    if (!xtc_xir_target_work(snapshot, 1)) return NULL;
+    if (snapshot->status != XR_XIR_TARGET_OK) return NULL;
     char separator = text[2];
     if (separator != '/' && separator != '\\') {
         xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID); return NULL;
@@ -143,8 +140,7 @@ static bool target_commands(XrXirTargetSnapshot *snapshot, const XrXirTargetSnap
         if (!output->executable) return false;
         output->cwd = target_command_path(snapshot, input->cwd);
         if (!output->cwd) return false;
-        if (!xtc_xir_target_work(snapshot, sizeof(output->timeout_ms) + sizeof(output->output_limit) +
-            sizeof(output->image_mode) + sizeof(output->completion_policy))) return false;
+        if (snapshot->status != XR_XIR_TARGET_OK) return false;
         output->timeout_ms = input->timeout_ms; output->output_limit = input->output_limit;
         output->image_mode = input->image_mode; output->completion_policy = input->completion_policy;
         const char **argv = xtc_xir_target_allocate(snapshot, ((size_t)input->argc + 1) * sizeof(*argv));
@@ -153,7 +149,7 @@ static bool target_commands(XrXirTargetSnapshot *snapshot, const XrXirTargetSnap
         for (uint32_t a = 0; a < input->argc; ++a) {
             argv[a] = xtc_xir_target_text(snapshot, input->argv[a]);
             if (!argv[a]) return false;
-            if (!a && (!xtc_xir_target_work(snapshot, 1) || !argv[a][0]))
+            if (!a && (snapshot->status != XR_XIR_TARGET_OK || !argv[a][0]))
                 return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID);
         }
         if (!input->environment_count) continue;
@@ -182,18 +178,18 @@ static bool target_commands(XrXirTargetSnapshot *snapshot, const XrXirTargetSnap
 }
 static bool target_hash_bytes(XrXirTargetSnapshot *snapshot, XrSHA256Context *hash,
     const void *bytes, size_t length) {
-    if (!xtc_xir_target_work(snapshot, length)) return false;
+    if (snapshot->status != XR_XIR_TARGET_OK) return false;
     xr_sha256_update(hash, bytes, length); return true;
 }
 static bool target_u32(XrXirTargetSnapshot *snapshot, XrSHA256Context *hash, uint32_t value) {
     uint8_t bytes[4];
-    if (!xtc_xir_target_work(snapshot, sizeof(bytes))) return false;
+    if (snapshot->status != XR_XIR_TARGET_OK) return false;
     for (uint32_t i = 0; i < 4; ++i) bytes[i] = (uint8_t)(value >> (i * 8));
     return target_hash_bytes(snapshot, hash, bytes, sizeof(bytes));
 }
 static bool target_u64(XrXirTargetSnapshot *snapshot, XrSHA256Context *hash, uint64_t value) {
     uint8_t bytes[8];
-    if (!xtc_xir_target_work(snapshot, sizeof(bytes))) return false;
+    if (snapshot->status != XR_XIR_TARGET_OK) return false;
     for (uint32_t i = 0; i < 8; ++i) bytes[i] = (uint8_t)(value >> (i * 8));
     return target_hash_bytes(snapshot, hash, bytes, sizeof(bytes));
 }
@@ -218,15 +214,15 @@ static bool target_family_identity(XrXirTargetSnapshot *snapshot, bool provider,
         !target_u32(snapshot, &hash, provider ? snapshot->facts.provider : snapshot->facts.crt)) return false;
     uint32_t count = 0;
     for (uint32_t i = 0; i < snapshot->facts.file_count; ++i) {
-        if (!xtc_xir_target_work(snapshot, 1)) return false;
+        if (snapshot->status != XR_XIR_TARGET_OK) return false;
         if (target_kind(snapshot->files[i].kind, provider)) ++count;
     }
     if (!target_u32(snapshot, &hash, count)) return false;
     for (uint32_t i = 0; i < snapshot->facts.file_count; ++i) {
-        if (!xtc_xir_target_work(snapshot, 1)) return false;
+        if (snapshot->status != XR_XIR_TARGET_OK) return false;
         if (target_kind(snapshot->files[i].kind, provider) && !target_hash_file(snapshot, &hash, &snapshot->files[i])) return false;
     }
-    if (!xtc_xir_target_work(snapshot, 1)) return false;
+    if (snapshot->status != XR_XIR_TARGET_OK) return false;
     xr_sha256_final(&hash, digest); return true;
 }
 static bool target_identity(XrXirTargetSnapshot *snapshot) {
@@ -261,7 +257,7 @@ static bool target_identity(XrXirTargetSnapshot *snapshot) {
     if (!target_u32(snapshot, &hash, facts->file_count)) return false;
     for (uint32_t i = 0; i < facts->file_count; ++i)
         if (!target_hash_file(snapshot, &hash, &snapshot->files[i])) return false;
-    if (!xtc_xir_target_work(snapshot, 1)) return false;
+    if (snapshot->status != XR_XIR_TARGET_OK) return false;
     xr_sha256_final(&hash, facts->identity); return true;
 }
 XR_FUNC XrXirTargetStatus xtc_xir_target_snapshot_capture(const XrXirTargetSnapshotRequest *request, XrXirTargetSnapshot **output) {

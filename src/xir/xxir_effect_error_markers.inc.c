@@ -60,7 +60,7 @@ static XrXirStatus error_marker_parameter(const XrXirCompileContext *work,const 
     if(status!=XR_XIR_OK) return status;
     uint32_t parameter=(uint32_t)type-XR_XIR_TYPE_PARAMETER_BASE;
     if(!generic || parameter>=generic->parameter_count) return XR_XIR_BAD_STRUCTURE;
-    if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
     uint32_t value=generic->constraints[parameter].markers;
     if(value&(XR_XIR_CONSTRAINT_ATOMIC_VALUE|XR_XIR_CONSTRAINT_ATOMIC_NUMBER|XR_XIR_CONSTRAINT_ATOMIC_BOOLEAN))
         value|=XR_XIR_CONSTRAINT_SENDABLE;
@@ -111,7 +111,7 @@ static XrXirStatus error_marker_enum(const XrXirCompileContext *work,const Effec
     if(status!=XR_XIR_OK) return status;
     uint32_t end=0;
     for(uint32_t i=0;i<variants;++i) {
-        if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
         if(items[i].field_begin!=end || items[i].field_count>fields-end) return XR_XIR_BAD_STRUCTURE;
         end+=items[i].field_count;
     }
@@ -121,7 +121,7 @@ static XrXirStatus error_marker_enum(const XrXirCompileContext *work,const Effec
         status=effect_role_range(work,declaration->constraints,arity,sizeof(*declaration->constraints));
         if(status!=XR_XIR_OK) return status;
         for(uint32_t a=0;a<arity;++a) {
-            if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
             const XrXirConstraint *constraint=&declaration->constraints[a];
             if(constraint->interfaces || constraint->interface_count || (constraint->markers&~XR_XIR_CONSTRAINT_SENDABLE))
                 return XR_XIR_BAD_STRUCTURE;
@@ -151,7 +151,7 @@ static XrXirStatus error_marker_call_argument(const XrXirCompileContext *work,co
         count>generic->argument_count-begin) return XR_XIR_BAD_STRUCTURE;
     status=effect_role_range(work,generic->arguments,generic->argument_count,sizeof(*generic->arguments));
     if(status!=XR_XIR_OK) return status;
-    if(!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+
     *output=generic->arguments[begin+parameter];return XR_XIR_OK;
 }
 static XrXirStatus error_marker_rule(const XrXirCompileContext *work,const EffectErrorFinite *proof,
@@ -161,7 +161,7 @@ static XrXirStatus error_marker_rule(const XrXirCompileContext *work,const Effec
         (goal->kind==ERROR_MARKER_CALL_PAIR && (!goal->bound || goal->binder==UINT32_MAX))) return XR_XIR_BAD_STRUCTURE;
     const XrXirGeneric *generic=NULL;XrXirStatus status=error_marker_scope(work,proof,goal->scope,&generic);
     if(status!=XR_XIR_OK) return status;
-    if(!xir_compile_work(work,sizeof(*output)+sizeof(*goal))) return XR_XIR_BUDGET;
+
     *output=(ErrorMarkerRule){.terminal=true};
     XrXirType type=(XrXirType)goal->left;uint32_t id=goal->left;
     bool parameter=id>=XR_XIR_TYPE_PARAMETER_BASE && id<XR_XIR_TYPE_PARAMETER_LIMIT;
@@ -197,7 +197,7 @@ static XrXirStatus error_marker_rule(const XrXirCompileContext *work,const Effec
             if(node->parameter_count!=target->parameter_count || node->parameter_count==UINT32_MAX ||
                 node->parameter_count>UINT32_MAX-extra) return XR_XIR_BAD_STRUCTURE;
             for(uint32_t p=0;p<node->parameter_count;++p) {
-                if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
                 if(node->parameters[p].mode!=target->parameters[p].mode) return XR_XIR_BAD_STRUCTURE;
             }
             output->children=node->parameter_count+extra;
@@ -237,7 +237,7 @@ static XrXirStatus error_marker_rule(const XrXirCompileContext *work,const Effec
     } else if(node->kind==XR_XIR_TYPE_TUPLE) {
         if(!node->parameter_count || !node->parameters) return XR_XIR_BAD_STRUCTURE;
         for(uint32_t p=0;p<node->parameter_count;++p) {
-            if(!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
             if(node->parameters[p].mode) return XR_XIR_OK;
         }
         output->children=node->parameter_count;
@@ -286,7 +286,7 @@ static XrXirStatus error_marker_child(const XrXirCompileContext *work,const Effe
         if(ordinal<view.bounds) {
             uint32_t bound=0;
             for(uint32_t a=0;a<view.arity;++a) {
-                if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
                 if(view.declaration->constraints[a].markers&XR_XIR_CONSTRAINT_SENDABLE) {
                     if(bound++==ordinal) {
                         *output=error_marker_type_goal(goal->scope,ERROR_MARKER_SENDABLE,node->nominal.arguments[a]);
@@ -317,7 +317,7 @@ static XrXirStatus error_marker_nodes_match(const XrXirCompileContext *work,cons
     if(status!=XR_XIR_OK) return status;
     for(uint32_t i=0;i<markers->count;++i) {
         const ErrorMarkerNode *node=&markers->nodes[i];
-        if(!xir_compile_work(work,sizeof(*node))) return XR_XIR_BUDGET;
+
         if(node->value>1 || node->end<=i || node->end>markers->count) return XR_XIR_BAD_STRUCTURE;
         if(node->reference!=UINT32_MAX) {
             if(node->reference>=i || node->children || node->end!=i+1) return XR_XIR_BAD_STRUCTURE;
@@ -329,7 +329,7 @@ static XrXirStatus error_marker_nodes_match(const XrXirCompileContext *work,cons
                 else if(node->value) return XR_XIR_BAD_STRUCTURE;
                 uint32_t parent=node->parent;bool ancestor=false;
                 for(uint32_t walked=0;parent!=UINT32_MAX && walked<=i;++walked) {
-                    if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+
                     if(parent>=i) return XR_XIR_BAD_STRUCTURE;
                     if(parent==node->reference) { ancestor=true;break; }
                     parent=markers->nodes[parent].parent;
@@ -370,7 +370,7 @@ static XrXirStatus error_marker_permissions_fold(const XrXirCompileContext *work
         if(status!=XR_XIR_OK) return status;
         XrXirStatus permission=(word&3)?XR_XIR_BAD_TYPE:XR_XIR_OK;
         for(uint32_t a=0;permission==XR_XIR_OK && a<proof->atom_count;++a) {
-            if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
             status=error_finite_word(&read,proof->rows[f].end-(uint64_t)proof->words*64+(uint64_t)((a+2)/64)*64,64,&word);
             if(status!=XR_XIR_OK) return status;
             if(!(word&(UINT64_C(1)<<((a+2)%64)))) continue;
@@ -384,7 +384,7 @@ static XrXirStatus error_marker_permissions_fold(const XrXirCompileContext *work
         }
         if(f<proof->functions) {
             if(projection) {
-                if(!xir_compile_work(work,sizeof(*projection))) return XR_XIR_BUDGET;
+
                 projection[f]=permission;
             } else if(permissions[f]!=permission) return XR_XIR_BAD_STRUCTURE;
         }

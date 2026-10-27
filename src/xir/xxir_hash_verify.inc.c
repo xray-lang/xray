@@ -56,7 +56,7 @@ static XrXirStatus hash_uses(const Graph *graph, const XrXirFunction *function,
     }
     uint32_t count = operand_count(function, op, context->module);
     if (op->op == XR_XIR_MAP_NEW && ((count & 1u) || node->result == XR_XIR_UNIT)) return XR_XIR_BAD_TYPE;
-    if (!xir_compile_work(&context->remaining, count)) return XR_XIR_BUDGET;
+
     for (uint32_t a = 0; a < count; ++a) {
         XrXirType expected;
         if (constructing) expected = map && (a & 1u) ? node->result : node->element;

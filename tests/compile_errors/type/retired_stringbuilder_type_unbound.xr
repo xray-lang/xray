@@ -1,0 +1,1 @@
+fn oldBuilder(value: StringBuilder) -> i64 { return 0 }

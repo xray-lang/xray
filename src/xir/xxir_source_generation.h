@@ -15,6 +15,7 @@
 #include "xxir_source.h"
 #include "xxir_source_ast_owner.h"
 #include "xxir_instance_generation.h"
+struct XrCompileRequestControl;
 struct AstNode;
 struct XrXirProgram;
 typedef struct XrXirSourceGenerations XrXirSourceGenerations;
@@ -35,6 +36,8 @@ typedef struct XrXirSourceReplInput {
     /* Optional empty output receives independently owned failure facts.
      * It borrows only during prepare; release with source_failure_free. */
     XrXirSourceFailure *failure;
+    /* Borrowed synchronously; no record retains request control. */
+    struct XrCompileRequestControl *request;
 } XrXirSourceReplInput;
 
 typedef struct XrXirSourceGenerationView {
@@ -74,7 +77,7 @@ typedef struct XrXirSourceGenerationDefinition {
     const struct AstNode *syntax, *dependency_syntax;
     const XrXirArtifact *checked;
 } XrXirSourceGenerationDefinition;
-/* Copies configuration strings and pins the supplied cumulative ledger.
+/* Copies configuration strings and pins the supplied memory owner.
  * Catalog and lockfile are borrowed and must outlive preparation calls.
  * All operations require caller exclusion; namespace distinguishes sessions. */
 XR_FUNC XrXirStatus xr_xir_compile_source_generations_new(

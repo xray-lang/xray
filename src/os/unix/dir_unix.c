@@ -32,18 +32,18 @@ XR_FUNC XrOsIoStatus xr_os_io_dir_open(const XrOsIoPolicy *policy, const char *p
     XrIoContext io = {policy, XR_OS_IO_OK}; size_t length = 0;
     if (!io_length(&io, path, &length)) return io.status;
     if (!length) return XR_OS_IO_BAD_ARGUMENT;
-    if (length > SIZE_MAX - 2) return XR_OS_IO_BUDGET;
+    if (length > SIZE_MAX - 2) return XR_OS_IO_OVERFLOW;
     XrDirIter *iterator = io_alloc(&io, sizeof(*iterator));
     if (!iterator) return io.status;
     if (!io_clear(&io, iterator, sizeof(*iterator))) { io_free(&io, iterator); return io.status; }
     iterator->policy = *policy;
     iterator->prefix = io_alloc(&io, length + 2);
-    if (iterator->prefix && io_copy(&io, iterator->prefix, path, length) && io_work(&io, 1)) {
-        if (path[length - 1] != '/' && io_work(&io, 1)) iterator->prefix[length++] = '/';
-        if (io_work(&io, 1)) iterator->prefix[length] = 0;
+    if (iterator->prefix && io_copy(&io, iterator->prefix, path, length) && ((&io)->status == XR_OS_IO_OK)) {
+        if (path[length - 1] != '/' && ((&io)->status == XR_OS_IO_OK)) iterator->prefix[length++] = '/';
+        if ((&io)->status == XR_OS_IO_OK) iterator->prefix[length] = 0;
         iterator->prefix_length = length;
     }
-    if (io_work(&io, 1)) {
+    if ((&io)->status == XR_OS_IO_OK) {
         iterator->directory = opendir(path);
         if (!iterator->directory) io_status(&io, io_errno_status(errno));
     }
@@ -56,10 +56,10 @@ static void classify_entry(XrIoContext *io, XrDirIter *iterator, const struct di
     if (entry->d_type == DT_DIR) { iterator->pending.is_dir = true; return; }
     if (entry->d_type != DT_UNKNOWN) return;
 #endif
-    if (length > SIZE_MAX - iterator->prefix_length - 1) { io_status(io, XR_OS_IO_BUDGET); return; }
+    if (length > SIZE_MAX - iterator->prefix_length - 1) { io_status(io, XR_OS_IO_OVERFLOW); return; }
     char *full = io_alloc(io, iterator->prefix_length + length + 1);
     if (full && io_copy(io, full, iterator->prefix, iterator->prefix_length) &&
-        io_copy(io, full + iterator->prefix_length, entry->d_name, length + 1) && io_work(io, 1)) {
+        io_copy(io, full + iterator->prefix_length, entry->d_name, length + 1) && ((io)->status == XR_OS_IO_OK)) {
         struct stat info;
         if (stat(full, &info)) io_status(io, io_errno_status(errno));
         else iterator->pending.is_dir = S_ISDIR(info.st_mode);
@@ -71,7 +71,7 @@ XR_FUNC XrOsIoStatus xr_os_io_dir_next(XrDirIter *iterator, XrDirEntry *output) 
     if (iterator->status != XR_OS_IO_OK) return iterator->status;
     if (iterator->ended) return XR_OS_IO_END;
     XrIoContext io = {&iterator->policy, XR_OS_IO_OK};
-    while (io_work(&io, 1)) {
+    while ((&io)->status == XR_OS_IO_OK) {
         errno = 0;
         struct dirent *entry = readdir(iterator->directory);
         if (!entry) {
@@ -80,14 +80,14 @@ XR_FUNC XrOsIoStatus xr_os_io_dir_next(XrDirIter *iterator, XrDirEntry *output) 
         }
         const char *name = entry->d_name;
         bool dot = false;
-        if (io_work(&io, 1) && name[0] == '.' && io_work(&io, 1)) {
+        if (((&io)->status == XR_OS_IO_OK) && name[0] == '.' && ((&io)->status == XR_OS_IO_OK)) {
             if (!name[1]) dot = true;
-            else if (name[1] == '.' && io_work(&io, 1) && !name[2]) dot = true;
+            else if (name[1] == '.' && ((&io)->status == XR_OS_IO_OK) && !name[2]) dot = true;
         }
         if (dot) continue;
         size_t length = 0;
         if (io.status == XR_OS_IO_OK && io_length(&io, name, &length)) {
-            if (length >= XR_DIR_ENTRY_NAME_MAX) io_status(&io, XR_OS_IO_BUDGET);
+            if (length >= XR_DIR_ENTRY_NAME_MAX) io_status(&io, XR_OS_IO_OVERFLOW);
             else if (io_clear(&io, &iterator->pending, sizeof(iterator->pending)) &&
                 io_copy(&io, iterator->pending.name, name, length + 1)) {
                 classify_entry(&io, iterator, entry, length);

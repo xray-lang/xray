@@ -23,19 +23,19 @@ XR_FUNC XrOsIoStatus xr_os_io_dir_open(const XrOsIoPolicy *policy, const char *p
     XrIoContext io = {policy, XR_OS_IO_OK}; size_t length = 0;
     if (!io_length(&io, path, &length)) return io.status;
     if (!length) return XR_OS_IO_BAD_ARGUMENT;
-    if (length > SIZE_MAX - 3) return XR_OS_IO_BUDGET;
+    if (length > SIZE_MAX - 3) return XR_OS_IO_OVERFLOW;
     XrDirIter *iterator = io_alloc(&io, sizeof(*iterator));
     if (!iterator) return io.status;
     if (!io_clear(&io, iterator, sizeof(*iterator))) { io_free(&io, iterator); return io.status; }
     iterator->policy = *policy; iterator->handle = INVALID_HANDLE_VALUE;
     char *pattern = io_alloc(&io, length + 3); wchar_t *wide = NULL;
-    if (pattern && io_copy(&io, pattern, path, length) && io_work(&io, 1)) {
+    if (pattern && io_copy(&io, pattern, path, length) && ((&io)->status == XR_OS_IO_OK)) {
         bool separator = path[length - 1] != '/' && path[length - 1] != 92;
-        if (separator && io_work(&io, 1)) pattern[length++] = 92;
-        if (io_work(&io, 2)) { pattern[length++] = '*'; pattern[length] = 0; }
+        if (separator && ((&io)->status == XR_OS_IO_OK)) pattern[length++] = 92;
+        if ((&io)->status == XR_OS_IO_OK) { pattern[length++] = '*'; pattern[length] = 0; }
     }
     if (io.status == XR_OS_IO_OK) io_status(&io, xr_win_utf8_path_owned(policy, pattern, &wide));
-    if (io_work(&io, 1)) {
+    if ((&io)->status == XR_OS_IO_OK) {
         iterator->handle = FindFirstFileW(wide, &iterator->data);
         if (iterator->handle == INVALID_HANDLE_VALUE) io_status(&io, io_windows_status(GetLastError()));
         else iterator->primed = true;
@@ -52,7 +52,7 @@ XR_FUNC XrOsIoStatus xr_os_io_dir_next(XrDirIter *iterator, XrDirEntry *output) 
     if (iterator->ended) return XR_OS_IO_END;
     XrIoContext io = {&iterator->policy, XR_OS_IO_OK};
     while (io.status == XR_OS_IO_OK) {
-        if (!iterator->primed && io_work(&io, 1) && !FindNextFileW(iterator->handle, &iterator->data)) {
+        if (!iterator->primed && ((&io)->status == XR_OS_IO_OK) && !FindNextFileW(iterator->handle, &iterator->data)) {
             DWORD error = GetLastError();
             if (error == ERROR_NO_MORE_FILES) { iterator->ended = true; return XR_OS_IO_END; }
             io_status(&io, io_windows_status(error));
@@ -61,15 +61,15 @@ XR_FUNC XrOsIoStatus xr_os_io_dir_next(XrDirIter *iterator, XrDirEntry *output) 
         if (io.status != XR_OS_IO_OK) break;
         const wchar_t *name = iterator->data.cFileName;
         bool dot = false;
-        if (io_work(&io, sizeof(wchar_t)) && name[0] == '.' && io_work(&io, sizeof(wchar_t))) {
+        if (((&io)->status == XR_OS_IO_OK) && name[0] == '.' && ((&io)->status == XR_OS_IO_OK)) {
             if (!name[1]) dot = true;
-            else if (name[1] == '.' && io_work(&io, sizeof(wchar_t)) && !name[2]) dot = true;
+            else if (name[1] == '.' && ((&io)->status == XR_OS_IO_OK) && !name[2]) dot = true;
         }
         if (dot) continue;
         char *text = NULL; size_t length = 0;
         if (io.status == XR_OS_IO_OK) io_status(&io, xr_win_utf16_text_owned(io.policy, name, &text));
         if (io.status == XR_OS_IO_OK && io_length(&io, text, &length)) {
-            if (length >= XR_DIR_ENTRY_NAME_MAX) io_status(&io, XR_OS_IO_BUDGET);
+            if (length >= XR_DIR_ENTRY_NAME_MAX) io_status(&io, XR_OS_IO_OVERFLOW);
             else if (io_clear(&io, &iterator->pending, sizeof(iterator->pending)) &&
                 io_copy(&io, iterator->pending.name, text, length + 1)) {
                 iterator->pending.is_dir = (iterator->data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;

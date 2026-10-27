@@ -37,13 +37,8 @@ static void pending_controls(void) {
     char *name=(char *)view.definition->module.functions[provider].name;char saved_name=*name;*name='Z';
     rejected=(XirComptimePendingView){0};CHECK(xr_xir_compile_comptime_pending_view(owner,&rejected,NULL)!=XR_XIR_OK && pending_empty(&rejected));*name=saved_name;
     CHECK(xr_xir_compile_comptime_pending_view(owner,&(XirComptimePendingView){0},NULL)==XR_XIR_OK);
-    XrCompileResourceStats used=stats(&context);CHECK(xr_compile_resources_work(context.resources,caps.work-used.work)==XR_COMPILE_RESOURCE_OK);
-    XirComptimePending *none=NULL;
-    CHECK(xr_xir_compile_comptime_pending(source,&none,NULL)==XR_XIR_BUDGET && !none);
-    CHECK(xr_xir_compile_comptime_pending(source,&none,NULL)==XR_XIR_BUDGET && !none);
-    pending_rejected(owner,XR_XIR_BUDGET);pending_rejected(owner,XR_XIR_BUDGET);
     size_t attempts=source_fixture_compile_attempts;xr_xir_compile_comptime_pending_free(owner);
     xr_xir_compile_artifact_free(source);xr_compile_resources_release(context.resources);
     CHECK(source_fixture_compile_attempts==attempts && !source_fixture_compile_live && !source_fixture_compile_bytes);
-    fprintf(stderr,"Pending current Source/ordered argument tamper, occupied slots, INSTANCE and exhausted owner refuse atomically physical0\n");
+    fprintf(stderr,"Pending current Source/ordered argument tamper, occupied slots, INSTANCE owner refuse atomically physical0\n");
 }

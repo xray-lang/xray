@@ -10,11 +10,11 @@ static bool source_region_expressions(SourceContext *ctx,bool seal) {
     SourceFunction *body=&ctx->bodies[ctx->function];
     uint32_t expressions=0;
     for (SourceExpressionStorage *storage=body->expressions;storage;storage=storage->next) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!storage->count || storage->count>32 || storage->count>body->expression_count-expressions)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"expression region storage is invalid");
         for (uint32_t e=0;e<storage->count;++e) {
-            if (!source_work(ctx,NULL)) return false;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             SourceExpressionPlan *plan=&storage->expressions[e];
             if (plan->owner!=ctx->function || (seal && plan->state!=SOURCE_TERM_GROUND && plan->state!=SOURCE_TERM_DISCARDED) ||
                 plan->identity>=body->expression_count || plan->entry.owner!=ctx->function ||
@@ -35,7 +35,7 @@ static bool source_region_seal(SourceContext *ctx,const uint32_t *map,uint32_t v
     uint32_t parameters=ctx->functions[ctx->function].parameter_count;
     if (!source_throw_map(ctx,map,value_count,parameters) || !source_handler_map(ctx,map,value_count,parameters)) return false;
     for (uint32_t i=0;i<body->debug_binding_count;++i) {
-        if (!source_work_units(ctx,NULL,sizeof(*body->debug_bindings))) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirSourceDebugBinding *binding=&body->debug_bindings[i];
         if (!(binding->flags & (XR_XIR_SOURCE_DEBUG_UNIT|XR_XIR_SOURCE_DEBUG_UNAVAILABLE)) &&
             !source_region_id(map,value_count,binding->value,&binding->value)) {
@@ -45,7 +45,7 @@ static bool source_region_seal(SourceContext *ctx,const uint32_t *map,uint32_t v
         }
     }
     for (SourceRootQuery *query = ctx->root_queries; query; query = query->next) {
-        if (!source_work(ctx,NULL)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (query->function == ctx->function && !source_region_id(map,value_count,query->value,&query->value)) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source region identity is invalid");
     }
     source_retire_array(ctx,body->operands);

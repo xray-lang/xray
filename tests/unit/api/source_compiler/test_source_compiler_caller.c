@@ -50,7 +50,7 @@ static void caller_ast_compiler(void) {
     XrCompileResourceLimits limits = {UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig config = configuration(resources); XrSourceCompiler *compiler = NULL;
-    CHECK(xr_source_compiler_new(&config,&compiler,NULL)==XR_SOURCE_COMPILE_OK);
+    CHECK(xr_source_compiler_new(&config,NULL,&compiler,NULL)==XR_SOURCE_COMPILE_OK);
     XrCompilerSession *session = xr_source_compiler_session(compiler);
     char source[] = "const n:i64 = 41\nprint(n)\n";
     XrSourceCompilerText text = {NULL,"compiler-caller-ast",source,sizeof(source)-1};
@@ -98,7 +98,7 @@ static void owned_compiler(void) {
     XrCompileResourceLimits limits = {UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig config = configuration(resources); XrSourceCompiler *compiler = NULL;
-    CHECK(xr_source_compiler_new(&config,&compiler,NULL)==XR_SOURCE_COMPILE_OK);
+    CHECK(xr_source_compiler_new(&config,NULL,&compiler,NULL)==XR_SOURCE_COMPILE_OK);
     CHECK(xr_source_compiler_resources(compiler)==resources);
     CHECK(xr_source_compiler_context(compiler)->resources==resources);
     XrCompilerSession *session = xr_source_compiler_session(compiler);
@@ -144,7 +144,7 @@ static XrSourceCompileStatus limited_build(XrCompileResourceLimits limits,
     XrCompileResources **ledger, bool syntax) {
     CHECK(xr_compile_resources_new(&limits,ledger)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig config=configuration(*ledger);
-    XrSourceCompileStatus status=xr_source_compiler_new(&config,owner,NULL);
+    XrSourceCompileStatus status=xr_source_compiler_new(&config,NULL,owner,NULL);
     if(status==XR_SOURCE_COMPILE_OK) {
         const char source[]="const n:i64 = 42\n";
         XrSourceCompilerText text={NULL,"compiler-owner-limits",source,sizeof(source)-1};
@@ -205,7 +205,7 @@ static void compiler_faults(void) {
         XrSourceCompileStatus status=XR_SOURCE_COMPILE_OUT_OF_MEMORY;
         if(created==XR_COMPILE_RESOURCE_OK) {
             XrSourceCompilerConfig config=configuration(resources);
-            status=xr_source_compiler_new(&config,&compiler,&diagnostic);
+            status=xr_source_compiler_new(&config,NULL,&compiler,&diagnostic);
             if(status==XR_SOURCE_COMPILE_OK) {
                 const char source[]="const n:i64 = 42\n";
                 XrSourceCompilerText text={NULL,"compiler-owner-faults",source,sizeof(source)-1};

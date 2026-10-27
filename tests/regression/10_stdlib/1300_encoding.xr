@@ -8,14 +8,14 @@ fn hexEncodeText(data: string) -> string {
     return encoding.hexEncode(view)
 }
 
-fn hexDecodeText(hex: string) -> string {
-    var bytes = encoding.hexDecode(hex)
+fn hexDecodeText(hex: string) throws(HexError) -> string {
+    var bytes = try encoding.hexDecode(hex)
     return string.fromUtf8(bytes[:])!
 }
 
 fn hexDecodeFails(hex: string) -> bool {
     try {
-        var bytes = encoding.hexDecode(hex)
+        var bytes = try encoding.hexDecode(hex)
         return len(bytes) < 0
     } catch (e: HexError) {
         return true
@@ -42,7 +42,7 @@ fn utf16Options(order: Endian, consumeBom: bool = true) -> Utf16DecodeOptions {
 
 fn utf16DecodeFails(data: Slice<u8>) -> bool {
     try {
-        var decoded = encoding.utf16Decode(data)
+        var decoded = try encoding.utf16Decode(data)
         return len(decoded) < 0
     } catch (e: Utf16Error) {
         return true
@@ -71,16 +71,16 @@ fn test_hex_encode_special() {
 // ===== Hex decode (returns Array<byte>) =====
 
 @test
-fn test_hex_decode_bytes() {
-    var bytes = encoding.hexDecode("48656c6c6f")
+fn test_hex_decode_bytes() throws(HexError) {
+    var bytes = try encoding.hexDecode("48656c6c6f")
     assertEqual(len(bytes), 5)
     assertEqual(bytes[0], 0x48)  // 'H'
     assertEqual(bytes[4], 0x6f)  // 'o'
 }
 
 @test
-fn test_hex_decode_text_composition() {
-    assertEqual(hexDecodeText("48656c6c6f"), "Hello")
+fn test_hex_decode_text_composition() throws(HexError) {
+    assertEqual(try hexDecodeText("48656c6c6f"), "Hello")
 }
 
 @test
@@ -90,14 +90,14 @@ fn test_hex_decode_invalid() {
 }
 
 @test
-fn test_hex_decode_empty() {
-    var bytes = encoding.hexDecode("")
+fn test_hex_decode_empty() throws(HexError) {
+    var bytes = try encoding.hexDecode("")
     assertEqual(len(bytes), 0)
 }
 
 @test
-fn test_hex_decode_uppercase() {
-    assertEqual(hexDecodeText("48656C6C6F"), "Hello")
+fn test_hex_decode_uppercase() throws(HexError) {
+    assertEqual(try hexDecodeText("48656C6C6F"), "Hello")
 }
 
 // ===== Hex valid =====
@@ -146,40 +146,40 @@ fn test_utf8_invalid_bytes() {
 // ===== UTF-16 =====
 
 @test
-fn test_utf16_encode_decode_le() {
+fn test_utf16_encode_decode_le() throws(Utf16Error) {
     var units = encoding.utf16Encode("AB")
     assertEqual(len(units), 4)
     // LE: 'A' = 0x0041 -> [0x41, 0x00]
     assertEqual(units[0], 0x41)
     assertEqual(units[1], 0x00)
-    var decoded = encoding.utf16Decode(units[:])
+    var decoded = try encoding.utf16Decode(units[:])
     assertEqual(decoded, "AB")
 }
 
 @test
-fn test_utf16_encode_decode_be() {
+fn test_utf16_encode_decode_be() throws(Utf16Error) {
     var units = encoding.utf16Encode("AB", utf16EncodeOptions(Endian.BE))
     assertEqual(len(units), 4)
     // BE: 'A' = 0x0041 -> [0x00, 0x41]
     assertEqual(units[0], 0x00)
     assertEqual(units[1], 0x41)
-    var decoded = encoding.utf16Decode(units[:], utf16Options(Endian.BE))
+    var decoded = try encoding.utf16Decode(units[:], utf16Options(Endian.BE))
     assertEqual(decoded, "AB")
 }
 
 @test
-fn test_utf16_cjk() {
+fn test_utf16_cjk() throws(Utf16Error) {
     var units = encoding.utf16Encode("你好")
     assertEqual(len(units), 4)  // 2 BMP chars x 2 bytes
-    var decoded = encoding.utf16Decode(units[:])
+    var decoded = try encoding.utf16Decode(units[:])
     assertEqual(decoded, "你好")
 }
 
 @test
-fn test_utf16_empty() {
+fn test_utf16_empty() throws(Utf16Error) {
     var units = encoding.utf16Encode("")
     assertEqual(len(units), 0)
-    var decoded = encoding.utf16Decode(units[:])
+    var decoded = try encoding.utf16Decode(units[:])
     assertEqual(decoded, "")
 }
 
@@ -210,14 +210,14 @@ fn test_utf16_surrogate_errors() {
 }
 
 @test
-fn test_utf16_bom_options() {
+fn test_utf16_bom_options() throws(Utf16Error) {
     var bom = Array<u8>(4)
     bom[0] = 0xFE
     bom[1] = 0xFF
     bom[2] = 0
     bom[3] = 65
-    assertEqual(encoding.utf16Decode(bom[:]), "A")
-    var kept = encoding.utf16Decode(bom[:], utf16Options(Endian.BE, false))
+    assertEqual(try encoding.utf16Decode(bom[:]), "A")
+    var kept = try encoding.utf16Decode(bom[:], utf16Options(Endian.BE, false))
     assertEqual(len(kept), 2)
     assertEqual(kept.runes().nth(0), '\u{FEFF}')
     assertEqual(kept.runes().nth(1), 'A')

@@ -160,7 +160,7 @@ static XrXirStatus effect_runtime_class(const EffectInvocationCertificate *certi
     if (!output || !request->read.class_value || parameter>=request->count) return XR_XIR_BAD_TYPE;
     if(parameter<request->captures) {
         const EffectBodyFunction *caller=&certificate->body->functions[request->caller];
-        EffectBodyRead read=effect_body_runtime_read(&request->read);XrXirInstruction op;
+        EffectBodyRead read=(EffectBodyRead){.execution=&request->read};XrXirInstruction op;
         XrXirStatus status=effect_body_instruction_get(&read,caller,request->instruction,&op);
         uint32_t mask=0,publication=UINT32_MAX;
         if(status!=XR_XIR_OK) return status;
@@ -178,7 +178,7 @@ static XrXirStatus effect_runtime_class(const EffectInvocationCertificate *certi
     if (parent>=owner->count || owner->nodes[parent].body!=request->caller ||
         owner->nodes[parent].root!=node->root) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyFunction *caller=&certificate->body->functions[request->caller];
-    EffectBodyRead read=effect_body_runtime_read(&request->read);XrXirInstruction decoded;
+    EffectBodyRead read=(EffectBodyRead){.execution=&request->read};XrXirInstruction decoded;
     XrXirStatus decoded_status=effect_body_instruction_get(&read,caller,request->instruction,&decoded);
     if (decoded_status!=XR_XIR_OK) return decoded_status;
     const XrXirInstruction *op=&decoded;
@@ -313,7 +313,7 @@ XR_FUNC XrXirStatus xir_effects_iterator_instruction(const XrXirEffects *effects
     const EffectBodyFunction *function=&certificate->body->functions[caller];
     if(instruction>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_runtime_work(actual,sizeof(*output)+8);if(status!=XR_XIR_OK) return status;
-    EffectBodyRead read=effect_body_runtime_read(actual);XrXirInstruction op;
+    EffectBodyRead read=(EffectBodyRead){.execution=actual};XrXirInstruction op;
     status=effect_body_instruction_get(&read,function,instruction,&op);if(status!=XR_XIR_OK) return status;
     if(!effect_invocation_iterator_operation(op.op)) return XR_XIR_BAD_TYPE;
     if(op.args[0]>=(uint64_t)function->parameter_count+function->instruction_count) return XR_XIR_BAD_STRUCTURE;
@@ -342,7 +342,7 @@ XR_FUNC XrXirStatus xir_effects_execution_edge(const XrXirEffects *effects,
     if (status!=XR_XIR_OK) return status;
     const EffectBodyFunction *function=&certificate->body->functions[request->caller];
     if (request->instruction>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRead read=effect_body_runtime_read(&request->read);XrXirInstruction decoded;
+    EffectBodyRead read=(EffectBodyRead){.execution=&request->read};XrXirInstruction decoded;
     status=effect_body_instruction_get(&read,function,request->instruction,&decoded);
     if (status!=XR_XIR_OK) return status;
     const XrXirInstruction *op=&decoded;

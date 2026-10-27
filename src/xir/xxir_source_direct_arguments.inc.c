@@ -50,7 +50,7 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     XrXirType *types=storage.types;
     SourceValue *values=storage.values;
     for (uint32_t p=0;p<prefix;++p) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         types[p]=request->prefix.types[p];
     }
     if (offset) values[0]=*request->receiver;
@@ -65,7 +65,7 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
          * about the error parameter of the returned Task handle. */
         plan.result=task->element;plan.expected_result=ctx->active_expression->task_element_context;
     }
-    if (!source_call_expand(ctx,node,&syntax,&plan,function.parameter_count)) return false;
+    if (!source_call_expand(ctx,&syntax,&plan,function.parameter_count)) return false;
     supplied=(uint32_t)syntax.arg_count+offset;
     if (!source_argument_arity(ctx,node,index,supplied) || !source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
     if (!source_instantiation_prove(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,index,0},substitution)) goto done;
@@ -87,7 +87,7 @@ static bool source_direct_signature_names(SourceContext *ctx,AstNode *node,XrXir
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"call signature result owner diverged");
     if(signature->result.generic_owner)owner=signature->result.generic_owner;
     for(uint32_t p=0;p<signature->parameter_count;++p) {
-        if(!source_work(ctx,node))return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
         uint32_t candidate=signature->parameters[p].generic_owner;
         if(owner&&candidate&&owner!=candidate)
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"call signature generic owners diverged");
@@ -129,7 +129,7 @@ static bool source_direct_call_signature(SourceContext *ctx,AstNode *node,uint32
     XrXirSourceType *parameters=prepared->count?source_alloc(ctx,prepared->count,sizeof(*parameters)):NULL;
     if(prepared->count&&!parameters)return false;
     for(uint32_t p=0;p<prepared->count;++p) {
-        if(!source_work(ctx,node))return false;
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
         XrXirType shown;
         if(!source_substitute(ctx,&prepared->substitution,declaration.parameters[p],0,&shown))return false;
         if(xr_xir_type_is_cell(&ctx->types,shown))shown=xr_xir_cell_element(&ctx->types,shown);

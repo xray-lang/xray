@@ -35,7 +35,12 @@ typedef enum XrSourceCompileStatus {
     XR_SOURCE_COMPILE_OUT_OF_MEMORY,
     XR_SOURCE_COMPILE_IO,
     XR_SOURCE_COMPILE_UNSUPPORTED,
-    XR_SOURCE_COMPILE_REJECTED
+    XR_SOURCE_COMPILE_REJECTED,
+    XR_SOURCE_COMPILE_MEMORY_LIMIT,
+    XR_SOURCE_COMPILE_OVERFLOW,
+    XR_SOURCE_COMPILE_CANCELLED,
+    XR_SOURCE_COMPILE_DEADLINE,
+    XR_SOURCE_COMPILE_CLOCK_FAILURE
 } XrSourceCompileStatus;
 
 typedef enum XrSourceCompileStage {
@@ -52,7 +57,7 @@ typedef struct XrSourceCompileDiagnostic {
     XrSourceCompileStage stage;
     XrManifestStatus authority_status;
     XrManifestDiagnostic authority;
-    XrCompilerSessionStatus session_status;
+    XrCompileResourceStatus session_status;
     XrXirSourceProductDiagnostic source;
 } XrSourceCompileDiagnostic;
 

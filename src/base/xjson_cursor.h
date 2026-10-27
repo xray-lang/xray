@@ -7,7 +7,7 @@
  * xjson_cursor.h - In-place, allocation-free closed-schema JSON primitives
  *
  * KEY CONCEPT:
- *   Every byte read and write uses the caller's explicit work policy.
+ *   Explicit spans and grammar limits bound reads and writes.
  *   Decoded strings borrow the mutable input; no DOM or owner is created.
  */
 #ifndef XJSON_CURSOR_H
@@ -19,24 +19,21 @@
 
 typedef enum XrJsonCursorStatus {
     XR_JSON_CURSOR_OK, XR_JSON_CURSOR_INVALID, XR_JSON_CURSOR_BUDGET,
-    XR_JSON_CURSOR_OUT_OF_MEMORY, XR_JSON_CURSOR_UNSUPPORTED
+    XR_JSON_CURSOR_OUT_OF_MEMORY, XR_JSON_CURSOR_UNSUPPORTED,
+    XR_JSON_CURSOR_MEMORY_LIMIT, XR_JSON_CURSOR_OVERFLOW
 } XrJsonCursorStatus;
-typedef XrJsonCursorStatus (*XrJsonCursorWork)(void *context, uint64_t units);
 typedef struct XrJsonCursor {
     char *begin, *cursor, *end;
-    void *context;
-    XrJsonCursorWork work;
     XrJsonCursorStatus status;
 } XrJsonCursor;
 
-/* NULL/zero input is useful for metered comparisons and identity framing.
+/* NULL/zero input permits comparisons and identity framing.
  * Parsing requires a nonempty writable span. Failure is sticky; low-level
  * cursor/input progress is not transactional. The enclosing owner publishes
- * only after its entire schema has succeeded. */
-XR_FUNC XrJsonCursor xr_json_cursor_make(char *bytes, size_t length,
-    void *context, XrJsonCursorWork work);
+ * only after its entire schema has succeeded. Text comparison/length inputs
+ * must be readable NUL-terminated strings; decoded strings remain in the span. */
+XR_FUNC XrJsonCursor xr_json_cursor_make(char *bytes, size_t length);
 XR_FUNC bool xr_json_cursor_fail(XrJsonCursor *, XrJsonCursorStatus);
-XR_FUNC bool xr_json_cursor_work(XrJsonCursor *, uint64_t);
 XR_FUNC bool xr_json_cursor_length(XrJsonCursor *, const char *, size_t *);
 XR_FUNC bool xr_json_cursor_peek(XrJsonCursor *, uint8_t *);
 XR_FUNC bool xr_json_cursor_byte(XrJsonCursor *, uint8_t *);

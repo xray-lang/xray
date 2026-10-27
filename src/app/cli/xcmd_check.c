@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcmd_check.c - Source and single-file syntax checking with one compiler ledger
+ * xcmd_check.c - Source and single-file syntax checking with one compiler memory owner
  */
 #include "xcli.h"
 #include "../../api/xsource_compile.h"
@@ -42,15 +42,15 @@ static void check_io_failure(CheckWork *work, const char *path, XrOsIoStatus sta
     fprintf(stderr, "xray check: %s: I/O status=%u\n", path, (unsigned)status);
     bool internal = status == XR_OS_IO_OUT_OF_MEMORY || status == XR_OS_IO_BAD_ARGUMENT;
     check_failure(work, internal ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL,
-        internal || status == XR_OS_IO_BUDGET);
+        internal || status == XR_OS_IO_MEMORY_LIMIT || status == XR_OS_IO_OVERFLOW);
 }
 static bool check_path_length(XrIoContext *io, const char *path, size_t *length) {
     if (!path) return io_status(io, XR_OS_IO_BAD_ARGUMENT);
     for (size_t i = 0; i < XR_PATH_MAX; ++i) {
-        if (!io_work(io, 1)) return false;
+        if (!((io)->status == XR_OS_IO_OK)) return false;
         if (!path[i]) { *length = i; return true; }
     }
-    return io_status(io, XR_OS_IO_BUDGET);
+    return io_status(io, XR_OS_IO_OVERFLOW);
 }
 static char *check_path_copy(CheckWork *work, const char *path) {
     XrIoContext io = {&work->policy, XR_OS_IO_OK};
@@ -71,10 +71,10 @@ static char *check_path_join(CheckWork *work, const char *directory, const char 
     char *path = NULL;
     if (check_path_length(&io, directory, &parent) && check_path_length(&io, name, &child)) {
         if (parent > XR_PATH_MAX - 2 || child > XR_PATH_MAX - parent - 2)
-            io_status(&io, XR_OS_IO_BUDGET);
+            io_status(&io, XR_OS_IO_OVERFLOW);
         else path = io_alloc(&io, parent + child + 2);
     }
-    if (path && io_copy(&io, path, directory, parent) && io_work(&io, 1)) {
+    if (path && io_copy(&io, path, directory, parent) && ((&io)->status == XR_OS_IO_OK)) {
         path[parent] = '/';
         io_copy(&io, path + parent + 1, name, child + 1);
     }
@@ -89,7 +89,7 @@ static bool check_source_name(CheckWork *work, const char *name) {
     XrIoContext io = {&work->policy, XR_OS_IO_OK};
     size_t length = 0;
     bool result = false;
-    if (check_path_length(&io, name, &length) && length > 3 && io_work(&io, 3))
+    if (check_path_length(&io, name, &length) && length > 3 && ((&io)->status == XR_OS_IO_OK))
         result = memcmp(name + length - 3, ".xr", 3) == 0;
     if (io.status != XR_OS_IO_OK) check_io_failure(work, "directory entry", io.status);
     return result;
@@ -101,9 +101,9 @@ static void check_syntax(CheckWork *work, const char *path) {
     XrIoContext io = {&work->policy, status};
     bool nul = false;
     size_t line=1,line_start=0,column=0;
-    for (size_t i = 0; i < length && io_work(&io, 1); ++i) {
+    for (size_t i = 0; i < length && ((&io)->status == XR_OS_IO_OK); ++i) {
         if (!bytes[i]) {
-            if(line>INT_MAX || i-line_start>=INT_MAX)io_status(&io,XR_OS_IO_BUDGET);
+            if(line>INT_MAX || i-line_start>=INT_MAX)io_status(&io,XR_OS_IO_OVERFLOW);
             else {nul=true;column=i-line_start+1;}
             break;
         }
@@ -117,17 +117,19 @@ static void check_syntax(CheckWork *work, const char *path) {
         XrCompileResourceStatus resized = xr_compile_resources_resize(work->resources, &terminated, length + 1);
         bytes = terminated;
         if (resized != XR_COMPILE_RESOURCE_OK)
-            io_status(&io, resized == XR_COMPILE_RESOURCE_BUDGET ? XR_OS_IO_BUDGET :
+            io_status(&io, resized == XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_OS_IO_MEMORY_LIMIT :
+                resized == XR_COMPILE_RESOURCE_OVERFLOW ? XR_OS_IO_OVERFLOW :
                 resized == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_OS_IO_OUT_OF_MEMORY : XR_OS_IO_BAD_ARGUMENT);
-        if (io_work(&io, 1)) bytes[length] = 0;
+        if ((&io)->status == XR_OS_IO_OK) bytes[length] = 0;
         if (io.status == XR_OS_IO_OK) {
             XrCompilerSession *session = NULL;
-            XrCompilerSessionStatus opened = xr_compile_session_new(work->resources, &session);
+            XrCompileResourceStatus opened = xr_compile_session_new(work->resources, &session);
             AstNode *ast = NULL;
-            XrParseStatus parsed = opened == XR_COMPILER_SESSION_OK ?
+            XrParseStatus parsed = opened == XR_COMPILE_RESOURCE_OK ?
                 xr_compile_parse_with_source(session, (const char *)bytes, path, &ast) :
-                opened == XR_COMPILER_SESSION_BUDGET ? XR_PARSE_BUDGET :
-                opened == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_PARSE_OUT_OF_MEMORY : XR_PARSE_BAD_ARGUMENT;
+                opened == XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_PARSE_MEMORY_LIMIT :
+                opened == XR_COMPILE_RESOURCE_OVERFLOW ? XR_PARSE_OVERFLOW :
+                opened == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_PARSE_OUT_OF_MEMORY : XR_PARSE_BAD_ARGUMENT;
             /* The AST owns its arena independently of the producing session. */
             xr_compile_session_free(session);
             xr_program_destroy(ast);
@@ -136,7 +138,7 @@ static void check_syntax(CheckWork *work, const char *path) {
                     fprintf(stderr, "%s: error: parser status=%u\n", path, (unsigned)parsed);
                 bool internal = parsed == XR_PARSE_OUT_OF_MEMORY || parsed == XR_PARSE_BAD_ARGUMENT;
                 check_failure(work, internal ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL,
-                    internal || parsed == XR_PARSE_BUDGET);
+                    internal || parsed == XR_PARSE_BUDGET || parsed == XR_PARSE_MEMORY_LIMIT || parsed == XR_PARSE_OVERFLOW);
             }
         }
     }
@@ -180,7 +182,8 @@ static void check_semantic(CheckWork *work, const char *path) {
     if (status != XR_SOURCE_COMPILE_OK) {
         bool internal = status == XR_SOURCE_COMPILE_OUT_OF_MEMORY || status == XR_SOURCE_COMPILE_BAD_ARGUMENT;
         check_failure(work, internal ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL,
-            internal || status == XR_SOURCE_COMPILE_BUDGET);
+            internal || status == XR_SOURCE_COMPILE_BUDGET ||
+            status == XR_SOURCE_COMPILE_MEMORY_LIMIT || status == XR_SOURCE_COMPILE_OVERFLOW);
     }
 #else
     fprintf(stderr, "xray check: %s: unsupported Source target architecture\n", path);
@@ -259,7 +262,7 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
     XrCompileResourceStatus status = xr_compile_resources_new(&limits, &work.resources);
     if (status != XR_COMPILE_RESOURCE_OK) {
         fprintf(stderr, "xray check: cannot initialize compiler resources\n");
-        return status == XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
+        return status == XR_COMPILE_RESOURCE_MEMORY_LIMIT || status == XR_COMPILE_RESOURCE_OVERFLOW ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
     }
     work.policy = xr_compile_io_policy(work.resources);
     for (int i = 0; i < (inv->positional_count ? inv->positional_count : 1) && !work.stopped; ++i) {

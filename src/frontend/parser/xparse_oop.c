@@ -879,7 +879,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
             "'public' modifier was removed; members are public by default, delete it");
     }
 
-    for (; xr_parser_step(parser) && (true);) {
+    for (; xr_parser_healthy(parser) && (true);) {
         const char *removed_name = NULL;
         if (xr_parser_check_name(parser, "abstract")) {
             return reject_removed_member_modifier(
@@ -980,7 +980,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         if (!xr_parser_healthy(parser)) return NULL;
         if (method) {
             method->as.method_decl.receiver_mode = receiver_mode;
-            if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+
             method->as.method_decl.receiver_mode_span = receiver_mode_span;
             method->as.method_decl.is_override = is_override;
             method->as.method_decl.is_protected = is_protected;
@@ -1069,7 +1069,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
                     if (!xr_parser_healthy(parser)) return NULL;
                 } while (0);
             method->as.method_decl.receiver_mode = receiver_mode;
-            if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+
             method->as.method_decl.receiver_mode_span = receiver_mode_span;
             method->as.method_decl.is_override = is_override;
             method->as.method_decl.is_protected = is_protected;
@@ -1581,8 +1581,7 @@ AstNode *xr_parse_this_expression(Parser *parser) {
     // Preserve the exact consumed token before the parser owner disappears.
     AstNode *node = xr_ast_this_expr(parser->compiler_session, line);
     if (!xr_parser_healthy(parser) || !node) return NULL;
-    if (!ast_work(parser->compiler_session,
-            sizeof(node->column) + sizeof(node->end_line) + sizeof(node->end_column))) return NULL;
+
     node->column = parser->previous.column;
     node->end_line = line;
     node->end_column = parser->previous.column + parser->previous.length;
@@ -2555,7 +2554,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
             parser->compiler_session, ast_strdup(parser->compiler_session, "__operator_len"), NULL,
             0, return_type, member_line);
         if (!xr_parser_healthy(parser)) return NULL;
-        if (!ast_work(parser->compiler_session, 4 * sizeof(int))) return NULL;
+
         method->line = name_span.line;
         method->column = name_span.column;
         method->end_line = name_span.line;
@@ -2564,7 +2563,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         method->as.interface_method.attributes = attributes;
         method->as.interface_method.attr_count = attr_count;
         method->as.interface_method.receiver_mode = receiver_mode;
-        if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+
         method->as.interface_method.receiver_mode_span = receiver_mode_span;
         method->as.interface_method.borrow_origin_syntax = borrow_origin_syntax;
         method->as.interface_method.borrow_origins = borrow_origins;
@@ -2724,7 +2723,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     AstNode *method = xr_ast_interface_method(parser->compiler_session, member_name, params,
                                               param_count, return_type, member_line);
     if (!xr_parser_healthy(parser)) return NULL;
-    if (!ast_work(parser->compiler_session, 3 * sizeof(int))) return NULL;
+
     method->column = member_column;
     method->end_line = member_line;
     method->end_column = member_column + (int)xr_parser_string_length(parser, member_name);
@@ -2734,7 +2733,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     method->as.interface_method.type_params = type_params;
     method->as.interface_method.type_param_count = type_param_count;
     method->as.interface_method.receiver_mode = receiver_mode;
-        if (!ast_work(parser->compiler_session, sizeof(XrNameSpan))) return NULL;
+
         method->as.interface_method.receiver_mode_span = receiver_mode_span;
     method->as.interface_method.borrow_origin_syntax = borrow_origin_syntax;
     method->as.interface_method.borrow_origins = borrow_origins;

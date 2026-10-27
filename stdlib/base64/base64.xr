@@ -127,33 +127,42 @@ fn _scan(text: string, options: Base64DecodeOptions) -> (i64, i64, u8, i64, i64,
 
 fn _encodeAlpha(data: Slice<u8>, alphabet: Base64Alphabet, padding: bool) -> string {
     var n = len(data)
-    var out = StringBuilder()
+    var out = ""
     var i = 0
     while (i + 3 <= n) {
         var b0 = data[i] as i64
         var b1 = data[i + 1] as i64
         var b2 = data[i + 2] as i64
-        out.append(_encodeRune(b0 >> 2, alphabet))
-        out.append(_encodeRune(((b0 & 3) << 4) | (b1 >> 4), alphabet))
-        out.append(_encodeRune(((b1 & 15) << 2) | (b2 >> 6), alphabet))
-        out.append(_encodeRune(b2 & 63, alphabet))
+        var _encodedRune0 = _encodeRune(b0 >> 2, alphabet)
+        out += "${_encodedRune0}"
+        var _encodedRune1 = _encodeRune(((b0 & 3) << 4) | (b1 >> 4), alphabet)
+        out += "${_encodedRune1}"
+        var _encodedRune2 = _encodeRune(((b1 & 15) << 2) | (b2 >> 6), alphabet)
+        out += "${_encodedRune2}"
+        var _encodedRune3 = _encodeRune(b2 & 63, alphabet)
+        out += "${_encodedRune3}"
         i = i + 3
     }
     var rem = n - i
     if (rem == 1) {
         var b0 = data[i] as i64
-        out.append(_encodeRune(b0 >> 2, alphabet))
-        out.append(_encodeRune((b0 & 3) << 4, alphabet))
-        if (padding) { out.append("==") }
+        var _encodedRune4 = _encodeRune(b0 >> 2, alphabet)
+        out += "${_encodedRune4}"
+        var _encodedRune5 = _encodeRune((b0 & 3) << 4, alphabet)
+        out += "${_encodedRune5}"
+        if (padding) { out += "==" }
     } else if (rem == 2) {
         var b0 = data[i] as i64
         var b1 = data[i + 1] as i64
-        out.append(_encodeRune(b0 >> 2, alphabet))
-        out.append(_encodeRune(((b0 & 3) << 4) | (b1 >> 4), alphabet))
-        out.append(_encodeRune((b1 & 15) << 2, alphabet))
-        if (padding) { out.append("=") }
+        var _encodedRune6 = _encodeRune(b0 >> 2, alphabet)
+        out += "${_encodedRune6}"
+        var _encodedRune7 = _encodeRune(((b0 & 3) << 4) | (b1 >> 4), alphabet)
+        out += "${_encodedRune7}"
+        var _encodedRune8 = _encodeRune((b1 & 15) << 2, alphabet)
+        out += "${_encodedRune8}"
+        if (padding) { out += "=" }
     }
-    return out.toString()
+    return out
 }
 
 fn _decodeValidated(src: Slice<u8>, end: i64, rem: i64, outLen: i64,
@@ -186,7 +195,7 @@ fn _decodeValidated(src: Slice<u8>, end: i64, rem: i64, outLen: i64,
     return out
 }
 
-fn _decodeImpl(text: string, options: Base64DecodeOptions) -> Array<u8> {
+fn _decodeImpl(text: string, options: Base64DecodeOptions) throws(Base64Error) -> Array<u8> {
     var scan = _scan(text, options)
     if (scan.0 == 1) { throw Base64Error.InvalidLength { length: scan.1 } }
     if (scan.0 == 2) { throw Base64Error.InvalidByte { byteOffset: scan.1, value: scan.2 } }
@@ -201,8 +210,8 @@ export fn encode(data: Slice<u8>, options: Base64EncodeOptions = Base64EncodeOpt
     return _encodeAlpha(data, options.alphabet, options.padding)
 }
 
-export fn decode(text: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> Array<u8> {
-    return _decodeImpl(text, options)
+export fn decode(text: string, options: Base64DecodeOptions = Base64DecodeOptions()) throws(Base64Error) -> Array<u8> {
+    return try _decodeImpl(text, options)
 }
 
 export fn isValid(text: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> bool {

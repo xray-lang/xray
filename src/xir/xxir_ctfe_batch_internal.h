@@ -24,13 +24,13 @@ typedef struct XirCtfeBatchRequest {
 } XirCtfeBatchRequest;
 /* Input and function storage remain immutable and do not overlap output.
  * All roots have zero runtime arguments. Every root receives its own original
- * steps/frame/output/depth limits; the finite compiler ledger is shared and
+ * steps/frame/output/depth limits; the finite compiler memory owner is shared and
  * never renewed. No callbacks, native code or stored validation hint enter.
  * Output has count canonical Unit slots. Any failure restores every slot. */
-XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_batch(const XirCtfeBatchRequest *request,
+XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_batch(const XirCtfeBatchRequest *request,XrCompileRequestControl *control,
     XrXirValue *output);
 /* The index starts at UINT32_MAX. A root-local failure reports its actual
  * selection without retrying. Global admission and success preserve it. */
-XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_batch_at(const XirCtfeBatchRequest *request,
+XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_batch_at(const XirCtfeBatchRequest *request,XrCompileRequestControl *control,
     XrXirValue *output,uint32_t *failed_index);
 #endif // XXIR_CTFE_BATCH_INTERNAL_H

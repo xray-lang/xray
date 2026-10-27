@@ -22,7 +22,46 @@
 #include "xir/xxir_library_catalog.h"
 #include "base/xsha256.h"
 #include "materialization76_golden.h"
-static const XrCompileResourceLimits caps={UINT64_C(67108864),UINT64_C(8388608),UINT64_C(128000000)};
+static XrXirStatus p11_resource_status(XrCompileResourceStatus status) {
+    switch(status){
+    case XR_COMPILE_RESOURCE_OK:return XR_XIR_OK;
+    case XR_COMPILE_RESOURCE_MEMORY_LIMIT:return XR_XIR_MEMORY_LIMIT;
+    case XR_COMPILE_RESOURCE_OUT_OF_MEMORY:return XR_XIR_OUT_OF_MEMORY;
+    case XR_COMPILE_RESOURCE_OVERFLOW:return XR_XIR_OVERFLOW;
+    case XR_COMPILE_RESOURCE_CANCELLED:return XR_XIR_CANCELLED;
+    case XR_COMPILE_RESOURCE_DEADLINE:return XR_XIR_DEADLINE;
+    case XR_COMPILE_RESOURCE_CLOCK_FAILURE:return XR_XIR_CLOCK_FAILURE;
+    default:return XR_XIR_BAD_STRUCTURE;
+    }
+}
+static XrXirCtfeStatus p11_ctfe_from_xir(XrXirStatus status) {
+    switch(status){
+    case XR_XIR_OK:return XR_XIR_CTFE_OK;
+    case XR_XIR_MEMORY_LIMIT:return XR_XIR_CTFE_MEMORY_LIMIT;
+    case XR_XIR_OUT_OF_MEMORY:return XR_XIR_CTFE_OUT_OF_MEMORY;
+    case XR_XIR_OVERFLOW:return XR_XIR_CTFE_OVERFLOW;
+    case XR_XIR_BUDGET:return XR_XIR_CTFE_COMPLEXITY_LIMIT;
+    case XR_XIR_CANCELLED:return XR_XIR_CTFE_CANCELLED;
+    case XR_XIR_DEADLINE:return XR_XIR_CTFE_DEADLINE;
+    case XR_XIR_CLOCK_FAILURE:return XR_XIR_CTFE_CLOCK_FAILURE;
+    default:return XR_XIR_CTFE_BAD_ARTIFACT;
+    }
+}
+static XrXirStatus p11_xir_from_ctfe(XrXirCtfeStatus status) {
+    switch(status){
+    case XR_XIR_CTFE_OK:return XR_XIR_OK;
+    case XR_XIR_CTFE_MEMORY_LIMIT:return XR_XIR_MEMORY_LIMIT;
+    case XR_XIR_CTFE_OUT_OF_MEMORY:return XR_XIR_OUT_OF_MEMORY;
+    case XR_XIR_CTFE_OVERFLOW:return XR_XIR_OVERFLOW;
+    case XR_XIR_CTFE_COMPLEXITY_LIMIT:case XR_XIR_CTFE_STEP_LIMIT:case XR_XIR_CTFE_FRAME_LIMIT:
+    case XR_XIR_CTFE_OUTPUT_LIMIT:case XR_XIR_CTFE_DEPTH_LIMIT:return XR_XIR_BUDGET;
+    case XR_XIR_CTFE_CANCELLED:return XR_XIR_CANCELLED;
+    case XR_XIR_CTFE_DEADLINE:return XR_XIR_DEADLINE;
+    case XR_XIR_CTFE_CLOCK_FAILURE:return XR_XIR_CLOCK_FAILURE;
+    default:return XR_XIR_BAD_STRUCTURE;
+    }
+}
+static const XrCompileResourceLimits caps={XR_COMPILE_MEMORY_FINITE,UINT64_C(8388608),true};
 typedef struct PreparedMaterialization {
     XrXirSourceResult source;
     XrXirModule module;
@@ -84,8 +123,8 @@ static XrXirStatus source_operation(const XrXirCompileContext *context,unsigned 
         CHECK(snprintf(library,sizeof(library),
             "export struct Inner<T>{private value:(T,T);static inner(value:T)->Inner<T>{return Inner<T>{value:(value,value)}};get()->T{return this.value.0}}\n")>0);
     }
-    XrCompilerSession *session=NULL;XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if (created!=XR_COMPILER_SESSION_OK) return created==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
+    XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILE_RESOURCE_OK) return p11_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,MATERIALIZATION_ROOT};
     char entry[1024],private_path[1024];
     CHECK(snprintf(entry,sizeof(entry),"%s/root.xr",MATERIALIZATION_ROOT)>0);
@@ -186,9 +225,8 @@ static void execute(XrXirArtifact **artifact,const char *entry,uint32_t bindings
     XrXirStatus received=xr_xir_compile_vm_program_take(artifact,&program);
     if (received!=XR_XIR_OK) {
         XrCompileResourceStats usage=stats(xr_xir_compile_artifact_context(*artifact));
-        fprintf(stderr,"Materializer Program reception status=%u allocated=%llu peak=%llu work=%llu\n",
-            (unsigned)received,(unsigned long long)usage.allocated_bytes,(unsigned long long)usage.peak_bytes,
-            (unsigned long long)usage.work);
+        fprintf(stderr,"Materializer Program reception status=%u allocated=%llu peak=%llu\n",
+            (unsigned)received,(unsigned long long)usage.allocated_bytes,(unsigned long long)usage.peak_bytes);
     }
     CHECK(received==XR_XIR_OK && !*artifact);
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
@@ -250,10 +288,10 @@ static void faults(const PreparedMaterialization *input,size_t sites) {
         XrCompileResourceStats baseline=stats(&context);size_t start=source_fixture_compile_attempts;XrXirArtifact *output=NULL;
         source_fixture_compile_injected=false;source_fixture_compile_fail_at=start+fault;
         CHECK(pipeline(&context,input,&output)==XR_XIR_OUT_OF_MEMORY && !output && source_fixture_compile_injected);
-        CHECK(source_fixture_compile_attempts==start+fault+1 && stats(&context).live_bytes==baseline.live_bytes);
-        source_fixture_compile_fail_at=SIZE_MAX;XrCompileResourceStats failed=stats(&context);
+        CHECK(source_fixture_compile_attempts==start+fault+1 && stats(&context).held_bytes==baseline.held_bytes);
+        source_fixture_compile_fail_at=SIZE_MAX;
         CHECK(pipeline(&context,input,&output)==XR_XIR_OK && output);xr_xir_compile_artifact_free(output);
-        CHECK(context.resources==same && stats(&context).live_bytes==baseline.live_bytes && stats(&context).work>=failed.work);
+        CHECK(context.resources==same && stats(&context).held_bytes==baseline.held_bytes);
         xr_compile_resources_release(context.resources);
         if (!(fault%32) || fault+1==sites) fprintf(stderr,"Materialization compiler FI=%zu/%zu same-owner retry/live\n",fault+1,sites);
     }
@@ -324,8 +362,8 @@ int main(int argc,char **argv) {
     size_t begin=source_fixture_compile_attempts;XrXirStatus status=pipeline(&receiver,&input,&lowered);
     if (status!=XR_XIR_OK) fprintf(stderr,"pipeline status=%u\n",(unsigned)status);
     CHECK(status==XR_XIR_OK && lowered);size_t sites=source_fixture_compile_attempts-begin;
-    CHECK(sites);fprintf(stderr,"Materialization compiler actual census=%zu work=%llu\n",sites,(unsigned long long)stats(&receiver).work);
-    xr_xir_compile_artifact_free(lowered);lowered=NULL;CHECK(stats(&receiver).live_bytes==baseline.live_bytes);
+    CHECK(sites);fprintf(stderr,"Materialization compiler actual census=%zu held=%llu\n",sites,(unsigned long long)stats(&receiver).held_bytes);
+    xr_xir_compile_artifact_free(lowered);lowered=NULL;CHECK(stats(&receiver).held_bytes==baseline.held_bytes);
     if (full) faults(&input,sites);
     CHECK(pipeline(&receiver,&input,&lowered)==XR_XIR_OK && lowered);
     prepared_free(&input);xr_compile_resources_release(producer.resources);xr_compile_resources_release(receiver.resources);

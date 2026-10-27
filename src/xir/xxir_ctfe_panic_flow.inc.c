@@ -26,10 +26,8 @@ static XrXirCtfeStatus ctfe_panic_begin(CtfeCallExecution *execution,const XrXir
     if (at>=body->instruction_count || frame->exit_kind || !xr_xir_panic_empty(&frame->panic)) return XR_XIR_CTFE_BAD_ARTIFACT;
     uint32_t low=0,high=body->block_count;
     while (low+1<high) {
-        if (!scalar_compile_work(&frame->run,2)) return XR_XIR_CTFE_BUDGET;
         uint32_t middle=low+(high-low)/2;if (body->blocks[middle].first<=at) low=middle;else high=middle;
     }
-    if (!scalar_compile_work(&frame->run,2*sizeof(XrXirPanicPayload)+32)) return XR_XIR_CTFE_BUDGET;
     XrXirCtfeStatus status=ctfe_value_status(xr_xir_panic_copy(panic,&frame->panic));if (status!=XR_XIR_CTFE_OK) return status;
     uint32_t handler=body->blocks[low].panic;
     frame->state.landing=handler;frame->state.exit_target=handler?body->blocks[handler].frontier:0;
@@ -62,7 +60,6 @@ static XrXirCtfeStatus ctfe_panic_land(CtfeCallExecution *execution) {
     if (marker->op!=XR_XIR_PANIC_CATCH) return XR_XIR_CTFE_BAD_ARTIFACT;
     if (marker->type==XR_XIR_PANIC_INFO) {
         if (ctfe_frame_spare(&execution->owned)<512) return XR_XIR_CTFE_FRAME_LIMIT;
-        if (!scalar_compile_work(&frame->run,1024)) return XR_XIR_CTFE_BUDGET;
         XrXirValue info={0};XrXirCtfeStatus status=ctfe_value_status(xr_xir_panic_info_new(execution->owned.domain,&frame->panic,&info));
         if (status!=XR_XIR_CTFE_OK) return status;
         xr_xir_owned_slot_move(frame->run.frame,frame->run.layout->offsets[body->parameter_count+first],&info);
@@ -77,7 +74,6 @@ static XrXirCtfeStatus ctfe_panic_continue(CtfeCallExecution *execution,bool *do
     if (!parent) { *done=true;return ctfe_panic_status(frame->panic.detail.code); }
     if (frame->return_value<parent->run.function->parameter_count) return XR_XIR_CTFE_BAD_ARTIFACT;
     uint32_t at=frame->return_value-parent->run.function->parameter_count;
-    if (!scalar_compile_work(&frame->run,2*sizeof(XrXirPanicPayload)+64)) return XR_XIR_CTFE_BUDGET;
     XrXirPanicPayload held={0};xr_xir_panic_move(&frame->panic,&held);
     execution->top=parent;--execution->depth;execution->live_bytes-=frame->bytes;ctfe_call_frame_free(frame);
     execution->owned.activation=parent;execution->owned.authority=(XrXirCellAuthority){execution,parent,parent->epoch};

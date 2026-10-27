@@ -67,14 +67,12 @@ static void source_fixture_compile_free(void *pointer) {
 typedef struct SourceFixtureSourceOwner { XrXirCompileContext context; XrCompileResourceStats baseline; } SourceFixtureSourceOwner;
 static SourceFixtureSourceOwner source_fixture_source_owners[512];
 static size_t source_fixture_source_owner_count;
-/* Separate semantic probes own separate finite graphs; all transitions of a
- * given graph derive the original artifact context and retain its ledger. */
-static inline const XrXirCompileContext *source_fixture_source_owner(uint64_t allocated, uint64_t work) {
+/* Separate semantic probes own separate memory graphs; all transitions of a
+ * given graph derive the original artifact context and retain its memory owner. */
+static inline const XrXirCompileContext *source_fixture_source_owner(XrCompileResourceLimits limits) {
     CHECK(source_fixture_source_owner_count < 512);
-    CHECK(allocated <= UINT64_C(64)*1024*1024 && work <= UINT64_C(128000000));
     SourceFixtureSourceOwner *o=&source_fixture_source_owners[source_fixture_source_owner_count++];
-    XrCompileResourceLimits caps={allocated,UINT64_C(8)*1024*1024,work};
-    CHECK(xr_compile_resources_new(&caps,&o->context.resources)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_compile_resources_new(&limits,&o->context.resources)==XR_COMPILE_RESOURCE_OK);
     o->context.limits=xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_stats(o->context.resources,&o->baseline)==XR_COMPILE_RESOURCE_OK);
     return &o->context;
@@ -83,26 +81,26 @@ static inline void source_fixture_source_owner_close(const XrXirCompileContext *
     for(size_t i=0;i<source_fixture_source_owner_count;++i){SourceFixtureSourceOwner *owner=&source_fixture_source_owners[i];
         if(owner->context.resources!=context->resources)continue;
         XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
-        CHECK(stats.live_bytes==owner->baseline.live_bytes);
-        fprintf(stderr,"Source closed negative owner: allocated=%llu peak=%llu work=%llu live=%llu\n",
-            (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,(unsigned long long)stats.work,(unsigned long long)stats.live_bytes);
+        CHECK(stats.held_bytes==owner->baseline.held_bytes);
+        fprintf(stderr,"Source closed negative owner: allocated=%llu peak=%llu allocations=%llu held=%llu\n",
+            (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,(unsigned long long)stats.allocation_count,(unsigned long long)stats.held_bytes);
         xr_compile_resources_release(owner->context.resources);*owner=(SourceFixtureSourceOwner){0};return;}
     CHECK(false);
 }
 static inline void source_fixture_source_owners_free(void) {
-    uint64_t max_allocated=0,max_peak=0,max_work=0;
+    uint64_t max_allocated=0,max_peak=0,max_allocations=0;
     for(size_t i=0;i<source_fixture_source_owner_count;++i) {
         SourceFixtureSourceOwner *o=&source_fixture_source_owners[i];if(!o->context.resources)continue;XrCompileResourceStats stats={0};
         CHECK(xr_compile_resources_stats(o->context.resources,&stats)==XR_COMPILE_RESOURCE_OK);
-        CHECK(stats.live_bytes==o->baseline.live_bytes);
+        CHECK(stats.held_bytes==o->baseline.held_bytes);
         if(stats.allocated_bytes>max_allocated)max_allocated=stats.allocated_bytes;
         if(stats.peak_bytes>max_peak)max_peak=stats.peak_bytes;
-        if(stats.work>max_work)max_work=stats.work;
+        if(stats.allocation_count>max_allocations)max_allocations=stats.allocation_count;
         xr_compile_resources_release(o->context.resources);*o=(SourceFixtureSourceOwner){0};
     }
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
-    fprintf(stderr,"effects Source compiler: %zu finite owners, max allocated=%llu peak=%llu work=%llu; physical=0/0\n",
-        source_fixture_source_owner_count,(unsigned long long)max_allocated,(unsigned long long)max_peak,(unsigned long long)max_work);
+    fprintf(stderr,"effects Source compiler: %zu memory owners, max allocated=%llu peak=%llu allocations=%llu; physical=0/0\n",
+        source_fixture_source_owner_count,(unsigned long long)max_allocated,(unsigned long long)max_peak,(unsigned long long)max_allocations);
     fprintf(stderr,"Source compiler physical peak: blocks=%zu bytes=%zu phase=%s; final=0/0\n",source_fixture_compile_peak_blocks,source_fixture_compile_peak_bytes,source_fixture_compile_peak_phase);
     source_fixture_source_owner_count=0;
 }
@@ -114,7 +112,7 @@ static inline void source_fixture_source_owners_free(void) {
 #if defined(XR_SOURCE_FIXTURES)
 static XrXirArtifact *source_fixture_lower(const XrXirCompileContext *context,const char *packet_path) {
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK && session);
+    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK && session);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
@@ -122,10 +120,10 @@ static XrXirArtifact *source_fixture_lower(const XrXirCompileContext *context,co
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK) {
         XrCompileResourceStats spent={0};CHECK(xr_compile_resources_stats(context->resources,&spent)==XR_COMPILE_RESOURCE_OK);
-        fprintf(stderr,"source %u:%d:%d: %s (%u); allocated=%llu peak=%llu live=%llu work=%llu\n",
+        fprintf(stderr,"source %u:%d:%d: %s (%u); allocated=%llu peak=%llu held=%llu allocations=%llu\n",
             diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message,(unsigned)status,
             (unsigned long long)spent.allocated_bytes,(unsigned long long)spent.peak_bytes,
-            (unsigned long long)spent.live_bytes,(unsigned long long)spent.work);
+            (unsigned long long)spent.held_bytes,(unsigned long long)spent.allocation_count);
     }
     CHECK(status==XR_XIR_OK && result.checked && result.snapshot);
     XrXirArtifact *checked=result.checked;result.checked=NULL;
@@ -142,10 +140,10 @@ static XrXirArtifact *source_fixture_lower(const XrXirCompileContext *context,co
     status=xr_xir_compile_specialize(checked,&specialized,&specialize_diagnostic);
     if(status!=XR_XIR_OK){XrCompileResourceStats stats={0};
         CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
-        fprintf(stderr,"Source specialize status=%u function=%u block=%u instruction=%u allocated=%llu peak=%llu work=%llu live=%llu\n",
+        fprintf(stderr,"Source specialize status=%u function=%u block=%u instruction=%u allocated=%llu peak=%llu allocations=%llu held=%llu\n",
             (unsigned)status,specialize_diagnostic.function,specialize_diagnostic.block,specialize_diagnostic.instruction,
             (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,
-            (unsigned long long)stats.work,(unsigned long long)stats.live_bytes);
+            (unsigned long long)stats.allocation_count,(unsigned long long)stats.held_bytes);
         const XrXirModule *failed=xr_xir_compile_artifact_module(checked);
         if(specialize_diagnostic.function<failed->function_count){
             const XrXirFunction *fn=&failed->functions[specialize_diagnostic.function];

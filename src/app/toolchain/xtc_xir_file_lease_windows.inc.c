@@ -13,15 +13,10 @@ static XrXirTargetStatus file_lease_open(XrCompileResources *resources, const ch
     void *memory = NULL;
     XrCompileResourceStatus allocated = xr_compile_resources_calloc(resources, 1, sizeof(XtcXirFileLease), &memory);
     if (allocated != XR_COMPILE_RESOURCE_OK)
-        return allocated == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_TARGET_BUDGET :
+        return allocated==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_TARGET_MEMORY_LIMIT :
+        allocated==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_TARGET_OVERFLOW :
             allocated == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_TARGET_OUT_OF_MEMORY : XR_XIR_TARGET_INVALID;
     XtcXirFileLease *lease = memory;
-    XrCompileResourceStatus initialized = xr_compile_resources_work(resources,
-        sizeof(lease->storage.resources) + sizeof(lease->directory));
-    if (initialized != XR_COMPILE_RESOURCE_OK) {
-        xr_compile_resources_free(lease);
-        return initialized == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_TARGET_BUDGET : XR_XIR_TARGET_INVALID;
-    }
     lease->storage.resources = resources; lease->directory = directory;
     XrXirTargetSnapshot *storage = &lease->storage;
     const char *canonical = NULL;
@@ -29,20 +24,19 @@ static XrXirTargetStatus file_lease_open(XrCompileResources *resources, const ch
     if(owned_scratch) {
         void *scratch=NULL;
         XrCompileResourceStatus made=xr_compile_resources_alloc(resources,XTC_XIR_TARGET_PATH_LIMIT*sizeof(wchar_t),&scratch);
-        if(made!=XR_COMPILE_RESOURCE_OK)xtc_xir_target_fail(storage,made==XR_COMPILE_RESOURCE_BUDGET?
-            XR_XIR_TARGET_BUDGET:made==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_TARGET_OUT_OF_MEMORY:XR_XIR_TARGET_INVALID);
+        if(made!=XR_COMPILE_RESOURCE_OK)xtc_xir_target_fail(storage,made==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_TARGET_MEMORY_LIMIT :
+        made==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_TARGET_OVERFLOW :made==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_TARGET_OUT_OF_MEMORY:XR_XIR_TARGET_INVALID);
         storage->scratch=scratch;
     } else storage->scratch=xtc_xir_target_allocate(storage,XTC_XIR_TARGET_PATH_LIMIT*sizeof(wchar_t));
     if (storage->scratch && sysroot_open_path(storage, path, directory, &canonical, &lease->lock)) {
         if (directory) {
             if (sysroot_id(storage, lease->lock->handle, &lease->directory_facts.volume, lease->directory_facts.file_id) &&
-                xtc_xir_target_work(storage, sizeof(canonical) + sizeof(lease->lock->path))) {
+                storage->status == XR_XIR_TARGET_OK) {
                 lease->directory_facts.path = canonical; lease->directory_facts.native_path = lease->lock->path;
             }
         } else {
             XrXirTargetFile file = {0};
-            if (sysroot_hash_with_proof(storage, lease->lock, &file,cache) && xtc_xir_target_work(storage,
-                sizeof(lease->file.path) + sizeof(lease->file.length) + sizeof(lease->file.digest))) {
+            if (sysroot_hash_with_proof(storage, lease->lock, &file,cache) && storage->status == XR_XIR_TARGET_OK) {
                 lease->file.path = canonical; lease->file.length = file.length;
                 memcpy(lease->file.digest, file.digest, sizeof(lease->file.digest));
             }
@@ -71,30 +65,34 @@ XR_FUNC XrXirTargetStatus xtc_xir_sysroot_read(XrXirTargetSnapshot *storage,
     if (!storage || !lock || lock->directory || !limit || !owned_bytes || *owned_bytes || !length || *length)
         return XR_XIR_TARGET_INVALID;
     if (storage->status != XR_XIR_TARGET_OK) return storage->status;
-    if (file_length > limit || file_length > SIZE_MAX) {
+    if (file_length > SIZE_MAX) {
+        xtc_xir_target_fail(storage, XR_XIR_TARGET_OVERFLOW); return storage->status;
+    }
+    if (file_length > limit) {
         xtc_xir_target_fail(storage, XR_XIR_TARGET_BUDGET); return storage->status;
     }
     size_t bytes = (size_t)file_length;
     void *data = NULL;
     XrCompileResourceStatus allocated = xr_compile_resources_alloc(storage->resources, bytes ? bytes : 1, &data);
     if (allocated != XR_COMPILE_RESOURCE_OK) {
-        xtc_xir_target_fail(storage, allocated == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_TARGET_BUDGET :
+        xtc_xir_target_fail(storage, allocated==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_TARGET_MEMORY_LIMIT :
+        allocated==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_TARGET_OVERFLOW :
             allocated == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_TARGET_OUT_OF_MEMORY : XR_XIR_TARGET_INVALID);
         return storage->status;
     }
     LARGE_INTEGER start = {0};
-    if (xtc_xir_target_work(storage, 1) && !SetFilePointerEx(lock->handle, start, NULL, FILE_BEGIN))
+    if (storage->status == XR_XIR_TARGET_OK && !SetFilePointerEx(lock->handle, start, NULL, FILE_BEGIN))
         sysroot_error(storage, GetLastError());
     for (size_t at = 0; at < bytes && storage->status == XR_XIR_TARGET_OK;) {
         DWORD amount = (DWORD)(bytes - at > 65536 ? 65536 : bytes - at), actual = 0;
-        if (!xtc_xir_target_work(storage, (uint64_t)amount + 1)) break;
+        if (storage->status != XR_XIR_TARGET_OK) break;
         if (!ReadFile(lock->handle, (uint8_t *)data + at, amount, &actual, NULL)) {
             sysroot_error(storage, GetLastError()); break;
         }
         if (actual != amount) { xtc_xir_target_fail(storage, XR_XIR_TARGET_IO); break; }
         at += actual;
     }
-    if (!bytes && xtc_xir_target_work(storage, 1)) *(uint8_t *)data = 0;
+    if (!bytes && storage->status == XR_XIR_TARGET_OK) *(uint8_t *)data = 0;
     if (storage->status != XR_XIR_TARGET_OK) { xr_compile_resources_free(data); return storage->status; }
     *owned_bytes = data; *length = bytes; return XR_XIR_TARGET_OK;
 }

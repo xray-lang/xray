@@ -67,7 +67,7 @@ static const XrNativeMemberDeclaration *source_iterator_member(SourceContext *ct
     if(!source_native_iterator_declaration(ctx)) return NULL;
     const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ITERATOR);
     const XrNativeMemberDeclaration *member=source_native_member(ctx,native,name);
-    if(!source_work(ctx,node)) return NULL;
+    if(!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
     if(!member || !member->is_public || !member->is_method || member->is_static || !member->lowered ||
         member->parameter_count!=(member->operation==XR_NATIVE_OPERATION_ITERATOR_NTH ? 1u : 0u) ||
         (member->operation!=XR_NATIVE_OPERATION_ITERATOR_HAS_NEXT && member->operation!=XR_NATIVE_OPERATION_ITERATOR_NEXT &&

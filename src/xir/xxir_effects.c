@@ -203,6 +203,8 @@ typedef struct EffectGraph {
     uint32_t *heads, *queue;
     uint8_t *queued;
     EffectEdge *edges;
+    /* Operation-local denial rows use the same Control dependency queue. */
+    uint8_t *default_access_denied;
     /* Supplemental GO dependencies are read only by escaping-error flow. */
     uint32_t *error_heads;
     EffectEdge *error_edges;
@@ -224,6 +226,14 @@ typedef struct EffectGraph {
     EffectBodyOrdinaryInput ordinary;
 } EffectGraph;
 
+struct XirEffectDefaultAccessScope {
+    XrXirCompileContext work,remaining;
+    const XrXirModule *module;
+    EffectGraph graph;
+    XrXirStatus status;
+    bool active;
+};
+
 static XrXirStatus effect_graph_physical_refresh(const XrXirCompileContext *work,
     const XrXirModule *module,EffectGraph *graph,EffectRefinementBounds *refinement) {
     if (!graph || (graph->physical_owned && (!graph->physical || !graph->material)))
@@ -234,7 +244,7 @@ static XrXirStatus effect_graph_physical_refresh(const XrXirCompileContext *work
         effect_body_material_generation_input(work,module,refinement,&graph->ordinary,&fresh) :
         effect_body_material_generation(work,module,refinement,&fresh);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(work,3)) { effect_body_material_free(fresh);return XR_XIR_BUDGET; }
+
     if (graph->physical_owned) effect_body_material_free(graph->material);
     graph->material=fresh;graph->physical=fresh->physical;graph->physical_owned=true;return XR_XIR_OK;
 }
@@ -255,7 +265,7 @@ static XrXirStatus effect_graph_owned_physical_function(const XrXirCompileContex
     XrXirStatus status=effect_body_request_dimensions(&request,function,&actual);
     if (status!=XR_XIR_OK) return status;
     const EffectPhysicalFunction *body=&graph->physical->functions[function];
-    if (!xir_compile_work(work,7)) return XR_XIR_BUDGET;
+
     if (body->parameters!=actual.parameter_count || body->instructions!=actual.instruction_count ||
         body->values!=(uint64_t)actual.parameter_count+actual.instruction_count ||
         body->count>body->capacity || body->capacity>body->values ||
@@ -282,7 +292,7 @@ static inline XrXirStatus effect_graph_material_take(const XrXirCompileContext *
         !graph->physical_owned || !effect_body_material_shape(graph->material) ||
         graph->material->resources!=work->resources || graph->physical!=graph->material->physical ||
         effect_body_count(graph->material)!=module->function_count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+
     *output=graph->material;graph->material=NULL;graph->physical=NULL;graph->physical_owned=false;
     return XR_XIR_OK;
 }
@@ -305,6 +315,7 @@ static XrXirStatus effect_invocation_public_trace(const XrXirCompileContext *wor
 static void effect_graph_free(EffectGraph *graph) {
     if (graph->physical_owned) effect_body_material_free(graph->material);
     graph->material=NULL;graph->physical=NULL;graph->physical_owned=false;
+    xr_compile_resources_free(graph->default_access_denied);
     xr_compile_resources_free(graph->flow_rows);
     xr_compile_resources_free(graph->parameter_first_callers);
     xr_compile_resources_free(graph->reference_heads); xr_compile_resources_free(graph->references);
@@ -482,7 +493,7 @@ static XrXirStatus effect_reference_graph(const XrXirModule *module,
     if (!graph->reference_heads) return status;
     graph->references = xir_compile_alloc(work, (size_t)count * sizeof(*graph->references), &status);
     if (!graph->references) return status;
-    if (!xir_compile_work(work, module->function_count)) return XR_XIR_BUDGET;
+
     for (uint32_t f = 0; f < module->function_count; ++f) graph->reference_heads[f] = UINT32_MAX;
     uint32_t at = 0;
     /* Prepending in reverse source order preserves the original ascending
@@ -496,7 +507,7 @@ static XrXirStatus effect_reference_graph(const XrXirModule *module,
         XrXirStatus classified=effect_graph_physical_function(work,module,graph,f,&physical);
         if (classified!=XR_XIR_OK) return classified;
         for (uint32_t r=physical->count;r-- > 0;) {
-            if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
             EffectPhysicalRecord record=physical->records[r];
             if (!(record.mask&EFFECT_PHYSICAL_REFERENCE)) continue;
             if (record.value<function->parameter_count || record.value>=physical->values)
@@ -506,7 +517,7 @@ static XrXirStatus effect_reference_graph(const XrXirModule *module,
             read_status=effect_body_request_instruction(&request,f,i,&storage,&op);
             if (read_status!=XR_XIR_OK) return read_status;
             if (op->op != XR_XIR_FUNCTION_REF) return XR_XIR_BAD_STRUCTURE;
-            if (!xir_compile_work(work, 5)) return XR_XIR_BUDGET;
+
             if (op->immediate < 0 || (uint64_t)op->immediate >= module->function_count || at >= count)
                 return XR_XIR_BAD_STRUCTURE;
             uint32_t callee = (uint32_t)op->immediate;
@@ -537,12 +548,12 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
     status=effect_graph_owned_physical_function(remaining,graph,f,&physical);
     if (status!=XR_XIR_OK) return status;
     const EffectBodyFunction *owned=&graph->material->functions[f];
-    if(!xir_compile_work(remaining,sizeof(*effects->outcomes_work.functions))) return XR_XIR_BUDGET;
-    effects->outcomes_work.functions[f]=(XrXirFunctionEffects){0};
+
+    if (effects) effects->outcomes_work.functions[f]=(XrXirFunctionEffects){0};
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};uint32_t r=0;
-    if (!xir_compile_work(remaining,sizeof(cursor)+sizeof(r))) return XR_XIR_BUDGET;
+
     while (r<physical->count && physical->records[r].value<function->parameter_count) {
-        if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+
         if (physical->records[r++].mask&(EFFECT_PHYSICAL_CONTROL|EFFECT_PHYSICAL_DIRECT|
             EFFECT_PHYSICAL_GO|EFFECT_PHYSICAL_REFERENCE)) return XR_XIR_BAD_STRUCTURE;
     }
@@ -550,15 +561,17 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
         const EffectBodyRun *ref;uint32_t opcode=XR_XIR_INVALID;
         status=effect_body_range_ref(&request.read,owned,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
-        status=effect_control_run_seed(&request,f,ref,&effects->outcomes_work.functions[f]);
-        if(status!=XR_XIR_OK) return status;
+        if (effects) {
+            status=effect_control_run_seed(&request,f,ref,&effects->outcomes_work.functions[f]);
+            if(status!=XR_XIR_OK) return status;
+        }
         if (!(ref->mask&UINT32_C(1))) {
             status=effect_body_run_word(&request.read,ref,ref->first,0,&opcode);
             if (status!=XR_XIR_OK) return status;
             if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
         }
         while (r<physical->count && physical->records[r].value-function->parameter_count<ref->first+ref->count) {
-            if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+
             EffectPhysicalRecord record=physical->records[r++];
             if (record.value<function->parameter_count || record.value>=physical->values ||
                 record.value-function->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
@@ -570,9 +583,9 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
                 if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
             }
             XrXirOp op=(XrXirOp)opcode;
-            if (op==XR_XIR_GO) effects->outcomes_work.task_creation[f]=XR_XIR_EFFECT_MAY;
+            if (effects && op==XR_XIR_GO) effects->outcomes_work.task_creation[f]=XR_XIR_EFFECT_MAY;
             if (symbolic && op==XR_XIR_FUNCTION_REF) {
-                if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+
                 if (counts->references==UINT32_MAX) return XR_XIR_BUDGET;
                 ++counts->references;
             }
@@ -590,22 +603,23 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
 
 static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirEffects *effects,
     EffectGraph *graph, XrXirCompileContext *remaining) {
-    if (!xir_compile_context_valid(remaining) || !module || !effects || !graph ||
-        effects->resources!=remaining->resources || effects->count!=module->function_count ||
-        !effects->outcomes_work.functions || !effects->outcomes_work.task_creation || !effect_body_material_shape(graph->material) ||
+    if (!xir_compile_context_valid(remaining) || !module || !graph ||
+        (effects && (effects->resources!=remaining->resources || effects->count!=module->function_count ||
+            !effects->outcomes_work.functions || !effects->outcomes_work.task_creation)) ||
+        !effect_body_material_shape(graph->material) ||
         graph->material->resources!=remaining->resources || graph->physical!=graph->material->physical ||
-        !graph->physical || effect_body_count(graph->material)!=effects->count ||
-        (!graph->physical_owned && graph->material!=effects->generation) || graph->heads || graph->queue ||
+        !graph->physical || effect_body_count(graph->material)!=module->function_count ||
+        (!graph->physical_owned && (!effects || graph->material!=effects->generation)) || graph->heads || graph->queue ||
         graph->queued || graph->edges || graph->references || graph->reference_heads)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(remaining,14)) return XR_XIR_BUDGET;
+
     XrXirStatus allocation_status = XR_XIR_OK;
     EffectGraphDependencyCounts counts={0};
-    if (!xir_compile_work(remaining,2*sizeof(counts))) return XR_XIR_BUDGET;
+
     XrXirStatus status=XR_XIR_OK;
-    bool symbolic=graph->material->ordinary_identities || graph->material->evidence_kind==XR_XIR_EVIDENCE_TEMPLATE;
-    for (uint32_t t=0;t<graph->material->domain.types->count && !symbolic;++t) {
-        if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+    bool symbolic=effects && (graph->material->ordinary_identities || graph->material->evidence_kind==XR_XIR_EVIDENCE_TEMPLATE);
+    for (uint32_t t=0;effects && t<graph->material->domain.types->count && !symbolic;++t) {
+
         if (graph->material->domain.types->nodes[t].kind==XR_XIR_TYPE_CELL) symbolic=true;
     }
     for (uint32_t f=0;f<module->function_count;++f) {
@@ -616,7 +630,9 @@ static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirE
     uint64_t bytes = (uint64_t) module->function_count * (2 * sizeof(uint32_t) + sizeof(uint8_t)) +
         (uint64_t) edges * sizeof(EffectEdge);
     if ((bytes > SIZE_MAX) || bytes > SIZE_MAX) return XR_XIR_BUDGET;
-    if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+    if (!effects && (bytes>remaining->limits.frame_bytes ||
+        module->function_count>remaining->limits.frame_bytes-bytes)) return XR_XIR_BUDGET;
+
     graph->edge_count = edges;
     graph->heads = xir_compile_calloc(remaining, module->function_count, sizeof(*graph->heads), &allocation_status);
     graph->queue = xir_compile_calloc(remaining, module->function_count, sizeof(*graph->queue), &allocation_status);
@@ -636,18 +652,18 @@ static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirE
         if (status!=XR_XIR_OK) return status;
         const EffectBodyFunction *owned=&graph->material->functions[f];
         EffectBodyRecordCursor cursor={0,0,UINT32_MAX};uint32_t r=0;
-        if (!xir_compile_work(remaining,sizeof(cursor)+sizeof(r))) return XR_XIR_BUDGET;
+
         while (r<physical->count && physical->records[r].value<function->parameter_count) {
-            if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+
             if (physical->records[r++].mask&EFFECT_PHYSICAL_DIRECT) return XR_XIR_BAD_STRUCTURE;
         }
         for (uint32_t run=0;run<owned->run_count;++run) {
             const EffectBodyRun *ref;XrXirInstruction constant={0};bool decoded=false;
-            if (!xir_compile_work(remaining,sizeof(constant)+sizeof(decoded))) return XR_XIR_BUDGET;
+
             status=effect_body_range_ref(&request.read,owned,&cursor,&ref);
             if (status!=XR_XIR_OK) return status;
             while (r<physical->count && physical->records[r].value-function->parameter_count<ref->first+ref->count) {
-                if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+
                 EffectPhysicalRecord record=physical->records[r++];
                 if (record.value<function->parameter_count || record.value>=physical->values ||
                     record.value-function->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
@@ -658,11 +674,11 @@ static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirE
                     status=effect_body_instruction_ref_value(&request.read,ref,i,ref->mask?&storage:&constant);
                     if (status!=XR_XIR_OK) return status;
                     if (!ref->mask) {
-                        if (!xir_compile_work(remaining,sizeof(decoded))) return XR_XIR_BUDGET;
+
                         decoded=true;
                     }
                 }
-                if (!xir_compile_work(remaining,sizeof(op))) return XR_XIR_BUDGET;
+
                 op=ref->mask?&storage:&constant;
                 if (op->op!=XR_XIR_INVOKE_DEFAULT && op->op!=XR_XIR_CALL_DEFAULT && op->op!=XR_XIR_CALL &&
                     op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_CLEANUP_REGISTER) return XR_XIR_BAD_STRUCTURE;
@@ -691,35 +707,105 @@ static XrXirStatus effect_graph_build(const XrXirModule *module, XrXirEffects *e
     XrXirStatus status=effect_graph_physical_refresh(remaining,module,graph,effects->refinement);
     return status==XR_XIR_OK?effect_graph_build_material(module,effects,graph,remaining):status;
 }
-static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, const XrXirCompileContext *work) {
-    uint32_t front = 0, back = 0, pending = effects->count;
-    for (uint32_t f = 0; f < effects->count; ++f) { graph->queue[f] = f; graph->queued[f] = 1; }
+static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph) {
+    if (!graph || (!effects && !graph->default_access_denied)) return XR_XIR_BAD_STRUCTURE;
+    uint32_t count=effects?effects->count:effect_body_count(graph->material);
+    uint32_t front = 0, back = 0, pending = count;
+    for (uint32_t f = 0; f < count; ++f) { graph->queue[f] = f; graph->queued[f] = 1; }
     while (pending) {
-        if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
         uint32_t callee = graph->queue[front];
-        front = front + 1 == effects->count ? 0 : front + 1;
+        front = front + 1 == count ? 0 : front + 1;
         --pending; graph->queued[callee] = 0;
-        XrXirFunctionEffects from = effects->outcomes_work.functions[callee];
         for (uint32_t edge = graph->heads[callee]; edge != UINT32_MAX; edge = graph->edges[edge].next) {
-            if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
-            EffectEdge link = graph->edges[edge];
-            /* Registered cleanup executes with worker authority, but its
-             * separate no-throw/no-suspend obligations govern control effects. */
-            XrXirFunctionEffects *to = &effects->outcomes_work.functions[link.caller];
-            bool changed = false;
-            if (!link.cleanup && from.suspend > to->suspend) { to->suspend = from.suspend; changed = true; }
-            if (!link.cleanup && effects->outcomes_work.task_creation[callee] > effects->outcomes_work.task_creation[link.caller]) {
-                effects->outcomes_work.task_creation[link.caller] = effects->outcomes_work.task_creation[callee]; changed = true;
+            EffectEdge link = graph->edges[edge];bool changed = false;
+            if (effects && !link.cleanup) {
+                XrXirFunctionEffects from=effects->outcomes_work.functions[callee];
+                XrXirFunctionEffects *to=&effects->outcomes_work.functions[link.caller];
+                if (from.suspend>to->suspend) { to->suspend=from.suspend;changed=true; }
+                if (effects->outcomes_work.task_creation[callee]>effects->outcomes_work.task_creation[link.caller]) {
+                    effects->outcomes_work.task_creation[link.caller]=effects->outcomes_work.task_creation[callee];changed=true;
+                }
+            }
+            /* Cleanup keeps its separate control rules, but its storage access
+             * executes inside the registering helper's access closure. */
+            if (graph->default_access_denied && graph->default_access_denied[callee] &&
+                !graph->default_access_denied[link.caller]) {
+                graph->default_access_denied[link.caller]=1;changed=true;
             }
             if (changed && !graph->queued[link.caller]) {
                 graph->queue[back] = link.caller;
-                back = back + 1 == effects->count ? 0 : back + 1;
+                back = back + 1 == count ? 0 : back + 1;
                 graph->queued[link.caller] = 1; ++pending;
             }
         }
     }
     return XR_XIR_OK;
 }
+
+/* Only explicit value/local/Cell operations have no hidden module source.
+ * Native, child execution and any new opcode need their own access facts. */
+static bool effect_default_access_local(XrXirOp op) {
+    switch (op) {
+    case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_FLOAT:
+    case XR_XIR_CONST_STRING: case XR_XIR_CONST_RUNE: case XR_XIR_COPY:
+    case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN: case XR_XIR_CONCAT_STRING:
+    case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT: case XR_XIR_DIV_INT:
+    case XR_XIR_REM_INT: case XR_XIR_EQ_INT: case XR_XIR_NE_INT: case XR_XIR_LT_INT:
+    case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT: case XR_XIR_AND_INT:
+    case XR_XIR_OR_INT: case XR_XIR_XOR_INT: case XR_XIR_SHL_INT: case XR_XIR_SHR_INT:
+    case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
+    case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT: case XR_XIR_LT_FLOAT:
+    case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT: case XR_XIR_CONVERT_NUMBER:
+    case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CALL_DEFAULT: case XR_XIR_INVOKE_DEFAULT:
+    case XR_XIR_CLEANUP_REGISTER: case XR_XIR_CLEANUP_LEAVE: case XR_XIR_CLEANUP_ERROR:
+    case XR_XIR_INVOKE_RESULT: case XR_XIR_INVOKE_ERROR: case XR_XIR_INVOKE_DISCARD:
+    case XR_XIR_JUMP: case XR_XIR_BRANCH: case XR_XIR_RETURN: case XR_XIR_THROW:
+    case XR_XIR_LOCAL_NEW: case XR_XIR_LOCAL_READ: case XR_XIR_LOCAL_WRITE: case XR_XIR_LOCAL_UNINIT:
+    case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_WRITE:
+    case XR_XIR_OWNED_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_READ: case XR_XIR_OWNED_LOCAL_WRITE:
+    case XR_XIR_PHI: case XR_XIR_FUNCTION_REF: case XR_XIR_FUNCTION_WEAKEN:
+    case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_LOCAL_WRITE:
+    case XR_XIR_CELL_PLACE: case XR_XIR_CELL_PROJECT: case XR_XIR_OBJECT_PLACE:
+    case XR_XIR_FIELD_PLACE: case XR_XIR_INDEX_PLACE: case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE:
+    case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_GET: case XR_XIR_ARRAY_SET: case XR_XIR_ARRAY_PUSH:
+    case XR_XIR_ARRAY_LEN: case XR_XIR_ARRAY_REPEAT: case XR_XIR_ARRAY_CAPACITY:
+    case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_ARRAY_RESERVE: case XR_XIR_CELL_STRING_APPEND:
+    case XR_XIR_STRING_LEN: case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING: case XR_XIR_LT_STRING:
+    case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING:
+    case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
+    case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_GET: case XR_XIR_STRUCT_SET:
+    case XR_XIR_ENUM_NEW: case XR_XIR_ENUM_TAG: case XR_XIR_ENUM_GET:
+    case XR_XIR_CLASS_NEW: case XR_XIR_CLASS_GET: case XR_XIR_CLASS_SET:
+    case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME: case XR_XIR_NULLABLE_UNWRAP:
+    case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD:
+    case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW: case XR_XIR_VIEW_LEN: case XR_XIR_VIEW_GET:
+    case XR_XIR_VIEW_SET: case XR_XIR_VIEW_COPY: case XR_XIR_VIEW_END: case XR_XIR_VIEW_CLEANUP:
+    case XR_XIR_ERROR_ERASE: case XR_XIR_ERROR_IS: case XR_XIR_ERROR_NARROW:
+    case XR_XIR_MATCH_FAIL: case XR_XIR_ASSERT_CONDITION: case XR_XIR_PANIC_CATCH:
+    case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE:
+        return true;
+    default: return false;
+    }
+}
+static XrXirStatus effect_default_access_seed(XirEffectDefaultAccessScope *scope) {
+    EffectGraph *graph=&scope->graph;uint32_t count=effect_body_count(graph->material);
+    EffectBodyRequest body=effect_body_owned_request(&scope->work,graph->material);
+    for (uint32_t f=0;f<count;++f) {
+        EffectBodyFunctionDimensions head={0};XrXirStatus status=effect_body_request_dimensions(&body,f,&head);
+        if (status!=XR_XIR_OK) return status;
+        /* Physical Control records intentionally omit some slot operations.
+         * This access decision therefore reads every owned instruction. */
+        for (uint32_t i=0;i<head.instruction_count;++i) {
+            XrXirInstruction storage;const XrXirInstruction *op=NULL;
+            status=effect_body_request_instruction(&body,f,i,&storage,&op);
+            if (status!=XR_XIR_OK) return status;
+            if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+            if (!effect_default_access_local(op->op)) graph->default_access_denied[f]=1;
+        }
+    }
+    return XR_XIR_OK;
+}
+
 #include "xxir_effect_errors.inc.c"
 #include "xxir_go_safe.inc.c"
 #include "xxir_effect_context.inc.c"
@@ -760,14 +846,14 @@ static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *eff
         /* The pre-existing NONE precharge is retained in this slice. No
          * accounting reduction is attributed to a walk that never occurred. */
         if (fact == XR_XIR_EFFECT_NONE) {
-            if (!xir_compile_work(work,(uint64_t)function->instruction_count+1)) return XR_XIR_BUDGET;
+
             continue;
         }
         const EffectPhysicalFunction *physical=NULL;
         XrXirStatus status=effect_graph_physical_function(work,module,graph,f,&physical);
         if (status!=XR_XIR_OK) return status;
         for (uint32_t r=0;r<physical->count;++r) {
-            if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
             EffectPhysicalRecord record=physical->records[r];
             if (!(record.mask&EFFECT_PHYSICAL_CONTROL)) continue;
             if (record.value<function->parameter_count || record.value>=physical->values)
@@ -796,10 +882,10 @@ static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *eff
         }
     }
     while (front < back) {
-        if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
+
         uint32_t callee = graph->queue[front++];
         for (uint32_t e = graph->heads[callee]; e != UINT32_MAX; e = graph->edges[e].next) {
-            if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
+
             EffectEdge edge = graph->edges[e];
             if (edge.cleanup) continue;
             if (effects->outcomes_work.witnesses[edge.caller].cause ||
@@ -826,7 +912,7 @@ static XrXirStatus effect_entry_roots_seal(const XrXirModule *module,
         sizeof(*effects->outcomes_work.entry_roots),&status);
     if (!effects->outcomes_work.entry_roots) return status;
     for (uint32_t f=0;f<effects->count;++f) {
-        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
         EffectBodyFunctionHead function={0};status=effect_body_request_head(&body,f,&function);
         if (status!=XR_XIR_OK) return status;
         XirEffectEntryRootView *view=&effects->outcomes_work.entry_roots[f];
@@ -839,7 +925,7 @@ static XrXirStatus effect_entry_roots_seal(const XrXirModule *module,
         const XrXirRootFormula *formula=&effect_contracts_read(effects)[f].formula;
         view->intrinsic_mask=formula->constant_mask;
         for (uint32_t t=0;t<formula->term_count;++t) {
-            if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
             const XrXirRootTerm *term=&formula->terms[t];
             if (term->kind==XR_XIR_ROOT_TERM_CELL_PARAMETER) {
                 if (term->index>=function.parameter_count ||
@@ -865,7 +951,7 @@ static XrXirStatus effect_entry_roots_seal(const XrXirModule *module,
             view->parameters=parameters;
             uint32_t at=0;
             for (uint32_t t=0;t<formula->term_count;++t) {
-                if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+
                 if (formula->terms[t].kind!=XR_XIR_ROOT_TERM_CELL_PARAMETER) continue;
                 uint32_t parameter=formula->terms[t].index;
                 if (at && parameters[at-1]>=parameter) return XR_XIR_BAD_STRUCTURE;
@@ -885,7 +971,7 @@ XR_FUNC XrXirStatus xir_effects_entry_root(const XrXirCompileContext *context,
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);
     if (!output || !final || !xir_effects_context_matches(context,effects,final->count) ||
         !final->entry_roots || function>=final->count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+
     *output=final->entry_roots[function];return XR_XIR_OK;
 }
 
@@ -898,6 +984,57 @@ static XrXirStatus effect_final_inventories_match(const XrXirCompileContext *wor
 #include "xxir_effect_invocation_inventory.inc.c"
 #include "xxir_effect_error_context_final_read.inc.c"
 #include "xxir_effect_source_terminal.inc.c"
+
+XR_FUNC XrXirStatus xir_effects_default_access_site(XirEffectDefaultAccessScope *scope,
+    const XrXirCompileContext *remaining,uint32_t caller,uint32_t instruction) {
+    if (!scope || !scope->active) return XR_XIR_BAD_STRUCTURE;
+    if (scope->status!=XR_XIR_OK) return scope->status;
+    XrXirStatus status=XR_XIR_OK;
+    if (!xir_compile_context_valid(remaining) || remaining->resources!=scope->remaining.resources ||
+        remaining->limits.frame_bytes>scope->remaining.limits.frame_bytes) status=XR_XIR_BAD_STRUCTURE;
+    if (status==XR_XIR_OK) status=effect_invocation_current_input_match(remaining,scope->module,scope->graph.material);
+    EffectBodyRequest body=effect_body_owned_request(remaining,scope->graph.material);
+    XrXirInstruction storage;const XrXirInstruction *op=NULL;
+    if (status==XR_XIR_OK) status=effect_body_request_instruction(&body,caller,instruction,&storage,&op);
+    if (status==XR_XIR_OK) status=xr_xir_compile_default_call_verify(remaining,scope->module,caller,op);
+    const XrXirDefaultBinding *binding=NULL;
+    if (status==XR_XIR_OK) {
+        const uint32_t *identity=xr_xir_default_identity(op);
+        status=xir_metadata_default_lookup(remaining,&body.domain,identity[0],identity[1],&binding);
+    }
+    if (status==XR_XIR_OK && (!binding || binding->function>=effect_body_count(scope->graph.material)))
+        status=XR_XIR_BAD_STRUCTURE;
+    if (status==XR_XIR_OK && scope->graph.default_access_denied[binding->function]) status=XR_XIR_UNRESOLVED;
+    if (status!=XR_XIR_OK) scope->status=status;
+    return status;
+}
+XR_FUNC XrXirStatus xir_effects_default_access_operation(const XrXirCompileContext *context,
+    const XrXirModule *module,XirEffectDefaultAccessOperation operation,void *data) {
+    if (!xir_compile_context_valid(context) || !module || !module->functions ||
+        !module->function_count || !operation) return XR_XIR_BAD_STRUCTURE;
+    XirEffectDefaultAccessScope scope={.work=*context,.module=module};
+    if (sizeof(scope)>context->limits.frame_bytes) return XR_XIR_BUDGET;
+    scope.work.limits.frame_bytes-=sizeof(scope);
+    XrXirStatus status=effect_graph_physical_refresh(&scope.work,module,&scope.graph,NULL);
+    if (status==XR_XIR_OK) status=effect_invocation_current_input_match(&scope.work,module,scope.graph.material);
+    if (status==XR_XIR_OK) status=effect_graph_build_material(module,NULL,&scope.graph,&scope.work);
+    if (status==XR_XIR_OK) {
+        scope.graph.default_access_denied=xir_compile_calloc(&scope.work,module->function_count,
+            sizeof(*scope.graph.default_access_denied),&status);
+    }
+    if (status==XR_XIR_OK) status=effect_default_access_seed(&scope);
+    if (status==XR_XIR_OK) status=effect_propagate(NULL,&scope.graph);
+    if (status==XR_XIR_OK) {
+        uint64_t scratch=(uint64_t)module->function_count*(2u*sizeof(uint32_t)+2u*sizeof(uint8_t))+
+            (uint64_t)scope.graph.edge_count*sizeof(*scope.graph.edges);
+        XR_CHECK(scratch<=scope.work.limits.frame_bytes,"default access scratch was admitted before allocation");
+        scope.remaining=scope.work;scope.remaining.limits.frame_bytes-=scratch;scope.active=true;
+        status=operation(data,&scope.remaining,&scope);scope.active=false;
+        if (scope.status!=XR_XIR_OK) status=scope.status;
+        if (status==XR_XIR_OK) status=effect_invocation_current_input_match(&scope.remaining,module,scope.graph.material);
+    }
+    effect_graph_free(&scope.graph);return status;
+}
 
 static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_context,
     const XrXirModule *module, const XrXirRootRefiner *refiner, XrXirEffects **output) {
@@ -936,7 +1073,7 @@ static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_con
     if (status == XR_XIR_OK) status = effect_graph_build(module, effects, &graph, remaining);
     if (status == XR_XIR_OK) status = effect_parameters_derive(module, effects, &graph, remaining);
     if (status == XR_XIR_OK) status = effect_invocation_publish(remaining,module,effects,&graph,NULL,NULL);
-    if (status == XR_XIR_OK) status = effect_propagate(effects, &graph, remaining);
+    if (status == XR_XIR_OK) status = effect_propagate(effects, &graph);
     if (status == XR_XIR_OK) status = effect_context_owner_refresh(remaining,module,effects,effects->invocations->body);
     while (status == XR_XIR_OK && refiner) {
         changed = false;
@@ -958,7 +1095,7 @@ static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_con
         status = effect_graph_physical_refresh(remaining,module,&graph,effects->refinement);
         if (status == XR_XIR_OK) status = effect_parameters_derive(module, effects, &graph, remaining);
         if (status == XR_XIR_OK) status = effect_invocation_publish(remaining,module,effects,&graph,NULL,NULL);
-        if (status == XR_XIR_OK) status = effect_propagate(effects,&graph,remaining);
+        if (status == XR_XIR_OK) status = effect_propagate(effects,&graph);
         if (status == XR_XIR_OK) status = effect_context_owner_refresh(remaining,module,effects,effects->invocations->body);
     }
     if (status == XR_XIR_OK) status = effect_go_safe(module, effects, &graph, remaining);
@@ -1005,7 +1142,7 @@ XR_FUNC XrXirStatus xir_effects_source_body_match(const XrXirCompileContext *con
         !effect_body_material_shape(effects->invocations->body) ||
         effects->invocations->body->resources!=context->resources)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+
     return effect_body_source_match(context,effects->invocations->body,source);
 }
 
@@ -1019,7 +1156,7 @@ XR_FUNC XrXirStatus xir_effects_program_body_match(const XrXirCompileContext *co
     if (status == XR_XIR_OK) status = effect_program_projection_storage(context, source);
     if (status != XR_XIR_OK) return status;
     if (effects->count != source->function_count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+
     if (body->stage!=source->stage || body->linkage_kind!=source->linkage_kind ||
         !source->functions) return XR_XIR_BAD_STRUCTURE;
     const XrXirTypes *types=source->types ? source->types : &effect_empty_types;
@@ -1037,7 +1174,7 @@ XR_FUNC XrXirStatus xir_effects_program_metadata(const XrXirCompileContext *cont
     if (body->resources!=context->resources || body->stage!=XR_XIR_LOWERED ||
         !body->domain.types || !body->domain.declarations || effect_body_count(body)!=effects->count)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+
     *types=body->domain.types;*declarations=body->domain.declarations;
     return XR_XIR_OK;
 }
@@ -1054,7 +1191,7 @@ XR_FUNC XrXirStatus xir_effects_program_signature_match(const XrXirCompileContex
     status = effect_program_range(context, body->parameters, body->parameter_count,
         sizeof(*body->parameters), _Alignof(XrXirType));
     if (status != XR_XIR_OK) return status;
-    if (!xir_compile_work(context,(uint64_t)parameter_count+2)) return XR_XIR_BUDGET;
+
     if (parameter_count!=body->parameter_count || result!=body->result) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t p=0;p<parameter_count;++p)
         if (parameters[p]!=body->parameters[p]) return XR_XIR_BAD_STRUCTURE;

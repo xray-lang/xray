@@ -29,14 +29,39 @@ typedef struct ExpressionState {
 } ExpressionState;
 static XrXirStatus expression_value_status(XrXirValueStatus status) {
     return status==XR_XIR_VALUE_OK ? XR_XIR_OK : status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+        status==XR_XIR_VALUE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        status==XR_XIR_VALUE_OVERFLOW ? XR_XIR_OVERFLOW :
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
+}
+static XrXirStatus expression_source_status(XrSourceCompileStatus status) {
+    switch (status) {
+    case XR_SOURCE_COMPILE_OK:return XR_XIR_OK;
+    case XR_SOURCE_COMPILE_OUT_OF_MEMORY:return XR_XIR_OUT_OF_MEMORY;
+    case XR_SOURCE_COMPILE_MEMORY_LIMIT:return XR_XIR_MEMORY_LIMIT;
+    case XR_SOURCE_COMPILE_OVERFLOW:return XR_XIR_OVERFLOW;
+    case XR_SOURCE_COMPILE_CANCELLED:return XR_XIR_CANCELLED;
+    case XR_SOURCE_COMPILE_DEADLINE:return XR_XIR_DEADLINE;
+    case XR_SOURCE_COMPILE_CLOCK_FAILURE:return XR_XIR_CLOCK_FAILURE;
+    case XR_SOURCE_COMPILE_BUDGET:case XR_SOURCE_COMPILE_LIMIT:return XR_XIR_BUDGET;
+    default:return XR_XIR_BAD_TYPE;
+    }
+}
+static XrXirStatus expression_parse_status(XrParseStatus status) {
+    switch (status) {
+    case XR_PARSE_OK:return XR_XIR_OK;
+    case XR_PARSE_OUT_OF_MEMORY:return XR_XIR_OUT_OF_MEMORY;
+    case XR_PARSE_MEMORY_LIMIT:return XR_XIR_MEMORY_LIMIT;
+    case XR_PARSE_OVERFLOW:return XR_XIR_OVERFLOW;
+    case XR_PARSE_CANCELLED:return XR_XIR_CANCELLED;
+    case XR_PARSE_DEADLINE:return XR_XIR_DEADLINE;
+    case XR_PARSE_CLOCK_FAILURE:return XR_XIR_CLOCK_FAILURE;
+    case XR_PARSE_BUDGET:return XR_XIR_BUDGET;
+    default:return XR_XIR_BAD_TYPE;
+    }
 }
 static bool expression_name_read(ExpressionState *state,const char *name,ExpressionBinding *output) {
     const XdapLexicalView *view=state->request->lexical;size_t length=strlen(name);
     for (uint32_t b=view->environment;b;b=view->function->bindings[b-1].parent) {
-        if (xr_compile_resources_work(view->launch->resources,length+1)!=XR_COMPILE_RESOURCE_OK) {
-            state->status=XR_XIR_BUDGET;return false;
-        }
         const XrXirSourceDebugBinding *binding=&view->function->bindings[b-1];
         const char *candidate=view->source->declarations[binding->declaration-1].name;
         if (strcmp(candidate,name)) continue;
@@ -55,11 +80,8 @@ static bool expression_name_read(ExpressionState *state,const char *name,Express
     state->status=XR_XIR_UNRESOLVED;return false;
 }
 static bool expression_binding(ExpressionState *state,const char *name) {
-    const XdapLexicalView *view=state->request->lexical;size_t length=strlen(name);
+    size_t length=strlen(name);
     for (uint32_t i=0;i<state->count;++i) {
-        if (xr_compile_resources_work(view->launch->resources,length+1)!=XR_COMPILE_RESOURCE_OK) {
-            state->status=XR_XIR_BUDGET;return false;
-        }
         if (state->bindings[i].length==length && !memcmp(state->bindings[i].name,name,length)) return true;
     }
     if (state->count==128) { state->status=XR_XIR_BUDGET;return false; }
@@ -68,23 +90,19 @@ static bool expression_binding(ExpressionState *state,const char *name) {
     state->bindings[state->count++]=fresh;return true;
 }
 #include "xdap_expression_members.inc.c"
-static bool expression_native_work(void *context,uint64_t units) {
-    return xr_compile_resources_work(context,units)==XR_COMPILE_RESOURCE_OK;
-}
 #include "xdap_expression_intrinsic.inc.c"
 /* This is syntax admission only. Source still resolves the actual receiver
  * and proves its declared operation; no callable value or provider is used. */
-static bool expression_call_allowed(const AstNode *node,XrCompileResources *resources,XrXirStatus *status,XrCoreBuiltinId *intrinsic) {
+static bool expression_call_allowed(const AstNode *node,XrXirStatus *status,XrCoreBuiltinId *intrinsic) {
     const CallExprNode *call=&node->as.call_expr;
     *intrinsic=XR_CORE_BUILTIN_NONE;
     if (!call->callee || call->type_arg_count || call->default_arg_count || call->arg_count<1 || call->arg_count>2 || !call->arguments) {
         *status=XR_XIR_BAD_TYPE;return false;
     }
     if (call->callee->type==AST_VARIABLE) {
-        const char *name=call->callee->as.variable.name;const XrCoreIntrinsicDesc *descriptor=NULL;
+        const char *name=call->callee->as.variable.name;
         if (!name) { *status=XR_XIR_BAD_STRUCTURE;return false; }
-        XrCoreIntrinsicQueryStatus query=xr_core_intrinsic_by_source_name_work(resources,expression_native_work,name,strlen(name),&descriptor);
-        if (query!=XR_CORE_INTRINSIC_QUERY_OK) { *status=query==XR_CORE_INTRINSIC_QUERY_WORK_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;return false; }
+        const XrCoreIntrinsicDesc *descriptor=xr_core_intrinsic_by_source_name(name,strlen(name));
         if (!descriptor || descriptor->id!=XR_CORE_BUILTIN_LEN || !xr_core_intrinsic_descriptor_validate(descriptor) ||
             descriptor->effect!=XR_CORE_INTRINSIC_EFFECT_READS_VALUE || call->arg_count!=1) {
             *status=XR_XIR_BAD_TYPE;return false;
@@ -93,18 +111,14 @@ static bool expression_call_allowed(const AstNode *node,XrCompileResources *reso
     } else {
         if (call->callee->type!=AST_MEMBER_ACCESS || !call->callee->as.member_access.name) { *status=XR_XIR_BAD_TYPE;return false; }
         const XrNativeTypeDeclaration *type=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
-        XrNativeDeclarationWork work={resources,expression_native_work};const XrNativeMemberDeclaration *member=NULL;
-        XrNativeDeclarationStatus found=xr_native_declaration_find_member(&work,type,call->callee->as.member_access.name,&member);
-        if (found!=XR_NATIVE_DECLARATION_OK) {
-            *status=found==XR_NATIVE_DECLARATION_WORK_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;return false;
-        }
+        const XrNativeMemberDeclaration *member=xr_native_declaration_member(type,call->callee->as.member_access.name);
+        if (!member) { *status=XR_XIR_BAD_TYPE;return false; }
         if (!member->is_public || !member->is_method || member->is_static || member->receiver!=XR_NATIVE_RECEIVER_READ ||
             member->operation<XR_NATIVE_OPERATION_STRING_CONTAINS || member->operation>XR_NATIVE_OPERATION_STRING_LAST_INDEX_OF) {
             *status=XR_XIR_BAD_TYPE;return false;
         }
     }
     for (int i=0;i<call->arg_count;++i) {
-        if (!expression_native_work(resources,1)) { *status=XR_XIR_BUDGET;return false; }
         if (call->arg_accesses && call->arg_accesses[i]!=XR_CALL_ARG_PLAIN) { *status=XR_XIR_BAD_TYPE;return false; }
     }
     return true;
@@ -121,14 +135,13 @@ static bool expression_visit(AstNode *node,void *context) {
     ExpressionState *state=context;
     if (!node) return true;
     if (state->depth==128) { state->status=XR_XIR_BUDGET;return false; }
-    if (xr_compile_resources_work(state->request->lexical->launch->resources,1)!=XR_COMPILE_RESOURCE_OK) { state->status=XR_XIR_BUDGET;return false; }
     if (node->type==AST_VARIABLE) return expression_binding(state,node->as.variable.name);
     if (node->type==AST_MEMBER_ACCESS) {
         if (expression_member_project(state,node)) return true;
         if (state->status!=XR_XIR_OK) return false;
     }
     XrCoreBuiltinId intrinsic=XR_CORE_BUILTIN_NONE;
-    if (node->type==AST_CALL_EXPR && !expression_call_allowed(node,state->request->lexical->launch->resources,&state->status,&intrinsic)) return false;
+    if (node->type==AST_CALL_EXPR && !expression_call_allowed(node,&state->status,&intrinsic)) return false;
     if (intrinsic!=XR_CORE_BUILTIN_NONE) {
         if (!expression_intrinsic_visible(state,node->as.call_expr.callee->as.variable.name)) return false;
         if (state->intrinsic_calls==UINT32_MAX) { state->status=XR_XIR_BUDGET;return false; }
@@ -143,14 +156,14 @@ static bool expression_visit(AstNode *node,void *context) {
     } else ok=xr_ast_for_each_child(node,expression_visit,state);
     --state->depth;return ok;
 }
-typedef struct ExpressionSyntax { XrCompileResources *resources;uint32_t depth;XrXirStatus status; } ExpressionSyntax;
+typedef struct ExpressionSyntax { uint32_t depth;XrXirStatus status; } ExpressionSyntax;
 static bool expression_syntax(AstNode *node,void *context) {
     ExpressionSyntax *syntax=context;
     if (!node) return true;
-    if (syntax->depth==128 || xr_compile_resources_work(syntax->resources,1)!=XR_COMPILE_RESOURCE_OK) { syntax->status=XR_XIR_BUDGET;return false; }
+    if (syntax->depth==128) { syntax->status=XR_XIR_BUDGET;return false; }
     if (!expression_node_allowed(node)) { syntax->status=XR_XIR_BAD_TYPE;return false; }
     XrCoreBuiltinId intrinsic=XR_CORE_BUILTIN_NONE;
-    if (node->type==AST_CALL_EXPR && !expression_call_allowed(node,syntax->resources,&syntax->status,&intrinsic)) return false;
+    if (node->type==AST_CALL_EXPR && !expression_call_allowed(node,&syntax->status,&intrinsic)) return false;
     ++syntax->depth;bool ok=true;
     if (intrinsic!=XR_CORE_BUILTIN_NONE) {
         for (int i=0;i<node->as.call_expr.arg_count && ok;++i) ok=expression_syntax(node->as.call_expr.arguments[i],syntax);
@@ -163,25 +176,40 @@ static bool expression_syntax(AstNode *node,void *context) {
 static XrParseStatus expression_parse(XrSourceCompiler *compiler,const char *text,const char *file,AstNode **output) {
     XrCompileResourceStatus status=xr_compile_session_resource_status(xr_source_compiler_session(compiler));
     if (status!=XR_COMPILE_RESOURCE_OK) return status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_PARSE_OUT_OF_MEMORY :
-        status==XR_COMPILE_RESOURCE_BUDGET ? XR_PARSE_BUDGET : XR_PARSE_BAD_ARGUMENT;
+        status==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_PARSE_MEMORY_LIMIT :
+        status==XR_COMPILE_RESOURCE_OVERFLOW ? XR_PARSE_OVERFLOW :
+        status==XR_COMPILE_RESOURCE_CANCELLED ? XR_PARSE_CANCELLED :
+        status==XR_COMPILE_RESOURCE_DEADLINE ? XR_PARSE_DEADLINE :
+        status==XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_PARSE_CLOCK_FAILURE :  XR_PARSE_BAD_ARGUMENT;
     XrCompilerSession *parser=NULL;
-    XrCompilerSessionStatus opened=xr_compile_session_new(xr_source_compiler_resources(compiler),&parser);
-    if (opened!=XR_COMPILER_SESSION_OK) return opened==XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_PARSE_OUT_OF_MEMORY :
-        opened==XR_COMPILER_SESSION_BUDGET ? XR_PARSE_BUDGET : XR_PARSE_BAD_ARGUMENT;
-    XrParseStatus parsed=xr_compile_parse_expression_string(parser,text,file,output);
+    XrCompileResourceStatus opened=xr_compile_session_new(xr_source_compiler_resources(compiler),&parser);
+    if (opened!=XR_COMPILE_RESOURCE_OK) return opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_PARSE_OUT_OF_MEMORY :
+        opened==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_PARSE_MEMORY_LIMIT :
+        opened==XR_COMPILE_RESOURCE_OVERFLOW ? XR_PARSE_OVERFLOW :
+        opened==XR_COMPILE_RESOURCE_CANCELLED ? XR_PARSE_CANCELLED :
+        opened==XR_COMPILE_RESOURCE_DEADLINE ? XR_PARSE_DEADLINE :
+        opened==XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_PARSE_CLOCK_FAILURE :  XR_PARSE_BAD_ARGUMENT;
+    XrCompileRequestControl *control=xr_compile_session_request(xr_source_compiler_session(compiler));
+    XrCompileResourceStatus bound=control ? xr_compile_session_bind_request(parser,control) : XR_COMPILE_RESOURCE_OK;
+    XrParseStatus parsed=bound==XR_COMPILE_RESOURCE_OK ? xr_compile_parse_expression_string(parser,text,file,output) : XR_PARSE_BAD_ARGUMENT;
     xr_compile_session_free(parser);return parsed;
 }
 XR_FUNC XrXirStatus xdap_expression_validate(XrSourceCompiler *compiler,const char *text,size_t length) {
     if (!compiler || !text || !length) return XR_XIR_BAD_TYPE;
     XrCompileResources *resources=xr_source_compiler_resources(compiler);
-    if (length>(UINT64_MAX-1)/2 || xr_compile_resources_work(resources,(uint64_t)length*2+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+    if (length==SIZE_MAX) return XR_XIR_OVERFLOW;
     if (memchr(text,0,length)) return XR_XIR_BAD_TYPE;
     char *owned=NULL;XrCompileResourceStatus allocated=xr_compile_resources_alloc(resources,length+1,(void **)&owned);
-    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+        allocated==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        allocated==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_OVERFLOW :
+        allocated==XR_COMPILE_RESOURCE_CANCELLED ? XR_XIR_CANCELLED :
+        allocated==XR_COMPILE_RESOURCE_DEADLINE ? XR_XIR_DEADLINE :
+        allocated==XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE : XR_XIR_BAD_STRUCTURE;
     memcpy(owned,text,length);owned[length]=0;AstNode *program=NULL;
     XrParseStatus parsed=expression_parse(compiler,owned,"<breakpoint-expression>",&program);
-    ExpressionSyntax syntax={resources,0,XR_XIR_OK};
-    if (parsed!=XR_PARSE_OK) syntax.status=parsed==XR_PARSE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : parsed==XR_PARSE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
+    ExpressionSyntax syntax={0,XR_XIR_OK};
+    if (parsed!=XR_PARSE_OK) syntax.status=expression_parse_status(parsed);
     else if (program->type!=AST_PROGRAM || program->as.program.count!=1 || !expression_syntax(program->as.program.statements[0],&syntax)) {
         if (syntax.status==XR_XIR_OK) syntax.status=XR_XIR_BAD_TYPE;
     }
@@ -219,8 +247,7 @@ static XrXirStatus expression_compiled(ExpressionState *state,XrXirValue *output
     if (status==XR_XIR_OK) {
         XrSourceCompilerText input={NULL,"dap-expression",source.bytes,source.length};
         XrSourceCompileStatus built=xr_source_compiler_build_text(request->compiler,&input,&product,&diagnostic);
-        if (built!=XR_SOURCE_COMPILE_OK) status=built==XR_SOURCE_COMPILE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
-            built==XR_SOURCE_COMPILE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
+        status=expression_source_status(built);
     }
     if (status==XR_XIR_OK) {
         uint32_t function=UINT32_MAX;uint32_t count=state->runtime ? data.count : state->count;
@@ -230,9 +257,15 @@ static XrXirStatus expression_compiled(ExpressionState *state,XrXirValue *output
         if (status==XR_XIR_OK && state->runtime) status=expression_runtime(state,product,function,data.arguments,data.count,output);
         else if (status==XR_XIR_OK) {
             XrXirCtfeLimits limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES};
-            XrXirCtfeStatus evaluated=xr_xir_compile_source_product_scalar(product,function,scalar_arguments,state->count,limits,output);
+            XrXirCtfeStatus evaluated=xr_xir_compile_source_product_scalar(product,function,scalar_arguments,state->count,limits,
+                xr_compile_session_request(xr_source_compiler_session(request->compiler)),output);
             status=evaluated==XR_XIR_CTFE_OK ? XR_XIR_OK : evaluated==XR_XIR_CTFE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
-                evaluated==XR_XIR_CTFE_BUDGET || evaluated==XR_XIR_CTFE_STEP_LIMIT || evaluated==XR_XIR_CTFE_FRAME_LIMIT ||
+                evaluated==XR_XIR_CTFE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+                evaluated==XR_XIR_CTFE_OVERFLOW ? XR_XIR_OVERFLOW :
+                evaluated==XR_XIR_CTFE_CANCELLED ? XR_XIR_CANCELLED :
+                evaluated==XR_XIR_CTFE_DEADLINE ? XR_XIR_DEADLINE :
+                evaluated==XR_XIR_CTFE_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE :
+                evaluated==XR_XIR_CTFE_COMPLEXITY_LIMIT || evaluated==XR_XIR_CTFE_STEP_LIMIT || evaluated==XR_XIR_CTFE_FRAME_LIMIT ||
                 evaluated==XR_XIR_CTFE_OUTPUT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
         }
     }
@@ -246,15 +279,18 @@ XR_FUNC XrXirStatus xdap_expression_evaluate(const XdapExpressionRequest *reques
         !output || output->type || output->reserved || output->payload ||
         xr_source_compiler_resources(request->compiler)!=request->lexical->launch->resources) return XR_XIR_BAD_STRUCTURE;
     if (request->expected && !xr_xir_value_valid(request->expected)) return XR_XIR_BAD_STRUCTURE;
-    if (request->length>(UINT64_MAX-1)/2 ||
-        xr_compile_resources_work(request->lexical->launch->resources,(uint64_t)request->length*2+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+    if (request->length==SIZE_MAX) return XR_XIR_OVERFLOW;
     if (memchr(request->text,0,request->length)) return XR_XIR_BAD_TYPE;
-    if (request->length==SIZE_MAX) return XR_XIR_BUDGET;
     char *text=NULL;XrCompileResourceStatus allocated=xr_compile_resources_alloc(request->lexical->launch->resources,request->length+1,(void **)&text);
-    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+        allocated==XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+        allocated==XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_OVERFLOW :
+        allocated==XR_COMPILE_RESOURCE_CANCELLED ? XR_XIR_CANCELLED :
+        allocated==XR_COMPILE_RESOURCE_DEADLINE ? XR_XIR_DEADLINE :
+        allocated==XR_COMPILE_RESOURCE_CLOCK_FAILURE ? XR_XIR_CLOCK_FAILURE : XR_XIR_BAD_STRUCTURE;
     memcpy(text,request->text,request->length);text[request->length]=0;
     AstNode *program=NULL;XrParseStatus parsed=expression_parse(request->compiler,text,"<debug-expression>",&program);
-    if (parsed!=XR_PARSE_OK) { xr_compile_resources_free(text);return parsed==XR_PARSE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : parsed==XR_PARSE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE; }
+    if (parsed!=XR_PARSE_OK) { xr_compile_resources_free(text);return expression_parse_status(parsed); }
     XdapExpressionRequest owned=*request;owned.text=text;ExpressionState state={.request=&owned};
     if (request->expected && request->expected->type!=XR_XIR_BOOL &&
         !xr_xir_type_is_integer((XrXirType)request->expected->type)) state.runtime=true;

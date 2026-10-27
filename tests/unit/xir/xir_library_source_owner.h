@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xir_library_source_owner.h - Same-ledger original Source replay fixture
+ * xir_library_source_owner.h - Same-memory-owner original Source replay fixture
  */
 #ifndef XIR_LIBRARY_SOURCE_OWNER_H
 #define XIR_LIBRARY_SOURCE_OWNER_H
@@ -18,8 +18,8 @@ static inline XrXirStatus library_source_operation(const XrXirCompileContext *co
     XrCompilerSession *session=NULL;XrXirSourceResult result={0};XrXirCheckedPacket packet={0};
     XrXirStatus status=XR_XIR_OK;
     if(fixture->count){status=xr_xir_compile_library_catalog_new_v2(context,fixture->inputs,fixture->count,&catalog);if(status!=XR_XIR_OK){CHECK(!catalog);goto done;}}
-    XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
-    if(created!=XR_COMPILER_SESSION_OK){CHECK(!session);status=created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;goto done;}
+    XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
+    if(created!=XR_COMPILE_RESOURCE_OK){CHECK(!session);status=library_compile_resource_status(created);goto done;}
     XrXirSourceRequest request={session,fixture->entry,&fixture->authority,context,NULL,NULL,fixture->kind,catalog};
     XrXirSourceDiagnostic diagnostic={0};
     status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);

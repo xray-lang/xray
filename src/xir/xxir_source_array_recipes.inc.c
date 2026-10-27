@@ -70,13 +70,13 @@ static bool source_native_callback_error(SourceContext *ctx, AstNode *node,
     if (!native || !member || !source_native_admit(ctx,native)) return false;
     bool found=false;
     for (uint32_t i=0;i<native->member_count;++i) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (&native->members[i]==member) { found=true;break; }
     }
     if (!found || !member->is_public || !member->is_method || member->is_static ||
         !member->parameter_count || !member->parameters || !member->signature)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"callback requires its admitted native declaration");
-    if (!source_work_units(ctx,node,source_text_size(ctx,member->signature))) return false;
+    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (strstr(member->signature,"throws"))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"native callback error clause is not admitted");
     switch (member->parameters[0].type) {
@@ -125,7 +125,7 @@ static bool source_array_callback(SourceContext *ctx, AstNode *node, AstNode *ar
     return true;
 }
 #include "xxir_source_array_call_arguments.inc.c"
-static bool source_array_append_snapshot(SourceContext *ctx, AstNode *node,
+static bool source_array_append_snapshot(SourceContext *ctx,
     SourceValue candidate, SourceValue array, SourceValue zero);
 
 static bool source_equal_admitted(SourceContext *ctx, AstNode *node, XrXirType type) {
@@ -496,9 +496,9 @@ static bool source_array_concat_call(SourceContext *ctx, AstNode *node,
         !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_NEW, cell_type, {seed.id}, {0}, 0, {0}}, &store) ||
         !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_PLACE, receiver.type, {store.id}, {0}, 0, {0}}, &candidate) ||
         !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &zero)) return false;
-    if (!source_array_append_snapshot(ctx,node,candidate,receiver,zero)) return false;
+    if (!source_array_append_snapshot(ctx,candidate,receiver,zero)) return false;
     for (uint32_t i = 0; i < count; ++i) {
-        if (!source_array_append_snapshot(ctx,node,candidate,arrays[i],zero)) return false;
+        if (!source_array_append_snapshot(ctx,candidate,arrays[i],zero)) return false;
     }
     return source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_READ, receiver.type,
         {store.id}, {0}, 0, {0}}, value);
@@ -545,9 +545,9 @@ static bool source_array_spread_literal(SourceContext *ctx, AstNode *node,
         !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_PLACE,array,{store.id},{0},0,{0}},&candidate) ||
         !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},&zero)) return false;
     for (int i = 0; i < literal->count; ++i) {
-        if (!source_work(ctx,node)) return false;
+        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (parts[i].spread) {
-            if (!source_array_append_snapshot(ctx,node,candidate,parts[i].value,zero)) return false;
+            if (!source_array_append_snapshot(ctx,candidate,parts[i].value,zero)) return false;
         } else if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_PUSH,XR_XIR_UNIT,
             {candidate.id,parts[i].value.id},{0},0,{0}},NULL)) return false;
     }

@@ -23,7 +23,7 @@ static bool source_query_module_identities(SourceContext *ctx,const XrXirArtifac
     for(uint32_t m=0;m<count;++m) {
         const XrXirSourceModule *source=&ctx->modules[m];
         const XrXirSourceModule *owner=&module->declarations->modules[m];
-        if(!source_work_units(ctx,NULL,sizeof(*queries)+(uint64_t)source->name_length+sizeof(queries[m].identity)))
+        if(!((ctx)->diagnostic.status == XR_XIR_OK))
             return false;
         if(!source->name || !owner->name || source->name_length!=owner->name_length ||
             memcmp(source->name,owner->name,source->name_length))

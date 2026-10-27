@@ -10,13 +10,13 @@
 #define XSOURCE_API_H
 #include "../../include/xray_source.h"
 #include "../program/xr_xir_source_product.h"
-/* Accept the actual product on its original ledger. Success consumes product;
+/* Prepare the selected ready target from the actual product on its memory owner. Success consumes product;
  * failure preserves both owner pointers. No code or metadata is synthesized. */
-XR_FUNC XrSourceStatus xr_source_program_take_product(XrXirSourceProduct **product,
-    XrSourceProgram **output);
-/* Transfers the genuine VM projection to a native/common host consumer. The
+XR_FUNC XrSourceStatus xr_source_artifact_take_product(XrXirSourceProduct **product,
+    XrSourceTarget target, XrSourceArtifact **output);
+/* Transfers an already prepared genuine VM projection to a native/common host consumer. The
  * public wrapper is consumed only on success; no execution representation is
  * copied or converted. Failure preserves the wrapper and empty output. */
-XR_FUNC XrSourceStatus xr_source_program_take_vm(XrSourceProgram **program,
+XR_FUNC XrSourceStatus xr_source_artifact_take_vm(XrSourceArtifact **program,
     XrXirProgram **output, uint32_t *entry);
 #endif // XSOURCE_API_H
