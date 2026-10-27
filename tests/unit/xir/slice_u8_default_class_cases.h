@@ -39,4 +39,31 @@ static const char default_class_native[]=DEFAULT_CLASS_OPTIONS
  "export fn native()->i64{var text=\"abc\";var view:Slice<u8>=text.bytes();return use(view,hidden())}";
 static const char default_class_wrong_type[]=DEFAULT_CLASS_OPTIONS DEFAULT_CLASS_USE
  "export fn wrong()->i64{var text=\"abc\";var view:Slice<u8>=text.bytes();return use(view,123)}";
+
+static const char imported_default_library[]=
+ "export class Options{value:i64;init(){this.value=7}}\n"
+ "export fn use(v:Slice<u8>,options:Options=Options())->i64{return len(v)+options.value}\n"
+ "export fn make()->Options{return Options()}\n";
+static const char imported_default_root[]=
+ "import {use} from \"./lib\"\n"
+ "export fn storage_receiver()->i64{var text=\"abc\";var view:Slice<u8>=text.bytes();return use(view)-9}\n";
+static const char imported_default_generic_library[]=
+ "export class Options{value:i64;init(){this.value=7}}\n"
+ "export fn use<T>(v:Slice<u8>,item:T,options:Options=Options())->i64{return len(v)-2}\n";
+static const char imported_default_generic_root[]=
+ "import {use} from \"./lib\"\n"
+ "export fn storage_receiver()->i64{var text=\"abc\";var view:Slice<u8>=text.bytes();return use<i64>(view,7)}\n";
+static const char imported_default_ordinary_root[]=
+ "import {use,make} from \"./lib\"\n"
+ "export fn storage_receiver()->i64{var text=\"abc\";var view:Slice<u8>=text.bytes();return use(view,make())-9}\n";
+static const char imported_default_slot_library[]=
+ "var counter:i64=7\n"
+ "export class Options{value:i64;init(){this.value=counter}}\n"
+ "export fn use(v:Slice<u8>,options:Options=Options())->i64{return len(v)+options.value}\n";
+
+static const char imported_default_callable_library[]=
+ "export fn use<T>(value:T,cb:fn(T)->T=fn(x:T)->T{return x})->T{return cb(value)}\n";
+static const char imported_default_callable_root[]=
+ "import {use} from \"./lib\"\nexport fn storage_receiver()->i64{return use<i64>(1)}\n";
+
 #endif

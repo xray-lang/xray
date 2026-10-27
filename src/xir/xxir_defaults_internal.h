@@ -19,4 +19,7 @@ static inline const uint32_t *xr_xir_default_identity(const XrXirInstruction *op
 /* Descriptor, generic and declaration structure must already be admitted. */
 XR_FUNC XrXirStatus xr_xir_compile_default_helper(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, bool *bound);
 XR_FUNC XrXirStatus xr_xir_compile_default_call_verify(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t caller, const XrXirInstruction *instruction);
+/* Exact retained Source/default correspondence only; not final provenance admission. */
+XR_FUNC XrXirStatus xir_compile_default_call_origin(const XrXirCompileContext *context,
+    const XrXirModule *module,uint32_t caller,uint32_t instruction,uint32_t target,bool *authorized);
 #endif // XXIR_DEFAULTS_INTERNAL_H

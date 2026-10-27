@@ -156,8 +156,8 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
     bool bound_helper=false,default_authorized=false;
     XrXirStatus helper_status=xr_xir_compile_default_helper(remaining, module, (uint32_t)op->immediate, &bound_helper);
     if (helper_status!=XR_XIR_OK) return helper_status;
-    helper_status=default_origin(module,caller_id,(uint32_t)(op-function->instructions),
-        (uint32_t)op->immediate,remaining,&default_authorized);
+    helper_status=xir_compile_default_call_origin(remaining,module,caller_id,
+        (uint32_t)(op-function->instructions),(uint32_t)op->immediate,&default_authorized);
     if(helper_status!=XR_XIR_OK) return helper_status;
     if (bound_helper && ((op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE) ||
         !default_authorized))

@@ -12,6 +12,8 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_library_catalog.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_internal.h"
+#include "xir/xxir_defaults_internal.h"
 #include "xir/xxir_emit_c.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_vm_debug_internal.h"
@@ -674,6 +676,150 @@ static void default_class_execution(const XrXirCompileContext *context) {
     uint32_t target=named(xr_xir_compile_artifact_module(code),"storage_receiver");
     XrXirProgram *program=take_vm(&code);slice_program_case(program,target);
 }
+
+static void imported_default_write(const char *path,const char *text) {
+    FILE *file=fopen(path,"wb");CHECK(file);
+    size_t size=strlen(text);CHECK(fwrite(text,1,size,file)==size && !fclose(file));
+}
+static XrXirArtifact *imported_default_source(const XrXirCompileContext *context,uint32_t kind) {
+    char directory[XR_TEST_PATH_MAX]="default-origin-XXXXXX",absolute[XR_TEST_PATH_MAX];
+    char library[XR_TEST_PATH_MAX],root[XR_TEST_PATH_MAX];
+    CHECK(xr_test_mkdtemp(directory) && xr_test_realpath_buf(directory,absolute,sizeof(absolute)));
+    CHECK(snprintf(library,sizeof(library),"%s/lib.xr",absolute)>0);
+    CHECK(snprintf(root,sizeof(root),"%s/root.xr",absolute)>0);
+    imported_default_write(library,kind==4?imported_default_callable_library:kind==1?imported_default_generic_library:
+        kind==3?imported_default_slot_library:imported_default_library);
+    imported_default_write(root,kind==4?imported_default_callable_root:kind==1?imported_default_generic_root:
+        kind==2?imported_default_ordinary_root:imported_default_root);
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
+    XrXirSourceRequest request={.session=session,.entry_path=root,.authority=&authority,
+        .context=context,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,NULL);
+    xr_compile_session_free(session);memset(&request,0xcc,sizeof(request));
+    CHECK(!xr_test_unlink(root) && !xr_test_unlink(library) && !xr_test_rmdir(directory));
+    if(status!=XR_XIR_OK)fprintf(stderr,"imported default%u Source status=%u: %s\n",kind,status,diagnostic.message);
+    if(kind==2 || kind==3) {
+        CHECK(status==XR_XIR_UNRESOLVED && diagnostic.status==status);
+        CHECK(strstr(diagnostic.message,kind==3?"(CALL_DEFAULT)":"(CALL)"));
+        CHECK(!source.checked && !source.snapshot);xr_xir_compile_source_result_free(&source);return NULL;
+    }
+    CHECK(status==XR_XIR_OK && source.checked && source.snapshot);
+    const XrXirModule *module=xr_xir_compile_artifact_module(source.checked);
+    CHECK(module->declarations && module->declarations->module_count==2);
+    XrXirCheckedPacket packet={0};XrXirArtifact *checked=NULL,*closed=NULL;
+    CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&source);
+    CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
+    memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
+    XrXirDiagnostic checked_diagnostic={0};status=xr_xir_compile_specialize(checked,&closed,&checked_diagnostic);
+    if(status!=XR_XIR_OK)fprintf(stderr,"imported default%u Specialize status=%u at %u/%u/%u\n",kind,status,
+        checked_diagnostic.function,checked_diagnostic.block,checked_diagnostic.instruction);
+    CHECK(status==XR_XIR_OK && closed);xr_xir_compile_artifact_free(checked);
+    return closed;
+}
+static void imported_default_origin_controls(const XrXirCompileContext *context,XrXirArtifact *closed) {
+    const XrXirModule *module=xr_xir_compile_artifact_module(closed);
+    ClassScopeProbe probe=class_scope_target(module);uint32_t target=(uint32_t)module->functions[probe.caller].instructions[probe.instruction].immediate;
+    CHECK(module->declarations->functions[probe.caller].module!=module->declarations->functions[target].module);
+    bool authorized=false;
+    CHECK(xir_compile_default_call_origin(context,module,probe.caller,probe.instruction,target,&authorized)==XR_XIR_OK && authorized);
+    CHECK(xir_effects_default_access_operation(context,module,class_scope_probe,&probe)==XR_XIR_OK);
+    XrXirProvenance *provenance=(XrXirProvenance *)module->provenance;CHECK(provenance && provenance->source);
+    XrXirOrigin *origin=&provenance->origins[target];uint32_t saved=origin->function;
+    origin->function=provenance->origins[probe.caller].function;authorized=true;
+    CHECK(xir_compile_default_call_origin(context,module,probe.caller,probe.instruction,target,&authorized)==XR_XIR_BAD_STRUCTURE && !authorized);
+    CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_BAD_STRUCTURE);origin->function=saved;
+    uint32_t count=provenance->count;provenance->count=0;authorized=true;
+    CHECK(xir_compile_default_call_origin(context,module,probe.caller,probe.instruction,target,&authorized)==XR_XIR_BAD_STRUCTURE && !authorized);provenance->count=count;
+    XrXirArtifact *source_owner=provenance->source;provenance->source=NULL;authorized=true;
+    CHECK(xir_compile_default_call_origin(context,module,probe.caller,probe.instruction,target,&authorized)==XR_XIR_BAD_STRUCTURE && !authorized);provenance->source=source_owner;
+    XrXirInstruction *edge=(XrXirInstruction *)&module->functions[probe.caller].instructions[probe.instruction];int64_t immediate=edge->immediate;
+    edge->immediate=probe.caller;authorized=true;
+    CHECK(xir_compile_default_call_origin(context,module,probe.caller,probe.instruction,target,&authorized)==XR_XIR_BAD_STRUCTURE && !authorized);edge->immediate=immediate;
+    XrXirFunctionIdentity *identity=(XrXirFunctionIdentity *)&module->declarations->functions[target];uint32_t owner=identity->module;
+    identity->module=module->declarations->functions[probe.caller].module;authorized=true;
+    CHECK(xir_compile_default_call_origin(context,module,probe.caller,probe.instruction,target,&authorized)==XR_XIR_BAD_STRUCTURE && !authorized);identity->module=owner;
+    XrXirModule *source=&source_owner->module;
+    XrXirInstruction *original=(XrXirInstruction *)&source->functions[provenance->origins[probe.caller].function].instructions[probe.instruction];
+    CHECK(original->op==XR_XIR_CALL_DEFAULT);XrXirOp operation=original->op;original->op=XR_XIR_CALL;authorized=true;
+    CHECK(xir_compile_default_call_origin(context,module,probe.caller,probe.instruction,target,&authorized)==XR_XIR_OK && !authorized);
+    CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_BAD_STRUCTURE);original->op=operation;
+    uint32_t ordinal=original->targets[1];original->targets[1]=UINT32_MAX;authorized=true;
+    CHECK(xir_compile_default_call_origin(context,module,probe.caller,probe.instruction,target,&authorized)==XR_XIR_BAD_STRUCTURE && !authorized);original->targets[1]=ordinal;
+    XrXirType result=edge->type;edge->type=XR_XIR_I64;authorized=true;
+    CHECK(xir_compile_default_call_origin(context,module,probe.caller,probe.instruction,target,&authorized)==XR_XIR_BAD_TYPE && !authorized);edge->type=result;
+    CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_OK);
+}
+static void imported_default_resources(const XrXirCompileContext *context,XrXirArtifact *closed) {
+    const XrXirModule *module=xr_xir_compile_artifact_module(closed);ClassScopeProbe probe=class_scope_target(module);
+    uint32_t target=(uint32_t)module->functions[probe.caller].instructions[probe.instruction].immediate;
+    size_t physical_count=effects_compile_live,physical_bytes=effects_compile_bytes;
+    XrCompileResourceLimits caps={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};XrXirCompileContext work=*context;work.resources=NULL;
+    CHECK(xr_compile_resources_new(&caps,&work.resources)==XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats baseline={0},stats={0};CHECK(xr_compile_resources_stats(work.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
+    size_t start=effects_compile_attempts;bool authorized=false;
+    CHECK(xir_compile_default_call_origin(&work,module,probe.caller,probe.instruction,target,&authorized)==XR_XIR_OK && authorized);
+    size_t sites=effects_compile_attempts-start;CHECK(sites>0);
+    CHECK(xr_compile_resources_stats(work.resources,&stats)==XR_COMPILE_RESOURCE_OK && stats.held_bytes==baseline.held_bytes);uint64_t peak=stats.peak_bytes;
+    for(size_t i=0;i<sites && i<3;++i) {
+        effects_compile_fail_at=effects_compile_attempts+i;effects_compile_injected=false;authorized=true;
+        XrXirStatus status=xir_compile_default_call_origin(&work,module,probe.caller,probe.instruction,target,&authorized);
+        effects_compile_fail_at=SIZE_MAX;CHECK(effects_compile_injected && status==XR_XIR_OUT_OF_MEMORY && !authorized);
+        CHECK(xr_compile_resources_stats(work.resources,&stats)==XR_COMPILE_RESOURCE_OK && stats.held_bytes==baseline.held_bytes);
+    }
+    work.limits.frame_bytes=1;authorized=true;
+    CHECK(xir_compile_default_call_origin(&work,module,probe.caller,probe.instruction,target,&authorized)==XR_XIR_BUDGET && !authorized);
+    xr_compile_resources_release(work.resources);work.resources=NULL;
+    for(unsigned minus=0;minus<2;++minus) {
+        caps.memory_mode=XR_COMPILE_MEMORY_FINITE;caps.memory_limit=peak-minus;work.limits=context->limits;
+        CHECK(xr_compile_resources_new(&caps,&work.resources)==XR_COMPILE_RESOURCE_OK);authorized=true;
+        CHECK(xir_compile_default_call_origin(&work,module,probe.caller,probe.instruction,target,&authorized)==(minus?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
+        CHECK(authorized==!minus);CHECK(xr_compile_resources_stats(work.resources,&stats)==XR_COMPILE_RESOURCE_OK && stats.held_bytes==baseline.held_bytes);
+        xr_compile_resources_release(work.resources);work.resources=NULL;
+    }
+    CHECK(effects_compile_live==physical_count && effects_compile_bytes==physical_bytes);
+    fprintf(stderr,"imported default: representative OOM=%zu of %zu, held peak=%llu exact/minus1, frame BUDGET, physical0 delta\n",sites<3?sites:(size_t)3,sites,(unsigned long long)peak);
+}
+
+static void imported_default_callable(const XrXirCompileContext *context) {
+    XrXirArtifact *closed=imported_default_source(context,4);
+    const XrXirModule *module=xr_xir_compile_artifact_module(closed);
+    uint32_t caller=named(module,"storage_receiver"),instruction=UINT32_MAX,target=UINT32_MAX;
+    const XrXirFunction *function=&module->functions[caller];
+    for(uint32_t i=0;i<function->instruction_count;++i) {
+        const XrXirInstruction *op=&function->instructions[i];
+        if(op->op==XR_XIR_CALL && xr_xir_callable_signature(module->types,op->type)) {
+            instruction=i;target=(uint32_t)op->immediate;break;
+        }
+    }
+    CHECK(instruction!=UINT32_MAX && target<module->function_count);
+    bool authorized=false;
+    CHECK(xir_compile_default_call_origin(context,module,caller,instruction,target,&authorized)==XR_XIR_OK && authorized);
+    XrXirOrigin *origin=&((XrXirProvenance *)module->provenance)->origins[target];
+    CHECK(origin->argument_count==1 && origin->arguments);
+    XrXirType *arguments=(XrXirType *)origin->arguments;XrXirType saved=arguments[0];arguments[0]=XR_XIR_BOOL;authorized=true;
+    CHECK(xir_compile_default_call_origin(context,module,caller,instruction,target,&authorized)==XR_XIR_BAD_TYPE && !authorized);
+    CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_BAD_TYPE);arguments[0]=saved;
+    CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_OK);
+    XrXirArtifact *code=lower(closed);xr_xir_compile_artifact_free(closed);
+    caller=named(xr_xir_compile_artifact_module(code),"storage_receiver");
+    XrXirProgram *program=take_vm(&code);slice_program_case(program,caller);
+}
+
+static void imported_default_execution(const XrXirCompileContext *context) {
+    imported_default_callable(context);
+    CHECK(!imported_default_source(context,2) && !imported_default_source(context,3));
+    for(uint32_t kind=0;kind<2;++kind) {
+        XrXirArtifact *closed=imported_default_source(context,kind);imported_default_origin_controls(context,closed);
+        if(kind==1)imported_default_resources(context,closed);
+        XrXirArtifact *code=lower(closed);xr_xir_compile_artifact_free(closed);
+        uint32_t target=named(xr_xir_compile_artifact_module(code),"storage_receiver");
+        XrXirProgram *program=take_vm(&code);slice_program_case(program,target);
+    }
+}
+
 static void local_storage_owned_capture(const XrXirCompileContext *context) {
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     CHECK(source_check(context,local_storage_owned_capture_text,&source,&diagnostic,XR_XIR_PROGRAM)==XR_XIR_OK);
@@ -756,12 +902,13 @@ int main(int argc,char **argv) {
         CHECK(!effects_compile_live && !effects_compile_bytes);return 0;
     }
     if (argc==2 && !strcmp(argv[1],"--local-storage-resources")) {xr_compile_resources_release(context.resources);local_storage_resources();return 0;}
-    if(argc==3 && !strcmp(argv[1],"--emit-default-class")) {closed=default_class_source(&context);local_storage_emit(closed,argv[2]);}
+    if(argc==3 && !strcmp(argv[1],"--emit-imported-default")) {closed=imported_default_source(&context,1);local_storage_emit(closed,argv[2]);}
+    else if(argc==3 && !strcmp(argv[1],"--emit-default-class")) {closed=default_class_source(&context);local_storage_emit(closed,argv[2]);}
     else if(argc==3 && !strcmp(argv[1],"--emit-scalar-slot")) {closed=scalar_slot_source(&context,0);local_storage_emit(closed,argv[2]);}
     else if(argc==3 && !strcmp(argv[1],"--emit-local-storage")) {closed=local_storage_positive(&context);local_storage_emit(closed,argv[2]);}
     else if (argc==3 && !strcmp(argv[1],"--emit")) {closed=cold_fixture(&context,identity);emit(closed,argv[2]);}
     else {
-        CHECK(argc==1);string_bytes_rejections(&context);local_storage_rejections(&context);local_storage_owned_capture(&context);local_storage_execution(&context);scalar_slot_execution(&context);default_class_execution(&context);observed_cases(&context);
+        CHECK(argc==1);string_bytes_rejections(&context);local_storage_rejections(&context);local_storage_owned_capture(&context);local_storage_execution(&context);scalar_slot_execution(&context);default_class_execution(&context);imported_default_execution(&context);observed_cases(&context);
         closed=fixture(&context,identity);strict_normalization(&context,closed);
         XrXirArtifact *code=lower(closed);const XrXirModule *module=xr_xir_compile_artifact_module(code);
         uint32_t run=named(module,"receiver");SliceHostCases host=host_cases(module);

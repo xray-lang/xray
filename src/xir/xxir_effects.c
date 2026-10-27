@@ -1051,7 +1051,13 @@ XR_FUNC XrXirStatus xir_effects_class_call_access_site(XirEffectDefaultAccessSco
         const XrXirDeclarations *d=module->declarations;
         if (!d || !d->functions || !d->modules || d->functions[caller].module>=d->module_count ||
             d->functions[query.callee].module>=d->module_count) status=XR_XIR_BAD_STRUCTURE;
-        else if (d->functions[caller].module!=d->functions[query.callee].module) status=XR_XIR_UNRESOLVED;
+        else if (d->functions[caller].module!=d->functions[query.callee].module) {
+            bool declared_default=false;
+            if (xir_effect_evidence_is_instance(module))
+                status=xir_compile_default_call_origin(&query.work,module,caller,instruction,
+                    query.callee,&declared_default);
+            if (status==XR_XIR_OK && !declared_default) status=XR_XIR_UNRESOLVED;
+        }
     }
     if (status==XR_XIR_OK && scope->graph.default_access_denied[query.callee]) status=XR_XIR_UNRESOLVED;
     if (status!=XR_XIR_OK) scope->status=status;return status;

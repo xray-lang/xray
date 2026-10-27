@@ -17,6 +17,7 @@
 #include "xxir_types.h"
 #include "xxir_nominal.h"
 #include "xxir_generic.h"
+#include "xxir_type_match_internal.h"
 #include "xxir_internal.h"
 #include "xxir_implementation.h"
 #include "../base/xmalloc.h"
@@ -167,6 +168,91 @@ XR_FUNC XrXirStatus xr_xir_compile_default_call_verify(const XrXirCompileContext
     s=xr_xir_compile_generic_call(b, m, caller, &call);
     if (s==XR_XIR_OK) s=xr_xir_compile_call_type_matches(b, m, caller, &call, m->functions[a->owner].parameters[a->ordinal], op->type);
     return s;
+}
+
+
+/* This exact-site relation borrows the retained Source synchronously. It only
+ * classifies an original default call; complete provenance still admits the
+ * final function bodies, substitutions and permissions before publication. */
+XR_FUNC XrXirStatus xir_compile_default_call_origin(const XrXirCompileContext *context,
+    const XrXirModule *m,uint32_t caller,uint32_t instruction,uint32_t target,bool *authorized) {
+    if (!authorized) return XR_XIR_BAD_STRUCTURE;
+    *authorized=false;
+    if (!xir_compile_context_valid(context) || !m || !m->functions ||
+        caller>=m->function_count || target>=m->function_count) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_effect_evidence_is_closed(m)) return XR_XIR_OK;
+    const XrXirProvenance *p=m->provenance;
+    if (!p->source || !p->origins || p->count!=m->function_count) return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *source=&p->source->module;
+    const XrXirOrigin *from=&p->origins[caller],*to=&p->origins[target];
+    if (source->stage!=XR_XIR_CHECKED || source->linkage_kind!=XR_XIR_PROGRAM ||
+        (source->provenance && source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) ||
+        !source->functions || from->function>=source->function_count || to->function>=source->function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *origin=&source->functions[from->function],*actual=&m->functions[caller];
+    if (!origin->instructions || !actual->instructions || instruction>=origin->instruction_count ||
+        instruction>=actual->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    const XrXirInstruction *op=&origin->instructions[instruction],*edge=&actual->instructions[instruction];
+    if (op->op!=XR_XIR_CALL_DEFAULT && op->op!=XR_XIR_INVOKE_DEFAULT) return XR_XIR_OK;
+    if ((op->op==XR_XIR_CALL_DEFAULT && (edge->op!=XR_XIR_CALL || edge->targets[0] || edge->targets[1])) ||
+        (op->op==XR_XIR_INVOKE_DEFAULT && (edge->op!=XR_XIR_INVOKE ||
+            edge->targets[0]!=op->targets[0] || edge->targets[1]!=op->targets[1])) ||
+        edge->immediate!=(int64_t)target || edge->args[0] || edge->args[1] ||
+        edge->type_arguments[0] || edge->type_arguments[1]) return XR_XIR_BAD_STRUCTURE;
+    const XrXirDefaultBinding *binding=NULL;
+    const uint32_t *identity=xr_xir_default_identity(op);
+    XrXirStatus status=xr_xir_compile_default_lookup(context,source,identity[0],identity[1],&binding);
+    if (status!=XR_XIR_OK) return status;
+    if (!binding || binding->owner_kind!=XR_XIR_DEFAULT_PARAMETER ||
+        binding->owner>=source->function_count || binding->function!=to->function ||
+        binding->function>=source->function_count ||
+        binding->ordinal>=source->functions[binding->owner].parameter_count ||
+        !source->functions[binding->owner].parameters ||
+        source->functions[to->function].parameter_count || m->functions[target].parameter_count)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirDeclarations *before=source->declarations,*after=m->declarations;
+    if (!before || !after || !before->functions || !after->functions || !before->modules || !after->modules ||
+        !before->module_count || before->module_count!=after->module_count) return XR_XIR_BAD_STRUCTURE;
+    uint32_t origins[2]={from->function,to->function},current[2]={caller,target};
+    for (uint32_t i=0;i<2;++i) {
+        const XrXirFunctionIdentity *a=&before->functions[origins[i]],*b=&after->functions[current[i]];
+        if (a->module>=before->module_count || b->module!=a->module ||
+            b->nominal_owner!=a->nominal_owner || b->member_access!=a->member_access ||
+            b->method_kind!=a->method_kind) return XR_XIR_BAD_STRUCTURE;
+    }
+    if (after->functions[target].exported || after->functions[target].cleanup_owner)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirGeneric zero={0};
+    const XrXirGeneric *generic=source->generics?&source->generics[from->function]:&zero;
+    const XrXirGeneric *helper=source->generics?&source->generics[to->function]:&zero;
+    if (from->argument_count!=generic->parameter_count || to->argument_count!=helper->parameter_count ||
+        from->argument_count>65536 || to->argument_count>65536 ||
+        (!!from->arguments!=!!from->argument_count) || (!!to->arguments!=!!to->argument_count) ||
+        (!!generic->arguments!=!!generic->argument_count) ||
+        op->type_arguments[0]>generic->argument_count ||
+        op->type_arguments[1]>generic->argument_count-op->type_arguments[0] ||
+        to->argument_count!=op->type_arguments[1]) return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunctionIdentity *owner=&before->functions[binding->owner];
+    if (owner->module>=before->module_count ||
+        before->functions[to->function].module!=owner->module) return XR_XIR_BAD_STRUCTURE;
+    status=xr_xir_compile_default_call_verify(context,source,from->function,op);
+    if (status!=XR_XIR_OK) return status;
+    XrXirTypeMatchScratch scratch={context->resources,NULL};
+    if (sizeof(scratch)>context->limits.frame_bytes) return XR_XIR_BUDGET;
+    XrXirCompileContext work=*context;work.limits.frame_bytes-=sizeof(scratch);
+    for (uint32_t i=0;status==XR_XIR_OK && i<to->argument_count;++i)
+        status=xr_xir_compile_type_substitution_matches_between_scratch(&work,source->types,m->types,
+            from->arguments,from->argument_count,generic->arguments[op->type_arguments[0]+i],
+            to->arguments[i],&scratch);
+    if (status==XR_XIR_OK) status=xr_xir_compile_type_substitution_matches_between_scratch(&work,
+        source->types,m->types,from->arguments,from->argument_count,op->type,edge->type,&scratch);
+    if (status==XR_XIR_OK) status=xr_xir_compile_type_substitution_matches_between_scratch(&work,
+        source->types,m->types,to->arguments,to->argument_count,
+        source->functions[to->function].result,m->functions[target].result,&scratch);
+    if (status==XR_XIR_OK && edge->type!=m->functions[target].result) status=XR_XIR_BAD_TYPE;
+    xr_xir_type_match_scratch_free(&scratch);
+    if (status==XR_XIR_OK) *authorized=true;
+    return status;
 }
 
 #include "xxir_construction_internal.h"
