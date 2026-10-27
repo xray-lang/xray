@@ -1179,6 +1179,21 @@ TEST(parser_call_expr) {
     teardown();
 }
 
+TEST(parser_retired_builder_name_is_an_ordinary_identifier) {
+    setup();
+    AstNode *call = parse_expr("StringBuilder(7)");
+    ASSERT_EQ_INT(call->type, AST_CALL_EXPR);
+    ASSERT_EQ_INT(call->as.call_expr.callee->type, AST_VARIABLE);
+    ASSERT_STR_EQ(call->as.call_expr.callee->as.variable.name, "StringBuilder");
+    ASSERT_EQ_INT(call->as.call_expr.arg_count, 1);
+    AstNode *decl = parse_first("class StringBuilder { init() {} }");
+    ASSERT_EQ_INT(decl->type, AST_CLASS_DECL);
+    ASSERT_STR_EQ(decl->as.class_decl.name, "StringBuilder");
+    AstNode *array = parse_expr("Array<i64>(0)");
+    ASSERT_EQ_INT(array->type, AST_NEW_EXPR);
+    teardown();
+}
+
 TEST(parser_call_arg_access_markers_only_in_direct_argument_slot) {
     setup();
 
@@ -1702,6 +1717,7 @@ int main(void) {
 
     // Calls
     RUN_TEST(parser_call_expr);
+    RUN_TEST(parser_retired_builder_name_is_an_ordinary_identifier);
     RUN_TEST(parser_call_arg_access_markers_only_in_direct_argument_slot);
     RUN_TEST(parser_member_access);
     RUN_TEST(parser_member_generic_call_uintsize_type_arg);

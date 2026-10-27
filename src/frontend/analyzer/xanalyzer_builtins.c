@@ -95,12 +95,10 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
      * builtin's name. This function is the single gate for builtin identity —
      * it decides the member table (xa_builtin_get_type_info), the native
      * capability flags (xanalyzer_capability.c), and LSP completion — so a
-     * name-only match would let `class StringBuilder { }` inherit the builtin's
-     * methods and its INTERIOR_MUTABLE | SYNC_SHAREABLE grant. */
+     * name-only match would let an ordinary user class inherit builtin
+     * members and capability grants without its own declaration. */
     if (xr_type_is_builtin_named_class(type, "BigInt"))
         return XR_TID_BIGINT;
-    if (xr_type_is_builtin_named_class(type, "StringBuilder"))
-        return XR_TID_STRINGBUILDER;
     if (type->kind == XR_KIND_CHANNEL)
         return XR_TID_CHANNEL;
     if (xr_type_is_builtin_named_class(type, "PanicInfo"))
@@ -763,19 +761,6 @@ XrType *xa_builtin_get_method_return_type(XaAnalyzer *analyzer, XrType *containe
             return xr_type_new_string(NULL);
     }
 
-    // StringBuilder methods
-    if (xr_type_is_builtin_named_class(container_type, "StringBuilder")) {
-        switch (sym) {
-            case SYMBOL_APPEND:
-                return xr_type_new_stringbuilder(X);
-            case SYMBOL_TOSTRING:
-                return xr_type_new_string(NULL);
-            case SYMBOL_CLEAR:
-                return xr_type_new_stringbuilder(X);
-            default:
-                break;
-        }
-    }
 
     return NULL;
 }
@@ -1707,7 +1692,7 @@ static XrType *parse_type_str(XrVMRuntime *X, XaAnalyzer *analyzer, const char *
         }
 
         // Last resort: consult the prelude registry. SIMPLE entries such as
-        // BigInt, Range, and StringBuilder surface here as named instances.
+        // BigInt and Range surface here as named instances.
         // Generic / singleton kinds were handled by dedicated branches above.
         if (!type && X) {
             const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);

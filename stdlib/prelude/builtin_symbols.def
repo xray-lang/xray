@@ -132,7 +132,6 @@ XR_BUILTIN_PRELUDE_TYPE("Set",           1, XR_TSET,      GENERIC_1)
  * XR_IS_SLICE_REF fat reference, so it has no GC type id. Its element storage
  * is owned by the Array / [T; N] / string it borrows from. */
 XR_BUILTIN_PRELUDE_TYPE("Slice",         1, 0,            GENERIC_1)
-XR_BUILTIN_PRELUDE_TYPE("StringBuilder", 0, XR_TINSTANCE, SIMPLE)
 XR_BUILTIN_PRELUDE_TYPE("Thread",        1, XR_TTHREAD,   GENERIC_1)
 
 /* ========== Prelude types declared in the standard library ==========

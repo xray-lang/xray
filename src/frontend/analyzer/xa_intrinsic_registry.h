@@ -118,8 +118,8 @@ typedef enum XaIntrinsicLowering {
     XA_INTRINSIC_LOWERING_STRING_BYTE_SLICE_VIEW,
     XA_INTRINSIC_LOWERING_ARRAY_RESERVE,
     XA_INTRINSIC_LOWERING_SCALAR_PARSE,
-    XA_INTRINSIC_LOWERING_STRING_BUILDER_APPEND,
-    XA_INTRINSIC_LOWERING_MATH_SQRT,
+    /* The retired lowering slot remains unassigned. */
+    XA_INTRINSIC_LOWERING_MATH_SQRT = 69,
     XA_INTRINSIC_LOWERING_MATH_POW,
     XA_INTRINSIC_LOWERING_MATH_ABS,
     XA_INTRINSIC_LOWERING_MATH_FLOOR,
@@ -155,9 +155,6 @@ typedef enum XaIntrinsicLowering {
     XA_INTRINSIC_LOWERING_MATH_MAX,
     XA_INTRINSIC_LOWERING_MATH_CLAMP,
 } XaIntrinsicLowering;
-
-/* This projection is shared with pointer-free SemanticPlan verification. */
-#define XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER "append"
 
 typedef enum XaIntrinsicEffectContract {
     XA_INTRINSIC_EFFECT_PURE = 0,

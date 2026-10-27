@@ -1246,7 +1246,7 @@ AstNode *xr_parse_call_argument(Parser *parser) {
 bool xr_is_construct_only_type_name(Parser *parser, const char *name) {
     if (!name)
         return false;
-    static const char *const names[] = {"Map", "Array", "Set", "Channel", "StringBuilder", NULL};
+    static const char *const names[] = {"Map", "Array", "Set", "Channel", NULL};
     for (const char *const *p = names; xr_parser_step(parser) && (xr_parser_healthy(parser) && *p); p++) {
         if (xr_parser_compare_string(parser, name, *p) == 0)
             return true;

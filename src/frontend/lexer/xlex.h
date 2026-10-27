@@ -165,7 +165,7 @@ typedef enum {
     TK_USIZE,
     // None of the uppercase native type names are lexer keywords any
     // more. Array / BigInt / Channel / DateTime / Json / Map /
-    // Range / Regex / Set / StringBuilder all reach the parser as plain
+    // Range / Regex / Set all reach the parser as plain
     // TK_NAME tokens and resolve through the prelude symbol table — see
     // module/xprelude_runtime.h. Channel additionally gets a contextual
     // intercept in xr_parse_variable so that `Channel(...)` still

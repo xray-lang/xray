@@ -1,0 +1,12 @@
+// A retired builtin spelling is an ordinary user class with its own methods.
+class StringBuilder {
+    const value: i64
+    init(value: i64) { this.value = value }
+    append(increment: i64) -> i64 { return this.value + increment }
+}
+
+@test
+fn test_retired_builder_spelling_uses_declared_class() {
+    const value = StringBuilder(35)
+    assertEqual(value.append(7), 42)
+}
