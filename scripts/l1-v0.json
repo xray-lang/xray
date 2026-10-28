@@ -124,7 +124,8 @@
     "test_xir_typed_await",
     "test_xir_typed_await_native",
     "test_xir_typed_await_controls",
-    "test_source_lowered_correspondence"
+    "test_source_lowered_correspondence",
+    "test_native_string_admission"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -346,7 +347,9 @@
     "test_xir_typed_await_native",
     "test_xir_typed_await_controls",
     "test_xir_typed_await_cli",
-    "source_lowered_correspondence"
+    "source_lowered_correspondence",
+    "native_string_admission",
+    "test_lir_owned_string"
   ],
   "versionCommand": [
     "{build}/xray.exe",
