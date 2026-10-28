@@ -143,25 +143,33 @@ static XrXirStatus submission_lowered_bindings(const SubmissionBindingDraft *dra
     const XrXirArtifact *closed,const XrXirArtifact *lowered) {
     const XrXirModule *a=xr_xir_compile_artifact_module(closed),*b=xr_xir_compile_artifact_module(lowered);
     const XrXirDeclarations *x=a ? a->declarations : NULL,*y=b ? b->declarations : NULL;
-    if(!x || !y || a->function_count!=b->function_count || x->slot_count!=y->slot_count ||
+    const XrXirCompileContext *context=xr_xir_compile_artifact_context(closed);
+    if(!context || !x || !y || a->function_count!=b->function_count || x->slot_count!=y->slot_count ||
         x->root_module!=y->root_module || x->module_count!=y->module_count ||
         x->entry_function!=y->entry_function)return XR_XIR_BAD_STRUCTURE;
-    /* The actual lower producer preserves ordinals. Match bound declaration
-     * shapes before transfer; the Program receiver still decides permissions. */
+    /* Lowering preserves function and slot ordinals, but interned type IDs
+     * belong to each pool. The Program receiver still decides permissions. */
     for(uint32_t i=0;i<draft->count;++i) {
 
         const XrXirInstanceBindingSpec *row=&draft->rows[i];uint32_t index=row->ordinal;
         if(row->kind==XR_XIR_INSTANCE_BINDING_SLOT) {
             if(index>=x->slot_count || x->slots[index].module!=y->slots[index].module ||
-                x->slots[index].type!=y->slots[index].type || x->slots[index].mutable!=y->slots[index].mutable)
+                x->slots[index].mutable!=y->slots[index].mutable)
                 return XR_XIR_BAD_STRUCTURE;
+            XrXirStatus status=xr_xir_compile_type_substitution_matches_between(context,a->types,b->types,
+                NULL,0,x->slots[index].type,y->slots[index].type);
+            if(status!=XR_XIR_OK)return status;
         } else {
             if(index>=a->function_count || x->functions[index].module!=y->functions[index].module ||
-                a->functions[index].result!=b->functions[index].result ||
                 a->functions[index].parameter_count!=b->functions[index].parameter_count)return XR_XIR_BAD_STRUCTURE;
+            XrXirStatus status=xr_xir_compile_type_substitution_matches_between(context,a->types,b->types,
+                NULL,0,a->functions[index].result,b->functions[index].result);
+            if(status!=XR_XIR_OK)return status;
             for(uint32_t p=0;p<a->functions[index].parameter_count;++p) {
 
-                if(a->functions[index].parameters[p]!=b->functions[index].parameters[p])return XR_XIR_BAD_STRUCTURE;
+                status=xr_xir_compile_type_substitution_matches_between(context,a->types,b->types,
+                    NULL,0,a->functions[index].parameters[p],b->functions[index].parameters[p]);
+                if(status!=XR_XIR_OK)return status;
             }
         }
     }

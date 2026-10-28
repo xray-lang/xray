@@ -12,6 +12,7 @@
 #include "xxir_prelude_source.h"
 #include "xxir_library_prelude.inc.c"
 static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t module);
+static const XrXirModule *source_owned_module_view(SourceContext *ctx,uint32_t module);
 typedef struct SourcePreludeScan { SourceContext *ctx; uint32_t depth; bool needed; } SourcePreludeScan;
 static bool source_prelude_word(SourcePreludeScan *scan,const char *name) {
     if (!name) return true;
@@ -148,7 +149,22 @@ static bool source_prelude_discover(SourceContext *ctx) {
     if (!any) return true;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_STDLIB,"prelude",NULL};
     int index=-1;
-    XrModuleStatus status=xr_compile_module_graph_include_catalog_logical(ctx->graph,&authority,XIR_PRELUDE_LOGICAL,&index);
+    for(uint32_t m=0;m<original;++m) {
+        const XrModuleSpec *spec=&ctx->graph->specs[m];
+        if(spec->representation!=XR_MODULE_CHECKED_HISTORY)continue;
+        bool canonical=source_text_same(ctx,NULL,spec->canonical,XIR_PRELUDE_CANONICAL);
+        if(ctx->diagnostic.status!=XR_XIR_OK)return false;
+        if(!canonical)continue;
+        const XrXirModule *history=source_owned_module_view(ctx,m);bool admitted=false;
+        if(!history)return false;
+        XrXirStatus checked=library_prelude_module(history,spec->history_module,&admitted);
+        if(checked!=XR_XIR_OK||!admitted||index>=0)
+            return source_fail(ctx,NULL,checked==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:checked,
+                "governed prelude history is not unique and authenticated");
+        index=(int)m;
+    }
+    XrModuleStatus status=index<0?
+        xr_compile_module_graph_include_catalog_logical(ctx->graph,&authority,XIR_PRELUDE_LOGICAL,&index):XR_MODULE_OK;
     if (status!=XR_MODULE_OK) return source_module_fail(ctx,NULL,status,"canonical prelude Catalog selection failed");
     if (index<0) {
         char *error=NULL;

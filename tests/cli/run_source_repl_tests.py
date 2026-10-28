@@ -61,6 +61,14 @@ def main() -> None:
         started = time.monotonic()
         result = run("import time\n{const before=time.monotonic();time.sleep(25);print(time.monotonic()-before>=25)}\nfn worker()->i64{Coro.yield();return 42}\ntry await go worker()\n.exit\n")
         require(not result.stderr and b"true\n" in result.stdout and b"42\n" in result.stdout and time.monotonic()-started >= 0.025, result)
+        result = run("fn worker()->i64{Coro.yield();return 42}\ntry await go worker()\n"
+                     "try await go worker()\nfn next()->i64{Coro.yield();return 43}\ntry await go next()\n.exit\n")
+        require(not result.stderr and result.stdout.count(b"42\n") == 2 and
+                result.stdout.count(b"43\n") == 1, result)
+        result = run("enum Cancelled{Fake}\nfn worker()->i64{Coro.yield();return 42}\n"
+                     "fn onlyUser() throws(Cancelled)->i64{return try await go worker()}\n42\n.exit\n")
+        require(result.stderr.count(b"E0331: escaping error exceeds the declared throws type") == 1 and
+                result.stdout.count(b"42\n") == 1, result)
     print("Source REPL CLI: ten commands, real FILE imports, old birth state, type effects, multiline/long input, strict bytes, timer and Task yield PASS")
 
 

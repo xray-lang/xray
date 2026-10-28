@@ -11,7 +11,12 @@ static const char *source_declaration_module_name(SourceContext *ctx,const XrMod
      * authority. Fresh interactive declarations have distinct birth owners,
      * even when the same file is loaded again. Exact Checked history keeps its
      * admitted names; neither name spelling nor this scope grants storage. */
-    if(!ctx->module_scope || spec->representation==XR_MODULE_CHECKED_HISTORY)
+    /* The selected governed prelude keeps the resolver owner authenticated by
+     * its native declarations. It does not acquire a user declaration birth. */
+    bool prelude=ctx->prelude_module&&ctx->graph&&
+        ctx->prelude_module<=(uint32_t)ctx->graph->spec_count&&
+        spec==&ctx->graph->specs[ctx->prelude_module-1];
+    if(!ctx->module_scope || spec->representation==XR_MODULE_CHECKED_HISTORY || prelude)
         return spec->canonical;
     size_t scope=0,canonical=0;
     if(!source_text_length(ctx,NULL,ctx->module_scope,&scope) ||
