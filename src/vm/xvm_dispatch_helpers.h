@@ -254,39 +254,15 @@ vm_ready_operation_next_or_yield(XrVMRuntime *isolate, XrCoroutine *current, XrB
  * pre-call pointers.
  *
  * Returns true on success (no grow needed, or grow succeeded with
- * pointers refreshed). Returns false on grow failure; caller should
+ * pointers refreshed). Cursors also remain valid on failure; caller should
  * throw XR_ERR_STACK_OVERFLOW. */
 static inline bool vm_ensure_call_stack(XrVMContext *vm_ctx, int needed_slots, XrValue **base_inout,
                                         XrBcCallFrame **frame_inout, XrInstruction *pc) {
-    int needed = needed_slots;
-    bool need_grow =
-        (needed > vm_ctx->stack_capacity) || (vm_ctx->frame_count + 1 >= vm_ctx->frame_capacity);
-    if (!need_grow)
-        return true;
-
-    XrCoroutine *coro = vm_get_coro(vm_ctx);
-    if (!coro)
-        return false;
-
-    /* Snapshot offsets BEFORE grow — pointers may move. */
-    int caller_base_off = (int) (*base_inout - vm_ctx->stack);
-    int caller_frame_idx = (int) (*frame_inout - vm_ctx->frames);
-
-    /* Save pc into the caller frame so a re-entry (e.g. via startfunc)
-     * resumes at the right instruction. */
-    (*frame_inout)->pc = pc;
-
-    int extra = (needed > vm_ctx->stack_capacity) ? (needed - vm_ctx->stack_capacity + 64) : 64;
-    if (extra < 64)
-        extra = 64;
-    if (!xr_coro_grow_stack(coro, extra))
-        return false;
-
-    /* Re-derive caller pointers from snapshots — stack/frames may have
-     * been reallocated to new addresses. */
-    *base_inout = vm_ctx->stack + caller_base_off;
-    *frame_inout = &vm_ctx->frames[caller_frame_idx];
-    return true;
+    XrVMStackCursor cursor = {*base_inout, *frame_inout, pc};
+    bool grown = xr_vm_ensure_call_stack(vm_ctx, vm_get_coro(vm_ctx), needed_slots, &cursor);
+    *base_inout = cursor.base;
+    *frame_inout = cursor.frame;
+    return grown;
 }
 
 static inline bool vm_rebind_after_native_call(XrVMContext *vm_ctx, int base_offset,
@@ -324,29 +300,12 @@ static inline bool vm_rebind_after_native_call(XrVMContext *vm_ctx, int base_off
 static inline XrBcCallFrame *vm_push_bc_frame(XrVMContext *vm_ctx, XrClosure *closure,
                                               int new_base_off_from_caller, XrValue **base_inout,
                                               XrBcCallFrame **frame_inout, XrInstruction *pc) {
-    if (XR_UNLIKELY(vm_ctx->frame_count >= XR_FRAMES_MAX))
-        return NULL;
-
-    XrProto *proto = closure->proto;
-    int abs_base_off = (int) (*base_inout - vm_ctx->stack) + new_base_off_from_caller;
-    int needed = abs_base_off + proto->maxstacksize;
-
-    /* savepc into caller frame so a re-entry resumes correctly. */
-    (*frame_inout)->pc = pc;
-
-    if (!vm_ensure_call_stack(vm_ctx, needed, base_inout, frame_inout, pc))
-        return NULL;
-
-    int fidx = vm_ctx->frame_count;
-    XR_DCHECK(fidx < vm_ctx->frame_capacity,
-              "vm_push_bc_frame: frame_count >= frame_capacity post-grow");
-    memset(&vm_ctx->frames[fidx], 0, sizeof(XrBcCallFrame));
-    vm_ctx->frame_count++;
-    XrBcCallFrame *new_frame = &vm_ctx->frames[fidx];
-    new_frame->closure = closure;
-    new_frame->pc = PROTO_CODE_BASE(proto);
-    new_frame->base_offset = abs_base_off;
-    return new_frame;
+    XrVMStackCursor cursor = {*base_inout, *frame_inout, pc};
+    XrBcCallFrame *next = xr_vm_push_frame(vm_ctx, vm_get_coro(vm_ctx), closure,
+                                          new_base_off_from_caller, &cursor);
+    *base_inout = cursor.base;
+    *frame_inout = cursor.frame;
+    return next;
 }
 
 /* ========== Channel ownership helpers ========== */

@@ -54,50 +54,6 @@ XrVMContext *xr_vm_current_ctx(XrVMRuntime *isolate) {
     return &isolate->vm_ctx;
 }
 
-/*
-** Ensure ctx has room for one new entry frame plus extra_stack slots.
-** See xvm_internal.h for contract.
-**
-** xr_coro_grow_stack reallocates ctx->stack but does NOT update
-** ctx->stack_top. We snapshot stack_top as an offset before grow and
-** re-derive it afterwards so the invariant stack <= stack_top <= stack+cap
-** always holds across this call.
-*/
-bool xr_vm_prepare_entry(XrVMContext *ctx, int extra_stack) {
-    XR_DCHECK(ctx != NULL, "vm_prepare_entry: NULL ctx");
-    XR_DCHECK(extra_stack >= 0, "vm_prepare_entry: negative extra_stack");
-
-    int stack_used = (int) (ctx->stack_top - ctx->stack);
-    int stack_needed = stack_used + extra_stack;
-    int frames_needed = ctx->frame_count + 1;
-
-    bool need_stack = stack_needed > ctx->stack_capacity;
-    bool need_frames = frames_needed >= ctx->frame_capacity;
-
-    if (!need_stack && !need_frames) {
-        return true;
-    }
-
-    XrCoroutine *coro = (XrCoroutine *) ctx->current_coro;
-    if (!coro) {
-        // Static fallback ctx (isolate->vm_ctx with no main coro): cannot grow.
-        // Caller must surface XR_VM_RUNTIME_ERROR; we never silently truncate.
-        return false;
-    }
-
-    // xr_coro_grow_stack(coro, n>0) grows stack and (when frames near full)
-    // also doubles frame capacity. Use a small bump (64) when only frames
-    // need to grow so the underlying API contract (extra_slots > 0) holds.
-    int extra = need_stack ? (stack_needed - ctx->stack_capacity + 64) : 64;
-    if (!xr_coro_grow_stack(coro, extra)) {
-        return false;
-    }
-
-    // Re-derive stack_top from saved offset — old pointer is now freed.
-    ctx->stack_top = ctx->stack + stack_used;
-    return true;
-}
-
 /* ========== C Code Calling Closure API ========== */
 
 /*
@@ -155,10 +111,10 @@ XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *ar
     // the right grow amount, then re-derive saved_stack_top via offset since
     // grow may relocate ctx->stack.
     int stack_top_offset = (int) (saved_stack_top - ctx->stack);
-    XrValue *prev_stack_top = ctx->stack_top;
+    int prev_top_offset = (int) (ctx->stack_top - ctx->stack);
     ctx->stack_top = saved_stack_top;
     if (!xr_vm_prepare_entry(ctx, 1 + proto->maxstacksize)) {
-        ctx->stack_top = prev_stack_top;
+        ctx->stack_top = ctx->stack + prev_top_offset;
         xr_log_warning("vm", "vm_call_closure: stack/frame growth failed");
         return xr_null();
     }

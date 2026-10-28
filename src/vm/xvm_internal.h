@@ -223,21 +223,7 @@ XR_FUNC const char *xr_debug_local_name(XrProto *proto, int reg, int pc);
 */
 XR_FUNC XrVMContext *xr_vm_current_ctx(XrVMRuntime *isolate);
 
-/*
-** Ensure the context can host a new entry frame with the given prototype.
-**
-** Reserves stack capacity for `extra_stack` slots above current stack_top
-** (typically proto->maxstacksize) and frame capacity for one additional
-** call frame. Grows backing storage when ctx is coroutine-backed; returns
-** false on growth failure or when ctx is the static fallback that cannot
-** grow. Public entries (xr_vm_call_closure / xr_vm_interpret_proto /
-** xr_vm_execute_module) must call this before installing a frame.
-**
-** Maintains the invariant stack <= stack_top <= stack + capacity across
-** the call (re-derives stack_top via offset since xr_coro_grow_stack may
-** relocate the backing buffer).
-*/
-XR_FUNC bool xr_vm_prepare_entry(XrVMContext *ctx, int extra_stack);
+#include "xvm_stack.h"
 
 // Call closure from C code (coroutine-aware, unified implementation)
 XR_FUNC XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *args,
