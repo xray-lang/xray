@@ -68,8 +68,14 @@ def main():
     cases['module-counter'] = (original_counter, b'1\n2\n99\n3\n3\n')
     cases['module-counter-optimized'] = (original_counter, b'1\n2\n99\n3\n3\n')
     original_terminator = Path(__file__).resolve().parents[2] / 'tests/diff/cases/semantics/output/print_terminator_exact.xr'
-    terminator_oracle = original_terminator.with_suffix('.xr.expected').read_bytes()
+    terminator_fixture = original_terminator.with_suffix('.xr.expected').read_bytes()
+    terminator_oracle = terminator_fixture.replace(b'\r\n', b'\n')
     assert len(terminator_oracle) == 31
+    assert hashlib.sha256(terminator_oracle).hexdigest() == 'cc9ebe4b7bd9fdc01c27cc79ff6c43c1e90e78115cad7795157f67b316d11c21'
+    identity['literalTerminatorOracle'] = {
+        'rawBytes': len(terminator_fixture), 'rawSHA256': hashlib.sha256(terminator_fixture).hexdigest(),
+        'normalizedLFBytes': len(terminator_oracle), 'normalizedLFSHA256': hashlib.sha256(terminator_oracle).hexdigest(),
+        'CRLF': terminator_fixture.count(b'\r\n'), 'bareLF': terminator_fixture.count(b'\n') - terminator_fixture.count(b'\r\n')}
     cases['literal-terminator'] = (original_terminator, terminator_oracle)
     cases['literal-terminator-optimized'] = (original_terminator, terminator_oracle)
     cases['literal-utf8-nul'] = ('print("A\\0é")\nprint(7)\nprint("")\n', b'A\x00\xc3\xa9\n7\n\n')
@@ -109,7 +115,9 @@ def main():
             run(command, cwd=root)
             identity[name + 'OriginalSource'] = {'path':str(program),
                 'SHA256':hashlib.sha256(program.read_bytes()).hexdigest(),
-                'copiedRawExactly':source.read_bytes() == program.read_bytes()}
+                'copiedRawExactly':source.read_bytes() == program.read_bytes(),
+                'sourceBytes':len(program.read_bytes()), 'CRLF':program.read_bytes().count(b'\r\n'),
+                'bareLF':program.read_bytes().count(b'\n') - program.read_bytes().count(b'\r\n')}
         elif program is None:
             run([args.fixture_driver, name, generated], cwd=root)
         else:
