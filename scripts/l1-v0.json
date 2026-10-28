@@ -100,7 +100,8 @@
     "test_xir_try_assert_task_unsafe_native",
     "test_xir_try_assert_task_safe_native",
     "test_xir_try_assert_ordinary_unsafe_native",
-    "test_xir_try_assert_order_native"
+    "test_xir_try_assert_order_native",
+    "test_source_request_lifetime"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -268,7 +269,9 @@
     "test_xir_try_assert_graph_source",
     "test_xir_try_assert_lexical_source",
     "test_xir_try_assert_never_source",
-    "test_xir_try_assert_cli"
+    "test_xir_try_assert_cli",
+    "source_report_json",
+    "source_request_lifetime"
   ],
   "versionCommand": [
     "{build}/xray.exe",
