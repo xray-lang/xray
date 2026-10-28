@@ -106,7 +106,13 @@
     "test_xir_try_optional_native",
     "test_xir_values",
     "test_xir_nullable_unit_native",
-    "test_native_clock"
+    "test_native_clock",
+    "test_xir_cleanup_replaced",
+    "test_xir_cleanup_replaced_native",
+    "test_xir_cleanup_replaced_wait_fault",
+    "test_xir_cleanup_replaced_host_fault",
+    "test_xir_cleanup_replaced_value_fault",
+    "test_xir_cleanup_replaced_sdk_reader"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -289,7 +295,25 @@
     "test_xir_nullable_unit_native",
     "native_clock_scope",
     "native_clock_standalone",
-    "native_offset_scope"
+    "native_offset_scope",
+    "test_xir_cleanup_replaced_source",
+    "test_xir_cleanup_replaced_host",
+    "test_xir_cleanup_replaced_cancel",
+    "test_xir_cleanup_replaced_graph",
+    "test_xir_cleanup_replaced_sticky-host",
+    "test_xir_cleanup_replaced_hard-reentry",
+    "test_xir_cleanup_replaced_task-sendable",
+    "test_xir_cleanup_original_optional",
+    "test_xir_cleanup_replaced_generated_native",
+    "test_xir_cleanup_replaced_cli",
+    "test_xir_cleanup_replaced_wait_identity",
+    "test_xir_cleanup_replaced_task_shutdown",
+    "test_xir_cleanup_replaced_task_pair",
+    "test_xir_cleanup_replaced_task_positive",
+    "test_xir_cleanup_replaced_late_cancel",
+    "test_xir_cleanup_replaced_host_wait",
+    "test_xir_cleanup_replaced_resources",
+    "test_xir_cleanup_replaced_sdk_manifest"
   ],
   "versionCommand": [
     "{build}/xray.exe",
