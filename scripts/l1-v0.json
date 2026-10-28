@@ -288,7 +288,8 @@
     "test_xir_nullable_unit_cli",
     "test_xir_nullable_unit_native",
     "native_clock_scope",
-    "native_clock_standalone"
+    "native_clock_standalone",
+    "native_offset_scope"
   ],
   "versionCommand": [
     "{build}/xray.exe",
