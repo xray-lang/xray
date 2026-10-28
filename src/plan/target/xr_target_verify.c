@@ -853,7 +853,6 @@ static bool scalar_rep_matches_profile(const XrTargetMachineRepRecord *rep,
 static bool semantic_direct_local_tagged_ref_parameter_is_exact_verify(
     const XrSemanticPlan *semantic, const XrSemanticParameterRecord *parameter, uint8_t *storage);
 
-
 /* A borrowed RAW_PTR is not a general pointer lifecycle. It exists only as
  * the physical callee-side carrier of an exact direct-local tagged ref
  * parameter, and every value binding that names the representation must
@@ -2562,7 +2561,6 @@ static const XrTargetValueRepRecord *verifier_value_rep(const XrTargetPlan *plan
     return NULL;
 }
 
-
 static const XrSemanticFunctionRecord *
 semantic_direct_local_callee_for_operation(const XrSemanticPlan *semantic,
                                            uint32_t operation_index) {
@@ -2692,18 +2690,6 @@ static bool semantic_direct_local_adt_enum_result_is_exact(const XrSemanticPlan 
         semantic_direct_local_callee_for_operation(semantic, operation_index);
     return xr_semantic_direct_local_adt_enum_result_is_exact(semantic, operation, callee);
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 static bool operation_is_exact_json_namespace_codec(const XrSemanticPlan *semantic,
                                                     const XrSemanticOperationRecord *operation,
@@ -4133,9 +4119,6 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan, const XrTarget
              * relying on the constructor to have marked StringBuilder would
              * leave toString's String result unproven. */
 
-
-
-
             xr_semantic_string_runes_is_exact(semantic, operation, NULL) ||
             xr_semantic_iterator_rune_has_next_is_exact(semantic, operation, NULL) ||
             xr_semantic_iterator_rune_next_is_exact(semantic, operation, NULL) ||
@@ -4394,8 +4377,6 @@ static bool verify_value_binding(
         operation && operation->result_value == semantic_value &&
         operation->result_type == semantic_type;
     bool exact_runtime_constructor = xr_semantic_runtime_constructor_is_exact(semantic, operation);
-
-
 
     /* A copy that only renames its operand carries the source's binding, so the
      * result having one is expected rather than unexplained. Same statement of
@@ -5658,12 +5639,6 @@ static bool operation_is_exact_channel_close(const XrSemanticPlan *semantic,
     return true;
 }
 
-
-
-
-
-
-
 static bool semantic_json_namespace_type_is_exact(const XrSemanticTypeRecord *type) {
     char expected_type_key[160];
     int written =
@@ -6053,8 +6028,6 @@ static bool collect_exact_native_module_namespace_values(const XrTargetPlan *pla
     return true;
 }
 
-
-
 static bool overflow_predicate_covers_call_operation(const XrTargetPlan *plan,
                                                      const XrTargetPartitionView *view,
                                                      uint32_t operation_index) {
@@ -6329,8 +6302,6 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             }
             expected_calls++;
         }
-
-
 
         if (operation_is_exact_native_module_scalar_call(semantic, operation, NULL)) {
             if (expected_calls == UINT32_MAX) {

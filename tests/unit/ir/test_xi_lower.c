@@ -478,20 +478,6 @@ static XrSemanticOperationRecord *semantic_find_intrinsic_operation(XrSemanticPl
     return NULL;
 }
 
-static uint32_t semantic_count_string_builder_append_operations(const XrSemanticPlan *plan,
-                                                                uint8_t ownership) {
-    uint32_t count = 0;
-    for (uint32_t i = 0; plan && i < plan->operation_count; i++) {
-        const XrSemanticOperationRecord *operation = &plan->operations[i];
-        bool append = operation->evidence[1] == XA_INTRINSIC_STRING_BUILDER_APPEND &&
-                      (operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING ||
-                       operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE);
-        if (append && (ownership == UINT8_MAX || operation->result_ownership == ownership))
-            count++;
-    }
-    return count;
-}
-
 static void func_tree_mark_optimized_for_semantic_fixture(XiFunc *f) {
     if (!f)
         return;
@@ -1091,76 +1077,6 @@ TEST(user_method_named_fetch_add_remains_ordinary_call) {
     assert(!func_tree_has_op(f, XI_ATOMIC_RMW) &&
            "Atomic semantics must come from resolved receiver identity, never method spelling");
     xi_func_free(f);
-}
-
-TEST(string_builder_append_lowers_with_stable_intrinsic_identity) {
-    XgGlobalEvidence evidence = {0};
-    XiFunc *f = lower_source_with_global_evidence(
-        "fn appendRune(out: ref StringBuilder) { out.append('x') }\n"
-        "fn build() -> string {\n"
-        "  var builder = StringBuilder()\n"
-        "  builder.append(\"x\")\n"
-        "  builder.append('中')\n"
-        "  appendRune(ref builder)\n"
-        "  return builder.toString()\n"
-        "}\n",
-        &evidence);
-    assert(f != NULL);
-    assert(func_tree_count_intrinsic_method(f, "append", XA_INTRINSIC_STRING_BUILDER_APPEND) == 3 &&
-           "every builtin StringBuilder.append call must carry one stable intrinsic identity");
-    XiValue *append = func_tree_find_method(f, "append");
-    assert(append && append->aux_int == ((int64_t) XI_METHOD_SYMBOL_APPEND << 1) &&
-           append->result_alias_operand == 0 && append->xg_capacity_op_id != XG_NO_ID &&
-           "append lowering must publish exact method, alias, and capacity evidence");
-
-    char error[512] = {0};
-    XrSemanticPlan *plan = NULL;
-    func_tree_mark_optimized_for_semantic_fixture(f);
-    XiModule fixture = {
-        .identity = "memory-module-v1:id=32:string-builder-append-fixture-v1",
-        .path = "string-builder-append-fixture.xr",
-        .name = "string_builder_append_fixture",
-        .init = f,
-    };
-    XiModule *saved_module = f->module;
-    f->module = &fixture;
-    bool built = xr_semantic_plan_build(f, &plan, error, sizeof(error));
-    f->module = saved_module;
-    if (!built)
-        fprintf(stderr, "StringBuilder.append SemanticPlan build failed: %s\n", error);
-    assert(built && plan != NULL);
-    assert(
-        semantic_count_string_builder_append_operations(plan, UINT8_MAX) == 3 &&
-        semantic_count_string_builder_append_operations(plan, XI_GEN_RESULT_OWNERSHIP_BORROWED) ==
-            1 &&
-        semantic_count_string_builder_append_operations(plan, XI_GEN_RESULT_OWNERSHIP_OWNED) == 2 &&
-        "every producer-marked append must freeze one exact shape and preserve receiver "
-        "ownership");
-    XrSemanticOperationRecord *operation =
-        semantic_find_intrinsic_operation(plan, XA_INTRINSIC_STRING_BUILDER_APPEND);
-    assert(operation &&
-           (operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING ||
-            operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE) &&
-           operation->semantic_immediate == ((int64_t) XI_METHOD_SYMBOL_APPEND << 1) &&
-           "SemanticPlan must consume the exact append producer marker");
-    uint32_t saved_intrinsic = operation->evidence[1];
-    operation->evidence[1] = XA_INTRINSIC_NONE;
-    memset(error, 0, sizeof(error));
-    assert(!xr_semantic_plan_verify(plan, error, sizeof(error)) &&
-           strstr(error, "XR_SEM_0019") != NULL &&
-           "SemanticPlan must reject a missing append producer identity");
-    operation->evidence[1] = saved_intrinsic;
-    int64_t saved_immediate = operation->semantic_immediate;
-    operation->semantic_immediate = ((int64_t) XI_METHOD_SYMBOL_PUSH << 1);
-    memset(error, 0, sizeof(error));
-    assert(!xr_semantic_plan_verify(plan, error, sizeof(error)) &&
-           strstr(error, "XR_SEM_0019") != NULL &&
-           "SemanticPlan must reject a mismatched append method identity");
-    operation->semantic_immediate = saved_immediate;
-    assert(xr_semantic_plan_verify(plan, error, sizeof(error)));
-    xr_semantic_plan_free(plan);
-    xi_func_free(f);
-    xg_global_evidence_free(&evidence);
 }
 
 TEST(user_method_named_append_remains_ordinary_call) {
@@ -4707,7 +4623,6 @@ int main(void) {
     run_scalar_parse_lowering_separates_typed_error_and_optional_flows();
     run_atomic_methods_lower_to_nothrow_canonical_ops();
     run_user_method_named_fetch_add_remains_ordinary_call();
-    run_string_builder_append_lowers_with_stable_intrinsic_identity();
     run_user_method_named_append_remains_ordinary_call();
     run_exact_integer_bit_methods_lower_to_typed_semantic_ops();
     run_codegen_controls_lower_to_first_class_semantic_ops();

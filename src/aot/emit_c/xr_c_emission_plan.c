@@ -54,9 +54,6 @@
 #define XR_C_CHANNEL_RECV_BOOL_SYMBOL "XR_TO_BOOL"
 #define XR_C_CHANNEL_RECV_RUNE_SYMBOL "XR_TO_RUNE"
 #define XR_C_STRING_BYTE_SLICE_VIEW_SYMBOL "xrt_span_from_string_bytes"
-#define XR_C_STRINGBUILDER_APPEND_RUNE_SYMBOL "xrt_strbuf_append"
-#define XR_C_STRINGBUILDER_TO_STRING_SYMBOL "xrt_strbuf_finish"
-#define XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL "xrt_strbuf_append"
 #define XR_C_STRING_CONCAT_SYMBOL "xrt_str_concat_parts"
 #define XR_C_ADT_ENUM_CONSTRUCTOR_SYMBOL "xrt_enum_aggregate_box"
 #define XR_C_ARRAY_WITH_CAPACITY_SYMBOL "xrt_array_with_capacity_value"
@@ -2639,84 +2636,6 @@ static const char *exact_runtime_constructor_recipe(const XrCEmissionModuleScope
     return runtime_constructor_symbol(shape.kind);
 }
 
-static bool exact_stringbuilder_append_rune_recipe(const XrCEmissionModuleScope *scope,
-                                                   const XrTargetValueRepRecord *binding,
-                                                   uint32_t *receiver_value,
-                                                   uint32_t *argument_value) {
-    const XrSemanticPlan *semantic = scope->semantic;
-    const XrSemanticOperationRecord *operation = binding_operation(scope, binding);
-    uint32_t operand_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
-    uint32_t call_count = 0;
-    const XrTargetCallRecord *calls = xr_target_plan_calls(scope->target, &call_count);
-    if (!semantic || !operation || !binding || !operands ||
-        operation->intrinsic_kind != XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE ||
-        operation->opcode != XI_CALL_METHOD || operation->operand_count != 2 ||
-        operation->operand_begin > operand_count ||
-        operation->operand_count > operand_count - operation->operand_begin ||
-        operation->result_value != binding->semantic_value || operation->result_alias_operand != 0)
-        return false;
-    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
-    const XrSemanticOperandRecord *argument = receiver + 1;
-    const XrTargetCallRecord *match = NULL;
-    for (uint32_t i = scope->call_begin; calls && i < scope->call_end; i++) {
-        const XrTargetCallRecord *call = &calls[i];
-        if (call->result_value != binding->semantic_value ||
-            call->calling_convention != XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_RUNE)
-            continue;
-        if (call->result_value != binding->semantic_value || match ||
-            call->semantic_call_target != XR_SEMANTIC_INDEX_NONE || call->argument_count != 0 ||
-            call->adapter_count != 0 || call->flags != 0 ||
-            call->calling_convention != XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_RUNE ||
-            call->target_kind != XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_RUNE ||
-            call->result_ownership !=
-                (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED
-                     ? XR_TARGET_CALL_BORROW
-                     : XR_TARGET_CALL_RETURN_OWNED))
-            return false;
-        match = call;
-    }
-    if (!match)
-        return false;
-    if (receiver_value)
-        *receiver_value = receiver->value;
-    if (argument_value)
-        *argument_value = argument->value;
-    return true;
-}
-
-static bool exact_stringbuilder_to_string_recipe(const XrCEmissionModuleScope *scope,
-                                                 const XrTargetValueRepRecord *binding,
-                                                 uint32_t *receiver_value) {
-    const XrSemanticPlan *semantic = scope->semantic;
-    const XrSemanticOperationRecord *operation = binding_operation(scope, binding);
-    uint32_t operands_count = 0, calls_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operands_count);
-    const XrTargetCallRecord *calls = xr_target_plan_calls(scope->target, &calls_count);
-    if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_STRINGBUILDER_TO_STRING ||
-        operation->operand_count != 1 || operation->operand_begin >= operands_count ||
-        operation->result_value != binding->semantic_value || operation->result_alias_operand != -1)
-        return false;
-    const XrTargetCallRecord *match = NULL;
-    for (uint32_t i = scope->call_begin; calls && i < scope->call_end; i++) {
-        const XrTargetCallRecord *call = &calls[i];
-        if (call->result_value != binding->semantic_value ||
-            call->calling_convention != XR_TARGET_CALL_CONVENTION_STRINGBUILDER_TO_STRING)
-            continue;
-        if (match || call->target_kind != XR_TARGET_CALL_TARGET_STRINGBUILDER_TO_STRING ||
-            call->semantic_call_target != XR_SEMANTIC_INDEX_NONE || call->argument_count != 0 ||
-            call->adapter_count != 0 || call->flags != 0 ||
-            call->result_ownership != XR_TARGET_CALL_RETURN_OWNED)
-            return false;
-        match = call;
-    }
-    if (!match)
-        return false;
-    if (receiver_value)
-        *receiver_value = operands[operation->operand_begin].value;
-    return true;
-}
-
 static bool exact_string_runes_recipe(const XrCEmissionModuleScope *scope,
                                       const XrTargetValueRepRecord *binding,
                                       uint32_t *receiver_value) {
@@ -3156,43 +3075,6 @@ static bool string_slice_bound_has_exact_projection(const XrCEmissionModuleScope
         binding ? xr_target_plan_machine_rep(scope->target, binding->memory_rep) : NULL;
     return binding && register_rep && memory_rep && register_rep->kind == XR_MACHINE_REP_I64 &&
            memory_rep->kind == XR_MACHINE_REP_I64;
-}
-
-static bool exact_stringbuilder_append_string_recipe(const XrCEmissionModuleScope *scope,
-                                                     const XrTargetValueRepRecord *binding,
-                                                     uint32_t *receiver_value,
-                                                     uint32_t *argument_value) {
-    const XrSemanticPlan *semantic = scope->semantic;
-    const XrSemanticOperationRecord *operation = binding_operation(scope, binding);
-    uint32_t oc = 0, cc = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &oc);
-    const XrTargetCallRecord *calls = xr_target_plan_calls(scope->target, &cc);
-    if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING ||
-        operation->operand_count != 2 || operation->operand_begin + 1u >= oc ||
-        operation->result_value != binding->semantic_value)
-        return false;
-    const XrTargetCallRecord *match = NULL;
-    for (uint32_t i = scope->call_begin; calls && i < scope->call_end; i++) {
-        const XrTargetCallRecord *call = &calls[i];
-        if (call->result_value != binding->semantic_value ||
-            call->calling_convention != XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING)
-            continue;
-        if (match || call->target_kind != XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING ||
-            call->argument_count != 0 || call->flags != 0 ||
-            call->result_ownership !=
-                (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED
-                     ? XR_TARGET_CALL_BORROW
-                     : XR_TARGET_CALL_RETURN_OWNED))
-            return false;
-        match = call;
-    }
-    if (!match)
-        return false;
-    if (receiver_value)
-        *receiver_value = operands[operation->operand_begin].value;
-    if (argument_value)
-        *argument_value = operands[operation->operand_begin + 1u].value;
-    return true;
 }
 
 /* Builder-side recipe collector. It reconstructs the literal authority from
@@ -3796,28 +3678,16 @@ static bool verify_value(const XrCValueEmissionView *value) {
     if (value->materialization == XR_C_VALUE_MATERIALIZATION_RUNTIME_CONSTRUCTOR)
         recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED && value->literal_byte_length == 0 &&
                        value->literal_bytes == NULL && value->recipe_argument_value == UINT32_MAX &&
-                       value->recipe_symbol &&
-                       ((value->recipe_operand_value == UINT32_MAX &&
-                         strcmp(value->recipe_symbol, "xrt_strbuf_new") == 0) ||
-                        (value->recipe_operand_value != UINT32_MAX &&
-                         (strcmp(value->recipe_symbol, "xr_aot_atomic_new_i64") == 0 ||
-                          strcmp(value->recipe_symbol, "xr_aot_atomic_new_f64") == 0 ||
-                          strcmp(value->recipe_symbol, "xr_aot_atomic_new_bool") == 0)));
+                       value->recipe_operand_value != UINT32_MAX && value->recipe_symbol &&
+                       (strcmp(value->recipe_symbol, "xr_aot_atomic_new_i64") == 0 ||
+                        strcmp(value->recipe_symbol, "xr_aot_atomic_new_f64") == 0 ||
+                        strcmp(value->recipe_symbol, "xr_aot_atomic_new_bool") == 0);
     if (value->materialization == XR_C_VALUE_MATERIALIZATION_STRING_BYTE_SLICE_VIEW)
         recipe_valid = value->rep == XR_C_VALUE_REP_VIEW && value->literal_byte_length == 0 &&
                        value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
                        value->recipe_argument_value == UINT32_MAX && value->recipe_symbol &&
                        strcmp(value->recipe_symbol, XR_C_STRING_BYTE_SLICE_VIEW_SYMBOL) == 0;
-    if (value->materialization == XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_RUNE)
-        recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED && value->literal_byte_length == 0 &&
-                       value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
-                       value->recipe_argument_value != UINT32_MAX && value->recipe_symbol &&
-                       strcmp(value->recipe_symbol, XR_C_STRINGBUILDER_APPEND_RUNE_SYMBOL) == 0;
-    if (value->materialization == XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_TO_STRING)
-        recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED && value->literal_byte_length == 0 &&
-                       value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
-                       value->recipe_argument_value == UINT32_MAX && value->recipe_symbol &&
-                       strcmp(value->recipe_symbol, XR_C_STRINGBUILDER_TO_STRING_SYMBOL) == 0;
+
     if (value->materialization == XR_C_VALUE_MATERIALIZATION_STRING_RUNES)
         recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED && value->literal_byte_length == 0 &&
                        value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
@@ -3887,11 +3757,7 @@ static bool verify_value(const XrCValueEmissionView *value) {
                            argument->reserved[2] == 0;
         }
     }
-    if (value->materialization == XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_STRING)
-        recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED &&
-                       value->recipe_operand_value != UINT32_MAX &&
-                       value->recipe_argument_value != UINT32_MAX && value->recipe_symbol &&
-                       strcmp(value->recipe_symbol, XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL) == 0;
+
     if (value->materialization == XR_C_VALUE_MATERIALIZATION_STRING_SLICE_RANGE) {
         /* The complete range recipe was checked above. */
     } else if (value->materialization == XR_C_VALUE_MATERIALIZATION_STRING_CONCAT) {
@@ -4499,13 +4365,6 @@ static bool emission_plan_verify_scoped(const XrCEmissionModuleScope *module_sco
         uint32_t expected_view_source = UINT32_MAX;
         bool expected_string_byte_slice_view =
             verify_exact_string_byte_slice_view_recipe(&scope, binding, &expected_view_source);
-        uint32_t expected_append_receiver = UINT32_MAX;
-        uint32_t expected_append_argument = UINT32_MAX;
-        bool expected_stringbuilder_append = exact_stringbuilder_append_rune_recipe(
-            &scope, binding, &expected_append_receiver, &expected_append_argument);
-        uint32_t expected_finish_receiver = UINT32_MAX;
-        bool expected_stringbuilder_finish =
-            exact_stringbuilder_to_string_recipe(&scope, binding, &expected_finish_receiver);
         uint32_t expected_string_runes_receiver = UINT32_MAX;
         bool expected_string_runes =
             exact_string_runes_recipe(&scope, binding, &expected_string_runes_receiver);
@@ -4535,10 +4394,6 @@ static bool emission_plan_verify_scoped(const XrCEmissionModuleScope *module_sco
         bool expected_string_slice_range = exact_string_slice_range_recipe(
             &scope, binding, &expected_string_slice_receiver, &expected_string_slice_start,
             &expected_string_slice_end);
-        uint32_t expected_append_string_receiver = UINT32_MAX,
-                 expected_append_string_argument = UINT32_MAX;
-        bool expected_append_string = exact_stringbuilder_append_string_recipe(
-            &scope, binding, &expected_append_string_receiver, &expected_append_string_argument);
         const XrSemanticOperandRecord *expected_concat_arguments = NULL;
         uint16_t expected_concat_argument_count = 0;
         bool expected_string_concat = exact_string_concat_recipe(
@@ -4605,7 +4460,6 @@ static bool emission_plan_verify_scoped(const XrCEmissionModuleScope *module_sco
             : expected_receive_symbol         ? XR_C_VALUE_MATERIALIZATION_CHANNEL_RECV_PAYLOAD
             : expected_runtime_constructor    ? XR_C_VALUE_MATERIALIZATION_RUNTIME_CONSTRUCTOR
             : expected_string_byte_slice_view ? XR_C_VALUE_MATERIALIZATION_STRING_BYTE_SLICE_VIEW
-            : expected_stringbuilder_append   ? XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_RUNE
             : expected_iterator_rune_has_next ? XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_HAS_NEXT
             : expected_iterator_rune_next     ? XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NEXT
             : expected_iterator_rune_nth      ? XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NTH
@@ -4614,8 +4468,6 @@ static bool emission_plan_verify_scoped(const XrCEmissionModuleScope *module_sco
             : expected_string_slice_range     ? XR_C_VALUE_MATERIALIZATION_STRING_SLICE_RANGE
             : expected_rune_is_whitespace     ? XR_C_VALUE_MATERIALIZATION_RUNE_IS_WHITESPACE
             : expected_string_runes           ? XR_C_VALUE_MATERIALIZATION_STRING_RUNES
-            : expected_stringbuilder_finish   ? XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_TO_STRING
-            : expected_append_string ? XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_STRING
             : expected_string_concat ? XR_C_VALUE_MATERIALIZATION_STRING_CONCAT
                                      : XR_C_VALUE_MATERIALIZATION_NONE;
         uint32_t expected_operand =
@@ -4628,7 +4480,6 @@ static bool emission_plan_verify_scoped(const XrCEmissionModuleScope *module_sco
             : expected_channel                ? expected_capacity
             : expected_receive_symbol         ? expected_receiver
             : expected_string_byte_slice_view ? expected_view_source
-            : expected_stringbuilder_append   ? expected_append_receiver
             : expected_iterator_rune_has_next ? expected_iterator_rune_has_next_receiver
             : expected_iterator_rune_next     ? expected_iterator_rune_next_receiver
             : expected_iterator_rune_nth      ? expected_iterator_rune_nth_receiver
@@ -4637,13 +4488,9 @@ static bool emission_plan_verify_scoped(const XrCEmissionModuleScope *module_sco
             : expected_string_slice_range     ? expected_string_slice_receiver
             : expected_rune_is_whitespace     ? expected_rune_is_whitespace_receiver
             : expected_string_runes           ? expected_string_runes_receiver
-            : expected_stringbuilder_finish   ? expected_finish_receiver
-            : expected_append_string          ? expected_append_string_receiver
                                               : UINT32_MAX;
         uint32_t expected_argument = expected_i64_overflow ? expected_overflow.argument_value
                                      : expected_typed_rule ? typed_location.element_value
-                                     : expected_stringbuilder_append ? expected_append_argument
-                                     : expected_append_string     ? expected_append_string_argument
                                      : expected_iterator_rune_nth ? expected_iterator_rune_nth_index
                                                                   : UINT32_MAX;
         const char *expected_symbol =
@@ -4654,7 +4501,6 @@ static bool emission_plan_verify_scoped(const XrCEmissionModuleScope *module_sco
             : expected_receive_symbol         ? expected_receive_symbol
             : expected_runtime_constructor    ? expected_constructor_symbol
             : expected_string_byte_slice_view ? XR_C_STRING_BYTE_SLICE_VIEW_SYMBOL
-            : expected_stringbuilder_append   ? XR_C_STRINGBUILDER_APPEND_RUNE_SYMBOL
             : expected_iterator_rune_has_next ? XR_C_ITERATOR_RUNE_HAS_NEXT_SYMBOL
             : expected_iterator_rune_next     ? XR_C_ITERATOR_RUNE_NEXT_SYMBOL
             : expected_iterator_rune_nth      ? XR_C_ITERATOR_RUNE_NTH_SYMBOL
@@ -4663,8 +4509,6 @@ static bool emission_plan_verify_scoped(const XrCEmissionModuleScope *module_sco
             : expected_string_slice_range     ? XR_C_STRING_SLICE_RANGE_SYMBOL
             : expected_rune_is_whitespace     ? XR_C_RUNE_IS_WHITESPACE_SYMBOL
             : expected_string_runes           ? XR_C_STRING_RUNES_SYMBOL
-            : expected_stringbuilder_finish   ? XR_C_STRINGBUILDER_TO_STRING_SYMBOL
-            : expected_append_string          ? XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL
             : expected_string_concat          ? XR_C_STRING_CONCAT_SYMBOL
                                               : NULL;
         if (expected_array_fill_member) {
@@ -4990,10 +4834,6 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
         XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE |
         XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE | XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE |
         XR_TARGET_FAMILY_SOURCE_IMPORT_STORAGE | XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE |
-        XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE |
-        XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |
-        XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |
-        XR_TARGET_FAMILY_STRINGBUILDER_CLEAR_STORAGE |
         XR_TARGET_FAMILY_NATIVE_MODULE_NAMESPACE_STORAGE |
         XR_TARGET_FAMILY_JSON_NAMESPACE_CODEC_STORAGE |
         XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_BOUNDARY_STORAGE |
@@ -5726,25 +5566,7 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
                         value->recipe_operand_value = source_value;
                         value->recipe_symbol = owned;
                     } else {
-                        uint32_t receiver = UINT32_MAX;
-                        uint32_t argument = UINT32_MAX;
-                        if (exact_stringbuilder_append_rune_recipe(&scope, binding, &receiver,
-                                                                   &argument)) {
-                            size_t symbol_length = sizeof(XR_C_STRINGBUILDER_APPEND_RUNE_SYMBOL);
-                            char *owned = (char *) xr_malloc(symbol_length);
-                            if (!owned) {
-                                xr_c_emission_plan_free(plan);
-                                return emission_error(
-                                    error, error_size, "XR_EXEC_5003",
-                                    "StringBuilder append recipe allocation failed");
-                            }
-                            memcpy(owned, XR_C_STRINGBUILDER_APPEND_RUNE_SYMBOL, symbol_length);
-                            value->materialization =
-                                XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_RUNE;
-                            value->recipe_operand_value = receiver;
-                            value->recipe_argument_value = argument;
-                            value->recipe_symbol = owned;
-                        }
+
                         if (value->materialization == XR_C_VALUE_MATERIALIZATION_NONE) {
                             uint32_t receiver = UINT32_MAX;
                             if (exact_string_runes_recipe(&scope, binding, &receiver)) {
@@ -5865,44 +5687,6 @@ static bool emission_plan_build_scoped(const XrCEmissionModuleScope *module_scop
                                 value->materialization =
                                     XR_C_VALUE_MATERIALIZATION_RUNE_IS_WHITESPACE;
                                 value->recipe_operand_value = receiver;
-                                value->recipe_symbol = owned;
-                            }
-                        }
-                        if (value->materialization == XR_C_VALUE_MATERIALIZATION_NONE) {
-                            uint32_t receiver = UINT32_MAX;
-                            if (exact_stringbuilder_to_string_recipe(&scope, binding, &receiver)) {
-                                size_t symbol_length = sizeof(XR_C_STRINGBUILDER_TO_STRING_SYMBOL);
-                                char *owned = (char *) xr_malloc(symbol_length);
-                                if (!owned) {
-                                    xr_c_emission_plan_free(plan);
-                                    return emission_error(
-                                        error, error_size, "XR_EXEC_5003",
-                                        "StringBuilder finish recipe allocation failed");
-                                }
-                                memcpy(owned, XR_C_STRINGBUILDER_TO_STRING_SYMBOL, symbol_length);
-                                value->materialization =
-                                    XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_TO_STRING;
-                                value->recipe_operand_value = receiver;
-                                value->recipe_symbol = owned;
-                            }
-                        }
-                        if (value->materialization == XR_C_VALUE_MATERIALIZATION_NONE) {
-                            uint32_t receiver = UINT32_MAX, argument = UINT32_MAX;
-                            if (exact_stringbuilder_append_string_recipe(&scope, binding, &receiver,
-                                                                         &argument)) {
-                                size_t n = sizeof(XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL);
-                                char *owned = (char *) xr_malloc(n);
-                                if (!owned) {
-                                    xr_c_emission_plan_free(plan);
-                                    return emission_error(
-                                        error, error_size, "XR_EXEC_5003",
-                                        "StringBuilder string append recipe allocation failed");
-                                }
-                                memcpy(owned, XR_C_STRINGBUILDER_APPEND_STRING_SYMBOL, n);
-                                value->materialization =
-                                    XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_STRING;
-                                value->recipe_operand_value = receiver;
-                                value->recipe_argument_value = argument;
                                 value->recipe_symbol = owned;
                             }
                         }

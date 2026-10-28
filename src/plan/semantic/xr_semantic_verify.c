@@ -1672,8 +1672,6 @@ static bool build_definition_map(const XrSemanticPlan *plan, uint32_t **out,
     return true;
 }
 
-
-
 static bool semantic_type_is_exact_string(const XrSemanticTypeRecord *type) {
     return type && type->kind == XR_KIND_STRING && type->builtin_type == XR_TID_NULL &&
            type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
@@ -1774,10 +1772,6 @@ static bool verify_string_byte_slice_view(const XrSemanticPlan *plan,
     }
     return exact;
 }
-
-
-
-
 
 static bool verify_string_runes(const XrSemanticPlan *plan,
                                 const XrSemanticOperationRecord *operation, char *error,
@@ -1930,8 +1924,6 @@ static bool verify_string_slice_range(const XrSemanticPlan *plan,
            report(error, error_size, "XR_SEM_0019",
                   "String.slice(start, end) authority is not exact");
 }
-
-
 
 /* Recomputed from the frozen rows alone.  A class type record whose source
  * class index and identity are both absent can only be a compiler-owned
@@ -2486,9 +2478,37 @@ static bool verify_native_module_scalar_call(const XrSemanticPlan *plan,
                                          "native module scalar call authority is not exact");
 }
 
-
-
-
+static bool semantic_intrinsic_supported(uint32_t kind) {
+    switch (kind) {
+        case XR_SEM_INTRINSIC_NONE:
+        case XR_SEM_INTRINSIC_STRING_BYTE_SLICE_VIEW:
+        case XR_SEM_INTRINSIC_JSON_NAMESPACE_CODEC:
+        case XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR:
+        case XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL:
+        case XR_SEM_INTRINSIC_ARRAY_WITH_CAPACITY:
+        case XR_SEM_INTRINSIC_ARRAY_FILLED_NEW:
+        case XR_SEM_INTRINSIC_STRING_RUNES:
+        case XR_SEM_INTRINSIC_ITERATOR_RUNE_HAS_NEXT:
+        case XR_SEM_INTRINSIC_ITERATOR_RUNE_NEXT:
+        case XR_SEM_INTRINSIC_RUNE_TO_UINT32:
+        case XR_SEM_INTRINSIC_RUNE_IS_WHITESPACE:
+        case XR_SEM_INTRINSIC_STRING_SLICE_RANGE:
+        case XR_SEM_INTRINSIC_ARRAY_FILL_SCALAR:
+        case XR_SEM_INTRINSIC_ARRAY_HOF:
+        case XR_SEM_INTRINSIC_PANIC_INFO_CONSTRUCTOR:
+        case XR_SEM_INTRINSIC_ITERATOR_RUNE_NTH:
+        case XR_SEM_INTRINSIC_RUNE_TO_STRING:
+        case XR_SEM_INTRINSIC_MAP_ENTRIES_ITERATOR:
+        case XR_SEM_INTRINSIC_MAP_ENTRY_ITERATOR_HAS_NEXT:
+        case XR_SEM_INTRINSIC_MAP_ENTRY_ITERATOR_NEXT:
+        case XR_SEM_INTRINSIC_ASSERTION:
+        case XR_SEM_INTRINSIC_OUTPUT:
+        case XR_SEM_INTRINSIC_BUILTIN_RUNTIME_METHOD:
+            return true;
+        default:
+            return false;
+    }
+}
 
 static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *edge_mask,
                                      uint32_t *definitions, uint32_t value_count, char *error,
@@ -2551,13 +2571,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
               plan->functions[operation->callable_function].parent != operation->function))) {
             return report(error, error_size, "XR_SEM_0015", "operation record is invalid");
         }
-        if (operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE ||
-            operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_TO_STRING ||
-            operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING)
-            return report(error, error_size, "XR_SEM_0019", "retired text-builder intrinsic");
-        if (operation->opcode == XI_CALL_BUILTIN && operation->metadata_count == 1 &&
-            strcmp(plan->metadata[operation->metadata_begin], "StringBuilder") == 0)
-            return report(error, error_size, "XR_SEM_0019", "retired text-builder constructor");
+        if (!semantic_intrinsic_supported(operation->intrinsic_kind))
+            return report(error, error_size, "XR_SEM_0019", "operation intrinsic is unsupported");
         if (import_ref) {
             if (operation->metadata_count != 2 ||
                 operation->metadata_begin > plan->metadata_count ||

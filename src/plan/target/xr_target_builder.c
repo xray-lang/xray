@@ -1136,7 +1136,6 @@ static bool index_value_operations(const XrSemanticPlan *plan,
     return true;
 }
 
-
 /* A direct-local call returns an owned String only when the callee, the call
  * operation, and the result type all agree. The result must be a fresh owner:
  * an aliased or parameter-forwarded return would need a borrow whose extent
@@ -1256,18 +1255,6 @@ semantic_direct_local_callee_for_operation(const XrSemanticPlan *plan, uint32_t 
     }
     return callee;
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 static bool semantic_array_reserve_is_exact(const XrSemanticPlan *plan,
                                             const XrSemanticOperationRecord *operation,
@@ -3788,8 +3775,6 @@ static bool note_runtime_constructor_storage_value(XrTargetBuildContext *builder
     return true;
 }
 
-
-
 static bool note_string_runes_storage_value(XrTargetBuildContext *builder,
                                             XrTargetValueStorageAnalysis *analysis,
                                             uint32_t semantic_operation, char *error,
@@ -3977,8 +3962,6 @@ static bool note_rune_to_string_storage_value(XrTargetBuildContext *builder,
     analysis->used_types[operation->result_type] = 1;
     return true;
 }
-
-
 
 static bool note_json_namespace_codec_storage_value(XrTargetBuildContext *builder,
                                                     XrTargetValueStorageAnalysis *analysis,
@@ -6690,10 +6673,6 @@ static bool builder_add_range_slice_view_storage(XrTargetBuildContext *builder, 
     return true;
 }
 
-
-
-
-
 static bool builder_add_string_runes_storage(XrTargetBuildContext *builder, char *error,
                                              size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE, error,
@@ -6789,8 +6768,6 @@ static bool builder_add_rune_to_string_storage(XrTargetBuildContext *builder, ch
     builder->completed_family_mask |= XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE;
     return true;
 }
-
-
 
 static bool builder_add_json_namespace_codec_storage(XrTargetBuildContext *builder, char *error,
                                                      size_t error_size) {
@@ -7222,8 +7199,6 @@ static bool builder_add_panic_info_constructor_storage(XrTargetBuildContext *bui
     builder->completed_family_mask |= XR_TARGET_FAMILY_PANIC_INFO_CONSTRUCTOR_STORAGE;
     return true;
 }
-
-
 
 /* Which carrier a String occupies at a direct-local call boundary. Both sides
  * of the boundary hold the same outer XrValue -- a String has no other storage
@@ -9639,8 +9614,6 @@ static bool collect_string_byte_slice_view_call_intent(XrTargetBuildContext *bui
     return append_call_intent(builder, &call, error, error_size);
 }
 
-
-
 static bool collect_string_runes_call_intent(XrTargetBuildContext *builder,
                                              uint32_t operation_index,
                                              const XrSemanticOperationRecord *operation,
@@ -10037,12 +10010,6 @@ static bool collect_string_slice_range_call_intent(XrTargetBuildContext *builder
     (void) end;
     return append_call_intent(builder, &call, error, error_size);
 }
-
-
-
-
-
-
 
 static bool collect_json_namespace_codec_call_intent(XrTargetBuildContext *builder,
                                                      uint32_t operation_index,

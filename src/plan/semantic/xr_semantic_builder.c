@@ -1446,7 +1446,6 @@ XR_FUNC bool xr_semantic_source_types_equal(
     return equal;
 }
 
-
 /* This producer proof is deliberately limited to a captured-free scalar
  * identity/constant closure. The artifact verifier reconstructs its own
  * PARAM/CONST/RETURN proof from frozen operations; complete bits alone grant
@@ -4130,8 +4129,6 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     return true;
 }
 
-
-
 static bool xi_string_runes_exact(const XiValue *value) {
     const XiValue *receiver = value && value->nargs == 1 ? value->args[0] : NULL;
     const XrType *receiver_type = receiver ? receiver->type : NULL;
@@ -4243,22 +4240,6 @@ static bool xi_string_slice_range_exact(const XiValue *value) {
            !start->type->is_nullable && !end->type->is_nullable &&
            start->type->scalar_rep == XR_NATIVE_I64 && end->type->scalar_rep == XR_NATIVE_I64;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /* `Array<T>` is a compiler-owned container: the array kind is produced only by
  * the builtin container type, never by a declaration, and the language admits
@@ -4821,8 +4802,6 @@ static bool semantic_json_namespace_codec_exact(const XrSemanticBuildContext *ct
            argument->flags == XR_SEM_OPERAND_CALL_CONTRACT && record->result_alias_operand == -1 &&
            record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED;
 }
-
-
 
 static bool append_operation_allocation_identity(XrSemanticBuildContext *ctx,
                                                  XrSemanticOperationRecord *record) {

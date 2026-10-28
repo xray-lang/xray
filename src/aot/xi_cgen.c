@@ -9449,15 +9449,6 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
                   (runtime_symbol == XI_METHOD_SYMBOL_REPLACE ||
                    runtime_symbol == XI_METHOD_SYMBOL_REPLACEALL))))
                 return true;
-            XrCValueEmissionView builder_append = {0};
-            uint32_t builder_argument = XR_SEMANTIC_INDEX_NONE;
-            if (arg_index == 1 && user->nargs == 2 &&
-                cg_value_emission_view(ctx, f, user, &builder_append) == CG_VALUE_EMISSION_FOUND &&
-                builder_append.materialization ==
-                    XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_STRING &&
-                cg_value_semantic_id(ctx, f, user->args[1], &builder_argument) &&
-                builder_append.recipe_argument_value == builder_argument)
-                return true;
             XrCValueEmissionView enum_constructor = {0};
             if (cg_adt_enum_constructor_emission_view(ctx, f, user, &enum_constructor))
                 return arg_index > 0;
@@ -11462,7 +11453,6 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
               xi_err_check_producer(f, v) == mt_call)))
             continue;
         bool error_before_value = ctx->error;
-        xicgen_emit_stringbuilder_literal_append_reserve(ctx, out, blk, i);
         emit_value_stmt(ctx, out, f, v, prefix);
         if (!error_before_value && ctx->error && getenv("XRAY_AOT_REFINE_TRACE"))
             fprintf(stderr, "[xi_cgen] first failing value function=%s block=%u value=%u op=%s\n",

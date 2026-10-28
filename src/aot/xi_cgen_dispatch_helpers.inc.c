@@ -7570,8 +7570,6 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         fprintf(out, "%s(", emission.recipe_symbol);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
-    } else if (strcmp(bn, "StringBuilder") == 0) {
-        xicgen_emit_runtime_constructor(ctx, out, f, v);
     } else if (strcmp(bn, "map_new") == 0) {
         xicgen_map_new(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "set_new") == 0) {
@@ -8943,361 +8941,6 @@ static bool xicgen_emit_planned_direct_method(XiCgenCtx *ctx, FILE *out, const X
     return xicgen_emit_direct_method(ctx, out, f, v, prefix, target_func, target_prefix);
 }
 
-static bool xicgen_is_stringbuilder_receiver(const XiValue *v) {
-    return xr_type_is_builtin_named_class(v ? v->type : NULL, "StringBuilder");
-}
-
-static const XaotCapacityPlan *xicgen_stringbuilder_capacity_plan(XiCgenCtx *ctx,
-                                                                  const XiValue *v) {
-    if (!ctx || !v || v->xg_capacity_op_id == XG_NO_ID)
-        return NULL;
-    return xaot_bundle_find_capacity_plan(cg_ctx_aot_bundle(ctx),
-                                          (XgCapacityOpId) v->xg_capacity_op_id);
-}
-
-static const XiValue *xicgen_stringbuilder_append_arg(const XiValue *v) {
-    const XiValue *arg = v && v->nargs >= 2 ? v->args[1] : NULL;
-    return cg_unwrap_identity_value(arg);
-}
-
-/* UTF-8 byte length of a Unicode scalar; 0 for surrogate / out-of-range code
- * points. Mirrors xrt_rune_utf8_encode's accepted range so the compile-time
- * reserve stays byte-exact with the runtime append. */
-static int xicgen_rune_scalar_utf8_len(int64_t cp) {
-    if (cp < 0)
-        return 0;
-    if (cp <= 0x7F)
-        return 1;
-    if (cp <= 0x7FF)
-        return 2;
-    if (cp <= 0xFFFF)
-        return (cp >= 0xD800 && cp <= 0xDFFF) ? 0 : 3;
-    if (cp <= 0x10FFFF)
-        return 4;
-    return 0;
-}
-
-/* Exact formatted byte length for a StringBuilder.append literal argument whose
- * length is a compile-time constant: string, rune, bool, or null. out_is_string
- * distinguishes the string fast path (append_string_no_grow) from the scalar
- * path (append_scalar_no_grow). Kept in sync with the producer's
- * body_string_builder_append_has_exact_count and the runtime formatting. */
-static bool xicgen_stringbuilder_exact_append_len(const XiValue *arg, int64_t *out_length,
-                                                  bool *out_is_string) {
-    if (!arg || arg->op != XI_CONST || !arg->type)
-        return false;
-    switch (arg->type->kind) {
-        case XR_KIND_STRING: {
-            const char *literal = xicgen_static_string_const(arg);
-            if (!literal)
-                return false;
-            size_t length = strlen(literal);
-            if (length > (size_t) INT64_MAX)
-                return false;
-            if (out_length)
-                *out_length = (int64_t) length;
-            if (out_is_string)
-                *out_is_string = true;
-            return true;
-        }
-        case XR_KIND_RUNE: {
-            int n = xicgen_rune_scalar_utf8_len(arg->aux_int);
-            if (n <= 0)
-                return false;
-            if (out_length)
-                *out_length = n;
-            if (out_is_string)
-                *out_is_string = false;
-            return true;
-        }
-        case XR_KIND_BOOL:
-            if (out_length)
-                *out_length = arg->aux_int ? 4 : 5;
-            if (out_is_string)
-                *out_is_string = false;
-            return true;
-        case XR_KIND_NULL:
-            if (out_length)
-                *out_length = 4;
-            if (out_is_string)
-                *out_is_string = false;
-            return true;
-        default:
-            return false;
-    }
-}
-
-static bool xicgen_stringbuilder_literal_append_plan(XiCgenCtx *ctx, const XiValue *v,
-                                                     int64_t *out_length) {
-    const XaotCapacityPlan *plan = xicgen_stringbuilder_capacity_plan(ctx, v);
-    const XiValue *arg = xicgen_stringbuilder_append_arg(v);
-    const uint32_t required = XAOT_CAPACITY_EV_GLOBAL_ROW | XAOT_CAPACITY_EV_RECEIVER_TYPE |
-                              XAOT_CAPACITY_EV_ELEM_TYPE | XAOT_CAPACITY_EV_EXACT_COUNT |
-                              XAOT_CAPACITY_EV_MAY_GROW;
-    int64_t length = 0;
-    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs != 2 ||
-        !xicgen_is_stringbuilder_receiver(v->args[0]) ||
-        !cg_method_name_is(v, "append", cg_method_sym("append")) || !plan ||
-        plan->sequence_kind != XG_SEQ_STRING_BUILDER || plan->op_kind != XG_CAPACITY_APPEND ||
-        plan->action != XAOT_CAPACITY_RESERVE_ONCE || plan->count_expr_id == 0 ||
-        (plan->evidence & required) != required ||
-        !xicgen_stringbuilder_exact_append_len(arg, &length, NULL))
-        return false;
-    if (out_length)
-        *out_length = length;
-    return true;
-}
-
-static const XiValue *xicgen_stringbuilder_receiver_origin(const XiValue *receiver) {
-    const XiValue *cur = receiver;
-    for (uint32_t depth = 0; cur && depth < 64; depth++) {
-        cur = cg_unwrap_identity_value(cur);
-        if (!cur || (cur->op != XI_CALL_METHOD && cur->op != XI_CALL_METHOD_DIRECT) ||
-            cur->nargs < 1 || !xicgen_is_stringbuilder_receiver(cur->args[0]) ||
-            !cg_method_name_is(cur, "append", cg_method_sym("append")))
-            return cur;
-        cur = cur->args[0];
-    }
-    return cur;
-}
-
-static bool xicgen_stringbuilder_chain_gap_value(const XiValue *v) {
-    return v &&
-           (v->op == XI_CONST || v->op == XI_ERR_CHECK || v->op == XI_BOX || v->op == XI_UNBOX ||
-            xi_op_is_identity_forward(v->op) || xi_copy_is_identity_alias(v));
-}
-
-static bool xicgen_stringbuilder_previous_append_in_run(XiCgenCtx *ctx, const XiBlock *blk,
-                                                        uint32_t index,
-                                                        const XiValue *receiver_origin) {
-    for (uint32_t i = index; i > 0; i--) {
-        const XiValue *candidate = blk->values[i - 1];
-        if (!candidate || xicgen_stringbuilder_chain_gap_value(candidate))
-            continue;
-        int64_t ignored = 0;
-        return xicgen_stringbuilder_literal_append_plan(ctx, candidate, &ignored) &&
-               xicgen_stringbuilder_receiver_origin(candidate->args[0]) == receiver_origin;
-    }
-    return false;
-}
-
-static void xicgen_emit_stringbuilder_literal_append_reserve(XiCgenCtx *ctx, FILE *out,
-                                                             const XiBlock *blk, uint32_t index) {
-    if (!ctx || !out || !blk || index >= blk->nvalues)
-        return;
-    const XiValue *first = blk->values[index];
-    int64_t total = 0;
-    if (!xicgen_stringbuilder_literal_append_plan(ctx, first, &total))
-        return;
-    const XiValue *receiver_origin = xicgen_stringbuilder_receiver_origin(first->args[0]);
-    if (!receiver_origin ||
-        xicgen_stringbuilder_previous_append_in_run(ctx, blk, index, receiver_origin))
-        return;
-
-    for (uint32_t i = index + 1; i < blk->nvalues; i++) {
-        const XiValue *candidate = blk->values[i];
-        if (!candidate || xicgen_stringbuilder_chain_gap_value(candidate))
-            continue;
-        int64_t length = 0;
-        if (!xicgen_stringbuilder_literal_append_plan(ctx, candidate, &length) ||
-            xicgen_stringbuilder_receiver_origin(candidate->args[0]) != receiver_origin)
-            break;
-        if (XR_UNLIKELY(length > INT64_MAX - total)) {
-            ctx->error = true;
-            fprintf(stderr,
-                    "[xi_cgen] ERROR: StringBuilder literal append reserve overflow at line %u\n",
-                    (unsigned) first->line);
-            return;
-        }
-        total += length;
-    }
-
-    fprintf(out, "    xrt_strbuf_reserve_extra_exact(");
-    emit_value_as_rep_ctx(ctx, out, first->args[0], XR_REP_TAGGED);
-    fprintf(out, ", INT64_C(%" PRId64 "));\n", total);
-}
-
-static bool xicgen_emit_stringbuilder_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                             const XiValue *v, const char *method, uint16_t nargs) {
-    const XrType *recv_type = v->nargs > 0 && v->args[0] ? v->args[0]->type : NULL;
-    if (!xr_type_is_builtin_named_class(recv_type, "StringBuilder") || !method)
-        return false;
-    const XaotCapacityPlan *plan = xicgen_stringbuilder_capacity_plan(ctx, v);
-
-    if (strcmp(method, "toString") == 0 && nargs == 0) {
-        XrCValueEmissionView authority = {0};
-        uint32_t receiver_value = XR_SEMANTIC_INDEX_NONE;
-        if (!cg_value_semantic_id(ctx, f, v->args[0], &receiver_value) ||
-            cg_value_emission_view(ctx, f, v, &authority) != CG_VALUE_EMISSION_FOUND ||
-            authority.materialization != XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_TO_STRING ||
-            authority.recipe_operand_value != receiver_value ||
-            authority.recipe_argument_value != UINT32_MAX || !authority.recipe_symbol ||
-            strcmp(authority.recipe_symbol, "xrt_strbuf_finish") != 0) {
-            ctx->error = true;
-            fprintf(stderr,
-                    "[xi_cgen] ERROR: StringBuilder.toString lacks immutable emission authority\n");
-            emit_codegen_abort_expr(out);
-            return true;
-        }
-        if (!plan && v->xg_capacity_op_id == XG_NO_ID)
-            return false;
-        const uint32_t required = XAOT_CAPACITY_EV_GLOBAL_ROW | XAOT_CAPACITY_EV_RECEIVER_TYPE |
-                                  XAOT_CAPACITY_EV_ELEM_TYPE;
-        if (!plan || plan->sequence_kind != XG_SEQ_STRING_BUILDER ||
-            plan->op_kind != XG_CAPACITY_TO_STRING ||
-            plan->action != XAOT_CAPACITY_BUILDER_FINISH ||
-            (plan->evidence & required) != required ||
-            plan->unproven_reason != XAOT_CAPACITY_UNPROVEN_NONE) {
-            ctx->error = true;
-            fprintf(stderr,
-                    "[xi_cgen] ERROR: StringBuilder.toString lacks verified builder-finish plan at "
-                    "line %u\n",
-                    (unsigned) v->line);
-            emit_codegen_abort_expr(out);
-            return true;
-        }
-        const char *suffix =
-            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        /* xrt_strbuf_finish allocates, so a result nobody consumes has to be
-         * released rather than cast away.  Same ownership rule as the symbol
-         * dispatchers; see xrt_method_0. */
-        bool discarded = cg_unused_call_result_emits_statement(ctx, f, v);
-        fprintf(out, discarded ? "xrt_discard_owned(xrt_strbuf_finish(" : "xrt_strbuf_finish(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, discarded ? "))" : ")");
-        emit_conversion_suffix(out, suffix);
-        return true;
-    }
-    if (strcmp(method, "clear") == 0 && nargs == 0) {
-        if (!plan && v->xg_capacity_op_id == XG_NO_ID)
-            return false;
-        const uint32_t required = XAOT_CAPACITY_EV_GLOBAL_ROW | XAOT_CAPACITY_EV_RECEIVER_TYPE |
-                                  XAOT_CAPACITY_EV_ELEM_TYPE;
-        if (!plan || plan->sequence_kind != XG_SEQ_STRING_BUILDER ||
-            plan->op_kind != XG_CAPACITY_CLEAR || plan->action != XAOT_CAPACITY_CLEAR_DIRECT ||
-            (plan->evidence & required) != required ||
-            plan->unproven_reason != XAOT_CAPACITY_UNPROVEN_NONE) {
-            ctx->error = true;
-            fprintf(stderr,
-                    "[xi_cgen] ERROR: StringBuilder.clear lacks verified direct-clear plan at line "
-                    "%u\n",
-                    (unsigned) v->line);
-            emit_codegen_abort_expr(out);
-            return true;
-        }
-        /* Answering with the receiver hands back a reference the caller owns,
-         * so it is retained exactly like the XRT_SYM_CLEAR arm of
-         * xrt_method_0.  A discarded result would only be retained and
-         * released again, so it skips the pair outright. */
-        bool discarded = cg_unused_call_result_emits_statement(ctx, f, v);
-        fprintf(out, "(xrt_strbuf_clear(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, "), ");
-        if (discarded) {
-            fprintf(out, "XR_NULL_VAL)");
-            return true;
-        }
-        fprintf(out, "xrt_method_return_self(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, "))");
-        return true;
-    }
-    if (strcmp(method, "append") != 0 || nargs != 1)
-        return false;
-
-    if (v->args[1] && v->args[1]->type && v->args[1]->type->kind == XR_KIND_RUNE) {
-        XrCValueEmissionView append_emission = {0};
-        uint32_t receiver_semantic = XR_SEMANTIC_INDEX_NONE;
-        uint32_t argument_semantic = XR_SEMANTIC_INDEX_NONE;
-        if (cg_value_emission_view(ctx, f, v, &append_emission) != CG_VALUE_EMISSION_FOUND ||
-            !cg_value_semantic_id(ctx, f, v->args[0], &receiver_semantic) ||
-            !cg_value_semantic_id(ctx, f, v->args[1], &argument_semantic) ||
-            append_emission.materialization !=
-                XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_RUNE ||
-            append_emission.recipe_operand_value != receiver_semantic ||
-            append_emission.recipe_argument_value != argument_semantic ||
-            !append_emission.recipe_symbol ||
-            strcmp(append_emission.recipe_symbol, "xrt_strbuf_append") != 0) {
-            ctx->error = true;
-            fprintf(
-                stderr,
-                "[xi_cgen] ERROR: StringBuilder.append(rune) lacks immutable emission authority\n");
-            emit_codegen_abort_expr(out);
-            return true;
-        }
-    }
-    if (v->args[1] && v->args[1]->type && v->args[1]->type->kind == XR_KIND_STRING) {
-        XrCValueEmissionView authority = {0};
-        uint32_t receiver = XR_SEMANTIC_INDEX_NONE, argument = XR_SEMANTIC_INDEX_NONE;
-        if (cg_value_emission_view(ctx, f, v, &authority) != CG_VALUE_EMISSION_FOUND ||
-            !cg_value_semantic_id(ctx, f, v->args[0], &receiver) ||
-            !cg_value_semantic_id(ctx, f, v->args[1], &argument) ||
-            authority.materialization != XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_STRING ||
-            authority.recipe_operand_value != receiver ||
-            authority.recipe_argument_value != argument || !authority.recipe_symbol ||
-            strcmp(authority.recipe_symbol, "xrt_strbuf_append") != 0) {
-            ctx->error = true;
-            fprintf(stderr, "[xi_cgen] ERROR: StringBuilder.append(string) lacks immutable "
-                            "emission authority\n");
-            emit_codegen_abort_expr(out);
-            return true;
-        }
-    }
-
-    int64_t literal_length = 0;
-    bool literal_plan = xicgen_stringbuilder_literal_append_plan(ctx, v, &literal_length);
-    bool literal_is_string = false;
-    if (literal_plan)
-        xicgen_stringbuilder_exact_append_len(xicgen_stringbuilder_append_arg(v), NULL,
-                                              &literal_is_string);
-    (void) literal_length;
-    if (v->xg_capacity_op_id != XG_NO_ID &&
-        (!plan || plan->sequence_kind != XG_SEQ_STRING_BUILDER ||
-         plan->op_kind != XG_CAPACITY_APPEND)) {
-        ctx->error = true;
-        fprintf(
-            stderr,
-            "[xi_cgen] ERROR: StringBuilder.append has stale capacity-plan binding at line %u\n",
-            (unsigned) v->line);
-        emit_codegen_abort_expr(out);
-        return true;
-    }
-    if (plan && plan->action == XAOT_CAPACITY_RESERVE_ONCE && !literal_plan) {
-        ctx->error = true;
-        fprintf(stderr,
-                "[xi_cgen] ERROR: StringBuilder.append reserve plan lacks an exact literal at line "
-                "%u\n",
-                (unsigned) v->line);
-        emit_codegen_abort_expr(out);
-        return true;
-    }
-    if (plan && plan->action != XAOT_CAPACITY_RESERVE_ONCE &&
-        plan->action != XAOT_CAPACITY_CHECKED_GROW) {
-        ctx->error = true;
-        fprintf(stderr,
-                "[xi_cgen] ERROR: unsupported StringBuilder.append capacity plan at line %u\n",
-                (unsigned) v->line);
-        emit_codegen_abort_expr(out);
-        return true;
-    }
-    /* StringBuilder.append takes Json (tagged): render the argument as a tagged
-     * value. If the rep planner inserted a lossy tagged->i64 UNBOX for the arg
-     * (e.g. a null literal), see through it to the original tagged source so the
-     * builder appends the real value ("null") instead of its unboxed int (0). */
-    const XiValue *append_arg = cg_unwrap_identity_value(v->args[1]);
-    const char *append_fn = !literal_plan       ? "(xrt_strbuf_append("
-                            : literal_is_string ? "(xrt_strbuf_append_string_no_grow("
-                                                : "(xrt_strbuf_append_scalar_no_grow(";
-    fprintf(out, "%s", append_fn);
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ", ");
-    emit_value_as_rep_ctx(ctx, out, append_arg, XR_REP_TAGGED);
-    fprintf(out, "), ");
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ")");
-    return true;
-}
-
 static void xicgen_emit_atomic_arg(XiCgenCtx *ctx, FILE *out, const XiValue *arg,
                                    CgAtomicKind kind) {
     if (!arg) {
@@ -9502,9 +9145,6 @@ static bool xicgen_runtime_method_call_is_direct_nothrow(XiCgenCtx *ctx, const X
          * Iterator methods as collection helpers swallowed the generator
          * error until an unrelated later check. */
         return strcmp(method, "iterator") == 0 && nargs == 0;
-    if (xr_type_is_builtin_named_class(receiver_type, "StringBuilder"))
-        return ((strcmp(method, "toString") == 0 || strcmp(method, "clear") == 0) && nargs == 0) ||
-               (strcmp(method, "append") == 0 && nargs == 1);
 
     return false;
 }
@@ -10557,8 +10197,7 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     }
     int sym = builtin_runtime_authority == CG_VALUE_EMISSION_FOUND ? (int) builtin_runtime_symbol
                                                                    : cg_method_sym(method);
-    if (xicgen_emit_stringbuilder_method(ctx, out, f, v, method, nargs))
-        return;
+
     if (xicgen_byte_slice_copy_method_drops_helper(ctx, v)) {
         xicgen_byte_slice_copy(ctx, out, f, v, NULL);
         return;
@@ -13127,8 +12766,6 @@ static const char *xicgen_prelude_native_class_tag_name(const char *class_name) 
         return NULL;
     if (strcmp(class_name, "BigInt") == 0)
         return "XR_TAG_BIGINT";
-    if (strcmp(class_name, "StringBuilder") == 0)
-        return "XR_TAG_STRBUF";
     return NULL;
 }
 
@@ -13313,7 +12950,6 @@ static bool xicgen_load_field_receiver_supports_builtin_getprop(const XiValue *r
             break;
     }
     return xr_type_is_builtin_named_class(type, "Buffer") ||
-           xr_type_is_builtin_named_class(type, "StringBuilder") ||
            xr_type_is_builtin_named_class(type, "Range");
 }
 
