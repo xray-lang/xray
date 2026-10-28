@@ -18,6 +18,7 @@
  * the canonical archive implementation separately. No runtime budget is changed. */
 #include "../../xir/xir_sdk_resource_test.h"
 #include "hir/xhir_items.h"
+#include "api/xsource_compile.h"
 
 typedef struct Cancel { int cancelled; size_t polls; } Cancel;
 static int cancel_poll(const void *context) {
@@ -321,6 +322,51 @@ static void report_control(void) {
     CHECK(failure.status==XR_SOURCE_DEADLINE&&failure.cleanup_status==XR_SOURCE_OK);
     xray_source_diagnostic_free(report);CHECK(!runtime_live&&!runtime_bytes);
 }
+static void partial_report_lifetime(void) {
+    char source[]="go fn() {}()\n";
+    XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"unlocated-go-error",source,sizeof(source)-1}};
+    XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;XrSourceFailure failure={0};
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_REJECTED&&!artifact&&report);
+    CHECK(failure.cleanup_status==XR_SOURCE_OK);
+    memset(source,'!',sizeof(source));
+    XrSourceDiagnosticReportInfo info={0};XrSourceDiagnosticRoot root={0};
+    CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==1);
+    CHECK(xray_source_diagnostic_root(report,0,&root)==XR_SOURCE_OK&&!root.primary.path);
+    CHECK((root.primary.flags&XR_SOURCE_LOCATION_LINE)&&root.primary.line==1&&root.primary.column==0);
+    CHECK(!(root.primary.flags&(XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16)));
+    CHECK(!strcmp(root.message,"go requires an accessible ordinary function declaration"));
+    XrCompileResources *owner=sdk_ledger(&sdk_unlimited);
+    XrSourceCompileDiagnostic display={.status=XR_SOURCE_COMPILE_REJECTED,.stage=XR_SOURCE_COMPILE_PRODUCT};
+    display.source.failure.report=report;report=NULL;
+    char *text=NULL;
+    CHECK(xr_source_compile_diagnostic_render(&display,owner,&text)==XR_SOURCE_COMPILE_OK&&text);
+    xr_source_compile_diagnostic_free(&display);
+    CHECK(!display.source.failure.report);
+    xr_compile_resources_release(owner);owner=NULL;
+    CHECK(!strcmp(text,"line 1:0: error: go requires an accessible ordinary function declaration\n"
+        "source build failed (stage=4 status=source-rejected)\n"));
+    xr_compile_resources_free(text);
+    CHECK(!runtime_live&&!runtime_bytes);
+
+    owner=sdk_ledger(&sdk_unlimited);XrFrontendReport *unknown=NULL;uint32_t file=0;
+    CHECK(xr_frontend_report_new(owner,&unknown)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_frontend_report_source(unknown,"unknown.xr",NULL,0,NULL,&file)==XR_COMPILE_RESOURCE_OK);
+    XrFrontendLocation location=xr_frontend_report_location(unknown,file,0,0,NULL);
+    CHECK(!(location.flags&(XR_FRONTEND_LOCATION_LINE|XR_FRONTEND_LOCATION_BYTES|XR_FRONTEND_LOCATION_UTF16)));
+    XrFrontendLabel label={"original unlocated label",location};
+    CHECK(xr_frontend_report_add(unknown,0,"first unlocated fact",location,&label,1)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_frontend_report_add(unknown,0,"second unlocated fact",location,NULL,0)==XR_COMPILE_RESOURCE_OK);
+    xr_frontend_report_seal(unknown,false);
+    display=(XrSourceCompileDiagnostic){.status=XR_SOURCE_COMPILE_REJECTED,.stage=XR_SOURCE_COMPILE_PRODUCT};
+    display.source.failure.report=unknown;unknown=NULL;text=NULL;
+    CHECK(xr_source_compile_diagnostic_render(&display,owner,&text)==XR_SOURCE_COMPILE_OK&&text);
+    xr_source_compile_diagnostic_free(&display);xr_compile_resources_release(owner);
+    CHECK(!strcmp(text,"error: first unlocated fact\nnote: original unlocated label\n"
+        "error: second unlocated fact\nsource build failed (stage=4 status=source-rejected)\n"));
+    xr_compile_resources_free(text);
+    CHECK(!runtime_live&&!runtime_bytes);
+}
 static void module_binding_classes(void) {
     static const struct {const char *text;uint32_t roots;int column,label_column;} cases[]={
         {"const (alpha,_)=(1,2)\nconst (alpha,_)=(3,4)\nconst (beta,_)=(5,6)\nconst (beta,_)=(7,8)\n",2,8,8},
@@ -353,7 +399,7 @@ static void module_binding_classes(void) {
     CHECK(output.size==2&&!memcmp(output.bytes,"9\n",2));xray_source_result_free(result);CHECK(!runtime_live&&!runtime_bytes);
 }
 int main(void) {
-    report_resources();report_control();unicode_report();module_binding_classes();
+    report_resources();report_control();unicode_report();module_binding_classes();partial_report_lifetime();
     module_report_lifetime(false);module_report_lifetime(true);
     independent_requests();detached_ast_and_result();ready_c_artifact();execution_policy();
     global_array_lifetime();global_string_lifetime();

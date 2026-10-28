@@ -248,9 +248,11 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_diagnostic_render(
         if(prefix<0 || length>SIZE_MAX-(size_t)prefix-1){xr_compile_resources_free(rendered);return XR_SOURCE_COMPILE_OVERFLOW;}
         char *text=NULL;status=source_resource_status(xr_compile_resources_alloc(resources,(size_t)prefix+length+1,(void **)&text));
         if(status==XR_SOURCE_COMPILE_OK) {
-            (void)snprintf(text,(size_t)prefix+1,"source build failed (stage=%u status=%s)\n",
+            /* An unavailable location must not hide the actual first root. */
+            memcpy(text,rendered,length);
+            (void)snprintf(text+length,(size_t)prefix+1,"source build failed (stage=%u status=%s)\n",
                 (unsigned)d->stage,xr_source_compile_status_name(d->status));
-            memcpy(text+(size_t)prefix,rendered,length+1);*output=text;
+            *output=text;
         }
         xr_compile_resources_free(rendered);return status;
     }

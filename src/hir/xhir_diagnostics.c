@@ -67,9 +67,9 @@ XrFrontendLocation xr_frontend_report_location(const XrFrontendReport *r,uint32_
     XrFrontendLocation v={0};if(!r || source>=r->source_count)return v;
     const ReportSource *s=&r->sources[source];v.path=s->path;
     if(s->known){v.flags|=XR_FRONTEND_LOCATION_REVISION;memcpy(v.revision,s->revision,32);}
-    if(line<=0 || column<=0)return v;
+    if(line<=0 || column<0)return v;
     v.line=line;v.column=column;v.end_line=line;v.end_column=column;v.flags|=XR_FRONTEND_LOCATION_LINE;
-    if(!s->text)return v;
+    if(column==0 || !s->text)return v;
     size_t at=0;int row=1;while(at<s->length&&row<line)if(s->text[at++]=='\n')++row;
     if(row!=line || (size_t)(column-1)>s->length-at)return v;
     size_t line_end=at;while(line_end<s->length&&s->text[line_end]!='\r'&&s->text[line_end]!='\n')++line_end;

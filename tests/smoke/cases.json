@@ -102,7 +102,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F10",
-        "first_diagnostic": "XR_RUN_6001: source build failed (stage=4 status=source-rejected): type declaration is not admitted by XIR (kind 13)"
+        "first_diagnostic": "error: type declaration is not admitted by XIR (kind 13)"
       }
     },
     {
