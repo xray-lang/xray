@@ -69,9 +69,12 @@ typedef struct XrSourceArtifactInfo {
     XrSourceTarget target;
     uint32_t entry, functions, modules, named_entries;
 } XrSourceArtifactInfo;
-/* Locations refer to the report's exact source revision. Compiler line/column
- * are one-based bytes; UTF-16 positions are zero-based and never guessed.
- * BYTES denotes a known half-open selection, not merely a known point. */
+/* Locations refer to the report's exact source revision. LINE guarantees
+ * positive one-based line/end_line. Zero column/end_column means unavailable;
+ * known compiler columns are one-based byte positions. BYTES and UTF16 are
+ * independent flags; never derive their positions from an unavailable column.
+ * UTF-16 positions are zero-based and never guessed. BYTES denotes a known
+ * half-open selection, not merely a known point. */
 enum { XR_SOURCE_LOCATION_LINE=1u, XR_SOURCE_LOCATION_BYTES=2u,
     XR_SOURCE_LOCATION_UTF16=4u, XR_SOURCE_LOCATION_REVISION=8u };
 typedef struct XrSourceDiagnosticLocation {
