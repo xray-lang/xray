@@ -87,7 +87,7 @@ static void test_encoding(void) {
 }
 
 static uint64_t run_function(XrRbcFunction function, const uint64_t *args, size_t count) {
-    XrRbcModule module = {&function, 1, NULL, 0};
+    XrRbcModule module = {&function, 1, NULL, 0, NULL, 0};
     uint64_t result = UINT64_MAX;
     CHECK(execute(&module, 0, args, count, &result) == XR_RBC_OK);
     return result;
@@ -184,7 +184,7 @@ static void test_call_windows(void) {
     immediate(callee, 1, XR_RBC_LOADI, 254, -10);
     emit(callee, 2, XR_RBC_RET, 2, 0, 0);
     XrRbcFunction functions[] = {{caller, 7, NULL, 0, 4, 0, NULL, 0, 0}, {callee, 3, NULL, 0, 255, 2, NULL, 0, 0}};
-    XrRbcModule module = {functions, 2, NULL, 0};
+    XrRbcModule module = {functions, 2, NULL, 0, NULL, 0};
     uint64_t result = 0;
     CHECK(execute(&module, 0, NULL, 0, &result) == XR_RBC_OK && result == 1042);
     // Zero arguments place the callee just beyond the last caller register.
@@ -204,7 +204,7 @@ static void test_rejections(void) {
     emit(code, 0, XR_RBC_DIV, 0, 0, 1);
     emit(code, 1, XR_RBC_RET, 0, 0, 0);
     XrRbcFunction function = {code, 2, NULL, 0, 2, 2, NULL, 0, 0};
-    XrRbcModule module = {&function, 1, NULL, 0};
+    XrRbcModule module = {&function, 1, NULL, 0, NULL, 0};
     CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_ARITHMETIC_PANIC);
     CHECK(result == 42);
     reject_prepare(&module, 1, args, 2);
@@ -242,7 +242,7 @@ static void test_prepare_unreachable(void) {
         {&root, 1, NULL, 0, 1, 0, NULL, 0, 0},
         {code, 4, &constant, 1, 3, 0, NULL, 0, 0}};
     const XrRbcNativeI64 native = xrt_print_i64;
-    XrRbcModule module = {functions, 2, &native, 1};
+    XrRbcModule module = {functions, 2, &native, 1, NULL, 0};
     const uint32_t invalid[] = {
         255, XR_RBC_MOV | (3u << 8), XR_RBC_MOV | (3u << 16), XR_RBC_MOV | (1u << 24),
         XR_RBC_ADD | (3u << 8), XR_RBC_ADD | (3u << 16), XR_RBC_ADD | (3u << 24),
@@ -304,7 +304,7 @@ static void test_native_print(void) {
     emit(code, 3, XR_RBC_RET0, 0, 0, 0);
     XrRbcFunction function = {code, 4, constants, 1, 255, 0, NULL, 0, 0};
     const XrRbcNativeI64 natives[] = {xrt_print_i64};
-    XrRbcModule module = {&function, 1, natives, 1};
+    XrRbcModule module = {&function, 1, natives, 1, NULL, 0};
     uint64_t result;
     CHECK(execute(&module, 0, NULL, 0, &result) == XR_RBC_OK);
 }
@@ -319,7 +319,7 @@ static void test_owned_execution(void) {
     uint32_t code[2];
     emit(code, 0, XR_RBC_RET, 0, 0, 0);
     XrRbcFunction function = {code, 1, NULL, 0, 1, 1, NULL, 0, 0};
-    XrRbcModule module = {&function, 1, NULL, 0};
+    XrRbcModule module = {&function, 1, NULL, 0, NULL, 0};
     XrtLocationOwner *owner = NULL;
     CHECK(xrt_locations_create(NULL, 0, &owner) == XRT_LOCATION_OK);
     uint64_t argument = UINT64_C(0x7ff0000000000001), bits = 123;
@@ -386,7 +386,7 @@ static void test_unknown_arithmetic_panic(void) {
     uint32_t code[2];
     emit(code, 1, XR_RBC_RET, 0, 0, 0);
     XrRbcFunction function = {code, 2, NULL, 0, 2, 2, NULL, 0, 0};
-    XrRbcModule module = {&function, 1, NULL, 0};
+    XrRbcModule module = {&function, 1, NULL, 0, NULL, 0};
     uint64_t arguments[] = {42, 0};
     for (unsigned op = 0; op < 2; ++op) {
         emit(code, 0, op ? XR_RBC_REM : XR_RBC_DIV, 0, 0, 1);
@@ -422,7 +422,7 @@ static void test_source_maps(void) {
         {callee, 2, NULL, 0, 2, 2, callee_ids, 2, 0},
         {callee, 2, NULL, 0, 2, 2, callee_ids, 2, 0}};
     XrRbcNativeI64 native = xrt_print_i64;
-    XrRbcModule module = {functions, 3, &native, 1};
+    XrRbcModule module = {functions, 3, &native, 1, NULL, 0};
     XrtSourceLocation location = {"raw.xr", 6, 7, 3, 7, 4};
     XrtLocationOwner *owner = NULL;
     CHECK(xrt_locations_create(&location, 1, &owner) == XRT_LOCATION_OK);
@@ -470,7 +470,7 @@ static void test_cells(void) {
     emit(code, 4, XR_RBC_CELL_READ, 2, 1, 0);
     CHECK(run_function(function, NULL, 0) == 7);
     CHECK(run_function(function, NULL, 0) == 7);
-    XrRbcModule module = {&function, 1, NULL, 0};
+    XrRbcModule module = {&function, 1, NULL, 0, NULL, 0};
     uint64_t bits = 999;
     function.cell_count = 2;
     immediate(code, 2, XR_RBC_LOADI, 1, 2);
@@ -505,7 +505,7 @@ static void test_cells(void) {
     emit(child, 2, XR_RBC_RET, 0, 0, 0);
     XrRbcFunction functions[] = {{parent, 5, NULL, 0, 3, 0, NULL, 0, 1},
         {child, 3, NULL, 0, 1, 0, NULL, 0, 1}};
-    module = (XrRbcModule) {functions, 2, NULL, 0};
+    module = (XrRbcModule) {functions, 2, NULL, 0, NULL, 0};
     CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_INVALID && bits == 999);
     uint32_t word = 919;
     CHECK(xr_rbc_encode(&word, (XrRbcOperands){XR_RBC_CELL_NEW, 254, 0, 0, UINT16_MAX}));
@@ -513,11 +513,49 @@ static void test_cells(void) {
     CHECK(!xr_rbc_encode(&word, (XrRbcOperands){XR_RBC_CELL_READ, 0, 0, 1, 0}));
 }
 
+
+static void test_literal_validation(void) {
+    uint32_t code[3];
+    immediate(code, 0, XR_RBC_PRINT_LITERAL, 0, 0);
+    emit(code, 1, XR_RBC_RET0, 0, 0, 0);
+    emit(code, 2, XR_RBC_RET0, 0, 0, 0);
+    XrRbcFunction functions[] = {{code + 2, 1, NULL, 0, 1, 0, NULL, 0, 0},
+        {code, 2, NULL, 0, 1, 0, NULL, 0, 0}};
+    XrRbcLiteral literal = {"A\0\xc3\xa9", 4};
+    XrRbcModule module = {functions, 2, NULL, 0, &literal, 1};
+    uint64_t bits = 99;
+    CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_OK && !bits);
+    // Even an unreachable literal instruction is checked before publication.
+    immediate(code, 0, XR_RBC_PRINT_LITERAL, 0, 1);
+    reject_prepare(&module, 0, NULL, 0);
+    immediate(code, 0, XR_RBC_PRINT_LITERAL, 1, 0);
+    reject_prepare(&module, 0, NULL, 0);
+    immediate(code, 0, XR_RBC_PRINT_LITERAL, 0, 0);
+    module.literals = NULL;
+    reject_prepare(&module, 0, NULL, 0);
+    module.literals = &literal;module.literal_count = 0;
+    reject_prepare(&module, 0, NULL, 0);
+    module.literal_count = 65537;
+    reject_prepare(&module, 0, NULL, 0);
+    module.literal_count = 1;literal.bytes = NULL;
+    reject_prepare(&module, 0, NULL, 0);
+    literal.length = 0;
+    CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_OK && !bits);
+    literal.bytes = "x";literal.length = SIZE_MAX;
+    reject_prepare(&module, 0, NULL, 0);
+    uint32_t word = 719;
+    CHECK(xr_rbc_encode(&word, (XrRbcOperands){XR_RBC_PRINT_LITERAL, 0, 0, 0, UINT16_MAX}));
+    uint32_t saved = word;
+    CHECK(!xr_rbc_encode(&word, (XrRbcOperands){XR_RBC_PRINT_LITERAL, 0, 0, 0, 65536}));
+    CHECK(word == saved);
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--native-print") == 0) {
         test_native_print();
         return 0;
     }
+    test_literal_validation();
     test_cells();
     test_encoding();
     test_arithmetic();

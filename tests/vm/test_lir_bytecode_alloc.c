@@ -26,20 +26,28 @@ static XrRbcStatus execute(XrRbcProgram *program, const uint64_t *arguments,
     return status;
 }
 
-static size_t attempts, fail_at = SIZE_MAX;
+static size_t attempts, fail_at = SIZE_MAX, live_allocations;
+static enum {LITERAL_NO_FAULT,LITERAL_MAP_FAULT,LITERAL_PAYLOAD_FAULT,LITERAL_TABLE_FAULT,LITERAL_TABLE_INITIAL_FAULT} literal_fault;
+static size_t literal_payload_count, literal_payload_failure, literal_table_requests;
 static struct { void *pointer; size_t size; } buffers[32];
 
 static void *allocate(size_t size) {
     if (++attempts == fail_at) return NULL;
-    return xr_malloc(size);
+    if (literal_fault == LITERAL_PAYLOAD_FAULT && size == 29 &&
+        ++literal_payload_count == literal_payload_failure) {literal_fault=LITERAL_NO_FAULT;return NULL;}
+    void *pointer=xr_malloc(size);if(pointer)++live_allocations;return pointer;
 }
 
 static void *allocate_zero(size_t count, size_t size) {
     if (++attempts == fail_at) return NULL;
-    return xr_calloc(count, size);
+    if (literal_fault == LITERAL_MAP_FAULT && count == 20 && size == sizeof(uint32_t)) {
+        literal_fault=LITERAL_NO_FAULT;return NULL;
+    }
+    void *pointer=xr_calloc(count,size);if(pointer)++live_allocations;return pointer;
 }
 
 static void release(void *pointer) {
+    if(pointer){CHECK(live_allocations);--live_allocations;}
     for (size_t i = 0; i < 32; ++i)
         if (buffers[i].pointer == pointer) {
             buffers[i].pointer = NULL;
@@ -50,11 +58,21 @@ static void release(void *pointer) {
 
 static void *relocate(void *old, size_t size) {
     if (++attempts == fail_at) return NULL;
+    // The first equal-sized initial buffer is the branch-patch table; the
+    // second is the real literal table; production decides the error status.
+    if(literal_fault == LITERAL_TABLE_INITIAL_FAULT && !old &&
+        size == 16*sizeof(XrRbcLiteral) && ++literal_table_requests == 2) {
+        literal_fault=LITERAL_NO_FAULT;return NULL;
+    }
+    if(literal_fault == LITERAL_TABLE_FAULT && old && size == 32*sizeof(XrRbcLiteral)) {
+        literal_fault=LITERAL_NO_FAULT;return NULL;
+    }
     size_t i = 0;
     while (i < 32 && buffers[i].pointer != old) ++i;
     CHECK(i < 32);
     void *fresh = xr_malloc(size);
     CHECK(fresh);
+    if(!old)++live_allocations;
     if (old) {
         memcpy(fresh, old, buffers[i].size < size ? buffers[i].size : size);
         xr_free(old);
@@ -208,7 +226,59 @@ static XrLirModule *cell_compiler_module(XrLirFunction *root) {
     return m;
 }
 
+
+static void literal_allocation_failures(void) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+    XrLirType flag=XR_LIR_I1,types[]={XR_LIR_PTR,XR_LIR_U64};
+    XrLirFunction root=test_function(m,"literal_allocations",&flag,1,XR_LIR_UNIT),print;
+    XrLirFunctionSpec spec={.name="xrt_print_string",.name_length=16,.parameters=types,
+        .parameter_count=2,.result=XR_LIR_UNIT,.kind=XR_LIR_FUNCTION_EXTERNAL,
+        .extern_kind=XR_LIR_EXTERN_PRINT_STRING};
+    OK(xr_lir_declare_function(m,&spec,&print));
+    XrLirBlock entry=test_block(m,root,NULL,0),output=test_block(m,root,NULL,0),done=test_block(m,root,NULL,0);
+    OK(xr_lir_set_entry(m,root,entry));
+    XrLirValue argument;OK(xr_lir_function_parameter(m,root,0,&argument));
+    XrLirInstruction conditional={.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&argument,.operand_count=1,
+        .edges={{output,NULL,0},{done,NULL,0}},.edge_count=2};
+    OK(xr_lir_set_terminator(m,entry,&conditional));
+    XrLirValue length=test_constant(m,output,XR_LIR_U64,29);
+    for(unsigned n=0;n<20;++n) {
+        char bytes[29];memset(bytes,(int)('A'+n),sizeof(bytes));bytes[1]=0;
+        XrLirLiteral literal={0};OK(xr_lir_add_literal(m,bytes,sizeof(bytes),&literal));
+        memset(bytes,'!',sizeof(bytes));
+        XrLirValue args[2]={{0},length};OK(xr_lir_literal_address(m,output,literal,&args[0]));
+        XrLirInstruction call={.op=XR_LIR_CALL,.type=XR_LIR_UNIT,.callee=print,.operands=args,.operand_count=2};
+        OK(xr_lir_emit_effect(m,output,&call));
+    }
+    test_branch(m,output,done,NULL,0);test_return(m,done,(XrLirValue){0});
+    OK(xr_lir_module_finish(m,NULL));
+    for(unsigned stage=0;stage<6;++stage) {
+        CHECK(!live_allocations);attempts=0;fail_at=SIZE_MAX;
+        literal_payload_count=0;literal_table_requests=0;literal_payload_failure=stage==4?17:1;
+        literal_fault=stage==1?LITERAL_MAP_FAULT:stage==2?LITERAL_TABLE_INITIAL_FAULT:
+            stage==3||stage==4?LITERAL_PAYLOAD_FAULT:stage==5?LITERAL_TABLE_FAULT:LITERAL_NO_FAULT;
+        XrRbcProgram *program=NULL;
+        XrRbcCompileDiagnostic diagnostic;
+        XrRbcCompileStatus status=xr_rbc_compile(m,root,&program,&diagnostic);
+        if(stage) {
+            CHECK(status==XR_RBC_COMPILE_OUT_OF_MEMORY&&!program&&literal_fault==LITERAL_NO_FAULT);
+            CHECK(!live_allocations);
+            CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OK);
+        } else CHECK(status==XR_RBC_COMPILE_OK);
+        CHECK(program->module.literal_count==20);
+        for(unsigned n=0;n<20;++n) {
+            CHECK(program->module.literals[n].length==29&&program->module.literals[n].bytes[1]==0);
+            CHECK(program->module.literals[n].bytes[0]==(char)('A'+n));
+        }
+        uint64_t flag_value=0,bits=99;
+        CHECK(execute(program,&flag_value,1,&bits)==XR_RBC_OK&&!bits);
+        xr_rbc_program_destroy(program);CHECK(!live_allocations);
+    }
+    xr_lir_module_destroy(m);
+}
+
 int main(void) {
+    literal_allocation_failures();
     register_workspace_failure();
     source_map_failures();
     XrLirFunction root;
@@ -243,6 +313,7 @@ int main(void) {
     xr_rbc_program_destroy(program);
     xr_lir_module_destroy(m);
     compiled_source_maps();
+    CHECK(!live_allocations);
     puts("lir_bytecode_alloc: passed (representative compiler/owner failures, relocating buffers)");
     return 0;
 }

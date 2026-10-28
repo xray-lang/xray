@@ -33,6 +33,20 @@ def main():
         run('loop', 'fn sum(n:i64)->i64{var i=0\nvar total=0\n'
             'while(i<n){total=total+i\ni=i+1}\nreturn total}\nsum(1000)\n')
         run('output', 'print(7)\n', stdout=b'7\n')
+        literal_input = (Path(__file__).resolve().parents[1] /
+            'diff/cases/semantics/output/print_terminator_exact.xr').read_bytes()
+        assert hashlib.sha256(literal_input.replace(b'\r\n', b'\n')).hexdigest() == \
+            '32f13c28e415c770c81bd0eafbfb7d4008b8bdf192f7cb6cade5c01f2845a6a2'
+        literal_path = root/'print_terminator_exact.xr'
+        literal_path.write_bytes(literal_input)
+        literal_oracle = bytes.fromhex('6c310a6c320a6c330a6d310a6d320a7a0a0a74200a300a310a320a656e640a')
+        for options in ([], ['--twice'], ['--optimize'], ['--twice', '--optimize']):
+            result = subprocess.run([args.driver, str(literal_path), *options], capture_output=True, timeout=15)
+            assert result.returncode == 0 and not result.stderr, (options, result.returncode, result.stderr)
+            assert result.stdout == literal_oracle * (2 if '--twice' in options else 1), (options, result.stdout)
+            assert literal_path.read_bytes() == literal_input
+        run('literal-nul-unicode-empty', 'print("A\\0é")\nprint(7)\nprint("")\n',
+            stdout=b'A\x00\xc3\xa9\n7\n\n')
         original_cell = (Path(__file__).resolve().parents[1] /
                          'diff/cases/semantics/default_params/default_evaluated_per_call.xr').read_bytes()
         assert hashlib.sha256(original_cell.replace(b'\r\n', b'\n')).hexdigest() == \

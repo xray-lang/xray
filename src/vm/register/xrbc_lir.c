@@ -24,12 +24,27 @@ struct XrRbcProgram {
     uint32_t parameter_count;
 };
 
+#define RBC_LIR_PRINT_STRING (UINT32_MAX - 1)
+
+typedef struct {
+    uint32_t literals[XR_RBC_REGISTER_COUNT_MAX + 1];
+    bool lengths[XR_RBC_REGISTER_COUNT_MAX + 1];
+} RbcLirOutputValues;
+
+typedef struct {
+    XrRbcProgram *program;
+    uint32_t *mapping;
+    size_t capacity;
+} RbcLirLiteralPool;
+
 typedef struct { size_t pc; uint32_t block; } RbcLirPatch;
 typedef struct {
     const XrLirModule *input;
     XrLirFunction function;
     XrLirFunctionView view;
     const uint32_t *functions;
+    RbcLirOutputValues output;
+    RbcLirLiteralPool *literals;
     uint32_t slots[XR_RBC_REGISTER_COUNT_MAX + 1];
     uint32_t slot_count, scratch_count, register_count, source_id, current_source_id, cell_count;
     uint32_t *code, *source_ids;
@@ -117,6 +132,32 @@ static bool rbc_lir_scalar(XrLirType type) {
     return type == XR_LIR_I64 || type == XR_LIR_I1 || type == XR_LIR_F64;
 }
 
+static bool rbc_lir_string_call(const XrLirModule *input, const XrLirInstructionView *i) {
+    if (i->op != XR_LIR_CALL) return false;
+    XrLirFunctionView callee;
+    return xr_lir_function_view(input, (XrLirFunction) {input, i->callee}, &callee) == XR_LIR_OK &&
+        callee.kind == XR_LIR_FUNCTION_EXTERNAL && callee.extern_kind == XR_LIR_EXTERN_PRINT_STRING;
+}
+
+static void rbc_lir_output_values(const XrLirModule *input, XrLirFunction f,
+    const XrLirFunctionView *view, RbcLirOutputValues *output) {
+    *output = (RbcLirOutputValues) {0};
+    for (uint32_t b = 0; b < view->block_count; ++b) {
+        XrLirBlock block;
+        XrLirBlockView bv;
+        xr_lir_block_at(input, f, b, &block);
+        xr_lir_block_view(input, block, &bv);
+        for (uint32_t n = 0; n < bv.instruction_count; ++n) {
+            XrLirInstructionView i;
+            xr_lir_instruction_view(input, block, n, &i);
+            if (i.op == XR_LIR_LITERAL_ADDR) output->literals[i.result] = (uint32_t)i.bits;
+            // The LIR verifier owns the pair's provenance, exact length and
+            // unique direct address use. These IDs only select no-code values.
+            if (rbc_lir_string_call(input, &i)) output->lengths[i.operands[1]] = true;
+        }
+    }
+}
+
 static XrLirSource rbc_lir_value_source(const XrLirModule *input, XrLirFunction f,
     const XrLirFunctionView *view, uint32_t value, XrRbcCompileDiagnostic *d) {
     XrLirSource fallback = {0};
@@ -151,7 +192,7 @@ static XrLirSource rbc_lir_value_source(const XrLirModule *input, XrLirFunction 
 }
 
 static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
-    const XrLirFunctionView *v, XrRbcCompileDiagnostic *d) {
+    const XrLirFunctionView *v, XrRbcCompileDiagnostic *d, RbcLirOutputValues *output) {
     d->function = f.id;
     d->block = d->instruction = 0;
     if (v->kind != XR_LIR_FUNCTION_DEFINITION ||
@@ -166,10 +207,13 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
             rbc_lir_value_source(input, f, v, 0, d));
         return false;
     }
+    rbc_lir_output_values(input, f, v, output);
     for (uint32_t value = 1; value <= v->value_count; ++value) {
         XrLirType type;
         if (xr_lir_value_type(input, (XrLirValue) {input, f.id, value}, &type) != XR_LIR_OK ||
-            (!rbc_lir_scalar(type) && type != XR_LIR_I64_CELL)) {
+            (!rbc_lir_scalar(type) && type != XR_LIR_I64_CELL &&
+             !(type == XR_LIR_PTR && output->literals[value]) &&
+             !(type == XR_LIR_U64 && output->lengths[value]))) {
             rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
                 "value type is not an admitted scalar",
                 rbc_lir_value_source(input, f, v, value, d));
@@ -180,8 +224,18 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
 }
 
 static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
-    const XrLirInstructionView *i) {
+    const XrLirInstructionView *i, const RbcLirOutputValues *output) {
+    if (rbc_lir_string_call(input, i)) return true;
+    // A length can also be an operand of otherwise valid unsigned LIR. Its
+    // output use must not silently enable signed arithmetic or comparisons.
+    for (uint32_t a = 0; a < i->operand_count; ++a)
+        if (output->literals[i->operands[a]] || output->lengths[i->operands[a]]) return false;
+    for (uint32_t e = 0; e < i->edge_count; ++e)
+        for (uint32_t a = 0; a < i->edges[e].argument_count; ++a)
+            if (output->literals[i->edges[e].arguments[a]] ||
+                output->lengths[i->edges[e].arguments[a]]) return false;
     switch (i->op) {
+    case XR_LIR_LITERAL_ADDR:
     case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
     case XR_LIR_NEG: case XR_LIR_DIV: case XR_LIR_REM: case XR_LIR_ICMP:
     case XR_LIR_CALL: case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
@@ -202,8 +256,9 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
     for (uint32_t index = 0; index < *count; ++index) {
         XrLirFunction f = {input, ids[index]};
         XrLirFunctionView v;
+        RbcLirOutputValues output;
         if (xr_lir_function_view(input, f, &v) != XR_LIR_OK ||
-            !rbc_lir_admit(input, f, &v, d)) return false;
+            !rbc_lir_admit(input, f, &v, d, &output)) return false;
         for (uint32_t b = 0; b < v.block_count; ++b) {
             XrLirBlock block;
             XrLirBlockView bv;
@@ -214,7 +269,7 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                 xr_lir_instruction_view(input, block, n, &i);
                 d->block = block.id;
                 d->instruction = n + 1;
-                if (!rbc_lir_operation(input, f, &i)) {
+                if (!rbc_lir_operation(input, f, &i, &output)) {
                     rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
                         "operation has no admitted bytecode implementation", i.source);
                     return false;
@@ -224,12 +279,14 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                     xr_lir_function_view(input, (XrLirFunction) {input, i.callee}, &callee);
                     if (callee.kind != XR_LIR_FUNCTION_DEFINITION) {
                         if (callee.kind != XR_LIR_FUNCTION_EXTERNAL ||
-                            callee.extern_kind != XR_LIR_EXTERN_PRINT_I64) {
+                            (callee.extern_kind != XR_LIR_EXTERN_PRINT_I64 &&
+                             callee.extern_kind != XR_LIR_EXTERN_PRINT_STRING)) {
                             rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
                                 "native call has no registered runtime leaf", i.source);
                             return false;
                         }
-                        mapping[i.callee - 1] = UINT32_MAX;
+                        mapping[i.callee - 1] = callee.extern_kind == XR_LIR_EXTERN_PRINT_STRING ?
+                            RBC_LIR_PRINT_STRING : UINT32_MAX;
                         continue;
                     }
                     if (*count == 65536) {
@@ -260,6 +317,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
             XrLirInstructionView i;
             xr_lir_instruction_view(c->input, block, n, &i);
             if (i.op == XR_LIR_CALL) {
+                if (c->functions[i.callee - 1] == RBC_LIR_PRINT_STRING) continue;
                 uint32_t physical = c->functions[i.callee - 1] == UINT32_MAX ? 2 : i.operand_count;
                 if (window < physical + 1) window = physical + 1;
             }
@@ -331,10 +389,44 @@ static bool rbc_lir_conditional(RbcLirCompiler *c, const XrLirInstructionView *i
     return true;
 }
 
+static bool rbc_lir_literal(RbcLirCompiler *c, uint32_t origin, uint32_t *ordinal) {
+    RbcLirLiteralPool *pool = c->literals;
+    if (!origin || origin > xr_lir_literal_count(c->input) || !pool->mapping)
+        return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "literal has no verified output identity");
+    if (pool->mapping[origin - 1]) {
+        *ordinal = pool->mapping[origin - 1] - 1;
+        return true;
+    }
+    XrLirLiteral literal = {0};
+    const uint8_t *bytes = NULL;
+    size_t length = 0;
+    if (xr_lir_literal_at(c->input, origin - 1, &literal) != XR_LIR_OK ||
+        xr_lir_literal_view(c->input, literal, &bytes, &length) != XR_LIR_OK)
+        return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "cannot read verified literal bytes");
+    XrRbcModule *module = &pool->program->module;
+    if (module->literal_count > UINT16_MAX)
+        return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "literal table exceeds bytecode encoding");
+    void *storage = (void *)module->literals;
+    if (!rbc_lir_grow(c, &storage, &pool->capacity,
+            module->literal_count + 1, sizeof(*module->literals))) return false;
+    module->literals = storage;
+    char *copy = length ? xr_malloc(length) : NULL;
+    if (length && !copy)
+        return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot allocate immutable literal bytes");
+    if (length) memcpy(copy, bytes, length);
+    *ordinal = (uint32_t)module->literal_count;
+    ((XrRbcLiteral *)module->literals)[module->literal_count++] = (XrRbcLiteral) {copy, length};
+    pool->mapping[origin - 1] = *ordinal + 1;
+    return true;
+}
+
 static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i) {
     uint32_t result = i->result ? c->slots[i->result] : 0;
     switch (i->op) {
-    case XR_LIR_CONST: return rbc_lir_constant(c, result, i->bits);
+    case XR_LIR_CONST:
+        return c->output.lengths[i->result] || rbc_lir_constant(c, result, i->bits);
+    case XR_LIR_LITERAL_ADDR:
+        return true;
     case XR_LIR_INTCAST:
         return rbc_lir_emit(c, XR_RBC_MOV, result, c->slots[i->operands[0]], 0, 0);
     case XR_LIR_CELL_NEW:
@@ -352,6 +444,11 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         return rbc_lir_emit(c, i->operand_count ? XR_RBC_RET : XR_RBC_RET0,
             i->operand_count ? c->slots[i->operands[0]] : 0, 0, 0, 0);
     case XR_LIR_CALL: {
+        if (c->functions[i->callee - 1] == RBC_LIR_PRINT_STRING) {
+            uint32_t ordinal;
+            return rbc_lir_literal(c, c->output.literals[i->operands[0]], &ordinal) &&
+                rbc_lir_emit(c, XR_RBC_PRINT_LITERAL, 0, 0, 0, ordinal);
+        }
         if (c->functions[i->callee - 1] == UINT32_MAX) {
             uint32_t destination = c->register_count - 3;
             return rbc_lir_emit(c, XR_RBC_MOV, destination + 1,
@@ -385,6 +482,7 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
 }
 
 static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
+    rbc_lir_output_values(c->input, c->function, &c->view, &c->output);
     if (!rbc_lir_layout(c)) return false;
     size_t count = (size_t) c->view.block_count + 1;
     if (count > SIZE_MAX / sizeof(*c->blocks))
@@ -427,6 +525,9 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
         xr_free((void *) program->module.functions[f].source_ids);
     }
     xr_free((void *) program->module.functions);
+    for (size_t i = 0; i < program->module.literal_count; ++i)
+        xr_free((void *)program->module.literals[i].bytes);
+    xr_free((void *)program->module.literals);
     xrt_locations_release(program->locations);
     xr_free(program);
 }
@@ -492,9 +593,20 @@ done:
 static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t *ids,
     const uint32_t *mapping, XrRbcProgram *p, XrRbcCompileDiagnostic *d) {
     uint32_t source_id = 0;
+    size_t literals = xr_lir_literal_count(input);
+    RbcLirLiteralPool pool = {.program = p};
+    if (literals > SIZE_MAX / sizeof(*pool.mapping))
+        return rbc_lir_error(d, XR_RBC_COMPILE_LIMIT, "literal mapping exceeds address space",
+            (XrLirSource) {0});
+    if (literals) {
+        pool.mapping = xr_calloc(literals, sizeof(*pool.mapping));
+        if (!pool.mapping)
+            return rbc_lir_error(d, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot allocate literal mapping",
+                (XrLirSource) {0});
+    }
     for (size_t f = 0; f < p->module.function_count; ++f) {
         RbcLirCompiler c = {.input = input, .function = {input, ids[f]},
-            .functions = mapping, .diagnostic = d, .source_id = source_id};
+            .functions = mapping, .diagnostic = d, .source_id = source_id, .literals = &pool};
         xr_lir_function_view(input, c.function, &c.view);
         d->function = ids[f];
         bool success = rbc_lir_function(&c, &((XrRbcFunction *) p->module.functions)[f]);
@@ -505,6 +617,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
             xr_free(c.code);
             xr_free(c.constants);
             xr_free(c.source_ids);
+            xr_free(pool.mapping);
             return c.status;
         }
         if (!f) {
@@ -514,6 +627,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
                     p->parameter_count * sizeof(*p->parameters));
         }
     }
+    xr_free(pool.mapping);
     return XR_RBC_COMPILE_OK;
 }
 

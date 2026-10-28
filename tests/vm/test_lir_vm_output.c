@@ -37,7 +37,7 @@ static XrRbcProgram *from_source(const char *text) {
     return program;
 }
 
-static XrRbcProgram *from_lir(const char *path, bool known, bool point, uint32_t panic_code) {
+static XrRbcProgram *from_lir(const char *path, bool known, bool point, uint32_t panic_code, bool string_output) {
     bool arithmetic = panic_code != 0;
     XrLirModule *module = NULL;
     OK(xr_lir_module_create(NULL, &module));
@@ -46,11 +46,14 @@ static XrRbcProgram *from_lir(const char *path, bool known, bool point, uint32_t
         .result = arithmetic ? XR_LIR_I64 : XR_LIR_UNIT};
     OK(xr_lir_declare_function(module, &spec, &root));
     OK(xr_lir_define_function(module, root));
-    XrLirType type = XR_LIR_I64;
+    XrLirType type = XR_LIR_I64, string_types[] = {XR_LIR_PTR, XR_LIR_U64};
     if (!arithmetic) {
         spec = (XrLirFunctionSpec) {.name = "xrt_print_i64", .name_length = 13,
             .parameters = &type, .parameter_count = 1, .result = XR_LIR_UNIT,
             .kind = XR_LIR_FUNCTION_EXTERNAL, .extern_kind = XR_LIR_EXTERN_PRINT_I64};
+        if (string_output) spec = (XrLirFunctionSpec){.name="xrt_print_string", .name_length=16,
+            .parameters=string_types, .parameter_count=2, .result=XR_LIR_UNIT,
+            .kind=XR_LIR_FUNCTION_EXTERNAL, .extern_kind=XR_LIR_EXTERN_PRINT_STRING};
         OK(xr_lir_declare_function(module, &spec, &print));
     }
     XrLirBlock block = {0};
@@ -81,10 +84,20 @@ static XrRbcProgram *from_lir(const char *path, bool known, bool point, uint32_t
         instruction = (XrLirInstruction) {.op = XR_LIR_RET, .type = XR_LIR_UNIT,
             .operands = &result, .operand_count = 1};
     } else {
+        XrLirValue arguments[2] = {value, {0}};
+        XrLirLiteral literal = {0};
+        if (string_output) {
+            const unsigned char bytes[] = {'A', 0, 0xc3, 0xa9};
+            OK(xr_lir_add_literal(module, bytes, sizeof(bytes), &literal));
+            OK(xr_lir_literal_address(module, block, literal, &arguments[0]));
+            XrLirInstruction length = {.op=XR_LIR_CONST, .type=XR_LIR_U64, .bits=sizeof(bytes)};
+            OK(xr_lir_emit_value(module, block, &length, &arguments[1]));
+        }
         if (known) source = (XrLirSource) {path, strlen(path), 7, 9, point ? 7u : 8u, point ? 9u : 11u};
         instruction = (XrLirInstruction) {.op = XR_LIR_CALL, .type = XR_LIR_UNIT,
-            .callee = print, .operands = &value, .operand_count = 1, .source = source};
+            .callee = print, .operands = arguments, .operand_count = string_output ? 2u : 1u, .source = source};
         OK(xr_lir_emit_effect(module, block, &instruction));
+        if (string_output) OK(xr_lir_literal_address(module, block, literal, &arguments[0]));
         if (known) instruction.source.line = instruction.source.end_line = 8;
         OK(xr_lir_emit_effect(module, block, &instruction)); // Must never follow a failed first print.
         instruction = (XrLirInstruction) {.op = XR_LIR_RET, .type = XR_LIR_UNIT};
@@ -219,7 +232,7 @@ static void check_arithmetic_panic(XrRbcOutcome *outcome, uint32_t code, const c
 }
 
 static int report_panic(const char *path, uint32_t code, bool bad_sink, bool program_first) {
-    XrRbcProgram *program = from_lir(path, true, false, code);
+    XrRbcProgram *program = from_lir(path, true, false, code, false);
     XrRbcOutcome *outcome = invoke(program);
     if (program_first) xr_rbc_program_destroy(program);
     check_arithmetic_panic(outcome, code, path);
@@ -252,7 +265,7 @@ static void nested_root(void *data) {
     ++nested->after_outer;
 }
 
-static void nested_execution(const char *path) {
+static void nested_execution(const char *path, bool string_output) {
     XrtSourceLocation source = {"outer.xr", 8, 33, 2, 0, 0};
     XrtLocationOwner *owner = NULL;
     CHECK(xrt_locations_create(&source, 1, &owner) == XRT_LOCATION_OK);
@@ -260,7 +273,7 @@ static void nested_execution(const char *path) {
     for (unsigned kind = 0; kind < 6; ++kind) {
         unsigned inner = kind % 3;
         XrRbcProgram *program = inner == 0 ? from_source("") :
-            from_lir(path, true, false, inner == 1 ? 420u : 0u);
+            from_lir(path, true, false, inner == 1 ? 420u : 0u, string_output);
         Nested *nested = xr_calloc(1, sizeof(*nested));
         XrtExecutionFailure *failure = xr_calloc(1, sizeof(*failure));
         CHECK(nested && failure);
@@ -292,8 +305,9 @@ static void nested_execution(const char *path) {
 int main(int argc, char **argv) {
     CHECK(argc >= 2);
     const char *mode = argv[1];
-    if (!strcmp(mode, "literal-repeat")) {
-        XrRbcProgram *program = from_source("const n=7\nprint(n)\nprint(99)\n");
+    if (!strcmp(mode, "literal-repeat") || !strcmp(mode, "string-repeat")) {
+        XrRbcProgram *program = from_source(!strcmp(mode,"string-repeat") ?
+            "print(\"A\\0\xc3\xa9\")\nprint(7)\nprint(\"\")\n" : "const n=7\nprint(n)\nprint(99)\n");
         for (unsigned i = 0; i < 2; ++i) {
             XrRbcOutcome *outcome = invoke(program);
             uint64_t bits = UINT64_MAX;
@@ -323,17 +337,21 @@ int main(int argc, char **argv) {
     if (!strcmp(mode, "panic-div") || !strcmp(mode, "panic-rem") || !strcmp(mode, "panic-bad-sink"))
         return report_panic(path, !strcmp(mode, "panic-rem") ? 421u : 420u,
             !strcmp(mode, "panic-bad-sink"), argc == 2 || strcmp(argv[2], "outcome-first") != 0);
-    if (!strcmp(mode, "nested")) nested_execution(path);
+    if (!strcmp(mode, "nested") || !strcmp(mode,"nested-string"))
+        nested_execution(path,!strcmp(mode,"nested-string"));
     else {
-        bool literal = !strcmp(mode, "literal-failure");
-        bool source_case = literal || !strcmp(mode, "source-failure");
-        bool point = !strcmp(mode, "point"), known = strcmp(mode, "unknown") != 0;
-        bool buffered = !strcmp(mode, "flush") || !strcmp(mode, "pipe-flush");
-        bool pipe = !strcmp(mode, "pipe") || !strcmp(mode, "pipe-flush");
+        bool string_output = !strncmp(mode,"string-",7);
+        const char *kind = string_output ? mode+7 : mode;
+        bool literal = !strcmp(kind, "literal-failure");
+        bool source_case = literal || !strcmp(kind, "source-failure");
+        bool point = !strcmp(kind, "point"), known = strcmp(kind, "unknown") != 0;
+        bool buffered = !strcmp(kind, "flush") || !strcmp(kind, "pipe-flush");
+        bool pipe = !strcmp(kind, "pipe") || !strcmp(kind, "pipe-flush");
         XrRbcProgram *program = source_case ?
-            from_source(literal ? "const n=7\nprint(n)\nprint(99)\n" :
+            from_source(literal ? "const n=7\nprint(n)\nprint(99)\n" : string_output ?
+                "fn fail()->i64{\nprint(\"A\\0\xc3\xa9\")\nreturn 1}\nprint(fail())\n" :
                 "fn fail()->i64{\nprint(42)\nreturn 1}\nprint(fail())\n") :
-            from_lir(path, known, point, false);
+            from_lir(path, known, point, false, string_output);
         XrtSourceLocation expected = source_case ? source_print_location(program) : (XrtSourceLocation) {0};
         XrRbcExecution *execution = prepare(program);
         static char buffer[128];

@@ -42,6 +42,9 @@ typedef struct {
 // retain every payload bit. I64 cells belong to an activation and may be
 // transported through verified internal calls and block parameters. Cells
 // cannot be host entry arguments, results, constants or native arguments.
+// Verified literal-address/length pairs used only by direct String output are
+// compile-time operands, not general PTR/U64 values or register contents.
+// The Program owns the selected immutable bytes independently of its input.
 XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunction entry,
     XrRbcProgram **output, XrRbcCompileDiagnostic *diagnostic);
 XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program);

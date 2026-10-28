@@ -831,7 +831,106 @@ static void test_cell_escape_rejections(void) {
     }
 }
 
+
+static XrLirModule *literal_module(XrLirFunction *root, unsigned unsigned_use) {
+    XrLirModule *m = NULL;
+    OK(xr_lir_module_create(NULL, &m));
+    unsigned char bytes[] = {'A', 0, 0xc3, 0xa9};
+    XrLirLiteral literal = {0}, unused = {0};
+    OK(xr_lir_add_literal(m, bytes, sizeof(bytes), &literal));
+    OK(xr_lir_add_literal(m, "unused", 6, &unused));
+    memset(bytes, 0xa5, sizeof(bytes));
+    XrLirType flag = XR_LIR_I1, types[] = {XR_LIR_PTR, XR_LIR_U64};
+    *root = test_function(m, "literal", &flag, 1, XR_LIR_UNIT);
+    XrLirFunction print;
+    XrLirFunctionSpec spec = {.name="xrt_print_string", .name_length=16,
+        .parameters=types, .parameter_count=2, .result=XR_LIR_UNIT,
+        .kind=XR_LIR_FUNCTION_EXTERNAL, .extern_kind=XR_LIR_EXTERN_PRINT_STRING};
+    OK(xr_lir_declare_function(m, &spec, &print));
+    XrLirBlock entry = test_block(m, *root, NULL, 0), output = test_block(m, *root, NULL, 0);
+    XrLirBlock finish = test_block(m, *root, NULL, 0);
+    OK(xr_lir_set_entry(m, *root, entry));
+    conditional(m, entry, parameter(m, *root, 0), (XrLirEdge){output, NULL, 0},
+        (XrLirEdge){finish, NULL, 0});
+    XrLirValue length = test_constant(m, output, XR_LIR_U64, sizeof(bytes));
+    for (unsigned i = 0; i < 2; ++i) {
+        XrLirValue args[2] = {{0}, length};
+        OK(xr_lir_literal_address(m, output, literal, &args[0]));
+        call(m, output, print, XR_LIR_UNIT, args, 2);
+    }
+    if (unsigned_use == 1 || unsigned_use == 2) {
+        XrLirValue args[] = {length, length}, result;
+        XrLirInstruction i = {.op=unsigned_use == 1 ? XR_LIR_ICMP : XR_LIR_ADD,
+            .type=unsigned_use == 1 ? XR_LIR_I1 : XR_LIR_U64,
+            .predicate=unsigned_use == 1 ? XR_LIR_LT : XR_LIR_PREDICATE_NONE,
+            .operands=args, .operand_count=2};
+        OK(xr_lir_emit_value(m, output, &i, &result));
+    }
+    if (unsigned_use == 3) {
+        XrLirType type = XR_LIR_U64;
+        XrLirBlock transport = test_block(m, *root, &type, 1);
+        test_branch(m, output, transport, &length, 1);
+        test_branch(m, transport, finish, NULL, 0);
+    } else test_branch(m, output, finish, NULL, 0);
+    test_return(m, finish, (XrLirValue){0});
+    OK(xr_lir_module_finish(m, NULL));
+    return m;
+}
+
+static void test_literal_ownership(void) {
+    XrLirFunction root;
+    XrLirModule *m = literal_module(&root, false);
+    XrRbcProgram *program = compile(m, root);
+    const XrRbcModule *module = xr_rbc_program_view(program);
+    CHECK(module->literal_count == 1 && module->literals[0].length == 4);
+    const unsigned char expected[] = {'A', 0, 0xc3, 0xa9};
+    CHECK(!memcmp(module->literals[0].bytes, expected, sizeof(expected)));
+    uint32_t prints = 0;
+    for (size_t pc = 0; pc < module->functions[0].code_count; ++pc)
+        if ((module->functions[0].code[pc] & 255) == XR_RBC_PRINT_LITERAL) {
+            CHECK((module->functions[0].code[pc] >> 8) == 0);++prints;
+        }
+    CHECK(prints == 2);
+    XrLirLiteral input;
+    const uint8_t *bytes = NULL;size_t length = 0;
+    OK(xr_lir_literal_at(m, 0, &input));OK(xr_lir_literal_view(m, input, &bytes, &length));
+    CHECK((const void *)bytes != (const void *)module->literals[0].bytes);
+    xr_lir_module_destroy(m);
+    CHECK(!memcmp(module->literals[0].bytes, expected, sizeof(expected)));
+    XrRbcOutcome *outcomes[2];
+    for (unsigned i = 0; i < 2; ++i) {
+        uint64_t flag = 0;
+        XrRbcExecution *execution = NULL;
+        CHECK(xr_rbc_program_prepare(program, &flag, 1, &execution) == XR_RBC_OK);
+        outcomes[i] = xr_rbc_execution_run(execution);
+        CHECK(outcomes[i] && !xr_rbc_execution_run(execution));
+        xr_rbc_execution_free(&execution);
+    }
+    xr_rbc_program_destroy(program);
+    for (unsigned i = 0; i < 2; ++i) {
+        uint64_t bits = 99;
+        CHECK(xr_rbc_outcome_bits(outcomes[i], &bits) && !bits);
+        xr_rbc_outcome_free(&outcomes[i]);
+    }
+    program = NULL;
+    for (unsigned i = 1; i <= 3; ++i) {
+        m = literal_module(&root, i);
+        CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+        xr_lir_module_destroy(m);
+    }
+    XrLirType types[] = {XR_LIR_PTR, XR_LIR_U64};
+    for (unsigned i = 0; i < 2; ++i) {
+        m = NULL;OK(xr_lir_module_create(NULL, &m));
+        root = test_function(m, "opaque_argument", &types[i], 1, XR_LIR_UNIT);
+        XrLirBlock b = test_block(m, root, NULL, 0);OK(xr_lir_set_entry(m, root, b));
+        test_return(m, b, (XrLirValue){0});OK(xr_lir_module_finish(m, NULL));
+        CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+        xr_lir_module_destroy(m);
+    }
+}
+
 int main(void) {
+    test_literal_ownership();
     test_cell_escape_rejections();
     test_cell_transport();
     test_edge_moves();

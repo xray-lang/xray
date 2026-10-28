@@ -47,6 +47,7 @@
     X(JMP, SJ)                                                                                     \
     X(CALL, ABX)                                                                                   \
     X(CALLN, ABX)                                                                                  \
+    X(PRINT_LITERAL, ABX)                                                                          \
     X(CELL_NEW, ABX)                                                                               \
     X(CELL_READ, AB)                                                                               \
     X(CELL_WRITE, AB)                                                                              \
@@ -87,10 +88,18 @@ typedef struct {
 typedef void (*XrRbcNativeI64)(int64_t value, uint32_t source_id);
 
 typedef struct {
+    const char *bytes;
+    size_t length;
+} XrRbcLiteral;
+
+typedef struct {
     const XrRbcFunction *functions;
     size_t function_count;
     const XrRbcNativeI64 *natives;
     size_t native_count;
+    // Immutable bytes share the same borrowed lifetime as code/descriptors.
+    const XrRbcLiteral *literals;
+    size_t literal_count;
 } XrRbcModule;
 
 typedef enum {
@@ -125,6 +134,8 @@ typedef struct XrRbcOutcome XrRbcOutcome;
 // window. CALLN reads value/id at A+1/A+2, with Bx selecting the actual leaf.
 // Callee locals may overwrite slots beyond the call window. LT/LE/EQ compare
 // A,B and execute the following JMP only when the comparison is true.
+// PRINT_LITERAL reserves A as zero and selects immutable bytes by Bx; its
+// location is the instruction's source map entry, never a scalar register.
 XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t entry,
     const uint64_t *arguments, size_t argument_count, XrtLocationOwner *locations,
     XrRbcExecution **output);

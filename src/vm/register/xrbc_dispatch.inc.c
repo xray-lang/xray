@@ -174,6 +174,12 @@ XR_RBC_CASE(CALLN) {
     module->natives[target](xr_rbc_signed(XR_RBC_REG(a + 1)), (uint32_t) id);
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(PRINT_LITERAL) {
+    const XrRbcLiteral *literal = &module->literals[instruction >> 16];
+    uint32_t source_id = function->source_ids ? function->source_ids[pc - 1] : 0;
+    xrt_print_string(literal->bytes, literal->length, source_id);
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(RET)
 XR_RBC_CASE(RET0) {
     uint64_t value = 0;

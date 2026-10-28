@@ -38,8 +38,9 @@ def main():
                 label, result.returncode, output, result.stderr)
             return
         assert result.returncode == 0, (label, result.returncode, output, result.stderr)
-        if mode in ('source', 'literal-repeat'):
-            expected = b'7\n99\n7\n99\n' if mode == 'literal-repeat' else b'10\n21\n'
+        if mode in ('source', 'literal-repeat', 'string-repeat'):
+            expected = (b'A\x00\xc3\xa9\n7\n\n'*2 if mode == 'string-repeat' else
+                        b'7\n99\n7\n99\n' if mode == 'literal-repeat' else b'10\n21\n')
             assert output == expected and result.stderr == b'', (output, result.stderr)
         else:
             marker = b'HOST_ALIVE\r\n' if os.name == 'nt' else b'HOST_ALIVE\n'
@@ -47,10 +48,16 @@ def main():
 
     run('source')
     run('literal-repeat')
+    run('string-repeat')
     for mode in ('write', 'flush', 'pipe', 'pipe-flush', 'point', 'unknown', 'source-failure', 'literal-failure'):
         for order in ('program-first', 'outcome-first'):
             run(mode, order, pipe=mode in ('pipe', 'pipe-flush'))
+    for mode in ('string-write', 'string-flush', 'string-pipe', 'string-pipe-flush',
+                 'string-point', 'string-unknown', 'string-source-failure'):
+        for order in ('program-first', 'outcome-first'):
+            run(mode, order, pipe=mode in ('string-pipe', 'string-pipe-flush'))
     run('nested')
+    run('nested-string')
     for mode in ('panic-div', 'panic-rem', 'panic-bad-sink'):
         for order in ('program-first', 'outcome-first'):
             run(mode, order)

@@ -119,6 +119,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     case XR_RBC_LOADI:
         if (a >= registers) return false;
         break;
+    case XR_RBC_PRINT_LITERAL:
+        if (a || index >= module->literal_count) return false;
+        break;
     case XR_RBC_CELL_NEW:
         if (a >= registers || index >= function->cell_count) return false;
         break;
@@ -149,6 +152,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
 }
 
 static bool xr_rbc_module_valid(const XrRbcModule *module) {
+    for (size_t i = 0; i < module->literal_count; ++i)
+        if (module->literals[i].length == SIZE_MAX ||
+            (module->literals[i].length && !module->literals[i].bytes)) return false;
     // Validate descriptors before using any call target's parameter count.
     for (size_t f = 0; f < module->function_count; ++f)
         if (!xr_rbc_function_valid(&module->functions[f])) return false;
@@ -241,7 +247,8 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     XrRbcExecution **output) {
     if (!output || *output || !locations || !module || !module->functions ||
         entry >= module->function_count || (argument_count && !arguments) ||
-        (module->native_count && !module->natives) || module->native_count > 65536)
+        (module->native_count && !module->natives) || module->native_count > 65536 ||
+        (module->literal_count && !module->literals) || module->literal_count > 65536)
         return XR_RBC_INVALID;
     const XrRbcFunction *function = &module->functions[entry];
     if (argument_count != function->parameter_count || !xr_rbc_module_valid(module) ||

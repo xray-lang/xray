@@ -101,7 +101,7 @@ static void panic_after_growth(void) {
     ids[10] = 1;
     function.source_ids = ids;
     function.source_id_count = 12;
-    XrRbcModule module = {&function, 1, NULL, 0};
+    XrRbcModule module = {&function, 1, NULL, 0, NULL, 0};
     XrtSourceLocation location = {"grown.xr", 8, 19, 2, 19, 7};
     XrtLocationOwner *owner = NULL;
     XR_CHECK(xrt_locations_create(&location, 1, &owner) == XRT_LOCATION_OK, "owned fault site");
@@ -155,7 +155,7 @@ static void cell_growth(bool panic) {
     ids[15] = 1;
     XrRbcFunction functions[] = {{root, 7, NULL, 0, 6, 1, NULL, 0, 1},
         {body, 17, NULL, 0, 6, 2, ids, 17, 1}};
-    XrRbcModule module = {functions, 2, NULL, 0};
+    XrRbcModule module = {functions, 2, NULL, 0, NULL, 0};
     XrtSourceLocation location = {"cells.xr", 8, 19, 2, 19, 7};
     XrtLocationOwner *owner = NULL;
     XR_CHECK(xrt_locations_create(&location, 1, &owner) == XRT_LOCATION_OK, "cell fault site");
@@ -196,7 +196,7 @@ static void cell_growth(bool panic) {
 int main(void) {
     uint32_t code[11];
     XrRbcFunction function = make_countdown(code);
-    XrRbcModule module = {&function, 1, NULL, 0};
+    XrRbcModule module = {&function, 1, NULL, 0, NULL, 0};
     XrtLocationOwner *owner = NULL;
     XR_CHECK(xrt_locations_create(NULL, 0, &owner) == XRT_LOCATION_OK, "real empty image");
     invoke(&module, owner, false, XR_RBC_OK);
