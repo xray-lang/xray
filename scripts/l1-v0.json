@@ -103,7 +103,9 @@
     "test_xir_try_assert_order_native",
     "test_source_request_lifetime",
     "test_xir_try_optional_faults",
-    "test_xir_try_optional_native"
+    "test_xir_try_optional_native",
+    "test_xir_values",
+    "test_xir_nullable_unit_native"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -277,7 +279,13 @@
     "test_xir_try_optional_cli",
     "test_xir_try_optional_resources",
     "test_xir_try_optional_faults",
-    "test_xir_try_optional_generated_native"
+    "test_xir_try_optional_generated_native",
+    "test_xir_nullable_unit_source",
+    "test_xir_nullable_unit_resources",
+    "test_xir_nullable_unit_faults",
+    "test_xir_nullable_unit_values",
+    "test_xir_nullable_unit_cli",
+    "test_xir_nullable_unit_native"
   ],
   "versionCommand": [
     "{build}/xray.exe",
