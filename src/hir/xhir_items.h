@@ -3,18 +3,23 @@
 #define XHIR_ITEMS_H
 #include "xhir_diagnostics.h"
 typedef struct XrHirItems XrHirItems;
+typedef enum {XR_HIR_ITEM_DECLARATION,XR_HIR_ITEM_PARAMETER} XrHirItemKind;
+typedef struct XrHirItemSpec {
+    const char *name;
+    uint32_t module,parent,node; /* Zero parent is the module; otherwise item+1. */
+    int line,column;
+    XrHirItemKind kind;
+} XrHirItemSpec;
 XR_FUNC XrCompileResourceStatus xr_hir_items_new(XrCompileResources *,XrHirItems **);
 XR_FUNC void xr_hir_items_free(XrHirItems *);
 /* Source bytes are borrowed only while the current compiler graph is live. */
 XR_FUNC XrCompileResourceStatus xr_hir_items_source(XrHirItems *,uint32_t,const char *,
     const char *,size_t,const uint8_t *);
 /* Register every declaration, including all members of an ambiguous group. */
-XR_FUNC XrCompileResourceStatus xr_hir_items_reserve(XrHirItems *,uint32_t,const char *,
-    uint32_t,int,int,uint32_t *);
-/* Lowering binds an existing declaration; generated names use this same table. */
-XR_FUNC XrCompileResourceStatus xr_hir_items_claim(XrHirItems *,uint32_t,const char *,
-    uint32_t,int,int,uint32_t *);
-XR_FUNC bool xr_hir_items_find(const XrHirItems *,uint32_t,const char *,uint32_t *);
+XR_FUNC XrCompileResourceStatus xr_hir_items_reserve(XrHirItems *,const XrHirItemSpec *,uint32_t *);
+/* Parameters bind only reserved declarations; generated module names may join. */
+XR_FUNC XrCompileResourceStatus xr_hir_items_claim(XrHirItems *,const XrHirItemSpec *,uint32_t *);
+XR_FUNC bool xr_hir_items_find(const XrHirItems *,uint32_t,uint32_t,const char *,uint32_t *);
 XR_FUNC bool xr_hir_items_module(const XrHirItems *,uint32_t,uint32_t *);
 /* Receiving bindings are synchronous borrows, never part of a report. */
 XR_FUNC bool xr_hir_items_bind(XrHirItems *,uint32_t,void *);

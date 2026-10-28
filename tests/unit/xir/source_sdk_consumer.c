@@ -457,7 +457,55 @@ static void installed_report(const char *stdlib) {
     CHECK(xray_source_diagnostic_root(report,2,&saved)==XR_SOURCE_BAD_ARGUMENT&&saved.code==123);
     xray_source_diagnostic_free(report);
 }
+/* Parameter scopes share the report owner and outlive their borrowed input. */
+static void installed_parameter_report(const char *stdlib) {
+    char text[]="const value:i64=99\r\n"
+        "/*\303\251\360\237\230\200*/ fn alpha(value:i64,value:i64)->i64{return value}\r\n"
+        "/*\303\251\360\237\230\200*/ fn beta(value:i64,value:i64)->i64{return value}\r\n"
+        "print(alpha(4,5)+beta(5,6))\r\n";
+    XrSourceCompileOptions options=compile_options(stdlib);
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"installed-parameter-report",text,sizeof(text)-1}};
+    XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;XrSourceFailure failure={0};
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_BAD_ARGUMENT&&!artifact&&report);
+    CHECK(failure.status==XR_SOURCE_BAD_ARGUMENT&&failure.cleanup_status==XR_SOURCE_OK);
+    memset(text,'!',sizeof(text));XrSourceDiagnosticReportInfo info={0};
+    CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==2&&!info.complete);
+    const uint64_t original[]={40,100},duplicate[]={50,110};
+    for(uint32_t i=0;i<2;++i) {
+        XrSourceDiagnosticRoot root={0};XrSourceDiagnosticLabel label={0};
+        CHECK(xray_source_diagnostic_root(report,i,&root)==XR_SOURCE_OK&&root.code==302&&root.labels==1);
+        CHECK(!strcmp(root.message,"duplicate parameter name"));
+        CHECK(xray_source_diagnostic_label(report,i,0,&label)==XR_SOURCE_OK);
+        CHECK(!strcmp(label.message,"first declaration is here"));
+        CHECK(root.primary.line==(int32_t)(2+i)&&root.primary.column==(int32_t)(31-i));
+        CHECK(label.location.line==(int32_t)(2+i)&&label.location.column==(int32_t)(21-i));
+        CHECK(root.primary.start_byte==duplicate[i]&&root.primary.end_byte==duplicate[i]+5);
+        CHECK(label.location.start_byte==original[i]&&label.location.end_byte==original[i]+5);
+        CHECK(root.primary.utf16_line==1+i&&root.primary.utf16_column==27-i);
+        CHECK(label.location.utf16_line==1+i&&label.location.utf16_column==17-i);
+        CHECK((root.primary.flags&(XR_SOURCE_LOCATION_LINE|XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16|XR_SOURCE_LOCATION_REVISION))==
+            (XR_SOURCE_LOCATION_LINE|XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16|XR_SOURCE_LOCATION_REVISION));
+        CHECK(root.primary.flags==label.location.flags&&!memcmp(root.primary.revision,label.location.revision,32));
+    }
+    XrSourceDiagnosticLabel saved={.location={.line=123}};
+    CHECK(xray_source_diagnostic_label(report,0,1,&saved)==XR_SOURCE_BAD_ARGUMENT&&saved.location.line==123);
+    xray_source_diagnostic_free(report);
+    char corrected[]="const value:i64=99\r\n"
+        "/*\303\251\360\237\230\200*/ fn alpha(value:i64,other:i64)->i64{return value}\r\n"
+        "/*\303\251\360\237\230\200*/ fn beta(value:i64,other:i64)->i64{return value}\r\n"
+        "print(alpha(4,5)+beta(5,6))\r\n";
+    artifact=compile(&options,corrected,__func__);
+    Output out={0};XrSourceCallOptions runtime;
+    CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
+    runtime.write=capture;runtime.context=&out;
+    XrSourceResult *result=NULL;XrSourceEvent event={0};
+    CHECK(execute_owned(artifact,&runtime,&result,&event)==XR_SOURCE_OK&&result);
+    xray_source_artifact_free(artifact);
+    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK&&event.state==XR_SOURCE_RUN_RETURNED);
+    int64_t value=99;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK&&!value);
+    CHECK(out.length==2&&!memcmp(out.bytes,"9\n",2));xray_source_result_free(result);
+}
 int main(int argc, char **argv) {
-    CHECK(argc == 2); installed_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
+    CHECK(argc == 2); installed_report(argv[1]); installed_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
     puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
 }

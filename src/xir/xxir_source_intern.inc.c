@@ -13,7 +13,7 @@ static SourceName *find_name(SourceContext *ctx, SourceName *names, const char *
     if(names && ctx->items) {
         uint32_t module=0,item=0;
         if(xr_hir_items_binding_module(ctx->items,names,&module)) {
-            if(!xr_hir_items_find(ctx->items,module,name,&item))return NULL;
+            if(!xr_hir_items_find(ctx->items,module,0,name,&item))return NULL;
             return xr_hir_items_binding(ctx->items,item);
         }
     }
@@ -22,6 +22,26 @@ static SourceName *find_name(SourceContext *ctx, SourceName *names, const char *
         if (source_text_same(ctx, NULL, p->name, name)) return p;
     }
     return NULL;
+}
+static SourceName *source_name_bind(SourceContext *ctx,SourceName **head,const char *name,
+    AstNode *node,uint32_t item) {
+    SourceName *symbol=source_alloc(ctx,1,sizeof(*symbol));
+    if(!symbol)return NULL;
+    if(item&&!xr_hir_items_bind(ctx->items,item-1,symbol)) {
+        source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"declaration was bound twice");return NULL;
+    }
+    symbol->name=name;symbol->node=node;symbol->hir_item=item;
+    symbol->next=*head;*head=symbol;return symbol;
+}
+static SourceName *source_parameter_name(SourceContext *ctx,AstNode *node,const XrParamNode *param,
+    uint32_t parent) {
+    uint32_t item=0;
+    XrHirItemSpec spec={param->name,ctx->module,parent,node->node_id,param->line,param->column,XR_HIR_ITEM_PARAMETER};
+    XrCompileResourceStatus status=xr_hir_items_claim(ctx->items,&spec,&item);
+    if(status!=XR_COMPILE_RESOURCE_OK) {
+        source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"parameter declaration was not reserved");return NULL;
+    }
+    return source_name_bind(ctx,&ctx->locals,param->name,node,item+1);
 }
 static SourceName *add_name(SourceContext *ctx, SourceName **head, const char *name, AstNode *node) {
     if(name && ctx->interactive && ctx->names && ctx->graph && ctx->graph->entry_index>=0 &&
@@ -33,8 +53,9 @@ static SourceName *add_name(SourceContext *ctx, SourceName **head, const char *n
     bool module=module_index!=UINT32_MAX;
     uint32_t item=0;
     if(module && ctx->items && name && *name) {
-        XrCompileResourceStatus status=xr_hir_items_claim(ctx->items,module_index,name,
-            node?node->node_id:0,node?node->line:0,node?node->column:0,&item);
+        XrHirItemSpec spec={name,module_index,0,node?node->node_id:0,
+            node?node->line:0,node?node->column:0,XR_HIR_ITEM_DECLARATION};
+        XrCompileResourceStatus status=xr_hir_items_claim(ctx->items,&spec,&item);
         if(status!=XR_COMPILE_RESOURCE_OK || xr_hir_items_errors(ctx->items)) {
             source_fail(ctx,node,status==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:
                 status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
@@ -44,14 +65,7 @@ static SourceName *add_name(SourceContext *ctx, SourceName **head, const char *n
     } else if (!name || !*name || find_name(ctx, *head, name)) {
         source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate or empty declaration name"); return NULL;
     }
-    SourceName *symbol = source_alloc(ctx, 1, sizeof(*symbol));
-    if (symbol) {
-        if(module && ctx->items && !xr_hir_items_bind(ctx->items,item,symbol)) {
-            source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"module declaration was bound twice");return NULL;
-        }
-        symbol->name = name; symbol->node = node;
-        symbol->next = *head; *head = symbol; }
-    return symbol;
+    return source_name_bind(ctx,head,name,node,module&&ctx->items?item+1:0);
 }
 static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);
 static bool source_nominal_type(SourceContext *ctx, const char *name, XrXirType *type);

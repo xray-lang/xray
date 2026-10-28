@@ -92,11 +92,23 @@ static bool source_item_resource(SourceContext *ctx,AstNode *node,XrCompileResou
         status==XR_COMPILE_RESOURCE_OVERFLOW?XR_XIR_OVERFLOW:XR_XIR_BAD_STRUCTURE,
         "module item collection failed");
 }
-static bool source_item_reserve(SourceContext *ctx,uint32_t module,AstNode *node,
-    const char *name,int line,int column) {
-    if(!name||!*name)return true;
-    uint32_t item=0;
-    return source_item_resource(ctx,node,xr_hir_items_reserve(ctx->items,module,name,node->node_id,line,column,&item));
+static bool source_item_reserve(SourceContext *ctx,AstNode *node,XrHirItemSpec spec,uint32_t *out) {
+    if(!spec.name||!*spec.name)return true;
+    uint32_t ignored=0;
+    return source_item_resource(ctx,node,xr_hir_items_reserve(ctx->items,&spec,out?out:&ignored));
+}
+static bool source_parameter_items(SourceContext *ctx,uint32_t module,AstNode *node,uint32_t parent) {
+    const FunctionDeclNode *decl=&node->as.function_decl;
+    if(decl->param_count<0||decl->param_count>65536||(decl->param_count&&!decl->params))
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"function parameters are malformed");
+    for(int p=0;p<decl->param_count;++p) {
+        if(!source_request_poll(ctx,node))return false;
+        const XrParamNode *param=decl->params[p];
+        if(!param)return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"function parameter is missing");
+        XrHirItemSpec spec={param->name,module,parent,node->node_id,param->line,param->column,XR_HIR_ITEM_PARAMETER};
+        if(!source_item_reserve(ctx,node,spec,NULL))return false;
+    }
+    return true;
 }
 static bool source_items_prepare(SourceContext *ctx) {
     if(ctx->items)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"module items already prepared");
@@ -122,23 +134,31 @@ static bool source_items_prepare(SourceContext *ctx) {
             case AST_INTERFACE_DECL:name=node->as.interface_decl.name;break;
             default:break;
             }
-            if(name&&!source_item_reserve(ctx,m,node,name,node->line,node->column))return false;
+            if(name&&*name) {
+                uint32_t item=0;
+                XrHirItemSpec item_spec={name,m,0,node->node_id,node->line,node->column,XR_HIR_ITEM_DECLARATION};
+                if(!source_item_reserve(ctx,node,item_spec,&item))return false;
+                if(node->type==AST_FUNCTION_DECL&&!source_parameter_items(ctx,m,node,item+1))return false;
+            }
             if(node->type==AST_DESTRUCTURE_DECL) {
                 SourceDestructurePlan plan={0};
                 if(!source_destructure_pattern(ctx,node,&plan))return false;
                 for(uint32_t f=0;f<plan.count;++f) {
                     const XrDestructurePattern *field=plan.fields[f].pattern;
-                    if(!source_item_reserve(ctx,m,node,field->as.identifier.name,field->line,field->column))return false;
+                    XrHirItemSpec item_spec={field->as.identifier.name,m,0,node->node_id,field->line,field->column,XR_HIR_ITEM_DECLARATION};
+                    if(!source_item_reserve(ctx,node,item_spec,NULL))return false;
                 }
             }
             if(node->type==AST_IMPORT_STMT) {
                 const ImportStmtNode *import=&node->as.import_stmt;
                 XrNameSpan binding=source_import_binding_span(import,0);
-                if(import->alias&&!source_item_reserve(ctx,m,node,import->alias,binding.line,binding.column))return false;
+                XrHirItemSpec item_spec={import->alias,m,0,node->node_id,binding.line,binding.column,XR_HIR_ITEM_DECLARATION};
+                if(!source_item_reserve(ctx,node,item_spec,NULL))return false;
                 for(int p=0;p<import->member_count;++p) {
                     const ImportMember *member=&import->members[p];
                     XrNameSpan span=member->alias?member->alias_span:member->name_span;
-                    if(!source_item_reserve(ctx,m,node,member->alias?member->alias:member->name,span.line,span.column))return false;
+                    item_spec=(XrHirItemSpec){member->alias?member->alias:member->name,m,0,node->node_id,span.line,span.column,XR_HIR_ITEM_DECLARATION};
+                    if(!source_item_reserve(ctx,node,item_spec,NULL))return false;
                 }
             }
         }

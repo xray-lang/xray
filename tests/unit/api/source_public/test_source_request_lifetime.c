@@ -232,7 +232,8 @@ static XrCompileResourceStatus report_build(XrCompileResources *owner,XrFrontend
     static const char text[]="const a=1\nconst a=2\nconst b=3\nconst b=4\n";
     if(status==XR_COMPILE_RESOURCE_OK)status=xr_hir_items_source(items,0,"report.xr",text,sizeof(text)-1,NULL);
     for(uint32_t i=0;status==XR_COMPILE_RESOURCE_OK&&i<4;++i) {
-        uint32_t id=0;status=xr_hir_items_reserve(items,0,i<2?"a":"b",i+1,(int)i+1,7,&id);
+        XrHirItemSpec spec={i<2?"a":"b",0,0,i+1,(int)i+1,7,XR_HIR_ITEM_DECLARATION};
+        uint32_t id=0;status=xr_hir_items_reserve(items,&spec,&id);
     }
     if(status==XR_COMPILE_RESOURCE_OK){*output=xr_hir_items_take_report(items);xr_frontend_report_seal(*output,false);}
     xr_hir_items_free(items);return status;

@@ -2,7 +2,7 @@
  * One module namespace supplies both compiler binding and duplicate roots. */
 #include "xhir_items.h"
 #include <string.h>
-typedef struct HirItem {char *name;uint32_t module,node;int line,column;void *binding;} HirItem;
+typedef struct HirItem {char *name;uint32_t module,parent,node;int line,column;XrHirItemKind kind;void *binding;} HirItem;
 typedef struct HirSource {
     const char *path,*text;size_t length;const uint8_t *revision;
     uint32_t module,report_source;
@@ -57,35 +57,47 @@ static XrCompileResourceStatus hir_source_report(XrHirItems *h,uint32_t module,u
     }
     return xr_frontend_report_source(h->report,NULL,NULL,0,NULL,out);
 }
-XrCompileResourceStatus xr_hir_items_reserve(XrHirItems *h,uint32_t module,const char *name,
-    uint32_t node,int line,int column,uint32_t *out) {
-    if(!h||!name||!*name||!out)return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+static bool hir_item_spec_valid(const XrHirItems *h,const XrHirItemSpec *spec) {
+    return h&&spec&&spec->name&&*spec->name&&spec->parent<=h->count&&
+        (!spec->parent||h->items[spec->parent-1].module==spec->module)&&
+        (spec->kind==XR_HIR_ITEM_DECLARATION||
+         (spec->kind==XR_HIR_ITEM_PARAMETER&&spec->parent));
+}
+XrCompileResourceStatus xr_hir_items_reserve(XrHirItems *h,const XrHirItemSpec *spec,uint32_t *out) {
+    if(!out||!hir_item_spec_valid(h,spec))return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     uint32_t previous=UINT32_MAX;
-    for(uint32_t i=0;i<h->count;++i)if(h->items[i].module==module&&!strcmp(h->items[i].name,name)){previous=i;break;}
+    for(uint32_t i=0;i<h->count;++i)if(h->items[i].module==spec->module&&
+        h->items[i].parent==spec->parent&&!strcmp(h->items[i].name,spec->name)){previous=i;break;}
     XrCompileResourceStatus s=XR_COMPILE_RESOURCE_OK;
     if(!hir_grow(h,(void **)&h->items,&h->capacity,h->count,sizeof(*h->items),&s))return s;
-    size_t length=strlen(name);if(length==SIZE_MAX)return XR_COMPILE_RESOURCE_OVERFLOW;
-    char *copy=hir_allocate(h,length+1,1,&s);if(!copy)return s;memcpy(copy,name,length+1);
+    size_t length=strlen(spec->name);if(length==SIZE_MAX)return XR_COMPILE_RESOURCE_OVERFLOW;
+    char *copy=hir_allocate(h,length+1,1,&s);if(!copy)return s;memcpy(copy,spec->name,length+1);
     if(previous!=UINT32_MAX) {
         if(!h->report){s=xr_frontend_report_new(h->resources,&h->report);if(s!=XR_COMPILE_RESOURCE_OK)return s;}
-        uint32_t source=0;s=hir_source_report(h,module,&source);if(s!=XR_COMPILE_RESOURCE_OK)return s;
+        uint32_t source=0;s=hir_source_report(h,spec->module,&source);if(s!=XR_COMPILE_RESOURCE_OK)return s;
         const HirItem *old=&h->items[previous];
-        XrFrontendLabel label={"first declaration is here",xr_frontend_report_location(h->report,source,old->line,old->column,name)};
-        s=xr_frontend_report_add(h->report,302,"duplicate declaration name",
-            xr_frontend_report_location(h->report,source,line,column,name),&label,1);
+        XrFrontendLabel label={"first declaration is here",xr_frontend_report_location(h->report,source,old->line,old->column,spec->name)};
+        s=xr_frontend_report_add(h->report,302,spec->kind==XR_HIR_ITEM_PARAMETER?
+            "duplicate parameter name":"duplicate declaration name",
+            xr_frontend_report_location(h->report,source,spec->line,spec->column,spec->name),&label,1);
         if(s!=XR_COMPILE_RESOURCE_OK)return s;++h->errors;
     }
-    *out=h->count;h->items[h->count++]=(HirItem){copy,module,node,line,column,NULL};return s;
+    *out=h->count;h->items[h->count++]=(HirItem){copy,spec->module,spec->parent,spec->node,
+        spec->line,spec->column,spec->kind,NULL};return s;
 }
-XrCompileResourceStatus xr_hir_items_claim(XrHirItems *h,uint32_t module,const char *name,
-    uint32_t node,int line,int column,uint32_t *out) {
-    if(!h||!name||!out)return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    for(uint32_t i=0;i<h->count;++i)if(h->items[i].module==module&&h->items[i].node==node&&!h->items[i].binding&&!strcmp(h->items[i].name,name)){*out=i;return XR_COMPILE_RESOURCE_OK;}
-    return xr_hir_items_reserve(h,module,name,node,line,column,out);
+XrCompileResourceStatus xr_hir_items_claim(XrHirItems *h,const XrHirItemSpec *spec,uint32_t *out) {
+    if(!out||!hir_item_spec_valid(h,spec))return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    for(uint32_t i=0;i<h->count;++i)if(h->items[i].module==spec->module&&
+        h->items[i].parent==spec->parent&&h->items[i].node==spec->node&&
+        h->items[i].kind==spec->kind&&!h->items[i].binding&&!strcmp(h->items[i].name,spec->name)) {
+        *out=i;return XR_COMPILE_RESOURCE_OK;
+    }
+    if(spec->parent)return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    return xr_hir_items_reserve(h,spec,out);
 }
-bool xr_hir_items_find(const XrHirItems *h,uint32_t module,const char *name,uint32_t *out) {
+bool xr_hir_items_find(const XrHirItems *h,uint32_t module,uint32_t parent,const char *name,uint32_t *out) {
     if(!h||!name||!out)return false;uint32_t found=UINT32_MAX;
-    for(uint32_t i=0;i<h->count;++i)if(h->items[i].module==module&&!strcmp(h->items[i].name,name)) {
+    for(uint32_t i=0;i<h->count;++i)if(h->items[i].module==module&&h->items[i].parent==parent&&!strcmp(h->items[i].name,name)) {
         if(found!=UINT32_MAX)return false;found=i;
     }
     if(found==UINT32_MAX)return false;*out=found;return true;
@@ -99,7 +111,7 @@ bool xr_hir_items_bind(XrHirItems *h,uint32_t item,void *binding) {
 }
 bool xr_hir_items_binding_module(const XrHirItems *h,const void *binding,uint32_t *out) {
     if(!h||!binding||!out)return false;
-    for(uint32_t i=0;i<h->count;++i)if(h->items[i].binding==binding){*out=h->items[i].module;return true;}
+    for(uint32_t i=0;i<h->count;++i)if(!h->items[i].parent&&h->items[i].binding==binding){*out=h->items[i].module;return true;}
     return false;
 }
 void *xr_hir_items_binding(const XrHirItems *h,uint32_t item) {return h&&item<h->count?h->items[item].binding:NULL;}

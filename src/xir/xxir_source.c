@@ -80,6 +80,7 @@ typedef struct SourceName {
     uint32_t reader;
     bool hidden;
     uint32_t debug_function, debug_binding;
+    uint32_t hir_item;
 } SourceName;
 /* SOURCE_UNIT_LOCAL is an initialized logical declaration with no runtime
  * payload. Its index is never an executable value or a capture ordinal.
@@ -218,7 +219,7 @@ typedef struct SourceFunction {
     uint32_t effect_value_capacity, effect_binding_capacity;
     SourceExpressionStorage *expressions;
     uint32_t expression_count;
-    uint32_t declaration, generic_owner;
+    uint32_t declaration, generic_owner, parameter_scope;
     uint32_t *constructor_places;
     AstNode *default_expression;
     SourceErrorContext *error_context;
@@ -2183,6 +2184,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     if (!symbol) return false;
     symbol->kind = SOURCE_FUNCTION; symbol->index = index;
     SourceFunction *body = &ctx->bodies[index]; body->node = body->type_owner = node; body->module = ctx->module;
+    body->parameter_scope = symbol->hir_item;
     ctx->function = index;
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_FUNCTION, 0, source_query_range(ctx, node, decl->name))) return false;
     body->declaration = symbol->declaration;
@@ -2229,11 +2231,6 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
         /* A ref parameter is the caller's mutable cell: reads and writes in the body reach the
          * caller's binding through it, exactly as a captured mutable variable does. */
         if (by_reference && !source_cell_type(ctx, body->parameters[i], &body->parameters[i])) return false;
-        for (int j = 0; j < i; ++j) {
-            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-            if (source_text_same(ctx, NULL, param->name, decl->params[j]->name))
-                return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate parameter name");
-        }
     }
     if (!source_generator_declaration(ctx,node,index,&identity,0)) return false;
     ctx->identities[index] = identity;
@@ -2941,7 +2938,7 @@ static bool build_bodies(SourceContext *ctx) {
         }
         FunctionDeclNode *decl = &ctx->bodies[f].node->as.function_decl;
         for (int i = 0; i < decl->param_count; ++i) {
-            SourceName *symbol = add_name(ctx, &ctx->locals, decl->params[i]->name, ctx->bodies[f].node);
+            SourceName *symbol = source_parameter_name(ctx,ctx->bodies[f].node,decl->params[i],ctx->bodies[f].parameter_scope);
             if (!symbol) return false;
             symbol->kind = SOURCE_LOCAL; symbol->index = (uint32_t) i; symbol->type = ctx->bodies[f].parameters[i];
             XrParamNode *param = decl->params[i];
