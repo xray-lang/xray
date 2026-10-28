@@ -224,7 +224,7 @@ fn rxSlice(t: RxAst, lo: i64, to: i64) -> string {
         b.push(t.src[i])
         i = i + 1
     }
-    return string.fromUtf8(b[:])!
+    return try! string.fromUtf8(b[:])
 }
 
 // ---------- predefined classes (REF-regex-semantics.md §3, byte-exact) ----------
@@ -1526,7 +1526,7 @@ fn rxBytesToStr(text: Array<u8>, lo: i64, hi: i64) -> string {
         b.push(text[i])
         i = i + 1
     }
-    return string.fromUtf8(b[:])!
+    return try! string.fromUtf8(b[:])
 }
 
 fn rxTest(prog: Array<i64>, s: string) -> bool {
@@ -1725,7 +1725,7 @@ fn rxReplace(prog: Array<i64>, s: string, repl: string, all: bool) -> string {
         buf.b.push(text[k])
         k = k + 1
     }
-    return string.fromUtf8(buf.b[:])!
+    return try! string.fromUtf8(buf.b[:])
 }
 
 // Mine 7 (FIXED): the C split silently truncated at 256 parts and dropped the
@@ -1782,7 +1782,7 @@ fn rxEscape(s: string) -> string {
         outb.push(text[i])
         i = i + 1
     }
-    return string.fromUtf8(outb[:])!
+    return try! string.fromUtf8(outb[:])
 }
 
 // Normalise a limit argument the way xr_regex_core_limit_arg does

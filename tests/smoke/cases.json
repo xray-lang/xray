@@ -554,7 +554,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F12",
-        "first_diagnostic": "stdlib/regex/regex.xr:227:0: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/regex/regex.xr:227:12: error: try! expressions are not yet supported by the compiler"
       }
     },
     {
