@@ -196,12 +196,12 @@ XR_FUNC XrTypeRef *xr_tref_optional(struct XrCompilerSession *session, XrTypeRef
 XR_FUNC XrTypeRef *xr_tref_union(struct XrCompilerSession *session, XrTypeRef **members,
                                  int count) {
     if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
-    if (!tref_count(session, count, UINT8_MAX)) return NULL;
+    if (!tref_count(session, count, INT_MAX)) return NULL;
     XR_DCHECK(count >= 2, "xr_tref_union: need at least 2 members");
     XrTypeRef *t = tref_alloc(session);
     if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;
     t->kind = XR_TREF_UNION;
-    t->nchildren = (uint8_t) count;
+    t->nchildren = count;
     do {
         t->children = tref_copy_children(session, members, count);
         if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) return NULL;

@@ -79,8 +79,10 @@ static XrXirStatus implementation_function(const XrXirModule *module, const XrXi
         status = xr_xir_compile_type_substitution_matches_between(budget, types, module->types, arguments, full_count, signature->parameters[a].type, f->parameters[a+1]);
     }
     if (status == XR_XIR_OK) status = xr_xir_compile_type_substitution_matches_between(budget, types, module->types, arguments, full_count, signature->result, f->result);
-    if (status == XR_XIR_OK && f->error_type != XR_XIR_NEVER && signature->element != XR_XIR_ERROR)
-        status = xr_xir_compile_type_substitution_matches_between(budget,types,module->types,arguments,full_count,signature->element,f->error_type);
+    if (status == XR_XIR_OK) {
+        XrXirErrorMatch match={types,module->types,arguments,full_count,signature->element,f->error_type,NULL,NULL};
+        status=xr_xir_compile_error_substitution_accepts(budget,&match);
+    }
     implementation_arguments_free(arguments); return status;
 }
 static XrXirStatus implementation_bindings(const XrXirModule *module, const XrXirImplementation *record,

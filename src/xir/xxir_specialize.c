@@ -81,7 +81,7 @@ static void *spec_alloc(SpecContext *c, uint64_t count, size_t size) {
 
     memory->next = c->memory; c->memory = memory; return memory + 1;
 }
-static XrXirType spec_node(SpecContext *c, XrXirTypeNode signature) {
+static XrXirType spec_node_raw(SpecContext *c, XrXirTypeNode signature) {
     for (uint32_t i = 0; i < c->types.count; ++i) {
         if (!((c)->diagnostic.status == XR_XIR_OK)) return XR_XIR_UNIT;
         const XrXirTypeNode *s = &c->types.nodes[i];
@@ -115,6 +115,22 @@ static XrXirType spec_node(SpecContext *c, XrXirTypeNode signature) {
     ((XrXirTypeNode *) c->types.nodes)[c->types.count] = signature;
     return (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + c->types.count++);
 }
+static XrXirType spec_node(SpecContext *c,XrXirTypeNode node) {
+    if (node.kind!=XR_XIR_TYPE_UNION) return spec_node_raw(c,node);
+    XrXirType *members=spec_alloc(c,node.parameter_count,sizeof(*members));
+    if (node.parameter_count && !members) return XR_XIR_UNIT;
+    for (uint32_t p=0;p<node.parameter_count;++p) members[p]=node.parameters[p].type;
+    XrXirErrorUnion normalized={0};
+    XrXirStatus status=xr_xir_compile_error_union(&c->remaining,&c->types,members,node.parameter_count,&normalized);
+    if (status!=XR_XIR_OK) {c->diagnostic.status=status;return XR_XIR_UNIT;}
+    if (!normalized.count) return normalized.scalar;
+    XrXirCallableParameter *owned=spec_alloc(c,normalized.count,sizeof(*owned));
+    if (owned) memcpy(owned,normalized.members,(size_t)normalized.count*sizeof(*owned));
+    xr_compile_resources_free(normalized.members);
+    if (!owned) return XR_XIR_UNIT;
+    return spec_node_raw(c,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
+        .parameters=owned,.parameter_count=normalized.count});
+}
 /* Source nodes are immutable; destination interning may grow its own table. */
 static XrXirType *spec_type_cache(SpecContext *c, const SpecInstance *instance, uint32_t index) {
     return (c->source->types->nodes[index].parameter_span ? instance->node_cache : c->closed.node_cache) + index;
@@ -135,7 +151,7 @@ static bool spec_type_push(SpecContext *c, uint32_t index, uint32_t *count) {
     SpecTypeFrame *frame = &c->type_stack[(*count)++];
     *frame = (SpecTypeFrame) {index, 0, c->source->types->nodes[index]};
     frame->node.parameter_span = 0;
-    if (frame->node.kind == XR_XIR_TYPE_CALLABLE || frame->node.kind == XR_XIR_TYPE_TUPLE) {
+    if (frame->node.kind == XR_XIR_TYPE_CALLABLE || frame->node.kind == XR_XIR_TYPE_TUPLE || frame->node.kind == XR_XIR_TYPE_UNION) {
         uint32_t n = frame->node.parameter_count;
         XrXirCallableParameter *parameters = spec_alloc(c, n, sizeof(*parameters));
         if (n && !parameters) return false;
@@ -164,7 +180,7 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
         const XrXirTypeNode *source = &c->source->types->nodes[frame->index];
         uint32_t components = source->kind == XR_XIR_TYPE_NOMINAL ? source->nominal.argument_count :
             source->kind == XR_XIR_TYPE_CALLABLE ? source->parameter_count + 2 :
-            source->kind == XR_XIR_TYPE_TUPLE ? source->parameter_count :
+            (source->kind == XR_XIR_TYPE_TUPLE || source->kind == XR_XIR_TYPE_UNION) ? source->parameter_count :
             (source->kind == XR_XIR_TYPE_MAP || source->kind == XR_XIR_TYPE_TASK || source->kind == XR_XIR_TYPE_ITERATOR) ? 2 : 1;
         if (frame->next == components) {
             *spec_type_cache(c, instance, frame->index) = spec_node(c, frame->node);
@@ -174,7 +190,7 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
         if ((source->kind == XR_XIR_TYPE_MAP || source->kind == XR_XIR_TYPE_TASK || source->kind == XR_XIR_TYPE_ITERATOR) && frame->next)
             child = source->result;
         if (source->kind == XR_XIR_TYPE_NOMINAL) child = source->nominal.arguments[frame->next];
-        if (source->kind == XR_XIR_TYPE_TUPLE) child = source->parameters[frame->next].type;
+        if (source->kind == XR_XIR_TYPE_TUPLE || source->kind == XR_XIR_TYPE_UNION) child = source->parameters[frame->next].type;
         if (source->kind == XR_XIR_TYPE_CALLABLE && frame->next <= source->parameter_count)
             child = frame->next < source->parameter_count ? source->parameters[frame->next].type : source->result;
         if (!spec_type_ready(c, instance, child, &result)) {
@@ -188,7 +204,7 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
             ((XrXirType *) frame->node.nominal.arguments)[frame->next] = result;
         else if ((source->kind == XR_XIR_TYPE_MAP || source->kind == XR_XIR_TYPE_TASK || source->kind == XR_XIR_TYPE_ITERATOR) && frame->next)
             frame->node.result = result;
-        else if (source->kind != XR_XIR_TYPE_CALLABLE && source->kind != XR_XIR_TYPE_TUPLE) frame->node.element = result;
+        else if (source->kind != XR_XIR_TYPE_CALLABLE && source->kind != XR_XIR_TYPE_TUPLE && source->kind != XR_XIR_TYPE_UNION) frame->node.element = result;
         else if (source->kind == XR_XIR_TYPE_CALLABLE && frame->next == source->parameter_count) frame->node.result = result;
         else if (source->kind == XR_XIR_TYPE_CALLABLE && frame->next > source->parameter_count) frame->node.element = result;
         else {

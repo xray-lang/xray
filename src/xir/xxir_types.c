@@ -25,6 +25,8 @@ XR_FUNC XrXirCompileLimits xr_xir_compile_default_limits(void) {
 #include "../base/xmalloc.h"
 #include "../shared/xnative_declaration.h"
 
+#include "xxir_type_union.inc.c"
+
 static XrXirStatus callable_weakening_head(const XrXirTypes *types,
     XrXirType source, XrXirType target, const XrXirTypeNode **from, const XrXirTypeNode **to) {
     *from = xr_xir_callable_signature(types, source);
@@ -33,7 +35,7 @@ static XrXirStatus callable_weakening_head(const XrXirTypes *types,
         !!(*from)->parameter_count != !!(*from)->parameters ||
         !!(*to)->parameter_count != !!(*to)->parameters ||
         (*from)->parameter_count != (*to)->parameter_count || (*from)->result != (*to)->result ||
-        !xr_xir_error_bound_accepts((*from)->element, (*to)->element)) return XR_XIR_BAD_TYPE;
+        !xr_xir_error_bound_accepts(types, (*from)->element, (*to)->element)) return XR_XIR_BAD_TYPE;
     return XR_XIR_OK;
 }
 XrXirStatus xr_xir_callable_weakening_admit(const XrXirTypes *types,
@@ -263,7 +265,8 @@ static bool type_error_component(const XrXirTypes *types, XrXirType type, uint32
     uint32_t id=(uint32_t)type;
     return type==XR_XIR_NEVER || type==XR_XIR_ERROR ||
         (id>=XR_XIR_TYPE_PARAMETER_BASE && id<XR_XIR_TYPE_PARAMETER_LIMIT) ||
-        (xr_xir_type_is_enum(types,type) && id-XR_XIR_CONSTRUCTED_TYPE_BASE<earlier);
+        ((xr_xir_type_is_enum(types,type) || error_union_node(types,type)) &&
+            id-XR_XIR_CONSTRUCTED_TYPE_BASE<earlier);
 }
 static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCompileContext *remaining) {
     const XrXirTypeNode *node = &types->nodes[index];
@@ -304,6 +307,16 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
         span = xr_xir_type_span(types, node->element);
         uint32_t value_span = node->kind == XR_XIR_TYPE_MAP ? xr_xir_type_span(types, node->result) : 0;
         if (value_span > span) span = value_span;
+    } else if (node->kind == XR_XIR_TYPE_UNION) {
+        if (!error_union_shape(types, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+index))) return XR_XIR_BAD_TYPE;
+        if (node->parameter_count > remaining->limits.parameters) return XR_XIR_BUDGET;
+        remaining->limits.parameters -= node->parameter_count;
+        for (uint32_t p = 0; p < node->parameter_count; ++p) {
+            XrXirType member = node->parameters[p].type;
+            if (!type_error_component(types, member, index)) return XR_XIR_BAD_TYPE;
+            uint32_t component = xr_xir_type_span(types, member);
+            if (component > span) span = component;
+        }
     } else if (node->kind == XR_XIR_TYPE_TUPLE) {
         if (node->element != XR_XIR_UNIT || node->result != XR_XIR_UNIT || node->flags)
             return XR_XIR_BAD_STRUCTURE;
@@ -372,6 +385,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
                 (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+index));
             bool unit_payload=argument==XR_XIR_UNIT && count==1 && native && native->native_id==XR_NATIVE_DECLARATION_RECV;
             if (argument != XR_XIR_NEVER && !unit_payload && !nominal &&
+                !(error_union_node(types,argument) && (uint32_t)argument-XR_XIR_CONSTRUCTED_TYPE_BASE<index) &&
                 !type_component(types, argument, index)) return XR_XIR_BAD_TYPE;
             uint32_t component = xr_xir_type_span(types, argument);
             if (component > span) span = component;

@@ -45,7 +45,9 @@ XrXirStatus xr_xir_compile_type_constraints(const XrXirCompileContext *compile_c
     if (!module || function >= module->function_count || constraints.interface_count || constraints.interfaces ||
         constraints.markers & ~XR_XIR_CONSTRAINT_MASK ||
         xr_xir_type_is_cell(module->types, type)) return XR_XIR_BAD_TYPE;
-    if (type == XR_XIR_NEVER ? !(constraints.markers & XR_XIR_CONSTRAINT_ERROR) :
+    const XrXirTypeNode *expression=xr_xir_type_node(module->types,type);
+    bool error_metadata=type==XR_XIR_NEVER || (expression && expression->kind==XR_XIR_TYPE_UNION);
+    if (error_metadata ? !(constraints.markers & XR_XIR_CONSTRAINT_ERROR) :
         !xr_xir_type_in_context(module, function, type)) return XR_XIR_BAD_TYPE;
     XrXirProofContext context = {module,{XR_XIR_CONTEXT_FUNCTION,function,0}};
     uint32_t borrowed=0;

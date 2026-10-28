@@ -127,6 +127,17 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
     XrXirType type, uint32_t required, const XrXirCompileContext *work,XirReadScratch *read) {
     const XrXirTypes *types = environment->types;
     if (required & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
+    const XrXirTypeNode *expression=xr_xir_type_node(types,type);
+    if (expression && expression->kind==XR_XIR_TYPE_UNION) {
+        if (required & ~(XR_XIR_CONSTRAINT_ERROR|XR_XIR_CONSTRAINT_SENDABLE)) return XR_XIR_BAD_TYPE;
+        if (expression->parameter_count<2 || !expression->parameters) return XR_XIR_BAD_TYPE;
+        for (uint32_t p=0;p<expression->parameter_count;++p) {
+            XrXirStatus status=constraint_markers(environment,expression->parameters[p].type,
+                required|XR_XIR_CONSTRAINT_ERROR,work,read);
+            if (status!=XR_XIR_OK) return status;
+        }
+        return XR_XIR_OK;
+    }
     if (required & XR_XIR_CONSTRAINT_HASHABLE) {
         XrXirStatus status = constraint_hashable(environment, type, work);
         if (status != XR_XIR_OK) return status;
@@ -447,8 +458,10 @@ static XrXirStatus proof_type_task(ConstraintProof *proof, XrXirType type) {
     } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NULLABLE ||
                node->kind == XR_XIR_TYPE_SLICE || (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL))
         status = proof_type_edge(proof,index,node->element);
-    else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {
+    else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) {
         if (node->parameter_count && !node->parameters) return XR_XIR_BAD_STRUCTURE;
+        if (node->kind == XR_XIR_TYPE_UNION)
+            status=constraint_markers(&proof->environment,type,XR_XIR_CONSTRAINT_ERROR,proof->budget,proof->read);
         if (node->kind == XR_XIR_TYPE_CALLABLE) {
             status = constraint_markers(&proof->environment,node->element,XR_XIR_CONSTRAINT_ERROR,proof->budget,proof->read);
             if (status == XR_XIR_OK) status = proof_type_edge(proof,index,node->element);

@@ -340,7 +340,7 @@ static bool type_ref_syntax_key_inner(const XrTypeRef *type_ref, int depth, uint
         *hash = type_ref_syntax_fold(*hash, (uint64_t) type_ref->borrow_origins[i].kind);
         *hash = type_ref_syntax_string(*hash, type_ref->borrow_origins[i].name);
     }
-    for (uint8_t i = 0; i < type_ref->nchildren; ++i) {
+    for (int i = 0; i < type_ref->nchildren; ++i) {
         if (!type_ref->children ||
             !type_ref_syntax_key_inner(type_ref->children[i], depth + 1, hash))
             return false;

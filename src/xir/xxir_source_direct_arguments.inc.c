@@ -41,6 +41,9 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     if (prefix != declared_prefix || (!!request->receiver != (identity->method_kind == XR_XIR_READ_METHOD)))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"direct call parameter owner mismatch");
     uint32_t own = count-prefix, supplied = (uint32_t)call->arg_count+offset;
+    const XrXirConstraint *constraints=ctx->generics[index].constraints;
+    if (own && !constraints) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"direct call binder is missing");
+    const XrXirConstraint *own_constraints=own ? constraints+prefix : NULL;
     if (call->type_arg_count && ctx->generics[index].parameter_kinds)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"callback result variables require inferred callable evidence");
     if (call->type_arg_count && ((uint32_t)call->type_arg_count != own || !call->type_args))
@@ -67,7 +70,7 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     }
     if (!source_call_expand(ctx,&syntax,&plan,function.parameter_count)) return false;
     supplied=(uint32_t)syntax.arg_count+offset;
-    if (!source_argument_arity(ctx,node,index,supplied) || !source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
+    if (!source_argument_arity(ctx,node,index,supplied) || !source_call_plan_arguments(ctx,node,&plan,&syntax,own_constraints)) return false;
     if (!source_instantiation_prove(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,index,0},substitution)) goto done;
     for (uint32_t p=supplied;p<function.parameter_count;++p)
         if (!source_argument_default(ctx,node,index,p,&substitution,&values[p])) goto done;

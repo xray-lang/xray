@@ -1348,11 +1348,16 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
         }
 
         case XR_TREF_UNION: {
-            XrType *members[XR_UNION_MAX_MEMBERS];
-            int count = t->nchildren < XR_UNION_MAX_MEMBERS ? t->nchildren : XR_UNION_MAX_MEMBERS;
-            for (int i = 0; i < count; i++)
+            int count = t->nchildren;
+            XrType **members = xr_type_union_members_alloc((size_t)count);
+            if (!members) return NULL;
+            for (int i = 0; i < count; i++) {
                 members[i] = resolve_impl(X, t->children[i]);
-            return xr_type_new_union(X, members, count);
+                if (!members[i]) { xr_type_union_members_free(members); return NULL; }
+            }
+            XrType *result = xr_type_new_union(X, members, count);
+            xr_type_union_members_free(members);
+            return result;
         }
 
         case XR_TREF_FUNCTION: {
@@ -1472,7 +1477,7 @@ static XaSymbol *xa_resolve_export_lookup(XaAnalyzer *analyzer, XrHashMap *expor
     void *value = NULL;
     XrOsIoStatus queried = xr_hashmap_owned_get(exports, name, &value);
     XrCompileResourceStatus status = queried == XR_OS_IO_OK ? XR_COMPILE_RESOURCE_OK :
-        queried == XR_OS_IO_OVERFLOW ? XR_COMPILE_RESOURCE_BUDGET :
+        queried == XR_OS_IO_OVERFLOW ? XR_COMPILE_RESOURCE_OVERFLOW :
         queried == XR_OS_IO_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     if (xr_compile_state_fail(state, status) != XR_COMPILE_RESOURCE_OK) return NULL;
     return value;
@@ -2042,11 +2047,16 @@ static XrType *resolve_in_analyzer_uncached(XaAnalyzer *analyzer, const XrTypeRe
     }
 
     if (tref->kind == XR_TREF_UNION) {
-        XrType *members[XR_UNION_MAX_MEMBERS];
-        int count = tref->nchildren < XR_UNION_MAX_MEMBERS ? tref->nchildren : XR_UNION_MAX_MEMBERS;
-        for (int i = 0; i < count; i++)
+        int count = tref->nchildren;
+        XrType **members = xr_type_union_members_alloc((size_t)count);
+        if (!members) return NULL;
+        for (int i = 0; i < count; i++) {
             members[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
+            if (!members[i]) { xr_type_union_members_free(members); return NULL; }
+        }
         XrType *resolved = xr_type_new_union(analyzer->isolate, members, count);
+        xr_type_union_members_free(members);
+        if (!resolved) return NULL;
         if (report_indiscriminable_union(analyzer, tref, resolved))
             return xr_type_new_error(NULL);
         return resolved;
@@ -2326,7 +2336,7 @@ static bool exact_type_key(const XrType *type, int depth, uint64_t *hash, bool *
             return true;
         case XR_KIND_UNION:
             *hash = exact_type_key_fold(*hash, (uint64_t) type->union_type.member_count);
-            for (uint8_t i = 0; i < type->union_type.member_count; ++i) {
+            for (int i = 0; i < type->union_type.member_count; ++i) {
                 if (!type->union_type.members ||
                     !exact_type_key(type->union_type.members[i], depth + 1, hash, has_nominal))
                     return false;

@@ -47,7 +47,6 @@ typedef struct XrSemanticFrozenBuiltin {
  * surface name; the two spellings denote one class, and nothing else may claim
  * either. */
 static const XrSemanticFrozenBuiltin xr_semantic_frozen_builtins[] = {
-    {"StringBuilder", XR_TID_STRINGBUILDER},
     {"Task", XR_TID_COROUTINE},
 };
 

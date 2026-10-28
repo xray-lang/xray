@@ -5878,7 +5878,7 @@ bool xa_boundary_transfer_type_needs_explicit(const XrType *type) {
             }
             return false;
         case XR_KIND_UNION:
-            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            for (int i = 0; i < type->union_type.member_count; i++) {
                 if (xa_boundary_transfer_type_needs_explicit(type->union_type.members[i]))
                     return true;
             }

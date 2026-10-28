@@ -84,7 +84,7 @@ static XrXirStatus effect_terms_import(EffectTerms *pool,
 
         XrXirTypeNode node=source->nodes[i];
         XrXirStatus status=XR_XIR_OK;
-        if (node.kind==XR_XIR_TYPE_CALLABLE || node.kind==XR_XIR_TYPE_TUPLE) {
+        if (node.kind==XR_XIR_TYPE_CALLABLE || node.kind==XR_XIR_TYPE_TUPLE || node.kind==XR_XIR_TYPE_UNION) {
             XrXirCallableParameter *parameters=node.parameter_count ?
                 effect_terms_alloc(pool,node.parameter_count,sizeof(*parameters)) : NULL;
             if (node.parameter_count && !parameters) return pool->status;

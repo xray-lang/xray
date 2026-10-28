@@ -156,7 +156,7 @@ static uint64_t type_hash_depth(const XrType *type, int depth) {
         case XR_KIND_UNION:
             h ^= type->union_type.member_count;
             h *= UINT64_C(1099511628211);
-            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            for (int i = 0; i < type->union_type.member_count; i++) {
                 h ^= type_hash_depth(type->union_type.members ? type->union_type.members[i] : NULL,
                                      depth + 1);
                 h *= UINT64_C(1099511628211);

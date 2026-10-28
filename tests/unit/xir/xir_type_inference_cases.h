@@ -22,8 +22,8 @@ typedef struct InferenceTestBatch {
 /* Test orchestration only; production exposes the single incremental state. */
 static XrXirStatus inference_test_run(const InferenceTestBatch *batch,
     XrXirCompileContext *budget, XrXirType *output, uint32_t count) {
-    XrXirInferenceRequest request = {batch->types,batch->prefix,batch->prefix_count,
-        batch->own_count,batch->caller_parameter_count, NULL};
+    XrXirInferenceRequest request = {.types=batch->types,.prefix=batch->prefix,.prefix_count=batch->prefix_count,
+        .own_count=batch->own_count,.caller_parameter_count=batch->caller_parameter_count,.union_owner={0}};
     XrXirInferenceState *state = NULL;
     XrXirStatus status = xr_xir_compile_inference_begin(budget, &request, &state);
     for (uint32_t p = 0; status == XR_XIR_OK && p < batch->pair_count; ++p)
@@ -166,7 +166,7 @@ static XrXirStatus inference_partial_run(XrXirCompileContext *budget) {
     XrXirType p1 = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1);
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_ARRAY; node.element = p0; node.parameter_span = 1;
     XrXirTypes initial = {NULL,0,NULL,NULL}, grown = {&node,1,NULL,NULL};
-    XrXirInferenceRequest request = {&initial,NULL,0,2,0, NULL};
+    XrXirInferenceRequest request = {.types=&initial,.own_count=2,.union_owner={0}};
     XrXirInferenceState *state = NULL;
     XrXirStatus status = xr_xir_compile_inference_begin(budget, &request, &state);
     XrXirInferenceKnown known = {0}; XrXirType output[2] = {XR_XIR_BOOL,XR_XIR_BOOL};
@@ -197,7 +197,7 @@ static void type_inference_partial_cases(void) {
 }
 static void type_inference_empty_prefix_cases(void) {
     XrXirCompileContext budget = interface_context_default();
-    XrXirInferenceRequest empty = {NULL,NULL,0,0,0, NULL};
+    XrXirInferenceRequest empty = {.types=NULL,.own_count=0,.union_owner={0}};
     XrXirInferenceState *state = NULL;
     CHECK(xr_xir_compile_inference_begin(&budget, &empty, &state)==XR_XIR_OK);
     CHECK(xr_xir_compile_inference_finalize(state, NULL, NULL, 0)==XR_XIR_OK);
@@ -219,7 +219,7 @@ static void type_inference_empty_prefix_cases(void) {
 }
 static void type_inference_failed_finalize_cases(void) {
     XrXirType p0 = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
-    XrXirInferenceRequest request = {NULL,NULL,0,1,0, NULL};
+    XrXirInferenceRequest request = {.types=NULL,.own_count=1,.union_owner={0}};
     for (uint32_t mode = 0; mode < 3; ++mode) {
         XrXirCompileContext budget = interface_context_default();
         XrXirInferenceState *state = NULL;
@@ -274,7 +274,7 @@ static void type_inference_exact_capacity_cases(void) {
 static void type_inference_relocated_ids_case(void) {
     XrXirTypeNode original = {0}; original.kind = XR_XIR_TYPE_ARRAY; original.element = XR_XIR_I64;
     XrXirTypes initial = {&original,1,NULL,NULL};
-    XrXirInferenceRequest request = {&initial,NULL,0,1,0, NULL};
+    XrXirInferenceRequest request = {.types=&initial,.own_count=1,.union_owner={0}};
     XrXirCompileContext budget = interface_context_default();
     XrXirInferenceState *state = NULL;
     CHECK(xr_xir_compile_inference_begin(&budget, &request, &state)==XR_XIR_OK);

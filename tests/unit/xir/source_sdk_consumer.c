@@ -7,6 +7,7 @@
  * source_sdk_consumer.c - Installed public API ownership and Checked consumers
  */
 #include "xray_source.h"
+#include "xray_source_entry.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -505,7 +506,72 @@ static void installed_parameter_report(const char *stdlib) {
     int64_t value=99;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK&&!value);
     CHECK(out.length==2&&!memcmp(out.bytes,"9\n",2));xray_source_result_free(result);
 }
+static XrSourceWriteStatus error_report_capture(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
+    CHECK(stream==XR_SOURCE_STDERR);return capture(context,XR_SOURCE_STDOUT,bytes,length);
+}
+static void installed_error_union(const char *stdlib) {
+    char source[]=
+        "enum First{Bad{message:string}}\n"
+        "enum Second{Bad}\n"
+        "enum Third{Bad}\n"
+        "enum Fourth{Bad}\n"
+        "enum Fifth{Bad}\n"
+        "enum Sixth{Bad}\n"
+        "enum Seventh{Bad}\n"
+        "fn value(which:i64) throws(First|Second|Third|Fourth|Fifth|Sixth|Seventh)->i64{\n"
+        "    if(which==0){throw First.Bad{message:\"owned \303\251\\0\347\225\214\"}}\n"
+        "    throw Seventh.Bad\n"
+        "}\n"
+        "fn relay(which:i64) throws(First|Second|Third|Fourth|Fifth|Sixth|Seventh)->i64{return try value(which)}\n"
+        "export fn escaped() throws(First|Seventh)->i64{throw First.Bad{message:\"owned \303\251\\0\347\225\214\"}}\n"
+        "export fn answer()->i64{\n"
+        "    try{return relay(6)}catch(error:Seventh){return 42}catch(error){return -1}\n"
+        "}\n"
+        "print(answer())\n";
+    XrSourceCompileOptions compiler=compile_options(stdlib);XrSourceArtifact *artifact=compile(&compiler,source,__func__);
+    Output output={0};XrSourceCallOptions options;CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.write=capture;options.context=&output;XrSourceResult *result=NULL;XrSourceEvent event={0};
+    CHECK(execute_owned(artifact,&options,&result,&event)==XR_SOURCE_OK && result);
+    CHECK(output.length==3 && !memcmp(output.bytes,"42\n",3));xray_source_result_free(result);result=NULL;output=(Output){0};
+    XrSourceExecutionOptions policy=xray_source_execution_options_default();XrSourceExecution *execution=NULL;
+    CHECK(xray_source_execution_new(&policy,&execution)==XR_SOURCE_OK);
+    XrSourceInvocation invocation;CHECK(xray_source_invocation_init(&invocation,sizeof(invocation))==XR_SOURCE_OK);
+    invocation.name="escaped";invocation.name_length=7;
+    CHECK(xray_source_invoke(execution,artifact,&invocation,&options,&result,&event)==XR_SOURCE_OK && result);
+    xray_source_execution_free(execution);xray_source_artifact_free(artifact);
+    CHECK(output.length==3 && !memcmp(output.bytes,"42\n",3));
+    XrSourceResult *copy=NULL;CHECK(xray_source_result_copy(result,&copy)==XR_SOURCE_OK && copy);xray_source_result_free(result);
+    CHECK(xray_source_result_event(copy,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_THROWN);
+    XrSourceValue *value=NULL;CHECK(xray_source_result_value(copy,&value)==XR_SOURCE_OK && value);
+    output=(Output){0};CHECK(xray_source_result_format(copy,error_report_capture,&output)==XR_SOURCE_OK);
+    const char report[]="[Uncaught Error] First.Bad(\"owned \303\251\000\347\225\214\")\n";
+    CHECK(output.length==sizeof(report)-1 && !memcmp(output.bytes,report,output.length));xray_source_result_free(copy);
+    XrSourceValueKind kind=XR_SOURCE_VALUE_UNIT;CHECK(xray_source_value_kind(value,&kind)==XR_SOURCE_OK && kind==XR_SOURCE_VALUE_ENUM);
+    output=(Output){0};CHECK(xray_source_value_format(value,capture,&output)==XR_SOURCE_OK);
+    const char rendered[]="First.Bad(\"owned \303\251\000\347\225\214\")";
+    CHECK(output.length==sizeof(rendered)-1 && !memcmp(output.bytes,rendered,output.length));xray_source_value_free(value);
+}
+static void installed_error_union_300(const char *stdlib) {
+    char source[32768];size_t length=0;
+    for (unsigned i=0;i<300;++i) {
+        int written=snprintf(source+length,sizeof(source)-length,"enum E%u{Bad}\n",i);
+        CHECK(written>0 && (size_t)written<sizeof(source)-length);length+=(size_t)written;
+    }
+    const char start[]="fn value() throws(";memcpy(source+length,start,sizeof(start)-1);length+=sizeof(start)-1;
+    for (unsigned i=0;i<300;++i) {
+        int written=snprintf(source+length,sizeof(source)-length,"%sE%u",i?"|":"",i);
+        CHECK(written>0 && (size_t)written<sizeof(source)-length);length+=(size_t)written;
+    }
+    const char tail[]=")->i64{throw E299.Bad}\nexport fn answer()->i64{try{return value()}catch(e:E299){return 42}catch(e){return -1}}\nprint(answer())\n";
+    CHECK(sizeof(tail)<sizeof(source)-length);memcpy(source+length,tail,sizeof(tail));length+=sizeof(tail)-1;CHECK(length==5924);
+    XrSourceCompileOptions compiler=compile_options(stdlib);XrSourceArtifact *artifact=compile(&compiler,source,__func__);
+    Output output={0};XrSourceCallOptions options;CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.write=capture;options.context=&output;XrSourceResult *result=NULL;XrSourceEvent event={0};
+    CHECK(execute_owned(artifact,&options,&result,&event)==XR_SOURCE_OK && result);xray_source_artifact_free(artifact);
+    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
+    CHECK(output.length==3 && !memcmp(output.bytes,"42\n",3));xray_source_result_free(result);
+}
 int main(int argc, char **argv) {
-    CHECK(argc == 2); installed_report(argv[1]); installed_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
+    CHECK(argc == 2); installed_error_union(argv[1]); installed_error_union_300(argv[1]); installed_report(argv[1]); installed_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
     puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
 }

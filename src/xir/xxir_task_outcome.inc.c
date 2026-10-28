@@ -42,7 +42,7 @@ static XrXirCallStatus task_core_error_admit(XrXirTaskExecutor *executor,
         !xr_xir_type_is_enum(program->types,record->object.type) ||
         !xr_xir_compile_type_arena_enum_sendable(program->arena,record->object.type))
         return XR_XIR_CALL_BAD_STATE;
-    return xr_xir_error_bound_accepts(record->object.type,declared) ?
+    return xr_xir_error_bound_accepts(program->types,record->object.type,declared) ?
         XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
 }
 static XrXirCallStatus task_core_outcome_admit(XrXirTaskExecutor *executor,

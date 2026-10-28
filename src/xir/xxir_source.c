@@ -617,7 +617,7 @@ static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
         node.nominal.fields = NULL; node.nominal.field_count = 0;
         return source_intern_type(ctx, node, output);
     }
-    if (node.kind != XR_XIR_TYPE_CALLABLE && node.kind != XR_XIR_TYPE_TUPLE) {
+    if (node.kind != XR_XIR_TYPE_CALLABLE && node.kind != XR_XIR_TYPE_TUPLE && node.kind != XR_XIR_TYPE_UNION) {
         if (!source_substitute(ctx, sub, node.element, depth + 1, &node.element)) return false;
         if ((node.kind == XR_XIR_TYPE_MAP || node.kind == XR_XIR_TYPE_TASK || node.kind == XR_XIR_TYPE_ITERATOR) &&
             !source_substitute(ctx, sub, node.result, depth + 1, &node.result)) return false;
@@ -659,13 +659,13 @@ static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *
 }
 static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);
 static bool source_tuple_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *type) {
-    if (!ref->nchildren) return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"empty type syntax must use Unit");
+    if (ref->nchildren <= 0) return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"empty type syntax must use Unit");
     if (!ref->children || ctx->depth>=128)
         return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"Tuple annotation requires bounded ordered fields");
     XrXirCallableParameter *fields=source_alloc(ctx,ref->nchildren,sizeof(*fields));
     if (!fields) return false;
     ++ctx->depth;
-    for (uint32_t i=0;i<ref->nchildren;++i) {
+    for (uint32_t i=0;i<(uint32_t)ref->nchildren;++i) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx,ref->children[i],&fields[i].type)) {--ctx->depth;return false;}
     }
     --ctx->depth;
@@ -689,6 +689,7 @@ static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     return valid;
 }
 static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
+    if (ref && ref->nchildren < 0) return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"source type child count is negative");
     if (!ref) { *type = XR_XIR_UNIT; return true; }
     switch (ref->kind) {
     case XR_TREF_OPTIONAL: {
@@ -1112,8 +1113,19 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, XrXirDeclara
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"declaration requires its exact explicit type arguments");
     XrXirType *types = count ? source_alloc(ctx,count,sizeof(*types)) : NULL;
     if (count && !types) return false;
-    for (uint32_t i = 0; i < count; ++i)
-        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx,arguments->refs[i],&types[i])) return false;
+    const XrXirConstraint *constraints=callee.kind==XR_XIR_CONTEXT_FUNCTION ?
+        ctx->generics[callee.declaration].constraints : ctx->nominals.declarations[callee.declaration].constraints;
+    if (count && !constraints) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"type argument binder is missing");
+    uint32_t *markers=count ? source_alloc(ctx,count,sizeof(*markers)) : NULL;
+    if (count && !markers) return false;
+    for (uint32_t i=0;i<count;++i) markers[i]=constraints[i].markers;
+    for (uint32_t i=0;i<count;++i) {
+        if (ctx->diagnostic.status!=XR_XIR_OK) return false;
+        bool ok=(markers[i] & XR_XIR_CONSTRAINT_ERROR) ?
+            source_error_type_ref(ctx,arguments->refs[i],&types[i]) : source_type(ctx,arguments->refs[i],&types[i]);
+        if (!ok) return false;
+    }
+    source_retire_array(ctx,markers);
     SourceSubstitution substitution = {types,count};
     if (!source_instantiation_prove(ctx,node,callee,substitution)) return false;
     arguments->substitution = substitution; return true;

@@ -854,13 +854,13 @@ static uint64_t hash_tref(uint64_t h, const XrTypeRef *t) {
     h = fold_u64(h, 0);
     if (t->name)
         h = fold_bytes(h, t->name, strlen(t->name));
-    for (uint8_t i = 0; i < t->nchildren; i++) {
+    for (int i = 0; i < t->nchildren; i++) {
         int source_index =
             t->kind == XR_TREF_OBJECT ? tref_object_canonical_source_index(t, i) : (int) i;
         h = hash_tref(h, t->children ? t->children[source_index] : NULL);
     }
     if (t->field_names) {
-        for (uint8_t i = 0; i < t->nchildren; i++) {
+        for (int i = 0; i < t->nchildren; i++) {
             int source_index =
                 t->kind == XR_TREF_OBJECT ? tref_object_canonical_source_index(t, i) : (int) i;
             const char *field = t->field_names[source_index];
@@ -870,11 +870,11 @@ static uint64_t hash_tref(uint64_t h, const XrTypeRef *t) {
     }
     if (t->field_readonly) {
         bool has_readonly_field = false;
-        for (uint8_t i = 0; i < t->nchildren; i++)
+        for (int i = 0; i < t->nchildren; i++)
             has_readonly_field = has_readonly_field || t->field_readonly[i];
         if (has_readonly_field) {
             h = fold_u64(h, UINT64_C(0x726561646f6e6c79)); /* "readonly" */
-            for (uint8_t i = 0; i < t->nchildren; i++) {
+            for (int i = 0; i < t->nchildren; i++) {
                 int source_index =
                     t->kind == XR_TREF_OBJECT ? tref_object_canonical_source_index(t, i) : (int) i;
                 h = fold_u64(h, t->field_readonly[source_index] ? 1 : 0);
@@ -883,11 +883,11 @@ static uint64_t hash_tref(uint64_t h, const XrTypeRef *t) {
     }
     if (t->kind == XR_TREF_FUNCTION && t->function_param_modes && t->nchildren > 0) {
         bool has_explicit_mode = false;
-        for (uint8_t i = 0; i + 1 < t->nchildren; i++)
+        for (int i = 0; i + 1 < t->nchildren; i++)
             has_explicit_mode = has_explicit_mode || t->function_param_modes[i] != XR_PARAM_READ;
         if (has_explicit_mode) {
             h = fold_u64(h, UINT64_C(0x706172616d6d6f64)); /* "parammod" */
-            for (uint8_t i = 0; i + 1 < t->nchildren; i++)
+            for (int i = 0; i + 1 < t->nchildren; i++)
                 h = fold_u64(h, t->function_param_modes[i]);
         }
     }
@@ -1529,7 +1529,7 @@ static bool producer_owns_decl(XgProducer *producer, const XrModuleSpec *spec,
         producer->module_graph, spec, decl, &owns);
     if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY) {
         (void) xr_compile_state_fail(producer->state, status == XR_MODULE_BUDGET
-            ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+            ? XR_COMPILE_RESOURCE_OVERFLOW : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
         producer->failed = true;
     }
     return status == XR_MODULE_OK && owns;
@@ -1561,7 +1561,7 @@ static XgModuleId producer_module_id_for_coordinate(XgProducer *p,
         xr_compile_resources_free(error);
         if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY) {
             (void) xr_compile_state_fail(p->state, status == XR_MODULE_BUDGET
-                ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+                ? XR_COMPILE_RESOURCE_OVERFLOW : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
             p->failed = true;
             return XG_NO_ID;
         }
@@ -1579,7 +1579,7 @@ static XgModuleId producer_module_id_for_coordinate(XgProducer *p,
         p->module_graph, importer->source_path, coordinate, &index);
     if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY)
         (void) xr_compile_state_fail(p->state, status == XR_MODULE_BUDGET
-            ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+            ? XR_COMPILE_RESOURCE_OVERFLOW : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
     if (status != XR_MODULE_OK) {
         if (status != XR_MODULE_NOT_FOUND)
             p->failed = true;
@@ -2139,7 +2139,7 @@ producer_derive_type_contract(const XrType *type, const XrClassInfo **stack, uin
         case XR_KIND_UNION:
             if (type->union_type.member_count > 0 && !type->union_type.members)
                 return producer_incomplete_nominal_contract();
-            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            for (int i = 0; i < type->union_type.member_count; i++) {
                 if (!producer_nominal_contract_merge(
                         &result, producer_derive_type_contract(type->union_type.members[i], stack,
                                                                depth + 1)))
@@ -2444,7 +2444,7 @@ static bool tref_contains_object(const XrTypeRef *t) {
         return false;
     if (t->kind == XR_TREF_OBJECT)
         return true;
-    for (uint8_t i = 0; i < t->nchildren; i++) {
+    for (int i = 0; i < t->nchildren; i++) {
         if (tref_contains_object(t->children ? t->children[i] : NULL))
             return true;
     }
@@ -4608,7 +4608,7 @@ static bool producer_add_interface_object_uses_for_type_ref(
                        : true;
         case XR_TREF_UNION:
         case XR_TREF_TUPLE:
-            for (uint8_t i = 0; i < type->nchildren; i++) {
+            for (int i = 0; i < type->nchildren; i++) {
                 if (!producer_add_interface_object_uses_for_type_ref(
                         p, module_id, owner_func_id, source_node_id, source_span_id, body_ordinal,
                         type->children ? type->children[i] : NULL, base_reason, 0, use_kind))
@@ -4616,7 +4616,7 @@ static bool producer_add_interface_object_uses_for_type_ref(
             }
             return true;
         case XR_TREF_OBJECT:
-            for (uint8_t i = 0; i < type->nchildren; i++) {
+            for (int i = 0; i < type->nchildren; i++) {
                 if (!producer_add_interface_object_uses_for_type_ref(
                         p, module_id, owner_func_id, source_node_id, source_span_id, body_ordinal,
                         type->children ? type->children[i] : NULL,
@@ -4627,7 +4627,7 @@ static bool producer_add_interface_object_uses_for_type_ref(
             return true;
         case XR_TREF_FUNCTION:
             if (type->children && type->nchildren > 0) {
-                for (uint8_t i = 0; i + 1 < type->nchildren; i++) {
+                for (int i = 0; i + 1 < type->nchildren; i++) {
                     XgInterfaceUseKind parameter_use =
                         type->function_param_modes
                             ? producer_interface_use_for_param_mode(type->function_param_modes[i])
@@ -5254,7 +5254,7 @@ static bool body_type_ref_contains_type_param(const XrTypeRef *type) {
         return false;
     if (type->kind == XR_TREF_TYPE_PARAM || type->kind == XR_TREF_ERROR)
         return true;
-    for (uint8_t i = 0; i < type->nchildren; i++) {
+    for (int i = 0; i < type->nchildren; i++) {
         if (body_type_ref_contains_type_param(type->children ? type->children[i] : NULL))
             return true;
     }
@@ -5275,7 +5275,7 @@ static bool body_type_ref_is_managed_storage_ref(const XrTypeRef *type) {
         case XR_TREF_UNION:
         case XR_TREF_TUPLE:
         case XR_TREF_FIXED_ARRAY:
-            for (uint8_t i = 0; i < type->nchildren; i++) {
+            for (int i = 0; i < type->nchildren; i++) {
                 if (body_type_ref_is_managed_storage_ref(type->children ? type->children[i] : NULL))
                     return true;
             }
@@ -6828,7 +6828,7 @@ static void body_add_object_fields_for_type_ref(XgProducer *producer, XgGlobalEv
     if (!evidence || shape_id == XG_NO_ID || !type || type->kind != XR_TREF_OBJECT ||
         (type->nchildren > 0 && (!type->field_names || !type->children)))
         return;
-    for (uint8_t i = 0; i < type->nchildren; i++) {
+    for (int i = 0; i < type->nchildren; i++) {
         int source_index = tref_object_canonical_source_index(type, i);
         const char *name = type->field_names[source_index];
         const XrTypeRef *field_type = type->children[source_index];
@@ -7136,7 +7136,7 @@ static XgObjectShapeId body_add_object_shape_for_type_ref(XgBodyCollect *bc, con
     if (existing)
         return existing->object_shape_id;
     shape_hash = fold_u64(shape_hash, type->nchildren);
-    for (uint8_t i = 0; i < type->nchildren; i++) {
+    for (int i = 0; i < type->nchildren; i++) {
         int source_index = tref_object_canonical_source_index(type, i);
         shape_hash = fold_u64(shape_hash, hash_name32(type->field_names[source_index]));
         shape_hash = fold_u64(shape_hash, hash_tref32(type->children[source_index]));
@@ -13067,7 +13067,7 @@ XR_FUNC XrOsIoStatus xg_compiler_image_hash_for_path(XrCompileState *state,
     const char *path, uint64_t *output) {
     XrCompileResourceStatus prior = xr_compile_state_status(state);
     if (prior != XR_COMPILE_RESOURCE_OK)
-        return prior == XR_COMPILE_RESOURCE_BUDGET ? XR_OS_IO_OVERFLOW
+        return prior == XR_COMPILE_RESOURCE_OVERFLOW ? XR_OS_IO_OVERFLOW
              : prior == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_OS_IO_OUT_OF_MEMORY
              : XR_OS_IO_BAD_ARGUMENT;
     if (!path || !output)
@@ -13077,7 +13077,7 @@ XR_FUNC XrOsIoStatus xg_compiler_image_hash_for_path(XrCompileState *state,
     XrOsIoStatus status = xr_os_io_stat(&policy, path, &st);
     if (status == XR_OS_IO_OVERFLOW || status == XR_OS_IO_OUT_OF_MEMORY)
         (void) xr_compile_state_fail(state, status == XR_OS_IO_OVERFLOW
-            ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+            ? XR_COMPILE_RESOURCE_OVERFLOW : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
     if (status != XR_OS_IO_OK && status != XR_OS_IO_NOT_FOUND)
         return status;
     uint64_t hash = XG_COMPILER_SEMVER_HASH;

@@ -772,7 +772,7 @@ static bool prepare_type_plans_for_type(XaotBundle *bundle, const XrType *type, 
             }
             return true;
         case XR_KIND_UNION:
-            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            for (int i = 0; i < type->union_type.member_count; i++) {
                 if (!prepare_type_plans_for_type(
                         bundle, type->union_type.members ? type->union_type.members[i] : NULL,
                         depth + 1))
@@ -3771,7 +3771,7 @@ static bool prepare_transfer_type_is_inline(const XrType *type) {
         case XR_KIND_ENUM:
             return true;
         case XR_KIND_UNION:
-            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            for (int i = 0; i < type->union_type.member_count; i++) {
                 if (!prepare_transfer_type_is_inline(type->union_type.members[i]))
                     return false;
             }

@@ -67,35 +67,65 @@ static XrXirValueStatus type_receiving_literal(XrXirLiteral a,XrXirLiteral b) {
 
     return !a.length || !memcmp(a.bytes,b.bytes,a.length) ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT;
 }
-static XrXirValueStatus type_receiving_nominal(TypeReceiving *r,const XrXirTypeNode *a,const XrXirTypeNode *b) {
-    const XrXirNominalIdentity *from=&r->source->types.nominals->identities[a->nominal.declaration];
-    const XrXirNominalIdentity *to=&r->target->types.nominals->identities[b->nominal.declaration];
+static bool type_receiving_nominal_header(void *owner,const XrXirTypes *source,
+    const XrXirTypeNode *a,const XrXirTypes *target,const XrXirTypeNode *b) {
+    (void)owner;
+    const XrXirNominalIdentity *from=&source->nominals->identities[a->nominal.declaration];
+    const XrXirNominalIdentity *to=&target->nominals->identities[b->nominal.declaration];
 
     if (from->exported!=to->exported || from->arity!=to->arity || from->field_count!=to->field_count ||
         from->kind!=to->kind || from->variant_count!=to->variant_count || from->flags!=to->flags ||
         a->nominal.argument_count!=b->nominal.argument_count || a->nominal.field_count!=b->nominal.field_count)
-        return XR_XIR_VALUE_BAD_ARGUMENT;
+        return false;
     if (from->native.native_id!=to->native.native_id ||
         memcmp(from->native.source_fingerprint,to->native.source_fingerprint,sizeof(from->native.source_fingerprint)))
-        return XR_XIR_VALUE_BAD_ARGUMENT;
+        return false;
     XrXirValueStatus status=type_receiving_literal(from->module,to->module);
     if (status==XR_XIR_VALUE_OK) status=type_receiving_literal(from->name,to->name);
     for (uint32_t i=0;status==XR_XIR_VALUE_OK && i<from->field_count;++i) {
 
-        if (from->fields[i].flags!=to->fields[i].flags) return XR_XIR_VALUE_BAD_ARGUMENT;
+        if (from->fields[i].flags!=to->fields[i].flags) return false;
         status=type_receiving_literal(from->fields[i].name,to->fields[i].name);
     }
     for (uint32_t i=0;status==XR_XIR_VALUE_OK && i<from->variant_count;++i) {
 
         if (from->variants[i].field_begin!=to->variants[i].field_begin ||
-            from->variants[i].field_count!=to->variants[i].field_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+            from->variants[i].field_count!=to->variants[i].field_count) return false;
         status=type_receiving_literal(from->variants[i].name,to->variants[i].name);
     }
+    return status==XR_XIR_VALUE_OK;
+}
+static XrXirValueStatus type_receiving_nominal(TypeReceiving *r,const XrXirTypeNode *a,const XrXirTypeNode *b) {
+    if (!type_receiving_nominal_header(r,&r->source->types,a,&r->target->types,b)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status=XR_XIR_VALUE_OK;
     for (uint32_t i=0;status==XR_XIR_VALUE_OK && i<a->nominal.argument_count;++i)
         status=type_receiving_edge(r,a->nominal.arguments[i],b->nominal.arguments[i]);
     for (uint32_t i=0;status==XR_XIR_VALUE_OK && i<a->nominal.field_count;++i)
         status=type_receiving_edge(r,a->nominal.fields[i],b->nominal.fields[i]);
     return status;
+}
+static XrXirValueStatus type_receiving_union(TypeReceiving *r,const XrXirTypeNode *a,const XrXirTypeNode *b) {
+    for (uint32_t p=0;p<a->parameter_count;++p) {
+        XrXirType source=a->parameters[p].type;bool found=false;
+        const XrXirTypeNode *from=xr_xir_type_node(&r->source->types,source);
+        if (!from || from->kind!=XR_XIR_TYPE_NOMINAL) return XR_XIR_VALUE_BAD_ARGUMENT;
+        for (uint32_t q=0;q<b->parameter_count && !found;++q) {
+            XrXirType target=b->parameters[q].type;
+            const XrXirTypeNode *to=xr_xir_type_node(&r->target->types,target);
+            if (!to || to->kind!=XR_XIR_TYPE_NOMINAL ||
+                !type_receiving_nominal_header(r,&r->source->types,from,&r->target->types,to)) continue;
+            XrXirErrorMatch match={&r->source->types,&r->target->types,NULL,0,source,target,
+                r,type_receiving_nominal_header};
+            XrXirStatus same=xr_xir_compile_error_substitution_accepts(r->context,&match);
+            if (same==XR_XIR_BAD_TYPE) continue;
+            if (same!=XR_XIR_OK) return arena_status(same);
+            XrXirValueStatus status=type_receiving_edge(r,source,target);
+            if (status!=XR_XIR_VALUE_OK) return status;
+            found=true;
+        }
+        if (!found) return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
+    return XR_XIR_VALUE_OK;
 }
 static XrXirValueStatus type_receiving_node(TypeReceiving *r,uint32_t index) {
     const XrXirTypeNode *a=&r->source->types.nodes[index];
@@ -104,6 +134,7 @@ static XrXirValueStatus type_receiving_node(TypeReceiving *r,uint32_t index) {
     if (!b || a->kind!=b->kind || a->flags!=b->flags || a->parameter_span || b->parameter_span ||
         a->parameter_count!=b->parameter_count) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (a->kind==XR_XIR_TYPE_NOMINAL) return type_receiving_nominal(r,a,b);
+    if (a->kind==XR_XIR_TYPE_UNION) return type_receiving_union(r,a,b);
     XrXirValueStatus status=type_receiving_edge(r,a->element,b->element);
     if (status==XR_XIR_VALUE_OK) status=type_receiving_edge(r,a->result,b->result);
     for (uint32_t p=0;status==XR_XIR_VALUE_OK && p<a->parameter_count;++p) {

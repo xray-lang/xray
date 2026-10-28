@@ -631,7 +631,7 @@ static bool enum_payload_type_predicate_supported(XiCgenCtx *ctx, const XrType *
         case XR_KIND_UNION:
             if (type->union_type.member_count == 0 || !type->union_type.members)
                 return false;
-            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            for (int i = 0; i < type->union_type.member_count; i++) {
                 if (!enum_payload_type_predicate_supported(ctx, type->union_type.members[i]))
                     return false;
             }
@@ -740,7 +740,7 @@ static bool emit_enum_payload_type_predicate_nonnull(XiCgenCtx *ctx, FILE *out, 
         case XR_KIND_UNION: {
             if (type->union_type.member_count == 0 || !type->union_type.members)
                 return false;
-            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            for (int i = 0; i < type->union_type.member_count; i++) {
                 if (!emit_enum_payload_type_predicate(ctx, out, type->union_type.members[i],
                                                       value_expr))
                     return false;

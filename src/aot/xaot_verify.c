@@ -1412,7 +1412,7 @@ static bool verify_transfer_type_is_inline(const XrType *type) {
         case XR_KIND_ENUM:
             return true;
         case XR_KIND_UNION:
-            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            for (int i = 0; i < type->union_type.member_count; i++) {
                 if (!verify_transfer_type_is_inline(type->union_type.members[i]))
                     return false;
             }

@@ -65,7 +65,7 @@ static XrXirValueStatus ctfe_function_admit(void *context,const XrXirFunctionBin
     }
     const XrXirFunction *target=&module->functions[lease->entry];
     const XrXirTypeNode *signature=xr_xir_callable_signature(module->types,type);
-    if (!signature || !xr_xir_error_bound_accepts(target->error_type,signature->element))
+    if (!signature || !xr_xir_error_bound_accepts(module->types,target->error_type,signature->element))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     if (binding->capture_count>target->parameter_count || (binding->capture_count && !binding->captures)) return XR_XIR_VALUE_BAD_ARGUMENT;
     for (uint32_t p=0;p<binding->capture_count;++p) {

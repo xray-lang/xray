@@ -190,6 +190,9 @@ static bool source_constructor_invoke(SourceContext *ctx, AstNode *node,
     const XrXirFunction *function = &ctx->functions[index];
     SourceCallSyntax syntax;
     if (!source_call_syntax(ctx,node,&syntax)) return false;
+    /* The nominal application already proved its type arguments. Constructors
+     * have no own binders; the value argument worker sees only that scope. */
+    syntax.type_args=NULL;syntax.type_arg_count=0;
     if (ctx->identities[index].member_access && ctx->identities[ctx->function].nominal_owner != ctx->identities[index].nominal_owner)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor arity or authority mismatch");
     SourceName called = *target;
@@ -207,7 +210,7 @@ static bool source_constructor_invoke(SourceContext *ctx, AstNode *node,
     SourceCallPlan plan={SOURCE_CALL_CONSTRUCTOR,substitution,substitution,function->parameters,NULL,
         type,{0},arguments,0,0,NULL,NULL};
     if (!source_call_expand(ctx,&syntax,&plan,function->parameter_count) ||
-        !source_argument_arity(ctx,node,index,(uint32_t)syntax.arg_count) || !source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
+        !source_argument_arity(ctx,node,index,(uint32_t)syntax.arg_count) || !source_call_plan_arguments(ctx,node,&plan,&syntax,NULL)) return false;
     for (uint32_t p = (uint32_t)syntax.arg_count; p < function->parameter_count; ++p)
         if (!source_argument_default(ctx, node, index, p, &substitution, &arguments[p])) return false;
     return source_constructor_emit(ctx,node,type,index,arguments,value);

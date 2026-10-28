@@ -144,8 +144,6 @@ static int xi_lower_prelude_native_class_typeid(const char *name) {
         return -1;
     if (strcmp(name, "BigInt") == 0)
         return XR_TID_BIGINT;
-    if (strcmp(name, "StringBuilder") == 0)
-        return XR_TID_STRINGBUILDER;
     return -1;
 }
 
@@ -293,7 +291,7 @@ static bool xi_lower_accept_export_query(XiLower *l, XrModuleStatus status) {
     if (status == XR_MODULE_OK && xr_compile_state_status(state) == XR_COMPILE_RESOURCE_OK)
         return true;
     if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY || status == XR_MODULE_INVALID)
-        (void) xr_compile_state_fail(state, status == XR_MODULE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
+        (void) xr_compile_state_fail(state, status == XR_MODULE_BUDGET ? XR_COMPILE_RESOURCE_OVERFLOW :
             status == XR_MODULE_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
     l->had_error = true;
     return false;
@@ -410,7 +408,7 @@ static const char *xi_lower_export_module_for_symbol(XiLower *l, XaSymbol *targe
     const XrOsIoPolicy policy = xr_compile_io_policy(graph->resources);
 
     for (int i = 0; i < graph->spec_count; i++) {
-        if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) {
+        if (xr_compile_session_poll(l->analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK) {
             l->had_error = true;
             return NULL;
         }
@@ -4997,7 +4995,7 @@ static bool lower_boundary_type_uses_value_copy(const XrType *type, unsigned dep
         case XR_KIND_INSTANCE:
             return xr_type_is_enum_metadata(type);
         case XR_KIND_UNION:
-            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            for (int i = 0; i < type->union_type.member_count; i++) {
                 if (lower_boundary_type_uses_value_copy(type->union_type.members[i], depth + 1))
                     return true;
             }
@@ -7419,30 +7417,6 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
         XiSequenceEvidenceIds sequence_ids;
         XiSequenceEvidenceKinds sequence_kinds = {
             .capacity_op_kind = XG_CAPACITY_RESERVE,
-        };
-        xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, sequence_kinds,
-                                            &sequence_ids);
-        xi_lower_apply_sequence_evidence_ids(value, &sequence_ids);
-    } else if (desc->id == XA_INTRINSIC_STRING_BUILDER_APPEND) {
-        const char *member_name = xa_intrinsic_source_member(desc);
-        if (args.count != 1 || !member_name ||
-            !xr_type_is_builtin_named_class(receiver->type, "StringBuilder") ||
-            !xr_type_is_builtin_named_class(result_type, "StringBuilder") ||
-            !xr_type_equals(result_type, receiver->type)) {
-            l->had_error = true;
-            return NULL;
-        }
-        value->aux = (void *) arena_strdup(l->func, member_name);
-        if (!value->aux) {
-            l->had_error = true;
-            return NULL;
-        }
-        value->aux_int = (int64_t) XI_METHOD_SYMBOL_APPEND << 1;
-        value->result_alias_operand = 0;
-        value->call_return_ownership = lower_call_return_ownership(l, call, receiver);
-        XiSequenceEvidenceIds sequence_ids;
-        XiSequenceEvidenceKinds sequence_kinds = {
-            .capacity_op_kind = XG_CAPACITY_APPEND,
         };
         xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, sequence_kinds,
                                             &sequence_ids);

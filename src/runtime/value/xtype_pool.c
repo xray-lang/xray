@@ -67,7 +67,7 @@ XR_FUNC void xr_type_pool_free(XrTypePool *pool) {
 
 XR_FUNC XrCompileResourceStatus xr_type_pool_pin(XrCompileState *state, XrTypePool *pool,
                                                 XrTypePoolPin *output) {
-    XrCompileResourceStatus status = xr_compile_state_work(state, 1);
+    XrCompileResourceStatus status = xr_compile_state_status(state);
     if (status != XR_COMPILE_RESOURCE_OK)
         return status;
     if (!output || output->pool || !pool || !pool->initialized || pool->state != state)
@@ -76,7 +76,7 @@ XR_FUNC XrCompileResourceStatus xr_type_pool_pin(XrCompileState *state, XrTypePo
     for (;;) {
         XR_CHECK(current != 0, "Pinning requires a live pool owner");
         if (current == UINT64_MAX)
-            return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+            return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OVERFLOW);
         if (atomic_compare_exchange_weak_explicit(&pool->references, &current, current + 1,
                 memory_order_relaxed, memory_order_relaxed))
             break;
@@ -129,7 +129,7 @@ XR_FUNC char *xr_pool_strdup(XrTypePool *pool, const char *str) {
 XR_FUNC XrType *xr_pool_alloc_type(XrTypePool *pool, XrTypeKind kind) {
     if (!pool_ready(pool)) return NULL;
     if (pool->next_type_id == UINT32_MAX) {
-        xr_compile_state_fail(pool->state, XR_COMPILE_RESOURCE_BUDGET);
+        xr_compile_state_fail(pool->state, XR_COMPILE_RESOURCE_OVERFLOW);
         return NULL;
     }
     XrType *type = xr_pool_alloc(pool, sizeof(XrType));

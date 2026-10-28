@@ -60,8 +60,6 @@ typedef enum {
     XR_TREF_TYPE_PARAM,  /* generic type parameter (T, U, ...)  */
 } XrTypeRefKind;
 
-/* Union member limit (mirrors XR_UNION_MAX_MEMBERS in xtype.h) */
-#define XR_TREF_UNION_MAX 6
 
 /* ========== The Type Reference ========== */
 
@@ -73,7 +71,7 @@ typedef struct XrTypeNameSpan {
 
 typedef struct XrTypeRef {
     uint8_t kind;      /* XrTypeRefKind                    */
-    uint8_t nchildren; /* number of child type refs        */
+    int nchildren; /* number of child type refs        */
     /* Source position of the annotation, 0 when synthesized. Type-level
      * diagnostics are raised long after the AST node that carried the
      * annotation is out of reach, so the position travels with the ref. */

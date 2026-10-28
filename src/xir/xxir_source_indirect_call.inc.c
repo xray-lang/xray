@@ -24,7 +24,7 @@ static bool source_indirect_call(SourceContext *ctx,AstNode *node,SourceValue ca
     if (!source_call_syntax(ctx,node,&syntax) || !source_call_expand(ctx,&syntax,&plan,count)) return false;
     if ((uint32_t)syntax.arg_count!=count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"indirect call requires its declared signature");
-    if (!source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
+    if (!source_call_plan_arguments(ctx,node,&plan,&syntax,NULL)) return false;
     for (uint32_t p=0;p<count;++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (arguments[p].type!=parameters[p]) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"indirect argument type mismatch");

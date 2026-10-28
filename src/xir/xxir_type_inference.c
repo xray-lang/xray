@@ -33,6 +33,7 @@ struct XrXirInferenceState {
     InferenceObservation *first, *last;
     XrXirStatus status;
     bool finalized;
+    XrXirInferenceUnionOwner union_owner;
 };
 typedef struct InferenceWalk {
     XrXirInferenceState *state;
@@ -66,8 +67,72 @@ static void inference_walk_dispose(InferenceWalk *w) {
 static XrXirStatus inference_match(XrXirInferenceState *s, const XrXirTypes *types,
     const XrXirType *arguments, uint32_t count, XrXirInferencePair pair) {
     XrXirCompileContext match = s->context;
-    XrXirStatus status = xr_xir_compile_type_substitution_matches_between(&match, types, types, arguments, count, pair.formal, pair.actual);
-     return status;
+    const XrXirTypeNode *from=xr_xir_callable_signature(types,pair.formal),*to=xr_xir_callable_signature(types,pair.actual);
+    if (!from || !to) return xr_xir_compile_type_substitution_matches_between(&match,types,types,arguments,count,pair.formal,pair.actual);
+    if (from->parameter_count!=to->parameter_count || !xr_xir_callable_flags_compatible(to->flags,from->flags)) return XR_XIR_BAD_TYPE;
+    XrXirErrorMatch errors={types,types,arguments,count,from->element,to->element,NULL,NULL};
+    XrXirStatus status=xr_xir_compile_error_substitution_accepts(&match,&errors);
+    if (status==XR_XIR_OK) status=xr_xir_compile_type_substitution_matches_between(&match,types,types,arguments,count,from->result,to->result);
+    for (uint32_t p=0;status==XR_XIR_OK && p<from->parameter_count;++p) {
+        if (from->parameters[p].mode!=to->parameters[p].mode) return XR_XIR_BAD_TYPE;
+        status=xr_xir_compile_type_substitution_matches_between(&match,types,types,arguments,count,from->parameters[p].type,to->parameters[p].type);
+    }
+    return status;
+}
+static bool inference_error_known(InferenceWalk *w,const XrXirType *known,uint32_t count,XrXirType actual) {
+    XrXirInferenceState *s=w->state;
+    for (uint32_t p=0;p<count;++p) {
+        XrXirErrorMatch match={w->types,w->types,s->arguments,s->count,known[p],actual,NULL,NULL};
+        XrXirStatus status=xr_xir_compile_error_substitution_accepts(&s->context,&match);
+        if (status==XR_XIR_OK) return true;
+        if (status!=XR_XIR_BAD_TYPE) {s->status=status;return false;}
+    }
+    return false;
+}
+static void inference_error_union(InferenceWalk *w,const InferenceTask *task,const XrXirTypeNode *from) {
+    XrXirInferenceState *s=w->state;uint32_t unknown=UINT32_MAX,known_count=0;
+    if (!xr_xir_error_bound_accepts(w->types,task->pair.actual,XR_XIR_ERROR)) {s->status=XR_XIR_BAD_TYPE;return;}
+    uint32_t count=from->parameter_count;
+    XrXirType *known=inference_alloc(s,(uint64_t)count*sizeof(*known));
+    if (!known) return;
+    for (uint32_t p=0;p<count && s->status==XR_XIR_OK;++p) {
+        XrXirType member=from->parameters[p].type;uint32_t id=(uint32_t)member;
+        if (id>=XR_XIR_TYPE_PARAMETER_BASE && id<XR_XIR_TYPE_PARAMETER_LIMIT) {
+            uint32_t index=id-XR_XIR_TYPE_PARAMETER_BASE;
+            if (index>=s->count) {s->status=XR_XIR_BAD_TYPE;break;}
+            if (!s->solved[index]) {
+                if (unknown!=UINT32_MAX && unknown!=index) {s->status=XR_XIR_BAD_TYPE;break;}
+                unknown=index;continue;
+            }
+        }
+        XrXirInferenceKnown view={0};
+        s->status=xr_xir_compile_inference_expected_known(s,w->types,member,&view);
+        if (s->status==XR_XIR_OK && !view.known) s->status=XR_XIR_BAD_TYPE;
+        known[known_count++]=member;
+    }
+    if (s->status!=XR_XIR_OK || unknown==UINT32_MAX) {xr_compile_resources_free(known);return;}
+    const XrXirTypeNode *actual=xr_xir_type_node(w->types,task->pair.actual);
+    bool set=actual && actual->kind==XR_XIR_TYPE_UNION;
+    uint32_t actual_count=set ? actual->parameter_count : task->pair.actual==XR_XIR_NEVER ? 0u : 1u;
+    XrXirType *residual=actual_count ? inference_alloc(s,(uint64_t)actual_count*sizeof(*residual)) : NULL;
+    uint32_t used=0;
+    for (uint32_t p=0;p<actual_count && s->status==XR_XIR_OK;++p) {
+        XrXirType member=set ? actual->parameters[p].type : task->pair.actual;
+        if (!inference_error_known(w,known,known_count,member) && s->status==XR_XIR_OK) residual[used++]=member;
+    }
+    xr_compile_resources_free(known);
+    XrXirType solution=used ? residual[0] : XR_XIR_NEVER;
+    if (s->status==XR_XIR_OK && used>1) {
+        if (!s->union_owner.intern) s->status=XR_XIR_BAD_TYPE;
+        else {
+            s->status=s->union_owner.intern(s->union_owner.context,residual,used,&solution);
+            w->types=s->union_owner.types;
+            if (s->status==XR_XIR_OK) s->status=xr_xir_compile_type_expression_shape(&s->context,w->types,solution,s->caller_count);
+        }
+    }
+    if (s->status==XR_XIR_OK && !xr_xir_error_bound_accepts(w->types,solution,XR_XIR_ERROR)) s->status=XR_XIR_BAD_TYPE;
+    if (s->status==XR_XIR_OK) {s->arguments[unknown]=solution;s->solved[unknown]=1;}
+    xr_compile_resources_free(residual);
 }
 static void inference_pair(InferenceWalk *w, const InferenceTask *task) {
     XrXirInferenceState *s = w->state;
@@ -90,6 +155,7 @@ static void inference_pair(InferenceWalk *w, const InferenceTask *task) {
     }
     const XrXirTypeNode *from = xr_xir_type_node(w->types,task->pair.formal);
     if (!from) return;
+    if (from->kind==XR_XIR_TYPE_UNION) {inference_error_union(w,task,from);return;}
     const XrXirTypeNode *to = xr_xir_type_node(w->types,task->pair.actual);
     if (!to || from->kind != to->kind || from->parameter_count != to->parameter_count || from->flags != to->flags) {
         s->status = XR_XIR_BAD_TYPE; return;
@@ -131,12 +197,14 @@ XR_FUNC XrXirStatus xr_xir_compile_inference_begin(const XrXirCompileContext *co
     XrXirCompileContext *budget = &compile_state;
 
     if (!r || !budget || !output || (!!r->prefix != !!r->prefix_count) || r->prefix_count > 65536 ||
-        r->own_count > 65536-r->prefix_count || r->caller_parameter_count > 65536) return XR_XIR_BAD_STRUCTURE;
+        r->own_count > 65536-r->prefix_count || r->caller_parameter_count > 65536 ||
+        (r->union_owner.intern ? !r->union_owner.types || r->union_owner.types!=r->types :
+            r->union_owner.context || r->union_owner.types)) return XR_XIR_BAD_STRUCTURE;
 
 
     XrXirInferenceState *s = xir_compile_calloc(compile_context, 1,sizeof(*s), &allocation_status);
     if (!s) return allocation_status;
-    s->context = *compile_context;
+    s->context = *compile_context;s->union_owner=r->union_owner;
     s->prefix_count = r->prefix_count; s->count = r->prefix_count+r->own_count; s->caller_count = r->caller_parameter_count;
     s->arguments = inference_alloc(s,(uint64_t)s->count*sizeof(*s->arguments)); s->solved = inference_alloc(s,s->count);
     if (r->parameter_kinds) {
@@ -197,7 +265,7 @@ XR_FUNC XrXirStatus xr_xir_compile_inference_expected_known(XrXirInferenceState 
         if (!node) continue;
         if (task->depth == UINT32_MAX) { s->status = XR_XIR_BUDGET; break; }
         uint32_t depth = task->depth+1;
-        if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {
+        if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) {
             if (node->kind == XR_XIR_TYPE_CALLABLE) {
                 inference_enqueue(&walk,node->result,XR_XIR_UNIT,depth);
                 inference_enqueue(&walk,node->element,XR_XIR_UNIT,depth);

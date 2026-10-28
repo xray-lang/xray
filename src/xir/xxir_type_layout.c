@@ -46,7 +46,9 @@ XrXirStatus xr_xir_compile_layout(const XrXirCompileContext *compile_context,
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         context < XR_XIR_LAYOUT_STORAGE || context > XR_XIR_LAYOUT_FRAME) return XR_XIR_BAD_LAYOUT;
 
-    if (!xr_xir_type_node(types, type)) return xr_xir_builtin_layout(type, target, context, layout);
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    if (!node) return xr_xir_builtin_layout(type, target, context, layout);
+    if (node->kind == XR_XIR_TYPE_UNION) return XR_XIR_BAD_LAYOUT;
     if (!xr_xir_type_is_owned(types, type) || xr_xir_type_span(types, type) ||
         (xr_xir_type_is_nominal(types, type) && !xr_xir_type_is_class(types, type) &&
          context == XR_XIR_LAYOUT_STORAGE)) return XR_XIR_BAD_LAYOUT;
@@ -76,6 +78,9 @@ static XrXirStatus storage_layouts_into(const XrXirCompileContext *compile_conte
         layouts[i].depth = 0; layouts[i].owned_depth = 0; layouts[i].tag_bytes = 0; layouts[i].body = (XrXirLayout){0,0};
         if (node->parameter_span || layouts[i].field_count != node->nominal.field_count ||
             (layouts[i].field_count != 0) != (layouts[i].field_offsets != NULL)) return XR_XIR_BAD_LAYOUT;
+        if (node->kind == XR_XIR_TYPE_UNION) {
+            layouts[i].value = (XrXirLayout){0,0}; continue;
+        }
         if (node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE) nominal = true;
         else {
             XrXirStatus status = xr_xir_compile_layout(compile_context, types, (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i),

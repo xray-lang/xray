@@ -14,11 +14,21 @@
 #include "xxir_types.h"
 typedef struct XrXirInferenceState XrXirInferenceState;
 typedef struct XrXirInferencePair { XrXirType formal, actual; } XrXirInferencePair;
+/* One synchronous builder owns the append-only type view. Intern may grow its
+ * descriptor array; no borrowed node pointer survives that call. The view
+ * object itself and callback context outlive the inference state. */
+typedef struct XrXirInferenceUnionOwner {
+    void *context;
+    const XrXirTypes *types;
+    XrXirStatus (*intern)(void *,const XrXirType *,uint32_t,XrXirType *);
+} XrXirInferenceUnionOwner;
+
 typedef struct XrXirInferenceRequest {
     const XrXirTypes *types;
     const XrXirType *prefix;
     uint32_t prefix_count, own_count, caller_parameter_count;
     const uint32_t *parameter_kinds;
+    XrXirInferenceUnionOwner union_owner;
 } XrXirInferenceRequest;
 typedef struct XrXirInferenceKnown {
     bool known;

@@ -375,25 +375,24 @@ static XrTypeRef *parse_type_annotation_inner(Parser *parser) {
 
     /* Union type: T | U | ... */
     if (xr_parser_check(parser, TK_PIPE)) {
-        XrTypeRef *members[XR_TREF_UNION_MAX + 1];
-        int count = 0;
-        members[count++] = base;
-
-        while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_PIPE) && count < XR_TREF_UNION_MAX + 1) {
+        int capacity = 8, count = 1;
+        XrTypeRef **members = ast_alloc_array(parser->compiler_session, sizeof(*members), (size_t)capacity);
+        if (!xr_parser_healthy(parser) || !members) return NULL;
+        members[0] = base;
+        while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_PIPE)) {
             XrTypeRef *next = parse_type_annotation_base(parser);
             if (!xr_parser_healthy(parser)) return NULL;
-            next=parse_nullable_suffixes(parser,next);
+            next = parse_nullable_suffixes(parser, next);
             if (!xr_parser_healthy(parser)) return NULL;
-            if (count < XR_TREF_UNION_MAX + 1)
-                members[count++] = next;
-        }
-
-        if (count > XR_TREF_UNION_MAX) {
-            do {
-                xr_parser_error(parser, "union type exceeds maximum of 6 members");
+            if (count == capacity) {
+                int grown = xr_parser_grow_capacity(parser, capacity);
                 if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return xr_tref_error(parser->compiler_session);
+                XrTypeRef **replacement = ast_array_grow(parser->compiler_session, members,
+                    sizeof(*members), (size_t)capacity, (size_t)grown);
+                if (!xr_parser_healthy(parser) || !replacement) return NULL;
+                members = replacement; capacity = grown;
+            }
+            members[count++] = next;
         }
 
         XrTypeRef *union_ref = xr_tref_union(parser->compiler_session, members, count);

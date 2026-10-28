@@ -52,11 +52,33 @@ XR_FUNC const XrXirTypeNode *xr_xir_callable_signature(const XrXirTypes *types, 
 /* CALLABLE.element is its required canonical error type. Unit denotes an
  * invalid query, never an omitted or inferred error bound. */
 XR_FUNC XrXirType xr_xir_callable_error(const XrXirTypes *types, XrXirType type);
+/* Error unions are metadata; their members have declaration-local Error proof.
+ * The temporary normalized vector belongs to the caller and must be released
+ * with xr_compile_resources_free. A nonempty vector needs an owned pool node;
+ * otherwise scalar is the canonical Never, Error, or singleton expression. */
+typedef struct XrXirErrorUnion {
+    XrXirType scalar;
+    XrXirCallableParameter *members;
+    uint32_t count;
+} XrXirErrorUnion;
+XR_FUNC XrXirStatus xr_xir_compile_error_union(const XrXirCompileContext *context,
+    const XrXirTypes *types, const XrXirType *members, uint32_t count, XrXirErrorUnion *output);
 /* Both expressions must already have their declaration-local Error proof. */
-static inline bool xr_xir_error_bound_accepts(XrXirType actual, XrXirType bound) {
-    return actual != XR_XIR_UNIT && bound != XR_XIR_UNIT &&
-        (actual == bound || actual == XR_XIR_NEVER || bound == XR_XIR_ERROR);
-}
+XR_FUNC bool xr_xir_error_bound_accepts(const XrXirTypes *types, XrXirType actual, XrXirType bound);
+/* Source and receiving pools have authenticated declaration correspondence.
+ * Argument expressions already belong to the receiving pool. */
+typedef bool (*XrXirNominalMatch)(void *owner,const XrXirTypes *source,
+    const XrXirTypeNode *from,const XrXirTypes *target,const XrXirTypeNode *to);
+typedef struct XrXirErrorMatch {
+    const XrXirTypes *source_types,*actual_types;
+    const XrXirType *arguments;
+    uint32_t argument_count;
+    XrXirType bound,actual;
+    void *owner;
+    XrXirNominalMatch nominal_match;
+} XrXirErrorMatch;
+XR_FUNC XrXirStatus xr_xir_compile_error_substitution_accepts(const XrXirCompileContext *context,
+    const XrXirErrorMatch *match);
 /* Ordered tuple fields use mode-zero parameter storage; arity zero is Unit. */
 XR_FUNC const XrXirTypeNode *xr_xir_tuple_signature(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_callable(const XrXirTypes *types, XrXirType type);

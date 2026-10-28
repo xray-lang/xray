@@ -228,7 +228,7 @@ static XrXirStatus inference_owner_begin(XrCompileResources *owner, XrXirInferen
     XrXirCompileContext context = {owner,xr_xir_compile_default_limits()};
     XrXirType prefix = XR_XIR_I64;
     const uint32_t kinds[] = {0,XR_XIR_BINDER_RESULT_VARIABLE};
-    XrXirInferenceRequest request = {NULL,&prefix,1,1,0,kinds};
+    XrXirInferenceRequest request = {.prefix=&prefix,.prefix_count=1,.own_count=1,.parameter_kinds=kinds,.union_owner={0}};
     return xr_xir_compile_inference_begin(&context,&request,output);
 }
 static XrXirStatus inference_owner_run(XrCompileResources *owner, bool release_caller) {

@@ -75,7 +75,7 @@ static XrXirStatus type_context_verify(TypeContextProof *proof, XrXirType type, 
                  node->kind == XR_XIR_TYPE_SLICE || (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL) ||
                  (node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK))
             status = type_context_edge(&c, node->element, i);
-        else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {
+        else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) {
             if (node->kind == XR_XIR_TYPE_CALLABLE) {
                 status = type_context_edge(&c, node->result, i);
                 if (status == XR_XIR_OK) status = type_context_edge(&c, node->element, i);

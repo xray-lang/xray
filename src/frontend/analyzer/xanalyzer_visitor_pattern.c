@@ -962,16 +962,17 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
 
             if (var_type) {
                 // Build expected type kind set from the variable's static type
-                XrTypeKind expected[XR_UNION_MAX_MEMBERS + 1];
+                XrTypeKind expected[XR_KIND_COUNT];
                 int expected_count = 0;
 
                 if (XR_TYPE_IS_UNION(var_type)) {
-                    for (int i = 0; i < var_type->union_type.member_count &&
-                                    expected_count < XR_UNION_MAX_MEMBERS;
-                         i++) {
+                    for (int i = 0; i < var_type->union_type.member_count; i++) {
                         XrType *m = var_type->union_type.members[i];
-                        if (m)
-                            expected[expected_count++] = m->kind;
+                        if (m && m->kind >= 0 && m->kind < XR_KIND_COUNT) {
+                            bool seen = false;
+                            for (int k = 0; k < expected_count; ++k) seen |= expected[k] == m->kind;
+                            if (!seen) expected[expected_count++] = m->kind;
+                        }
                     }
                 } else if (var_type->is_nullable) {
                     // T? means we need T and null

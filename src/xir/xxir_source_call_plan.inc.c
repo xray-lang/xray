@@ -242,21 +242,49 @@ static bool source_call_complete_argument(SourceContext *ctx,AstNode *node,
         !source_call_observe(ctx,node,state,formal,value->type,requirement)) return false;
     return true;
 }
+static XrXirStatus source_inference_union(void *owner,const XrXirType *members,uint32_t count,XrXirType *output) {
+    SourceContext *ctx=owner;
+    if (!source_request_poll(ctx,NULL)) return ctx->diagnostic.status;
+    XrXirCallableParameter *parameters=source_alloc(ctx,count,sizeof(*parameters));
+    if (!parameters) return ctx->diagnostic.status;
+    for (uint32_t p=0;p<count;++p) parameters[p]=(XrXirCallableParameter){members[p],0};
+    bool completed=source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
+        .parameters=parameters,.parameter_count=count},output);
+    source_retire_array(ctx,parameters);
+    return completed ? XR_XIR_OK : ctx->diagnostic.status;
+}
 static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node,
-    const SourceCallPlan *plan,const SourceCallSyntax *call) {
+    const SourceCallPlan *plan,const SourceCallSyntax *call,const XrXirConstraint *own_constraints) {
     bool requirement=plan->family==SOURCE_CALL_REQUIREMENT;
-    uint32_t prefix=plan->prefix.count, count=plan->substitution.count, own=count-prefix;
+    uint32_t prefix=plan->prefix.count, count=plan->substitution.count;
+    if (prefix>count) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"call binder prefix exceeds its declaration");
+    uint32_t own=count-prefix;
+    if (call->type_arg_count && (!own || (uint32_t)call->type_arg_count!=own || !call->type_args))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"call requires its exact own type arguments");
     XrXirType *types=(XrXirType *)plan->substitution.types;
     bool inferred=own && !call->type_arg_count, ok=false;
     XrXirInferenceState *state=NULL;
     if (inferred) {
-        XrXirInferenceRequest begin={&ctx->types,plan->prefix.types,prefix,own,
-            ctx->generics[ctx->function].parameter_count,plan->parameter_kinds};
+        XrXirInferenceRequest begin={.types=&ctx->types,.prefix=plan->prefix.types,.prefix_count=prefix,.own_count=own,
+            .caller_parameter_count=ctx->generics[ctx->function].parameter_count,.parameter_kinds=plan->parameter_kinds,
+            .union_owner={ctx,&ctx->types,source_inference_union}};
         XrXirStatus status=xr_xir_compile_inference_begin(&ctx->compile, &begin, &state);
         if (status!=XR_XIR_OK) return source_fail(ctx,node,status,
             requirement ? "method inference could not begin" : "direct call inference could not begin");
-    } else for (uint32_t p=0;p<own;++p)
-        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx,call->type_args[p],&types[prefix+p])) return false;
+    } else if (own) {
+        if (!own_constraints) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"call own binder constraints are missing");
+        uint32_t *markers=source_alloc(ctx,own,sizeof(*markers));
+        if (!markers) return false;
+        for (uint32_t p=0;p<own;++p) markers[p]=own_constraints[p].markers;
+        for (uint32_t p=0;p<own;++p) {
+            if (ctx->diagnostic.status!=XR_XIR_OK) return false;
+            bool accepted=(markers[p] & XR_XIR_CONSTRAINT_ERROR) ?
+                source_error_type_ref(ctx,call->type_args[p],&types[prefix+p]) :
+                source_type(ctx,call->type_args[p],&types[prefix+p]);
+            if (!accepted) return false;
+        }
+        source_retire_array(ctx,markers);
+    }
     uint32_t argument_count=(uint32_t)call->arg_count;
     SourceCallArgumentPlan *arguments=argument_count ? source_recipe_storage(ctx,argument_count,sizeof(*arguments)) : NULL;
     bool *references=argument_count ? source_recipe_storage(ctx,argument_count,sizeof(*references)) : NULL;

@@ -210,7 +210,7 @@ static XaJsonCapabilityResult json_capability_visit(const XrType *type, XaJsonCa
             result = json_capability_visit(type->container.element_type, mode, walk);
             break;
         case XR_KIND_UNION:
-            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            for (int i = 0; i < type->union_type.member_count; i++) {
                 result = json_capability_visit(type->union_type.members[i], mode, walk);
                 if (!result.supported)
                     break;

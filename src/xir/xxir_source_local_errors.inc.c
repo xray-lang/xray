@@ -6,19 +6,54 @@
  *
  * xxir_source_local_errors.inc.c - Declaration-based function-local error checks
  */
+static bool source_parameter_constraints(SourceContext *ctx, AstNode *node,
+    const XrGenericParam *parameter, XrXirConstraint *output);
+static bool source_error_prove(SourceContext *ctx,XrXirType type) {
+    if (ctx->type_scope.active) {
+        uint32_t id=(uint32_t)type;
+        if (id>=XR_XIR_TYPE_PARAMETER_BASE && id<XR_XIR_TYPE_PARAMETER_LIMIT) {
+            uint32_t p=id-XR_XIR_TYPE_PARAMETER_BASE;XrXirConstraint constraint={0};
+            if (p>=ctx->type_scope.count || !ctx->type_scope.parameters)
+                return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"error type parameter has no declaration scope");
+            if (!source_parameter_constraints(ctx,ctx->type_scope.node,ctx->type_scope.parameters[p],&constraint)) return false;
+            if (!(constraint.markers & XR_XIR_CONSTRAINT_ERROR))
+                return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"error type parameter must satisfy Error");
+            return true;
+        }
+        if (type==XR_XIR_NEVER || type==XR_XIR_ERROR || xr_xir_type_is_enum(&ctx->types,type)) return true;
+        const XrXirTypeNode *node=xr_xir_type_node(&ctx->types,type);
+        if (node && node->kind==XR_XIR_TYPE_UNION) {
+            uint32_t count=node->parameter_count;
+            const XrXirCallableParameter *members=node->parameters;
+            for (uint32_t p=0;p<count;++p)
+                if (!source_error_prove(ctx,members[p].type)) return false;
+            return true;
+        }
+        return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"error type must satisfy Error");
+    }
+    XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);
+    XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
+    XrXirStatus status=xr_xir_compile_type_markers_prove(&ctx->compile,&proof,type,XR_XIR_CONSTRAINT_ERROR);
+    if (status==XR_XIR_OK) status=xr_xir_compile_type_access(&ctx->compile,&module,ctx->function,type);
+    return status==XR_XIR_OK || source_fail(ctx,NULL,status,"error type must satisfy Error");
+}
 static bool source_error_type_ref(SourceContext *ctx,XrTypeRef *type,XrXirType *output) {
     if (!type) return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"error type is missing");
     if (type->kind==XR_TREF_NAMED && type->name && !type->nchildren &&
         source_text_same(ctx,NULL,type->name,"Never") && !source_nominal_name(ctx,type->name)) {
         *output=XR_XIR_NEVER;return true;
     }
-    if (!source_type(ctx,type,output)) return false;
-    if (!ctx->type_scope.active) {
-        XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);
-        XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
-        XrXirStatus status=xr_xir_compile_type_markers_prove(&ctx->compile,&proof,*output,XR_XIR_CONSTRAINT_ERROR);
-        if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"error type must satisfy Error");
+    if (type->kind==XR_TREF_UNION) {
+        if (type->nchildren<2 || !type->children) return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"error union is malformed");
+        XrXirCallableParameter *members=source_alloc(ctx,(uint32_t)type->nchildren,sizeof(*members));
+        if (!members) return false;
+        /* Prove every original member before interning may select Error. */
+        for (int p=0;p<type->nchildren;++p)
+            if (!source_error_type_ref(ctx,type->children[p],&members[p].type)) return false;
+        return source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
+            .parameters=members,.parameter_count=(uint32_t)type->nchildren},output);
     }
+    if (!source_type(ctx,type,output) || !source_error_prove(ctx,*output)) return false;
     return true;
 }
 static bool source_error_clause_type(SourceContext *ctx, AstNode *node,
@@ -31,11 +66,7 @@ static bool source_error_clause_type(SourceContext *ctx, AstNode *node,
         if (!source_error_type_ref(ctx,type,&error)) return false;
     } else if (clause->syntax!=XR_THROWS_OMITTED)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"throws clause is malformed");
-    XrXirDeclarations declarations;
-    XrXirModule module=source_module_view(ctx,&declarations);
-    XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
-    XrXirStatus status=xr_xir_compile_type_markers_prove(&ctx->compile,&proof,error,XR_XIR_CONSTRAINT_ERROR);
-    if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"throws type must satisfy Error");
+    if (!source_error_prove(ctx,error)) return false;
     *output=error;return true;
 }
 static bool source_local_marked(SourceContext *ctx) {
@@ -54,10 +85,22 @@ static bool source_local_accept(SourceContext *ctx, AstNode *node, XrXirType err
     if (!marked)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"E0330: throwing call requires try or a try body");
     if (asserted) return true;
-    for (SourceLocalHandler *handler=handlers;handler;handler=handler->previous)
-        for (uint32_t i=0;i<handler->count;++i)
-            if (handler->complete[i] &&
-                (handler->types[i]==XR_XIR_ERROR || handler->types[i]==error)) return true;
+    const XrXirTypeNode *error_node=xr_xir_type_node(&ctx->types,error);
+    bool union_error=error_node && error_node->kind==XR_XIR_TYPE_UNION;
+    uint32_t member_count=union_error ? error_node->parameter_count : 1,escaping=0;
+    XrXirCallableParameter *remaining=source_alloc(ctx,member_count,sizeof(*remaining));
+    if (!remaining) return false;
+    for (uint32_t p=0;p<member_count;++p) {
+        XrXirType member=union_error ? error_node->parameters[p].type : error;
+        bool handled=false;
+        for (SourceLocalHandler *handler=handlers;handler;handler=handler->previous)
+            for (uint32_t i=0;i<handler->count;++i)
+                handled|=handler->complete[i] && (handler->types[i]==XR_XIR_ERROR || handler->types[i]==member);
+        if (!handled) remaining[escaping++]=(XrXirCallableParameter){member,0};
+    }
+    if (!escaping) return true;
+    if (!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
+        .parameters=remaining,.parameter_count=escaping},&error)) return false;
     const XrXirTypeNode *iterator=xr_xir_type_node(&ctx->types,ctx->functions[ctx->function].result);
     XrXirType declared=ctx->functions[ctx->function].error_type;
     bool generator=(ctx->identities[ctx->function].promises & XR_XIR_FUNCTION_GENERATOR)!=0;
@@ -68,12 +111,12 @@ static bool source_local_accept(SourceContext *ctx, AstNode *node, XrXirType err
     }
     XrXirType *bound=&ctx->functions[ctx->function].error_type;
     if (body->infer_errors && !generator) {
-        if (*bound==XR_XIR_NEVER || error==XR_XIR_ERROR) *bound=error;
-        else if (error!=*bound && *bound!=XR_XIR_ERROR)
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"inferred error union is not yet supported; declare throws(Error)");
+        XrXirCallableParameter members[2]={{*bound,0},{error,0}};
+        if (!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
+            .parameters=members,.parameter_count=2},bound)) return false;
         return true;
     }
-    if (!xr_xir_error_bound_accepts(error,declared))
+    if (!xr_xir_error_bound_accepts(&ctx->types,error,declared))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,ctx->identities[ctx->function].cleanup_owner ?
             "E0387: defer must handle every business error inside its own body" :
             "E0331: escaping error exceeds the declared throws type; catch it or declare throws");

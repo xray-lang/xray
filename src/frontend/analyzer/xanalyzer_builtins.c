@@ -161,9 +161,6 @@ XR_FUNC XrCompileResourceStatus xa_builtin_get_members(
         return status;
     if (!output || output->items || output->count || output->owns_symbols)
         return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
-    status = xr_compile_state_work(state, 1);
-    if (status != XR_COMPILE_RESOURCE_OK)
-        return status;
     return xa_member_list_builtins(registry, xa_builtin_get_type_info(type), output);
 }
 
@@ -1136,8 +1133,9 @@ XR_FUNC XrType *xa_builtin_enum_decl_type(XrVMRuntime *X, XaAnalyzer *analyzer,
             XrType **types = memory;
             bool ok = true;
             for (int j = 0; j < src->payload_count; ++j) {
-                status = policy.work(policy.context, 1);
-                if (!builtin_enum_io(analyzer, status)) { ok = false; break; }
+                if (analyzer && xr_compile_session_poll(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK) {
+                    ok = false; break;
+                }
                 types[j] = parse_metadata_type(X, analyzer, src->payload_type_strs[j]);
                 if (analyzer && xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) { ok = false; break; }
             }
@@ -1389,29 +1387,29 @@ static XrType *parse_type_str(XrVMRuntime *X, XaAnalyzer *analyzer, const char *
     // like xr_parse_type_annotation does.
     size_t first_pipe = parse_type_find_top_pipe(s, len, 0);
     if (first_pipe < len) {
-        XrType *members[XR_UNION_MAX_MEMBERS];
+        XrType **members = xr_type_union_members_alloc(len);
+        if (!members) return NULL;
         int count = 0;
 
         size_t start = 0;
-        while (start <= len && count < XR_UNION_MAX_MEMBERS) {
+        while (start <= len) {
             size_t pipe = parse_type_find_top_pipe(s, len, start);
             size_t mstart = parse_type_skip_ws(s, len, start);
             size_t mend = parse_type_trim_right(s, mstart, pipe);
             if (mend > mstart) {
                 XrType *m = parse_type_str(X, analyzer, module_name, s + mstart, mend - mstart);
-                if (m)
-                    members[count++] = m;
+                if (!m) { xr_type_union_members_free(members); return NULL; }
+                members[count++] = m;
             }
             if (pipe >= len)
                 break;
             start = pipe + 1;
         }
 
-        if (count == 0)
-            return xr_type_new_error(X);
-        if (count == 1)
-            return members[0];
-        return xr_type_new_union(X, members, count);
+        XrType *result = count == 0 ? xr_type_new_error(X) :
+            count == 1 ? members[0] : xr_type_new_union(X, members, count);
+        xr_type_union_members_free(members);
+        return result;
     }
 
     // Strip trailing '?' for nullable check
@@ -1641,10 +1639,11 @@ static XrType *parse_type_str(XrVMRuntime *X, XaAnalyzer *analyzer, const char *
         // (signature strings have no grouping form).
         const char *inner = s + 1;
         size_t inner_len = base_len - 2;
-        XrType *elems[XR_UNION_MAX_MEMBERS];
+        XrType **elems = xr_type_union_members_alloc(inner_len ? inner_len : 1);
+        if (!elems) return NULL;
         int count = 0;
         size_t p = 0;
-        while (p < inner_len && count < XR_UNION_MAX_MEMBERS) {
+        while (p < inner_len) {
             while (p < inner_len && (inner[p] == ' ' || inner[p] == ','))
                 p++;
             if (p >= inner_len)
@@ -1661,13 +1660,16 @@ static XrType *parse_type_str(XrVMRuntime *X, XaAnalyzer *analyzer, const char *
                     break;
                 e++;
             }
-            elems[count++] = parse_type_str(X, analyzer, module_name, inner + p, e - p);
+            XrType *element = parse_type_str(X, analyzer, module_name, inner + p, e - p);
+            if (!element) { xr_type_union_members_free(elems); return NULL; }
+            elems[count++] = element;
             p = e;
         }
         if (count > 0)
             type = xr_type_new_tuple(X, elems, count);
         else
             type = xr_type_new_unit(X);
+        xr_type_union_members_free(elems);
     } else if (base_len == 1 && s[0] >= 'A' && s[0] <= 'Z') {
         // Single uppercase letter: generic type parameter (T, K, V, etc.)
         char name[2] = {s[0], '\0'};

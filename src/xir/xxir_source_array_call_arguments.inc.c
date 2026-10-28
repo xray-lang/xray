@@ -37,7 +37,7 @@ static bool source_array_callback_check(SourceContext *ctx,AstNode *node,
     if (!signature || signature->parameter_count<shape->shortest || signature->parameter_count>shape->longest)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Array callback requires a function of the declared shape");
     output->arity=signature->parameter_count;
-    if (!xr_xir_error_bound_accepts(signature->element,shape->error_type))
+    if (!xr_xir_error_bound_accepts(&ctx->types,signature->element,shape->error_type))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Array callback error exceeds its declaration");
     for (uint32_t p=0;p<signature->parameter_count;++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
@@ -89,7 +89,7 @@ static bool source_array_callback_arguments(SourceContext *ctx,AstNode *node,
         !source_native_callback_error(ctx,node,native,member,&shape.error_type)) return false;
     if (!source_array_callback_context(ctx,node,syntax.expanded->entries[0].plan.value,&shape,&contexts[0])) return false;
     parameters[0]=contexts[0].type;
-    if (!source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
+    if (!source_call_plan_arguments(ctx,node,&plan,&syntax,NULL)) return false;
     callback->value=values[0];*initial=count==2 ? values[1] : (SourceValue){0};
     return source_array_callback_check(ctx,node,&shape,callback);
 }

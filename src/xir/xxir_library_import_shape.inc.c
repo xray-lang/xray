@@ -208,7 +208,7 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m) {
         const XrXirTypeNode *node=&types->nodes[t];
         if (node->kind!=XR_XIR_TYPE_NOMINAL && node->kind!=XR_XIR_TYPE_CALLABLE &&
             node->kind!=XR_XIR_TYPE_ARRAY && node->kind!=XR_XIR_TYPE_MAP && node->kind!=XR_XIR_TYPE_SET &&
-            node->kind!=XR_XIR_TYPE_TUPLE &&
+            node->kind!=XR_XIR_TYPE_TUPLE && node->kind!=XR_XIR_TYPE_UNION &&
             !(node->kind==XR_XIR_TYPE_SLICE && node->element==XR_XIR_U8) &&
             node->kind!=XR_XIR_TYPE_NULLABLE && node->kind!=XR_XIR_TYPE_CELL &&
             !((node->kind==XR_XIR_TYPE_ATOMIC || node->kind==XR_XIR_TYPE_TASK) &&

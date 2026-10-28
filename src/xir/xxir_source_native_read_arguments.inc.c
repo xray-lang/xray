@@ -31,7 +31,7 @@ static bool source_native_read_arguments(SourceContext *ctx,AstNode *node,
     if (!source_call_expand(ctx,&syntax,&plan,maximum)) return false;
     if ((uint32_t)syntax.arg_count<minimum || (uint32_t)syntax.arg_count>maximum)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,diagnostic);
-    if (!source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
+    if (!source_call_plan_arguments(ctx,node,&plan,&syntax,NULL)) return false;
     *supplied=(uint32_t)syntax.arg_count;
     return true;
 }
@@ -48,7 +48,7 @@ static bool source_native_variadic_read_arguments(SourceContext *ctx,AstNode *no
     uint32_t count=(uint32_t)syntax.arg_count;
     plan.values=count ? source_recipe_storage(ctx,count,sizeof(*plan.values)) : NULL;
     if (count && !plan.values) return false;
-    if (!source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
+    if (!source_call_plan_arguments(ctx,node,&plan,&syntax,NULL)) return false;
     *values=plan.values;*supplied=count;
     return true;
 }

@@ -190,17 +190,18 @@ XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_name
     // Substitute in union types
     if (type->kind == XR_KIND_UNION) {
         bool changed = false;
-        XrType *new_members[XR_UNION_MAX_MEMBERS];
         int mc = type->union_type.member_count;
+        XrType **new_members = xr_type_union_members_alloc(mc);
+        if (!new_members) return NULL;
         for (int i = 0; i < mc; i++) {
             new_members[i] = xr_type_substitute(X, type->union_type.members[i], param_names,
                                                 actual_types, count);
-            if (new_members[i] != type->union_type.members[i])
-                changed = true;
+            if (!new_members[i]) { xr_type_union_members_free(new_members); return NULL; }
+            if (new_members[i] != type->union_type.members[i]) changed = true;
         }
-        if (changed)
-            return xr_type_new_union(X, new_members, mc);
-        return type;
+        XrType *result = changed ? xr_type_new_union(X, new_members, mc) : type;
+        xr_type_union_members_free(new_members);
+        return result;
     }
 
     // Substitute in tuple types

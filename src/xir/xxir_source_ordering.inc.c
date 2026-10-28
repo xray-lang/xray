@@ -26,12 +26,13 @@ static bool source_prelude_word(SourcePreludeScan *scan,const char *name) {
 }
 static bool source_prelude_ref(SourcePreludeScan *scan,const XrTypeRef *ref) {
     if (!ref || scan->needed) return true;
+    if (ref->nchildren < 0) return source_fail(scan->ctx,NULL,XR_XIR_BAD_TYPE,"source type child count is negative");
     if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (scan->depth==128) return source_fail(scan->ctx,NULL,XR_XIR_BUDGET,"native source discovery depth exhausted");
     if (!source_prelude_word(scan,ref->name)) return false;
     ++scan->depth;
     bool ok=true;
-    for (uint32_t i=0;i<ref->nchildren && ok && !scan->needed;++i) {
+    for (uint32_t i=0;i<(uint32_t)ref->nchildren && ok && !scan->needed;++i) {
         if (!ref->children) ok=source_fail(scan->ctx,NULL,XR_XIR_BAD_TYPE,"source type children are missing");
         else ok=source_prelude_ref(scan,ref->children[i]);
     }

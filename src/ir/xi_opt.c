@@ -1999,7 +1999,7 @@ static bool sr_type_is_task_instance(const XrType *type) {
     if (type->kind == XR_KIND_INSTANCE)
         return xr_type_is_builtin_named_class(type, "Task");
     if (type->kind == XR_KIND_UNION) {
-        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+        for (int i = 0; i < type->union_type.member_count; i++) {
             if (sr_type_is_task_instance(type->union_type.members[i]))
                 return true;
         }
@@ -2013,7 +2013,7 @@ static bool sr_type_is_channel(const XrType *type) {
     if (type->kind == XR_KIND_CHANNEL)
         return true;
     if (type->kind == XR_KIND_UNION) {
-        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+        for (int i = 0; i < type->union_type.member_count; i++) {
             if (sr_type_is_channel(type->union_type.members[i]))
                 return true;
         }
@@ -2308,7 +2308,7 @@ static bool sr_type_is_named_instance(const XrType *type, const char *name) {
     if (type->kind == XR_KIND_INSTANCE)
         return type->instance.class_name && strcmp(type->instance.class_name, name) == 0;
     if (type->kind == XR_KIND_UNION) {
-        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+        for (int i = 0; i < type->union_type.member_count; i++) {
             if (sr_type_is_named_instance(type->union_type.members[i], name))
                 return true;
         }

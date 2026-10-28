@@ -18,6 +18,7 @@
 #include "../../os/os_thread.h"
 #include "xtype_names.h"
 #include <stdint.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -568,7 +569,7 @@ static bool xr_type_contains_error_impl(const XrType *type, int depth) {
             }
             return false;
         case XR_KIND_UNION:
-            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            for (int i = 0; i < type->union_type.member_count; i++) {
                 XrType *member = type->union_type.members ? type->union_type.members[i] : NULL;
                 if (xr_type_contains_error_impl(member, depth + 1))
                     return true;
@@ -834,11 +835,11 @@ XR_FUNC XrViewOriginBindStatus xr_type_function_set_view_origins(XrVMRuntime *X,
         if (xr_compile_state_copy(state, normalized, origins, (size_t) count * sizeof(*origins)) != XR_COMPILE_RESOURCE_OK)
             goto normalization_failed;
         for (int i = 1; i < count; i++) {
-            if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) goto normalization_failed;
+            if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) goto normalization_failed;
             XrViewOrigin key = normalized[i];
             int j = i - 1;
             while (j >= 0) {
-                if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) goto normalization_failed;
+                if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) goto normalization_failed;
                 if (view_origin_compare(&normalized[j], &key) <= 0) break;
                 normalized[j + 1] = normalized[j];
                 j--;
@@ -847,7 +848,7 @@ XR_FUNC XrViewOriginBindStatus xr_type_function_set_view_origins(XrVMRuntime *X,
         }
         int unique = 0;
         for (int i = 0; i < count; i++) {
-            if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) goto normalization_failed;
+            if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) goto normalization_failed;
             XrViewOrigin origin = normalized[i];
             bool valid = origin.kind == XR_VIEW_ORIGIN_PARAM
                 ? origin.param_ordinal >= 0 && origin.param_ordinal < type->function.param_count &&
@@ -872,7 +873,7 @@ XR_FUNC XrViewOriginBindStatus xr_type_function_set_view_origins(XrVMRuntime *X,
         if (xr_compile_state_copy(state, stored, normalized, (size_t) count * sizeof(*stored)) != XR_COMPILE_RESOURCE_OK)
             goto normalization_failed;
     }
-    if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) goto normalization_failed;
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) goto normalization_failed;
     xr_compile_state_free(normalized);
     type->function.view_origin_set = stored;
     type->function.view_origin_count = count;
@@ -994,7 +995,7 @@ static TypeContainsSliceResult type_contains_slice_impl(const XrType *type,
             }
             break;
         case XR_KIND_UNION:
-            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            for (int i = 0; i < type->union_type.member_count; i++) {
                 VISIT_SLICE_CHILD(type->union_type.members ? type->union_type.members[i] : NULL);
             }
             break;
@@ -1263,7 +1264,7 @@ XrType *xr_type_tuple_get(XrType *type, int index) {
 
 /* ========== Union Type Implementation ========== */
 
-// Helper: sort members by kind for canonical order (insertion sort, count <= 6)
+// Stable kind order preserves the declaration order of distinct nominal members.
 static void union_sort_by_kind(XrType **members, int count) {
     for (int i = 1; i < count; i++) {
         XrType *key = members[i];
@@ -1277,7 +1278,7 @@ static void union_sort_by_kind(XrType **members, int count) {
 }
 
 // Helper: normalize members (dedup, remove never, apply special rules)
-// Returns final count. If any member is `any`, returns -1 (caller should return any).
+// Unknown absorbs ordinary legacy unions; allocation failure never does.
 static int union_normalize(XrType **in, int in_count, XrType **out, bool *out_nullable) {
     bool has_null = false;
     int out_count = 0;
@@ -1303,7 +1304,7 @@ static int union_normalize(XrType **in, int in_count, XrType **out, bool *out_nu
                 break;
             }
         }
-        if (!dup && out_count < XR_UNION_MAX_MEMBERS * 2)
+        if (!dup)
             out[out_count++] = t;
     }
 
@@ -1311,77 +1312,81 @@ static int union_normalize(XrType **in, int in_count, XrType **out, bool *out_nu
     return out_count;
 }
 
-// Construct a union type from an array of member types.
-// Applies: flatten existing unions, dedup, sort, special rules.
-// Union aliases as members are flattened (from xr_type_union merge path).
-XrType *xr_type_new_union(XrVMRuntime *X, XrType **members, int count) {
-    X = resolve_isolate(X);
-    XR_DCHECK(count >= 0, "type_new_union: negative count");
-    XR_DCHECK(count == 0 || members != NULL, "type_new_union: NULL members with count > 0");
-    if (count == 0)
-        return xr_type_new_never(X);
-    if (count == 1)
-        return members[0];
+XR_FUNC XrType **xr_type_union_members_alloc(size_t count) {
+    XrTypePool *pool = resolve_type_pool(NULL);
+    if (!pool) return NULL;
+    if (!count || count > INT_MAX) {
+        xr_compile_state_fail(pool->state, count ? XR_COMPILE_RESOURCE_OVERFLOW : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return NULL;
+    }
+    void *memory = NULL;
+    if (xr_compile_state_calloc(pool->state, (size_t)count, sizeof(XrType *), &memory) !=
+        XR_COMPILE_RESOURCE_OK) return NULL;
+    return memory;
+}
+XR_FUNC void xr_type_union_members_free(XrType **members) {
+    xr_compile_state_free(members);
+}
 
-    // 1. Flatten any existing union members (from xr_type_union merge)
-    XrType *flat[XR_UNION_MAX_MEMBERS * 2];
-    int flat_count = 0;
-    for (int i = 0; i < count && flat_count < XR_UNION_MAX_MEMBERS * 2; i++) {
-        if (!members[i])
-            continue;
-        if (XR_TYPE_IS_UNION(members[i])) {
-            for (int j = 0; j < members[i]->union_type.member_count; j++) {
-                if (flat_count < XR_UNION_MAX_MEMBERS * 2)
-                    flat[flat_count++] = members[i]->union_type.members[j];
-            }
-        } else {
-            flat[flat_count++] = members[i];
+/* Flatten into request scratch before publishing one complete owned member array. */
+XrType *xr_type_new_union(XrVMRuntime *X, XrType **members, int count) {
+    XrTypePool *pool = resolve_type_pool(X);
+    if (count < 0 || (count && !members)) {
+        if (pool) xr_compile_state_fail(pool->state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return NULL;
+    }
+    if (!count) return xr_type_new_never(X);
+    uint64_t total = 0;
+    for (int i = 0; i < count; ++i) {
+        XrType *member = members[i];
+        if (!member || (XR_TYPE_IS_UNION(member) &&
+            (member->union_type.member_count <= 0 || !member->union_type.members))) {
+            if (pool) xr_compile_state_fail(pool->state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+            return NULL;
+        }
+        total += XR_TYPE_IS_UNION(member) ? (uint64_t)member->union_type.member_count : 1u;
+        if (total > INT_MAX) {
+            if (pool) xr_compile_state_fail(pool->state, XR_COMPILE_RESOURCE_OVERFLOW);
+            return NULL;
         }
     }
-
-    // 2. Normalize: dedup, remove never, apply special rules
-    XrType *result[XR_UNION_MAX_MEMBERS * 2];
-    bool has_null = false;
-    int result_count = union_normalize(flat, flat_count, result, &has_null);
-
-    // unknown fallback
-    if (result_count < 0)
-        return xr_type_new_unknown(X);
-
-    // Degenerate: empty -> never
-    if (result_count == 0) {
-        return has_null ? xr_type_new_null(X) : xr_type_new_never(X);
+    if (count == 1) return members[0];
+    XrType *stack[16];
+    XrType **flat = total <= 16 ? stack : xr_type_union_members_alloc((size_t)total);
+    if (!flat) return NULL;
+    int used = 0;
+    for (int i = 0; i < count; ++i) {
+        XrType *member = members[i];
+        int n = XR_TYPE_IS_UNION(member) ? member->union_type.member_count : 1;
+        for (int j = 0; j < n; ++j) {
+            XrType *leaf = XR_TYPE_IS_UNION(member) ? member->union_type.members[j] : member;
+            if (!leaf || XR_TYPE_IS_UNION(leaf)) {
+                if (pool) xr_compile_state_fail(pool->state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+                if (flat != stack) xr_type_union_members_free(flat); return NULL;
+            }
+            flat[used++] = leaf;
+        }
     }
-
-    // Single member
-    if (result_count == 1) {
-        if (has_null)
-            return xr_type_make_nullable(X, result[0]);
-        return result[0];
+    bool nullable = false;
+    int size = union_normalize(flat, used, flat, &nullable);
+    XrType *result = NULL;
+    if (size < 0) result = xr_type_new_unknown(X);
+    else if (!size) result = nullable ? xr_type_new_null(X) : xr_type_new_never(X);
+    else if (size == 1) result = nullable ? xr_type_make_nullable(X, flat[0]) : flat[0];
+    else {
+        union_sort_by_kind(flat, size);
+        result = type_alloc(X, XR_KIND_UNION);
+        size_t bytes = 0;
+        XrType **owned = result ? type_alloc_array(pool, sizeof(*owned), size, &bytes) : NULL;
+        if (!owned) result = NULL;
+        else {
+            memcpy(owned, flat, bytes);
+            result->union_type.members = owned; result->union_type.member_count = size;
+            result->is_nullable = nullable;
+        }
     }
-
-    // Exceeds max -> degrade to unknown
-    if (result_count > XR_UNION_MAX_MEMBERS)
-        return xr_type_new_unknown(X);
-
-    // 3. Sort by kind for canonical order
-    union_sort_by_kind(result, result_count);
-
-    // 4. Allocate union type
-    XrType *type = type_alloc(X, XR_KIND_UNION);
-    if (!type)
-        return xr_type_new_unknown(X);
-    XrTypePool *pool = resolve_type_pool(X);
-    size_t member_size;
-    type->union_type.members =
-        (XrType **) type_alloc_array(pool, sizeof(XrType *), result_count, &member_size);
-    if (!type->union_type.members)
-        return xr_type_new_unknown(X);
-    memcpy(type->union_type.members, result, member_size);
-    type->union_type.member_count = (uint8_t) result_count;
-    if (has_null)
-        type->is_nullable = true;
-    return type;
+    if (flat != stack) xr_type_union_members_free(flat);
+    return result;
 }
 
 // Merge two types into a union (or apply special rules).
@@ -1507,21 +1512,25 @@ XrType *xr_type_union_remove(XrVMRuntime *X, XrType *type, XrTypeKind kind) {
     if (!XR_TYPE_IS_UNION(type)) {
         return type->kind == kind ? xr_type_new_never(X) : type;
     }
-    XrType *kept[XR_UNION_MAX_MEMBERS];
+    XrType **kept = xr_type_union_members_alloc(type->union_type.member_count);
+    if (!kept) return NULL;
     int kept_count = 0;
     for (int i = 0; i < type->union_type.member_count; i++) {
         if (type->union_type.members[i]->kind != kind)
             kept[kept_count++] = type->union_type.members[i];
     }
-    if (kept_count == 0)
-        return xr_type_new_never(X);
+    if (kept_count == 0) {
+        xr_type_union_members_free(kept); return xr_type_new_never(X);
+    }
     if (kept_count == 1) {
         XrType *r = kept[0];
+        xr_type_union_members_free(kept);
         if (type->is_nullable)
             r = xr_type_make_nullable(X, r);
         return r;
     }
     XrType *r = xr_type_new_union(X, kept, kept_count);
+    xr_type_union_members_free(kept);
     if (type->is_nullable && r)
         r->is_nullable = true;
     return r;

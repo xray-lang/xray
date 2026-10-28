@@ -1684,7 +1684,7 @@ XR_FUNC bool xi_coro_type_needs_boundary_clone(const XrType *type) {
         case XR_KIND_INSTANCE:
             return xr_type_is_builtin_named_class(type, "StringBuilder");
         case XR_KIND_UNION:
-            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            for (int i = 0; i < type->union_type.member_count; i++) {
                 if (xi_coro_type_needs_boundary_clone(type->union_type.members[i]))
                     return true;
             }

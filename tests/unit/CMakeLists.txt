@@ -4723,3 +4723,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/never_type.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/local_errors.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/local_cfg_errors.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/error_union/CMakeLists.txt")

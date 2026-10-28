@@ -68,7 +68,7 @@ static bool flow_type_matches_tref(const XrType *type, const XrTypeRef *tref) {
                 return type->enum_type.type_arg_count == 0;
             if (type->enum_type.type_arg_count != tref->nchildren)
                 return false;
-            for (uint8_t i = 0; i < tref->nchildren; i++) {
+            for (int i = 0; i < tref->nchildren; i++) {
                 if (!flow_type_matches_tref(type->enum_type.type_args[i], tref->children[i]))
                     return false;
             }
@@ -81,7 +81,7 @@ static bool flow_type_matches_tref(const XrType *type, const XrTypeRef *tref) {
                 return type->instance.type_arg_count == 0;
             if (type->instance.type_arg_count != tref->nchildren)
                 return false;
-            for (uint8_t i = 0; i < tref->nchildren; i++) {
+            for (int i = 0; i < tref->nchildren; i++) {
                 if (!flow_type_matches_tref(type->instance.type_args[i], tref->children[i]))
                     return false;
             }
@@ -108,18 +108,18 @@ static XrType *flow_narrow_nonnull_by_tref(XrType *base_type, const XrTypeRef *t
     if (!base_type || !tref)
         return base_type;
     if (XR_TYPE_IS_UNION(base_type)) {
-        XrType *members[XR_UNION_MAX_MEMBERS];
+        XrType **members = xr_type_union_members_alloc((size_t)base_type->union_type.member_count);
+        if (!members) return NULL;
         int count = 0;
-        for (int i = 0; i < xr_type_union_count(base_type) && count < XR_UNION_MAX_MEMBERS; i++) {
+        for (int i = 0; i < xr_type_union_count(base_type); i++) {
             XrType *member = xr_type_union_member(base_type, i);
             if (flow_type_matches_tref(member, tref) == assume_true)
                 members[count++] = member;
         }
-        if (count == 0)
-            return xr_type_new_never(NULL);
-        if (count == 1)
-            return members[0];
-        return xr_type_new_union(NULL, members, count);
+        XrType *result = !count ? xr_type_new_never(NULL) :
+            count == 1 ? members[0] : xr_type_new_union(NULL, members, count);
+        xr_type_union_members_free(members);
+        return result;
     }
     bool matches = flow_type_matches_tref(base_type, tref);
     if (assume_true) {
@@ -699,17 +699,20 @@ XrType *xa_narrow_by_typeid(XrType *type, XrTypeId type_id, bool assume_true) {
 
     if (type_id == XR_TID_OBJECT) {
         if (XR_TYPE_IS_UNION(type)) {
-            XrType *members[XR_UNION_MAX_MEMBERS];
+            XrType **members = xr_type_union_members_alloc((size_t)type->union_type.member_count);
+            if (!members) return NULL;
             int count = 0;
-            for (int i = 0; i < xr_type_union_count(type) && count < XR_UNION_MAX_MEMBERS; i++) {
+            for (int i = 0; i < xr_type_union_count(type); i++) {
                 XrType *member = xr_type_union_member(type, i);
                 bool is_object = member && (member->kind == XR_KIND_JSON ||
                                             member->kind == XR_KIND_STRUCT_OBJECT);
                 if (is_object == assume_true)
                     members[count++] = member;
             }
-            return count == 0 ? xr_type_new_never(NULL)
+            XrType *result = count == 0 ? xr_type_new_never(NULL)
                               : (count == 1 ? members[0] : xr_type_new_union(NULL, members, count));
+            xr_type_union_members_free(members);
+            return result;
         }
         bool is_object = type->kind == XR_KIND_JSON || type->kind == XR_KIND_STRUCT_OBJECT;
         return is_object == assume_true ? type : xr_type_new_never(NULL);

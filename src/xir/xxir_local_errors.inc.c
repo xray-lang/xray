@@ -85,13 +85,13 @@ static void local_error_type(LocalErrorCfg *cfg,XrXirType type,uint64_t *set) {
     type=local_error_payload(&cfg->terms.types,type);
     if (type==XR_XIR_ERROR) { set[0]|=1;return; }
     for (uint32_t a=0;a<cfg->atom_count;++a)
-        if (cfg->atoms[a].type==type) set[(a+1)/64]|=UINT64_C(1)<<((a+1)%64);
+        if (xr_xir_error_bound_accepts(&cfg->terms.types,cfg->atoms[a].type,type)) set[(a+1)/64]|=UINT64_C(1)<<((a+1)%64);
 }
 static XrXirStatus local_error_subset(LocalErrorCfg *cfg,const uint64_t *set) {
     if (cfg->bound==XR_XIR_ERROR) return XR_XIR_OK;
     if (set[0]&1) return local_error_failure(cfg,XR_XIR_BAD_TYPE);
     for (uint32_t a=0;a<cfg->atom_count;++a)
-        if ((set[(a+1)/64]&(UINT64_C(1)<<((a+1)%64))) && cfg->atoms[a].type!=cfg->bound)
+        if ((set[(a+1)/64]&(UINT64_C(1)<<((a+1)%64))) && !xr_xir_error_bound_accepts(&cfg->terms.types,cfg->atoms[a].type,cfg->bound))
             return local_error_failure(cfg,XR_XIR_BAD_TYPE);
     return XR_XIR_OK;
 }

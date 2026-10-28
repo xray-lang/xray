@@ -73,7 +73,7 @@ static SourceName *source_nominal_name(SourceContext *ctx, const char *name);
 static bool source_error_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *output);
 static bool source_nominal_arguments(SourceContext *ctx, const char *name, XrTypeRef **arguments,
     uint32_t count, XrXirType *type);
-static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType *type) {
+static bool source_intern_type_raw(SourceContext *ctx, XrXirTypeNode node, XrXirType *type) {
     uint32_t span = xr_xir_type_span(&ctx->types,
         node.kind == XR_XIR_TYPE_CALLABLE ? node.result : node.element);
     if (node.kind == XR_XIR_TYPE_MAP || node.kind == XR_XIR_TYPE_CALLABLE ||
@@ -131,6 +131,26 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
     XrXirTypeNode *table = (XrXirTypeNode *) ctx->types.nodes;
     table[ctx->types.count] = node;
     *type = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + ctx->types.count++); return true;
+}
+static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType *type) {
+    if (node.kind != XR_XIR_TYPE_UNION) return source_intern_type_raw(ctx,node,type);
+    XrXirType *members = node.parameter_count ? source_alloc(ctx,node.parameter_count,sizeof(*members)) : NULL;
+    if (node.parameter_count && (!members || !node.parameters)) return false;
+    for (uint32_t p=0;p<node.parameter_count;++p) {
+        if (node.parameters[p].mode) return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"error union member has a passing mode");
+        members[p]=node.parameters[p].type;
+    }
+    XrXirErrorUnion normalized={0};
+    XrXirStatus status=xr_xir_compile_error_union(&ctx->compile,&ctx->types,members,node.parameter_count,&normalized);
+    source_retire_array(ctx,members);
+    if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"error union normalization failed");
+    if (!normalized.count) { *type=normalized.scalar;return true; }
+    XrXirCallableParameter *owned=source_alloc(ctx,normalized.count,sizeof(*owned));
+    if (owned) memcpy(owned,normalized.members,(size_t)normalized.count*sizeof(*owned));
+    xr_compile_resources_free(normalized.members);
+    if (!owned) return false;
+    node=(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,.parameters=owned,.parameter_count=normalized.count};
+    return source_intern_type_raw(ctx,node,type);
 }
 static bool source_signature(SourceContext *ctx, const XrXirCallableParameter *parameters,
     uint32_t count, XrXirType result, XrXirType error_type, XrXirType *type) {

@@ -127,6 +127,7 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     /* Copy the node before argument expressions append to the descriptor arena. */
     XrXirTypeNode formal = *xr_xir_callable_signature(&ctx->types,method->signature);
     uint32_t own = method->own_parameter_count, parent = application.argument_count;
+    const XrXirConstraint *own_constraints=method->constraints;
     if (parent > 65536 || own > 65536-parent || call->type_arg_count < 0 ||
         (call->type_arg_count && ((uint32_t)call->type_arg_count != own || !call->type_args))) {
         source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method requires its exact explicit type arguments or an omitted list"); goto done;
@@ -149,7 +150,7 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     if ((uint32_t)syntax.arg_count!=formal.parameter_count) {
         source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method argument arity mismatch"); goto done;
     }
-    if (!source_call_plan_arguments(ctx,node,&plan,&syntax)) goto done;
+    if (!source_call_plan_arguments(ctx,node,&plan,&syntax,own_constraints)) goto done;
     if (!source_requirement_prove(ctx,node,selected.member,application,substitution,&signature)) goto done;
     XrXirTypeNode callable = *xr_xir_callable_signature(&ctx->types,signature);
     SourceCallConversions conversions={SOURCE_CALL_REQUIREMENT,substitution,NULL,callable.parameters,

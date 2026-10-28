@@ -296,7 +296,7 @@ struct XrType {
         // For union type (int | string) - compile-time only
         struct {
             XrType **members;      // Flat member types (sorted by kind)
-            uint8_t member_count;  // Number of members (≤ XR_UNION_MAX_MEMBERS)
+            int member_count;      // Number of owned members
         } union_type;
 
         // For fixed-length array ([T; N])
@@ -533,7 +533,6 @@ static inline bool xr_type_is_u8_contiguous(const XrType *type) {
     return xr_type_is_exact_u8(xr_type_contiguous_element_type(type));
 }
 
-#define XR_UNION_MAX_MEMBERS 6
 
 // Derive base rep ignoring nullable flag (for nullable optimization)
 static inline XrRep xr_type_base_rep(const XrType *t) {
@@ -846,6 +845,9 @@ XR_FUNC int xr_type_tuple_count(XrType *type);
 XR_FUNC XrType *xr_type_tuple_get(XrType *type, int index);
 
 // API: Union type construction and operations
+/* Temporary union arrays use the current type pool's request ledger. */
+XR_FUNC XrType **xr_type_union_members_alloc(size_t count);
+XR_FUNC void xr_type_union_members_free(XrType **members);
 XR_FUNC XrType *xr_type_new_union(XrVMRuntime *X, XrType **members, int count);
 XR_FUNC XrType *xr_type_union(XrVMRuntime *X, XrType *a, XrType *b);
 XR_FUNC int xr_type_union_count(XrType *type);

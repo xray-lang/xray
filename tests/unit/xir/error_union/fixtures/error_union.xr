@@ -1,0 +1,17 @@
+enum First{Bad{message:string}}
+enum Second{Bad}
+enum Third{Bad}
+enum Fourth{Bad}
+enum Fifth{Bad}
+enum Sixth{Bad}
+enum Seventh{Bad}
+fn value(which:i64) throws(First|Second|Third|Fourth|Fifth|Sixth|Seventh)->i64{
+    if(which==0){throw First.Bad{message:"owned é\0界"}}
+    throw Seventh.Bad
+}
+fn relay(which:i64) throws(First|Second|Third|Fourth|Fifth|Sixth|Seventh)->i64{return try value(which)}
+export fn escaped() throws(First|Seventh)->i64{throw First.Bad{message:"owned é\0界"}}
+export fn answer()->i64{
+    try{return relay(6)}catch(error:Seventh){return 42}catch(error){return -1}
+}
+print(answer())

@@ -253,7 +253,7 @@ static bool type_is_u8_contiguous_view(const XrType *type) {
     if (!type)
         return false;
     if (type->kind == XR_KIND_UNION) {
-        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+        for (int i = 0; i < type->union_type.member_count; i++) {
             if (type_is_u8_contiguous_view(type->union_type.members[i]))
                 return true;
         }

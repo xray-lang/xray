@@ -26,7 +26,7 @@ XR_FUNC bool xi_type_is_channel(const XrType *type) {
     if (type->kind == XR_KIND_CHANNEL)
         return true;
     if (type->kind == XR_KIND_UNION) {
-        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+        for (int i = 0; i < type->union_type.member_count; i++) {
             if (xi_type_is_channel(type->union_type.members[i]))
                 return true;
         }
@@ -159,7 +159,7 @@ XR_FUNC bool xi_type_is_named_instance(const XrType *type, const char *name) {
     if (type->kind == XR_KIND_CLASS && strcmp(name, "Atomic") == 0)
         return type->instance.class_name && strcmp(type->instance.class_name, name) == 0;
     if (type->kind == XR_KIND_UNION) {
-        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+        for (int i = 0; i < type->union_type.member_count; i++) {
             if (xi_type_is_named_instance(type->union_type.members[i], name))
                 return true;
         }

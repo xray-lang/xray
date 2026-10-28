@@ -87,7 +87,7 @@ XR_FUNC XrXirStatus xr_xir_compile_type_access_scratch(const XrXirCompileContext
             status = xr_xir_compile_nominal_access(remaining, module, function, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i), 0, XR_XIR_NOMINAL_TYPE);
             for (uint32_t a = 0; a < node->nominal.argument_count && status == XR_XIR_OK; ++a)
                 status = type_access_edge(types, node->nominal.arguments[a], i, pending);
-        } else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {
+        } else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) {
             if (node->kind == XR_XIR_TYPE_CALLABLE) {
                 status = type_access_edge(types, node->result, i, pending);
                 if (status == XR_XIR_OK) status = type_access_edge(types, node->element, i, pending);

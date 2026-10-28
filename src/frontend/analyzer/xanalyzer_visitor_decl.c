@@ -98,7 +98,7 @@ static XrCompileResourceStatus xa_store_type_params_with_constraints(XaInferCont
         status = xr_compile_state_calloc(state, (size_t) count, sizeof(int), &memory);
     int *constraint_counts = memory;
     for (int i = 0; i < count && status == XR_COMPILE_RESOURCE_OK; ++i) {
-        status = xr_compile_state_work(state, 1);
+        status = xr_compile_session_poll(ctx->analyzer->compiler_session);
         if (status != XR_COMPILE_RESOURCE_OK) break;
         XrGenericParam *gp = type_params[i];
         names[i] = gp ? gp->name : NULL;
@@ -114,7 +114,7 @@ static XrCompileResourceStatus xa_store_type_params_with_constraints(XaInferCont
         constraint_lists[i] = resolved;
         constraint_counts[i] = cn;
         for (int j = 0; j < cn; ++j) {
-            if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) break;
+            if (xr_compile_session_poll(ctx->analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK) break;
             // Use analyzer-aware resolver so class-bounded constraints
             // (e.g. <T: Animal>) keep their inheritance chain.
             resolved[j] =
@@ -124,8 +124,8 @@ static XrCompileResourceStatus xa_store_type_params_with_constraints(XaInferCont
             if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) break;
             if (gp->constraints[j] && gp->constraints[j]->kind == XR_TREF_OBJECT &&
                 !gp->constraints[j]->name && gp->constraints[j]->field_readonly) {
-                for (uint8_t k = 0; k < gp->constraints[j]->nchildren; k++) {
-                    if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) break;
+                for (int k = 0; k < gp->constraints[j]->nchildren; k++) {
+                    if (xr_compile_session_poll(ctx->analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK) break;
                     if (!gp->constraints[j]->field_readonly[k])
                         continue;
                     XrLocation loc = {.file = ctx->file_path,
@@ -1848,7 +1848,7 @@ static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymb
             sizeof(XaParamEffectSummary), &memory) != XR_COMPILE_RESOURCE_OK) return false;
     XaParamEffectSummary *effects = memory;
     for (int i = 0; i < param_count; i++) {
-        if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) {
+        if (xr_compile_session_poll(ctx->analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK) {
             xr_compile_state_free(effects);
             return false;
         }
@@ -5164,15 +5164,15 @@ static bool build_class_vtable(XaAnalyzer *analyzer, XrClassInfo *info) {
     XrClassInfo *cursor = info, *slow = info, *fast = info;
     size_t count = 0, methods = 0;
     while (cursor && !cursor->vtable) {
-        if (xr_compile_state_work(state, 4) != XR_COMPILE_RESOURCE_OK) return false;
+        if (xr_compile_session_poll(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK) return false;
         if (count == SIZE_MAX) {
-            (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);return false;
+            (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OVERFLOW);return false;
         }
         if (cursor->method_count < 0 || (cursor->method_count && !cursor->methods)) {
             (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);return false;
         }
         if ((size_t) cursor->method_count > SIZE_MAX - methods) {
-            (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);return false;
+            (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OVERFLOW);return false;
         }
         methods += (size_t) cursor->method_count;++count;cursor = cursor->base;
         slow = slow ? slow->base : NULL;
@@ -5202,7 +5202,7 @@ static bool build_class_vtable(XaAnalyzer *analyzer, XrClassInfo *info) {
         XrClassInfo *current = inputs[i].info;
         inputs[i].method_ids = current->method_count ? ids + offset : NULL;
         for (int j = 0; j < current->method_count; ++j) {
-            status = xr_compile_state_work(state, 1);
+            status = xr_compile_session_poll(analyzer->compiler_session);
             if (status != XR_COMPILE_RESOURCE_OK) goto done;
             XaSymbol *method = current->methods[j];
             if (!method || !method->name) continue;

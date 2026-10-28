@@ -73,12 +73,22 @@ static bool source_nominal_apply(SourceContext *ctx, SourceName *symbol, XrTypeR
         return source_fail(ctx, NULL, XR_XIR_BUDGET, "nominal type argument depth exhausted");
     XrXirType *types = source_alloc(ctx, count, sizeof(*types));
     if (!types) return false;
+    uint32_t declaration=symbol->index;
+    const XrXirConstraint *formal=ctx->nominals.declarations[declaration].constraints;
+    if (!formal) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"nominal type binder is missing");
+    uint32_t *markers=source_alloc(ctx,count,sizeof(*markers));
+    if (!markers) return false;
+    for (uint32_t i=0;i<count;++i) markers[i]=formal[i].markers;
     ++ctx->depth;
-    for (uint32_t i = 0; i < count; ++i)
-        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx, arguments[i], &types[i])) return false;
-    --ctx->depth;
+    for (uint32_t i=0;i<count;++i) {
+        if (ctx->diagnostic.status!=XR_XIR_OK) {--ctx->depth;return false;}
+        bool ok=(markers[i] & XR_XIR_CONSTRAINT_ERROR) ?
+            source_error_type_ref(ctx,arguments[i],&types[i]) : source_type(ctx,arguments[i],&types[i]);
+        if (!ok) {--ctx->depth;return false;}
+    }
+    --ctx->depth;source_retire_array(ctx,markers);
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
-    node.nominal = (XrXirNominalType) {symbol->index, types, count, NULL, 0};
+    node.nominal = (XrXirNominalType) {declaration, types, count, NULL, 0};
     return source_intern_type(ctx, node, type);
 }
 static bool source_nominal_arguments(SourceContext *ctx, const char *name, XrTypeRef **arguments,

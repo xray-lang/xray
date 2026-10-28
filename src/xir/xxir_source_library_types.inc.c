@@ -207,7 +207,7 @@ static bool source_library_intern_types(SourceContext *ctx, SourceLibraryUnit *u
             out.nominal.declaration=unit->nominals[in->nominal.declaration];
             if (!source_library_type_arguments(ctx,unit,in->nominal.arguments,in->nominal.argument_count,
                 &out.nominal.arguments)) return false;
-        } else if (in->kind==XR_XIR_TYPE_CALLABLE || in->kind==XR_XIR_TYPE_TUPLE) {
+        } else if (in->kind==XR_XIR_TYPE_CALLABLE || in->kind==XR_XIR_TYPE_TUPLE || in->kind==XR_XIR_TYPE_UNION) {
             XrXirCallableParameter *parameters=in->parameter_count ? source_alloc(ctx,in->parameter_count,sizeof(*parameters)) : NULL;
             if (in->parameter_count && !parameters) return false;
             for (uint32_t p=0; p<in->parameter_count; ++p) {

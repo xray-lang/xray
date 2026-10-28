@@ -144,7 +144,7 @@ static bool source_native_type_shadowed(SourceContext *ctx, const char *name) {
 }
 static bool source_native_array_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     const XrNativeTypeDeclaration *native = source_native_find(ctx,ref->name);
-    if (!native || native->id != XR_NATIVE_DECLARATION_ARRAY || ref->nchildren != native->parameter_count ||
+    if (!native || native->id != XR_NATIVE_DECLARATION_ARRAY || (ref->nchildren < 0 || (uint32_t)ref->nchildren != native->parameter_count) ||
         !ref->children || source_native_type_shadowed(ctx, ref->name))
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "type name does not bind the governed Array declaration");
     if (ctx->depth >= 128) return source_fail(ctx, NULL, XR_XIR_BUDGET, "source type depth exhausted");

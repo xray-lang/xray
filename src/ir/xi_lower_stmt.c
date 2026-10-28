@@ -815,7 +815,7 @@ static struct XrType *stmt_channel_element_type(struct XrType *type) {
     if (type->kind == XR_KIND_CHANNEL)
         return type->container.element_type;
     if (type->kind == XR_KIND_UNION) {
-        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+        for (int i = 0; i < type->union_type.member_count; i++) {
             struct XrType *elem = stmt_channel_element_type(type->union_type.members[i]);
             if (elem)
                 return elem;

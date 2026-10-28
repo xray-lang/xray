@@ -168,7 +168,7 @@ static uint64_t mono_type_ref_hash64(const XrTypeRef *type) {
     hash = mono_hash_bytes(hash, &type->scalar_rep, sizeof(type->scalar_rep));
     hash = mono_hash_bytes(hash, &type->fixed_length, sizeof(type->fixed_length));
     hash = mono_hash_cstr(hash, type->name);
-    for (uint8_t i = 0; i < type->nchildren; i++) {
+    for (int i = 0; i < type->nchildren; i++) {
         if (type->kind == XR_TREF_OBJECT) {
             hash = mono_hash_cstr(hash, type->field_names ? type->field_names[i] : NULL);
             bool readonly = type->field_readonly && type->field_readonly[i];
@@ -210,7 +210,7 @@ static void mono_qualified_type_tag(XrTypeRef *t, char *buf, size_t cap) {
             used = (size_t) snprintf(buf, cap, "tup%u", (unsigned) t->nchildren);
         else
             used = (size_t) snprintf(buf, cap, "%s", t->name ? t->name : "obj");
-        for (uint8_t i = 0; i < t->nchildren && used < cap; i++) {
+        for (int i = 0; i < t->nchildren && used < cap; i++) {
             char child[128];
             mono_qualified_type_tag(t->children ? t->children[i] : NULL, child, sizeof(child));
             int written = snprintf(buf + used, cap - used, "_%s", child);
@@ -1537,7 +1537,7 @@ static bool mono_type_ref_contains_open_param(XaAnalyzer *analyzer, const XrType
     XrType *semantic = analyzer ? xa_analyzer_get_type_ref_type(analyzer, type) : NULL;
     if (semantic && semantic->kind == XR_KIND_TYPE_PARAM)
         return true;
-    for (uint8_t i = 0; i < type->nchildren; ++i) {
+    for (int i = 0; i < type->nchildren; ++i) {
         if (mono_type_ref_contains_open_param(analyzer, type->children ? type->children[i] : NULL))
             return true;
     }
@@ -2673,7 +2673,7 @@ static bool mono_find_private_target(XaAnalyzer *analyzer,
         if (ownership != XR_MODULE_OK) {
             XrCompileResourceStatus failure = ownership == XR_MODULE_OUT_OF_MEMORY
                 ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : ownership == XR_MODULE_BUDGET
-                ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+                ? XR_COMPILE_RESOURCE_OVERFLOW : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
             (void) xr_compile_state_fail(
                 xr_compile_session_compile_state(analyzer->compiler_session), failure);
             return false;

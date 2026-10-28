@@ -115,7 +115,7 @@ static bool source_array_callback(SourceContext *ctx, AstNode *node, AstNode *ar
     }
     const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types, callback->type);
     if (!signature) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback is not callable");
-    if (!xr_xir_error_bound_accepts(signature->element,shape->error_type))
+    if (!xr_xir_error_bound_accepts(&ctx->types,signature->element,shape->error_type))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"collection callback error exceeds its declaration");
     for (uint32_t i = 0; i < signature->parameter_count; ++i)
         if (signature->parameters[i].type != shape->parameters[i] || signature->parameters[i].mode != XR_PARAM_READ)

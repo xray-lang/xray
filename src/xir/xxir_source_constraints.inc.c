@@ -76,11 +76,19 @@ static bool source_interface_application(SourceContext *ctx, AstNode *node,
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface application requires its exact explicit arguments");
     XrXirType *arguments = count ? source_alloc(ctx, count, sizeof(*arguments)) : NULL;
     if (count && !arguments) return false;
-    for (uint32_t a = 0; a < count; ++a) {
-        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx, ref->children[a], &arguments[a])) return false;
-        if (arguments[a] == XR_XIR_UNIT || xr_xir_type_is_cell(&ctx->types, arguments[a]))
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface argument must be an admitted value type");
+    if (count && !declaration->constraints) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"interface type binder is missing");
+    uint32_t *markers=count ? source_alloc(ctx,count,sizeof(*markers)) : NULL;
+    if (count && !markers) return false;
+    for (uint32_t a=0;a<count;++a) markers[a]=declaration->constraints[a].markers;
+    for (uint32_t a=0;a<count;++a) {
+        if (ctx->diagnostic.status!=XR_XIR_OK) return false;
+        bool ok=(markers[a] & XR_XIR_CONSTRAINT_ERROR) ?
+            source_error_type_ref(ctx,ref->children[a],&arguments[a]) : source_type(ctx,ref->children[a],&arguments[a]);
+        if (!ok) return false;
+        if (arguments[a]==XR_XIR_UNIT || xr_xir_type_is_cell(&ctx->types,arguments[a]))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface argument must be an admitted value type");
     }
+    source_retire_array(ctx,markers);
     *output = (XrXirInterfaceApplication){index, arguments, count};
     return source_interface_reference(ctx, ref, binding, target);
 }

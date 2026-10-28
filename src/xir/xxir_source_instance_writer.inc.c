@@ -33,7 +33,7 @@ static bool source_instance_argument(SourceInstanceTypes *input,XrXirType argume
         for (uint32_t a=0;a<node.nominal.argument_count;++a)
             if (!source_instance_argument(input,node.nominal.arguments[a],depth+1,&arguments[a])) return false;
         node.nominal.arguments=arguments;node.nominal.fields=NULL;node.nominal.field_count=0;
-    } else if (node.kind==XR_XIR_TYPE_CALLABLE || node.kind==XR_XIR_TYPE_TUPLE) {
+    } else if (node.kind==XR_XIR_TYPE_CALLABLE || node.kind==XR_XIR_TYPE_TUPLE || node.kind==XR_XIR_TYPE_UNION) {
         XrXirCallableParameter *parameters=node.parameter_count?source_alloc(ctx,node.parameter_count,sizeof(*parameters)):NULL;
         if (node.parameter_count && !parameters) return false;
         for (uint32_t p=0;p<node.parameter_count;++p) {
