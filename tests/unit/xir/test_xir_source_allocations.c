@@ -128,7 +128,7 @@ static XrXirStatus allocation_refinement_update(void *opaque,
 }
 static XrXirStatus allocation_refinement_check(const XrXirCompileContext *context,
     const XrXirModule *built, const XrXirConstruction *construction, const XrXirRootRefiner *refiner,
-    XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    XrCompileRequestControl *control, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
     XrCompileResourceStats before, after;
     CHECK(xr_compile_resources_stats(context->resources, &before) == XR_COMPILE_RESOURCE_OK);
     AllocationRefinementProbe probe = {.context = context, .original = refiner};
@@ -138,7 +138,7 @@ static XrXirStatus allocation_refinement_check(const XrXirCompileContext *contex
     if (allocation_transition_observed) {
         allocation_effect_work_totals = (AllocationEffectWork){0};
     }
-    XrXirStatus status = xr_xir_compile_check_refined_v2(context, built, construction, &observed, output, diagnostic);
+    XrXirStatus status = xr_xir_compile_check_refined_v2(context, built, construction, &observed, control, output, diagnostic);
     if (allocation_transition_observed) allocation_effect_work_report();
     allocation_transition_observed = prior;
     CHECK(xr_compile_resources_stats(context->resources, &after) == XR_COMPILE_RESOURCE_OK);

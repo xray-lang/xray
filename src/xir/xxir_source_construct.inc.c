@@ -220,7 +220,7 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
         XrXirModule built = source_module_view(ctx,&declarations);
         XrXirDiagnostic location = {0};
         XrXirRootRefiner refiner = {ctx,source_root_refine};
-        XrXirStatus status = xr_xir_compile_check_refined_v2(&ctx->compile, &built, ctx->construction, &refiner, &output->checked, &location);
+        XrXirStatus status = xr_xir_compile_check_refined_v2(&ctx->compile, &built, ctx->construction, &refiner, ctx->request, &output->checked, &location);
         for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f) {
             if (!ctx->bodies[f].initialization_regions) continue;
             location.function=f;

@@ -104,12 +104,12 @@ static void *lower_copy_bytes(const XrXirCompileContext *context, const void *so
     return memory;
 }
 
-static bool clone_defaults(const XrXirCompileContext *compile_context, const XrXirDefaultTable *source, XrXirModule *destination, XrXirStatus *allocation_status) {
+static bool clone_defaults(const XrXirCompileContext *compile_context, const XrXirDefaultTable *source, XrXirModule *destination, XrXirStatus *allocation_status, XrCompileRequestControl *control) {
     if (!source) return true;
     XrXirDefaultTable *table = xir_compile_calloc(compile_context, 1, sizeof(*table), allocation_status);
     if (!table) return false;
     destination->defaults = table;
-    table->records = copy_bytes(compile_context, source->records, (size_t)source->count * sizeof(*source->records), allocation_status);
+    table->records = lower_copy_bytes(compile_context, source->records, (size_t)source->count * sizeof(*source->records), allocation_status, control);
     if (!table->records) return false;
     table->count = source->count;
     return true;
@@ -156,7 +156,7 @@ static XrXirArtifact *clone_module_receiving(const XrXirCompileContext *compile_
         return NULL;
     }
     copy->module.declarations = declarations;
-    if (!clone_defaults(compile_context, source->defaults, &copy->module, allocation_status)) {
+    if (!clone_defaults(compile_context, source->defaults, &copy->module, allocation_status, control)) {
         xr_xir_compile_artifact_free(copy); return NULL;
     }
     for (uint32_t i = 0; i < source->function_count; ++i) {
@@ -448,17 +448,19 @@ XrXirStatus xr_xir_compile_check_v2(const XrXirCompileContext *compile_context, 
  * Construction memory remains private until an independent owned copy passes. */
 XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *context,
     const XrXirModule *built, const XrXirConstruction *construction, const XrXirRootRefiner *refiner,
-    XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    XrCompileRequestControl *control, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !output || *output || !refiner ||
         !refiner->update || !refiner->context) return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
-    XrXirStatus status = transition_shape(built,XR_XIR_BUILT,context,NULL,diagnostic);
+    XrXirStatus status=lower_control_poll(control);
+    if (status!=XR_XIR_OK) status=transition_error(status,diagnostic);
+    if (status==XR_XIR_OK) status=transition_shape(built,XR_XIR_BUILT,context,NULL,diagnostic);
     if (status == XR_XIR_OK) status = xr_xir_compile_structure_verify_v2(context,built,construction,diagnostic);
     XrXirEffects *effects = NULL;
     if (status == XR_XIR_OK) status = xr_xir_compile_effects_refine_verified(context,built,refiner,&effects);
     if (status == XR_XIR_OK) status = xr_xir_compile_verify_effects_v2(context,built,construction,effects,diagnostic);
     XrXirArtifact *copy = NULL;
     if (status == XR_XIR_OK) {
-        copy = clone_module(context,built,construction,&status);
+        copy = clone_module_receiving(context,built,construction,&status,NULL,control);
         if (copy) {
             copy->module.stage = XR_XIR_CHECKED;
             status = xr_xir_compile_verify_effects_v2(context,&copy->module,copy->construction,effects,diagnostic);
@@ -466,6 +468,7 @@ XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *c
     }
     xr_xir_compile_effects_free(effects);
     if (status==XR_XIR_OK) status=source_facts_prepare(copy,diagnostic);
+    if (status==XR_XIR_OK) status=lower_control_poll(control);
     if (status != XR_XIR_OK) {
         xr_xir_compile_artifact_free(copy);
         if (diagnostic) diagnostic->status = status;

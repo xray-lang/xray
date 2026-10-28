@@ -88,13 +88,13 @@ static void root_source_prepared_guards(const XrXirCompileContext *context, XrXi
     uint32_t calls = 0; XrXirRootRefiner refiner = {&calls,root_source_guard_callback};
     XrXirArtifact *output = artifact;
     XrCompileResourceStats before = library_compile_stats(context);
-    CHECK(xr_xir_compile_check_refined_v2(context,xr_xir_compile_artifact_module(artifact),xr_xir_compile_artifact_construction(artifact),&refiner,&output,NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_check_refined_v2(context,xr_xir_compile_artifact_module(artifact),xr_xir_compile_artifact_construction(artifact),&refiner,NULL,&output,NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(output == artifact && !calls);
     XrXirCompileContext invalid = {0};
-    CHECK(xr_xir_compile_check_refined_v2(&invalid,NULL,NULL,&refiner,&output,NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_check_refined_v2(&invalid,NULL,NULL,&refiner,NULL,&output,NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(output == artifact && !calls);
     output = NULL;
-    CHECK(xr_xir_compile_check_refined_v2(context,xr_xir_compile_artifact_module(artifact),xr_xir_compile_artifact_construction(artifact),&refiner,&output,NULL) == XR_XIR_BAD_STAGE);
+    CHECK(xr_xir_compile_check_refined_v2(context,xr_xir_compile_artifact_module(artifact),xr_xir_compile_artifact_construction(artifact),&refiner,NULL,&output,NULL) == XR_XIR_BAD_STAGE);
     CHECK(!output && !calls);
     XrCompileResourceStats after = library_compile_stats(context);
     CHECK(before.allocated_bytes == after.allocated_bytes && before.live_bytes == after.live_bytes && before.work == after.work);
