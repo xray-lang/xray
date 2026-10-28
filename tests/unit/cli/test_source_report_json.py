@@ -17,8 +17,10 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     output = Path(tempfile.mkdtemp(prefix='run-', dir=args.output.resolve()))
     directory = output/'long'
-    for index in range(5):
+    index = 0
+    while len(str(directory/'two-independent-items.xr')) <= 512:
         directory = directory/(str(index)+'_'+'x'*78)
+        index += 1
     directory.mkdir(parents=True)
     source = directory/'two-independent-items.xr'
     source.write_bytes(b'const alpha:i64=1\nconst alpha:i64=2\nconst beta:i64=3\nconst beta:i64=4\nprint(9)\n')
