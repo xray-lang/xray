@@ -10,6 +10,8 @@
  *   Each request admits all direct and Function producer targets. Numeric and
  *   CFG execution share scalar_step; compiler calls never enter Instance admission.
  */
+#include "xxir_native_callable.h"
+
 typedef struct CtfeCellLoan {
     XrXirValue value;XrXirCellLoan loan;
     bool projected;
@@ -48,10 +50,11 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
     const XrXirModule *module=&artifact->module;
     const XrXirFunction *body=&module->functions[f];
 
-    /* Empty declarations have no ordinary compiler execution body. */
-    if (!body->block_count || !body->instruction_count) return XR_XIR_CTFE_NOT_SUPPORTED;
     if (!module->declarations || !module->declarations->functions) return XR_XIR_CTFE_NOT_SUPPORTED;
     const XrXirFunctionIdentity *identity=&module->declarations->functions[f];
+    if (identity->native_callable) {
+        if (xir_native_callable_verify(module,f)!=XR_XIR_OK) return XR_XIR_CTFE_BAD_ARTIFACT;
+    } else if (!body->block_count || !body->instruction_count) return XR_XIR_CTFE_NOT_SUPPORTED;
     XrXirCtfeStatus owner=ctfe_nominal_owner_admit(artifact,identity->nominal_owner);
     if (owner!=XR_XIR_CTFE_OK) return owner;
     if (module->generics && (module->generics[f].parameter_count || module->generics[f].argument_count))
@@ -266,6 +269,8 @@ static XrXirCtfeStatus ctfe_call_enter(CtfeCallExecution *execution,
     const XrXirFunction *target=&artifact->module.functions[callee];
     const XrXirFunctionLayout *target_layout=&artifact->layouts[callee];
     if (captures>target->parameter_count || op->args[1]!=target->parameter_count-captures) return XR_XIR_CTFE_BAD_ARTIFACT;
+    if (artifact->module.declarations->functions[callee].native_callable && (captures || cleanup))
+        return XR_XIR_CTFE_NOT_SUPPORTED;
     CtfeCallFrame *child=NULL;
     XrXirCtfeStatus status=ctfe_call_frame_new(execution,callee,
         cleanup?UINT32_MAX:body->parameter_count+parent->state.instruction,&child);
@@ -336,6 +341,7 @@ static XrXirCtfeStatus ctfe_call_return(CtfeCallExecution *execution,
     ctfe_call_frame_free(frame);return XR_XIR_CTFE_OK;
 }
 
+#include "xxir_ctfe_native_callable.inc.c"
 #include "xxir_ctfe_cleanup.inc.c"
 #include "xxir_ctfe_dispatch.inc.c"
 
@@ -351,7 +357,10 @@ static XrXirCtfeStatus ctfe_call_execute(CtfeCallExecution *execution,XrXirValue
         }
         if (!execution->steps) return XR_XIR_CTFE_STEP_LIMIT;
         --execution->steps;
-        if (frame->state.instruction>=body->instruction_count) return XR_XIR_CTFE_BAD_ARTIFACT;
+        bool native=artifact->module.declarations->functions[frame->function].native_callable!=0;
+        if (native && xir_native_callable_verify(&artifact->module,frame->function)!=XR_XIR_OK)
+            return XR_XIR_CTFE_BAD_ARTIFACT;
+        if (!native && frame->state.instruction>=body->instruction_count) return XR_XIR_CTFE_BAD_ARTIFACT;
         execution->owned.frame_spare=execution->request->evaluation.limits.frame_bytes-execution->live_bytes-execution->loan_bytes;
     execution->owned.loan_base=execution->loan_bytes;
         execution->owned.authority=(XrXirCellAuthority){execution,frame,frame->epoch};execution->owned.activation=frame;
@@ -360,7 +369,8 @@ static XrXirCtfeStatus ctfe_call_execute(CtfeCallExecution *execution,XrXirValue
             if (status!=XR_XIR_CTFE_OK || done) return status;continue;
         }
         uint32_t at=frame->state.instruction;execution->owned.fault=(XrXirFaultDetail){0};
-        XirScalarCoreAction action={0};XrXirCtfeStatus stepped=ctfe_call_step(execution,&action);
+        XirScalarCoreAction action={0};
+        XrXirCtfeStatus stepped=native?ctfe_native_callable_step(execution,&action):ctfe_call_step(execution,&action);
         if (stepped!=XR_XIR_CTFE_OK) {
             XrXirCtfeStatus caught=ctfe_panic_fault(execution,stepped,at);
             if (caught!=XR_XIR_CTFE_OK) return caught;continue;

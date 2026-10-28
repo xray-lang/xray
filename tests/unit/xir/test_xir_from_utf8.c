@@ -222,8 +222,8 @@ static void source_rejections(void) {
     const char ctfe[]="fn decode() throws(Utf8Error)->string { return try comptime { var bytes:Array<u8>=[65]; try string.fromUtf8(bytes[:]) } }\nprint(try decode())\n";
     XrXirStatus status=XR_XIR_OK;
     CHECK(product_check(no_try,sizeof(no_try)-1,false,NULL,NULL,&status,"E0330: throwing call requires try or a try body") && status==XR_XIR_BAD_TYPE);
-    CHECK(product_check(ctfe,sizeof(ctfe)-1,false,NULL,NULL,&status,"comptime requires an admitted deterministic closed-value call closure") && status==XR_XIR_BAD_TYPE);
-    puts("Strict fromUtf8 no-try and CTFE Slice closure rejection without product/held leak PASS");
+    CHECK(!product_check(ctfe,sizeof(ctfe)-1,false,NULL,NULL,&status,NULL) && status==XR_XIR_OK);
+    puts("Strict fromUtf8 no-try rejection and compiler-owned Slice conversion without held leak PASS");
 }
 static void historical_check(const char *path) {
     FILE *file=fopen(path,"rb");CHECK(file && !fseek(file,0,SEEK_END));long count=ftell(file);

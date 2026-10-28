@@ -39,7 +39,8 @@ static XrXirStatus slice_source(const XrXirCompileContext *context,const char *n
     n=snprintf(identity,sizeof(identity),"ctfe-slice-%s",name);CHECK(n>0 && (size_t)n<sizeof(identity));
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,identity,NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    const char *stdlib=!strcmp(name,"from_utf8")?XR_CTFE_UTF8_STDLIB:NULL;
+    XrXirSourceRequest request={session,NULL,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,bytes};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,result,diagnostic,NULL);
     xr_compile_session_free(session);memset(text,0xa5,sizeof(text));memset(identity,0xa5,sizeof(identity));return status;
@@ -425,7 +426,16 @@ static void slice_constant(const SliceConstantCase *selected) {
     xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     printf("%s: constant=%lld producer-death/packet/VM passed\n",selected->name,(long long)selected->expected);
 }
+#include "ctfe_from_utf8_resources.h"
+
 int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"native-packet")) {slice_native_packet();return 0;}
+    if (argc==2 && !strcmp(argv[1],"native-oom")) {slice_native_oom();return 0;}
+    if (argc==2 && !strcmp(argv[1],"native-control")) {slice_native_control();return 0;}
+    if (argc==2 && !strcmp(argv[1],"native-lifetime")) {slice_native_lifetime();return 0;}
+    if (argc==2 && !strcmp(argv[1],"native-types")) {slice_native_types();return 0;}
+    if (argc==2 && !strcmp(argv[1],"native-memory")) {slice_native_memory();return 0;}
+
     if (argc!=2) return 2;
     if (!strcmp(argv[1],"argument-resources")) {slice_argument_resources();return 0;}
     if (!strcmp(argv[1],"argument-authority")) {slice_argument_authority();return 0;}

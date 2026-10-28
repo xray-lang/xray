@@ -49,11 +49,16 @@ static XrXirCtfeStatus ctfe_invoke_deliver(CtfeCallExecution *execution,CtfeCall
 }
 static XrXirCtfeStatus ctfe_error_begin(CtfeCallExecution *execution,const XrXirValue *value,uint8_t kind) {
     CtfeCallFrame *frame=execution->top;XrXirValue concrete={0};
+    const XrXirModule *module=frame->run.module;
+    bool native=module->declarations->functions[frame->function].native_callable!=0;
+    if (native && (kind!=CTFE_EXIT_ERROR || xir_native_callable_verify(module,frame->function)!=XR_XIR_OK))
+        return XR_XIR_CTFE_BAD_ARTIFACT;
     XrXirCtfeStatus status=ctfe_error_concrete(&frame->run,value,&concrete);
     if (status==XR_XIR_CTFE_OK) status=ctfe_value_graph_admit(&frame->run,&execution->owned,&concrete);
     if (status!=XR_XIR_CTFE_OK) return status;
     status=ctfe_value_status(xr_xir_value_copy(&concrete,&frame->returned));if (status!=XR_XIR_CTFE_OK) return status;
     frame->exit_kind=kind;frame->state.leaving=true;
+    if (native) {frame->state.exit_target=0;frame->state.exit_block=0;return XR_XIR_CTFE_OK;}
     const XrXirInstruction *op=&frame->run.function->instructions[frame->state.instruction];
     frame->state.exit_target=kind==CTFE_EXIT_ERROR?0:(uint32_t)op->immediate;frame->state.exit_block=op->targets[0];
     return XR_XIR_CTFE_OK;

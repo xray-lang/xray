@@ -137,8 +137,14 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
             XrXirType actual=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+frame->index);
             const XrXirNominalNativeRecord *native=xr_xir_nominal_native_record(types,actual);
 
-            if ((native && native->native_id && !xr_xir_nominal_native_ordering(types,actual)) ||
-                (node->nominal.field_count && !node->nominal.fields)) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
+            if (native && native->native_id && !xr_xir_nominal_native_ordering(types,actual)) {
+                if (!internal || native->native_id!=XR_NATIVE_DECLARATION_UTF8_ERROR) {
+                    status=XR_XIR_CTFE_NOT_SUPPORTED;break;
+                }
+                status=ctfe_compile_status(xr_xir_compile_nominal_structure_verify(context,types->nominals,types));
+                if (status!=XR_XIR_CTFE_OK) break;
+            }
+            if (node->nominal.field_count && !node->nominal.fields) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
             if (!frame->next && !node->nominal.field_count && xr_xir_type_is_enum(types,actual)) {
                 status=ctfe_unit_enum_admit(types,node);
                 if (status!=XR_XIR_CTFE_OK) break;

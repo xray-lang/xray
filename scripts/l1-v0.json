@@ -92,7 +92,8 @@
     "test_xir_ctfe_slice_u8",
     "test_xir_from_utf8",
     "test_xir_from_utf8_native",
-    "test_xir_from_utf8_fault"
+    "test_xir_from_utf8_fault",
+    "test_xir_ctfe_from_utf8_native"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -228,7 +229,15 @@
     "xir_from_utf8_native",
     "xir_from_utf8_physical_header",
     "xir_from_utf8_physical_bytes",
-    "xir_from_utf8_cancel_after_allocation"
+    "xir_from_utf8_cancel_after_allocation",
+    "test_xir_ctfe_from_utf8",
+    "test_xir_ctfe_from_utf8_native",
+    "test_xir_ctfe_from_utf8_oom",
+    "test_xir_ctfe_from_utf8_control",
+    "test_xir_ctfe_from_utf8_lifetime",
+    "test_xir_ctfe_from_utf8_types",
+    "test_xir_ctfe_from_utf8_memory",
+    "test_xir_ctfe_from_utf8_packet"
   ],
   "versionCommand": [
     "{build}/xray.exe",

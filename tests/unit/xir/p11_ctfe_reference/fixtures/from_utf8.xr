@@ -1,0 +1,45 @@
+fn unicode() throws(Utf8Error)->string {
+    var bytes:Array<u8>=[65,0,195,169]
+    const answer=try string.fromUtf8(bytes[:])
+    bytes[0]=90
+    return answer
+}
+fn empty() throws(Utf8Error)->string {
+    var bytes:Array<u8>=[]
+    return try string.fromUtf8(bytes[:])
+}
+fn textRoot() throws(Utf8Error)->string {
+    var text="Q\0界"
+    const answer=try string.fromUtf8(text.bytes())
+    text="changed"
+    return answer
+}
+fn invalid(bytes:Slice<u8>)->string {
+    try { const unexpected=try string.fromUtf8(bytes); return "accepted:"+unexpected }
+    catch(e:Utf8Error) {
+        if (e==Utf8Error.InvalidUtf8) { return "invalid" }
+        return "wrong Utf8Error"
+    }
+}
+fn illegalByte()->string { var bytes:Array<u8>=[128]; return invalid(bytes[:]) }
+fn overlong()->string { var bytes:Array<u8>=[192,175]; return invalid(bytes[:]) }
+fn surrogate()->string { var bytes:Array<u8>=[237,160,128]; return invalid(bytes[:]) }
+fn outOfUnicode()->string { var bytes:Array<u8>=[244,144,128,128]; return invalid(bytes[:]) }
+fn truncated()->string { var bytes:Array<u8>=[226,130]; return invalid(bytes[:]) }
+const foldedUnicode:string=try comptime { try unicode() }
+const foldedEmpty:string=try comptime { try empty() }
+const foldedText:string=try comptime { try textRoot() }
+const foldedIllegal:string=comptime illegalByte()
+const foldedOverlong:string=comptime overlong()
+const foldedSurrogate:string=comptime surrogate()
+const foldedOutOfUnicode:string=comptime outOfUnicode()
+const foldedTruncated:string=comptime truncated()
+print(foldedUnicode)
+print(foldedEmpty)
+print(foldedText)
+print(foldedIllegal)
+print(foldedOverlong)
+print(foldedSurrogate)
+print(foldedOutOfUnicode)
+print(foldedTruncated)
+export fn run() throws(Utf8Error)->string { return try comptime { try unicode() } }

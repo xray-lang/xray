@@ -81,3 +81,35 @@ foreach(mode IN ITEMS resources authority controls boundaries memory runtime-wor
     add_test(NAME test_xir_ctfe_slice_u8_${mode} COMMAND test_xir_ctfe_slice_u8 ${mode})
     set_tests_properties(test_xir_ctfe_slice_u8_${mode} PROPERTIES LABELS "unit;xir;ctfe;ownership;resources" TIMEOUT 60)
 endforeach()
+
+set(ctfe_from_utf8_fixture "${CMAKE_CURRENT_LIST_DIR}/fixtures/from_utf8.xr")
+set(ctfe_from_utf8_stdout "${CMAKE_CURRENT_LIST_DIR}/fixtures/from_utf8.stdout")
+set(ctfe_from_utf8_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/ctfe_from_utf8.c")
+add_custom_command(OUTPUT "${ctfe_from_utf8_generated}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND $<TARGET_FILE:test_xir_from_utf8> --emit-file "${ctfe_from_utf8_fixture}" "${ctfe_from_utf8_generated}"
+    DEPENDS test_xir_from_utf8 "${ctfe_from_utf8_fixture}" VERBATIM)
+add_executable(test_xir_ctfe_from_utf8_native
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_from_utf8_native.c" "${ctfe_from_utf8_generated}")
+target_link_libraries(test_xir_ctfe_from_utf8_native PRIVATE xray_xir_scalar xray_compile_resources)
+set_target_properties(test_xir_ctfe_from_utf8_native PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_ctfe_from_utf8_native PRIVATE /utf-8 /W4 /WX)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_xir_ctfe_from_utf8_native PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(test_xir_ctfe_from_utf8_native PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_xir_ctfe_from_utf8
+    COMMAND test_xir_from_utf8 --vm-file "${ctfe_from_utf8_fixture}" --expect "${ctfe_from_utf8_stdout}")
+add_test(NAME test_xir_ctfe_from_utf8_native
+    COMMAND test_xir_ctfe_from_utf8_native --expect "${ctfe_from_utf8_stdout}")
+set_tests_properties(test_xir_ctfe_from_utf8 test_xir_ctfe_from_utf8_native PROPERTIES
+    LABELS "unit;xir;ctfe;source;ownership;fast" TIMEOUT 60)
+
+target_compile_definitions(test_xir_ctfe_slice_u8 PRIVATE XR_CTFE_UTF8_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+foreach(mode oom control lifetime types memory packet)
+    add_test(NAME test_xir_ctfe_from_utf8_${mode} COMMAND test_xir_ctfe_slice_u8 native-${mode})
+    set_tests_properties(test_xir_ctfe_from_utf8_${mode} PROPERTIES LABELS "unit;xir;ctfe;ownership;resources" TIMEOUT 60)
+endforeach()
