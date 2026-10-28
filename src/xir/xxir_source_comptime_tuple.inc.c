@@ -193,7 +193,7 @@ receive_parent:
                 XrXirOp op=frame->enumeration?XR_XIR_ENUM_NEW:XR_XIR_STRUCT_NEW;
                 if (!source_recipe_group(ctx,(XrXirInstruction){op,frame->target,{0},{0},frame->variant,{0}},frame->payloads,frame->payload,&result)) { ok=false;goto done; }
             } else if (frame->nullable) {
-                if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_NULLABLE_SOME,frame->target,{result.id},{0},0,{0}},&result)) { ok=false;goto done; }
+                if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_NULLABLE_SOME,frame->target,{result.type==XR_XIR_UNIT?0:result.id},{0},0,{0}},&result)) { ok=false;goto done; }
             } else if (!source_recipe_group(ctx,(XrXirInstruction){XR_XIR_TUPLE_NEW,frame->target,{0},{0},0,{0}},
                 frame->payloads,frame->payload,&result)) { ok=false;goto done; }
             if (frame->owned) xr_xir_value_drop(&frame->value);--depth;

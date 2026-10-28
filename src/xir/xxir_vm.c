@@ -782,7 +782,8 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         if (op->op==XR_XIR_NULLABLE_SOME && xr_xir_compile_type_arena_borrowed(run->view->arena,op->type))
             return vm_view_aggregate(run,state,op,run->layout->offsets[result_id]);
         XrXirValue payload = {0}, output = {0};
-        if (op->op == XR_XIR_NULLABLE_SOME || op->op == XR_XIR_F64_TRY_PARSE) payload = vm_value_operand(run, op->args[0]);
+        if ((op->op == XR_XIR_NULLABLE_SOME && !xr_xir_nullable_is_unit(run->module->types,op->type)) ||
+            op->op == XR_XIR_F64_TRY_PARSE) payload = vm_value_operand(run, op->args[0]);
         XrXirValueStatus status = op->op == XR_XIR_F64_TRY_PARSE ?
             xr_xir_f64_try_parse(&payload,op->type,xr_xir_call_admission(run->view),&output) : xr_xir_nullable_new(op->type,
             op->op == XR_XIR_NULLABLE_SOME ? &payload : NULL, xr_xir_call_admission(run->view), &output);

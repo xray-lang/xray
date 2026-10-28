@@ -83,8 +83,9 @@ static bool source_conversion_emit(SourceContext *ctx, const SourceConversionRec
             ctx->bodies[ctx->function].recipes[value->id - ctx->functions[ctx->function].parameter_count].root.kind = 1;
         }
     }
+    uint32_t payload=recipe->operation==XR_XIR_NULLABLE_SOME && recipe->source==XR_XIR_UNIT ? 0 : value->id;
     if (!source_recipe_record(ctx,(XrXirInstruction){recipe->operation,recipe->target,
-        {value->id,0},{0},0,{0}},value)) return false;
+        {payload,0},{0},0,{0}},value)) return false;
     if (recipe->operation == XR_XIR_COPY || recipe->operation == XR_XIR_FUNCTION_WEAKEN)
         ctx->bodies[ctx->function].recipes[value->id - ctx->functions[ctx->function].parameter_count].root.kind = recipe->inferred ? 2 : 1;
     if (recipe->effect_binding) {

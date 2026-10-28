@@ -25,7 +25,7 @@ static bool source_try_optional(SourceContext *ctx,SourceExpressionPlan *plan,So
     XrXirType result=value->type;
     if (!xr_xir_type_is_nullable(&ctx->types,result)) {
         if (!source_nullable_type(ctx,result,&result) || !source_recipe_record(ctx,
-            (XrXirInstruction){XR_XIR_NULLABLE_SOME,result,{value->id},{0},0,{0}},value)) return false;
+            (XrXirInstruction){XR_XIR_NULLABLE_SOME,result,{value->type==XR_XIR_UNIT?0:value->id},{0},0,{0}},value)) return false;
     }
     if (!handler.count) return true;
     if (!source_root_join_record(ctx,value)) return false;

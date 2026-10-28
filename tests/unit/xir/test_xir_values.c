@@ -513,7 +513,11 @@ static void string_search_coordinates(void) {
         xr_xir_value_drop(&text); xr_xir_value_drop(&pattern);
     }
 }
+#include "xir_nullable_unit_cases.h"
 int main(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1], "--nullable-unit")) {
+        nullable_unit_value_cases();return 0;
+    }
     if (argc == 2 && !strcmp(argv[1], "--strings")) {
         unicode_cases(); cow_cases();
         CHECK(!value_compile_live && !value_compile_bytes);
@@ -521,6 +525,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (argc != 1) return 2;
+    nullable_unit_value_cases();
     string_search_coordinates();
     string_predicates();
     string_queries();

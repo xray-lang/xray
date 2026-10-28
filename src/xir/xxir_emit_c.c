@@ -982,7 +982,9 @@ static bool emit_resume_value_step(CBuffer *buffer,const XrXirFunction *function
         }
         EMIT_STATIC(buffer, es_ff1a07ada386851d," { XrXirValue output = {0};\n");
         if (op->op == XR_XIR_NULLABLE_SOME) {
-            EMIT_LITERAL(buffer," XrXirValue payload = "); emit_value(buffer,function,layout,op->args[0]);
+            EMIT_LITERAL(buffer," XrXirValue payload = ");
+            if (xr_xir_nullable_is_unit(buffer->types,op->type)) EMIT_LITERAL(buffer,"{0}");
+            else emit_value(buffer,function,layout,op->args[0]);
             EMIT_LITERAL(buffer,";\n");
         }
         EMIT_FORMAT(buffer, et_694f5b963d544356,
@@ -1013,7 +1015,8 @@ static bool emit_resume_value_step(CBuffer *buffer,const XrXirFunction *function
                     " copied == XR_XIR_VALUE_LIMIT || copied == XR_XIR_VALUE_REFCOUNT_LIMIT \? XR_XIR_RUN_FRAME_LIMIT :\n"
         " copied == XR_XIR_VALUE_UNSUPPORTED \? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n"
                     " xr_xir_owned_slot_move(state->frame,%uu,&owned); } }\n", destination);
-            else EMIT_FORMAT(buffer, et_29cd689a14959a3f, "\n xr_xir_scalar_store(state->frame,%uu,payload->payload); }\n", destination);
+            else if (op->type!=XR_XIR_UNIT) EMIT_FORMAT(buffer, et_29cd689a14959a3f, "\n xr_xir_scalar_store(state->frame,%uu,payload->payload); }\n", destination);
+            else EMIT_LITERAL(buffer,"\n }\n");
         }
         break;
     }
@@ -1302,7 +1305,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME:
         EMIT_STATIC(buffer, es_ff1a07ada386851d," { XrXirValue output = {0};\n");
         if (op->op == XR_XIR_NULLABLE_SOME) {
-            EMIT_LITERAL(buffer," XrXirValue payload = "); emit_value(buffer,function,layout,op->args[0]);
+            EMIT_LITERAL(buffer," XrXirValue payload = ");
+            if (xr_xir_nullable_is_unit(buffer->types,op->type)) EMIT_LITERAL(buffer,"{0}");
+            else emit_value(buffer,function,layout,op->args[0]);
             EMIT_LITERAL(buffer,";\n");
         }
         EMIT_FORMAT(buffer, et_694f5b963d544356,
@@ -1333,7 +1338,8 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                     " copied == XR_XIR_VALUE_LIMIT || copied == XR_XIR_VALUE_REFCOUNT_LIMIT \? XR_XIR_RUN_FRAME_LIMIT :\n"
         " copied == XR_XIR_VALUE_UNSUPPORTED \? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n"
                     " xr_xir_owned_slot_move(state->frame,%uu,&owned); } }\n", destination);
-            else EMIT_FORMAT(buffer, et_29cd689a14959a3f, "\n xr_xir_scalar_store(state->frame,%uu,payload->payload); }\n", destination);
+            else if (op->type!=XR_XIR_UNIT) EMIT_FORMAT(buffer, et_29cd689a14959a3f, "\n xr_xir_scalar_store(state->frame,%uu,payload->payload); }\n", destination);
+            else EMIT_LITERAL(buffer,"\n }\n");
         }
         break;
     }

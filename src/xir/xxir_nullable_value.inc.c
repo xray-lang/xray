@@ -16,7 +16,8 @@ static XrXirValueStatus xr_xir_nullable_new_graph_operation(XrXirType type,
         return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!admission_is_compile(admission) && (!admission->work)) return XR_XIR_VALUE_LIMIT;
     if (!admission_is_compile(admission)) --admission->work;
-    XrXirValueStatus status = payload ? xr_xir_value_admit(payload, node->element, admission) : XR_XIR_VALUE_OK;
+    XrXirValueStatus status = !payload ? XR_XIR_VALUE_OK : node->element==XR_XIR_UNIT ?
+        (unit_value(payload)?XR_XIR_VALUE_OK:XR_XIR_VALUE_BAD_ARGUMENT) : xr_xir_value_admit(payload, node->element, admission);
     if (status != XR_XIR_VALUE_OK) return status;
     size_t bytes = sizeof(XirNominalValue) + (payload ? sizeof(XrXirValue) : 0);
     XirNominalValue *record = (XirNominalValue *)constructed_allocate(admission->domain,

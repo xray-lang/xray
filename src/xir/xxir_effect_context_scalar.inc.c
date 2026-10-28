@@ -220,6 +220,7 @@ static XrXirStatus effect_scalar_escape(EffectScalarFlow *flow, uint32_t instruc
     }
     bool table=xr_xir_op_uses_operand_table(op.op);
     uint32_t count=table ? op.args[1] : effect_parameter_operands[op.op];
+    if (op.op==XR_XIR_NULLABLE_SOME && xr_xir_nullable_is_unit(&flow->terms->types,op.type)) count=0;
     if (op.op==XR_XIR_SLOT_STORE || op.op==XR_XIR_SLOT_INIT) {
         if (!flow->declarations || op.immediate<0 ||
             (uint64_t)op.immediate>=flow->declarations->slot_count) return XR_XIR_BAD_STRUCTURE;

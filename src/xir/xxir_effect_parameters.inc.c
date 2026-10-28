@@ -234,6 +234,7 @@ static XrXirStatus effect_parameter_group(EffectParameterFlow *flow,
 static XrXirStatus effect_parameter_opaque(EffectParameterFlow *flow,
     const XrXirInstruction *op, uint32_t use) {
     if (xr_xir_op_uses_owner_slots(op->op)) return XR_XIR_OK;
+    if (op->op==XR_XIR_NULLABLE_SOME && xr_xir_nullable_is_unit(flow->body.domain.types,op->type)) return XR_XIR_OK;
     if (xr_xir_op_uses_operand_table(op->op)) return effect_parameter_group(flow, op, use, false);
     uint32_t count = effect_parameter_operands[op->op];
     if (op->op == XR_XIR_RETURN) count = flow->function->result != XR_XIR_UNIT &&
@@ -307,6 +308,7 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
         if (xr_xir_cell_is_unit(flow->body.domain.types,op->type)) return XR_XIR_OK;
         return effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_STORE);
     case XR_XIR_NULLABLE_SOME:
+        if (xr_xir_nullable_is_unit(flow->body.domain.types,op->type)) return XR_XIR_OK;
         return effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_STORE);
     case XR_XIR_SET_UNION: case XR_XIR_SET_INTERSECTION: case XR_XIR_SET_DIFFERENCE:
     case XR_XIR_SET_SYMMETRIC_DIFFERENCE: {

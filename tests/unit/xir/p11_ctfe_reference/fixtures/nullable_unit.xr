@@ -1,0 +1,48 @@
+enum Failure { Bad }
+var calls = 0
+fn value(fail: bool) throws(Failure) {
+    calls += 1
+    if(fail) { throw Failure.Bad }
+}
+fn never() {}
+fn foldedWitness() -> i64 {
+    return comptime {
+        const some: ()? = ()
+        const none: ()? = null
+        some != null && none == null ? 42 : 0
+    }
+}
+fn panicUnit() { const zero = 0; const ignored = 1 / zero }
+const ordinary: () = never()
+const some: ()? = ()
+const none: ()? = null
+print(some != null)
+print(none == null)
+const unwrapped: () = some!
+const success = try? value(false)
+const failure = try? value(true)
+const pure = try? never()
+print(success != null)
+print(failure == null)
+print(pure != null)
+print(calls)
+const nested: ()?? = none
+print(nested != null)
+const inner: ()? = nested!
+print(inner == null)
+const items: Array<()?> = [none, some]
+print(items[0] == null)
+print(items[1] != null)
+print(foldedWitness())
+try { const unwrappedNone: () = none! } catch panic (p) { print(p.code) }
+try { const result = try? panicUnit(); print("unreached") }
+catch panic (p) { print(p.code) }
+fn worker() {}
+const task: Task<()> = go worker()
+try await task
+print("task")
+var fallbacks = 0
+fn fallback() { fallbacks += 1 }
+const fromNone: () = none ?? fallback()
+const fromSome: () = some ?? fallback()
+print(fallbacks)

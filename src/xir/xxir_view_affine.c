@@ -122,6 +122,7 @@ static bool affine_call(XrXirOp op) {
     return op==XR_XIR_CALL || op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE || op==XR_XIR_INVOKE_INDIRECT;
 }
 static uint32_t affine_operands(const AffineCheck *a,const XrXirInstruction *op) {
+    if (op->op==XR_XIR_NULLABLE_SOME && xr_xir_nullable_is_unit(a->module->types,op->type)) return 0;
     if (op->op==XR_XIR_RETURN) return a->function->result!=XR_XIR_UNIT;
     if (op->op==XR_XIR_SLOT_INIT || op->op==XR_XIR_SLOT_STORE) {
         const XrXirDeclarations *d=a->module->declarations;

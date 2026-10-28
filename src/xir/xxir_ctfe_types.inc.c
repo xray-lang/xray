@@ -172,7 +172,7 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
             }
             field.type=xr_xir_cell_element(types,field.type);
         }
-        if (single && field.type==XR_XIR_UNIT) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
+        if (node->kind==XR_XIR_TYPE_ARRAY && field.type==XR_XIR_UNIT) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
         if (internal && field.type==XR_XIR_ERROR) {
             frame->dynamic=true;frame->pure_arrays=false;continue;
         }

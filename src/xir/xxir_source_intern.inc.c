@@ -138,7 +138,7 @@ static bool source_cell_type(SourceContext *ctx, XrXirType element, XrXirType *t
         NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);
 }
 static bool source_nullable_type(SourceContext *ctx, XrXirType element, XrXirType *type) {
-    if (!element || xr_xir_type_is_cell(&ctx->types,element))
+    if (xr_xir_type_is_cell(&ctx->types,element))
         return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"nullable element must be an ordinary value type");
     return source_intern_type(ctx,(XrXirTypeNode){XR_XIR_TYPE_NULLABLE,element,NULL,0,XR_XIR_UNIT,0,0,{0}},type);
 }

@@ -37,6 +37,12 @@ static inline uint32_t xr_xir_cell_payload_operands(const XrXirTypes *types,
         op == XR_XIR_CELL_READ ? 1u : 1u + !unit;
 }
 
+/* A present Unit has a tag and an exact zero value, not an SSA payload. */
+static inline bool xr_xir_nullable_is_unit(const XrXirTypes *types,XrXirType type) {
+    const XrXirTypeNode *node=xr_xir_type_node(types,type);
+    return node && node->kind==XR_XIR_TYPE_NULLABLE && node->element==XR_XIR_UNIT;
+}
+
 typedef enum XrXirPlaceKind {
     XR_XIR_PLACE_NONE, XR_XIR_PLACE_LOCAL, XR_XIR_PLACE_CELL, XR_XIR_PLACE_SLOT,
     XR_XIR_PLACE_FIELD, XR_XIR_PLACE_INDEX, XR_XIR_PLACE_OBJECT

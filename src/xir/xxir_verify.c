@@ -99,6 +99,7 @@ static bool scalar(XrXirType type) {
 static uint32_t operand_count_metadata(const XrXirTypes *types,const XrXirDeclarations *declarations,
     XrXirType result,XrXirType cell,bool generator,const XrXirInstruction *op) {
     if (xr_xir_op_uses_owner_slots(op->op)) return 0;
+    if (op->op==XR_XIR_NULLABLE_SOME && xr_xir_nullable_is_unit(types,op->type)) return 0;
     if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
         return declarations ? xr_xir_slot_payload_operands(declarations->slots,
             declarations->slot_count,op) : 1u;
@@ -325,7 +326,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
             !xr_xir_type_is_nominal(module->types, op->type) && !xr_xir_type_is_map(module->types, op->type) &&
             !xr_xir_type_is_set(module->types, op->type)) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_NOMINAL && !xr_xir_type_is_nominal(module->types, op->type)) ||
-        (rule->result == RULE_VALUE && !((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_CELL_READ || op->op == XR_XIR_ENUM_GET || op->op==XR_XIR_CHANNEL_RECV_OR) && op->type == XR_XIR_UNIT) &&
+        (rule->result == RULE_VALUE && !((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_CELL_READ || op->op == XR_XIR_ENUM_GET || op->op==XR_XIR_CHANNEL_RECV_OR || op->op==XR_XIR_NULLABLE_UNWRAP) && op->type == XR_XIR_UNIT) &&
             !xr_xir_type_in_context(module, caller_id, op->type)) ||
         (rule->result == RULE_SCALAR && !scalar(op->type)))
         return XR_XIR_BAD_TYPE;

@@ -328,7 +328,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
         bool nominal_element = element &&
             element->kind == XR_XIR_TYPE_NOMINAL &&
             (uint32_t) node->element - XR_XIR_CONSTRUCTED_TYPE_BASE < index;
-        if (!((node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_CELL ||
+        if (!((node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NULLABLE ||
               (node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL)) && node->element == XR_XIR_UNIT) &&
             !nominal_element && !type_component(types, node->element, index)) return XR_XIR_BAD_TYPE;
         if (node->kind == XR_XIR_TYPE_ATOMIC) {

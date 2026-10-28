@@ -142,6 +142,7 @@ static bool view_access_structural(XrXirOp op) {
         op==XR_XIR_CELL_NEW || op==XR_XIR_CELL_PLACE || op==XR_XIR_OBJECT_PLACE || op==XR_XIR_FIELD_PLACE || op==XR_XIR_INDEX_PLACE;
 }
 static uint32_t view_access_operands(const ViewAccess *a,const XrXirInstruction *op) {
+    if (op->op==XR_XIR_NULLABLE_SOME && xr_xir_nullable_is_unit(a->resolver->check.module->types,op->type)) return 0;
     if (op->op==XR_XIR_SLOT_INIT || op->op==XR_XIR_SLOT_STORE) {
         const XrXirDeclarations *d=a->resolver->check.module->declarations;
         return xr_xir_slot_payload_operands(d->slots,d->slot_count,op);

@@ -99,7 +99,10 @@ static XrXirStatus effect_role_transfer(EffectRoleCheck *check,EffectRoleIndex *
     case XR_XIR_CELL_NEW:
         if (xr_xir_cell_is_unit(body->domain.types,op->type)) return XR_XIR_OK;
         return effect_role_value(check,uses,op->args[0],0,EFFECT_ROLE_FIXED);
-    case XR_XIR_NULLABLE_SOME: case XR_XIR_FUNCTION_WEAKEN:
+    case XR_XIR_NULLABLE_SOME:
+        if (xr_xir_nullable_is_unit(body->domain.types,op->type)) return XR_XIR_OK;
+        return effect_role_value(check,uses,op->args[0],0,EFFECT_ROLE_FIXED);
+    case XR_XIR_FUNCTION_WEAKEN:
         return effect_role_value(check,uses,op->args[0],0,EFFECT_ROLE_FIXED);
     case XR_XIR_PLACE_WRITE:return effect_role_value(check,uses,op->args[1],0,EFFECT_ROLE_FIXED);
     case XR_XIR_CELL_WRITE: case XR_XIR_CELL_LOCAL_WRITE: {

@@ -81,6 +81,7 @@ static XrXirStatus effect_capture_alias(EffectCaptureRead *read,const EffectCapt
 static XrXirStatus effect_capture_barrier(EffectCaptureRead *read,const EffectCaptureNode *node,const XrXirInstruction *op) {
     if(!(effect_physical_opcode(op->op)&EFFECT_PHYSICAL_BARRIER)) return XR_XIR_OK;
     bool table=xr_xir_op_uses_operand_table(op->op);uint32_t count=table?op->args[1]:effect_parameter_operands[op->op];
+    if(op->op==XR_XIR_NULLABLE_SOME && xr_xir_nullable_is_unit(read->body.domain.types,op->type)) count=0;
     if(op->op==XR_XIR_CELL_NEW || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE) {
         XrXirType type=op->type;
         if(op->op!=XR_XIR_CELL_NEW) {

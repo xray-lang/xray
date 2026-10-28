@@ -130,11 +130,14 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
     } else if (*tuple_field) *value=((XirTuple *)frame->boxed.object)->fields[index];
     else *value = ((XirNominalValue *)frame->boxed.object)->fields[index];
     const XrXirTypes *types=xr_xir_compile_type_arena_types(arena);
+    const XrXirTypeNode *parent=xr_xir_type_node(types,frame->boxed.inline_storage?
+        frame->packed.type:frame->boxed.object->type);
+    bool unit_nullable=parent && parent->kind==XR_XIR_TYPE_NULLABLE && parent->element==XR_XIR_UNIT;
     if (frame->boxed.inline_storage && span->type==XR_XIR_UNIT &&
-        xr_xir_nominal_native_recv(types,frame->packed.type,XR_XIR_UNIT)) {
+        (unit_nullable || xr_xir_nominal_native_recv(types,frame->packed.type,XR_XIR_UNIT))) {
         *value=(XrXirValue){0}; *inlined=false; *tuple_field=true;
     } else if (!frame->boxed.inline_storage && !*inlined && value->type==XR_XIR_UNIT &&
-        xr_xir_nominal_native_recv(types,frame->boxed.object->type,XR_XIR_UNIT)) *tuple_field=true;
+        (unit_nullable || xr_xir_nominal_native_recv(types,frame->boxed.object->type,XR_XIR_UNIT))) *tuple_field=true;
 }
 static XrXirValueStatus admission_inline(ValueAdmissionStack *stack,
     StorageSpan span,const XrXirTypeArena *arena,XrXirValueAdmission *admission) {

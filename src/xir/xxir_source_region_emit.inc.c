@@ -176,6 +176,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
             operand_end+=op.args[1];
         } else {
             uint32_t count=op.op==XR_XIR_RETURN ? output->result!=XR_XIR_UNIT : role.values;
+            if (op.op==XR_XIR_NULLABLE_SOME && xr_xir_nullable_is_unit(&ctx->types,op.type)) count=0;
             if (op.op==XR_XIR_SLOT_INIT || op.op==XR_XIR_SLOT_STORE)
                 count=xr_xir_slot_payload_operands(ctx->slots,ctx->slot_count,&op);
             if (op.op==XR_XIR_CELL_NEW || op.op==XR_XIR_CELL_WRITE || op.op==XR_XIR_CELL_LOCAL_WRITE) {

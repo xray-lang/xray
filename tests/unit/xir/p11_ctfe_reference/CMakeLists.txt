@@ -238,3 +238,42 @@ add_test(NAME test_xir_try_optional_generated_native COMMAND ${XRAY_PYTHON} -X u
     --source "${try_optional_fixture}" --expect "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_optional.expected.json"
     --native-driver $<TARGET_FILE:test_xir_try_optional_native>)
 set_tests_properties(test_xir_try_optional_generated_native PROPERTIES LABELS "unit;xir;native;ctfe;ownership" TIMEOUT 120)
+
+add_test(NAME test_xir_nullable_unit_source COMMAND test_xir_local_errors nullable-unit)
+add_test(NAME test_xir_nullable_unit_resources COMMAND test_xir_local_errors unit-resources)
+add_test(NAME test_xir_nullable_unit_faults COMMAND test_xir_try_optional_faults unit-resources)
+add_test(NAME test_xir_nullable_unit_values COMMAND test_xir_values --nullable-unit)
+set_tests_properties(test_xir_nullable_unit_source test_xir_nullable_unit_resources
+    test_xir_nullable_unit_faults test_xir_nullable_unit_values PROPERTIES
+    LABELS "unit;xir;nullable;ownership;resources" TIMEOUT 120)
+set(nullable_unit_fixture "${CMAKE_CURRENT_LIST_DIR}/fixtures/nullable_unit.xr")
+set(nullable_unit_oracle "${CMAKE_CURRENT_LIST_DIR}/fixtures/nullable_unit.expected.json")
+if(WIN32)
+    add_test(NAME test_xir_nullable_unit_cli COMMAND ${XRAY_PYTHON} -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/test_try_optional_cli.py"
+        --root "${PROJECT_SOURCE_DIR}" --binary $<TARGET_FILE:xray>
+        --source "${nullable_unit_fixture}" --expect "${nullable_unit_oracle}")
+    set_tests_properties(test_xir_nullable_unit_cli PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE
+        LABELS "unit;xir;nullable;cli;execution;sdk")
+endif()
+set(nullable_unit_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/nullable_unit.c")
+add_custom_command(OUTPUT "${nullable_unit_generated}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND $<TARGET_FILE:test_xir_from_utf8> --emit-file "${nullable_unit_fixture}" "${nullable_unit_generated}"
+    DEPENDS test_xir_from_utf8 "${nullable_unit_fixture}" VERBATIM)
+add_executable(test_xir_nullable_unit_native "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_from_utf8_native.c" "${nullable_unit_generated}")
+target_link_libraries(test_xir_nullable_unit_native PRIVATE xray_xir_scalar xray_compile_resources)
+set_target_properties(test_xir_nullable_unit_native PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_nullable_unit_native PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_xir_nullable_unit_native PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(test_xir_nullable_unit_native PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_xir_nullable_unit_native COMMAND ${XRAY_PYTHON} -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_try_optional_cli.py" --root "${PROJECT_SOURCE_DIR}" --binary $<TARGET_FILE:xray>
+    --source "${nullable_unit_fixture}" --expect "${nullable_unit_oracle}"
+    --native-driver $<TARGET_FILE:test_xir_nullable_unit_native>)
+set_tests_properties(test_xir_nullable_unit_native PROPERTIES LABELS "unit;xir;nullable;native;ctfe;ownership" TIMEOUT 120)

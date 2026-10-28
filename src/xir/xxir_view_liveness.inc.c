@@ -142,6 +142,7 @@ static XrXirStatus view_live_edge(ViewLive *a,uint32_t from,uint32_t target,bool
     return XR_XIR_OK;
 }
 static uint32_t view_live_operands(const ViewLive *a,const XrXirInstruction *op) {
+    if (op->op==XR_XIR_NULLABLE_SOME && xr_xir_nullable_is_unit(a->module->types,op->type)) return 0;
     if (op->op==XR_XIR_RETURN) return a->function->result!=XR_XIR_UNIT;
     if (op->op==XR_XIR_SLOT_INIT || op->op==XR_XIR_SLOT_STORE) {
         const XrXirDeclarations *d=a->module->declarations;

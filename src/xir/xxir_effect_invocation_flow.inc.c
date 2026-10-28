@@ -488,6 +488,7 @@ static XrXirStatus effect_invocation_barriers(EffectInvocationFlow *flow) {
         if (!store) continue;
         bool table=xr_xir_op_uses_operand_table(op->op);
         uint32_t count=table ? op->args[1] : effect_parameter_operands[op->op];
+        if (op->op==XR_XIR_NULLABLE_SOME && xr_xir_nullable_is_unit(module->types,op->type)) count=0;
         if (op->op==XR_XIR_CELL_NEW || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE) {
             XrXirType cell=op->type;
             if (op->op!=XR_XIR_CELL_NEW) {

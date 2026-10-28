@@ -10,9 +10,11 @@
 #include "toolchain/xcompiler_session.h"
 #include "base/xcompile_resources.h"
 #include "base/xmalloc.h"
+#include "base/xsha256.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_checked.h"
 #include "../test_win_compat.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,11 +28,19 @@ typedef struct LocalErrorCase {
     const char *name, *text, *diagnostic;
     int64_t expected;
 } LocalErrorCase;
+static void local_packet_digest(uint8_t *bytes,size_t length) {
+    XrSHA256Context hash;xr_sha256_init(&hash);
+    xr_sha256_update(&hash,bytes,32);xr_sha256_update(&hash,bytes+64,length-64);
+    xr_sha256_final(&hash,bytes+32);
+}
 static uint32_t local_answer(XrXirSourceProduct *product) {
     XrXirSourceProductPacketView packet={0};XrXirArtifact *checked=NULL;
     CHECK(xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK);
     CHECK(packet.length>64 && packet.bytes[8]==39 && !packet.bytes[9] && !packet.bytes[10] && !packet.bytes[11]);
-    uint8_t *old=xr_malloc(packet.length);CHECK(old);memcpy(old,packet.bytes,packet.length);old[8]=37;
+    CHECK(packet.bytes[12]==102 && !packet.bytes[13] && !packet.bytes[14] && !packet.bytes[15]);
+    uint8_t *old=xr_malloc(packet.length);CHECK(old);memcpy(old,packet.bytes,packet.length);old[8]=37;local_packet_digest(old,packet.length);
+    CHECK(xr_xir_compile_checked_read(xr_xir_compile_source_product_context(product),old,packet.length,&checked,NULL)==XR_XIR_BAD_STRUCTURE && !checked);
+    old[8]=39;old[12]=101;local_packet_digest(old,packet.length);
     CHECK(xr_xir_compile_checked_read(xr_xir_compile_source_product_context(product),old,packet.length,&checked,NULL)==XR_XIR_BAD_STRUCTURE && !checked);
     xr_free(old);
     CHECK(xr_xir_compile_checked_read(xr_xir_compile_source_product_context(product),packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
@@ -140,6 +150,11 @@ static const char local_optional_text[]=
     "fn value() throws(Failure)->i64{throw Failure.Bad{message:\"owned é\\0界\"}}\n"
     "fn chooseValue()->i64{return (try? value()) ?? 42}\n"
     "const folded=comptime chooseValue()\nexport fn answer()->i64{return folded}\n";
+static const char local_unit_text[]=
+    "enum Failure{Bad}\nfn value(fail:bool) throws(Failure){if(fail){throw Failure.Bad}}\n"
+    "fn chooseValue()->i64{const some=try? value(false);const none=try? value(true);return some!=null && none==null?42:0}\n"
+    "fn foldedWitness()->i64{return comptime chooseValue()}\nexport fn answer()->i64{return foldedWitness()}\n";
+static const char *local_resource_text=local_optional_text;
 static uint64_t local_optional_build(uint64_t memory,uint64_t frame,size_t cancel_at,
     XrXirStatus expected,size_t *polls,size_t physical_fault,size_t *attempts) {
     XrCompileResourceLimits limits={.memory_mode=memory?XR_COMPILE_MEMORY_FINITE:XR_COMPILE_MEMORY_ORDINARY,
@@ -161,7 +176,7 @@ static uint64_t local_optional_build(uint64_t memory,uint64_t frame,size_t cance
 #else
     CHECK(physical_fault==SIZE_MAX);(void)attempts;
 #endif
-    XrXirSourceText input={NULL,local_optional_text,sizeof(local_optional_text)-1};
+    XrXirSourceText input={NULL,local_resource_text,strlen(local_resource_text)};
     XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_product_build_text(&request,&input,&product,&diagnostic);
 #if defined(XR_LOCAL_ERROR_ALLOCATOR)
@@ -247,6 +262,30 @@ int main(int argc,char **argv) {
         local_case(&known);return 0;
     }
     if(argc==2 && !strcmp(argv[1],"optional-resources")){local_optional_resources();return 0;}
+    if(argc==2 && !strcmp(argv[1],"unit-resources")) {
+        local_resource_text=local_unit_text;local_optional_resources();return 0;
+    }
+    if(argc==2 && !strcmp(argv[1],"nullable-unit")) {
+        const LocalErrorCase unit_cases[]={
+            {"Unit Some/Never","fn value(){}\nexport fn answer()->i64{const v=try? value();const u:()=v!;return v!=null?42:0}\n",NULL,42},
+            {"Unit error None","enum Failure{Bad}\nfn value() throws(Failure){throw Failure.Bad}\n"
+                "export fn answer()->i64{const v=try? value();return v==null?42:0}\n",NULL,42},
+            {"Unit Some/None CTFE",local_unit_text,NULL,42},
+            {"Unit nested presence","export fn answer()->i64{const u:()?=();const n:()?=null;const outer:()?" "?=n;"
+                "const inner:()?=outer!;return u!=null && outer!=null && inner==null?42:0}\n",NULL,42},
+            {"Unit packed source","export fn answer()->i64{const some:()?=();const none:()?=null;"
+                "const values:Array<()?>=[some,none];return values[0]!=null && values[1]==null?42:0}\n",NULL,42},
+            {"Unit coalesce order","var calls=0\nfn fallback(){calls+=1}\nexport fn answer()->i64{"
+                "const none:()?=null;const some:()?=();const a:()=none ?? fallback();const b:()=some ?? fallback();return calls==1?42:0}\n",NULL,42},
+            {"Unit coalesce checks unreachable RHS","enum Failure{Bad}\nfn value() throws(Failure){}\n"
+                "export fn answer()->i64{const some:()?=();const u:()=some ?? value();return 42}\n","E0330",0},
+            {"Unit missing marker","enum Failure{Bad}\nfn value() throws(Failure){}\nexport fn answer()->i64{value();return 42}\n","E0330",0},
+            {"Unit wrong error","enum First{Bad}\nenum Second{Bad}\nfn value() throws(First){throw Second.Bad}\n"
+                "export fn answer()->i64{const v=try? value();return 42}\n","E0331",0}
+        };
+        for(size_t i=0;i<sizeof(unit_cases)/sizeof(unit_cases[0]);++i)local_case(&unit_cases[i]);
+        puts("Unit optional presence, owned packet retirement, CTFE and typed markers passed");return 0;
+    }
     xr_test_suppress_dialogs();
     static const LocalErrorCase cases[]={
         {"typed propagation","enum Failure{Bad}\nfn value() throws(Failure)->i64{throw Failure.Bad}\n"

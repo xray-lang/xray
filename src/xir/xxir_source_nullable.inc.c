@@ -140,6 +140,7 @@ static bool source_coalesce(SourceContext *ctx,AstNode *node,SourceExpectedType 
     if (!begin_block(ctx)) return false;
     body->recipes[branch].instruction.targets[0]=yes_block;body->recipes[branch].instruction.targets[1]=no_block;
     body->recipes[yes_jump].instruction.targets[0]=join;body->recipes[no_jump].instruction.targets[0]=join;
+    if (result==XR_XIR_UNIT) { *value=(SourceValue){UINT32_MAX,XR_XIR_UNIT};return true; }
     SourceValue inputs[]={{yes_end,XR_XIR_UNIT},yes,{no_end,XR_XIR_UNIT},no};
     return source_recipe_group(ctx,(XrXirInstruction){XR_XIR_PHI,result,{0},{0},0,{0}},inputs,4,value);
 }
