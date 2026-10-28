@@ -128,7 +128,9 @@
     "test_native_string_admission",
     "test_core_spec",
     "test_xr_program_verify",
-    "test_xr_program_vm_runtime"
+    "test_xr_program_vm_runtime",
+    "test_xir_module_limits",
+    "test_xir_module_limits_native"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -355,7 +357,9 @@
     "test_lir_owned_string",
     "test_core_spec",
     "test_xr_program_verify",
-    "test_xr_program_vm_runtime"
+    "test_xr_program_vm_runtime",
+    "xir_module_limits",
+    "xir_module_limits_native"
   ],
   "versionCommand": [
     "{build}/xray.exe",
