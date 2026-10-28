@@ -181,3 +181,12 @@ set_tests_properties(test_xir_try_assert_graph_source PROPERTIES LABELS "unit;xi
 add_test(NAME test_xir_try_assert_lexical_source COMMAND test_xir_from_utf8 --try-rejections)
 add_test(NAME test_xir_try_assert_never_source COMMAND test_xir_from_utf8 --vm-file "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_assert_never.xr" --expect "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_assert_never.stdout")
 set_tests_properties(test_xir_try_assert_lexical_source test_xir_try_assert_never_source PROPERTIES LABELS "unit;xir;panic;errors" TIMEOUT 120)
+
+if(WIN32)
+    add_test(NAME test_xir_try_assert_cli COMMAND ${XRAY_PYTHON} -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/test_try_assert_cli.py"
+        --root "${PROJECT_SOURCE_DIR}" --binary $<TARGET_FILE:xray>
+        --source "${try_assert_fixture}" --expect "${try_assert_stdout}")
+    set_tests_properties(test_xir_try_assert_cli PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
+        LABELS "unit;xir;cli;panic;execution;sdk")
+endif()
