@@ -55,6 +55,12 @@ typedef struct XrXirCallMetadata {
     void *cell_context;
 } XrXirCallMetadata;
 
+/* These coordinates are read and consumed inside one current callback, never
+ * retained as authority after the frame or its cleanup registration retires. */
+typedef struct XirCallCleanupOrigin {uint32_t owner,helper,frontier;} XirCallCleanupOrigin;
+XR_FUNC XrXirCallStatus xir_call_cleanup_origin(const XrXirCallView *view,uint32_t target,
+    XrXirCellRoleResolver role,void *context,XirCallCleanupOrigin *output);
+
 typedef struct XrXirCallRequest {
     uint32_t entry;
     const XrXirValue *arguments;

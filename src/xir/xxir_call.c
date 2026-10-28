@@ -487,6 +487,42 @@ static uint64_t state_offset(void) {
     return (sizeof(CallFrame) + alignment - 1) / alignment * alignment;
 }
 #include "xxir_call_cell_loans.inc.c"
+
+XR_FUNC XrXirCallStatus xir_call_cleanup_origin(const XrXirCallView *view,uint32_t target,
+    XrXirCellRoleResolver role,void *context,XirCallCleanupOrigin *output) {
+    if (!output || !role || !context) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirValueAdmission *admission=xr_xir_call_admission(view);
+    if (!admission) return XR_XIR_CALL_BAD_STATE;
+    XrXirCall *call=view->activation;const XrXirCallMetadata *metadata=&call->metadata;
+    const CallFrame *frame=call->top,*owner=NULL;uint32_t helper=target;
+    if (metadata->arena!=admission->arena || metadata->admission_context!=admission->context ||
+        metadata->cell_role!=role || metadata->cell_context!=context || frame->metadata!=metadata ||
+        target>=metadata->entry_count) return XR_XIR_CALL_BAD_STATE;
+    uint32_t current=(uint32_t)(frame->entry-metadata->entries);
+    if (frame->exiting && metadata->entries[target].cleanup_owner==current+1) {
+        if (!call_cell_work(call,1)) return XR_XIR_CALL_LIMIT;
+        owner=frame;
+    } else {
+        if (!frame->in_cleanup || metadata->entries[target].cleanup_owner) return XR_XIR_CALL_BAD_STATE;
+        uint32_t remaining=frame->depth;
+        for (;frame;frame=frame->parent) {
+            if (!remaining-- || frame->metadata!=metadata || !frame->epoch || !frame->in_cleanup)
+                return XR_XIR_CALL_BAD_STATE;
+            if (!call_cell_work(call,1)) return XR_XIR_CALL_LIMIT;
+            if (frame->cleanup_call) {
+                owner=frame->parent;helper=(uint32_t)(frame->entry-metadata->entries);
+                if (!owner || owner->metadata!=metadata || owner->epoch>=frame->epoch)
+                    return XR_XIR_CALL_BAD_STATE;
+                break;
+            }
+        }
+    }
+    if (!owner || !owner->entered || !owner->exiting || !owner->cleanup_frontier || !owner->epoch ||
+        !(owner->entry->flags&XR_XIR_ENTRY_EXIT)) return XR_XIR_CALL_BAD_STATE;
+    uint32_t parent=(uint32_t)(owner->entry-metadata->entries);
+    if (metadata->entries[helper].cleanup_owner!=parent+1) return XR_XIR_CALL_BAD_STATE;
+    *output=(XirCallCleanupOrigin){parent,helper,owner->cleanup_frontier};return XR_XIR_CALL_READY;
+}
 XR_FUNC XrXirCallStatus xir_call_vm_frame_entry(const XrXirCallView *view,uint64_t identity,uint32_t *output) {
     if (!identity || !output || !xir_call_vm_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCall *call=view->activation;

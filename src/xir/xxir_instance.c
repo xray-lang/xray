@@ -908,6 +908,14 @@ XrXirCallStatus xr_xir_instance_close_activation(XrXirInstance *instance) {
     if (status != XR_XIR_CALL_READY) (void)xr_xir_instance_stop(root);
     return status;
 }
+static bool instance_execution_failure(XrXirCallStatus status) {
+    switch(status) {
+    case XR_XIR_CALL_LIMIT: case XR_XIR_CALL_OOM: case XR_XIR_CALL_HOST_ERROR: case XR_XIR_CALL_OUTPUT_ERROR:
+    case XR_XIR_CALL_BAD_ARGUMENT: case XR_XIR_CALL_BAD_ABI: case XR_XIR_CALL_BAD_STATE:
+    case XR_XIR_CALL_BUSY: case XR_XIR_CALL_CONSUMED: case XR_XIR_CALL_UNSUPPORTED:return true;
+    default:return false;
+    }
+}
 XR_FUNC XrXirCallStatus xir_instance_host_finish(XrXirInstance *instance,XrXirInstanceResult *observed) {
     if (!instance_owner_current(instance) || !instance || !observed) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance_busy(instance)) return XR_XIR_CALL_BUSY;
@@ -918,10 +926,12 @@ XR_FUNC XrXirCallStatus xir_instance_host_finish(XrXirInstance *instance,XrXirIn
         active->last_outcome==XR_XIR_CALL_SUSPENDED) return XR_XIR_CALL_BAD_STATE;
     instance_driving(active,true);
     XrXirCallStatus closed=xr_xir_task_executor_drain(active->executor,XR_XIR_CALL_READY);
-    if (closed==XR_XIR_CALL_CLEANUP_FAILED && active->state==XR_XIR_INSTANCE_FAILED &&
-        (active->failure.status==XR_XIR_CALL_THROWN || xr_xir_call_panic_status(active->failure.status))) {
+    if (active->state==XR_XIR_INSTANCE_FAILED &&
+        ((closed==XR_XIR_CALL_CLEANUP_FAILED &&
+          (active->failure.status==XR_XIR_CALL_THROWN || xr_xir_call_panic_status(active->failure.status))) ||
+         (active->failure.status==XR_XIR_CALL_THROWN && instance_execution_failure(closed)))) {
         XrXirCallResult selected=xr_xir_task_executor_poll_root(active->executor,1);
-        XR_CHECK(selected.status==closed,"late initialization cleanup keeps its actual fatal root owner");
+        XR_CHECK(selected.status==closed,"late initialization cleanup keeps its actual selected root outcome");
         fail_initialization(active,selected);
     }
     instance_driving(active,false);
@@ -1075,6 +1085,39 @@ static XrXirCallStatus instance_function_producer_value(XrXirInstance *instance,
  * context. Conditional Cell-root inspection charges the current Domain before
  * the Call owner prepares any callee loans. */
 
+/* Code can finish its registered cleanup after initialization failed; module
+ * storage remains unpublished and all ordinary storage gates stay in force. */
+static XrXirCallStatus instance_cleanup_entry(XrXirCallView *view,const XrXirInstance *instance,
+    uint32_t caller,uint32_t entry) {
+    const XrXirProgram *program=instance->program;const XrXirDeclarations *d=program->declarations;
+    if (instance!=instance_current(view->instance) || instance->state!=XR_XIR_INSTANCE_FAILED ||
+        caller>=program->entry_count || entry>=program->entry_count ||
+        d->functions[caller].module!=d->functions[entry].module) return XR_XIR_CALL_BAD_STATE;
+    XirCallCleanupOrigin origin={0};
+    XrXirCallStatus status=xir_call_cleanup_origin(view,entry,instance_cell_role,(void *)program,&origin);
+    if (status!=XR_XIR_CALL_READY) return status;
+    if (!program->permissions || !program->permissions->input) return XR_XIR_CALL_BAD_STATE;
+    const XrXirModule *body=xr_xir_compile_artifact_module(program->permissions->input->artifact);
+    if (!body || !body->declarations || body->function_count!=program->entry_count ||
+        !body->declarations->functions || body->declarations->module_count!=d->module_count ||
+        origin.owner>=program->entry_count || origin.helper>=program->entry_count ||
+        d->functions[origin.owner].module!=d->functions[entry].module ||
+        d->functions[origin.helper].module!=d->functions[entry].module ||
+        d->functions[origin.helper].cleanup_owner!=origin.owner+1) return XR_XIR_CALL_BAD_STATE;
+    const uint32_t identities[]={origin.owner,origin.helper};
+    for (uint32_t i=0;i<2;++i) {
+        const XrXirFunctionIdentity *actual=&d->functions[identities[i]];
+        const XrXirFunctionIdentity *input=&body->declarations->functions[identities[i]];
+        if (actual->module!=input->module || actual->nominal_owner!=input->nominal_owner ||
+            actual->member_access!=input->member_access || actual->cleanup_owner!=input->cleanup_owner)
+            return XR_XIR_CALL_BAD_STATE;
+    }
+    const XrXirFunction *owner=&body->functions[origin.owner];
+    if (!origin.frontier || origin.frontier>owner->instruction_count) return XR_XIR_CALL_BAD_STATE;
+    const XrXirInstruction *registration=&owner->instructions[origin.frontier-1];
+    return registration->op==XR_XIR_CLEANUP_REGISTER && registration->immediate==(int64_t)origin.helper ?
+        XR_XIR_CALL_READY:XR_XIR_CALL_BAD_STATE;
+}
 static XrXirCallStatus instance_call_entry_check(XrXirCallView *view, uint32_t entry,
     const XrXirValue *function, const XrXirValue *arguments, uint32_t count,
     const XirEffectInvocationSelection *prepared) {
@@ -1111,7 +1154,10 @@ static XrXirCallStatus instance_call_entry_check(XrXirCallView *view, uint32_t e
             XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
     if (caller == instance->program->entry_count &&
         (target!=instance || instance->state != XR_XIR_INSTANCE_READY || instance->requested != entry)) return XR_XIR_CALL_BAD_STATE;
-    if (!target->ready[module] && target->current_module != module) return XR_XIR_CALL_BAD_STATE;
+    if (!target->ready[module] && target->current_module != module) {
+        XrXirCallStatus cleanup=target==instance?instance_cleanup_entry(view,instance,caller,entry):XR_XIR_CALL_BAD_STATE;
+        if (cleanup!=XR_XIR_CALL_READY) return cleanup;
+    }
     if (!child) return XR_XIR_CALL_READY;
     if (!function) return XR_XIR_CALL_BAD_STATE;
     XrXirCallFrontier frontier={0};

@@ -39,9 +39,14 @@ static void resource_free(void *p) {if(p){if(!resource_live)abort();--resource_l
  * Canonical product targets do not compile this replacement translation unit. */
 #define xr_xir_call_complete_task_wait xir_cleanup_actual_complete_task_wait
 #define xr_xir_call_poll_bounded xir_cleanup_actual_call_poll_bounded
+#define xir_call_cleanup_origin xir_cleanup_actual_cleanup_origin
+XR_FUNC XrXirCallStatus xir_cleanup_actual_call_free(XrXirCall *call);
+#define xr_xir_call_free xir_cleanup_actual_call_free
 #include "xir/xxir_call.c"
 #undef xr_xir_call_complete_task_wait
 #undef xr_xir_call_poll_bounded
+#undef xir_call_cleanup_origin
+#undef xr_xir_call_free
 #endif
 #if defined(XR_CLEANUP_HOST_OBSERVER)
 #define xr_xir_host_wait_begin xir_cleanup_injected_wait_begin
@@ -207,7 +212,19 @@ static Prepared prepare_text(const char *text,size_t length) {
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceText input={NULL,text,length};
     XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
-    CHECK(xr_xir_compile_source_product_build_text(&request,&input,&product,&diagnostic)==XR_XIR_OK);
+    XrXirStatus built=xr_xir_compile_source_product_build_text(&request,&input,&product,&diagnostic);
+    if(built!=XR_XIR_OK) {
+        fprintf(stderr,"prepare stage%u status%u source%u module%u\n%.*s\n",(unsigned)diagnostic.stage,(unsigned)built,
+            (unsigned)diagnostic.source.status,diagnostic.source.module,(int)length,text);
+        XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_CLEANUP_STDLIB;
+        XrSourceInput public_input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"cleanup-diagnostic",text,length}};
+        XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *detail=NULL;
+        XrSourceStatus status=xray_source_build(&public_input,&options,&artifact,NULL,&detail);
+        if(detail){XrSourceDiagnosticRoot root={0};CHECK(xray_source_diagnostic_root(detail,0,&root)==XR_SOURCE_OK);
+            fprintf(stderr,"public diagnostic status%u: %s\n",(unsigned)status,root.message);}
+        xray_source_diagnostic_free(detail);xray_source_artifact_free(artifact);
+    }
+    CHECK(built==XR_XIR_OK);
     CHECK(xr_xir_compile_source_product_vm_take(product,&ready.program)==XR_XIR_OK);
     xr_xir_compile_source_product_free(product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     xr_compile_session_free(session);return ready;
@@ -417,12 +434,100 @@ static void late_cancel_once(bool swallow) {
 }
 static void late_cancel(void) {late_cancel_once(false);late_cancel_once(true);}
 #if defined(XR_CLEANUP_CALL_OBSERVER)
+static bool module_probe_active,module_fault_done;
+static unsigned module_scenario,module_origins,module_retired,module_inner,module_slot_checks,module_cell_checks;
+static unsigned module_freed;
+static uint32_t module_slot=UINT32_MAX;
+static bool module_published,module_released;
+static XrXirProgram *module_foreign_program;
+static XrXirInstance *module_foreign_instance;
+static XrXirValue module_cell;
+static XrXirCallView module_saved_view;
+static uint32_t module_saved_target;
+static XrXirCellRoleResolver module_saved_role;
+static void *module_saved_context;
+static void module_trace(void *context,XrXirLifecycleEvent event,uint32_t index) {
+    (void)context;if(index!=module_slot)return;
+    if(event==XR_XIR_SLOT_PUBLISHED)module_published=true;
+    if(event==XR_XIR_SLOT_RELEASED)module_released=true;
+}
+XR_FUNC XrXirCallStatus xir_call_cleanup_origin(const XrXirCallView *view,uint32_t target,
+    XrXirCellRoleResolver role,void *context,XirCallCleanupOrigin *origin) {
+    if(!module_probe_active)return xir_cleanup_actual_cleanup_origin(view,target,role,context,origin);
+    if((module_scenario==7 || module_scenario==9) && !module_fault_done) {
+        module_fault_done=true;XrXirValueAdmission *admission=xr_xir_call_admission(view);CHECK(admission);admission->work=0;
+    }
+    XrXirCallStatus status=xir_cleanup_actual_cleanup_origin(view,target,role,context,origin);
+    if(status!=XR_XIR_CALL_READY)return status;
+    ++module_origins;XirCallCleanupOrigin untouched={91,92,93},before=untouched;XrXirCallView copied=*view;
+    CHECK(xir_cleanup_actual_cleanup_origin(&copied,target,role,context,&untouched)==XR_XIR_CALL_BAD_STATE &&
+        !memcmp(&untouched,&before,sizeof(before)));
+    CHECK(xir_cleanup_actual_cleanup_origin(view,target,role,module_foreign_program,&untouched)==XR_XIR_CALL_BAD_STATE &&
+        !memcmp(&untouched,&before,sizeof(before)));
+    XrXirCallView *current=(XrXirCallView *)view;void *instance=current->instance;current->instance=module_foreign_instance;
+    CHECK(xir_cleanup_actual_cleanup_origin(view,target,role,context,&untouched)==XR_XIR_CALL_BAD_STATE &&
+        !memcmp(&untouched,&before,sizeof(before)));current->instance=instance;
+    if(!view->activation->top->in_cleanup)
+        CHECK(xir_cleanup_actual_cleanup_origin(view,origin->owner,role,context,&untouched)==XR_XIR_CALL_BAD_STATE);
+    if(module_slot!=UINT32_MAX) {
+        XrXirValue value={0};CHECK(xr_xir_instance_slot_read((XrXirCallView *)view,module_slot,&value)==XR_XIR_CALL_BAD_STATE &&
+            !value.type && !value.payload);++module_slot_checks;
+        if(module_scenario==1)CHECK(!module_published && !module_released);
+        else CHECK(module_published && module_released);
+    }
+    if(module_cell.type) {
+        XrXirValue value={0},next={XR_XIR_I64,0,99};
+        CHECK(xr_xir_instance_cell_read((XrXirCallView *)view,&module_cell,&value)==XR_XIR_CALL_BAD_STATE && !value.type && !value.payload);
+        CHECK(xr_xir_instance_cell_write((XrXirCallView *)view,&module_cell,&next)==XR_XIR_CALL_BAD_STATE);++module_cell_checks;
+    }
+    module_saved_view=*view;module_saved_target=target;module_saved_role=role;module_saved_context=context;
+    if(!module_fault_done && module_scenario>=4 && module_scenario<=6) {
+        module_fault_done=true;
+        const XrXirProgram *program=context;
+        const XrXirModule *body=xr_xir_compile_artifact_module(program->permissions->input->artifact);bool replaced=false;
+        if(module_scenario==4) {
+            const XrXirFunction *owner=&body->functions[origin->owner];
+            for(uint32_t i=0;i<owner->instruction_count;++i)
+                if(owner->instructions[i].op==XR_XIR_CLEANUP_REGISTER && owner->instructions[i].immediate!=(int64_t)origin->helper) {
+                    origin->frontier=i+1;replaced=true;break;
+                }
+        } else if(module_scenario==5) {
+            for(uint32_t i=0;i<program->entry_count;++i)
+                if(i!=origin->helper && program->declarations->functions[i].cleanup_owner==origin->owner+1) {
+                    origin->helper=i;replaced=true;break;
+                }
+        } else {origin->owner=named(program,"read");replaced=true;}
+        CHECK(replaced);
+    }
+    return status;
+}
 static unsigned receiver_checks;
 static bool receiver_active;
 static bool shutdown_observing,shutdown_admitted;
 static bool shutdown_pair,shutdown_first,shutdown_fatal;
+XR_FUNC XrXirCallStatus xr_xir_call_free(XrXirCall *call) {
+    XrXirCallAccounting *accounting=module_probe_active && call?call->config.accounting:NULL;
+    XrXirCallStatus status=xir_cleanup_actual_call_free(call);
+    if(accounting && status!=XR_XIR_CALL_BUSY){CHECK(!accounting->live_bytes);++module_freed;}
+    return status;
+}
 XR_FUNC XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call,uint64_t quantum) {
-    XrXirCallResult result=xir_cleanup_actual_call_poll_bounded(call,quantum);
+    XrXirCallResult result=xir_cleanup_actual_call_poll_bounded(call,module_probe_active?1:quantum);
+    if(module_probe_active) {
+        if(module_scenario==2 && !module_cell.type && call->top)
+            for(uint32_t i=0;i<call->top->entry->parameter_count;++i) {
+                const XrXirValue *root=xr_xir_cell_canonical_root(&call->top->arguments[i]);
+                if(root && xr_xir_cell_module_storage(root)) {CHECK(xr_xir_value_copy(root,&module_cell)==XR_XIR_VALUE_OK);break;}
+            }
+        if(result.status==XR_XIR_CALL_BAD_STATE || result.status==XR_XIR_CALL_LIMIT) {
+            CHECK(call->abort_reason==result.status && xr_xir_call_result_valid(&result));module_inner=(unsigned)result.status;
+        }
+        if(module_saved_view.activation==call) {
+            XirCallCleanupOrigin untouched={91,92,93},before=untouched;
+            CHECK(xir_cleanup_actual_cleanup_origin(&module_saved_view,module_saved_target,module_saved_role,module_saved_context,
+                &untouched)==XR_XIR_CALL_BAD_STATE && !memcmp(&untouched,&before,sizeof(before)));++module_retired;
+        }
+    }
     if (shutdown_observing && call->top && !call->driving &&
         call->top->inbox.status==XR_XIR_CALL_DIVIDE_BY_ZERO && call->top->inbox.panic.replaced_error.type==XR_XIR_ERROR) {
         CHECK(xr_xir_call_result_valid(&call->top->inbox) && !call->top->inbox_dispatched);
@@ -478,6 +583,100 @@ static void task_identity(void) {
     puts("complete Source Task panic observed through the actual scheduler and caller");
 }
 #if defined(XR_CLEANUP_CALL_OBSERVER)
+static void module_public_resource(const char *text,size_t length) {
+    module_probe_active=false;
+    XrSourceCompileOptions compile=xray_source_compile_options_default();compile.stdlib_path=XR_CLEANUP_STDLIB;
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"cleanup-resource",text,length}};
+    XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *diagnostic=NULL;
+    CHECK(xray_source_build(&input,&compile,&artifact,NULL,&diagnostic)==XR_SOURCE_OK && artifact && !diagnostic);
+    XrSourceExecution *owner=execution();Output out={0};XrSourceCallOptions config=options(&out);
+    XrSourceInvocation request;CHECK(xray_source_invocation_init(&request,sizeof(request))==XR_SOURCE_OK);
+    request.name="answer";request.name_length=6;XrSourceResult *result=NULL;XrSourceEvent failure={0},event={0};
+    module_probe_active=true;module_fault_done=false;module_saved_view=(XrXirCallView){0};module_inner=0;module_freed=0;
+    XrSourceStatus status=xray_source_invoke(owner,artifact,&request,&config,&result,&failure);
+    if(result)CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK);
+    fprintf(stderr,"actual Source cleanup resource status%u result%u event%u failure%u inner%u closed%u\n",
+        (unsigned)status,result!=NULL,(unsigned)event.engine_status,(unsigned)failure.engine_status,module_inner,module_freed);
+    CHECK(status==XR_SOURCE_LIMIT && !result && failure.engine_status==XR_XIR_CALL_LIMIT && module_inner==XR_XIR_CALL_LIMIT && module_freed);
+    CHECK(out.size==5 && !memcmp(out.bytes,"41\n7\n",5));
+    module_probe_active=false;static const char good[]="export fn answer()->i64{return 42}\n";
+    XrSourceInput next={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"cleanup-next",good,sizeof(good)-1}};
+    XrSourceArtifact *ready=NULL;CHECK(xray_source_build(&next,&compile,&ready,NULL,&diagnostic)==XR_SOURCE_OK && ready && !diagnostic);
+    CHECK(xray_source_invoke(owner,ready,&request,&config,&result,NULL)==XR_SOURCE_OK && result);int64_t number=0;
+    CHECK(xray_source_result_i64(result,&number)==XR_SOURCE_OK && number==42);xray_source_result_free(result);
+    xray_source_artifact_free(ready);xray_source_artifact_free(artifact);xray_source_execution_free(owner);
+}
+static XrXirOutputStatus module_limited_output(void *context,const XrXirOutputGroup *value) {
+    RawOutput *out=context;CHECK(out->output.size<=5);XrXirOutputSink limited=out->sink;
+    limited.byte_limit=5-out->output.size;return xr_xir_output_render(&limited,value);
+}
+static void module_cleanup_controls(void) {
+    static const char *const reads[]={"return prior","return neverPublished","cell+=1;print(99);return cell","return 1/n"};
+    for(unsigned scenario=0;scenario<10;++scenario) {
+        char text[4096];unsigned source=scenario<3?scenario:3;
+        int length=snprintf(text,sizeof(text),"enum InitFailure{Failed{stream:Iterator<i64>}}\n"
+            "fn seed()->i64{print(41);return 41}\n%s\n"
+            "fn expose(n:ref i64)->i64{return n}\nfn read(n:i64)->i64{%s}\n"
+            "fn values(n:i64)->Iterator<i64>{defer{const ignored=read(n);print(99)};defer{const marker=n};yield 7}\n"
+            "fn fail()throws(InitFailure)->i64{%sconst it=values(0);print(it.next());throw InitFailure.Failed{stream:it}}\n"
+            "const neverPublished:i64=try%s fail()\nexport fn answer()->i64{return 42}\n",
+            source==2?"var cell=seed()":"const prior=seed()",reads[source],source==2?"const touched=expose(ref cell);":scenario==8?"const pendingPrint=0;":"",scenario==9?"!":"");
+        CHECK(length>0 && (size_t)length<sizeof(text));
+        if(scenario==8) {
+            const char *before="print(it.next());throw";char *point=strstr(text,before);CHECK(point);
+            size_t offset=(size_t)(point-text)+strlen("print(it.next());"),tail=strlen(text+offset);
+            CHECK((size_t)length+strlen("print(8);")<sizeof(text));memmove(text+offset+strlen("print(8);"),text+offset,tail+1);
+            memcpy(text+offset,"print(8);",strlen("print(8);"));length+=(int)strlen("print(8);");
+        }
+        Prepared ready=prepare_text(text,(size_t)length);
+        static const char foreign_text[]="export fn answer()->i64{return 42}\n";
+        Prepared foreign=prepare_text(foreign_text,sizeof(foreign_text)-1);module_foreign_program=foreign.program;
+        module_slot=UINT32_MAX;
+        const XrXirModule *body=xr_xir_compile_artifact_module(ready.program->permissions->input->artifact);
+        const XrXirFunction *read=&body->functions[named(ready.program,"read")];bool writes=false;
+        for(uint32_t i=0;i<read->instruction_count;++i) {
+            if(read->instructions[i].op==XR_XIR_SLOT_LOAD)module_slot=(uint32_t)read->instructions[i].immediate;
+            writes|=read->instructions[i].op==XR_XIR_CELL_WRITE;
+        }
+        CHECK((source<3)==(module_slot!=UINT32_MAX) && (source!=2 || writes));
+        RawOutput out={0};out.sink=(XrXirOutputSink){XR_XIR_CALL_ABI_VERSION,0,raw_bytes,&out.output,sizeof(out.output.bytes)};
+        XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+        config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,scenario==8?module_limited_output:raw_group,&out};config.trace=module_trace;
+        XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(ready.program,&config,&instance)==XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_new(foreign.program,&config,&module_foreign_instance)==XR_XIR_CALL_READY);
+        module_scenario=scenario;module_probe_active=true;module_fault_done=false;module_origins=module_retired=module_inner=0;
+        module_slot_checks=module_cell_checks=0;module_published=module_released=false;module_saved_view=(XrXirCallView){0};
+        CHECK(!module_cell.type);CHECK(xr_xir_instance_start(instance,named(ready.program,"answer"),NULL,0)==XR_XIR_CALL_READY);
+        XrXirInstanceResult initial={0};unsigned polls=0;
+        do {CHECK(++polls<10000);initial=xr_xir_instance_poll_bounded(instance,1);}while(initial.outcome.status==XR_XIR_CALL_READY);
+        CHECK(initial.outcome.status==(scenario==8?XR_XIR_CALL_LIMIT:scenario==9?XR_XIR_CALL_RUNTIME_PANIC:XR_XIR_CALL_THROWN) && out.output.size==5 && !memcmp(out.output.bytes,"41\n7\n",5));
+        XrXirCallResult original={0};CHECK(xr_xir_call_result_copy(&initial.outcome,&original)==XR_XIR_VALUE_OK);
+        XrXirInstanceResult finished={0};CHECK(xir_instance_host_finish(instance,&finished)==XR_XIR_CALL_READY);
+        CHECK(out.output.size==5 && !memcmp(out.output.bytes,"41\n7\n",5));
+        if(scenario==3) CHECK(finished.outcome.status==XR_XIR_CALL_CLEANUP_FAILED && finished.outcome.panic.detail.code==420 &&
+            finished.outcome.prior_status==XR_XIR_CALL_CANCELLED && !module_inner);
+        else {
+            CHECK(module_inner==(unsigned)(scenario>=7?XR_XIR_CALL_LIMIT:XR_XIR_CALL_BAD_STATE));
+            CHECK(finished.outcome.status==(scenario==9?XR_XIR_CALL_RUNTIME_PANIC:(XrXirCallStatus)module_inner));
+            if(scenario==9)CHECK(finished.outcome.panic.detail.code==446 && finished.outcome.panic.error.type==XR_XIR_ERROR);
+        }
+        if(source<3)CHECK(module_slot_checks && (source!=2 || (module_cell.type && module_cell_checks)));
+        if(scenario<7)CHECK(module_origins && module_retired);
+        XrXirCallResult retained={0};CHECK(xr_xir_call_result_copy(&finished.outcome,&retained)==XR_XIR_VALUE_OK);
+        XrXirInstanceResult sticky=xr_xir_instance_poll_bounded(instance,1);CHECK(sticky.outcome.status==finished.outcome.status);
+        CHECK(xr_xir_instance_start(instance,named(ready.program,"answer"),NULL,0)==sticky.outcome.status);
+        if(scenario==7)module_public_resource(text,(size_t)length);
+        module_probe_active=false;
+        CHECK(xr_xir_instance_free(instance)==(scenario==3?XR_XIR_CALL_CLEANUP_FAILED:scenario>=7?XR_XIR_CALL_LIMIT:XR_XIR_CALL_BAD_STATE));
+        CHECK(xr_xir_instance_free(module_foreign_instance)==XR_XIR_CALL_READY);module_foreign_instance=NULL;
+        xr_xir_compile_program_drop(ready.program);xr_xir_compile_program_drop(foreign.program);
+        CHECK(xr_xir_call_result_valid(&retained) && xr_xir_call_result_valid(&original));xr_xir_call_result_drop(&retained);xr_xir_call_result_drop(&original);xr_xir_value_drop(&module_cell);
+        XrCompileResourceStats stats;CHECK(xr_compile_resources_stats(ready.resources,&stats)==XR_COMPILE_RESOURCE_OK && stats.held_bytes==ready.baseline);
+        xr_compile_resources_release(ready.resources);CHECK(xr_compile_resources_stats(foreign.resources,&stats)==XR_COMPILE_RESOURCE_OK && stats.held_bytes==foreign.baseline);
+        xr_compile_resources_release(foreign.resources);
+        printf("failed module scenario%u actual inner=%u origins=%u slot=%u cell=%u retired=%u PASS\n",scenario,module_inner,module_origins,module_slot_checks,module_cell_checks,module_retired);
+    }
+}
 static void task_shutdown(bool pair) {
     Prepared ready=prepare();XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     RawOutput out={0};out.sink=(XrXirOutputSink){XR_XIR_CALL_ABI_VERSION,0,raw_bytes,&out.output,sizeof(out.output.bytes)};
@@ -578,6 +777,7 @@ int main(int argc,char **argv) {
     else if (!strcmp(argv[1],"late-cancel")) late_cancel();
     else if (!strcmp(argv[1],"task-identity")) task_identity();
 #if defined(XR_CLEANUP_CALL_OBSERVER)
+    else if (!strcmp(argv[1],"failed-module")) module_cleanup_controls();
     else if (!strcmp(argv[1],"task-shutdown")) task_shutdown(false);
     else if (!strcmp(argv[1],"task-pair")) task_shutdown(true);
 #endif

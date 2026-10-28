@@ -129,13 +129,29 @@ static void completed_child(void) {
     }
     puts("public completed Iterator: late owned fatal, primary/prior, retired results and new host request PASS");
 }
-static void initializing_child(void) {
+static void initializing_child(unsigned mode) {
     static const char source[]="import { values } from \"./_cleanup_initialized_iterator\"\n"
         "enum InitFailure{Failed{stream:Iterator<i64>}}\n"
         "fn fail()throws(InitFailure)->i64{const it=values(0);print(it.next());throw InitFailure.Failed{stream:it}}\n"
         "const neverPublished=try fail()\nexport fn answer()->i64{return 42}\n";
+    static const char callee[]="enum InitFailure{Failed{stream:Iterator<i64>}}\n"
+        "fn divide(n:i64)->i64{return 1/n}\n"
+        "fn values()->Iterator<i64>{defer{const ignored=divide(0)};yield 7}\n"
+        "fn fail()throws(InitFailure)->i64{const it=values();print(it.next());throw InitFailure.Failed{stream:it}}\n"
+        "const neverPublished=try fail()\nexport fn answer()->i64{return 42}\n";
+    static const char direct[]="enum InitFailure{Failed{stream:Iterator<i64>}}\n"
+        "fn divide(n:i64)->i64{return 1/n}\n"
+        "fn values(n:i64)->Iterator<i64>{defer{const ignored=1/n};yield 7}\n"
+        "fn fail()throws(InitFailure)->i64{const it=values(0);print(it.next());throw InitFailure.Failed{stream:it}}\n"
+        "const neverPublished=try fail()\nexport fn answer()->i64{return 42}\n";
+    static const char nested[]="enum InitFailure{Failed{stream:Iterator<i64>}}\n"
+        "fn divide(n:i64)->i64{return 1/n}\nfn helper(n:i64)->i64{return divide(n)}\n"
+        "fn values(n:i64)->Iterator<i64>{defer{const ignored=helper(n)};yield 7}\n"
+        "fn fail()throws(InitFailure)->i64{const it=values(0);print(it.next());throw InitFailure.Failed{stream:it}}\n"
+        "const neverPublished=try fail()\nexport fn answer()->i64{return 42}\n";
+    const char *sources[]={source,callee,direct,nested};CHECK(mode<4);
     XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
-    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={__FILE__,NULL,source,sizeof(source)-1}};
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={mode?NULL:__FILE__,mode?"initializing-child":NULL,sources[mode],strlen(sources[mode])}};
     XrSourceArtifact *program=NULL;XrSourceDiagnostic *diagnostic=NULL;
     XrSourceStatus compiled=xray_source_build(&input,&options,&program,NULL,&diagnostic);
     if(diagnostic) {XrSourceDiagnosticRoot info={0};CHECK(xray_source_diagnostic_root(diagnostic,0,&info)==XR_SOURCE_OK);
@@ -159,7 +175,8 @@ static void initializing_child(void) {
 }
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--completed-child")){completed_child();return 0;}
-    if(argc==2 && !strcmp(argv[1],"--initializing-child")){initializing_child();return 0;}
+    if(argc==2 && !strcmp(argv[1],"--initializing-child")){initializing_child(0);return 0;}
+    if(argc==3 && !strcmp(argv[1],"--initializing-child")){CHECK(argv[2][0]>='0' && argv[2][0]<='3' && !argv[2][1]);initializing_child((unsigned)(argv[2][0]-'0'));return 0;}
     CHECK(argc==1);
     static const char source[]="fn initial()->i64{print(90);return 40}\nvar state=initial()\n"
         "export fn read()->i64{return state}\nexport fn next(value:i64)->i64{state+=value;return state}\n"
@@ -265,6 +282,6 @@ int main(int argc,char **argv) {
     CHECK(xray_source_instance_drop(&owners[0],NULL)==XR_SOURCE_OK);
     puts("public persistent Instance: producer death, state, callable arguments, authority, reentry, cancellation and cumulative output PASS");
     completed_child();
-    initializing_child();
+    for(unsigned mode=0;mode<4;++mode)initializing_child(mode);
     return 0;
 }
