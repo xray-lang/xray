@@ -134,7 +134,9 @@ PURE_DOC_PATTERN = re.compile(
 )
 PURE_FN_PATTERN = re.compile(
     r'^(?:@[A-Za-z_][^\n]*\n)*(?:export\s+)?fn\s+'
-    r'([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*(\([^)]*\))\s*'
+    r'([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*'
+    r'(\((?:[^(){}]|\([^(){}]*\))*\))\s*'
+    r'(?:throws\s*\(([^(){}\n]+)\)\s*)?'
     r'(?:->\s*([^{\n]+))?\s*\{',
     re.M,
 )
@@ -228,9 +230,10 @@ def normalize_params(params):
     return ", ".join(normalized)
 
 
-def normalize_function_signature(params, ret_type):
+def normalize_function_signature(params, ret_type, error_type=None):
     ret = normalize_type(ret_type) if ret_type else "()"
-    return f"({normalize_params(params)}): {ret}"
+    effect = f" throws({normalize_type(error_type)})" if error_type else ""
+    return f"({normalize_params(params)}){effect}: {ret}"
 
 
 def infer_pure_const_type(annotation, value):
@@ -307,7 +310,8 @@ def scan_pure_xray_module(filepath, module_name):
         functions[name] = {
             'func': name,
             'name': name,
-            'signature': normalize_function_signature(match.group(2), match.group(3)),
+            'signature': normalize_function_signature(
+                match.group(2), match.group(4), match.group(3)),
             'doc': docs.get(name, ''),
         }
 

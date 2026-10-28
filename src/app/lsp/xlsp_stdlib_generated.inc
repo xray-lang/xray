@@ -21,13 +21,16 @@ static const XlspSymbolInfo g_xlsp_stdlib_coro_symbols[] = {
 
 // base64 module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
+    {"encode", XLSP_SYM_FUNCTION, "fn(data: Slice<u8>, options?: Base64EncodeOptions): string", "", NULL, 0},
+    {"decode", XLSP_SYM_FUNCTION, "fn(text: string, options?: Base64DecodeOptions) throws(Base64Error): Array<u8>", "", NULL, 0},
+    {"isValid", XLSP_SYM_FUNCTION, "fn(text: string, options?: Base64DecodeOptions): bool", "", NULL, 0},
     {"Base64Alphabet", XLSP_SYM_CLASS, "type Base64Alphabet", "Enum type", NULL, 0},
     {"Base64PaddingPolicy", XLSP_SYM_CLASS, "type Base64PaddingPolicy", "Enum type", NULL, 0},
     {"Base64Error", XLSP_SYM_CLASS, "type Base64Error", "Enum type", NULL, 0},
     {"Base64EncodeOptions", XLSP_SYM_CLASS, "type Base64EncodeOptions", "Class type", NULL, 0},
     {"Base64DecodeOptions", XLSP_SYM_CLASS, "type Base64DecodeOptions", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT 5
+#define GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT 8
 
 // cluster module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
@@ -192,15 +195,17 @@ static const XlspSymbolInfo g_xlsp_stdlib_datetime_symbols[] = {
 // encoding module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_encoding_symbols[] = {
     {"hexEncode", XLSP_SYM_FUNCTION, "fn(data: Slice<u8>): string", "", NULL, 0},
-    {"hexDecode", XLSP_SYM_FUNCTION, "fn(hex: string): Array<u8>", "", NULL, 0},
+    {"hexDecode", XLSP_SYM_FUNCTION, "fn(hex: string) throws(HexError): Array<u8>", "", NULL, 0},
     {"hexValid", XLSP_SYM_FUNCTION, "fn(hex: string): bool", "", NULL, 0},
     {"utf8Valid", XLSP_SYM_FUNCTION, "fn(data: Slice<u8>): bool", "", NULL, 0},
+    {"utf16Encode", XLSP_SYM_FUNCTION, "fn(data: string, options?: Utf16EncodeOptions): Array<u8>", "", NULL, 0},
+    {"utf16Decode", XLSP_SYM_FUNCTION, "fn(data: Slice<u8>, options?: Utf16DecodeOptions) throws(Utf16Error): string", "", NULL, 0},
     {"HexError", XLSP_SYM_CLASS, "type HexError", "Enum type", NULL, 0},
     {"Utf16Error", XLSP_SYM_CLASS, "type Utf16Error", "Enum type", NULL, 0},
     {"Utf16DecodeOptions", XLSP_SYM_CLASS, "type Utf16DecodeOptions", "Class type", NULL, 0},
     {"Utf16EncodeOptions", XLSP_SYM_CLASS, "type Utf16EncodeOptions", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_ENCODING_SYMBOL_COUNT 8
+#define GEN_XLSP_STDLIB_ENCODING_SYMBOL_COUNT 10
 
 // http module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
@@ -519,14 +524,15 @@ static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
 
 // parallel module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_parallel_symbols[] = {
-    {"map", XLSP_SYM_FUNCTION, "fn(range: Range, body: fn(i64): T, options: Options = Options()) -> Array<T>", "", NULL, 0},
-    {"mapInto", XLSP_SYM_FUNCTION, "fn(range: Range, output: ref Array<T>, body: fn(i64): T, options: Options = Options())", "", NULL, 0},
-    {"reduce", XLSP_SYM_FUNCTION, "fn(range: Range, initial: A, body: fn(i64): A, combine: fn(A, A) -> A, options: Options = Options()) -> A", "", NULL, 0},
+    {"forEach", XLSP_SYM_FUNCTION, "fn(range: Range, body: fn(i64), options?: Options) throws(ParallelError): ()", "", NULL, 0},
+    {"map", XLSP_SYM_FUNCTION, "fn(range: Range, body: fn(i64) -> T, options?: Options) throws(ParallelError): Array<T>", "", NULL, 0},
+    {"mapInto", XLSP_SYM_FUNCTION, "fn(range: Range, output: ref Array<T>, body: fn(i64) -> T, options?: Options) throws(ParallelError): ()", "", NULL, 0},
+    {"reduce", XLSP_SYM_FUNCTION, "fn(range: Range, initial: A, body: fn(i64) -> A, combine: fn(A, A) -> A, options?: Options) throws(ParallelError): A", "", NULL, 0},
     {"ParallelError", XLSP_SYM_CLASS, "type ParallelError", "Enum type", NULL, 0},
     {"Options", XLSP_SYM_CLASS, "type Options", "Class type", NULL, 0},
     {"Plan", XLSP_SYM_CLASS, "type Plan", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_PARALLEL_SYMBOL_COUNT 6
+#define GEN_XLSP_STDLIB_PARALLEL_SYMBOL_COUNT 7
 
 // path module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_path_symbols[] = {
@@ -621,6 +627,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
 static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"threadYield", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
     {"pinToCpu", XLSP_SYM_FUNCTION, "fn(cpu: i64): bool", "", NULL, 0},
+    {"onSignal", XLSP_SYM_FUNCTION, "fn(signal: Signal, handler: fn()): bool", "", NULL, 0},
     {"OsMutex", XLSP_SYM_CLASS, "type OsMutex", "Class type", NULL, 0},
     {"OsRwLock", XLSP_SYM_CLASS, "type OsRwLock", "Class type", NULL, 0},
     {"OsCondvar", XLSP_SYM_CLASS, "type OsCondvar", "Class type", NULL, 0},
@@ -633,7 +640,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"ThreadLocal", XLSP_SYM_CLASS, "type ThreadLocal", "Class type", NULL, 0},
     {"Dylib", XLSP_SYM_CLASS, "type Dylib", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 13
+#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 14
 
 // text module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_text_symbols[] = {
@@ -742,6 +749,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"recv", XLSP_SYM_FUNCTION, "fn(conn: ref WsConn, timeout?: i64): WsMessage?", "", NULL, 0},
     {"ping", XLSP_SYM_FUNCTION, "fn(conn: ref WsConn): bool", "", NULL, 0},
     {"close", XLSP_SYM_FUNCTION, "fn(conn: ref WsConn, code?: i64, reason?: string): bool", "", NULL, 0},
+    {"serve", XLSP_SYM_FUNCTION, "fn(port: i64, handler: fn(ref WsConn), running: Atomic<bool>, maxMessage?: i64): bool", "", NULL, 0},
     {"ParsedFrame", XLSP_SYM_CLASS, "type ParsedFrame", "Class type", NULL, 0},
     {"WsUrl", XLSP_SYM_CLASS, "type WsUrl", "Class type", NULL, 0},
     {"ClosePayload", XLSP_SYM_CLASS, "type ClosePayload", "Class type", NULL, 0},
@@ -751,7 +759,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"WsMessage", XLSP_SYM_CLASS, "type WsMessage", "Class type", NULL, 0},
     {"WsConn", XLSP_SYM_CLASS, "type WsConn", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 31
+#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 32
 
 // xml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {

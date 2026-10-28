@@ -67,6 +67,48 @@ TEST(generated_encoding_types_track_pure_module_exports) {
     ASSERT(xlsp_stdlib_find_symbol(encoding, "BE") == NULL);
 }
 
+TEST(generated_throwing_pure_exports_preserve_signatures) {
+    const XlspModuleInfo *encoding = xlsp_stdlib_find_module("encoding");
+    ASSERT(encoding != NULL);
+    const XlspSymbolInfo *decode = xlsp_stdlib_find_symbol(encoding, "hexDecode");
+    ASSERT(decode != NULL);
+    ASSERT(decode->kind == XLSP_SYM_FUNCTION);
+    ASSERT_STR_EQ(decode->signature, "fn(hex: string) throws(HexError): Array<u8>");
+    ASSERT(xlsp_stdlib_find_symbol(encoding, "_hexVal") == NULL);
+
+    decode = xlsp_stdlib_find_symbol(encoding, "utf16Decode");
+    ASSERT(decode != NULL);
+    ASSERT_STR_EQ(decode->signature,
+                  "fn(data: Slice<u8>, options?: Utf16DecodeOptions) throws(Utf16Error): string");
+
+    const XlspModuleInfo *base64 = xlsp_stdlib_find_module("base64");
+    ASSERT(base64 != NULL);
+    decode = xlsp_stdlib_find_symbol(base64, "decode");
+    ASSERT(decode != NULL);
+    ASSERT_STR_EQ(decode->signature,
+                  "fn(text: string, options?: Base64DecodeOptions) throws(Base64Error): Array<u8>");
+}
+
+TEST(generated_parallel_exports_preserve_effects) {
+    const XlspModuleInfo *parallel = xlsp_stdlib_find_module("parallel");
+    ASSERT(parallel != NULL);
+    const XlspSymbolInfo *map = xlsp_stdlib_find_symbol(parallel, "map");
+    ASSERT(map != NULL);
+    ASSERT_STR_EQ(map->signature,
+                  "fn(range: Range, body: fn(i64) -> T, options?: Options) "
+                  "throws(ParallelError): Array<T>");
+    const XlspSymbolInfo *map_into = xlsp_stdlib_find_symbol(parallel, "mapInto");
+    ASSERT(map_into != NULL);
+    ASSERT_STR_EQ(map_into->signature,
+                  "fn(range: Range, output: ref Array<T>, body: fn(i64) -> T, "
+                  "options?: Options) throws(ParallelError): ()");
+    const XlspSymbolInfo *reduce = xlsp_stdlib_find_symbol(parallel, "reduce");
+    ASSERT(reduce != NULL);
+    ASSERT_STR_EQ(reduce->signature,
+                  "fn(range: Range, initial: A, body: fn(i64) -> A, combine: fn(A, A) -> A, "
+                  "options?: Options) throws(ParallelError): A");
+}
+
 TEST(generated_methods_use_def_overlay) {
     const XlspModuleInfo *url = xlsp_stdlib_find_module("url");
     ASSERT(url != NULL);
@@ -96,6 +138,8 @@ int main(void) {
     RUN_TEST(generated_modules_use_real_stdlib_names);
     RUN_TEST(generated_constants_preserve_kind_and_signature);
     RUN_TEST(generated_encoding_types_track_pure_module_exports);
+    RUN_TEST(generated_throwing_pure_exports_preserve_signatures);
+    RUN_TEST(generated_parallel_exports_preserve_effects);
     RUN_TEST(generated_methods_use_def_overlay);
     RUN_TEST(generated_handle_types_surface_as_classes);
 
