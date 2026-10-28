@@ -329,7 +329,8 @@
     "test_xir_error_union_faults",
     "test_xir_error_union_inference",
     "test_xir_error_union_legacy",
-    "test_xir_error_union_cli"
+    "test_xir_error_union_cli",
+    "test_xir_cleanup_failed_module"
   ],
   "versionCommand": [
     "{build}/xray.exe",
