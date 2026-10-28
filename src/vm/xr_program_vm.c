@@ -14,7 +14,6 @@
 #include "../runtime/core/xr_text_kernel.h"
 #include "../runtime/core/xr_array_allocation_plan.h"
 #include "../runtime/core/xr_channel_storage.h"
-#include "../runtime/core/xr_string_builder_storage.h"
 #include "../shared/xr_integer_division_core.h"
 #include "../shared/xr_byte_compare_core.h"
 #include "../shared/xr_integer_bitwise_core.h"
@@ -160,11 +159,6 @@ typedef struct XrVmAtomicValue {
     XrAtomicStorageCore *shared;
 } XrVmAtomicValue;
 
-typedef struct XrVmStringBuilderValue {
-    XrVmValueCell cell;
-    XrStringBuilderStorage text;
-} XrVmStringBuilderValue;
-
 typedef struct XrVmChannelValue {
     XrVmValueCell cell;
     uint16_t type_id;
@@ -276,8 +270,6 @@ static XrVmValueCell *vm_value_cell(XrVmValue value) {
             return (XrVmValueCell *) (void *) value.as.panic_info.message;
         case XR_VM_VALUE_RESOURCE:
             return (XrVmValueCell *) (void *) value.as.resource;
-        case XR_VM_VALUE_STRING_BUILDER:
-            return (XrVmValueCell *) (void *) value.as.string_builder;
         case XR_VM_VALUE_CHANNEL:
             return (XrVmValueCell *) (void *) value.as.channel_storage;
         case XR_VM_VALUE_ATOMIC:
@@ -370,8 +362,6 @@ static bool value_matches_type(const XrValidatedProgram *program, XrVmValue valu
             return value.kind == XR_VM_VALUE_ERROR;
         case XR_CORE_TYPE_PANIC_INFO:
             return value.kind == XR_VM_VALUE_PANIC_INFO;
-        case XR_CORE_TYPE_STRING_BUILDER:
-            return value.kind == XR_VM_VALUE_STRING_BUILDER && value.as.string_builder;
         case XR_CORE_TYPE_STRING:
             return value.kind == XR_VM_VALUE_STRING && value.as.string;
         case XR_CORE_TYPE_RUNE:
@@ -463,6 +453,12 @@ static void *vm_array_backing_allocate(void *context, size_t size) {
     return xr_malloc(size);
 }
 
+static void vm_array_backing_release(void *context, void *pointer) {
+    (void) context;
+    xr_free(pointer);
+}
+
+
 static XrVmAggregateValue *allocate_aggregate(XrVmContext *context, uint16_t type_id,
                                               uint32_t variant_ordinal, uint32_t field_count) {
     XrVmValueStorage *storage = context->storage;
@@ -493,38 +489,6 @@ static XrVmAggregateValue *allocate_aggregate(XrVmContext *context, uint16_t typ
 }
 
 /* Each string counts one cell plus its payload bytes against the VM budget. */
-static void *vm_builder_allocate(void *opaque, size_t size) {
-    XrVmContext *context = opaque;
-    if (context->storage->aggregate_cell_count > context->code->options.max_value_cells ||
-        size > context->code->options.max_value_cells - context->storage->aggregate_cell_count)
-        return NULL;
-    return xr_malloc(size);
-}
-
-static void vm_builder_release(void *opaque, void *pointer) {
-    (void) opaque;
-    xr_free(pointer);
-}
-
-static void release_string_builder_storage(XrVmStringBuilderValue *value) {
-    if (!value) return;
-    size_t capacity = value->text.capacity;
-    XrStringBuilderAllocator allocator = {NULL, NULL, vm_builder_release};
-    xr_string_builder_dispose(&value->text, &allocator);
-    if (value->cell.storage) {
-        value->cell.storage->aggregate_cell_count -= capacity;
-        value->cell.cell_count -= capacity;
-    }
-}
-
-static XrVmStringBuilderValue *allocate_string_builder(XrVmContext *context) {
-    if (context->storage->aggregate_cell_count >= context->code->options.max_value_cells)
-        return NULL;
-    XrVmStringBuilderValue *value = xr_calloc(1u, sizeof(*value));
-    if (value) vm_value_cell_link(context->storage, &value->cell, XR_VM_VALUE_STRING_BUILDER, 1u);
-    return value;
-}
-
 static XrVmStringValue *allocate_string(XrVmContext *context, size_t size) {
     XrVmValueStorage *storage = context->storage;
     if (size > XR_PROGRAM_CONSTANT_STRING_MAX_BYTES ||
@@ -868,8 +832,6 @@ static void drop_vm_value(XrVmContext *context, XrVmValue *value, XrVmLifecycleE
         XrVmResourceValue *resource = (XrVmResourceValue *) (void *) value->as.resource;
         if (resource)
             xr_execution_resource_free(&resource->owner);
-    } else if (value->kind == XR_VM_VALUE_STRING_BUILDER) {
-        release_string_builder_storage((XrVmStringBuilderValue *) (void *) value->as.string_builder);
     } else if (value->kind == XR_VM_VALUE_CHANNEL) {
         release_channel_storage((XrVmChannelValue *) (void *) value->as.channel_storage);
     } else if (value->kind == XR_VM_VALUE_ATOMIC) {
@@ -1055,9 +1017,6 @@ static void vm_value_cell_unlink(XrVmValueCell *cell) {
 static void vm_value_cell_destroy(XrVmValueCell *cell) {
     vm_value_cell_unlink(cell);
     switch (cell->kind) {
-        case XR_VM_VALUE_STRING_BUILDER:
-            release_string_builder_storage((XrVmStringBuilderValue *) cell);
-            break;
         case XR_VM_VALUE_RESOURCE:
             xr_execution_resource_free(&((XrVmResourceValue *) cell)->owner);
             break;
@@ -2234,13 +2193,6 @@ static void vm_dispatch_instruction(XrVmDispatch *dispatch) {
         case XR_CORE_OP_CORE_PLACE_TAKE:
         case XR_CORE_OP_CORE_PLACE_EXCHANGE:
             vm_dispatch_place(dispatch);
-            return;
-        case XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT:
-        case XR_CORE_OP_CORE_STRING_BUILDER_APPEND:
-        case XR_CORE_OP_CORE_STRING_BUILDER_CLEAR:
-        case XR_CORE_OP_CORE_STRING_BUILDER_LENGTH:
-        case XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT:
-            vm_dispatch_string_builder(dispatch);
             return;
         case XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL:
         case XR_CORE_OP_CORE_CHANNEL_CONSTRUCT:

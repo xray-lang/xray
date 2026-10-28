@@ -852,7 +852,7 @@ static bool scalar_rep_matches_profile(const XrTargetMachineRepRecord *rep,
 
 static bool semantic_direct_local_tagged_ref_parameter_is_exact_verify(
     const XrSemanticPlan *semantic, const XrSemanticParameterRecord *parameter, uint8_t *storage);
-static bool semantic_stringbuilder_type_is_exact(const XrSemanticTypeRecord *type);
+
 
 /* A borrowed RAW_PTR is not a general pointer lifecycle. It exists only as
  * the physical callee-side carrier of an exact direct-local tagged ref
@@ -1207,8 +1207,7 @@ static bool semantic_direct_local_tagged_boundary_type_is_exact_verify(
      * the same set, or the
      * plan the builder froze is one this pass refuses. */
     if (admits_instance && semantic &&
-        (xr_semantic_class_instance_type_source_class(semantic, type) != XR_SEMANTIC_INDEX_NONE ||
-         semantic_stringbuilder_type_is_exact(type))) {
+        (xr_semantic_class_instance_type_source_class(semantic, type) != XR_SEMANTIC_INDEX_NONE)) {
         if (storage)
             *storage = XR_TARGET_ARRAY_STORAGE_NONE;
         return true;
@@ -2694,59 +2693,17 @@ static bool semantic_direct_local_adt_enum_result_is_exact(const XrSemanticPlan 
     return xr_semantic_direct_local_adt_enum_result_is_exact(semantic, operation, callee);
 }
 
-static bool semantic_stringbuilder_type_is_exact(const XrSemanticTypeRecord *type) {
-    char expected_type_key[160];
-    int written = snprintf(expected_type_key, sizeof(expected_type_key),
-                           "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
-                           (unsigned) XR_KIND_INSTANCE, (unsigned) XR_TID_STRINGBUILDER,
-                           (unsigned) XR_SCALAR_REP_NONE);
-    return type && written > 0 && (size_t) written < sizeof(expected_type_key) &&
-           type->kind == XR_KIND_INSTANCE && type->builtin_type == XR_TID_STRINGBUILDER &&
-           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE &&
-           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
-           type->canonical_key && strcmp(type->canonical_key, expected_type_key) == 0;
-}
 
-static bool semantic_stringbuilder_receiver_alias_result_is_exact_verify(
-    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation) {
-    const XrSemanticFunctionRecord *function =
-        operation ? xr_semantic_plan_function(semantic, operation->function) : NULL;
-    return operation &&
-           ((operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
-             operation->return_parameter == -1 &&
-             ((operation->return_provenance == XR_SEM_RETURN_OWNED &&
-               operation->return_complete == 1) ||
-              (operation->return_provenance == XR_SEM_RETURN_NONE &&
-               operation->return_complete == 0))) ||
-            (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
-             ((((operation->return_provenance == XR_SEM_RETURN_BORROWED_STATIC &&
-                 operation->return_parameter == -1) ||
-                (operation->return_provenance == XR_SEM_RETURN_BORROWED_PARAM && function &&
-                 operation->return_parameter >= 0 &&
-                 (uint16_t) operation->return_parameter < function->parameter_count)) &&
-               operation->return_complete == 1) ||
-              (operation->return_provenance == XR_SEM_RETURN_NONE &&
-               operation->return_parameter == -1 && operation->return_complete == 0))));
-}
 
-static bool operation_is_exact_stringbuilder_append_rune(const XrSemanticPlan *semantic,
-                                                         const XrSemanticOperationRecord *operation,
-                                                         uint32_t *receiver_value,
-                                                         uint32_t *argument_value);
 
-static bool operation_is_exact_stringbuilder_to_string(const XrSemanticPlan *semantic,
-                                                       const XrSemanticOperationRecord *operation,
-                                                       uint32_t *receiver_value);
 
-static bool
-operation_is_exact_stringbuilder_append_string(const XrSemanticPlan *semantic,
-                                               const XrSemanticOperationRecord *operation,
-                                               uint32_t *argument_value);
 
-static bool operation_is_exact_stringbuilder_clear(const XrSemanticPlan *semantic,
-                                                   const XrSemanticOperationRecord *operation,
-                                                   uint32_t *receiver_value);
+
+
+
+
+
+
 
 static bool operation_is_exact_json_namespace_codec(const XrSemanticPlan *semantic,
                                                     const XrSemanticOperationRecord *operation,
@@ -4175,10 +4132,10 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan, const XrTarget
             /* The method families own their result type in their own right;
              * relying on the constructor to have marked StringBuilder would
              * leave toString's String result unproven. */
-            operation_is_exact_stringbuilder_append_rune(semantic, operation, NULL, NULL) ||
-            operation_is_exact_stringbuilder_to_string(semantic, operation, NULL) ||
-            operation_is_exact_stringbuilder_append_string(semantic, operation, NULL) ||
-            operation_is_exact_stringbuilder_clear(semantic, operation, NULL) ||
+
+
+
+
             xr_semantic_string_runes_is_exact(semantic, operation, NULL) ||
             xr_semantic_iterator_rune_has_next_is_exact(semantic, operation, NULL) ||
             xr_semantic_iterator_rune_next_is_exact(semantic, operation, NULL) ||
@@ -4437,16 +4394,9 @@ static bool verify_value_binding(
         operation && operation->result_value == semantic_value &&
         operation->result_type == semantic_type;
     bool exact_runtime_constructor = xr_semantic_runtime_constructor_is_exact(semantic, operation);
-    /* StringBuilder methods bind a dynamic result in their own right. Append
-     * preserves the receiver's ownership, while toString creates a new owner. */
-    bool exact_stringbuilder_append =
-        operation_is_exact_stringbuilder_append_rune(semantic, operation, NULL, NULL);
-    bool exact_stringbuilder_to_string =
-        operation_is_exact_stringbuilder_to_string(semantic, operation, NULL);
-    bool exact_stringbuilder_append_string =
-        operation_is_exact_stringbuilder_append_string(semantic, operation, NULL);
-    bool exact_stringbuilder_clear =
-        operation_is_exact_stringbuilder_clear(semantic, operation, NULL);
+
+
+
     /* A copy that only renames its operand carries the source's binding, so the
      * result having one is expected rather than unexplained. Same statement of
      * the shape the builder used to give it that binding. */
@@ -4611,8 +4561,6 @@ static bool verify_value_binding(
                 exact_string_literal || exact_bigint_value || exact_string_concat ||
                 exact_string_convert || exact_direct_string_result ||
                 exact_source_dependency_owned_reference_result || exact_runtime_constructor ||
-                exact_stringbuilder_append || exact_stringbuilder_to_string ||
-                exact_stringbuilder_append_string || exact_stringbuilder_clear ||
                 exact_identity_copy || exact_owner_transfer || exact_string_runes ||
                 exact_map_entries_iterator || exact_map_entry_iterator_next ||
                 exact_string_slice_range || exact_rune_to_string || exact_json_namespace_codec ||
@@ -4692,9 +4640,7 @@ static bool verify_value_binding(
         exact_class_instance || exact_class_receiver || exact_string_literal ||
         exact_bigint_value || exact_string_concat || exact_string_convert ||
         exact_direct_string_result || exact_runtime_constructor ||
-        exact_source_dependency_owned_reference_result || exact_stringbuilder_append ||
-        exact_stringbuilder_to_string || exact_stringbuilder_append_string ||
-        exact_stringbuilder_clear || exact_string_runes || exact_map_entries_iterator ||
+        exact_source_dependency_owned_reference_result || exact_string_runes || exact_map_entries_iterator ||
         exact_map_entry_iterator_next || exact_string_slice_range || exact_rune_to_string ||
         exact_json_namespace_codec || exact_panic_info_constructor || exact_array_member_result ||
         exact_direct_callee || exact_go_callee || exact_go_task || exact_channel ||
@@ -4834,9 +4780,6 @@ static bool verify_value_binding(
              exact_source_structural_field_result || exact_tagged_ref_place_load ||
              (exact_array_value_parameter && !array_parameter_callee_owns) ||
              exact_string_value_parameter_borrowed || exact_native_storage_parameter_borrowed ||
-             ((exact_stringbuilder_append || exact_stringbuilder_append_string ||
-               exact_stringbuilder_clear) &&
-              operation && operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED) ||
              (exact_dynamic_value && xr_semantic_dynamic_value_is_borrowed(operation)) ||
              (exact_channel && operation && operation->opcode == XI_COPY))
                 ? XR_TARGET_OWNERSHIP_BORROWED
@@ -5715,91 +5658,11 @@ static bool operation_is_exact_channel_close(const XrSemanticPlan *semantic,
     return true;
 }
 
-static bool operation_is_exact_stringbuilder_to_string(const XrSemanticPlan *semantic,
-                                                       const XrSemanticOperationRecord *operation,
-                                                       uint32_t *receiver_value) {
-    uint32_t operands_count = 0, metadata_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operands_count);
-    const char *const *metadata = xr_semantic_plan_metadata(semantic, &metadata_count);
-    if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_STRINGBUILDER_TO_STRING ||
-        operation->opcode != XI_CALL_METHOD || operation->operand_count != 1 ||
-        operation->operand_begin >= operands_count || operation->metadata_count != 1 ||
-        operation->metadata_begin >= metadata_count ||
-        strcmp(metadata[operation->metadata_begin], "toString") != 0 ||
-        operation->result_alias_operand != -1 ||
-        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED)
-        return false;
-    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
-    const XrSemanticTypeRecord *receiver_type = xr_semantic_plan_type(semantic, receiver->type);
-    const XrSemanticTypeRecord *result_type =
-        xr_semantic_plan_type(semantic, operation->result_type);
-    bool exact = semantic_stringbuilder_type_is_exact(receiver_type) && result_type &&
-                 result_type->kind == XR_KIND_STRING && receiver->role == XR_SEM_OPERAND_RECEIVER &&
-                 receiver->parameter == -1 && receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT;
-    if (exact && receiver_value)
-        *receiver_value = receiver->value;
-    return exact;
-}
 
-static bool
-operation_is_exact_stringbuilder_append_string(const XrSemanticPlan *semantic,
-                                               const XrSemanticOperationRecord *operation,
-                                               uint32_t *argument_value) {
-    uint32_t count = 0, metadata_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &count);
-    const char *const *metadata = xr_semantic_plan_metadata(semantic, &metadata_count);
-    if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING ||
-        operation->operand_count != 2 || operation->operand_begin + 1u >= count ||
-        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
-        strcmp(metadata[operation->metadata_begin], "append") != 0 ||
-        operation->result_alias_operand != 0)
-        return false;
-    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin],
-                                  *argument = receiver + 1;
-    const XrSemanticTypeRecord *rt = xr_semantic_plan_type(semantic, receiver->type);
-    const XrSemanticTypeRecord *at = xr_semantic_plan_type(semantic, argument->type);
-    /* The same terms the builder proves before it writes the row: a verifier
-     * that admits more than the builder writes cannot catch a row the builder
-     * should not have written. */
-    bool exact =
-        semantic_stringbuilder_type_is_exact(rt) && at && at->kind == XR_KIND_STRING &&
-        operation->result_type == receiver->type &&
-        semantic_stringbuilder_receiver_alias_result_is_exact_verify(semantic, operation) &&
-        receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
-        receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-        argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
-        argument->flags == XR_SEM_OPERAND_CALL_CONTRACT;
-    if (exact && argument_value)
-        *argument_value = argument->value;
-    return exact;
-}
 
-static bool operation_is_exact_stringbuilder_clear(const XrSemanticPlan *semantic,
-                                                   const XrSemanticOperationRecord *operation,
-                                                   uint32_t *receiver_value) {
-    uint32_t operand_count = 0, metadata_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
-    const char *const *metadata = xr_semantic_plan_metadata(semantic, &metadata_count);
-    if (!semantic || !operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
-        operation->opcode != XI_CALL_METHOD ||
-        operation->semantic_immediate != (int64_t) XI_METHOD_SYMBOL_CLEAR << 1 ||
-        operation->operand_count != 1 || operation->operand_begin >= operand_count ||
-        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
-        !operands || !metadata || !metadata[operation->metadata_begin] ||
-        strcmp(metadata[operation->metadata_begin], "clear") != 0 ||
-        operation->result_alias_operand != 0 ||
-        !semantic_stringbuilder_receiver_alias_result_is_exact_verify(semantic, operation))
-        return false;
-    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
-    const XrSemanticTypeRecord *receiver_type = xr_semantic_plan_type(semantic, receiver->type);
-    bool exact = semantic_stringbuilder_type_is_exact(receiver_type) &&
-                 operation->result_type == receiver->type &&
-                 receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
-                 receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT;
-    if (exact && receiver_value)
-        *receiver_value = receiver->value;
-    return exact;
-}
+
+
+
 
 static bool semantic_json_namespace_type_is_exact(const XrSemanticTypeRecord *type) {
     char expected_type_key[160];
@@ -6190,44 +6053,7 @@ static bool collect_exact_native_module_namespace_values(const XrTargetPlan *pla
     return true;
 }
 
-static bool operation_is_exact_stringbuilder_append_rune(const XrSemanticPlan *semantic,
-                                                         const XrSemanticOperationRecord *operation,
-                                                         uint32_t *receiver_value,
-                                                         uint32_t *argument_value) {
-    uint32_t operand_count = 0;
-    uint32_t metadata_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
-    const char *const *metadata = xr_semantic_plan_metadata(semantic, &metadata_count);
-    if (!semantic || !operation ||
-        operation->intrinsic_kind != XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE ||
-        operation->opcode != XI_CALL_METHOD || operation->semantic_immediate <= 0 ||
-        (operation->semantic_immediate & 1) != 0 || operation->operand_count != 2 ||
-        operation->operand_begin > operand_count ||
-        operation->operand_count > operand_count - operation->operand_begin ||
-        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
-        strcmp(metadata[operation->metadata_begin], "append") != 0 ||
-        operation->result_alias_operand != 0 ||
-        !semantic_stringbuilder_receiver_alias_result_is_exact_verify(semantic, operation))
-        return false;
-    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
-    const XrSemanticOperandRecord *argument = receiver + 1;
-    const XrSemanticTypeRecord *receiver_type = xr_semantic_plan_type(semantic, receiver->type);
-    const XrSemanticTypeRecord *argument_type = xr_semantic_plan_type(semantic, argument->type);
-    if (!semantic_stringbuilder_type_is_exact(receiver_type) ||
-        operation->result_type != receiver->type || !argument_type ||
-        argument_type->kind != XR_KIND_RUNE || argument_type->builtin_type != XR_TID_NULL ||
-        argument_type->child_count != 0 || argument_type->scalar_rep != XR_SCALAR_REP_NONE ||
-        argument_type->flags != 0 || receiver->role != XR_SEM_OPERAND_RECEIVER ||
-        receiver->parameter != -1 || receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
-        argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != 0 ||
-        argument->flags != XR_SEM_OPERAND_CALL_CONTRACT)
-        return false;
-    if (receiver_value)
-        *receiver_value = receiver->value;
-    if (argument_value)
-        *argument_value = argument->value;
-    return true;
-}
+
 
 static bool overflow_predicate_covers_call_operation(const XrTargetPlan *plan,
                                                      const XrTargetPartitionView *view,
@@ -6430,13 +6256,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             }
             expected_calls++;
         }
-        if (operation_is_exact_stringbuilder_append_rune(semantic, operation, NULL, NULL)) {
-            if (expected_calls == UINT32_MAX) {
-                valid = false;
-                break;
-            }
-            expected_calls++;
-        }
+
         if (xr_semantic_builtin_runtime_method_is_exact(semantic, operation, NULL, NULL)) {
             if (expected_calls == UINT32_MAX) {
                 valid = false;
@@ -6509,27 +6329,9 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             }
             expected_calls++;
         }
-        if (operation_is_exact_stringbuilder_to_string(semantic, operation, NULL)) {
-            if (expected_calls == UINT32_MAX) {
-                valid = false;
-                break;
-            }
-            expected_calls++;
-        }
-        if (operation_is_exact_stringbuilder_append_string(semantic, operation, NULL)) {
-            if (expected_calls == UINT32_MAX) {
-                valid = false;
-                break;
-            }
-            expected_calls++;
-        }
-        if (operation_is_exact_stringbuilder_clear(semantic, operation, NULL)) {
-            if (expected_calls == UINT32_MAX) {
-                valid = false;
-                break;
-            }
-            expected_calls++;
-        }
+
+
+
         if (operation_is_exact_native_module_scalar_call(semantic, operation, NULL)) {
             if (expected_calls == UINT32_MAX) {
                 valid = false;
@@ -6790,11 +6592,6 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                                                    semantic, operation, &scalar_copy_argument);
         bool string_byte_slice_view =
             !semantic_target && semantic_string_byte_slice_view_is_exact(semantic, operation);
-        uint32_t append_receiver = XR_SEMANTIC_INDEX_NONE;
-        uint32_t append_argument = XR_SEMANTIC_INDEX_NONE;
-        bool stringbuilder_append_rune =
-            !semantic_target && operation_is_exact_stringbuilder_append_rune(
-                                    semantic, operation, &append_receiver, &append_argument);
         uint32_t string_runes_receiver = XR_SEMANTIC_INDEX_NONE;
         bool string_runes = !semantic_target && xr_semantic_string_runes_is_exact(
                                                     semantic, operation, &string_runes_receiver);
@@ -6859,18 +6656,6 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             !semantic_target &&
             xr_semantic_string_slice_range_is_exact(semantic, operation, &string_slice_receiver,
                                                     &string_slice_start, &string_slice_end);
-        uint32_t to_string_receiver = XR_SEMANTIC_INDEX_NONE;
-        bool stringbuilder_to_string =
-            !semantic_target &&
-            operation_is_exact_stringbuilder_to_string(semantic, operation, &to_string_receiver);
-        uint32_t append_string_argument = XR_SEMANTIC_INDEX_NONE;
-        bool stringbuilder_append_string =
-            !semantic_target && operation_is_exact_stringbuilder_append_string(
-                                    semantic, operation, &append_string_argument);
-        uint32_t stringbuilder_clear_receiver = XR_SEMANTIC_INDEX_NONE;
-        bool stringbuilder_clear =
-            !semantic_target && operation_is_exact_stringbuilder_clear(
-                                    semantic, operation, &stringbuilder_clear_receiver);
         uint32_t json_value_argument = XR_SEMANTIC_INDEX_NONE;
         bool json_namespace_codec =
             !semantic_target &&
@@ -6979,8 +6764,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                                            0) == 1;
         bool direct_aggregate_result =
             direct_leaf_program || direct_product_program || direct_value_aggregate_result;
-        if (runtime_constructor || stringbuilder_to_string || stringbuilder_append_string ||
-            stringbuilder_clear || direct_nullable_scalar_result || direct_string_result ||
+        if (runtime_constructor || direct_nullable_scalar_result || direct_string_result ||
             direct_nullable_string_result ||
             direct_array_result || direct_adt_enum_result || direct_class_instance_result ||
             json_namespace_codec || string_utf8_static || source_nullable_scalar_result ||
@@ -7008,13 +6792,10 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_VIEW;
         }
-        if (stringbuilder_append_rune || string_runes || string_slice_range || rune_to_string) {
+        if (string_runes || string_slice_range || rune_to_string) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
-        bool borrowed_stringbuilder_append =
-            (stringbuilder_append_rune || stringbuilder_append_string || stringbuilder_clear) &&
-            operation && operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED;
         if (map_entries_iterator) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -7089,20 +6870,15 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
                  : stable_id_is_zero(call->native_callee_identity)) &&
             call->result_mode ==
                 (direct_aggregate_result ? XR_TARGET_CALL_CALLER_STORAGE : XR_TARGET_CALL_VALUE) &&
-            /* Receiver-aliasing StringBuilder append preserves a borrowed
-             * receiver. Every genuinely fresh dynamic family agrees on
-             * RETURN_OWNED; the per-family branches below re-assert the same
-             * answer, so the shared and specific checks cannot drift. */
+            /* Fresh dynamic results carry their own return owner. */
             call->result_ownership ==
-                (borrowed_stringbuilder_append ? XR_TARGET_CALL_BORROW
-                 : runtime_constructor || array_member_owned_string_result ||
+                (runtime_constructor || array_member_owned_string_result ||
                          direct_string_result || direct_nullable_string_result ||
                          direct_array_result ||
                          direct_adt_enum_result || direct_class_instance_result ||
                          source_owned_reference_result || source_class_result ||
-                         stringbuilder_append_rune || string_runes || string_slice_range ||
-                         rune_to_string || stringbuilder_to_string || stringbuilder_append_string ||
-                         stringbuilder_clear || json_namespace_codec || string_utf8_static ||
+                         string_runes || string_slice_range ||
+                         rune_to_string || json_namespace_codec || string_utf8_static ||
                          class_construction || adt_enum_constructor || array_intrinsic ||
                          panic_info_constructor || container_copy || map_entries_iterator ||
                          map_entry_iterator_next || native_direct_fresh_result ||
@@ -8213,34 +7989,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             if (!valid) {
                 break;
             }
-        } else if (stringbuilder_append_rune) {
-            const XrSemanticTypeRecord *receiver_type =
-                xr_semantic_plan_type(semantic, operation->result_type);
-            bool borrowed = operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED;
-            valid =
-                receiver_type && !suspends &&
-                reconstruct_call_identity("xray-target-stringbuilder-append-rune-v1", operation->id,
-                                          receiver_type->id, append_argument, &expected_identity) &&
-                xr_stable_id_equal(call->identity, expected_identity) &&
-                call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
-                call->callee_function == XR_SEMANTIC_INDEX_NONE &&
-                call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
-                call->source_export == XR_SEMANTIC_INDEX_NONE &&
-                stable_id_is_zero(call->source_declaration_identity) &&
-                stable_id_is_zero(call->source_callee_identity) && call->argument_count == 0 &&
-                call->flags == 0 &&
-                call->calling_convention == XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_RUNE &&
-                call->target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_RUNE &&
-                call->result_ownership ==
-                    (borrowed ? XR_TARGET_CALL_BORROW : XR_TARGET_CALL_RETURN_OWNED) &&
-                result && result->slot < plan->slots_count &&
-                plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
-                plan->slots[result->slot].ownership ==
-                    (borrowed ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_OWNED);
-            if (!valid) {
-                break;
-            }
-        } else if (builtin_runtime_method) {
+        }  else if (builtin_runtime_method) {
             bool owned_dynamic =
                 builtin_runtime_result_class == XR_SEM_BUILTIN_RUNTIME_METHOD_RESULT_OWNED_DYNAMIC;
             bool nullable_scalar = !owned_dynamic && semantic_nullable_scalar_type_is_exact(result_type);
@@ -8560,75 +8309,7 @@ static bool verify_calls_partition(const XrTargetPlan *plan, const XrTargetParti
             if (!valid) {
                 break;
             }
-        } else if (stringbuilder_clear) {
-            bool borrowed = operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED;
-            valid = result_type && !suspends &&
-                    reconstruct_call_identity("xray-target-stringbuilder-clear-v1", operation->id,
-                                              result_type->id, stringbuilder_clear_receiver,
-                                              &expected_identity) &&
-                    xr_stable_id_equal(call->identity, expected_identity) &&
-                    call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
-                    call->callee_function == XR_SEMANTIC_INDEX_NONE &&
-                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
-                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
-                    stable_id_is_zero(call->source_declaration_identity) &&
-                    stable_id_is_zero(call->source_callee_identity) && call->argument_count == 0 &&
-                    call->flags == 0 &&
-                    call->calling_convention == XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CLEAR &&
-                    call->target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_CLEAR &&
-                    call->result_ownership ==
-                        (borrowed ? XR_TARGET_CALL_BORROW : XR_TARGET_CALL_RETURN_OWNED) &&
-                    result && result->slot < plan->slots_count &&
-                    plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
-                    plan->slots[result->slot].ownership ==
-                        (borrowed ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_OWNED);
-            if (!valid) {
-                break;
-            }
-        } else if (stringbuilder_to_string) {
-            valid = result_type && !suspends &&
-                    reconstruct_call_identity("xray-target-stringbuilder-to-string-v1",
-                                              operation->id, result_type->id, to_string_receiver,
-                                              &expected_identity) &&
-                    xr_stable_id_equal(call->identity, expected_identity) &&
-                    call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
-                    call->callee_function == XR_SEMANTIC_INDEX_NONE &&
-                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
-                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
-                    stable_id_is_zero(call->source_declaration_identity) &&
-                    stable_id_is_zero(call->source_callee_identity) && call->argument_count == 0 &&
-                    call->flags == 0 &&
-                    call->calling_convention == XR_TARGET_CALL_CONVENTION_STRINGBUILDER_TO_STRING &&
-                    call->target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_TO_STRING &&
-                    call->result_ownership == XR_TARGET_CALL_RETURN_OWNED && result &&
-                    result->slot < plan->slots_count &&
-                    plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
-                    plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED;
-            if (!valid) {
-                break;
-            }
-        } else if (stringbuilder_append_string) {
-            bool borrowed = operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED;
-            valid =
-                result_type && !suspends &&
-                reconstruct_call_identity("xray-target-stringbuilder-append-string-v1",
-                                          operation->id, result_type->id, append_string_argument,
-                                          &expected_identity) &&
-                xr_stable_id_equal(call->identity, expected_identity) &&
-                call->semantic_call_target == XR_SEMANTIC_INDEX_NONE && call->argument_count == 0 &&
-                call->flags == 0 &&
-                call->calling_convention == XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING &&
-                call->target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING &&
-                call->result_ownership ==
-                    (borrowed ? XR_TARGET_CALL_BORROW : XR_TARGET_CALL_RETURN_OWNED) &&
-                result && result->slot < plan->slots_count &&
-                plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
-                plan->slots[result->slot].ownership ==
-                    (borrowed ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_OWNED);
-            if (!valid) {
-                break;
-            }
-        } else if (panic_info_constructor) {
+        }    else if (panic_info_constructor) {
             /* The class is compiler-owned, so no source export, dependency, or
              * callee index can name it: the row carries the sealed identity
              * alone and the result owns the record the constructor allocates. */

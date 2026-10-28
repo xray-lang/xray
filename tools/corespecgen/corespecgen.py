@@ -35,6 +35,7 @@ REGISTRY_KEYS = {
     "capabilities",
     "traps",
     "features",
+    "retired_type_ids",
     "retired_operation_ids",
     "operations",
 }
@@ -133,8 +134,9 @@ def semantic_registry_projection(registry: dict[str, Any]) -> dict[str, Any]:
     for rows in ("types", "effects", "capabilities", "traps"):
         for row in projection[rows]:
             row.pop("description", None)
-    for row in projection["retired_operation_ids"]:
-        row.pop("reason", None)
+    for rows in ("retired_type_ids", "retired_operation_ids"):
+        for row in projection[rows]:
+            row.pop("reason", None)
     for operation in projection["operations"]:
         operation.pop("kat_validator", None)
         operation.pop("coverage", None)
@@ -210,6 +212,28 @@ def walk_keys(value: Any) -> set[str]:
     return keys
 
 
+def validate_retired_types(rows: Any, active_ids: set[int], active_names: set[str]) -> None:
+    retired = unique_rows(rows, "retired type registry", "stable_id")
+    retired_names: set[str] = set()
+    for row in retired:
+        require(set(row) == {"stable_id", "name", "reason"},
+                f"retired type {row.get('stable_id')} fields drifted")
+        require(type(row["stable_id"]) is int and 0 <= row["stable_id"] <= 65535,
+                "retired type has invalid stable id")
+        require(isinstance(row["name"], str) and row["name"],
+                "retired type has empty name")
+        require(isinstance(row["reason"], str) and row["reason"],
+                "retired type has empty reason")
+        require(row["stable_id"] not in active_ids,
+                f"type registry reuses retired id {row['stable_id']}")
+        require(row["name"] not in active_names,
+                f"type registry reuses retired name {row['name']}")
+        require(row["name"] not in retired_names, "retired type name is duplicated")
+        retired_names.add(row["name"])
+    require([row["stable_id"] for row in retired] == sorted(row["stable_id"] for row in retired),
+            "retired type registry must be sorted by stable id")
+
+
 def referenced_types(type_rule: dict[str, Any]) -> set[str]:
     result: set[str] = set()
     operands = type_rule.get("operands")
@@ -254,7 +278,8 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
     require(registry["epoch"] == 1, "W1 CoreSpec epoch must be 1")
     require(registry["feature_policy"] == "fail-closed", "unknown features must fail closed")
 
-    _, type_names = validate_named_registry(registry["types"], "type registry")
+    type_ids, type_names = validate_named_registry(registry["types"], "type registry")
+    validate_retired_types(registry["retired_type_ids"], type_ids, type_names)
     _, effect_names = validate_named_registry(registry["effects"], "effect registry")
     _, capability_names = validate_named_registry(registry["capabilities"], "capability registry")
     _, trap_names = validate_named_registry(registry["traps"], "trap registry")
@@ -352,8 +377,7 @@ def validate_registry(registry: dict[str, Any]) -> dict[str, dict[Any, dict[str,
                 and operation["determinism"]["allowed_trace"],
                 f"operation {spelling} lacks allowed trace")
         require(operation["kat_validator"] in {
-            "array-append", "bytes-timing-safe-equal", "string-builder-construct", "string-builder-append", "string-builder-clear",
-            "string-builder-length", "string-builder-snapshot",
+            "array-append", "bytes-timing-safe-equal",
             "channel-construct", "channel-is-closed", "scalar-bitcast64", "atomic-construct", "atomic-load", "atomic-exchange", "atomic-compare-exchange", "atomic-update",
             "aggregate-construct", "array-construct", "array-allocate-default", "sequence-element-place", "aggregate-project", "aggregate-update", "assert-condition",
             "class-construct", "owner-alias", "class-field-load", "class-field-place",
@@ -1306,33 +1330,6 @@ def contract_oracle(case: dict[str, Any], validator: str) -> bool:
                 and scalar_valid(actual.get("replacement"))
                 and type(actual.get("stored")) is type(actual.get("replacement"))
                 and actual.get("stored") == actual.get("replacement"))
-    if validator.startswith("string-builder-"):
-        operation = validator.removeprefix("string-builder-")
-        expected = {
-            "construct": ([], [], "string-builder", "owner"),
-            "append": (["string-builder", None], ["borrow-place-mut", "borrow-value"], "void", "non-owner"),
-            "clear": (["string-builder"], ["borrow-place-mut"], "void", "non-owner"),
-            "length": (["string-builder"], ["borrow-value"], "i64", "non-owner"),
-            "snapshot": (["string-builder"], ["borrow-value"], "string", "owner"),
-        }.get(operation)
-        if expected is None:
-            return False
-        types, modes, result, owner = expected
-        actual_types = actual.get("operand_types")
-        if operation == "append":
-            if (not isinstance(actual_types, list) or len(actual_types) != 2 or
-                    actual_types[1] not in {"string", "rune", "i64", "f64", "bool", "void"}):
-                return False
-            types = ["string-builder", actual_types[1]]
-        if (actual_types != types or actual.get("operand_modes") != modes or
-                actual.get("result_type") != result or actual.get("result_ownership") != owner or
-                actual.get("immediates") != {}):
-            return False
-        if operation != "construct" and (actual.get("receiver_rooted") is not True or
-                                          actual.get("receiver_initialized") is not True):
-            return False
-        return operation not in {"append", "clear"} or (
-            actual.get("receiver_writable") is True and actual.get("borrow_conflict") is False)
     if validator == "array-allocate-default":
         element = actual.get("element_type")
         return (element in {"bool", "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f64"}
@@ -2037,6 +2034,14 @@ def expect_invalid(label: str, registry: dict[str, Any], kats: dict[str, Any]) -
     raise CoreSpecError(f"self-test mutation was accepted: {label}")
 
 
+def expect_invalid_registry(label: str, registry: dict[str, Any]) -> None:
+    try:
+        validate_registry(registry)
+    except CoreSpecError:
+        return
+    raise CoreSpecError(f"self-test registry mutation was accepted: {label}")
+
+
 def self_test(registry: dict[str, Any], kats: dict[str, Any]) -> None:
     for name in ("i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64"):
         for field, invalid in (("width", 128), ("width", True), ("signed", 1),
@@ -2068,6 +2073,8 @@ def self_test(registry: dict[str, Any], kats: dict[str, Any]) -> None:
     governance = copy.deepcopy(registry)
     governance["operations"][0]["coverage"]["vm"]["status"] = "COMPLETE"
     governance["types"][0]["description"] += " Editorial clarification."
+    for row in governance["retired_type_ids"]:
+        row["reason"] += " Editorial clarification."
     require(semantic_registry_digest(governance) == semantic_registry_digest(registry),
             "governance or prose changed semantic identity")
     semantic = copy.deepcopy(registry)
@@ -2082,6 +2089,46 @@ def self_test(registry: dict[str, Any], kats: dict[str, Any]) -> None:
     mutation = copy.deepcopy(registry)
     mutation["operations"][0]["stable_id"] = mutation["retired_operation_ids"][0]["stable_id"]
     expect_invalid("retired id reuse", mutation, kats)
+
+    for retired in registry["retired_type_ids"]:
+        mutation = copy.deepcopy(registry)
+        mutation["types"].append({"stable_id": retired["stable_id"], "name": "replacement-owner",
+                                  "description": "A different type cannot reuse a retired identity."})
+        mutation["types"].sort(key=lambda row: row["stable_id"])
+        expect_invalid_registry("retired type id reuse", mutation)
+
+        mutation = copy.deepcopy(registry)
+        mutation["types"].append({"stable_id": max(row["stable_id"] for row in registry["types"]) + 2,
+                                  "name": retired["name"],
+                                  "description": "A retired type cannot be reintroduced at a different identity."})
+        expect_invalid_registry("retired type name reuse", mutation)
+
+    if registry["retired_type_ids"]:
+        mutation = copy.deepcopy(registry)
+        del mutation["retired_type_ids"][0]["reason"]
+        expect_invalid_registry("retired type missing reason", mutation)
+
+        mutation = copy.deepcopy(registry)
+        mutation["retired_type_ids"].append(copy.deepcopy(mutation["retired_type_ids"][0]))
+        expect_invalid_registry("duplicate retired type identity", mutation)
+
+        mutation = copy.deepcopy(registry)
+        mutation["retired_type_ids"][0]["stable_id"] = True
+        expect_invalid_registry("boolean retired type identity", mutation)
+
+    for retired in registry["retired_operation_ids"]:
+        mutation = copy.deepcopy(registry)
+        mutation["operations"][0]["stable_id"] = retired["stable_id"]
+        mutation["operations"].sort(key=lambda row: row["stable_id"])
+        expect_invalid_registry("every retired operation id reuse", mutation)
+
+        mutation = copy.deepcopy(registry)
+        mutation["operations"][0]["spelling"] = retired["spelling"]
+        expect_invalid_registry("retired operation spelling reuse", mutation)
+
+        kat_mutation = copy.deepcopy(kats)
+        kat_mutation["cases"][0]["operation"] = retired["spelling"]
+        expect_invalid("KAT with retired operation", registry, kat_mutation)
 
     mutation = copy.deepcopy(registry)
     mutation["operations"][0]["feature"] = "core.unknown"

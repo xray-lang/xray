@@ -3,7 +3,7 @@
  * Task 297: XrProgram semantic verifier and independent reference evaluator.
  */
 
-#include "xr_program_string_builder_fixture.h"
+#include "xr_program_retired_builder_fixture.h"
 #include "xr_program_array_default_fixture.h"
 #include "xr_program_array_append_fixture.h"
 #include "xr_program_string_slice_fixture.h"
@@ -80,20 +80,13 @@ _Static_assert(XR_CORE_TYPE_TARGET_ENDIAN == 10, "TargetEndian stable type id dr
 _Static_assert(XR_CORE_TYPE_TYPE_VARIABLE == 11, "type-variable stable type id drifted");
 _Static_assert(XR_CORE_TYPE_STRING == 12, "string stable type id drifted");
 _Static_assert(XR_CORE_TYPE_RUNE == 13, "rune stable type id drifted");
-_Static_assert(XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT == 20u, "runtime builtin row count drifted");
+_Static_assert(XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT == 19u, "runtime builtin row count drifted");
 _Static_assert(XR_CORE_PROGRAM_TYPE_DYNAMIC_BASE == 32u, "dynamic types overlap scalar ids");
 _Static_assert(XR_CORE_TYPE_I8 == 14u && XR_CORE_TYPE_U8 == 15u && XR_CORE_TYPE_I16 == 16u &&
                    XR_CORE_TYPE_I32 == 17u && XR_CORE_TYPE_U64 == 18u,
                "exact integer type ids drifted");
 
 _Static_assert(XR_CORE_TYPE_F64 == 19u, "f64 stable type id drifted");
-_Static_assert(XR_CORE_TYPE_STRING_BUILDER == 20u, "StringBuilder stable type id drifted");
-
-_Static_assert(XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT == 173u, "StringBuilder operation identity drifted");
-_Static_assert(XR_CORE_OP_CORE_STRING_BUILDER_APPEND == 174u, "StringBuilder operation identity drifted");
-_Static_assert(XR_CORE_OP_CORE_STRING_BUILDER_CLEAR == 175u, "StringBuilder operation identity drifted");
-_Static_assert(XR_CORE_OP_CORE_STRING_BUILDER_LENGTH == 176u, "StringBuilder operation identity drifted");
-_Static_assert(XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT == 177u, "StringBuilder operation identity drifted");
 _Static_assert(XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL == 178u, "Byte comparison operation identity drifted");
 
 static int failures = 0;
@@ -7286,37 +7279,6 @@ static void test_channel_operation_admission(void) {
     }
 }
 
-static void test_string_builder_contracts(void) {
-    for (unsigned mutation = 0u; mutation < 3u; ++mutation) {
-        XrProgramArtifact artifact = {0};
-        XrValidatedProgram *program = NULL;
-        CHECK(xr_program_string_builder_call_fixture_write(mutation, &artifact) == XR_PROGRAM_BUILD_OK);
-        XrProgramVerifyStatus status = xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL);
-        CHECK(mutation ? status != XR_PROGRAM_VERIFY_OK : status == XR_PROGRAM_VERIFY_OK);
-        xr_validated_program_free(program);
-        xr_program_artifact_free(&artifact);
-    }
-    for (unsigned mutation = 0u; mutation <= 10u; ++mutation) {
-        XrProgramArtifact artifact = {0};
-        XrProgramBuildStatus built = xr_program_string_builder_fixture_write(mutation, &artifact);
-        XrValidatedProgram *program = NULL;
-        XrProgramDiagnostic diagnostic = {0};
-        XrProgramVerifyStatus status = XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED;
-        if (built == XR_PROGRAM_BUILD_OK)
-            status = xr_program_validate(artifact.bytes, artifact.size, NULL, &program, &diagnostic);
-        if (mutation == 0u) {
-            if (status != XR_PROGRAM_VERIFY_OK)
-                fprintf(stderr, "StringBuilder admission failed: build=%u verify=%u\n", built, status);
-            CHECK(built == XR_PROGRAM_BUILD_OK && status == XR_PROGRAM_VERIFY_OK && program != NULL);
-        } else {
-            CHECK(built != XR_PROGRAM_BUILD_OK || status != XR_PROGRAM_VERIFY_OK);
-            CHECK(program == NULL);
-        }
-        xr_validated_program_free(program);
-        xr_program_artifact_free(&artifact);
-    }
-}
-
 int main(void) {
     for (unsigned scenario = 0u; scenario < 9u; ++scenario) {
         XrProgramArtifact artifact = {0}; XrValidatedProgram *program = NULL;
@@ -7333,7 +7295,7 @@ int main(void) {
         CHECK(status == (mutation ? XR_PROGRAM_VERIFY_SEMANTIC_REJECTED : XR_PROGRAM_VERIFY_OK));
         xr_validated_program_free(program); xr_program_artifact_free(&artifact);
     }
-    test_string_builder_contracts();
+    CHECK(xr_program_retired_builder_admission_controls());
     test_channel_operation_admission();
     test_assert_message_contract();
     for (unsigned mutation = 0u; mutation < 6u; ++mutation) {

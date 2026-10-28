@@ -1672,19 +1672,7 @@ static bool build_definition_map(const XrSemanticPlan *plan, uint32_t **out,
     return true;
 }
 
-static bool semantic_type_is_exact_string_builder(const XrSemanticTypeRecord *type) {
-    char expected[160];
-    int length = snprintf(expected, sizeof(expected),
-                          "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;named:13:StringBuilder[0]",
-                          (unsigned) XR_KIND_INSTANCE, (unsigned) XR_TID_STRINGBUILDER,
-                          (unsigned) XR_SCALAR_REP_NONE);
-    return type && length > 0 && (size_t) length < sizeof(expected) &&
-           type->kind == XR_KIND_INSTANCE && type->builtin_type == XR_TID_STRINGBUILDER &&
-           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->scalar_rep == XR_SCALAR_REP_NONE &&
-           type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
-           type->canonical_key && strcmp(type->canonical_key, expected) == 0;
-}
+
 
 static bool semantic_type_is_exact_string(const XrSemanticTypeRecord *type) {
     return type && type->kind == XR_KIND_STRING && type->builtin_type == XR_TID_NULL &&
@@ -1787,64 +1775,9 @@ static bool verify_string_byte_slice_view(const XrSemanticPlan *plan,
     return exact;
 }
 
-static bool string_builder_append_result_is_exact(const XrSemanticPlan *plan,
-                                                  const XrSemanticOperationRecord *operation) {
-    const XrSemanticFunctionRecord *function =
-        operation ? xr_semantic_plan_function(plan, operation->function) : NULL;
-    return operation &&
-           ((operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
-             operation->return_parameter == -1 &&
-             ((operation->return_provenance == XR_SEM_RETURN_OWNED &&
-               operation->return_complete == 1) ||
-              (operation->return_provenance == XR_SEM_RETURN_NONE &&
-               operation->return_complete == 0))) ||
-            (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
-             ((((operation->return_provenance == XR_SEM_RETURN_BORROWED_STATIC &&
-                 operation->return_parameter == -1) ||
-                (operation->return_provenance == XR_SEM_RETURN_BORROWED_PARAM && function &&
-                 operation->return_parameter >= 0 &&
-                 (uint16_t) operation->return_parameter < function->parameter_count)) &&
-               operation->return_complete == 1) ||
-              (operation->return_provenance == XR_SEM_RETURN_NONE &&
-               operation->return_parameter == -1 && operation->return_complete == 0))));
-}
 
-static bool verify_string_builder_append_rune(const XrSemanticPlan *plan,
-                                              const XrSemanticOperationRecord *operation,
-                                              char *error, size_t error_size) {
-    bool candidate = operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE;
-    if (!candidate)
-        return true;
-    const XrSemanticOperandRecord *receiver =
-        operation->operand_count == 2 && operation->operand_begin < plan->operand_count
-            ? &plan->operands[operation->operand_begin]
-            : NULL;
-    const XrSemanticOperandRecord *argument = receiver ? receiver + 1 : NULL;
-    const XrSemanticTypeRecord *receiver_type =
-        receiver && receiver->type < plan->type_count ? &plan->types[receiver->type] : NULL;
-    const XrSemanticTypeRecord *argument_type =
-        argument && argument->type < plan->type_count ? &plan->types[argument->type] : NULL;
-    const char *selector =
-        operation->metadata_count == 1 && operation->metadata_begin < plan->metadata_count
-            ? plan->metadata[operation->metadata_begin]
-            : NULL;
-    bool exact =
-        operation->opcode == XI_CALL_METHOD &&
-        operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_APPEND << 1 &&
-        operation->evidence[1] == XA_INTRINSIC_STRING_BUILDER_APPEND && selector &&
-        strcmp(selector, XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0 && receiver &&
-        argument && semantic_type_is_exact_string_builder(receiver_type) &&
-        operation->result_type == receiver->type && argument_type &&
-        argument_type->kind == XR_KIND_RUNE && argument_type->builtin_type == XR_TID_NULL &&
-        argument_type->child_count == 0 && argument_type->scalar_rep == XR_SCALAR_REP_NONE &&
-        argument_type->flags == 0 && receiver->role == XR_SEM_OPERAND_RECEIVER &&
-        receiver->parameter == -1 && receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-        argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
-        argument->flags == XR_SEM_OPERAND_CALL_CONTRACT && operation->result_alias_operand == 0 &&
-        string_builder_append_result_is_exact(plan, operation);
-    return exact || report(error, error_size, "XR_SEM_0019",
-                           "StringBuilder.append(rune) authority is not exact");
-}
+
+
 
 static bool verify_string_runes(const XrSemanticPlan *plan,
                                 const XrSemanticOperationRecord *operation, char *error,
@@ -1998,37 +1931,7 @@ static bool verify_string_slice_range(const XrSemanticPlan *plan,
                   "String.slice(start, end) authority is not exact");
 }
 
-static bool verify_string_builder_to_string(const XrSemanticPlan *plan,
-                                            const XrSemanticOperationRecord *operation, char *error,
-                                            size_t error_size) {
-    if (operation->intrinsic_kind != XR_SEM_INTRINSIC_STRINGBUILDER_TO_STRING)
-        return true;
-    const XrSemanticOperandRecord *receiver =
-        operation->operand_count == 1 && operation->operand_begin < plan->operand_count
-            ? &plan->operands[operation->operand_begin]
-            : NULL;
-    const XrSemanticTypeRecord *receiver_type =
-        receiver && receiver->type < plan->type_count ? &plan->types[receiver->type] : NULL;
-    const XrSemanticTypeRecord *result_type =
-        operation->result_type < plan->type_count ? &plan->types[operation->result_type] : NULL;
-    const char *selector =
-        operation->metadata_count == 1 && operation->metadata_begin < plan->metadata_count
-            ? plan->metadata[operation->metadata_begin]
-            : NULL;
-    bool exact =
-        operation->opcode == XI_CALL_METHOD && operation->semantic_immediate > 0 &&
-        (operation->semantic_immediate & 1) == 0 && selector && strcmp(selector, "toString") == 0 &&
-        receiver && semantic_type_is_exact_string_builder(receiver_type) && result_type &&
-        result_type->kind == XR_KIND_STRING && result_type->builtin_type == XR_TID_NULL &&
-        result_type->child_count == 0 && result_type->scalar_rep == XR_SCALAR_REP_NONE &&
-        result_type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
-        receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
-        receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT && operation->result_alias_operand == -1 &&
-        operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
-        operation->return_complete == 1;
-    return exact || report(error, error_size, "XR_SEM_0019",
-                           "StringBuilder.toString authority is not exact");
-}
+
 
 /* Recomputed from the frozen rows alone.  A class type record whose source
  * class index and identity are both absent can only be a compiler-owned
@@ -2583,73 +2486,9 @@ static bool verify_native_module_scalar_call(const XrSemanticPlan *plan,
                                          "native module scalar call authority is not exact");
 }
 
-static bool verify_string_builder_append_string(const XrSemanticPlan *plan,
-                                                const XrSemanticOperationRecord *operation,
-                                                char *error, size_t error_size) {
-    if (operation->intrinsic_kind != XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING)
-        return true;
-    const XrSemanticOperandRecord *receiver =
-        operation->operand_count == 2 && operation->operand_begin + 1u < plan->operand_count
-            ? &plan->operands[operation->operand_begin]
-            : NULL;
-    const XrSemanticOperandRecord *argument = receiver ? receiver + 1 : NULL;
-    const XrSemanticTypeRecord *receiver_type =
-        receiver && receiver->type < plan->type_count ? &plan->types[receiver->type] : NULL;
-    const XrSemanticTypeRecord *argument_type =
-        argument && argument->type < plan->type_count ? &plan->types[argument->type] : NULL;
-    const char *selector =
-        operation->metadata_count == 1 && operation->metadata_begin < plan->metadata_count
-            ? plan->metadata[operation->metadata_begin]
-            : NULL;
-    bool exact =
-        operation->opcode == XI_CALL_METHOD &&
-        operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_APPEND << 1 &&
-        operation->evidence[1] == XA_INTRINSIC_STRING_BUILDER_APPEND && selector &&
-        strcmp(selector, XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0 && receiver &&
-        argument && semantic_type_is_exact_string_builder(receiver_type) && argument_type &&
-        argument_type->kind == XR_KIND_STRING && operation->result_type == receiver->type &&
-        receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
-        receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-        argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
-        argument->flags == XR_SEM_OPERAND_CALL_CONTRACT && operation->result_alias_operand == 0 &&
-        string_builder_append_result_is_exact(plan, operation);
-    return exact || report(error, error_size, "XR_SEM_0019",
-                           "StringBuilder.append(string) authority is not exact");
-}
 
-static bool verify_string_builder_constructor(const XrSemanticPlan *plan,
-                                              const XrSemanticOperationRecord *operation,
-                                              char *error, size_t error_size) {
-    if (operation->opcode != XI_CALL_BUILTIN)
-        return true;
-    const XrSemanticTypeRecord *type =
-        operation->result_type < plan->type_count ? &plan->types[operation->result_type] : NULL;
-    bool type_names_constructor = semantic_type_is_exact_string_builder(type);
-    const char *metadata =
-        operation->metadata_count == 1 && operation->metadata_begin < plan->metadata_count
-            ? plan->metadata[operation->metadata_begin]
-            : NULL;
-    bool metadata_names_constructor = metadata && strcmp(metadata, "StringBuilder") == 0;
-    if (!type_names_constructor && !metadata_names_constructor)
-        return true;
-    bool exact =
-        type_names_constructor && metadata_names_constructor && operation->operand_count == 0 &&
-        operation->auxiliary_kind == XI_AUX_KIND_NONE && operation->semantic_immediate == 0 &&
-        operation->constant == XR_SEMANTIC_INDEX_NONE &&
-        operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
-        operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
-        operation->ownership_use == xi_generated_op_own_use(XI_CALL_BUILTIN) &&
-        operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
-        operation->transfer_mode == XR_TRANSFER_SHARE &&
-        operation->parameter_mode == XR_PARAM_READ &&
-        operation->parameter_ownership == XI_OWN_NONE &&
-        operation->flags == xi_generated_op_default_flags(XI_CALL_BUILTIN) &&
-        operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
-        operation->return_provenance == XR_SEM_RETURN_OWNED && operation->return_complete == 1 &&
-        xr_semantic_allocation_identity_is_canonical(operation);
-    return exact || report(error, error_size, "XR_SEM_0019",
-                           "StringBuilder constructor authority is not exact");
-}
+
+
 
 static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *edge_mask,
                                      uint32_t *definitions, uint32_t value_count, char *error,
@@ -2712,6 +2551,13 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
               plan->functions[operation->callable_function].parent != operation->function))) {
             return report(error, error_size, "XR_SEM_0015", "operation record is invalid");
         }
+        if (operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE ||
+            operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_TO_STRING ||
+            operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING)
+            return report(error, error_size, "XR_SEM_0019", "retired text-builder intrinsic");
+        if (operation->opcode == XI_CALL_BUILTIN && operation->metadata_count == 1 &&
+            strcmp(plan->metadata[operation->metadata_begin], "StringBuilder") == 0)
+            return report(error, error_size, "XR_SEM_0019", "retired text-builder constructor");
         if (import_ref) {
             if (operation->metadata_count != 2 ||
                 operation->metadata_begin > plan->metadata_count ||
@@ -2760,12 +2606,6 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         if (!verify_rune_is_whitespace(plan, operation, error, error_size))
             return false;
         if (!verify_string_slice_range(plan, operation, error, error_size))
-            return false;
-        if (!verify_string_builder_append_rune(plan, operation, error, error_size))
-            return false;
-        if (!verify_string_builder_to_string(plan, operation, error, error_size))
-            return false;
-        if (!verify_string_builder_append_string(plan, operation, error, error_size))
             return false;
         if (!verify_json_namespace_codec(plan, operation, error, error_size))
             return false;
@@ -2817,8 +2657,6 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
             !verify_id(operation->allocation_key, operation->allocation_id)) {
             return report(error, error_size, "XR_SEM_0002", "allocation identity is invalid");
         }
-        if (!verify_string_builder_constructor(plan, operation, error, error_size))
-            return false;
         if (operation->opcode == XI_TRY && (operation->evidence[7] >= plan->block_count ||
                                             (edge_mask[i] & XR_SEM_OPERATION_EDGE_PANIC) == 0)) {
             return report(error, error_size, "XR_SEM_0010",

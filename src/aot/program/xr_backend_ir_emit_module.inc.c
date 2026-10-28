@@ -354,13 +354,6 @@ static bool emit_module_storage(CBuffer *buffer, const XrBackendIR *ir) {
                      "    return 1;\n"
                      "}\n\n"))
         return false;
-    if (has_string_builder_values(ir) && !append_format(buffer,
-            "void xr_aot_promote_%u(XrAotContext *destination, XrStringBuilderStorage *value) {\n"
-            "    if (!value) return;\n"
-            "    (void)xr_aot_transfer_allocation(destination, value);\n"
-            "    (void)xr_aot_transfer_allocation(destination, value->bytes);\n"
-            "}\n\n", XR_CORE_TYPE_STRING_BUILDER))
-        return false;
     if (has_string_values(ir) &&
         !append_format(buffer,
                        "void xr_aot_promote_%u(XrAotContext *destination, XrAotString *value) {\n"

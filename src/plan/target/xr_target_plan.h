@@ -154,10 +154,6 @@ typedef enum XrTargetExecutionFamily {
                  XR_TARGET_FAMILY_DIRECT_LOCAL_GO_CALLEE_STORAGE |                                 \
                  XR_TARGET_FAMILY_SOURCE_IMPORT_STORAGE |                                          \
                  XR_TARGET_FAMILY_STRING_BYTE_SLICE_VIEW_STORAGE |                                 \
-                 XR_TARGET_FAMILY_STRINGBUILDER_APPEND_RUNE_STORAGE |                              \
-                 XR_TARGET_FAMILY_STRINGBUILDER_TO_STRING_STORAGE |                                \
-                 XR_TARGET_FAMILY_STRINGBUILDER_APPEND_STRING_STORAGE |                            \
-                 XR_TARGET_FAMILY_STRINGBUILDER_CLEAR_STORAGE |                                    \
                  XR_TARGET_FAMILY_JSON_NAMESPACE_CODEC_STORAGE |                                   \
                  XR_TARGET_FAMILY_DIRECT_LOCAL_STRING_BOUNDARY_STORAGE |                           \
                  XR_TARGET_FAMILY_ARRAY_ALLOCATION_STORAGE |                                       \

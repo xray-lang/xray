@@ -1152,92 +1152,6 @@ done:
     dispatch->outcome = result;
 }
 
-static void vm_dispatch_string_builder(XrVmDispatch *dispatch) {
-    XrVmExecution *execution = dispatch->execution;
-    XrVmInstructionView instruction = dispatch->instruction;
-    XrVmContext *context = &execution->context;
-    XrVmRuntimeValue *values = execution->values;
-    XrVmRuntimeValue produced = dispatch->produced;
-    XrVmOutcome result = dispatch->outcome;
-    XrVmStringBuilderValue *builder = NULL;
-    dispatch->terminal = true;
-    if (instruction.operand_count) {
-        XrVmRuntimeValue receiver = values[instruction.operands[0]];
-        if (receiver.category == XR_CORE_IR_PLACE && !receiver.as.place->initialized) {
-            result.kind = XR_VM_OUTCOME_TRAP;
-            result.trap = XR_VM_TRAP_MODULE_SLOT_UNINITIALIZED;
-            goto done;
-        }
-        XrVmValue value = receiver.category == XR_CORE_IR_PLACE
-            ? *vm_place_value_const(receiver.as.place) : receiver.as.value;
-        if (value.kind != XR_VM_VALUE_STRING_BUILDER || !value.as.string_builder) goto done;
-        builder = (XrVmStringBuilderValue *) (void *) value.as.string_builder;
-    }
-    switch (instruction.operation_id) {
-        case XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT:
-            builder = allocate_string_builder(context);
-            if (!builder) goto resource_limit;
-            produced.as.value.kind = XR_VM_VALUE_STRING_BUILDER;
-            produced.as.value.as.string_builder = builder;
-            break;
-        case XR_CORE_OP_CORE_STRING_BUILDER_APPEND: {
-            XrVmValue operand = values[instruction.operands[1]].as.value;
-            XrTextDisplayOperand display = {0};
-            if (operand.kind != XR_VM_VALUE_VOID && !vm_display_operand(&operand, &display)) goto done;
-            XrVmContext allocation = *context;
-            allocation.storage = builder->cell.storage;
-            XrStringBuilderAllocator allocator = {&allocation, vm_builder_allocate, vm_builder_release};
-            size_t old_capacity = builder->text.capacity;
-            uint64_t occupied = allocation.storage->aggregate_cell_count;
-            if (occupied > context->code->options.max_value_cells) goto resource_limit;
-            size_t maximum = (size_t) (context->code->options.max_value_cells - occupied) + old_capacity;
-            XrStringBuilderResult appended = xr_string_builder_append_value(&builder->text,
-                operand.kind == XR_VM_VALUE_VOID ? NULL : &display, maximum, &allocator);
-            if (appended == XR_STRING_BUILDER_RESOURCE_LIMIT) goto resource_limit;
-            if (appended != XR_STRING_BUILDER_OK) goto done;
-            size_t growth = builder->text.capacity - old_capacity;
-            allocation.storage->aggregate_cell_count += growth;
-            builder->cell.cell_count += growth;
-            break;
-        }
-        case XR_CORE_OP_CORE_STRING_BUILDER_CLEAR:
-            if (!xr_string_builder_clear(&builder->text)) goto done;
-            break;
-        case XR_CORE_OP_CORE_STRING_BUILDER_LENGTH:
-            produced.as.value.kind = XR_VM_VALUE_I64;
-            produced.as.value.as.i64 = (int64_t) builder->text.scalar_count;
-            break;
-        case XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT: {
-            uint64_t occupied = context->storage->aggregate_cell_count;
-            if (occupied >= context->code->options.max_value_cells ||
-                builder->text.size > XR_PROGRAM_CONSTANT_STRING_MAX_BYTES) goto resource_limit;
-            size_t maximum = (size_t) (context->code->options.max_value_cells - occupied - 1u);
-            XrStringBuilderAllocator allocator = {context, vm_builder_allocate, vm_builder_release};
-            uint8_t *bytes = NULL;
-            if (xr_string_builder_snapshot(&builder->text, maximum, &allocator, &bytes) !=
-                XR_STRING_BUILDER_OK) goto resource_limit;
-            XrVmStringValue *string = xr_calloc(1u, sizeof(*string));
-            if (!string) { xr_free(bytes); goto resource_limit; }
-            string->bytes = bytes;
-            string->size = (uint32_t) builder->text.size;
-            string->scalar_count = (uint32_t) builder->text.scalar_count;
-            vm_value_cell_link(context->storage, &string->cell, XR_VM_VALUE_STRING,
-                               (uint64_t) string->size + 1u);
-            produced.as.value = vm_string_value(string);
-            break;
-        }
-        default:
-            goto done;
-    }
-    dispatch->terminal = false;
-    goto done;
-resource_limit:
-    result.kind = XR_VM_OUTCOME_RESOURCE_LIMIT;
-done:
-    dispatch->produced = produced;
-    dispatch->outcome = result;
-}
-
 static void vm_dispatch_aggregate_variant(XrVmDispatch *dispatch) {
     XrVmExecution *execution = dispatch->execution;
     XrVmInstructionView instruction = dispatch->instruction;
@@ -1361,7 +1275,7 @@ static void vm_dispatch_aggregate_variant(XrVmDispatch *dispatch) {
                                array->field_capacity;
             XrVmContext allocation = *context;
             allocation.storage = owner_storage;
-            XrArrayAppendAllocator allocator = {&allocation, vm_array_backing_allocate, vm_builder_release};
+            XrArrayAppendAllocator allocator = {&allocation, vm_array_backing_allocate, vm_array_backing_release};
             XrArrayAppendStorage storage = {array->fields, array->field_count, array->field_capacity};
             /* The allocator budget is in value cells here, not payload bytes. */
             XrArrayAppendResult appended = xr_array_append_storage(&storage, sizeof(XrVmValue),

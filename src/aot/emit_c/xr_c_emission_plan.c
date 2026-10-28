@@ -2064,8 +2064,6 @@ exact_direct_local_tagged_ref_parameter_prior(const XrCEmissionModuleScope *scop
         return false;
     if (xr_semantic_task_type_is_exact(semantic, parameter->type) ||
         xr_semantic_class_instance_type_source_class(semantic, array) != XR_SEMANTIC_INDEX_NONE ||
-        xr_semantic_runtime_constructor_type_is_exact(array, XR_KIND_INSTANCE, XR_TID_STRINGBUILDER,
-                                                      "StringBuilder", NULL) ||
         (array->kind == XR_KIND_STRUCT_OBJECT &&
          xr_semantic_source_structural_shape_is_exact(semantic, parameter->type))) {
         if (out_storage)
@@ -2589,8 +2587,6 @@ static const XrTargetCallRecord *runtime_constructor_call(const XrCEmissionModul
 
 static const char *runtime_constructor_symbol(XrSemanticRuntimeConstructorKind kind) {
     switch (kind) {
-        case XR_SEM_RUNTIME_CONSTRUCTOR_STRINGBUILDER:
-            return "xrt_strbuf_new";
         case XR_SEM_RUNTIME_CONSTRUCTOR_ATOMIC_I64:
             return "xr_aot_atomic_new_i64";
         case XR_SEM_RUNTIME_CONSTRUCTOR_ATOMIC_F64:

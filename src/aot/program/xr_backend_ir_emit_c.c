@@ -31,7 +31,6 @@
 #include "xr_channel_storage_embedded.inc.c"
 #include "xr_byte_compare_core_embedded.inc.c"
 #include "xr_buffer_capacity_core_embedded.inc.c"
-#include "xr_string_builder_storage_embedded.inc.c"
 #include "xstable_id_embedded.inc.c"
 #include "xr_provider_value_embedded.inc.c"
 
@@ -128,8 +127,6 @@ static const char *type_c_name(uint16_t type_id, char storage[32]) {
             return "uint16_t";
         case XR_CORE_TYPE_VOID:
             return "void";
-        case XR_CORE_TYPE_STRING_BUILDER:
-            return "XrStringBuilderStorage *";
         case XR_CORE_TYPE_STRING:
             return "XrAotString *";
         case XR_CORE_TYPE_RUNE:
@@ -175,8 +172,6 @@ static uint32_t outcome_value_kind(uint16_t type_id) {
         case XR_CORE_TYPE_TARGET_ABI:
         case XR_CORE_TYPE_TARGET_ENDIAN:
             return 6u;
-        case XR_CORE_TYPE_STRING_BUILDER:
-            return 15u;
         case XR_CORE_TYPE_STRING:
             return 8u;
         case XR_CORE_TYPE_RUNE:
@@ -420,7 +415,6 @@ static const char *outcome_field(uint16_t type_id) {
             return "u16";
         case XR_CORE_TYPE_ERROR:
             return "error";
-        case XR_CORE_TYPE_STRING_BUILDER:
         case XR_CORE_TYPE_STRING:
             return "pointer";
         case XR_CORE_TYPE_RUNE:
@@ -491,37 +485,6 @@ static bool has_string_values(const XrBackendIR *ir) {
     return false;
 }
 
-static bool has_string_builder_values(const XrBackendIR *ir) {
-    for (uint32_t module = 0u; module < ir->program->module_count; ++module)
-        for (uint32_t slot = 0u; slot < ir->program->modules[module].slot_count; ++slot)
-            if (ir->program->modules[module].slots[slot].type_id == XR_CORE_TYPE_STRING_BUILDER)
-                return true;
-    for (uint32_t index = 0u; index < ir->program->type_count; ++index) {
-        const XrValidatedType *type = &ir->program->types[index];
-        if (type->kind == XR_CORE_IR_TYPE_ARRAY && type->array_element_type == XR_CORE_TYPE_STRING_BUILDER)
-            return true;
-        for (uint32_t field = 0u; field < type->field_count; ++field)
-            if (type->field_types[field] == XR_CORE_TYPE_STRING_BUILDER)
-                return true;
-        for (uint32_t variant = 0u; variant < type->variant_count; ++variant)
-            for (uint32_t field = 0u; field < type->variants[variant].payload_count; ++field)
-                if (type->variants[variant].payload_types[field] == XR_CORE_TYPE_STRING_BUILDER)
-                    return true;
-    }
-    for (uint32_t function = 0; ir && function < ir->program->function_count; ++function) {
-        const XrValidatedFunction *fn = &ir->program->functions[function];
-        for (uint32_t value = 0; value < fn->value_count; ++value)
-            if (fn->value_types[value] == XR_CORE_TYPE_STRING_BUILDER)
-                return true;
-        for (uint32_t parameter = 0; parameter < fn->parameter_count; ++parameter)
-            if (fn->parameter_types[parameter] == XR_CORE_TYPE_STRING_BUILDER)
-                return true;
-        if (fn->result_type_id == XR_CORE_TYPE_STRING_BUILDER)
-            return true;
-    }
-    return false;
-}
-
 /* Whether an instruction releases a string owner through the arena free
  * helper; the emitter and the helper gate ask this one predicate. */
 static bool instruction_drops_string_owner(const XrValidatedFunction *function,
@@ -541,8 +504,7 @@ static void scan_string_helpers(const XrBackendIR *ir, bool *bytes, bool *intege
                 const XrValidatedInstruction *op = &block->instructions[i];
                 /* Copies may reach strings through nested values or captures;
                  * the inline byte helper is also available to typed helpers. */
-                *bytes |= op->operation_id == XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT ||
-                          op->operation_id == XR_CORE_OP_CORE_STRING_SLICE ||
+                *bytes |= op->operation_id == XR_CORE_OP_CORE_STRING_SLICE ||
                           op->operation_id == XR_CORE_OP_CORE_CONSTANT_STRING ||
                           (op->operation_id == XR_CORE_OP_CORE_OWNER_COPY && string_values) ||
                           (op->operation_id == XR_CORE_OP_CORE_ASSERT_CONDITION &&
@@ -558,7 +520,7 @@ static void scan_helpers(const XrBackendIR *ir, bool *checked, bool *wrapping, b
                          bool *output) {
     *checked = false;
     *wrapping = false;
-    *arena = has_class_reference_types(ir) || has_string_values(ir) || has_string_builder_values(ir);
+    *arena = has_class_reference_types(ir) || has_string_values(ir);
     for (uint32_t index = 0u; index < ir->program->type_count; ++index)
         *arena |= ir->program->types[index].kind == XR_CORE_IR_TYPE_ARRAY ||
                   ir->program->types[index].kind == XR_CORE_IR_TYPE_ATOMIC ||
@@ -639,8 +601,6 @@ static bool program_uses_operation(const XrBackendIR *ir, uint16_t operation) {
     return false;
 }
 
-static bool emit_string_builder_runtime(CBuffer *buffer, bool snapshot);
-
 static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone_main) {
     bool checked = false;
     bool wrapping = false;
@@ -648,16 +608,15 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
     bool output = false;
     scan_helpers(ir, &checked, &wrapping, &arena, &output);
     bool classes = has_class_reference_types(ir);
-    bool builders = has_string_builder_values(ir);
-    bool owner_drops = has_affine_owner_drops(ir) || has_panic_messages(ir) || builders;
+    bool owner_drops = has_affine_owner_drops(ir) || has_panic_messages(ir);
     bool host_providers =
         standalone_main && xr_validated_program_provider_requirement_count(ir->program) != 0u;
-    bool text = builders || has_string_values(ir) || output || (standalone_main && has_boundary_error(ir));
+    bool text = has_string_values(ir) || output || (standalone_main && has_boundary_error(ir));
     bool f64_constants = program_uses_operation(ir, XR_CORE_OP_CORE_SCALAR_BITCAST64);
     for (uint32_t index = 0u; index < ir->program->constant_count; ++index)
         f64_constants |= ir->program->constants[index].kind == XR_CORE_IR_CONSTANT_F64;
     bool strings = has_string_values(ir);
-    bool arena_allocations = !arena || classes || strings || builders;
+    bool arena_allocations = !arena || classes || strings;
     for (uint32_t index = 0u; index < ir->program->type_count; ++index)
         arena_allocations |= ir->program->types[index].kind == XR_CORE_IR_TYPE_ARRAY ||
                              ir->program->types[index].kind == XR_CORE_IR_TYPE_CALLABLE ||
@@ -668,7 +627,7 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
     /* Type declarations and drop helpers can need arena layout without any
      * allocation in this translation unit (for example a nullable record
      * initialized to null). Emit the allocator only when a body calls it. */
-    bool allocates = builders || string_bytes || string_integer || string_concat ||
+    bool allocates = string_bytes || string_integer || string_concat ||
                      program_uses_operation(ir, XR_CORE_OP_CORE_CLASS_CONSTRUCT);
     for (uint32_t index = 0u; index < ir->program->type_count; ++index)
         allocates |= ir->program->types[index].kind == XR_CORE_IR_TYPE_ARRAY ||
@@ -747,11 +706,8 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
         return false;
     if (program_uses_operation(ir, XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL) &&
         !append_text(buffer, (const char *) xr_byte_compare_core_source)) return false;
-    if (builders && (!append_text(buffer, (const char *) xr_buffer_capacity_core_source) ||
-                     !append_text(buffer, (const char *) xr_string_builder_storage_source)))
-        return false;
     if (program_uses_operation(ir, XR_CORE_OP_CORE_ARRAY_APPEND) &&
-        ((!builders && !append_text(buffer, (const char *) xr_buffer_capacity_core_source)) ||
+        (!append_text(buffer, (const char *) xr_buffer_capacity_core_source) ||
          !append_text(buffer, (const char *) xr_array_append_kernel_source)))
         return false;
     if (program_uses_operation(ir, XR_CORE_OP_CORE_ARRAY_ALLOCATE_DEFAULT) &&
@@ -910,9 +866,6 @@ static bool emit_prelude(CBuffer *buffer, const XrBackendIR *ir, bool standalone
         "    return xr_aot_alloc((XrAotContext *)context, size);\n}\n"
         "static void xr_aot_array_release(void *context, void *pointer) {\n"
         "    xr_aot_free((XrAotContext *)context, pointer);\n}\n"))
-        return false;
-    if (builders && !emit_string_builder_runtime(buffer,
-            program_uses_operation(ir, XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT)))
         return false;
     if (string_integer &&
         !append_text(buffer, "static XrAotString *xr_aot_string_from_scalar(XrAotContext *context, "
@@ -2376,7 +2329,6 @@ static const char *display_operand_kind(uint16_t type_id) {
     }
 }
 
-#include "xr_backend_ir_emit_string_builder.inc.c"
 
 static bool emit_output_group(CBuffer *buffer, const XrValidatedFunction *function,
                               const XrValidatedInstruction *instruction, uint32_t function_id) {
@@ -2944,12 +2896,6 @@ static bool emit_instruction(CBuffer *buffer, const XrBackendIR *ir,
             return append_format(buffer, "        v%u = *v%u;\n        v%u = NULL;\n",
                                  instruction->result_id, instruction->operands[0],
                                  instruction->operands[0]);
-        case XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT:
-        case XR_CORE_OP_CORE_STRING_BUILDER_APPEND:
-        case XR_CORE_OP_CORE_STRING_BUILDER_CLEAR:
-        case XR_CORE_OP_CORE_STRING_BUILDER_LENGTH:
-        case XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT:
-            return emit_string_builder_operation(buffer, ir, function, instruction);
         case XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL:
             return append_format(buffer,
                 "        v%u = xr_crypto_core_timing_safe_equal(v%u.storage->data, v%u.storage->length, 1u, "

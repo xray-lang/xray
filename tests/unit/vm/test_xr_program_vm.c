@@ -3,7 +3,7 @@
  * Task 299: runtime-only typed VM over the validated XrProgram graph.
  */
 
-#include "../program/xr_program_string_builder_fixture.h"
+#include "../program/xr_program_retired_builder_fixture.h"
 #include "../program/xr_program_array_default_fixture.h"
 #include "../program/xr_program_array_append_fixture.h"
 #include "../program/xr_program_string_slice_fixture.h"
@@ -5663,69 +5663,14 @@ static void test_f64_scalar_execution(void) {
     xr_program_artifact_free(&artifact);
 }
 
-static void test_string_builder_execution(void) {
-    XrProgramArtifact artifact = {0};
-    XrValidatedProgram *program = NULL;
-    REQUIRE(xr_program_string_builder_fixture_write(0u, &artifact) == XR_PROGRAM_BUILD_OK);
-    REQUIRE(xr_program_validate(artifact.bytes, artifact.size, NULL, &program, NULL) == XR_PROGRAM_VERIFY_OK);
-    const XrValidatedInstruction *ops = program->functions[program->entry_function].blocks[0].instructions;
-    REQUIRE(ops[0].operation_id == XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT);
-    REQUIRE(ops[3].operation_id == XR_CORE_OP_CORE_STRING_BUILDER_APPEND);
-    REQUIRE(ops[6].operation_id == XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT);
-    REQUIRE(ops[7].operation_id == XR_CORE_OP_CORE_STRING_BUILDER_CLEAR);
-    REQUIRE(ops[8].operation_id == XR_CORE_OP_CORE_STRING_BUILDER_LENGTH);
-    XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
-    REQUIRE(profile != NULL);
-    TestProviderBindings bindings;
-    build_provider_bindings(profile, &bindings);
-    const uint8_t expected[] = {'A', 0, 0xc3, 0xa9, 0xf0, 0x9f, 0x98, 0x80};
-    for (unsigned budget = 0u; budget < 2u; ++budget) {
-        XrVmCodeOptions options = xr_vm_code_default_options();
-        options.max_value_cells = budget ? 1024u : 1u;
-        XrVmCode *code = NULL;
-        REQUIRE(xr_vm_code_build(program, profile, &options, &code, NULL) == XR_VM_CODE_OK);
-        for (unsigned independent = 0u; independent < 2u; ++independent) {
-            XrInstance *instance = create_instance(program, profile, &bindings, 1u);
-            XrVmOutcome result = xr_vm_code_execute(code, instance, program->entry_function, NULL, 0u);
-            if (!budget) REQUIRE(result.kind == XR_VM_OUTCOME_RESOURCE_LIMIT);
-            else {
-                REQUIRE(result.kind == XR_VM_OUTCOME_RETURN && result.owns_dynamic_values);
-                XrVmStringView view;
-                REQUIRE(xr_vm_value_string_view(&result.value, &view));
-                REQUIRE(view.size == sizeof(expected) && memcmp(view.bytes, expected, sizeof(expected)) == 0);
-            }
-            xr_vm_outcome_dispose(&result);
-            retire_and_free(&instance);
-        }
-        xr_vm_code_free(code);
-    }
-    XrProgramArtifact call_artifact = {0};
-    XrValidatedProgram *call_program = NULL;
-    REQUIRE(xr_program_string_builder_call_fixture_write(0u, &call_artifact) == XR_PROGRAM_BUILD_OK);
-    REQUIRE(xr_program_validate(call_artifact.bytes, call_artifact.size, NULL, &call_program, NULL) == XR_PROGRAM_VERIFY_OK);
-    XrInstance *call_instance = create_instance(call_program, profile, &bindings, 1u);
-    XrVmCode *call_code = NULL;
-    REQUIRE(xr_vm_code_build(call_program, profile, NULL, &call_code, NULL) == XR_VM_CODE_OK);
-    XrVmOutcome call_result = xr_vm_code_execute(call_code, call_instance, call_program->entry_function, NULL, 0u);
-    REQUIRE(call_result.kind == XR_VM_OUTCOME_RETURN && call_result.value.kind == XR_VM_VALUE_I64);
-    REQUIRE(call_result.value.as.i64 == 0);
-    xr_vm_outcome_dispose(&call_result);
-    xr_vm_code_free(call_code);
-    retire_and_free(&call_instance);
-    xr_validated_program_free(call_program);
-    xr_program_artifact_free(&call_artifact);
-    xr_target_profile_free(profile);
-    xr_validated_program_free(program);
-    xr_program_artifact_free(&artifact);
-}
-
 int main(int argc, char **argv) {
     const XrCoreOperationSpec *byte_compare =
         xr_core_spec_operation_by_id(XR_CORE_OP_CORE_BYTES_TIMING_SAFE_EQUAL);
     REQUIRE(byte_compare && byte_compare->vm_status == XR_CORE_COVERAGE_COMPLETE &&
           byte_compare->decoder_status == XR_CORE_COVERAGE_COMPLETE);
     if (argc == 1) {
-        test_string_builder_execution();
+        /* Retired artifacts stop before VM code construction or execution. */
+        REQUIRE(xr_program_retired_builder_admission_controls());
         test_f64_scalar_execution();
     }
     if (argc == 1) {

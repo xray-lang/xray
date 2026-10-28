@@ -6,8 +6,8 @@
 #include <stdint.h>
 
 #define XR_PROGRAM_FORMAT_MAJOR 3u
-#define XR_PROGRAM_FORMAT_MINOR 11u
-#define XR_PROGRAM_SCHEMA_SHA256 "ec846ecc84ec5d56f3646be719db19621b31259cd40a643ec902374f627b7da2"
+#define XR_PROGRAM_FORMAT_MINOR 12u
+#define XR_PROGRAM_SCHEMA_SHA256 "1e8ff270ccb97074ec964c096925e4921fb548f5dd777f8ebc59cd6c5f57fc46"
 #define XR_PROGRAM_ID_DOMAIN "xray-program-id-v3"
 #define XR_PROGRAM_MAGIC_SIZE 8u
 /* clang-format off */

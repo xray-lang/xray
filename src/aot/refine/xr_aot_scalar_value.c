@@ -61,8 +61,6 @@ static bool parameter_identity_is_exact(const XiFunc *function, const XiValue *v
  * SemanticPlan type producer. A matching spelling with a source class_ref is
  * deliberately not a builtin and cannot inherit its frozen storage flags. */
 static uint32_t live_frozen_builtin_type(const XrType *type) {
-    if (xr_type_is_builtin_named_class(type, "StringBuilder"))
-        return XR_TID_STRINGBUILDER;
     if (xr_type_is_builtin_named_class(type, "Task"))
         return XR_TID_COROUTINE;
     return XR_TID_NULL;

@@ -33,7 +33,6 @@
  * functions. Physical layout and emission bindings are verified separately. */
 typedef enum {
     XR_SEM_RUNTIME_CONSTRUCTOR_NONE,
-    XR_SEM_RUNTIME_CONSTRUCTOR_STRINGBUILDER,
     XR_SEM_RUNTIME_CONSTRUCTOR_ATOMIC_I64,
     XR_SEM_RUNTIME_CONSTRUCTOR_ATOMIC_F64,
     XR_SEM_RUNTIME_CONSTRUCTOR_ATOMIC_BOOL,
@@ -69,7 +68,7 @@ xr_semantic_runtime_constructor_signature(const XrSemanticPlan *plan,
                                           const XrSemanticOperationRecord *operation,
                                           XrSemanticRuntimeConstructorShape *out) {
     if (!plan || !operation ||
-        (operation->opcode != XI_CALL_BUILTIN && operation->opcode != XI_CALL) ||
+        operation->opcode != XI_CALL ||
         operation->result_value == XR_SEMANTIC_INDEX_NONE ||
         operation->auxiliary_kind != XI_AUX_KIND_NONE || operation->semantic_immediate != 0 ||
         operation->constant != XR_SEMANTIC_INDEX_NONE ||
@@ -90,17 +89,10 @@ xr_semantic_runtime_constructor_signature(const XrSemanticPlan *plan,
     const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
     const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, operation->result_type);
     XrSemanticRuntimeConstructorShape shape = {
-        .kind = XR_SEM_RUNTIME_CONSTRUCTOR_STRINGBUILDER,
+        .kind = XR_SEM_RUNTIME_CONSTRUCTOR_NONE,
         .argument_value = XR_SEMANTIC_INDEX_NONE,
     };
-    if (operation->opcode == XI_CALL_BUILTIN) {
-        if (operation->operand_count != 0 || operation->metadata_count != 1 ||
-            operation->metadata_begin >= metadata_count || !metadata ||
-            strcmp(metadata[operation->metadata_begin], "StringBuilder") != 0 ||
-            !xr_semantic_runtime_constructor_type_is_exact(
-                type, XR_KIND_INSTANCE, XR_TID_STRINGBUILDER, "StringBuilder", NULL))
-            return false;
-    } else {
+    {
         uint32_t operand_count = 0, child_count = 0;
         const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
         const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);

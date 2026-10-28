@@ -65,7 +65,7 @@ static bool type_needs_owned_drop(const XrBackendIR *ir, uint16_t type_id) {
     const XrValidatedType *type = xr_validated_program_type(ir->program, type_id);
     /* Panic messages reuse the immutable string allocation owner. */
     if (!type)
-        return type_id == XR_CORE_TYPE_STRING_BUILDER || type_id == XR_CORE_TYPE_STRING ||
+        return type_id == XR_CORE_TYPE_STRING ||
                (type_id == XR_CORE_TYPE_PANIC_INFO && has_panic_messages(ir));
     if (type->kind == XR_CORE_IR_TYPE_EXISTENTIAL &&
         type->interface_use_kind == XR_CORE_IR_INTERFACE_EXISTENTIAL_REF)
@@ -95,8 +95,6 @@ static bool emit_owned_value_drop(CBuffer *buffer, const XrBackendIR *ir, uint16
         return append_format(buffer, "    (void)(%s);\n", value);
     if (type_id == XR_CORE_TYPE_PANIC_INFO)
         return append_format(buffer, "    xr_aot_free(xr_ctx, (%s).message);\n", value);
-    if (type_id == XR_CORE_TYPE_STRING_BUILDER)
-        return append_format(buffer, "    xr_aot_builder_drop(xr_ctx, %s);\n", value);
     if (type_id == XR_CORE_TYPE_STRING)
         return append_format(buffer, "    xr_aot_free(xr_ctx, %s);\n", value);
     return append_format(buffer, "    xr_aot_%sdrop_%u(xr_ctx, %s, %s);\n",
