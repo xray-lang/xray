@@ -11,6 +11,7 @@
  */
 #include "xir/xxir_program_internal.h"
 #include "xir/xxir_task_internal.h"
+#include "base/xbuiltin_enum.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -152,7 +153,22 @@ static void run_case(enum Scenario selected,size_t failure) {
     if (runtime_live || runtime_bytes) runtime_report_residuals(stderr);
     CHECK(!runtime_live && !runtime_bytes);
 }
+static void cancelled_builtin_slot(void) {
+    _Static_assert(XR_GLOBAL_VAR_CRYPTO_ERROR==37,"Existing global slots remain stable");
+    _Static_assert(XR_GLOBAL_VAR_CANCELLED==38 && XR_USER_GLOBALS_START==39,"Cancelled precedes user globals");
+    const XrBuiltinEnumRow *cancelled=xr_builtin_enum_registry_row(XR_GLOBAL_VAR_CANCELLED);
+    CHECK(cancelled && !strcmp(cancelled->enum_name,"Cancelled") && cancelled->member_count==1);
+    CHECK(xr_builtin_enum_row_is_unit(cancelled) && !strcmp(cancelled->members[0].name,"Cancelled"));
+    size_t count=0;const XrBuiltinEnumRow *rows=xr_builtin_enum_registry(&count);
+    for (size_t i=0;i<count;++i) {
+        CHECK(rows[i].builtin_index>XR_GLOBAL_VAR_RESERVED0 && rows[i].builtin_index<XR_USER_GLOBALS_START);
+        for (size_t j=0;j<i;++j) CHECK(rows[i].builtin_index!=rows[j].builtin_index);
+    }
+    CHECK(!xr_builtin_enum_registry_row(XR_USER_GLOBALS_START));
+    puts("prelude Cancelled: unique slot 38, unit variant, user globals start at 39 PASS");
+}
 int main(void) {
+    cancelled_builtin_slot();
     run_case(CANCEL_CHILD,0);size_t allocations=spawn_allocations;
     run_case(CANCEL_SELF,0);run_case(SPAWN_OOM,0);run_case(SPAWN_OOM,allocations-1);
     puts("trusted native controls: authenticated self/foreign/epoch/late requests, allocation-free cancel and physical OOM rollback PASS");return 0;
