@@ -62,3 +62,6 @@ tests/unit/xir/shared_current_checked.h text eol=lf
 # Owner-registry generation and checkout use the same canonical LF bytes.
 src/plan/semantic/xr_semantic_ops_gen.h text eol=lf
 src/shared/xr_semantic_owner_ids_gen.h text eol=lf
+
+# Preserve raw output oracle bytes, including NUL and explicit line endings.
+tests/unit/xir/p11_ctfe_reference/fixtures/try_assert*.stdout -text
