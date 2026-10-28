@@ -1,6 +1,7 @@
 """Build and run an explicit L1 manifest, rejecting absent or skipped tests."""
 
 from collections import Counter
+from copy import deepcopy
 import json
 import os
 from pathlib import Path
@@ -67,20 +68,59 @@ def manifest(content: bytes) -> dict:
 
 
 def tests(names: list[str], build: Path, logs: Path, label: str, environment: dict) -> None:
-    listing = logs / (label + ".tests.txt")
-    report = logs / (label + ".xml")
+    if not test_groups({label: names}, build, logs, environment)[label]:
+        raise RuntimeError(f"{label}: failed, skipped or unexecuted test")
+
+
+def test_groups(groups: dict[str, list[str]], build: Path, logs: Path,
+                environment: dict) -> dict[str, bool]:
+    """Execute the union once, preserving each group's exact report and verdict."""
+    if not groups or any(not names or len(names) != len(set(names)) for names in groups.values()):
+        raise ValueError("Test groups must be nonempty and contain unique names")
+    label = next(iter(groups))
+    stem = label + "-combined" if len(groups) > 1 else label
+    names = list(dict.fromkeys(name for group in groups.values() for name in group))
+    listing, report = logs / (stem + ".tests.txt"), logs / (stem + ".xml")
+    for group, members in groups.items():
+        (logs / (group + ".tests.txt")).write_text("\n".join(members) + "\n", encoding="utf-8")
+        (logs / (group + ".xml")).unlink(missing_ok=True)
     listing.write_text("\n".join(names) + "\n", encoding="utf-8")
     if report.exists():
         report.unlink()
-    command(["ctest", "--test-dir", build, "--tests-from-file", listing, "--no-tests=error",
-             "--output-on-failure", "--output-junit", report, "-j1"], build, environment,
-            logs / (label + ".log"))
-    cases = list(ET.parse(report).getroot().iter("testcase"))
+    failed_command = False
+    try:
+        command(["ctest", "--test-dir", build, "--tests-from-file", listing, "--no-tests=error",
+                 "--output-on-failure", "--output-junit", report, "-j1"], build, environment,
+                logs / (label + ".log"))
+    except subprocess.CalledProcessError:
+        failed_command = True
+    for group in groups:
+        if group != label:
+            (logs / (group + ".log")).write_bytes((logs / (label + ".log")).read_bytes())
+    root = ET.parse(report).getroot()
+    cases = list(root.iter("testcase"))
     if Counter(case.get("name") for case in cases) != Counter(names):
         raise RuntimeError(f"{label}: requested tests differ from executed tests")
-    if any(case.get("status") != "run" or case.find("failure") is not None
-           or case.find("skipped") is not None or case.find("error") is not None for case in cases):
-        raise RuntimeError(f"{label}: failed, skipped or unexecuted test")
+    def passed(case):
+        return case.get("status") == "run" and all(
+            case.find(tag) is None for tag in ("failure", "skipped", "error"))
+    results = {}
+    for group, members in groups.items():
+        selected = [case for case in cases if case.get("name") in members]
+        results[group] = all(passed(case) for case in selected)
+        if len(groups) > 1:
+            suite = ET.Element("testsuite", name=group, tests=str(len(selected)),
+                               failures=str(sum(case.find("failure") is not None for case in selected)),
+                               errors=str(sum(case.find("error") is not None for case in selected)),
+                               skipped=str(sum(case.find("skipped") is not None for case in selected)),
+                               time=str(sum(float(case.get("time", "0")) for case in selected)))
+            for case in selected:
+                suite.append(deepcopy(case))
+            ET.ElementTree(suite).write(logs / (group + ".xml"), encoding="utf-8",
+                                       xml_declaration=True)
+    if failed_command and all(results.values()):
+        raise RuntimeError(f"{label}: CTest failed despite passing test reports")
+    return results
 
 
 def configure(source: Path, build: Path, logs: Path, environment: dict) -> None:

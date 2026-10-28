@@ -154,12 +154,16 @@ def integrate(args, review: dict, log: dict, logs: Path) -> None:
             xray_l1.build_targets(args.build, plan["targets"], logs, environment)
             clean(integration)
         log["identity"] = xray_l1.identity(plan, integration, args.build, candidate, logs, environment)
-        xray_l1.tests(plan["tests"], args.build, logs, "l1", environment)
-        log["gates"]["L1"] = "PASS"
+        groups = {"l1": plan["tests"]}
         if any(re.match(r"src/(ir|aot|analysis|lir|hir|xir|plan|program|module)/", p) for p in changed):
             log["gates"]["meta_ownership_inventory"] = "FAIL"
-            xray_l1.tests(["meta_ownership_inventory"], args.build, logs, "metadata", environment)
-            log["gates"]["meta_ownership_inventory"] = "PASS"
+            groups["metadata"] = ["meta_ownership_inventory"]
+        results = xray_l1.test_groups(groups, args.build, logs, environment)
+        log["gates"]["L1"] = "PASS" if results["l1"] else "FAIL"
+        if "metadata" in results:
+            log["gates"]["meta_ownership_inventory"] = "PASS" if results["metadata"] else "FAIL"
+        if not all(results.values()):
+            raise RuntimeError("L1 or metadata: failed, skipped or unexecuted test")
     if git(integration, "rev-parse", "HEAD") != candidate or git(root, "rev-parse", args.branch) != source:
         raise RuntimeError("Candidate or reviewed branch moved while gates were running")
     clean(integration)

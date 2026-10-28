@@ -11,6 +11,7 @@ import tempfile
 import time
 import unittest
 from unittest import mock
+import xml.etree.ElementTree as ET
 
 QUEUE = Path(__file__).resolve().parents[2] / "scripts/merge_slice.py"
 sys.path.insert(0, str(QUEUE.parent))
@@ -25,6 +26,7 @@ if mode == 'l1':
     if (root / 'race').exists():
         old, new = (root / 'race').read_text().split()
         subprocess.run(['git','-C',str(root),'update-ref','refs/heads/main',new,old],check=True)
+if mode == 'metadata' and (root / 'metadata-fail').exists(): raise SystemExit(4)
 if mode == 'asan':
     assert os.environ['XR_ASAN_PROFILE'] == 'full'
     assert os.environ['XR_ASAN_JOBS'] == '4'
@@ -176,6 +178,40 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(saved.read_bytes(), self.asan_log.read_bytes())
         slots = [json.loads(p.read_text()) for p in (self.root / "slots/requests").glob("*.json")]
         self.assertEqual([r["kind"] for r in slots], ["build"])
+        folder = saved.parent
+        self.assertEqual(len(list(ET.parse(folder / "l1.xml").getroot().iter("testcase"))), 1)
+        self.assertEqual(len(list(ET.parse(folder / "metadata.xml").getroot().iter("testcase"))), 1)
+        self.assertEqual(len(list(ET.parse(folder / "l1-combined.xml").getroot().iter("testcase"))), 2)
+        self.assertEqual((folder / "l1.log").read_text().count('$ ["ctest"'), 1)
+
+    def test_metadata_failure_never_advances_main(self):
+        branch = self.branch("a/meta-fail", {"src/lir/change.c": "/* fixture */",
+                                             "metadata-fail": "yes"})
+        log = self.finish(self.start(branch), 1)
+        self.assertEqual(log["gates"]["L1"], "PASS")
+        self.assertEqual(log["gates"]["meta_ownership_inventory"], "FAIL")
+        self.assertEqual(self.git("rev-parse", "main"), self.base)
+
+    def test_missing_metadata_never_advances_main(self):
+        line = next(line for line in CMAKE.splitlines() if line.startswith("add_test(NAME meta_"))
+        branch = self.branch("a/meta-missing", {"src/lir/change.c": "/* fixture */",
+                                                "CMakeLists.txt": CMAKE.replace(line, "")})
+        log = self.finish(self.start(branch), 1)
+        self.assertIn("requested tests differ", log["error"])
+        self.assertEqual(self.git("rev-parse", "main"), self.base)
+
+    def test_overlapping_metadata_runs_once(self):
+        plan = json.loads((self.repo / "scripts/l1-v0.json").read_text())
+        plan["tests"].append("meta_ownership_inventory")
+        branch = self.branch("a/meta-overlap", {"src/lir/change.c": "/* fixture */",
+                                                "scripts/l1-v0.json": json.dumps(plan)})
+        log = self.finish(self.start(branch), 0)
+        folder = self.root / "queue/logs" / f"{log['sequence']:020d}"
+        combined = list(ET.parse(folder / "l1-combined.xml").getroot().iter("testcase"))
+        self.assertEqual([case.get("name") for case in combined].count("meta_ownership_inventory"), 1)
+        self.assertEqual(len(list(ET.parse(folder / "l1.xml").getroot().iter("testcase"))), 2)
+        self.assertEqual(len(list(ET.parse(folder / "metadata.xml").getroot().iter("testcase"))), 1)
+        self.assertEqual(log["gates"]["meta_ownership_inventory"], "PASS")
 
     def test_placeholder_identity_is_rejected(self):
         branch = self.branch("a/invalid", {"invalid": "yes"}, invalid=True)
@@ -186,7 +222,8 @@ class QueueTests(unittest.TestCase):
     def test_missing_test_and_external_manifest_cannot_pass(self):
         plan = json.loads((self.repo / "scripts/l1-v0.json").read_text())
         plan["tests"].append("missing-test")
-        branch = self.branch("a/missing", {"scripts/l1-v0.json": json.dumps(plan)})
+        branch = self.branch("a/missing", {"scripts/l1-v0.json": json.dumps(plan),
+                                            "src/lir/change.c": "/* fixture */"})
         log = self.finish(self.start(branch), 1)
         self.assertIn("requested tests differ", log["error"])
         log = self.finish(self.start(branch, ("--manifest", str(self.repo / "scripts/l1-v0.json"))), 1)
@@ -258,6 +295,67 @@ class QueueTests(unittest.TestCase):
         request = next((self.root / "queue/requests").glob("*.json"))
         self.assertEqual(json.loads(request.read_text())["state"], "NEEDS_RECOVERY")
         self.assertEqual(self.git("rev-parse", "main"), self.base)
+
+
+class GroupedReportTests(unittest.TestCase):
+    def run_report(self, cases, *, failed_command=False):
+        with tempfile.TemporaryDirectory(prefix="xray-groups-") as directory:
+            logs = Path(directory)
+            calls = []
+
+            def produce(arguments, directory, environment, log):
+                calls.append(arguments)
+                report = Path(arguments[arguments.index("--output-junit") + 1])
+                root = ET.Element("testsuite")
+                for name, status, problem in cases:
+                    case = ET.SubElement(root, "testcase", name=name, status=status, time="0.01")
+                    if problem:
+                        ET.SubElement(case, problem)
+                ET.ElementTree(root).write(report)
+                log.write_text("fixture command\n", encoding="utf-8")
+                if failed_command:
+                    raise subprocess.CalledProcessError(8, arguments)
+
+            with mock.patch.object(merge_slice.xray_l1, "command", side_effect=produce):
+                result = merge_slice.xray_l1.test_groups(
+                    {"l1": ["actual"], "metadata": ["meta_ownership_inventory"]},
+                    logs, logs, {})
+            self.assertEqual(len(calls), 1)
+            return result
+
+    def test_exact_groups(self):
+        self.assertEqual(self.run_report([("actual", "run", None),
+                                          ("meta_ownership_inventory", "run", None)]),
+                         {"l1": True, "metadata": True})
+
+    def test_missing_duplicate_or_unexpected_rows_reject(self):
+        valid = [("actual", "run", None), ("meta_ownership_inventory", "run", None)]
+        for cases in [valid[:1], valid[1:], valid + valid[:1], valid + valid[1:],
+                      valid + [("extra", "run", None)]]:
+            with self.subTest(cases=cases), self.assertRaisesRegex(RuntimeError, "requested tests differ"):
+                self.run_report(cases)
+
+    def test_failed_skipped_or_unexecuted_rows_reject_only_their_group(self):
+        for name, group in [("actual", "l1"), ("meta_ownership_inventory", "metadata")]:
+            for status, problem in [("run", "failure"), ("run", "error"),
+                                    ("run", "skipped"), ("notrun", None)]:
+                cases = [(n, status if n == name else "run", problem if n == name else None)
+                         for n in ("actual", "meta_ownership_inventory")]
+                with self.subTest(group=group, status=status, problem=problem):
+                    result = self.run_report(cases, failed_command=problem == "failure")
+                    self.assertFalse(result[group])
+                    self.assertTrue(result["metadata" if group == "l1" else "l1"])
+
+    def test_command_failure_cannot_be_hidden_by_passing_xml(self):
+        with self.assertRaisesRegex(RuntimeError, "CTest failed"):
+            self.run_report([("actual", "run", None), ("meta_ownership_inventory", "run", None)],
+                            failed_command=True)
+
+    def test_duplicate_requested_group_rejects_before_execution(self):
+        with mock.patch.object(merge_slice.xray_l1, "command") as command:
+            with self.assertRaises(ValueError):
+                merge_slice.xray_l1.test_groups({"l1": ["actual", "actual"]}, Path(), Path(), {})
+            command.assert_not_called()
 
 
 if __name__ == "__main__":
