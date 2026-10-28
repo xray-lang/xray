@@ -39,7 +39,7 @@ typedef struct {
 // F64 transport are supported, as is an I64-to-I64 INTCAST. Other integer
 // conversions and all floating operations, comparisons and conversions are
 // not admitted. Native calls bind the shared i64 output and fixed typed system
-// clocks. F64 arguments
+// clocks and the I64-to-I64 UTC offset query. F64 arguments
 // retain every payload bit. I64 cells belong to an activation and may be
 // transported through verified internal calls and block parameters. Cells
 // cannot be host entry arguments, results, constants or native arguments.

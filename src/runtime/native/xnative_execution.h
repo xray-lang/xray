@@ -30,7 +30,7 @@ typedef enum XrtHostClockReason {
     XRT_CLOCK_READ_FAILED, XRT_CLOCK_OUT_OF_RANGE
 } XrtHostClockReason;
 typedef struct XrtHostClockFailure {
-    uint32_t kind, source_id;
+    uint32_t kind, source_id; // Kinds 1..3 read clocks; kind 4 queries a UTC offset.
     XrtHostClockReason reason;
 } XrtHostClockFailure;
 

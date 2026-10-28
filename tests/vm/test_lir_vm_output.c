@@ -318,6 +318,26 @@ int main(int argc, char **argv) {
         xr_rbc_program_destroy(program);
         return 0;
     }
+    if (!strcmp(mode, "offset-source")) {
+        XrRbcProgram *program = from_source("import time\n"
+            "fn offsets(){\n"
+            "print(time.localOffsetAt(0))\n"
+            "print(time.localOffsetAt(1700000000))\n"
+            "print(time.localOffsetAt(1719792000))\n"
+            "const before=time.now()/1000\n"
+            "const actual=time.localOffset()\n"
+            "const after=time.now()/1000\n"
+            "print(before)\n"
+            "print(actual)\n"
+            "print(after)\n"
+            "}\n"
+            "offsets()\n");
+        for (unsigned i=0;i<2;++i) {
+            XrRbcOutcome *outcome=invoke(program);CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_OK);
+            xr_rbc_outcome_free(&outcome);
+        }
+        xr_rbc_program_destroy(program);return 0;
+    }
     if (!strcmp(mode, "clock-source")) {
         XrRbcProgram *program = from_source("import time\nfn check()->i64{\n"
             "const a=time.nanos()\nconst b=time.nanos()\n"

@@ -70,6 +70,9 @@ XRAY_API void xrt_print_string(const char *bytes, size_t byte_length, uint32_t s
 XRAY_API int64_t xrt_clock_realtime_nanos(uint32_t source_id);
 XRAY_API int64_t xrt_clock_process_cpu_nanos(uint32_t source_id);
 XRAY_API int64_t xrt_clock_monotonic_nanos(uint32_t source_id);
+// Minutes east of UTC at this exact Unix timestamp in seconds. A timestamp
+// outside the host calendar range ends the execution as a host-clock failure.
+XRAY_API int64_t xrt_clock_utc_offset_at(int64_t seconds, uint32_t source_id);
 
 // End the active synchronous execution with division (420) or modulo (421)
 // by zero. The source id must be zero or in the active image map. Invalid

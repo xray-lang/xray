@@ -1,6 +1,7 @@
 """Compare independent Source pipelines and preserve unqualified stage receipts."""
 from pathlib import Path
 import argparse
+import datetime
 import hashlib
 import json
 import os
@@ -189,6 +190,20 @@ def failure_rows(args, folder, source, mode, executable):
     return rows
 
 
+
+def check_offsets(output, runs):
+    fields = output.splitlines()
+    assert len(fields) == runs * 6
+    def host_offset(seconds):
+        local = datetime.datetime(*time.localtime(seconds)[:6])
+        utc = datetime.datetime(*time.gmtime(seconds)[:6])
+        return int((local - utc).total_seconds() / 60)
+    for run in range(runs):
+        fixed = [int(x) for x in fields[run * 6:run * 6 + 6]]
+        assert fixed[:3] == [host_offset(t) for t in (0, 1700000000, 1719792000)]
+        assert fixed[4] in (host_offset(fixed[3]), host_offset(fixed[5]))
+
+
 def main():
     parser = argparse.ArgumentParser()
     for name in ('driver', 'compiler', 'include', 'library', 'source-root', 'helper', 'work'):
@@ -254,6 +269,9 @@ def main():
     clock_entry = inputs / 'clock-properties.xr'
     clock_entry.write_text('import time\nfn verifyClocks()->i64 {\n const a=time.nanos()\n const ms=time.monotonic()\n const b=time.nanos()\n const cpu1=time.clock()\n const cpu2=time.clock()\n const now=time.now()\n if(a>0 && b>=a && a/1000000<=ms && ms<=b/1000000 && cpu1>=0 && cpu2>=cpu1 && now>0){return 1}\n return 0\n}\nprint(verifyClocks())\n', encoding='utf-8')
     cases.append(('clock-properties', clock_entry, b'1\n'))
+    offset_entry = inputs / 'offset-values.xr'
+    offset_entry.write_text('import time\nfn offsets(){\nprint(time.localOffsetAt(0))\nprint(time.localOffsetAt(1700000000))\nprint(time.localOffsetAt(1719792000))\nconst before=time.now()/1000\nconst actual=time.localOffset()\nconst after=time.now()/1000\nprint(before)\nprint(actual)\nprint(after)\n}\noffsets()\n', encoding='utf-8')
+    cases.append(('offset-values', offset_entry, None))
     compiler = Path(shutil.which(str(args.compiler)) or args.compiler).resolve()
     assert compiler.is_file()
     identity = {'compiler': str(compiler), 'compilerSHA256': digest(compiler),
@@ -270,7 +288,9 @@ def main():
             generated, metrics = folder / 'generated.c', folder / 'receipt.json'
             p, vm_record = invoke(folder, 'source-pipeline',
                                   [args.driver, source, mode, generated, metrics, 0, 2, 'normal', args.source_root / 'stdlib'])
-            assert p.stdout == expected * 2 and not p.stderr
+            assert not p.stderr
+            if name == 'offset-values': check_offsets(p.stdout, 2)
+            else: assert p.stdout == expected * 2
             receipt = json.loads(metrics.read_bytes())
             check_receipt(receipt, mode, 2)
             selected = receipt['snapshots'][-1]['ROOT_CFG_CLOSURE']
@@ -290,12 +310,14 @@ def main():
             executable = folder / ('native.exe' if os.name == 'nt' else 'native')
             _, host_compile = invoke(folder, 'host-compile-link', compile_command(args, native_adapter, executable))
             native, native_record = invoke(folder, 'native-complete-entry', [executable])
-            assert native.stdout == expected * 2 and not native.stderr
+            assert not native.stderr
+            if name == 'offset-values': check_offsets(native.stdout, 2)
+            else: assert native.stdout == expected * 2
             native_receipt = json.loads((folder / 'native-ticks.json').read_bytes())
             assert native_receipt['clock_frequency'] > 0 and native_receipt['formal_performance'] is False
             assert len(native_receipt['samples']) == 2
             assert all(s['completed_entry'] and s['result'] == 0 for s in native_receipt['samples'])
-            row = {'case': name, 'mode': mode, 'expectedHex': expected.hex(),
+            row = {'case': name, 'mode': mode, 'expectedHex': expected.hex() if expected is not None else None,
                    'sourceSHA256': digest(source), 'generatedSHA256': digest(generated),
                    'executableSHA256': digest(executable),
                    'vm': vm_record, 'native': native_record, 'compile_link': host_compile,

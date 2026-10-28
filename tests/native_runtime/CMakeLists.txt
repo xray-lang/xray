@@ -73,7 +73,7 @@ foreach(suite output failures link_contract)
 endforeach()
 
 add_executable(test_native_clock test_clock.c)
-target_link_libraries(test_native_clock PRIVATE xray_lir_bytecode xray_lir_lower)
+target_link_libraries(test_native_clock PRIVATE xray_lir_bytecode xray_lir_lower xray_lir_c)
 target_include_directories(test_native_clock PRIVATE "${PROJECT_SOURCE_DIR}/src")
 set_target_properties(test_native_clock PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
@@ -88,3 +88,6 @@ add_test(NAME native_clock_standalone
         --suite clock --build "${CMAKE_BINARY_DIR}" --clients "$<TARGET_FILE:test_native_clock>"
         --logs "${CMAKE_CURRENT_BINARY_DIR}/results-clock")
 set_tests_properties(native_clock_standalone PROPERTIES LABELS "unit;native-runtime;fast" TIMEOUT 30)
+
+add_test(NAME native_offset_scope COMMAND test_native_clock offset)
+set_tests_properties(native_offset_scope PROPERTIES LABELS "unit;native-runtime;fast" TIMEOUT 30)

@@ -13,6 +13,7 @@
  */
 
 #include "register_vm_programs.h"
+#include "shared/xr_time_offset.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
@@ -549,11 +550,26 @@ static void test_literal_validation(void) {
     CHECK(word == saved);
 }
 
+static void test_offset_window(void) {
+    uint32_t code[4];const uint64_t timestamp=1700000000;
+    immediate(code,0,XR_RBC_LOADK,253,0);immediate(code,1,XR_RBC_LOADI,254,0);
+    immediate(code,2,XR_RBC_CALLN,252,0);emit(code,3,XR_RBC_RET,252,0,0);
+    XrRbcFunction f={code,4,&timestamp,1,255,0,NULL,0,0};
+    XrRbcNativeKind native=XR_RBC_NATIVE_UTC_OFFSET_AT;
+    XrRbcModule module={&f,1,&native,1,NULL,0};int64_t expected=0;uint64_t result=UINT64_MAX;
+    CHECK(xr_time_utc_offset_at((int64_t)timestamp,&expected));
+    CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_OK && result==(uint64_t)expected);
+    immediate(code,2,XR_RBC_CALLN,253,0);reject_prepare(&module,0,NULL,0);
+    immediate(code,2,XR_RBC_CALLN,252,0);native=(XrRbcNativeKind)UINT32_MAX;reject_prepare(&module,0,NULL,0);
+    native=XR_RBC_NATIVE_UTC_OFFSET_AT;immediate(code,1,XR_RBC_LOADI,254,1);result=91;
+    CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_INVALID && result==91);
+}
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--native-print") == 0) {
         test_native_print();
         return 0;
     }
+    test_offset_window();
     test_literal_validation();
     test_cells();
     test_encoding();

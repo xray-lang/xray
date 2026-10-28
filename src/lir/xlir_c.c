@@ -559,6 +559,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
                     external.extern_kind == XR_LIR_EXTERN_PRINT_I64 ? "xrt_print_i64" :
                     external.extern_kind == XR_LIR_EXTERN_CLOCK_REALTIME ? "xrt_clock_realtime_nanos" :
                     external.extern_kind == XR_LIR_EXTERN_CLOCK_CPU ? "xrt_clock_process_cpu_nanos" :
+                    external.extern_kind == XR_LIR_EXTERN_UTC_OFFSET_AT ? "xrt_clock_utc_offset_at" :
                     "xrt_clock_monotonic_nanos";
                 c_text(c, name);
             } else c_function_name(c, v->callee);

@@ -285,7 +285,7 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                     if (callee.kind != XR_LIR_FUNCTION_DEFINITION) {
                         if (callee.kind != XR_LIR_FUNCTION_EXTERNAL ||
                             (callee.extern_kind < XR_LIR_EXTERN_PRINT_I64 ||
-                             callee.extern_kind > XR_LIR_EXTERN_CLOCK_MONOTONIC)) {
+                             callee.extern_kind > XR_LIR_EXTERN_UTC_OFFSET_AT)) {
                             rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
                                 "native call has no registered runtime leaf", i.source);
                             return false;
@@ -327,7 +327,8 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                 if (c->functions[i.callee - 1] == RBC_LIR_PRINT_STRING) continue;
                 uint32_t mapped = c->functions[i.callee - 1];
                 uint32_t physical = rbc_lir_native(mapped) ?
-                    (mapped == RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_PRINT_I64 ? 2u : 1u) : i.operand_count;
+                    (mapped == RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_PRINT_I64 ||
+                     mapped == RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_UTC_OFFSET_AT ? 2u : 1u) : i.operand_count;
                 if (window < physical + 1) window = physical + 1;
             }
             if (i.op == XR_LIR_CONDBR && !c->scratch_count) c->scratch_count = 1;
@@ -460,11 +461,11 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         }
         if (rbc_lir_native(c->functions[i->callee - 1])) {
             uint32_t kind = c->functions[i->callee - 1] - RBC_LIR_NATIVE_BASE;
-            bool printing = kind == XR_RBC_NATIVE_PRINT_I64;
-            uint32_t destination = c->register_count - (printing ? 3u : 2u);
-            if (printing && !rbc_lir_emit(c, XR_RBC_MOV, destination + 1,
+            bool argument = kind == XR_RBC_NATIVE_PRINT_I64 || kind == XR_RBC_NATIVE_UTC_OFFSET_AT;
+            uint32_t destination = c->register_count - (argument ? 3u : 2u);
+            if (argument && !rbc_lir_emit(c, XR_RBC_MOV, destination + 1,
                     c->slots[i->operands[0]], 0, 0)) return false;
-            if (!rbc_lir_constant(c, destination + (printing ? 2u : 1u),
+            if (!rbc_lir_constant(c, destination + (argument ? 2u : 1u),
                     i->source.path_length ? c->source_id : 0) ||
                 !rbc_lir_emit(c, XR_RBC_CALLN, destination, 0, 0, kind)) return false;
             return !i->result || rbc_lir_emit(c, XR_RBC_MOV, result, destination, 0, 0);

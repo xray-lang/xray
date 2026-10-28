@@ -13,6 +13,7 @@
 #include "xnative_execution.h"
 #include "base/xchecks.h"
 #include "os/os_time.h"
+#include "shared/xr_time_offset.h"
 #include "shared/xr_value_format_core.h"
 #include <setjmp.h>
 
@@ -102,6 +103,16 @@ XRAY_API_NORET void xrt_arithmetic_panic(uint32_t code, uint32_t source_id) {
     _Exit(1);
 }
 
+static XR_NORET void clock_failure(uint32_t kind, uint32_t source_id, XrtHostClockReason reason) {
+    const XrtExecutionBinding *binding = current_execution;
+    XrtHostClockFailure failure = {kind, source_id, reason};
+    if (binding->target) {
+        binding->failure->kind = XRT_FAILURE_HOST_CLOCK;
+        binding->failure->detail.clock = failure;
+        longjmp(*binding->target, 1);
+    }
+    xrt_clock_exit(&binding->map, failure);
+}
 static int64_t clock_read(uint32_t kind, uint32_t source_id) {
     const XrtExecutionBinding *binding = current_execution;
     XR_CHECK(binding && kind >= 1 && kind <= 3 && source_id <= binding->map.count,
@@ -109,14 +120,8 @@ static int64_t clock_read(uint32_t kind, uint32_t source_id) {
     uint64_t reading = kind == 1 ? xr_time_realtime_ns() : kind == 2 ?
         xr_time_process_cpu_ns() : xr_time_monotonic_ns();
     if (reading <= INT64_MAX && (reading || kind == 2)) return (int64_t)reading;
-    XrtHostClockFailure failure = {kind, source_id,
-        reading > INT64_MAX ? XRT_CLOCK_OUT_OF_RANGE : XRT_CLOCK_READ_FAILED};
-    if (binding->target) {
-        binding->failure->kind = XRT_FAILURE_HOST_CLOCK;
-        binding->failure->detail.clock = failure;
-        longjmp(*binding->target, 1);
-    }
-    xrt_clock_exit(&binding->map, failure);
+    clock_failure(kind, source_id,
+        reading > INT64_MAX ? XRT_CLOCK_OUT_OF_RANGE : XRT_CLOCK_READ_FAILED);
 }
 XRAY_API int64_t xrt_clock_realtime_nanos(uint32_t source_id) {
     return clock_read(1, source_id);
@@ -126,4 +131,12 @@ XRAY_API int64_t xrt_clock_process_cpu_nanos(uint32_t source_id) {
 }
 XRAY_API int64_t xrt_clock_monotonic_nanos(uint32_t source_id) {
     return clock_read(3, source_id);
+}
+XRAY_API int64_t xrt_clock_utc_offset_at(int64_t seconds, uint32_t source_id) {
+    const XrtExecutionBinding *binding = current_execution;
+    XR_CHECK(binding && source_id <= binding->map.count,
+        "UTC offset queries require an active execution and registered source id");
+    int64_t minutes = 0;
+    if (xr_time_utc_offset_at(seconds, &minutes)) return minutes;
+    clock_failure(4, source_id, XRT_CLOCK_OUT_OF_RANGE);
 }

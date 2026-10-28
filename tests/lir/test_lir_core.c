@@ -683,7 +683,25 @@ static void clock_signatures(void) {
         xr_lir_module_destroy(m);
     }
 }
+static void offset_signature(void) {
+    const XrLirType argument = XR_LIR_I64, wrong = XR_LIR_U64;
+    XrLirModule *m = NULL; XrLirFunction f = {0};
+    XrLirFunctionSpec spec = {.name="xrt_clock_utc_offset_at", .name_length=23,
+        .result=XR_LIR_I64, .kind=XR_LIR_FUNCTION_EXTERNAL, .extern_kind=XR_LIR_EXTERN_UTC_OFFSET_AT,
+        .parameters=&argument, .parameter_count=1};
+    OK(xr_lir_module_create(NULL, &m)); OK(xr_lir_declare_function(m, &spec, &f));
+    OK(xr_lir_module_finish(m, NULL)); OK(xr_lir_verify(m, NULL)); xr_lir_module_destroy(m); m = NULL;
+    OK(xr_lir_module_create(NULL, &m));
+    spec.parameter_count = 0;
+    CHECK(xr_lir_declare_function(m, &spec, &f) == XR_LIR_INVALID_ARGUMENT);
+    spec.parameter_count = 1; spec.parameters = &wrong;
+    CHECK(xr_lir_declare_function(m, &spec, &f) == XR_LIR_INVALID_ARGUMENT);
+    spec.parameters = &argument; spec.result = XR_LIR_UNIT;
+    CHECK(xr_lir_declare_function(m, &spec, &f) == XR_LIR_INVALID_ARGUMENT);
+    xr_lir_module_destroy(m);
+}
 int main(void) {
+    offset_signature();
     clock_signatures();
     queries();
     literal_ownership();

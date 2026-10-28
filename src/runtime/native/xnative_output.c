@@ -114,7 +114,8 @@ XRAY_API void xrt_print_string(const char *bytes, size_t byte_length, uint32_t s
 
 XR_FUNC XR_NORET void xrt_clock_exit(const XrtSourceMap *map, XrtHostClockFailure failure) {
     diagnostic_text("xray: host clock ");
-    diagnostic_text(failure.kind == 1 ? "realtime" : failure.kind == 2 ? "process-cpu" : "monotonic");
+    diagnostic_text(failure.kind == 1 ? "realtime" : failure.kind == 2 ? "process-cpu" :
+        failure.kind == 4 ? "utc-offset" : "monotonic");
     diagnostic_text(failure.reason == XRT_CLOCK_OUT_OF_RANGE ? " out of range at " : " read failed at ");
     diagnostic_location(map, failure.source_id);
     diagnostic_text("\n");

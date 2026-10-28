@@ -1,9 +1,25 @@
 """Run the real Source driver and its shared output leaf."""
 import argparse
+import datetime
 from pathlib import Path
 import subprocess
+import time
 import tempfile
 import hashlib
+
+
+
+def check_offsets(output, runs):
+    fields = output.splitlines()
+    assert len(fields) == runs * 6
+    def host_offset(seconds):
+        local = datetime.datetime(*time.localtime(seconds)[:6])
+        utc = datetime.datetime(*time.gmtime(seconds)[:6])
+        return int((local - utc).total_seconds() / 60)
+    for run in range(runs):
+        fixed = [int(x) for x in fields[run * 6:run * 6 + 6]]
+        assert fixed[:3] == [host_offset(t) for t in (0, 1700000000, 1719792000)]
+        assert fixed[4] in (host_offset(fixed[3]), host_offset(fixed[5]))
 
 
 def main():
@@ -61,6 +77,13 @@ def main():
             1, b'before complete publication')
 
         run('clock-properties', 'import time\nfn verifyClocks()->i64 {\n const a=time.nanos()\n const ms=time.monotonic()\n const b=time.nanos()\n const cpu1=time.clock()\n const cpu2=time.clock()\n const now=time.now()\n if(a>0 && b>=a && a/1000000<=ms && ms<=b/1000000 && cpu1>=0 && cpu2>=cpu1 && now>0){return 1}\n return 0\n}\nprint(verifyClocks())\n', stdout=b'1\n')
+        offset = root / 'offset-values.xr'
+        offset.write_text('import time\nfn offsets(){\nprint(time.localOffsetAt(0))\nprint(time.localOffsetAt(1700000000))\nprint(time.localOffsetAt(1719792000))\nconst before=time.now()/1000\nconst actual=time.localOffset()\nconst after=time.now()/1000\nprint(before)\nprint(actual)\nprint(after)\n}\noffsets()\n', encoding='utf-8')
+        for options in ([], ['--twice'], ['--optimize'], ['--twice', '--optimize']):
+            result = subprocess.run([args.driver, str(offset), '--stdlib', str(stdlib), *options],
+                                    capture_output=True, timeout=15)
+            assert result.returncode == 0 and not result.stderr, (options, result.stderr)
+            check_offsets(result.stdout, 2 if '--twice' in options else 1)
         run('empty', '')
         run('ordinary-main', 'fn main()->i64{print(99)\nreturn 7}\n')
         run('recursive-call', 'fn fib(n:i64)->i64{if(n<2){return n}\n'

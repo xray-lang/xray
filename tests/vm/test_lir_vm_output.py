@@ -1,8 +1,24 @@
 """Verify real VM output and host survival with the production runtime."""
 import argparse
+import datetime
 import os
 from pathlib import Path
 import subprocess
+import time
+
+
+
+def check_offsets(output, runs):
+    fields = output.splitlines()
+    assert len(fields) == runs * 6
+    def host_offset(seconds):
+        local = datetime.datetime(*time.localtime(seconds)[:6])
+        utc = datetime.datetime(*time.gmtime(seconds)[:6])
+        return int((local - utc).total_seconds() / 60)
+    for run in range(runs):
+        fixed = [int(x) for x in fields[run * 6:run * 6 + 6]]
+        assert fixed[:3] == [host_offset(t) for t in (0, 1700000000, 1719792000)]
+        assert fixed[4] in (host_offset(fixed[3]), host_offset(fixed[5]))
 
 
 def main():
@@ -38,7 +54,10 @@ def main():
                 label, result.returncode, output, result.stderr)
             return
         assert result.returncode == 0, (label, result.returncode, output, result.stderr)
-        if mode in ('source', 'literal-repeat', 'string-repeat', 'clock-source'):
+        if mode == 'offset-source':
+            check_offsets(output, 2)
+            assert not result.stderr
+        elif mode in ('source', 'literal-repeat', 'string-repeat', 'clock-source'):
             expected = (b'1\n1\n' if mode == 'clock-source' else b'A\x00\xc3\xa9\n7\n\n'*2 if mode == 'string-repeat' else
                         b'7\n99\n7\n99\n' if mode == 'literal-repeat' else b'10\n21\n')
             assert output == expected and result.stderr == b'', (output, result.stderr)
@@ -48,6 +67,7 @@ def main():
 
     run('source')
     run('clock-source')
+    run('offset-source')
     run('literal-repeat')
     run('string-repeat')
     for mode in ('write', 'flush', 'pipe', 'pipe-flush', 'point', 'unknown', 'source-failure', 'literal-failure'):

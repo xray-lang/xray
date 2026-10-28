@@ -24,7 +24,7 @@ typedef struct Lower {
     const XrLirLowerRequest *request;
     const XrXirModule *source;
     XrLirModule *module;
-    XrLirFunction *functions, print, print_string, clocks[3];
+    XrLirFunction *functions, print, print_string, clocks[4];
     uint8_t *active;
     uint32_t *queue, queued;
     uint32_t function, block, instruction;
@@ -178,7 +178,7 @@ static bool lower_build(Lower *c, XrLirStatus status) {
 
 static bool lower_known(XrXirOp op) {
     switch (op) {
-        case XR_XIR_CLOCK_NANOS:
+        case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
         case XR_XIR_SLOT_INIT:
         case XR_XIR_SLOT_LOAD:
         case XR_XIR_CONST_STRING:
@@ -457,7 +457,8 @@ static bool lower_local_pure(Lower *c, uint32_t selected) {
             for (uint32_t i = f->blocks[b].first; i < f->blocks[b].first + f->blocks[b].count; ++i) {
                 c->instruction = i;
                 const XrXirInstruction *op = &f->instructions[i];
-                if (op->op == XR_XIR_PRINT || op->op == XR_XIR_CLOCK_NANOS || !lower_known(op->op))
+                if (op->op == XR_XIR_PRINT || op->op == XR_XIR_CLOCK_NANOS ||
+                    op->op == XR_XIR_UTC_OFFSET_AT || !lower_known(op->op))
                     return lower_unsupported(c, "effect in local function closure");
                 if (op->op != XR_XIR_CALL)
                     continue;
@@ -590,6 +591,10 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
         if (op->immediate < 1 || op->immediate > 3)
             return lower_unsupported(c, "clock kind");
         c->clock_kinds |= (uint8_t)(1u << (op->immediate - 1));
+        return true;
+    }
+    if (op->op == XR_XIR_UTC_OFFSET_AT) {
+        c->clock_kinds |= 8u;
         return true;
     }
     if (op->op == XR_XIR_CELL_NEW) {
@@ -1057,6 +1062,13 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
             .callee=c->clocks[op->immediate - 1], .source=lower_source(c)};
         return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &call, &f->values[result]));
     }
+    if (op->op == XR_XIR_UTC_OFFSET_AT) {
+        XrLirValue seconds;
+        if (!lower_value(f, op->args[0], &seconds)) return false;
+        XrLirInstruction call = {.op=XR_LIR_CALL, .type=XR_LIR_I64,
+            .callee=c->clocks[3], .operands=&seconds, .operand_count=1, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &call, &f->values[result]));
+    }
     if (op->op == XR_XIR_CONST_STRING) {
         const XrXirLiteral *input = &c->source->declarations->literals[op->immediate];
         XrLirLiteral literal = {0};
@@ -1456,9 +1468,11 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         good = lower_build(&c, xr_lir_declare_function(c.module, &spec, &c.print_string));
     }
     static const char *clock_names[] = {"xrt_clock_realtime_nanos",
-        "xrt_clock_process_cpu_nanos", "xrt_clock_monotonic_nanos"};
-    for (uint32_t kind=0; kind<3 && good; ++kind) if (c.clock_kinds & (1u << kind)) {
+        "xrt_clock_process_cpu_nanos", "xrt_clock_monotonic_nanos", "xrt_clock_utc_offset_at"};
+    for (uint32_t kind=0; kind<4 && good; ++kind) if (c.clock_kinds & (1u << kind)) {
+        const XrLirType seconds = XR_LIR_I64;
         XrLirFunctionSpec spec = {.name=clock_names[kind], .name_length=strlen(clock_names[kind]),
+            .parameters=kind == 3 ? &seconds : NULL, .parameter_count=kind == 3 ? 1u : 0u,
             .result=XR_LIR_I64, .kind=XR_LIR_FUNCTION_EXTERNAL,
             .extern_kind=(XrLirExternKind)(XR_LIR_EXTERN_CLOCK_REALTIME + kind)};
         good = lower_build(&c, xr_lir_declare_function(c.module, &spec, &c.clocks[kind]));

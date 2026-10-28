@@ -79,6 +79,7 @@ static const char *clock_external_name(XrLirExternKind kind) {
     case XR_LIR_EXTERN_CLOCK_REALTIME: return "xrt_clock_realtime_nanos";
     case XR_LIR_EXTERN_CLOCK_CPU: return "xrt_clock_process_cpu_nanos";
     case XR_LIR_EXTERN_CLOCK_MONOTONIC: return "xrt_clock_monotonic_nanos";
+    case XR_LIR_EXTERN_UTC_OFFSET_AT: return "xrt_clock_utc_offset_at";
     default: return NULL;
     }
 }
@@ -523,7 +524,9 @@ static bool lir_function_shape(const XrLirFunctionData *f) {
     if (f->kind == XR_LIR_FUNCTION_EXTERNAL) {
         if (f->defined || f->block_count || f->entry) return false;
         const char *clock = clock_external_name(f->extern_kind);
-        if (clock) return f->result == XR_LIR_I64 && !f->parameter_count &&
+        if (clock) return f->result == XR_LIR_I64 &&
+            f->parameter_count == (f->extern_kind == XR_LIR_EXTERN_UTC_OFFSET_AT ? 1u : 0u) &&
+            (!f->parameter_count || f->parameter_types[0] == XR_LIR_I64) &&
             f->name_length == strlen(clock) && !memcmp(f->name, clock, f->name_length);
         if (f->result != XR_LIR_UNIT) return false;
         if (f->extern_kind == XR_LIR_EXTERN_PRINT_STRING)

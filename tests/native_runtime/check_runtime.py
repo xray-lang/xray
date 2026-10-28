@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import shutil
+import tempfile
 
 
 def header_clients(build, logs):
@@ -18,9 +20,16 @@ def header_clients(build, logs):
     source = Path(cache['CMAKE_HOME_DIRECTORY'])
     compiler = cache['CMAKE_C_COMPILER']
     msvc = os.name == 'nt' and Path(compiler).name.lower() in ('cl', 'cl.exe', 'clang-cl', 'clang-cl.exe')
-    libraries = list(build.rglob('xray_native_runtime.lib' if msvc else 'libxray_native_runtime.a'))
-    assert len(libraries) == 1, libraries
-    library = libraries[0]
+    library = build / 'src/runtime/native' / ('xray_native_runtime.lib' if msvc else 'libxray_native_runtime.a')
+    assert library.is_file(), library
+    prefix = Path(tempfile.mkdtemp(prefix='native-prefix-', dir=logs))
+    (prefix / 'include').mkdir(); (prefix / 'lib').mkdir()
+    shutil.copyfile(source / 'include/xray_native_runtime.h', prefix / 'include/xray_native_runtime.h')
+    shutil.copyfile(source / 'include/xray_export.h', prefix / 'include/xray_export.h')
+    shutil.copyfile(library, prefix / 'lib' / library.name)
+    moved = prefix.with_name(prefix.name + '-moved'); prefix.rename(moved)
+    library = moved / 'lib' / library.name
+    include = moved / 'include'
     sanitizer = re.findall(r'(?<!\S)[/-](?:clang:-)?fsanitize=[^\s]+', recipe)
     if msvc:
         crt = re.findall(r'(?<!\S)[/-]M[TD]d?(?=\s)', recipe)
@@ -38,8 +47,10 @@ def header_clients(build, logs):
             'static int64_t (*const realtime)(uint32_t) = xrt_clock_realtime_nanos;\n'
             'static int64_t (*const cpu)(uint32_t) = xrt_clock_process_cpu_nanos;\n'
             'static int64_t (*const monotonic)(uint32_t) = xrt_clock_monotonic_nanos;\n'
+            'static int64_t (*const offset)(int64_t, uint32_t) = xrt_clock_utc_offset_at;\n'
             'static void invoke(void *context) { int64_t a = monotonic(0);\n'
-            ' if (a <= 0 || realtime(0) <= 0 || cpu(0) < 0 || monotonic(0) < a) return;\n'
+            ' if (a <= 0 || realtime(0) <= 0 || cpu(0) < 0 || monotonic(0) < a ||\n'
+            ' offset(INT64_C(1700000000), 0) != offset(INT64_C(1700000000), 0)) return;\n'
             ' text("header", 6, 0); leaf(*(uint32_t *)context, 0); }\n'
             'int main(void) { uint32_t code = 421;\n'
             'xrt_run_standalone(&xrt_standalone_source_map, invoke, &code); return 77; }\n')
@@ -50,11 +61,11 @@ def header_clients(build, logs):
         executable = logs / ('header-client-' + language.replace('+', 'x') + ('.exe' if msvc else ''))
         if msvc:
             command = [compiler, *flags, '/std:' + language,
-                       '/I' + str(source / 'include'), ('/Tc' if language == 'c11' else '/Tp') + str(client),
+                       '/I' + str(include), ('/Tc' if language == 'c11' else '/Tp') + str(client),
                        library, '/Fe:' + str(executable), *link]
         else:
             command = [compiler, *flags, '-std=' + language, '-x', 'c' if language == 'c11' else 'c++',
-                       '-I' + str(source / 'include'), client, '-x', 'none', library, '-o', executable, *link]
+                       '-I' + str(include), client, '-x', 'none', library, '-o', executable, *link]
         compiled = subprocess.run(command, cwd=logs, capture_output=True, timeout=30)
         compile_log = logs / (language.replace('+', 'x') + '-compile.log')
         compile_log.write_bytes(compiled.stdout + compiled.stderr)
@@ -68,6 +79,7 @@ def header_clients(build, logs):
                         'librarySHA256': hashlib.sha256(library.read_bytes()).hexdigest(),
                         'headerSHA256': hashlib.sha256((source / 'include/xray_native_runtime.h').read_bytes()).hexdigest()})
     (logs / 'header-clients.json').write_text(json.dumps(records, indent=2), encoding='utf-8')
+    return records
 
 
 def main():
@@ -99,7 +111,8 @@ def main():
         return process.returncode, output, process.stderr
 
     if args.suite == 'clock':
-        for mode in ('failed', 'range', 'unknown', 'bad-source'):
+        for mode in ('failed', 'range', 'unknown', 'bad-source',
+                     'offset-range', 'offset-unknown', 'offset-bad-source'):
             command = [args.clients[0], mode]
             process = subprocess.run(command, capture_output=True, timeout=15)
             (args.logs / (mode + '.stdout')).write_bytes(process.stdout)
@@ -107,11 +120,44 @@ def main():
             (args.logs / (mode + '.exit')).write_text(str(process.returncode))
             assert process.returncode != 0 and not process.stdout
             assert b'AFTER_CALL' not in process.stderr and b'EXIT_CALLBACK' not in process.stderr
-            if mode != 'bad-source':
-                reason = b'out of range' if mode == 'range' else b'read failed'
-                source = b'unknown source' if mode == 'unknown' else b'clock.xr:7:9-7:12'
+            if mode not in ('bad-source', 'offset-bad-source'):
+                offset = mode.startswith('offset-')
+                reason = b'out of range' if offset or mode == 'range' else b'read failed'
+                source = b'unknown source' if mode in ('unknown', 'offset-unknown') else b'clock.xr:7:9-7:12'
+                kind = b'utc-offset' if offset else b'monotonic'
                 assert process.returncode == 1
-                assert process.stderr == b'xray: host clock monotonic ' + reason + b' at ' + source + b'\n'
+                assert process.stderr == b'xray: host clock ' + kind + b' ' + reason + b' at ' + source + b'\n'
+        # The original complete Source call discards the result; all four
+        # optimization orders must retain its execution-ending range failure.
+        clients = header_clients(Path(args.build), args.logs)
+        template = next(row['command'] for row in clients if row['language'] == 'c11')
+        for mode in range(4):
+            generated = args.logs / ('offset-range-' + str(mode) + '.c')
+            emitted = subprocess.run([args.clients[0], 'emit-offset', str(generated), str(mode)],
+                                     capture_output=True, timeout=30)
+            assert (emitted.returncode, emitted.stdout, emitted.stderr) == (0, b'', b''), emitted.stderr
+            adapter = generated.with_name(generated.stem + '-client.c')
+            adapter.write_text('#include <stdio.h>\n#include <stdlib.h>\n#include "' + generated.name +
+                '"\nstatic void late(void){fputs("EXIT_CALLBACK",stderr); }\n'
+                'int main(void){if(atexit(late))return 2;(void)xray_lir_entry();'
+                'fputs("AFTER_CALL",stderr);return 77;}\n', encoding='ascii')
+            exe = adapter.with_suffix('.exe' if os.name == 'nt' else '')
+            command = [('/Tc' + str(adapter) if x.startswith('/Tc') else
+                        '/Fe:' + str(exe) if x.startswith('/Fe:') else
+                        str(adapter) if x.endswith('header-client.c') else x) for x in template]
+            if os.name != 'nt':
+                command[command.index('-o') + 1] = str(exe)
+            (args.logs / (generated.stem + '.compile.json')).write_text(json.dumps(command, indent=2))
+            compiled = subprocess.run(command, cwd=args.logs, capture_output=True, timeout=30)
+            (args.logs / (generated.stem + '.compile.log')).write_bytes(compiled.stdout + compiled.stderr)
+            assert compiled.returncode == 0, compiled.stderr
+            ran = subprocess.run([exe], capture_output=True, timeout=15)
+            (args.logs / (generated.stem + '.stdout')).write_bytes(ran.stdout)
+            (args.logs / (generated.stem + '.stderr')).write_bytes(ran.stderr)
+            (args.logs / (generated.stem + '.exit')).write_text(str(ran.returncode))
+            assert ran.returncode == 1 and not ran.stdout
+            assert ran.stderr == (b'xray: host clock utc-offset out of range at '
+                b'<embedded stdlib>/time/time.xr:45:5-45:5\n'), ran.stderr
         return
     if args.suite == 'output':
         code, output, error = run('raw-values', mode='values')

@@ -138,7 +138,8 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
         break;
     case XR_RBC_CALLN:
         if (index >= module->native_count ||
-            a + (module->natives[index] == XR_RBC_NATIVE_PRINT_I64 ? 2u : 1u) >= registers)
+            a + (module->natives[index] == XR_RBC_NATIVE_PRINT_I64 ||
+                module->natives[index] == XR_RBC_NATIVE_UTC_OFFSET_AT ? 2u : 1u) >= registers)
             return false;
         break;
     case XR_RBC_RET:

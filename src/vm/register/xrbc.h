@@ -90,6 +90,7 @@ typedef enum XrRbcNativeKind {
     XR_RBC_NATIVE_CLOCK_REALTIME,
     XR_RBC_NATIVE_CLOCK_CPU,
     XR_RBC_NATIVE_CLOCK_MONOTONIC,
+    XR_RBC_NATIVE_UTC_OFFSET_AT,
     XR_RBC_NATIVE_COUNT
 } XrRbcNativeKind;
 
@@ -140,6 +141,7 @@ typedef struct XrRbcOutcome XrRbcOutcome;
 // CALL A,Bx returns into A; the callee starts at A+1, the caller's top argument
 // window. CALLN selects a fixed native kind with Bx. Integer output reads
 // value/id at A+1/A+2; clocks read id at A+1 and return I64 bits into A.
+// UTC offset reads timestamp/id at A+1/A+2 and also returns I64 bits into A.
 // Callee locals may overwrite slots beyond the call window. LT/LE/EQ compare
 // A,B and execute the following JMP only when the comparison is true.
 // PRINT_LITERAL reserves A as zero and selects immutable bytes by Bx; its

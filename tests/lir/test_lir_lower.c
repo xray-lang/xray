@@ -619,8 +619,24 @@ static void clock_sources(const char *programs) {
     rejected("const divisor=0\nfn f(x:i64)->i64{return x/divisor}\nprint(f(1))\n",false,"DIV_INT");
     rejected("print(f(1))\nconst divisor=2\nfn f(x:i64)->i64{return x/divisor}\n",false,"before complete publication");
 }
+static void offset_sources(void) {
+    SourceFixture fixture=source_fixture("import time\nprint(time.localOffsetAt(1700000000))\nprint(time.localOffset())\n");
+    XrLirLowered output={0};XrLirLowerRequest request={fixture.closed,fixture.source.snapshot,false};
+    OK(xr_lir_lower_program_checked(&request,&output,NULL));source_fixture_free(&fixture);
+    unsigned offsets=0;
+    for(uint32_t i=0;i<xr_lir_function_count(output.module);++i) {
+        XrLirFunction f;XrLirFunctionView v;
+        OK(xr_lir_function_at(output.module,i,&f));OK(xr_lir_function_view(output.module,f,&v));
+        if(v.extern_kind==XR_LIR_EXTERN_UTC_OFFSET_AT) {
+            CHECK(v.kind==XR_LIR_FUNCTION_EXTERNAL && v.result==XR_LIR_I64 && v.parameter_count==1 && v.parameter_types[0]==XR_LIR_I64);
+            ++offsets;
+        }
+    }
+    CHECK(offsets==1);xr_lir_lowered_free(&output);
+}
 int main(int argc, char **argv) {
     CHECK(argc == 3);
+    offset_sources();
     imported_time(argv[1]);
     clock_sources(argv[1]);
     supported_control();
