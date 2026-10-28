@@ -105,7 +105,8 @@
     "test_xir_try_optional_faults",
     "test_xir_try_optional_native",
     "test_xir_values",
-    "test_xir_nullable_unit_native"
+    "test_xir_nullable_unit_native",
+    "test_native_clock"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -285,7 +286,9 @@
     "test_xir_nullable_unit_faults",
     "test_xir_nullable_unit_values",
     "test_xir_nullable_unit_cli",
-    "test_xir_nullable_unit_native"
+    "test_xir_nullable_unit_native",
+    "native_clock_scope",
+    "native_clock_standalone"
   ],
   "versionCommand": [
     "{build}/xray.exe",
