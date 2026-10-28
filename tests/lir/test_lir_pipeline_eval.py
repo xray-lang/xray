@@ -233,6 +233,21 @@ def main():
             path.write_bytes(raw.replace(needle, b'const n = ' + str(n).encode('ascii')))
             cases.append((path.stem, path, expected))
     cases.append(('helper', args.helper.resolve(), b'10\n10\n-10\n-10\n'))
+    time_library = args.source_root / 'stdlib/time/time.xr'
+    time_bytes = time_library.read_bytes()
+    time_entry = inputs / 'time.xr'
+    time_entry.write_bytes(b'import time\nprint(1)\n')
+    cases.append(('time', time_entry, b'1\n'))
+    sources['time'] = {'path': str(time_library), 'rawSHA256': digest(time_library)}
+    (inputs / 'base.xr').write_bytes(b'const n=10\nexport fn read()->i64{return n}\n')
+    (inputs / 'left.xr').write_bytes(b'import "./base" as base\nconst own=1\n'
+        b'export fn read()->i64{return base.read()+own}\n')
+    (inputs / 'right.xr').write_bytes(b'import "./base" as base\nconst own=2\n'
+        b'export fn read()->i64{return base.read()+own}\n')
+    diamond = inputs / 'diamond.xr'
+    diamond.write_bytes(b'import "./left" as left\nimport "./right" as right\n'
+        b'print(left.read()+right.read())\n')
+    cases.append(('diamond', diamond, b'23\n'))
     compiler = Path(shutil.which(str(args.compiler)) or args.compiler).resolve()
     assert compiler.is_file()
     identity = {'compiler': str(compiler), 'compilerSHA256': digest(compiler),
@@ -248,7 +263,7 @@ def main():
             folder.mkdir(parents=True)
             generated, metrics = folder / 'generated.c', folder / 'receipt.json'
             p, vm_record = invoke(folder, 'source-pipeline',
-                                  [args.driver, source, mode, generated, metrics, 0, 2, 'normal'])
+                                  [args.driver, source, mode, generated, metrics, 0, 2, 'normal', args.source_root / 'stdlib'])
             assert p.stdout == expected * 2 and not p.stderr
             receipt = json.loads(metrics.read_bytes())
             check_receipt(receipt, mode, 2)
@@ -283,6 +298,8 @@ def main():
             if name == 'helper':
                 row['outputFailures'] = failure_rows(args, folder, source, mode, executable)
             records.append(row)
+    assert time_library.read_bytes() == time_bytes
+    assert time_entry.read_bytes() == b'import time\nprint(1)\n'
     for source in sources.values():
         assert digest(Path(source['path'])) == source['rawSHA256']
     identity.update(status='PASS_READINESS_NOT_FORMAL_PERFORMANCE', cases=len(records),

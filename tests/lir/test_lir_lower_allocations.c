@@ -89,8 +89,10 @@ static void diagnostic_copy_failure(void) {
 // These are private structural controls, not claims of valid Source/Checked input.
 static void literal_guard(const XrLirLowerRequest *request, const XrXirModule *source, bool good) {
     Lower c = {.request = request, .source = source, .instruction = UINT32_MAX};
+    CHECK(lower_modules(&c));
     CHECK(lower_literal(&c) == good);
     CHECK(c.status == (good ? XR_LIR_OK : XR_LIR_UNSUPPORTED));
+    lower_modules_free(&c);
 }
 static void literal_structure(void) {
     SourceFixture fixture = source_fixture("const n=7\nprint(n)\nprint(n)\n");
@@ -98,13 +100,18 @@ static void literal_structure(void) {
     const XrXirModule *original = xr_xir_compile_artifact_module(fixture.closed);
     XrXirModule source = *original;
     XrXirDeclarations declarations = *source.declarations;
-    XrXirSlot slot = declarations.slots[0];
+    XrXirSlot slots[2] = {declarations.slots[0], declarations.slots[0]};
     source.declarations = &declarations;
-    declarations.slots = &slot;
+    declarations.slots = slots;
     XrXirFunction *functions = xr_malloc((size_t)(source.function_count + 1) * sizeof(*functions));
     CHECK(functions);
     memcpy(functions, source.functions, (size_t)source.function_count * sizeof(*functions));
     source.functions = functions;
+    XrXirFunctionIdentity *identities = xr_malloc((source.function_count + 1) * sizeof(*identities));
+    CHECK(identities);
+    memset(identities, 0, (source.function_count + 1) * sizeof(*identities));
+    memcpy(identities, declarations.functions, source.function_count * sizeof(*identities));
+    declarations.functions = identities;
     uint32_t init = declarations.modules[0].initializer;
     XrXirFunction *f = &functions[init];
     XrXirInstruction *ops = xr_malloc((size_t)f->instruction_count * sizeof(*ops));
@@ -144,17 +151,19 @@ static void literal_structure(void) {
     XrLirLowerFailure failure = {0};
     Lower early = {.request = &request, .source = &source, .failure = &failure,
         .instruction = UINT32_MAX};
+    CHECK(lower_modules(&early));
     CHECK(!lower_literal(&early) && early.status == XR_LIR_UNSUPPORTED);
     CHECK(strstr(failure.diagnostic.message, "slot read outside its initialized block"));
     xr_lir_lower_failure_free(&failure);
+    lower_modules_free(&early);
     ops[publish] = original_ops[publish];
     ops[read] = original_ops[read];
-    slot.mutable = 1;
+    slots[0].mutable = 1;
     literal_guard(&request, &source, false);
-    slot.mutable = 0;
-    slot.type = XR_XIR_F64;
+    slots[0].mutable = 0;
+    slots[0].type = XR_XIR_F64;
     literal_guard(&request, &source, false);
-    slot.type = XR_XIR_I64;
+    slots[0].type = XR_XIR_I64;
     declarations.slot_count = 2;
     literal_guard(&request, &source, false);
     declarations.slot_count = 1;
@@ -195,7 +204,7 @@ static void literal_structure(void) {
     functions[source.function_count] = (XrXirFunction) {.instructions = spare_ops,
         .instruction_count = 2, .blocks = &spare_block, .block_count = 1};
     ++source.function_count;
-    literal_guard(&request, &source, false); // Unselected function reads the slot.
+    literal_guard(&request, &source, true); // A same-module helper can read initialized constants.
     spare_ops[0] = (XrXirInstruction) {.op = XR_XIR_CALL, .immediate = init};
     literal_guard(&request, &source, false); // Unselected cross-function initializer call.
     for (size_t i = 0; i < sizeof(roles) / sizeof(roles[0]); ++i) {
@@ -204,6 +213,7 @@ static void literal_structure(void) {
     }
     xr_free(ops);
     xr_free(functions);
+    xr_free(identities);
     source_fixture_free(&fixture);
     puts("original literal slot roles and one-time entry restrictions passed");
 }
@@ -230,6 +240,18 @@ int main(void) {
     OK(run(&fixture));
     CHECK(attempts > 2);
     for (size_t point=0; point<2; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+        fail_at = SIZE_MAX;
+        OK(run(&fixture));
+    }
+    source_fixture_free(&fixture);
+    fixture = source_fixture("import time\nprint(1)\n");
+    attempts = 0; fail_at = SIZE_MAX;
+    OK(run(&fixture));
+    size_t imported_attempts = attempts;
+    CHECK(imported_attempts > 4);
+    for (size_t point=0; point<imported_attempts; ++point) {
         attempts = 0; fail_at = point;
         CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
         fail_at = SIZE_MAX;

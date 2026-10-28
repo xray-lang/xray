@@ -467,11 +467,16 @@ static void literal_sources(void) {
     rejected("fn value()->i64{return 7}\nconst n=value()\nprint(n)\n", false,
              "direct same-block i64 literal");
     rejected("const s=\"managed\"\nprint(7)\n", false, "module slots");
-    rejected("const n=7\nconst m=8\nprint(n+m)\n", false, "module slots");
-    rejected("const n=7\nfn reader()->i64{return n}\nprint(reader())\n", false,
-             "slot read outside");
-    rejected("const n=7\nfn unused()->i64{return n}\nprint(1)\n", false,
-             "slot read outside");
+    static const char *constants[] = {
+        "const n=7\nconst m=8\nprint(n+m)\n",
+        "const n=7\nfn reader()->i64{return n}\nprint(reader())\n",
+        "const n=7\nfn unused()->i64{return n}\nprint(1)\n"
+    };
+    for (size_t i=0; i<sizeof(constants)/sizeof(constants[0]); ++i) {
+        output = lower_text(constants[i]); xr_lir_lowered_free(&output);
+    }
+    rejected("print(reader())\nconst n=7\nfn reader()->i64{return n}\n", false,
+             "before complete publication");
     rejected("const n=7\nif(true){print(n)}\n", false, "slot read outside");
 }
 static void module_cells_source(const char *directory) {
@@ -568,8 +573,33 @@ static void local_boundaries(void) {
         xr_lir_lower_failure_free(&failure);
     }
 }
+static void imported_time(const char *programs) {
+    char stdlib[2048];
+    int count = snprintf(stdlib, sizeof(stdlib), "%s/../../../stdlib", programs);
+    CHECK(count > 0 && (size_t)count < sizeof(stdlib));
+    SourceFixture fixture = source_fixture_stdlib("import time\nprint(1)\n", stdlib);
+    const XrXirModule *source = xr_xir_compile_artifact_module(fixture.closed);
+    CHECK(source->declarations->module_count == 2 && source->declarations->slot_count == 3);
+    XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
+    XrLirLowered output = {0};
+    OK(xr_lir_lower_program_checked(&request, &output, NULL));
+    source_fixture_free(&fixture);
+    OK(xr_lir_verify(output.module, NULL));
+    XrLirBlock block;
+    OK(xr_lir_block_at(output.module, output.entry, 0, &block));
+    uint32_t selected[3];
+    for (uint32_t i=0; i<3; ++i) {
+        XrLirInstructionView instruction;
+        OK(xr_lir_instruction_view(output.module, block, i, &instruction));
+        CHECK(instruction.op == XR_LIR_CALL);
+        selected[i] = instruction.callee;
+        for (uint32_t j=0; j<i; ++j) CHECK(selected[j] != selected[i]);
+    }
+    xr_lir_lowered_free(&output);
+}
 int main(int argc, char **argv) {
     CHECK(argc == 3);
+    imported_time(argv[1]);
     supported_control();
     floating_negation_source();
     swapped_backedge();

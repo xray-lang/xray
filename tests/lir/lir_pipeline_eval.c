@@ -22,6 +22,7 @@
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_source_dependencies.h"
 #include "vm/register/xrbc_lir.h"
 #include <errno.h>
 #include <inttypes.h>
@@ -255,8 +256,41 @@ static void transform(Eval *e, XrLirLowered *current, bool inlining, const char 
     snapshot(e, name, current);
 }
 
+static void check_initialization(const XrXirArtifact *closed, const XrLirLowered *lowered) {
+    const XrXirModule *input = xr_xir_compile_artifact_module(closed);
+    const XrXirDeclarations *d = input->declarations;
+    // Mutable Cells retain their existing activation-owned wrapper contract.
+    for (uint32_t s=0; s<d->slot_count; ++s) if (d->slots[s].mutable) return;
+    uint32_t *order = array(d->module_count, sizeof(*order)), count = 0;
+    uint8_t *active = array(d->module_count, 1);
+    CHECK(xr_xir_compile_declarations_active(xr_xir_compile_artifact_context(closed),
+        d, order, active, &count) == XR_XIR_OK);
+    XrLirBlock block;
+    XrLirBlockView view;
+    OK(xr_lir_block_at(lowered->module, lowered->entry, 0, &block));
+    OK(xr_lir_block_view(lowered->module, block, &view));
+    CHECK(view.instruction_count == count + 2);
+    for (uint32_t i=0; i<=count; ++i) {
+        uint32_t selected = i == count ? d->entry_function : d->modules[order[i]].initializer;
+        XrLirInstructionView call;
+        XrLirFunctionView callee;
+        OK(xr_lir_instruction_view(lowered->module, block, i, &call));
+        CHECK(call.op == XR_LIR_CALL);
+        OK(xr_lir_function_view(lowered->module,
+            (XrLirFunction){lowered->module, call.callee}, &callee));
+        char prefix[32];
+        int length = snprintf(prefix, sizeof(prefix), "f%u_", selected);
+        CHECK(length > 0 && (size_t)length < sizeof(prefix) &&
+            callee.name_length == (size_t)length + input->functions[selected].name_length &&
+            !memcmp(callee.name, prefix, (size_t)length) &&
+            !memcmp(callee.name + length, input->functions[selected].name,
+                    input->functions[selected].name_length));
+    }
+    xr_free(active); xr_free(order);
+}
+
 static XrLirLowered source_lower(Eval *e, const char *path, XrCompileResources *resources,
-                               char **expected_path) {
+                               char **expected_path, const char *stdlib) {
     XrCompilerSession *session = NULL;
     XrModuleIdentityAuthority authority = {0}; char *authority_root = NULL;
     XrXirSourceResult source = {0}; XrXirArtifact *closed = NULL;
@@ -266,7 +300,7 @@ static XrLirLowered source_lower(Eval *e, const char *path, XrCompileResources *
         &authority, &authority_root) == XR_MODULE_OK);
     XrXirCompileContext context = {.resources = resources, .limits = xr_xir_compile_default_limits()};
     XrXirSourceRequest request = {.session = session, .entry_path = path, .authority = &authority,
-        .context = &context, .linkage_kind = XR_XIR_PROGRAM};
+        .context = &context, .linkage_kind = XR_XIR_PROGRAM, .stdlib_path = stdlib};
     uint64_t start = clock_ticks();
     XrXirStatus status = xr_xir_compile_source_check(&request, &source, &diagnostic, &failure);
     if (status != XR_XIR_OK) fprintf(stderr, "source: %s\n", diagnostic.message);
@@ -280,9 +314,15 @@ static XrLirLowered source_lower(Eval *e, const char *path, XrCompileResources *
     XrLirStatus ls = xr_lir_lower_program_checked(&lower, &lowered, &lower_failure);
     if (ls != XR_LIR_OK) fprintf(stderr, "lower: %s\n", lower_failure.diagnostic.message);
     CHECK(ls == XR_LIR_OK); stage(e, "lower", start);
+    check_initialization(closed, &lowered);
     const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(source.snapshot);
-    CHECK(view && view->module_count == 1);
-    const char *borrowed = view->modules[0].path ? view->modules[0].path : view->modules[0].identity;
+    const XrXirSourceDependencies *dependencies =
+        xr_xir_compile_source_snapshot_dependencies(source.snapshot);
+    CHECK(view && dependencies && dependencies->entry < dependencies->count);
+    uint32_t root_module = dependencies->entries[dependencies->entry].module;
+    CHECK(root_module < view->module_count);
+    const XrXirSourceQueryModule *root = &view->modules[root_module];
+    const char *borrowed = root->path ? root->path : root->identity;
     CHECK(borrowed && strlen(borrowed) < SIZE_MAX);
     *expected_path = xr_malloc(strlen(borrowed) + 1); CHECK(*expected_path);
     memcpy(*expected_path, borrowed, strlen(borrowed) + 1);
@@ -391,8 +431,8 @@ static void run_vm(Eval *e, XrRbcProgram **program, Sample *sample, const char *
 }
 
 int main(int argc, char **argv) {
-    if (argc != 8) {
-        fputs("usage: lir_pipeline_eval <source> <mode> <output.c> <receipt.json> <warmups> <runs> <normal|program-first|outcome-first>\n", stderr);
+    if (argc != 8 && argc != 9) {
+        fputs("usage: lir_pipeline_eval <source> <mode> <output.c> <receipt.json> <warmups> <runs> <normal|program-first|outcome-first> [stdlib-directory]\n", stderr);
         return 2;
     }
     const char *mode = argv[2];
@@ -412,7 +452,7 @@ int main(int argc, char **argv) {
     XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
     char *expected_path = NULL;
-    XrLirLowered lowered = source_lower(&e, argv[1], resources, &expected_path);
+    XrLirLowered lowered = source_lower(&e, argv[1], resources, &expected_path, argc == 9 ? argv[8] : NULL);
     snapshot(&e, "raw", &lowered);
     if (sccp || combined) transform(&e, &lowered, false, "sccp_1");
     if (inlining || combined) transform(&e, &lowered, true, "inline_1");

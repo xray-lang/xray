@@ -30,7 +30,7 @@ typedef struct SourceFixture {
     XrXirArtifact *closed;
 } SourceFixture;
 
-static SourceFixture source_fixture(const char *text) {
+static SourceFixture source_fixture_stdlib(const char *text, const char *stdlib) {
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrXirCompileContext context = {0};
     CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
@@ -41,7 +41,7 @@ static SourceFixture source_fixture(const char *text) {
     XrXirSourceRequest request = {.session = session,
                                   .authority = &authority,
                                   .context = &context,
-                                  .linkage_kind = XR_XIR_PROGRAM};
+                                  .linkage_kind = XR_XIR_PROGRAM, .stdlib_path = stdlib};
     SourceFixture fixture = {0};
     XrXirSourceDiagnostic diagnostic = {0};
     XrXirSourceText input = {NULL, text, strlen(text)};
@@ -55,6 +55,9 @@ static SourceFixture source_fixture(const char *text) {
     xr_compile_session_free(session);
     xr_compile_resources_release(context.resources);
     return fixture;
+}
+static SourceFixture source_fixture(const char *text) {
+    return source_fixture_stdlib(text, NULL);
 }
 static void source_fixture_free(SourceFixture *fixture) {
     xr_xir_compile_artifact_free(fixture->closed);

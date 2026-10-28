@@ -21,7 +21,7 @@
 #include "xir/xxir_source.h"
 #include <stdio.h>
 
-static XrRbcProgram *compile_file(const char *path, bool optimize) {
+static XrRbcProgram *compile_file(const char *path, bool optimize, const char *stdlib) {
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrXirCompileContext context = {0};
     XrCompilerSession *session = NULL;
@@ -44,7 +44,8 @@ static XrRbcProgram *compile_file(const char *path, bool optimize) {
     }
     context.limits = xr_xir_compile_default_limits();
     XrXirSourceRequest request = {.session = session, .entry_path = path,
-        .authority = &authority, .context = &context, .linkage_kind = XR_XIR_PROGRAM};
+        .authority = &authority, .context = &context, .linkage_kind = XR_XIR_PROGRAM,
+        .stdlib_path = stdlib};
     if (xr_xir_compile_source_check(&request, &source, &source_diagnostic,
             &source_failure) != XR_XIR_OK) {
         fprintf(stderr, "lir_vm_run: source %s:%d:%d: %s\n",
@@ -107,17 +108,19 @@ done:
 }
 
 int main(int argc, char **argv) {
-    bool twice = false, optimize = false, valid = argc >= 2 && argc <= 4;
+    bool twice = false, optimize = false, valid = argc >= 2 && argc <= 6;
+    const char *stdlib = NULL;
     for (int i = 2; i < argc; ++i) {
         if (!strcmp(argv[i], "--twice") && !twice) twice = true;
         else if (!strcmp(argv[i], "--optimize") && !optimize) optimize = true;
+        else if (!strcmp(argv[i], "--stdlib") && !stdlib && i + 1 < argc) stdlib = argv[++i];
         else valid = false;
     }
     if (!valid) {
-        fputs("usage: lir_vm_run <source.xr> [--twice] [--optimize]\n", stderr);
+        fputs("usage: lir_vm_run <source.xr> [--twice] [--optimize] [--stdlib <directory>]\n", stderr);
         return 2;
     }
-    XrRbcProgram *program = compile_file(argv[1], optimize);
+    XrRbcProgram *program = compile_file(argv[1], optimize, stdlib);
     if (!program) return 1;
     int result = 0;
     for (unsigned i = 0; i < (twice ? 2u : 1u) && !result; ++i) {

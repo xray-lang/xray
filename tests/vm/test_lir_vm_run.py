@@ -15,16 +15,50 @@ def main():
     with tempfile.TemporaryDirectory(prefix='source-', dir=args.scratch) as folder:
         root = Path(folder)
 
-        def run(name, text, expected=0, diagnostic=b'', stdout=b''):
+        def run(name, text, expected=0, diagnostic=b'', stdout=b'', diagnostic_path=None):
             path = root / (name + '.xr')
             path.write_text(text, encoding='utf-8')
             result = subprocess.run([args.driver, str(path)], capture_output=True, timeout=15)
             assert result.returncode == expected, (name, result.returncode, result.stderr)
             assert result.stdout == stdout, (name, result.stdout)
             if expected:
-                assert diagnostic in result.stderr and str(path).encode() in result.stderr, (name, result.stderr)
+                assert diagnostic in result.stderr and str(diagnostic_path or path).encode() in result.stderr, (name, result.stderr)
             else:
                 assert result.stderr == b'', (name, result.stderr)
+
+        stdlib = Path(__file__).resolve().parents[2] / 'stdlib'
+        time_library = stdlib / 'time/time.xr'
+        time_bytes = time_library.read_bytes()
+        path = root / 'time.xr'
+        path.write_bytes(b'import time\nprint(1)\n')
+        for options in ([], ['--twice'], ['--optimize'], ['--twice', '--optimize']):
+            result = subprocess.run([args.driver, str(path), '--stdlib', str(stdlib), *options],
+                                    capture_output=True, timeout=15)
+            assert result.returncode == 0 and not result.stderr, (options, result.stderr)
+            assert result.stdout == b'1\n' * (2 if '--twice' in options else 1)
+        assert path.read_bytes() == b'import time\nprint(1)\n'
+        assert time_library.read_bytes() == time_bytes
+        (root / 'base.xr').write_text('const value=10\n'
+            'export fn read()->i64{return value}\n', encoding='utf-8')
+        (root / 'left.xr').write_text('import "./base" as base\nconst own=1\n'
+            'export fn read()->i64{return base.read()+own}\n', encoding='utf-8')
+        (root / 'right.xr').write_text('import "./base" as base\nconst own=2\n'
+            'export fn read()->i64{return base.read()+own}\n', encoding='utf-8')
+        diamond = ('import "./left" as left\nimport "./right" as right\n'
+                   'print(left.read()+right.read())\n')
+        path = root / 'diamond.xr'
+        path.write_text(diamond, encoding='utf-8')
+        for options in ([], ['--twice'], ['--optimize'], ['--twice', '--optimize']):
+            result = subprocess.run([args.driver, str(path), *options], capture_output=True, timeout=15)
+            assert result.returncode == 0 and not result.stderr, (options, result.stderr)
+            assert result.stdout == b'23\n' * (2 if '--twice' in options else 1)
+        (root / 'effect.xr').write_text('const owned="unsupported"\n', encoding='utf-8')
+        run('unsupported-initializer', 'import "./effect" as effect\nprint(1)\n', 1, b'module slots')
+        (root / 'invalid.xr').write_text('export fn unused()->i64{return "wrong"}\n', encoding='utf-8')
+        run('unselected-check-error', 'import "./invalid" as invalid\nprint(1)\n', 1, b'source',
+            diagnostic_path=root / 'invalid.xr')
+        run('early-reader', 'print(read())\nconst n=7\nfn read()->i64{return n}\n',
+            1, b'before complete publication')
 
         run('empty', '')
         run('ordinary-main', 'fn main()->i64{print(99)\nreturn 7}\n')
