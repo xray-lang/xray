@@ -98,9 +98,11 @@ static bool source_item_reserve(SourceContext *ctx,AstNode *node,XrHirItemSpec s
     return source_item_resource(ctx,node,xr_hir_items_reserve(ctx->items,&spec,out?out:&ignored));
 }
 static bool source_parameter_items(SourceContext *ctx,uint32_t module,AstNode *node,uint32_t parent) {
-    bool method=node->type==AST_METHOD_DECL;
-    int count=method?node->as.method_decl.param_count:node->as.function_decl.param_count;
-    XrParamNode **parameters=method?node->as.method_decl.params:node->as.function_decl.params;
+    bool method=node->type==AST_METHOD_DECL,requirement=node->type==AST_INTERFACE_METHOD;
+    int count=method?node->as.method_decl.param_count:
+        requirement?node->as.interface_method.param_count:node->as.function_decl.param_count;
+    XrParamNode **parameters=method?node->as.method_decl.params:
+        requirement?node->as.interface_method.params:node->as.function_decl.params;
     if(count<0||count>65536||(count&&!parameters))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"function parameters are malformed");
     for(int p=0;p<count;++p) {
@@ -122,6 +124,23 @@ static bool source_nominal_parameter_items(SourceContext *ctx,uint32_t module,As
             return source_fail(ctx,method,XR_XIR_BAD_STRUCTURE,"nominal method declaration is malformed");
         const char *name=method->as.method_decl.is_constructor?"init":method->as.method_decl.name;
         if(!name||!*name)return source_fail(ctx,method,XR_XIR_BAD_STRUCTURE,"method name is missing");
+        uint32_t item=0;
+        XrHirItemSpec spec={name,module,parent,method->node_id,method->line,method->column,XR_HIR_ITEM_PARAMETER_SCOPE};
+        if(!source_item_reserve(ctx,method,spec,&item)||!source_parameter_items(ctx,module,method,item+1))return false;
+    }
+    return true;
+}
+static bool source_interface_parameter_items(SourceContext *ctx,uint32_t module,AstNode *node,uint32_t parent) {
+    const InterfaceDeclNode *declaration=&node->as.interface_decl;
+    if(declaration->method_count<0||(declaration->method_count&&!declaration->methods))
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"interface method declarations are malformed");
+    for(int m=0;m<declaration->method_count;++m) {
+        AstNode *method=declaration->methods[m];
+        if(!source_request_poll(ctx,method))return false;
+        if(!method||method->type!=AST_INTERFACE_METHOD)
+            return source_fail(ctx,method,XR_XIR_BAD_STRUCTURE,"interface method declaration is malformed");
+        const char *name=method->as.interface_method.name;
+        if(!name||!*name)return source_fail(ctx,method,XR_XIR_BAD_STRUCTURE,"interface method name is missing");
         uint32_t item=0;
         XrHirItemSpec spec={name,module,parent,method->node_id,method->line,method->column,XR_HIR_ITEM_PARAMETER_SCOPE};
         if(!source_item_reserve(ctx,method,spec,&item)||!source_parameter_items(ctx,module,method,item+1))return false;
@@ -159,6 +178,7 @@ static bool source_items_prepare(SourceContext *ctx) {
                 if(node->type==AST_FUNCTION_DECL&&!source_parameter_items(ctx,m,node,item+1))return false;
                 if((node->type==AST_STRUCT_DECL||node->type==AST_CLASS_DECL||node->type==AST_ENUM_DECL)&&
                     !source_nominal_parameter_items(ctx,m,node,item+1))return false;
+                if(node->type==AST_INTERFACE_DECL&&!source_interface_parameter_items(ctx,m,node,item+1))return false;
             }
             if(node->type==AST_DESTRUCTURE_DECL) {
                 SourceDestructurePlan plan={0};

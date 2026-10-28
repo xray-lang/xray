@@ -130,6 +130,81 @@ def method_parameter_cases(args, output, environment):
                 field_and_this=True, source_removed=True, commands=commands)
 
 
+
+def interface_parameter_cases(args, output, environment):
+    source = output/'interface-参数.xr'
+    text = (
+        'const value:i64=99\r\n'
+        'enum Fault{Bad}\r\n'
+        'interface Reader {\r\n'
+        '/*é😀*/ first(value:i64,value:i64) throws(Fault)->i64\r\n'
+        '/*é😀*/ second(value:i64,value:i64) throws(Fault)->i64\r\n'
+        '}\r\n'
+        'struct Pair implements Reader {\r\n'
+        'first(value:i64,other:i64) throws(Fault)->i64{return value+other}\r\n'
+        'second(value:i64,other:i64) throws(Fault)->i64{return value+other}\r\n'
+        '}\r\n'
+        'fn answer<T:Reader>(reader:T) throws(Fault)->i64{return try reader.first(4,5)}\r\n'
+        'print(try answer(Pair{}))\r\n').encode('utf-8')
+    assert len(text) == 455 and hashlib.sha256(text).hexdigest() == 'd390c03a325d97a1c2e234092bebefd24aeb895e67e17cb26fed56907aec8251'
+    source.write_bytes(text)
+    report = output/'interface-parameters.json'
+    commands = []
+
+    def invoke(label, arguments):
+        command = [str(args.xray.resolve()), *map(str, arguments)]
+        child = subprocess.run(command, env=environment, capture_output=True, timeout=90)
+        (output/('interface-'+label+'.stdout')).write_bytes(child.stdout)
+        (output/('interface-'+label+'.stderr')).write_bytes(child.stderr)
+        commands.append(dict(command=command, exit=child.returncode))
+        return child
+
+    child = invoke('test', ['test', source, '--report', report])
+    assert child.returncode == 1, (child.returncode, child.stdout, child.stderr)
+    result = json.loads(report.read_text(encoding='utf-8'))['files'][0]
+    assert result['sourceStatus'] == 'source-rejected' and result['sourceStage'] == 4
+    rows = []
+    for number, line in enumerate(text.splitlines(), 1):
+        if line.startswith(b'/*'):
+            first = line.index(b'value')
+            second = line.index(b'value', first+5)
+            rows.extend(((number, second+1, 'error', 'duplicate parameter name'),
+                         (number, first+1, 'note', 'first declaration is here')))
+    path = str(source).replace('\\', '/')
+    expected = ''.join(f'{path}:{line}:{column}: {kind}: {message}\n'
+                       for line, column, kind, message in rows)
+    assert len(rows) == 4 and result['error'].replace('\\', '/') == expected
+    child = invoke('check', ['check', source])
+    assert child.returncode == 1 and child.stderr.count(b'duplicate parameter name') == 2
+    source.unlink()
+    assert json.loads(report.read_text(encoding='utf-8'))['files'][0]['error'] == result['error']
+    corrected = text.replace(b'value:i64,value:i64', b'value:i64,other:i64')
+    assert corrected != text and corrected.count(b'value:i64,other:i64') == 4
+    source.write_bytes(corrected)
+    child = invoke('run', ['run', source])
+    assert child.returncode == 0 and child.stdout == b'9\n' and not child.stderr
+    generated, native = output/'interface-parameters.c', output/'interface-parameters.exe'
+    child = invoke('c', ['build', '-c', source, '-o', generated])
+    assert child.returncode == 0 and generated.is_file() and not child.stderr
+    child = invoke('native-build', ['build', source, '-o', native])
+    assert child.returncode == 0 and native.is_file() and not child.stderr
+    assert source.read_bytes() == corrected
+    source.unlink()
+    child = subprocess.run([str(native)], env=environment, capture_output=True, timeout=90)
+    assert child.returncode == 0 and child.stdout == b'9\n' and not child.stderr
+    (output/'interface-native.stdout').write_bytes(child.stdout)
+    guards = {'member': ('interface I{f()->i64\nf()->i64}\nprint(9)\n', 'duplicate or empty declaration name'), 'default': ('interface I{f(value:i64=0)->i64}\n', "expected ')'"), 'type': ('interface I{f(value:Missing)->i64}\n', 'name does not resolve to an admitted nominal type'), 'error': ('interface I{f() throws(i64)->i64}\n', 'error type must satisfy Error'), 'generic': ('interface I{f<T,T>(value:T)->T}\n', "duplicate type parameter name 'T'"), 'closure': ('const f=fn(value:i64,value:i64)->i64{return value}\nprint(9)\n', 'duplicate or empty declaration name')}
+    for name, (guard, reason) in guards.items():
+        path = output/("interface-guard-"+name+".xr")
+        path.write_text(guard, encoding="utf-8")
+        child = invoke("guard-"+name, ["check", path])
+        assert child.returncode == 1 and child.stderr.endswith((reason+"\n").encode("utf-8"))
+    return dict(roots=2, labels=2, unicode_crlf=True, corrected_stdout_hex='390a',
+                source_bytes=len(text), source_sha256=hashlib.sha256(text).hexdigest(),
+                corrected_sha256=hashlib.sha256(corrected).hexdigest(),
+                declared_errors=True, implements_and_generic=True, same_names_across_scopes=True, source_removed=True, commands=commands)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
@@ -173,6 +248,7 @@ def main():
                    source_removed=True, report_sha256=hashlib.sha256(report.read_bytes()).hexdigest(), output=str(output))
     summary['parameters'] = parameter_cases(args, output, environment)
     summary['method_parameters'] = method_parameter_cases(args, output, environment)
+    summary['interface_parameters'] = interface_parameter_cases(args, output, environment)
     (output/'result.json').write_text(json.dumps(summary, indent=2)+'\n', encoding='utf-8')
     print(json.dumps(summary))
 

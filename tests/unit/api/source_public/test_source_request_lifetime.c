@@ -973,13 +973,71 @@ static void method_report_lifetime(void) {
     CHECK(!runtime_live&&!runtime_bytes);
     puts("Method/init owned AST report survives request/input retirement; cancellation and memory failure remain resources PASS");
 }
+static void interface_report_lifetime(void) {
+    static const char original[]=
+        "const value:i64=99\r\n"
+        "enum Fault{Bad}\r\n"
+        "interface Reader {\r\n"
+        "/*\303\251\360\237\230\200*/ first(value:i64,value:i64) throws(Fault)->i64\r\n"
+        "/*\303\251\360\237\230\200*/ second(value:i64,value:i64) throws(Fault)->i64\r\n"
+        "}\r\n"
+        "struct Pair implements Reader {\r\n"
+        "first(value:i64,other:i64) throws(Fault)->i64{return value+other}\r\n"
+        "second(value:i64,other:i64) throws(Fault)->i64{return value+other}\r\n"
+        "}\r\n"
+        "fn answer<T:Reader>(reader:T) throws(Fault)->i64{return try reader.first(4,5)}\r\n"
+        "print(try answer(Pair{}))\r\n";
+    _Static_assert(sizeof(original)-1==455,"Complete interface requirement source bytes");
+    char text[sizeof(original)];memcpy(text,original,sizeof(text));
+    XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+    XrSourceText source={NULL,"interface-ast-report",text,sizeof(text)-1};XrSourceAst *ast=NULL;
+    XrSourceFailure failure={0};XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;
+    CHECK(xray_source_parse(&source,&options,&ast,&failure,NULL)==XR_SOURCE_OK&&ast);
+    CHECK(xray_source_build_ast(ast,&options,&artifact,&failure,&report)==XR_SOURCE_BAD_ARGUMENT&&!artifact&&report);
+    CHECK(failure.status==XR_SOURCE_BAD_ARGUMENT&&failure.cleanup_status==XR_SOURCE_OK);
+    xray_source_ast_free(ast);memset(text,'!',sizeof(text));
+    XrSourceDiagnosticReportInfo info={0};
+    CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==2&&!info.complete);
+    const uint64_t original_bytes[]={74,133},duplicate_bytes[]={84,143};
+    for(uint32_t i=0;i<2;++i) {
+        XrSourceDiagnosticRoot root={0};XrSourceDiagnosticLabel label={0};
+        CHECK(xray_source_diagnostic_root(report,i,&root)==XR_SOURCE_OK&&root.code==302&&root.labels==1);
+        CHECK(!strcmp(root.message,"duplicate parameter name"));
+        CHECK(xray_source_diagnostic_label(report,i,0,&label)==XR_SOURCE_OK&&!strcmp(label.message,"first declaration is here"));
+        CHECK(root.primary.line==(int32_t)(4+i)&&root.primary.column==(int32_t)(28+i));
+        CHECK(label.location.line==(int32_t)(4+i)&&label.location.column==(int32_t)(18+i));
+        CHECK(root.primary.start_byte==duplicate_bytes[i]&&root.primary.end_byte==duplicate_bytes[i]+5);
+        CHECK(label.location.start_byte==original_bytes[i]&&label.location.end_byte==original_bytes[i]+5);
+        CHECK(root.primary.utf16_line==3+i&&root.primary.utf16_column==24+i);
+        CHECK(label.location.utf16_line==3+i&&label.location.utf16_column==14+i);
+        CHECK(root.primary.flags==label.location.flags&&!memcmp(root.primary.revision,label.location.revision,32));
+    }
+    xray_source_diagnostic_free(report);report=NULL;CHECK(!runtime_live&&!runtime_bytes);
+    memcpy(text,original,sizeof(text));memcpy(text+84,"other",5);memcpy(text+143,"other",5);
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"interface-resource-control",text,sizeof(text)-1}};
+    Calibration control={0};options.cancel_poll=calibration_poll;options.cancel_context=&control;
+    CHECK(calibration_build(&input,&options,&control,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
+    size_t polls=control.polls;CHECK(polls>4);xray_source_artifact_free(artifact);artifact=NULL;
+    CHECK(!runtime_live&&!runtime_bytes);control=(Calibration){.at=polls/2,.cancel=true};
+    calibration_failure(&input,&options,&control,XR_SOURCE_CANCELLED,XR_SOURCE_STAGE_COMPILE);
+    options.cancel_poll=NULL;options.cancel_context=NULL;size_t attempts=runtime_attempts;runtime_fail_at=attempts;
+    XrSourceStatus status=xray_source_build(&input,&options,&artifact,&failure,&report);
+    runtime_fail_at=SIZE_MAX;
+    CHECK(runtime_attempts>attempts&&status==XR_SOURCE_OUT_OF_MEMORY&&!artifact&&failure.status==status);
+    CHECK(failure.cleanup_status==XR_SOURCE_OK);xray_source_diagnostic_free(report);report=NULL;
+    CHECK(!runtime_live&&!runtime_bytes);options.memory_mode=XR_SOURCE_MEMORY_FINITE;options.memory_limit=1;
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_MEMORY_LIMIT&&!artifact);
+    CHECK(failure.status==XR_SOURCE_MEMORY_LIMIT&&failure.cleanup_status==XR_SOURCE_OK);xray_source_diagnostic_free(report);
+    CHECK(!runtime_live&&!runtime_bytes);
+    puts("Interface parameter report survives AST/request/input retirement; physical OOM, cancellation and finite memory remain resources PASS");
+}
 int main(void) {
     lower_loop_controls();
     input_helper_controls();input_prior_resource();public_input_controls();input_nul_location();graph_input_controls();
     compilation_controls();
     report_resources();report_control();unicode_report();module_binding_classes();partial_report_lifetime();
     module_report_lifetime(false);module_report_lifetime(true);
-    method_scope_allocation_controls();method_report_lifetime();
+    method_scope_allocation_controls();method_report_lifetime();interface_report_lifetime();
     independent_requests();detached_ast_and_result();ready_c_artifact();execution_policy();
     global_array_lifetime();global_string_lifetime();
     CHECK(!runtime_live&&!runtime_bytes);

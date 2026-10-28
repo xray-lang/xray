@@ -137,6 +137,8 @@ static bool source_interface_method(SourceContext *ctx, SourceName *owner,
         method->borrow_origin_count || method->borrow_origin_syntax || method->param_count < 0 ||
         method->param_count > 65536 || (method->param_count && !method->params))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface method contract is not admitted");
+    uint32_t parameter_scope=0;
+    if(!source_method_parameter_scope(ctx,node,&parameter_scope))return false;
     SourceName *symbol = add_name(ctx, &ctx->interface_members[owner->index], method->name, node);
     if (!symbol) return false;
     symbol->kind = SOURCE_INTERFACE; symbol->index = member; symbol->module = owner->module;
@@ -160,11 +162,8 @@ static bool source_interface_method(SourceContext *ctx, SourceName *owner,
             !parameter->type || parameter->passing_mode != XR_PARAM_READ || parameter->pattern ||
             parameter->is_rest || parameter->default_value)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface method parameter contract is not admitted");
-        for (uint32_t earlier = 0; earlier < p; ++earlier) {
-            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-            if (source_text_same(ctx, NULL, parameter->name, method->params[earlier]->name))
-                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate interface method parameter");
-        }
+        uint32_t item=0;
+        if(!source_parameter_item(ctx,node,parameter,parameter_scope,&item))return false;
         if (!source_type(ctx, parameter->type, &parameters[p].type)) return false;
         if (parameters[p].type == XR_XIR_UNIT)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface method parameter must be a value type");

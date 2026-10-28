@@ -39,14 +39,19 @@ static bool source_method_parameter_scope(SourceContext *ctx,AstNode *node,uint3
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"method parameter scope was not reserved");
     *out=item+1;return true;
 }
+/* Requirements claim the same declarations without creating body bindings. */
+static bool source_parameter_item(SourceContext *ctx,AstNode *node,const XrParamNode *param,
+    uint32_t parent,uint32_t *item) {
+    XrHirItemSpec spec={param->name,ctx->module,parent,node->node_id,param->line,param->column,XR_HIR_ITEM_PARAMETER};
+    XrCompileResourceStatus status=xr_hir_items_claim(ctx->items,&spec,item);
+    if(status!=XR_COMPILE_RESOURCE_OK)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"parameter declaration was not reserved");
+    return true;
+}
 static SourceName *source_parameter_name(SourceContext *ctx,AstNode *node,const XrParamNode *param,
     uint32_t parent) {
     uint32_t item=0;
-    XrHirItemSpec spec={param->name,ctx->module,parent,node->node_id,param->line,param->column,XR_HIR_ITEM_PARAMETER};
-    XrCompileResourceStatus status=xr_hir_items_claim(ctx->items,&spec,&item);
-    if(status!=XR_COMPILE_RESOURCE_OK) {
-        source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"parameter declaration was not reserved");return NULL;
-    }
+    if(!source_parameter_item(ctx,node,param,parent,&item))return NULL;
     return source_name_bind(ctx,&ctx->locals,param->name,node,item+1);
 }
 static SourceName *add_name(SourceContext *ctx, SourceName **head, const char *name, AstNode *node) {
