@@ -1040,9 +1040,10 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
         if (op->op == XR_XIR_CONVERT_NUMBER ? !xr_xir_type_is_number(expected) : !xr_xir_float_bits(expected))
             return XR_XIR_BAD_TYPE;
     }
-    if (op->op == XR_XIR_THROW || op->op == XR_XIR_CLEANUP_ERROR || op->op == XR_XIR_ERROR_ERASE) {
+    if (op->op == XR_XIR_THROW || op->op == XR_XIR_CLEANUP_ERROR || op->op == XR_XIR_ERROR_ERASE || op->op == XR_XIR_PANIC_ERROR) {
         if (op->op == XR_XIR_ERROR_ERASE && op->type != XR_XIR_ERROR) return XR_XIR_BAD_TYPE;
         expected = xr_xir_operand_type(function, op->args[0]);
+        if (op->op==XR_XIR_PANIC_ERROR && expected!=XR_XIR_ERROR) return XR_XIR_BAD_TYPE;
         XrXirStatus status = xr_xir_compile_type_constraints(&context->remaining, context->module, context->location.function, expected, (XrXirConstraint){.markers = XR_XIR_CONSTRAINT_ERROR});
         if (status != XR_XIR_OK) return status;
     }

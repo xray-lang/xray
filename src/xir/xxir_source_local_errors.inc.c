@@ -41,16 +41,18 @@ static bool source_error_clause_type(SourceContext *ctx, AstNode *node,
 static bool source_local_marked(SourceContext *ctx) {
     if (ctx->bodies[ctx->function].local_handler) return true;
     for (SourceExpressionPlan *plan=ctx->active_expression;plan && plan->owner==ctx->function;plan=plan->parent)
-        if (plan->syntax->type==AST_TRY_EXPR && plan->syntax->as.try_expr.mode==XR_TRY_PROPAGATE) return true;
+        if (plan->syntax->type==AST_TRY_EXPR && (plan->syntax->as.try_expr.mode==XR_TRY_PROPAGATE ||
+            plan->syntax->as.try_expr.mode==XR_TRY_ASSERT)) return true;
     return false;
 }
 static bool source_local_accept(SourceContext *ctx, AstNode *node, XrXirType error,
-    bool marked, SourceLocalHandler *handlers) {
+    bool marked, SourceLocalHandler *handlers, bool asserted) {
     if (error==XR_XIR_NEVER) return true;
     if (error==XR_XIR_UNIT) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"call has no declared error type");
     SourceFunction *body=&ctx->bodies[ctx->function];
     if (!marked)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"E0330: throwing call requires try or a try body");
+    if (asserted) return true;
     for (SourceLocalHandler *handler=handlers;handler;handler=handler->previous)
         for (uint32_t i=0;i<handler->count;++i)
             if (handler->complete[i] &&
@@ -78,7 +80,8 @@ static bool source_local_accept(SourceContext *ctx, AstNode *node, XrXirType err
 }
 static bool source_local_error(SourceContext *ctx, AstNode *node, XrXirType error, bool call) {
     return source_local_accept(ctx,node,error,!call || source_local_marked(ctx),
-        ctx->bodies[ctx->function].local_handler);
+        ctx->bodies[ctx->function].local_handler,
+        ctx->bodies[ctx->function].error_context && ctx->bodies[ctx->function].error_context->asserted);
 }
 static bool source_local_declared_error(SourceContext *ctx,uint32_t target,
     uint32_t first,uint32_t count,XrXirType *output) {
@@ -154,7 +157,8 @@ static bool source_local_call(SourceContext *ctx,const XrXirInstruction *op) {
                 (ctx->identities[ctx->function].method_kind==XR_XIR_CONSTRUCTOR &&
                  ctx->bodies[target].node && ctx->bodies[target].node->type==AST_FIELD_DECL);
             *site=(SourcePendingError){body->pending_errors,body->local_handler,node,target,
-                op->type_arguments[0],op->type_arguments[1],generated || source_local_marked(ctx)};
+                op->type_arguments[0],op->type_arguments[1],generated || source_local_marked(ctx),
+                body->error_context && body->error_context->asserted};
             body->pending_errors=site;return true;
         }
         if (!source_local_declared_error(ctx,target,op->type_arguments[0],op->type_arguments[1],&error)) return false;
@@ -198,7 +202,7 @@ static bool source_local_errors_finish(SourceContext *ctx) {
             for (SourcePendingError *site=body->pending_errors;site;site=site->next) {
                 XrXirType error;
                 if (!source_local_declared_error(ctx,site->target,site->first_argument,site->argument_count,&error) ||
-                    !source_local_accept(ctx,site->node,error,true,site->handler)) return false;
+                    !source_local_accept(ctx,site->node,error,true,site->handler,site->asserted)) return false;
             }
             state[current]=2;--depth;
         }
@@ -208,7 +212,7 @@ static bool source_local_errors_finish(SourceContext *ctx) {
         for (SourcePendingError *site=body->pending_errors;site;site=site->next) {
             XrXirType error;
             if (!source_local_declared_error(ctx,site->target,site->first_argument,site->argument_count,&error) ||
-                !source_local_accept(ctx,site->node,error,site->marked,site->handler)) return false;
+                !source_local_accept(ctx,site->node,error,site->marked,site->handler,site->asserted)) return false;
         }
     }
     ctx->function=saved_function;ctx->module=saved_module;return true;

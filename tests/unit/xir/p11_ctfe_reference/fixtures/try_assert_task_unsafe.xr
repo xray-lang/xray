@@ -1,0 +1,6 @@
+final class Local { value: i64 init(value: i64) { this.value = value } }
+enum UnsafeFailure { Empty, Unsafe { hidden: Local } }
+fn fail() throws(UnsafeFailure) -> i64 { throw UnsafeFailure.Empty }
+fn worker() -> i64 { return try! fail() }
+try { const task = go worker(); print(try await task) }
+catch panic (p) { print("UNSAFE_CROSSED", p.code, p.message) }

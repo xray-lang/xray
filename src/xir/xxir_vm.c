@@ -155,7 +155,7 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
     default: return XR_XIR_RUN_BAD_ARTIFACT;
     }
     if (status==XR_XIR_CALL_BOUNDS && xr_xir_fault_bounds_valid(fault)) {
-        *action=(XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{fault,{0}},0};
+        *action=(XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{.detail=fault},0};
         return XR_XIR_RUN_OK;
     }
     if (status != XR_XIR_CALL_READY) return status == XR_XIR_CALL_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :
@@ -227,7 +227,7 @@ static XrXirRunStatus vm_array_capacity_step(ScalarRun *run, VmState *state,
         *action = status == XR_XIR_CALL_NUMERIC_RANGE ?
             xr_xir_call_fault(XR_XIR_RUN_NUMERIC_RANGE) :
             (XrXirAction){XR_XIR_ACTION_FAULT, 0, NULL, 0,
-                {XR_XIR_I64, 0, status}, {fault, {0}}, 0};
+                {XR_XIR_I64, 0, status}, {.detail=fault}, 0};
         return XR_XIR_RUN_OK;
     }
     if (xr_xir_type_is_owned(run->module->types, op->type))
@@ -257,7 +257,7 @@ static XrXirRunStatus vm_array_step(ScalarRun *run, VmState *state,
             op->op == XR_XIR_ARRAY_LEN, &output, &fault);
     }
     if (status != XR_XIR_CALL_READY) {
-        *action = (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {fault, {0}}, 0};
+        *action = (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {.detail=fault}, 0};
         return XR_XIR_RUN_OK;
     }
     if (xr_xir_type_is_owned(run->module->types, op->type)) xr_xir_owned_slot_move(run->frame, destination, &output);
@@ -533,7 +533,7 @@ static XrXirRunStatus vm_io_step(ScalarRun *run, VmState *state, XrXirAction *ac
             if(status==XR_XIR_VALUE_BOUNDS) {
                 *action=(XrXirAction){.kind=XR_XIR_ACTION_FAULT,
                     .value={XR_XIR_I64,0,XR_XIR_CALL_RUNTIME_PANIC},
-                    .panic={{XR_XIR_PANIC_STRING_SLICE_RANGE,0,0,0},{0}}};
+                    .panic={.detail={XR_XIR_PANIC_STRING_SLICE_RANGE,0,0,0}}};
                 return XR_XIR_RUN_OK;
             }
             if(status==XR_XIR_VALUE_OK) xr_xir_owned_slot_move(run->frame,run->layout->offsets[result_id],&result);
@@ -842,6 +842,11 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
             *action = xr_xir_call_assertion(&message);
         }
         break;
+    case XR_XIR_PANIC_ERROR: {
+        XrXirValue error=vm_value_operand(run,op->args[0]);
+        *action=xr_xir_call_error_panic(run->view,&error);
+        return XR_XIR_RUN_OK;
+    }
     case XR_XIR_MATCH_FAIL:
         *action = xr_xir_call_match_failure();
         break;
@@ -1400,7 +1405,7 @@ XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint
             body->instructions[i].op == XR_XIR_TIMER_AFTER_MS || body->instructions[i].op == XR_XIR_CLOCK_NANOS ||
             body->instructions[i].op == XR_XIR_UTC_OFFSET_AT ||
             body->instructions[i].op == XR_XIR_THROW || body->instructions[i].op == XR_XIR_MATCH_FAIL ||
-            body->instructions[i].op == XR_XIR_ASSERT_CONDITION || body->instructions[i].op == XR_XIR_EQUAL ||
+            body->instructions[i].op == XR_XIR_PANIC_ERROR || body->instructions[i].op == XR_XIR_ASSERT_CONDITION || body->instructions[i].op == XR_XIR_EQUAL ||
             body->instructions[i].op == XR_XIR_PANIC_CATCH ||
             body->instructions[i].op == XR_XIR_CLEANUP_REGISTER || body->instructions[i].op == XR_XIR_CLEANUP_LEAVE ||
             body->instructions[i].op == XR_XIR_CLEANUP_ERROR ||

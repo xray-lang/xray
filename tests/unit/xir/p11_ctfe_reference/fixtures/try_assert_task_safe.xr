@@ -1,0 +1,5 @@
+enum Failure { Bad { message: string, number: i64 } }
+fn fail() throws(Failure) -> i64 { throw Failure.Bad { message: "é\0界", number: 23 } }
+fn worker() -> i64 { return try! fail() }
+try { const task = go worker(); print(try await task) }
+catch panic (p) { print("SAFE_PANIC", p.code, p.message) }

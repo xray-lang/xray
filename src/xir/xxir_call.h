@@ -16,9 +16,10 @@
 #include "xxir_panic.h"
 #include "xxir_output_status.h"
 
-#define XR_XIR_CALL_ABI_VERSION 35u
+#define XR_XIR_CALL_ABI_VERSION 36u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
+typedef struct XrXirCallView XrXirCallView;
 typedef enum XrXirCallStatus {
     XR_XIR_CALL_READY, XR_XIR_CALL_RETURNED, XR_XIR_CALL_THROWN,
     XR_XIR_CALL_SUSPENDED, XR_XIR_CALL_CANCELLED, XR_XIR_CALL_LIMIT,
@@ -81,6 +82,8 @@ XR_FUNC XrXirAction xr_xir_call_bounds(int64_t index, int64_t length);
 XR_FUNC XrXirAction xr_xir_call_match_failure(void);
 /* The returned action borrows message until the current resume returns. */
 XR_FUNC XrXirAction xr_xir_call_assertion(const XrXirValue *message);
+/* The error remains borrowed until the driver retains the pending panic. */
+XR_FUNC XrXirAction xr_xir_call_error_panic(XrXirCallView *view, const XrXirValue *error);
 /* Panic-channel statuses are the only faults a protected region may observe. */
 XR_FUNC bool xr_xir_call_panic_status(XrXirCallStatus status);
 XR_FUNC bool xr_xir_call_panic_payload(XrXirCallStatus status, const XrXirPanicPayload *panic);

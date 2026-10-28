@@ -9,7 +9,7 @@ PRIMITIVES = {'u32': (4, 4), 'i32': (4, 4), 'u64': (8, 8), 'ptr': (8, 8),
 STRUCTURES = [
  (100, 'XrXirValue', [('type','u32'),('reserved','u32'),('payload','u64')]),
  (200, 'XrXirFaultDetail', [('code','u32'),('reserved','u32'),('index','u64'),('length','u64')]),
- (300, 'XrXirPanicPayload', [('detail','XrXirFaultDetail'),('message','XrXirValue')]),
+ (300, 'XrXirPanicPayload', [('detail','XrXirFaultDetail'),('message','XrXirValue'),('error','XrXirValue')]),
  (400, 'XrXirCallResult', [('status','enum'),('value','XrXirValue'),('wake','u64'),('panic','XrXirPanicPayload')]),
  (500, 'XrXirAction', [('kind','enum'),('callee','u32'),('arguments','ptr'),('argument_count','u32'),
                       ('value','XrXirValue'),('panic','XrXirPanicPayload'),('flags','u32')]),

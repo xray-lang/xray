@@ -220,7 +220,7 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
         if (!plan->condition || !plan->left || !plan->right || !source_plan_binary_prepare(ctx,plan,(SourceExpectedType){false,XR_XIR_UNIT, false, false},false)) return NULL;
         break;
     case AST_TRY_EXPR:
-        if (node->as.try_expr.mode!=XR_TRY_PROPAGATE) {
+        if (node->as.try_expr.mode!=XR_TRY_PROPAGATE && node->as.try_expr.mode!=XR_TRY_ASSERT) {
             source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"try expression mode is not yet supported");return NULL;
         }
         if (ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"try expression depth exhausted");return NULL;}

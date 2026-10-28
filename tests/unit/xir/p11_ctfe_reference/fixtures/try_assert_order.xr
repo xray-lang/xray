@@ -1,0 +1,13 @@
+var calls:i64=0
+enum Failure { Bad { step:i64 } }
+fn step(ok:bool) throws(Failure)->i64 {
+    calls+=1
+    if(!ok) {throw Failure.Bad{step:calls}}
+    return calls
+}
+fn divide(value:i64)->i64 {return 10/value}
+print(try! (step(true)+step(true)))
+try {print(try! (step(false)+step(true)))}
+catch panic(p) {print(p.code,p.message)}
+print(calls)
+try {print(try! divide(0))} catch panic(p) {print(p.code)}

@@ -427,8 +427,15 @@ static void slice_constant(const SliceConstantCase *selected) {
     printf("%s: constant=%lld producer-death/packet/VM passed\n",selected->name,(long long)selected->expected);
 }
 #include "ctfe_from_utf8_resources.h"
+#include "try_assert_cases.h"
 
 int main(int argc,char **argv) {
+    if(argc==2 && !strcmp(argv[1],"try-rejections")){slice_try_rejections();return 0;}
+    if(argc==2 && !strcmp(argv[1],"try-owner")){slice_try_owner();return 0;}
+    if(argc==2 && !strcmp(argv[1],"try-vm")){slice_try_vm();return 0;}
+    if(argc==2 && !strcmp(argv[1],"try-resources")){slice_try_resources();return 0;}
+    if(argc==2 && !strcmp(argv[1],"try-controls")){slice_try_controls();return 0;}
+    if(argc==2 && !strcmp(argv[1],"try-memory")){slice_try_memory();return 0;}
     if (argc==2 && !strcmp(argv[1],"native-packet")) {slice_native_packet();return 0;}
     if (argc==2 && !strcmp(argv[1],"native-oom")) {slice_native_oom();return 0;}
     if (argc==2 && !strcmp(argv[1],"native-control")) {slice_native_control();return 0;}

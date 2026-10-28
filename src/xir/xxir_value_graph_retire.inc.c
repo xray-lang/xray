@@ -61,7 +61,8 @@ static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void 
         return graph_direct_edge(&view->storage.root,visit,context) && graph_direct_edge(&view->parent,visit,context);
     }
     if (object->type == XR_XIR_PANIC_INFO)
-        return graph_direct_edge(&((XirPanicInfo *)object)->panic.message, visit, context);
+        return graph_direct_edge(&((XirPanicInfo *)object)->panic.message, visit, context) &&
+            graph_direct_edge(&((XirPanicInfo *)object)->panic.error, visit, context);
     if (object->kind == XIR_OBJECT_CELL) {
         XirCell *cell = (XirCell *)object;
         XrXirValuePathStep *steps = (XrXirValuePathStep *)(cell + 1);
@@ -113,14 +114,16 @@ static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void 
         if(atomic_load_explicit(&generator->state,memory_order_acquire)!=XIR_GENERATOR_TERMINAL ||
             generator->executor || generator->call) return true;
         return graph_direct_edge(&generator->outcome.value,visit,context) &&
-            graph_direct_edge(&generator->outcome.panic.message,visit,context);
+            graph_direct_edge(&generator->outcome.panic.message,visit,context) &&
+            graph_direct_edge(&generator->outcome.panic.error,visit,context);
     }
     if (object->kind == XR_XIR_TYPE_TASK) {
         XirTask *task = (XirTask *)object;
         if (atomic_load_explicit(&task->state, memory_order_acquire) != XIR_TASK_TERMINAL ||
             task->executor || task->call) return true;
         return graph_direct_edge(&task->outcome.value, visit, context) &&
-            graph_direct_edge(&task->outcome.panic.message, visit, context);
+            graph_direct_edge(&task->outcome.panic.message, visit, context) &&
+            graph_direct_edge(&task->outcome.panic.error, visit, context);
     }
     if (object->kind == XR_XIR_TYPE_TUPLE) {
         XirTuple *tuple = (XirTuple *)object;

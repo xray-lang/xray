@@ -1,0 +1,5 @@
+final class Local { value: i64 init(value: i64) { this.value = value } }
+enum UnsafeFailure { Empty, Unsafe { hidden: Local } }
+fn fail() throws(UnsafeFailure) -> i64 { throw UnsafeFailure.Empty }
+fn worker() -> i64 { return try! fail() }
+try { print(try! fail()) } catch panic(p) { print("ORDINARY_PANIC",p.code,p.message) }

@@ -1,0 +1,28 @@
+enum ProbeError { Bad { message: string, number: i64 } }
+fn number(ok: bool) throws(ProbeError) -> i64 {
+    if (ok) { return 17 }
+    throw ProbeError.Bad { message: "é\0界", number: 23 }
+}
+fn caught() -> i64 {
+    try {
+        return try! number(false)
+    } catch (e: ProbeError) {
+        return -9
+    } catch panic (p) {
+        print(p.message)
+        return p.code
+    }
+}
+fn compileCaught() -> i64 {
+    try { return try! number(false) }
+    catch panic (p) { return p.code }
+}
+fn text(ok: bool) throws(ProbeError) -> string {
+    if (ok) { return "owned é\0界" }
+    throw ProbeError.Bad { message: "failure", number: 31 }
+}
+const folded = comptime compileCaught()
+print(try! number(true))
+print(caught())
+print(folded)
+print(try! text(true))

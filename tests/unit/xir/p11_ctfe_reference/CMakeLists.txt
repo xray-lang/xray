@@ -113,3 +113,71 @@ foreach(mode oom control lifetime types memory packet)
     add_test(NAME test_xir_ctfe_from_utf8_${mode} COMMAND test_xir_ctfe_slice_u8 native-${mode})
     set_tests_properties(test_xir_ctfe_from_utf8_${mode} PROPERTIES LABELS "unit;xir;ctfe;ownership;resources" TIMEOUT 60)
 endforeach()
+
+set(try_assert_fixture "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_assert.xr")
+set(try_assert_stdout "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_assert.stdout")
+set(try_assert_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/try_assert.c")
+add_custom_command(OUTPUT "${try_assert_generated}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND $<TARGET_FILE:test_xir_from_utf8> --emit-file "${try_assert_fixture}" "${try_assert_generated}"
+    DEPENDS test_xir_from_utf8 "${try_assert_fixture}" VERBATIM)
+add_executable(test_xir_try_assert_native
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_from_utf8_native.c" "${try_assert_generated}")
+target_link_libraries(test_xir_try_assert_native PRIVATE xray_xir_scalar xray_compile_resources)
+set_target_properties(test_xir_try_assert_native PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_try_assert_native PRIVATE /utf-8 /W4 /WX)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_xir_try_assert_native PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(test_xir_try_assert_native PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_xir_try_assert_source
+    COMMAND test_xir_from_utf8 --vm-file "${try_assert_fixture}" --expect "${try_assert_stdout}")
+add_test(NAME test_xir_try_assert_native
+    COMMAND test_xir_try_assert_native --expect "${try_assert_stdout}")
+set_tests_properties(test_xir_try_assert_source test_xir_try_assert_native PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;panic" TIMEOUT 60)
+
+foreach(mode owner vm resources controls memory rejections)
+    add_test(NAME test_xir_try_assert_${mode} COMMAND test_xir_ctfe_slice_u8 try-${mode})
+    set_tests_properties(test_xir_try_assert_${mode} PROPERTIES LABELS "unit;xir;ctfe;ownership;panic;resources" TIMEOUT 60)
+endforeach()
+
+foreach(case task_unsafe task_safe ordinary_unsafe order)
+    set(fixture "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_assert_${case}.xr")
+    set(generated "${CMAKE_CURRENT_BINARY_DIR}/generated/try_assert_${case}.c")
+    set(target "test_xir_try_assert_${case}_native")
+    add_custom_command(OUTPUT "${generated}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+        COMMAND $<TARGET_FILE:test_xir_from_utf8> --emit-file "${fixture}" "${generated}"
+        DEPENDS test_xir_from_utf8 "${fixture}" VERBATIM)
+    add_executable(${target} "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_from_utf8_native.c" "${generated}")
+    target_link_libraries(${target} PRIVATE xray_xir_scalar xray_compile_resources)
+    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /utf-8 /W4 /WX)
+        if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+            target_compile_options(${target} PRIVATE /experimental:c11atomics)
+        endif()
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
+    endif()
+    if(case STREQUAL "task_unsafe")
+        add_test(NAME test_xir_try_assert_${case}_source COMMAND test_xir_from_utf8 --vm-file "${fixture}" --expect-bad-state)
+        add_test(NAME ${target} COMMAND ${target} --expect-bad-state)
+    else()
+        set(oracle "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_assert_${case}.stdout")
+        add_test(NAME test_xir_try_assert_${case}_source COMMAND test_xir_from_utf8 --vm-file "${fixture}" --expect "${oracle}")
+        add_test(NAME ${target} COMMAND ${target} --expect "${oracle}")
+    endif()
+    set_tests_properties(test_xir_try_assert_${case}_source ${target} PROPERTIES LABELS "unit;xir;panic;ownership;task" TIMEOUT 120)
+endforeach()
+
+add_test(NAME test_xir_try_assert_graph_source COMMAND test_xir_from_utf8 --try-graph)
+set_tests_properties(test_xir_try_assert_graph_source PROPERTIES LABELS "unit;xir;panic;ownership" TIMEOUT 120)
+
+add_test(NAME test_xir_try_assert_lexical_source COMMAND test_xir_from_utf8 --try-rejections)
+add_test(NAME test_xir_try_assert_never_source COMMAND test_xir_from_utf8 --vm-file "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_assert_never.xr" --expect "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_assert_never.stdout")
+set_tests_properties(test_xir_try_assert_lexical_source test_xir_try_assert_never_source PROPERTIES LABELS "unit;xir;panic;errors" TIMEOUT 120)

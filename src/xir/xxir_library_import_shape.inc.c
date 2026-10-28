@@ -64,6 +64,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_ENUM_NEW:
     case XR_XIR_ENUM_TAG:
     case XR_XIR_ENUM_GET:
+    case XR_XIR_PANIC_ERROR:
     case XR_XIR_MATCH_FAIL:
     case XR_XIR_CLASS_NEW:
     case XR_XIR_CLASS_GET:

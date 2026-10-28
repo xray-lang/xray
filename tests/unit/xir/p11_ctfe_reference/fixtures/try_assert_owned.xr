@@ -1,0 +1,20 @@
+enum ProbeError { Bad { message: string, number: i64 } }
+fn number(ok: bool) throws(ProbeError) -> i64 {
+    if (ok) { return 17 }
+    throw ProbeError.Bad { message: "é\0界", number: 23 }
+}
+export fn raw() -> i64 { return try! number(false) }
+export fn message() -> string {
+    try { const ignored = try! number(false); return "unexpected" }
+    catch panic (p) { return p.message }
+}
+export fn caughtCode() -> i64 {
+    try { return try! number(false) }
+    catch panic (p) { return p.code }
+}
+fn divide(n: i64) -> i64 { return 12 / n }
+export fn originalPanic() -> i64 {
+    try { return try! divide(0) }
+    catch panic (p) { return p.code }
+}
+export fn foldedCode() -> i64 { return comptime caughtCode() }

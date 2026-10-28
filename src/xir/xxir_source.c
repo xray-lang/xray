@@ -178,7 +178,7 @@ typedef struct SourcePendingError {
     SourceLocalHandler *handler;
     AstNode *node;
     uint32_t target, first_argument, argument_count;
-    bool marked;
+    bool marked, asserted;
 } SourcePendingError;
 typedef struct SourceFunction {
     AstNode *node, *type_owner;
@@ -238,6 +238,7 @@ struct SourceErrorContext {
     SourceErrorEdge *edges;
     uint32_t count, frontier;
     SourceHandlerRecipe *route;
+    bool asserted;
 };
 
 typedef struct SourceTypeScope {
@@ -859,6 +860,7 @@ static bool source_plan_binary_prepare(SourceContext *ctx,SourceExpressionPlan *
 static bool source_plan_numeric_prepare(SourceContext *ctx,SourceExpressionPlan *plan,SourceExpectedType hint,bool defaults);
 static bool source_plan_soft_numeric(SourceContext *ctx,SourceExpressionPlan *plan,bool *soft);
 #include "xxir_source_conversion.inc.c"
+#include "xxir_source_try_assert.inc.c"
 
 static bool source_direct_integer(SourceContext *ctx, AstNode *node, SourceInteger *literal) {
     *literal = (SourceInteger) {0};
@@ -1742,7 +1744,11 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         return source_array_construct(ctx, node, value);
     case AST_AS_EXPR: return source_number_cast(ctx, node, value);
     case AST_TRY_EXPR:
-        if (node->as.try_expr.mode != XR_TRY_PROPAGATE || !ctx->active_expression->left)
+        if (!ctx->active_expression->left)
+            return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "try expression has no operand");
+        if (node->as.try_expr.mode == XR_TRY_ASSERT)
+            return source_try_assert(ctx, ctx->active_expression->left, value);
+        if (node->as.try_expr.mode != XR_TRY_PROPAGATE)
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "try expression mode is not yet supported");
         return source_plan_complete(ctx, ctx->active_expression->left, value);
     case AST_TERNARY: return source_conditional(ctx, node, context, value);

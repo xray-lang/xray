@@ -24,7 +24,8 @@ static XrXirOutputStatus group(void *context,const XrXirOutputGroup *value) {
     return xr_xir_output_render(&((Output *)context)->sink,value);
 }
 int main(int argc,char **argv) {
-    CHECK(argc==1 || (argc==3 && !strcmp(argv[1],"--expect")));
+    bool bad_state=argc==2 && !strcmp(argv[1],"--expect-bad-state");
+    CHECK(argc==1 || bad_state || (argc==3 && !strcmp(argv[1],"--expect")));
     XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
     XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
@@ -36,7 +37,13 @@ int main(int argc,char **argv) {
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     xr_xir_compile_program_drop(program);
     CHECK(xr_xir_instance_start(instance,source_artifact_program.declarations->entry_function,NULL,0)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
+    XrXirCallStatus terminal=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
+    CHECK(terminal==(bad_state?XR_XIR_CALL_BAD_STATE:XR_XIR_CALL_RETURNED));
+    if (bad_state) {
+        CHECK(!output.size);
+        CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_BAD_STATE);
+        puts("Generated C rejects non-Sendable panic Error before Task terminal publication");return 0;
+    }
     XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY && xr_xir_value_valid(&result));xr_xir_value_drop(&result);
     if (argc==3) {

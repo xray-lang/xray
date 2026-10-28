@@ -38,6 +38,7 @@ static bool source_comptime_failure(SourceContext *ctx,AstNode *node,XrXirCtfeSt
         status==XR_XIR_CTFE_BOUNDS?"comptime index out of bounds":
         status==XR_XIR_CTFE_UNCAUGHT_ERROR?"comptime uncaught error":
         status==XR_XIR_CTFE_ASSERTION_FAILURE?"comptime assertion failed":
+        status==XR_XIR_CTFE_TRY_ASSERT_FAILURE?"comptime forced try raised panic":
         status==XR_XIR_CTFE_MATCH_FAILURE?"comptime non-exhaustive match":
         status==XR_XIR_CTFE_CLEANUP_PANIC?"comptime panic escaped defer cleanup":
         "comptime requires an admitted deterministic closed-value call closure";

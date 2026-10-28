@@ -500,8 +500,8 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
     }
     default: emit_reject(buffer, XR_XIR_BAD_STAGE); break;
     }
-    EMIT_STATIC(buffer, es_bf88de7cd2177400, " if (status != XR_XIR_CALL_READY) return (XrXirAction) "
-        "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {fault,{0}}, 0};\n");
+    EMIT_STATIC(buffer, es_9048564ecdddbdb8, " if (status != XR_XIR_CALL_READY) return (XrXirAction) "
+        "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {.detail=fault}, 0};\n");
     if (xr_xir_type_is_owned(buffer->types, op->type))
         EMIT_FORMAT(buffer, et_47856f87172c63ea, " xr_xir_owned_slot_move(state->frame, %uu, &value);\n", destination);
     else if (op->type != XR_XIR_UNIT)
@@ -692,7 +692,7 @@ static void emit_array_step(CBuffer *buffer, const XrXirFunction *function,
     }
     EMIT_STATIC(buffer, es_1e170e87c4d687c1, " if (status != XR_XIR_CALL_READY) ");
     emit_fault_return(buffer, function, layout, index,
-        "(XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {fault, {0}}, 0}");
+        "(XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {.detail=fault}, 0}");
     EMIT_LITERAL(buffer, "\n");
     if (xr_xir_type_is_owned(buffer->types, op->type))
         EMIT_FORMAT(buffer, et_47856f87172c63ea, " xr_xir_owned_slot_move(state->frame, %uu, &value);\n", destination);
@@ -1058,6 +1058,13 @@ static bool emit_resume_value_step(CBuffer *buffer,const XrXirFunction *function
         emit_fault_return(buffer, function, layout, index, "xr_xir_call_assertion(&message)");
         EMIT_LITERAL(buffer, "\n }\n");
         break;
+    case XR_XIR_PANIC_ERROR:
+        EMIT_LITERAL(buffer, " { XrXirValue error = ");
+        emit_value(buffer,function,layout,op->args[0]);
+        EMIT_LITERAL(buffer, ";\n ");
+        emit_fault_return(buffer,function,layout,index,"xr_xir_call_error_panic(view,&error)");
+        EMIT_LITERAL(buffer, "\n }\n");
+        return true;
     case XR_XIR_MATCH_FAIL:
         EMIT_LITERAL(buffer, " ");
         emit_fault_return(buffer, function, layout, index, "xr_xir_call_match_failure()");
@@ -1371,6 +1378,13 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         emit_fault_return(buffer, function, layout, index, "xr_xir_call_assertion(&message)");
         EMIT_LITERAL(buffer, "\n }\n");
         break;
+    case XR_XIR_PANIC_ERROR:
+        EMIT_LITERAL(buffer, " { XrXirValue error = ");
+        emit_value(buffer,function,layout,op->args[0]);
+        EMIT_LITERAL(buffer, ";\n ");
+        emit_fault_return(buffer,function,layout,index,"xr_xir_call_error_panic(view,&error)");
+        EMIT_LITERAL(buffer, "\n }\n");
+        return;
     case XR_XIR_MATCH_FAIL:
         EMIT_LITERAL(buffer, " ");
         emit_fault_return(buffer, function, layout, index, "xr_xir_call_match_failure()");
@@ -1906,15 +1920,15 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n",
            XR_XIR_CALL_ABI_VERSION, XR_XIR_VALUE_ABI_VERSION);
     append(buffer,"#include \"xir/xxir_channel_call_internal.h\"\n");
-    EMIT_STATIC(buffer, es_fc644a73452330e2,
+    EMIT_STATIC(buffer, es_97d5dffc591ff8b4,
            "_Static_assert(sizeof(XrXirFaultDetail) == 24 && _Alignof(XrXirFaultDetail) == 8, \"XIR fault layout\");\n"
            "_Static_assert(offsetof(XrXirFaultDetail, index) == 8 && offsetof(XrXirFaultDetail, length) == 16, \"XIR fault offsets\");\n"
-           "_Static_assert(sizeof(XrXirPanicPayload) == 40 && _Alignof(XrXirPanicPayload) == 8, \"XIR panic layout\");\n"
-           "_Static_assert(offsetof(XrXirPanicPayload, detail) == 0 && offsetof(XrXirPanicPayload, message) == 24, \"XIR panic offsets\");\n"
-           "_Static_assert(sizeof(XrXirAction) == 88 && _Alignof(XrXirAction) == 8, \"XIR action layout\");\n"
+           "_Static_assert(sizeof(XrXirPanicPayload) == 56 && _Alignof(XrXirPanicPayload) == 8, \"XIR panic layout\");\n"
+           "_Static_assert(offsetof(XrXirPanicPayload, detail) == 0 && offsetof(XrXirPanicPayload, message) == 24 && offsetof(XrXirPanicPayload, error) == 40, \"XIR panic offsets\");\n"
+           "_Static_assert(sizeof(XrXirAction) == 104 && _Alignof(XrXirAction) == 8, \"XIR action layout\");\n"
            "_Static_assert(offsetof(XrXirAction, value) == 24 && offsetof(XrXirAction, panic) == 40 && "
-           "offsetof(XrXirAction, flags) == 80, \"XIR action offsets\");\n"
-           "_Static_assert(sizeof(XrXirCallResult) == 72 && _Alignof(XrXirCallResult) == 8, \"XIR result layout\");\n"
+           "offsetof(XrXirAction, flags) == 96, \"XIR action offsets\");\n"
+           "_Static_assert(sizeof(XrXirCallResult) == 88 && _Alignof(XrXirCallResult) == 8, \"XIR result layout\");\n"
            "_Static_assert(offsetof(XrXirCallResult, value) == 8 && offsetof(XrXirCallResult, wake) == 24 && "
            "offsetof(XrXirCallResult, panic) == 32, \"XIR result offsets\");\n");
     if (module->function_count) emit_resume_inbox_helper(buffer, symbol_prefix);

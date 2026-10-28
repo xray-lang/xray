@@ -18,6 +18,7 @@ static XrXirCtfeStatus ctfe_panic_status(uint32_t code) {
     case XR_XIR_PANIC_BOUNDS: return XR_XIR_CTFE_BOUNDS;
     case XR_XIR_PANIC_STRING_SLICE_RANGE: return XR_XIR_CTFE_BOUNDS;
     case XR_XIR_PANIC_ASSERTION: return XR_XIR_CTFE_ASSERTION_FAILURE;
+    case XR_XIR_PANIC_TRY_ASSERT: return XR_XIR_CTFE_TRY_ASSERT_FAILURE;
     case XR_XIR_PANIC_MATCH: return XR_XIR_CTFE_MATCH_FAILURE;
     default: return XR_XIR_CTFE_BAD_ARTIFACT;
     }
@@ -48,7 +49,7 @@ static XrXirCtfeStatus ctfe_panic_fault(CtfeCallExecution *execution,XrXirCtfeSt
     case XR_XIR_CTFE_MATCH_FAILURE: code=XR_XIR_PANIC_MATCH;break;
     default: return status;
     }
-    XrXirPanicPayload panic={{code,0,0,0},{0}};
+    XrXirPanicPayload panic={.detail={code,0,0,0}};
     if (code==XR_XIR_PANIC_BOUNDS) {
         if (!xr_xir_fault_bounds_valid(execution->owned.fault)) return XR_XIR_CTFE_BAD_ARTIFACT;
         panic.detail=execution->owned.fault;

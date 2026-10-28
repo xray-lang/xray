@@ -49,6 +49,11 @@ XR_FUNC XrXirHostReportStatus xr_xir_host_report_result(const XrXirCallResult *r
         XrXirFormatContext format={0};
         written = xr_value_format_uncaught(xr_xir_value_format_reader(&format),
             (XrValueFormatNode){value, 0}, checked, 0, color);
+    } else if (result->panic.detail.code==XR_XIR_PANIC_TRY_ASSERT && xr_xir_call_panic_status(result->status)) {
+        char prefix[32];int count=snprintf(prefix,sizeof(prefix)," E%04u: ",result->panic.detail.code);
+        written=count>0 && (size_t)count<sizeof(prefix) && xr_value_format_label(checked,"[Uncaught Panic]",color) &&
+            xr_value_format_write(checked,prefix,(size_t)count) && xr_xir_panic_error_format(&result->panic,checked) &&
+            xr_value_format_text(checked,"\n");
     } else if (xr_xir_call_panic_status(result->status)) {
         char scratch[XR_XIR_PANIC_MESSAGE_CAPACITY];
         XrErrorCoreMessageView message = {0};

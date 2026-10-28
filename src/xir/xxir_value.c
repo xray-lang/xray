@@ -972,6 +972,7 @@ static void release_pending(XirObject *pending) {
             if (!object->graph_dead) {
                 queue_release(&task->outcome.value, &pending);
                 queue_release(&task->outcome.panic.message, &pending);
+                queue_release(&task->outcome.panic.error, &pending);
             }
             xr_xir_domain_deallocate(domain, task, sizeof(*task));
         } else if (object->kind == XR_XIR_TYPE_ITERATOR) {
@@ -980,6 +981,7 @@ static void release_pending(XirObject *pending) {
             if(!object->graph_dead) {
                 queue_release(&generator->outcome.value,&pending);
                 queue_release(&generator->outcome.panic.message,&pending);
+                queue_release(&generator->outcome.panic.error,&pending);
             }
             xr_xir_domain_deallocate(domain,generator,sizeof(*generator));
         } else if (object->kind==XR_XIR_TYPE_SLICE || object->kind==XR_XIR_TYPE_MUT_SLICE) {
@@ -1052,7 +1054,10 @@ static void release_pending(XirObject *pending) {
             if (array->data) xr_xir_domain_deallocate(domain, array->data, array->capacity * array->stride);
             xr_xir_domain_deallocate(domain, array, (size_t)array_header_bytes(arena, array->element));
         } else if (object->type == XR_XIR_PANIC_INFO) {
-            if (!object->graph_dead) queue_release(&((XirPanicInfo *)object)->panic.message, &pending);
+            if (!object->graph_dead) {
+                queue_release(&((XirPanicInfo *)object)->panic.message, &pending);
+                queue_release(&((XirPanicInfo *)object)->panic.error, &pending);
+            }
             xr_xir_domain_deallocate(domain, object, sizeof(XirPanicInfo));
         } else {
             XR_CHECK(false, "unknown owned value kind");

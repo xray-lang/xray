@@ -15,12 +15,21 @@
 #include "xxir_value.h"
 #include "xxir_fault.h"
 #include "../shared/xr_error_core.h"
+#include "../shared/xr_value_format_core.h"
 
 typedef struct XrXirPanicPayload {
     XrXirFaultDetail detail;
     XrXirValue message;
+    XrXirValue error;
 } XrXirPanicPayload;
 
+#define XR_XIR_TRY_ASSERT_MESSAGE "try! failed: "
+/* Borrows the actual concrete enum; the panic owner must remain alive. */
+XR_FUNC bool xr_xir_panic_error_borrow(const XrXirPanicPayload *panic, XrXirValue *output);
+/* One complete graph walk for actual Task outcome reception. Every carried
+ * enum must satisfy its complete Sendable definition in the receiving arena. */
+XR_FUNC XrXirValueStatus xr_xir_panic_graph_admit(const XrXirValue *value, XrXirType type, XrXirValueAdmission *admission);
+XR_FUNC bool xr_xir_panic_error_format(const XrXirPanicPayload *panic, XrValueFormatSink sink);
 XR_FUNC bool xr_xir_panic_empty(const XrXirPanicPayload *panic);
 XR_FUNC bool xr_xir_panic_valid(const XrXirPanicPayload *panic);
 /* Copy publishes only to an empty output; move consumes an owned source. */

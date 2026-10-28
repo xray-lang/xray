@@ -294,8 +294,8 @@ bool xr_xir_call_panic_action(const XrXirAction *action) {
 }
 
 XrXirAction xr_xir_call_bounds(int64_t index, int64_t length) {
-    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0,
-        {XR_XIR_I64, 0, XR_XIR_CALL_BOUNDS}, {{430, 0, index, length}, {0}}, 0};
+    return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,XR_XIR_CALL_BOUNDS},
+        .panic={.detail={430,0,index,length}}};
 }
 
 static XrXirCallStatus admit_value(const XrXirValue *value, XrXirType type,
@@ -305,7 +305,7 @@ static XrXirCallStatus admit_value(const XrXirValue *value, XrXirType type,
     if (type == XR_XIR_UNIT)
         return value && boundary_value(*value, type) ? XR_XIR_CALL_READY : XR_XIR_CALL_BAD_ARGUMENT;
     if (!xr_xir_value_argument(value, admission->arena, type)) return XR_XIR_CALL_BAD_ARGUMENT;
-    if ((uint32_t) type < XR_XIR_CONSTRUCTED_TYPE_BASE) return XR_XIR_CALL_READY;
+    if ((uint32_t) type < XR_XIR_CONSTRUCTED_TYPE_BASE && type!=XR_XIR_ERROR && type!=XR_XIR_PANIC_INFO) return XR_XIR_CALL_READY;
     XrXirValueStatus status = xr_xir_value_admit(value, type, admission);
     if (status == XR_XIR_VALUE_OK) return XR_XIR_CALL_READY;
     if (status == XR_XIR_VALUE_OOM) return XR_XIR_CALL_OOM;
@@ -898,15 +898,27 @@ static XrXirCallStatus complete_owned_wait(XrXirCall *call,XrXirCallResult *outc
 #include "xxir_call_generator.inc.c"
 
 XrXirAction xr_xir_call_match_failure(void) {
-    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0,
-        {XR_XIR_I64, 0, XR_XIR_CALL_MATCH_FAILURE}, {{442, 0, 0, 0}, {0}}, 0};
+    return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,XR_XIR_CALL_MATCH_FAILURE},
+        .panic={.detail={442,0,0,0}}};
 }
 
+XR_FUNCDEF XrXirAction xr_xir_call_error_panic(XrXirCallView *view,const XrXirValue *error) {
+    XrXirValueAdmission *admission=xr_xir_call_admission(view);
+    if (!admission || !error || error->type!=XR_XIR_ERROR)
+        return xr_xir_call_fault(XR_XIR_RUN_BAD_ARGUMENT);
+    view->activation->admitting=true;
+    XrXirCallStatus status=admit_value(error,XR_XIR_ERROR,admission);
+    view->activation->admitting=false;
+    if (status!=XR_XIR_CALL_READY)
+        return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};
+    return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,XR_XIR_CALL_RUNTIME_PANIC},
+        .panic={.detail={XR_XIR_PANIC_TRY_ASSERT,0,0,0},.error=*error}};
+}
 XR_FUNCDEF XrXirAction xr_xir_call_assertion(const XrXirValue *message) {
     if (!xr_xir_value_argument(message, NULL, XR_XIR_STRING))
         return xr_xir_call_fault(XR_XIR_RUN_BAD_ARGUMENT);
-    return (XrXirAction){XR_XIR_ACTION_FAULT, 0, NULL, 0,
-        {XR_XIR_I64, 0, XR_XIR_CALL_ASSERTION}, {{XR_XIR_PANIC_ASSERTION, 0, 0, 0}, *message}, 0};
+    return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,XR_XIR_CALL_ASSERTION},
+        .panic={.detail={XR_XIR_PANIC_ASSERTION,0,0,0},.message=*message}};
 }
 
 static XrXirCallStatus output_call_status(XrXirOutputStatus status) {
@@ -1077,6 +1089,16 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
     }
     if (action.kind == XR_XIR_ACTION_FAULT) {
         if (panic) {
+            if (action.panic.detail.code==XR_XIR_PANIC_TRY_ASSERT) {
+                call->admitting=true;
+                XrXirCallStatus admitted=admit_value(&action.panic.error,XR_XIR_ERROR,&call->config.admission);
+                call->admitting=false;
+                if (admitted!=XR_XIR_CALL_READY) {
+                    if (admitted==XR_XIR_CALL_OOM || admitted==XR_XIR_CALL_LIMIT) request_execution_failure(call,admitted);
+                    else abort_frames(call,XR_XIR_CALL_BAD_STATE);
+                    return;
+                }
+            }
             XrXirCallResult result = call_result((XrXirCallStatus) action.value.payload);
             if (xr_xir_panic_copy(&action.panic, &result.panic) != XR_XIR_VALUE_OK) {
                 request_execution_failure(call, XR_XIR_CALL_LIMIT); return;
@@ -1470,7 +1492,10 @@ XR_FUNC XrXirCallStatus xr_xir_call_complete_task_wait(XrXirCall *call, const Xr
         task->outcome.panic.detail.length != outcome->panic.detail.length ||
         task->outcome.panic.message.type != outcome->panic.message.type ||
         task->outcome.panic.message.reserved != outcome->panic.message.reserved ||
-        task->outcome.panic.message.payload != outcome->panic.message.payload) return XR_XIR_CALL_BAD_STATE;
+        task->outcome.panic.message.payload != outcome->panic.message.payload ||
+        task->outcome.panic.error.type != outcome->panic.error.type ||
+        task->outcome.panic.error.reserved != outcome->panic.error.reserved ||
+        task->outcome.panic.error.payload != outcome->panic.error.payload) return XR_XIR_CALL_BAD_STATE;
     unlink_task_wait(call,false);
     return complete_owned_wait(call,outcome);
 }

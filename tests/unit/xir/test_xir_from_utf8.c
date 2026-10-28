@@ -384,7 +384,10 @@ static void result_lifetime(void) {
     CHECK(compile_cancel.polls==compile_cancel.finished);xray_source_result_free(result);
     puts("Strict fromUtf8 named owned String survives input/request/artifact/execution/call retirement PASS");
 }
+#include "try_assert_source_cases.h"
 static int source_case(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--try-rejections")) {try_assert_source_rejections();return 0;}
+    if (argc==2 && !strcmp(argv[1],"--try-graph")) {try_assert_source_graph();return 0;}
     if (argc==2 && !strcmp(argv[1],"--result-life")) {result_lifetime();return 0;}
     if (argc==2 && !strcmp(argv[1],"--guards")) {guard_checks();return 0;}
     if (argc==2 && !strcmp(argv[1],"--library")) {library_check(NULL);return 0;}
@@ -416,7 +419,8 @@ static int source_case(int argc,char **argv) {
     if (invalid_case) {text=from_utf8_invalid_source;length=sizeof(from_utf8_invalid_source)-1;expected=from_utf8_invalid_expected;expected_length=sizeof(from_utf8_invalid_expected)-1;}
     bool product=argc==3 && !strcmp(argv[1],"--product-file");
     bool emit_file=argc==4 && !strcmp(argv[1],"--emit-file");
-    bool external=(argc==3 || argc==5) && (!strcmp(argv[1],"--vm-file") || product);
+    bool bad_state=argc==4 && !strcmp(argv[1],"--vm-file") && !strcmp(argv[3],"--expect-bad-state");
+    bool external=(argc==3 || argc==5 || bad_state) && (!strcmp(argv[1],"--vm-file") || product);
     CHECK(argc==1 || local || owned_case || invalid_case || external || emit_file);
     if (argc==5) CHECK(!strcmp(argv[3],"--expect"));
     if (external || emit_file) {
@@ -441,11 +445,13 @@ static int source_case(int argc,char **argv) {
     XrSourceEvent event={0};for (unsigned i=0;i<4096;++i) {
         CHECK(xray_source_call_poll(call,8,&event)==XR_SOURCE_OK);if(event.state!=XR_SOURCE_RUN_READY)break;
     }
-    XrSourceRunState terminal=physical?(physical_index==2?XR_SOURCE_RUN_CANCELLED:XR_SOURCE_RUN_OUT_OF_MEMORY):XR_SOURCE_RUN_RETURNED;
+    XrSourceRunState terminal=physical?(physical_index==2?XR_SOURCE_RUN_CANCELLED:XR_SOURCE_RUN_OUT_OF_MEMORY):bad_state?XR_SOURCE_RUN_API_ERROR:XR_SOURCE_RUN_RETURNED;
     CHECK(event.state==terminal);
+    if (bad_state) CHECK(event.engine_status==XR_XIR_CALL_BAD_STATE && !output.length);
     if (physical) CHECK(event.engine_status==(uint32_t)(physical_index==2?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_OOM) && !output.length);
     XrSourceResult *result=NULL;CHECK(xray_source_call_take(call,&result)==XR_SOURCE_OK && result);
-    CHECK(xray_source_call_drop(&call,NULL)==XR_SOURCE_OK && !call);
+    XrSourceEvent cleanup={0};CHECK(xray_source_call_drop(&call,&cleanup)==XR_SOURCE_OK && !call);
+    if (bad_state) CHECK(cleanup.state==XR_SOURCE_RUN_CLEANUP_FAILED && cleanup.engine_status==XR_XIR_CALL_BAD_STATE);
     CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==terminal);
     xray_source_result_free(result);CHECK(compile_cancel.polls==compile_cancel.finished);
 #if defined(XR_FROM_UTF8_WITH_OBSERVER)

@@ -26,6 +26,14 @@ static XrXirCtfeStatus ctfe_call_step(CtfeCallExecution *execution,XirScalarCore
     if (op->op==XR_XIR_ERROR_ERASE || op->op==XR_XIR_ERROR_IS || op->op==XR_XIR_ERROR_NARROW)
         return ctfe_error_value_step(run,&frame->state,&execution->owned);
     if (op->op==XR_XIR_PANIC_CODE || op->op==XR_XIR_PANIC_MESSAGE) return ctfe_panic_value_step(run,&frame->state,&execution->owned);
+    if (op->op==XR_XIR_PANIC_ERROR) {
+        XrXirValue error=ctfe_nominal_operand(run,op->args[0]),concrete={0};
+        XrXirCtfeStatus status=ctfe_error_concrete(run,&error,&concrete);
+        if (status==XR_XIR_CTFE_OK) status=ctfe_value_graph_admit(run,&execution->owned,&concrete);
+        if (status!=XR_XIR_CTFE_OK) return status;
+        XrXirPanicPayload panic={.detail={XR_XIR_PANIC_TRY_ASSERT,0,0,0},.error=error};
+        return ctfe_panic_begin(execution,&panic,frame->state.instruction);
+    }
     if (op->op==XR_XIR_ASSERT_CONDITION) {
         if (!xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]])) return XR_XIR_CTFE_ASSERTION_FAILURE;
         ++frame->state.instruction;return XR_XIR_CTFE_OK;

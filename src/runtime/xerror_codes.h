@@ -196,6 +196,8 @@
 #define XR_ERR_DEFER_ASYNC 444
 /* Assertion panic; the XIR fault detail retains the same numeric identity. */
 #define XR_ERR_ASSERTION_FAILED 445
+/* A forced throwing expression converted its original error into a panic. */
+#define XR_ERR_TRY_ASSERT_FAILED 446
 
 /* ---- Runtime argument errors (E04xx, 450-452) ---- */
 #define XR_ERR_WRONG_ARG_COUNT 450

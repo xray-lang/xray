@@ -30,7 +30,7 @@ static XrXirRunStatus vm_hash_step(ScalarRun *run, VmState *state,
     }
     if (status != XR_XIR_CALL_READY) {
         *action = (XrXirAction){XR_XIR_ACTION_FAULT, 0, NULL, 0,
-            {XR_XIR_I64, 0, status}, {fault, {0}}, 0};
+            {XR_XIR_I64, 0, status}, {.detail=fault}, 0};
         return XR_XIR_RUN_OK;
     }
     if (xr_xir_type_is_owned(run->module->types, op->type))

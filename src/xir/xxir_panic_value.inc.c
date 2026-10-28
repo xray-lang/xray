@@ -39,7 +39,7 @@ XR_FUNCDEF size_t xr_xir_panic_message_format(XrXirFaultDetail detail, char *buf
     return graph_outcome;
 }
 static bool xr_xir_panic_empty_graph_operation(const XrXirPanicPayload *panic) {
-    return panic && xr_xir_fault_empty(panic->detail) && unit_value(&panic->message);
+    return panic && xr_xir_fault_empty(panic->detail) && unit_value(&panic->message) && unit_value(&panic->error);
 }
 XR_FUNCDEF bool xr_xir_panic_empty(const XrXirPanicPayload *panic) {
     xr_xir_value_graph_begin();
@@ -51,6 +51,9 @@ static bool xr_xir_panic_valid_graph_operation(const XrXirPanicPayload *panic) {
     if (!panic) return false;
     if (xr_xir_panic_empty(panic)) return true;
     if (!xr_xir_fault_panic_valid(panic->detail)) return false;
+    if (panic->detail.code == XR_XIR_PANIC_TRY_ASSERT)
+        return unit_value(&panic->message) && (panic->error.type==XR_XIR_ERROR && xr_xir_value_argument(&panic->error,xr_xir_value_arena(&panic->error),XR_XIR_ERROR));
+    if (!unit_value(&panic->error)) return false;
     return panic->detail.code == XR_XIR_PANIC_ASSERTION ?
         xr_xir_value_argument(&panic->message, NULL, XR_XIR_STRING) : unit_value(&panic->message);
 }
@@ -62,9 +65,11 @@ XR_FUNCDEF bool xr_xir_panic_valid(const XrXirPanicPayload *panic) {
 }
 static XrXirValueStatus xr_xir_panic_copy_graph_operation(const XrXirPanicPayload *source, XrXirPanicPayload *output) {
     if (!xr_xir_panic_empty(output) || !xr_xir_panic_valid(source)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirPanicPayload copy = {source->detail, {0}};
+    XrXirPanicPayload copy = {.detail=source->detail};
     XrXirValueStatus status = xr_xir_value_copy(&source->message, &copy.message);
+    if (status == XR_XIR_VALUE_OK) status=xr_xir_value_copy(&source->error,&copy.error);
     if (status == XR_XIR_VALUE_OK) *output = copy;
+    else xr_xir_value_drop(&copy.message);
     return status;
 }
 XR_FUNCDEF XrXirValueStatus xr_xir_panic_copy(const XrXirPanicPayload *source, XrXirPanicPayload *output) {
@@ -88,12 +93,49 @@ static void xr_xir_panic_drop_graph_operation(XrXirPanicPayload *panic) {
     if (!panic) return;
     XR_CHECK(xr_xir_panic_valid(panic), "invalid owned panic release");
     xr_xir_value_drop(&panic->message);
+    xr_xir_value_drop(&panic->error);
     *panic = (XrXirPanicPayload){0};
 }
 XR_FUNCDEF void xr_xir_panic_drop(XrXirPanicPayload *panic) {
     xr_xir_value_graph_begin();
     xr_xir_panic_drop_graph_operation(panic);
     xr_xir_value_graph_end();
+}
+XR_FUNCDEF bool xr_xir_panic_error_borrow(const XrXirPanicPayload *panic, XrXirValue *output) {
+    return unit_value(output) && xr_xir_panic_valid(panic) &&
+        panic->detail.code==XR_XIR_PANIC_TRY_ASSERT && xr_xir_error_borrow(&panic->error,output);
+}
+XR_FUNCDEF bool xr_xir_panic_error_format(const XrXirPanicPayload *panic, XrValueFormatSink sink) {
+    XrXirValue concrete={0};XrXirFormatContext context={0};
+    return xr_xir_panic_error_borrow(panic,&concrete) &&
+        xr_value_format_text(sink,XR_XIR_TRY_ASSERT_MESSAGE) &&
+        xr_value_format_value(xr_xir_value_format_reader(&context),(XrValueFormatNode){&concrete,0},sink,0);
+}
+typedef struct PanicTextSink { char *bytes;size_t size,capacity;bool overflow; } PanicTextSink;
+static int panic_text_write(void *context,const void *bytes,size_t length) {
+    PanicTextSink *text=context;
+    if (length>SIZE_MAX-text->size) {text->overflow=true;return 0;}
+    if (text->bytes) {
+        if (length>text->capacity-text->size) return 0;
+        if (length) memcpy(text->bytes+text->size,bytes,length);
+    }
+    text->size+=length;return 1;
+}
+static XrXirValueStatus panic_error_message(XrXirDomain *domain,const XrXirPanicPayload *panic,XrXirValue *output) {
+    PanicTextSink measure={0};
+    if (!xr_xir_panic_error_format(panic,(XrValueFormatSink){&measure,panic_text_write}))
+        return measure.overflow?XR_XIR_VALUE_OVERFLOW:XR_XIR_VALUE_BAD_ARGUMENT;
+    if (measure.size==SIZE_MAX) return XR_XIR_VALUE_OVERFLOW;
+    if (!xr_xir_domain_is_compile(domain) && !xr_xir_domain_work(domain,(uint64_t)measure.size+1))
+        return XR_XIR_VALUE_LIMIT;
+    XirString *string=NULL;XrXirValueStatus status=string_allocate(domain,measure.size,&string);
+    if (status!=XR_XIR_VALUE_OK) return status;
+    XrXirValue owned=string_value(string);PanicTextSink sink={string->bytes,0,measure.size,false};
+    bool rendered=xr_xir_panic_error_format(panic,(XrValueFormatSink){&sink,panic_text_write});
+    XrUtf8ScanResult scan=xr_utf8_core_scan_strict((const uint8_t *)string->bytes,sink.size);
+    if (!rendered || sink.size!=measure.size || scan.error!=XR_UTF8_OK) status=XR_XIR_VALUE_BAD_ARGUMENT;
+    else {string->runes=scan.rune_count;*output=owned;owned=(XrXirValue){0};}
+    xr_xir_value_drop(&owned);return status;
 }
 static bool xr_xir_panic_message_borrow_graph_operation(const XrXirPanicPayload *panic, char *scratch,
     size_t capacity, XrErrorCoreMessageView *output) {
@@ -162,6 +204,8 @@ XR_FUNCDEF bool xr_xir_panic_info_detail(const XrXirValue *info, XrXirFaultDetai
 static XrXirValueStatus xr_xir_panic_info_message_graph_operation(const XrXirValue *info, XrXirValue *output) {
     XrXirFaultDetail detail;
     if (!unit_value(output) || !xr_xir_panic_info_detail(info, &detail)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (detail.code == XR_XIR_PANIC_TRY_ASSERT)
+        return panic_error_message(object_pointer(info)->domain,&((const XirPanicInfo *)object_pointer(info))->panic,output);
     if (detail.code == XR_XIR_PANIC_ASSERTION)
         return xr_xir_value_copy(&((const XirPanicInfo *)object_pointer(info))->panic.message, output);
     char text[XR_XIR_PANIC_MESSAGE_CAPACITY];

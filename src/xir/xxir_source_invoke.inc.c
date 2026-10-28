@@ -8,7 +8,7 @@
  */
 static bool source_handler_site(SourceContext *ctx,uint32_t instruction,uint32_t error) {
     SourceFunction *body=&ctx->bodies[ctx->function];
-    if (!body->error_context) return true;
+    if (!body->error_context || body->error_context->asserted) return true;
     if (!body->error_context->route || instruction>=body->count || body->route_count==UINT32_MAX)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source handler site has no route");
     SourceRouteRecipe *site=source_alloc(ctx,1,sizeof(*site));if (!site) return false;
@@ -19,6 +19,8 @@ static bool source_error_edge(SourceContext *ctx, SourceValue value) {
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
     SourceErrorContext *handler = body->error_context;
+    if (handler && handler->asserted)
+        return source_recipe_append(ctx,(XrXirInstruction){XR_XIR_PANIC_ERROR,XR_XIR_UNIT,{value.id},{0},0,{0}},NULL);
     SourceErrorEdge *edge = source_alloc(ctx,1,sizeof(*edge));
     if (!edge || !handler || handler->count >= UINT32_MAX/2)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"error continuation budget exhausted");

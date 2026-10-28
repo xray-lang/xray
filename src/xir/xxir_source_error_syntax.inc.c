@@ -50,7 +50,7 @@ static bool source_error_syntax(SourceContext *ctx, AstNode *node) {
     case AST_INTERFACE_METHOD:
         clause = &node->as.interface_method.throws_clause; break;
     case AST_TRY_EXPR:
-        if (node->as.try_expr.mode == XR_TRY_PROPAGATE) return true;
+        if (node->as.try_expr.mode == XR_TRY_PROPAGATE || node->as.try_expr.mode == XR_TRY_ASSERT) return true;
         return source_error_syntax_fail(&scan, node->line, node->column,
             node->as.try_expr.mode == XR_TRY_OPTIONAL ? "try? expressions are not yet supported by the compiler" :
             node->as.try_expr.mode == XR_TRY_ASSERT ? "try! expressions are not yet supported by the compiler" :

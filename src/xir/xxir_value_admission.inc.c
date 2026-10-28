@@ -31,7 +31,12 @@ static size_t admission_frame_count(const ValueAdmissionFrame *frame) {
     return frame->boxed.inline_storage ? frame->packed.count : frame->boxed.count;
 }
 static const XrXirTypeArena *admission_frame_arena(const ValueAdmissionFrame *frame) {
-    return frame->boxed.inline_storage ? frame->packed.arena : frame->boxed.object->arena;
+    if (frame->boxed.inline_storage) return frame->packed.arena;
+    if (frame->boxed.object->type==XR_XIR_PANIC_INFO) {
+        const XrXirPanicPayload *panic=&((const XirPanicInfo *)frame->boxed.object)->panic;
+        return xr_xir_value_arena(unit_value(&panic->error)?&panic->message:&panic->error);
+    }
+    return frame->boxed.object->arena;
 }
 
 typedef struct ValueAdmissionStack {
@@ -77,7 +82,7 @@ static XrXirValueStatus type_needs_admission(const XrXirTypes *types, XrXirType 
         if (!admission_is_compile(admission) && (!admission->work)) return XR_XIR_VALUE_LIMIT;
         if (!admission_is_compile(admission)) --admission->work;
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
-        if (!node) { *needed = type == XR_XIR_ERROR; return XR_XIR_VALUE_OK; }
+        if (!node) { *needed = type == XR_XIR_ERROR || type==XR_XIR_PANIC_INFO; return XR_XIR_VALUE_OK; }
         if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_NOMINAL ||
             node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
             node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK ||
@@ -98,7 +103,10 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
     *tuple_field=!frame->boxed.inline_storage && frame->boxed.object->kind==XR_XIR_TYPE_TUPLE;
     *inlined = frame->boxed.inline_storage || frame->boxed.object->kind == XR_XIR_TYPE_ARRAY ||
         frame->boxed.object->kind==XIR_OBJECT_CLASS;
-    if (!frame->boxed.inline_storage && frame->boxed.object->kind==XIR_OBJECT_CLASS) {
+    if (!frame->boxed.inline_storage && frame->boxed.object->type==XR_XIR_PANIC_INFO) {
+        const XrXirPanicPayload *panic=&((const XirPanicInfo *)frame->boxed.object)->panic;
+        *value=unit_value(&panic->error)?panic->message:panic->error;
+    } else if (!frame->boxed.inline_storage && frame->boxed.object->kind==XIR_OBJECT_CLASS) {
         const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(arena),frame->boxed.object->type);
         const XrXirStorageLayout *layout=class_body_layout(frame->boxed.object);
         const unsigned char *body=(const unsigned char *)((const XirClassObject *)frame->boxed.object+1);
@@ -149,8 +157,8 @@ static XrXirValueStatus admission_inline(ValueAdmissionStack *stack,
 }
 /* Ownership summary shares the authority walk and its existing work/scratch
  * charges. Empty or pure scalar/String aggregates need no foreign detachment. */
-static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType type,
-    XrXirValueAdmission *admission, bool *domain_sensitive) {
+static XrXirValueStatus value_admit_summary_mode(const XrXirValue *value, XrXirType type,
+    XrXirValueAdmission *admission, bool *domain_sensitive, bool task) {
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (domain_sensitive) *domain_sensitive = false;
     if (!admission || !value) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -187,8 +195,18 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                     object->kind == XIR_OBJECT_FUNCTION || object->kind == XR_XIR_TYPE_TASK ||
                     object->kind == XR_XIR_TYPE_ITERATOR))
                     *domain_sensitive = true;
+                if (task && object->arena && xr_xir_type_is_enum(xr_xir_compile_type_arena_types(object->arena),object->type) &&
+                    (object->arena!=admission->arena || !xr_xir_compile_type_arena_enum_sendable(object->arena,object->type))) {
+                    status=XR_XIR_VALUE_BAD_ARGUMENT;break;
+                }
                 size_t count = 0;
-                if (object->kind == XIR_OBJECT_CLASS) {
+                if (object->type==XR_XIR_PANIC_INFO) {
+                    const XrXirPanicPayload *panic=&((const XirPanicInfo *)object)->panic;
+                    count=!unit_value(&panic->message) || !unit_value(&panic->error);
+                    if (task && !unit_value(&panic->error) && xr_xir_value_arena(&panic->error)!=admission->arena) {
+                        status=XR_XIR_VALUE_BAD_ARGUMENT;break;
+                    }
+                } else if (object->kind == XIR_OBJECT_CLASS) {
                     const XrXirStorageLayout *body=class_body_layout(object);
                     if (object->domain != admission->domain || !body) {
                         status=XR_XIR_VALUE_BAD_ARGUMENT;break;
@@ -274,6 +292,17 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
         admission->scratch_bytes += stack.bytes;
     }
     return status;
+}
+static XrXirValueStatus value_admit_summary(const XrXirValue *value,XrXirType type,
+    XrXirValueAdmission *admission,bool *domain_sensitive) {
+    return value_admit_summary_mode(value,type,admission,domain_sensitive,false);
+}
+XR_FUNCDEF XrXirValueStatus xr_xir_panic_graph_admit(const XrXirValue *value,XrXirType type,
+    XrXirValueAdmission *admission) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status=value_admit_summary_mode(value,type,admission,NULL,true);
+    xr_xir_value_graph_end();return status;
 }
 XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value, XrXirType type,
     XrXirValueAdmission *admission) {
