@@ -102,7 +102,7 @@ endforeach()
             '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
         stdout, stderr = run('runtime-'+language, [exe])
         assert stdout == b'Installed Runtime Call37: owned fatal, moved result, retired Domain and old ABI refusal PASS\r\n' and not stderr
-    summary = dict(state='PASS', source_api=source_manifest['api_version'], call_abi=37, common=103,
+    summary = dict(state='PASS', source_api=source_manifest['api_version'], call_abi=37, common=runtime_manifest['semantic'],
         crt='MD', sanitizers=0, source_languages=['C11', 'C++17'], runtime_languages=['C11', 'C++17'], clients=4, prefix_moved=True,
         runtime_manifest_sha256=hashlib.sha256((runtime/'sdk_manifest.json').read_bytes()).hexdigest(),
         source_manifest_sha256=hashlib.sha256((source/'source_sdk_manifest.json').read_bytes()).hexdigest(),
