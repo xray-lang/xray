@@ -219,6 +219,10 @@ static XrXirCallStatus host_complete(XrXirHostCall *call, XrXirCallResult *outpu
         }
         observed = xr_xir_host_call_step_bounded(call, 256);
     }
+    call->busy=true;
+    XR_CHECK(xir_instance_host_finish(call->instance,&call->observed)==XR_XIR_CALL_READY,
+        "the host exclusively owns its terminal, unprepared current instance");
+    call->busy=false;observed=call->observed;
     goto complete;
 host_failure:
     call->busy=true;
@@ -229,6 +233,12 @@ complete: ;
     XrXirCallResult owned = {0};
     if (status == XR_XIR_CALL_READY || status==observed.outcome.status) status = xr_xir_host_call_take(call, &owned);
     XrXirCallStatus cleanup = xr_xir_host_call_drop(call);
+    /* Resource and host failures are statuses, not owned guest outcomes. */
+    if (owned.status!=XR_XIR_CALL_RETURNED && owned.status!=XR_XIR_CALL_THROWN &&
+        !xr_xir_call_panic_status(owned.status) && owned.status!=XR_XIR_CALL_CLEANUP_FAILED) {
+        xr_xir_call_result_drop(&owned);
+        return status;
+    }
     if (cleanup != XR_XIR_CALL_READY && (xr_xir_call_result_empty(&owned) || owned.status==XR_XIR_CALL_RETURNED)) {
         xr_xir_call_result_drop(&owned);
         return cleanup;

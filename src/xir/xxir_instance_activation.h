@@ -15,6 +15,9 @@ typedef struct XrXirInstance XrXirInstance;
  * the Instance. Initialization failure stays sticky. A prepared generation is
  * rejected; failed cleanup permanently stops the owner. */
 XR_FUNC XrXirCallStatus xr_xir_instance_close_activation(XrXirInstance *instance);
+/* Finish the current terminal group while its complete outcome is still borrowed.
+ * The host must copy that outcome before reclaiming the activation. */
+XR_FUNC XrXirCallStatus xir_instance_host_finish(XrXirInstance *instance, XrXirInstanceResult *observed);
 /* A hard host service failure closes only this authenticated execution group.
  * Success borrows its complete original terminal through the existing result. */
 XR_FUNC XrXirCallStatus xir_instance_host_failure(XrXirInstance *instance, XrXirInstanceResult *observed);

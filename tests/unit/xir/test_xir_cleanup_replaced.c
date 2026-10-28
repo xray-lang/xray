@@ -181,11 +181,14 @@ XR_FUNC XrXirHostWaitStatus xir_cleanup_injected_wait_begin(XrXirHostWait *wait,
 static void host_wait_failure(void) {
     XrSourceArtifact *program=public_build("owned");XrSourceExecution *owner=execution();Output out={0};
     host_wait_inject=true;host_wait_failures=0;
-    XrSourceResult *result=invoke(owner,program,"hostWaitFailure",&out);XrSourceEvent event={0};
+    XrSourceInvocation request;CHECK(xray_source_invocation_init(&request,sizeof(request))==XR_SOURCE_OK);
+    request.name="hostWaitFailure";request.name_length=strlen(request.name);
+    XrSourceCallOptions config=options(&out);XrSourceResult *result=NULL;XrSourceEvent failure={0};
+    XrSourceStatus status=xray_source_invoke(owner,program,&request,&config,&result,&failure);
     CHECK(!host_wait_inject && host_wait_failures==1);
-    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.engine_status==XR_XIR_CALL_HOST_ERROR);
+    CHECK(status==XR_SOURCE_IO && !result && failure.engine_status==XR_XIR_CALL_HOST_ERROR);
     CHECK(out.size==sizeof(owned_stdout)-1 && !memcmp(out.bytes,owned_stdout,out.size));
-    xray_source_result_free(result);out=(Output){0};
+    out=(Output){0};
     result=invoke(owner,program,"afterFailure",&out);int64_t value=0;
     CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK && value==42);
     xray_source_result_free(result);xray_source_artifact_free(program);xray_source_execution_free(owner);
@@ -264,16 +267,29 @@ static void owned_graph(void) {
     CHECK(stats.held_bytes==ready.baseline);
     xr_compile_resources_release(ready.resources);puts("cleanup raw owned graphs: dual Error, prior panic, copied result and producer/arena retirement passed");
 }
+typedef struct FinishObservation {XrXirInstance *instance;unsigned traces;} FinishObservation;
+static void finish_observation(void *context,XrXirLifecycleEvent event,uint32_t index) {
+    FinishObservation *probe=context;(void)event;(void)index;XrXirInstanceResult untouched={.epoch=91};
+    CHECK(xir_instance_host_finish(probe->instance,&untouched)==XR_XIR_CALL_BUSY && untouched.epoch==91 &&
+        xr_xir_call_result_empty(&untouched.outcome));++probe->traces;
+}
 static void sticky_host_guard(void) {
     static const char text[]="enum InitFailure { Failed { text: string } }\n"
         "fn fail() throws(InitFailure) -> i64 { throw InitFailure.Failed { text: \"sticky é\\0界\" } }\n"
         "const neverPublished = try fail()\nexport fn answer() -> i64 { return 42 }\n";
     Prepared ready=prepare_text(text,sizeof(text)-1);XrXirInstanceConfig config;
     CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
-    CHECK(xr_xir_instance_new(ready.program,&config,&instance)==XR_XIR_CALL_READY);
+    FinishObservation probe={0};config.trace=finish_observation;config.trace_context=&probe;
+    CHECK(xr_xir_instance_new(ready.program,&config,&instance)==XR_XIR_CALL_READY);probe.instance=instance;
     CHECK(xr_xir_instance_start(instance,named(ready.program,"answer"),NULL,0)==XR_XIR_CALL_READY);
+    XrXirInstanceResult pending={.epoch=71};
+    CHECK(xir_instance_host_finish(instance,&pending)==XR_XIR_CALL_BAD_STATE && pending.epoch==71 &&
+        xr_xir_call_result_empty(&pending.outcome));
     XrXirInstanceResult original=xr_xir_instance_poll_bounded(instance,UINT64_MAX),untouched={.epoch=91};
-    CHECK(original.outcome.status==XR_XIR_CALL_THROWN && original.outcome.value.payload);
+    CHECK(original.outcome.status==XR_XIR_CALL_THROWN && original.outcome.value.payload && probe.traces);
+    XrXirInstanceResult finished={0};
+    CHECK(xir_instance_host_finish(instance,&finished)==XR_XIR_CALL_READY && finished.outcome.status==XR_XIR_CALL_THROWN &&
+        finished.outcome.value.payload==original.outcome.value.payload && finished.epoch==original.epoch);
     CHECK(xir_instance_host_failure(instance,&untouched)==XR_XIR_CALL_BAD_STATE && untouched.epoch==91 && xr_xir_call_result_empty(&untouched.outcome));
     XrXirInstanceResult again=xr_xir_instance_poll_bounded(instance,1);
     CHECK(again.outcome.status==XR_XIR_CALL_THROWN && again.outcome.value.type==original.outcome.value.type &&
@@ -330,9 +346,12 @@ static void task_sendable(void) {
     XrSourceArtifact *program=public_build("owned");XrSourceExecution *owner=execution();Output out={0};
     XrSourceResult *result=invoke(owner,program,"unsafeOrdinary",&out);int64_t value=0;
     CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK && value==420);xray_source_result_free(result);
-    out=(Output){0};result=invoke(owner,program,"unsafeTask",&out);XrSourceEvent event={0};
-    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.engine_status==XR_XIR_CALL_BAD_STATE);
-    CHECK(out.size==sizeof(owned_stdout)-1 && !memcmp(out.bytes,owned_stdout,out.size));xray_source_result_free(result);
+    out=(Output){0};result=NULL;XrSourceEvent failure={0};XrSourceInvocation request;
+    CHECK(xray_source_invocation_init(&request,sizeof(request))==XR_SOURCE_OK);
+    request.name="unsafeTask";request.name_length=strlen(request.name);XrSourceCallOptions config=options(&out);
+    CHECK(xray_source_invoke(owner,program,&request,&config,&result,&failure)==XR_SOURCE_BAD_STATE && !result &&
+        failure.engine_status==XR_XIR_CALL_BAD_STATE);
+    CHECK(out.size==sizeof(owned_stdout)-1 && !memcmp(out.bytes,owned_stdout,out.size));
     out=(Output){0};result=invoke(owner,program,"ordinaryTask",&out);
     CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK && value==420);xray_source_result_free(result);
     xray_source_artifact_free(program);xray_source_execution_free(owner);

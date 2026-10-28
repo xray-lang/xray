@@ -1,0 +1,1 @@
+export fn values(n:i64)->Iterator<i64>{defer{const ignored=1/n};yield 7}

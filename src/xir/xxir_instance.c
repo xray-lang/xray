@@ -908,6 +908,28 @@ XrXirCallStatus xr_xir_instance_close_activation(XrXirInstance *instance) {
     if (status != XR_XIR_CALL_READY) (void)xr_xir_instance_stop(root);
     return status;
 }
+XR_FUNC XrXirCallStatus xir_instance_host_finish(XrXirInstance *instance,XrXirInstanceResult *observed) {
+    if (!instance_owner_current(instance) || !instance || !observed) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (instance_busy(instance)) return XR_XIR_CALL_BUSY;
+    XrXirInstance *root=instance_root(instance),*active=instance_current(root);
+    if (root->prepared_generation) return XR_XIR_CALL_BAD_STATE;
+    if (instance!=root && instance!=active) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!active->executor || !active->call || active->last_outcome==XR_XIR_CALL_READY ||
+        active->last_outcome==XR_XIR_CALL_SUSPENDED) return XR_XIR_CALL_BAD_STATE;
+    instance_driving(active,true);
+    XrXirCallStatus closed=xr_xir_task_executor_drain(active->executor,XR_XIR_CALL_READY);
+    if (closed==XR_XIR_CALL_CLEANUP_FAILED && active->state==XR_XIR_INSTANCE_FAILED &&
+        (active->failure.status==XR_XIR_CALL_THROWN || xr_xir_call_panic_status(active->failure.status))) {
+        XrXirCallResult selected=xr_xir_task_executor_poll_root(active->executor,1);
+        XR_CHECK(selected.status==closed,"late initialization cleanup keeps its actual fatal root owner");
+        fail_initialization(active,selected);
+    }
+    instance_driving(active,false);
+    XrXirInstanceResult result=xr_xir_instance_poll_bounded(active,1);
+    XR_CHECK(result.outcome.status!=XR_XIR_CALL_READY && result.outcome.status!=XR_XIR_CALL_SUSPENDED &&
+        xr_xir_call_result_valid(&result.outcome),"a finished host group owns its selected complete terminal");
+    *observed=result;return XR_XIR_CALL_READY;
+}
 XR_FUNC XrXirCallStatus xir_instance_host_failure(XrXirInstance *instance,XrXirInstanceResult *observed) {
     if (!instance_owner_current(instance) || !instance || !observed) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance_busy(instance)) return XR_XIR_CALL_BUSY;

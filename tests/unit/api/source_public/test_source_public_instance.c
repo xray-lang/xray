@@ -32,6 +32,14 @@ static XrSourceWriteStatus collect(void *context,XrSourceOutputStream stream,con
     }
     memcpy(out->bytes+out->length,bytes,length);out->length+=length;return XR_SOURCE_WRITE_OK;
 }
+static XrSourceWriteStatus formatted_failure(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
+    Output *out=context;CHECK(stream==XR_SOURCE_STDERR && length<=sizeof(out->bytes)-out->length);
+    memcpy(out->bytes+out->length,bytes,length);out->length+=length;return XR_SOURCE_WRITE_OK;
+}typedef struct RefusedOutput {XrSourceWriteStatus status;unsigned calls;} RefusedOutput;
+static XrSourceWriteStatus refuse_output(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
+    RefusedOutput *out=context;CHECK(stream==XR_SOURCE_STDOUT && length==3 && !memcmp(bytes,"90\n",3));
+    ++out->calls;return out->status;
+}
 static XrSourceInvocation invocation(const char *name,const XrSourceValue *const *arguments,size_t count) {
     XrSourceInvocation request;CHECK(xray_source_invocation_init(&request,sizeof(request))==XR_SOURCE_OK);
     request.name=name;request.name_length=strlen(name);request.arguments=arguments;request.argument_count=count;return request;
@@ -80,7 +88,79 @@ static void default_output(XrSourceExecution *execution,XrSourceArtifact *progra
     xray_source_value_free(argument);
     puts("public default output: persistent and one-shot cumulative bytes exceed 1 MiB PASS");
 }
-int main(void) {
+static void completed_child(void) {
+    static const char source[]="fn divide(n:i64)->i64{return 1/n}\n"
+        "fn values()->Iterator<i64>{defer{const ignored=divide(0)};yield 7}\n"
+        "export fn answer()->Iterator<i64>{const it=values();print(it.next());return it}\n"
+        "export fn again()->i64{return 42}\n";
+    XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"completed-child",source,sizeof(source)-1}};
+    XrSourceArtifact *program=NULL;XrSourceDiagnostic *diagnostic=NULL;
+    CHECK(xray_source_build(&input,&options,&program,NULL,&diagnostic)==XR_SOURCE_OK && program && !diagnostic);
+    XrSourceExecutionOptions policy=xray_source_execution_options_default();XrSourceExecution *execution=NULL;
+    CHECK(xray_source_execution_new(&policy,&execution)==XR_SOURCE_OK);
+    XrSourceResult *retained[2]={0};
+    for(unsigned persistent=0;persistent<2;++persistent) {
+        Output out={0};XrSourceCallOptions runtime;CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
+        runtime.write=collect;runtime.context=&out;XrSourceInvocation request=invocation("answer",NULL,0);
+        XrSourceInstance *owner=NULL;
+        if(persistent) {CHECK(xray_source_instance_new(execution,program,&runtime,&owner)==XR_SOURCE_OK);out.owner=owner;}
+        XrSourceResult *result=NULL;XrSourceEvent failure={0},event={0};
+        XrSourceStatus status=persistent?xray_source_instance_execute(owner,&request,&result,&failure):
+            xray_source_invoke(execution,program,&request,&runtime,&result,&failure);
+        if(result)CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK);
+        if(status!=XR_SOURCE_OK || !result || event.state!=XR_SOURCE_RUN_CLEANUP_FAILED)
+            fprintf(stderr,"completed child persistent=%u status=%u result=%p event=%u engine=%u failure=%u bytes=%zu\n",
+                persistent,(unsigned)status,(void *)result,(unsigned)event.state,(unsigned)event.engine_status,
+                (unsigned)failure.engine_status,out.length);
+        CHECK(status==XR_SOURCE_OK && result && event.state==XR_SOURCE_RUN_CLEANUP_FAILED);
+        CHECK(out.length==2 && !memcmp(out.bytes,"7\n",2));
+        CHECK(xray_source_result_copy(result,&retained[persistent])==XR_SOURCE_OK);xray_source_result_free(result);result=NULL;
+        CHECK(xray_source_instance_drop(&owner,NULL)==XR_SOURCE_OK && !owner);out.owner=NULL;
+        request=invocation("again",NULL,0);CHECK(xray_source_invoke(execution,program,&request,&runtime,&result,NULL)==XR_SOURCE_OK);
+        returned_i64(result,42);
+    }
+    xray_source_artifact_free(program);xray_source_execution_free(execution);
+    static const char expected[]="[Fatal Cleanup] E0420: division by zero\n[Prior Cancellation]\n";
+    for(unsigned i=0;i<2;++i) {
+        Output formatted={0};CHECK(xray_source_result_format(retained[i],formatted_failure,&formatted)==XR_SOURCE_OK);
+        CHECK(formatted.length==sizeof(expected)-1 && !memcmp(formatted.bytes,expected,formatted.length));
+        xray_source_result_free(retained[i]);
+    }
+    puts("public completed Iterator: late owned fatal, primary/prior, retired results and new host request PASS");
+}
+static void initializing_child(void) {
+    static const char source[]="import { values } from \"./_cleanup_initialized_iterator\"\n"
+        "enum InitFailure{Failed{stream:Iterator<i64>}}\n"
+        "fn fail()throws(InitFailure)->i64{const it=values(0);print(it.next());throw InitFailure.Failed{stream:it}}\n"
+        "const neverPublished=try fail()\nexport fn answer()->i64{return 42}\n";
+    XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={__FILE__,NULL,source,sizeof(source)-1}};
+    XrSourceArtifact *program=NULL;XrSourceDiagnostic *diagnostic=NULL;
+    XrSourceStatus compiled=xray_source_build(&input,&options,&program,NULL,&diagnostic);
+    if(diagnostic) {XrSourceDiagnosticRoot info={0};CHECK(xray_source_diagnostic_root(diagnostic,0,&info)==XR_SOURCE_OK);
+        fprintf(stderr,"initializing child compile=%u: %s\n",(unsigned)compiled,info.message);}
+    CHECK(compiled==XR_SOURCE_OK && program && !diagnostic);
+    XrSourceExecutionOptions policy=xray_source_execution_options_default();XrSourceExecution *execution=NULL;
+    CHECK(xray_source_execution_new(&policy,&execution)==XR_SOURCE_OK);
+    Output out={0};XrSourceCallOptions runtime;CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
+    runtime.write=collect;runtime.context=&out;XrSourceInvocation request=invocation("answer",NULL,0);
+    XrSourceResult *result=NULL;XrSourceEvent failure={0},event={0};
+    XrSourceStatus status=xray_source_invoke(execution,program,&request,&runtime,&result,&failure);
+    if(result)CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK);
+    fprintf(stderr,"initializing child status=%u result=%p event=%u engine=%u failure=%u bytes=%zu\n",
+        (unsigned)status,(void *)result,(unsigned)event.state,(unsigned)event.engine_status,(unsigned)failure.engine_status,out.length);
+    CHECK(status==XR_SOURCE_OK && result && event.state==XR_SOURCE_RUN_CLEANUP_FAILED);
+    CHECK(out.length==2 && !memcmp(out.bytes,"7\n",2));
+    xray_source_artifact_free(program);xray_source_execution_free(execution);
+    Output formatted={0};CHECK(xray_source_result_format(result,formatted_failure,&formatted)==XR_SOURCE_OK);
+    static const char expected[]="[Fatal Cleanup] E0420: division by zero\n[Prior Cancellation]\n";
+    CHECK(formatted.length==sizeof(expected)-1 && !memcmp(formatted.bytes,expected,formatted.length));xray_source_result_free(result);
+}
+int main(int argc,char **argv) {
+    if(argc==2 && !strcmp(argv[1],"--completed-child")){completed_child();return 0;}
+    if(argc==2 && !strcmp(argv[1],"--initializing-child")){initializing_child();return 0;}
+    CHECK(argc==1);
     static const char source[]="fn initial()->i64{print(90);return 40}\nvar state=initial()\n"
         "export fn read()->i64{return state}\nexport fn next(value:i64)->i64{state+=value;return state}\n"
         "export fn reader()->fn(i64)->i64{return fn(value:i64)->i64{return state+value}}\n"
@@ -114,8 +194,25 @@ int main(void) {
     Output one_shot={0};runtime.output_byte_limit=5;runtime.context=&one_shot;
     XrSourceInvocation two_lines=invocation("twoLines",NULL,0);XrSourceResult *limited=NULL;
     /* The initial module line spends three bytes, leaving only one full line. */
-    CHECK(xray_source_invoke(execution,program,&two_lines,&runtime,&limited,NULL)==XR_SOURCE_LIMIT && !limited);
+    XrSourceEvent limited_failure={0},limited_event={0};
+    status=xray_source_invoke(execution,program,&two_lines,&runtime,&limited,&limited_failure);
+    if(status!=XR_SOURCE_LIMIT || limited) {
+        if(limited)CHECK(xray_source_result_event(limited,&limited_event)==XR_SOURCE_OK);
+        fprintf(stderr,"one-shot output status=%u result=%p event=%u engine=%u failure=%u bytes=%zu hex=",
+            (unsigned)status,(void *)limited,(unsigned)limited_event.state,(unsigned)limited_event.engine_status,
+            (unsigned)limited_failure.engine_status,one_shot.length);
+        for(size_t i=0;i<one_shot.length;++i)fprintf(stderr,"%02x",(unsigned char)one_shot.bytes[i]);
+        fputc('\n',stderr);
+    }
+    CHECK(status==XR_SOURCE_LIMIT && !limited);
     CHECK(one_shot.length==5 && !memcmp(one_shot.bytes,"90\n7\n",5));
+    const XrSourceWriteStatus refused[]={XR_SOURCE_WRITE_OOM,XR_SOURCE_WRITE_LIMIT,XR_SOURCE_WRITE_IO};
+    const XrSourceStatus rejected[]={XR_SOURCE_OUT_OF_MEMORY,XR_SOURCE_LIMIT,XR_SOURCE_IO};
+    for(unsigned i=0;i<3;++i) {
+        RefusedOutput out={refused[i],0};runtime.write=refuse_output;runtime.context=&out;
+        CHECK(xray_source_invoke(execution,program,&two_lines,&runtime,&limited,&limited_failure)==rejected[i] && !limited);
+        CHECK(out.calls==1);
+    }
     xray_source_artifact_free(program);xray_source_execution_free(execution);
     const XrSourceValue *arguments[]={two};
     XrSourceInvocation next=invocation("next",arguments,1),read=invocation("read",NULL,0),reader=invocation("reader",NULL,0);
@@ -167,5 +264,7 @@ int main(void) {
     for(unsigned i=0;i<3;++i)CHECK(xray_source_instance_drop(&owners[i],NULL)==XR_SOURCE_OK && !owners[i]);
     CHECK(xray_source_instance_drop(&owners[0],NULL)==XR_SOURCE_OK);
     puts("public persistent Instance: producer death, state, callable arguments, authority, reentry, cancellation and cumulative output PASS");
+    completed_child();
+    initializing_child();
     return 0;
 }
