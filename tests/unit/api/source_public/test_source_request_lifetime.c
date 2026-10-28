@@ -17,7 +17,57 @@
 /* This TU observes the actual compiler allocator. Installed SDK consumers use
  * the canonical archive implementation separately. No runtime budget is changed. */
 #define xr_compile_resources_new calibration_resources_new
-#include "../../xir/xir_sdk_resource_test.h"
+#include "base/xmalloc.h"
+static void *sdk_fixture_malloc(size_t bytes) {return xr_malloc(bytes);}
+static void sdk_fixture_free(void *pointer) {xr_free(pointer);}
+/* Bookkeeping is outside the measured provider and disappears at zero live.
+ * Its capacity never rejects an otherwise valid compiler allocation. */
+typedef struct SdkAllocation {void *pointer;size_t bytes;} SdkAllocation;
+static SdkAllocation *sdk_allocations;
+static size_t sdk_allocation_capacity;
+static size_t runtime_attempts,runtime_fail_at=SIZE_MAX,runtime_live,runtime_bytes;
+static void *sdk_test_malloc(size_t bytes) {
+    if(runtime_attempts++==runtime_fail_at)return NULL;
+    size_t index=0;
+    while(index<sdk_allocation_capacity && sdk_allocations[index].pointer)++index;
+    if(index==sdk_allocation_capacity) {
+        size_t count=sdk_allocation_capacity?sdk_allocation_capacity*2:1;
+        if(count<sdk_allocation_capacity || count>SIZE_MAX/sizeof(*sdk_allocations))return NULL;
+        SdkAllocation *grown=xr_realloc(sdk_allocations,count*sizeof(*grown));
+        if(!grown)return NULL;
+        memset(grown+sdk_allocation_capacity,0,(count-sdk_allocation_capacity)*sizeof(*grown));
+        sdk_allocations=grown;sdk_allocation_capacity=count;
+    }
+    void *pointer=xr_malloc(bytes);if(!pointer)return NULL;
+    sdk_allocations[index]=(SdkAllocation){pointer,bytes};++runtime_live;runtime_bytes+=bytes;return pointer;
+}
+static void sdk_test_free(void *pointer) {
+    if(!pointer)return;
+    for(size_t i=0;i<sdk_allocation_capacity;++i)if(sdk_allocations[i].pointer==pointer) {
+        --runtime_live;runtime_bytes-=sdk_allocations[i].bytes;sdk_allocations[i]=(SdkAllocation){0};xr_free(pointer);
+        if(!runtime_live){xr_free(sdk_allocations);sdk_allocations=NULL;sdk_allocation_capacity=0;}
+        return;
+    }
+    CHECK(false);
+}
+#undef xr_malloc
+#undef xr_free
+#define xr_malloc sdk_test_malloc
+#define xr_free sdk_test_free
+#include "base/xcompile_resources.c"
+#undef xr_malloc
+#undef xr_free
+#define xr_malloc sdk_fixture_malloc
+#define xr_free sdk_fixture_free
+static const XrCompileResourceLimits sdk_unlimited={XR_COMPILE_MEMORY_ORDINARY,0,true};
+static XrCompileResources *sdk_ledger(const XrCompileResourceLimits *limits) {
+    XrCompileResources *resources=NULL;
+    CHECK(xr_compile_resources_new(limits,&resources)==XR_COMPILE_RESOURCE_OK);return resources;
+}
+static XrCompileResourceStats sdk_stats(XrCompileResources *resources) {
+    XrCompileResourceStats stats;
+    CHECK(xr_compile_resources_stats(resources,&stats)==XR_COMPILE_RESOURCE_OK);return stats;
+}
 #undef xr_compile_resources_new
 #include "os/os_time.h"
 
@@ -45,6 +95,71 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_new(
 #include "xir/xxir_vm.h"
 #include "xir/xxir_source.h"
 #include "toolchain/xcompiler_session.h"
+
+/* This observer compiles the unchanged admission TU locally. Installed SDK
+ * and CLI consumers continue to use the canonical archive provider. */
+#include "xir/xxir_compile_memory.h"
+typedef struct DefaultsCopyProbe {
+    const XrXirDefaultBinding *records;
+    unsigned char *destination;
+    size_t bytes,spans,witnesses,allocations;
+    uint64_t held_before,held_after,held_empty;
+    XrCompileResources *resources;
+    XrCompileRequestControl *control;
+    unsigned mode;
+    bool cancelled;
+} DefaultsCopyProbe;
+static DefaultsCopyProbe *defaults_copy_probe;
+static void *defaults_observe_alloc(const XrXirCompileContext *context,size_t bytes,
+    XrXirStatus *status,const char *caller) {
+    DefaultsCopyProbe *probe=defaults_copy_probe;
+    if (probe && probe->records && probe->mode==2 && !probe->allocations &&
+        bytes==probe->bytes && !strcmp(caller,"lower_copy_bytes")) {
+        runtime_fail_at=runtime_attempts;
+        void *memory=xir_compile_alloc(context,bytes,status);
+        CHECK(!memory && *status==XR_XIR_OUT_OF_MEMORY && runtime_attempts>runtime_fail_at);
+        runtime_fail_at=SIZE_MAX;++probe->allocations;probe->cancelled=true;return NULL;
+    }
+    return xir_compile_alloc(context,bytes,status);
+}
+static XrCompileResourceStatus defaults_observe_span(XrCompileRequestControl *control,
+    void *destination,const void *source,size_t bytes) {
+    DefaultsCopyProbe *probe=defaults_copy_probe;
+    bool observed=probe && probe->records==source && probe->bytes==bytes;
+    if (observed) {CHECK(!probe->destination);probe->destination=destination;memset(destination,0xa5,bytes);++probe->spans;}
+    XrCompileResourceStatus status=xir_lower_copy_span(control,destination,source,bytes);
+    if (observed) {if(status==XR_COMPILE_RESOURCE_OK)CHECK(!memcmp(destination,source,bytes));probe->destination=NULL;}
+    return status;
+}
+#define xir_compile_alloc(context,bytes,status) defaults_observe_alloc(context,bytes,status,__func__)
+#define xir_lower_copy_span defaults_observe_span
+#define xr_xir_compile_check_refined_v2 defaults_actual_check
+#include "xir/xxir.c"
+#undef xr_xir_compile_check_refined_v2
+#undef xir_lower_copy_span
+#undef xir_compile_alloc
+XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *context,
+    const XrXirModule *built,const XrXirConstruction *construction,const XrXirRootRefiner *refiner,
+    XrCompileRequestControl *control,XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
+    DefaultsCopyProbe *probe=defaults_copy_probe;
+    bool observed=probe && built && built->defaults && built->defaults->count==302;
+    XrXirDefaultBinding original[302];
+    if (observed) {
+        CHECK(!probe->records && control);probe->records=built->defaults->records;
+        CHECK(!probe->resources && xr_compile_resources_retain(context->resources)==XR_COMPILE_RESOURCE_OK);probe->resources=context->resources;
+        CHECK(calibration_owner==context->resources);probe->held_empty=calibration_initial_held;
+        probe->held_before=sdk_stats(context->resources).held_bytes;
+        probe->bytes=sizeof(original);probe->control=control;memcpy(original,probe->records,sizeof(original));
+    }
+    XrXirStatus status=defaults_actual_check(context,built,construction,refiner,control,output,diagnostic);
+    if (observed) {
+        probe->held_after=sdk_stats(context->resources).held_bytes;
+        if(status!=XR_XIR_OK)CHECK(!*output && diagnostic->status==status);
+        CHECK(!probe->destination && !memcmp(original,built->defaults->records,sizeof(original)));
+        probe->records=NULL;probe->control=NULL;
+    }
+    return status;
+}
 
 typedef struct Cancel { int cancelled; size_t polls; } Cancel;
 static int cancel_poll(const void *context) {
@@ -1031,8 +1146,92 @@ static void interface_report_lifetime(void) {
     CHECK(!runtime_live&&!runtime_bytes);
     puts("Interface parameter report survives AST/request/input retirement; physical OOM, cancellation and finite memory remain resources PASS");
 }
+
+static int defaults_copy_poll(const void *context) {
+    DefaultsCopyProbe *probe=(DefaultsCopyProbe *)context;
+    if(probe->cancelled)return 1;
+    if(!probe->destination || probe->witnesses || memcmp(probe->destination,probe->records,4096))return 0;
+    for(size_t i=4096;i<probe->bytes;++i)CHECK(probe->destination[i]==0xa5);
+    ++probe->witnesses;
+    if(probe->mode==0)return 1;
+    if(probe->mode==1) {
+        CHECK(probe->control && probe->control->has_deadline);uint64_t now=xr_time_monotonic_ns();CHECK(now);
+        while(now<probe->control->deadline_ns){xr_time_sleep_ns(1000000);now=xr_time_monotonic_ns();CHECK(now);}
+    }
+    return 0;
+}
+static size_t defaults_source(char *text,size_t capacity) {
+    size_t used=0;
+    const char head[]="fn pad(";
+    CHECK(sizeof(head)<capacity);memcpy(text,head,sizeof(head)-1);used=sizeof(head)-1;
+    for(unsigned i=0;i<300;++i) {
+        int n=snprintf(text+used,capacity-used,"%sp%u:i64=1",i?",":"",i);
+        CHECK(n>0&&(size_t)n<capacity-used);used+=(size_t)n;
+    }
+    const char tail[]=")->i64{return p0}\nfn add(left:i64=40,right:i64=2)->i64{return left+right}\nexport fn answer()->i64{return add()}\nprint(answer())\n";
+    CHECK(sizeof(tail)<=capacity-used);memcpy(text+used,tail,sizeof(tail));used+=sizeof(tail)-1;
+    const char *record=getenv("XR_DEFAULTS_SOURCE_RECORD");
+    if(record){FILE *file=fopen(record,"wb");CHECK(file&&fwrite(text,1,used,file)==used&&fclose(file)==0);}
+    return used;
+}
+static void defaults_execute(XrSourceArtifact *artifact,char *source,size_t length) {
+    memset(source,'!',length);ArrayOutput output={0};
+    XrSourceExecution *execution=execution_new();XrSourceCallOptions runtime;
+    CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
+    runtime.context=&output;runtime.write=array_write;
+    XrSourceInvocation invocation;CHECK(xray_source_invocation_init(&invocation,sizeof(invocation))==XR_SOURCE_OK);
+    invocation.name="answer";invocation.name_length=6;XrSourceCall *call=NULL;
+    CHECK(xray_source_invoke_begin(execution,artifact,&invocation,&runtime,&call)==XR_SOURCE_OK&&call);
+    xray_source_artifact_free(artifact);xray_source_execution_free(execution);
+    CHECK(finish(call).state==XR_SOURCE_RUN_RETURNED);
+    XrSourceResult *result=NULL;CHECK(xray_source_call_take(call,&result)==XR_SOURCE_OK&&result);
+    CHECK(xray_source_call_drop(&call,NULL)==XR_SOURCE_OK&&!call);
+    int64_t value=0;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK&&value==42);
+    CHECK(output.size==3&&!memcmp(output.bytes,"42\n",3));xray_source_result_free(result);
+}
+static void defaults_copy_controls(void) {
+    char text[24000];size_t length=defaults_source(text,sizeof(text));
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"defaults-copy",text,length}};
+    uint64_t baseline_ns=0;
+    for(unsigned mode=3;mode<7;++mode) {
+        unsigned kind=mode==3?3:mode-4;DefaultsCopyProbe probe={.mode=kind};
+        XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+        options.cancel_poll=defaults_copy_poll;options.cancel_context=&probe;
+        if(kind==1){options.deadline_mode=XR_SOURCE_DEADLINE_AFTER;options.timeout_ns=baseline_ns+UINT64_C(5000000000);}
+        XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;XrSourceFailure failure={0};
+        CHECK(!defaults_copy_probe);defaults_copy_probe=&probe;uint64_t start=xr_time_monotonic_ns();CHECK(start);
+        Calibration request={0};XrSourceStatus status=calibration_build(&input,&options,&request,&artifact,&failure,&report);
+        uint64_t elapsed=xr_time_monotonic_ns()-start;defaults_copy_probe=NULL;
+        fprintf(stderr,"defaults kind%u status%u records302 bytes%zu spans%zu witnesses%zu allocations%zu held%llu/%llu elapsed%llu\n",kind,(unsigned)status,probe.bytes,probe.spans,probe.witnesses,probe.allocations,(unsigned long long)probe.held_before,(unsigned long long)probe.held_after,(unsigned long long)elapsed);
+        CHECK(!probe.records && !probe.destination && !probe.control);
+        if(status!=XR_SOURCE_OK && report) {
+            XrSourceDiagnosticReportInfo details={0};CHECK(xray_source_diagnostic_report(report,&details)==XR_SOURCE_OK);
+            for(uint32_t i=0;i<details.roots;++i){XrSourceDiagnosticRoot root={0};CHECK(xray_source_diagnostic_root(report,i,&root)==XR_SOURCE_OK);fprintf(stderr,"defaults failure stage%u %d:%d %s\n",(unsigned)failure.stage,root.primary.line,root.primary.column,root.message);}
+        }
+        if(kind==3) {
+            CHECK(status==XR_SOURCE_OK && artifact && probe.spans && !report);baseline_ns=elapsed;
+            defaults_execute(artifact,text,length);artifact=NULL;
+            length=defaults_source(text,sizeof(text));input.value.text.length=length;
+        } else {
+            XrSourceStatus expected=kind==0?XR_SOURCE_CANCELLED:kind==1?XR_SOURCE_DEADLINE:XR_SOURCE_OUT_OF_MEMORY;
+            CHECK(status==expected&&!artifact&&failure.status==expected&&failure.cleanup_status==XR_SOURCE_OK&&failure.stage==XR_SOURCE_STAGE_COMPILE);
+            CHECK(kind==2?(probe.allocations==1&&probe.cancelled):(probe.spans&&probe.witnesses));
+            xray_source_diagnostic_free(report);report=NULL;
+            CHECK(probe.resources && sdk_stats(probe.resources).held_bytes==probe.held_empty);
+            xr_compile_resources_release(probe.resources);probe.resources=NULL;CHECK(!runtime_live&&!runtime_bytes);
+            options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+            CHECK(xray_source_build(&input,&options,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
+            defaults_execute(artifact,text,length);artifact=NULL;
+            length=defaults_source(text,sizeof(text));input.value.text.length=length;
+        }
+        if(probe.resources) {CHECK(sdk_stats(probe.resources).held_bytes==probe.held_empty);xr_compile_resources_release(probe.resources);probe.resources=NULL;}
+        CHECK(!runtime_live&&!runtime_bytes);
+    }
+    puts("Actual 300-parameter Source defaults receiving: 302 records, copied prefix, canary tail, cancel/deadline/OOM, original table, retry and retired ready42 PASS");
+
+}
 int main(void) {
-    lower_loop_controls();
+    defaults_copy_controls();lower_loop_controls();
     input_helper_controls();input_prior_resource();public_input_controls();input_nul_location();graph_input_controls();
     compilation_controls();
     report_resources();report_control();unicode_report();module_binding_classes();partial_report_lifetime();
@@ -1040,6 +1239,6 @@ int main(void) {
     method_scope_allocation_controls();method_report_lifetime();interface_report_lifetime();
     independent_requests();detached_ast_and_result();ready_c_artifact();execution_policy();
     global_array_lifetime();global_string_lifetime();
-    CHECK(!runtime_live&&!runtime_bytes);
+    CHECK(!runtime_live&&!runtime_bytes&&!sdk_allocations&&!sdk_allocation_capacity);
     puts("Independent Source requests, ready artifacts, detached AST and result ownership passed");return 0;
 }
