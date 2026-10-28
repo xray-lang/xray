@@ -1245,7 +1245,7 @@ static XrXirStatus verify_nominal_modules(const XrXirModule *module, XrXirCompil
     return XR_XIR_OK;
 }
 
-static XrXirStatus verify_provenance(const XrXirModule *module, XrXirCompileContext *remaining,
+static XrXirStatus verify_provenance(const XrXirModule *module, const XrXirCompileContext *remaining,
     const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
     const XrXirProvenance *p = module->provenance;
     XrXirStatus shape = xir_effect_contract_shape_verify(remaining, module);
