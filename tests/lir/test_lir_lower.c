@@ -178,7 +178,7 @@ static void unsupported(void) {
         "struct Pair{x:i64}\nfn answer()->i64{const p=Pair{x:42}\nreturn p.x}\nprint(answer())\n",
         false, "STRUCT_NEW");
     rejected("fn answer()->i64{const s=\"a\"+\"b\"\nreturn len(s)}\nprint(answer())\n", false,
-             "CONST_STRING");
+             "literal without one direct output");
     rejected("fn answer()->i64{var n=40\nconst f=fn()->i64{n=n+1\nreturn n}\nreturn "
              "f()}\nprint(answer())\n",
              false, "FUNCTION_REF");
