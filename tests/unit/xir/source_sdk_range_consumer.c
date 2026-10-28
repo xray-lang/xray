@@ -42,7 +42,7 @@ int main(void) {
     CHECK(xray_source_parse(&text,&options,&ast,NULL,&diagnostic)==XR_SOURCE_OK && ast && !diagnostic);
     memset(source,0xa5,sizeof(source));XrSourceArtifact *program=NULL;
     XrSourceStatus status=xray_source_build_ast(ast,&options,&program,NULL,&diagnostic);
-    if(diagnostic){XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);fprintf(stderr,"Range SDK status%u %s\n",status,info.message);}
+    if(diagnostic){XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);fprintf(stderr,"Range SDK status%u %s\n",status,info.message);}
     CHECK(status==XR_SOURCE_OK && program && !diagnostic);xray_source_ast_free(ast);
     XrSourceValue *start=range_sdk_scalar(execution,XR_SOURCE_VALUE_I64,INT64_MIN);
     XrSourceValue *end=range_sdk_scalar(execution,XR_SOURCE_VALUE_I64,INT64_MAX);

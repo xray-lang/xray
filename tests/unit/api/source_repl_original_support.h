@@ -71,9 +71,9 @@ static XrSourceStatus original_submit(const char *source,bool query) {
 static bool original_eval(const char *source) {
     XrSourceStatus status=original_submit(source,false);
     if(status!=XR_SOURCE_OK || fixture.event.state!=XR_SOURCE_RUN_RETURNED) {
-        XrSourceDiagnosticInfo info={0};
-        if(fixture.diagnostic && xray_source_diagnostic_info(fixture.diagnostic,&info)==XR_SOURCE_OK)
-            fprintf(stderr,"original input status=%u at%d:%d: %s; source=%s\n",(unsigned)status,info.line,info.column,info.message,source);
+        XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};
+        if(fixture.diagnostic && (xray_source_diagnostic_report(fixture.diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(fixture.diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK)
+            fprintf(stderr,"original input status=%u at%d:%d: %s; source=%s\n",(unsigned)status,info.primary.line,info.primary.column,info.message,source);
         else fprintf(stderr,"original input status=%u event=%u; source=%s\n",(unsigned)status,(unsigned)fixture.event.state,source);
         return false;
     }

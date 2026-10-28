@@ -126,7 +126,7 @@ static NominalRun graph_build(const SourceProductNominalFixture *fixture,
     XrCompilerSession *session = NULL;
     XrXirSourceProduct *product = NULL;
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    XrXirSourceProductDiagnostic diagnostic = {0};
+    XrXirSourceProductDiagnostic diagnostic = {0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirCheckedPacket rewrite = {0};
     XrXirCSource original = {0}, regenerated = {0};
     XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &context.resources);
@@ -145,11 +145,16 @@ static NominalRun graph_build(const SourceProductNominalFixture *fixture,
         {session, fixture->file, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL},
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
     run.status = xr_xir_compile_source_product_build(&request, &product, &diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     if (run.status != XR_XIR_OK) {
         CHECK(!product);
         if (!instance_compile_injected)
             fprintf(stderr, "nominal source status=%u stage=%u line=%d: %s\n", run.status,
-                diagnostic.stage, diagnostic.source.line, diagnostic.source.message);
+                diagnostic.stage, diagnostic_root.primary.line, diagnostic_root.message);
         goto release;
     }
     XrXirSourceProductPacketView packet = {0};

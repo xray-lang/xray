@@ -19,6 +19,9 @@ def run(name,args,code,contains=(),cwd=None,injected=False):
 ok=write('ok.xr','const n = 42\n')
 run('semantic',[ok],0)
 run('syntax',['--syntax-only',ok],0)
+duplicate=write('two-independent-items.xr','const alpha:i64=1\nconst alpha:i64=2\nconst beta:i64=3\nconst beta:i64=4\nprint(9)\n')
+double=run('two-root-labels',[duplicate],1,('two-independent-items.xr:2:7: error: duplicate declaration name','two-independent-items.xr:4:7: error: duplicate declaration name','two-independent-items.xr:1:7: note: first declaration is here','two-independent-items.xr:3:7: note: first declaration is here'))
+assert double.stderr.count(b'error: duplicate declaration name')==2 and double.stderr.count(b'note: first declaration is here')==2
 missing=write('missing.xr','import {value} from "./absent"\n')
 run('syntax-missing-import',['--syntax-only',missing],0)
 run('semantic-missing-import',[missing],1,('status=not-found', 'module not found'))

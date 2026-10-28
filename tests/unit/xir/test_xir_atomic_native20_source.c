@@ -22,9 +22,14 @@ static XrXirStatus atomic_build(AtomicCompileOwner *owner,XrXirSourceProduct **p
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ATOMIC_FIXTURES};
     XrXirSourceProductRequest request={{session,XR_ATOMIC_FIXTURES "/root.xr",&authority,&owner->context,
         XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
-    XrXirSourceProductDiagnostic diagnostic={0};
+    XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,product,&diagnostic);
-    if(status!=XR_XIR_OK && !atomic_program_compile_injected)fprintf(stderr,"Atomic source status=%u stage=%u line=%d %s\n",status,diagnostic.stage,diagnostic.source.line,diagnostic.source.message);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
+    if(status!=XR_XIR_OK && !atomic_program_compile_injected)fprintf(stderr,"Atomic source status=%u stage=%u line=%d %s\n",status,diagnostic.stage,diagnostic_root.primary.line,diagnostic_root.message);
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);xr_compile_session_free(session);return status;
 }
 

@@ -14,8 +14,8 @@ static XrSourceStatus rooted_begin(XrSourceRepl *owner,const char *path,const ch
 static void rooted_execute(XrSourceRepl *owner,const char *path,const char *source) {
     XrSourceDiagnostic *diagnostic=NULL;
     XrSourceStatus status=rooted_begin(owner,path,source,false,&diagnostic);
-    if(diagnostic){XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
-        fprintf(stderr,"rooted %u at %s:%d: %s\n",(unsigned)status,info.path?info.path:path,info.line,info.message);}
+    if(diagnostic){XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
+        fprintf(stderr,"rooted %u at %s:%d: %s\n",(unsigned)status,info.primary.path?info.primary.path:path,info.primary.line,info.message);}
     CHECK(status==XR_SOURCE_OK && !diagnostic);
     XrSourceEvent event=pause_or_finish(owner);
     if(event.state!=XR_SOURCE_RUN_RETURNED)fprintf(stderr,"rooted execution state=%u engine=%u source=%s\n",
@@ -30,8 +30,8 @@ static void rooted_inputs(void) {
         "fn next()->i64{state+=1;return state+sibling.answer()}\nconst saved=next\nnext()\n";
     XrSourceDiagnostic *first_diagnostic=NULL;
     XrSourceStatus first_status=rooted_begin(owner,path,source,false,&first_diagnostic);
-    if(first_diagnostic){XrSourceDiagnosticInfo detail;CHECK(xray_source_diagnostic_info(first_diagnostic,&detail)==XR_SOURCE_OK);
-        fprintf(stderr,"first rooted %u stage%u at %s:%d: %s\n",(unsigned)first_status,detail.stage,detail.path?detail.path:path,detail.line,detail.message);}
+    if(first_diagnostic){XrSourceDiagnosticRoot detail={0};XrSourceDiagnosticReportInfo report_detail={0};CHECK((xray_source_diagnostic_report(first_diagnostic,&report_detail)==XR_SOURCE_OK && report_detail.roots==1 ? xray_source_diagnostic_root(first_diagnostic,0,&detail) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
+        fprintf(stderr,"first rooted %u at %s:%d: %s\n",(unsigned)first_status,detail.primary.path?detail.primary.path:path,detail.primary.line,detail.message);}
     CHECK(first_status==XR_SOURCE_OK && !first_diagnostic);
     memset(path,'!',sizeof(path)-1);memset(source,'!',sizeof(source)-1);
     CHECK(pause_or_finish(owner).state==XR_SOURCE_RUN_RETURNED);
@@ -51,7 +51,7 @@ static void rooted_inputs(void) {
     integer(owner,"it",143);execute(owner,"const after=saved()\n");integer(owner,"after",48);
     XrSourceDiagnostic *diagnostic=NULL;
     CHECK(rooted_begin(owner,same,"import \"./absent\" as absent\n",false,&diagnostic)!=XR_SOURCE_OK && diagnostic);
-    XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK && *info.message);
+    XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK && *info.message);
     xray_source_diagnostic_free(diagnostic);diagnostic=NULL;
     CHECK(begin(owner,"import \"./sibling\" as forbidden\n",&diagnostic)!=XR_SOURCE_OK && diagnostic);
     xray_source_diagnostic_free(diagnostic);diagnostic=NULL;
@@ -65,7 +65,7 @@ static void rooted_inputs(void) {
         XrSourceStatus status=rooted_begin(owner,invalid[i],"const forbiddenFallback=1\n",false,&diagnostic);
         if(status!=expected)fprintf(stderr,"invalid rooted authority case=%zu status=%u expected=%u\n",i,(unsigned)status,(unsigned)expected);
         CHECK(status==expected && diagnostic);
-        CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK && *info.message);
+        CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK && *info.message);
         xray_source_diagnostic_free(diagnostic);diagnostic=NULL;
         CHECK(xray_source_repl_read(owner,"forbiddenFallback",&empty)!=XR_SOURCE_OK && !empty);
     }
@@ -93,7 +93,7 @@ static void rooted_nominals(void) {
     integer(owner,"priorValue",7);
     XrSourceDiagnostic *diagnostic=NULL;
     CHECK(rooted_begin(owner,same,"const wrong=acceptOld(current)\n",false,&diagnostic)==XR_SOURCE_REJECTED && diagnostic);
-    XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK && *info.message);
+    XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK && *info.message);
     xray_source_diagnostic_free(diagnostic);
     execute(owner,"const sameBirth=acceptOld(original)\n");integer(owner,"sameBirth",7);
     rooted_execute(owner,same,"struct Item{value:string}\nconst changed=Item{value:\"new\"}\nconst stillOld=oldValue()\n");

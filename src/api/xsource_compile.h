@@ -56,7 +56,6 @@ typedef struct XrSourceCompileDiagnostic {
     XrSourceCompileStatus status;
     XrSourceCompileStage stage;
     XrManifestStatus authority_status;
-    XrManifestDiagnostic authority;
     XrCompileResourceStatus session_status;
     XrXirSourceProductDiagnostic source;
 } XrSourceCompileDiagnostic;
@@ -77,10 +76,11 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_build(
     XrSourceCompileDiagnostic *diagnostic);
 XR_FUNC void xr_source_compile_diagnostic_free(XrSourceCompileDiagnostic *diagnostic);
 XR_FUNC const char *xr_source_compile_status_name(XrSourceCompileStatus status);
-/* Renders one failed build. A located semantic failure becomes
- * "path:line:column: error: message" and returns true; any other failure is
- * "source build failed (stage=N status=NAME)[: message]" and returns false.
- * The text is truncated to fit. SIZE must be nonzero. */
-XR_FUNC bool xr_source_compile_diagnostic_format(
-    const XrSourceCompileDiagnostic *diagnostic, char *out, size_t size);
+/* Consumes the immediate manifest producer fact before its scratch expires. */
+XR_FUNC XrCompileResourceStatus xr_source_compile_manifest_report(
+    XrSourceCompileDiagnostic *,XrCompileResources *,const XrManifestDiagnostic *);
+/* Produces all roots and original labels without a fixed message buffer.
+ * Returned text is a controlled allocation, independent of the report. */
+XR_FUNC XrSourceCompileStatus xr_source_compile_diagnostic_render(
+    const XrSourceCompileDiagnostic *,XrCompileResources *,char **);
 #endif // XSOURCE_COMPILE_H

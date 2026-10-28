@@ -32,7 +32,7 @@ static void types_open(TypeFixture *fixture,const char *text,bool at_return) {
     CHECK(xr_compile_resources_stats(fixture->resources,&fixture->baseline)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig source={{fixture->resources,xr_xir_compile_default_limits()},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
-    XrSourceCompileDiagnostic diagnostic={0};
+    XrSourceCompileDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     CHECK(xr_source_compiler_new(&source,NULL,&fixture->compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
     xr_source_compile_diagnostic_free(&diagnostic);
     XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};
@@ -45,8 +45,12 @@ static void types_open(TypeFixture *fixture,const char *text,bool at_return) {
     request.instance.requested_value_limit=request.instance.requested_call_limit=1048576;
     request.instance.work_limit=128000000;request.instance.poll_limit=10000;request.instance.depth_limit=64;
     XrXirStatus status=xdap_launch_build(&request,&fixture->launch,&diagnostic);
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
     if (status!=XR_XIR_OK) fprintf(stderr,"type source status=%u stage=%u: %s\n",status,
-        diagnostic.source.stage,diagnostic.source.source.message);
+        diagnostic.source.stage,diagnostic_root.message);
     CHECK(status==XR_XIR_OK && fixture->launch);xr_source_compile_diagnostic_free(&diagnostic);
     if (text && strstr(text,"Atomic<i64>")) {
         const XrXirSourceView *view=xr_xir_compile_source_product_view(fixture->launch->source);

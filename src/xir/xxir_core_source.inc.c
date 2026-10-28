@@ -70,7 +70,12 @@ static bool source_core_contract(SourceContext *ctx) {
 #include "xxir_source_root_refine.inc.c"
 #include "xxir_source_construct.inc.c"
 
-static void source_core_dispose(SourceContext *ctx) {
+static void source_core_dispose(SourceContext *ctx,SourceContext *parent) {
+    if(ctx->diagnostic.status!=XR_XIR_OK && parent && !parent->report && !xr_hir_items_has_report(parent->items)) {
+        parent->report=ctx->report?ctx->report:xr_hir_items_take_report(ctx->items);ctx->report=NULL;
+    }
+    xr_frontend_report_free(ctx->report);ctx->report=NULL;
+    xr_hir_items_free(ctx->items);ctx->items=NULL;
     source_release_retired_arrays(ctx);
     xr_xir_compile_construction_free(ctx->construction);
     ctx->construction=NULL;
@@ -377,7 +382,7 @@ static bool source_core_load(SourceContext *ctx, AstNode *site) {
         source_fail(ctx,site,core.diagnostic.status==XR_XIR_OK ? XR_XIR_BAD_STRUCTURE : core.diagnostic.status,
             core.diagnostic.message[0] ? core.diagnostic.message : "core source construction failed");
     xr_xir_compile_source_result_free(&result);
-    source_core_dispose(&core);
+    source_core_dispose(&core,ctx);
     xr_compile_module_resolver_free(resolver);
     xr_compile_session_free(session);
     xr_compile_resources_free(error);

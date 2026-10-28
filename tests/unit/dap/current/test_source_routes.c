@@ -104,8 +104,9 @@ static XirVmDebugExceptionRoute route_snapshot(XrXirVmDebugSnapshot *snapshot,co
 }
 static void route_case(const RouteCase *expected,bool observe) {
     HandlerFixture fixture={0};handler_open(&fixture);XrXirStatus status=handler_build(&fixture,expected->text);
-    if (status!=XR_XIR_OK) fprintf(stderr,"route source=%u %s\n",status,fixture.diagnostic.source.source.message);
-    CHECK(status==XR_XIR_OK);RoutePoint points[32];uint32_t count=route_points(&fixture,points,32);
+    char *source_report=NULL;if(status!=XR_XIR_OK)(void)xr_frontend_report_render(fixture.diagnostic.source.failure.report,&source_report);
+    if (status!=XR_XIR_OK) fprintf(stderr,"route source=%u %s\n",status,source_report?source_report:"diagnostic unavailable");
+    xr_compile_resources_free(source_report);CHECK(status==XR_XIR_OK);RoutePoint points[32];uint32_t count=route_points(&fixture,points,32);
     CHECK(xdap_current_break_on_throw(fixture.launch->control,observe)==XR_XIR_VALUE_OK);
     xr_xir_compile_source_product_free(fixture.launch->source);fixture.launch->source=NULL;
     xr_source_compiler_free(fixture.compiler);fixture.compiler=NULL;

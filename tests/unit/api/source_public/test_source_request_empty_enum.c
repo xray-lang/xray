@@ -22,8 +22,8 @@ int main(void) {
     XrSourceArtifact *artifact=NULL;XrSourceFailure failure={0};XrSourceDiagnostic *diagnostic=NULL;
     XrSourceStatus status=xray_source_build(&input,&options,&artifact,&failure,&diagnostic);
     if (diagnostic) {
-        XrSourceDiagnosticInfo info={0};
-        CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
+        XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};
+        CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
         fprintf(stderr,"compile status=%u: %s\n",(unsigned)status,info.message);
     }
     CHECK(status==XR_SOURCE_OK && artifact && !diagnostic);

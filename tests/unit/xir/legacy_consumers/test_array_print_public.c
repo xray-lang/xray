@@ -28,7 +28,7 @@ static void source_case(const char *source, const char *expected, size_t length,
     XrSourceProgram *program=NULL; XrSourceDiagnostic *diagnostic=NULL;
     XrSourceStatus status=xray_source_compile_text(compiler,&text,&program,&diagnostic);
     if (diagnostic) {
-        XrSourceDiagnosticInfo info; CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
+        XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0}; CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
         if (!expected) CHECK(status==XR_SOURCE_REJECTED && !program &&
             !strcmp(info.message,"print requires an admitted display type"));
         else fprintf(stderr,"compile status=%d %s\n",status,info.message);

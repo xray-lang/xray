@@ -125,8 +125,13 @@ int main(int argc, char **argv) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, root};
     XrXirSourceProductRequest request = {{session, file, &authority, context, argv[3], NULL, XR_XIR_PROGRAM, NULL},
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
-    XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};
+    XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status = xr_xir_compile_source_product_build(&request, &product, &diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     XrXirArtifact *source_checked = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket original_source_packet = {0}, original_closed_packet = {0};
     uint32_t product_entry = UINT32_MAX;
@@ -146,7 +151,7 @@ int main(int argc, char **argv) {
         packet_copy(context, &packet, &original_source_packet);
         CHECK(xr_xir_compile_source_product_packet(product, XR_XIR_SOURCE_PRODUCT_CLOSED, &packet) == XR_XIR_OK);
         packet_copy(context, &packet, &original_closed_packet);
-    } else CHECK(!product && diagnostic.status == status && diagnostic.source.message[0]);
+    } else CHECK(!product && diagnostic.status == status && diagnostic_root.message[0]);
     XrXirSourceProductDiagnostic saved = diagnostic;
     char owned_path[2048] = {0};
     if (diagnostic.failure.path) {
@@ -210,7 +215,7 @@ int main(int argc, char **argv) {
         CHECK(!runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
         puts("static-methods-current-vm normal-two-instances=2 independent-fixed42=4 source-dead=1 source-Checked-dead=1 closed-Checked-dead=1 caller-Program-dead=1 actual-Lowered-code-lease-released=1");
     } else fprintf(stderr, "static-methods-current-vm Source required=0 actual=%u stage=%u message=%s\n",
-        status, diagnostic.stage, diagnostic.source.message);
+        status, diagnostic.stage, diagnostic_root.message);
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     source_program_owners_free();
     CHECK(!source_program_compile_allocations && !source_program_compile_capacity);

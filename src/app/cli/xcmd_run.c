@@ -37,11 +37,11 @@ static int source_exit(XrSourceCompileStatus status) {
         status == XR_SOURCE_COMPILE_BAD_ARGUMENT ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
 }
 
-static int report_source_failure(const XrSourceCompileDiagnostic *diagnostic) {
-    char text[1024];
-    bool located = xr_source_compile_diagnostic_format(diagnostic, text, sizeof(text));
-    fprintf(stderr, located ? "%s\n" : "XR_RUN_6001: %s\n", text);
-    return source_exit(diagnostic->status);
+static int report_source_failure(const XrSourceCompileDiagnostic *diagnostic,XrCompileResources *resources) {
+    char *text=NULL;XrSourceCompileStatus shown=xr_source_compile_diagnostic_render(diagnostic,resources,&text);
+    if(shown==XR_SOURCE_COMPILE_OK)fputs(text,stderr);
+    else fprintf(stderr,"XR_RUN_6001: diagnostic rendering failed (%s)\n",xr_source_compile_status_name(shown));
+    xr_compile_resources_free(text);return source_exit(diagnostic->status);
 }
 #endif
 
@@ -104,7 +104,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
             xr_source_compile_default_manifest_limits(), xr_xir_host_target(), NULL};
         status = xr_source_compile_build(&request, &product, &diagnostic);
         if (status != XR_SOURCE_COMPILE_OK) {
-            result = report_source_failure(&diagnostic);
+            result = report_source_failure(&diagnostic,resources);
         } else {
             XrSourceStatus wrapped = xr_source_artifact_take_product(&product, XR_SOURCE_TARGET_VM, &owned);
             if (wrapped != XR_SOURCE_OK) {

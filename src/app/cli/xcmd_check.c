@@ -158,17 +158,11 @@ static void check_semantic(CheckWork *work, const char *path) {
             xr_source_compile_default_manifest_limits(), xr_xir_host_target(), NULL};
         status = xr_source_compile_build(&request, &product, &diagnostic);
         if (status != XR_SOURCE_COMPILE_OK) {
-            const XrXirSourceDiagnostic *source = &diagnostic.source.source;
-            const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(diagnostic.source.snapshot);
-            const char *failed_path = diagnostic.source.failure.path;
-            if (!failed_path && view && view->modules && source->module < view->module_count)
-                failed_path = view->modules[source->module].path;
-            if (failed_path && source->line > 0)
-                fprintf(stderr, "%s:%d:%d: error: %s\n", failed_path, source->line, source->column,
-                    source->message[0] ? source->message : xr_source_compile_status_name(status));
-            else
-                fprintf(stderr, "xray check: %s: source build failed (stage=%u status=%s): %s\n",
-                    path, (unsigned)diagnostic.stage, xr_source_compile_status_name(status), source->message);
+            char *text=NULL;
+            XrSourceCompileStatus shown=xr_source_compile_diagnostic_render(&diagnostic,work->resources,&text);
+            if(shown==XR_SOURCE_COMPILE_OK)fputs(text,stderr);
+            else fprintf(stderr,"xray check: diagnostic rendering failed (%s)\n",xr_source_compile_status_name(shown));
+            xr_compile_resources_free(text);
         }
     } else {
         char text[4096];

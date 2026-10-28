@@ -9,16 +9,23 @@
 #include <limits.h>
 
 typedef struct ApiParseDiagnostic {
-    XrSourceCompileDiagnostic *output;
+    XrXirSourceDiagnostic immediate;
 } ApiParseDiagnostic;
 static void api_parse_error(void *context,int line,int column,int end_line,int end_column,const char *message) {
     (void)end_line;(void)end_column;
     ApiParseDiagnostic *capture=context;
-    if(!capture->output || capture->output->source.source.line)return;
-    XrXirSourceDiagnostic *detail=&capture->output->source.source;
-    capture->output->source.failure.origin=XR_XIR_SOURCE_DIAGNOSTIC_PARSE;
-    (void)snprintf(detail->message,sizeof(detail->message),"%s",message?message:"");
-    detail->line=line;detail->column=column;
+    if(capture->immediate.status!=XR_XIR_OK)return;
+    capture->immediate.status=XR_XIR_BAD_STRUCTURE;
+    (void)snprintf(capture->immediate.message,sizeof(capture->immediate.message),"%s",message?message:"");
+    capture->immediate.line=line;capture->immediate.column=column;
+}
+static void api_parse_record(XrSourceCompiler *compiler,XrSourceCompileDiagnostic *out,
+    XrSourceAst *ast,const XrXirSourceDiagnostic *fact,uint32_t origin) {
+    if(!out)return;
+    out->source.source=(XrXirSourceDiagnosticFact){fact->status,fact->module};
+    out->source.failure.origin=origin;
+    (void)xr_xir_compile_source_failure_record(xr_source_compiler_resources(compiler),
+        &out->source.failure,fact,ast->path,ast->source,ast->source_length);
 }
 XRAY_API void xray_source_ast_free(XrSourceAst *ast) {
     if(!ast)return;
@@ -41,23 +48,22 @@ static XrSourceStatus api_parse_owned(XrSourceCompiler *compiler,const XrSourceT
     for(size_t i=0;status==XR_SOURCE_OK && i<text->length;++i) {
         if(!ast->source[i]) {
             if(line>INT_MAX || i-line_start>=INT_MAX)return XR_SOURCE_OVERFLOW;
-            if(diagnostic) {
-                XrXirSourceDiagnostic *detail=&diagnostic->source.source;
-                diagnostic->source.failure.origin=XR_XIR_SOURCE_DIAGNOSTIC_INPUT;
-                detail->line=(int)line;detail->column=(int)(i-line_start)+1;
-                (void)snprintf(detail->message,sizeof(detail->message),"source text contains an embedded NUL");
-            }
+            XrXirSourceDiagnostic immediate={.status=XR_XIR_BAD_STRUCTURE,
+                .line=(int)line,.column=(int)(i-line_start)+1};
+            (void)snprintf(immediate.message,sizeof(immediate.message),"source text contains an embedded NUL");
+            api_parse_record(compiler,diagnostic,ast,&immediate,XR_XIR_SOURCE_DIAGNOSTIC_INPUT);
             return XR_SOURCE_INVALID;
         }
         if(ast->source[i]=='\n'){++line;line_start=i+1;}
     }
     if(status!=XR_SOURCE_OK)return status;
-    ApiParseDiagnostic capture={diagnostic};
+    ApiParseDiagnostic capture={0};
     XrParseDiagnostics options={api_parse_error,&capture,1};
     XrParseStatus parsed=interactive ? xr_compile_parse_repl_with_trivia(xr_source_compiler_session(compiler),
         ast->source,ast->path,&options,&ast->program) : xr_compile_parse_with_trivia(xr_source_compiler_session(compiler),
         ast->source,ast->path,&options,&ast->program);
     if(parsed==XR_PARSE_OK)return XR_SOURCE_OK;
+    api_parse_record(compiler,diagnostic,ast,&capture.immediate,XR_XIR_SOURCE_DIAGNOSTIC_PARSE);
     XrSourceStatus cause=api_resource(xr_compile_state_status(state));
     if(cause!=XR_SOURCE_OK)return cause;
     return parsed==XR_PARSE_OUT_OF_MEMORY ? XR_SOURCE_OUT_OF_MEMORY :
@@ -89,7 +95,7 @@ static XrSourceStatus api_parse_text(XrSourceCompiler *compiler,const XrSourceTe
 }
 XRAY_API XrSourceStatus xray_source_parse(const XrSourceText *text,const XrSourceCompileOptions *options,
     XrSourceAst **output,XrSourceFailure *failure,XrSourceDiagnostic **diagnostic) {
-    XrSourceFailure fact={XR_SOURCE_BAD_ARGUMENT,XR_SOURCE_OK,XR_SOURCE_STAGE_OPTIONS,0,0};
+    XrSourceFailure fact={XR_SOURCE_BAD_ARGUMENT,XR_SOURCE_OK,XR_SOURCE_STAGE_OPTIONS};
     if(failure)*failure=fact;
     if(!output || *output || (diagnostic && *diagnostic))return fact.status;
     ApiBuildRequest request={0};XrSourceCompileDiagnostic detail={0};XrSourceAst *ast=NULL;
@@ -99,9 +105,9 @@ XRAY_API XrSourceStatus xray_source_parse(const XrSourceText *text,const XrSourc
         status=api_parse_text(request.compiler,text,&ast,&detail,false);
     }
     if(status==XR_SOURCE_OK)status=api_resource(xr_compile_request_control_poll(&request.control));
-    fact.status=status;fact.line=detail.source.source.line;fact.column=detail.source.source.column;
+    fact.status=status;
     if(status==XR_SOURCE_OK){fact.stage=XR_SOURCE_STAGE_PUBLISH;*output=ast;ast=NULL;}
-    else api_diagnostic_snapshot(request.resources,&detail,status,diagnostic);
+    else api_diagnostic_take(request.resources,&detail,status,diagnostic);
     xray_source_ast_free(ast);xr_source_compile_diagnostic_free(&detail);api_request_clear(&request);
     if(failure)*failure=fact;
     return status;

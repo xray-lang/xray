@@ -9,9 +9,15 @@
 #include "xray_source_ast.h"
 #include "xray_source_entry.h"
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if(!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while(0)
+
+/* This TU observes the actual compiler allocator. Installed SDK consumers use
+ * the canonical archive implementation separately. No runtime budget is changed. */
+#include "../../xir/xir_sdk_resource_test.h"
+#include "hir/xhir_items.h"
 
 typedef struct Cancel { int cancelled; size_t polls; } Cancel;
 static int cancel_poll(const void *context) {
@@ -119,8 +125,8 @@ static void global_array_source(char *source,size_t length,const char *name,cons
     XrSourceArtifact *artifact=NULL;XrSourceFailure failure={0};XrSourceDiagnostic *diagnostic=NULL;
     XrSourceStatus status=xray_source_build(&input,&options,&artifact,&failure,&diagnostic);
     if (status!=XR_SOURCE_OK && diagnostic) {
-        XrSourceDiagnosticInfo info={0};CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
-        fprintf(stderr,"Global Array Source %u %d:%d %s\n",(unsigned)status,info.line,info.column,info.message);
+        XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
+        fprintf(stderr,"Global Array Source %u %d:%d %s\n",(unsigned)status,info.primary.line,info.primary.column,info.message);
     }
     CHECK(status==XR_SOURCE_OK && artifact && !diagnostic && failure.cleanup_status==XR_SOURCE_OK);
     size_t polls=cancel.polls;cancel.cancelled=1;memset(source,'!',length);
@@ -169,8 +175,188 @@ static void global_string_lifetime(void) {
         "export fn answer()->string { return text }\n";
     global_array_source(text,sizeof(text)-1,"answer","11\n0\n4\n");
 }
+/* Report roots are owned independently of parsing, requests and caller text. */
+static void module_report_lifetime(bool syntax_first) {
+    char source[]="const alpha:i64=1\r\nconst alpha:i64=2\r\nconst beta:i64=3\r\nconst beta:i64=4\r\nprint(9)\r\n";
+    XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+    XrSourceText text={NULL,"two-independent-module-errors",source,sizeof(source)-1};
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text=text};
+    XrSourceDiagnostic *report=NULL;XrSourceFailure failure={0};XrSourceArtifact *artifact=NULL;XrSourceAst *ast=NULL;
+    XrSourceStatus rejected;
+    if(syntax_first) {
+        CHECK(xray_source_parse(&text,&options,&ast,&failure,NULL)==XR_SOURCE_OK&&ast);
+        rejected=xray_source_build_ast(ast,&options,&artifact,&failure,&report);
+    } else rejected=xray_source_build(&input,&options,&artifact,&failure,&report);
+    if(rejected!=XR_SOURCE_BAD_ARGUMENT)fprintf(stderr,"module rejection=%u stage=%u syntax=%u\n",(unsigned)rejected,(unsigned)failure.stage,(unsigned)syntax_first);
+    if(rejected!=XR_SOURCE_BAD_ARGUMENT&&report) {
+        XrSourceDiagnosticReportInfo debug={0};(void)xray_source_diagnostic_report(report,&debug);
+        for(uint32_t i=0;i<debug.roots;++i){XrSourceDiagnosticRoot root={0};(void)xray_source_diagnostic_root(report,i,&root);fprintf(stderr,"root %u %s\n",root.code,root.message);}
+    }
+    CHECK(rejected==XR_SOURCE_BAD_ARGUMENT);
+    CHECK(!artifact&&report&&failure.cleanup_status==XR_SOURCE_OK);
+    xray_source_ast_free(ast);memset(source,'!',sizeof(source));
+    XrSourceDiagnosticReportInfo info={0};CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==2&&!info.complete);
+    const char *names[]={"alpha","beta"};
+    for(uint32_t i=0;i<info.roots;++i) {
+        XrSourceDiagnosticRoot root={0};XrSourceDiagnosticLabel label={0};
+        CHECK(xray_source_diagnostic_root(report,i,&root)==XR_SOURCE_OK&&root.code==302&&root.severity==1&&root.labels==1);
+        CHECK(!strcmp(root.message,"duplicate declaration name"));
+        CHECK(root.primary.line==(int32_t)(2+2*i)&&root.primary.column==7);
+        CHECK((root.primary.flags&(XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16|XR_SOURCE_LOCATION_REVISION))==
+            (XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16|XR_SOURCE_LOCATION_REVISION));
+        CHECK(root.primary.end_byte-root.primary.start_byte==strlen(names[i]));
+        CHECK(root.primary.utf16_line==1+2*i&&root.primary.utf16_column==6);
+        CHECK(xray_source_diagnostic_label(report,i,0,&label)==XR_SOURCE_OK&&label.location.line==(int32_t)(1+2*i));
+        CHECK(!strcmp(label.message,"first declaration is here")&&label.location.utf16_column==6);
+        CHECK((label.location.flags&XR_SOURCE_LOCATION_BYTES)&&!memcmp(label.location.revision,root.primary.revision,32));
+    }
+    XrSourceDiagnosticRoot preserved={.code=12345};
+    CHECK(xray_source_diagnostic_root(report,2,&preserved)==XR_SOURCE_BAD_ARGUMENT&&preserved.code==12345);
+    XrSourceDiagnosticLabel preserved_label={.message="unchanged"};
+    CHECK(xray_source_diagnostic_label(report,0,1,&preserved_label)==XR_SOURCE_BAD_ARGUMENT&&!strcmp(preserved_label.message,"unchanged"));
+    xray_source_diagnostic_free(report);
+    char corrected[]="const alpha:i64=1\nconst beta:i64=3\nprint(9)\n";
+    input.value.text=(XrSourceText){NULL,"corrected-module-errors",corrected,sizeof(corrected)-1};
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
+    memset(corrected,'!',sizeof(corrected));
+    XrSourceExecution *execution=execution_new();XrSourceCallOptions runtime;
+    CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
+    ArrayOutput output={0};runtime.write=array_write;runtime.context=&output;XrSourceResult *result=NULL;
+    CHECK(xray_source_artifact_execute(execution,artifact,&runtime,&result,NULL)==XR_SOURCE_OK&&result);
+    xray_source_artifact_free(artifact);xray_source_execution_free(execution);
+    CHECK(output.size==2&&!memcmp(output.bytes,"9\n",2));xray_source_result_free(result);
+}
+static XrCompileResourceStatus report_build(XrCompileResources *owner,XrFrontendReport **output) {
+    XrHirItems *items=NULL;XrCompileResourceStatus status=xr_hir_items_new(owner,&items);
+    static const char text[]="const a=1\nconst a=2\nconst b=3\nconst b=4\n";
+    if(status==XR_COMPILE_RESOURCE_OK)status=xr_hir_items_source(items,0,"report.xr",text,sizeof(text)-1,NULL);
+    for(uint32_t i=0;status==XR_COMPILE_RESOURCE_OK&&i<4;++i) {
+        uint32_t id=0;status=xr_hir_items_reserve(items,0,i<2?"a":"b",i+1,(int)i+1,7,&id);
+    }
+    if(status==XR_COMPILE_RESOURCE_OK){*output=xr_hir_items_take_report(items);xr_frontend_report_seal(*output,false);}
+    xr_hir_items_free(items);return status;
+}
+static void report_resources(void) {
+    (void)sdk_fixture_malloc;(void)sdk_fixture_free;
+    CHECK(!runtime_live&&!runtime_bytes);
+    XrCompileResources *owner=sdk_ledger(&sdk_unlimited);XrCompileResourceStats baseline=sdk_stats(owner);
+    XrFrontendReport *empty=NULL;char *empty_text=NULL;
+    CHECK(xr_frontend_report_new(owner,&empty)==XR_COMPILE_RESOURCE_OK);xr_frontend_report_seal(empty,false);
+    CHECK(xr_frontend_report_render(empty,&empty_text)==XR_COMPILE_RESOURCE_OK&&empty_text&&empty_text[0]==0);
+    xr_frontend_report_free(empty);CHECK(empty_text[0]==0);xr_compile_resources_free(empty_text);
+    CHECK(sdk_stats(owner).held_bytes==baseline.held_bytes);
+    XrFrontendReport *report=NULL;CHECK(report_build(owner,&report)==XR_COMPILE_RESOURCE_OK&&report);
+    uint64_t peak=sdk_stats(owner).peak_bytes;
+    xr_frontend_report_free(report);report=NULL;
+    CHECK(sdk_stats(owner).held_bytes==baseline.held_bytes);xr_compile_resources_release(owner);
+    CHECK(!runtime_live&&!runtime_bytes);
+    for(int delta=-1;delta<=1;++delta) {
+        XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,delta<0?peak-1:peak+(uint64_t)delta,true};
+        owner=sdk_ledger(&limits);baseline=sdk_stats(owner);
+        XrCompileResourceStatus status=report_build(owner,&report);
+        CHECK(status==(delta<0?XR_COMPILE_RESOURCE_MEMORY_LIMIT:XR_COMPILE_RESOURCE_OK));
+        CHECK(delta<0?!report:report!=NULL);xr_frontend_report_free(report);report=NULL;
+        CHECK(sdk_stats(owner).held_bytes==baseline.held_bytes);xr_compile_resources_release(owner);
+        CHECK(!runtime_live&&!runtime_bytes);
+    }
+    /* Two real report allocation failures remain resource failures, never roots. */
+    owner=sdk_ledger(&sdk_unlimited);baseline=sdk_stats(owner);
+    runtime_fail_at=runtime_attempts;
+    CHECK(xr_frontend_report_new(owner,&report)==XR_COMPILE_RESOURCE_OUT_OF_MEMORY&&!report&&runtime_attempts>runtime_fail_at);
+    runtime_fail_at=SIZE_MAX;CHECK(sdk_stats(owner).held_bytes==baseline.held_bytes);
+    CHECK(xr_frontend_report_new(owner,&report)==XR_COMPILE_RESOURCE_OK);
+    uint32_t source=0;CHECK(xr_frontend_report_source(report,"report.xr","a",1,NULL,&source)==XR_COMPILE_RESOURCE_OK);
+    XrFrontendLocation location=xr_frontend_report_location(report,source,1,1,"a");
+    CHECK(xr_frontend_report_add(report,302,"first preserved root",location,NULL,0)==XR_COMPILE_RESOURCE_OK);
+    XrFrontendLabel related={"original label",location};
+    /* Existing root capacity is live; the next root message succeeds, then its
+     * label storage physically fails. That incomplete root must not publish. */
+    runtime_fail_at=runtime_attempts+1;
+    CHECK(xr_frontend_report_add(report,302,"unpublished root",location,&related,1)==XR_COMPILE_RESOURCE_OUT_OF_MEMORY&&runtime_attempts>runtime_fail_at);
+    runtime_fail_at=SIZE_MAX;xr_frontend_report_seal(report,false);
+    XrFrontendReportInfo info={0};XrFrontendRoot preserved={0};
+    CHECK(xr_frontend_report_info(report,&info)&&info.roots==1&&!info.complete);
+    CHECK(xr_frontend_report_root(report,0,&preserved)&&!strcmp(preserved.message,"first preserved root"));
+    xr_frontend_report_free(report);report=NULL;CHECK(sdk_stats(owner).held_bytes==baseline.held_bytes);
+    xr_compile_resources_release(owner);CHECK(!runtime_live&&!runtime_bytes);
+    owner=sdk_ledger(&sdk_unlimited);CHECK(report_build(owner,&report)==XR_COMPILE_RESOURCE_OK);
+    xr_compile_resources_release(owner);XrSourceDiagnosticRoot root={0};
+    CHECK(xray_source_diagnostic_root(report,1,&root)==XR_SOURCE_OK&&root.code==302);
+    xr_frontend_report_free(report);CHECK(!runtime_live&&!runtime_bytes);
+    printf("Report measured held boundary=%llu, two physical OOM controls, physical=0/0\n",(unsigned long long)peak);
+}
+static void unicode_report(void) {
+    char source[]="/*😀*/ const alpha:i64=1\r\n/*😀*/ const alpha:i64=2\r\n";
+    XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"unicode-module-diagnostic",source,sizeof(source)-1}};
+    XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;XrSourceFailure failure={0};
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_BAD_ARGUMENT&&!artifact&&report);
+    memset(source,'!',sizeof(source));XrSourceDiagnosticRoot root={0};XrSourceDiagnosticLabel label={0};
+    CHECK(xray_source_diagnostic_root(report,0,&root)==XR_SOURCE_OK&&root.primary.column==16&&root.primary.utf16_column==13);
+    CHECK(root.primary.line==2&&root.primary.utf16_line==1&&root.primary.end_byte-root.primary.start_byte==5);
+    CHECK(xray_source_diagnostic_label(report,0,0,&label)==XR_SOURCE_OK&&label.location.column==16&&label.location.utf16_column==13);
+    xray_source_diagnostic_free(report);CHECK(!runtime_live&&!runtime_bytes);
+}
+typedef struct CancelAt {size_t polls,at;} CancelAt;
+static int cancel_at(const void *context) {
+    CancelAt *control=(CancelAt *)context;++control->polls;
+    return control->at&&control->polls>=control->at;
+}
+static void report_control(void) {
+    static const char text[]="const alpha:i64=1\nconst alpha:i64=2\nconst beta:i64=3\nconst beta:i64=4\nprint(9)\n";
+    CancelAt control={0};XrSourceCompileOptions options=xray_source_compile_options_default();
+    options.stdlib_path=XR_PUBLIC_STDLIB;options.cancel_poll=cancel_at;options.cancel_context=&control;
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"partial-report-cancel",text,sizeof(text)-1}};
+    XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;XrSourceFailure failure={0};
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_BAD_ARGUMENT&&!artifact&&report);
+    size_t actual_polls=control.polls;CHECK(actual_polls);xray_source_diagnostic_free(report);report=NULL;
+    CHECK(!runtime_live&&!runtime_bytes);control=(CancelAt){0,actual_polls};
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_CANCELLED&&!artifact&&report);
+    XrSourceDiagnosticReportInfo info={0};
+    CHECK(failure.status==XR_SOURCE_CANCELLED&&failure.cleanup_status==XR_SOURCE_OK);
+    CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==2&&!info.complete);
+    xray_source_diagnostic_free(report);report=NULL;CHECK(!runtime_live&&!runtime_bytes);
+    options.cancel_poll=NULL;options.cancel_context=NULL;options.deadline_mode=XR_SOURCE_DEADLINE_AFTER;options.timeout_ns=0;
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_DEADLINE&&!artifact);
+    CHECK(failure.status==XR_SOURCE_DEADLINE&&failure.cleanup_status==XR_SOURCE_OK);
+    xray_source_diagnostic_free(report);CHECK(!runtime_live&&!runtime_bytes);
+}
+static void module_binding_classes(void) {
+    static const struct {const char *text;uint32_t roots;int column,label_column;} cases[]={
+        {"const (alpha,_)=(1,2)\nconst (alpha,_)=(3,4)\nconst (beta,_)=(5,6)\nconst (beta,_)=(7,8)\n",2,8,8},
+        {"const (alpha,_)=(1,2)\nconst alpha:i64=3\n",1,7,8},
+        {"import time\nconst time:i64=3\n",1,7,8}
+    };
+    XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+    for(size_t c=0;c<sizeof(cases)/sizeof(*cases);++c) {
+        XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"module-binding-classes",cases[c].text,strlen(cases[c].text)}};
+        XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;XrSourceFailure failure={0};
+        CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_BAD_ARGUMENT&&!artifact&&report);
+        XrSourceDiagnosticReportInfo info={0};CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==cases[c].roots);
+        for(uint32_t i=0;i<info.roots;++i) {
+            XrSourceDiagnosticRoot root={0};XrSourceDiagnosticLabel label={0};
+            CHECK(xray_source_diagnostic_root(report,i,&root)==XR_SOURCE_OK&&root.code==302&&root.primary.line==(int32_t)(2+2*i));
+            CHECK(root.primary.column==cases[c].column&&(root.primary.flags&XR_SOURCE_LOCATION_BYTES));
+            CHECK(xray_source_diagnostic_label(report,i,0,&label)==XR_SOURCE_OK&&label.location.line==(int32_t)(1+2*i));
+            CHECK(label.location.column==cases[c].label_column&&(label.location.flags&XR_SOURCE_LOCATION_BYTES));
+        }
+        xray_source_diagnostic_free(report);CHECK(!runtime_live&&!runtime_bytes);
+    }
+    char source[]="type T=i64\nconst T:i64=9\nprint(T)\n";
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"separate-alias-scope",source,sizeof(source)-1}};
+    XrSourceArtifact *artifact=NULL;CHECK(xray_source_build(&input,&options,&artifact,NULL,NULL)==XR_SOURCE_OK&&artifact);
+    memset(source,'!',sizeof(source));XrSourceExecution *execution=execution_new();XrSourceCallOptions runtime;
+    CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);ArrayOutput output={0};
+    runtime.write=array_write;runtime.context=&output;XrSourceResult *result=NULL;
+    CHECK(xray_source_artifact_execute(execution,artifact,&runtime,&result,NULL)==XR_SOURCE_OK&&result);
+    xray_source_artifact_free(artifact);xray_source_execution_free(execution);
+    CHECK(output.size==2&&!memcmp(output.bytes,"9\n",2));xray_source_result_free(result);CHECK(!runtime_live&&!runtime_bytes);
+}
 int main(void) {
+    report_resources();report_control();unicode_report();module_binding_classes();
+    module_report_lifetime(false);module_report_lifetime(true);
     independent_requests();detached_ast_and_result();ready_c_artifact();execution_policy();
     global_array_lifetime();global_string_lifetime();
+    CHECK(!runtime_live&&!runtime_bytes);
     puts("Independent Source requests, ready artifacts, detached AST and result ownership passed");return 0;
 }

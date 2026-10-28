@@ -10,6 +10,13 @@
  *   Canonical type nodes share the declaration checker's finite ownership ledger.
  */
 static SourceName *find_name(SourceContext *ctx, SourceName *names, const char *name) {
+    if(names && ctx->items) {
+        uint32_t module=0,item=0;
+        if(xr_hir_items_binding_module(ctx->items,names,&module)) {
+            if(!xr_hir_items_find(ctx->items,module,name,&item))return NULL;
+            return xr_hir_items_binding(ctx->items,item);
+        }
+    }
     for (SourceName *p = names; p; p = p->next) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
         if (source_text_same(ctx, NULL, p->name, name)) return p;
@@ -21,11 +28,29 @@ static SourceName *add_name(SourceContext *ctx, SourceName **head, const char *n
         head==&ctx->names[ctx->graph->entry_index] && source_text_same(ctx,node,name,"it")) {
         source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"it is reserved for the last successful non-Unit REPL result");return NULL;
     }
-    if (!name || !*name || find_name(ctx, *head, name)) {
+    uint32_t module_index=UINT32_MAX;
+    for(uint32_t m=0;ctx->names&&m<ctx->module_count;++m)if(head==&ctx->names[m]){module_index=m;break;}
+    bool module=module_index!=UINT32_MAX;
+    uint32_t item=0;
+    if(module && ctx->items && name && *name) {
+        XrCompileResourceStatus status=xr_hir_items_claim(ctx->items,module_index,name,
+            node?node->node_id:0,node?node->line:0,node?node->column:0,&item);
+        if(status!=XR_COMPILE_RESOURCE_OK || xr_hir_items_errors(ctx->items)) {
+            source_fail(ctx,node,status==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:
+                status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
+                status==XR_COMPILE_RESOURCE_OVERFLOW?XR_XIR_OVERFLOW:XR_XIR_BAD_STRUCTURE,"duplicate or empty declaration name");
+            return NULL;
+        }
+    } else if (!name || !*name || find_name(ctx, *head, name)) {
         source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate or empty declaration name"); return NULL;
     }
     SourceName *symbol = source_alloc(ctx, 1, sizeof(*symbol));
-    if (symbol) { symbol->name = name; symbol->node = node; symbol->next = *head; *head = symbol; }
+    if (symbol) {
+        if(module && ctx->items && !xr_hir_items_bind(ctx->items,item,symbol)) {
+            source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"module declaration was bound twice");return NULL;
+        }
+        symbol->name = name; symbol->node = node;
+        symbol->next = *head; *head = symbol; }
     return symbol;
 }
 static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);

@@ -55,6 +55,8 @@ typedef struct SourceHistoryReceive {
 } SourceHistoryReceive;
 typedef struct SourceContext {
     XrModuleGraph *graph;
+    XrHirItems *items; /* Synchronous module namespace; never a persistent graph borrow. */
+    XrFrontendReport *report; /* Sole transferred child failure, before this context retires. */
     XrXirLinkageKind linkage_kind;
     XrXirCompileContext compile;
     /* Borrowed only by this synchronous construction, never semantic history. */

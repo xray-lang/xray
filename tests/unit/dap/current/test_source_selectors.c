@@ -61,9 +61,9 @@ static void selector_case(const SelectorCase *expected,bool generic,bool observe
     HandlerFixture fixture={0};handler_open(&fixture);XrXirStatus status=handler_build(&fixture,expected->text);
     if (status!=XR_XIR_OK) {
         XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(fixture.resources,&stats)==XR_COMPILE_RESOURCE_OK);
-        char message[512];xr_source_compile_diagnostic_format(&fixture.diagnostic,message,sizeof(message));
+        char *message=NULL;(void)xr_frontend_report_render(fixture.diagnostic.source.failure.report,&message);
         fprintf(stderr,"selector source=%u work=%llu allocated=%llu peak=%llu: %s\n",status,
-            (unsigned long long)stats.work,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,message);
+            (unsigned long long)stats.work,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,message?message:"diagnostic unavailable");xr_compile_resources_free(message);
     }
     CHECK(status==XR_XIR_OK);selector_closed_facts(&fixture,generic);
     const XrXirSourceDebugView *source=xr_xir_compile_source_product_debug(fixture.launch->source);CHECK(source);

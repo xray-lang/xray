@@ -21,13 +21,18 @@ static size_t product_expression(size_t fail,bool boolean) {
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig config={{resources,xr_xir_compile_default_limits()},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
-    XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
+    XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     CHECK(xr_source_compiler_new(&config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);xr_source_compile_diagnostic_free(&diagnostic);
     const char *text=boolean ? "const evaluator = fn(value:i64) { return value==40 && value<42 }\n" :
         "const evaluator = fn(value:i64) { return value+2 }\n";
     XrSourceCompilerText input={NULL,"dap-expression-product",text,strlen(text)};XrXirSourceProduct *product=NULL;
     XrSourceCompileStatus built=xr_source_compiler_build_text(compiler,&input,&product,&diagnostic);
-    if (built!=XR_SOURCE_COMPILE_OK) fprintf(stderr,"expression product source=%u: %s\n",built,diagnostic.source.source.message);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
+    if (built!=XR_SOURCE_COMPILE_OK) fprintf(stderr,"expression product source=%u: %s\n",built,diagnostic_root.message);
     CHECK(built==XR_SOURCE_COMPILE_OK && product);xr_source_compile_diagnostic_free(&diagnostic);xr_source_compiler_free(compiler);
     const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(product);
     const XrXirSourceView *view=xr_xir_compile_source_product_view(product);CHECK(debug && view);

@@ -427,10 +427,22 @@ static const char *repl_status_text(XrSourceStatus status) {
     return (unsigned)status<sizeof(names)/sizeof(*names)?names[status]:"internal failure";
 }
 static void repl_failure(ReplState *state,XrSourceStatus status,XrSourceDiagnostic *diagnostic) {
-    XrSourceDiagnosticInfo info={0};
-    if(diagnostic && xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK) {
-        if(info.path)fprintf(stderr,"%s:%d:%d: %s\n",info.path,info.line,info.column,info.message);
-        else fprintf(stderr,"Error: %s\n",info.message);
+    XrSourceDiagnosticReportInfo info={0};
+    if(diagnostic&&xray_source_diagnostic_report(diagnostic,&info)==XR_SOURCE_OK&&info.roots) {
+        for(uint32_t i=0;i<info.roots;++i) {
+            XrSourceDiagnosticRoot root={0};
+            if(xray_source_diagnostic_root(diagnostic,i,&root)!=XR_SOURCE_OK)break;
+            if(root.primary.path&&(root.primary.flags&XR_SOURCE_LOCATION_LINE))
+                fprintf(stderr,"%s:%d:%d: error: %s\n",root.primary.path,root.primary.line,root.primary.column,root.message);
+            else fprintf(stderr,"Error: %s\n",root.message);
+            for(uint32_t j=0;j<root.labels;++j) {
+                XrSourceDiagnosticLabel label={0};
+                if(xray_source_diagnostic_label(diagnostic,i,j,&label)!=XR_SOURCE_OK)break;
+                if(label.location.path&&(label.location.flags&XR_SOURCE_LOCATION_LINE))
+                    fprintf(stderr,"%s:%d:%d: note: %s\n",label.location.path,label.location.line,label.location.column,label.message);
+                else fprintf(stderr,"note: %s\n",label.message);
+            }
+        }
     } else xr_cli_error("repl","%s",repl_status_text(status));
     if(status==XR_SOURCE_MEMORY_LIMIT || status==XR_SOURCE_OUT_OF_MEMORY || status==XR_SOURCE_LIMIT ||
         status==XR_SOURCE_IO || status==XR_SOURCE_BAD_STATE || status==XR_SOURCE_EXECUTION_FAILED)state->failed=true;

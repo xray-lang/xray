@@ -14,7 +14,7 @@
 #include <time.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 _Static_assert(sizeof(XrSourceText) == 32, "text ABI");
-_Static_assert(sizeof(XrSourceDiagnosticInfo) == 32, "diagnostic ABI");
+_Static_assert(sizeof(XrSourceDiagnosticReportInfo) == 8, "diagnostic report ABI");
 _Static_assert(sizeof(XrSourceEvent) == 24, "event ABI");
 _Static_assert(sizeof(XrSourceCallOptions) == 80, "call options ABI");
 _Static_assert(sizeof(XrSourceWait) == 40, "wait ABI");
@@ -57,7 +57,7 @@ static XrSourceArtifact *compile(const XrSourceCompileOptions *compiler, char *b
     XrSourceStatus status = xray_source_build(&input, compiler, &program, &failure, &diagnostic);
     if (status != XR_SOURCE_OK || !program || diagnostic)
         fprintf(stderr, "[sdk-compile-failure] case=%s status=%u\n", case_name, (unsigned)status);
-    if (diagnostic) { XrSourceDiagnosticInfo info; CHECK(xray_source_diagnostic_info(diagnostic, &info) == XR_SOURCE_OK); fprintf(stderr, "%s\n", info.message); }
+    if (diagnostic) { XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0}; CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE) == XR_SOURCE_OK); fprintf(stderr, "%s\n", info.message); }
     CHECK(status == XR_SOURCE_OK && program && !diagnostic); memset(bytes, '!', strlen(bytes)); return program;
 }
 static void checked_program(const char *stdlib) {
@@ -348,10 +348,10 @@ static int constructed_task_case(const TaskCase *test, const char *stdlib, size_
     memset(source, '!', sizeof(source));
 
     if (status != XR_SOURCE_OK) {
-        CHECK(!program && diagnostic); XrSourceDiagnosticInfo info;
-        CHECK(xray_source_diagnostic_info(diagnostic, &info) == XR_SOURCE_OK);
+        CHECK(!program && diagnostic); XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};
+        CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE) == XR_SOURCE_OK);
         fprintf(stderr, "case=%s compile status=%u stage=%u message=%s\n",
-            test->name, (unsigned)status, info.stage, info.message);
+            test->name, (unsigned)status, (unsigned)failure.stage, info.message);
         xray_source_diagnostic_free(diagnostic);
         return (int)(10+ordinal);
     }
@@ -390,7 +390,31 @@ static void constructed_tasks(const char *stdlib) {
     for (size_t i = 0; i < sizeof(task_cases)/sizeof(task_cases[0]); ++i)
         CHECK(constructed_task_case(&task_cases[i], stdlib, i) == 0);
 }
+/* Silent API4 check: the installed report survives the entire source request. */
+static void installed_report(const char *stdlib) {
+    char text[]="const alpha:i64=1\nconst alpha:i64=2\nconst beta:i64=3\nconst beta:i64=4\nprint(9)\n";
+    XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=stdlib;
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"installed-report",text,sizeof(text)-1}};
+    XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;XrSourceFailure failure={0};
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_BAD_ARGUMENT&&!artifact&&report);
+    CHECK(failure.status==XR_SOURCE_BAD_ARGUMENT&&failure.cleanup_status==XR_SOURCE_OK);
+    memset(text,'!',sizeof(text));XrSourceDiagnosticReportInfo info={0};
+    CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==2&&!info.complete);
+    for(uint32_t i=0;i<info.roots;++i) {
+        XrSourceDiagnosticRoot root={0};XrSourceDiagnosticLabel label={0};
+        CHECK(xray_source_diagnostic_root(report,i,&root)==XR_SOURCE_OK&&root.code==302&&root.labels==1);
+        CHECK(root.primary.line==(int32_t)(2+2*i)&&root.primary.column==7&&!strcmp(root.message,"duplicate declaration name"));
+        CHECK(xray_source_diagnostic_label(report,i,0,&label)==XR_SOURCE_OK&&label.location.line==(int32_t)(1+2*i));
+        CHECK(label.location.column==7&&!strcmp(label.message,"first declaration is here"));
+        CHECK((root.primary.flags&(XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16|XR_SOURCE_LOCATION_REVISION))==
+            (XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16|XR_SOURCE_LOCATION_REVISION));
+        CHECK(!memcmp(root.primary.revision,label.location.revision,32));
+    }
+    XrSourceDiagnosticRoot saved={.code=123};
+    CHECK(xray_source_diagnostic_root(report,2,&saved)==XR_SOURCE_BAD_ARGUMENT&&saved.code==123);
+    xray_source_diagnostic_free(report);
+}
 int main(int argc, char **argv) {
-    CHECK(argc == 2); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
+    CHECK(argc == 2); installed_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
     puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
 }

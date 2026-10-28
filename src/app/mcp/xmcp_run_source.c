@@ -61,10 +61,10 @@ static XrXirStatus source_status(XrSourceCompileStatus status, XrXirStatus detai
 static void parse_diagnostic(void *context, int line, int column, int end_line,
     int end_column, const char *message) {
     (void)end_line; (void)end_column;
-    XrXirSourceProductDiagnostic *diagnostic = context;
-    if (!diagnostic || diagnostic->source.message[0]) return;
-    diagnostic->source.line = line; diagnostic->source.column = column;
-    snprintf(diagnostic->source.message, sizeof(diagnostic->source.message), "%s", message);
+    XrXirSourceDiagnostic *diagnostic = context;
+    if (!diagnostic || diagnostic->status!=XR_XIR_OK) return;
+    diagnostic->status=XR_XIR_BAD_STRUCTURE;diagnostic->line=line;diagnostic->column=column;
+    snprintf(diagnostic->message,sizeof(diagnostic->message),"%s",message);
 }
 static XrXirStatus import_preflight(const XmcpSourceRequest *request, XrCompilerSession *session,
     XrXirSourceProductDiagnostic *diagnostic) {
@@ -78,9 +78,9 @@ static XrXirStatus import_preflight(const XmcpSourceRequest *request, XrCompiler
         if (memchr(request->text, 0, request->length)) status = XR_XIR_BAD_STRUCTURE;
         else { memcpy(text, request->text, request->length); text[request->length] = 0; }
     }
-    AstNode *ast = NULL;
+    AstNode *ast = NULL;XrXirSourceDiagnostic immediate={0};
     if (status == XR_XIR_OK) {
-        XrParseDiagnostics capture = {parse_diagnostic, diagnostic, 1};
+        XrParseDiagnostics capture = {parse_diagnostic, &immediate, 1};
         XrParseStatus parsed = xr_compile_parse_with_trivia(session, text, NULL, &capture, &ast);
         status = parse_status(parsed);
     }
@@ -99,11 +99,15 @@ static XrXirStatus import_preflight(const XmcpSourceRequest *request, XrCompiler
         if (module && (quoted || !module_allowed(module))) {
             status = XR_XIR_BAD_STRUCTURE;
             if (diagnostic) {
-                diagnostic->source.line = node->line; diagnostic->source.column = node->column;
-                snprintf(diagnostic->source.message, sizeof(diagnostic->source.message),
+                immediate.status=status;immediate.line=node->line;immediate.column=node->column;
+                snprintf(immediate.message, sizeof(immediate.message),
                     "MCP runner does not allow import '%s'", module);
             }
         }
+    }
+    if(diagnostic&&immediate.status!=XR_XIR_OK) {
+        diagnostic->source=(XrXirSourceDiagnosticFact){immediate.status,immediate.module};
+        (void)xr_xir_compile_source_failure_record(resources,&diagnostic->failure,&immediate,NULL,request->text,request->length);
     }
     xr_program_destroy(ast); xr_compile_resources_free(text);
     return status;
@@ -122,8 +126,14 @@ static XrXirStatus dependencies_admit(const XmcpSourceRequest *request,
          * still pass the separate spelling policy before resolution. */
         bool allowed = module_allowed(entry->path) || (entry->path && !strcmp(entry->path, "prelude"));
         if (entry->kind != XR_XIR_DEPENDENCY_STDLIB || !allowed) {
-            if (diagnostic) snprintf(diagnostic->source.message, sizeof(diagnostic->source.message),
-                "MCP runner does not allow resolved dependency '%s'", entry->path ? entry->path : "");
+            if(diagnostic) {
+                XrXirSourceDiagnostic immediate={.status=XR_XIR_BAD_STRUCTURE};
+                snprintf(immediate.message,sizeof(immediate.message),
+                    "MCP runner does not allow resolved dependency '%s'",entry->path?entry->path:"");
+                diagnostic->source=(XrXirSourceDiagnosticFact){immediate.status,immediate.module};
+                (void)xr_xir_compile_source_failure_record(request->context->resources,
+                    &diagnostic->failure,&immediate,NULL,request->text,request->length);
+            }
             return XR_XIR_BAD_STRUCTURE;
         }
     }

@@ -93,23 +93,38 @@ static void text_owned_execution(void) {
 }
 static void rejects_and_diagnostics(void) {
     TextWorld w; world_open(&w, UINT64_C(128000000));
-    XrXirSourceProduct *out = NULL; XrXirSourceProductDiagnostic diagnostic = {0};
+    XrXirSourceProduct *out = NULL; XrXirSourceProductDiagnostic diagnostic = {0};XrFrontendRoot diagnostic_root={.message=""};
     CHECK(xr_xir_compile_source_product_build_text(&w.request, NULL, &out, &diagnostic) == XR_XIR_BAD_STRUCTURE);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     CHECK(!out && diagnostic.stage == XR_XIR_SOURCE_PRODUCT_INPUT);
     const char source[] = "var value = missing_symbol\n";
     XrXirSourceText text = {NULL, source, sizeof(source) - 1};
     CHECK(xr_xir_compile_source_product_build_text(&w.request, &text, &out, &diagnostic) != XR_XIR_OK);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     CHECK(!out && diagnostic.stage == XR_XIR_SOURCE_PRODUCT_CHECK);
-    CHECK(diagnostic.source.line == 1 && diagnostic.source.column == 13);
-    CHECK(strstr(diagnostic.source.message, "initialized value"));
+    CHECK(diagnostic_root.primary.line == 1 && diagnostic_root.primary.column == 13);
+    CHECK(strstr(diagnostic_root.message, "initialized value"));
     world_close(&w);
-    CHECK(diagnostic.source.line == 1 && diagnostic.source.column == 13);
+    CHECK(diagnostic_root.primary.line == 1 && diagnostic_root.primary.column == 13);
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     CHECK(!runtime_live && !runtime_bytes);
     world_open(&w, UINT64_C(128000000));
     const char nul[] = {'p','r','i','n','t','(',')',0,'\n'};
     text = (XrXirSourceText){NULL, nul, sizeof(nul)};
     CHECK(xr_xir_compile_source_product_build_text(&w.request, &text, &out, &diagnostic) != XR_XIR_OK && !out);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     xr_xir_compile_source_product_diagnostic_free(&diagnostic); world_close(&w);
     CHECK(!runtime_live && !runtime_bytes);
 }
@@ -156,9 +171,14 @@ static void rooted_text_authority(void) {
     const char source[] = "import \"./sibling\" as sibling\nprint(sibling.answer())\n";
     XrXirSourceText text = {"unsaved.xr", source, sizeof(source)-1};
     XrXirSourceProduct *product = NULL;
-    XrXirSourceProductDiagnostic diagnostic = {0};
+    XrXirSourceProductDiagnostic diagnostic = {0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus built = xr_xir_compile_source_product_build_text(&w.request, &text, &product, &diagnostic);
-    if (built != XR_XIR_OK) fprintf(stderr, "rooted status=%d stage=%u path=%s message=%s\n", built, (unsigned)diagnostic.stage, diagnostic.failure.path ? diagnostic.failure.path : "", diagnostic.source.message);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
+    if (built != XR_XIR_OK) fprintf(stderr, "rooted status=%d stage=%u path=%s message=%s\n", built, (unsigned)diagnostic.stage, diagnostic.failure.path ? diagnostic.failure.path : "", diagnostic_root.message);
     CHECK(built == XR_XIR_OK);
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     CHECK(xr_xir_compile_source_product_public_admit(product, NULL) == XR_XIR_OK);
@@ -196,7 +216,7 @@ static void complete_compiler_failures(void) {
     for (size_t point = 0; !point || point <= count; ++point) {
         runtime_attempts = 0; runtime_fail_at = point ? point - 1 : SIZE_MAX;
         XrCompileResourceLimits limits = {UINT64_C(64) << 20, UINT64_C(8) << 20, UINT64_C(128000000)};
-        TextWorld w = {0}; XrXirSourceProduct *out = NULL; XrXirSourceProductDiagnostic diagnostic = {0};
+        TextWorld w = {0}; XrXirSourceProduct *out = NULL; XrXirSourceProductDiagnostic diagnostic = {0};XrFrontendRoot diagnostic_root={.message=""};
         XrCompileResourceStatus created = xr_compile_resources_new(&limits, &w.resources);
         XrCompilerSessionStatus opened = created == XR_COMPILE_RESOURCE_OK ?
             xr_compile_session_new(w.resources, &w.session) : XR_COMPILER_SESSION_OUT_OF_MEMORY;
@@ -209,6 +229,11 @@ static void complete_compiler_failures(void) {
             const char source[] = "const n:i64 = 42\n";
             XrXirSourceText text = {NULL,source,sizeof(source)-1};
             status = xr_xir_compile_source_product_build_text(&w.request,&text,&out,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
         }
         if (!point) { CHECK(status == XR_XIR_OK); count = runtime_attempts; CHECK(count); }
         else { CHECK(status == XR_XIR_OUT_OF_MEMORY && !out && runtime_attempts > runtime_fail_at); }
@@ -221,7 +246,7 @@ static void complete_compiler_failures(void) {
 static XrXirStatus ast_compile_trial(XrCompileResourceLimits limits,
     XrCompileResourceStats *measured) {
     TextWorld w = {0}; AstNode *ast = NULL;
-    XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};
+    XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};XrFrontendRoot diagnostic_root={.message=""};
     XrCompileResourceStatus allocation = xr_compile_resources_new(&limits, &w.resources);
     XrXirStatus status = allocation == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
         allocation == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
@@ -243,6 +268,11 @@ static XrXirStatus ast_compile_trial(XrCompileResourceLimits limits,
     if (status == XR_XIR_OK) {
         XrXirSourceAst syntax = {{NULL,source,sizeof(source)-1},ast};
         status = xr_xir_compile_source_product_build_ast(&w.request,&syntax,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     }
     if (measured && w.resources)
         CHECK(xr_compile_resources_stats(w.resources,measured)==XR_COMPILE_RESOURCE_OK);

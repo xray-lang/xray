@@ -15,7 +15,7 @@ static const XrSourceReplBindingInfo *binding_info(XrSourceRepl *owner,const cha
 static void inspect_type(XrSourceRepl *owner,const char *source) {
     XrSourceText text={NULL,namespace_id,source,strlen(source)};XrSourceDiagnostic *diagnostic=NULL;
     XrSourceStatus status=xray_source_repl_begin_type(owner,&text,&diagnostic);
-    if(diagnostic){XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);fprintf(stderr,"type query %u: %s\n",(unsigned)status,info.message);}
+    if(diagnostic){XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);fprintf(stderr,"type query %u: %s\n",(unsigned)status,info.message);}
     CHECK(status==XR_SOURCE_OK && !diagnostic);
     CHECK(pause_or_finish(owner).state==XR_SOURCE_RUN_RETURNED);
     xray_source_result_free(take(owner,XR_SOURCE_RUN_RETURNED));

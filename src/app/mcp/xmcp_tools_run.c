@@ -15,6 +15,7 @@
 #include "xmcp_tools_internal.h"
 #include "xmcp_server.h"
 #include "xmcp_run_source.h"
+#include "../../api/xsource_compile.h"
 #include "../../base/xmalloc.h"
 #include "../../xir/xxir_program.h"
 #include "../../execution/xr_xir_host_cli.h"
@@ -178,6 +179,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
     if (!server || !ctx || !arguments) return NULL;
     RunCapture capture = {0}; RunExecution execution = {0};
     XrXirStatus status = XR_XIR_BAD_STRUCTURE;
+    char *source_report=NULL;
     char summary[384] = "Error: 'code' must not be empty";
     XrJsonValue *code = xjson_get(arguments, "code"), *identity = xjson_get(arguments, "moduleId");
     if (!xjson_is_string(code) || !code->string_len) goto publish;
@@ -219,8 +221,11 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
         entry = xr_xir_compile_source_product_facts(product)->entry;
         status = xr_xir_compile_source_product_vm_take(product, &program);
     }
-    snprintf(summary, sizeof(summary), "Source failure (%d) at %d:%d: %s", status,
-        diagnostic.source.line, diagnostic.source.column, diagnostic.source.message);
+    if(status!=XR_XIR_OK&&context.resources) {
+        XrSourceCompileDiagnostic failure={.status=XR_SOURCE_COMPILE_REJECTED,.source=diagnostic};
+        (void)xr_source_compile_diagnostic_render(&failure,context.resources,&source_report);
+    }
+    snprintf(summary,sizeof(summary),"Source failure (%d)",status);
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     xr_xir_compile_source_product_free(product); xr_compile_resources_release(context.resources);
     if (status == XR_XIR_DEADLINE) {
@@ -242,7 +247,8 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
     xr_xir_call_result_drop(&execution.owned);
 publish:;
     bool ok = status == XR_XIR_OK && execution.status == XR_XIR_CALL_RETURNED && !execution.timed_out;
-    XrJsonValue *result = run_result(ok, ok ? 0 : -1, &capture, &execution, status, summary);
+    XrJsonValue *result = run_result(ok, ok ? 0 : -1, &capture, &execution, status,source_report&&status!=XR_XIR_DEADLINE?source_report:summary);
+    xr_compile_resources_free(source_report);
     xr_free(capture.out.bytes); xr_free(capture.error.bytes);
     return xmcp_json_finish(result);
 }

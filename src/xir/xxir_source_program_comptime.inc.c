@@ -68,5 +68,5 @@ static void source_program_comptime_receive(SourceContext *ctx,XrXirSourceResult
         xr_xir_compile_source_result_free(&result);ctx->diagnostic=received.diagnostic;ctx->module=received.module;
         if (ctx->diagnostic.status==XR_XIR_OK) source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"comptime final publication is incomplete");
     }
-    xr_xir_compile_artifact_free(complete);source_comptime_context_free(&received);source_comptime_values_free(ctx);
+    xr_xir_compile_artifact_free(complete);source_comptime_context_free(&received,ctx);source_comptime_values_free(ctx);
 }

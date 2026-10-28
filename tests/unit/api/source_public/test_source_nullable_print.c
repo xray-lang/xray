@@ -35,8 +35,8 @@ static XrSourceStatus build(const char *text,size_t length,const XrSourceCompile
     XrSourceFailure failure={0};XrSourceDiagnostic *diagnostic=NULL;
     XrSourceStatus status=xray_source_build(&in,o,artifact,&failure,&diagnostic);
     if(status!=XR_SOURCE_OK && diagnostic) {
-        XrSourceDiagnosticInfo info={0};CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
-        fprintf(stderr,"Source %u %d:%d %s\n",(unsigned)status,info.line,info.column,info.message);
+        XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
+        fprintf(stderr,"Source %u %d:%d %s\n",(unsigned)status,info.primary.line,info.primary.column,info.message);
     }
     CHECK(failure.status==status && failure.cleanup_status==XR_SOURCE_OK);
     xray_source_diagnostic_free(diagnostic);return status;
@@ -92,7 +92,7 @@ static void exact_rejections(void) {
         XrSourceInput in={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"nullable-print-reject",inputs[i],strlen(inputs[i])}};
         XrSourceStatus status=xray_source_build(&in,&o,&artifact,&failure,&diagnostic);
         CHECK(status==XR_SOURCE_REJECTED && !artifact && diagnostic && failure.status==status);
-        XrSourceDiagnosticInfo info={0};CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
+        XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
         CHECK(!strcmp(info.message,"print requires an admitted display type"));xray_source_diagnostic_free(diagnostic);
     }
 }

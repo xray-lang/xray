@@ -90,9 +90,9 @@ static void faults(unsigned mode) {
         CHECK(!owner.program);
         if(!point) {
             CHECK(status==XR_SOURCE_INVALID && owner.diagnostic);
-            XrSourceDiagnosticInfo info={0};
-            CHECK(xray_source_diagnostic_info(owner.diagnostic,&info)==XR_SOURCE_OK);
-            CHECK(info.line==2 && info.column==1 && !strcmp(info.message,"source text contains an embedded NUL"));
+            XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};
+            CHECK((xray_source_diagnostic_report(owner.diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(owner.diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
+            CHECK(info.primary.line==2 && info.primary.column==1 && !strcmp(info.message,"source text contains an embedded NUL"));
             sites=runtime_attempts;CHECK(sites);
         } else {
             if(status!=XR_SOURCE_OUT_OF_MEMORY)fprintf(stderr,"mode=%u point=%zu status=%u\n",mode,point,(unsigned)status);

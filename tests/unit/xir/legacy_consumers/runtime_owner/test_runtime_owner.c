@@ -124,10 +124,10 @@ static XrSourceProgram *compile_original(const char *path, const char *stdlib) {
     CHECK(xray_source_compiler_new(&options,&compiler) == XR_SOURCE_OK);
     XrSourceStatus status = xray_source_compile_file(compiler,path,&program,&diagnostic);
     if (status != XR_SOURCE_OK && diagnostic) {
-        XrSourceDiagnosticInfo info;
-        CHECK(xray_source_diagnostic_info(diagnostic,&info) == XR_SOURCE_OK);
-        fprintf(stderr,"original consumer rejected: stage=%u line=%d column=%d %s\n",
-            info.stage,info.line,info.column,info.message);
+        XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};
+        CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE) == XR_SOURCE_OK);
+        fprintf(stderr,"original consumer rejected: line=%d column=%d %s\n",
+            info.primary.line,info.primary.column,info.message);
     }
     CHECK(status == XR_SOURCE_OK && program && !diagnostic);
     xray_source_compiler_free(compiler);

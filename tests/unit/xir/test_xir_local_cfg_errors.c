@@ -96,10 +96,15 @@ static void body_false_never(const BodyErrorCase *test) {
     XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceText input={NULL,test->text,strlen(test->text)};XrXirSourceProduct *product=NULL;
-    XrXirSourceProductDiagnostic source={0};
+    XrXirSourceProductDiagnostic source={0};XrFrontendRoot source_root={.message=""};
     XrXirStatus created=xr_xir_compile_source_product_build_text(&request,&input,&product,&source);
+    source_root=(XrFrontendRoot){.message=""};
+    if(source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(source.failure.report,0,&source_root));
+    }
     if (created!=XR_XIR_OK) fprintf(stderr,"body source %s status%u %d:%d %s\n",test->name,(unsigned)created,
-        source.source.line,source.source.column,source.source.message);
+        source_root.primary.line,source_root.primary.column,source_root.message);
     CHECK(created==XR_XIR_OK);
     xr_compile_session_free(session);session=NULL;
     XrXirSourceProductPacketView packet={0};

@@ -60,6 +60,8 @@ typedef struct XrModuleSpec {
     XrModuleIdentityAuthority authority; /* Owned typed authority */
     bool embedded_source; /* source_path is a diagnostic-only embedded stdlib path */
     XrFingerprint source_content_fingerprint; /* Source bytes; zero when only an AST was supplied. */
+    char *source_text; /* Exact controlled parse input; absent for byte-less AST/Checked input. */
+    size_t source_length;
     XrModSpecStatus status;
 
     struct AstNode *ast; /* Owned unless ast_borrowed; never moved within its arena. */

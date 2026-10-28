@@ -10,6 +10,7 @@
  *   Source names are resolved before lowering and never rediscovered at runtime.
  */
 #include "xxir_source.h"
+#include "../hir/xhir_items.h"
 #include "xxir_source_corpus.h"
 #include "xxir_map.h"
 #include "xxir_ctfe.h"

@@ -18,7 +18,10 @@ static bool policy_selected(uint32_t filters,bool caught) {
 }
 static void policy_case(const RouteCase *expected,uint32_t filters) {
     HandlerFixture fixture={0};handler_open(&fixture);XrXirStatus built=handler_build(&fixture,expected->text);
-    if (built!=XR_XIR_OK) fprintf(stderr,"policy source=%u %s\n",built,fixture.diagnostic.source.source.message);
+    if(built!=XR_XIR_OK) {
+        char *report=NULL;(void)xr_frontend_report_render(fixture.diagnostic.source.failure.report,&report);
+        fprintf(stderr,"policy source=%u %s\n",built,report?report:"diagnostic unavailable");xr_compile_resources_free(report);
+    }
     CHECK(built==XR_XIR_OK);RoutePoint points[32];uint32_t count=route_points(&fixture,points,32);
     XrXirValueStatus configured=xdap_current_break_on_throw(fixture.launch->control,filters);
     if (configured!=XR_XIR_VALUE_OK) fprintf(stderr,"policy flags=%u configure=%u\n",filters,configured);

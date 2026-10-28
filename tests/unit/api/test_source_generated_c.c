@@ -37,9 +37,8 @@ int main(int argc, char **argv) {
     int result = 1;
     XrSourceCompileStatus source_status = xr_source_compile_build(&request, &product, &diagnostic);
     if (source_status != XR_SOURCE_COMPILE_OK) {
-        char message[2048];
-        xr_source_compile_diagnostic_format(&diagnostic, message, sizeof(message));
-        fprintf(stderr, "%s\n", message);
+        char *message=NULL;(void)xr_frontend_report_render(diagnostic.source.failure.report,&message);
+        fprintf(stderr,"%s\n",message?message:"diagnostic unavailable");xr_compile_resources_free(message);
         goto cleanup;
     }
     const XrXirNativeProjectionRequest prepare = {product, "source_fixture", (size_t)UINT64_C(64) << 20};
@@ -74,9 +73,9 @@ cleanup:
     xr_source_compile_diagnostic_free(&diagnostic);
     XrCompileResourceStats stats = {0};
     CHECK(xr_compile_resources_stats(resources, &stats) == XR_COMPILE_RESOURCE_OK &&
-        stats.live_bytes == baseline.live_bytes);
-    printf("Source C ledger: work=%" PRIu64 " allocated=%" PRIu64 " peak=%" PRIu64 " live=baseline\n",
-        stats.work, stats.allocated_bytes, stats.peak_bytes);
+        stats.held_bytes == baseline.held_bytes);
+    printf("Source C owner: allocated=%" PRIu64 " peak=%" PRIu64 " held=baseline\n",
+        stats.allocated_bytes, stats.peak_bytes);
     xr_compile_resources_release(resources);
     instance_compile_report();
     return result;

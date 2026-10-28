@@ -88,8 +88,8 @@ static XrSourceArtifact *build_text(XrSourceTarget target,const char *text,size_
     XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"strict-from-utf8",text,length}};
     XrSourceArtifact *artifact=NULL;XrSourceFailure failure={0};XrSourceDiagnostic *diagnostic=NULL;
     XrSourceStatus status=xray_source_build(&input,&options,&artifact,&failure,&diagnostic);
-    if (diagnostic) {XrSourceDiagnosticInfo info={0};CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
-        fprintf(stderr,"Source %u stage=%u %d:%d %s\n",(unsigned)status,(unsigned)info.stage,info.line,info.column,info.message);}
+    if (diagnostic) {XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
+        fprintf(stderr,"Source %u stage=%u %d:%d %s\n",(unsigned)status,(unsigned)failure.stage,info.primary.line,info.primary.column,info.message);}
     xray_source_diagnostic_free(diagnostic);CHECK(status==XR_SOURCE_OK && artifact);
     compile_cancel.finished=compile_cancel.polls;compile_cancel.cancelled=1;return artifact;
 }
@@ -191,15 +191,20 @@ static int product_check(const char *text,size_t length,bool identities,
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"from-utf8-product",NULL};
     XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_PUBLIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
-    XrXirSourceText input={NULL,text,length};XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
+    XrXirSourceText input={NULL,text,length};XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build_text(&request,&input,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     xr_compile_session_free(session);
     CHECK(status==XR_XIR_OK || !product);
     fprintf(stderr,"Product status=%u stage=%u f=%u b=%u i=%u reason=%u source=%s\n",(unsigned)status,
         (unsigned)diagnostic.stage,diagnostic.xir.function,diagnostic.xir.block,diagnostic.xir.instruction,
-        (unsigned)diagnostic.xir.reason,diagnostic.source.message);
+        (unsigned)diagnostic.xir.reason,diagnostic_root.message);
     if (rejection) CHECK(status==XR_XIR_BAD_TYPE && diagnostic.stage==XR_XIR_SOURCE_PRODUCT_CHECK &&
-        !product && !strcmp(diagnostic.source.message,rejection));
+        !product && !strcmp(diagnostic_root.message,rejection));
     if (identities) {CHECK(status==XR_XIR_OK && product);identity_checks(&context,product);}
     xr_xir_compile_source_product_free(product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && before.held_bytes==after.held_bytes);
@@ -287,9 +292,14 @@ static void library_check(const char *emit) {
     request.session=session;request.entry_path=root;request.linkage_kind=XR_XIR_PROGRAM;request.libraries=catalog;
     char consumer[]="import {decode} from \"./lib\"\nfn check() {var good:Array<u8>=[65,0,195,169];try { print(try decode(good[:])) } catch(e:Utf8Error) {print(\"unexpected\")}\nvar bad:Array<u8>=[255];try { print(try decode(bad[:])) } catch(e:Utf8Error) { print(\"invalid\") }}\ncheck()\n";
     input=(XrXirSourceText){"root.xr",consumer,sizeof(consumer)-1};XrXirSourceProductRequest product_request={request,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
-    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic failure={0};
+    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic failure={0};XrFrontendRoot failure_root={.message=""};
     status=xr_xir_compile_source_product_build_text(&product_request,&input,&product,&failure);
-    fprintf(stderr,"Library consumer status=%u stage=%u f=%u i=%u %s\n",(unsigned)status,(unsigned)failure.stage,failure.xir.function,failure.xir.instruction,failure.source.message);
+    failure_root=(XrFrontendRoot){.message=""};
+    if(failure.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(failure.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(failure.failure.report,0,&failure_root));
+    }
+    fprintf(stderr,"Library consumer status=%u stage=%u f=%u i=%u %s\n",(unsigned)status,(unsigned)failure.stage,failure.xir.function,failure.xir.instruction,failure_root.message);
     CHECK(status==XR_XIR_OK && product);uint32_t entry=xr_xir_compile_source_product_facts(product)->entry;
     xr_compile_session_free(session);xr_xir_compile_library_catalog_free(catalog);memset(consumer,0xa5,sizeof(consumer));
     CHECK(xr_test_rmdir(directory)==0);memset(absolute,0xa5,sizeof(absolute));
@@ -335,8 +345,13 @@ static void guard_checks(void) {
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_PUBLIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL},target};
     const char text[]="export fn probe()->i64 { return 42 }\n";XrXirSourceText input={NULL,text,sizeof(text)-1};
-    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic failure={0};
+    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic failure={0};XrFrontendRoot failure_root={.message=""};
     CHECK(xr_xir_compile_source_product_build_text(&request,&input,&product,&failure)==XR_XIR_OK);
+    failure_root=(XrFrontendRoot){.message=""};
+    if(failure.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(failure.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(failure.failure.report,0,&failure_root));
+    }
     xr_compile_session_free(session);XrXirSourceProductPacketView packet={0};
     CHECK(xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK);
     XrXirArtifact *closed=NULL,*code=NULL;CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&closed,NULL)==XR_XIR_OK);

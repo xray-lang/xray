@@ -17,7 +17,7 @@ static void array_history(void) {
     execute(owner,"const retained=len(items)\n");integer(owner,"retained",3);
     XrSourceValue *old=read_value(owner,"items");
     XrSourceDiagnostic *diagnostic=NULL;CHECK(begin(owner,"fixed.push(9)\n",&diagnostic)==XR_SOURCE_REJECTED && diagnostic);
-    XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK && info.line==1);
+    XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK && info.primary.line==1);
     xray_source_diagnostic_free(diagnostic);execute(owner,"const unchanged=fixed[0]\n");integer(owner,"unchanged",4);
     execute(owner,"var items:Array<i64>=[99]\nappend(4)\nconst fresh=len(items)\n");integer(owner,"fresh",1);
     execute(owner,"append(5)\n");XrSourceEvent cleanup;

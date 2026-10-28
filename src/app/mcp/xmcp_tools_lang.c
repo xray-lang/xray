@@ -128,11 +128,12 @@ static void analysis_error_callback(void *data, int line, int column, int end_li
     snprintf(capture->messages[i], sizeof(capture->messages[i]), "%s", message);
 }
 
-static XrJsonValue *analysis_result(const char *mode, bool ok, bool truncated, XrJsonValue *diagnostics) {
+static XrJsonValue *analysis_result(const char *mode,bool ok,bool truncated,XrJsonValue *diagnostics,bool checked,XrXirStatus source_status) {
     int count = xjson_array_len(diagnostics);
     XrJsonValue *structured = xjson_new_object();
     XMCP_JSON_BOOL(structured, "ok", ok);
     XMCP_JSON_STRING(structured, "mode", mode);
+    if(checked)XMCP_JSON_INT(structured,"sourceStatus",source_status);
     XMCP_JSON_INT(structured, "diagnosticCount", count);
     XMCP_JSON_BOOL(structured, "truncated", truncated);
     xmcp_json_set(structured, "diagnostics", diagnostics);
@@ -162,7 +163,8 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
     if (ctx->progress_token) xmcp_send_progress_notification(server, ctx->progress_token, 0, 2);
     XrJsonValue *items = xjson_new_array();
     if (!items) return NULL;
-    bool ok = false, truncated = false;
+    bool ok = false, truncated = false, source_checked=false;
+    XrXirStatus source_status=XR_XIR_OK;
     XrCompileRequestControl control = {0};
     XrCompileResourceStatus controlled = xmcp_request_control_init(server, 0, &control);
     if (controlled == XR_COMPILE_RESOURCE_OK) controlled = xr_compile_request_control_poll(&control);
@@ -204,10 +206,27 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
         XmcpSourceRequest request = {input->as.string, input->string_len, "mcp-analyze", &context, &control};
         XrXirStatus status = created == XR_COMPILE_RESOURCE_OK ? xmcp_source_check(&request, &owner) :
             xmcp_source_resource_status(created);
+        source_checked=true;source_status=status;
         const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(owner.result.snapshot);
         ok = status == XR_XIR_OK && view && view->complete;
-        if (!ok) analysis_failure(items, owner.diagnostic.line, owner.diagnostic.column,
-            (int)status, owner.diagnostic.message, "source");
+        if(!ok) {
+            XrFrontendReportInfo report={0};
+            if(xr_frontend_report_info(owner.failure.report,&report)&&report.roots) {
+                for(uint32_t i=0;i<report.roots;++i) {
+                    XrFrontendRoot root={0};if(!xr_frontend_report_root(owner.failure.report,i,&root))break;
+                    XrJsonValue *item=make_diagnostic(root.primary.line,root.primary.column,
+                        root.primary.end_line,root.primary.end_column,"error",(int)root.code,root.message,"source");
+                    XrJsonValue *related=xjson_new_array();
+                    for(uint32_t j=0;j<root.labels;++j) {
+                        XrFrontendLabel label={0};if(!xr_frontend_report_label(owner.failure.report,i,j,&label))break;
+                        xmcp_json_push(related,make_diagnostic(label.location.line,label.location.column,
+                            label.location.end_line,label.location.end_column,"note",0,label.message,"source"));
+                    }
+                    xmcp_json_set(item,"related",related);xmcp_json_push(items,item);
+                }
+                truncated=!report.complete;
+            } else analysis_failure(items,0,0,(int)status,"Source checking failed","source");
+        }
         xmcp_source_free(&owner);
         xr_compile_resources_release(context.resources);
     }
@@ -217,10 +236,11 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
             ok = false;
             int code = !strcmp(mode,"syntax") ? (int)parse_resource_status(controlled) :
                 (int)xmcp_source_resource_status(controlled);
-            analysis_failure(items,0,0,code,"Request stopped before publication","request");
+            if(source_checked)source_status=xmcp_source_resource_status(controlled);
+            analysis_failure(items,0,0,source_checked?0:code,"Request stopped before publication","request");
         }
     }
-    XrJsonValue *result = analysis_result(mode, ok, truncated, items);
+    XrJsonValue *result=analysis_result(mode,ok,truncated,items,source_checked,source_status);
     if (ctx->progress_token) xmcp_send_progress_notification(server, ctx->progress_token, 2, 2);
     return result;
 }

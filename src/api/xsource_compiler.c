@@ -224,9 +224,15 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_open_input(XrSourceCompiler *co
     XrSourceCompileDiagnostic detail={0};detail.stage=XR_SOURCE_COMPILE_AUTHORITY;
     XrSourceCompileStatus status=compiler_resource(xr_compile_session_resource_status(compiler->session));
     if(status==XR_SOURCE_COMPILE_OK) {
-        const XrSourceAuthorityDiagnostics receivers={&detail.authority,&detail.source.source,&detail.source.failure};
+        XrXirSourceDiagnostic immediate={0};
+        XrManifestDiagnostic authority_fact={0};
+        const XrSourceAuthorityDiagnostics receivers={&authority_fact,&immediate,&detail.source.failure};
         detail.authority_status=xr_source_authority_open_input(&compiler->context,input,compiler->libraries,
             &compiler->manifest_limits,output,&receivers);
+        (void)xr_source_compile_manifest_report(&detail,compiler->context.resources,&authority_fact);
+        detail.source.source=(XrXirSourceDiagnosticFact){immediate.status,immediate.module};
+        if(immediate.status!=XR_XIR_OK)(void)xr_xir_compile_source_failure_record(compiler->context.resources,
+            &detail.source.failure,&immediate,detail.source.failure.path,input->text,input->length);
         status=compiler_manifest(detail.authority_status);
     }
     return compiler_publish(diagnostic,&detail,status);
@@ -321,7 +327,11 @@ static XrSourceCompileStatus compiler_build_supplied(XrSourceCompiler *compiler,
             (detail.source.failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE ||
              detail.source.failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT))status=XR_SOURCE_COMPILE_INVALID;
         if (status == XR_SOURCE_COMPILE_OK) {
-            XrXirStatus admitted = xr_xir_compile_source_product_public_admit(product, &detail.source.source);
+            XrXirSourceDiagnostic immediate={0};
+            XrXirStatus admitted = xr_xir_compile_source_product_public_admit(product, &immediate);
+            detail.source.source=(XrXirSourceDiagnosticFact){immediate.status,immediate.module};
+            if(admitted!=XR_XIR_OK)(void)xr_xir_compile_source_failure_record(compiler->context.resources,
+                &detail.source.failure,&immediate,NULL,NULL,0);
             status = compiler_xir(admitted);
             if (admitted != XR_XIR_OK) {
                 detail.source.stage = XR_XIR_SOURCE_PRODUCT_FACTS; detail.source.status = admitted;

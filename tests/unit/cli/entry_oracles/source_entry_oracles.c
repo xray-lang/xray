@@ -55,7 +55,7 @@ static XrSourceProgram *oracle_compile(const char *source,XrSourceCompiler **com
     const XrSourceText text={NULL,"entry-oracle",source,strlen(source)};
     XrSourceProgram *program=NULL;XrSourceDiagnostic *diagnostic=NULL;
     XrSourceStatus status=xray_source_compile_text(*compiler,&text,&program,&diagnostic);
-    if(diagnostic){XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);fprintf(stderr,"source %u: %s\n",(unsigned)status,info.message);}
+    if(diagnostic){XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);fprintf(stderr,"source %u: %s\n",(unsigned)status,info.message);}
     CHECK(status==XR_SOURCE_OK && program && !diagnostic);return program;
 }
 static XrSourceEvent oracle_poll(XrSourceCall *call) {

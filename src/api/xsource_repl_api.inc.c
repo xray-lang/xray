@@ -140,10 +140,11 @@ static XrSourceStatus api_repl_prepare(XrSourceRepl *owner,const XrSourceText *i
     if(status==XR_SOURCE_OK)status=xr_source_ast_owned_input(ast,&syntax);
     repl.ast=&syntax;
     if(status==XR_SOURCE_OK)detail.stage=XR_SOURCE_COMPILE_PRODUCT;
-    XrXirSourceFailure failed={0};repl.failure=&failed;
+    XrXirSourceFailure failed={0};repl.failure=&failed;XrXirSourceDiagnostic immediate={0};
     if(status==XR_SOURCE_OK)status=api_resource(xr_compile_request_control_poll(&request->control));
     if(status==XR_SOURCE_OK)status=type_query ? xr_source_submission_prepare_repl_type_ast(owner->submission,&repl,
-        &detail.source.source) : xr_source_submission_prepare_repl_ast(owner->submission,&repl,&detail.source.source);
+        &immediate) : xr_source_submission_prepare_repl_ast(owner->submission,&repl,&immediate);
+    detail.source.source=(XrXirSourceDiagnosticFact){immediate.status,immediate.module};
     bool prepared=status==XR_SOURCE_OK;
     if((status==XR_SOURCE_BAD_ARGUMENT || status==XR_SOURCE_REJECTED) &&
         detail.source.source.status==XR_XIR_BAD_STRUCTURE &&
@@ -152,6 +153,8 @@ static XrSourceStatus api_repl_prepare(XrSourceRepl *owner,const XrSourceText *i
         xr_xir_compile_source_failure_free(&detail.source.failure);
         detail.source.failure=failed;failed=(XrXirSourceFailure){0};
     }
+    if(immediate.status!=XR_XIR_OK)(void)xr_xir_compile_source_failure_record(request->resources,
+        &detail.source.failure,&immediate,ast?ast->path:NULL,ast?ast->source:NULL,ast?ast->source_length:0);
     xr_source_authority_close(opened);
     if(status==XR_SOURCE_OK)status=api_resource(xr_compile_request_control_poll(&request->control));
     if(status==XR_SOURCE_OK && !type_query)status=api_repl_prepare_names(owner);
@@ -166,7 +169,7 @@ static XrSourceStatus api_repl_prepare(XrSourceRepl *owner,const XrSourceText *i
         owner->result=result;owner->active=true;owner->terminal=false;owner->type_query=type_query;
         owner->observed=api_event(XR_XIR_CALL_READY,0,0);
     } else {
-        xray_source_result_free(result);api_diagnostic_snapshot(request->resources,&detail,status,diagnostic);
+        xray_source_result_free(result);api_diagnostic_take(request->resources,&detail,status,diagnostic);
     }
     xr_source_compile_diagnostic_free(&detail);return status;
 }
@@ -192,7 +195,7 @@ XRAY_API XrSourceStatus xray_source_repl_begin_file(XrSourceRepl *owner,const ch
     if(status==XR_SOURCE_OK) {
         const XrSourceText input={xr_source_authority_source_path(file.authority),NULL,(const char *)file.bytes,file.length};
         status=api_repl_prepare(owner,&input,file.authority,&request,diagnostic,false);
-    } else api_diagnostic_snapshot(request.resources,&detail,status,diagnostic);
+    } else api_diagnostic_take(request.resources,&detail,status,diagnostic);
     xr_source_compile_diagnostic_free(&detail);xr_source_compiler_file_clear(&file);api_request_clear(&request);
     owner->busy=false;return status;
 }

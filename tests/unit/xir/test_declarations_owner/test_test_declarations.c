@@ -44,10 +44,15 @@ int main(int argc, char **argv) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, argv[1]};
     XrXirSourceProductRequest request = {{session,input,&authority,&context,argv[2],NULL,XR_XIR_PROGRAM,NULL},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
-    XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};
+    XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status = xr_xir_compile_source_product_build(&request,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     if (status != XR_XIR_OK) fprintf(stderr,"status=%u stage=%u line=%d column=%d %s\n",status,
-        diagnostic.stage,diagnostic.source.line,diagnostic.source.column,diagnostic.source.message);
+        diagnostic.stage,diagnostic_root.primary.line,diagnostic_root.primary.column,diagnostic_root.message);
     CHECK(status == XR_XIR_OK);
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     xr_compile_session_free(session);

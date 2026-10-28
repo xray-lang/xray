@@ -36,7 +36,7 @@ static XrSourceProgram *compile(XrSourceCompiler *compiler,const char *source) {
     XrSourceText text={NULL,"public-source-entry",source,strlen(source)};XrSourceProgram *program=NULL;
     XrSourceDiagnostic *diagnostic=NULL;
     XrSourceStatus status=xray_source_compile_text(compiler,&text,&program,&diagnostic);
-    if(status!=XR_SOURCE_OK && diagnostic) {XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);fprintf(stderr,"compile status=%d %s\n",status,info.message);}
+    if(status!=XR_SOURCE_OK && diagnostic) {XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);fprintf(stderr,"compile status=%d %s\n",status,info.message);}
     CHECK(status==XR_SOURCE_OK && program && !diagnostic);return program;
 }
 static XrSourceCallOptions options_for(Bytes *out) {
@@ -252,8 +252,8 @@ static void located_diagnostic(void) {
     XrSourceText text={XR_PUBLIC_FIXTURE "/unsaved-public.xr",NULL,source,sizeof(source)-1};
     XrSourceProgram *program=NULL;XrSourceDiagnostic *diagnostic=NULL;
     CHECK(xray_source_compile_text(compiler,&text,&program,&diagnostic)==XR_SOURCE_REJECTED && !program && diagnostic);
-    xray_source_compiler_free(compiler);XrSourceDiagnosticInfo info;
-    CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK && info.line==1 && info.column==13);
-    CHECK(info.path && strstr(info.path,"unsaved-public.xr") && strstr(info.message,"initialized value"));xray_source_diagnostic_free(diagnostic);
+    xray_source_compiler_free(compiler);XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};
+    CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK && info.primary.line==1 && info.primary.column==13);
+    CHECK(info.primary.path && strstr(info.primary.path,"unsaved-public.xr") && strstr(info.message,"initialized value"));xray_source_diagnostic_free(diagnostic);
 }
 int main(void) {compiler_layout_guards();detached_call();escaped_panic();cancellation_and_budget();timer_protocol();task_timer_protocol();task_scalar_protocol();task_constructed_protocol();reentry();located_diagnostic();puts("public header compiler/Program/Call/result ownership, exact waits and byte semantics PASS");return 0;}

@@ -120,13 +120,25 @@ XR_FUNC void xr_source_compile_diagnostic_free(XrSourceCompileDiagnostic *diagno
     xr_xir_compile_source_product_diagnostic_free(&diagnostic->source);
     memset(diagnostic, 0, sizeof(*diagnostic));
 }
+XR_FUNC XrCompileResourceStatus xr_source_compile_manifest_report(XrSourceCompileDiagnostic *detail,
+    XrCompileResources *resources,const XrManifestDiagnostic *fact) {
+    if(!detail||!fact)return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    if(detail->source.failure.report||!fact->message[0])return XR_COMPILE_RESOURCE_OK;
+    XrFrontendReport *report=NULL;uint32_t source=0;
+    XrCompileResourceStatus status=xr_frontend_report_new(resources,&report);
+    if(status==XR_COMPILE_RESOURCE_OK)status=xr_frontend_report_source(report,NULL,NULL,0,NULL,&source);
+    if(status==XR_COMPILE_RESOURCE_OK)status=xr_frontend_report_add(report,0,fact->message,
+        xr_frontend_report_location(report,source,0,0,NULL),NULL,0);
+    if(status!=XR_COMPILE_RESOURCE_OK){xr_frontend_report_free(report);return status;}
+    xr_frontend_report_seal(report,false);detail->source.failure.report=report;return status;
+}
 XR_FUNC XrSourceCompileStatus xr_source_compile_build(
     const XrSourceCompileRequest *request, XrXirSourceProduct **output,
     XrSourceCompileDiagnostic *diagnostic) {
     /* Never overwrite a caller's still-owned diagnostic storage. */
     if (diagnostic && (diagnostic->source.snapshot || !xr_xir_compile_source_failure_empty(&diagnostic->source.failure)))
         return XR_SOURCE_COMPILE_BAD_ARGUMENT;
-    XrSourceCompileDiagnostic detail = {0};
+    XrSourceCompileDiagnostic detail = {0};XrManifestDiagnostic authority_fact={0};
     XrSourceCompileStatus status = XR_SOURCE_COMPILE_BAD_ARGUMENT;
     if (!request || !request->context || !request->context->resources || !output || *output ||
         !request->absolute_entry_path || !request->absolute_stdlib_path || !source_catalog_matches(request) ||
@@ -168,7 +180,8 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_build(
     if (status == XR_SOURCE_COMPILE_OK) {
         detail.stage = XR_SOURCE_COMPILE_AUTHORITY;
         detail.authority_status = xr_source_authority_open(request->context, entry,
-            libraries, &request->manifest_limits, &authority, &detail.authority);
+            libraries, &request->manifest_limits, &authority, &authority_fact);
+        (void)xr_source_compile_manifest_report(&detail,request->context->resources,&authority_fact);
         status = source_manifest_status(detail.authority_status);
     }
     if (status == XR_SOURCE_COMPILE_OK) {
@@ -188,7 +201,11 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_build(
             (detail.source.failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE ||
              detail.source.failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT))status=XR_SOURCE_COMPILE_INVALID;
         if (status == XR_SOURCE_COMPILE_OK) {
-            XrXirStatus admitted = xr_xir_compile_source_product_public_admit(product, &detail.source.source);
+            XrXirSourceDiagnostic immediate={0};
+            XrXirStatus admitted = xr_xir_compile_source_product_public_admit(product, &immediate);
+            detail.source.source=(XrXirSourceDiagnosticFact){immediate.status,immediate.module};
+            if(admitted!=XR_XIR_OK)(void)xr_xir_compile_source_failure_record(request->context->resources,
+                &detail.source.failure,&immediate,NULL,NULL,0);
             status = source_xir_status(admitted);
             if (admitted != XR_XIR_OK) {
                 detail.source.stage = XR_XIR_SOURCE_PRODUCT_FACTS;
@@ -210,24 +227,41 @@ rejected:
     else xr_source_compile_diagnostic_free(&detail);
     return status;
 }
-XR_FUNC bool xr_source_compile_diagnostic_format(
-    const XrSourceCompileDiagnostic *diagnostic, char *out, size_t size) {
-    if (!diagnostic || !out || !size) return false;
-    const XrXirSourceDiagnostic *source = &diagnostic->source.source;
-    const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(diagnostic->source.snapshot);
-    const char *path = diagnostic->source.failure.path;
-    if (!path && view && view->modules && source->module < view->module_count)
-        path = view->modules[source->module].path;
-    if (path && path[0] && source->line > 0) {
-        snprintf(out, size, "%s:%d:%d: error: %s", path, source->line, source->column,
-            source->message[0] ? source->message : xr_source_compile_status_name(diagnostic->status));
-        return true;
+XR_FUNC XrSourceCompileStatus xr_source_compile_diagnostic_render(
+    const XrSourceCompileDiagnostic *d,XrCompileResources *resources,char **output) {
+    if(!d||!resources||!output||*output)return XR_SOURCE_COMPILE_BAD_ARGUMENT;
+    XrFrontendReportInfo info={0};
+    if(xr_frontend_report_info(d->source.failure.report,&info)&&info.roots) {
+        bool located=false;
+        for(uint32_t i=0;i<info.roots;++i) {
+            XrFrontendRoot root={0};
+            if(!xr_frontend_report_root(d->source.failure.report,i,&root))return XR_SOURCE_COMPILE_BAD_ARGUMENT;
+            located|=root.primary.path&&*root.primary.path&&(root.primary.flags&XR_FRONTEND_LOCATION_LINE);
+        }
+        char *rendered=NULL;
+        XrSourceCompileStatus status=source_resource_status(xr_frontend_report_render(d->source.failure.report,&rendered));
+        if(status!=XR_SOURCE_COMPILE_OK)return status;
+        if(located){*output=rendered;return XR_SOURCE_COMPILE_OK;}
+        int prefix=snprintf(NULL,0,"source build failed (stage=%u status=%s)\n",
+            (unsigned)d->stage,xr_source_compile_status_name(d->status));
+        size_t length=strlen(rendered);
+        if(prefix<0 || length>SIZE_MAX-(size_t)prefix-1){xr_compile_resources_free(rendered);return XR_SOURCE_COMPILE_OVERFLOW;}
+        char *text=NULL;status=source_resource_status(xr_compile_resources_alloc(resources,(size_t)prefix+length+1,(void **)&text));
+        if(status==XR_SOURCE_COMPILE_OK) {
+            (void)snprintf(text,(size_t)prefix+1,"source build failed (stage=%u status=%s)\n",
+                (unsigned)d->stage,xr_source_compile_status_name(d->status));
+            memcpy(text+(size_t)prefix,rendered,length+1);*output=text;
+        }
+        xr_compile_resources_free(rendered);return status;
     }
-    int written = snprintf(out, size, "source build failed (stage=%u status=%s)",
-        (unsigned)diagnostic->stage, xr_source_compile_status_name(diagnostic->status));
-    if (source->message[0] && written > 0 && (size_t)written < size)
-        snprintf(out + written, size - (size_t)written, ": %s", source->message);
-    return false;
+    int size=snprintf(NULL,0,"source build failed (stage=%u status=%s)\n",
+        (unsigned)d->stage,xr_source_compile_status_name(d->status));
+    if(size<0)return XR_SOURCE_COMPILE_BAD_ARGUMENT;
+    char *text=NULL;XrSourceCompileStatus status=source_resource_status(xr_compile_resources_alloc(resources,(size_t)size+1,(void **)&text));
+    if(status!=XR_SOURCE_COMPILE_OK)return status;
+    (void)snprintf(text,(size_t)size+1,"source build failed (stage=%u status=%s)\n",
+        (unsigned)d->stage,xr_source_compile_status_name(d->status));
+    *output=text;return XR_SOURCE_COMPILE_OK;
 }
 static void paths_append(char *out, size_t size, size_t *used, const char *format, ...)
     XR_PRINTF_FMT(4, 5);

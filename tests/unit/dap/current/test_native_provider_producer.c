@@ -23,9 +23,9 @@ int main(int argc,char **argv) {
     CHECK(xr_source_compiler_new(&config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
     XrXirSourceProduct *source=NULL;
     XrSourceCompileStatus status=xr_source_compiler_build_file(compiler,XR_NATIVE_PROVIDER_FIXTURE,&source,&diagnostic);
-    if(status!=XR_SOURCE_COMPILE_OK) { char message[1024];xr_source_compile_diagnostic_format(&diagnostic,message,sizeof(message));fprintf(stderr,"%s\n",message); }
+    if(status!=XR_SOURCE_COMPILE_OK) { char *message=NULL;(void)xr_frontend_report_render(diagnostic.source.failure.report,&message);fprintf(stderr,"%s\n",message?message:"diagnostic unavailable");xr_compile_resources_free(message); }
     CHECK(status==XR_SOURCE_COMPILE_OK);
-    CHECK(xr_xir_compile_source_product_public_admit(source,&diagnostic.source.source)==XR_XIR_OK);
+    XrXirSourceDiagnostic immediate={0};CHECK(xr_xir_compile_source_product_public_admit(source,&immediate)==XR_XIR_OK);
     const XrXirSourceProductFacts *facts=xr_xir_compile_source_product_facts(source);
     XrXirSourceProductPacketView packet={0};XrXirArtifact *lowered=NULL;
     CHECK(xr_xir_compile_source_product_packet(source,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK);

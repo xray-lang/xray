@@ -26,10 +26,10 @@ static int legacy_source_script(const char *source,const char *absolute_path,
     status=absolute_path?xray_source_compile_file(compiler,absolute_path,&program,&diagnostic):
         xray_source_compile_text(compiler,&text,&program,&diagnostic);
     if(diagnostic) {
-        XrSourceDiagnosticInfo info={0};
-        if(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK)
+        XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};
+        if((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK)
             fprintf(stderr,"original script compile status=%u line=%d path=%s message=%s\n",
-                (unsigned)status,info.line,info.path?info.path:"",info.message?info.message:"");
+                (unsigned)status,info.primary.line,info.primary.path?info.primary.path:"",info.message?info.message:"");
     }
     xray_source_diagnostic_free(diagnostic);
     xray_source_compiler_free(compiler);

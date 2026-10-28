@@ -32,7 +32,7 @@ static bool same_path(const char *actual,const char *expected) {
 static void run_case(unsigned mode) {
     XrSourceCompiler *compiler=NULL;XrSourceProgram *program=NULL;XrSourceAst *ast=NULL;
     XrSourceDiagnostic *diagnostic=NULL;XrSourceResult *result=NULL;
-    XrSourceCompilerOptions options;XrSourceCallOptions runtime;XrSourceDiagnosticInfo info={0};
+    XrSourceCompilerOptions options;XrSourceCallOptions runtime;XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};
     size_t written=0;char source[128]="var bad =\n";
     char root[]=XR_DIAGNOSTIC_FIXTURE "/entry.xr";
     const char *bad=XR_DIAGNOSTIC_FIXTURE "/坏 库.xr";
@@ -51,11 +51,11 @@ static void run_case(unsigned mode) {
         status=xray_source_compile_ast(compiler,ast,&program,&diagnostic);
     } else status=xray_source_compile_text(compiler,&input,&program,&diagnostic);
     CHECK(diagnostic && !program);
-    CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
-    printf("entry=%u status=%u location=%d:%d message=%s\n",mode,(unsigned)status,info.line,info.column,info.message);
-    CHECK(status==XR_SOURCE_INVALID && info.status==status);
-    CHECK(info.line==2 && info.column==1 && !strcmp(info.message,"expected expression"));
-    CHECK(mode ? same_path(info.path,bad) : info.path==NULL);
+    CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
+    printf("entry=%u status=%u location=%d:%d message=%s\n",mode,(unsigned)status,info.primary.line,info.primary.column,info.message);
+    CHECK(status==XR_SOURCE_INVALID);
+    CHECK(info.primary.line==2 && info.primary.column==1 && !strcmp(info.message,"expected expression"));
+    CHECK(mode ? same_path(info.primary.path,bad) : info.primary.path==NULL);
     if(mode==1)CHECK(xray_source_compile_file(compiler,root,&program,NULL)==XR_SOURCE_INVALID && !program);
     else if(mode==3)CHECK(xray_source_compile_ast(compiler,ast,&program,NULL)==XR_SOURCE_INVALID && !program);
     else CHECK(xray_source_compile_text(compiler,&input,&program,NULL)==XR_SOURCE_INVALID && !program);
@@ -71,9 +71,9 @@ static void run_case(unsigned mode) {
     runtime.write=capture;runtime.context=&written;
     CHECK(xray_source_execute(program,&runtime,&result,NULL)==XR_SOURCE_OK && written==3);
     xray_source_result_free(result);result=NULL;xray_source_program_free(program);program=NULL;
-    CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
-    CHECK(info.status==XR_SOURCE_INVALID && info.line==2 && info.column==1);
-    CHECK(!strcmp(info.message,"expected expression") && (mode ? same_path(info.path,bad) : info.path==NULL));
+    CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
+    CHECK(info.primary.line==2 && info.primary.column==1);
+    CHECK(!strcmp(info.message,"expected expression") && (mode ? same_path(info.primary.path,bad) : info.primary.path==NULL));
 cleanup:
     xray_source_ast_free(ast);xray_source_compiler_free(compiler);xray_source_program_free(program);
     xray_source_diagnostic_free(diagnostic);xray_source_result_free(result);
@@ -82,7 +82,7 @@ static void run_repl(unsigned mode) {
     XrSourceRepl *owner=NULL;XrSourceDiagnostic *diagnostic=NULL;
     XrSourceResult *result=NULL;XrSourceValue *value=NULL;
     XrSourceCompilerOptions options;XrSourceCallOptions runtime;
-    XrSourceDiagnosticInfo info={0};XrSourceEvent event={0};size_t written=0;
+    XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};XrSourceEvent event={0};size_t written=0;
     char root[]=XR_DIAGNOSTIC_FIXTURE "/entry.xr";
     const char *bad=XR_DIAGNOSTIC_FIXTURE "/坏 库.xr";
     char source[128]="var bad =\n";
@@ -97,10 +97,10 @@ static void run_repl(unsigned mode) {
         mode>=7 ? xray_source_repl_begin_type(owner,&input,&diagnostic) :
         xray_source_repl_begin(owner,&input,&diagnostic);
     CHECK(diagnostic && written==0);
-    CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
-    printf("entry=%u status=%u location=%d:%d message=%s\n",mode,(unsigned)status,info.line,info.column,info.message);
-    CHECK(status==XR_SOURCE_INVALID && info.status==status && info.line==2 && info.column==1);
-    CHECK(!strcmp(info.message,"expected expression") && (rooted?same_path(info.path,bad):info.path==NULL));
+    CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
+    printf("entry=%u status=%u location=%d:%d message=%s\n",mode,(unsigned)status,info.primary.line,info.primary.column,info.message);
+    CHECK(status==XR_SOURCE_INVALID && info.primary.line==2 && info.primary.column==1);
+    CHECK(!strcmp(info.message,"expected expression") && (rooted?same_path(info.primary.path,bad):info.primary.path==NULL));
     XrSourceDiagnostic *held=diagnostic;
     CHECK(xray_source_repl_begin(owner,&input,&held)==XR_SOURCE_BAD_ARGUMENT && held==diagnostic);
     status=mode==6 ? xray_source_repl_begin_file(owner,root,NULL) :
@@ -120,9 +120,9 @@ static void run_repl(unsigned mode) {
     XrSourceScalar scalar={0};
     CHECK(xray_source_value_scalar(value,&scalar)==XR_SOURCE_OK && scalar.kind==XR_SOURCE_VALUE_I64 &&
         scalar.value.signed_value==42);
-    CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK && info.status==XR_SOURCE_INVALID);
-    CHECK(info.line==2 && info.column==1 && !strcmp(info.message,"expected expression"));
-    CHECK(rooted?same_path(info.path,bad):info.path==NULL);
+    CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
+    CHECK(info.primary.line==2 && info.primary.column==1 && !strcmp(info.message,"expected expression"));
+    CHECK(rooted?same_path(info.primary.path,bad):info.primary.path==NULL);
 cleanup:
     xray_source_repl_drop(&owner,&event);xray_source_diagnostic_free(diagnostic);
     xray_source_result_free(result);xray_source_value_free(value);

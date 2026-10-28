@@ -14,7 +14,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#define XRAY_SOURCE_API_VERSION 3u
+#define XRAY_SOURCE_API_VERSION 4u
 
 typedef struct XrSourceArtifact XrSourceArtifact;
 typedef struct XrSourceExecution XrSourceExecution;
@@ -64,18 +64,31 @@ typedef enum XrSourceStage {
 typedef struct XrSourceFailure {
     XrSourceStatus status, cleanup_status;
     XrSourceStage stage;
-    int32_t line, column;
 } XrSourceFailure;
 typedef struct XrSourceArtifactInfo {
     XrSourceTarget target;
     uint32_t entry, functions, modules, named_entries;
 } XrSourceArtifactInfo;
-typedef struct XrSourceDiagnosticInfo {
-    XrSourceStatus status;
-    uint32_t stage;
-    int32_t line, column;
-    const char *path, *message; /* Borrows end at diagnostic_free. */
-} XrSourceDiagnosticInfo;
+/* Locations refer to the report's exact source revision. Compiler line/column
+ * are one-based bytes; UTF-16 positions are zero-based and never guessed.
+ * BYTES denotes a known half-open selection, not merely a known point. */
+enum { XR_SOURCE_LOCATION_LINE=1u, XR_SOURCE_LOCATION_BYTES=2u,
+    XR_SOURCE_LOCATION_UTF16=4u, XR_SOURCE_LOCATION_REVISION=8u };
+typedef struct XrSourceDiagnosticLocation {
+    const char *path;
+    uint64_t start_byte,end_byte;
+    int32_t line,column,end_line,end_column;
+    uint32_t utf16_line,utf16_column,utf16_end_line,utf16_end_column,flags;
+    uint8_t revision[32];
+} XrSourceDiagnosticLocation;
+typedef struct XrSourceDiagnosticReportInfo {uint32_t roots;int complete;} XrSourceDiagnosticReportInfo;
+typedef struct XrSourceDiagnosticRoot {
+    uint32_t code,severity; /* code0 is explicitly unavailable, not an inferred error code. */
+    const char *message;
+    XrSourceDiagnosticLocation primary;
+    uint32_t labels;
+} XrSourceDiagnosticRoot;
+typedef struct XrSourceDiagnosticLabel {const char *message;XrSourceDiagnosticLocation location;} XrSourceDiagnosticLabel;
 
 typedef enum XrSourceRunState {
     XR_SOURCE_RUN_READY, XR_SOURCE_RUN_SUSPENDED, XR_SOURCE_RUN_RETURNED,
@@ -136,7 +149,12 @@ XRAY_API XrSourceStatus xray_source_build(const XrSourceInput *, const XrSourceC
 XRAY_API XrSourceStatus xray_source_artifact_info(const XrSourceArtifact *, XrSourceArtifactInfo *);
 XRAY_API XrSourceStatus xray_source_artifact_c_text(const XrSourceArtifact *, const char **, size_t *);
 XRAY_API void xray_source_artifact_free(XrSourceArtifact *);
-XRAY_API XrSourceStatus xray_source_diagnostic_info(const XrSourceDiagnostic *, XrSourceDiagnosticInfo *);
+/* Immutable views borrow this report. Index failures preserve every output.
+ * Incomplete analysis still exposes its actual roots; an empty report never
+ * overrides the operation's nonallocating failure status. */
+XRAY_API XrSourceStatus xray_source_diagnostic_report(const XrSourceDiagnostic *,XrSourceDiagnosticReportInfo *);
+XRAY_API XrSourceStatus xray_source_diagnostic_root(const XrSourceDiagnostic *,uint32_t,XrSourceDiagnosticRoot *);
+XRAY_API XrSourceStatus xray_source_diagnostic_label(const XrSourceDiagnostic *,uint32_t,uint32_t,XrSourceDiagnosticLabel *);
 XRAY_API void xray_source_diagnostic_free(XrSourceDiagnostic *);
 /* The execution owner is independent of compilation. Calls and result/value
  * blocks retain their required owner and may outlive this handle. FINITE is

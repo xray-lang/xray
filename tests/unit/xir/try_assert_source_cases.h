@@ -69,7 +69,7 @@ static void try_assert_source_rejections(void) {
         XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"try-lexical-errors",text,(size_t)count}};
         XrSourceArtifact *output=NULL;XrSourceFailure failure={0};XrSourceDiagnostic *diagnostic=NULL;
         CHECK(xray_source_build(&input,&options,&output,&failure,&diagnostic)==XR_SOURCE_REJECTED && !output && diagnostic);
-        XrSourceDiagnosticInfo info={0};CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK && info.message && strstr(info.message,"E0330:"));
+        XrSourceDiagnosticRoot info={0};CHECK(xray_source_diagnostic_root(diagnostic,0,&info)==XR_SOURCE_OK && info.message && strstr(info.message,"E0330:"));
         xray_source_diagnostic_free(diagnostic);
     }
     puts("Actual Source lexical continuation ends before later calls and nested function bodies; exact E0330");

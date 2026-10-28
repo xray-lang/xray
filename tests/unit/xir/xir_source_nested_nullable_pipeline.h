@@ -12,7 +12,7 @@ static void sn_metadata_checkpoint(const XrXirCompileContext *context,const char
 static XrXirStatus sn_build(const XrXirCompileContext *context,const char *output,
     XrXirProgram **program,uint32_t functions[SN_COUNT]) {
     XrCompilerSession *session=NULL;XrXirSourceProduct *product=NULL;XrXirArtifact *closed=NULL;
-    XrXirSourceProductDiagnostic diagnostic={0};XrXirCSource source={0};
+    XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};XrXirCSource source={0};
     XrCompilerSessionStatus session_status=xr_compile_session_new(context->resources,&session);
     XrXirStatus status=session_status==XR_COMPILER_SESSION_OK?XR_XIR_OK:
         session_status==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
@@ -20,6 +20,11 @@ static XrXirStatus sn_build(const XrXirCompileContext *context,const char *outpu
     const XrXirSourceProductRequest request={{session,XR_SOURCE_NESTED_FIXTURES "/root.xr",&authority,
         context,NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     if (status==XR_XIR_OK) status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     sn_metadata_checkpoint(context,"build",status);
     if (status==XR_XIR_OK) {
         CHECK(product && xr_xir_compile_source_product_view(product)->complete);
@@ -45,7 +50,7 @@ static XrXirStatus sn_build(const XrXirCompileContext *context,const char *outpu
     if (status!=XR_XIR_OK) {
         if (status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_BUDGET)
             fprintf(stderr,"Source nested pipeline status=%u stage=%u %u:%u: %s\n",status,diagnostic.stage,
-                diagnostic.source.line,diagnostic.source.column,diagnostic.source.message);
+                diagnostic_root.primary.line,diagnostic_root.primary.column,diagnostic_root.message);
         CHECK(!*program);
     }
     xr_xir_compile_c_source_free(&source);xr_xir_compile_artifact_free(closed);

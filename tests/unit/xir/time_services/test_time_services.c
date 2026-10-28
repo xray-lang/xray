@@ -70,9 +70,8 @@ static Fixture build(const char *entry_path, const char *stdlib) {
     XrSourceCompileDiagnostic diagnostic = {0};
     XrSourceCompileStatus status = xr_source_compile_build(&request, &product, &diagnostic);
     if (status != XR_SOURCE_COMPILE_OK) {
-        char text[512];
-        xr_source_compile_diagnostic_format(&diagnostic, text, sizeof(text));
-        fprintf(stderr, "build failed: %s\n", text);
+        char *text=NULL;(void)xr_frontend_report_render(diagnostic.source.failure.report,&text);
+        fprintf(stderr,"build failed: %s\n",text?text:"diagnostic unavailable");xr_compile_resources_free(text);
     }
     CHECK(status == XR_SOURCE_COMPILE_OK);
     fixture.entry = xr_xir_compile_source_product_facts(product)->entry;

@@ -58,7 +58,7 @@ typedef enum XrXirSourceProductStage {
 typedef struct XrXirSourceProductDiagnostic {
     XrXirSourceProductStage stage;
     XrXirStatus status;
-    XrXirSourceDiagnostic source;
+    XrXirSourceDiagnosticFact source;
     XrXirDiagnostic xir;
     XrXirSourceSnapshot *snapshot;
     XrXirSourceFailure failure;

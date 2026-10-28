@@ -243,9 +243,11 @@ static XrXirStatus dispatch_source(XdapAdapter *s,const XdapRequest *r) {
     XdapLaunch *launch=NULL;XrSourceCompileDiagnostic diagnostic={0};
     status=xdap_launch_build(&input,&launch,&diagnostic);
     if (status!=XR_XIR_OK) {
-        char message[256];xr_source_compile_diagnostic_format(&diagnostic,message,sizeof(message));
+        char *message=NULL;
+        XrSourceCompileStatus shown=xr_source_compile_diagnostic_render(&diagnostic,xr_source_compiler_resources(s->compiler),&message);
         xr_source_compile_diagnostic_free(&diagnostic);
-        return xdap_dispatch_response(s,r,false,NULL,message);
+        XrXirStatus sent=xdap_dispatch_response(s,r,false,NULL,message?message:xr_source_compile_status_name(shown));
+        xr_compile_resources_free(message);return sent;
     }
     xr_source_compile_diagnostic_free(&diagnostic);
     if (xdap_current_break_on_throw(launch->control,s->break_throw)!=XR_XIR_VALUE_OK) {
@@ -268,8 +270,11 @@ static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
     XdapLaunch *candidate=NULL;XrSourceCompileDiagnostic diagnostic={0};
     XrXirStatus status=xdap_launch_build(&input,&candidate,&diagnostic);
     if (status!=XR_XIR_OK) {
-        char message[256];xr_source_compile_diagnostic_format(&diagnostic,message,sizeof(message));
-        xr_source_compile_diagnostic_free(&diagnostic);return xdap_dispatch_response(s,r,false,NULL,message);
+        char *message=NULL;
+        XrSourceCompileStatus shown=xr_source_compile_diagnostic_render(&diagnostic,xr_source_compiler_resources(s->compiler),&message);
+        xr_source_compile_diagnostic_free(&diagnostic);
+        XrXirStatus sent=xdap_dispatch_response(s,r,false,NULL,message?message:xr_source_compile_status_name(shown));
+        xr_compile_resources_free(message);return sent;
     }
     xr_source_compile_diagnostic_free(&diagnostic);
     if (candidate->native_startup && s->stop_entry) {

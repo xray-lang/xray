@@ -58,9 +58,10 @@ static XrXirSourceSnapshot *handler_publication(HandlerFixture *fixture,const Xr
 static void handler_case(const HandlerCase *expected) {
     HandlerFixture fixture={0};handler_open(&fixture);
     XrXirStatus status=handler_build(&fixture,expected->text);
+    char *source_report=NULL;if(status!=XR_XIR_OK)(void)xr_frontend_report_render(fixture.diagnostic.source.failure.report,&source_report);
     if (status!=XR_XIR_OK) fprintf(stderr,"handler source=%u stage=%u: %s\n%s\n",status,
-        fixture.diagnostic.source.stage,fixture.diagnostic.source.source.message,expected->text);
-    CHECK(status==XR_XIR_OK && fixture.launch);
+        fixture.diagnostic.source.stage,source_report?source_report:"diagnostic unavailable",expected->text);
+    xr_compile_resources_free(source_report);CHECK(status==XR_XIR_OK && fixture.launch);
     const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(fixture.launch->source);CHECK(debug);
     XrXirVmDebugLocation sites[32];uint32_t count=0;
     for (uint32_t f=0;f<debug->function_count;++f) {

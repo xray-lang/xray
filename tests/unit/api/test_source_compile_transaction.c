@@ -127,11 +127,11 @@ TEST(production_compile_entry_commits_or_aborts_one_operation) {
     transaction_idle(session);
     xray_source_ast_free(transaction.ast);transaction.ast=NULL;
     xray_source_compiler_free(transaction.compiler);transaction.compiler=NULL;
-    XrSourceDiagnosticInfo detail={0};
-    ASSERT_EQ_INT(xray_source_diagnostic_info(transaction.diagnostic,&detail),XR_SOURCE_OK);
-    ASSERT_EQ_INT(detail.status,rejected);ASSERT_TRUE(detail.message && *detail.message);
+    XrSourceDiagnosticRoot detail={0};XrSourceDiagnosticReportInfo report_detail={0};
+    ASSERT_EQ_INT((xray_source_diagnostic_report(transaction.diagnostic,&report_detail)==XR_SOURCE_OK && report_detail.roots==1 ? xray_source_diagnostic_root(transaction.diagnostic,0,&detail) : XR_SOURCE_BAD_STATE),XR_SOURCE_OK);
+    ASSERT_TRUE(rejected!=XR_SOURCE_OK);ASSERT_TRUE(detail.message && *detail.message);
     printf("\n    owned syntax diagnostic status=%d line=%d column=%d message=%s\n    ",
-        detail.status,detail.line,detail.column,detail.message);
+        rejected,detail.primary.line,detail.primary.column,detail.message);
     transaction_execute(0);transaction_execute(1);transaction_execute(2);
     ASSERT_EQ_INT(transaction.length,9);
     ASSERT_TRUE(!memcmp(transaction.output,"42\n42\n42\n",9));

@@ -8,7 +8,7 @@
  */
 static void file_execute(XrSourceRepl *owner,const char *path) {
     XrSourceDiagnostic *diagnostic=NULL;XrSourceStatus status=xray_source_repl_begin_file(owner,path,&diagnostic);
-    if(diagnostic){XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
+    if(diagnostic){XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
         fprintf(stderr,"FILE begin status=%u: %s\n",(unsigned)status,info.message);}
     CHECK(status==XR_SOURCE_OK && !diagnostic);
     CHECK(pause_or_finish(owner).state==XR_SOURCE_RUN_RETURNED);xray_source_result_free(take(owner,XR_SOURCE_RUN_RETURNED));
@@ -27,8 +27,8 @@ static void file_inputs(void) {
     XrSourceDiagnostic *missing=NULL,*syntax=NULL,*bad=NULL;
     CHECK(xray_source_repl_begin_file(owner,XR_PUBLIC_REPL_FILE_FIXTURE "/absent.xr",&missing)==XR_SOURCE_NOT_FOUND && missing);
     CHECK(xray_source_repl_begin_file(owner,XR_PUBLIC_REPL_FILE_FIXTURE "/syntax.xr",&syntax)==XR_SOURCE_INVALID && syntax);
-    XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(syntax,&info)==XR_SOURCE_OK &&
-        info.line==1 && info.path && strstr(info.path,"syntax.xr") && *info.message);
+    XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(syntax,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(syntax,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK &&
+        info.primary.line==1 && info.primary.path && strstr(info.primary.path,"syntax.xr") && *info.message);
     CHECK(xray_source_repl_begin_file(owner,XR_PUBLIC_REPL_FILE_FIXTURE "/invalid-project/entry.xr",&bad)==XR_SOURCE_INVALID && bad);
     xray_source_diagnostic_free(bad);bad=NULL;
     CHECK(xray_source_repl_begin_file(owner,XR_PUBLIC_REPL_FILE_FIXTURE,&bad)!=XR_SOURCE_OK && bad);
@@ -40,7 +40,7 @@ static void file_inputs(void) {
     int64_t scalar=0;CHECK(xray_source_result_i64(survivor,&scalar)==XR_SOURCE_OK && scalar==11);
     const char *bytes=NULL;size_t length=0;static const char expected_bytes[]="owned\0中";
     CHECK(xray_source_value_bytes(bytes_value,&bytes,&length)==XR_SOURCE_OK && length==sizeof(expected_bytes)-1 && !memcmp(bytes,expected_bytes,length));
-    CHECK(xray_source_diagnostic_info(syntax,&info)==XR_SOURCE_OK && info.line==1 && *info.message);
+    CHECK((xray_source_diagnostic_report(syntax,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(syntax,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK && info.primary.line==1 && *info.message);
     xray_source_diagnostic_free(syntax);xray_source_diagnostic_free(missing);xray_source_value_free(bytes_value);xray_source_result_free(survivor);
     static const char expected[]="11\n11\n42\n";
     CHECK(trace.count==sizeof(expected)-1 && !memcmp(trace.bytes,expected,sizeof(expected)-1));

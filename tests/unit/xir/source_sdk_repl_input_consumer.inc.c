@@ -26,7 +26,7 @@ static void sdk_repl_rooted(XrSourceRepl *owner,const char *path,const char *sou
     XrSourceText input={path,NULL,source,strlen(source)};
     XrSourceDiagnostic *diagnostic=NULL;
     XrSourceStatus status=xray_source_repl_begin(owner,&input,&diagnostic);
-    if(diagnostic){XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
+    if(diagnostic){XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
         fprintf(stderr,"installed rooted status=%u: %s\n",(unsigned)status,info.message);}
     CHECK(status==XR_SOURCE_OK && !diagnostic);sdk_repl_finish(owner);
 }
@@ -99,7 +99,7 @@ static void sdk_repl_file_cases(const char *stdlib_path,const char *fixtures) {
     int64_t result=0;CHECK(xray_source_result_i64(survivor,&result)==XR_SOURCE_OK && result==11);
     const char *bytes=NULL;size_t length=0;static const char expected_bytes[]="owned\0中";
     CHECK(xray_source_value_bytes(bytes_value,&bytes,&length)==XR_SOURCE_OK && length==sizeof(expected_bytes)-1 && !memcmp(bytes,expected_bytes,length));
-    XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(syntax,&info)==XR_SOURCE_OK && info.line==1 && info.path && strstr(info.path,"syntax.xr") && *info.message);
+    XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(syntax,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(syntax,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK && info.primary.line==1 && info.primary.path && strstr(info.primary.path,"syntax.xr") && *info.message);
     xray_source_diagnostic_free(syntax);xray_source_diagnostic_free(missing);xray_source_value_free(bytes_value);xray_source_result_free(survivor);
     CHECK(trace.count==9 && !memcmp(trace.bytes,"11\n11\n42\n",9));
     puts("Installed FILE REPL: real imports, repeated births, absent/directory/config refusals and owned survivors PASS");

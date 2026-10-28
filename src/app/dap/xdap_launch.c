@@ -246,7 +246,11 @@ XR_FUNC XrXirStatus xdap_launch_build(const XdapLaunchRequest *request,XdapLaunc
         xr_source_compiler_build_text(request->compiler,request->text,&launch->source,diagnostic) :
         xr_source_compiler_build_file(request->compiler,request->absolute_file,&launch->source,diagnostic));
     if (status!=XR_XIR_OK) goto done;
-    status=xr_xir_compile_source_product_public_admit(launch->source,&diagnostic->source.source);
+    XrXirSourceDiagnostic immediate={0};
+    status=xr_xir_compile_source_product_public_admit(launch->source,&immediate);
+    diagnostic->source.source=(XrXirSourceDiagnosticFact){immediate.status,immediate.module};
+    if(status!=XR_XIR_OK)(void)xr_xir_compile_source_failure_record(
+        xr_source_compiler_resources(request->compiler),&diagnostic->source.failure,&immediate,NULL,NULL,0);
     if (status!=XR_XIR_OK) goto done;
     const XrXirSourceProductFacts *facts=xr_xir_compile_source_product_facts(launch->source);
     XrXirSourceProductPacketView packet={0};

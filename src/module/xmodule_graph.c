@@ -27,6 +27,7 @@ static XrModuleStatus graph_failure(XrModuleGraph *graph, XrModuleStatus status)
 static void spec_cleanup(XrModuleSpec *spec) {
     xr_compile_resources_free(spec->canonical); xr_compile_resources_free(spec->logical_path);
     xr_compile_resources_free(spec->source_path); xr_compile_resources_free((char *)spec->authority.namespace_id);
+    xr_compile_resources_free(spec->source_text);
     xr_compile_resources_free((char *)spec->authority.physical_root); xr_compile_resources_free(spec->dep_indices);
     if (spec->ast && !spec->ast_borrowed) xr_program_destroy(spec->ast);
     xr_hashmap_owned_free(spec->export_symbols); *spec = (XrModuleSpec){0};
@@ -310,6 +311,13 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
             continue;
         }
         if (index == entry && root->ast) {
+            if(root->source) {
+                char *owned=module_dup(work,root->source);
+                if(work->status!=XR_MODULE_OK)break;
+                xr_compile_resources_free(spec->source_text);spec->source_text=owned;
+                spec->source_length=module_length(work,root->source);
+                xr_module_source_fingerprint(root->source,&spec->source_content_fingerprint);
+            }
             spec->ast = root->ast; spec->ast_borrowed = true;
             spec->status = XR_MODSPEC_PARSED;
             graph_imports(work,graph,index,root->ast);
@@ -359,9 +367,20 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
             module_status(work,parse_status(xr_compile_parse_with_diagnostics(
                 graph->compiler_session,text,spec->source_path,&diagnostics,&ast)));
         }
-        if (work->status == XR_MODULE_OK)
+        if (work->status == XR_MODULE_OK) {
             xr_module_source_fingerprint(text,&spec->source_content_fingerprint);
-        xr_compile_resources_free(bytes.data);
+            size_t length=bytes.data?bytes.size:module_length(work,text);
+            char *owned=bytes.data?bytes.data:module_dup(work,text);
+            if(work->status==XR_MODULE_OK) {
+                xr_compile_resources_free(spec->source_text);
+                spec->source_text=owned;spec->source_length=length;
+                if(owned==bytes.data)bytes.data=NULL;
+            }
+        }
+        if(bytes.data) {
+            xr_compile_resources_free(spec->source_text);
+            spec->source_text=bytes.data;spec->source_length=bytes.size;bytes.data=NULL;
+        }
         if (work->status != XR_MODULE_OK) { if (ast) xr_program_destroy(ast); break; }
         spec->ast = ast; spec->status = XR_MODSPEC_PARSED;
         graph_imports(work,graph,index,ast);

@@ -92,8 +92,9 @@ static XrXirSourceSnapshot *throw_site_publication(HandlerFixture *fixture,const
 static void throw_site_case(const ThrowSiteCase *expected) {
     HandlerFixture fixture={0};handler_open(&fixture);
     XrXirStatus status=handler_build(&fixture,expected->text);
-    if (status!=XR_XIR_OK) fprintf(stderr,"throw source=%u %s\n%s\n",status,fixture.diagnostic.source.source.message,expected->text);
-    CHECK(status==XR_XIR_OK && fixture.launch);
+    char *source_report=NULL;if(status!=XR_XIR_OK)(void)xr_frontend_report_render(fixture.diagnostic.source.failure.report,&source_report);
+    if (status!=XR_XIR_OK) fprintf(stderr,"throw source=%u %s\n%s\n",status,source_report?source_report:"diagnostic unavailable",expected->text);
+    xr_compile_resources_free(source_report);CHECK(status==XR_XIR_OK && fixture.launch);
     const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(fixture.launch->source);CHECK(debug);
     XrXirVmDebugLocation locations[16];uint32_t lines[16],count=0;
     XrXirSourceSnapshot *publication=NULL;

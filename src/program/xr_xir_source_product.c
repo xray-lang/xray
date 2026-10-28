@@ -168,16 +168,17 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
     const XrXirCompileContext *context = request->source.context;
     if (diagnostic) memset(diagnostic,0,sizeof(*diagnostic));
     XrXirSourceResult source={0};XrXirArtifact *closed=NULL,*lowered=NULL;
-    XrXirSourceFailure failure={0};
+    XrXirSourceFailure failure={0};XrXirSourceDiagnostic immediate={0};
     XrXirCheckedPacket source_packet={0},closed_packet={0};
     XrXirStatus status = input.kind == SOURCE_PRODUCT_AST ?
         xr_xir_compile_source_check_ast(&request->source, input.ast, &source,
-            diagnostic ? &diagnostic->source : NULL, diagnostic ? &failure : NULL) :
+            &immediate, diagnostic ? &failure : NULL) :
         input.kind == SOURCE_PRODUCT_TEXT ?
         xr_xir_compile_source_check_text(&request->source, input.text, &source,
-            diagnostic ? &diagnostic->source : NULL, diagnostic ? &failure : NULL) :
+            &immediate, diagnostic ? &failure : NULL) :
         xr_xir_compile_source_check(&request->source, &source,
-            diagnostic ? &diagnostic->source : NULL, diagnostic ? &failure : NULL);
+            &immediate, diagnostic ? &failure : NULL);
+    if(diagnostic)diagnostic->source=(XrXirSourceDiagnosticFact){immediate.status,immediate.module};
     if(diagnostic){diagnostic->failure=failure;failure=(XrXirSourceFailure){0};}
     xr_xir_compile_source_failure_free(&failure);
     XrXirSourceProductStage stage=XR_XIR_SOURCE_PRODUCT_CHECK;

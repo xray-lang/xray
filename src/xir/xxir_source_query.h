@@ -13,6 +13,7 @@
 #define XXIR_SOURCE_QUERY_H
 #include "xxir.h"
 #include "../base/xstable_id.h"
+#include "../hir/xhir_diagnostics.h"
 typedef enum XrXirSourceDiagnosticOrigin {
     XR_XIR_SOURCE_DIAGNOSTIC_DEFAULT, XR_XIR_SOURCE_DIAGNOSTIC_PARSE,
     XR_XIR_SOURCE_DIAGNOSTIC_INPUT
@@ -23,6 +24,8 @@ typedef struct XrXirSourceDiagnostic {
     int line, column;
     char message[192];
 } XrXirSourceDiagnostic;
+/* Immediate producer scratch is not a published diagnostic owner. */
+typedef struct XrXirSourceDiagnosticFact {XrXirStatus status;uint32_t module;} XrXirSourceDiagnosticFact;
 /* Separate failure ownership leaves the diagnostic and semantic owner layouts
  * unchanged. Coordinates project actual parser text before teardown. */
 typedef struct XrXirSourceFailure {
@@ -30,9 +33,13 @@ typedef struct XrXirSourceFailure {
     XrXirSourceDiagnosticOrigin origin;
     bool has_utf16_position;
     uint32_t utf16_line,utf16_column;
+    XrFrontendReport *report; /* Sole owned diagnostic roots; transfer, never copy messages. */
 } XrXirSourceFailure;
 XR_FUNC bool xr_xir_compile_source_failure_empty(const XrXirSourceFailure *);
 XR_FUNC void xr_xir_compile_source_failure_free(XrXirSourceFailure *);
+/* Submit one immediate producer cause when no earlier report was produced. */
+XR_FUNC XrCompileResourceStatus xr_xir_compile_source_failure_record(XrCompileResources *,
+    XrXirSourceFailure *,const XrXirSourceDiagnostic *,const char *,const char *,size_t);
 typedef struct XrXirSourceRange {
     uint32_t module;
     int line, column, end_line, end_column;
@@ -158,7 +165,7 @@ typedef struct XrXirSourceQueryModule {
 } XrXirSourceQueryModule;
 typedef struct XrXirSourceView {
     bool complete;
-    XrXirSourceDiagnostic diagnostic;
+    XrXirSourceDiagnosticFact diagnostic;
     const XrXirSourceQueryModule *modules;
     uint32_t module_count;
     const XrXirSourceDeclaration *declarations;

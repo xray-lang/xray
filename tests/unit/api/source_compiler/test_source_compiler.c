@@ -177,12 +177,17 @@ static void owned_compiler(void) {
     CHECK(xr_xir_compile_source_product_facts(rooted)->module_count==2);
     const char invalid[] = "var value = missing_symbol\n";
     text.text=invalid; text.length=sizeof(invalid)-1;
-    XrXirSourceProduct *rejected=NULL; XrSourceCompileDiagnostic diagnostic={0};
+    XrXirSourceProduct *rejected=NULL; XrSourceCompileDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     CHECK(xr_source_compiler_build_text(compiler,&text,&rejected,&diagnostic)==XR_SOURCE_COMPILE_REJECTED);
-    CHECK(!rejected && diagnostic.source.source.line==1 && diagnostic.source.source.column==13);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
+    CHECK(!rejected && diagnostic_root.primary.line==1 && diagnostic_root.primary.column==13);
     CHECK(diagnostic.source.failure.path && strstr(diagnostic.source.failure.path,"unsaved-compiler.xr"));
     memset(source,'!',sizeof(source)); xr_source_compiler_free(compiler);
-    CHECK(strstr(diagnostic.source.source.message,"initialized value"));
+    CHECK(strstr(diagnostic_root.message,"initialized value"));
     CHECK(strstr(diagnostic.source.failure.path,"unsaved-compiler.xr"));
     CHECK(xr_xir_compile_source_product_verify(first,1048576,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_source_product_verify(second,1048576,NULL)==XR_XIR_OK);

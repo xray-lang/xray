@@ -56,12 +56,22 @@ static void execute(XrXirSourceProduct *product,const char *expected) {
 static void input_rejections(const XrSourceCompileRequest *original) {
     XrCompileResourceStats before=sdk_stats(original->context->resources);
     XrXirSourceProduct *sentinel=(XrXirSourceProduct *)(uintptr_t)1;
-    XrSourceCompileDiagnostic diagnostic={0};
+    XrSourceCompileDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     CHECK(xr_source_compile_build(original,&sentinel,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
     CHECK(sentinel==(XrXirSourceProduct *)(uintptr_t)1);
     XrSourceCompileRequest wrong=*original;wrong.target.abi_version=17;
     XrXirSourceProduct *output=NULL;
     CHECK(xr_source_compile_build(&wrong,&output,&diagnostic)==XR_SOURCE_COMPILE_UNSUPPORTED && !output);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
     CHECK(runtime_attempts==0);
     XrCompileResourceStats after=sdk_stats(original->context->resources);
     CHECK(after.work==before.work && after.allocation_count==before.allocation_count);
@@ -69,10 +79,20 @@ static void input_rejections(const XrSourceCompileRequest *original) {
     for (size_t i=0;i<sizeof(relative)/sizeof(*relative);++i) {
         wrong=*original;wrong.absolute_entry_path=relative[i];
         CHECK(xr_source_compile_build(&wrong,&output,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT && !output);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
         CHECK(runtime_attempts==0);
     }
     wrong=*original;wrong.absolute_stdlib_path="stdlib";
     CHECK(xr_source_compile_build(&wrong,&output,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT && !output);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
     CHECK(runtime_attempts==0);xr_source_compile_diagnostic_free(&diagnostic);
 }
 static XrXirLibraryCatalog *catalog(const XrSourceCompileRequest *request) {
@@ -128,9 +148,14 @@ static void catalog_rejections(const XrSourceCompileRequest *request) {
     XrCompileResources *foreign=sdk_ledger(&sdk_unlimited);
     XrXirCompileContext context={foreign,request->context->limits};
     XrSourceCompileRequest wrong=*request;wrong.context=&context;
-    XrXirSourceProduct *output=NULL;XrSourceCompileDiagnostic diagnostic={0};
+    XrXirSourceProduct *output=NULL;XrSourceCompileDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     size_t attempts=runtime_attempts;XrCompileResourceStats before=sdk_stats(foreign);
     CHECK(xr_source_compile_build(&wrong,&output,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT && !output);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
     CHECK(runtime_attempts==attempts && sdk_stats(foreign).work==before.work);
     for (unsigned axis=0;axis<5;++axis) {
         context=*request->context;
@@ -141,6 +166,11 @@ static void catalog_rejections(const XrSourceCompileRequest *request) {
         if(axis==4)--context.limits.frame_bytes;
         XrCompileResourceStats own_before=sdk_stats(context.resources);
         CHECK(xr_source_compile_build(&wrong,&output,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT && !output);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
         CHECK(runtime_attempts==attempts && sdk_stats(context.resources).work==own_before.work);
     }
     xr_compile_resources_release(foreign);
@@ -149,8 +179,13 @@ static void fault_scan(const char *entry,const char *stdlib) {
     XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     XrSourceCompileRequest request={&context,entry,stdlib,NULL,{1048576,64},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL};
-    XrXirSourceProduct *product=NULL;XrSourceCompileDiagnostic diagnostic={0};
+    XrXirSourceProduct *product=NULL;XrSourceCompileDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     runtime_attempts=0;CHECK(xr_source_compile_build(&request,&product,&diagnostic)==XR_SOURCE_COMPILE_OK);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
     size_t sites=runtime_attempts;XrCompileResourceStats total=sdk_stats(resources);
     xr_xir_compile_source_product_free(product);xr_source_compile_diagnostic_free(&diagnostic);xr_compile_resources_release(resources);
     CHECK(!runtime_live && !runtime_bytes);DWORD baseline=handles();
@@ -159,6 +194,11 @@ static void fault_scan(const char *entry,const char *stdlib) {
         XrCompileResourceLimits limits=sdk_unlimited;limits.work=cap;
         resources=sdk_ledger(&limits);context.resources=resources;product=NULL;runtime_attempts=0;
         CHECK(xr_source_compile_build(&request,&product,&diagnostic)==XR_SOURCE_COMPILE_BUDGET);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
         CHECK(!product && !runtime_attempts && sdk_stats(resources).work==cap);
         CHECK(diagnostic.stage==XR_SOURCE_COMPILE_PATH);
         xr_source_compile_diagnostic_free(&diagnostic);xr_compile_resources_release(resources);
@@ -169,6 +209,11 @@ static void fault_scan(const char *entry,const char *stdlib) {
         resources=sdk_ledger(&sdk_unlimited);context.resources=resources;product=NULL;
         runtime_attempts=0;runtime_fail_at=i;
         XrSourceCompileStatus status=xr_source_compile_build(&request,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
         runtime_fail_at=SIZE_MAX;
         CHECK(status==XR_SOURCE_COMPILE_OUT_OF_MEMORY && !product && runtime_attempts>i);
         CHECK(diagnostic.status==status);xr_compile_resources_release(resources);
@@ -178,6 +223,11 @@ static void fault_scan(const char *entry,const char *stdlib) {
             CHECK(view && view->complete && view->module_count && view->modules[0].path[0]);
             XrSourceCompileDiagnostic saved=diagnostic;
             CHECK(xr_source_compile_build(NULL,&product,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
             CHECK(!memcmp(&saved,&diagnostic,sizeof(saved)));
         }
         xr_source_compile_diagnostic_free(&diagnostic);
@@ -190,6 +240,11 @@ static void fault_scan(const char *entry,const char *stdlib) {
         if (axis==2) limits.work=total.work-minus;
         resources=sdk_ledger(&limits);context.resources=resources;product=NULL;
         XrSourceCompileStatus status=xr_source_compile_build(&request,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
         CHECK(status==(minus?XR_SOURCE_COMPILE_BUDGET:XR_SOURCE_COMPILE_OK));
         CHECK(minus?!product:product!=NULL);
         xr_xir_compile_source_product_free(product);xr_source_compile_diagnostic_free(&diagnostic);xr_compile_resources_release(resources);
@@ -275,11 +330,16 @@ static int source_owner_main(int argc,char **argv) {
     XrXirLibraryCatalog *libraries=library?catalog(&request):NULL;
     request.libraries=libraries;if(library)catalog_rejections(&request);
     if(!strcmp(argv[3],"limit"))request.manifest_limits.input_bytes=1;
-    XrXirSourceProduct *product=NULL;XrSourceCompileDiagnostic diagnostic={0};
+    XrXirSourceProduct *product=NULL;XrSourceCompileDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrSourceCompileStatus status=xr_source_compile_build(&request,&product,&diagnostic);
-    printf("CLI %s status=%s stage=%u source=%u authority=%u message=%s %s\n",argv[3],
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
+    printf("CLI %s status=%s stage=%u source=%u authority=%u message=%s\n",argv[3],
         xr_source_compile_status_name(status),(unsigned)diagnostic.stage,(unsigned)diagnostic.source.status,
-        (unsigned)diagnostic.authority_status,diagnostic.source.source.message,diagnostic.authority.message);
+        (unsigned)diagnostic.authority_status,diagnostic_root.message);
     XrSourceCompileStatus expected=XR_SOURCE_COMPILE_OK;
     bool semantic=!strcmp(argv[3],"reject") || !strcmp(argv[3],"failure-path");
     if(semantic)expected=XR_SOURCE_COMPILE_REJECTED;
@@ -294,7 +354,7 @@ static int source_owner_main(int argc,char **argv) {
     if(state_rejected) {
         CHECK(!product && diagnostic.source.status==XR_XIR_BAD_STRUCTURE);
         CHECK(diagnostic.source.stage==XR_XIR_SOURCE_PRODUCT_FACTS);
-        CHECK(!strcmp(diagnostic.source.source.message,"library mutable or exported state is not admitted"));
+        CHECK(!strcmp(diagnostic_root.message,"library mutable or exported state is not admitted"));
     }
     xr_xir_compile_library_catalog_free(libraries);xr_compile_resources_release(resources);
     memset(&context,0xcc,sizeof(context));memset(&request,0xcc,sizeof(request));
@@ -303,11 +363,16 @@ static int source_owner_main(int argc,char **argv) {
     if(semantic) {
         CHECK(!diagnostic.source.snapshot);
         CHECK(diagnostic.source.failure.path && !strcmp(diagnostic.source.failure.path,argc==5?argv[4]:argv[1]));
-        CHECK(diagnostic.source.source.line==1 && diagnostic.source.source.column==13);
-        CHECK(!strcmp(diagnostic.source.source.message,"name is not an initialized value"));
+        CHECK(diagnostic_root.primary.line==1 && diagnostic_root.primary.column==13);
+        CHECK(!strcmp(diagnostic_root.message,"name is not an initialized value"));
         if(argc==5) CHECK(diagnostic.source.source.module!=0);
         XrSourceCompileDiagnostic saved=diagnostic;
         CHECK(xr_source_compile_build(NULL,&product,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
         CHECK(!memcmp(&saved,&diagnostic,sizeof(saved)));
         CHECK(xr_xir_compile_source_product_build(NULL,&product,&diagnostic.source)==XR_XIR_BAD_STRUCTURE);
         CHECK(!memcmp(&saved,&diagnostic,sizeof(saved)));
@@ -315,10 +380,10 @@ static int source_owner_main(int argc,char **argv) {
     if(!strcmp(argv[3],"parse-reject")) {
         CHECK(diagnostic.source.failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE);
         CHECK(diagnostic.source.failure.path&&!strcmp(diagnostic.source.failure.path,argv[1]));
-        CHECK(!diagnostic.source.snapshot&&diagnostic.source.source.line>0&&diagnostic.source.source.column>0);
+        CHECK(!diagnostic.source.snapshot&&diagnostic_root.primary.line>0&&diagnostic_root.primary.column>0);
     }
     if(!strcmp(argv[3],"graph-reject"))
-        CHECK(!diagnostic.source.failure.path && !diagnostic.source.snapshot && !diagnostic.source.source.line);
+        CHECK(!diagnostic.source.failure.path && !diagnostic.source.snapshot && !diagnostic_root.primary.line);
     xr_source_compile_diagnostic_free(&diagnostic);xr_source_compile_diagnostic_free(&diagnostic);
     CHECK(!runtime_live && !runtime_bytes && handles()==baseline);
     if(!strcmp(argv[3],"scan"))fault_scan(argv[1],argv[2]);

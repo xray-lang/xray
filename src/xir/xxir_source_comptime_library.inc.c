@@ -73,5 +73,5 @@ static bool source_comptime_evaluate_library(SourceContext *ctx,const XrXirArtif
     ctx->remaining_blocks=program.remaining_blocks;ctx->remaining_instructions=program.remaining_instructions;
     if (ok) ok=source_comptime_library_results(ctx,&program);
     else { ctx->diagnostic=program.diagnostic;ctx->module=program.module; }
-    xr_xir_compile_artifact_free(complete);xr_xir_compile_source_result_free(&output);source_comptime_context_free(&program);return ok;
+    xr_xir_compile_artifact_free(complete);xr_xir_compile_source_result_free(&output);source_comptime_context_free(&program,ctx);return ok;
 }

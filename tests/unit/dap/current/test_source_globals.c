@@ -94,11 +94,16 @@ int main(void) {
     XrCompileResourceStats initial={0};CHECK(xr_compile_resources_stats(resources,&initial)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     XrSourceCompilerConfig config={context,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
-    XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
+    XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     CHECK(xr_source_compiler_new(&config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
     XrXirSourceProduct *product=NULL;
     XrSourceCompileStatus status=xr_source_compiler_build_file(compiler,XR_DAP_GLOBAL_SLOTS_FIXTURE,&product,&diagnostic);
-    if (status!=XR_SOURCE_COMPILE_OK) fprintf(stderr,"global source=%u stage=%u: %s\n",status,diagnostic.source.stage,diagnostic.source.source.message);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
+    if (status!=XR_SOURCE_COMPILE_OK) fprintf(stderr,"global source=%u stage=%u: %s\n",status,diagnostic.source.stage,diagnostic_root.message);
     CHECK(status==XR_SOURCE_COMPILE_OK && product);xr_source_compile_diagnostic_free(&diagnostic);xr_source_compiler_free(compiler);
     const XrXirSourceView *view=xr_xir_compile_source_product_view(product);
     const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(product);CHECK(view && debug);

@@ -11,8 +11,12 @@ static EvaluateFixture evaluate_intrinsic_open(const char *text) {
     CHECK(xdap_launch_free(adapter->launch)==XR_XIR_CALL_READY);adapter->launch=NULL;
     XrSourceCompilerText input={NULL,"dap-intrinsic-scope",text,strlen(text)};
     XdapLaunchRequest launch_request={.compiler=adapter->compiler,.text=&input,.observer_metadata=fixture.domain,.instance=adapter->config.instance};
-    XrSourceCompileDiagnostic diagnostic={0};XrXirStatus status=xdap_launch_build(&launch_request,&adapter->launch,&diagnostic);
-    if (status!=XR_XIR_OK) fprintf(stderr,"intrinsic Source=%u stage=%u: %s\n",status,diagnostic.source.stage,diagnostic.source.source.message);
+    XrSourceCompileDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};XrXirStatus status=xdap_launch_build(&launch_request,&adapter->launch,&diagnostic);
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
+    if (status!=XR_XIR_OK) fprintf(stderr,"intrinsic Source=%u stage=%u: %s\n",status,diagnostic.source.stage,diagnostic_root.message);
     CHECK(status==XR_XIR_OK && adapter->launch);xr_source_compile_diagnostic_free(&diagnostic);
     request(adapter,"{\"seq\":3,\"type\":\"request\",\"command\":\"setFunctionBreakpoints\",\"arguments\":{\"breakpoints\":[{\"name\":\"probe\"}]}}");
     XrJsonValue *reply=last_response("setFunctionBreakpoints",true);xjson_free(reply);

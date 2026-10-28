@@ -98,7 +98,10 @@ typedef struct {
 
     // Compilation/execution error
     bool has_error;
-    char error_msg[TEST_MESSAGE_MAX];
+    char error_msg[TEST_MESSAGE_MAX]; /* Non-Source execution/input failure scratch. */
+    XrFrontendReport *source_report;
+    XrSourceCompileStatus source_status;
+    XrSourceCompileStage source_stage;
 } XrTestFileResult;
 
 static void file_result_add_failure(XrTestFileResult *r, const char *test_name, const char *message,
@@ -140,6 +143,7 @@ static void file_result_free(XrTestFileResult *r) {
         xr_free(r->cases[i].message);
     }
     xr_free(r->cases);
+    xr_frontend_report_free(r->source_report);r->source_report=NULL;
 }
 
 /* ========== Display Helpers ========== */
@@ -458,8 +462,10 @@ static void run_test_file(const char *filepath, const XrTestConfig *config,
         xr_source_compile_default_manifest_limits(), xr_xir_host_target(), NULL};
     status = xr_source_compile_build(&request, &product, &diagnostic);
     if (status != XR_SOURCE_COMPILE_OK) {
-        xr_source_compile_diagnostic_format(&diagnostic, error, sizeof(error));
-        fail_file(result, error);
+        result->source_status=status;result->source_stage=diagnostic.stage;
+        result->source_report=diagnostic.source.failure.report;diagnostic.source.failure.report=NULL;
+        if(result->source_report){result->has_error=true;++result->errors;}
+        else fail_file(result,xr_source_compile_status_name(status));
         goto release;
     }
     const XrXirSourceTests *tests = xr_xir_compile_source_product_tests(product);
@@ -657,9 +663,12 @@ static void print_file_result(XrTestFileResult *r, int align_width, bool verbose
     get_display_name(r->filepath, name, sizeof(name));
 
     if (r->has_error) {
-        printf("   %sx%s %s: %s\n", xr_cli_clr(XR_CLR_RED), xr_cli_clr(XR_CLR_RESET), name,
-               r->error_msg);
-        return;
+        char *text=NULL;XrCompileResourceStatus rendered=XR_COMPILE_RESOURCE_OK;
+        if(r->source_report)rendered=xr_frontend_report_render(r->source_report,&text);
+        printf("   %sx%s %s: %s\n",xr_cli_clr(XR_CLR_RED),xr_cli_clr(XR_CLR_RESET),name,
+            text?text:rendered!=XR_COMPILE_RESOURCE_OK?"diagnostic rendering failed":r->error_msg);
+        if(rendered!=XR_COMPILE_RESOURCE_OK)fprintf(stderr,"Source diagnostic resource status=%u\n",(unsigned)rendered);
+        xr_compile_resources_free(text);return;
     }
 
     int problems = r->failed + r->errors + r->timeout;
@@ -903,7 +912,15 @@ static bool write_report(const char *path, XrTestFileResult *results, int count,
                 r->test_count, r->passed, r->failed, r->errors, r->timeout, r->skipped);
         if (r->has_error) {
             fputs(",\"error\":", out);
-            json_string(out, r->error_msg);
+            char *text=NULL;
+            if(r->source_report && xr_frontend_report_render(r->source_report,&text)!=XR_COMPILE_RESOURCE_OK) {
+                (void)fclose(out);return false;
+            }
+            json_string(out,text?text:r->error_msg);xr_compile_resources_free(text);
+            if(r->source_status!=XR_SOURCE_COMPILE_OK) {
+                fputs(",\"sourceStatus\":",out);json_string(out,xr_source_compile_status_name(r->source_status));
+                fprintf(out,",\"sourceStage\":%u",(unsigned)r->source_stage);
+            }
         }
         fputs(",\"cases\":[", out);
         for (int j = 0; j < r->case_count; j++) {

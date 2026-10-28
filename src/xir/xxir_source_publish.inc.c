@@ -40,7 +40,7 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
     source_release_retired_arrays(ctx);
     ctx->query.complete = ctx->diagnostic.status == XR_XIR_OK;
     ctx->query.implementations = ctx->implementations_ready && ctx->implementations.count ? &ctx->implementations : NULL;
-    ctx->query.diagnostic = ctx->diagnostic;
+    ctx->query.diagnostic = (XrXirSourceDiagnosticFact){ctx->diagnostic.status,ctx->diagnostic.module};
     ctx->query.types = ctx->types.count || ctx->types.nominals || ctx->types.interfaces ? &ctx->types : NULL;
     if(!source_native_query_types(ctx) || !source_hash_query_types(ctx)){xr_xir_compile_source_result_free(output);return;}
     if(!source_display_names_publish(ctx) || !source_query_module_identities(ctx,output->checked)){

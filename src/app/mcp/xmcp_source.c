@@ -48,8 +48,9 @@ XR_FUNC XrXirStatus xmcp_source_check(const XmcpSourceRequest *request, XmcpSour
     if (status == XR_XIR_OK) {
         XrXirSourceRequest input = {session, NULL, &authority, request->context, NULL, NULL, XR_XIR_PROGRAM, NULL};
         XrXirSourceText text = {NULL, request->text, request->length};
-        status = xr_xir_compile_source_check_text(&input, &text, &output->result,
-            &output->diagnostic, &output->failure);
+        XrXirSourceDiagnostic immediate={0};
+        status = xr_xir_compile_source_check_text(&input, &text, &output->result,&immediate,&output->failure);
+        output->diagnostic=(XrXirSourceDiagnosticFact){immediate.status,immediate.module};
     } else output->diagnostic.status = status;
     xr_compile_session_free(session);
     if (status == XR_XIR_OK && request->control) {

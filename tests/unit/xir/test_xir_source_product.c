@@ -57,7 +57,7 @@ static void product_guards(const XrXirSourceProductRequest *request) {
 static void product_build_oom(const XrXirSourceProductRequest *request) {
     size_t live=runtime_live,bytes=runtime_bytes,sites=0;
     for (size_t point=0;point<=sites;++point) {
-        XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
+        XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
         XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
         XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;
         runtime_attempts=0;runtime_fail_at=point ? point-1 : SIZE_MAX;
@@ -72,6 +72,11 @@ static void product_build_oom(const XrXirSourceProductRequest *request) {
             XrXirSourceProductRequest owned=*request;
             owned.source.context=&context;owned.source.session=session;
             status=xr_xir_compile_source_product_build(&owned,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
         }
         if (!point) {CHECK(status==XR_XIR_OK);sites=runtime_attempts;}
         else {
@@ -92,7 +97,7 @@ static XrXirStatus product_limited_pipeline(const XrXirSourceProductRequest *req
     source_base_bytes=bytes;source_physical_total=source_physical_peak=0;
     XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;
     XrXirSourceProduct *product=NULL;XrXirProgram *program=NULL;
-    XrXirSourceProductDiagnostic diagnostic={0};XrXirCSource code={0};
+    XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};XrXirCSource code={0};
     XrXirNativeProjection *projection=NULL;
     XrXirStatus status=xir_compile_resource_status(xr_compile_resources_new(limits,&resources));
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
@@ -104,6 +109,11 @@ static XrXirStatus product_limited_pipeline(const XrXirSourceProductRequest *req
     if (status==XR_XIR_OK) {
         XrXirSourceProductRequest owned=*request;owned.source.context=&context;owned.source.session=session;
         status=xr_xir_compile_source_product_build(&owned,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     }
     xr_compile_session_free(session);
     if (stop==4 && status==XR_XIR_OK) {
@@ -223,12 +233,17 @@ int main(int argc,char **argv) {
                                      {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     bool scan=!strcmp(argv[7],"scan");product_guards(&request);
     if (scan && !strcmp(argv[4],"accept")) {product_build_oom(&request);product_take_oom(&request);product_cumulative_limits(&request);}
-    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
+    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     xr_compile_session_free(session);xr_compile_resources_release(resources);memset(&request,0xcc,sizeof(request));memset(&authority,0xcc,sizeof(authority));
     bool accepted=!strcmp(argv[4],"accept");
     printf("opaque owner status=%u stage=%u line=%d column=%d message=%s\n",status,diagnostic.stage,
-           diagnostic.source.line,diagnostic.source.column,diagnostic.source.message);
+           diagnostic_root.primary.line,diagnostic_root.primary.column,diagnostic_root.message);
     CHECK((status==XR_XIR_OK)==accepted);
     if (!accepted) {
         CHECK(!product);const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(diagnostic.snapshot);

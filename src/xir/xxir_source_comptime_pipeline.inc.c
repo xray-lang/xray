@@ -169,7 +169,12 @@ static void source_comptime_values_free(SourceContext *ctx) {
     for (SourceComptimeSite *site=ctx->comptime_sites;site;site=site->next) xr_xir_value_drop(&site->value);
     for (SourceMaterialization *site=ctx->materializations;site;site=site->next) xr_xir_value_drop(&site->value);
 }
-static void source_comptime_context_free(SourceContext *ctx) {
+static void source_comptime_context_free(SourceContext *ctx,SourceContext *parent) {
+    if(ctx->diagnostic.status!=XR_XIR_OK && parent && !parent->report && !xr_hir_items_has_report(parent->items)) {
+        parent->report=ctx->report?ctx->report:xr_hir_items_take_report(ctx->items);ctx->report=NULL;
+    }
+    xr_frontend_report_free(ctx->report);ctx->report=NULL;
+    xr_hir_items_free(ctx->items);ctx->items=NULL;
     source_comptime_values_free(ctx);
     source_release_retired_arrays(ctx);
     xr_xir_compile_construction_free(ctx->construction);
@@ -216,5 +221,5 @@ static void source_comptime_receive(SourceContext *ctx,XrXirSourceResult *output
     xr_xir_compile_source_result_free(output);
     if (received.diagnostic.status==XR_XIR_OK) *output=result;
     else { xr_xir_compile_source_result_free(&result);ctx->diagnostic=received.diagnostic;ctx->module=received.module; }
-    source_comptime_context_free(&received);source_comptime_values_free(ctx);
+    source_comptime_context_free(&received,ctx);source_comptime_values_free(ctx);
 }

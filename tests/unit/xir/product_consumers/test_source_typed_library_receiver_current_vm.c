@@ -460,10 +460,13 @@ static void catalog_import_controls(ReceiverRun *run) {
     XrXirStatus status = xr_xir_compile_source_product_build(&absent, &run->control_product, &run->control_diagnostic);
     CHECK(compile_expected(run, status, XR_XIR_UNRESOLVED, "no-Catalog-original-root-missing-Library-control"));
     CHECK(!run->control_product && run->control_diagnostic.status == status);
+    XrFrontendReportInfo report_info={0};XrFrontendRoot control_root={0};
+    CHECK(xr_frontend_report_info(run->control_diagnostic.failure.report,&report_info)&&report_info.roots==1);
+    CHECK(xr_frontend_report_root(run->control_diagnostic.failure.report,0,&control_root));
     CHECK(run->control_diagnostic.stage == XR_XIR_SOURCE_PRODUCT_CHECK &&
-        run->control_diagnostic.source.status == status && run->control_diagnostic.source.message[0]);
+        run->control_diagnostic.source.status == status && control_root.message[0]);
     printf("no-Catalog unchanged-original-root required=UNRESOLVED actual=%u stage=%u message=%.192s\n",
-        (unsigned)status, (unsigned)run->control_diagnostic.stage, run->control_diagnostic.source.message);
+        (unsigned)status, (unsigned)run->control_diagnostic.stage, control_root.message);
     xr_xir_compile_source_product_diagnostic_free(&run->control_diagnostic);
     xr_compile_session_free(run->control_session); run->control_session = NULL;
     poison(&absent, sizeof(absent)); absent_owned_leaf(run, 1);
@@ -502,8 +505,10 @@ static bool program_source_build(ReceiverRun *run) {
     CHECK(request.source.libraries == run->catalog);
     if (!completed(run, xr_xir_compile_source_product_build(&request, &run->product,
         &run->diagnostic), "Program-SourceProduct-Catalog-import")) {
-        fprintf(stderr, "Program-stage=%u message=%.192s path=%s\n", (unsigned)run->diagnostic.stage,
-            run->diagnostic.source.message, run->diagnostic.failure.path ? run->diagnostic.failure.path : "(none)");
+        char *report=NULL;(void)xr_frontend_report_render(run->diagnostic.failure.report,&report);
+        fprintf(stderr,"Program-stage=%u message=%s path=%s\n",(unsigned)run->diagnostic.stage,
+            report?report:"diagnostic unavailable",run->diagnostic.failure.path?run->diagnostic.failure.path:"(none)");
+        xr_compile_resources_free(report);
         return false;
     }
     CHECK(run->product && xr_xir_compile_source_product_context(run->product)->resources == run->context->resources);

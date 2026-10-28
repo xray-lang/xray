@@ -21,7 +21,7 @@ static size_t launch_fault(size_t fail) {
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig config={{resources,xr_xir_compile_default_limits()},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
-    XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
+    XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     CHECK(xr_source_compiler_new(&config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
     xr_source_compile_diagnostic_free(&diagnostic);
     XrXirDomain *domain=NULL;XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};
@@ -37,6 +37,10 @@ static size_t launch_fault(size_t fail) {
     XdapLaunch *launch=NULL;size_t begin=runtime_attempts;
     runtime_fail_at=fail==SIZE_MAX ? SIZE_MAX : begin+fail;
     XrXirStatus status=xdap_launch_build(&request,&launch,&diagnostic);
+    if(diagnostic.source.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.source.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.source.failure.report,0,&diagnostic_root));
+    }
     size_t sites=runtime_attempts-begin;runtime_fail_at=SIZE_MAX;
     if (fail==SIZE_MAX) CHECK(status==XR_XIR_OK && launch);
     else {
@@ -74,7 +78,7 @@ int main(int argc,char **argv) {
     CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig config={context,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,
         xr_source_compile_default_manifest_limits()};
-    XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
+    XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     CHECK(xr_source_compiler_new(&config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
     const char text[]="fn leaf(value:i64)->string {\n"
         "    var observed=value*2\n"
@@ -95,7 +99,7 @@ int main(int argc,char **argv) {
     request.instance.work_limit=128000000;request.instance.poll_limit=10000;request.instance.depth_limit=64;
     XdapLaunch *launch=NULL;XrXirStatus status=xdap_launch_build(&request,&launch,&diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"launch=%u source=%u stage=%u: %s\n",status,diagnostic.status,
-        diagnostic.source.stage,diagnostic.source.source.message);
+        diagnostic.source.stage,diagnostic_root.message);
     CHECK(status==XR_XIR_OK && launch);
     CHECK(launch->module_count);
     const XrXirSourceView *view=xr_xir_compile_source_product_view(launch->source);

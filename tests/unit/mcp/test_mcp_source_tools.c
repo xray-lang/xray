@@ -50,8 +50,25 @@ static void analyze_cases(void) {
     CHECK(xjson_get_int_or(s,"diagnosticCount",0)==1);
     XrJsonValue *d=xjson_array_get(xjson_get_array(s,"diagnostics"),0);
     CHECK(d && !strcmp(xjson_get_string(d,"source"),"source"));
-    CHECK(xjson_get_int_or(d,"code",-1)==XR_XIR_BAD_TYPE);
+    CHECK(xjson_get_int_or(d,"code",-1)==0); /* This producer has no canonical code yet. */
+    CHECK(xjson_get_int_or(s,"sourceStatus",-1)==XR_XIR_BAD_TYPE);
     xjson_free(r);
+    static const char duplicates[]="const alpha:i64=1\nconst alpha:i64=2\nconst beta:i64=3\nconst beta:i64=4\nprint(9)\n";
+    for(unsigned mode=0;mode<2;++mode) {
+        r=analysis(duplicates,sizeof(duplicates)-1,mode?"full":"semantic");s=xjson_get_object(r,"structuredContent");
+        CHECK(s&&!xjson_get_bool(s,"ok")&&xjson_get_bool(r,"isError"));
+        CHECK(xjson_get_int_or(s,"sourceStatus",-1)==XR_XIR_BAD_STRUCTURE);
+        CHECK(xjson_get_int_or(s,"diagnosticCount",0)==2);
+        for(unsigned i=0;i<2;++i) {
+            d=xjson_array_get(xjson_get_array(s,"diagnostics"),(int)i);
+            CHECK(d&&xjson_get_int_or(d,"code",-1)==302&&xjson_get_int_or(d,"line",0)==2+2*i);
+            CHECK(!strcmp(xjson_get_string(d,"message"),"duplicate declaration name"));
+            XrJsonValue *related=xjson_get_array(d,"related");CHECK(related&&xjson_array_len(related)==1);
+            XrJsonValue *label=xjson_array_get(related,0);
+            CHECK(label&&xjson_get_int_or(label,"line",0)==1+2*i&&!strcmp(xjson_get_string(label,"message"),"first declaration is here"));
+        }
+        xjson_free(r);physical_zero();
+    }
     static const char bad_syntax[]="var x = ;\n";
     r=analysis(bad_syntax,sizeof(bad_syntax)-1,"syntax");
     CHECK(xjson_get_bool(r,"isError"));

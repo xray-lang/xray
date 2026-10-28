@@ -51,14 +51,11 @@ static bool build_options_supported(const XrCliInvocation *inv) {
     }
     return true;
 }
-static void build_source_report(const XrSourceCompileDiagnostic *diagnostic) {
-    const XrXirSourceDiagnostic *source = &diagnostic->source.source;
-    const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(diagnostic->source.snapshot);
-    const char *path = diagnostic->source.failure.path;
-    if (!path && view && view->modules && source->module < view->module_count) path=view->modules[source->module].path;
-    if (path && source->line>0) fprintf(stderr,"%s:%d:%d: error: %s\n",path,source->line,source->column,source->message);
-    else fprintf(stderr,"XR_BUILD_6003: source build failed (stage=%u status=%s): %s\n",
-        (unsigned)diagnostic->stage,xr_source_compile_status_name(diagnostic->status),source->message);
+static void build_source_report(const XrSourceCompileDiagnostic *diagnostic,XrCompileResources *resources) {
+    char *text=NULL;XrSourceCompileStatus shown=xr_source_compile_diagnostic_render(diagnostic,resources,&text);
+    if(shown==XR_SOURCE_COMPILE_OK)fputs(text,stderr);
+    else fprintf(stderr,"XR_BUILD_6003: diagnostic rendering failed (%s)\n",xr_source_compile_status_name(shown));
+    xr_compile_resources_free(text);
 }
 static int build_publication_close(XtcXirPublication **owner) {
     bool had_failure=false;
@@ -126,7 +123,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     XrSourceCompileRequest request={&context,paths.entry,paths.stdlib,NULL,
         xr_source_compile_default_manifest_limits(),xr_xir_host_target(), NULL};
     source=xr_source_compile_build(&request,&product,&diagnostic);
-    if (source!=XR_SOURCE_COMPILE_OK) { build_source_report(&diagnostic);result=build_source_exit(source);goto cleanup; }
+    if (source!=XR_SOURCE_COMPILE_OK) { build_source_report(&diagnostic,resources);result=build_source_exit(source);goto cleanup; }
     XrXirNativeProjectionRequest prepare={product,"xray_app",(size_t)BUILD_C_LIMIT};
     XrXirDiagnostic projection_diagnostic={0};
     XrXirStatus projected=xr_compile_native_projection_prepare(&prepare,&projection,&projection_diagnostic);

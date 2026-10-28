@@ -134,8 +134,8 @@ static void sdk_repl_cases(const char *stdlib_path) {
     CHECK(xray_source_result_i64(survivor,&answer)==XR_SOURCE_OK && answer==42);
     const char *bytes=NULL;size_t length=0;
     CHECK(xray_source_value_bytes(text,&bytes,&length)==XR_SOURCE_OK && length==4 && !memcmp(bytes,"kept",4));
-    XrSourceDiagnosticInfo info;
-    CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK && info.message && *info.message);
+    XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};
+    CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK && info.message && *info.message);
     xray_source_result_free(survivor);xray_source_value_free(text);xray_source_diagnostic_free(diagnostic);
     puts("Installed public REPL: typed history, busy callback, cancel/defer, resume and owned survivors PASS");
 }
@@ -213,12 +213,12 @@ int main(int argc,char **argv) {
     XrSourceExecution *execution=sdk_execution_new();XrSourceDiagnostic *diagnostic=NULL;
     XrSourceText text={NULL,"installed-owned-api",source,sizeof(source)-1};XrSourceAst *ast=NULL;
     XrSourceStatus parsed=xray_source_parse(&text,&options,&ast,NULL,&diagnostic);
-    if(diagnostic){XrSourceDiagnosticInfo detail;CHECK(xray_source_diagnostic_info(diagnostic,&detail)==XR_SOURCE_OK);fprintf(stderr,"parse=%u line=%d col=%d %s\n",(unsigned)parsed,detail.line,detail.column,detail.message);}
+    if(diagnostic){XrSourceDiagnosticRoot detail={0};XrSourceDiagnosticReportInfo report_detail={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_detail)==XR_SOURCE_OK && report_detail.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&detail) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);fprintf(stderr,"parse=%u line=%d col=%d %s\n",(unsigned)parsed,detail.primary.line,detail.primary.column,detail.message);}
     else if(parsed!=XR_SOURCE_OK)fprintf(stderr,"parse=%u without diagnostic\n",(unsigned)parsed);
     CHECK(parsed==XR_SOURCE_OK && ast && !diagnostic);
     memset(source,0xa5,sizeof(source));XrSourceArtifact *program=NULL;
     XrSourceStatus compiled=xray_source_build_ast(ast,&options,&program,NULL,&diagnostic);
-    if(diagnostic){XrSourceDiagnosticInfo detail;CHECK(xray_source_diagnostic_info(diagnostic,&detail)==XR_SOURCE_OK);fprintf(stderr,"compile=%u %s\n",(unsigned)compiled,detail.message);}
+    if(diagnostic){XrSourceDiagnosticRoot detail={0};XrSourceDiagnosticReportInfo report_detail={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_detail)==XR_SOURCE_OK && report_detail.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&detail) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);fprintf(stderr,"compile=%u %s\n",(unsigned)compiled,detail.message);}
     CHECK(compiled==XR_SOURCE_OK && program && !diagnostic);xray_source_ast_free(ast);
     XrSourceScalar scalar;memset(&scalar,0,sizeof(scalar));scalar.kind=XR_SOURCE_VALUE_I64;scalar.value.signed_value=2;
     XrSourceValue *two=NULL,*string=NULL;

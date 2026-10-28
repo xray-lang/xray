@@ -28,10 +28,15 @@ int main(void) {
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_TUPLE_DESTRUCTURE_REJECTED};
         XrXirSourceProductRequest request={{session,entry,&authority,context,XR_TUPLE_DESTRUCTURE_STDLIB,NULL,
             XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
-        XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
+        XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
         XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
         if(status!=cases[i].expected)fprintf(stderr,"%s got=%u expected=%u stage=%u line=%d: %s\n",
-            cases[i].name,status,cases[i].expected,diagnostic.stage,diagnostic.source.line,diagnostic.source.message);
+            cases[i].name,status,cases[i].expected,diagnostic.stage,diagnostic_root.primary.line,diagnostic_root.message);
         if (cases[i].expected==XR_XIR_OK) {
             CHECK(status==XR_XIR_OK && product);
             CHECK(xr_xir_compile_source_product_verify(product,1048576,NULL)==XR_XIR_OK);
@@ -49,7 +54,7 @@ int main(void) {
         CHECK(status==cases[i].expected && !product && diagnostic.stage==XR_XIR_SOURCE_PRODUCT_CHECK);
         /* Parser failures precede a typed Source diagnostic; their exact
          * lexer spans are printed by the existing frontend diagnostic owner. */
-        CHECK(cases[i].parser_failure ? diagnostic.source.line==0 : diagnostic.source.line>0);
+        CHECK(cases[i].parser_failure ? diagnostic_root.primary.line==0 : diagnostic_root.primary.line>0);
         xr_xir_compile_source_product_diagnostic_free(&diagnostic);xr_compile_session_free(session);
         printf("Tuple declaration %s rejected at definition status=%u, output empty\n",cases[i].name,status);
         source_program_owners_free();

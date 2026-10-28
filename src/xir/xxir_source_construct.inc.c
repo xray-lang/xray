@@ -85,10 +85,71 @@ static bool source_construction_prepare(SourceContext *ctx) {
 
 #include "xxir_source_binding_readers.inc.c"
 #include "xxir_source_view_prepare.inc.c"
+static bool source_item_resource(SourceContext *ctx,AstNode *node,XrCompileResourceStatus status) {
+    if(status==XR_COMPILE_RESOURCE_OK)return true;
+    return source_fail(ctx,node,status==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:
+        status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
+        status==XR_COMPILE_RESOURCE_OVERFLOW?XR_XIR_OVERFLOW:XR_XIR_BAD_STRUCTURE,
+        "module item collection failed");
+}
+static bool source_item_reserve(SourceContext *ctx,uint32_t module,AstNode *node,
+    const char *name,int line,int column) {
+    if(!name||!*name)return true;
+    uint32_t item=0;
+    return source_item_resource(ctx,node,xr_hir_items_reserve(ctx->items,module,name,node->node_id,line,column,&item));
+}
+static bool source_items_prepare(SourceContext *ctx) {
+    if(ctx->items)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"module items already prepared");
+    if(!source_item_resource(ctx,NULL,xr_hir_items_new(ctx->compile.resources,&ctx->items)))return false;
+    uint32_t previous_module=ctx->module;
+    for(uint32_t m=0;m<(uint32_t)ctx->graph->spec_count;++m) {
+        ctx->module=m;
+        if(!source_request_poll(ctx,NULL))return false;
+        const XrModuleSpec *spec=&ctx->graph->specs[m];
+        const uint8_t zero[32]={0};const uint8_t *revision=memcmp(spec->source_content_fingerprint.bytes,zero,32)?spec->source_content_fingerprint.bytes:NULL;
+        if(!source_item_resource(ctx,NULL,xr_hir_items_source(ctx->items,m,spec->source_path,
+            spec->source_text,spec->source_length,revision)))return false;
+        AstNode *ast=spec->ast;if(!ast||ast->type!=AST_PROGRAM)continue;
+        for(int i=0;i<ast->as.program.count;++i) {
+            AstNode *node=ast->as.program.statements[i];const char *name=NULL;
+            if(!source_request_poll(ctx,node))return false;
+            switch(node->type) {
+            case AST_FUNCTION_DECL:name=node->as.function_decl.name;break;
+            case AST_VAR_DECL:case AST_CONST_DECL:name=node->as.var_decl.name;break;
+            case AST_STRUCT_DECL:name=node->as.struct_decl.name;break;
+            case AST_CLASS_DECL:name=node->as.class_decl.name;break;
+            case AST_ENUM_DECL:name=node->as.enum_decl.name;break;
+            case AST_INTERFACE_DECL:name=node->as.interface_decl.name;break;
+            default:break;
+            }
+            if(name&&!source_item_reserve(ctx,m,node,name,node->line,node->column))return false;
+            if(node->type==AST_DESTRUCTURE_DECL) {
+                SourceDestructurePlan plan={0};
+                if(!source_destructure_pattern(ctx,node,&plan))return false;
+                for(uint32_t f=0;f<plan.count;++f) {
+                    const XrDestructurePattern *field=plan.fields[f].pattern;
+                    if(!source_item_reserve(ctx,m,node,field->as.identifier.name,field->line,field->column))return false;
+                }
+            }
+            if(node->type==AST_IMPORT_STMT) {
+                const ImportStmtNode *import=&node->as.import_stmt;
+                XrNameSpan binding=source_import_binding_span(import,0);
+                if(import->alias&&!source_item_reserve(ctx,m,node,import->alias,binding.line,binding.column))return false;
+                for(int p=0;p<import->member_count;++p) {
+                    const ImportMember *member=&import->members[p];
+                    XrNameSpan span=member->alias?member->alias_span:member->name_span;
+                    if(!source_item_reserve(ctx,m,node,member->alias?member->alias:member->name,span.line,span.column))return false;
+                }
+            }
+        }
+    }
+    ctx->module=previous_module;
+    return !xr_hir_items_errors(ctx->items)||source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"duplicate declaration name");
+}
 static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     ctx->query_ready = true;
     ctx->declarations_building = true;
-    bool declarations_ready = source_query_modules(ctx) && collect_declarations(ctx);
+    bool declarations_ready = source_query_modules(ctx) && source_items_prepare(ctx) && collect_declarations(ctx);
     ctx->declarations_building = false;
     if (declarations_ready && (!ctx->core_factory || source_core_contract(ctx)) && source_manifests_bind(ctx) &&
         source_implementations_bind(ctx) && source_generator_methods(ctx) && build_bodies(ctx) && source_exported_const_finish(ctx) && source_binding_readers(ctx) && source_history_graph_commit(ctx) &&

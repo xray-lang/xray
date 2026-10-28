@@ -8,7 +8,7 @@
  */
 static void sdk_repl_array_execute(XrSourceRepl *owner,const char *source) {
     XrSourceDiagnostic *diagnostic=NULL;XrSourceStatus status=sdk_repl_begin(owner,source,&diagnostic);
-    if(diagnostic){XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
+    if(diagnostic){XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
         fprintf(stderr,"installed array status=%u: %s\n",(unsigned)status,info.message);}
     CHECK(status==XR_SOURCE_OK && !diagnostic);sdk_repl_finish(owner);
 }
@@ -30,7 +30,7 @@ static void sdk_repl_array_cases(const char *stdlib_path) {
     XrSourceValue *snapshot=NULL;CHECK(xray_source_repl_read(owner,"items",&snapshot)==XR_SOURCE_OK && snapshot);
     XrSourceDiagnostic *diagnostic=NULL;
     CHECK(sdk_repl_begin(owner,"fixed.push(9)\n",&diagnostic)==XR_SOURCE_REJECTED && diagnostic);
-    XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK && info.line==1);
+    XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK && info.primary.line==1);
     xray_source_diagnostic_free(diagnostic);sdk_repl_array_execute(owner,"const unchanged=fixed[0]\n");
     sdk_repl_integer(owner,"unchanged",4);
     sdk_repl_array_execute(owner,"var items:Array<i64>=[99]\nappend(4)\nconst fresh=len(items)\n");

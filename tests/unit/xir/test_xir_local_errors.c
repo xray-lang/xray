@@ -93,19 +93,24 @@ static void local_case(const LocalErrorCase *test) {
     XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     size_t length=strlen(test->text);char *text=xr_malloc(length+1);CHECK(text);memcpy(text,test->text,length+1);
-    XrXirSourceText input={NULL,text,length};XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
+    XrXirSourceText input={NULL,text,length};XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build_text(&request,&input,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     memset(text,0xa5,length+1);xr_free(text);xr_compile_session_free(session);
     if (test->diagnostic) {
-        if (status!=XR_XIR_BAD_TYPE || !strstr(diagnostic.source.message,test->diagnostic) ||
-            diagnostic.source.line<=0 || diagnostic.source.column<=0)
+        if (status!=XR_XIR_BAD_TYPE || !strstr(diagnostic_root.message,test->diagnostic) ||
+            diagnostic_root.primary.line<=0 || diagnostic_root.primary.column<=0)
             fprintf(stderr,"local rejection %s status%u stage%u %d:%d %s\n",test->name,(unsigned)status,
-                (unsigned)diagnostic.stage,diagnostic.source.line,diagnostic.source.column,diagnostic.source.message);
-        CHECK(status==XR_XIR_BAD_TYPE && !product && diagnostic.source.line>0 && diagnostic.source.column>0);
-        CHECK(strstr(diagnostic.source.message,test->diagnostic));
+                (unsigned)diagnostic.stage,diagnostic_root.primary.line,diagnostic_root.primary.column,diagnostic_root.message);
+        CHECK(status==XR_XIR_BAD_TYPE && !product && diagnostic_root.primary.line>0 && diagnostic_root.primary.column>0);
+        CHECK(strstr(diagnostic_root.message,test->diagnostic));
     } else {
         if (status!=XR_XIR_OK) fprintf(stderr,"local product %s status%u stage%u %d:%d %s (function%u block%u instruction%u reason%u)\n",test->name,
-            (unsigned)status,(unsigned)diagnostic.stage,diagnostic.source.line,diagnostic.source.column,diagnostic.source.message,
+            (unsigned)status,(unsigned)diagnostic.stage,diagnostic_root.primary.line,diagnostic_root.primary.column,diagnostic_root.message,
             diagnostic.xir.function,diagnostic.xir.block,diagnostic.xir.instruction,(unsigned)diagnostic.xir.reason);
         CHECK(status==XR_XIR_OK && product);local_execute(product,test->name,test->expected);
     }

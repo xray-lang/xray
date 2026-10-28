@@ -43,9 +43,14 @@ static XrXirStatus array_build(ArrayCompileOwner *owner,XrXirSourceProduct **pro
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ARRAY_FIXTURES};
     XrXirSourceProductRequest request={{session,XR_ARRAY_FIXTURES "/root.xr",&authority,&owner->context,
         XR_ARRAY_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
-    XrXirSourceProductDiagnostic diagnostic={0};
+    XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,product,&diagnostic);
-    if(status!=XR_XIR_OK && !array_program_compile_injected)fprintf(stderr,"Array source status=%u stage=%u line=%d %s\n",status,diagnostic.stage,diagnostic.source.line,diagnostic.source.message);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
+    if(status!=XR_XIR_OK && !array_program_compile_injected)fprintf(stderr,"Array source status=%u stage=%u line=%d %s\n",status,diagnostic.stage,diagnostic_root.primary.line,diagnostic_root.message);
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);xr_compile_session_free(session);return status;
 }
 static ArrayProgramEntries array_product_entries(ArrayCompileOwner *owner,XrXirSourceProduct *product) {
@@ -120,11 +125,16 @@ static void array_source_reject(const char *file,const char *message) {
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ARRAY_FIXTURES};
     XrXirSourceProductRequest request={{session,path,&authority,&owner.context,XR_ARRAY_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
-    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
+    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
-    if(status!=XR_XIR_BAD_TYPE)fprintf(stderr,"Source Array reject %s status=%u message=%s\n",file,status,diagnostic.source.message);
-    CHECK(status==XR_XIR_BAD_TYPE && !product && diagnostic.stage==XR_XIR_SOURCE_PRODUCT_CHECK && diagnostic.source.line==1);
-    if(message)CHECK(strstr(diagnostic.source.message,message));
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
+    if(status!=XR_XIR_BAD_TYPE)fprintf(stderr,"Source Array reject %s status=%u message=%s\n",file,status,diagnostic_root.message);
+    CHECK(status==XR_XIR_BAD_TYPE && !product && diagnostic.stage==XR_XIR_SOURCE_PRODUCT_CHECK && diagnostic_root.primary.line==1);
+    if(message)CHECK(strstr(diagnostic_root.message,message));
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);xr_compile_session_free(session);
     CHECK(!runtime_live && !runtime_bytes);array_compile_owner_free(&owner);
 }

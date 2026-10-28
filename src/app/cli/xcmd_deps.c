@@ -57,10 +57,11 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
     }
     if (status != XR_SOURCE_COMPILE_OK) {
         char text[4096] = {0};
-        if (diagnostic.status != XR_SOURCE_COMPILE_OK)
-            (void)xr_source_compile_diagnostic_format(&diagnostic, text, sizeof(text));
-        else xr_source_paths_diagnostic_format(&path_diagnostic, text, sizeof(text));
-        xr_cli_error("deps", "%s", text);
+        if (diagnostic.status != XR_SOURCE_COMPILE_OK) {
+            char *report=NULL;XrSourceCompileStatus shown=xr_source_compile_diagnostic_render(&diagnostic,resources,&report);
+            xr_cli_error("deps","%s",report?report:xr_source_compile_status_name(shown));
+            xr_compile_resources_free(report);
+        } else {xr_source_paths_diagnostic_format(&path_diagnostic,text,sizeof(text));xr_cli_error("deps","%s",text);}
     }
     xr_source_paths_free(&paths);
     xr_source_paths_diagnostic_free(&path_diagnostic);

@@ -58,9 +58,12 @@ static bool same_path(const char *left, const char *right) {
 static void diagnostic(const RejectionCase *test, const XrXirSourceProductDiagnostic *value) {
     CHECK(value->stage == XR_XIR_SOURCE_PRODUCT_CHECK && value->status == test->status);
     CHECK(value->source.status == test->status && value->source.module == 0);
-    CHECK(value->source.line == 1);
-    if (test->column >= 0) CHECK(value->source.column == test->column);
-    CHECK(!strcmp(value->source.message, test->message));
+    XrFrontendReportInfo info={0};XrFrontendRoot root={0};
+    CHECK(xr_frontend_report_info(value->failure.report,&info)&&info.roots==1);
+    CHECK(xr_frontend_report_root(value->failure.report,0,&root));
+    CHECK(root.primary.line == 1);
+    if (test->column >= 0) CHECK(root.primary.column == test->column);
+    CHECK(!strcmp(root.message, test->message));
     CHECK(same_path(value->failure.path, test->file));
     CHECK(!value->snapshot);
 }
@@ -75,7 +78,7 @@ static RejectionRun run(const RejectionCase *test, size_t failure, XrCompileReso
     context.limits = xr_xir_compile_default_limits();
     XrCompilerSession *session = NULL;
     XrXirSourceProduct *product = NULL;
-    XrXirSourceProductDiagnostic error = {0};
+    XrXirSourceProductDiagnostic error = {0};XrFrontendRoot error_root={.message=""};
     XrCompileResourceStatus opened = xr_compile_resources_new(&budget, &context.resources);
     if (opened != XR_COMPILE_RESOURCE_OK) {
         result.status = opened == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
@@ -91,6 +94,11 @@ static RejectionRun run(const RejectionCase *test, size_t failure, XrCompileReso
         {session, test->file, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL},
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
     result.status = xr_xir_compile_source_product_build(&request, &product, &error);
+    error_root=(XrFrontendRoot){.message=""};
+    if(error.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(error.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(error.failure.report,0,&error_root));
+    }
     CHECK(!product);
 release:
     CHECK(xr_compile_resources_stats(context.resources, &result.stats) == XR_COMPILE_RESOURCE_OK);
@@ -104,11 +112,11 @@ release:
         CHECK(instance_compile_live > 0 && instance_compile_bytes > 0);
         diagnostic(test, &error);
         printf("rejection case=%s stage=%u status=%u module=%u line=%d column=%d path=%s owned-after-ledger-drop=1\n",
-            test->name, error.stage, error.status, error.source.module, error.source.line,
-            error.source.column, error.failure.path);
+            test->name, error.stage, error.status, error.source.module, error_root.primary.line,
+            error_root.primary.column, error.failure.path);
     }
     xr_xir_compile_source_product_diagnostic_free(&error);
-    CHECK(!error.snapshot && xr_xir_compile_source_failure_empty(&error.failure) && !error.source.message[0]);
+    CHECK(!error.snapshot && xr_xir_compile_source_failure_empty(&error.failure) && !error.failure.report);
     xr_xir_compile_source_product_diagnostic_free(&error);
 done:
     result.attempts = instance_compile_attempts;

@@ -30,7 +30,7 @@ static XrSourceAst *parse(XrSourceCompiler *compiler,const char *source) {
     XrSourceText text={NULL,"owned-ast-input",source,strlen(source)};
     XrSourceAst *ast=NULL;XrSourceDiagnostic *diagnostic=NULL;
     XrSourceStatus status=xray_source_parse_text(compiler,&text,&ast,&diagnostic);
-    if(diagnostic) {XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);fprintf(stderr,"%s\n",info.message);}
+    if(diagnostic) {XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);fprintf(stderr,"%s\n",info.message);}
     CHECK(status==XR_SOURCE_OK && ast && !diagnostic);return ast;
 }
 static XrXirCallStatus finish(XrSourceSubmission *owner) {

@@ -24,7 +24,7 @@ typedef struct XmcpSourceRequest {
 } XmcpSourceRequest;
 typedef struct XmcpSourceOwner {
     XrXirSourceResult result;
-    XrXirSourceDiagnostic diagnostic;
+    XrXirSourceDiagnosticFact diagnostic;
     XrXirSourceFailure failure;
 } XmcpSourceOwner;
 

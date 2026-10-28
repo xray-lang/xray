@@ -13,6 +13,7 @@
 #include "xmcp_json.h"
 #include "xmcp_tools_internal.h"
 #include "xmcp_source.h"
+#include "../../api/xsource_compile.h"
 #include "xmcp_server.h"
 #include <stdio.h>
 #include <string.h>
@@ -57,8 +58,12 @@ XR_FUNC XrJsonValue *xmcp_tool_source_definition(XmcpServer *server, XrJsonValue
     if (status == XR_XIR_OK) status = xmcp_source_resource_status(xr_compile_request_control_poll(&control));
     bool complete = status == XR_XIR_OK && view && view->complete;
     bool found = complete && matches == 1;
-    const char *message = !complete ? owner.diagnostic.message[0] ? owner.diagnostic.message :
-        "Source checking failed" : matches > 1 ? "Source symbol is ambiguous" :
+    char *report=NULL;
+    if(!complete&&context.resources) {
+        XrSourceCompileDiagnostic failed={.status=XR_SOURCE_COMPILE_REJECTED};failed.source.failure.report=owner.failure.report;
+        (void)xr_source_compile_diagnostic_render(&failed,context.resources,&report);
+    }
+    const char *message = !complete ? report?report:"Source checking failed" : matches > 1 ? "Source symbol is ambiguous" :
         !found ? "Source symbol was not found" : selected->signature ? selected->signature : selected->name;
     XrJsonValue *s = source_definition_result(name->as.string, message, found);
     XMCP_JSON_BOOL(s, "complete", complete);
@@ -72,7 +77,7 @@ XR_FUNC XrJsonValue *xmcp_tool_source_definition(XmcpServer *server, XrJsonValue
         XMCP_JSON_STRING(s, "moduleId", identity->as.string);
     }
     XrJsonValue *result = xmcp_make_text_structured_result(message, s, !complete || matches > 1);
-    xmcp_source_free(&owner);
+    xr_compile_resources_free(report);xmcp_source_free(&owner);
     xr_compile_resources_release(context.resources);
     return xmcp_json_finish(result);
 }

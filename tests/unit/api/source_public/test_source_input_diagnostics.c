@@ -25,10 +25,10 @@ static bool same_path(const char *actual,const char *expected) {
     return !*actual && !*expected;
 }
 static bool exact_info(XrSourceDiagnostic *diagnostic,bool memory) {
-    XrSourceDiagnosticInfo info={0};
-    return xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK && info.status==XR_SOURCE_INVALID &&
-        info.line==2 && info.column==1 && !strcmp(info.message,"source text contains an embedded NUL") &&
-        (memory?info.path==NULL:same_path(info.path,bad_path));
+    XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};
+    return (xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK &&
+        info.primary.line==2 && info.primary.column==1 && !strcmp(info.message,"source text contains an embedded NUL") &&
+        (memory?info.primary.path==NULL:same_path(info.primary.path,bad_path));
 }
 static XrSourceWriteStatus capture(void *context,XrSourceOutputStream stream,const char *bytes,size_t count) {
     size_t *written=context;
@@ -54,8 +54,8 @@ static void compile_case(unsigned mode) {
         status=xray_source_compile_ast(compiler,ast,&program,&diagnostic);
     } else status=xray_source_compile_text(compiler,&input,&program,&diagnostic);
     CHECK(diagnostic && !program);
-    XrSourceDiagnosticInfo info={0};CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
-    printf("entry=%u status=%u location=%d:%d message=%s\n",mode,(unsigned)status,info.line,info.column,info.message);
+    XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
+    printf("entry=%u status=%u location=%d:%d message=%s\n",mode,(unsigned)status,info.primary.line,info.primary.column,info.message);
     CHECK(status==XR_SOURCE_INVALID && exact_info(diagnostic,memory));
     XrSourceDiagnostic *held=diagnostic;
     CHECK(xray_source_compile_text(compiler,&input,&program,&held)==XR_SOURCE_BAD_ARGUMENT && held==diagnostic);
@@ -98,8 +98,8 @@ static void repl_case(unsigned mode) {
     CHECK(xray_source_repl_new(&options,"source-input-diagnostics",&runtime,&owner)==XR_SOURCE_OK);
     XrSourceStatus status=reject_repl(owner,mode,&input,path,&diagnostic);
     CHECK(diagnostic && written==0);
-    XrSourceDiagnosticInfo info={0};CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);
-    printf("entry=%u status=%u location=%d:%d message=%s\n",mode,(unsigned)status,info.line,info.column,info.message);
+    XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
+    printf("entry=%u status=%u location=%d:%d message=%s\n",mode,(unsigned)status,info.primary.line,info.primary.column,info.message);
     CHECK(status==XR_SOURCE_INVALID && exact_info(diagnostic,memory));
     XrSourceDiagnostic *held=diagnostic;
     CHECK(reject_repl(owner,mode,&input,path,&held)==XR_SOURCE_BAD_ARGUMENT && held==diagnostic);

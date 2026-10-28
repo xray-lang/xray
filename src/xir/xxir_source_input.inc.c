@@ -233,6 +233,21 @@ done:
             ctx.graph->compiler_session=NULL;ctx.graph->resolver=NULL;ctx.graph=NULL;
         }
     }
+    /* A failed entry phase owns every root before graph/AST teardown. Other
+     * producers contribute one immediate fact to that same report family. */
+    XrFrontendReport *report=ctx.report?ctx.report:xr_hir_items_take_report(ctx.items);ctx.report=NULL;
+    if(!report && failure && ctx.diagnostic.status!=XR_XIR_OK) {
+        const XrModuleSpec *spec=ctx.graph&&ctx.diagnostic.module<(uint32_t)ctx.graph->spec_count?
+            &ctx.graph->specs[ctx.diagnostic.module]:NULL;
+        (void)xr_xir_compile_source_failure_record(ctx.compile.resources,failure,&ctx.diagnostic,
+            failure->path?failure->path:spec?spec->source_path:NULL,
+            spec&&spec->source_text?spec->source_text:supplied&&(!spec||ctx.diagnostic.module==(uint32_t)ctx.graph->entry_index)?text:NULL,
+            spec&&spec->source_text?spec->source_length:supplied&&(!spec||ctx.diagnostic.module==(uint32_t)ctx.graph->entry_index)?length:0);
+        report=failure->report;failure->report=NULL;
+    }
+    xr_frontend_report_seal(report,false);
+    if(failure){failure->report=report;report=NULL;}
+    xr_frontend_report_free(report);xr_hir_items_free(ctx.items);ctx.items=NULL;
     xr_compile_resources_free(error);
     for (SourceManifest *manifest = ctx.manifests; manifest; manifest = manifest->next)
         xr_compile_declaration_manifest_free(manifest->declarations);

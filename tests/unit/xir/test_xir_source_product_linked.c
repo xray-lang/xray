@@ -70,10 +70,15 @@ int main(int argc,char **argv) {
     CHECK(xr_lockfile_new_owned(&policy,&lock)==XR_OS_IO_OK);
     request.source.lockfile=lock;
     XrXirSourceProduct *product=NULL;
-    XrXirSourceProductDiagnostic diagnostic={0};
+    XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     if (status!=XR_XIR_OK) fprintf(stderr,"source status=%u stage=%u line=%d column=%d: %s\n",
-        status,diagnostic.stage,diagnostic.source.line,diagnostic.source.column,diagnostic.source.message);
+        status,diagnostic.stage,diagnostic_root.primary.line,diagnostic_root.primary.column,diagnostic_root.message);
     CHECK(status==XR_XIR_OK);
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     xr_lockfile_free_owned(lock);

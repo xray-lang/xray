@@ -38,10 +38,15 @@ static void nested_source_case(const char *name,bool accept,bool hidden) {
             if(types->nodes[i].kind==XR_XIR_TYPE_NULLABLE && xr_xir_type_is_nullable(types,types->nodes[i].element))nested=true;
         CHECK(nested);xr_xir_compile_artifact_free(closed);xr_xir_compile_source_result_free(&result);
     }
-    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
+    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     if(status!=(accept?XR_XIR_OK:XR_XIR_BAD_TYPE))fprintf(stderr,"nested Source %s status=%u stage=%u: %s\n",
-        name,status,diagnostic.stage,diagnostic.source.message);
+        name,status,diagnostic.stage,diagnostic_root.message);
     CHECK(status==(accept?XR_XIR_OK:XR_XIR_BAD_TYPE));
     if(accept){
         CHECK(product && xr_xir_compile_source_product_view(product)->complete);
@@ -61,7 +66,7 @@ static void nested_source_case(const char *name,bool accept,bool hidden) {
         CHECK(diagnostic.snapshot && xr_xir_compile_source_snapshot_view(diagnostic.snapshot)->complete);
     }else{
         CHECK(!product && diagnostic.stage==XR_XIR_SOURCE_PRODUCT_CHECK && diagnostic.source.status==XR_XIR_BAD_TYPE);
-        CHECK(!strcmp(diagnostic.source.message,"nested nullable types are not admitted by source"));
+        CHECK(!strcmp(diagnostic_root.message,"nested nullable types are not admitted by source"));
     }
     xr_xir_compile_source_product_free(product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     xr_compile_session_free(session);nested_nullable_compile_owner_free(&owner);
@@ -77,8 +82,13 @@ static uint64_t nested_source_quota(uint64_t work,XrXirStatus expected) {
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_NESTED_SOURCE_FIXTURES "/single"};
     const XrXirSourceProductRequest request={{session,XR_NESTED_SOURCE_FIXTURES "/single/root.xr",&authority,
         &owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
-    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
+    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     if(status!=expected)fprintf(stderr,"nested quota=%llu status=%u stage=%u\n",(unsigned long long)work,status,diagnostic.stage);
     CHECK(status==expected && diagnostic.status==expected && (product!=NULL)==(status==XR_XIR_OK));
     xr_xir_compile_source_product_free(product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);

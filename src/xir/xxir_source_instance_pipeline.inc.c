@@ -52,7 +52,7 @@ static void source_instance_receive(SourceContext *ctx,XrXirSourceResult *output
         xr_xir_compile_source_result_free(output);
         if (received.diagnostic.status==XR_XIR_OK) *output=result;
         else { xr_xir_compile_source_result_free(&result);ctx->diagnostic=received.diagnostic;ctx->module=received.module; }
-        source_comptime_context_free(&received);
+        source_comptime_context_free(&received,ctx);
     }
     xr_xir_compile_ctfe_instance_batch_free(owner);
     xr_compile_resources_free(views);xr_compile_resources_free(functions);xr_xir_compile_artifact_free(closed);

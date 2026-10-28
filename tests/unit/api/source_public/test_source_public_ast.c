@@ -50,13 +50,13 @@ static void ast_diagnostics(void) {
     XrSourceCompiler *compiler=compiler_new();XrSourceAst *ast=NULL;XrSourceDiagnostic *diagnostic=NULL;
     const XrSourceText syntax={XR_PUBLIC_FIXTURE "/unsaved-syntax.xr",NULL,"const ok=1\nvar =\n",17};
     CHECK(xray_source_parse_text(compiler,&syntax,&ast,&diagnostic)==XR_SOURCE_INVALID && !ast && diagnostic);
-    XrSourceDiagnosticInfo info={0};CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK &&
-        info.status==XR_SOURCE_INVALID && info.line==2 && info.path && strstr(info.path,"unsaved-syntax.xr") && *info.message);
+    XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK &&
+        info.primary.line==2 && info.primary.path && strstr(info.primary.path,"unsaved-syntax.xr") && *info.message);
     const XrSourceText valid={NULL,"syntax-retry","print(42)\n",10};XrSourceDiagnostic *held=diagnostic;
     CHECK(xray_source_parse_text(compiler,&valid,&ast,&held)==XR_SOURCE_BAD_ARGUMENT && !ast && held==diagnostic);
     CHECK(xray_source_parse_text(compiler,&valid,&ast,NULL)==XR_SOURCE_OK && ast);
     xray_source_compiler_free(compiler);
-    CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK && info.line==2 && *info.message);
+    CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK && info.primary.line==2 && *info.message);
     xray_source_diagnostic_free(diagnostic);xray_source_ast_free(ast);xray_source_ast_free(NULL);
     compiler=compiler_new();ast=NULL;diagnostic=NULL;
     const char embedded[]="print(1)\0print(2)\n";XrSourceText input={NULL,"nul-ast",embedded,sizeof(embedded)-1};
@@ -67,7 +67,7 @@ static void ast_diagnostics(void) {
     XrSourceProgram *program=NULL;
     CHECK(xray_source_compile_ast(compiler,ast,&program,&diagnostic)==XR_SOURCE_REJECTED && !program && diagnostic);
     xray_source_ast_free(ast);xray_source_compiler_free(compiler);
-    CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK && info.line==1 && *info.message);
+    CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK && info.primary.line==1 && *info.message);
     xray_source_diagnostic_free(diagnostic);
 }
 int main(void) {

@@ -29,12 +29,17 @@ static void sn_source_rejections(void) {
         const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
         const XrXirSourceProductRequest request={{session,path,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL},
             {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
-        XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
+        XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
         XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
-        if (status!=XR_XIR_BAD_TYPE) fprintf(stderr,"Source rejection %s status=%u stage=%u: %s\n",names[n],status,diagnostic.stage,diagnostic.source.message);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
+        if (status!=XR_XIR_BAD_TYPE) fprintf(stderr,"Source rejection %s status=%u stage=%u: %s\n",names[n],status,diagnostic.stage,diagnostic_root.message);
         CHECK(status==XR_XIR_BAD_TYPE && !product && diagnostic.status==status &&
             diagnostic.stage==XR_XIR_SOURCE_PRODUCT_CHECK && diagnostic.source.status==status && !diagnostic.snapshot);
-        if (n==5) CHECK(!strcmp(diagnostic.source.message,"value mutation requires a mutable named root"));
+        if (n==5) CHECK(!strcmp(diagnostic_root.message,"value mutation requires a mutable named root"));
         xr_xir_compile_source_product_diagnostic_free(&diagnostic);xr_compile_session_free(session);
         CHECK(!runtime_live && !runtime_bytes);source_nested_compile_owner_free(&owner);
     }
@@ -46,10 +51,15 @@ static void sn_permission_control(void) {
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
     const XrXirSourceProductRequest request={{session,XR_SOURCE_NESTED_FIXTURES "/default_permission_control/root.xr",
         &authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
-    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
+    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
+    diagnostic_root=(XrFrontendRoot){.message=""};
+    if(diagnostic.failure.report) {
+        XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
+        CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
+    }
     if (status!=XR_XIR_OK) fprintf(stderr,"Source writable-default control status=%u stage=%u %u:%u: %s\n",
-        status,diagnostic.stage,diagnostic.source.line,diagnostic.source.column,diagnostic.source.message);
+        status,diagnostic.stage,diagnostic_root.primary.line,diagnostic_root.primary.column,diagnostic_root.message);
     CHECK(status==XR_XIR_OK && product && xr_xir_compile_source_product_view(product)->complete);
     CHECK(xr_xir_compile_source_product_verify(product,1048576,NULL)==XR_XIR_OK);
     XrXirSourceProductPacketView packet={0};XrXirArtifact *closed=NULL;

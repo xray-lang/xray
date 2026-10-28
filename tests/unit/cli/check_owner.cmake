@@ -22,3 +22,9 @@ add_test(NAME check_source_owner COMMAND ${XRAY_PYTHON} -X utf8
     --output "${CMAKE_CURRENT_BINARY_DIR}/check-owner")
 set_tests_properties(check_source_owner PROPERTIES TIMEOUT 120 COST 3
     LABELS "unit;cli;xir;ownership;budget")
+
+add_test(NAME source_report_json COMMAND ${XRAY_PYTHON} -B
+    "${CMAKE_CURRENT_LIST_DIR}/test_source_report_json.py" --root "${PROJECT_SOURCE_DIR}"
+    --xray $<TARGET_FILE:xray> --output "${CMAKE_CURRENT_BINARY_DIR}/source-report-json")
+set_tests_properties(source_report_json PROPERTIES TIMEOUT 120
+    LABELS "unit;cli;source;diagnostic;ownership")

@@ -69,7 +69,7 @@ static XrSourceResult *take(XrSourceRepl *owner,XrSourceRunState expected) {
 }
 static void execute(XrSourceRepl *owner,const char *source) {
     XrSourceDiagnostic *diagnostic=NULL;XrSourceStatus status=begin(owner,source,&diagnostic);
-    if(diagnostic) {XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);fprintf(stderr,"%u: %s input: %s\n",(unsigned)status,info.message,source);}
+    if(diagnostic) {XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);fprintf(stderr,"%u: %s input: %s\n",(unsigned)status,info.message,source);}
     CHECK(status==XR_SOURCE_OK && !diagnostic);
     XrSourceEvent terminal=pause_or_finish(owner);
     if(terminal.state!=XR_SOURCE_RUN_RETURNED)fprintf(stderr,"run state=%u engine=%u input: %s\n",
@@ -95,7 +95,7 @@ static void history(void) {
     CHECK(xray_source_repl_begin(owner,&wrong,NULL)==XR_SOURCE_BAD_ARGUMENT);
     char first[]="var value=40\nfn next()->i64{value+=1;return value}\nconst old=next\nprint(17)\n";
     XrSourceDiagnostic *first_detail=NULL;XrSourceStatus first_status=begin(owner,first,&first_detail);
-    if(first_detail){XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(first_detail,&info)==XR_SOURCE_OK);fprintf(stderr,"first input %u at%d: %s\n",(unsigned)first_status,info.line,info.message);}
+    if(first_detail){XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(first_detail,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(first_detail,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);fprintf(stderr,"first input %u at%d: %s\n",(unsigned)first_status,info.primary.line,info.message);}
     CHECK(first_status==XR_SOURCE_OK);xray_source_diagnostic_free(first_detail);memset(first,'!',sizeof(first));
     XrSourceValue *empty=NULL;CHECK(xray_source_repl_read(owner,"value",&empty)==XR_SOURCE_BUSY && !empty);
     CHECK(begin(owner,"const pending=99\n",NULL)==XR_SOURCE_BUSY);
@@ -131,7 +131,7 @@ static void history(void) {
     trace.owner=NULL;int64_t zero=9;CHECK(xray_source_result_i64(survivor,&zero)==XR_SOURCE_OK && zero==0);
     XrSourceValueKind kind;CHECK(xray_source_value_kind(function,&kind)==XR_SOURCE_OK && kind==XR_SOURCE_VALUE_CALLABLE);
     CHECK(xray_source_value_bytes(shadow,&bytes,&length)==XR_SOURCE_OK && length==6 && !memcmp(bytes,"shadow",6));
-    XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK && info.message && *info.message);
+    XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK && info.message && *info.message);
     xray_source_diagnostic_free(diagnostic);xray_source_value_free(shadow);xray_source_value_free(function);xray_source_result_free(survivor);
     CHECK(xray_source_repl_drop(&owner,&cleanup)==XR_SOURCE_OK && cleanup.state==XR_SOURCE_RUN_READY);
 }
@@ -140,11 +140,11 @@ static void cancellation(void) {
     XrSourceDiagnostic *diagnostic=NULL;
     XrSourceStatus prepared=begin(owner,"state+=1\ndefer{state+=10}\nCoro.yield()\nstate+=100\n",&diagnostic);
     CHECK(prepared==XR_SOURCE_REJECTED && diagnostic);
-    XrSourceDiagnosticInfo invalid;CHECK(xray_source_diagnostic_info(diagnostic,&invalid)==XR_SOURCE_OK &&
+    XrSourceDiagnosticRoot invalid={0};XrSourceDiagnosticReportInfo report_invalid={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_invalid)==XR_SOURCE_OK && report_invalid.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&invalid) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK &&
         strstr(invalid.message,"enclosing real block"));
     xray_source_diagnostic_free(diagnostic);diagnostic=NULL;integer(owner,"state",0);
     prepared=begin(owner,"{state+=1\ndefer{state+=10}\nCoro.yield()\nstate+=100}\n",&diagnostic);
-    if(diagnostic){XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);fprintf(stderr,"cancel block %u at%d: %s\n",(unsigned)prepared,info.line,info.message);}
+    if(diagnostic){XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);fprintf(stderr,"cancel block %u at%d: %s\n",(unsigned)prepared,info.primary.line,info.message);}
     CHECK(prepared==XR_SOURCE_OK && !diagnostic);
     XrSourceEvent suspended=pause_or_finish(owner);CHECK(suspended.state==XR_SOURCE_RUN_SUSPENDED);
     XrSourceWait wait={0};CHECK(xray_source_repl_wait_request(owner,suspended.epoch,suspended.wake,&wait,sizeof(wait))==XR_SOURCE_OK && wait.kind==XR_SOURCE_WAIT_YIELD);
