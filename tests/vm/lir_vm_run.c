@@ -11,6 +11,9 @@
  *   inputs have been retired. Unsupported closures never select an executor.
  */
 #include "lir/xlir_lower.h"
+#include "lir/xlir_builder.h"
+#include "lir/xlir_sccp.h"
+#include "lir/xlir_inline.h"
 #include "toolchain/xcompiler_session.h"
 #include "vm/register/xrbc_lir.h"
 #include "lir_vm_result_report.h"
@@ -18,7 +21,7 @@
 #include "xir/xxir_source.h"
 #include <stdio.h>
 
-static XrRbcProgram *compile_file(const char *path) {
+static XrRbcProgram *compile_file(const char *path, bool optimize) {
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrXirCompileContext context = {0};
     XrCompilerSession *session = NULL;
@@ -73,6 +76,18 @@ static XrRbcProgram *compile_file(const char *path) {
     root = NULL;
     xr_compile_resources_release(context.resources);
     context.resources = NULL;
+    if (optimize) {
+        XrLirModule *optimized = NULL;
+        if (xr_lir_sccp(lowered.module, &optimized) != XR_LIR_OK) goto done;
+        xr_lir_module_destroy(lowered.module);
+        lowered.module = optimized;
+        lowered.entry.module = optimized;
+        optimized = NULL;
+        if (xr_lir_inline(lowered.module, &optimized) != XR_LIR_OK) goto done;
+        xr_lir_module_destroy(lowered.module);
+        lowered.module = optimized;
+        lowered.entry.module = optimized;
+    }
     if (xr_rbc_compile(lowered.module, lowered.entry, &program,
             &bytecode_diagnostic) != XR_RBC_COMPILE_OK) {
         fprintf(stderr, "lir_vm_run: bytecode %s:%u:%u: %s\n",
@@ -92,19 +107,32 @@ done:
 }
 
 int main(int argc, char **argv) {
-    if (argc != 2) {
-        fputs("usage: lir_vm_run <source.xr>\n", stderr);
+    bool twice = false, optimize = false, valid = argc >= 2 && argc <= 4;
+    for (int i = 2; i < argc; ++i) {
+        if (!strcmp(argv[i], "--twice") && !twice) twice = true;
+        else if (!strcmp(argv[i], "--optimize") && !optimize) optimize = true;
+        else valid = false;
+    }
+    if (!valid) {
+        fputs("usage: lir_vm_run <source.xr> [--twice] [--optimize]\n", stderr);
         return 2;
     }
-    XrRbcProgram *program = compile_file(argv[1]);
+    XrRbcProgram *program = compile_file(argv[1], optimize);
     if (!program) return 1;
-    XrRbcExecution *execution = NULL;
-    XrRbcStatus status = xr_rbc_program_prepare(program, NULL, 0, &execution);
-    XrRbcOutcome *outcome = status == XR_RBC_OK ? xr_rbc_execution_run(execution) : NULL;
-    if (status == XR_RBC_OK) status = xr_rbc_outcome_status(outcome);
-    xr_rbc_execution_free(&execution);
+    int result = 0;
+    for (unsigned i = 0; i < (twice ? 2u : 1u) && !result; ++i) {
+        XrRbcExecution *execution = NULL;
+        XrRbcStatus status = xr_rbc_program_prepare(program, NULL, 0, &execution);
+        XrRbcOutcome *outcome = status == XR_RBC_OK ? xr_rbc_execution_run(execution) : NULL;
+        if (status == XR_RBC_OK) status = xr_rbc_outcome_status(outcome);
+        xr_rbc_execution_free(&execution);
+        if (i + 1 == (twice ? 2u : 1u)) {
+            xr_rbc_program_destroy(program);
+            program = NULL;
+        }
+        result = lir_vm_result_report(outcome, status);
+        xr_rbc_outcome_free(&outcome);
+    }
     xr_rbc_program_destroy(program);
-    int result = lir_vm_result_report(outcome, status);
-    xr_rbc_outcome_free(&outcome);
     return result;
 }

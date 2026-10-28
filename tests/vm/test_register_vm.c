@@ -139,15 +139,15 @@ static void test_arithmetic(void) {
         uint64_t args[2] = {cases[i].lhs, cases[i].rhs};
         emit(code, 0, cases[i].op, 0, 0, 1);
         emit(code, 1, XR_RBC_RET, 0, 0, 0);
-        CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 2, 2, NULL, 0}, args, 2) == cases[i].result);
+        CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 2, 2, NULL, 0, 0}, args, 2) == cases[i].result);
     }
     uint32_t code[2];
     uint64_t arg = (uint64_t) INT64_MIN;
     emit(code, 0, XR_RBC_NEG, 0, 0, 0);
     emit(code, 1, XR_RBC_RET, 0, 0, 0);
-    CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 1, 1, NULL, 0}, &arg, 1) == arg);
+    CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 1, 1, NULL, 0, 0}, &arg, 1) == arg);
     immediate(code, 0, XR_RBC_LOADI, 0, INT16_MIN);
-    CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 1, 0, NULL, 0}, NULL, 0) == (uint64_t) INT16_MIN);
+    CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 1, 0, NULL, 0, 0}, NULL, 0) == (uint64_t) INT16_MIN);
 }
 
 static void test_branches(void) {
@@ -164,7 +164,7 @@ static void test_branches(void) {
             bool expected = operation == XR_RBC_LT   ? lhs < 0
                             : operation == XR_RBC_LE ? lhs <= 0
                                                      : lhs == 0;
-            CHECK(run_function((XrRbcFunction) {code, 6, NULL, 0, 2, 2, NULL, 0}, args, 2) ==
+            CHECK(run_function((XrRbcFunction) {code, 6, NULL, 0, 2, 2, NULL, 0, 0}, args, 2) ==
                   (uint64_t) expected);
         }
     }
@@ -183,7 +183,7 @@ static void test_call_windows(void) {
     emit(callee, 0, XR_RBC_ADD, 2, 0, 1);
     immediate(callee, 1, XR_RBC_LOADI, 254, -10);
     emit(callee, 2, XR_RBC_RET, 2, 0, 0);
-    XrRbcFunction functions[] = {{caller, 7, NULL, 0, 4, 0, NULL, 0}, {callee, 3, NULL, 0, 255, 2, NULL, 0}};
+    XrRbcFunction functions[] = {{caller, 7, NULL, 0, 4, 0, NULL, 0, 0}, {callee, 3, NULL, 0, 255, 2, NULL, 0, 0}};
     XrRbcModule module = {functions, 2, NULL, 0};
     uint64_t result = 0;
     CHECK(execute(&module, 0, NULL, 0, &result) == XR_RBC_OK && result == 1042);
@@ -203,7 +203,7 @@ static void test_rejections(void) {
     uint64_t args[2] = {1, 0}, result = 42;
     emit(code, 0, XR_RBC_DIV, 0, 0, 1);
     emit(code, 1, XR_RBC_RET, 0, 0, 0);
-    XrRbcFunction function = {code, 2, NULL, 0, 2, 2, NULL, 0};
+    XrRbcFunction function = {code, 2, NULL, 0, 2, 2, NULL, 0, 0};
     XrRbcModule module = {&function, 1, NULL, 0};
     CHECK(execute(&module, 0, args, 2, &result) == XR_RBC_ARITHMETIC_PANIC);
     CHECK(result == 42);
@@ -239,8 +239,8 @@ static void test_prepare_unreachable(void) {
     uint32_t root = XR_RBC_RET0, code[] = {XR_RBC_RET0, XR_RBC_RET0, XR_RBC_RET0, XR_RBC_RET0};
     uint64_t constant = 42;
     XrRbcFunction functions[] = {
-        {&root, 1, NULL, 0, 1, 0, NULL, 0},
-        {code, 4, &constant, 1, 3, 0, NULL, 0}};
+        {&root, 1, NULL, 0, 1, 0, NULL, 0, 0},
+        {code, 4, &constant, 1, 3, 0, NULL, 0, 0}};
     const XrRbcNativeI64 native = xrt_print_i64;
     XrRbcModule module = {functions, 2, &native, 1};
     const uint32_t invalid[] = {
@@ -302,7 +302,7 @@ static void test_native_print(void) {
     immediate(code, 1, XR_RBC_LOADI, 254, 0);
     immediate(code, 2, XR_RBC_CALLN, 252, 0);
     emit(code, 3, XR_RBC_RET0, 0, 0, 0);
-    XrRbcFunction function = {code, 4, constants, 1, 255, 0, NULL, 0};
+    XrRbcFunction function = {code, 4, constants, 1, 255, 0, NULL, 0, 0};
     const XrRbcNativeI64 natives[] = {xrt_print_i64};
     XrRbcModule module = {&function, 1, natives, 1};
     uint64_t result;
@@ -318,7 +318,7 @@ static void unregistered(int64_t value, uint32_t id) {
 static void test_owned_execution(void) {
     uint32_t code[2];
     emit(code, 0, XR_RBC_RET, 0, 0, 0);
-    XrRbcFunction function = {code, 1, NULL, 0, 1, 1, NULL, 0};
+    XrRbcFunction function = {code, 1, NULL, 0, 1, 1, NULL, 0, 0};
     XrRbcModule module = {&function, 1, NULL, 0};
     XrtLocationOwner *owner = NULL;
     CHECK(xrt_locations_create(NULL, 0, &owner) == XRT_LOCATION_OK);
@@ -385,7 +385,7 @@ static void test_owned_execution(void) {
 static void test_unknown_arithmetic_panic(void) {
     uint32_t code[2];
     emit(code, 1, XR_RBC_RET, 0, 0, 0);
-    XrRbcFunction function = {code, 2, NULL, 0, 2, 2, NULL, 0};
+    XrRbcFunction function = {code, 2, NULL, 0, 2, 2, NULL, 0, 0};
     XrRbcModule module = {&function, 1, NULL, 0};
     uint64_t arguments[] = {42, 0};
     for (unsigned op = 0; op < 2; ++op) {
@@ -418,9 +418,9 @@ static void test_source_maps(void) {
     emit(callee, 0, XR_RBC_DIV, 0, 0, 1);
     emit(callee, 1, XR_RBC_RET, 0, 0, 0);
     XrRbcFunction functions[] = {
-        {caller, 5, NULL, 0, 3, 0, ids, 5},
-        {callee, 2, NULL, 0, 2, 2, callee_ids, 2},
-        {callee, 2, NULL, 0, 2, 2, callee_ids, 2}};
+        {caller, 5, NULL, 0, 3, 0, ids, 5, 0},
+        {callee, 2, NULL, 0, 2, 2, callee_ids, 2, 0},
+        {callee, 2, NULL, 0, 2, 2, callee_ids, 2, 0}};
     XrRbcNativeI64 native = xrt_print_i64;
     XrRbcModule module = {functions, 3, &native, 1};
     XrtSourceLocation location = {"raw.xr", 6, 7, 3, 7, 4};
@@ -448,11 +448,69 @@ static void test_source_maps(void) {
     CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, owner, &execution) == XR_RBC_OK);
     xr_rbc_execution_free(&execution);
     uint32_t invalid = XR_RBC_OP_COUNT;
-    functions[0] = (XrRbcFunction) {&invalid, 1, NULL, 0, 1, 0, NULL, 0};
+    functions[0] = (XrRbcFunction) {&invalid, 1, NULL, 0, 1, 0, NULL, 0, 0};
     module.function_count = 1;
     CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, owner, &execution) == XR_RBC_INVALID);
     CHECK(!execution);
     xrt_locations_release(owner);
+}
+
+
+static void test_cells(void) {
+    uint32_t code[7];
+    immediate(code, 0, XR_RBC_LOADI, 0, 7);
+    immediate(code, 1, XR_RBC_CELL_NEW, 0, 0);
+    emit(code, 2, XR_RBC_MOV, 1, 0, 0);
+    immediate(code, 3, XR_RBC_LOADI, 2, 42);
+    emit(code, 4, XR_RBC_CELL_WRITE, 1, 2, 0);
+    emit(code, 5, XR_RBC_CELL_READ, 2, 0, 0);
+    emit(code, 6, XR_RBC_RET, 2, 0, 0);
+    XrRbcFunction function = {code, 7, NULL, 0, 3, 0, NULL, 0, 1};
+    CHECK(run_function(function, NULL, 0) == 42);
+    emit(code, 4, XR_RBC_CELL_READ, 2, 1, 0);
+    CHECK(run_function(function, NULL, 0) == 7);
+    CHECK(run_function(function, NULL, 0) == 7);
+    XrRbcModule module = {&function, 1, NULL, 0};
+    uint64_t bits = 999;
+    function.cell_count = 2;
+    immediate(code, 2, XR_RBC_LOADI, 1, 2);
+    CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_INVALID && bits == 999);
+    emit(code, 2, XR_RBC_MOV, 1, 0, 0);
+    function.cell_count = 1;
+    // Capacity alone cannot initialize a cell. Nor can an earlier retired
+    // activation authorize a later read of its numeric index.
+    immediate(code, 1, XR_RBC_LOADI, 0, 1);
+    CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_INVALID && bits == 999);
+    const int64_t handles[] = {0, 2, -1};
+    for (size_t i = 0; i < sizeof(handles) / sizeof(handles[0]); ++i) {
+        immediate(code, 0, XR_RBC_LOADI, 0, handles[i]);
+        emit(code, 1, XR_RBC_MOV, 1, 0, 0);
+        CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_INVALID && bits == 999);
+    }
+    immediate(code, 0, XR_RBC_LOADI, 0, 7);
+    immediate(code, 1, XR_RBC_CELL_NEW, 0, 1);
+    reject_prepare(&module, 0, NULL, 0); // Ordinal is outside its descriptor.
+    function.cell_count = 2;
+    CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_INVALID && bits == 999);
+    function.cell_count = 65537;
+    reject_prepare(&module, 0, NULL, 0);
+    uint32_t parent[5], child[3];
+    immediate(parent, 0, XR_RBC_LOADI, 0, 7);
+    immediate(parent, 1, XR_RBC_CELL_NEW, 0, 0);
+    immediate(parent, 2, XR_RBC_CALL, 2, 1);
+    emit(parent, 3, XR_RBC_CELL_READ, 1, 2, 0);
+    emit(parent, 4, XR_RBC_RET, 1, 0, 0);
+    immediate(child, 0, XR_RBC_LOADI, 0, 17);
+    immediate(child, 1, XR_RBC_CELL_NEW, 0, 0);
+    emit(child, 2, XR_RBC_RET, 0, 0, 0);
+    XrRbcFunction functions[] = {{parent, 5, NULL, 0, 3, 0, NULL, 0, 1},
+        {child, 3, NULL, 0, 1, 0, NULL, 0, 1}};
+    module = (XrRbcModule) {functions, 2, NULL, 0};
+    CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_INVALID && bits == 999);
+    uint32_t word = 919;
+    CHECK(xr_rbc_encode(&word, (XrRbcOperands){XR_RBC_CELL_NEW, 254, 0, 0, UINT16_MAX}));
+    CHECK(!xr_rbc_encode(&word, (XrRbcOperands){XR_RBC_CELL_NEW, 0, 0, 0, 65536}));
+    CHECK(!xr_rbc_encode(&word, (XrRbcOperands){XR_RBC_CELL_READ, 0, 0, 1, 0}));
 }
 
 int main(int argc, char **argv) {
@@ -460,6 +518,7 @@ int main(int argc, char **argv) {
         test_native_print();
         return 0;
     }
+    test_cells();
     test_encoding();
     test_arithmetic();
     test_branches();

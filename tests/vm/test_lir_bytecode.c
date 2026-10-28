@@ -730,7 +730,110 @@ static void test_owned_arithmetic_panics(void) {
     }
 }
 
+
+static XrLirValue cell_value(XrLirModule *m, XrLirBlock block, XrLirOp op,
+    XrLirValue operand) {
+    XrLirInstruction instruction = {.op = op,
+        .type = op == XR_LIR_CELL_NEW ? XR_LIR_I64_CELL : XR_LIR_I64,
+        .operands = &operand, .operand_count = 1};
+    XrLirValue result;
+    OK(xr_lir_emit_value(m, block, &instruction, &result));
+    return result;
+}
+
+static void test_cell_transport(void) {
+    XrLirModule *m = NULL;
+    OK(xr_lir_module_create(NULL, &m));
+    XrLirType flag = XR_LIR_I1, cells[] = {XR_LIR_I64_CELL, XR_LIR_I64_CELL};
+    XrLirFunction root = test_function(m, "root", &flag, 1, XR_LIR_I64);
+    XrLirFunction helper = test_function(m, "alias", cells, 2, XR_LIR_I64);
+    XrLirBlock entry = test_block(m, root, NULL, 0), join = test_block(m, root, cells, 2);
+    XrLirBlock body = test_block(m, helper, NULL, 0);
+    OK(xr_lir_set_entry(m, root, entry));
+    OK(xr_lir_set_entry(m, helper, body));
+    XrLirValue a = cell_value(m, entry, XR_LIR_CELL_NEW, test_constant(m, entry, XR_LIR_I64, 7));
+    XrLirValue b = cell_value(m, entry, XR_LIR_CELL_NEW, test_constant(m, entry, XR_LIR_I64, 20));
+    XrLirValue yes[] = {a, b}, no[] = {b, a};
+    conditional(m, entry, parameter(m, root, 0), (XrLirEdge){join, yes, 2}, (XrLirEdge){join, no, 2});
+    XrLirValue selected = block_parameter(m, join, 0), other = block_parameter(m, join, 1);
+    XrLirValue arguments[] = {selected, selected};
+    XrLirValue first = call(m, join, helper, XR_LIR_I64, arguments, 2);
+    arguments[0] = arguments[1] = other;
+    XrLirValue second = call(m, join, helper, XR_LIR_I64, arguments, 2);
+    first = test_binary(m, join, XR_LIR_MUL, first, test_constant(m, join, XR_LIR_I64, 100),
+        XR_LIR_PREDICATE_NONE);
+    test_return(m, join, test_binary(m, join, XR_LIR_ADD, first, second, XR_LIR_PREDICATE_NONE));
+    XrLirValue value = cell_value(m, body, XR_LIR_CELL_READ, parameter(m, helper, 0));
+    value = test_binary(m, body, XR_LIR_ADD, value, test_constant(m, body, XR_LIR_I64, 1),
+        XR_LIR_PREDICATE_NONE);
+    XrLirValue write[] = {parameter(m, helper, 1), value};
+    XrLirInstruction instruction = {.op = XR_LIR_CELL_WRITE, .type = XR_LIR_UNIT,
+        .operands = write, .operand_count = 2};
+    OK(xr_lir_emit_effect(m, body, &instruction));
+    test_return(m, body, cell_value(m, body, XR_LIR_CELL_READ, parameter(m, helper, 0)));
+    OK(xr_lir_module_finish(m, NULL));
+    XrRbcProgram *program = compile(m, root);
+    CHECK(xr_rbc_program_view(program)->functions[0].cell_count == 2);
+    XrRbcProgram *rejected = NULL;
+    XrRbcCompileDiagnostic diagnostic;
+    CHECK(xr_rbc_compile(m, helper, &rejected, &diagnostic) == XR_RBC_COMPILE_UNSUPPORTED && !rejected);
+    CHECK(strstr(diagnostic.message, "cell argument"));
+    xr_lir_module_destroy(m);
+    uint64_t choose = 1;
+    XrRbcExecution *first_execution = NULL, *second_execution = NULL;
+    CHECK(xr_rbc_program_prepare(program, &choose, 1, &first_execution) == XR_RBC_OK);
+    CHECK(xr_rbc_program_prepare(program, &choose, 1, &second_execution) == XR_RBC_OK);
+    XrRbcOutcome *first_outcome = xr_rbc_execution_run(first_execution);
+    CHECK(!xr_rbc_execution_run(first_execution));
+    XrRbcOutcome *second_outcome = xr_rbc_execution_run(second_execution);
+    xr_rbc_execution_free(&first_execution);
+    xr_rbc_execution_free(&second_execution);
+    choose = 0;
+    CHECK(run(program, &choose, 1) == 2108);
+    xr_rbc_program_destroy(program);
+    uint64_t bits = 0;
+    CHECK(xr_rbc_outcome_bits(first_outcome, &bits) && bits == 821);
+    CHECK(xr_rbc_outcome_bits(second_outcome, &bits) && bits == 821);
+    xr_rbc_outcome_free(&first_outcome);
+    xr_rbc_outcome_free(&second_outcome);
+}
+
+
+static void test_cell_escape_rejections(void) {
+    for (unsigned kind = 0; kind < 3; ++kind) {
+        XrLirModule *m = NULL;
+        OK(xr_lir_module_create(NULL, &m));
+        XrLirFunction root = {0};
+        if (kind == 1) {
+            XrLirFunctionSpec spec = {.name = "invalid_cell", .name_length = 12,
+                .result = XR_LIR_I64_CELL};
+            CHECK(xr_lir_declare_function(m, &spec, &root) == XR_LIR_INVALID_ARGUMENT && !root.id);
+        } else {
+            root = test_function(m, "invalid_cell", NULL, 0, XR_LIR_I64);
+            XrLirBlock body = test_block(m, root, NULL, 0);
+            OK(xr_lir_set_entry(m, root, body));
+            XrLirInstruction instruction = {.op = XR_LIR_CONST, .type = XR_LIR_I64_CELL, .bits = 1};
+            XrLirValue rejected = {0};
+            if (kind == 0) {
+                CHECK(xr_lir_emit_value(m, body, &instruction, &rejected) == XR_LIR_VERIFY_ERROR);
+                CHECK(!rejected.id);
+            } else {
+                XrLirValue value = test_constant(m, body, XR_LIR_I64, 7);
+                XrLirValue cell = cell_value(m, body, XR_LIR_CELL_NEW, value);
+                instruction = (XrLirInstruction) {.op = XR_LIR_CALL, .type = XR_LIR_UNIT,
+                    .callee = test_print_declaration(m), .operands = &cell, .operand_count = 1};
+                CHECK(xr_lir_emit_effect(m, body, &instruction) == XR_LIR_VERIFY_ERROR);
+            }
+        }
+        XrRbcProgram *program = NULL;
+        CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_INVALID && !program);
+        xr_lir_module_destroy(m);
+    }
+}
+
 int main(void) {
+    test_cell_escape_rejections();
+    test_cell_transport();
     test_edge_moves();
     test_owned_arithmetic_panics();
     test_i64_identity_cast();

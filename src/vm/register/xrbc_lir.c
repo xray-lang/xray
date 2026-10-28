@@ -31,7 +31,7 @@ typedef struct {
     XrLirFunctionView view;
     const uint32_t *functions;
     uint32_t slots[XR_RBC_REGISTER_COUNT_MAX + 1];
-    uint32_t slot_count, scratch_count, register_count, source_id, current_source_id;
+    uint32_t slot_count, scratch_count, register_count, source_id, current_source_id, cell_count;
     uint32_t *code, *source_ids;
     uint64_t *constants;
     size_t code_count, code_capacity, source_id_capacity, constant_count, constant_capacity;
@@ -169,7 +169,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     for (uint32_t value = 1; value <= v->value_count; ++value) {
         XrLirType type;
         if (xr_lir_value_type(input, (XrLirValue) {input, f.id, value}, &type) != XR_LIR_OK ||
-            !rbc_lir_scalar(type)) {
+            (!rbc_lir_scalar(type) && type != XR_LIR_I64_CELL)) {
             rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
                 "value type is not an admitted scalar",
                 rbc_lir_value_source(input, f, v, value, d));
@@ -185,6 +185,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
     case XR_LIR_NEG: case XR_LIR_DIV: case XR_LIR_REM: case XR_LIR_ICMP:
     case XR_LIR_CALL: case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
+    case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE:
         return true;
     case XR_LIR_INTCAST: {
         XrLirType source = XR_LIR_TYPE_INVALID;
@@ -336,6 +337,14 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
     case XR_LIR_CONST: return rbc_lir_constant(c, result, i->bits);
     case XR_LIR_INTCAST:
         return rbc_lir_emit(c, XR_RBC_MOV, result, c->slots[i->operands[0]], 0, 0);
+    case XR_LIR_CELL_NEW:
+        return rbc_lir_emit(c, XR_RBC_MOV, result, c->slots[i->operands[0]], 0, 0) &&
+            rbc_lir_emit(c, XR_RBC_CELL_NEW, result, 0, 0, c->cell_count++);
+    case XR_LIR_CELL_READ:
+        return rbc_lir_emit(c, XR_RBC_CELL_READ, result, c->slots[i->operands[0]], 0, 0);
+    case XR_LIR_CELL_WRITE:
+        return rbc_lir_emit(c, XR_RBC_CELL_WRITE, c->slots[i->operands[0]],
+            c->slots[i->operands[1]], 0, 0);
     case XR_LIR_ICMP: return rbc_lir_comparison(c, i);
     case XR_LIR_BR: return rbc_lir_edge(c, i->edges[0]);
     case XR_LIR_CONDBR: return rbc_lir_conditional(c, i);
@@ -406,7 +415,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
             return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "branch exceeds jump encoding");
     }
     *out = (XrRbcFunction) {c->code, c->code_count, c->constants, c->constant_count,
-        c->register_count, c->view.parameter_count, c->source_ids, c->code_count};
+        c->register_count, c->view.parameter_count, c->source_ids, c->code_count, c->cell_count};
     return true;
 }
 
@@ -527,6 +536,10 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
         return rbc_lir_error(d, verified == XR_LIR_OUT_OF_MEMORY ?
             XR_RBC_COMPILE_OUT_OF_MEMORY : XR_RBC_COMPILE_INVALID, invalid.message, invalid.source);
     }
+    for (uint32_t i = 0; i < root.parameter_count; ++i)
+        if (root.parameter_types[i] == XR_LIR_I64_CELL)
+            return rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
+                "execution entry cannot borrow a cell argument", (XrLirSource) {0});
     size_t all = xr_lir_function_count(input);
     if (all > SIZE_MAX / sizeof(uint32_t))
         return rbc_lir_error(d, XR_RBC_COMPILE_LIMIT, "function table exceeds address space",

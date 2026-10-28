@@ -19,6 +19,8 @@
 typedef struct {
     size_t function, pc, base;
     uint32_t destination;
+    size_t cell_base;
+    uint32_t initialized_cells;
 } XrRbcFrame;
 
 typedef struct {
@@ -26,6 +28,8 @@ typedef struct {
     size_t slot_capacity;
     XrRbcFrame *frames;
     size_t frame_capacity, depth;
+    uint64_t *cells;
+    size_t cell_capacity, cell_count;
 } XrRbcStack;
 
 struct XrRbcOutcome {
@@ -65,7 +69,7 @@ static bool xr_rbc_grow(void **storage, size_t *capacity, size_t count, size_t i
     return true;
 }
 
-static bool xr_rbc_reserve(XrRbcStack *stack, size_t slots, size_t frames) {
+static bool xr_rbc_reserve(XrRbcStack *stack, size_t slots, size_t frames, size_t cells) {
     // Use real void* objects, not a type-punned pointer-to-pointer.
     void *storage = stack->slots;
     if (!xr_rbc_grow(&storage, &stack->slot_capacity, slots, sizeof(uint64_t)))
@@ -75,6 +79,10 @@ static bool xr_rbc_reserve(XrRbcStack *stack, size_t slots, size_t frames) {
     if (!xr_rbc_grow(&storage, &stack->frame_capacity, frames, sizeof(XrRbcFrame)))
         return false;
     stack->frames = storage;
+    storage = stack->cells;
+    if (!xr_rbc_grow(&storage, &stack->cell_capacity, cells, sizeof(uint64_t)))
+        return false;
+    stack->cells = storage;
     return true;
 }
 
@@ -82,6 +90,7 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
     return function->code && function->code_count && function->register_count &&
            function->register_count <= XR_RBC_REGISTER_COUNT_MAX &&
            function->parameter_count <= function->register_count &&
+           function->cell_count <= 65536 &&
            (!function->constant_count || function->constants);
 }
 
@@ -93,7 +102,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     size_t remaining = function->code_count - pc;
     bool comparison = op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ;
     switch (op) {
-    case XR_RBC_MOV: case XR_RBC_NEG:
+    case XR_RBC_MOV: case XR_RBC_NEG: case XR_RBC_CELL_READ: case XR_RBC_CELL_WRITE:
     case XR_RBC_LT: case XR_RBC_LE: case XR_RBC_EQ:
         if (a >= registers || b >= registers || c) return false;
         if (comparison && (remaining <= 2 || (function->code[pc + 1] & 255) != XR_RBC_JMP))
@@ -109,6 +118,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
         break;
     case XR_RBC_LOADI:
         if (a >= registers) return false;
+        break;
+    case XR_RBC_CELL_NEW:
+        if (a >= registers || index >= function->cell_count) return false;
         break;
     case XR_RBC_JMP: {
         uint32_t bits = word >> 8;
@@ -185,15 +197,32 @@ static XrRbcStatus xr_rbc_call(const XrRbcModule *module, XrRbcStack *stack, uin
     if (caller.base > SIZE_MAX - destination - 1 || stack->depth == SIZE_MAX)
         return XR_RBC_OUT_OF_MEMORY;
     size_t base = caller.base + destination + 1;
+    size_t cell_base = stack->cell_count;
     if (base > SIZE_MAX - callee->register_count ||
-        !xr_rbc_reserve(stack, base + callee->register_count, stack->depth + 1))
+        cell_base > SIZE_MAX - callee->cell_count ||
+        !xr_rbc_reserve(stack, base + callee->register_count, stack->depth + 1,
+            cell_base + callee->cell_count))
         return XR_RBC_OUT_OF_MEMORY;
     // Only arguments are live on entry; clearing the rest prevents stale
     // bits from an earlier invocation from becoming observable.
     memset(stack->slots + base + callee->parameter_count, 0,
            (callee->register_count - callee->parameter_count) * sizeof(uint64_t));
-    stack->frames[stack->depth++] = (XrRbcFrame) {target, 0, base, destination};
+    stack->frames[stack->depth++] = (XrRbcFrame) {target, 0, base, destination, cell_base, 0};
+    stack->cell_count = cell_base + callee->cell_count;
     return XR_RBC_OK;
+}
+
+static uint64_t *xr_rbc_cell(XrRbcStack *stack, uint64_t handle) {
+    if (!handle || handle > stack->cell_count) return NULL;
+    size_t index = (size_t)handle - 1;
+    // Reserved capacity does not establish a cell's lifetime. Only an active
+    // owner's initialized prefix can authorize a read or write.
+    for (size_t depth = stack->depth; depth; --depth) {
+        const XrRbcFrame *frame = &stack->frames[depth - 1];
+        if (index >= frame->cell_base && index - frame->cell_base < frame->initialized_cells)
+            return &stack->cells[index];
+    }
+    return NULL;
 }
 
 static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
@@ -226,7 +255,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     execution->module = module;
     execution->pending = xr_calloc(1, sizeof(*execution->pending));
     if (!execution->pending ||
-        !xr_rbc_reserve(&execution->stack, function->register_count, 1) ||
+        !xr_rbc_reserve(&execution->stack, function->register_count, 1, function->cell_count) ||
         !xrt_locations_retain(locations)) {
         xr_rbc_execution_free(&execution);
         return XR_RBC_OUT_OF_MEMORY;
@@ -236,8 +265,9 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     memset(execution->stack.slots, 0, function->register_count * sizeof(uint64_t));
     if (argument_count)
         memcpy(execution->stack.slots, arguments, argument_count * sizeof(uint64_t));
-    execution->stack.frames[0] = (XrRbcFrame) {entry, 0, 0, 0};
+    execution->stack.frames[0] = (XrRbcFrame) {entry, 0, 0, 0, 0, 0};
     execution->stack.depth = 1;
+    execution->stack.cell_count = function->cell_count;
     *output = execution;
     return XR_RBC_OK;
 }
@@ -249,6 +279,7 @@ static void xr_rbc_root(void *context) {
 }
 
 static void xr_rbc_stack_free(XrRbcStack *stack) {
+    xr_free(stack->cells);
     xr_free(stack->frames);
     xr_free(stack->slots);
     *stack = (XrRbcStack) {0};

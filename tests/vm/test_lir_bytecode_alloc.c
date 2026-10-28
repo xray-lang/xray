@@ -187,12 +187,32 @@ static void register_workspace_failure(void) {
     xr_lir_module_destroy(m);
 }
 
+
+static XrLirModule *cell_compiler_module(XrLirFunction *root) {
+    XrLirModule *m = NULL;
+    OK(xr_lir_module_create(NULL, &m));
+    XrLirType type = XR_LIR_I64;
+    *root = test_function(m, "cell_square", &type, 1, type);
+    XrLirBlock body = test_block(m, *root, NULL, 0);
+    OK(xr_lir_set_entry(m, *root, body));
+    XrLirValue input, cell, value;
+    OK(xr_lir_function_parameter(m, *root, 0, &input));
+    XrLirInstruction instruction = {.op = XR_LIR_CELL_NEW, .type = XR_LIR_I64_CELL,
+        .operands = &input, .operand_count = 1};
+    OK(xr_lir_emit_value(m, body, &instruction, &cell));
+    instruction = (XrLirInstruction) {.op = XR_LIR_CELL_READ, .type = XR_LIR_I64,
+        .operands = &cell, .operand_count = 1};
+    OK(xr_lir_emit_value(m, body, &instruction, &value));
+    test_return(m, body, test_binary(m, body, XR_LIR_MUL, value, value, XR_LIR_PREDICATE_NONE));
+    OK(xr_lir_module_finish(m, NULL));
+    return m;
+}
+
 int main(void) {
     register_workspace_failure();
     source_map_failures();
-    XrLirModule *m = test_fib();
     XrLirFunction root;
-    OK(xr_lir_function_at(m, 1, &root));
+    XrLirModule *m = cell_compiler_module(&root);
     XrRbcProgram *program = NULL;
     XrRbcCompileDiagnostic diagnostic;
     CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);

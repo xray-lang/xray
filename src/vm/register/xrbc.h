@@ -47,6 +47,9 @@
     X(JMP, SJ)                                                                                     \
     X(CALL, ABX)                                                                                   \
     X(CALLN, ABX)                                                                                  \
+    X(CELL_NEW, ABX)                                                                               \
+    X(CELL_READ, AB)                                                                               \
+    X(CELL_WRITE, AB)                                                                              \
     X(RET, A)                                                                                      \
     X(RET0, NONE)
 
@@ -74,6 +77,9 @@ typedef struct {
     // is zero or belongs to the execution's location owner.
     const uint32_t *source_ids;
     size_t source_id_count;
+    // Cells belong to this activation. Handles are indices in its execution;
+    // they may travel only to active callees, never outlive their owner.
+    uint32_t cell_count;
 } XrRbcFunction;
 
 // Only the registered output leaf is admitted. Both physical arguments are

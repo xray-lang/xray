@@ -40,7 +40,7 @@ static XrRbcFunction make_fib(uint32_t code[13]) {
     emit(code, 10, XR_RBC_ADD, 2, 3, 4);
     emit(code, 11, XR_RBC_RET, 2, 0, 0);
     emit(code, 12, XR_RBC_RET, 0, 0, 0);
-    return (XrRbcFunction) {code, 13, NULL, 0, 6, 1, NULL, 0};
+    return (XrRbcFunction) {code, 13, NULL, 0, 6, 1, NULL, 0, 0};
 }
 
 static XrRbcFunction make_loop(uint32_t code[10]) {
@@ -54,7 +54,7 @@ static XrRbcFunction make_loop(uint32_t code[10]) {
     emit(code, 7, XR_RBC_ADD, 1, 1, 3);
     XR_CHECK(xr_rbc_jump(code + 8, 8, 3, 10), "loop backedge");
     emit(code, 9, XR_RBC_RET0, 0, 0, 0);
-    return (XrRbcFunction) {code, 10, NULL, 0, 4, 1, NULL, 0};
+    return (XrRbcFunction) {code, 10, NULL, 0, 4, 1, NULL, 0, 0};
 }
 
 static XrRbcFunction make_countdown(uint32_t code[11]) {
@@ -69,7 +69,7 @@ static XrRbcFunction make_countdown(uint32_t code[11]) {
     emit(code, 8, XR_RBC_RET0, 0, 0, 0);
     emit(code, 9, XR_RBC_RET0, 0, 0, 0);
     emit(code, 10, XR_RBC_RET, 0, 0, 0);
-    return (XrRbcFunction) {code, 11, NULL, 0, 4, 1, NULL, 0};
+    return (XrRbcFunction) {code, 11, NULL, 0, 4, 1, NULL, 0, 0};
 }
 
 #endif  // REGISTER_VM_PROGRAMS_H

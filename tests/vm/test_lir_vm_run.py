@@ -3,6 +3,7 @@ import argparse
 from pathlib import Path
 import subprocess
 import tempfile
+import hashlib
 
 
 def main():
@@ -32,6 +33,18 @@ def main():
         run('loop', 'fn sum(n:i64)->i64{var i=0\nvar total=0\n'
             'while(i<n){total=total+i\ni=i+1}\nreturn total}\nsum(1000)\n')
         run('output', 'print(7)\n', stdout=b'7\n')
+        original_cell = (Path(__file__).resolve().parents[1] /
+                         'diff/cases/semantics/default_params/default_evaluated_per_call.xr').read_bytes()
+        assert hashlib.sha256(original_cell.replace(b'\r\n', b'\n')).hexdigest() == \
+            '8678fe40214cebbf01fc88a552610ec957b9092ffc92a6c49cf884fe0b3f6f47'
+        path = root/'default_evaluated_per_call.xr'
+        path.write_bytes(original_cell)
+        for options in ([], ['--twice'], ['--optimize'], ['--twice', '--optimize']):
+            result = subprocess.run([args.driver, str(path), *options], capture_output=True, timeout=15)
+            assert result.returncode == 0 and not result.stderr, (options, result.returncode, result.stderr)
+            assert result.stdout == b'1\n2\n99\n3\n3\n' * (2 if '--twice' in options else 1), \
+                (options, result.stdout)
+            assert path.read_bytes() == original_cell
         run('literal-zero', 'const n=0\nprint(n)\n', stdout=b'0\n')
         run('printing-closure', 'fn leaf(x:i64)->i64{print(x)\nreturn x}\n'
             'fn call(x:i64)->i64{return leaf(x)}\nprint(call(7))\n', stdout=b'7\n7\n')

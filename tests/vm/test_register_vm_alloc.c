@@ -13,20 +13,23 @@
 #include "register_vm_programs.h"
 #include "base/xmalloc.h"
 
-static struct { void *pointer; size_t size; } blocks[2];
-static enum { NO_FAILURE, OUTCOME_FAILURE, INITIAL_STACK_FAILURE, GROWTH_FAILURE } fault;
+static struct { void *pointer; size_t size; } blocks[3];
+static enum { NO_FAILURE, OUTCOME_FAILURE, INITIAL_STACK_FAILURE, GROWTH_FAILURE,
+    CELL_INITIAL_FAILURE, CELL_GROWTH_FAILURE } fault;
 
 static void *real_calloc(size_t count, size_t size) { return xr_calloc(count, size); }
 static void *execution_calloc(size_t count, size_t size);
 
 static void *moving_realloc(void *old, size_t size) {
-    if ((fault == INITIAL_STACK_FAILURE && !old) || (fault == GROWTH_FAILURE && old)) {
+    size_t index = 0;
+    while (index < 3 && blocks[index].pointer != old) ++index;
+    XR_CHECK(index < 3, "unknown stack allocation");
+    if ((fault == INITIAL_STACK_FAILURE && !old) || (fault == GROWTH_FAILURE && old) ||
+        (fault == CELL_INITIAL_FAILURE && !old && index == 2) ||
+        (fault == CELL_GROWTH_FAILURE && old && index == 2)) {
         fault = NO_FAILURE;
         return NULL;
     }
-    size_t index = 0;
-    while (index < 2 && blocks[index].pointer != old) ++index;
-    XR_CHECK(index < 2, "unknown stack allocation");
     void *fresh = xr_malloc(size);
     if (!fresh) return NULL;
     if (old) {
@@ -41,7 +44,7 @@ static void *moving_realloc(void *old, size_t size) {
 
 static void moving_free(void *pointer) {
     if (!pointer) return;
-    for (size_t i = 0; i < 2; ++i) {
+    for (size_t i = 0; i < 3; ++i) {
         if (blocks[i].pointer != pointer) continue;
         blocks[i].pointer = NULL;
         blocks[i].size = 0;
@@ -122,6 +125,74 @@ static void panic_after_growth(void) {
     xrt_locations_release(owner);
 }
 
+
+static void cell_growth(bool panic) {
+    uint32_t root[7], body[17], ids[17] = {0};
+    immediate(root, 0, XR_RBC_LOADI, 1, 7);
+    immediate(root, 1, XR_RBC_CELL_NEW, 1, 0);
+    emit(root, 2, XR_RBC_MOV, 4, 0, 0);
+    emit(root, 3, XR_RBC_MOV, 5, 1, 0);
+    immediate(root, 4, XR_RBC_CALL, 3, 1);
+    emit(root, 5, XR_RBC_CELL_READ, 0, 1, 0);
+    emit(root, 6, XR_RBC_RET, 0, 0, 0);
+    immediate(body, 0, XR_RBC_LOADI, 2, 1);
+    immediate(body, 1, XR_RBC_CELL_NEW, 2, 0);
+    emit(body, 2, XR_RBC_CELL_READ, 3, 1, 0);
+    emit(body, 3, XR_RBC_CELL_READ, 2, 2, 0);
+    emit(body, 4, XR_RBC_ADD, 3, 3, 2);
+    emit(body, 5, XR_RBC_CELL_WRITE, 1, 3, 0);
+    immediate(body, 6, XR_RBC_LOADI, 2, 0);
+    emit(body, 7, XR_RBC_EQ, 0, 2, 0);
+    XR_CHECK(xr_rbc_jump(body + 8, 8, 15, 17), "deepest cell activation");
+    immediate(body, 9, XR_RBC_LOADI, 2, 1);
+    emit(body, 10, XR_RBC_SUB, 4, 0, 2);
+    emit(body, 11, XR_RBC_MOV, 5, 1, 0);
+    immediate(body, 12, XR_RBC_CALL, 3, 1);
+    emit(body, 13, XR_RBC_RET, 3, 0, 0);
+    emit(body, 14, XR_RBC_RET0, 0, 0, 0);
+    emit(body, 15, panic ? XR_RBC_DIV : XR_RBC_CELL_READ, 0, panic ? 0 : 1, panic ? 2 : 0);
+    emit(body, 16, XR_RBC_RET, 0, 0, 0);
+    ids[15] = 1;
+    XrRbcFunction functions[] = {{root, 7, NULL, 0, 6, 1, NULL, 0, 1},
+        {body, 17, NULL, 0, 6, 2, ids, 17, 1}};
+    XrRbcModule module = {functions, 2, NULL, 0};
+    XrtSourceLocation location = {"cells.xr", 8, 19, 2, 19, 7};
+    XrtLocationOwner *owner = NULL;
+    XR_CHECK(xrt_locations_create(&location, 1, &owner) == XRT_LOCATION_OK, "cell fault site");
+    uint64_t argument = 128, bits = 999;
+    XrRbcExecution *execution = NULL;
+    bool prepare_fails = fault == CELL_INITIAL_FAILURE;
+    bool growth_fails = fault == CELL_GROWTH_FAILURE;
+    XrRbcStatus status = xr_rbc_module_prepare(&module, 0, &argument, 1, owner, &execution);
+    if (prepare_fails) {
+        XR_CHECK(status == XR_RBC_OUT_OF_MEMORY && !execution && fault == NO_FAILURE,
+            "real initial cell allocation failed atomically");
+    } else {
+        XR_CHECK(status == XR_RBC_OK && execution, "cell execution is ready");
+        XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+        XR_CHECK(outcome && !xr_rbc_execution_run(execution), "one owned cell outcome");
+        XR_CHECK(xr_rbc_outcome_status(outcome) == (growth_fails ? XR_RBC_OUT_OF_MEMORY :
+            panic ? XR_RBC_ARITHMETIC_PANIC : XR_RBC_OK), "cell outcome classification");
+        xr_rbc_execution_free(&execution);
+        if (!panic && !growth_fails)
+            XR_CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == 136,
+                "ancestor cell survives every relocated recursive bank");
+        else XR_CHECK(!xr_rbc_outcome_bits(outcome, &bits) && bits == 999, "failure preserves bits");
+        if (panic && !growth_fails) {
+            XrtArithmeticPanic facts;
+            const XrtLocationOwner *borrowed = NULL;
+            XR_CHECK(xr_rbc_outcome_arithmetic_panic(outcome, &facts, &borrowed), "owned cell panic");
+            XR_CHECK(facts.code == 420 && xrt_locations_get(borrowed, facts.source_id)->line == 19,
+                "panic locations survive cell stack retirement");
+        }
+        xr_rbc_outcome_free(&outcome);
+    }
+    xrt_locations_release(owner);
+    XR_CHECK(fault == NO_FAILURE, "requested cell fault reached");
+    for (size_t i = 0; i < 3; ++i)
+        XR_CHECK(!blocks[i].pointer && !blocks[i].size, "all three moving buffers reclaimed");
+}
+
 int main(void) {
     uint32_t code[11];
     XrRbcFunction function = make_countdown(code);
@@ -139,5 +210,12 @@ int main(void) {
     xrt_locations_release(owner);
     puts("register_vm_alloc: passed");
     panic_after_growth();
+    cell_growth(false);
+    fault = CELL_INITIAL_FAILURE;
+    cell_growth(false);
+    fault = CELL_GROWTH_FAILURE;
+    cell_growth(false);
+    cell_growth(false);
+    cell_growth(true);
     return 0;
 }

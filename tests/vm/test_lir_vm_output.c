@@ -61,6 +61,14 @@ static XrRbcProgram *from_lir(const char *path, bool known, bool point, uint32_t
     XrLirInstruction instruction = {.op = XR_LIR_CONST, .type = XR_LIR_I64,
         .bits = 42, .source = source};
     OK(xr_lir_emit_value(module, block, &instruction, &value));
+    // These failures unwind with a real live cell bank, not only scalar slots.
+    XrLirValue cell;
+    XrLirInstruction cell_instruction = {.op = XR_LIR_CELL_NEW, .type = XR_LIR_I64_CELL,
+        .operands = &value, .operand_count = 1};
+    OK(xr_lir_emit_value(module, block, &cell_instruction, &cell));
+    cell_instruction = (XrLirInstruction) {.op = XR_LIR_CELL_READ, .type = XR_LIR_I64,
+        .operands = &cell, .operand_count = 1};
+    OK(xr_lir_emit_value(module, block, &cell_instruction, &value));
     if (arithmetic) {
         XrLirValue zero = {0};
         instruction.bits = 0;

@@ -66,6 +66,28 @@ XR_RBC_CASE(LOADI) {
     XR_RBC_REG(a) = (uint64_t) value;
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(CELL_NEW) {
+    uint32_t ordinal = instruction >> 16;
+    XrRbcFrame *frame = &stack->frames[stack->depth - 1];
+    if (ordinal > frame->initialized_cells) return XR_RBC_INVALID;
+    size_t index = frame->cell_base + ordinal;
+    stack->cells[index] = XR_RBC_REG(a);
+    if (ordinal == frame->initialized_cells) ++frame->initialized_cells;
+    XR_RBC_REG(a) = (uint64_t)index + 1;
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(CELL_READ) {
+    uint64_t *cell = xr_rbc_cell(stack, XR_RBC_REG(b));
+    if (!cell) return XR_RBC_INVALID;
+    XR_RBC_REG(a) = *cell;
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(CELL_WRITE) {
+    uint64_t *cell = xr_rbc_cell(stack, XR_RBC_REG(a));
+    if (!cell) return XR_RBC_INVALID;
+    *cell = XR_RBC_REG(b);
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(ADD) {
     XR_RBC_BINARY(XR_RBC_REG(b) + XR_RBC_REG(c));
     XR_RBC_NEXT();
@@ -158,7 +180,9 @@ XR_RBC_CASE(RET0) {
     if (op == XR_RBC_RET) {
         value = XR_RBC_REG(a);
     }
-    uint32_t destination = stack->frames[--stack->depth].destination;
+    XrRbcFrame retired = stack->frames[--stack->depth];
+    uint32_t destination = retired.destination;
+    stack->cell_count = retired.cell_base;
     if (!stack->depth) {
         *result = value;
         return XR_RBC_OK;

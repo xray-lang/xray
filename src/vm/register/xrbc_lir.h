@@ -39,7 +39,9 @@ typedef struct {
 // F64 transport are supported, as is an I64-to-I64 INTCAST. Other integer
 // conversions and all floating operations, comparisons and conversions are
 // not admitted; native calls bind only the shared i64 output leaf. F64 arguments
-// retain every payload bit.
+// retain every payload bit. I64 cells belong to an activation and may be
+// transported through verified internal calls and block parameters. Cells
+// cannot be host entry arguments, results, constants or native arguments.
 XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunction entry,
     XrRbcProgram **output, XrRbcCompileDiagnostic *diagnostic);
 XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program);
