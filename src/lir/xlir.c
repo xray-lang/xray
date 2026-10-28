@@ -158,6 +158,8 @@ XR_FUNC void xr_lir_module_destroy(XrLirModule *m) {
         lir_function_free(&m->functions[i]);
     for (uint32_t i = 0; i < m->intrinsic_count; ++i)
         xr_free((void *) m->intrinsics[i].parameters);
+    for (uint32_t i = 0; i < m->literal_count; ++i) xr_free(m->literals[i].bytes);
+    xr_free(m->literals);
     xr_free(m->functions);
     xr_free(m->intrinsics);
     xr_free(m->failure_path);
@@ -209,6 +211,47 @@ XR_FUNC XrLirStatus xr_lir_module_create(const XrLirRegistry *registry, XrLirMod
     return XR_LIR_OK;
 }
 
+XR_FUNC XrLirStatus xr_lir_add_literal(XrLirModule *m, const void *bytes, size_t length,
+    XrLirLiteral *output) {
+    if (!output || output->module || output->id || (length && !bytes) || length == SIZE_MAX)
+        return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    XrLirStatus status = lir_writable(m);
+    if (status != XR_LIR_OK) return status;
+    void *table = lir_reserve(m, m->literals, m->literal_count, &m->literal_capacity, sizeof(*m->literals));
+    if (!table) return m->failure;
+    m->literals = table;
+    uint8_t *copy = lir_allocate(m, length + 1, 1);
+    if (!copy) return m->failure;
+    if (length) memcpy(copy, bytes, length);
+    copy[length] = 0;
+    m->literals[m->literal_count++] = (XrLirLiteralData){copy, length};
+    *output = (XrLirLiteral){m, m->literal_count};
+    return XR_LIR_OK;
+}
+XR_FUNC uint32_t xr_lir_literal_count(const XrLirModule *m) {
+    return xr_lir_module_is_readable(m) ? m->literal_count : 0;
+}
+XR_FUNC XrLirStatus xr_lir_literal_at(const XrLirModule *m, uint32_t ordinal, XrLirLiteral *output) {
+    if (output) *output = (XrLirLiteral){0};
+    if (!output || !xr_lir_module_is_readable(m) || ordinal >= m->literal_count)
+        return XR_LIR_INVALID_ARGUMENT;
+    *output = (XrLirLiteral){m, ordinal + 1};return XR_LIR_OK;
+}
+XR_FUNC XrLirStatus xr_lir_literal_view(const XrLirModule *m, XrLirLiteral literal,
+    const uint8_t **bytes, size_t *length) {
+    if (!bytes || !length || !xr_lir_module_is_readable(m) || literal.module != m ||
+        !literal.id || literal.id > m->literal_count) return XR_LIR_INVALID_ARGUMENT;
+    *bytes = m->literals[literal.id - 1].bytes;
+    *length = m->literals[literal.id - 1].length;return XR_LIR_OK;
+}
+XR_FUNC XrLirStatus xr_lir_literal_address(XrLirModule *m, XrLirBlock block,
+    XrLirLiteral literal, XrLirValue *output) {
+    if (!m || literal.module != m || !literal.id || literal.id > m->literal_count)
+        return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    XrLirInstruction op = {.op=XR_LIR_LITERAL_ADDR, .type=XR_LIR_PTR, .bits=literal.id};
+    return xr_lir_emit_value(m, block, &op, output);
+}
+
 static bool lir_function_spec_valid(const XrLirFunctionSpec *spec) {
     if (!spec || !spec->name || !spec->name_length || spec->name_length == SIZE_MAX ||
         memchr(spec->name, 0, spec->name_length) ||
@@ -217,11 +260,15 @@ static bool lir_function_spec_valid(const XrLirFunctionSpec *spec) {
         return false;
     if (spec->kind == XR_LIR_FUNCTION_DEFINITION)
         return spec->extern_kind == XR_LIR_EXTERN_NONE;
-    return spec->kind == XR_LIR_FUNCTION_EXTERNAL && spec->extern_kind == XR_LIR_EXTERN_PRINT_I64 &&
-           spec->name_length == sizeof("xrt_print_i64") - 1 &&
-           !memcmp(spec->name, "xrt_print_i64", sizeof("xrt_print_i64") - 1) &&
-           spec->parameter_count == 1 && spec->parameters[0] == XR_LIR_I64 &&
-           spec->result == XR_LIR_UNIT;
+    if (spec->kind != XR_LIR_FUNCTION_EXTERNAL || spec->result != XR_LIR_UNIT) return false;
+    if (spec->extern_kind == XR_LIR_EXTERN_PRINT_STRING)
+        return spec->name_length == sizeof("xrt_print_string") - 1 &&
+            !memcmp(spec->name, "xrt_print_string", sizeof("xrt_print_string") - 1) &&
+            spec->parameter_count == 2 && spec->parameters[0] == XR_LIR_PTR && spec->parameters[1] == XR_LIR_U64;
+    return spec->extern_kind == XR_LIR_EXTERN_PRINT_I64 &&
+        spec->name_length == sizeof("xrt_print_i64") - 1 &&
+        !memcmp(spec->name, "xrt_print_i64", sizeof("xrt_print_i64") - 1) &&
+        spec->parameter_count == 1 && spec->parameters[0] == XR_LIR_I64;
 }
 
 static bool lir_signature_copy(XrLirModule *m, const XrLirFunctionSpec *spec,

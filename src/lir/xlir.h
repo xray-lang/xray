@@ -66,7 +66,8 @@ typedef enum XrLirFunctionKind {
 } XrLirFunctionKind;
 typedef enum XrLirExternKind {
     XR_LIR_EXTERN_NONE,
-    XR_LIR_EXTERN_PRINT_I64
+    XR_LIR_EXTERN_PRINT_I64,
+    XR_LIR_EXTERN_PRINT_STRING
 } XrLirExternKind;
 
 /* Handles are valid only while their module is alive. Zero IDs are invalid. */
@@ -74,6 +75,10 @@ typedef struct XrLirFunction {
     const XrLirModule *module;
     uint32_t id;
 } XrLirFunction;
+typedef struct XrLirLiteral {
+    const XrLirModule *module;
+    uint32_t id;
+} XrLirLiteral;
 typedef struct XrLirBlock {
     const XrLirModule *module;
     uint32_t function, id;
@@ -140,6 +145,9 @@ typedef struct XrLirInstructionView {
  * verified SSA; NULL, unfinished and failed modules are not readable. */
 XR_FUNC bool xr_lir_module_is_readable(const XrLirModule *module);
 XR_FUNC uint32_t xr_lir_function_count(const XrLirModule *module);
+XR_FUNC uint32_t xr_lir_literal_count(const XrLirModule *module);
+XR_FUNC XrLirStatus xr_lir_literal_at(const XrLirModule *, uint32_t ordinal, XrLirLiteral *);
+XR_FUNC XrLirStatus xr_lir_literal_view(const XrLirModule *, XrLirLiteral, const uint8_t **, size_t *);
 /* Intrinsic signatures include unused entries. Query parameter slices borrow
  * the finished module; a receiving builder must copy them before it dies. */
 XR_FUNC uint32_t xr_lir_intrinsic_count(const XrLirModule *module);

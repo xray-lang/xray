@@ -9,6 +9,9 @@
 #include "lir_test_programs.h"
 #include "lir/xlir_internal.h"
 #include "lir/xlir_verify.h"
+#include "lir/xlir_rebuild.h"
+#include "lir/xlir_inline.h"
+#include "lir/xlir_sccp.h"
 #include "base/xmalloc.h"
 
 static void queries(void) {
@@ -193,6 +196,47 @@ static void verifier_rejections(void) {
     arguments[0] = saved;
     OK(xr_lir_verify(m, &d));
     xr_lir_module_destroy(m);
+}
+
+static void definition_prevalidation_rejections(void) {
+    XrLirModule *m = test_fib();
+    XrLirFunctionData *f = &m->functions[1];
+    XrLirBlockData *later = &f->blocks[2];
+    XrLirInstructionView *comparison = &f->blocks[0].instructions[1].view;
+    uint32_t *arguments = (uint32_t *)comparison->operands;
+    uint32_t original = arguments[0], target = later->instructions[2].view.result;
+    XrLirValueData *value = &f->values[target - 1];
+    CHECK(value->block == 3 && value->instruction == 2);
+    CHECK(xr_lir_internal_value_definition(f, target) == &later->instructions[2].view);
+    CHECK(!xr_lir_internal_value_definition(NULL, target));
+    arguments[0] = target;
+    XrLirDiagnostic diagnostic = {0};
+    XrLirInstructionData *storage = later->instructions;
+    later->instructions = NULL;
+    CHECK(!xr_lir_internal_value_definition(f, target));
+    CHECK(xr_lir_verify(m, &diagnostic) == XR_LIR_VERIFY_ERROR &&
+          diagnostic.status == XR_LIR_VERIFY_ERROR && diagnostic.function == 2 &&
+          diagnostic.block == 3 && diagnostic.instruction == 0);
+    later->instructions = storage;
+    uint32_t count = later->instruction_count, coordinate = value->instruction;
+    CHECK(later->instruction_capacity < UINT32_MAX);
+    later->instruction_count = later->instruction_capacity + 1;
+    value->instruction = later->instruction_capacity;
+    CHECK(!xr_lir_internal_value_definition(f, target));
+    CHECK(xr_lir_verify(m, &diagnostic) == XR_LIR_VERIFY_ERROR &&
+          diagnostic.status == XR_LIR_VERIFY_ERROR && diagnostic.function == 2 &&
+          diagnostic.block == 3 && diagnostic.instruction == 0);
+    later->instruction_count = count;
+    value->instruction = count;
+    CHECK(!xr_lir_internal_value_definition(f, target));
+    CHECK(xr_lir_verify(m, &diagnostic) == XR_LIR_VERIFY_ERROR && diagnostic.function == 2);
+    value->instruction = coordinate;
+    CHECK(xr_lir_verify(m, &diagnostic) == XR_LIR_VERIFY_ERROR &&
+          strstr(diagnostic.message, "dominate"));
+    arguments[0] = original;
+    OK(xr_lir_verify(m, &diagnostic));
+    xr_lir_module_destroy(m);
+    puts("cross-block definition storage rejects before lookup; restored dominance remains enforced");
 }
 
 static void graph_edges(void) {
@@ -550,11 +594,84 @@ static void intrinsic_query_and_transfer(void) {
     CHECK(xr_lir_module_create(&registry, &copy) == XR_LIR_INVALID_ARGUMENT && !copy);
 }
 
+static XrLirModule *literal_program(uint32_t attack) {
+    XrLirModule *m = NULL;OK(xr_lir_module_create(NULL, &m));
+    unsigned char bytes[] = {'A', 0, 0xc3, 0xa9};
+    XrLirLiteral literal = {0};OK(xr_lir_add_literal(m, bytes, sizeof(bytes), &literal));
+    memset(bytes, 0xa5, sizeof(bytes));
+    XrLirType parameters[] = {XR_LIR_PTR, XR_LIR_U64};
+    XrLirFunction print = {0};
+    XrLirFunctionSpec external = {.name="xrt_print_string", .name_length=16, .parameters=parameters,
+        .parameter_count=2, .result=XR_LIR_UNIT, .kind=XR_LIR_FUNCTION_EXTERNAL,
+        .extern_kind=XR_LIR_EXTERN_PRINT_STRING};
+    OK(xr_lir_declare_function(m, &external, &print));
+    XrLirFunction f = test_function(m, "literal", NULL, 0, attack == 4 ? XR_LIR_PTR : XR_LIR_UNIT);
+    XrLirBlock block = test_block(m, f, NULL, 0);OK(xr_lir_set_entry(m, f, block));
+    XrLirValue args[2] = {{0}};
+    if (attack == 1) {
+        literal.id = 2;
+        CHECK(xr_lir_literal_address(m, block, literal, &args[0]) == XR_LIR_INVALID_ARGUMENT && !args[0].id);
+        xr_lir_module_destroy(m);return NULL;
+    }
+    if (attack == 2) {
+        XrLirModule *other = NULL;OK(xr_lir_module_create(NULL, &other));
+        XrLirLiteral foreign = {0};OK(xr_lir_add_literal(other, "x", 1, &foreign));
+        CHECK(xr_lir_literal_address(m, block, foreign, &args[0]) == XR_LIR_INVALID_ARGUMENT && !args[0].id);
+        xr_lir_module_destroy(other);xr_lir_module_destroy(m);return NULL;
+    }
+    if (attack == 3) args[0] = test_constant(m, block, XR_LIR_PTR, 0);
+    else OK(xr_lir_literal_address(m, block, literal, &args[0]));
+    if (attack == 4) {
+        XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=args, .operand_count=1};
+        CHECK(xr_lir_set_terminator(m, block, &ret) == XR_LIR_VERIFY_ERROR);
+        xr_lir_module_destroy(m);return NULL;
+    }
+    args[1] = test_constant(m, block, XR_LIR_U64, attack == 5 ? 3 : sizeof(bytes));
+    XrLirInstruction call = {.op=XR_LIR_CALL, .type=XR_LIR_UNIT, .callee=print,
+        .operands=args, .operand_count=2};
+    if (attack == 3 || attack == 5) {
+        CHECK(xr_lir_emit_effect(m, block, &call) == XR_LIR_VERIFY_ERROR);
+        xr_lir_module_destroy(m);return NULL;
+    }
+    if (attack != 7) OK(xr_lir_emit_effect(m, block, &call));
+    if (attack == 6) OK(xr_lir_emit_effect(m, block, &call));
+    XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT};OK(xr_lir_set_terminator(m, block, &ret));
+    if (attack) {
+        CHECK(xr_lir_verify(m, NULL) == XR_LIR_VERIFY_ERROR);
+        xr_lir_module_destroy(m);return NULL;
+    }
+    OK(xr_lir_module_finish(m, NULL));return m;
+}
+static void literal_ownership(void) {
+    XrLirModule *m = literal_program(0), *copies[3] = {0};
+    OK(xr_lir_rebuild(m, &copies[0]));OK(xr_lir_inline(m, &copies[1]));OK(xr_lir_sccp(m, &copies[2]));
+    XrLirLiteral original = {0};const uint8_t *bytes = NULL;size_t length = 0;
+    OK(xr_lir_literal_at(m, 0, &original));OK(xr_lir_literal_view(m, original, &bytes, &length));
+    CHECK(length == 4 && xr_lir_literal_count(m) == 1);
+    for (uint32_t i = 0; i < 3; ++i) {
+        XrLirLiteral owned = {0};const uint8_t *copy = NULL;size_t size = 0;
+        OK(xr_lir_literal_at(copies[i], 0, &owned));OK(xr_lir_literal_view(copies[i], owned, &copy, &size));
+        CHECK(copy != bytes && size == length && !memcmp(copy, bytes, size));
+        CHECK(xr_lir_literal_view(copies[i], original, &copy, &size) == XR_LIR_INVALID_ARGUMENT);
+    }
+    xr_lir_module_destroy(m);
+    const uint8_t expected[] = {'A', 0, 0xc3, 0xa9};
+    for (uint32_t i = 0; i < 3; ++i) {
+        XrLirLiteral owned = {0};OK(xr_lir_literal_at(copies[i], 0, &owned));
+        OK(xr_lir_literal_view(copies[i], owned, &bytes, &length));
+        CHECK(length == sizeof(expected) && !memcmp(bytes, expected, sizeof(expected)));
+        OK(xr_lir_verify(copies[i], NULL));xr_lir_module_destroy(copies[i]);
+    }
+    for (uint32_t attack = 1; attack <= 7; ++attack) CHECK(!literal_program(attack));
+}
+
 int main(void) {
     queries();
+    literal_ownership();
     builder_rejections();
     foreign_handles();
     verifier_rejections();
+    definition_prevalidation_rejections();
     graph_edges();
     owned_inputs_and_growth();
     constants_and_swap();

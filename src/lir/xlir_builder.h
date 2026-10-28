@@ -51,6 +51,10 @@ typedef struct XrLirInstruction {
  * The module owns a snapshot of every supplied intrinsic signature. */
 XR_FUNC XrLirStatus xr_lir_module_create(const XrLirRegistry *, XrLirModule **output);
 XR_FUNC void xr_lir_module_destroy(XrLirModule *module);
+/* Literal data is copied before publication. The address is usable only by
+ * the exact String output call, paired with this record's explicit length. */
+XR_FUNC XrLirStatus xr_lir_add_literal(XrLirModule *, const void *, size_t, XrLirLiteral *);
+XR_FUNC XrLirStatus xr_lir_literal_address(XrLirModule *, XrLirBlock, XrLirLiteral, XrLirValue *);
 XR_FUNC XrLirStatus xr_lir_declare_function(XrLirModule *, const XrLirFunctionSpec *,
                                             XrLirFunction *);
 XR_FUNC XrLirStatus xr_lir_define_function(XrLirModule *, XrLirFunction);

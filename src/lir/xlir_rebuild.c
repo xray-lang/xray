@@ -52,6 +52,12 @@ static XrLirStatus rebuild_registry(Rebuild *c) {
     }
     // module_create copied parameter slices while their source was still live.
     xr_free(entries);
+    for (uint32_t i = 0; status == XR_LIR_OK && i < xr_lir_literal_count(c->input); ++i) {
+        XrLirLiteral old = {0}, owned = {0};const uint8_t *bytes = NULL;size_t length = 0;
+        status = xr_lir_literal_at(c->input, i, &old);
+        if (status == XR_LIR_OK) status = xr_lir_literal_view(c->input, old, &bytes, &length);
+        if (status == XR_LIR_OK) status = xr_lir_add_literal(c->output, bytes, length, &owned);
+    }
     return status;
 }
 

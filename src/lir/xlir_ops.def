@@ -25,3 +25,5 @@ XR_LIR_OP(CALL_INTRINSIC, "call_intrinsic", -1)
 XR_LIR_OP(BR, "br", 0)
 XR_LIR_OP(CONDBR, "condbr", 1)
 XR_LIR_OP(RET, "ret", -1)
+/* The module owns these immutable bytes; this is not a general pointer constant. */
+XR_LIR_OP(LITERAL_ADDR, "literal_addr", 0)

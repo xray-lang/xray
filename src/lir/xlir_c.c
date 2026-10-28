@@ -16,6 +16,7 @@
  */
 #include "xlir_c.h"
 #include "xlir_verify.h"
+#include "xlir_internal.h"
 #include "../aot/xi_cgen_verify_output.h"
 #include "../base/xchecks.h"
 #include <inttypes.h>
@@ -31,7 +32,7 @@ typedef struct LirC {
     size_t length, capacity;
     uint32_t *closure;
     uint32_t closure_count;
-    uint8_t *seen, *fixed_divisors;
+    uint8_t *seen, *fixed_divisors, *used_literals;
     XrLirFunction function;
     XrLirFunctionView view;
     uint32_t block, instruction, scratch;
@@ -231,6 +232,10 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     c_scalar(c, v->type);
     switch (v->op) {
         case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE:
+            break;
+        case XR_LIR_LITERAL_ADDR:
+            c->used_literals[v->bits - 1] = 1;
+            break;
         case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
         case XR_LIR_NEG: case XR_LIR_ICMP: case XR_LIR_INTCAST:
         case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
@@ -387,6 +392,11 @@ static void c_signature(LirC *c, bool definition) {
     }
     c_text(c, definition ? ") {\n" : ");\n");
 }
+static bool c_literal_value(LirC *c, uint32_t id) {
+    const XrLirFunctionData *function = &c->request->module->functions[c->function.id - 1];
+    const XrLirInstructionView *definition = xr_lir_internal_value_definition(function, id);
+    return definition && definition->op == XR_LIR_LITERAL_ADDR;
+}
 static void c_declarations(LirC *c) {
     for (uint32_t id = 1; id <= c->view.value_count && c->status == XR_LIR_C_OK; ++id) {
         if (!c_request_poll(c))
@@ -395,7 +405,7 @@ static void c_declarations(LirC *c) {
         for (uint32_t p = 0; p < c->view.parameter_count && c->status == XR_LIR_C_OK; ++p)
             parameter |= c->view.parameters[p] == id;
         if (!parameter) {
-            c_format(c, "    %s v%" PRIu32 ";\n", c_type(c_value_type(c, id)), id);
+            c_format(c, "    %s v%" PRIu32 ";\n", c_literal_value(c, id) ? "const void *" : c_type(c_value_type(c, id)), id);
             c_format(c, "    (void)&v%" PRIu32 ";\n", id);
         }
     }
@@ -494,6 +504,9 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_text(c, "    *"); c_value(c, v->operands[0]);
             c_text(c, " = "); c_value(c, v->operands[1]); c_text(c, ";\n");
             break;
+        case XR_LIR_LITERAL_ADDR:
+            c_format(c, "    v%" PRIu32 " = xrl_literal%" PRIu64 ";\n", v->result, v->bits);
+            break;
         case XR_LIR_CONST:
             if (v->type == XR_LIR_PTR)
                 c_format(c, "    v%" PRIu32 " = 0;\n", v->result);
@@ -532,18 +545,23 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_value(c, v->operands[1]);
             c_text(c, ";\n");
             break;
-        case XR_LIR_CALL:
+        case XR_LIR_CALL: {
             c_text(c, "    ");
             if (v->result)
                 c_format(c, "v%" PRIu32 " = ", v->result);
-            if (c_print_call(c, v))
-                c_text(c, "xrt_print_i64");
-            else
-                c_function_name(c, v->callee);
+            bool string_output = false;
+            if (c_print_call(c, v)) {
+                XrLirFunctionView external;
+                xr_lir_function_view(c->request->module,
+                    (XrLirFunction){c->request->module, v->callee}, &external);
+                string_output = external.extern_kind == XR_LIR_EXTERN_PRINT_STRING;
+                c_text(c, string_output ? "xrt_print_string" : "xrt_print_i64");
+            } else c_function_name(c, v->callee);
             c_text(c, "(");
             for (uint32_t a = 0; a < v->operand_count && c->status == XR_LIR_C_OK; ++a) {
                 if (a)
                     c_text(c, ", ");
+                if (string_output && a == 1) c_text(c, "(size_t)");
                 c_value(c, v->operands[a]);
             }
             if (c_print_call(c, v)) {
@@ -552,6 +570,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             }
             c_text(c, ");\n");
             break;
+        }
         case XR_LIR_BR:
             c_edge(c, &v->edges[0]);
             break;
@@ -617,6 +636,19 @@ static void c_preamble(LirC *c) {
         c_text(c, "#include <stdint.h>\n\n");
     }
 }
+static void c_literals(LirC *c) {
+    for (uint32_t i = 0; i < xr_lir_literal_count(c->request->module) && c_request_poll(c); ++i) {
+        if (!c->used_literals[i]) continue;
+        XrLirLiteral literal = {0};const uint8_t *bytes = NULL;size_t length = 0;
+        xr_lir_literal_at(c->request->module, i, &literal);
+        xr_lir_literal_view(c->request->module, literal, &bytes, &length);
+        c_format(c, "_Static_assert(SIZE_MAX >= UINT64_C(%" PRIu64 "), \"literal length fits size_t\");\n",
+            (uint64_t)length);
+        c_format(c, "static const unsigned char xrl_literal%" PRIu32 "[] = {", i + 1);
+        for (size_t b = 0; b < length && c_request_poll(c); ++b) c_format(c, "0x%02x,", (unsigned)bytes[b]);
+        c_text(c, "0};\n");
+    }
+}
 static void c_emit(LirC *c, XrLirType root_result) {
     XR_DCHECK(c->closure_count && c->closure[0] == c->request->entry.id,
               "emission starts from the explicit execution root");
@@ -630,6 +662,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
             "#if defined(__clang__)\n#pragma STDC FENV_ACCESS ON\n"
             "#elif defined(_MSC_VER)\n#pragma fenv_access(on)\n#endif\n#endif\n\n");
     c_locations(c);
+    c_literals(c);
     for (uint32_t n = 0; n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
         c->function = (XrLirFunction) {c->request->module, c->closure[n]};
         xr_lir_function_view(c->request->module, c->function, &c->view);
@@ -708,7 +741,14 @@ XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *request, XrLirCOutput *o
     }
     if (!c_request_poll(&c))
         return c.status;
-    c_admit(&c);
+    uint32_t literal_count = xr_lir_literal_count(request->module);
+    if (literal_count) {
+        void *used = NULL;
+        if (c_resource(&c, xr_compile_resources_calloc(request->resources, literal_count, 1, &used)))
+            c.used_literals = used;
+    }
+    if (c.status == XR_LIR_C_OK)
+        c_admit(&c);
     if (c.status == XR_LIR_C_OK)
         c_emit(&c, entry.result);
     if (c_request_poll(&c)) {
@@ -738,5 +778,6 @@ XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *request, XrLirCOutput *o
     xr_compile_resources_free(c.closure);
     xr_compile_resources_free(c.seen);
     xr_compile_resources_free(c.fixed_divisors);
+    xr_compile_resources_free(c.used_literals);
     return c.status;
 }

@@ -164,7 +164,9 @@ static void lir_print_instruction(LirPrinter *p, const XrLirModule *m, const XrL
             displayed = f->values[v->operands[0] - 1].type;
         }
         lir_print_format(p, " %s ", xr_lir_type_name(displayed));
-        if (v->op == XR_LIR_CONST)
+        if (v->op == XR_LIR_LITERAL_ADDR)
+            lir_print_format(p, "#%" PRIu64, v->bits);
+        else if (v->op == XR_LIR_CONST)
             lir_print_constant(p, v->type, v->bits);
         else
             lir_print_values(p, v->operands, v->operand_count);
@@ -242,6 +244,12 @@ XR_FUNC XrLirStatus xr_lir_print(const XrLirModule *m, XrLirWrite write, void *c
         return XR_LIR_INVALID_ARGUMENT;
     LirPrinter printer = {write, context, true, NULL};
     lir_print_text(&printer, "module {\n");
+    for (uint32_t i = 0; i < m->literal_count && printer.good; ++i) {
+        lir_print_format(&printer, "  literal #%" PRIu32 " = \"", i + 1);
+        for (size_t b = 0; b < m->literals[i].length && printer.good; ++b)
+            lir_print_format(&printer, "\\x%02x", (unsigned)m->literals[i].bytes[b]);
+        lir_print_text(&printer, "\"\n");
+    }
     for (uint32_t i = 0; i < m->function_count && printer.good; ++i) {
         XrLirStatus status = lir_print_function(&printer, m, &m->functions[i]);
         if (status != XR_LIR_OK)

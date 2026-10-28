@@ -183,6 +183,16 @@ static bool lir_edges_valid(const XrLirFunctionData *f, const XrLirInstructionVi
     return true;
 }
 
+static bool lir_literal_call(const XrLirModule *m, const XrLirFunctionData *f,
+    const XrLirInstructionView *v) {
+    if (v->operand_count != 2) return false;
+    const XrLirInstructionView *address = xr_lir_internal_value_definition(f, v->operands[0]);
+    const XrLirInstructionView *length = xr_lir_internal_value_definition(f, v->operands[1]);
+    return address && address->op == XR_LIR_LITERAL_ADDR && address->bits && address->bits <= m->literal_count &&
+        length && length->op == XR_LIR_CONST && length->type == XR_LIR_U64 &&
+        length->bits == m->literals[address->bits - 1].length;
+}
+
 XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint32_t function,
                                                       const XrLirInstructionView *v,
                                                       XrLirDiagnostic *d) {
@@ -208,7 +218,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
     if (comparison ? v->predicate < XR_LIR_EQ || v->predicate > XR_LIR_GE
                    : v->predicate != XR_LIR_PREDICATE_NONE)
         goto invalid;
-    if (v->op != XR_LIR_CONST && v->bits)
+    if (v->op != XR_LIR_CONST && v->op != XR_LIR_LITERAL_ADDR && v->bits)
         goto invalid;
     if ((v->op != XR_LIR_CALL && v->callee) || (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))
         goto invalid;
@@ -217,6 +227,22 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         message = "control flow edge target or parameter signature mismatch";
         goto invalid;
     }
+    for (uint32_t a = 0; a < v->operand_count; ++a) {
+        const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, v->operands[a]);
+        if (definition && definition->op == XR_LIR_LITERAL_ADDR &&
+            !(v->op == XR_LIR_CALL && !a && v->callee && v->callee <= m->function_count &&
+              m->functions[v->callee - 1].kind == XR_LIR_FUNCTION_EXTERNAL &&
+              m->functions[v->callee - 1].extern_kind == XR_LIR_EXTERN_PRINT_STRING)) goto invalid;
+    }
+    for (uint32_t e = 0; e < v->edge_count; ++e)
+        for (uint32_t a = 0; a < v->edges[e].argument_count; ++a) {
+            const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, v->edges[e].arguments[a]);
+            if (definition && definition->op == XR_LIR_LITERAL_ADDR) goto invalid;
+        }
+    if (v->op == XR_LIR_LITERAL_ADDR) {
+        if (v->type != XR_LIR_PTR || !v->bits || v->bits > m->literal_count) goto invalid;
+        return XR_LIR_OK;
+    }
     if (v->op == XR_LIR_CALL) {
         if (!v->callee || v->callee > m->function_count)
             goto invalid;
@@ -224,6 +250,8 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         if (!lir_signature_matches(f, v, callee->parameter_types, callee->parameter_count,
                                    callee->result))
             goto invalid;
+        if (callee->kind == XR_LIR_FUNCTION_EXTERNAL && callee->extern_kind == XR_LIR_EXTERN_PRINT_STRING &&
+            !lir_literal_call(m, f, v)) goto invalid;
         return XR_LIR_OK;
     }
     if (v->op == XR_LIR_CALL_INTRINSIC) {
@@ -483,15 +511,43 @@ static bool lir_function_shape(const XrLirFunctionData *f) {
     for (uint32_t p = 0; p < f->parameter_count; ++p)
         if (!xr_lir_internal_type_valid(f->parameter_types[p], false))
             return false;
-    if (f->kind == XR_LIR_FUNCTION_EXTERNAL)
+    if (f->kind == XR_LIR_FUNCTION_EXTERNAL) {
+        if (f->result != XR_LIR_UNIT || f->defined || f->block_count || f->entry) return false;
+        if (f->extern_kind == XR_LIR_EXTERN_PRINT_STRING)
+            return f->parameter_count == 2 && f->parameter_types[0] == XR_LIR_PTR &&
+                f->parameter_types[1] == XR_LIR_U64 && f->name_length == sizeof("xrt_print_string") - 1 &&
+                !memcmp(f->name, "xrt_print_string", sizeof("xrt_print_string") - 1);
         return f->extern_kind == XR_LIR_EXTERN_PRINT_I64 && f->parameter_count == 1 &&
-               f->parameter_types[0] == XR_LIR_I64 && f->result == XR_LIR_UNIT &&
-               f->name_length == sizeof("xrt_print_i64") - 1 &&
-               !memcmp(f->name, "xrt_print_i64", sizeof("xrt_print_i64") - 1) && !f->defined &&
-               !f->block_count && !f->entry;
+            f->parameter_types[0] == XR_LIR_I64 && f->name_length == sizeof("xrt_print_i64") - 1 &&
+            !memcmp(f->name, "xrt_print_i64", sizeof("xrt_print_i64") - 1);
+    }
     return f->kind == XR_LIR_FUNCTION_DEFINITION && f->extern_kind == XR_LIR_EXTERN_NONE &&
            f->defined && f->entry && f->entry <= f->block_count && f->blocks &&
            f->block_count <= f->block_capacity && !f->blocks[f->entry - 1].parameter_count;
+}
+
+static XrLirStatus lir_literal_consumers(const XrLirFunctionData *f, uint32_t function,
+    uint8_t *uses, XrLirDiagnostic *d) {
+    if (f->value_count) memset(uses, 0, f->value_count);
+    for (uint32_t b = 0; b < f->block_count; ++b)
+        for (uint32_t i = 0; i < f->blocks[b].instruction_count; ++i) {
+            const XrLirInstructionView *v = &f->blocks[b].instructions[i].view;
+            for (uint32_t a = 0; a < v->operand_count; ++a) {
+                uint32_t id = v->operands[a];
+                const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, id);
+                if (definition && definition->op == XR_LIR_LITERAL_ADDR && uses[id - 1] < 2)
+                    ++uses[id - 1];
+            }
+        }
+    for (uint32_t id = 1; id <= f->value_count; ++id) {
+        const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, id);
+        if (definition && definition->op == XR_LIR_LITERAL_ADDR && uses[id - 1] != 1) {
+            const XrLirValueData *value = &f->values[id - 1];
+            return xr_lir_internal_error(d, "literal address requires one direct output consumer",
+                function, value->block, value->instruction + 1, &definition->source);
+        }
+    }
+    return XR_LIR_OK;
 }
 
 XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
@@ -500,6 +556,11 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
     if (!m || m->failure != XR_LIR_OK || m->function_count > m->function_capacity ||
         (m->function_count && !m->functions))
         return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid LIR module");
+    if (m->literal_count > m->literal_capacity || (m->literal_count && !m->literals))
+        return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal inventory");
+    for (uint32_t i = 0; i < m->literal_count; ++i)
+        if (!m->literals[i].bytes || m->literals[i].length == SIZE_MAX)
+            return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal record");
     for (uint32_t index = 0; index < m->function_count; ++index) {
         const XrLirFunctionData *f = &m->functions[index];
         if (!lir_function_shape(f))
@@ -513,6 +574,8 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         if (seen)
             memset(seen, 0, f->value_count);
         XrLirStatus status = lir_definitions(m, index, seen, d);
+        if (status == XR_LIR_OK)
+            status = lir_literal_consumers(f, index + 1, seen, d);
         xr_free(seen);
         if (status != XR_LIR_OK)
             return status;

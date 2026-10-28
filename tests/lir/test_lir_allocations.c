@@ -10,6 +10,7 @@
 #include "base/xmalloc.h"
 #include "lir/xlir_builder.h"
 #include <stdio.h>
+#include <stddef.h>
 #include <stdlib.h>
 
 #define REQUIRE(c)                                                                                 \
@@ -20,17 +21,31 @@
         }                                                                                          \
     } while (0)
 
-static size_t allocation_index, fail_at = SIZE_MAX;
-
+static size_t allocation_index, fail_at = SIZE_MAX, live_allocations, live_bytes;
+typedef union AllocationHeader {
+    long double scalar_alignment;
+    void *pointer_alignment;
+    size_t bytes;
+} AllocationHeader;
 static void *injected_allocate(size_t size) {
-    if (allocation_index++ == fail_at)
-        return NULL;
-    return xr_malloc(size);
+    if (allocation_index++ == fail_at || size > SIZE_MAX - sizeof(AllocationHeader)) return NULL;
+    AllocationHeader *allocation = xr_malloc(sizeof(*allocation) + size);
+    if (!allocation) return NULL;
+    allocation->bytes = size;++live_allocations;live_bytes += size;
+    return allocation + 1;
+}
+static void injected_free(void *memory) {
+    if (!memory) return;
+    AllocationHeader *allocation = (AllocationHeader *)memory - 1;
+    REQUIRE(live_allocations && live_bytes >= allocation->bytes);
+    --live_allocations;live_bytes -= allocation->bytes;xr_free(allocation);
 }
 
 /* Inject into the production allocator calls without replacing graph logic. */
 #undef xr_malloc
 #define xr_malloc(size) injected_allocate(size)
+#undef xr_free
+#define xr_free(memory) injected_free(memory)
 #include "lir/xlir.c"
 
 static void creation_failure(size_t point) {
@@ -69,10 +84,32 @@ static void instruction_failure(void) {
     xr_lir_module_destroy(module);
 }
 
+static void literal_allocation_failure(unsigned which) {
+    fail_at = SIZE_MAX;allocation_index = 0;
+    XrLirModule *module = NULL;REQUIRE(xr_lir_module_create(NULL, &module) == XR_LIR_OK);
+    XrLirLiteral first = {0}, output = {0};
+    if (which == 2) REQUIRE(xr_lir_add_literal(module, "kept", 4, &first) == XR_LIR_OK);
+    fail_at = allocation_index + (which == 1 ? 1u : 0u);
+    REQUIRE(xr_lir_add_literal(module, "bytes", 5, &output) == XR_LIR_OUT_OF_MEMORY);
+    REQUIRE(!output.module && !output.id);
+    REQUIRE(xr_lir_module_finish(module, NULL) == XR_LIR_OUT_OF_MEMORY);
+    xr_lir_module_destroy(module);REQUIRE(!live_allocations && !live_bytes);
+    fail_at = SIZE_MAX;module = NULL;
+    REQUIRE(xr_lir_module_create(NULL, &module) == XR_LIR_OK);
+    REQUIRE(xr_lir_add_literal(module, "bytes", 5, &output) == XR_LIR_OK);
+    REQUIRE(xr_lir_module_finish(module, NULL) == XR_LIR_OK);
+    const uint8_t *bytes = NULL;size_t length = 0;
+    REQUIRE(xr_lir_literal_view(module, output, &bytes, &length) == XR_LIR_OK);
+    REQUIRE(length == 5 && !memcmp(bytes, "bytes", 5));
+    xr_lir_module_destroy(module);REQUIRE(!live_allocations && !live_bytes);
+}
+
 int main(void) {
     creation_failure(0);
     creation_failure(2);
     instruction_failure();
+    REQUIRE(!live_allocations && !live_bytes);
+    for (unsigned which = 0; which < 3; ++which) literal_allocation_failure(which);
     puts("representative LIR construction failures preserve unpublished outputs");
     return 0;
 }

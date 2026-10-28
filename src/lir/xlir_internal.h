@@ -46,7 +46,13 @@ typedef struct XrLirFunctionData {
     XrLirValueData *values;
     uint32_t value_count, value_capacity;
 } XrLirFunctionData;
+typedef struct XrLirLiteralData {
+    uint8_t *bytes;
+    size_t length;
+} XrLirLiteralData;
 struct XrLirModule {
+    XrLirLiteralData *literals;
+    uint32_t literal_count, literal_capacity;
     XrLirFunctionData *functions;
     uint32_t function_count, function_capacity;
     XrLirIntrinsic *intrinsics;
@@ -57,6 +63,22 @@ struct XrLirModule {
     bool finished;
 };
 
+/* Operand validation may reach a later block before its shape is checked. */
+static inline const XrLirInstructionView *xr_lir_internal_value_definition(
+    const XrLirFunctionData *f, uint32_t id) {
+    if (!f || !id || id > f->value_count || f->value_count > f->value_capacity ||
+        !f->values || !f->blocks || f->block_count > f->block_capacity)
+        return NULL;
+    const XrLirValueData *value = &f->values[id - 1];
+    if (value->parameter || !value->block || value->block > f->block_count)
+        return NULL;
+    const XrLirBlockData *block = &f->blocks[value->block - 1];
+    if (!block->instructions || block->instruction_count > block->instruction_capacity ||
+        value->instruction >= block->instruction_count)
+        return NULL;
+    const XrLirInstructionView *definition = &block->instructions[value->instruction].view;
+    return definition->result == id ? definition : NULL;
+}
 XR_FUNC bool xr_lir_internal_type_valid(XrLirType type, bool unit);
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op);
 XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *, uint32_t function,

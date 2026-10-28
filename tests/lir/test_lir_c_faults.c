@@ -193,6 +193,51 @@ static XrLirCOutput memory_boundaries(XrLirCRequest *request) {
         sites, (unsigned long long)measured.peak_bytes);
     return output;
 }
+static void literal_memory_boundaries(void) {
+    XrLirModule *module = NULL;
+    CHECK(xr_lir_module_create(NULL, &module) == XR_LIR_OK);
+    const unsigned char bytes[] = {'A', 0, 0xc3, 0xa9};
+    XrLirLiteral literal = {0};
+    CHECK(xr_lir_add_literal(module, bytes, sizeof(bytes), &literal) == XR_LIR_OK);
+    const XrLirType parameters[] = {XR_LIR_PTR, XR_LIR_U64};
+    XrLirFunction print = {0}, entry = {0};
+    XrLirFunctionSpec spec = {.name = "xrt_print_string", .name_length = 16,
+        .parameters = parameters, .parameter_count = 2, .result = XR_LIR_UNIT,
+        .kind = XR_LIR_FUNCTION_EXTERNAL, .extern_kind = XR_LIR_EXTERN_PRINT_STRING};
+    CHECK(xr_lir_declare_function(module, &spec, &print) == XR_LIR_OK);
+    spec = (XrLirFunctionSpec){.name = "literal", .name_length = 7, .result = XR_LIR_I64};
+    CHECK(xr_lir_declare_function(module, &spec, &entry) == XR_LIR_OK);
+    CHECK(xr_lir_define_function(module, entry) == XR_LIR_OK);
+    XrLirBlock block = {0};
+    CHECK(xr_lir_add_block(module, entry, NULL, 0, &block) == XR_LIR_OK);
+    CHECK(xr_lir_set_entry(module, entry, block) == XR_LIR_OK);
+    XrLirValue arguments[2] = {{0}}, answer = {0};
+    CHECK(xr_lir_literal_address(module, block, literal, &arguments[0]) == XR_LIR_OK);
+    XrLirInstruction op = {.op = XR_LIR_CONST, .type = XR_LIR_U64, .bits = sizeof(bytes)};
+    CHECK(xr_lir_emit_value(module, block, &op, &arguments[1]) == XR_LIR_OK);
+    op = (XrLirInstruction){.op = XR_LIR_CALL, .type = XR_LIR_UNIT,
+        .callee = print, .operands = arguments, .operand_count = 2};
+    CHECK(xr_lir_emit_effect(module, block, &op) == XR_LIR_OK);
+    op = (XrLirInstruction){.op = XR_LIR_CONST, .type = XR_LIR_I64, .bits = 42};
+    CHECK(xr_lir_emit_value(module, block, &op, &answer) == XR_LIR_OK);
+    op = (XrLirInstruction){.op = XR_LIR_RET, .type = XR_LIR_UNIT,
+        .operands = &answer, .operand_count = 1};
+    CHECK(xr_lir_set_terminator(module, block, &op) == XR_LIR_OK);
+    CHECK(xr_lir_module_finish(module, NULL) == XR_LIR_OK);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
+    XrCompileResources *resources = sdk_ledger(&limits);
+    XrLirCRequest request = {module, entry, resources, "literal-publication-fault", NULL};
+    control_boundaries(&request);
+    XrLirCOutput output = memory_boundaries(&request);
+    xr_lir_module_destroy(module);
+    xr_compile_resources_release(resources);
+    memset(&request, 0xa5, sizeof(request));
+    CHECK(strstr(output.bytes, "0x41,0x00,0xc3,0xa9,0") &&
+          strstr(output.bytes, "xrt_print_string(") && output.entry_result == XR_LIR_I64);
+    xr_lir_c_output_free(&output);
+    CHECK(!runtime_live && !runtime_bytes);
+    puts("literal used-set OOM/held/control and retired-producer output ownership PASS");
+}
 int main(int argc, char **argv) {
     (void)sdk_fixture_malloc; (void)sdk_fixture_free;
     CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--ice")));
@@ -249,6 +294,7 @@ int main(int argc, char **argv) {
     CHECK(strstr(output.bytes, "xray_lir_entry(void)") && output.entry_result == XR_LIR_I64);
     xr_lir_c_output_free(&output);
     CHECK(!output.bytes && !output.length && !output.entry_result && !runtime_live && !runtime_bytes);
+    literal_memory_boundaries();
     puts("representative C workspace/text failures and cancellation passed");
     puts("output survives module, caller memory reference, control/context destruction; physical zero PASS");
     return 0;

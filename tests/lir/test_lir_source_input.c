@@ -10,6 +10,7 @@
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_types.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_comptime_pending_internal.h"
 #include "xir/xxir_source_comptime_instances_internal.h"
@@ -229,8 +230,30 @@ static void evaluation_origin_rejected(void) {
     puts("source origins reject genuine compiler-only evaluation input without changing output");
 }
 
+static void literal_output_source_facts(void) {
+    XrXirSourceResult source = compile_text("print(\"A\\0\\u{e9}\")\nvar i=0\nwhile(i<3){print(i);i=i+1}\nprint(\"\")\n");
+    XrXirArtifact *closed = NULL;
+    XIR_OK(xr_xir_compile_specialize(source.checked, &closed, NULL));
+    const XrXirModule *module = xr_xir_compile_artifact_module(closed);
+    const XrXirDeclarations *d = module->declarations;
+    CHECK(d->slot_count == 1 && d->slots[0].mutable &&
+        xr_xir_cell_element(module->types, d->slots[0].type) == XR_XIR_I64);
+    const unsigned char expected[] = {'A', 0, 0xc3, 0xa9};
+    bool bytes = false, empty = false;
+    for (uint32_t i = 0; i < d->literal_count; ++i) {
+        bytes |= d->literals[i].length == sizeof(expected) &&
+            !memcmp(d->literals[i].bytes, expected, sizeof(expected));
+        empty |= d->literals[i].length == 0;
+    }
+    CHECK(bytes && empty);
+    xr_xir_compile_source_result_free(&source);
+    CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);
+}
+
 int main(void) {
     scalar_input_facts();
+    literal_output_source_facts();
     specialization_origins();
     lowered_origin_rejected();
     evaluation_origin_rejected();

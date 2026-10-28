@@ -67,6 +67,12 @@ def main():
     original_counter = Path(__file__).resolve().parents[2] / 'tests/diff/cases/semantics/default_params/default_evaluated_per_call.xr'
     cases['module-counter'] = (original_counter, b'1\n2\n99\n3\n3\n')
     cases['module-counter-optimized'] = (original_counter, b'1\n2\n99\n3\n3\n')
+    original_terminator = Path(__file__).resolve().parents[2] / 'tests/diff/cases/semantics/output/print_terminator_exact.xr'
+    terminator_oracle = original_terminator.with_suffix('.xr.expected').read_bytes()
+    assert len(terminator_oracle) == 31
+    cases['literal-terminator'] = (original_terminator, terminator_oracle)
+    cases['literal-terminator-optimized'] = (original_terminator, terminator_oracle)
+    cases['literal-utf8-nul'] = ('print("A\\0é")\nprint(7)\nprint("")\n', b'A\x00\xc3\xa9\n7\n\n')
     cases['module-order'] = ('var first=3\nvar second=first+4\n'
         'fn adjust(n:i64)->i64{first=first+n\nsecond=second+first\nreturn second}\n'
         'print(first)\nprint(second)\nprint(adjust(2))\nprint(first)\nprint(second)\n',
@@ -114,6 +120,9 @@ def main():
         assert text.count('xrt_run_standalone(') == 1
         assert '#include "xray_native_runtime.h"' in text and '({' not in text
         assert re.search(r'xrt_print_i64\((?:v|p)[0-9]+, UINT32_C\([0-9]+\)\);', text)
+        if name.startswith('literal-terminator') or name == 'literal-utf8-nul':
+            assert re.search(r'xrt_print_string\((?:v|p)[0-9]+, \(size_t\)(?:v|p)[0-9]+, UINT32_C\([0-9]+\)\);', text)
+            assert 'static const unsigned char xrl_literal' in text
         assert 'invoke_io' not in text and 'fail_io' not in text and 'switch' not in text
         if name == 'fib':
             functions = re.findall(r'static int64_t (xrl_f[0-9]+)\(int64_t p0\) \{(.*?)\n\}', text, re.S)
@@ -181,7 +190,7 @@ def main():
         run(command, cwd=root)
         completed = run([executable], cwd=root)
         assert completed.stdout == expected and completed.stderr == b'', (name, completed)
-        if name == 'literal-slot' or name.startswith('module-'):
+        if name == 'literal-slot' or name.startswith('module-') or name.startswith('literal-terminator'):
             # Reuse the same compiled image and actual complete entry twice.
             repeat_name = 'literal' if name == 'literal-slot' else name
             twice = root / (repeat_name + '-twice-adapter.c')
@@ -212,7 +221,8 @@ def main():
                  'output-range': b'odd"\\x5c\xc3\xa9\\x0a.xr:4:3-5:8 ',
                  'typed-unit': b'typed-root.xr:2:1-2:1 ',
                  'literal-slot': b'literal-slot.xr:2:1-2:1 ',
-                 'module-counter': b'module-counter.xr:12:1-12:1 '}
+                 'module-counter': b'module-counter.xr:12:1-12:1 ',
+                 'literal-terminator': b'literal-terminator.xr:6:1-6:1 '}
     for name, location in locations.items():
         with read_only.open('rb') as stream:
             failure = subprocess.run([str(executables[name]), 'fail'], stdout=stream,
