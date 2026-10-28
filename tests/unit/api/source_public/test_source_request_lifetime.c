@@ -520,8 +520,9 @@ static void compilation_controls(void) {
             control=(Calibration){.at=total/2,.wait_deadline=true,.timeout_ns=5000000000ULL};
             options.deadline_mode=XR_SOURCE_DEADLINE_AFTER;options.timeout_ns=control.timeout_ns;
             calibration_failure(&input,&options,&control,XR_SOURCE_DEADLINE,XR_SOURCE_STAGE_COMPILE);
-            /* A cancellation first observed inside the callback stays primary
-             * even when the deadline expires before that callback returns. */
+            /* This poll checked a live deadline before entering the callback.
+             * Returning cancellation wins even though the deadline then elapsed;
+             * this demonstrates poll precedence, not chronological ordering. */
             control=(Calibration){.at=total/2,.wait_deadline=true,.cancel=true,.timeout_ns=5000000000ULL};
             calibration_failure(&input,&options,&control,XR_SOURCE_CANCELLED,XR_SOURCE_STAGE_COMPILE);
         }
