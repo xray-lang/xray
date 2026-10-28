@@ -8,6 +8,7 @@
  */
 #include "base/xresource_limits.h"
 #include "base/xsha256.h"
+#include "shared/xnative_declaration.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_library_catalog.h"
@@ -51,8 +52,17 @@ static XrXirSourceResult range_source(const XrXirCompileContext *context,const c
     XrXirSourceResult result={0};CHECK(range_check(context,text,logical,kind,catalog,&result)==XR_XIR_OK);
     CHECK(result.checked && result.snapshot);return result;
 }
+static uint32_t range_cancelled_ordinal(const XrXirModule *module) {
+    const XrXirNominalTable *table=module->types->nominals;uint32_t found=UINT32_MAX;
+    CHECK(table && table->declarations && !table->identities);
+    for(uint32_t n=0;n<table->count;++n)if(table->declarations[n].native.native_id==XR_NATIVE_DECLARATION_CANCELLED) {
+        CHECK(found==UINT32_MAX);found=n;
+    }
+    CHECK(found!=UINT32_MAX);return found;
+}
 static XrXirLibraryCatalog *range_catalog(const XrXirCompileContext *context,const XrXirArtifact *artifact,bool valid) {
     const XrXirModule *module=xr_xir_compile_artifact_module(artifact);uint32_t count=module->declarations->module_count;
+    if(valid)(void)range_cancelled_ordinal(module);
     XrXirLibraryModuleInput *bindings=NULL;CHECK(xr_compile_resources_calloc(context->resources,count,sizeof(*bindings),(void **)&bindings)==XR_COMPILE_RESOURCE_OK);
     const XrModuleIdentityAuthority script={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_RANGE_VALUE_WORK};
     char *canonical=NULL;CHECK(xr_compile_module_identity_from_logical(context->resources,&script,"range-lib.xr",&canonical)==XR_MODULE_OK);
@@ -84,6 +94,30 @@ static uint32_t range_entry(const XrXirModule *module,const char *name) {
 }
 static void range_definition_negatives(const XrXirCompileContext *context,const XrXirArtifact *producer) {
     const XrXirModule *original=xr_xir_compile_artifact_module(producer);uint32_t ctor=UINT32_MAX,count=UINT32_MAX;
+    uint32_t cancelled=range_cancelled_ordinal(original);
+    XrXirTypes types=*original->types;XrXirNominalTable table=*types.nominals;
+    XrXirNominalDeclaration *records=NULL;
+    CHECK(xr_compile_resources_alloc(context->resources,(size_t)table.count*sizeof(*records),(void **)&records)==XR_COMPILE_RESOURCE_OK);
+    table.declarations=records;types.nominals=&table;
+    for(unsigned mode=0;mode<4;++mode) {
+        memcpy(records,original->types->nominals->declarations,(size_t)table.count*sizeof(*records));
+        XrXirNominalDeclaration *record=&records[cancelled];
+        XrXirNominalVariant variant=record->variants[0];
+        XrXirNominalField payload={.name={"value",5},.type=XR_XIR_I64};
+        if(!mode) {
+            const XrXirSourceModule *script=&original->declarations->modules[0];
+            CHECK(script->name_length!=record->module.length || memcmp(script->name,record->module.bytes,script->name_length));
+            record->module=(XrXirLiteral){script->name,script->name_length};
+        } else if(mode==1)record->native.source_fingerprint[0]^=1;
+        else if(mode==2) {
+            record->fields=&payload;record->field_count=1;variant.field_count=1;record->variants=&variant;
+        } else record->native.native_id=UINT32_MAX;
+        CHECK(xr_xir_compile_nominal_structure_verify(context,&table,&types)==XR_XIR_BAD_STRUCTURE);
+        XrXirModule altered=*original;altered.types=&types;XrXirArtifact *owned=NULL;
+        CHECK(xr_xir_compile_recheck_v2(context,&altered,xr_xir_compile_artifact_construction(producer),&owned,NULL)==XR_XIR_BAD_STRUCTURE && !owned);
+    }
+    xr_compile_resources_free(records);
+    fprintf(stderr,"Range Cancelled authentication: origin/fingerprint/payload/unknown ID rejected\n");
     for(uint32_t f=0;f<original->function_count;++f) {
         uint32_t owner=original->declarations->functions[f].nominal_owner;if(!owner)continue;
         const XrXirNominalDeclaration *d=&original->types->nominals->declarations[owner-1];
