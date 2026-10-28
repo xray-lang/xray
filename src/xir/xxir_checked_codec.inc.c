@@ -709,7 +709,7 @@ static void checked_provenance(CheckedCursor *c, XrXirModule *m, uint32_t eviden
     checked_effect_origins(c, m, p);
     checked_effect_proofs(c, p);
 }
-static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction **construction, uint32_t evidence_limit) {
+static void checked_module_fields(CheckedCursor *c, XrXirModule *m, XrXirConstruction **construction, uint32_t evidence_limit) {
     uint32_t kind = checked_u32(c, (uint32_t)m->linkage_kind);
     if (c->status == XR_XIR_OK && kind > XR_XIR_LIBRARY) c->status = XR_XIR_BAD_STRUCTURE;
     if (c->reading && c->status == XR_XIR_OK) m->linkage_kind = (XrXirLinkageKind)kind;
@@ -738,6 +738,17 @@ static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction *
     if (c->status == XR_XIR_OK) checked_construction(c, m, construction);
     if (c->status == XR_XIR_OK) checked_defaults(c, m);
     if (c->status == XR_XIR_OK) checked_provenance(c, m, evidence_limit);
+}
+static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction **construction, uint32_t evidence_limit) {
+    if (c->status != XR_XIR_OK) return;
+    /* Each inventory uses the same current caller limits. The nested Source
+     * cursor shares the physical byte range and ledger, but cannot spend its
+     * enclosing module's counters. evidence_limit bounds nesting to a leaf. */
+    CheckedCursor module = *c;
+    module.structural = c->remaining.limits;
+    checked_module_fields(&module, m, construction, evidence_limit);
+    c->position = module.position;
+    c->status = module.status;
 }
 static void checked_digest(const uint8_t *bytes, size_t size, uint8_t digest[32]) {
     XrSHA256Context sha;

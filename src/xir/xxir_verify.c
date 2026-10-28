@@ -1456,8 +1456,11 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
         else status = xr_xir_compile_cell_provenance_verified(&context.remaining, module, &cell_proof, &context.location);
         xr_xir_compile_cell_provenance_free(cell_proof);
     }
+    /* A closed module and its template Source have distinct inventories.
+     * Both use this caller's limits and ledger, never the retained owner's
+     * former limits. Provenance shape rejects a nested closed Source first. */
     if (status == XR_XIR_OK && module->provenance)
-        status = verify_provenance(module, &context.remaining, source_effects, &context.location);
+        status = verify_provenance(module, compile_context, source_effects, &context.location);
     context.location.status = status;
     *remaining = context.remaining;
     if (diagnostic)
