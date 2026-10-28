@@ -120,7 +120,11 @@
     "test_xir_error_union_native_300",
     "test_xir_error_union_legacy",
     "test_xi_retired_builder",
-    "test_lsp_stdlib"
+    "test_lsp_stdlib",
+    "test_xir_typed_await",
+    "test_xir_typed_await_native",
+    "test_xir_typed_await_controls",
+    "test_source_lowered_correspondence"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -335,7 +339,14 @@
     "test_xir_cleanup_failed_module",
     "test_xi_retired_builder",
     "test_lsp_stdlib",
-    "test_lsp_stdlib_generator"
+    "test_lsp_stdlib_generator",
+    "test_xir_typed_await_ordinary",
+    "test_xir_typed_await_own-cancel",
+    "test_xir_typed_await_host-close",
+    "test_xir_typed_await_native",
+    "test_xir_typed_await_controls",
+    "test_xir_typed_await_cli",
+    "source_lowered_correspondence"
   ],
   "versionCommand": [
     "{build}/xray.exe",

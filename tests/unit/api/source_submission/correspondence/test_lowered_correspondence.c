@@ -29,7 +29,7 @@ static Artifacts artifacts(const XrXirCompileContext *context,const char *text) 
     Artifacts result={0};CHECK(xr_xir_compile_specialize(source.checked,&result.closed,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);xr_compile_session_free(session);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(result.closed,&target,&result.lowered,NULL)==XR_XIR_OK);return result;
+    CHECK(xr_xir_compile_lower(result.closed,&target,NULL,&result.lowered,NULL)==XR_XIR_OK);return result;
 }
 static void artifacts_free(Artifacts value) {
     xr_xir_compile_artifact_free(value.lowered);xr_xir_compile_artifact_free(value.closed);

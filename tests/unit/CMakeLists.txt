@@ -4730,3 +4730,4 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/local_cfg_errors.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/error_union/CMakeLists.txt")
 add_subdirectory(ir/retired_builder)
+add_subdirectory(api/source_submission/correspondence)
