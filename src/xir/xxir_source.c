@@ -1513,6 +1513,7 @@ static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) 
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_BOOL, {place.id, 0}, {0}, 0, {0}}, value);
 }
 #include "xxir_source_nullable.inc.c"
+#include "xxir_source_try_optional.inc.c"
 /* The text of a bool or number, as `print` writes it; a string converts to itself. */
 static bool source_text_conversion(SourceContext *ctx, AstNode *node, SourceValue input, SourceValue *value) {
     if (input.type == XR_XIR_STRING) { *value = input; return true; }
@@ -1749,6 +1750,8 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "try expression has no operand");
         if (node->as.try_expr.mode == XR_TRY_ASSERT)
             return source_try_assert(ctx, ctx->active_expression->left, value);
+        if (node->as.try_expr.mode == XR_TRY_OPTIONAL)
+            return source_try_optional(ctx, ctx->active_expression, value);
         if (node->as.try_expr.mode != XR_TRY_PROPAGATE)
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "try expression mode is not yet supported");
         return source_plan_complete(ctx, ctx->active_expression->left, value);

@@ -1,0 +1,41 @@
+enum PullFailure { Bad { detail: string } }
+fn element(fail: bool) throws(PullFailure) -> i64 {
+    if (fail) { throw PullFailure.Bad { detail: "é\0界" } }
+    return 17
+}
+fn maybeNull(mode: i64) throws(PullFailure) -> i64? {
+    if (mode == 0) { return null }
+    if (mode == 1) { return 13 }
+    throw PullFailure.Bad { detail: "optional failure" }
+}
+fn values() -> Iterator<i64, PullFailure> {
+    yield 7
+    throw PullFailure.Bad { detail: "pull failure" }
+}
+fn pureValues() -> Iterator<i64> { yield 19 }
+fn text() throws(PullFailure) -> string { return "owned é\0界" }
+fn part(mark: i64, fail: bool) throws(PullFailure) -> i64 { print(mark);return try element(fail) }
+fn foldedValue() -> i64 { return (try? element(true)) ?? 41 }
+fn divide(divisor: i64) -> i64 { return 1 / divisor }
+const folded = comptime foldedValue()
+print((try? element(false)) ?? -1)
+print((try? element(true)) ?? -1)
+const empty: i64? = try? maybeNull(0)
+const present: i64? = try? maybeNull(1)
+const failed: i64? = try? maybeNull(2)
+print(empty ?? -2)
+print(present ?? -2)
+print(failed ?? -2)
+const it = values()
+print((try? it.next()) ?? -1)
+print((try? it.hasNext()) ?? false)
+const indexed = values()
+print((try? indexed.nth(1)) ?? -1)
+const pure = pureValues()
+print((try? pure.next()) ?? -1)
+print(folded)
+const owned: string? = try? text()
+print(owned ?? "missing")
+print((try? (part(31, false) + part(32, true) + part(33, false))) ?? -3)
+try { const ignored = try? divide(0); print(ignored ?? -9) }
+catch panic (p) { print(p.code) }

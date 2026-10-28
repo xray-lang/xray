@@ -42,7 +42,8 @@ static bool source_local_marked(SourceContext *ctx) {
     if (ctx->bodies[ctx->function].local_handler) return true;
     for (SourceExpressionPlan *plan=ctx->active_expression;plan && plan->owner==ctx->function;plan=plan->parent)
         if (plan->syntax->type==AST_TRY_EXPR && (plan->syntax->as.try_expr.mode==XR_TRY_PROPAGATE ||
-            plan->syntax->as.try_expr.mode==XR_TRY_ASSERT)) return true;
+            plan->syntax->as.try_expr.mode==XR_TRY_ASSERT ||
+            plan->syntax->as.try_expr.mode==XR_TRY_OPTIONAL)) return true;
     return false;
 }
 static bool source_local_accept(SourceContext *ctx, AstNode *node, XrXirType error,

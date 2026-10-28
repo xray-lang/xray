@@ -190,3 +190,50 @@ if(WIN32)
     set_tests_properties(test_xir_try_assert_cli PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
         LABELS "unit;xir;cli;panic;execution;sdk")
 endif()
+
+if(WIN32)
+    add_test(NAME test_xir_try_optional_cli COMMAND ${XRAY_PYTHON} -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/test_try_optional_cli.py"
+        --root "${PROJECT_SOURCE_DIR}" --binary $<TARGET_FILE:xray>
+        --source "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_optional.xr"
+        --expect "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_optional.expected.json")
+    set_tests_properties(test_xir_try_optional_cli PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
+        LABELS "unit;xir;cli;errors;execution;ctfe;sdk")
+endif()
+
+add_test(NAME test_xir_try_optional_resources COMMAND test_xir_local_errors optional-resources)
+set_tests_properties(test_xir_try_optional_resources PROPERTIES LABELS "unit;xir;errors;ownership;resources" TIMEOUT 60)
+add_executable(test_xir_try_optional_faults "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_local_errors.c")
+target_link_libraries(test_xir_try_optional_faults PRIVATE xray_xir_source_product xray_xir_vm)
+target_compile_definitions(test_xir_try_optional_faults PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_LOCAL_ERROR_ALLOCATOR=1)
+set_target_properties(test_xir_try_optional_faults PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_try_optional_faults PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_try_optional_faults PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_try_optional_faults COMMAND test_xir_try_optional_faults optional-resources)
+set_tests_properties(test_xir_try_optional_faults PROPERTIES LABELS "unit;xir;errors;ownership;resources" TIMEOUT 60)
+
+set(try_optional_fixture "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_optional.xr")
+set(try_optional_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/try_optional.c")
+add_custom_command(OUTPUT "${try_optional_generated}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND $<TARGET_FILE:test_xir_from_utf8> --emit-file "${try_optional_fixture}" "${try_optional_generated}"
+    DEPENDS test_xir_from_utf8 "${try_optional_fixture}" VERBATIM)
+add_executable(test_xir_try_optional_native "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_from_utf8_native.c" "${try_optional_generated}")
+target_link_libraries(test_xir_try_optional_native PRIVATE xray_xir_scalar xray_compile_resources)
+set_target_properties(test_xir_try_optional_native PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_try_optional_native PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_xir_try_optional_native PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(test_xir_try_optional_native PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_xir_try_optional_generated_native COMMAND ${XRAY_PYTHON} -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_try_optional_cli.py" --root "${PROJECT_SOURCE_DIR}" --binary $<TARGET_FILE:xray>
+    --source "${try_optional_fixture}" --expect "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_optional.expected.json"
+    --native-driver $<TARGET_FILE:test_xir_try_optional_native>)
+set_tests_properties(test_xir_try_optional_generated_native PROPERTIES LABELS "unit;xir;native;ctfe;ownership" TIMEOUT 120)

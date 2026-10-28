@@ -18,6 +18,9 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) {fprintf(stderr,"FAIL %d: %s\n",__LINE__,#c);exit(1);} } while (0)
+#if defined(XR_LOCAL_ERROR_ALLOCATOR)
+#include "../base/parser_resources_observer.h"
+#endif
 
 typedef struct LocalErrorCase {
     const char *name, *text, *diagnostic;
@@ -51,6 +54,15 @@ static uint32_t local_answer(XrXirSourceProduct *product) {
         const XrXirFunction *function=&module->functions[f];
         if (function->name_length==6 && !memcmp(function->name,"answer",6)) {
             CHECK(answer==UINT32_MAX);answer=f;
+        }
+        if(function->name_length==13 && !memcmp(function->name,"foldedWitness",13)) {
+            bool constant=false;CHECK(function->error_type==XR_XIR_NEVER);
+            for(uint32_t i=0;i<function->instruction_count;++i) {
+                const XrXirInstruction *op=&function->instructions[i];
+                CHECK(op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_ITERATOR_NEXT);
+                if(op->op==XR_XIR_CONST_INT && op->immediate==42)constant=true;
+            }
+            CHECK(constant);
         }
         if (function->name_length==4 && !memcmp(function->name,"pure",4))
             CHECK(function->error_type==XR_XIR_ERROR);
@@ -118,7 +130,123 @@ static void local_case(const LocalErrorCase *test) {
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.held_bytes==before.held_bytes);xr_compile_resources_release(context.resources);
 }
-int main(void) {
+typedef struct LocalOptionalCancel { size_t polls, stop; } LocalOptionalCancel;
+static bool local_optional_cancel(const void *pointer) {
+    LocalOptionalCancel *state=(LocalOptionalCancel *)pointer;
+    return ++state->polls>=state->stop;
+}
+static const char local_optional_text[]=
+    "enum Failure{Bad{message:string}}\n"
+    "fn value() throws(Failure)->i64{throw Failure.Bad{message:\"owned é\\0界\"}}\n"
+    "fn chooseValue()->i64{return (try? value()) ?? 42}\n"
+    "const folded=comptime chooseValue()\nexport fn answer()->i64{return folded}\n";
+static uint64_t local_optional_build(uint64_t memory,uint64_t frame,size_t cancel_at,
+    XrXirStatus expected,size_t *polls,size_t physical_fault,size_t *attempts) {
+    XrCompileResourceLimits limits={.memory_mode=memory?XR_COMPILE_MEMORY_FINITE:XR_COMPILE_MEMORY_ORDINARY,
+        .memory_limit=memory};XrXirCompileContext context={0};
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits();if(frame)context.limits.frame_bytes=frame;
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
+    LocalOptionalCancel cancel={0,cancel_at};XrCompileRequestControl control={0};
+    XrCompileRequestOptions options={.cancel_poll=local_optional_cancel,.cancel_context=&cancel};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_compile_session_bind_request(session,&control)==XR_COMPILE_RESOURCE_OK);
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"optional-resources",NULL};
+    XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
+        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+#if defined(XR_LOCAL_ERROR_ALLOCATOR)
+    attempt_count=0;fail_at=physical_fault;
+#else
+    CHECK(physical_fault==SIZE_MAX);(void)attempts;
+#endif
+    XrXirSourceText input={NULL,local_optional_text,sizeof(local_optional_text)-1};
+    XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
+    XrXirStatus status=xr_xir_compile_source_product_build_text(&request,&input,&product,&diagnostic);
+#if defined(XR_LOCAL_ERROR_ALLOCATOR)
+    if(attempts)*attempts=attempt_count;fail_at=SIZE_MAX;
+#endif
+    if(status!=expected)fprintf(stderr,"optional resource status%u expected%u stage%u frame%llu\n",
+        (unsigned)status,(unsigned)expected,(unsigned)diagnostic.stage,(unsigned long long)frame);
+    CHECK(status==expected && (expected==XR_XIR_OK ? product!=NULL : product==NULL));
+    xr_compile_session_free(session);
+    if(product)local_execute(product,"optional resource survivor",42);
+    xr_xir_compile_source_product_diagnostic_free(&diagnostic);
+    CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(after.held_bytes==before.held_bytes);xr_compile_resources_release(context.resources);
+    if(polls)*polls=cancel.polls;
+#if defined(XR_LOCAL_ERROR_ALLOCATOR)
+    CHECK(!physical_live && !allocation_count);
+#endif
+    return after.peak_bytes;
+}
+static void local_optional_runtime_limit(void) {
+    static const char prefix[]="enum Failure{Bad}\nfn text() throws(Failure)->string{return \"";
+    static const char suffix[]="\"}\nexport fn answer()->i64{const value=try? text();if(value==null){return 42};return 0}\n";
+    size_t length=sizeof(prefix)-1+16384+sizeof(suffix)-1;
+    char *text=xr_malloc(length+1);CHECK(text);
+    memcpy(text,prefix,sizeof(prefix)-1);memset(text+sizeof(prefix)-1,'x',16384);
+    memcpy(text+sizeof(prefix)-1+16384,suffix,sizeof(suffix));
+    XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};XrXirCompileContext context={0};
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits();XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"optional-runtime-limit",NULL};
+    XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
+        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+    XrXirSourceText input={NULL,text,length};XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
+    CHECK(xr_xir_compile_source_product_build_text(&request,&input,&product,&diagnostic)==XR_XIR_OK && product);
+    memset(text,0xa5,length);xr_free(text);xr_compile_session_free(session);
+    uint32_t entry=xr_xir_compile_source_product_facts(product)->entry,answer=local_answer(product);
+    XrXirProgram *program=NULL;CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK);
+    xr_xir_compile_source_product_free(product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);
+    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    config.value_limit=4096;
+    XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+    xr_xir_compile_program_drop(program);
+    CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
+    XrXirValue ignored={0};CHECK(xr_xir_instance_take_result(instance,&ignored)==XR_XIR_CALL_RETURNED);xr_xir_value_drop(&ignored);
+    CHECK(xr_xir_instance_start(instance,answer,NULL,0)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_LIMIT);
+    CHECK(xr_xir_instance_take_result(instance,&ignored)==XR_XIR_CALL_LIMIT && !ignored.type && !ignored.payload);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_LIMIT);
+    CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);
+    xr_compile_resources_release(context.resources);
+#if defined(XR_LOCAL_ERROR_ALLOCATOR)
+    CHECK(!physical_live && !allocation_count);
+#endif
+    puts("try? callee String limit remains actual CALL_LIMIT, no nullable publication PASS");
+}
+static void local_optional_resources(void) {
+    size_t polls=0,attempts=0;
+    uint64_t peak=local_optional_build(0,0,SIZE_MAX,XR_XIR_OK,&polls,SIZE_MAX,&attempts);
+    CHECK(peak>1 && polls>2);
+    local_optional_build(peak-1,0,SIZE_MAX,XR_XIR_MEMORY_LIMIT,NULL,SIZE_MAX,NULL);
+    local_optional_build(peak,0,SIZE_MAX,XR_XIR_OK,NULL,SIZE_MAX,NULL);
+    local_optional_build(0,1,SIZE_MAX,XR_XIR_BUDGET,NULL,SIZE_MAX,NULL);
+    local_optional_build(0,0,polls/2,XR_XIR_CANCELLED,NULL,SIZE_MAX,NULL);
+#if defined(XR_LOCAL_ERROR_ALLOCATOR)
+    CHECK(attempts>2);
+    local_optional_build(0,0,SIZE_MAX,XR_XIR_OUT_OF_MEMORY,NULL,0,NULL);
+    local_optional_build(0,0,SIZE_MAX,XR_XIR_OUT_OF_MEMORY,NULL,attempts-1,NULL);
+    reset();
+#endif
+    local_optional_build(0,0,SIZE_MAX,XR_XIR_OK,NULL,SIZE_MAX,NULL);
+    local_optional_runtime_limit();
+    printf("try? held peak %llu: exact/minus1, frame, cancel, retirement and reuse PASS\n",(unsigned long long)peak);
+}
+int main(int argc,char **argv) {
+    if(argc==2 && !strcmp(argv[1],"known-cleanup-panic")) {
+        static const LocalErrorCase known={"optional cleanup panic",
+            "enum Failure{Bad}\nfn divide(n:i64)->i64{return 1/n}\n"
+            "fn value() throws(Failure)->i64{defer{const ignored=divide(0)};throw Failure.Bad}\n"
+            "export fn answer()->i64{try{return (try? value()) ?? 0}catch panic(p){return p.code}}\n",NULL,420};
+        local_case(&known);return 0;
+    }
+    if(argc==2 && !strcmp(argv[1],"optional-resources")){local_optional_resources();return 0;}
     xr_test_suppress_dialogs();
     static const LocalErrorCase cases[]={
         {"typed propagation","enum Failure{Bad}\nfn value() throws(Failure)->i64{throw Failure.Bad}\n"
@@ -238,5 +366,37 @@ int main(void) {
             "export fn answer()->i64{return 42}\n",NULL,42}
     };
     for (size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) local_case(&cases[i]);
+    static const LocalErrorCase optional_cases[]={
+        {"optional context null", "export fn answer()->i64{const value:i64?=try? null;"
+            "if(value==null){return 42};return 0}\n",NULL,42},
+        {"optional numeric context", "fn value()->u8?{return try? 42}\n"
+            "export fn answer()->i64{const result=value();if(result==null){return 0};return 42}\n",NULL,42},
+        {"optional CTFE witness", "enum Failure{Bad}\nfn value() throws(Failure)->i64{throw Failure.Bad}\n"
+            "export fn foldedWitness()->i64{return comptime ((try? value()) ?? 42)}\n"
+            "export fn answer()->i64{return foldedWitness()}\n",NULL,42},
+        {"optional leaves outer business catch", "enum Failure{Bad}\nfn value() throws(Failure)->i64{throw Failure.Bad}\n"
+            "export fn answer()->i64{try{return (try? value()) ?? 42}catch(e:Failure){return 0}}\n",NULL,42},
+        {"optional enum", "enum Failure{Bad}\nfn value() throws(Failure)->i64{throw Failure.Bad}\n"
+            "export fn answer()->i64{return (try? value()) ?? 42}\n",NULL,42},
+        {"optional Never", "fn value()->i64{return 42}\nexport fn answer()->i64{return (try? value()) ?? 0}\n",NULL,42},
+        {"optional typed pull", "enum Failure{Bad}\nfn values()->Iterator<i64,Failure>{yield 1\nthrow Failure.Bad}\n"
+            "export fn answer()->i64{const it=values();const first=try? it.next();const second=try? it.next();"
+            "return (first ?? 0)+(second ?? 41)}\n",NULL,42},
+        {"optional existing Nullable", "enum Failure{Bad}\nfn value() throws(Failure)->i64?{return 42}\n"
+            "export fn answer()->i64{const result:i64?=try? value();return result ?? 0}\n",NULL,42},
+        {"optional nested Nullable", "fn value()->i64??{const missing:i64?=null;return missing}\n"
+            "export fn answer()->i64{const result:i64?" "?=try? value();if(result==null){return 0};"
+            "const inner:i64?=result!;if(inner==null){return 42};return 1}\n",NULL,42},
+        {"optional owning String", "enum Failure{Bad}\nfn value() throws(Failure)->string{return \"é\\0界\"}\n"
+            "export fn answer()->i64{const result=try? value();if((result ?? \"missing\")==\"é\\0界\"){return 42};return 0}\n",NULL,42},
+        {"optional does not mark following call", "enum Failure{Bad}\nfn value() throws(Failure)->i64{throw Failure.Bad}\n"
+            "export fn answer()->i64{const optional=try? value();return value()}\n","E0330",0},
+        {"optional does not mark nested function", "enum Failure{Bad}\nfn value() throws(Failure)->i64{throw Failure.Bad}\n"
+            "export fn answer()->i64{const optional=try? (fn()->i64{return value()})();return 42}\n","E0330",0},
+        {"optional does not weaken producer E", "enum First{Bad}\nenum Second{Bad}\n"
+            "fn value() throws(First)->i64{throw Second.Bad}\nexport fn answer()->i64{return (try? value()) ?? 42}\n","E0331",0}
+    };
+    for(size_t i=0;i<sizeof(optional_cases)/sizeof(optional_cases[0]);++i)local_case(&optional_cases[i]);
+
     puts("Local declared errors, markers, defaults, constructors and independent VM execution passed");return 0;
 }

@@ -220,15 +220,30 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
         if (!plan->condition || !plan->left || !plan->right || !source_plan_binary_prepare(ctx,plan,(SourceExpectedType){false,XR_XIR_UNIT, false, false},false)) return NULL;
         break;
     case AST_TRY_EXPR:
-        if (node->as.try_expr.mode!=XR_TRY_PROPAGATE && node->as.try_expr.mode!=XR_TRY_ASSERT) {
+        if (node->as.try_expr.mode!=XR_TRY_PROPAGATE && node->as.try_expr.mode!=XR_TRY_ASSERT &&
+            node->as.try_expr.mode!=XR_TRY_OPTIONAL) {
             source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"try expression mode is not yet supported");return NULL;
         }
         if (ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"try expression depth exhausted");return NULL;}
         ctx->active_expression=plan;++ctx->depth;
-        plan->left=source_plan_collect(ctx,node->as.try_expr.operand,context);
+        plan->left=source_plan_collect(ctx,node->as.try_expr.operand,
+            node->as.try_expr.mode==XR_TRY_OPTIONAL && !source_null_syntax(ctx,node->as.try_expr.operand) ?
+                (SourceExpectedType){0} : context);
         --ctx->depth;ctx->active_expression=parent;
         if (!plan->left) return NULL;
-        if (plan->left->type_ready) {plan->type_ready=true;plan->ground_type=plan->left->ground_type;}
+        if (node->as.try_expr.mode==XR_TRY_OPTIONAL && context.present &&
+            xr_xir_type_is_nullable(&ctx->types,context.type) && !plan->left->type_ready) {
+            SourceExpectedType element={true,xr_xir_nullable_element(&ctx->types,context.type),false,false};
+            if (!source_plan_binary_prepare(ctx,plan->left,element,false) ||
+                !source_plan_numeric_prepare(ctx,plan->left,element,false)) return NULL;
+        }
+        if (plan->left->type_ready) {
+            plan->ground_type=plan->left->ground_type;
+            if (node->as.try_expr.mode==XR_TRY_OPTIONAL &&
+                !xr_xir_type_is_nullable(&ctx->types,plan->ground_type) &&
+                !source_nullable_type(ctx,plan->ground_type,&plan->ground_type)) return NULL;
+            plan->type_ready=true;
+        }
         break;
     case AST_GROUPING:
         if (plan->integer.present || plan->decimal.node) break;

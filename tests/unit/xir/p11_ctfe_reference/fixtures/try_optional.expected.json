@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "exit": 0,
+  "stdoutUtf8": "17\n-1\n-2\n13\n-2\n7\nfalse\n-1\n19\n41\nowned é\u0000界\n31\n32\n-3\n420\n",
+  "stderrUtf8": ""
+}
