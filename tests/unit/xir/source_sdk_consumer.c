@@ -331,7 +331,50 @@ static const TaskCase task_cases[] = {
         "fn worker()->Task<i64> { Coro.yield(); return go leaf() }\n"
         "fn calculate() throws(Error) { const task:Task<Task<i64>> = go worker(); const first=try await task;"
         " const next=try await task; print(try await first); print(try await next) }\ntry calculate()\n",
-        "29\n29\n")
+        "29\n29\n"),
+    TASK_CASE("try-optional",
+        "enum PullFailure { Bad { detail: string } }\n"
+        "fn element(fail: bool) throws(PullFailure) -> i64 {\n"
+        "    if (fail) { throw PullFailure.Bad { detail: \"\303\251\\0\347\225\214\" } }\n"
+        "    return 17\n"
+        "}\n"
+        "fn maybeNull(mode: i64) throws(PullFailure) -> i64\? {\n"
+        "    if (mode == 0) { return null }\n"
+        "    if (mode == 1) { return 13 }\n"
+        "    throw PullFailure.Bad { detail: \"optional failure\" }\n"
+        "}\n"
+        "fn values() -> Iterator<i64, PullFailure> {\n"
+        "    yield 7\n"
+        "    throw PullFailure.Bad { detail: \"pull failure\" }\n"
+        "}\n"
+        "fn pureValues() -> Iterator<i64> { yield 19 }\n"
+        "fn text() throws(PullFailure) -> string { return \"owned \303\251\\0\347\225\214\" }\n"
+        "fn part(mark: i64, fail: bool) throws(PullFailure) -> i64 { print(mark);return try element(fail) }\n"
+        "fn foldedValue() -> i64 { return (try\? element(true)) \?\? 41 }\n"
+        "fn divide(divisor: i64) -> i64 { return 1 / divisor }\n"
+        "const folded = comptime foldedValue()\n"
+        "print((try\? element(false)) \?\? -1)\n"
+        "print((try\? element(true)) \?\? -1)\n"
+        "const empty: i64\? = try\? maybeNull(0)\n"
+        "const present: i64\? = try\? maybeNull(1)\n"
+        "const failed: i64\? = try\? maybeNull(2)\n"
+        "print(empty \?\? -2)\n"
+        "print(present \?\? -2)\n"
+        "print(failed \?\? -2)\n"
+        "const it = values()\n"
+        "print((try\? it.next()) \?\? -1)\n"
+        "print((try\? it.hasNext()) \?\? false)\n"
+        "const indexed = values()\n"
+        "print((try\? indexed.nth(1)) \?\? -1)\n"
+        "const pure = pureValues()\n"
+        "print((try\? pure.next()) \?\? -1)\n"
+        "print(folded)\n"
+        "const owned: string\? = try\? text()\n"
+        "print(owned \?\? \"missing\")\n"
+        "print((try\? (part(31, false) + part(32, true) + part(33, false))) \?\? -3)\n"
+        "try { const ignored = try\? divide(0); print(ignored \?\? -9) }\n"
+        "catch panic (p) { print(p.code) }\n",
+        "17\n-1\n-2\n13\n-2\n7\nfalse\n-1\n19\n41\nowned \303\251\000\347\225\214\n31\n32\n-3\n420\n")
 };
 static int constructed_task_case(const TaskCase *test, const char *stdlib, size_t ordinal) {
     XrSourceCompileOptions compiler = compile_options(stdlib);
