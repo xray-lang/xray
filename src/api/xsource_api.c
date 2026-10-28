@@ -196,6 +196,7 @@ static XrSourceEvent api_event(XrXirCallStatus status,uint64_t epoch,uint64_t wa
     case XR_XIR_CALL_HOST_ERROR:state=XR_SOURCE_RUN_HOST_ERROR;break;
     case XR_XIR_CALL_OUTPUT_ERROR:state=XR_SOURCE_RUN_OUTPUT_ERROR;break;
     case XR_XIR_CALL_UNSUPPORTED:state=XR_SOURCE_RUN_UNSUPPORTED;break;
+    case XR_XIR_CALL_CLEANUP_FAILED:state=XR_SOURCE_RUN_CLEANUP_FAILED;break;
     default:break;
     }
     return(XrSourceEvent){state,(uint32_t)status,epoch,wake};
@@ -600,7 +601,8 @@ XRAY_API XrSourceStatus xray_source_result_format(const XrSourceResult *result,X
     XrValueFormatSink sink={&out,api_format_write};XrValueFormatReader reader=xr_xir_value_format_reader(&format);
     const XrXirValue *value=&result->value.value;
     int formatted;
-    if(result->value.status==XR_XIR_CALL_THROWN || xr_xir_call_panic_status(result->value.status))
+    if(result->value.status==XR_XIR_CALL_THROWN || xr_xir_call_panic_status(result->value.status) ||
+        result->value.status==XR_XIR_CALL_CLEANUP_FAILED)
         formatted=xr_xir_host_report_result(&result->value,sink,false)==XR_XIR_HOST_REPORT_OK;
     else if(result->value.status==XR_XIR_CALL_RETURNED)
         formatted=xr_value_format_value(reader,(XrValueFormatNode){value,0},sink,0);

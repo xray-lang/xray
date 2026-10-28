@@ -277,3 +277,111 @@ add_test(NAME test_xir_nullable_unit_native COMMAND ${XRAY_PYTHON} -X utf8
     --source "${nullable_unit_fixture}" --expect "${nullable_unit_oracle}"
     --native-driver $<TARGET_FILE:test_xir_nullable_unit_native>)
 set_tests_properties(test_xir_nullable_unit_native PROPERTIES LABELS "unit;xir;nullable;native;ctfe;ownership" TIMEOUT 120)
+
+add_executable(test_xir_cleanup_replaced "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_cleanup_replaced.c")
+target_link_libraries(test_xir_cleanup_replaced PRIVATE xray_source_api)
+target_compile_definitions(test_xir_cleanup_replaced PRIVATE
+    XR_CLEANUP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_CLEANUP_FIXTURES="${CMAKE_CURRENT_LIST_DIR}/fixtures")
+set_target_properties(test_xir_cleanup_replaced PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_cleanup_replaced PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_cleanup_replaced PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+foreach(cleanup_case source host cancel graph sticky-host hard-reentry task-sendable)
+    add_test(NAME test_xir_cleanup_replaced_${cleanup_case} COMMAND test_xir_cleanup_replaced ${cleanup_case})
+    set_tests_properties(test_xir_cleanup_replaced_${cleanup_case} PROPERTIES
+        LABELS "unit;xir;cleanup;ownership;runtime" TIMEOUT 120)
+endforeach()
+add_test(NAME test_xir_cleanup_original_optional COMMAND test_xir_local_errors known-cleanup-panic)
+set_tests_properties(test_xir_cleanup_original_optional PROPERTIES LABELS "unit;xir;cleanup;errors" TIMEOUT 60)
+
+set(cleanup_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/cleanup_replaced.c")
+add_custom_command(OUTPUT "${cleanup_generated}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND $<TARGET_FILE:test_xir_from_utf8> --emit-file
+        "${CMAKE_CURRENT_LIST_DIR}/fixtures/cleanup_replaced_owned.xr" "${cleanup_generated}"
+    DEPENDS test_xir_from_utf8 "${CMAKE_CURRENT_LIST_DIR}/fixtures/cleanup_replaced_owned.xr" VERBATIM)
+add_executable(test_xir_cleanup_replaced_native "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_cleanup_replaced_native.c" "${cleanup_generated}")
+target_link_libraries(test_xir_cleanup_replaced_native PRIVATE xray_xir_scalar xray_compile_resources)
+set_target_properties(test_xir_cleanup_replaced_native PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_cleanup_replaced_native PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_xir_cleanup_replaced_native PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(test_xir_cleanup_replaced_native PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_xir_cleanup_replaced_generated_native COMMAND ${XRAY_PYTHON} -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_cleanup_replaced_cli.py" --root "${PROJECT_SOURCE_DIR}"
+    --binary $<TARGET_FILE:xray> --fixtures "${CMAKE_CURRENT_LIST_DIR}/fixtures"
+    --native-driver $<TARGET_FILE:test_xir_cleanup_replaced_native>)
+add_test(NAME test_xir_cleanup_replaced_cli COMMAND ${XRAY_PYTHON} -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_cleanup_replaced_cli.py" --root "${PROJECT_SOURCE_DIR}"
+    --binary $<TARGET_FILE:xray> --fixtures "${CMAKE_CURRENT_LIST_DIR}/fixtures")
+set_tests_properties(test_xir_cleanup_replaced_generated_native test_xir_cleanup_replaced_cli PROPERTIES
+    LABELS "unit;xir;cleanup;ownership;native" RUN_SERIAL TRUE TIMEOUT 240)
+
+add_executable(test_xir_cleanup_replaced_wait_fault "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_cleanup_replaced.c")
+target_link_libraries(test_xir_cleanup_replaced_wait_fault PRIVATE xray_source_api)
+target_compile_definitions(test_xir_cleanup_replaced_wait_fault PRIVATE XR_CLEANUP_CALL_OBSERVER=1
+    XR_CLEANUP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_CLEANUP_FIXTURES="${CMAKE_CURRENT_LIST_DIR}/fixtures")
+set_target_properties(test_xir_cleanup_replaced_wait_fault PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_cleanup_replaced_wait_fault PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_cleanup_replaced_wait_fault PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_xir_cleanup_replaced_wait_identity COMMAND test_xir_cleanup_replaced_wait_fault task-identity)
+add_test(NAME test_xir_cleanup_replaced_task_shutdown COMMAND test_xir_cleanup_replaced_wait_fault task-shutdown)
+add_test(NAME test_xir_cleanup_replaced_task_pair COMMAND test_xir_cleanup_replaced_wait_fault task-pair)
+add_test(NAME test_xir_cleanup_replaced_task_positive COMMAND test_xir_cleanup_replaced task-identity)
+add_test(NAME test_xir_cleanup_replaced_late_cancel COMMAND test_xir_cleanup_replaced late-cancel)
+set_tests_properties(test_xir_cleanup_replaced_wait_identity test_xir_cleanup_replaced_task_shutdown test_xir_cleanup_replaced_task_pair test_xir_cleanup_replaced_task_positive test_xir_cleanup_replaced_late_cancel
+    PROPERTIES LABELS "unit;xir;cleanup;ownership;runtime" TIMEOUT 120)
+
+add_executable(test_xir_cleanup_replaced_host_fault "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_cleanup_replaced.c")
+target_link_libraries(test_xir_cleanup_replaced_host_fault PRIVATE xray_source_api)
+target_compile_definitions(test_xir_cleanup_replaced_host_fault PRIVATE XR_CLEANUP_HOST_OBSERVER=1
+    XR_CLEANUP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_CLEANUP_FIXTURES="${CMAKE_CURRENT_LIST_DIR}/fixtures")
+set_target_properties(test_xir_cleanup_replaced_host_fault PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_cleanup_replaced_host_fault PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_cleanup_replaced_host_fault PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_xir_cleanup_replaced_host_wait COMMAND test_xir_cleanup_replaced_host_fault host-wait)
+set_tests_properties(test_xir_cleanup_replaced_host_wait PROPERTIES LABELS "unit;xir;cleanup;ownership;runtime" TIMEOUT 120)
+
+add_executable(test_xir_cleanup_replaced_value_fault "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_cleanup_replaced.c")
+target_link_libraries(test_xir_cleanup_replaced_value_fault PRIVATE xray_source_api)
+target_compile_definitions(test_xir_cleanup_replaced_value_fault PRIVATE XR_CLEANUP_VALUE_OBSERVER=1
+    XR_CLEANUP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_CLEANUP_FIXTURES="${CMAKE_CURRENT_LIST_DIR}/fixtures")
+set_target_properties(test_xir_cleanup_replaced_value_fault PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_cleanup_replaced_value_fault PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_xir_cleanup_replaced_value_fault PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(test_xir_cleanup_replaced_value_fault PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_xir_cleanup_replaced_resources COMMAND test_xir_cleanup_replaced_value_fault resources)
+set_tests_properties(test_xir_cleanup_replaced_resources PROPERTIES LABELS "unit;xir;cleanup;ownership;resources" TIMEOUT 120)
+
+add_executable(test_xir_cleanup_replaced_sdk_reader "${PROJECT_SOURCE_DIR}/tests/unit/xir/sdk_cleanup_consumer.c")
+target_link_libraries(test_xir_cleanup_replaced_sdk_reader PRIVATE xray_xir_runtime_sdk)
+target_compile_definitions(test_xir_cleanup_replaced_sdk_reader PRIVATE XR_CLEANUP_READER=1)
+set_target_properties(test_xir_cleanup_replaced_sdk_reader PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_cleanup_replaced_sdk_reader PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_cleanup_replaced_sdk_reader PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_xir_cleanup_replaced_sdk_manifest COMMAND ${XRAY_PYTHON} -X utf8
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/sdk_manifest_vectors.py"
+    --executable $<TARGET_FILE:test_xir_cleanup_replaced_sdk_reader>
+    --bundle "${CMAKE_BINARY_DIR}/xir-runtime-sdk" --case cleanup-abi)
+set_tests_properties(test_xir_cleanup_replaced_sdk_manifest PROPERTIES LABELS "unit;xir;cleanup;sdk;abi" TIMEOUT 120)

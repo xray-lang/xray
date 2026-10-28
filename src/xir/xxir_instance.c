@@ -166,7 +166,7 @@ static bool instance_view_current(const XrXirCallView *view) {
 }
 #include "xxir_instance_cell_roles.inc.c"
 static XrXirCallResult instance_result(XrXirCallStatus status) {
-    return (XrXirCallResult) {status, {0, 0, 0}, 0, {0}};
+    return (XrXirCallResult) {.status=status};
 }
 static XrXirCallStatus value_call_status(XrXirValueStatus status) {
     if (status == XR_XIR_VALUE_OK) return XR_XIR_CALL_READY;
@@ -374,7 +374,11 @@ static void clear_slots(XrXirInstance *instance) {
 }
 static void fail_initialization(XrXirInstance *instance, XrXirCallResult failure) {
     XrXirCallResult copy = instance_result(XR_XIR_CALL_READY);
-    XrXirValueStatus status = xr_xir_call_result_copy(&failure, &copy);
+    XrXirValueStatus status=XR_XIR_VALUE_OK;
+    if (failure.status==XR_XIR_CALL_CLEANUP_FAILED) {
+        XR_CHECK(xr_xir_call_take_outcome(instance->call,&copy)==XR_XIR_CALL_CLEANUP_FAILED,
+            "sticky fatal initialization takes its actual complete root owner");
+    } else status=xr_xir_call_result_copy(&failure,&copy);
     if (status != XR_XIR_VALUE_OK) copy = instance_result(value_call_status(status));
     xr_xir_call_result_drop(&instance->failure);
     xr_xir_call_result_move(&copy, &instance->failure);
@@ -884,7 +888,7 @@ XrXirCallStatus xr_xir_instance_close_activation(XrXirInstance *instance) {
     instance = instance_current(instance);
     if (!instance->executor) return XR_XIR_CALL_READY;
     instance_driving(instance, true);
-    XrXirCallStatus status = xr_xir_task_executor_drain(instance->executor);
+    XrXirCallStatus status = xr_xir_task_executor_drain(instance->executor,XR_XIR_CALL_READY);
     XR_CHECK(xr_xir_task_executor_root_idle(instance->executor),
         "an exclusively owned current activation drains every runnable task");
     if (instance->call && instance->state == XR_XIR_INSTANCE_INITIALIZING) {
@@ -903,6 +907,28 @@ XrXirCallStatus xr_xir_instance_close_activation(XrXirInstance *instance) {
     if (status == XR_XIR_CALL_READY) status = released;
     if (status != XR_XIR_CALL_READY) (void)xr_xir_instance_stop(root);
     return status;
+}
+XR_FUNC XrXirCallStatus xir_instance_host_failure(XrXirInstance *instance,XrXirInstanceResult *observed) {
+    if (!instance_owner_current(instance) || !instance || !observed) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (instance_busy(instance)) return XR_XIR_CALL_BUSY;
+    XrXirInstance *root=instance_root(instance);
+    if (root->prepared_generation) return XR_XIR_CALL_BAD_STATE;
+    XrXirInstance *active=instance_current(root);
+    if ((instance!=root && instance!=active) || root->stopping || active->stopping ||
+        active->state==XR_XIR_INSTANCE_FAILED || active->state==XR_XIR_INSTANCE_DRAINING)
+        return XR_XIR_CALL_BAD_STATE;
+    instance=active;
+    if (!instance->executor || !instance->call) return XR_XIR_CALL_BAD_STATE;
+    XrXirCallStatus current=xr_xir_call_state(instance->call);
+    if (current!=XR_XIR_CALL_READY && current!=XR_XIR_CALL_SUSPENDED) return XR_XIR_CALL_BAD_STATE;
+    instance_driving(instance,true);
+    XrXirCallStatus status=xr_xir_task_executor_drain(instance->executor,XR_XIR_CALL_HOST_ERROR);
+    instance_driving(instance,false);
+    (void)xr_xir_instance_stop(root);
+    XrXirInstanceResult result=xr_xir_instance_poll_bounded(instance,1);
+    XR_CHECK(result.outcome.status==status && xr_xir_call_result_valid(&result.outcome),
+        "hard host close preserves its existing complete first terminal");
+    *observed=result;return XR_XIR_CALL_READY;
 }
 XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance) {
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -1875,7 +1901,8 @@ XrXirAction xr_xir_instance_panic_land(XrXirCallView *view, void *frame, XrXirAc
     if (!xr_xir_call_panic_action(&action)) return action;
     XrXirCallStatus status = XR_XIR_CALL_READY;
     if (!frame || !pc || !handler_pc) status = XR_XIR_CALL_BAD_STATE;
-    else if (destination != UINT32_MAX) {
+    else status=value_call_status(xr_xir_panic_payload_admit(&action.panic,xr_xir_call_admission(view)));
+    if (status==XR_XIR_CALL_READY && destination != UINT32_MAX) {
         XrXirInstance *instance = view_instance(view);
         XrXirValue info = {0};
         status = !instance ? XR_XIR_CALL_BAD_STATE :

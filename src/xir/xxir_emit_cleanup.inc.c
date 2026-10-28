@@ -39,7 +39,7 @@ static void emit_cleanup_entry(CBuffer *buffer, const XrXirFunction *function,
     }
     append(buffer, "    if (view->phase == XR_XIR_CALL_EXIT) {\n"
         "        if (state->cleanup_waiting) {\n"
-        "            if (view->inbox.status != XR_XIR_CALL_RETURNED) goto invalid;\n"
+        "            if (view->inbox.status != XR_XIR_CALL_RETURNED && !xr_xir_call_panic_status(view->inbox.status)) goto invalid;\n"
         "            if (xr_xir_call_cleanup_frontier(view, state->cleanup_parent) != XR_XIR_CALL_READY) goto invalid;\n"
         "            state->frontier = state->cleanup_parent; state->cleanup_waiting = false;\n        }\n"
         "        if (state->frontier == (view->scope_exit ? state->exit_target : 0u))\n"
@@ -68,6 +68,9 @@ static void emit_cleanup_entry(CBuffer *buffer, const XrXirFunction *function,
         const XrXirInstruction *op = &function->instructions[i];
         if (op->op != XR_XIR_CLEANUP_LEAVE && op->op != XR_XIR_CLEANUP_ERROR) continue;
         append(buffer, "        case %uu:\n", i + 1);
+        append(buffer,"            if (xr_xir_call_panic_status(view->inbox.status)) { ");
+        emit_fault_return(buffer,function,layout,i,"(XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,view->inbox.status},view->inbox.panic,0}");
+        append(buffer," }\n");
         emit_edge(buffer, function, layout, i, op->targets[0], true);
         append(buffer, "            return (XrXirAction){XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n");
     }

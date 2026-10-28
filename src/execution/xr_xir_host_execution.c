@@ -16,6 +16,7 @@
 #include "xr_xir_host_time.h"
 #include "../os/os_time.h"
 #include "../base/xmalloc.h"
+#include "../base/xchecks.h"
 
 XR_FUNC XrXirTarget xr_xir_host_target(void) {
 #if defined(XR_ARCH_X86_64)
@@ -210,27 +211,25 @@ static XrXirCallStatus host_complete(XrXirHostCall *call, XrXirCallResult *outpu
             while (waiting == XR_XIR_HOST_WAIT_PENDING)
                 waiting = xr_xir_host_wait_poll(&wait, UINT64_MAX);
             if (waiting != XR_XIR_HOST_WAIT_DUE) {
-                /* The host cannot honor the wait: drain the activation and report the host failure. */
-                if (xr_xir_host_call_request_cancel(call) == XR_XIR_CALL_CANCEL_REQUESTED) {
-                    do observed = xr_xir_host_call_step_bounded(call, 256);
-                    while (observed.outcome.status == XR_XIR_CALL_READY);
-                }
-                status = XR_XIR_CALL_HOST_ERROR;
-                break;
+                status=XR_XIR_CALL_HOST_ERROR;
+                goto host_failure;
             }
             status = xr_xir_host_call_resume(call, observed.epoch, observed.outcome.wake);
-            if (status != XR_XIR_CALL_READY) break;
+            if (status != XR_XIR_CALL_READY) goto host_failure;
         }
         observed = xr_xir_host_call_step_bounded(call, 256);
     }
-    if (status == XR_XIR_CALL_HOST_ERROR) {
-        XrXirCallStatus cleanup_failed = xr_xir_host_call_drop(call);
-        return cleanup_failed != XR_XIR_CALL_READY ? cleanup_failed : status;
-    }
+    goto complete;
+host_failure:
+    call->busy=true;
+    XR_CHECK(xir_instance_host_failure(call->instance,&call->observed)==XR_XIR_CALL_READY,
+        "the host exclusively owns its waiting, unprepared current instance");
+    call->busy=false;observed=call->observed;status=observed.outcome.status;
+complete: ;
     XrXirCallResult owned = {0};
-    if (status == XR_XIR_CALL_READY) status = xr_xir_host_call_take(call, &owned);
+    if (status == XR_XIR_CALL_READY || status==observed.outcome.status) status = xr_xir_host_call_take(call, &owned);
     XrXirCallStatus cleanup = xr_xir_host_call_drop(call);
-    if (cleanup != XR_XIR_CALL_READY) {
+    if (cleanup != XR_XIR_CALL_READY && (xr_xir_call_result_empty(&owned) || owned.status==XR_XIR_CALL_RETURNED)) {
         xr_xir_call_result_drop(&owned);
         return cleanup;
     }

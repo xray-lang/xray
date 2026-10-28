@@ -419,7 +419,7 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
     case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME:
     case XR_XIR_RANGE_CHECK: case XR_XIR_EQUAL: case XR_XIR_ASSERT_CONDITION: case XR_XIR_PANIC_ERROR: case XR_XIR_MATCH_FAIL: case XR_XIR_ERROR_ERASE: case XR_XIR_INVOKE_RESULT:
     case XR_XIR_INVOKE_ERROR: case XR_XIR_INVOKE_DISCARD: case XR_XIR_ERROR_IS: case XR_XIR_ERROR_NARROW:
-    case XR_XIR_PANIC_CATCH: case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE:
+    case XR_XIR_PANIC_CATCH: case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE: case XR_XIR_PANIC_REPLACED_ERROR:
     case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
     case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD:
         return EFFECT_SEED_LOCAL;
@@ -767,7 +767,7 @@ static bool effect_default_access_local(XrXirOp op) {
     case XR_XIR_VIEW_SET: case XR_XIR_VIEW_COPY: case XR_XIR_VIEW_END: case XR_XIR_VIEW_CLEANUP:
     case XR_XIR_ERROR_ERASE: case XR_XIR_ERROR_IS: case XR_XIR_ERROR_NARROW:
     case XR_XIR_PANIC_ERROR: case XR_XIR_MATCH_FAIL: case XR_XIR_ASSERT_CONDITION: case XR_XIR_PANIC_CATCH:
-    case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE:
+    case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE: case XR_XIR_PANIC_REPLACED_ERROR:
         return true;
     default: return false;
     }

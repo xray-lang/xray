@@ -10,7 +10,7 @@
  *   The ordinary Value factory owns assertion messages. Intrinsic messages
  *   use the sole canonical formatter and preserve actual primitive facts.
  */
-_Static_assert(sizeof(XrXirPanicPayload)<=64,"panic payload reserve must cover its public carrier");
+_Static_assert(sizeof(XrXirPanicPayload)<=80,"panic payload reserve must cover its public carrier");
 _Static_assert(XR_XIR_PANIC_MESSAGE_CAPACITY<=128,"panic message reserve must cover canonical formatting");
 static XrXirCtfeStatus ctfe_panic_value_step(ScalarRun *run,VmState *vm,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[vm->instruction];

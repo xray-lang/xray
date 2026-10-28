@@ -16,7 +16,7 @@
 #include "xxir_panic.h"
 #include "xxir_output_status.h"
 
-#define XR_XIR_CALL_ABI_VERSION 36u
+#define XR_XIR_CALL_ABI_VERSION 37u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef struct XrXirCallView XrXirCallView;
@@ -33,13 +33,17 @@ typedef enum XrXirCallStatus {
     /* A language panic whose detail code alone names it, such as unwrapping null. */
     XR_XIR_CALL_RUNTIME_PANIC, XR_XIR_CALL_UNSUPPORTED,
     /* A pull-produced owner; its activation remains live and has no wake. */
-    XR_XIR_CALL_YIELDED
+    XR_XIR_CALL_YIELDED,
+    /* Internal owned terminal; a guest Action cannot construct this status. */
+    XR_XIR_CALL_CLEANUP_FAILED
 } XrXirCallStatus;
 typedef struct XrXirCallResult {
     XrXirCallStatus status;
     XrXirValue value;
     uint64_t wake;
     XrXirPanicPayload panic;
+    XrXirPanicPayload prior_panic;
+    XrXirCallStatus prior_status;
 } XrXirCallResult;
 typedef enum XrXirActionKind {
     XR_XIR_ACTION_CALL = 1, XR_XIR_ACTION_RETURN, XR_XIR_ACTION_THROW,

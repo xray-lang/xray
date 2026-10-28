@@ -99,6 +99,13 @@ static bool emit_protection(CBuffer *buffer, const XrXirFunction *function, cons
     *handler_pc = first + 1;
     return true;
 }
+/* This owned-result format is used once per query; generic append validates
+ * the actual output without expanding the private transition inventory. */
+static const char replaced_error_format[] = "; XrXirValue result={0};\n"
+            " XrXirValueStatus status=xr_xir_panic_info_replaced_error(&info,%uu,xr_xir_call_admission(view),&result);\n"
+            " if (status!=XR_XIR_VALUE_OK) return xr_xir_call_fault(status==XR_XIR_VALUE_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"
+            " status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n"
+            " xr_xir_owned_slot_move(state->frame,%uu,&result); }\n";
 static void emit_fault_return(CBuffer *buffer, const XrXirFunction *function,
     const XrXirFunctionLayout *layout, uint32_t index, const char *action) {
     uint32_t destination = 0, handler_pc = 0;
@@ -1078,6 +1085,10 @@ static bool emit_resume_value_step(CBuffer *buffer,const XrXirFunction *function
         EMIT_FORMAT(buffer, et_5983beda6e3f1912, ";\n XrXirFaultDetail detail;\n if (!xr_xir_panic_info_detail(&info, &detail)) goto invalid;\n"
             " xr_xir_scalar_store(state->frame, %uu, (int64_t) detail.code); }\n", destination);
         break;
+    case XR_XIR_PANIC_REPLACED_ERROR:
+        EMIT_LITERAL(buffer," { XrXirValue info = "); emit_value(buffer,function,layout,op->args[0]);
+        append(buffer,replaced_error_format,(unsigned)op->type,destination);
+        break;
     case XR_XIR_PANIC_MESSAGE:
         EMIT_LITERAL(buffer, " { XrXirValue info = "); emit_value(buffer, function, layout, op->args[0]);
         EMIT_FORMAT(buffer, et_6510d1d41c8bd61c, ";\n XrXirValue message = {0};\n"
@@ -1269,6 +1280,10 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         EMIT_LITERAL(buffer, " { XrXirValue info = "); emit_value(buffer, function, layout, op->args[0]);
         EMIT_FORMAT(buffer, et_5983beda6e3f1912, ";\n XrXirFaultDetail detail;\n if (!xr_xir_panic_info_detail(&info, &detail)) goto invalid;\n"
             " xr_xir_scalar_store(state->frame, %uu, (int64_t) detail.code); }\n", destination);
+        break;
+    case XR_XIR_PANIC_REPLACED_ERROR:
+        EMIT_LITERAL(buffer," { XrXirValue info = "); emit_value(buffer,function,layout,op->args[0]);
+        append(buffer,replaced_error_format,(unsigned)op->type,destination);
         break;
     case XR_XIR_PANIC_MESSAGE:
         EMIT_LITERAL(buffer, " { XrXirValue info = "); emit_value(buffer, function, layout, op->args[0]);
@@ -1926,17 +1941,30 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n",
            XR_XIR_CALL_ABI_VERSION, XR_XIR_VALUE_ABI_VERSION);
     append(buffer,"#include \"xir/xxir_channel_call_internal.h\"\n");
-    EMIT_STATIC(buffer, es_97d5dffc591ff8b4,
-           "_Static_assert(sizeof(XrXirFaultDetail) == 24 && _Alignof(XrXirFaultDetail) == 8, \"XIR fault layout\");\n"
-           "_Static_assert(offsetof(XrXirFaultDetail, index) == 8 && offsetof(XrXirFaultDetail, length) == 16, \"XIR fault offsets\");\n"
-           "_Static_assert(sizeof(XrXirPanicPayload) == 56 && _Alignof(XrXirPanicPayload) == 8, \"XIR panic layout\");\n"
-           "_Static_assert(offsetof(XrXirPanicPayload, detail) == 0 && offsetof(XrXirPanicPayload, message) == 24 && offsetof(XrXirPanicPayload, error) == 40, \"XIR panic offsets\");\n"
-           "_Static_assert(sizeof(XrXirAction) == 104 && _Alignof(XrXirAction) == 8, \"XIR action layout\");\n"
-           "_Static_assert(offsetof(XrXirAction, value) == 24 && offsetof(XrXirAction, panic) == 40 && "
-           "offsetof(XrXirAction, flags) == 96, \"XIR action offsets\");\n"
-           "_Static_assert(sizeof(XrXirCallResult) == 88 && _Alignof(XrXirCallResult) == 8, \"XIR result layout\");\n"
-           "_Static_assert(offsetof(XrXirCallResult, value) == 8 && offsetof(XrXirCallResult, wake) == 24 && "
-           "offsetof(XrXirCallResult, panic) == 32, \"XIR result offsets\");\n");
+    append(buffer,
+        "_Static_assert(sizeof(XrXirFaultDetail)==24"
+        "&&_Alignof(XrXirFaultDetail)==8"
+        "&&offsetof(XrXirFaultDetail,index)==8"
+        "&&offsetof(XrXirFaultDetail,length)==16"
+        "&&sizeof(XrXirPanicPayload)==72"
+        "&&_Alignof(XrXirPanicPayload)==8"
+        "&&offsetof(XrXirPanicPayload,detail)==0"
+        "&&offsetof(XrXirPanicPayload,message)==24"
+        "&&offsetof(XrXirPanicPayload,error)==40"
+        "&&offsetof(XrXirPanicPayload,replaced_error)==56"
+        "&&sizeof(XrXirAction)==120"
+        "&&_Alignof(XrXirAction)==8"
+        "&&offsetof(XrXirAction,value)==24"
+        "&&offsetof(XrXirAction,panic)==40"
+        "&&offsetof(XrXirAction,flags)==112"
+        "&&sizeof(XrXirCallResult)==184"
+        "&&_Alignof(XrXirCallResult)==8"
+        "&&offsetof(XrXirCallResult,value)==8"
+        "&&offsetof(XrXirCallResult,wake)==24"
+        "&&offsetof(XrXirCallResult,panic)==32"
+        "&&offsetof(XrXirCallResult,prior_panic)==104"
+        "&&offsetof(XrXirCallResult,prior_status)==176"
+        ",\"XIR Call37 layout\");\n");
     if (module->function_count) emit_resume_inbox_helper(buffer, symbol_prefix);
     if (!((buffer)->status == XR_XIR_OK)) return;
     bool waiting_helper_emitted = false;

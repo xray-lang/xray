@@ -1,0 +1,111 @@
+enum Failure { Bad { text: string, number: i64 } }
+final class Local { value: i64 init(value: i64) { this.value = value } }
+enum UnsafeFailure { Empty, Unsafe { hidden: Local } }
+fn divide(n: i64) -> i64 { return 1 / n }
+fn remainder(n: i64) -> i64 { return 1 % n }
+fn oldFailure() throws(Failure) -> i64 {
+    defer { const ignored = divide(0) }
+    throw Failure.Bad { text: "old é\0界", number: 23 }
+}
+fn nextFailure() throws(Failure) -> i64 {
+    throw Failure.Bad { text: "new é\0界", number: 31 }
+}
+fn bothFailure() throws(Failure) -> i64 {
+    defer { const ignored = try! nextFailure() }
+    throw Failure.Bad { text: "old é\0界", number: 23 }
+}
+fn saved() -> Error? {
+    try { const ignored = oldFailure() }
+    catch (e: Failure) { return null }
+    catch panic (p) { return p.replacedError }
+    return null
+}
+fn ordinary() -> i64 {
+    try { return divide(0) }
+    catch panic (p) { print(p.replacedError == null); return p.code }
+}
+fn returned() -> i64 { defer { const ignored = divide(0) }; return 17 }
+fn returnCatch() -> i64 {
+    try { return returned() }
+    catch panic (p) { print(p.replacedError == null); return p.code }
+}
+fn caughtCleanup() throws(Failure) -> i64 {
+    defer { try { const ignored = divide(0) } catch panic {} }
+    throw Failure.Bad { text: "caught", number: 42 }
+}
+fn run() -> i64 {
+    const kept = saved()
+    print(kept != null)
+    print(ordinary())
+    print(returnCatch())
+    try { const ignored = caughtCleanup() } catch (e: Failure) { print(42) }
+    try { return bothFailure() }
+    catch (e: Failure) { return -1 }
+    catch panic (p) { print(p.replacedError != null); return p.code }
+}
+export fn fatalPanic() -> i64 {
+    defer { print("forbidden-after-fatal") }
+    defer { const ignored = remainder(0) }
+    return divide(0)
+}
+fn priorFailure() throws(Failure) -> i64 { throw Failure.Bad { text: "prior é\0界", number: 47 } }
+export fn fatal446() -> i64 {
+    defer { const ignored = try! nextFailure() }
+    return try! priorFailure()
+}
+fn taskFatal() -> i64 { return fatalPanic() }
+fn singleWorker() throws(Failure) -> i64 { return try oldFailure() }
+export fn ordinaryTask() -> i64 {
+    try { const t = go singleWorker(); return await t }
+    catch (e: Failure) { return -1 }
+    catch (e) { return -3 }
+    catch panic (p) { return p.replacedError != null ? p.code : -2 }
+}
+export fn completedTask() -> Task<i64,Failure> { return go singleWorker() }
+export fn stopTask() -> i64 {
+    const task = completedTask()
+    var count = 0
+    while (true) { Coro.yield(); count = count + 1 }
+    return count
+}
+fn peerWaiting() -> i64 {
+    defer { const ignored = remainder(0) }
+    print("peer-armed")
+    var count = 0
+    while (true) { Coro.yield(); count = count + 1 }
+    return count
+}
+export fn stopPair() -> i64 {
+    const peer = go peerWaiting()
+    const task = completedTask()
+    var count = 0
+    while (true) { Coro.yield(); count = count + 1 }
+    return count
+}
+export fn fatalTask() -> i64 { try { const t = go taskFatal(); return await t } catch (e) { return -7 } }
+export fn cancellable() -> i64 {
+    defer { const ignored = divide(0) }
+    print("armed")
+    var i = 0
+    while (true) { i = i + 1 }
+    return i
+}
+export fn afterFailure() -> i64 { return 42 }
+export fn hostWaitFailure() -> i64 {
+    defer { print("forbidden-host-cleanup"); const ignored = divide(0) }
+    Coro.yield()
+    return 17
+}
+fn unsafeBusiness() throws(UnsafeFailure) -> i64 {
+    defer { const ignored = divide(0) }
+    throw UnsafeFailure.Empty
+}
+fn unsafeWorker() -> i64 { try { return unsafeBusiness() } catch (e) { return -1 } }
+export fn unsafeOrdinary() -> i64 {
+    try { return unsafeBusiness() } catch (e) { return -1 }
+    catch panic (p) { return p.replacedError != null ? p.code : -2 }
+}
+export fn unsafeTask() -> i64 { try { const task = go unsafeWorker(); return await task } catch (e) { return -3 } }
+export fn singleError() throws(Failure) -> i64 { return try oldFailure() }
+export fn single446() throws(Failure) -> i64 { return try bothFailure() }
+print(run())

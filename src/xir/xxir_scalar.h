@@ -61,7 +61,8 @@ typedef struct XrXirIntegerFormat {
     bool is_signed;
 } XrXirIntegerFormat;
 static inline XrXirIntegerFormat xr_xir_integer_format(XrXirType type) {
-    return (XrXirIntegerFormat) {xr_xir_integer_bits(type), xr_xir_integer_signed(type)};
+    XrXirIntegerFormat format={xr_xir_integer_bits(type),xr_xir_integer_signed(type)};
+    return format;
 }
 /* Shift counts use all payload bits independently of the left operand format. */
 /* Failed construction preserves the caller output. Rune never becomes numeric. */

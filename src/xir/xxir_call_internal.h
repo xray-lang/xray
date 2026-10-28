@@ -131,6 +131,9 @@ XR_FUNC XrXirCallStatus xr_xir_call_bind_executor(XrXirCall *call, const XrXirEx
 XR_FUNC bool xr_xir_call_executor_member(const XrXirCall *call, const XrXirExecutorBinding *binding);
 /* Observe the stable first driver failure for this exact executor activation.
  * Rejected bindings leave output untouched and never grant entry authority. */
+/* Physical release only; never resumes guest cleanup in a failed group. */
+XR_FUNC XrXirCallStatus xir_call_close_bound(XrXirCall *call, const XrXirExecutorBinding *binding,
+    XrXirCallResult *terminal);
 XR_FUNC bool xr_xir_call_driver_failure(const XrXirCall *call, const XrXirExecutorBinding *binding,
     XrXirCallStatus *output);
 XR_FUNC bool xr_xir_call_task_wait_token(const XrXirCall *call, XrXirTaskWaitToken *output);

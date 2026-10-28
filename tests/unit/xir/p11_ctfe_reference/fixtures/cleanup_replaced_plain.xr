@@ -1,0 +1,5 @@
+enum Failure{Bad}
+fn divide(n:i64)->i64{return 1/n}
+fn value() throws(Failure)->i64{defer{const ignored=divide(0)};throw Failure.Bad}
+fn answer()->i64{try{return value()}catch(e:Failure){return 0}catch panic(p){return p.code}}
+print(answer())

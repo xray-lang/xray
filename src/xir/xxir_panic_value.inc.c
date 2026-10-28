@@ -39,7 +39,7 @@ XR_FUNCDEF size_t xr_xir_panic_message_format(XrXirFaultDetail detail, char *buf
     return graph_outcome;
 }
 static bool xr_xir_panic_empty_graph_operation(const XrXirPanicPayload *panic) {
-    return panic && xr_xir_fault_empty(panic->detail) && unit_value(&panic->message) && unit_value(&panic->error);
+    return panic && xr_xir_fault_empty(panic->detail) && unit_value(&panic->message) && unit_value(&panic->error) && unit_value(&panic->replaced_error);
 }
 XR_FUNCDEF bool xr_xir_panic_empty(const XrXirPanicPayload *panic) {
     xr_xir_value_graph_begin();
@@ -50,7 +50,9 @@ XR_FUNCDEF bool xr_xir_panic_empty(const XrXirPanicPayload *panic) {
 static bool xr_xir_panic_valid_graph_operation(const XrXirPanicPayload *panic) {
     if (!panic) return false;
     if (xr_xir_panic_empty(panic)) return true;
-    if (!xr_xir_fault_panic_valid(panic->detail)) return false;
+    if (!xr_xir_fault_panic_valid(panic->detail) ||
+        (!unit_value(&panic->replaced_error) && (panic->replaced_error.type!=XR_XIR_ERROR ||
+        !xr_xir_value_argument(&panic->replaced_error,xr_xir_value_arena(&panic->replaced_error),XR_XIR_ERROR)))) return false;
     if (panic->detail.code == XR_XIR_PANIC_TRY_ASSERT)
         return unit_value(&panic->message) && (panic->error.type==XR_XIR_ERROR && xr_xir_value_argument(&panic->error,xr_xir_value_arena(&panic->error),XR_XIR_ERROR));
     if (!unit_value(&panic->error)) return false;
@@ -63,13 +65,24 @@ XR_FUNCDEF bool xr_xir_panic_valid(const XrXirPanicPayload *panic) {
     xr_xir_value_graph_end();
     return graph_outcome;
 }
+XR_FUNCDEF XrXirValueStatus xr_xir_panic_payload_admit(const XrXirPanicPayload *panic,
+    XrXirValueAdmission *admission) {
+    if (!admission || !xr_xir_panic_valid(panic)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirValue *edges[]={&panic->message,&panic->error,&panic->replaced_error};
+    for (size_t i=0;i<3;++i) if (!unit_value(edges[i])) {
+        XrXirValueStatus status=xr_xir_value_admit(edges[i],(XrXirType)edges[i]->type,admission);
+        if (status!=XR_XIR_VALUE_OK) return status;
+    }
+    return XR_XIR_VALUE_OK;
+}
 static XrXirValueStatus xr_xir_panic_copy_graph_operation(const XrXirPanicPayload *source, XrXirPanicPayload *output) {
     if (!xr_xir_panic_empty(output) || !xr_xir_panic_valid(source)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirPanicPayload copy = {.detail=source->detail};
     XrXirValueStatus status = xr_xir_value_copy(&source->message, &copy.message);
     if (status == XR_XIR_VALUE_OK) status=xr_xir_value_copy(&source->error,&copy.error);
+    if (status == XR_XIR_VALUE_OK) status=xr_xir_value_copy(&source->replaced_error,&copy.replaced_error);
     if (status == XR_XIR_VALUE_OK) *output = copy;
-    else xr_xir_value_drop(&copy.message);
+    else { xr_xir_value_drop(&copy.message); xr_xir_value_drop(&copy.error); }
     return status;
 }
 XR_FUNCDEF XrXirValueStatus xr_xir_panic_copy(const XrXirPanicPayload *source, XrXirPanicPayload *output) {
@@ -94,6 +107,7 @@ static void xr_xir_panic_drop_graph_operation(XrXirPanicPayload *panic) {
     XR_CHECK(xr_xir_panic_valid(panic), "invalid owned panic release");
     xr_xir_value_drop(&panic->message);
     xr_xir_value_drop(&panic->error);
+    xr_xir_value_drop(&panic->replaced_error);
     *panic = (XrXirPanicPayload){0};
 }
 XR_FUNCDEF void xr_xir_panic_drop(XrXirPanicPayload *panic) {
@@ -218,4 +232,15 @@ XR_FUNCDEF XrXirValueStatus xr_xir_panic_info_message(const XrXirValue *info, Xr
     XrXirValueStatus graph_outcome = xr_xir_panic_info_message_graph_operation(info, output);
     xr_xir_value_graph_end();
     return graph_outcome;
+}
+
+XR_FUNCDEF XrXirValueStatus xr_xir_panic_info_replaced_error(const XrXirValue *info,
+    XrXirType type, XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission || !unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena),type);
+    if (!node || node->kind!=XR_XIR_TYPE_NULLABLE || node->element!=XR_XIR_ERROR) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status=xr_xir_value_admit(info,XR_XIR_PANIC_INFO,admission);
+    if (status!=XR_XIR_VALUE_OK) return status;
+    const XrXirValue *error=&((const XirPanicInfo *)object_pointer(info))->panic.replaced_error;
+    return xr_xir_nullable_new(type,unit_value(error)?NULL:error,admission,output);
 }

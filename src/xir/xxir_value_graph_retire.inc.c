@@ -62,7 +62,8 @@ static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void 
     }
     if (object->type == XR_XIR_PANIC_INFO)
         return graph_direct_edge(&((XirPanicInfo *)object)->panic.message, visit, context) &&
-            graph_direct_edge(&((XirPanicInfo *)object)->panic.error, visit, context);
+            graph_direct_edge(&((XirPanicInfo *)object)->panic.error, visit, context) &&
+            graph_direct_edge(&((XirPanicInfo *)object)->panic.replaced_error, visit, context);
     if (object->kind == XIR_OBJECT_CELL) {
         XirCell *cell = (XirCell *)object;
         XrXirValuePathStep *steps = (XrXirValuePathStep *)(cell + 1);
@@ -115,7 +116,11 @@ static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void 
             generator->executor || generator->call) return true;
         return graph_direct_edge(&generator->outcome.value,visit,context) &&
             graph_direct_edge(&generator->outcome.panic.message,visit,context) &&
-            graph_direct_edge(&generator->outcome.panic.error,visit,context);
+            graph_direct_edge(&generator->outcome.panic.error,visit,context) &&
+            graph_direct_edge(&generator->outcome.panic.replaced_error,visit,context) &&
+            graph_direct_edge(&generator->outcome.prior_panic.message,visit,context) &&
+            graph_direct_edge(&generator->outcome.prior_panic.error,visit,context) &&
+            graph_direct_edge(&generator->outcome.prior_panic.replaced_error,visit,context);
     }
     if (object->kind == XR_XIR_TYPE_TASK) {
         XirTask *task = (XirTask *)object;
@@ -123,7 +128,11 @@ static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void 
             task->executor || task->call) return true;
         return graph_direct_edge(&task->outcome.value, visit, context) &&
             graph_direct_edge(&task->outcome.panic.message, visit, context) &&
-            graph_direct_edge(&task->outcome.panic.error, visit, context);
+            graph_direct_edge(&task->outcome.panic.error, visit, context) &&
+            graph_direct_edge(&task->outcome.panic.replaced_error, visit, context) &&
+            graph_direct_edge(&task->outcome.prior_panic.message,visit,context) &&
+            graph_direct_edge(&task->outcome.prior_panic.error,visit,context) &&
+            graph_direct_edge(&task->outcome.prior_panic.replaced_error,visit,context);
     }
     if (object->kind == XR_XIR_TYPE_TUPLE) {
         XirTuple *tuple = (XirTuple *)object;

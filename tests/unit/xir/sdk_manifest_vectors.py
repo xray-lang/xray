@@ -38,15 +38,39 @@ def raw_error_abi_cases(original):
     return cases
 
 
+def cleanup_abi_cases(original):
+    assert original['call_abi']==37 and original['semantic']==103
+    rows=original['abi_measurements'];cases=[('cleanup-current',original,0)]
+    for field,offset in ((305,56),(406,104),(407,176)):
+        indexes=[i for i,row in enumerate(rows) if row['id']==field]
+        assert len(indexes)==1 and rows[indexes[0]]['value']==offset
+        index=indexes[0]
+        for attack in ('missing','offset','id'):
+            value=json.loads(json.dumps(original))
+            if attack=='missing':value['abi_measurements'].pop(index)
+            elif attack=='offset':value['abi_measurements'][index]['value']=offset+1
+            else:value['abi_measurements'][index]['id']=999999
+            cases.append((f'cleanup-{field}-{attack}',value,1))
+    for attack in ('old-call36','old-common102','extra','duplicate','order'):
+        value=json.loads(json.dumps(original))
+        if attack=='old-call36':value['call_abi']=36
+        elif attack=='old-common102':value['semantic']=102
+        elif attack=='extra':value['abi_measurements'].append({'id':999999,'value':0})
+        elif attack=='duplicate':value['abi_measurements'].append(value['abi_measurements'][-1])
+        else:value['abi_measurements'][-1],value['abi_measurements'][-2]=value['abi_measurements'][-2],value['abi_measurements'][-1]
+        cases.append(('cleanup-'+attack,value,1))
+    return cases
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--executable',required=True);parser.add_argument('--bundle',type=Path,required=True)
-    parser.add_argument('--case',choices=('all','raw-error-abi'),default='all')
+    parser.add_argument('--case',choices=('all','raw-error-abi','cleanup-abi'),default='all')
     args=parser.parse_args();bundle=args.bundle.resolve();original=json.loads((bundle/'sdk_manifest.json').read_text())
-    if args.case=='raw-error-abi':
+    if args.case in ('raw-error-abi','cleanup-abi'):
         with tempfile.TemporaryDirectory(prefix='xir-sdk-error-abi-') as temporary:
             directory=Path(temporary)
-            for name,value,status in raw_error_abi_cases(original):
+            for name,value,status in (cleanup_abi_cases(original) if args.case=='cleanup-abi' else raw_error_abi_cases(original)):
                 path=directory/(name+'.json');path.write_text(json.dumps(value,ensure_ascii=False),encoding='utf-8')
                 result=subprocess.run([args.executable,str(bundle),str(path),'status'],capture_output=True,timeout=60)
                 assert not result.returncode,(name,result.stderr.decode(errors='replace'))
@@ -65,6 +89,7 @@ def main():
         def modified():return json.loads(json.dumps(original))
         add('same',original,0);add('root-reordered',dict(reversed(list(original.items()))),0)
         for case in raw_error_abi_cases(original):add(*case)
+        for case in cleanup_abi_cases(original):add(*case)
         escaped=json.dumps(original).replace('"schema"','"\\u0073chema"').replace('kernel32','kernel\\u0033\\u0032')
         add('escaped-same',escaped.encode(),0)
         for name in list(original)[:17]:

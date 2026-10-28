@@ -56,15 +56,17 @@ static XrXirCallStatus task_core_outcome_admit(XrXirTaskExecutor *executor,
         return status==XR_XIR_VALUE_OK ? XR_XIR_CALL_READY : status==XR_XIR_VALUE_LIMIT ? XR_XIR_CALL_LIMIT :
             status==XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM : XR_XIR_CALL_BAD_STATE;
     }
-    if (xr_xir_call_panic_status(outcome->status)) {
-        const XrXirValue *value=outcome->panic.detail.code==XR_XIR_PANIC_TRY_ASSERT?
-            &outcome->panic.error:&outcome->panic.message;
-        if (value->type!=XR_XIR_UNIT) {
-            XrXirValueAdmission admission={executor->config.program->arena,executor->config.domain,NULL,NULL,
-                executor->config.poll_limit,executor->config.call_limit};
-            XrXirValueStatus status=xr_xir_panic_graph_admit(value,(XrXirType)value->type,&admission);
-            return status==XR_XIR_VALUE_OK?XR_XIR_CALL_READY:status==XR_XIR_VALUE_OOM?XR_XIR_CALL_OOM:
-                status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT?XR_XIR_CALL_LIMIT:XR_XIR_CALL_BAD_STATE;
+    if (xr_xir_call_panic_status(outcome->status) || outcome->status==XR_XIR_CALL_CLEANUP_FAILED) {
+        const XrXirPanicPayload *panics[]={&outcome->panic,&outcome->prior_panic};
+        for (size_t p=0;p<2;++p) {
+            const XrXirValue *values[]={&panics[p]->message,&panics[p]->error,&panics[p]->replaced_error};
+            for (size_t i=0;i<3;++i) if (values[i]->type!=XR_XIR_UNIT) {
+                XrXirValueAdmission admission={executor->config.program->arena,executor->config.domain,NULL,NULL,
+                    executor->config.poll_limit,executor->config.call_limit};
+                XrXirValueStatus status=xr_xir_panic_graph_admit(values[i],(XrXirType)values[i]->type,&admission);
+                if (status!=XR_XIR_VALUE_OK) return status==XR_XIR_VALUE_OOM?XR_XIR_CALL_OOM:
+                    status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT?XR_XIR_CALL_LIMIT:XR_XIR_CALL_BAD_STATE;
+            }
         }
     }
     return XR_XIR_CALL_READY;

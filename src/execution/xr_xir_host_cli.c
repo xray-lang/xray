@@ -33,39 +33,48 @@ static int host_report_write(void *context, const void *bytes, size_t length) {
     return !sink->failed;
 }
 
+static int host_report_panic(const XrXirPanicPayload *panic,XrValueFormatSink sink,bool color,const char *label) {
+    char prefix[32];int count=snprintf(prefix,sizeof(prefix)," E%04u: ",panic->detail.code);
+    if (count<=0 || (size_t)count>=sizeof(prefix) || !xr_value_format_label(sink,label,color) ||
+        !xr_value_format_write(sink,prefix,(size_t)count)) return 0;
+    if (panic->detail.code==XR_XIR_PANIC_TRY_ASSERT) {
+        if (!xr_xir_panic_error_format(panic,sink)) return 0;
+    } else {
+        char scratch[XR_XIR_PANIC_MESSAGE_CAPACITY];XrErrorCoreMessageView message={0};
+        if (!xr_xir_panic_message_borrow(panic,scratch,sizeof(scratch),&message) ||
+            !xr_value_format_write(sink,message.message,message.message_len)) return 0;
+    }
+    if (!xr_value_format_text(sink,"\n")) return 0;
+    if (panic->replaced_error.type!=XR_XIR_UNIT) {
+        XrXirValue concrete={0};XrXirFormatContext context={0};
+        if (!xr_xir_error_borrow(&panic->replaced_error,&concrete) ||
+            !xr_value_format_label(sink,"[Replaced Error]",color) || !xr_value_format_text(sink," ") ||
+            !xr_value_format_value(xr_xir_value_format_reader(&context),(XrValueFormatNode){&concrete,0},sink,0) ||
+            !xr_value_format_text(sink,"\n")) return 0;
+    }
+    return 1;
+}
 XR_FUNC XrXirHostReportStatus xr_xir_host_report_result(const XrXirCallResult *result,
-    XrValueFormatSink sink, bool color) {
+    XrValueFormatSink sink,bool color) {
     if (!sink.write || !xr_xir_call_result_valid(result)) return XR_XIR_HOST_REPORT_BAD_ARGUMENT;
-    HostReportSink capture = {sink, false};
-    XrValueFormatSink checked = {&capture, host_report_write};
-    int written;
-    if (result->status == XR_XIR_CALL_THROWN) {
-        XrXirValue concrete = {0};
-        const XrXirValue *value = &result->value;
-        if (value->type == XR_XIR_ERROR) {
-            if (!xr_xir_error_borrow(value, &concrete)) return XR_XIR_HOST_REPORT_BAD_ARGUMENT;
-            value = &concrete;
+    HostReportSink capture={sink,false};XrValueFormatSink checked={&capture,host_report_write};int written;
+    if (result->status==XR_XIR_CALL_THROWN) {
+        XrXirValue concrete={0};const XrXirValue *value=&result->value;
+        if (value->type==XR_XIR_ERROR) {
+            if (!xr_xir_error_borrow(value,&concrete)) return XR_XIR_HOST_REPORT_BAD_ARGUMENT;
+            value=&concrete;
         }
         XrXirFormatContext format={0};
-        written = xr_value_format_uncaught(xr_xir_value_format_reader(&format),
-            (XrValueFormatNode){value, 0}, checked, 0, color);
-    } else if (result->panic.detail.code==XR_XIR_PANIC_TRY_ASSERT && xr_xir_call_panic_status(result->status)) {
-        char prefix[32];int count=snprintf(prefix,sizeof(prefix)," E%04u: ",result->panic.detail.code);
-        written=count>0 && (size_t)count<sizeof(prefix) && xr_value_format_label(checked,"[Uncaught Panic]",color) &&
-            xr_value_format_write(checked,prefix,(size_t)count) && xr_xir_panic_error_format(&result->panic,checked) &&
-            xr_value_format_text(checked,"\n");
+        written=xr_value_format_uncaught(xr_xir_value_format_reader(&format),(XrValueFormatNode){value,0},checked,0,color);
+    } else if (result->status==XR_XIR_CALL_CLEANUP_FAILED) {
+        written=host_report_panic(&result->panic,checked,color,"[Fatal Cleanup]");
+        if (written) written=result->prior_status==XR_XIR_CALL_CANCELLED?
+            xr_value_format_label(checked,"[Prior Cancellation]",color) && xr_value_format_text(checked,"\n"):
+            host_report_panic(&result->prior_panic,checked,color,"[Prior Panic]");
     } else if (xr_xir_call_panic_status(result->status)) {
-        char scratch[XR_XIR_PANIC_MESSAGE_CAPACITY];
-        XrErrorCoreMessageView message = {0};
-        if (!xr_xir_panic_message_borrow(&result->panic, scratch, sizeof(scratch), &message))
-            return XR_XIR_HOST_REPORT_BAD_ARGUMENT;
-        written = xr_value_format_panic(checked, result->panic.detail.code, 0, 0, 0,
-            1, (const uint8_t *)message.message, message.message_len, color);
-    } else {
-        return result->status == XR_XIR_CALL_RETURNED ? XR_XIR_HOST_REPORT_OK : XR_XIR_HOST_REPORT_BAD_ARGUMENT;
-    }
-    return written ? XR_XIR_HOST_REPORT_OK :
-        capture.failed ? XR_XIR_HOST_REPORT_IO : XR_XIR_HOST_REPORT_BAD_ARGUMENT;
+        written=host_report_panic(&result->panic,checked,color,"[Uncaught Panic]");
+    } else return result->status==XR_XIR_CALL_RETURNED?XR_XIR_HOST_REPORT_OK:XR_XIR_HOST_REPORT_BAD_ARGUMENT;
+    return written?XR_XIR_HOST_REPORT_OK:capture.failed?XR_XIR_HOST_REPORT_IO:XR_XIR_HOST_REPORT_BAD_ARGUMENT;
 }
 
 static bool host_use_color(void) {
@@ -104,7 +113,7 @@ static int host_failure(const char *message, int code) {
 static int host_terminal(XrXirCallStatus status, const XrXirCallResult *result) {
     if (!xr_xir_call_result_valid(result))
         return host_failure("XR_RUN_6002: canonical execution returned an invalid owned outcome\n", 4);
-    if (status == XR_XIR_CALL_THROWN || xr_xir_call_panic_status(status)) {
+    if (status == XR_XIR_CALL_THROWN || xr_xir_call_panic_status(status) || status==XR_XIR_CALL_CLEANUP_FAILED) {
         if (result->status != status)
             return host_failure("XR_RUN_6002: canonical cleanup failed without an owned outcome\n", 4);
         XrXirHostReportStatus reported = xr_xir_host_report_result(result,
@@ -114,7 +123,7 @@ static int host_terminal(XrXirCallStatus status, const XrXirCallResult *result) 
                 "XR_RUN_6005: cannot render uncaught typed error\n" :
                 "XR_RUN_6005: cannot render uncaught typed panic\n", stderr);
         (void)fflush(stderr);
-        return 1;
+        return status==XR_XIR_CALL_CLEANUP_FAILED?70:1;
     }
     if (status == XR_XIR_CALL_RETURNED && result->status == status &&
         xr_xir_call_result_valid(result) && result->value.type == XR_XIR_I64 && !result->value.payload)

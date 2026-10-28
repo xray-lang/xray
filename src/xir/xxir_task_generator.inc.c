@@ -114,13 +114,20 @@ static void generator_core_finish(XrXirTaskExecutor *executor,XirGenerator *gene
     XrXirCallStatus status=xr_xir_call_take_outcome(generator->call,&outcome);
     XR_CHECK(status!=XR_XIR_CALL_READY && status!=XR_XIR_CALL_SUSPENDED && status!=XR_XIR_CALL_YIELDED,
         "terminal generator publication consumes the complete producer outcome");
+    if (outcome.status==XR_XIR_CALL_CLEANUP_FAILED) {
+        XrXirCallStatus admitted=task_core_outcome_admit(executor,NULL,&outcome);
+        if (admitted!=XR_XIR_CALL_READY) {
+            task_core_record_status(executor,admitted);xr_xir_call_result_drop(&outcome);outcome.status=admitted;
+        } else task_core_capture_fatal(executor,&outcome);
+        status=outcome.status;
+    }
     if(xr_xir_call_cleanup_incomplete(generator->call)) executor->cleanup_incomplete=true;
     XrXirCallStatus freed=xr_xir_call_free(generator->call);
     if(freed!=XR_XIR_CALL_READY) {executor->cleanup_incomplete=true;task_core_record_status(executor,freed);}
     if(executor->shutdown_status==XR_XIR_CALL_READY && freed!=XR_XIR_CALL_READY) executor->shutdown_status=freed;
     if(executor->shutdown_status==XR_XIR_CALL_READY && status!=XR_XIR_CALL_RETURNED && status!=XR_XIR_CALL_CANCELLED &&
         (executor->stopping || (status!=XR_XIR_CALL_THROWN && !xr_xir_call_panic_status(status))))
-        executor->shutdown_status=status;
+        task_core_record_shutdown(executor,&outcome);
     /* The numeric entry remains creation identity, never scheduling authority. */
     generator->call=NULL;generator->activation.call=NULL;
     if(executor->external==&generator->activation) {executor->external=NULL;executor->external_call_wake=0;}

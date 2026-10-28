@@ -34,7 +34,8 @@ static const XrXirTypeArena *admission_frame_arena(const ValueAdmissionFrame *fr
     if (frame->boxed.inline_storage) return frame->packed.arena;
     if (frame->boxed.object->type==XR_XIR_PANIC_INFO) {
         const XrXirPanicPayload *panic=&((const XirPanicInfo *)frame->boxed.object)->panic;
-        return xr_xir_value_arena(unit_value(&panic->error)?&panic->message:&panic->error);
+        return xr_xir_value_arena(!unit_value(&panic->error)?&panic->error:
+            !unit_value(&panic->replaced_error)?&panic->replaced_error:&panic->message);
     }
     return frame->boxed.object->arena;
 }
@@ -105,7 +106,9 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
         frame->boxed.object->kind==XIR_OBJECT_CLASS;
     if (!frame->boxed.inline_storage && frame->boxed.object->type==XR_XIR_PANIC_INFO) {
         const XrXirPanicPayload *panic=&((const XirPanicInfo *)frame->boxed.object)->panic;
-        *value=unit_value(&panic->error)?panic->message:panic->error;
+        const XrXirValue *edges[]={&panic->message,&panic->error,&panic->replaced_error};
+        size_t at=0;
+        for (size_t i=0;i<3;++i) if (!unit_value(edges[i]) && at++==index) { *value=*edges[i];break; }
     } else if (!frame->boxed.inline_storage && frame->boxed.object->kind==XIR_OBJECT_CLASS) {
         const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(arena),frame->boxed.object->type);
         const XrXirStorageLayout *layout=class_body_layout(frame->boxed.object);
@@ -205,8 +208,10 @@ static XrXirValueStatus value_admit_summary_mode(const XrXirValue *value, XrXirT
                 size_t count = 0;
                 if (object->type==XR_XIR_PANIC_INFO) {
                     const XrXirPanicPayload *panic=&((const XirPanicInfo *)object)->panic;
-                    count=!unit_value(&panic->message) || !unit_value(&panic->error);
-                    if (task && !unit_value(&panic->error) && xr_xir_value_arena(&panic->error)!=admission->arena) {
+                    count=(size_t)!unit_value(&panic->message)+(size_t)!unit_value(&panic->error)+
+                        (size_t)!unit_value(&panic->replaced_error);
+                    if (task && ((!unit_value(&panic->error) && xr_xir_value_arena(&panic->error)!=admission->arena) ||
+                        (!unit_value(&panic->replaced_error) && xr_xir_value_arena(&panic->replaced_error)!=admission->arena))) {
                         status=XR_XIR_VALUE_BAD_ARGUMENT;break;
                     }
                 } else if (object->kind == XIR_OBJECT_CLASS) {

@@ -11,7 +11,8 @@
  */
 static XrXirAction vm_cleanup_exit(ScalarRun *run, VmState *state) {
     if (state->cleanup_waiting) {
-        if (run->view->inbox.status != XR_XIR_CALL_RETURNED || !state->frontier)
+        if ((run->view->inbox.status != XR_XIR_CALL_RETURNED &&
+            !xr_xir_call_panic_status(run->view->inbox.status)) || !state->frontier)
             return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
         uint32_t parent = run->function->blocks[vm_block(run->function, state->frontier - 1)].frontier;
         if (xr_xir_call_cleanup_frontier(run->view, parent) != XR_XIR_CALL_READY)
@@ -34,6 +35,12 @@ static XrXirAction vm_cleanup_exit(ScalarRun *run, VmState *state) {
 }
 static XrXirAction vm_cleanup_continue(ScalarRun *run, VmState *state) {
     state->leaving = false;
+    if (xr_xir_call_panic_status(run->view->inbox.status) && !state->landing) {
+        uint32_t handler=run->function->blocks[vm_block(run->function,state->instruction)].panic;
+        XrXirAction panic={XR_XIR_ACTION_FAULT,0,NULL,0,
+            {XR_XIR_I64,0,run->view->inbox.status},run->view->inbox.panic,0};
+        return handler?vm_panic_land(run,state,handler,panic):panic;
+    }
     if (state->landing) {
         uint32_t handler = state->landing; state->landing = 0;
         return vm_panic_land(run, state, handler, (XrXirAction){XR_XIR_ACTION_FAULT, 0, NULL, 0,

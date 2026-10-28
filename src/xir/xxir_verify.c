@@ -271,6 +271,9 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         uint32_t maximum = required + (op->op != XR_XIR_ATOMIC_TO_STRING);
         if (op->args[1] < required || op->args[1] > maximum) return XR_XIR_BAD_STRUCTURE;
     }
+    if (op->op==XR_XIR_PANIC_REPLACED_ERROR &&
+        (!xr_xir_type_is_nullable(module->types,op->type) || xr_xir_nullable_element(module->types,op->type)!=XR_XIR_ERROR))
+        return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_PHI && (!op->args[1] || op->args[1] % 2)) return XR_XIR_BAD_STRUCTURE;
     if ((op->op == XR_XIR_MAP_SET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_REPLACE || op->op == XR_XIR_RANGE_CHECK) && op->args[1] != 3) return XR_XIR_BAD_STRUCTURE;
     if (op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_STRING_REPLACE) {
@@ -1089,7 +1092,7 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
         op->op == XR_XIR_STRING_INDEX_OF ||
         op->op == XR_XIR_STRING_LAST_INDEX_OF) expected = XR_XIR_STRING;
 
-    if (op->op == XR_XIR_PANIC_CODE || op->op == XR_XIR_PANIC_MESSAGE) expected = XR_XIR_PANIC_INFO;
+    if (op->op == XR_XIR_PANIC_CODE || op->op == XR_XIR_PANIC_MESSAGE || op->op==XR_XIR_PANIC_REPLACED_ERROR) expected = XR_XIR_PANIC_INFO;
     *output=expected;return XR_XIR_OK;
 }
 

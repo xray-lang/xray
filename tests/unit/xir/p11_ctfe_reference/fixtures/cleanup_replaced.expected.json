@@ -1,0 +1,22 @@
+{
+  "plain": {
+    "exit": 0,
+    "stdout": "420\n",
+    "stderr": ""
+  },
+  "optional": {
+    "exit": 0,
+    "stdout": "420\n",
+    "stderr": ""
+  },
+  "owned": {
+    "exit": 0,
+    "stdout": "true\ntrue\n420\ntrue\n420\n42\ntrue\n446\n",
+    "stderr": ""
+  },
+  "fatal": {
+    "exit": 70,
+    "stdout": "true\ntrue\n420\ntrue\n420\n42\ntrue\n446\n",
+    "stderr": "[Fatal Cleanup] E0421: modulo by zero\n[Prior Panic] E0420: division by zero\n"
+  }
+}

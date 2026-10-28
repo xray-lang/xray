@@ -19,5 +19,10 @@ static bool source_panic_member(SourceContext *ctx, AstNode *node, const SourceT
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PANIC_CODE, XR_XIR_I64, {receiver.id, 0}, {0}, 0, {0}}, value);
     if (name && source_text_same(ctx, NULL, name, "message"))
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PANIC_MESSAGE, XR_XIR_STRING, {receiver.id, 0}, {0}, 0, {0}}, value);
-    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo exposes only message and code without class support");
+    if (name && source_text_same(ctx,NULL,name,"replacedError")) {
+        XrXirType type;
+        return source_nullable_type(ctx,XR_XIR_ERROR,&type) && source_recipe_record(ctx,
+            (XrXirInstruction){XR_XIR_PANIC_REPLACED_ERROR,type,{receiver.id},{0},0,{0}},value);
+    }
+    return source_fail(ctx,node,XR_XIR_BAD_TYPE,"PanicInfo exposes code, message and readonly replacedError");
 }

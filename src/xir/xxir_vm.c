@@ -735,7 +735,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         return vm_go_step(run, state, op, action, run->layout->offsets[result_id]);
     case XR_XIR_TASK_AWAIT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
         return vm_await_step(run, state, op, action);
-    case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE: {
+    case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE: case XR_XIR_PANIC_REPLACED_ERROR: {
         if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
         XrXirValue info = vm_value_operand(run, op->args[0]);
         state->instruction = next;
@@ -746,7 +746,9 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
             return XR_XIR_RUN_OK;
         }
         XrXirValue message = {0};
-        XrXirValueStatus status = xr_xir_panic_info_message(&info, &message);
+        XrXirValueStatus status = op->op==XR_XIR_PANIC_REPLACED_ERROR ?
+            xr_xir_panic_info_replaced_error(&info,op->type,xr_xir_call_admission(run->view),&message) :
+            xr_xir_panic_info_message(&info, &message);
         if (status != XR_XIR_VALUE_OK) return value_run_status(status);
         xr_xir_owned_slot_move(run->frame, run->layout->offsets[result_id], &message);
         return XR_XIR_RUN_OK;

@@ -973,6 +973,10 @@ static void release_pending(XirObject *pending) {
                 queue_release(&task->outcome.value, &pending);
                 queue_release(&task->outcome.panic.message, &pending);
                 queue_release(&task->outcome.panic.error, &pending);
+                queue_release(&task->outcome.panic.replaced_error,&pending);
+                queue_release(&task->outcome.prior_panic.message,&pending);
+                queue_release(&task->outcome.prior_panic.error,&pending);
+                queue_release(&task->outcome.prior_panic.replaced_error,&pending);
             }
             xr_xir_domain_deallocate(domain, task, sizeof(*task));
         } else if (object->kind == XR_XIR_TYPE_ITERATOR) {
@@ -982,6 +986,10 @@ static void release_pending(XirObject *pending) {
                 queue_release(&generator->outcome.value,&pending);
                 queue_release(&generator->outcome.panic.message,&pending);
                 queue_release(&generator->outcome.panic.error,&pending);
+                queue_release(&generator->outcome.panic.replaced_error,&pending);
+                queue_release(&generator->outcome.prior_panic.message,&pending);
+                queue_release(&generator->outcome.prior_panic.error,&pending);
+                queue_release(&generator->outcome.prior_panic.replaced_error,&pending);
             }
             xr_xir_domain_deallocate(domain,generator,sizeof(*generator));
         } else if (object->kind==XR_XIR_TYPE_SLICE || object->kind==XR_XIR_TYPE_MUT_SLICE) {
@@ -1057,6 +1065,7 @@ static void release_pending(XirObject *pending) {
             if (!object->graph_dead) {
                 queue_release(&((XirPanicInfo *)object)->panic.message, &pending);
                 queue_release(&((XirPanicInfo *)object)->panic.error, &pending);
+                queue_release(&((XirPanicInfo *)object)->panic.replaced_error,&pending);
             }
             xr_xir_domain_deallocate(domain, object, sizeof(XirPanicInfo));
         } else {

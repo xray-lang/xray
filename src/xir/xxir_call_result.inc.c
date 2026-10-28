@@ -11,11 +11,19 @@
  */
 XR_FUNCDEF bool xr_xir_call_result_empty(const XrXirCallResult *result) {
     return result && result->status == XR_XIR_CALL_READY && !result->wake &&
-        boundary_value(result->value, XR_XIR_UNIT) && xr_xir_panic_empty(&result->panic);
+        boundary_value(result->value, XR_XIR_UNIT) && xr_xir_panic_empty(&result->panic) &&
+        result->prior_status==XR_XIR_CALL_READY && xr_xir_panic_empty(&result->prior_panic);
 }
 XR_FUNCDEF bool xr_xir_call_result_valid(const XrXirCallResult *result) {
-    if (!result || result->status < XR_XIR_CALL_READY || result->status > XR_XIR_CALL_YIELDED ||
+    if (!result || result->status < XR_XIR_CALL_READY || result->status > XR_XIR_CALL_CLEANUP_FAILED ||
         !xr_xir_value_valid(&result->value)) return false;
+    if (result->status==XR_XIR_CALL_CLEANUP_FAILED)
+        return !result->wake && boundary_value(result->value,XR_XIR_UNIT) &&
+            xr_xir_panic_valid(&result->panic) && !xr_xir_panic_empty(&result->panic) &&
+            (result->prior_status==XR_XIR_CALL_CANCELLED ? xr_xir_panic_empty(&result->prior_panic) :
+                xr_xir_call_panic_status(result->prior_status) &&
+                xr_xir_call_panic_payload(result->prior_status,&result->prior_panic));
+    if (result->prior_status!=XR_XIR_CALL_READY || !xr_xir_panic_empty(&result->prior_panic)) return false;
     if (xr_xir_call_panic_status(result->status))
         return !result->wake && boundary_value(result->value, XR_XIR_UNIT) &&
             xr_xir_call_panic_payload(result->status, &result->panic);
@@ -33,11 +41,13 @@ XR_FUNCDEF XrXirValueStatus xr_xir_call_result_copy(const XrXirCallResult *sourc
     if (!xr_xir_call_result_empty(output) || !xr_xir_call_result_valid(source))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirCallResult copy = call_result(source->status);
-    copy.wake = source->wake;
+    copy.wake = source->wake; copy.prior_status=source->prior_status;
     XrXirValueStatus status = xr_xir_value_copy(&source->value, &copy.value);
     if (status != XR_XIR_VALUE_OK) return status;
     status = xr_xir_panic_copy(&source->panic, &copy.panic);
     if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&copy.value); return status; }
+    status=xr_xir_panic_copy(&source->prior_panic,&copy.prior_panic);
+    if (status!=XR_XIR_VALUE_OK) { xr_xir_value_drop(&copy.value);xr_xir_panic_drop(&copy.panic);return status; }
     *output = copy;
     return XR_XIR_VALUE_OK;
 }
@@ -52,6 +62,7 @@ XR_FUNCDEF void xr_xir_call_result_drop(XrXirCallResult *result) {
     XR_CHECK(xr_xir_call_result_valid(result), "invalid owned result release");
     xr_xir_value_drop(&result->value);
     xr_xir_panic_drop(&result->panic);
+    xr_xir_panic_drop(&result->prior_panic);
     *result = call_result(XR_XIR_CALL_READY);
 }
 static XrXirCallStatus call_inbox_frame(XrXirCallView *view,XrXirType expected,CallFrame **output) {
