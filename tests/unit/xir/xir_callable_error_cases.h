@@ -332,10 +332,20 @@ static void callable_error_host(const XrXirCompileContext *work,const XrXirArtif
 static void callable_error_program(const XrXirCompileContext *work,XrXirType error) {
     CallableErrorFixture *f=xr_malloc(sizeof(*f));CHECK(f);callable_error_fixture(f,error);
     XrXirArtifact *checked=NULL,*received=NULL,*closed=NULL,*lowered=NULL;XrXirDiagnostic diagnostic={0};
+    /* The Array exposes the widened callable declaration, even for a Never target. */
+    f->functions[1].error_type=XR_XIR_ERROR;
     XrXirStatus status=xir_fixture_check(work,&f->module,&checked,&diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"Callable E%u status%u f%u b%u i%u reason%u\n",
         (unsigned)error,(unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction,(unsigned)diagnostic.reason);
     CHECK(status==XR_XIR_OK);
+    XrXirArtifact *rejected=NULL;XrXirDiagnostic rejection={0};
+    f->functions[1].error_type=XR_XIR_NEVER;
+    CHECK(xir_fixture_check(work,&f->module,&rejected,&rejection)==XR_XIR_BAD_TYPE && !rejected);
+    CHECK(rejection.function==1 && rejection.block==0 &&
+        rejection.instruction==(error==XR_XIR_ERROR?8u:9u));
+    f->functions[1].error_type=XR_XIR_ERROR;
+    CHECK(xir_fixture_check(work,&f->module,&rejected,NULL)==XR_XIR_OK && rejected);
+    xr_xir_compile_artifact_free(rejected);
     /* E belongs to the actual reference target, not its flags or result shape. */
     f->arguments[1]=error==XR_XIR_NEVER?XR_XIR_ERROR:XR_XIR_NEVER;
     CHECK(xir_fixture_verify(work,&f->module,NULL)==XR_XIR_BAD_TYPE);

@@ -288,6 +288,11 @@ static void check_lowered_error_remap(const XrXirCompileContext *work) {
     functions[1].error_type=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
     CHECK(xir_fixture_check(work,&module,&checked,NULL)==XR_XIR_BAD_TYPE && !checked);
     functions[1].error_type=XR_XIR_NEVER;
+    XrXirDiagnostic rejected={0};
+    CHECK(xir_fixture_check(work,&module,&checked,&rejected)==XR_XIR_BAD_TYPE && !checked);
+    CHECK(rejected.function==1 && rejected.block==0 && rejected.instruction==0);
+    /* ErrorTag<Never> still has an Empty variant and remains the declared E. */
+    functions[1].error_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);
     CHECK(xir_fixture_check(work,&module,&checked,NULL)==XR_XIR_OK);
     memset(nodes,0xa5,sizeof(nodes));
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
