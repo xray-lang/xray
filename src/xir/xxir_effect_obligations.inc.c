@@ -13,6 +13,9 @@
 #include "xxir_callable_root_obligations.inc.c"
 static XrXirStatus declaration_effects_verify(const XrXirModule *module,
     XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic, const XrXirEffects *prepared, XrXirEffects **output, bool require_owned) {
+    XrXirStatus local=prepared?xir_effects_local_errors_verify(remaining,module,prepared,diagnostic):
+        xir_compile_local_errors_verify(remaining,module,diagnostic);
+    if (local!=XR_XIR_OK) return local;
     bool templated = module->provenance && module->provenance->kind == XR_XIR_EVIDENCE_TEMPLATE;
     if (output && (*output || prepared)) return XR_XIR_BAD_STRUCTURE;
     if (!module->declarations) {
@@ -72,7 +75,7 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
                 else if (root->requires_root) reason = XR_XIR_DIAGNOSTIC_GO_ROOT_REQUIRED;
                 else if (root->unresolved) reason = XR_XIR_DIAGNOSTIC_GO_ROOT_UNRESOLVED;
             }
-            if (status == XR_XIR_OK) status = xr_xir_effects_task_errors(facts, (uint32_t)op->immediate);
+            if (status == XR_XIR_OK) status = xir_compile_worker_error_verify(remaining,module,(uint32_t)op->immediate);
             if (status != XR_XIR_OK) *diagnostic = (XrXirDiagnostic){status, f, UINT32_MAX, i, reason};
         }
     }

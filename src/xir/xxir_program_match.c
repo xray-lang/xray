@@ -255,6 +255,12 @@ XR_FUNC void xir_program_permissions_free(XrXirProgramPermissions *permissions) 
     xr_compile_resources_free(permissions);
 }
 
+static XrXirStatus program_permission_current(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirEffects *effects,XrXirStatus permission) {
+    if (permission!=XR_XIR_OK && permission!=XR_XIR_BAD_TYPE) return permission;
+    return xir_effects_program_body_match(context,module,effects);
+}
+
 static XrXirStatus program_permissions(const XrXirCompileContext *context,
     const XrXirArtifact *lowered, XrXirEffects *effects, XrXirProgramPermissions **output) {
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
@@ -277,6 +283,7 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
         references * sizeof(*permissions->references) + generators * sizeof(*permissions->generators);
     if (status == XR_XIR_OK && bytes > SIZE_MAX) status = XR_XIR_BUDGET;
     if (status == XR_XIR_OK) permissions = xir_compile_calloc(context, 1, (size_t)bytes, &status);
+    if (status==XR_XIR_OK) status=xir_effects_program_body_match(context,module,effects);
     if (status == XR_XIR_OK) {
         permissions->entries = (XrXirProgramPermission *)(permissions + 1);
         permissions->references = (XrXirProgramFunctionRef *)(permissions->entries + count);
@@ -297,7 +304,11 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
         bool generator=xr_xir_function_is_generator(module,f);
         XrXirStatus permission = xr_xir_function_has_go_role(module, f) || generator ?
             xr_xir_effects_go_safe(effects, f) : XR_XIR_BAD_TYPE;
-        if (permission == XR_XIR_OK && !generator) permission = xr_xir_effects_task_errors(effects, f);
+        if (permission == XR_XIR_OK && !generator) {
+            permission=xir_compile_worker_error_verify(context,module,f);
+            status=program_permission_current(context,module,effects,permission);
+            if (status!=XR_XIR_OK) break;
+        }
         XrXirProofContext proof = {module, {XR_XIR_CONTEXT_FUNCTION, f, 0}};
         const XrXirFunction *function = &module->functions[f];
         permissions->entries[f].reference_begin = reference_at;
@@ -329,21 +340,24 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
                 real.target, real.capture_count, real.instruction, real.site, real.type};
             ++permissions->entries[f].reference_count;
         }
-        if (permission == XR_XIR_OK && !generator)
-            permission = xr_xir_compile_type_markers_prove(context, &proof, function->result, XR_XIR_CONSTRAINT_SENDABLE);
-        for (uint32_t p = 0; !generator && p < function->parameter_count && permission == XR_XIR_OK; ++p)
-            permission = xr_xir_compile_type_markers_prove(context, &proof, function->parameters[p], XR_XIR_CONSTRAINT_SENDABLE);
-        if (permission == XR_XIR_BUDGET || permission == XR_XIR_OUT_OF_MEMORY) status = permission;
-        else permissions->entries[f].worker = permission;
+        if (permission == XR_XIR_OK && !generator) {
+            permission=xr_xir_compile_type_markers_prove(context,&proof,function->result,XR_XIR_CONSTRAINT_SENDABLE);
+            status=program_permission_current(context,module,effects,permission);
+        }
+        for (uint32_t p=0;status==XR_XIR_OK && !generator && p<function->parameter_count && permission==XR_XIR_OK;++p) {
+            permission=xr_xir_compile_type_markers_prove(context,&proof,function->parameters[p],XR_XIR_CONSTRAINT_SENDABLE);
+            status=program_permission_current(context,module,effects,permission);
+        }
+        if (status==XR_XIR_OK) permissions->entries[f].worker=permission;
     }
-    for (uint32_t slot = 0; slot < module->declarations->slot_count && status == XR_XIR_OK; ++slot) {
+    for (uint32_t slot = 0; status == XR_XIR_OK && slot < module->declarations->slot_count; ++slot) {
 
         const XrXirSlot *entry = &module->declarations->slots[slot];
         XrXirProofContext proof = {module, {XR_XIR_CONTEXT_CLOSED, 0, 0}};
         XrXirStatus permission = entry->mutable ? XR_XIR_BAD_TYPE :
             xr_xir_compile_type_markers_prove(context, &proof, entry->type, XR_XIR_CONSTRAINT_SENDABLE);
-        if (permission == XR_XIR_BUDGET || permission == XR_XIR_OUT_OF_MEMORY) status = permission;
-        else permissions->entries[(uint64_t)module->function_count + slot].worker = permission;
+        status=program_permission_current(context,module,effects,permission);
+        if (status==XR_XIR_OK) permissions->entries[(uint64_t)module->function_count+slot].worker=permission;
     }
     if (status == XR_XIR_OK && (reference_at != references || generator_at != generators))
         status = XR_XIR_BAD_STRUCTURE;

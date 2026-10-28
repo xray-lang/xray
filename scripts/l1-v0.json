@@ -93,7 +93,9 @@
     "test_xir_from_utf8",
     "test_xir_from_utf8_native",
     "test_xir_from_utf8_fault",
-    "test_xir_ctfe_from_utf8_native"
+    "test_xir_ctfe_from_utf8_native",
+    "test_xir_local_cfg_errors",
+    "test_xir_program_owned_callbacks"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -237,7 +239,11 @@
     "test_xir_ctfe_from_utf8_lifetime",
     "test_xir_ctfe_from_utf8_types",
     "test_xir_ctfe_from_utf8_memory",
-    "test_xir_ctfe_from_utf8_packet"
+    "test_xir_ctfe_from_utf8_packet",
+    "test_xir_local_cfg_errors",
+    "test_xir_program_owned_callbacks",
+    "test_xir_program_owned_callback_worker-marker-free",
+    "test_xir_program_owned_callback_worker-marker-alloc"
   ],
   "versionCommand": [
     "{build}/xray.exe",

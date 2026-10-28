@@ -338,10 +338,11 @@ static XrXirStatus effect_source_terminal_current(const XrXirCompileContext *wor
         effects->generation || effects->refinement) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_source_relations(work,effects->invocations,effects);
     if (status==XR_XIR_OK) status=effect_source_contexts(work,source,effects);
+    if (status==XR_XIR_OK) status=local_errors_owned(work,effects->invocations->body,NULL);
+    if (status==XR_XIR_OK) status=effect_source_terminal_roles(work,effects);
     if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
     if (status==XR_XIR_OK) status=effect_source_outcomes(work,effects);
-    if (status==XR_XIR_OK) status=effect_source_terminal_roles(work,effects);
-    if (status==XR_XIR_OK) status=error_finite_outcomes_match(work,effects->invocations->body,effect_final_outcomes(effects));
+    if (status==XR_XIR_OK) status=local_error_outcomes(work,effects->invocations->body,effect_final_outcomes(effects)->functions,true);
     if (status==XR_XIR_OK) status=checked_copy?
         effect_body_checked_copy_match(work,effects->invocations->body,source):
         effect_invocation_current_input_match(work,source,effects->invocations->body);

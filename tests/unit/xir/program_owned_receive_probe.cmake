@@ -124,13 +124,11 @@ foreach(final_storage_attack RANGE 0 38)
     set_tests_properties(test_xir_program_owned_final_storage_${final_storage_attack} PROPERTIES TIMEOUT 60)
 endforeach()
 
-foreach(outcome_callback joint suspend task-errors throws joint-error unknown-error)
+foreach(outcome_callback joint suspend task-creation throws)
     add_test(NAME test_xir_program_owned_callback_${outcome_callback}
         COMMAND test_xir_program_owned_callbacks ${outcome_callback})
     set_tests_properties(test_xir_program_owned_callback_${outcome_callback} PROPERTIES TIMEOUT 60)
 endforeach()
-add_test(NAME test_xir_program_owned_seedless_error_cycle COMMAND test_xir_program_owned_callbacks seedless-cycle)
-set_tests_properties(test_xir_program_owned_seedless_error_cycle PROPERTIES TIMEOUT 60)
 foreach(input_header_attack RANGE 0 3)
     add_test(NAME test_xir_program_owned_input_header_${input_header_attack}
         COMMAND test_xir_program_owned_callbacks input-header-${input_header_attack})
@@ -161,4 +159,11 @@ foreach(entry_axis free alloc)
         COMMAND test_xir_program_owned_callbacks entry-count-${entry_axis})
     set_tests_properties(test_xir_program_owned_entries_${entry_axis} test_xir_program_owned_count_${entry_axis}
         PROPERTIES TIMEOUT 60 LABELS "unit;xir;program;ownership;atomic-receive")
+endforeach()
+
+foreach(worker_marker_callback worker-marker-free worker-marker-alloc)
+    add_test(NAME test_xir_program_owned_callback_${worker_marker_callback}
+        COMMAND test_xir_program_owned_callbacks ${worker_marker_callback})
+    set_tests_properties(test_xir_program_owned_callback_${worker_marker_callback} PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;program;ownership;current-error")
 endforeach()

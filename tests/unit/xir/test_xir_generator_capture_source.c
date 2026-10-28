@@ -19,6 +19,7 @@
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_source_fixture_owner.h"
 #include "xir/xxir_effects.c"
+#include "xir_final_origin_receiving_cases.h"
 typedef struct CaptureSourceCase {const char *name,*body;bool cold,unknown;} CaptureSourceCase;
 static const CaptureSourceCase capture_source_cases[]={
     {"physical_walk","fn keep(it:Iterator<i64>)->i64{return 17}\nconst original=make()\nconst first=fn()->i64{return keep(original)}\nconst second=fn()->i64{return first()}\nconst third=fn()->i64{return second()}\nreturn third()",true,false},
@@ -48,115 +49,51 @@ static XrXirStatus capture_source_instruction(const EffectBodyRequest *request,u
     return effect_body_owned_instruction(request,f,i,storage,output,fields);
 }
 static XrXirStatus capture_source_replay(const XrXirCompileContext *context,XrXirEffects *effects,bool owned) {
-    EffectInvocationCertificate *certificate=effects->invocations;EffectInvocationRead read={0};
-    XrXirStatus status=effect_invocation_read_open(context,effects,certificate->declared,certificate->final,&read);
-    EffectBodyRequest body=read.body;if(!owned)body.instruction=capture_source_instruction;
-    if(status==XR_XIR_OK)status=effect_body_physical_match(context,read.final->physical,read.final->material);
-    if(status==XR_XIR_OK)status=owned?effect_invocation_owned_proofs_read(&read,&body):
-        effect_invocation_producers_verify_read(&read,&body);
-    if(status==XR_XIR_OK && !owned)status=effect_invocation_coverage_verify_read(&read,&body);
-    if(status==XR_XIR_OK && !owned)status=effect_invocation_iterators_read(&read,&body,NULL);
-    if(status==XR_XIR_OK && !owned)status=effect_invocation_class_verify_read(&read,&body);
-    if(status==XR_XIR_OK)status=effect_invocation_closed_read(context,certificate->final);
-    effect_invocation_read_close(&read);return status;
+    EffectBodyRequest body=effect_body_owned_request(context,effects->invocations->body);
+    if(!owned)body.instruction=capture_source_instruction;
+    return final_origin_receive(context,effects,&body);
 }
 
-/* Data columns preserve current uncertainty without becoming producer seeds.
- * Both receiving paths must reject deletion, inflation and invented causes. */
-static void capture_source_data(const XrXirCompileContext *context,XrXirEffects *effects) {
-    EffectInvocationFinal *final=effects->invocations->final;
-    uint32_t selected=UINT32_MAX,ordinal=UINT32_MAX;
-    for(uint32_t n=0;n<final->count && selected==UINT32_MAX;++n)
-        for(uint32_t p=0;p<final->nodes[n].producer_count;++p)
-            if(final->nodes[n].producers[p].site==UINT32_MAX &&
-                final->nodes[n].producer_count<final->nodes[n].producer_capacity) {selected=n;ordinal=p;break;}
-    CHECK(selected!=UINT32_MAX && ordinal!=UINT32_MAX);
-    EffectInvocationNode *node=&final->nodes[selected];EffectInvocationProducer saved=node->producers[ordinal];
-    uint32_t values=node->parameter_count+node->instruction_count;
-    for(uint32_t route=0;route<2;++route) {
-        CHECK(capture_source_replay(context,effects,route!=0)==XR_XIR_OK);
-        for(uint32_t attack=0;attack<12;++attack) {
-            EffectInvocationProducer *fact=&node->producers[ordinal];*fact=saved;
-            uint32_t count=node->producer_count;EffectInvocationProducer tail=node->producers[count-1];
-            if(attack==0) {node->producers[ordinal]=tail;--node->producer_count;}
-            if(attack==1) fact->atom=saved.atom+1;
-            if(attack==2) fact->atom=UINT32_MAX;
-            if(attack==3) fact->site=0;
-            if(attack==4) fact->next_node=0;
-            if(attack==5) fact->next_value=0;
-            if(attack==6) fact->edge=0;
-            if(attack==7) fact->instruction=0;
-            if(attack==8) fact->distance=1;
-            if(attack==9) fact->value=values;
-            if(attack==10) fact->value=UINT32_MAX;
-            if(attack==11) {node->producers[count]=saved;++node->producer_count;}
-            XrXirStatus status=capture_source_replay(context,effects,route!=0);
-            if(status!=XR_XIR_BAD_STRUCTURE) fprintf(stderr,"SSA data route%u attack%u status%u\n",route,attack,status);
-            CHECK(status==XR_XIR_BAD_STRUCTURE);
-            node->producer_count=count;node->producers[count-1]=tail;node->producers[ordinal]=saved;
-        }
-        CHECK(capture_source_replay(context,effects,route!=0)==XR_XIR_OK);
-    }
-    EffectInvocationFinal dimensions=*final;dimensions.binding_count=UINT32_MAX;dimensions.site_count=UINT32_MAX;
-    EffectInvocationRead invalid={.work=context,.final=&dimensions};EffectInvocationBasis basis={0};
-    uint32_t columns=73;XrCompileResourceStats before={0},after={0};
-    CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
-    CHECK(effect_invocation_data_columns(&invalid,&basis,&columns)==XR_XIR_BUDGET && columns==73);
-    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
-    CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes &&
-        after.live_bytes==before.live_bytes);
-    puts("Current SSA data: 12 attacks on owned and complete receiving paths PASS");
-}
-
-/* The original iterator-discovery rule can intentionally withhold a call
- * edge. That row keeps Unknown Error; deleting a known edge still rejects. */
-static void capture_source_pending_errors(const XrXirCompileContext *context,XrXirEffects *effects) {
+/* Iterator discovery remains independent of declaration-based Error checking.
+ * Both actual body readers preserve pending and discovered call inputs. */
+static void capture_source_pending_calls(const XrXirCompileContext *context,XrXirEffects *effects) {
     uint32_t pending_total=0,known_total=0;
     for(uint32_t route=0;route<2;++route) {
-        XrXirCompileContext work=*context;const EffectInvocationCertificate *certificate=effects->invocations;
-        ErrorFlow errors={.effects=effects,.remaining=&work};errors.body=effect_body_owned_request(&work,certificate->body);
-        if(route)errors.body.instruction=capture_source_instruction;
-        ErrorInvocationContexts *contexts=NULL;CHECK(error_invocation_contexts_new(&errors,&contexts)==XR_XIR_OK && contexts);
-        EffectInvocationRead read={0};CHECK(effect_invocation_read_open(&work,effects,certificate->declared,certificate->final,&read)==XR_XIR_OK);
+        const EffectInvocationCertificate *certificate=effects->invocations;
+        EffectBodyRequest body=effect_body_owned_request(context,certificate->body);
+        if(route)body.instruction=capture_source_instruction;
+        CHECK(local_errors_request(context,&body,NULL)==XR_XIR_OK);
+        CHECK(final_origin_request_rows(&body)==XR_XIR_OK);
+        EffectInvocationRead read={0};CHECK(effect_invocation_read_open(context,certificate,certificate->final,&read)==XR_XIR_OK);
         for(uint32_t n=0;n<read.final->count;++n) {
             EffectInvocationFlow replay={.read=&read,.node=n,.instruction=UINT32_MAX};
-            CHECK(effect_invocation_origins(&replay)==XR_XIR_OK);EffectInvocationCoverage coverage={0};
-            if(read.producer_enabled)CHECK(effect_invocation_coverage_values(&replay,&coverage)==XR_XIR_OK);
+            CHECK(effect_invocation_origins_read(&replay,&read.body)==XR_XIR_OK);
             for(uint32_t i=0;i<replay.function->instruction_count;++i) {
                 XrXirInstruction storage;const XrXirInstruction *op=NULL;
                 CHECK(effect_invocation_flow_instruction(&replay,i,&storage,&op)==XR_XIR_OK);
-                if(!error_invocation_indirect_opcode(op->op))continue;
+                if(op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_INVOKE_INDIRECT)continue;
                 bool pending=false;CHECK(effect_invocation_iterator_pending(&replay,op,&pending)==XR_XIR_OK);
-                ErrorInvocationCall *call=&contexts->calls[contexts->nodes[n].calls+i];
-                bool unknown=false;CHECK(error_invocation_indirect_check(&replay,contexts,&coverage,i,op,&unknown)==XR_XIR_OK);
-                if(pending) {CHECK(unknown && call->unknown);++pending_total;}
-                else if(call->head!=UINT32_MAX) {
-                    uint32_t head=call->head;call->head=contexts->links[head].next;bool untouched=true;
-                    CHECK(error_invocation_indirect_check(&replay,contexts,&coverage,i,op,&untouched)==XR_XIR_BAD_STRUCTURE && untouched);
-                    call->head=head;CHECK(error_invocation_indirect_check(&replay,contexts,&coverage,i,op,&unknown)==XR_XIR_OK);++known_total;
-                }
+                if(pending)++pending_total;else ++known_total;
             }
-            xr_compile_resources_free(coverage.memory);xr_compile_resources_free(replay.memory);
+            xr_compile_resources_free(replay.memory);
         }
-        effect_invocation_read_close(&read);error_invocation_contexts_free(contexts);
+        effect_invocation_read_close(&read);
     }
     CHECK(pending_total && known_total);
-    printf("CAPTURE_ERROR_PENDING %u original pending Unknown controls, %u omitted-known edge refusals/restores, owned/delegated PASS\n",pending_total,known_total);
+    printf("CAPTURE_PENDING %u pending, %u discovered calls; current call inputs owned/delegated PASS\n",pending_total,known_total);
 }
 
+/* Mutate the published finite capture relation, not retired discovery rows.
+ * Both body adapters exhaust their actual inputs before the authentic reader. */
 static void capture_source_atoms(XrXirArtifact *artifact,bool pending) {
     const XrXirCompileContext *context=xr_xir_compile_artifact_context(artifact);XrXirEffects *effects=NULL;
     CHECK(xr_xir_compile_effects_analyze(artifact,&effects)==XR_XIR_OK && effects);
     EffectInvocationFinal *final=effects->invocations->final;
-    uint32_t selected=UINT32_MAX,ordinal=UINT32_MAX;
-    for(uint32_t n=0;n<final->count && selected==UINT32_MAX;++n) {
-        uint64_t parameters=effects->invocations->body->functions[final->nodes[n].root].parameter_count;
-        uint64_t cell_atoms=(uint64_t)final->binding_count*(parameters+3);
-        for(uint32_t a=0;a<final->nodes[n].producer_count;++a)
-            if(final->nodes[n].producers[a].site!=UINT32_MAX &&
-                (uint64_t)final->nodes[n].producers[a].atom>cell_atoms) {selected=n;ordinal=a;break;}
-    }
-    CHECK(selected!=UINT32_MAX && ordinal!=UINT32_MAX);
+    uint32_t ordinal=UINT32_MAX;
+    for(uint32_t p=0;p<final->capture.count;++p)
+        if(final->capture.facts[p].word!=EFFECT_CAPTURE_FLAGS) {ordinal=p;break;}
+    CHECK(ordinal!=UINT32_MAX);
+    EffectCaptureFact saved=final->capture.facts[ordinal];
     EffectInvocationFinal dimensions=*final;dimensions.binding_count=UINT32_MAX;dimensions.site_count=UINT32_MAX;
     EffectInvocationRead invalid={.work=context,.final=&dimensions};EffectInvocationBasis basis={0};
     uint32_t atoms=73;XrCompileResourceStats before={0},after={0};
@@ -164,31 +101,33 @@ static void capture_source_atoms(XrXirArtifact *artifact,bool pending) {
     CHECK(effect_invocation_producer_atoms(&invalid,&basis,&atoms)==XR_XIR_BUDGET && atoms==73);
     CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes &&
-        after.live_bytes==before.live_bytes);
-    EffectInvocationNode *node=&final->nodes[selected];EffectInvocationProducer saved=node->producers[ordinal];
+        after.held_bytes==before.held_bytes);
     for(uint32_t route=0;route<2;++route) {
         CHECK(capture_source_replay(context,effects,route!=0)==XR_XIR_OK);
         for(uint32_t attack=0;attack<8;++attack) {
-            EffectInvocationProducer *fact=&node->producers[ordinal];*fact=saved;
-            uint32_t count=node->producer_count;EffectInvocationProducer tail=node->producers[count-1];
-            if(attack==0)fact->atom=0;
-            if(attack==1)fact->atom=saved.atom+1;
-            if(attack==2)fact->atom=UINT32_MAX;
-            if(attack==3)fact->distance=saved.distance?0:1;
-            if(attack==4)fact->next_value=saved.distance?UINT32_MAX:0;
-            if(attack==5)fact->site=(saved.site+1)%final->site_count;
-            if(attack==6)fact->edge=saved.edge==UINT32_MAX?0:UINT32_MAX;
-            if(attack==7) {node->producers[ordinal]=tail;--node->producer_count;}
+            EffectCaptureFact *fact=&final->capture.facts[ordinal];*fact=saved;
+            uint32_t count=final->capture.count,capacity=final->capture.capacity;
+            if(attack==0)fact->node=final->count;
+            if(attack==1)fact->value=UINT32_MAX;
+            if(attack==2)fact->word=EFFECT_CAPTURE_FLAGS;
+            if(attack==3)fact->bit=64;
+            if(attack==4)fact->rank=UINT64_MAX;
+            if(attack==5) {
+                memmove(fact,fact+1,(size_t)(count-ordinal-1)*sizeof(*fact));--final->capture.count;
+            }
+            if(attack==6)final->capture.count=capacity+1;
+            if(attack==7) {final->capture.count=UINT32_MAX;final->capture.capacity=UINT32_MAX;}
             XrXirStatus status=capture_source_replay(context,effects,route!=0);
-            if(status!=XR_XIR_BAD_STRUCTURE)fprintf(stderr,"Capture atom route%u attack%u status%u\n",route,attack,status);
+            if(status!=XR_XIR_BAD_STRUCTURE)fprintf(stderr,"Capture relation route%u attack%u status%u\n",route,attack,status);
             CHECK(status==XR_XIR_BAD_STRUCTURE);
-            node->producer_count=count;node->producers[count-1]=tail;node->producers[ordinal]=saved;
+            if(attack==5)memmove(fact+1,fact,(size_t)(count-ordinal-1)*sizeof(*fact));
+            final->capture.count=count;final->capture.capacity=capacity;*fact=saved;
         }
         CHECK(capture_source_replay(context,effects,route!=0)==XR_XIR_OK);
     }
-    capture_source_data(context,effects);if(pending)capture_source_pending_errors(context,effects);
+    if(pending)capture_source_pending_calls(context,effects);
     xr_xir_compile_effects_free(effects);
-    puts("Captured Fn/Iterator origin atoms: 8 attacks on owned and complete SSA receiving paths PASS");
+    puts("Captured Fn/Iterator Final relation: 8 attacks on owned and delegated receiving paths PASS");
 }
 
 static void capture_source_execute(XrXirArtifact **lowered) {
@@ -211,11 +150,11 @@ static void capture_source_check(const CaptureSourceCase *fixture,bool root,cons
         "var state:i64=0\nfn values()->Iterator<i64>{yield %s}\n"
         "fn make()->Iterator<i64>{return values()}\n"
         "fn consume(it:Iterator<i64>)->i64{return it.next()}\n"
-        "fn worker()->i64{try{%s} catch(error){return -99}}\nexport fn run()->i64{return await go worker()}\nfn main(){}\n",
+        "fn worker()->i64{try{%s} catch(error){return -99}}\nexport fn run() throws(Error)->i64{return try await go worker()}\nfn main(){}\n",
         root?"state":"17",fixture->body);
     CHECK(length>0 && (size_t)length<sizeof(text));
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"generator-capture",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&owner.context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};

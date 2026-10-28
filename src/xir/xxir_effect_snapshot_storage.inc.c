@@ -449,13 +449,16 @@ static XrXirStatus effect_body_source_match(const XrXirCompileContext *work,
     return status==XR_XIR_OK ? effect_body_rows_match(work,body,source) : status;
 }
 
-/* Only raw Built admission may use this exact receiving stage pair. The
- * current Checked structure is independently verified by its caller; every
- * physical field and metadata row still matches the sole owned input. */
+/* Built admission checks the original and its Checked copy against one input.
+ * Template evidence is preserved by that copy; a closed instance is not this
+ * transition. Every physical field and metadata row still matches below. */
 static XrXirStatus effect_body_checked_copy_match(const XrXirCompileContext *work,
     const EffectBodyMaterial *body,const XrXirModule *source) {
-    if(!source || source->provenance || !effect_body_material_shape(body) ||
-        body->ordinary_identities || body->evidence_kind) return XR_XIR_BAD_STRUCTURE;
+    if(!source || !effect_body_material_shape(body) || body->ordinary_identities)
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t evidence=source->provenance?source->provenance->kind:0;
+    if(evidence!=body->evidence_kind || (evidence && evidence!=XR_XIR_EVIDENCE_TEMPLATE))
+        return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_body_source_types_compare(work,body,source,true);
     if(status==XR_XIR_OK) status=xir_effect_contract_shape_verify(work,source);
     return status==XR_XIR_OK?effect_body_rows_match(work,body,source):status;

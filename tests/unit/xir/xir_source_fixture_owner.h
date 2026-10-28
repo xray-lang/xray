@@ -21,7 +21,7 @@ typedef struct SourceFixtureOwner {
 
 static inline void source_fixture_owner_new(SourceFixtureOwner *owner) {
     CHECK(!owner->context.resources);
-    const XrCompileResourceLimits limits = XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
+    const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,true};
     CHECK(xr_compile_resources_new(&limits, &owner->context.resources) == XR_COMPILE_RESOURCE_OK);
     owner->context.limits = xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_stats(owner->context.resources, &owner->baseline) == XR_COMPILE_RESOURCE_OK);
@@ -30,10 +30,10 @@ static inline void source_fixture_owner_new(SourceFixtureOwner *owner) {
 static inline void source_fixture_owner_free(SourceFixtureOwner *owner) {
     XrCompileResourceStats stats = {0};
     CHECK(xr_compile_resources_stats(owner->context.resources, &stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.live_bytes == owner->baseline.live_bytes);
-    fprintf(stderr, "source fixture compiler ledger: work=%llu allocated=%llu peak=%llu live=%llu\n",
-        (unsigned long long) stats.work, (unsigned long long) stats.allocated_bytes,
-        (unsigned long long) stats.peak_bytes, (unsigned long long) stats.live_bytes);
+    CHECK(stats.held_bytes == owner->baseline.held_bytes);
+    fprintf(stderr, "source fixture compiler owner: allocated=%llu peak=%llu held=%llu\n",
+        (unsigned long long) stats.allocated_bytes,
+        (unsigned long long) stats.peak_bytes, (unsigned long long) stats.held_bytes);
     xr_compile_resources_release(owner->context.resources);
     *owner = (SourceFixtureOwner) {0};
 }

@@ -20,6 +20,12 @@
 #include "xxir_effect_contract_internal.h"
 #include "xxir_construction_internal.h"
 
+/* Structural admission precedes this synchronous declaration-local body check. */
+XR_FUNC XrXirStatus xir_compile_local_errors_verify(const XrXirCompileContext *context,
+    const XrXirModule *module,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_effects_local_errors_verify(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
+
 /* Requires verified source and type pools; proves function correspondence and instance closure. */
 XR_FUNC XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext *compile_context, const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance, XrXirDiagnostic *diagnostic);
 /* Complete current Source admission and correspondence use a genuine
@@ -200,7 +206,8 @@ XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *c
     XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 /* A derived complete-outcome fact grants no call or source permissions.
  * Checked import and specialization rebuild it from authentic declarations. */
-XR_FUNC XrXirStatus xr_xir_effects_task_errors(const XrXirEffects *effects, uint32_t function);
+XR_FUNC XrXirStatus xir_compile_worker_error_verify(const XrXirCompileContext *context,
+    const XrXirModule *module,uint32_t function);
 /* Derived from the verified direct graph; neither fact is wire authority. */
 XR_FUNC XrXirStatus xr_xir_effects_go_safe(const XrXirEffects *effects, uint32_t function);
 XR_FUNC XrXirEffect xr_xir_effects_task_creation(const XrXirEffects *effects, uint32_t function);

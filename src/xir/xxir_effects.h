@@ -40,8 +40,7 @@ typedef struct XrXirRootCauseStep {
     uint32_t function, instruction, callee, slot, distance;
     XrXirRootEffectCause cause;
 } XrXirRootCauseStep;
-#define XR_XIR_ERROR_SYMBOLIC_VARIANT UINT32_MAX
-/* Reverification and inference consume one cumulative work allowance.
+/* Construction owns temporary compiler memory and retains current input.
  * Success publishes into an empty output; every failure preserves it. */
 XR_FUNC XrXirStatus xr_xir_compile_effects_analyze(const XrXirArtifact *artifact, XrXirEffects **output);
 /* Every query returns independent numeric values. Invalid queries carry an
@@ -55,7 +54,7 @@ typedef struct XrXirEffectFacts {
 } XrXirEffectFacts;
 XR_FUNC XrXirEffectFacts xr_xir_effects_read(const XrXirEffects *effects,uint32_t function);
 /* Copy both existing cause chains into one independent owner on the same
- * compiler ledger. Invalid/occupied outputs consume no work and remain intact. */
+ * compiler memory owner. Invalid/occupied outputs remain intact. */
 XR_FUNC XrXirStatus xr_xir_compile_root_cause_trace_copy(
     const XrXirCompileContext *context, const XrXirEffects *effects,
     uint32_t function, XrXirRootCauseTrace **output);
@@ -66,17 +65,5 @@ XR_FUNC const XrXirRootEffects *xr_xir_root_cause_trace_facts(const XrXirRootCau
 XR_FUNC const XrXirRootCauseStep *xr_xir_root_cause_trace_steps(
     const XrXirRootCauseTrace *trace, bool unresolved, uint32_t *count);
 XR_FUNC void xr_xir_compile_root_cause_trace_free(XrXirRootCauseTrace *trace);
-/* Numeric type identities refer to the analyzed artifact, without borrowing it. */
-XR_FUNC bool xr_xir_effects_error(const XrXirEffects *effects, uint32_t function,
-    XrXirType type, uint32_t variant);
-/* Constant-time worst-case work for one exact error lookup: two setup units
- * and at most three per immutable atom (iteration and two comparisons).
- * The receiving runtime prepays this bound before membership scanning. The
- * caller retains effects across both calls; neither call uses a compiler
- * ledger. Invalid owners, functions or outputs leave work untouched. */
-XR_FUNC XrXirStatus xr_xir_effects_error_query_work(const XrXirEffects *effects,
-    uint32_t function, uint64_t *work);
-XR_FUNC bool xr_xir_effects_error_unidentified(const XrXirEffects *effects, uint32_t function);
-XR_FUNC bool xr_xir_effects_error_unknown(const XrXirEffects *effects, uint32_t function);
 XR_FUNC void xr_xir_compile_effects_free(XrXirEffects *effects);
 #endif // XXIR_EFFECTS_H

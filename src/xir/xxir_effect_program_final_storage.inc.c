@@ -41,25 +41,15 @@ static XrXirStatus effect_program_bounds_storage(const XrXirCompileContext *work
 static XrXirStatus effect_program_outcomes_storage(const XrXirCompileContext *work,
     const EffectFinalOutcomes *outcomes,uint32_t count) {
     FINAL_STORAGE(outcomes,1,EffectFinalOutcomes);
-    if (outcomes->resources!=work->resources || outcomes->count!=count ||
-        outcomes->atom_count>outcomes->atom_capacity || outcomes->contexts)
+    if (outcomes->resources!=work->resources || outcomes->count!=count || outcomes->contexts)
         return XR_XIR_BAD_STRUCTURE;
-    FINAL_STORAGE(outcomes->error_proof,1,EffectErrorFinite);
     FINAL_STORAGE(outcomes->control_proof,1,EffectControlProof);
-    XrCompileResourceStatus error_owner=xr_compile_resources_allocation(work->resources,
-        outcomes->error_proof,sizeof(*outcomes->error_proof));
-    XrCompileResourceStatus control_owner=error_owner==XR_COMPILE_RESOURCE_OK?
-        xr_compile_resources_allocation(work->resources,outcomes->control_proof,
-            sizeof(*outcomes->control_proof)):error_owner;
+    XrCompileResourceStatus control_owner=xr_compile_resources_allocation(work->resources,
+        outcomes->control_proof,sizeof(*outcomes->control_proof));
     if (control_owner!=XR_COMPILE_RESOURCE_OK)
         return XR_XIR_BAD_STRUCTURE;
     FINAL_STORAGE(outcomes->functions,count,XrXirFunctionEffects);
     FINAL_STORAGE(outcomes->witnesses,count,XrXirEffectWitness);
-    FINAL_STORAGE(outcomes->atoms,outcomes->atom_capacity,EffectErrorAtom);
-    uint64_t words=(uint64_t)outcomes->error_rows*outcomes->words;
-    if (words>SIZE_MAX/sizeof(uint64_t)) return XR_XIR_BUDGET;
-    FINAL_STORAGE(outcomes->errors,(size_t)words,uint64_t);
-    FINAL_STORAGE(outcomes->task_errors,count,XrXirStatus);
     FINAL_STORAGE(outcomes->go_safe,count,XrXirStatus);
     FINAL_STORAGE(outcomes->task_creation,count,XrXirEffect);
     FINAL_STORAGE(outcomes->root,count,XrXirRootEffects);
