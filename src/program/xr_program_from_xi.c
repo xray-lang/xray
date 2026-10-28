@@ -784,11 +784,6 @@ static bool map_builtin_type(const XrType *type, uint16_t *type_id) {
             return true;
         case XR_KIND_CLASS:
         case XR_KIND_INSTANCE:
-            if (xr_type_is_builtin_named_class(type, "StringBuilder") &&
-                type->instance.type_arg_count == 0) {
-                *type_id = XR_CORE_TYPE_STRING_BUILDER;
-                return true;
-            }
             if (type->instance.class_name && strcmp(type->instance.class_name, "PanicInfo") == 0) {
                 *type_id = XR_CORE_TYPE_PANIC_INFO;
                 return true;
@@ -2786,42 +2781,6 @@ static bool resolved_atomic_construction(const XiValue *call) {
            (element == XR_CORE_TYPE_I64 || element == XR_CORE_TYPE_BOOL || element == XR_CORE_TYPE_F64);
 }
 
-/* Builtin type identity seals construction; method symbols select the exact
- * operation. A user class with the same display name cannot gain authority. */
-static uint16_t exact_string_builder_operation(const XiValue *value) {
-    uint16_t result = XR_CORE_TYPE_VOID;
-    if (!value || !map_builtin_type(value->type, &result))
-        return 0u;
-    if (value->op == XI_CALL_BUILTIN && value->nargs == 0u &&
-        result == XR_CORE_TYPE_STRING_BUILDER && value->aux_kind == XI_AUX_KIND_NONE &&
-        value->aux_int == 0 && value->aux &&
-        strcmp((const char *) value->aux, "StringBuilder") == 0)
-        return XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT;
-    uint16_t receiver = XR_CORE_TYPE_VOID;
-    if (value->op != XI_CALL_METHOD || value->nargs == 0u || !value->args ||
-        !value->args[0] || !map_builtin_type(value->args[0]->type, &receiver) ||
-        receiver != XR_CORE_TYPE_STRING_BUILDER)
-        return 0u;
-    if (value->nargs == 2u && value->args[1] &&
-        value->aux_int == ((int64_t) XI_METHOD_SYMBOL_APPEND << 1) &&
-        value->xa_intrinsic_id == XA_INTRINSIC_STRING_BUILDER_APPEND &&
-        value->result_alias_operand == 0 && result == XR_CORE_TYPE_STRING_BUILDER) {
-        uint16_t argument = XR_CORE_TYPE_VOID;
-        if (map_builtin_type(value->args[1]->type, &argument) &&
-            (argument == XR_CORE_TYPE_STRING || argument == XR_CORE_TYPE_RUNE ||
-             argument == XR_CORE_TYPE_I64 || argument == XR_CORE_TYPE_F64 ||
-             argument == XR_CORE_TYPE_BOOL || argument == XR_CORE_TYPE_VOID))
-            return XR_CORE_OP_CORE_STRING_BUILDER_APPEND;
-    }
-    if (value->nargs == 1u && value->aux_int == ((int64_t) XI_METHOD_SYMBOL_CLEAR << 1) &&
-        result == XR_CORE_TYPE_STRING_BUILDER && value->result_alias_operand == 0)
-        return XR_CORE_OP_CORE_STRING_BUILDER_CLEAR;
-    if (value->nargs == 1u && value->aux_int == ((int64_t) XI_METHOD_SYMBOL_TOSTRING << 1) &&
-        result == XR_CORE_TYPE_STRING)
-        return XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT;
-    return 0u;
-}
-
 static bool exact_array_append(const XiValue *value) {
     uint16_t result = XR_CORE_TYPE_VOID;
     const XaBuiltinReceiverMethodSpec *spec =
@@ -2843,12 +2802,6 @@ static bool exact_array_append(const XiValue *value) {
     return receiver && receiver->kind == XR_KIND_ARRAY && !receiver->is_nullable &&
            !receiver->is_const && receiver->container.element_type &&
            xr_type_equals(receiver->container.element_type, value->args[1]->type);
-}
-
-static bool string_builder_mutation(const XiValue *value) {
-    uint16_t operation = exact_string_builder_operation(value);
-    return operation == XR_CORE_OP_CORE_STRING_BUILDER_APPEND ||
-           operation == XR_CORE_OP_CORE_STRING_BUILDER_CLEAR;
 }
 
 /* The optimized intrinsic carries folded Ordering members as scalar constants.
@@ -7531,9 +7484,7 @@ static bool logical_value_produces_owner(XrXiBuildContext *context, const XiFunc
         (value->op == XI_CONST || value->op == XI_STR_CONCAT || value->op == XI_CONVERT ||
          xi_value_is_string_slice(value)))
         return true;
-    return exact_string_builder_operation(value) == XR_CORE_OP_CORE_STRING_BUILDER_CONSTRUCT ||
-           exact_string_builder_operation(value) == XR_CORE_OP_CORE_STRING_BUILDER_SNAPSHOT ||
-           xi_value_is_scalar_array_default(value) ||
+    return xi_value_is_scalar_array_default(value) ||
            (value->op == XI_CLOSURE_NEW && value->nargs != 0u) ||
            value->xg_existential_kind == XI_EXISTENTIAL_PACK ||
            value->op == XI_SUM_INJECT || value->op == XI_AGG_UPDATE ||
@@ -7810,7 +7761,7 @@ static bool value_has_canonical_materialization(const XrXiBuildContext *context,
     if (xr_program_xi_value_is_materialized(value->op) ||
         exact_channel_state_query(value) || resolved_channel_construction(value) ||
         xi_value_is_string_slice(value) || xi_value_is_scalar_array_default(value) ||
-        exact_array_append(value) || exact_string_builder_operation(value) || resolved_byte_compare_call(context, function, value) ||
+        exact_array_append(value) || resolved_byte_compare_call(context, function, value) ||
         resolved_atomic_construction(value) || exact_atomic_scalar_operation(value) ||
         (value->op == XI_GET_SHARED && resolved_module_data_slot(context, function, value, NULL)) ||
         shared_callable_value_is_exact(context, function, value) ||
@@ -9691,61 +9642,6 @@ translate_integer_composition(XrXiBuildContext *context, XrXiModuleStorage *modu
     return XR_PROGRAM_BUILD_OK;
 }
 
-/* Mutation returns a new read view of the same storage. Only the construction
- * owns it; chaining never duplicates ownership or mutates through a stale loan. */
-static XrProgramBuildStatus translate_string_builder_mutation(
-    XrXiBuildContext *context, XrXiFunctionStorage *function, const XiValue *value,
-    const XrXiBlockStorage *block, XrCoreIrInstructionInput *instructions, uint32_t *count) {
-    const XiValue *receiver = logical_value_identity(value->args[0]);
-    uint32_t depth = 0u;
-    while (string_builder_mutation(receiver) && ++depth <= function->xi->next_value_id)
-        receiver = logical_value_identity(receiver->args[0]);
-    if (!receiver || depth > function->xi->next_value_id)
-        return XR_PROGRAM_BUILD_INVALID_INPUT;
-    if (receiver->op == XI_PLACE_LOAD && receiver->nargs == 1u && receiver->args)
-        receiver = receiver->args[0];
-    XrCoreIrKey place;
-    if (!value_operand_key(context, function, block, receiver, &place))
-        return XR_PROGRAM_BUILD_INVALID_INPUT;
-    *count = 0u;
-    if (!logical_value_is_place(function->xi, receiver)) {
-        XrCoreIrKey *owner = xr_malloc(sizeof(*owner));
-        if (!owner)
-            return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-        *owner = place;
-        place = key_from_key_and_u32(UINT8_C(0x73), value_key(function, value), 0u);
-        instructions[(*count)++] = (XrCoreIrInstructionInput) {
-            .operation_id = XR_CORE_OP_CORE_PLACE_LOCAL,
-            .result = place, .result_type_id = XR_CORE_TYPE_STRING_BUILDER,
-            .result_category = XR_CORE_IR_PLACE, .operands = owner, .operand_count = 1u,
-        };
-    }
-    XrCoreIrKey *operands = xr_malloc(value->nargs * sizeof(*operands));
-    if (!operands)
-        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-    operands[0] = place;
-    if (value->nargs == 2u &&
-        !value_operand_key(context, function, block, value->args[1], &operands[1])) {
-        xr_free(operands);
-        return XR_PROGRAM_BUILD_INVALID_INPUT;
-    }
-    instructions[(*count)++] = (XrCoreIrInstructionInput) {
-        .operation_id = exact_string_builder_operation(value),
-        .result_type_id = XR_CORE_TYPE_VOID, .operands = operands,
-        .operand_count = value->nargs,
-    };
-    XrCoreIrKey *borrow = xr_malloc(sizeof(*borrow));
-    if (!borrow)
-        return XR_PROGRAM_BUILD_OUT_OF_MEMORY;
-    *borrow = place;
-    instructions[(*count)++] = (XrCoreIrInstructionInput) {
-        .operation_id = XR_CORE_OP_CORE_PLACE_LOAD,
-        .result = value_key(function, value), .result_type_id = XR_CORE_TYPE_STRING_BUILDER,
-        .operands = borrow, .operand_count = 1u,
-    };
-    return XR_PROGRAM_BUILD_OK;
-}
-
 static XrProgramBuildStatus translate_array_append(
     XrXiBuildContext *context, XrXiFunctionStorage *function, const XiValue *value,
     const XrXiBlockStorage *block, XrCoreIrInstructionInput *instructions, uint32_t *count) {
@@ -9943,15 +9839,6 @@ static XrProgramBuildStatus translate_value(XrXiBuildContext *context, XrXiModul
         instruction->result_type_id = XR_CORE_TYPE_BOOL;
         instruction->result_ownership = XR_CORE_IR_NON_OWNER;
         return set_operands(context, instruction, function, block, value->args + 1u, 2u,
-                            diagnostic, diagnostic_size);
-    }
-    uint16_t builder_operation = exact_string_builder_operation(value);
-    if (builder_operation) {
-        instruction->operation_id = builder_operation;
-        instruction->result = value_key(function, value);
-        instruction->result_type_id = result_type;
-        instruction->result_ownership = XR_CORE_IR_OWNER;
-        return set_operands(context, instruction, function, block, value->args, value->nargs,
                             diagnostic, diagnostic_size);
     }
     uint16_t atomic_operation = exact_atomic_scalar_operation(value);
@@ -17292,12 +17179,6 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                         has_contract = append != NULL;
                         value_effects = append ? append->effect_mask : 0u;
                         value_capabilities = append ? append->capability_mask : 0u;
-                    } else if (exact_string_builder_operation(value)) {
-                        const XrCoreOperationSpec *builder = xr_core_spec_operation_by_id(
-                            exact_string_builder_operation(value));
-                        has_contract = builder != NULL;
-                        value_effects = builder ? builder->effect_mask : 0u;
-                        value_capabilities = builder ? builder->capability_mask : 0u;
                     } else if (exact_atomic_scalar_operation(value)) {
                         const XrCoreOperationSpec *atomic = xr_core_spec_operation_by_id(
                             exact_atomic_scalar_operation(value));
@@ -17462,7 +17343,7 @@ precompute_function_contracts(XrXiBuildContext *context, char *diagnostic, size_
                             value->xg_existential_kind == XI_EXISTENTIAL_NONE;
                         if (!value || (value->op != XI_CALL && !witness && !sealed_method))
                             continue;
-                        if (xi_value_is_string_slice(value) || exact_array_append(value) || exact_string_builder_operation(value) ||
+                        if (xi_value_is_string_slice(value) || exact_array_append(value) ||
                             resolved_atomic_construction(value) ||
                             resolved_canonical_class_construction(context, storage->xi, value, NULL,
                                                                   NULL) ||
@@ -18133,7 +18014,7 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                     return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
                 construction_literal_count += 2u;
             }
-            if (string_builder_mutation(value) || exact_array_append(value)) {
+            if (exact_array_append(value)) {
                 if (construction_literal_count > UINT32_MAX - 2u)
                     return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
                 construction_literal_count += 2u;
@@ -18359,20 +18240,17 @@ static XrProgramBuildStatus build_function_body(XrXiBuildContext *context,
                 span->end = instruction_index;
                 continue;
             }
-            if (string_builder_mutation(value) || exact_array_append(value)) {
+            if (exact_array_append(value)) {
                 if (instruction_index > instruction_capacity ||
                     instruction_capacity - instruction_index < 3u)
                     return XR_PROGRAM_BUILD_RESOURCE_LIMIT;
                 uint32_t count = 0u;
-                status = exact_array_append(value)
-                    ? translate_array_append(context, storage, value, block_storage,
-                        &block_storage->instructions[instruction_index], &count)
-                    : translate_string_builder_mutation(context, storage, value, block_storage,
-                        &block_storage->instructions[instruction_index], &count);
+                status = translate_array_append(context, storage, value, block_storage,
+                    &block_storage->instructions[instruction_index], &count);
                 if (status != XR_PROGRAM_BUILD_OK)
                     return fail(diagnostic, diagnostic_size, status,
-                                "Xi StringBuilder mutation v%u has no exact storage root", value->id);
-                for (uint32_t builder_index = 0u; builder_index < count; ++builder_index) {
+                                "Xi Array append v%u has no exact storage root", value->id);
+                for (uint32_t append_index = 0u; append_index < count; ++append_index) {
                     const XrCoreOperationSpec *operation = xr_core_spec_operation_by_id(
                         block_storage->instructions[instruction_index++].operation_id);
                     storage->local_effect_mask |= operation->effect_mask;
@@ -19008,7 +18886,7 @@ static XrProgramBuildStatus close_effects(XrXiBuildContext *context, char *diagn
                             value->xg_existential_kind == XI_EXISTENTIAL_NONE;
                         if (value->op != XI_CALL && !witness && !sealed_method)
                             continue;
-                        if (xi_value_is_string_slice(value) || exact_array_append(value) || exact_string_builder_operation(value) ||
+                        if (xi_value_is_string_slice(value) || exact_array_append(value) ||
                             resolved_atomic_construction(value) ||
                             resolved_canonical_class_construction(context, function->xi, value,
                                                                   NULL, NULL) ||

@@ -88,17 +88,27 @@ static bool registry_has_source_name(const char *source_name) {
 static int g_passed = 0;
 static int g_failed = 0;
 
-#define ASSERT_TRUE(cond, msg)                                                                     \
-    do {                                                                                           \
-        if (!(cond)) {                                                                             \
-            fprintf(stderr, "  FAIL: %s\n", msg);                                                  \
-            g_failed++;                                                                            \
-        } else {                                                                                   \
-            g_passed++;                                                                            \
-        }                                                                                          \
-    } while (0)
+static void assertion_true(bool condition, const char *message) {
+    if (!condition) {
+        fprintf(stderr, "  FAIL: %s\n", message);
+        ++g_failed;
+    } else ++g_passed;
+}
+#define ASSERT_TRUE(cond, msg) assertion_true((cond), (msg))
 
 /* ========== xi_intrinsic.def tests ========== */
+
+static void unique_id(bool *seen, unsigned id, const char *range, const char *duplicate) {
+    if (range) ASSERT_TRUE(id < 256, range);
+    if (id < 256) {
+        ASSERT_TRUE(!seen[id], duplicate);
+        seen[id] = true;
+    }
+}
+
+static void display_name_valid(const char *name, const char *message) {
+    ASSERT_TRUE(name != NULL && name[0] != '\0', message);
+}
 
 /* Verify every intrinsic ID is unique and matches its expected value. */
 static void test_enum_values(void) {
@@ -121,13 +131,8 @@ static void test_no_duplicate_ids(void) {
     bool seen[256];
     memset(seen, 0, sizeof(seen));
 #define XI_INTRINSIC(name, id, arity, helper, eff, rep)                                            \
-    do {                                                                                           \
-        ASSERT_TRUE(id < 256, "XR_INTRIN_" #name " ID out of table range");                        \
-        if (id < 256) {                                                                            \
-            ASSERT_TRUE(!seen[id], "XR_INTRIN_" #name " duplicate ID detected");                   \
-            seen[id] = true;                                                                       \
-        }                                                                                          \
-    } while (0);
+    unique_id(seen, id, "XR_INTRIN_" #name " ID out of table range",                                \
+              "XR_INTRIN_" #name " duplicate ID detected");
 #include "../../src/ir/xi_intrinsic.def"
 #undef XI_INTRINSIC
 }
@@ -183,12 +188,7 @@ static void test_method_sym_no_dups(void) {
     bool seen[256];
     memset(seen, 0, sizeof(seen));
 #define XI_METHOD_SYM(aot_name, id, rt_name, display_name)                                         \
-    do {                                                                                           \
-        if (id < 256) {                                                                            \
-            ASSERT_TRUE(!seen[id], "TEST_SYM_" #aot_name " duplicate ID");                         \
-            seen[id] = true;                                                                       \
-        }                                                                                          \
-    } while (0);
+    unique_id(seen, id, NULL, "TEST_SYM_" #aot_name " duplicate ID");
 #include "../../src/ir/xi_method_sym.def"
 #undef XI_METHOD_SYM
 }
@@ -196,8 +196,7 @@ static void test_method_sym_no_dups(void) {
 /* Verify display names are non-NULL and non-empty. */
 static void test_method_sym_names(void) {
 #define XI_METHOD_SYM(aot_name, id, rt_name, display_name)                                         \
-    ASSERT_TRUE(display_name != NULL && display_name[0] != '\0',                                   \
-                "TEST_SYM_" #aot_name " display name empty");
+    display_name_valid(display_name, "TEST_SYM_" #aot_name " display name empty");
 #include "../../src/ir/xi_method_sym.def"
 #undef XI_METHOD_SYM
 }
@@ -223,9 +222,9 @@ static bool method_sym_display_name_exists(const char *name) {
     return false;
 }
 
-static void test_string_builder_append_symbol_identity(void) {
+static void test_append_symbol_identity(void) {
     ASSERT_TRUE(TEST_SYM_APPEND == 253,
-                "StringBuilder.append must keep stable method symbol 253");
+                "append must keep stable method symbol 253");
     ASSERT_TRUE(SYMBOL_APPEND == 253 && xr_builtin_symbol_from_name("append") == SYMBOL_APPEND,
                 "runtime and Xi must share the stable append symbol");
     ASSERT_TRUE(method_sym_display_name_exists("append"),
@@ -415,6 +414,25 @@ static void test_builtin_receiver_method_placement(void) {
     }
 }
 
+static void test_retired_builder(void) {
+    ASSERT_TRUE(xa_intrinsic_by_id((XaIntrinsicId)6007) == NULL,
+                "retired intrinsic 6007 must not resolve to a current operation");
+    XrType builtin_builder = {
+        .kind = XR_KIND_INSTANCE,
+        .instance = {.class_name = "StringBuilder"},
+    };
+    XrType shadow_builder = {
+        .kind = XR_KIND_INSTANCE,
+        .instance = {.class_name = "StringBuilder", .class_ref = (XrClassInfo *) (uintptr_t) 1},
+    };
+    ASSERT_TRUE(xa_intrinsic_compiler_receiver_method(&builtin_builder, "append") ==
+                    XA_INTRINSIC_NONE,
+                "an undeclared builder spelling must not acquire a native intrinsic");
+    ASSERT_TRUE(xa_intrinsic_compiler_receiver_method(&shadow_builder, "append") ==
+                    XA_INTRINSIC_NONE,
+                "a source class with the same spelling must not acquire builtin append semantics");
+}
+
 static void test_semantic_intrinsic_registry(void) {
     char error[192];
     ASSERT_TRUE(xa_intrinsic_registry_validate(error, sizeof(error)),
@@ -482,33 +500,7 @@ static void test_semantic_intrinsic_registry(void) {
                     atomic_fetch_add->allocation == XA_INTRINSIC_ALLOCATION_NO_ALLOC,
                 "Atomic.fetchAdd must publish stable nothrow RMW semantics");
 
-    const XaIntrinsicDesc *builder_append =
-        xa_intrinsic_by_id(XA_INTRINSIC_STRING_BUILDER_APPEND);
-    ASSERT_TRUE(builder_append && builder_append->id == 6007 &&
-                    builder_append->family == XA_INTRINSIC_FAMILY_CORE &&
-                    builder_append->lowering == XA_INTRINSIC_LOWERING_STRING_BUILDER_APPEND &&
-                    builder_append->effect == XA_INTRINSIC_EFFECT_WRITE_ONLY &&
-                    builder_append->allocation == XA_INTRINSIC_ALLOCATION_MAY_ALLOC &&
-                    builder_append->min_arity == 1 && builder_append->max_arity == 1,
-                "StringBuilder.append must publish one typed core intrinsic identity");
-    ASSERT_TRUE(builder_append &&
-                    strcmp(xa_intrinsic_source_member(builder_append),
-                           XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0,
-                "the registry and pointer-free verifier must share one append projection");
-    XrType builtin_builder = {
-        .kind = XR_KIND_INSTANCE,
-        .instance = {.class_name = "StringBuilder"},
-    };
-    XrType shadow_builder = {
-        .kind = XR_KIND_INSTANCE,
-        .instance = {.class_name = "StringBuilder", .class_ref = (XrClassInfo *) (uintptr_t) 1},
-    };
-    ASSERT_TRUE(xa_intrinsic_compiler_receiver_method(&builtin_builder, "append") ==
-                    XA_INTRINSIC_STRING_BUILDER_APPEND,
-                "builtin receiver binding must select append by typed receiver and stable symbol");
-    ASSERT_TRUE(xa_intrinsic_compiler_receiver_method(&shadow_builder, "append") ==
-                    XA_INTRINSIC_NONE,
-                "a source class with the same spelling must not acquire builtin append semantics");
+    test_retired_builder();
 
     const XaIntrinsicDesc *par_map_into = xa_intrinsic_by_id(XA_INTRINSIC_PARALLEL_PLAN_MAP_INTO);
     ASSERT_TRUE(par_map_into && par_map_into->family == XA_INTRINSIC_FAMILY_PARALLEL &&
@@ -863,7 +855,13 @@ static void test_exact_scalar_registry(void) {
                 "float must not have an exact scalar identity");
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1], "--retired-builder")) {
+        test_retired_builder();
+        printf("retired Builder: %d passed, %d failed\n", g_passed, g_failed);
+        return g_failed ? 1 : 0;
+    }
+    if (argc != 1) return 2;
     printf("--- xi_intrinsic.def ---\n");
     test_enum_values();
     test_id_range();
@@ -878,7 +876,7 @@ int main(void) {
     test_method_sym_no_dups();
     test_method_sym_names();
     test_method_sym_count();
-    test_string_builder_append_symbol_identity();
+    test_append_symbol_identity();
     test_builtin_receiver_registry_method_symbols();
     test_builtin_receiver_registry_method_ids();
     test_builtin_receiver_registry_metadata();
