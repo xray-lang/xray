@@ -244,5 +244,5 @@
     "--version",
     "--json"
   ],
-  "smokeStatus": "smoke: demos 2/22 stdlib 1/29 readme 0/6 native 0/3; native GAP, NOT_RUN (Task328 P2)"
+  "smokeStatus": "smoke: demos 3/23 stdlib 2/29 readme 0/6 native 5/5; PASS 10 GAP 53 FAIL 0 NOT_RUN 0"
 }
