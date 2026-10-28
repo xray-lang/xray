@@ -125,7 +125,10 @@
     "test_xir_typed_await_native",
     "test_xir_typed_await_controls",
     "test_source_lowered_correspondence",
-    "test_native_string_admission"
+    "test_native_string_admission",
+    "test_core_spec",
+    "test_xr_program_verify",
+    "test_xr_program_vm_runtime"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -349,7 +352,10 @@
     "test_xir_typed_await_cli",
     "source_lowered_correspondence",
     "native_string_admission",
-    "test_lir_owned_string"
+    "test_lir_owned_string",
+    "test_core_spec",
+    "test_xr_program_verify",
+    "test_xr_program_vm_runtime"
   ],
   "versionCommand": [
     "{build}/xray.exe",
