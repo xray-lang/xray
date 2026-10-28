@@ -1676,6 +1676,7 @@ add_dependencies(xray_core
 # depends on mutable compiler IR ownership analysis.
 set(XRAY_COMPILER_BACKEND_SOURCES
     src/base/xarena.c
+    src/base/xarena_backing.c
     src/base/xlog.c
     src/base/xsha256.c
     src/base/xtarget_data_layout.c
