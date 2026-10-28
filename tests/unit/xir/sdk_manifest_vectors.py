@@ -22,10 +22,40 @@ def identity(manifest):
     return hashlib.sha256(b''.join(chunks)).hexdigest()
 
 
+
+def raw_error_abi_cases(original):
+    rows=original['abi_measurements']
+    positions=[i for i,row in enumerate(rows) if row['id']==304]
+    assert len(positions)==1 and rows[positions[0]]['value']==40
+    index=positions[0];cases=[('raw-error-same',original,0)]
+    for name in ('missing','offset','id','old-call35'):
+        value=json.loads(json.dumps(original))
+        if name=='missing':value['abi_measurements'].pop(index)
+        elif name=='offset':value['abi_measurements'][index]['value']=41
+        elif name=='id':value['abi_measurements'][index]['id']=305
+        else:value['call_abi']=35
+        cases.append(('raw-error-'+name,value,1))
+    return cases
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--executable',required=True);parser.add_argument('--bundle',type=Path,required=True)
+    parser.add_argument('--case',choices=('all','raw-error-abi'),default='all')
     args=parser.parse_args();bundle=args.bundle.resolve();original=json.loads((bundle/'sdk_manifest.json').read_text())
+    if args.case=='raw-error-abi':
+        with tempfile.TemporaryDirectory(prefix='xir-sdk-error-abi-') as temporary:
+            directory=Path(temporary)
+            for name,value,status in raw_error_abi_cases(original):
+                path=directory/(name+'.json');path.write_text(json.dumps(value,ensure_ascii=False),encoding='utf-8')
+                result=subprocess.run([args.executable,str(bundle),str(path),'status'],capture_output=True,timeout=60)
+                assert not result.returncode,(name,result.stderr.decode(errors='replace'))
+                facts=result.stdout.decode().split();assert int(facts[0])==status,(name,facts,status)
+                if status==0:assert int(facts[1])==len(original['files']) and facts[2]==identity(original)
+                print(name+': actual SDK status '+facts[0])
+        print('SDK owned Error ABI exact row/offset/current admission and missing/wrong/old Call refusal PASS')
+        return
+
     with tempfile.TemporaryDirectory(prefix='xir-sdk-gates-') as temporary:
         directory=Path(temporary);cases=[]
         def add(name,value,status=1):
@@ -34,6 +64,7 @@ def main():
             cases.append((name,path,status))
         def modified():return json.loads(json.dumps(original))
         add('same',original,0);add('root-reordered',dict(reversed(list(original.items()))),0)
+        for case in raw_error_abi_cases(original):add(*case)
         escaped=json.dumps(original).replace('"schema"','"\\u0073chema"').replace('kernel32','kernel\\u0033\\u0032')
         add('escaped-same',escaped.encode(),0)
         for name in list(original)[:17]:
