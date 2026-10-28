@@ -13,6 +13,9 @@
 static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCaptureScan *scan,
     XrXirCallableParameter *parameters, const XrXirTypeNode *context) {
     if (!source_capture_parameters(ctx, node, scan)) return false;
+    uint32_t scope=0;
+    if(!xr_hir_items_find_scope(ctx->items,ctx->module,node->node_id,&scope))
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"closure parameter scope was not reserved");
     SourceFunction *body = &ctx->bodies[ctx->function];
     FunctionDeclNode *decl = &node->as.function_expr;
     for (int i = 0; i < decl->param_count; ++i) {
@@ -35,7 +38,7 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
         }
         if (type == XR_XIR_UNIT && !by_reference)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter cannot be unit");
-        SourceName *symbol = add_name(ctx, &ctx->locals, param->name, node);
+        SourceName *symbol = source_parameter_name(ctx,node,param,scope+1);
         if (!symbol) return false;
         symbol->kind = SOURCE_LOCAL; symbol->index = scan->count + (uint32_t)i;
         symbol->type = type; symbol->mutable = by_reference;

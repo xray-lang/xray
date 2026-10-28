@@ -671,6 +671,58 @@ static void installed_interface_parameter_report(const char *stdlib) {
     CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK&&event.state==XR_SOURCE_RUN_RETURNED);
     CHECK(output.length==2&&!memcmp(output.bytes,"9\n",2));xray_source_result_free(result);
 }
+static void installed_closure_parameter_report(const char *stdlib) {
+    static const char original[]=
+        "enum Fault{Bad}\r\n"
+        "fn answer<T>(tag:T) throws(Fault)->i64{\r\n"
+        "var offset=2\r\n"
+        "/*\303\251\360\237\230\200*/ const a=fn(value:i64,value:i64) throws(Fault)->i64{return value+offset}\r\n"
+        "/*\303\251\360\237\230\200*/ const b=(value:i64,value:i64)->value+offset\r\n"
+        "/*\303\251\360\237\230\200*/ fn local(value:i64,value:i64) throws(Fault)->i64{return value+offset}\r\n"
+        "return try a(1,2)+b(1,2)+try local(1,2)\r\n"
+        "}\r\n"
+        "print(try answer<i64>(0))\r\n";
+    _Static_assert(sizeof(original)-1==365,"Complete closure parameter source bytes");
+    char text[sizeof(original)];memcpy(text,original,sizeof(text));XrSourceCompileOptions options=compile_options(stdlib);
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"closure-parameter-report",text,sizeof(text)-1}};
+    XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;XrSourceFailure failure={0};
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_BAD_ARGUMENT&&!artifact&&report);
+    CHECK(failure.status==XR_SOURCE_BAD_ARGUMENT&&failure.cleanup_status==XR_SOURCE_OK&&failure.stage==XR_SOURCE_STAGE_COMPILE);
+    memset(text,'!',sizeof(text));
+    XrSourceDiagnosticReportInfo info={0};
+    CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==3&&!info.complete);
+    const uint64_t original_bytes[]={94,176,232},duplicate_bytes[]={104,186,242};
+    const int32_t columns[]={33,31,31},label_columns[]={23,21,21};
+    for(uint32_t i=0;i<3;++i) {
+        XrSourceDiagnosticRoot root={0};XrSourceDiagnosticLabel label={0};
+        CHECK(xray_source_diagnostic_root(report,i,&root)==XR_SOURCE_OK&&root.code==302&&root.labels==1);
+        CHECK(!strcmp(root.message,"duplicate parameter name"));
+        CHECK(xray_source_diagnostic_label(report,i,0,&label)==XR_SOURCE_OK&&!strcmp(label.message,"first declaration is here"));
+        CHECK(root.primary.line==(int32_t)(4+i)&&root.primary.column==columns[i]);
+        CHECK(label.location.line==(int32_t)(4+i)&&label.location.column==label_columns[i]);
+        CHECK(root.primary.start_byte==duplicate_bytes[i]&&root.primary.end_byte==duplicate_bytes[i]+5);
+        CHECK(label.location.start_byte==original_bytes[i]&&label.location.end_byte==original_bytes[i]+5);
+        CHECK(root.primary.utf16_line==3+i&&root.primary.utf16_column==(uint32_t)(columns[i]-4));
+        CHECK(label.location.utf16_line==3+i&&label.location.utf16_column==(uint32_t)(label_columns[i]-4));
+        CHECK(root.primary.flags==label.location.flags&&!memcmp(root.primary.revision,label.location.revision,32));
+    }
+    /* Independent domain-separated identity of the complete CRLF source. */
+    const uint8_t revision[]={0x4c,0x00,0xc3,0x68,0x83,0xad,0x12,0x9a,0x11,0x59,0xf3,0x0c,0x22,0xb5,0x34,0xff,0xce,0x00,0xbc,0xb4,0x47,0xd5,0xf3,0x5a,0xe7,0x74,0xf5,0xb0,0x14,0x3f,0x6d,0x5e};
+    XrSourceDiagnosticRoot preserved={.code=123};
+    CHECK(xray_source_diagnostic_root(report,3,&preserved)==XR_SOURCE_BAD_ARGUMENT&&preserved.code==123);
+    CHECK(xray_source_diagnostic_root(report,0,&preserved)==XR_SOURCE_OK);
+    CHECK((preserved.primary.flags&(XR_SOURCE_LOCATION_LINE|XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16|XR_SOURCE_LOCATION_REVISION))==
+        (XR_SOURCE_LOCATION_LINE|XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16|XR_SOURCE_LOCATION_REVISION));
+    CHECK(!memcmp(preserved.primary.revision,revision,sizeof(revision)));xray_source_diagnostic_free(report);
+    char corrected[sizeof(original)];memcpy(corrected,original,sizeof(corrected));
+    memcpy(corrected+104,"other",5);memcpy(corrected+186,"other",5);memcpy(corrected+242,"other",5);
+    artifact=compile(&options,corrected,__func__);memset(corrected,'!',sizeof(corrected));
+    Output output={0};XrSourceCallOptions runtime;CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
+    runtime.write=capture;runtime.context=&output;XrSourceResult *result=NULL;XrSourceEvent event={0};
+    CHECK(execute_owned(artifact,&runtime,&result,&event)==XR_SOURCE_OK&&result);xray_source_artifact_free(artifact);
+    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK&&event.state==XR_SOURCE_RUN_RETURNED);
+    CHECK(output.length==2&&!memcmp(output.bytes,"9\n",2));xray_source_result_free(result);
+}
 static XrSourceWriteStatus error_report_capture(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
     CHECK(stream==XR_SOURCE_STDERR);return capture(context,XR_SOURCE_STDOUT,bytes,length);
 }
@@ -737,6 +789,6 @@ static void installed_error_union_300(const char *stdlib) {
     CHECK(output.length==3 && !memcmp(output.bytes,"42\n",3));xray_source_result_free(result);
 }
 int main(int argc, char **argv) {
-    CHECK(argc == 2); installed_error_union(argv[1]); installed_error_union_300(argv[1]); installed_report(argv[1]); installed_parameter_report(argv[1]); installed_method_parameter_report(argv[1]); installed_interface_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
+    CHECK(argc == 2); installed_error_union(argv[1]); installed_error_union_300(argv[1]); installed_report(argv[1]); installed_parameter_report(argv[1]); installed_method_parameter_report(argv[1]); installed_interface_parameter_report(argv[1]); installed_closure_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
     puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
 }

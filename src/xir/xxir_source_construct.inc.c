@@ -126,7 +126,7 @@ static bool source_nominal_parameter_items(SourceContext *ctx,uint32_t module,As
         if(!name||!*name)return source_fail(ctx,method,XR_XIR_BAD_STRUCTURE,"method name is missing");
         uint32_t item=0;
         XrHirItemSpec spec={name,module,parent,method->node_id,method->line,method->column,XR_HIR_ITEM_PARAMETER_SCOPE};
-        if(!source_item_reserve(ctx,method,spec,&item)||!source_parameter_items(ctx,module,method,item+1))return false;
+        if(!source_item_reserve(ctx,method,spec,&item))return false;
     }
     return true;
 }
@@ -147,6 +147,39 @@ static bool source_interface_parameter_items(SourceContext *ctx,uint32_t module,
     }
     return true;
 }
+typedef struct SourceParameterItems {
+    SourceContext *ctx;
+    uint32_t module,parent,depth;
+} SourceParameterItems;
+static bool source_closure_parameter_items(AstNode *node,void *pointer) {
+    SourceParameterItems *walk=pointer;
+    SourceContext *ctx=walk->ctx;
+    if(!node)return true;
+    if(!source_request_poll(ctx,node))return false;
+    if(walk->depth==128)
+        return source_fail(ctx,node,XR_XIR_BUDGET,"parameter scope depth exhausted");
+    uint32_t parent=walk->parent;
+    bool closure=node->type==AST_FUNCTION_EXPR||(node->type==AST_FUNCTION_DECL&&walk->depth);
+    if(closure) {
+        uint32_t item=0;
+        /* Scope markers are keyed by AST identity and never enter a name namespace. */
+        XrHirItemSpec spec={"$closure",walk->module,parent,node->node_id,node->line,node->column,
+            XR_HIR_ITEM_PARAMETER_SCOPE};
+        if(!source_item_reserve(ctx,node,spec,&item)||
+            !source_parameter_items(ctx,walk->module,node,item+1))return false;
+        walk->parent=item+1;
+    } else if(node->type==AST_METHOD_DECL) {
+        uint32_t item=0;
+        if(!xr_hir_items_find_scope(ctx->items,walk->module,node->node_id,&item))
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"method parameter scope was not reserved");
+        if(!source_parameter_items(ctx,walk->module,node,item+1))return false;
+        walk->parent=item+1;
+    }
+    ++walk->depth;
+    bool ok=xr_ast_for_each_child(node,source_closure_parameter_items,walk);
+    --walk->depth;walk->parent=parent;
+    return ok||source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"parameter scope syntax is unknown");
+}
 static bool source_items_prepare(SourceContext *ctx) {
     if(ctx->items)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"module items already prepared");
     if(!source_item_resource(ctx,NULL,xr_hir_items_new(ctx->compile.resources,&ctx->items)))return false;
@@ -160,7 +193,7 @@ static bool source_items_prepare(SourceContext *ctx) {
             spec->source_text,spec->source_length,revision)))return false;
         AstNode *ast=spec->ast;if(!ast||ast->type!=AST_PROGRAM)continue;
         for(int i=0;i<ast->as.program.count;++i) {
-            AstNode *node=ast->as.program.statements[i];const char *name=NULL;
+            AstNode *node=ast->as.program.statements[i];const char *name=NULL;uint32_t parent=0;
             if(!source_request_poll(ctx,node))return false;
             switch(node->type) {
             case AST_FUNCTION_DECL:name=node->as.function_decl.name;break;
@@ -175,6 +208,7 @@ static bool source_items_prepare(SourceContext *ctx) {
                 uint32_t item=0;
                 XrHirItemSpec item_spec={name,m,0,node->node_id,node->line,node->column,XR_HIR_ITEM_DECLARATION};
                 if(!source_item_reserve(ctx,node,item_spec,&item))return false;
+                parent=item+1;
                 if(node->type==AST_FUNCTION_DECL&&!source_parameter_items(ctx,m,node,item+1))return false;
                 if((node->type==AST_STRUCT_DECL||node->type==AST_CLASS_DECL||node->type==AST_ENUM_DECL)&&
                     !source_nominal_parameter_items(ctx,m,node,item+1))return false;
@@ -201,6 +235,8 @@ static bool source_items_prepare(SourceContext *ctx) {
                     if(!source_item_reserve(ctx,node,item_spec,NULL))return false;
                 }
             }
+            SourceParameterItems walk={ctx,m,parent,0};
+            if(!source_closure_parameter_items(node,&walk))return false;
         }
     }
     ctx->module=previous_module;

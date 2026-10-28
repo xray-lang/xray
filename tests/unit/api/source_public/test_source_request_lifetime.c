@@ -1189,6 +1189,95 @@ static void defaults_execute(XrSourceArtifact *artifact,char *source,size_t leng
     int64_t value=0;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK&&value==42);
     CHECK(output.size==3&&!memcmp(output.bytes,"42\n",3));xray_source_result_free(result);
 }
+static void closure_report_lifetime(void) {
+    static const char original[]=
+        "enum Fault{Bad}\r\n"
+        "fn answer<T>(tag:T) throws(Fault)->i64{\r\n"
+        "var offset=2\r\n"
+        "/*\303\251\360\237\230\200*/ const a=fn(value:i64,value:i64) throws(Fault)->i64{return value+offset}\r\n"
+        "/*\303\251\360\237\230\200*/ const b=(value:i64,value:i64)->value+offset\r\n"
+        "/*\303\251\360\237\230\200*/ fn local(value:i64,value:i64) throws(Fault)->i64{return value+offset}\r\n"
+        "return try a(1,2)+b(1,2)+try local(1,2)\r\n"
+        "}\r\n"
+        "print(try answer<i64>(0))\r\n";
+    _Static_assert(sizeof(original)-1==365,"Complete closure parameter source bytes");
+    char text[sizeof(original)];memcpy(text,original,sizeof(text));
+    XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+    XrSourceText source={NULL,"closure-ast-report",text,sizeof(text)-1};XrSourceAst *ast=NULL;
+    XrSourceFailure failure={0};XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;
+    CHECK(xray_source_parse(&source,&options,&ast,&failure,NULL)==XR_SOURCE_OK&&ast);
+    CHECK(xray_source_build_ast(ast,&options,&artifact,&failure,&report)==XR_SOURCE_BAD_ARGUMENT&&!artifact&&report);
+    CHECK(failure.status==XR_SOURCE_BAD_ARGUMENT&&failure.cleanup_status==XR_SOURCE_OK);
+    xray_source_ast_free(ast);memset(text,'!',sizeof(text));
+    XrSourceDiagnosticReportInfo info={0};
+    CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==3&&!info.complete);
+    const uint8_t revision[]={0x4c,0x00,0xc3,0x68,0x83,0xad,0x12,0x9a,0x11,0x59,0xf3,0x0c,0x22,0xb5,0x34,0xff,0xce,0x00,0xbc,0xb4,0x47,0xd5,0xf3,0x5a,0xe7,0x74,0xf5,0xb0,0x14,0x3f,0x6d,0x5e};
+    const uint64_t original_bytes[]={94,176,232},duplicate_bytes[]={104,186,242};
+    const int32_t columns[]={33,31,31},label_columns[]={23,21,21};
+    for(uint32_t i=0;i<3;++i) {
+        XrSourceDiagnosticRoot root={0};XrSourceDiagnosticLabel label={0};
+        CHECK(xray_source_diagnostic_root(report,i,&root)==XR_SOURCE_OK&&root.code==302&&root.labels==1);
+        CHECK(!strcmp(root.message,"duplicate parameter name"));
+        CHECK(xray_source_diagnostic_label(report,i,0,&label)==XR_SOURCE_OK&&!strcmp(label.message,"first declaration is here"));
+        CHECK(root.primary.line==(int32_t)(4+i)&&root.primary.column==columns[i]);
+        CHECK(label.location.line==(int32_t)(4+i)&&label.location.column==label_columns[i]);
+        CHECK(root.primary.start_byte==duplicate_bytes[i]&&root.primary.end_byte==duplicate_bytes[i]+5);
+        CHECK(label.location.start_byte==original_bytes[i]&&label.location.end_byte==original_bytes[i]+5);
+        CHECK(root.primary.utf16_line==3+i&&root.primary.utf16_column==(uint32_t)(columns[i]-4));
+        CHECK(label.location.utf16_line==3+i&&label.location.utf16_column==(uint32_t)(label_columns[i]-4));
+        CHECK(!memcmp(root.primary.revision,revision,sizeof(revision)));
+        CHECK(root.primary.flags==label.location.flags&&!memcmp(root.primary.revision,label.location.revision,32));
+    }
+    xray_source_diagnostic_free(report);report=NULL;CHECK(!runtime_live&&!runtime_bytes);
+    memcpy(text,original,sizeof(text));memcpy(text+104,"other",5);memcpy(text+186,"other",5);memcpy(text+242,"other",5);
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"closure-resource-control",text,sizeof(text)-1}};
+    Calibration control={0};options.cancel_poll=calibration_poll;options.cancel_context=&control;
+    CHECK(calibration_build(&input,&options,&control,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
+    size_t polls=control.polls;CHECK(polls>4);xray_source_artifact_free(artifact);artifact=NULL;
+    CHECK(!runtime_live&&!runtime_bytes);control=(Calibration){.at=polls/2,.cancel=true};
+    calibration_failure(&input,&options,&control,XR_SOURCE_CANCELLED,XR_SOURCE_STAGE_COMPILE);
+    options.cancel_poll=NULL;options.cancel_context=NULL;size_t attempts=runtime_attempts;runtime_fail_at=attempts;
+    XrSourceStatus status=xray_source_build(&input,&options,&artifact,&failure,&report);
+    runtime_fail_at=SIZE_MAX;
+    CHECK(runtime_attempts>attempts&&status==XR_SOURCE_OUT_OF_MEMORY&&!artifact&&failure.status==status);
+    CHECK(failure.cleanup_status==XR_SOURCE_OK);xray_source_diagnostic_free(report);report=NULL;
+    CHECK(!runtime_live&&!runtime_bytes);options.memory_mode=XR_SOURCE_MEMORY_FINITE;options.memory_limit=1;
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_MEMORY_LIMIT&&!artifact);
+    CHECK(failure.status==XR_SOURCE_MEMORY_LIMIT&&failure.cleanup_status==XR_SOURCE_OK);xray_source_diagnostic_free(report);
+    CHECK(!runtime_live&&!runtime_bytes);
+    puts("Closure parameter report survives AST/request/input retirement; physical OOM, cancellation and finite memory remain resources PASS");
+}
+
+static void closure_scope_allocation_controls(void) {
+    CHECK(!runtime_live&&!runtime_bytes);
+    XrCompileResources *owner=sdk_ledger(&sdk_unlimited);uint64_t baseline=sdk_stats(owner).held_bytes;
+    XrHirItems *items=NULL;CHECK(xr_hir_items_new(owner,&items)==XR_COMPILE_RESOURCE_OK);
+    XrHirItemSpec spec={"$closure",0,0,100,1,1,XR_HIR_ITEM_PARAMETER_SCOPE};uint32_t first=123;
+    runtime_fail_at=runtime_attempts;
+    CHECK(xr_hir_items_reserve(items,&spec,&first)==XR_COMPILE_RESOURCE_OUT_OF_MEMORY&&first==123);
+    runtime_fail_at=SIZE_MAX;CHECK(!xr_hir_items_find_scope(items,0,100,&first)&&first==123);
+    CHECK(xr_hir_items_reserve(items,&spec,&first)==XR_COMPILE_RESOURCE_OK);
+    uint32_t found=123;CHECK(!xr_hir_items_find(items,0,0,"$closure",&found)&&found==123);
+    int marker=0;CHECK(xr_hir_items_bind(items,first,&marker));
+    CHECK(!xr_hir_items_binding_module(items,&marker,&found));
+    spec.node=101;uint32_t sibling=0;CHECK(xr_hir_items_reserve(items,&spec,&sibling)==XR_COMPILE_RESOURCE_OK&&sibling!=first);
+    spec.parent=first+1;spec.node=102;uint32_t nested=0;
+    CHECK(xr_hir_items_reserve(items,&spec,&nested)==XR_COMPILE_RESOURCE_OK&&nested!=sibling);
+    spec.module=1;uint32_t absent=123;
+    CHECK(xr_hir_items_reserve(items,&spec,&absent)==XR_COMPILE_RESOURCE_BAD_ARGUMENT&&absent==123);
+    const uint32_t scopes[]={first,sibling,nested};
+    for(uint32_t i=0;i<3;++i) {
+        spec=(XrHirItemSpec){"value",0,scopes[i]+1,100+i,1,1,XR_HIR_ITEM_PARAMETER};
+        uint32_t parameter=0;CHECK(xr_hir_items_reserve(items,&spec,&parameter)==XR_COMPILE_RESOURCE_OK);
+        uint32_t claimed=123;CHECK(xr_hir_items_claim(items,&spec,&claimed)==XR_COMPILE_RESOURCE_OK&&claimed==parameter);
+        CHECK(xr_hir_items_find(items,0,scopes[i]+1,"value",&found)&&found==parameter);
+    }
+    CHECK(!xr_hir_items_errors(items)&&!xr_hir_items_has_report(items));
+    xr_hir_items_free(items);CHECK(sdk_stats(owner).held_bytes==baseline);
+    xr_compile_resources_release(owner);CHECK(!runtime_live&&!runtime_bytes);
+    puts("Closure scope allocation: physical OOM rollback, siblings/nesting, module namespace and foreign-parent rejection PASS");
+}
+
 static void defaults_copy_controls(void) {
     char text[24000];size_t length=defaults_source(text,sizeof(text));
     XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"defaults-copy",text,length}};
@@ -1237,6 +1326,7 @@ int main(void) {
     report_resources();report_control();unicode_report();module_binding_classes();partial_report_lifetime();
     module_report_lifetime(false);module_report_lifetime(true);
     method_scope_allocation_controls();method_report_lifetime();interface_report_lifetime();
+    closure_scope_allocation_controls();closure_report_lifetime();
     independent_requests();detached_ast_and_result();ready_c_artifact();execution_policy();
     global_array_lifetime();global_string_lifetime();
     CHECK(!runtime_live&&!runtime_bytes&&!sdk_allocations&&!sdk_allocation_capacity);

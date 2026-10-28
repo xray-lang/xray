@@ -62,7 +62,7 @@ static bool hir_item_spec_valid(const XrHirItems *h,const XrHirItemSpec *spec) {
         (!spec->parent||h->items[spec->parent-1].module==spec->module)&&
         (spec->kind==XR_HIR_ITEM_DECLARATION||
          (spec->kind==XR_HIR_ITEM_PARAMETER&&spec->parent)||
-         (spec->kind==XR_HIR_ITEM_PARAMETER_SCOPE&&spec->parent&&spec->node));
+         (spec->kind==XR_HIR_ITEM_PARAMETER_SCOPE&&spec->node));
 }
 XrCompileResourceStatus xr_hir_items_reserve(XrHirItems *h,const XrHirItemSpec *spec,uint32_t *out) {
     if(!out||!hir_item_spec_valid(h,spec))return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
@@ -122,7 +122,8 @@ bool xr_hir_items_bind(XrHirItems *h,uint32_t item,void *binding) {
 }
 bool xr_hir_items_binding_module(const XrHirItems *h,const void *binding,uint32_t *out) {
     if(!h||!binding||!out)return false;
-    for(uint32_t i=0;i<h->count;++i)if(!h->items[i].parent&&h->items[i].binding==binding){*out=h->items[i].module;return true;}
+    for(uint32_t i=0;i<h->count;++i)if(h->items[i].kind==XR_HIR_ITEM_DECLARATION&&
+        !h->items[i].parent&&h->items[i].binding==binding){*out=h->items[i].module;return true;}
     return false;
 }
 void *xr_hir_items_binding(const XrHirItems *h,uint32_t item) {return h&&item<h->count?h->items[item].binding:NULL;}
