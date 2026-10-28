@@ -3751,6 +3751,9 @@ if(XR_BUILD_LSP)
         ${CMAKE_SOURCE_DIR}/src/app/lsp
     )
     add_test(NAME test_lsp_stdlib COMMAND test_lsp_stdlib)
+    add_test(NAME test_lsp_stdlib_generator COMMAND ${XRAY_PYTHON} -B -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/lsp/test_gen_stdlib_types.py)
+    set_tests_properties(test_lsp_stdlib_generator PROPERTIES LABELS "unit;lsp;metadata" TIMEOUT 30)
 
     file(GLOB LSP_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/lsp/*.c)
     list(FILTER LSP_SOURCES EXCLUDE REGEX "\\.inc\\.c$")
@@ -4725,3 +4728,4 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/local_errors.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/local_cfg_errors.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/error_union/CMakeLists.txt")
+add_subdirectory(ir/retired_builder)

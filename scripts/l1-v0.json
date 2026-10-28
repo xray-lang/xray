@@ -118,7 +118,9 @@
     "test_xir_error_union_faults",
     "test_xir_error_union_native_7",
     "test_xir_error_union_native_300",
-    "test_xir_error_union_legacy"
+    "test_xir_error_union_legacy",
+    "test_xi_retired_builder",
+    "test_lsp_stdlib"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -330,7 +332,10 @@
     "test_xir_error_union_inference",
     "test_xir_error_union_legacy",
     "test_xir_error_union_cli",
-    "test_xir_cleanup_failed_module"
+    "test_xir_cleanup_failed_module",
+    "test_xi_retired_builder",
+    "test_lsp_stdlib",
+    "test_lsp_stdlib_generator"
   ],
   "versionCommand": [
     "{build}/xray.exe",
