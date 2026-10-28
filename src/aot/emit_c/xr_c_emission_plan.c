@@ -72,8 +72,11 @@
 static const char *own_pointer_type(XrCEmissionPlan *plan, const char *name) {
     if (!plan || !name)
         return NULL;
-    if (!plan->type_names.head)
-        xr_arena_init(&plan->type_names, 128u);
+    if (!plan->type_names.retained) {
+        XrArenaBacking backing = xr_arena_system_backing();
+        if (xr_arena_open(&plan->type_names, 128u, &backing) != XR_ARENA_OK)
+            return NULL;
+    }
     return xr_arena_strdup(&plan->type_names, name);
 }
 
