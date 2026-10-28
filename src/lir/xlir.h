@@ -42,8 +42,15 @@ typedef enum XrLirType {
     XR_LIR_F64,
     XR_LIR_PTR,
     XR_LIR_I64_CELL,
+    XR_LIR_STRING,
+    XR_LIR_STRING_CELL,
     XR_LIR_TYPE_COUNT
 } XrLirType;
+
+/* String instruction results own references. Ordinary call parameters borrow
+ * through that call; a language binding explicitly retains its parameter.
+ * RET transfers an owned result. String Cells own one independent reference
+ * and their storage remains in the defining activation. */
 typedef enum XrLirOp {
     XR_LIR_OP_INVALID,
 #define XR_LIR_OP(name, text, arity) XR_LIR_##name,

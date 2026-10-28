@@ -10,7 +10,7 @@ import shutil
 import tempfile
 
 
-def header_clients(build, logs):
+def header_clients(build, logs, libraries):
     cache = dict(re.findall(r'^([^#/:\n]+):[^=\n]+=(.*)$',
                            (build / 'CMakeCache.txt').read_text(encoding='utf-8'), re.M))
     graph = subprocess.run([cache['CMAKE_MAKE_PROGRAM'], '-C', build, '-t', 'commands',
@@ -20,15 +20,15 @@ def header_clients(build, logs):
     source = Path(cache['CMAKE_HOME_DIRECTORY'])
     compiler = cache['CMAKE_C_COMPILER']
     msvc = os.name == 'nt' and Path(compiler).name.lower() in ('cl', 'cl.exe', 'clang-cl', 'clang-cl.exe')
-    library = build / 'src/runtime/native' / ('xray_native_runtime.lib' if msvc else 'libxray_native_runtime.a')
-    assert library.is_file(), library
+    assert libraries and all(p.is_file() for p in libraries), libraries
     prefix = Path(tempfile.mkdtemp(prefix='native-prefix-', dir=logs))
     (prefix / 'include').mkdir(); (prefix / 'lib').mkdir()
     shutil.copyfile(source / 'include/xray_native_runtime.h', prefix / 'include/xray_native_runtime.h')
     shutil.copyfile(source / 'include/xray_export.h', prefix / 'include/xray_export.h')
-    shutil.copyfile(library, prefix / 'lib' / library.name)
+    for library in libraries:
+        shutil.copyfile(library, prefix / 'lib' / library.name)
     moved = prefix.with_name(prefix.name + '-moved'); prefix.rename(moved)
-    library = moved / 'lib' / library.name
+    libraries = [moved / 'lib' / p.name for p in libraries]
     include = moved / 'include'
     sanitizer = re.findall(r'(?<!\S)[/-](?:clang:-)?fsanitize=[^\s]+', recipe)
     if msvc:
@@ -51,6 +51,14 @@ def header_clients(build, logs):
             'static void invoke(void *context) { int64_t a = monotonic(0);\n'
             ' if (a <= 0 || realtime(0) <= 0 || cpu(0) < 0 || monotonic(0) < a ||\n'
             ' offset(INT64_C(1700000000), 0) != offset(INT64_C(1700000000), 0)) return;\n'
+            ' XrtString *s = xrt_string_new("head", 4, 0);\n'
+            ' XrtString *n = xrt_string_i64(7, 0);\n'
+            ' XrtString *t = xrt_string_concat(s, n, 0);\n'
+            ' XrtString *copy = xrt_string_retain(t, 0), *moved = NULL;\n'
+            ' size_t size = 0; const char *bytes = xrt_string_bytes(copy, &size);\n'
+            ' if (size != 5 || bytes[4] != 55) return;\n'
+            ' xrt_string_move(&moved, &copy); xrt_string_drop(&moved);\n'
+            ' xrt_string_owned_drop(&copy); xrt_string_drop(&s); xrt_string_drop(&n);\n'
             ' text("header", 6, 0); leaf(*(uint32_t *)context, 0); }\n'
             'int main(void) { uint32_t code = 421;\n'
             'xrt_run_standalone(&xrt_standalone_source_map, invoke, &code); return 77; }\n')
@@ -62,10 +70,10 @@ def header_clients(build, logs):
         if msvc:
             command = [compiler, *flags, '/std:' + language,
                        '/I' + str(include), ('/Tc' if language == 'c11' else '/Tp') + str(client),
-                       library, '/Fe:' + str(executable), *link]
+                       *libraries, '/Fe:' + str(executable), *link]
         else:
             command = [compiler, *flags, '-std=' + language, '-x', 'c' if language == 'c11' else 'c++',
-                       '-I' + str(include), client, '-x', 'none', library, '-o', executable, *link]
+                       '-I' + str(include), client, '-x', 'none', *libraries, '-o', executable, *link]
         compiled = subprocess.run(command, cwd=logs, capture_output=True, timeout=30)
         compile_log = logs / (language.replace('+', 'x') + '-compile.log')
         compile_log.write_bytes(compiled.stdout + compiled.stderr)
@@ -75,8 +83,8 @@ def header_clients(build, logs):
         records.append({'language': language, 'command': [str(x) for x in command],
                         'actualClientRecipe': recipe,
                         'compileExit': compiled.returncode, 'exit': ran.returncode,
-                        'stderrHex': ran.stderr.hex(), 'library': str(library),
-                        'librarySHA256': hashlib.sha256(library.read_bytes()).hexdigest(),
+                        'stderrHex': ran.stderr.hex(),
+                        'libraries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in libraries],
                         'headerSHA256': hashlib.sha256((source / 'include/xray_native_runtime.h').read_bytes()).hexdigest()})
     (logs / 'header-clients.json').write_text(json.dumps(records, indent=2), encoding='utf-8')
     return records
@@ -84,6 +92,7 @@ def header_clients(build, logs):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--library', type=Path, nargs='+', required=True)
     parser.add_argument('--suite', required=True)
     parser.add_argument('--build', required=True)
     parser.add_argument('--clients', nargs='+', required=True)
@@ -129,7 +138,7 @@ def main():
                 assert process.stderr == b'xray: host clock ' + kind + b' ' + reason + b' at ' + source + b'\n'
         # The original complete Source call discards the result; all four
         # optimization orders must retain its execution-ending range failure.
-        clients = header_clients(Path(args.build), args.logs)
+        clients = header_clients(Path(args.build), args.logs, args.library)
         template = next(row['command'] for row in clients if row['language'] == 'c11')
         for mode in range(4):
             generated = args.logs / ('offset-range-' + str(mode) + '.c')
@@ -222,7 +231,7 @@ def main():
         assert code not in (0, 1, 74) and not output, (code, output, error)
         assert b'String output requires bytes for a nonempty span' in error
     elif args.suite == 'link_contract':
-        header_clients(Path(args.build).resolve(), args.logs.resolve())
+        header_clients(Path(args.build).resolve(), args.logs.resolve(), args.library)
         for name, diagnostic in [('missing', rb'LNK20(?:01|19)|undefined (?:reference|symbol)'),
                                  ('duplicate', rb'LNK2005|multiple definition|duplicate symbol')]:
             result = subprocess.run(['cmake', '--build', args.build, '--target',

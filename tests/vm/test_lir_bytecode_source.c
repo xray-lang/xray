@@ -9,6 +9,7 @@
 #include "../lir/lir_source_fixture.h"
 #include "lir/xlir_lower.h"
 #include "lir/xlir_verify.h"
+#include "lir/xlir_c.h"
 #include "vm/register/xrbc_lir.h"
 #include <fenv.h>
 #if defined(XR_ARCH_X86_64)
@@ -253,7 +254,53 @@ static void f64_transport(void) {
     xr_rbc_program_destroy(recurse);
 }
 
-int main(void) {
+static void owned_string_result(const char *path) {
+    XrLirLowered lowered = lower("fn produce()->string{return \"é\\0${73}\"}\nproduce()\n",true);
+    XrRbcProgram *program = NULL;
+    CHECK(xr_rbc_compile(lowered.module,lowered.entry,&program,NULL)==XR_RBC_COMPILE_OK);
+    XrCompileResources *resources = NULL;
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,false};
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+    XrLirCRequest request = {lowered.module,lowered.entry,resources,"owned-string-result",NULL};
+    XrLirCOutput output = {0};
+    CHECK(xr_lir_emit_c(&request,&output,NULL)==XR_LIR_C_OK && output.entry_result==XR_LIR_STRING);
+    xr_lir_lowered_free(&lowered);
+    xr_compile_resources_release(resources);
+    for (unsigned run=0; run<2; ++run) {
+        XrRbcExecution *execution = NULL;
+        CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+        XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+        CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK);
+        xr_rbc_execution_free(&execution);
+        if (run) {xr_rbc_program_destroy(program);program=NULL;}
+        uint64_t bits = 99;
+        CHECK(!xr_rbc_outcome_bits(outcome,&bits) && bits==99);
+        const XrtString *borrowed = NULL;
+        CHECK(xr_rbc_outcome_string(outcome,&borrowed));
+        size_t length = 0;
+        const char *bytes = xrt_string_bytes(borrowed,&length);
+        CHECK(length==5 && !memcmp(bytes,"\xc3\xa9\0" "73",5));
+        if (!run) {
+            XrtString *owned = NULL;
+            CHECK(xr_rbc_outcome_take_string(outcome,&owned));
+            CHECK(!xr_rbc_outcome_string(outcome,&borrowed));
+            xr_rbc_outcome_free(&outcome);
+            bytes=xrt_string_bytes(owned,&length);
+            CHECK(length==5 && !memcmp(bytes,"\xc3\xa9\0" "73",5));
+            xrt_string_owned_drop(&owned);CHECK(!owned);
+        } else xr_rbc_outcome_free(&outcome);
+    }
+    if (path) {
+        FILE *file=fopen(path,"wb");CHECK(file);
+        CHECK(fwrite(output.bytes,1,output.length,file)==output.length && fclose(file)==0);
+    }
+    xr_lir_c_output_free(&output);
+}
+
+int main(int argc, char **argv) {
+    CHECK(argc==1 || argc==2);
+    owned_string_result(argc==2 ? argv[1] : NULL);
+    if (argc==2) return 0;
     i64_identity_cast();
     metadata_lifetime();
     numerical_oracles();

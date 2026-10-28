@@ -1,4 +1,15 @@
 set(native_runtime_clients)
+add_executable(test_native_string_admission test_string_admission.c)
+target_link_libraries(test_native_string_admission PRIVATE xray_register_vm)
+target_include_directories(test_native_string_admission PRIVATE "${PROJECT_SOURCE_DIR}/src")
+set_target_properties(test_native_string_admission PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(test_native_string_admission PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_native_string_admission PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME native_string_admission COMMAND test_native_string_admission)
+set_tests_properties(native_string_admission PROPERTIES LABELS "unit;native-runtime;ownership" TIMEOUT 10)
 add_executable(test_native_locations test_locations.c)
 target_link_libraries(test_native_locations PRIVATE xray_native_runtime)
 target_include_directories(test_native_locations PRIVATE "${PROJECT_SOURCE_DIR}/src")
@@ -12,7 +23,7 @@ add_test(NAME native_location_owner COMMAND test_native_locations)
 set_tests_properties(native_location_owner PROPERTIES LABELS "unit;native-runtime;fast" TIMEOUT 10)
 
 add_executable(test_native_execution test_execution.c)
-target_link_libraries(test_native_execution PRIVATE xray_native_runtime xray_xir_scalar)
+target_link_libraries(test_native_execution PRIVATE xray_native_runtime xray_xir_scalar xray_register_vm)
 target_include_directories(test_native_execution PRIVATE "${PROJECT_SOURCE_DIR}/src")
 set_target_properties(test_native_execution PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
@@ -25,7 +36,7 @@ set_tests_properties(native_execution_scope PROPERTIES LABELS "unit;native-runti
 
 add_executable(test_native_execution_allocations test_execution.c)
 target_compile_definitions(test_native_execution_allocations PRIVATE XR_NATIVE_STRING_ALLOCATIONS=1)
-target_link_libraries(test_native_execution_allocations PRIVATE xray_native_runtime xray_xir_scalar)
+target_link_libraries(test_native_execution_allocations PRIVATE xray_native_runtime xray_xir_scalar xray_register_vm)
 target_include_directories(test_native_execution_allocations PRIVATE "${PROJECT_SOURCE_DIR}/src")
 set_target_properties(test_native_execution_allocations PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
@@ -61,7 +72,7 @@ target_link_libraries(test_native_runtime_duplicate PRIVATE xray_native_runtime)
 foreach(suite output failures link_contract)
     add_test(NAME native_runtime_${suite}
         COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_CURRENT_SOURCE_DIR}/check_runtime.py"
-            --suite ${suite} --build "${CMAKE_BINARY_DIR}"
+            --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS} --suite ${suite} --build "${CMAKE_BINARY_DIR}"
             --clients "$<TARGET_FILE:test_native_runtime_0>" "$<TARGET_FILE:test_native_runtime_1>"
                 "$<TARGET_FILE:test_native_runtime_2>" "$<TARGET_FILE:test_native_runtime_3>"
                 "$<TARGET_FILE:test_native_runtime_4>" "$<TARGET_FILE:test_native_runtime_5>"
@@ -85,7 +96,7 @@ add_test(NAME native_clock_scope COMMAND test_native_clock)
 set_tests_properties(native_clock_scope PROPERTIES LABELS "unit;native-runtime;fast" TIMEOUT 30)
 add_test(NAME native_clock_standalone
     COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_CURRENT_SOURCE_DIR}/check_runtime.py"
-        --suite clock --build "${CMAKE_BINARY_DIR}" --clients "$<TARGET_FILE:test_native_clock>"
+        --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS} --suite clock --build "${CMAKE_BINARY_DIR}" --clients "$<TARGET_FILE:test_native_clock>"
         --logs "${CMAKE_CURRENT_BINARY_DIR}/results-clock")
 set_tests_properties(native_clock_standalone PROPERTIES LABELS "unit;native-runtime;fast" TIMEOUT 30)
 

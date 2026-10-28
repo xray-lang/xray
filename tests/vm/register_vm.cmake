@@ -44,6 +44,7 @@ set_tests_properties(lir_bytecode lir_bytecode_alloc PROPERTIES LABELS "unit;vm;
 add_executable(lir_vm_run ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/lir_vm_run.c)
 add_executable(test_lir_bytecode_source
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_lir_bytecode_source.c)
+target_link_libraries(test_lir_bytecode_source PRIVATE xray_lir_c)
 add_executable(test_lir_vm_output
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_lir_vm_output.c)
 foreach(target lir_vm_run test_lir_bytecode_source test_lir_vm_output)
@@ -85,7 +86,7 @@ add_test(NAME skeleton_diff COMMAND ${XRAY_PYTHON} -X utf8
     --vm-driver $<TARGET_FILE:lir_vm_run> --c-driver $<TARGET_FILE:lir_c_run>
     --fixtures ${CMAKE_CURRENT_SOURCE_DIR}/tests/lir/programs
     --compiler "${CMAKE_C_COMPILER}" --kind "${skeleton_provider_kind}"
-    --include ${CMAKE_CURRENT_SOURCE_DIR}/include --library $<TARGET_FILE:xray_native_runtime>
+    --include ${CMAKE_CURRENT_SOURCE_DIR}/include --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --work ${CMAKE_CURRENT_BINARY_DIR}/skeleton-diff ${skeleton_native_options})
 set_tests_properties(skeleton_diff PROPERTIES LABELS "unit;vm;lir;native;fast" TIMEOUT 120)

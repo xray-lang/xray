@@ -18,7 +18,7 @@ def main():
     parser.add_argument('--compiler', type=Path, required=True)
     parser.add_argument('--kind', choices=['msvc', 'gnu'], required=True)
     parser.add_argument('--include', type=Path, required=True)
-    parser.add_argument('--library', type=Path, required=True)
+    parser.add_argument('--library', type=Path, nargs='+', required=True)
     parser.add_argument('--msvc-runtime', default='MultiThreaded')
     parser.add_argument('--work', type=Path, required=True)
     parser.add_argument('--asan', action='store_true')
@@ -26,7 +26,7 @@ def main():
     args.work.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix='lir-runtime-', dir=args.work))
     header = args.include / 'xray_native_runtime.h'
-    identity = {'library': str(args.library), 'librarySHA256': hashlib.sha256(args.library.read_bytes()).hexdigest(),
+    identity = {'libraries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in args.library],
                 'header': str(header), 'headerSHA256': hashlib.sha256(header.read_bytes()).hexdigest()}
     print(json.dumps(identity), flush=True)
     cases = {
@@ -175,7 +175,7 @@ def main():
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
             command = [args.compiler, '/nologo', '/std:c11', '/utf-8', '/W4', '/WX', '/O2', crt,
-                       '/I' + str(args.include), adapter, args.library, '/Fe:' + str(executable)]
+                       '/I' + str(args.include), adapter, *args.library, '/Fe:' + str(executable)]
             if args.asan:
                 command += ['/fsanitize=address', '/Zi']
                 if 'clang' in args.compiler.name.lower():
@@ -183,7 +183,7 @@ def main():
                 command += ['/link', '/INCREMENTAL:NO']
         else:
             command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2',
-                       '-I' + str(args.include), adapter, args.library, '-pthread', '-o', executable]
+                       '-I' + str(args.include), adapter, *args.library, '-pthread', '-o', executable]
             if args.asan:
                 command += ['-fsanitize=address,undefined', '-g']
         if name in ('f64-source', 'f64-fneg-source'):

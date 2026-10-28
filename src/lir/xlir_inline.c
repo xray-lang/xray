@@ -21,7 +21,7 @@ typedef struct {
     size_t first, count;
     uint64_t instructions, scratch;
     uint32_t index, low, component, component_size;
-    bool active, self, returns, eligible, cell_storage;
+    bool active, self, returns, eligible, cell_storage, string_owners;
 } InlineFunction;
 typedef struct { uint32_t function; size_t next; } InlineGraphFrame;
 typedef struct {
@@ -85,6 +85,11 @@ static XrLirStatus inline_graph_storage(Inliner *c) {
     for (uint32_t f = 0; f < c->count; ++f) {
         InlineFunction *info = &c->info[f + 1];
         xr_lir_function_view(c->input, (XrLirFunction){c->input, f + 1}, &info->view);
+        for (uint32_t v = 1; v <= info->view.value_count; ++v) {
+            XrLirType type = XR_LIR_TYPE_INVALID;
+            xr_lir_value_type(c->input, (XrLirValue){c->input, f + 1, v}, &type);
+            info->string_owners |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL;
+        }
         info->first = c->edge_count;
         for (uint32_t b = 0; b < info->view.block_count; ++b) {
             XrLirBlockView block = inline_block_view(c, f + 1, b + 1);
@@ -165,7 +170,8 @@ static void inline_components(Inliner *c) {
     for (uint32_t f = 0; f < c->count; ++f) {
         InlineFunction *info = &c->info[f + 1];
         info->eligible = info->view.kind == XR_LIR_FUNCTION_DEFINITION && info->returns &&
-            !info->self && !info->cell_storage && c->info[info->component].component_size == 1 &&
+            !info->self && !info->cell_storage && !info->string_owners &&
+            c->info[info->component].component_size == 1 &&
             info->view.block_count <= 16 && info->view.value_count <= 128 &&
             info->instructions <= 256 && info->scratch <= 256;
     }
@@ -212,7 +218,8 @@ static XrLirStatus inline_plan(InlineBody *b) {
             XrLirInstructionView v = inline_view(b->owner, b->source, block + 1, n);
             if (v.op != XR_LIR_CALL) continue;
             const InlineFunction *callee = &b->owner->info[v.callee];
-            if (!callee->eligible) continue;
+            // Continuation blocks cannot introduce an unrepresented String transfer.
+            if (!callee->eligible || b->owner->info[b->source].string_owners) continue;
             if (callee->view.value_count < callee->view.parameter_count) return XR_LIR_VERIFY_ERROR;
             uint64_t blocks = (uint64_t)callee->view.block_count + 1;
             uint64_t values = callee->view.value_count - callee->view.parameter_count;

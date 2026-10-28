@@ -14,6 +14,7 @@
 #define XNATIVE_EXECUTION_H
 #include "xnative_locations.h"
 #include "os/os_native_output.h"
+#include "xnative_string.h"
 
 typedef enum XrtOutputOperation { XRT_OUTPUT_FLUSH, XRT_OUTPUT_WRITE } XrtOutputOperation;
 typedef struct XrtOutputFailure {
@@ -37,7 +38,8 @@ typedef struct XrtHostClockFailure {
 typedef enum XrtExecutionFailureKind {
     XRT_FAILURE_OUTPUT,
     XRT_FAILURE_ARITHMETIC_PANIC,
-    XRT_FAILURE_HOST_CLOCK
+    XRT_FAILURE_HOST_CLOCK,
+    XRT_FAILURE_VALUE
 } XrtExecutionFailureKind;
 
 typedef struct XrtExecutionFailure {
@@ -46,6 +48,7 @@ typedef struct XrtExecutionFailure {
         XrtOutputFailure output;
         XrtArithmeticPanic panic;
         XrtHostClockFailure clock;
+        struct { XrXirValueStatus status; uint32_t source_id; } value;
     } detail;
 } XrtExecutionFailure;
 
@@ -64,6 +67,8 @@ typedef enum XrtExecutionStatus {
 // restored on either return. No target crosses yield, thread handoff or FFI.
 XR_FUNC XrtExecutionStatus xrt_run_embedded(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context);
+XR_FUNC XrtExecutionStatus xrt_run_embedded_owned(const XrtLocationOwner *locations,
+    XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtStringRoot *strings);
 
 // I/O helpers have already restored their OS state before this transfer.
 XR_FUNC XR_NORET void xrt_end_execution(XrtIoResult failure,

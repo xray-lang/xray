@@ -51,6 +51,15 @@
     X(CELL_NEW, ABX)                                                                               \
     X(CELL_READ, AB)                                                                               \
     X(CELL_WRITE, AB)                                                                              \
+    X(STRING_LITERAL, ABX)                                                                         \
+    X(STRING_I64, AB)                                                                              \
+    X(STRING_CONCAT, ABC)                                                                          \
+    X(STRING_RETAIN, AB)                                                                           \
+    X(STRING_DROP, A)                                                                              \
+    X(STRING_PRINT, A)                                                                             \
+    X(STRING_TAKE, AB)                                                                             \
+    X(STRING_CELL_NEW, ABC)                                                                        \
+    X(STRING_CELL_DROP, A)                                                                         \
     X(RET, A)                                                                                      \
     X(RET0, NONE)
 
@@ -67,6 +76,10 @@ typedef struct {
     int64_t immediate;
 } XrRbcOperands;
 
+typedef enum XrRbcRegisterKind {
+    XR_RBC_BITS, XR_RBC_STRING, XR_RBC_STRING_CELL, XR_RBC_CALL_WINDOW
+} XrRbcRegisterKind;
+
 typedef struct {
     const uint32_t *code;
     size_t code_count;
@@ -81,6 +94,13 @@ typedef struct {
     // Cells belong to this activation. Handles are indices in its execution;
     // they may travel only to active callees, never outlive their owner.
     uint32_t cell_count;
+    // NULL/0 declares exactly scalar-bit registers/cells. Managed functions
+    // supply complete immutable tables; windows are typed at each real call.
+    const XrRbcRegisterKind *register_kinds;
+    size_t register_kind_count;
+    const XrRbcRegisterKind *cell_kinds;
+    size_t cell_kind_count;
+    XrRbcRegisterKind result_kind;
 } XrRbcFunction;
 
 // The native set is closed. Dispatch calls each typed function directly;
@@ -115,7 +135,8 @@ typedef enum {
     XR_RBC_OUT_OF_MEMORY,
     XR_RBC_ARITHMETIC_PANIC,
     XR_RBC_OUTPUT_FAILURE,
-    XR_RBC_HOST_CLOCK_FAILURE
+    XR_RBC_HOST_CLOCK_FAILURE,
+    XR_RBC_VALUE_FAILURE
 } XrRbcStatus;
 
 // Failure leaves the output untouched. Register 255 is reserved; every
@@ -159,6 +180,10 @@ XR_FUNC XrRbcStatus xr_rbc_outcome_status(const XrRbcOutcome *outcome);
 // Failure outcomes keep their owner independently of the executable. Retain
 // that owner explicitly before outcome_free to keep it longer.
 XR_FUNC bool xr_rbc_outcome_bits(const XrRbcOutcome *outcome, uint64_t *output);
+XR_FUNC bool xr_rbc_outcome_string(const XrRbcOutcome *outcome, const XrtString **borrowed);
+XR_FUNC bool xr_rbc_outcome_take_string(XrRbcOutcome *outcome, XrtString **output);
+XR_FUNC bool xr_rbc_outcome_value_failure(const XrRbcOutcome *outcome,
+    XrXirValueStatus *status, uint32_t *source_id, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
     XrtOutputFailure *facts, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_arithmetic_panic(const XrRbcOutcome *outcome,

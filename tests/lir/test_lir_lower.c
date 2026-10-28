@@ -178,7 +178,7 @@ static void unsupported(void) {
         "struct Pair{x:i64}\nfn answer()->i64{const p=Pair{x:42}\nreturn p.x}\nprint(answer())\n",
         false, "STRUCT_NEW");
     rejected("fn answer()->i64{const s=\"a\"+\"b\"\nreturn len(s)}\nprint(answer())\n", false,
-             "literal without one direct output");
+             "STRING_LEN");
     rejected("fn answer()->i64{var n=40\nconst f=fn()->i64{n=n+1\nreturn n}\nreturn "
              "f()}\nprint(answer())\n",
              false, "FUNCTION_REF");
@@ -534,7 +534,12 @@ static void module_cells_source(const char *directory) {
         false,"function parameter type");
     rejected("var n=7\nfn outer()->i64{const f=fn()->i64{return n}\nreturn f()}\nprint(outer())\n",
         false,"FUNCTION_REF");
-    rejected("var s=\"owned\"\nprint(7)\n",false,"module slots other than mutable i64 Cells");
+    fixture = source_fixture("var s=\"owned\"\nprint(7)\n");
+    request = (XrLirLowerRequest){fixture.closed,fixture.source.snapshot,false};
+    OK(xr_lir_lower_program_checked(&request,&out,NULL));
+    source_fixture_free(&fixture);
+    OK(xr_lir_verify(out.module,NULL));
+    xr_lir_lowered_free(&out);
     puts("actual mutable module Cells retain identity, ordered publication and scoped plain calls");
 }
 

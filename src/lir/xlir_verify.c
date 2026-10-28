@@ -19,7 +19,8 @@
 #include <string.h>
 
 static const char *const lir_type_names[] = {"invalid", "unit", "i1",  "i8",  "i16", "i32", "i64",
-                                             "u8",      "u16",  "u32", "u64", "f32", "f64", "ptr", "i64_cell"};
+                                             "u8", "u16", "u32", "u64", "f32", "f64", "ptr", "i64_cell",
+                                             "string", "string_cell"};
 static const char *const lir_op_names[] = {
     "invalid",
 #define XR_LIR_OP(name, text, arity) text,
@@ -128,11 +129,24 @@ static bool lir_scalar_instruction_types(const XrLirFunctionData *f,
         case XR_LIR_CONST:
             return lir_constant_valid(v->type, v->bits);
         case XR_LIR_CELL_NEW:
-            return v->type == XR_LIR_I64_CELL && a == XR_LIR_I64;
+            return (v->type == XR_LIR_I64_CELL && a == XR_LIR_I64) ||
+                (v->type == XR_LIR_STRING_CELL && a == XR_LIR_STRING);
         case XR_LIR_CELL_READ:
-            return v->type == XR_LIR_I64 && a == XR_LIR_I64_CELL;
+            return (v->type == XR_LIR_I64 && a == XR_LIR_I64_CELL) ||
+                (v->type == XR_LIR_STRING && a == XR_LIR_STRING_CELL);
         case XR_LIR_CELL_WRITE:
-            return v->type == XR_LIR_UNIT && a == XR_LIR_I64_CELL && b == XR_LIR_I64;
+            return v->type == XR_LIR_UNIT && ((a == XR_LIR_I64_CELL && b == XR_LIR_I64) ||
+                (a == XR_LIR_STRING_CELL && b == XR_LIR_STRING));
+        case XR_LIR_STRING_I64:
+            return v->type == XR_LIR_STRING && a == XR_LIR_I64;
+        case XR_LIR_STRING_CONCAT:
+            return v->type == XR_LIR_STRING && a == XR_LIR_STRING && b == XR_LIR_STRING;
+        case XR_LIR_STRING_RETAIN:
+            return v->type == XR_LIR_STRING && a == XR_LIR_STRING;
+        case XR_LIR_STRING_DROP: case XR_LIR_STRING_PRINT:
+            return v->type == XR_LIR_UNIT && a == XR_LIR_STRING;
+        case XR_LIR_STRING_CELL_DROP:
+            return v->type == XR_LIR_UNIT && a == XR_LIR_STRING_CELL;
         case XR_LIR_ADD:
         case XR_LIR_SUB:
         case XR_LIR_MUL:
@@ -228,7 +242,8 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
     if (comparison ? v->predicate < XR_LIR_EQ || v->predicate > XR_LIR_GE
                    : v->predicate != XR_LIR_PREDICATE_NONE)
         goto invalid;
-    if (v->op != XR_LIR_CONST && v->op != XR_LIR_LITERAL_ADDR && v->bits)
+    if (v->op != XR_LIR_CONST && v->op != XR_LIR_LITERAL_ADDR &&
+        v->op != XR_LIR_STRING_LITERAL && v->bits)
         goto invalid;
     if ((v->op != XR_LIR_CALL && v->callee) || (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))
         goto invalid;
@@ -253,6 +268,10 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         if (v->type != XR_LIR_PTR || !v->bits || v->bits > m->literal_count) goto invalid;
         return XR_LIR_OK;
     }
+    if (v->op == XR_LIR_STRING_LITERAL) {
+        if (v->type != XR_LIR_STRING || !v->bits || v->bits > m->literal_count) goto invalid;
+        return XR_LIR_OK;
+    }
     if (v->op == XR_LIR_CALL) {
         if (!v->callee || v->callee > m->function_count)
             goto invalid;
@@ -269,9 +288,9 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             const XrLirIntrinsic *entry = &m->intrinsics[i];
             if (entry->id != v->intrinsic)
                 continue;
-            bool cell = entry->result == XR_LIR_I64_CELL;
+            bool cell = entry->result >= XR_LIR_I64_CELL;
             for (uint32_t p = 0; p < entry->parameter_count; ++p)
-                cell |= entry->parameters[p] == XR_LIR_I64_CELL;
+                cell |= entry->parameters[p] >= XR_LIR_I64_CELL;
             if (cell || !entry->scalar_sync ||
                 !lir_signature_matches(f, v, entry->parameters, entry->parameter_count,
                                        entry->result))
@@ -514,7 +533,7 @@ static XrLirStatus lir_uses(const XrLirFunctionData *f, uint32_t function, const
 
 static bool lir_function_shape(const XrLirFunctionData *f) {
     if (!f->name || !f->name_length || !xr_lir_internal_type_valid(f->result, true) ||
-        f->result == XR_LIR_I64_CELL ||
+        f->result == XR_LIR_I64_CELL || f->result == XR_LIR_STRING_CELL ||
         f->value_count > f->value_capacity || (f->value_count && !f->values) ||
         (f->parameter_count && (!f->parameters || !f->parameter_types)))
         return false;
@@ -566,6 +585,43 @@ static XrLirStatus lir_literal_consumers(const XrLirFunctionData *f, uint32_t fu
     return XR_LIR_OK;
 }
 
+/* This initial owned subset has no managed PHI or loop-carried reference.
+ * Explicit typed releases, rather than last-use guesses, retire each owner. */
+static XrLirStatus lir_string_owners(const XrLirFunctionData *f, uint32_t function,
+    uint8_t *owned, XrLirDiagnostic *d) {
+    bool managed = false;
+    for (uint32_t i = 0; i < f->value_count; ++i)
+        managed |= f->values[i].type == XR_LIR_STRING || f->values[i].type == XR_LIR_STRING_CELL;
+    if (!managed) return XR_LIR_OK;
+    if (f->block_count != 1)
+        return xr_lir_internal_error(d, "managed String CFG transfer is not supported", function, 0, 0, NULL);
+    memset(owned, 0, f->value_count);
+    const XrLirBlockData *block = &f->blocks[0];
+    for (uint32_t i = 0; i < block->instruction_count; ++i) {
+        const XrLirInstructionView *v = &block->instructions[i].view;
+        for (uint32_t a = 0; a < v->operand_count; ++a) {
+            uint32_t id = v->operands[a];
+            const XrLirValueData *value = &f->values[id - 1];
+            if ((value->type == XR_LIR_STRING || value->type == XR_LIR_STRING_CELL) &&
+                !value->parameter && !owned[id - 1])
+                return xr_lir_internal_error(d, "String use follows release or precedes ownership", function, 1, i + 1, &v->source);
+        }
+        if (v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_STRING_CELL_DROP ||
+            (v->op == XR_LIR_RET && v->operand_count && f->result == XR_LIR_STRING)) {
+            uint32_t id = v->operands[0];
+            if (!owned[id - 1])
+                return xr_lir_internal_error(d, "String transfer requires an owned reference", function, 1, i + 1, &v->source);
+            owned[id - 1] = 0;
+        }
+        if (v->result && (v->type == XR_LIR_STRING || v->type == XR_LIR_STRING_CELL))
+            owned[v->result - 1] = 1;
+    }
+    for (uint32_t i = 0; i < f->value_count; ++i)
+        if (owned[i])
+            return xr_lir_internal_error(d, "String owner requires release or result transfer", function, 1, 0, NULL);
+    return XR_LIR_OK;
+}
+
 XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
     if (d)
         memset(d, 0, sizeof(*d));
@@ -592,6 +648,8 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         XrLirStatus status = lir_definitions(m, index, seen, d);
         if (status == XR_LIR_OK)
             status = lir_literal_consumers(f, index + 1, seen, d);
+        if (status == XR_LIR_OK)
+            status = lir_string_owners(f, index + 1, seen, d);
         xr_free(seen);
         if (status != XR_LIR_OK)
             return status;

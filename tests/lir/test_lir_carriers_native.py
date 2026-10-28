@@ -211,7 +211,7 @@ def _f64_cases(args, root, results):
                         objects = [work / 'gateway.obj', work / 'adapter.obj']
                         commands = [[args.compiler, *flags, '/c', path, '/Fo' + str(obj)]
                                     for path, obj in zip((gateway, host), objects)]
-                        link = [args.compiler, *flags, *objects, *([args.library] if output else []),
+                        link = [args.compiler, *flags, *objects, *(args.library if output else []),
                                 '/Fe:' + str(work / 'run.exe'), '/link', '/INCREMENTAL:NO']
                         executable = work / 'run.exe'
                     else:
@@ -222,7 +222,7 @@ def _f64_cases(args, root, results):
                         commands = [[args.compiler, *flags, '-c', path, '-o', obj]
                                     for path, obj in zip((gateway, host), objects)]
                         executable = work / 'run'
-                        link = [args.compiler, *flags, *objects, *([args.library] if output else []), '-lm', '-o', executable]
+                        link = [args.compiler, *flags, *objects, *(args.library if output else []), '-lm', '-o', executable]
                     if fp not in profiles:
                         profiles[fp] = _f64_profile(args.compiler, args.kind, flags, work)
                     profile = profiles[fp]
@@ -271,7 +271,7 @@ def _f64_cases(args, root, results):
                                             fpOnlyQualification=marker == _FP_ERROR)
                             record['guardRejections'].append(rejected)
                     if output:
-                        record['runtime'] = {'library': str(args.library), 'librarySHA256': digest(args.library),
+                        record['runtime'] = {'libraries': [{'path': str(p), 'sha256': digest(p)} for p in args.library],
                                              'header': str(args.include / 'xray_native_runtime.h'),
                                              'headerSHA256': digest(args.include / 'xray_native_runtime.h'),
                                              'msvcRuntime': args.msvc_runtime}
@@ -358,7 +358,7 @@ def _fneg_commands(args, work, output, fp):
         compiles = [[args.compiler, *flags, '/c', source, '/Fo' + str(obj)]
                     for source, obj in zip(sources, objects)]
         executable = work / 'run.exe'
-        link = [args.compiler, *flags, *objects, *([args.library] if output else []),
+        link = [args.compiler, *flags, *objects, *(args.library if output else []),
                 '/Fe:' + str(executable), '/link', '/INCREMENTAL:NO']
     else:
         flags = ['-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', '-fno-lto']
@@ -367,7 +367,7 @@ def _fneg_commands(args, work, output, fp):
         objects = [work / 'gateway.o', work / 'adapter.o']
         compiles = [[args.compiler, *flags, '-c', source, '-o', obj] for source, obj in zip(sources, objects)]
         executable = work / 'run'
-        link = [args.compiler, *flags, *objects, *([args.library] if output else []), '-lm', '-o', executable]
+        link = [args.compiler, *flags, *objects, *(args.library if output else []), '-lm', '-o', executable]
     return flags, objects, compiles, link, executable
 
 
@@ -452,7 +452,7 @@ def _fneg_cases(args, root, results):
                     if base == 'fneg-zero' and not output and mode == 'before' and fp == 'default':
                         record['guardRejections'] = _fneg_controls(args, flags, generated, work)
                     if output:
-                        record['runtime'] = {'library': str(args.library), 'librarySHA256': digest(args.library),
+                        record['runtime'] = {'libraries': [{'path': str(p), 'sha256': digest(p)} for p in args.library],
                             'header': str(args.include / 'xray_native_runtime.h'),
                             'headerSHA256': digest(args.include / 'xray_native_runtime.h'), 'msvcRuntime': args.msvc_runtime}
                     results.append(record)
@@ -466,7 +466,7 @@ def main():
     parser.add_argument('--kind', choices=['msvc', 'gnu'], required=True)
     parser.add_argument('--msvc-runtime', default='MultiThreaded')
     parser.add_argument('--include', type=Path, required=True)
-    parser.add_argument('--library', type=Path, required=True)
+    parser.add_argument('--library', type=Path, nargs='+', required=True)
     parser.add_argument('--work', type=Path, required=True)
     parser.add_argument('--asan', action='store_true')
     args = parser.parse_args()
@@ -538,7 +538,7 @@ def main():
                             for source, obj in zip((gateway, host), objects)]
                 link = [args.compiler, *flags, *objects]
                 if output:
-                    link += [args.library]
+                    link += args.library
                 link += ['/Fe:' + str(executable), '/link', '/INCREMENTAL:NO']
             else:
                 flags = ['-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2', '-fno-lto']
@@ -550,7 +550,7 @@ def main():
                             for source, obj in zip((gateway, host), objects)]
                 link = [args.compiler, *flags, *objects]
                 if output:
-                    link += [args.library, '-pthread']
+                    link += [*args.library, '-pthread']
                 link += ['-o', executable]
             compiled = [run(command, work) for command in compiles]
             linked = run(link, work)
@@ -565,7 +565,7 @@ def main():
             assert native['stdoutHex'] == expected.hex() and native['stderrHex'] == ''
             runtime = None
             if output:
-                runtime = {'library': str(args.library), 'librarySHA256': digest(args.library),
+                runtime = {'libraries': [{'path': str(p), 'sha256': digest(p)} for p in args.library],
                            'header': str(args.include / 'xray_native_runtime.h'),
                            'headerSHA256': digest(args.include / 'xray_native_runtime.h'), 'msvcRuntime': args.msvc_runtime}
             results.append({'case': case, 'mode': mode, 'expectedHex': expected.hex(), 'producer': producer,

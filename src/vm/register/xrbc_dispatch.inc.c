@@ -21,7 +21,10 @@
         c = instruction >> 24; \
     } while (0)
 
-#define XR_RBC_REG(index) stack->slots[base + (index)]
+#define XR_RBC_SLOT(index) stack->slots[base + (index)]
+#define XR_RBC_REG(index) XR_RBC_SLOT(index).bits
+#define XR_RBC_STRING(index) XR_RBC_SLOT(index).string
+#define XR_RBC_SOURCE() (function->source_ids ? function->source_ids[pc - 1] : 0)
 #define XR_RBC_BINARY(expression) (XR_RBC_REG(a) = (expression))
 
 #if defined(__clang__) || defined(__GNUC__)
@@ -52,7 +55,7 @@ xr_rbc_next : XR_RBC_FETCH();
 switch (op) {
 #endif
 XR_RBC_CASE(MOV) {
-    XR_RBC_REG(a) = XR_RBC_REG(b);
+    XR_RBC_SLOT(a) = XR_RBC_SLOT(b);
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(LOADK) {
@@ -71,21 +74,76 @@ XR_RBC_CASE(CELL_NEW) {
     XrRbcFrame *frame = &stack->frames[stack->depth - 1];
     if (ordinal > frame->initialized_cells) return XR_RBC_INVALID;
     size_t index = frame->cell_base + ordinal;
-    stack->cells[index] = XR_RBC_REG(a);
+    stack->cells[index].bits = XR_RBC_REG(a);
     if (ordinal == frame->initialized_cells) ++frame->initialized_cells;
     XR_RBC_REG(a) = (uint64_t)index + 1;
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(CELL_READ) {
-    uint64_t *cell = xr_rbc_cell(stack, XR_RBC_REG(b));
+    bool string = function->register_kinds && function->register_kinds[b] == XR_RBC_STRING_CELL;
+    XrRbcRegister *cell = xr_rbc_cell(stack, module, XR_RBC_REG(b), string ? XR_RBC_STRING : XR_RBC_BITS);
     if (!cell) return XR_RBC_INVALID;
-    XR_RBC_REG(a) = *cell;
+    if (string) XR_RBC_STRING(a) = xrt_string_retain(cell->string, XR_RBC_SOURCE());
+    else XR_RBC_REG(a) = cell->bits;
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(CELL_WRITE) {
-    uint64_t *cell = xr_rbc_cell(stack, XR_RBC_REG(a));
+    bool string = function->register_kinds && function->register_kinds[a] == XR_RBC_STRING_CELL;
+    XrRbcRegister *cell = xr_rbc_cell(stack, module, XR_RBC_REG(a), string ? XR_RBC_STRING : XR_RBC_BITS);
     if (!cell) return XR_RBC_INVALID;
-    *cell = XR_RBC_REG(b);
+    if (string) {
+        XrtString *owned = xrt_string_retain(XR_RBC_STRING(b), XR_RBC_SOURCE());
+        xrt_string_drop(&cell->string);
+        cell->string = owned;
+    } else cell->bits = XR_RBC_REG(b);
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(STRING_LITERAL) {
+    const XrRbcLiteral *literal = &module->literals[instruction >> 16];
+    XR_RBC_STRING(a) = xrt_string_new(literal->bytes, literal->length, XR_RBC_SOURCE());
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(STRING_I64) {
+    XR_RBC_STRING(a) = xrt_string_i64(xr_rbc_signed(XR_RBC_REG(b)), XR_RBC_SOURCE());
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(STRING_RETAIN) {
+    XR_RBC_STRING(a) = xrt_string_retain(XR_RBC_STRING(b), XR_RBC_SOURCE());
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(STRING_CONCAT) {
+    XR_RBC_STRING(a) = xrt_string_concat(XR_RBC_STRING(b), XR_RBC_STRING(c), XR_RBC_SOURCE());
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(STRING_DROP) {
+    xrt_string_drop(&XR_RBC_STRING(a));
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(STRING_PRINT) {
+    size_t length;
+    const char *bytes = xrt_string_bytes(XR_RBC_STRING(a), &length);
+    xrt_print_string(bytes, length, XR_RBC_SOURCE());
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(STRING_TAKE) {
+    XR_RBC_STRING(a) = XR_RBC_STRING(b);
+    XR_RBC_STRING(b) = NULL;
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(STRING_CELL_NEW) {
+    XrRbcFrame *frame = &stack->frames[stack->depth - 1];
+    if (c != frame->initialized_cells) return XR_RBC_INVALID;
+    size_t index = frame->cell_base + c;
+    stack->cells[index].string = xrt_string_retain(XR_RBC_STRING(b), XR_RBC_SOURCE());
+    ++frame->initialized_cells;
+    XR_RBC_REG(a) = (uint64_t)index + 1;
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(STRING_CELL_DROP) {
+    XrRbcRegister *cell = xr_rbc_cell(stack, module, XR_RBC_REG(a), XR_RBC_STRING);
+    if (!cell) return XR_RBC_INVALID;
+    xrt_string_drop(&cell->string);
+    XR_RBC_REG(a) = 0;
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(ADD) {
@@ -196,9 +254,10 @@ XR_RBC_CASE(PRINT_LITERAL) {
 }
 XR_RBC_CASE(RET)
 XR_RBC_CASE(RET0) {
-    uint64_t value = 0;
+    XrRbcRegister value = {0};
     if (op == XR_RBC_RET) {
-        value = XR_RBC_REG(a);
+        value = XR_RBC_SLOT(a);
+        if (function->result_kind == XR_RBC_STRING) XR_RBC_STRING(a) = NULL;
     }
     XrRbcFrame retired = stack->frames[--stack->depth];
     uint32_t destination = retired.destination;
@@ -217,6 +276,9 @@ return XR_RBC_INVALID;
 
 #undef XR_RBC_FETCH
 #undef XR_RBC_REG
+#undef XR_RBC_SLOT
+#undef XR_RBC_STRING
+#undef XR_RBC_SOURCE
 #undef XR_RBC_BINARY
 #undef XR_RBC_CASE
 #undef XR_RBC_NEXT

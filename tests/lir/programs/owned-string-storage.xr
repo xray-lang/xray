@@ -1,0 +1,11 @@
+var text = "é\0"
+fn read() -> string {
+    return text
+}
+fn replace(n: i64) {
+    text = "v${n}"
+}
+print(read())
+replace(12)
+print(read())
+print("")

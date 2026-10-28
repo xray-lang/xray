@@ -83,14 +83,22 @@ set_tests_properties(test_lir_c_native PROPERTIES LABELS "unit;lir;native" TIMEO
 add_test(NAME test_lir_c_runtime COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_c_runtime.py"
     --driver $<TARGET_FILE:lir_c_run> --fixture-driver $<TARGET_FILE:test_lir_c>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
-    --include "${PROJECT_SOURCE_DIR}/include" --library $<TARGET_FILE:xray_native_runtime>
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --work "${CMAKE_CURRENT_BINARY_DIR}/runtime" ${lir_c_native_options})
 set_tests_properties(test_lir_c_runtime PROPERTIES LABELS "unit;lir;native" TIMEOUT 120)
+add_test(NAME test_lir_owned_string COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_owned_string.py"
+    --driver $<TARGET_FILE:lir_pipeline_eval> --source-driver $<TARGET_FILE:lir_c_run>
+    --result-driver $<TARGET_FILE:test_lir_bytecode_source>
+    --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/owned-string" ${lir_c_native_options})
+set_tests_properties(test_lir_owned_string PROPERTIES LABELS "unit;lir;native;ownership" TIMEOUT 180)
 add_test(NAME test_lir_pipeline_eval COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_pipeline_eval.py"
     --driver $<TARGET_FILE:lir_pipeline_eval>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
-    --include "${PROJECT_SOURCE_DIR}/include" --library $<TARGET_FILE:xray_native_runtime>
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --source-root "${PROJECT_SOURCE_DIR}" --helper "${CMAKE_CURRENT_SOURCE_DIR}/programs/source-eval-helper.xr"
     --work "${CMAKE_CURRENT_BINARY_DIR}/pipeline" ${lir_c_native_options})
@@ -98,28 +106,28 @@ set_tests_properties(test_lir_pipeline_eval PROPERTIES LABELS "unit;lir;native;r
 add_test(NAME test_lir_rebuild_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_rebuild_native.py"
     --driver $<TARGET_FILE:test_lir_rebuild>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
-    --include "${PROJECT_SOURCE_DIR}/include" --library $<TARGET_FILE:xray_native_runtime>
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --work "${CMAKE_CURRENT_BINARY_DIR}/rebuild" ${lir_c_native_options})
 set_tests_properties(test_lir_rebuild_native PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)
 add_test(NAME test_lir_sccp_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_sccp_native.py"
     --driver $<TARGET_FILE:test_lir_sccp>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
-    --include "${PROJECT_SOURCE_DIR}/include" --library $<TARGET_FILE:xray_native_runtime>
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --work "${CMAKE_CURRENT_BINARY_DIR}/sccp" ${lir_c_native_options})
 set_tests_properties(test_lir_sccp_native PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)
 add_test(NAME test_lir_inline_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_inline_native.py"
     --driver $<TARGET_FILE:test_lir_inline>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
-    --include "${PROJECT_SOURCE_DIR}/include" --library $<TARGET_FILE:xray_native_runtime>
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --work "${CMAKE_CURRENT_BINARY_DIR}/inline" ${lir_c_native_options})
 set_tests_properties(test_lir_inline_native PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)
 add_test(NAME test_lir_carriers_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_carriers_native.py"
     --driver $<TARGET_FILE:test_lir_carriers>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
-    --include "${PROJECT_SOURCE_DIR}/include" --library $<TARGET_FILE:xray_native_runtime>
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --work "${CMAKE_CURRENT_BINARY_DIR}/carriers" ${lir_c_native_options})
 set_tests_properties(test_lir_carriers_native PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)

@@ -119,13 +119,13 @@ def compile_command(args, source, executable):
             command += ['/fsanitize=address', '/Zi']
             if 'clang' in args.compiler.name.lower():
                 command += ['/clang:-fsanitize=undefined']
-        command += ['/link', args.library]
+        command += ['/link', *args.library]
         if args.asan:
             command += ['/INCREMENTAL:NO']
     else:
         command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic',
                    '-O2', '-fno-lto', '-I' + str(args.include),
-                   '-I' + str(args.source_root / 'src'), source, args.library, '-pthread', '-o', executable]
+                   '-I' + str(args.source_root / 'src'), source, *args.library, '-pthread', '-o', executable]
         if args.asan:
             command += ['-fsanitize=address,undefined', '-g']
     return command
@@ -206,8 +206,9 @@ def check_offsets(output, runs):
 
 def main():
     parser = argparse.ArgumentParser()
-    for name in ('driver', 'compiler', 'include', 'library', 'source-root', 'helper', 'work'):
+    for name in ('driver', 'compiler', 'include', 'source-root', 'helper', 'work'):
         parser.add_argument('--' + name, type=Path, required=True)
+    parser.add_argument('--library', type=Path, nargs='+', required=True)
     parser.add_argument('--kind', choices=('msvc', 'gnu'), required=True)
     parser.add_argument('--msvc-runtime', default='MultiThreaded')
     parser.add_argument('--asan', action='store_true')
@@ -275,8 +276,7 @@ def main():
     compiler = Path(shutil.which(str(args.compiler)) or args.compiler).resolve()
     assert compiler.is_file()
     identity = {'compiler': str(compiler), 'compilerSHA256': digest(compiler),
-                'driverSHA256': digest(args.driver), 'library': str(args.library),
-                'librarySHA256': digest(args.library),
+                'driverSHA256': digest(args.driver), 'libraries': [{'path': str(p), 'sha256': digest(p)} for p in args.library],
                 'headerSHA256': digest(args.include / 'xray_native_runtime.h'),
                 'asan': args.asan, 'msvcRuntime': args.msvc_runtime,
                 'sourceInputs': sources, 'formal_performance': False}

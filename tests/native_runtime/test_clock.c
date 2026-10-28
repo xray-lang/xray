@@ -117,6 +117,11 @@ static void nested_root(void *opaque) {
     CHECK(xrt_clock_monotonic_nanos(2) == 2000000);
     CHECK(xrt_locations_count(outer) == 2);
 }
+static bool source_time_path(const XrtSourceLocation *point) {
+    static const char suffix[] = "time/time.xr";
+    return point && point->path_length >= sizeof(suffix)-1 &&
+        !memcmp(point->path + point->path_length-(sizeof(suffix)-1),suffix,sizeof(suffix)-1);
+}
 static void source_failure(bool offset) {
     SourceFixture source = source_fixture(offset ?
         "import time\nprint(time.localOffsetAt(9223372036854775807))\nprint(99)\n" :
@@ -139,7 +144,7 @@ static void source_failure(bool offset) {
     const XrtSourceLocation *point = xrt_locations_get(owner, facts.source_id);
     CHECK(facts.kind == (offset ? 4u : 3u) &&
         facts.reason == (offset ? XRT_CLOCK_OUT_OF_RANGE : XRT_CLOCK_READ_FAILED) && point &&
-        point->line == (offset ? 45u : 40u) && point->column == 5 && strstr(point->path, "time"));
+        point->line == (offset ? 45u : 40u) && point->column == 5 && source_time_path(point));
     if (offset) CHECK(last_seconds == INT64_MAX);
     CHECK(xrt_locations_retain((XrtLocationOwner *)owner));
     uint64_t bits = UINT64_MAX;
@@ -174,7 +179,7 @@ static void emit_offset_range(const char *path, unsigned mode) {
     CHECK(xr_rbc_outcome_host_clock_failure(outcome,&facts,&locations) && facts.kind==4 &&
         facts.reason==XRT_CLOCK_OUT_OF_RANGE && last_seconds==INT64_MAX);
     const XrtSourceLocation *point=xrt_locations_get(locations,facts.source_id);
-    CHECK(point && point->line==45 && point->column==5 && strstr(point->path,"time"));
+    CHECK(point && point->line==45 && point->column==5 && source_time_path(point));
     xr_rbc_outcome_free(&outcome);
     FILE *file=NULL;
 #if defined(XR_OS_WINDOWS)

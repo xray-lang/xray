@@ -120,7 +120,7 @@ static void c_format(LirC *c, const char *format, ...) {
 static const char *c_type(XrLirType type) {
     static const char *const types[] = {NULL, "void", "_Bool", "int8_t", "int16_t",
         "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
-        NULL, "double", "void *", "int64_t *"};
+        NULL, "double", "void *", "int64_t *", "XrtString *", "XrtString **"};
     return (unsigned) type < sizeof(types) / sizeof(types[0]) ? types[type] : NULL;
 }
 static unsigned c_width(XrLirType type) {
@@ -160,6 +160,7 @@ static bool c_scalar(LirC *c, XrLirType type) {
     if (!c_type(type))
         c_error(c, XR_LIR_C_UNSUPPORTED, "C backend requires integer, bool, unit, f64 transport or data pointer types");
     c->f64 |= type == XR_LIR_F64;
+    c->runtime |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL;
     return c->status == XR_LIR_C_OK;
 }
 static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
@@ -169,6 +170,14 @@ static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
     XrLirFunctionView view;
     xr_lir_function_view(c->request->module, callee, &view);
     return view.kind == XR_LIR_FUNCTION_EXTERNAL;
+}
+static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
+    if (v->op == XR_LIR_STRING_LITERAL || v->op == XR_LIR_STRING_I64 ||
+        v->op == XR_LIR_STRING_CONCAT || v->op == XR_LIR_STRING_RETAIN ||
+        v->op == XR_LIR_STRING_PRINT) return true;
+    return (v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_STRING_CELL) ||
+        (v->op == XR_LIR_CELL_READ && v->type == XR_LIR_STRING) ||
+        (v->op == XR_LIR_CELL_WRITE && c_value_type(c, v->operands[0]) == XR_LIR_STRING_CELL);
 }
 static bool c_located(const XrLirSource *source) {
     return source->path && source->path_length && source->line && source->column;
@@ -230,10 +239,20 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     c_scalar(c, v->type);
+    if (c_string_point(c, v)) {
+        c->runtime = true;
+        if (c_located(&v->source)) {
+            if (c->location_count == UINT32_MAX)
+                c_error(c, XR_LIR_C_UNSUPPORTED, "source map cannot represent another nonzero ID");
+            else ++c->location_count;
+        }
+    }
     switch (v->op) {
         case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE:
+        case XR_LIR_STRING_I64: case XR_LIR_STRING_CONCAT: case XR_LIR_STRING_RETAIN:
+        case XR_LIR_STRING_DROP: case XR_LIR_STRING_CELL_DROP: case XR_LIR_STRING_PRINT:
             break;
-        case XR_LIR_LITERAL_ADDR:
+        case XR_LIR_LITERAL_ADDR: case XR_LIR_STRING_LITERAL:
             c->used_literals[v->bits - 1] = 1;
             break;
         case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
@@ -355,7 +374,7 @@ static void c_locations(LirC *c) {
             for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
-                if (!c_runtime_call(c, &v) || !c_located(&v.source))
+                if ((!c_runtime_call(c, &v) && !c_string_point(c, &v)) || !c_located(&v.source))
                     continue;
                 ++id;
                 c_text(c, "    { ");
@@ -489,18 +508,67 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     static const char *const predicates[] = {NULL, "==", "!=", "<", "<=", ">", ">="};
+    uint32_t string_source = c_string_point(c, v) && c_located(&v->source) ? ++c->location_cursor : 0;
     switch (v->op) {
+        case XR_LIR_STRING_LITERAL: {
+            XrLirLiteral literal = {c->request->module, (uint32_t)v->bits};
+            const uint8_t *bytes = NULL;
+            size_t length = 0;
+            xr_lir_literal_view(c->request->module, literal, &bytes, &length);
+            c_format(c, "    v%" PRIu32 " = xrt_string_new((const char *)xrl_literal%" PRIu64 ", %zu, UINT32_C(%" PRIu32 "));\n",
+                v->result, v->bits, length, string_source);
+            break;
+        }
+        case XR_LIR_STRING_I64: case XR_LIR_STRING_RETAIN: case XR_LIR_STRING_CONCAT:
+            c_format(c, "    v%" PRIu32 " = %s(", v->result,
+                v->op == XR_LIR_STRING_I64 ? "xrt_string_i64" :
+                v->op == XR_LIR_STRING_RETAIN ? "xrt_string_retain" : "xrt_string_concat");
+            c_value(c, v->operands[0]);
+            if (v->operand_count == 2) { c_text(c, ", "); c_value(c, v->operands[1]); }
+            c_format(c, ", UINT32_C(%" PRIu32 "));\n", string_source);
+            break;
+        case XR_LIR_STRING_DROP:
+            c_text(c, "    xrt_string_drop(&"); c_value(c, v->operands[0]); c_text(c, ");\n");
+            break;
+        case XR_LIR_STRING_CELL_DROP:
+            c_text(c, "    xrt_string_drop("); c_value(c, v->operands[0]); c_text(c, ");\n");
+            break;
+        case XR_LIR_STRING_PRINT:
+            c_text(c, "    { size_t length; const char *bytes = xrt_string_bytes(");
+            c_value(c, v->operands[0]);
+            c_format(c, ", &length); xrt_print_string(bytes, length, UINT32_C(%" PRIu32 ")); }\n", string_source);
+            break;
         case XR_LIR_CELL_NEW:
+            if (v->type == XR_LIR_STRING_CELL) {
+                c_format(c, "    XrtString *xrl_cell%" PRIu32 " = xrt_string_retain(", v->result);
+                c_value(c, v->operands[0]);
+                c_format(c, ", UINT32_C(%" PRIu32 "));\n    v%" PRIu32 " = &xrl_cell%" PRIu32 ";\n",
+                    string_source, v->result, v->result);
+                break;
+            }
             c_format(c, "    int64_t xrl_cell%" PRIu32 " = ", v->result);
             c_value(c, v->operands[0]);
             c_format(c, ";\n    v%" PRIu32 " = &xrl_cell%" PRIu32 ";\n", v->result, v->result);
             break;
         case XR_LIR_CELL_READ:
+            if (v->type == XR_LIR_STRING) {
+                c_format(c, "    v%" PRIu32 " = xrt_string_retain(*", v->result);
+                c_value(c, v->operands[0]);
+                c_format(c, ", UINT32_C(%" PRIu32 "));\n", string_source);
+                break;
+            }
             c_format(c, "    v%" PRIu32 " = *", v->result);
             c_value(c, v->operands[0]);
             c_text(c, ";\n");
             break;
         case XR_LIR_CELL_WRITE:
+            if (c_value_type(c, v->operands[0]) == XR_LIR_STRING_CELL) {
+                c_text(c, "    { XrtString *owned = xrt_string_retain("); c_value(c, v->operands[1]);
+                c_format(c, ", UINT32_C(%" PRIu32 ")); xrt_string_drop(", string_source);
+                c_value(c, v->operands[0]); c_text(c, "); *"); c_value(c, v->operands[0]);
+                c_text(c, " = owned; }\n");
+                break;
+            }
             c_text(c, "    *"); c_value(c, v->operands[0]);
             c_text(c, " = "); c_value(c, v->operands[1]); c_text(c, ";\n");
             break;
@@ -608,12 +676,18 @@ static void c_standalone_root(LirC *c, XrLirType result) {
     c->block = c->instruction = 0;
     c->source = (XrLirSource) {0};
     c_text(c, "static void xrl_invoke(void *context) {\n");
+    if (result == XR_LIR_STRING) {
+        c_text(c, "    XrtString *owned = ");
+        c_function_name(c, c->request->entry.id);
+        c_text(c, "();\n    *(XrtString **)context = xrt_string_root_take(owned);\n}\n\n");
+    } else {
     if (result == XR_LIR_UNIT)
         c_text(c, "    (void)context;\n    ");
     else
         c_format(c, "    *(%s *)context = ", type);
     c_function_name(c, c->request->entry.id);
     c_text(c, "();\n}\n\n");
+    }
     c_format(c, "%s xray_lir_entry(void) {\n", type);
     if (result == XR_LIR_UNIT) {
         c_text(c, "    xrt_run_standalone(&xrt_standalone_source_map, xrl_invoke, NULL);\n");
@@ -661,6 +735,8 @@ static void c_emit(LirC *c, XrLirType root_result) {
     c_preamble(c);
     if (c->runtime)
         c_text(c, "#include \"xray_native_runtime.h\"\n\n");
+    if (root_result == XR_LIR_STRING)
+        c_text(c, "extern XrtString *xrt_string_root_take(XrtString *string);\n\n");
     if (c->fneg)
         c_text(c, "#if defined(_MSC_VER) && defined(_M_X64) && !defined(_M_ARM64EC) && "
             "!defined(_M_FP_FAST) && !defined(__FAST_MATH__) && "

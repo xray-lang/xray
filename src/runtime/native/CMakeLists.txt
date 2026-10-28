@@ -5,7 +5,8 @@ if(WIN32)
     set(native_output_platform "${PROJECT_SOURCE_DIR}/src/os/native_output/native_output_win.c")
 endif()
 add_library(xray_native_runtime STATIC xnative_output.c xnative_locations.c
-    xnative_execution.c "${native_output_platform}" "${native_clock_platform}")
+    xnative_execution.c xnative_string.c "${native_output_platform}" "${native_clock_platform}")
+target_link_libraries(xray_native_runtime PUBLIC xray_xir_scalar)
 target_include_directories(xray_native_runtime PUBLIC "${PROJECT_SOURCE_DIR}/include"
     PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_compile_features(xray_native_runtime PUBLIC c_std_11)
@@ -23,3 +24,9 @@ if(NOT WIN32)
     target_link_libraries(xray_native_runtime PRIVATE Threads::Threads)
     target_compile_definitions(xray_native_runtime PRIVATE _POSIX_C_SOURCE=200809L)
 endif()
+
+# Direct generated-C clients consume the same canonical archive closure.
+set(XRAY_NATIVE_RUNTIME_LINK_INPUTS
+    $<TARGET_FILE:xray_native_runtime> $<TARGET_FILE:xray_xir_scalar>
+    $<TARGET_FILE:xray_xir_admission> $<TARGET_FILE:xray_xir_declarations>
+    $<TARGET_FILE:xray_compile_resources> PARENT_SCOPE)

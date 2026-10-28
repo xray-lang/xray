@@ -1,0 +1,6 @@
+fn join(s: string, n: i64) -> string {
+    return "${s}${n}"
+}
+var name = "Xray"
+var text = join(name, 1)
+print(text)
