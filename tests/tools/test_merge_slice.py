@@ -185,7 +185,7 @@ class QueueTests(unittest.TestCase):
         self.assertEqual((folder / "l1.log").read_text().count('$ ["ctest"'), 1)
 
     def test_metadata_failure_never_advances_main(self):
-        branch = self.branch("a/meta-fail", {"src/lir/change.c": "/* fixture */",
+        branch = self.branch("a/meta-fail", {"src/vm/register/change.c": "/* fixture */",
                                              "metadata-fail": "yes"})
         log = self.finish(self.start(branch), 1)
         self.assertEqual(log["gates"]["L1"], "PASS")

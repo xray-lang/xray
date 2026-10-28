@@ -155,7 +155,7 @@ def integrate(args, review: dict, log: dict, logs: Path) -> None:
             clean(integration)
         log["identity"] = xray_l1.identity(plan, integration, args.build, candidate, logs, environment)
         groups = {"l1": plan["tests"]}
-        if any(re.match(r"src/(ir|aot|analysis|lir|hir|xir|plan|program|module)/", p) for p in changed):
+        if any(re.match(r"src/(ir|aot|analysis|lir|hir|xir|plan|program|module|vm/register)/", p) for p in changed):
             log["gates"]["meta_ownership_inventory"] = "FAIL"
             groups["metadata"] = ["meta_ownership_inventory"]
         results = xray_l1.test_groups(groups, args.build, logs, environment)
