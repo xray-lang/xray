@@ -7,6 +7,7 @@
  * xsource_ast_api.inc.c - Exact parser ownership at the public AST boundary
  */
 #include <limits.h>
+#include "../frontend/xsource_input_control.h"
 
 typedef struct ApiParseDiagnostic {
     XrXirSourceDiagnostic immediate;
@@ -38,25 +39,27 @@ XRAY_API void xray_source_ast_free(XrSourceAst *ast) {
 static XrSourceStatus api_parse_owned(XrSourceCompiler *compiler,const XrSourceText *text,
     XrSourceAst *ast,XrSourceCompileDiagnostic *diagnostic,bool interactive) {
     XrCompileState *state=xr_source_compiler_state(compiler);
+    XrCompileRequestControl *control=xr_compile_session_request(xr_source_compiler_session(compiler));
     ast->source_length=text->length;
-    XrSourceStatus status=api_resource(xr_compile_state_strndup(state,text->bytes,text->length,&ast->source));
+    XrSourceStatus status=api_resource(xr_compile_state_alloc(state,text->length+1,(void **)&ast->source));
+    if(status==XR_SOURCE_OK) {
+        ast->source[text->length]=0;
+        status=api_resource(xr_source_input_copy(state,control,ast->source,text->bytes,text->length,XR_SOURCE_INPUT_CHUNK_BYTES));
+    }
     if(status==XR_SOURCE_OK && text->absolute_path)
         status=api_resource(xr_compile_state_strdup(state,text->absolute_path,&ast->path));
     if(status==XR_SOURCE_OK && text->namespace_id)
         status=api_resource(xr_compile_state_strdup(state,text->namespace_id,&ast->namespace_id));
-    size_t line=1,line_start=0;
-    for(size_t i=0;status==XR_SOURCE_OK && i<text->length;++i) {
-        if(!ast->source[i]) {
-            if(line>INT_MAX || i-line_start>=INT_MAX)return XR_SOURCE_OVERFLOW;
-            XrXirSourceDiagnostic immediate={.status=XR_XIR_BAD_STRUCTURE,
-                .line=(int)line,.column=(int)(i-line_start)+1};
-            (void)snprintf(immediate.message,sizeof(immediate.message),"source text contains an embedded NUL");
-            api_parse_record(compiler,diagnostic,ast,&immediate,XR_XIR_SOURCE_DIAGNOSTIC_INPUT);
-            return XR_SOURCE_INVALID;
-        }
-        if(ast->source[i]=='\n'){++line;line_start=i+1;}
-    }
+    XrCompileInputNul nul={0};
+    if(status==XR_SOURCE_OK)status=api_resource(xr_source_input_nul(state,control,ast->source,
+        text->length,XR_SOURCE_INPUT_CHUNK_BYTES,&nul));
     if(status!=XR_SOURCE_OK)return status;
+    if(nul.found) {
+        XrXirSourceDiagnostic immediate={.status=XR_XIR_BAD_STRUCTURE,.line=nul.line,.column=nul.column};
+        (void)snprintf(immediate.message,sizeof(immediate.message),"source text contains an embedded NUL");
+        api_parse_record(compiler,diagnostic,ast,&immediate,XR_XIR_SOURCE_DIAGNOSTIC_INPUT);
+        return XR_SOURCE_INVALID;
+    }
     ApiParseDiagnostic capture={0};
     XrParseDiagnostics options={api_parse_error,&capture,1};
     XrParseStatus parsed=interactive ? xr_compile_parse_repl_with_trivia(xr_source_compiler_session(compiler),

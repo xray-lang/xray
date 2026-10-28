@@ -14,6 +14,7 @@
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xparse.h"
 #include "../toolchain/xcompiler_session.h"
+#include "../frontend/xsource_input_control.h"
 #include "../toolchain/xcompiler_arena_backing.h"
 #include "../os/os_file_read.h"
 #include <limits.h>
@@ -276,6 +277,23 @@ static XrModuleStatus read_status(XrFileReadStatus status) {
     default: return XR_MODULE_INVALID;
     }
 }
+static char *graph_source_copy(ModuleWork *work,XrModuleGraph *graph,const char *text,size_t *length) {
+    if(work->status!=XR_MODULE_OK)return NULL;
+    XrCompileState *state=xr_compile_session_compile_state(graph->compiler_session);
+    XrCompileRequestControl *control=xr_compile_session_request(graph->compiler_session);
+    size_t size=0;
+    if(!module_status(work,xr_module_status_from_resource(xr_source_input_length(
+        state,control,text,XR_SOURCE_INPUT_CHUNK_BYTES,&size))))return NULL;
+    char *copy=module_alloc(work,size+1);
+    if(copy) {
+        copy[size]=0;
+        module_status(work,xr_module_status_from_resource(xr_source_input_copy(
+            state,control,copy,text,size,XR_SOURCE_INPUT_CHUNK_BYTES)));
+        if(work->status!=XR_MODULE_OK){xr_compile_resources_free(copy);return NULL;}
+        *length=size;
+    }
+    return copy;
+}
 static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSourceRoot *root) {
     int entry = -1; module_status(work,xr_compile_module_graph_find(graph,root->canonical,&entry));
     if (entry >= 0 && work->status == XR_MODULE_OK) {
@@ -312,10 +330,10 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
         }
         if (index == entry && root->ast) {
             if(root->source) {
-                char *owned=module_dup(work,root->source);
+                size_t length=0;char *owned=graph_source_copy(work,graph,root->source,&length);
                 if(work->status!=XR_MODULE_OK)break;
                 xr_compile_resources_free(spec->source_text);spec->source_text=owned;
-                spec->source_length=module_length(work,root->source);
+                spec->source_length=length;
                 xr_module_source_fingerprint(root->source,&spec->source_content_fingerprint);
             }
             spec->ast = root->ast; spec->ast_borrowed = true;
@@ -344,19 +362,15 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
             if (!text) module_status(work,XR_MODULE_INVALID);
         } else if (!supplied) {
             module_status(work,read_status(xr_os_io_read_under_root(&policy,spec->authority.physical_root,spec->logical_path,SIZE_MAX-1,&bytes)));
-            size_t line=1,line_start=0;
-            for (size_t i = 0; i < bytes.size && ((work)->status == XR_MODULE_OK); ++i) {
-                if (!bytes.data[i]) {
-                    if(line>INT_MAX || i-line_start>=INT_MAX)module_status(work,XR_MODULE_BUDGET);
-                    else {
-                        GraphParseCapture capture={.work=work,.graph=graph,.module=(uint32_t)index,.text=text};
-                        graph_source_diagnostic(&capture,XR_MODULE_DIAGNOSTIC_INPUT,(int)line,(int)(i-line_start)+1,
-                            "source text contains an embedded NUL");
-                        module_status(work,XR_MODULE_INVALID);
-                    }
-                    break;
-                }
-                if(bytes.data[i]=='\n'){++line;line_start=i+1;}
+            XrCompileInputNul nul={0};
+            if(work->status==XR_MODULE_OK)module_status(work,xr_module_status_from_resource(xr_source_input_nul(
+                xr_compile_session_compile_state(graph->compiler_session),
+                xr_compile_session_request(graph->compiler_session),bytes.data,bytes.size,XR_SOURCE_INPUT_CHUNK_BYTES,&nul)));
+            if(work->status==XR_MODULE_OK&&nul.found) {
+                GraphParseCapture capture={.work=work,.graph=graph,.module=(uint32_t)index,.text=text};
+                graph_source_diagnostic(&capture,XR_MODULE_DIAGNOSTIC_INPUT,nul.line,nul.column,
+                    "source text contains an embedded NUL");
+                module_status(work,XR_MODULE_INVALID);
             }
             text = bytes.data;
         }
@@ -369,8 +383,8 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
         }
         if (work->status == XR_MODULE_OK) {
             xr_module_source_fingerprint(text,&spec->source_content_fingerprint);
-            size_t length=bytes.data?bytes.size:module_length(work,text);
-            char *owned=bytes.data?bytes.data:module_dup(work,text);
+            size_t length=bytes.size;
+            char *owned=bytes.data?bytes.data:graph_source_copy(work,graph,text,&length);
             if(work->status==XR_MODULE_OK) {
                 xr_compile_resources_free(spec->source_text);
                 spec->source_text=owned;spec->source_length=length;

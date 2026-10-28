@@ -37,6 +37,8 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_new(
 }
 #include "hir/xhir_items.h"
 #include "api/xsource_compile.h"
+#include "frontend/xsource_input_control.h"
+#include "os/os_fs.h"
 
 typedef struct Cancel { int cancelled; size_t polls; } Cancel;
 static int cancel_poll(const void *context) {
@@ -534,7 +536,228 @@ static void compilation_controls(void) {
     }
 }
 
+
+typedef struct InputProbe {
+    size_t polls,at,chunk,length;
+    char *destination;
+    const char *source;
+    XrCompileResources *owner;
+    uint64_t timeout_ns,previous,max_gap_ns,peak,held;
+    bool cancel,wait;
+} InputProbe;
+static bool input_control_poll(const void *context) {
+    InputProbe *probe=(InputProbe *)context;uint64_t now=xr_time_monotonic_ns();CHECK(now);
+    if(probe->previous&&now-probe->previous>probe->max_gap_ns)probe->max_gap_ns=now-probe->previous;
+    probe->previous=now;++probe->polls;
+    XrCompileResources *owner=probe->owner?probe->owner:calibration_owner;
+    if(owner) {
+        XrCompileResourceStats stats=sdk_stats(owner);probe->held=stats.held_bytes;
+        if(stats.peak_bytes>probe->peak)probe->peak=stats.peak_bytes;
+    }
+    if(!probe->at||probe->polls!=probe->at)return false;
+    if(probe->destination) {
+        CHECK(probe->at==2&&probe->length>probe->chunk);
+        CHECK(!memcmp(probe->destination,probe->source,probe->chunk));
+        for(size_t i=probe->chunk;i<probe->length;++i)CHECK((unsigned char)probe->destination[i]==0xa5);
+    }
+    if(probe->wait) {
+        uint64_t start=now;
+        do {xr_time_sleep_ns(1000000);now=xr_time_monotonic_ns();CHECK(now);}
+        while(now-start<=probe->timeout_ns);
+    }
+    return probe->cancel;
+}
+static int input_public_poll(const void *context) {return input_control_poll(context)?1:0;}
+static void input_request(InputProbe *probe,XrCompileRequestControl *control) {
+    XrCompileRequestOptions options={input_control_poll,probe,
+        probe->wait?XR_COMPILE_DEADLINE_AFTER:XR_COMPILE_DEADLINE_NONE,probe->timeout_ns};
+    CHECK(xr_compile_request_control_init(&options,control)==XR_COMPILE_RESOURCE_OK);
+}
+static void input_helper_controls(void) {
+    static const size_t chunks[]={4096,16384,65536};const size_t length=4*65536;
+    char *source=sdk_fixture_malloc(length+1);CHECK(source);memset(source,'x',length);source[length]=0;
+    memcpy(source,"/*\xf0\x9f\x98\x80*/\r\n",10);
+    for(size_t c=0;c<sizeof(chunks)/sizeof(*chunks);++c) {
+        XrCompileResources *owner=sdk_ledger(&sdk_unlimited);uint64_t baseline=sdk_stats(owner).held_bytes;
+        XrCompileState *state=NULL;CHECK(xr_compile_state_new(owner,&state)==XR_COMPILE_RESOURCE_OK);
+        char *destination=NULL;CHECK(xr_compile_state_alloc(state,length,(void **)&destination)==XR_COMPILE_RESOURCE_OK);
+        memset(destination,0xa5,length);
+        InputProbe probe={.chunk=chunks[c],.owner=owner};XrCompileRequestControl control={0};input_request(&probe,&control);
+        uint64_t start=xr_time_monotonic_ns();
+        CHECK(xr_source_input_copy(state,&control,destination,source,length,chunks[c])==XR_COMPILE_RESOURCE_OK);
+        uint64_t elapsed=xr_time_monotonic_ns()-start;CHECK(!memcmp(destination,source,length));
+        printf("Input-copy bytes=%zu chunk=%zu polls=%zu elapsed_ns=%llu max_gap_ns=%llu\n",length,chunks[c],probe.polls,
+            (unsigned long long)elapsed,(unsigned long long)probe.max_gap_ns);
+        probe=(InputProbe){.chunk=chunks[c],.owner=owner};control=(XrCompileRequestControl){0};input_request(&probe,&control);
+        XrCompileInputNul nul={0};start=xr_time_monotonic_ns();
+        CHECK(xr_source_input_nul(state,&control,source,length,chunks[c],&nul)==XR_COMPILE_RESOURCE_OK&&!nul.found);
+        elapsed=xr_time_monotonic_ns()-start;
+        printf("Input-scan bytes=%zu chunk=%zu polls=%zu elapsed_ns=%llu max_gap_ns=%llu\n",length,chunks[c],probe.polls,
+            (unsigned long long)elapsed,(unsigned long long)probe.max_gap_ns);
+        xr_compile_state_free(destination);xr_compile_state_release(state);
+        CHECK(sdk_stats(owner).held_bytes==baseline);xr_compile_resources_release(owner);CHECK(!runtime_live&&!runtime_bytes);
+    }
+    for(unsigned operation=0;operation<3;++operation)for(unsigned deadline=0;deadline<2;++deadline) {
+        XrCompileResources *owner=sdk_ledger(&sdk_unlimited);uint64_t baseline=sdk_stats(owner).held_bytes;
+        XrCompileState *state=NULL;CHECK(xr_compile_state_new(owner,&state)==XR_COMPILE_RESOURCE_OK);
+        char *destination=NULL;CHECK(xr_compile_state_alloc(state,length,(void **)&destination)==XR_COMPILE_RESOURCE_OK);
+        memset(destination,0xa5,length);
+        InputProbe probe={.at=2,.chunk=XR_SOURCE_INPUT_CHUNK_BYTES,.length=length,.source=source,.owner=owner,
+            .destination=operation==0?destination:NULL,.cancel=!deadline,.wait=deadline!=0,.timeout_ns=deadline?1000000000ULL:0};
+        XrCompileRequestControl control={0};input_request(&probe,&control);XrCompileInputNul nul={true,17,19,23};size_t size=12345;
+        XrCompileResourceStatus status=operation==0?xr_source_input_copy(state,&control,destination,source,length,probe.chunk):
+            operation==1?xr_source_input_nul(state,&control,source,length,probe.chunk,&nul):
+            xr_source_input_length(state,&control,source,probe.chunk,&size);
+        CHECK(status==(deadline?XR_COMPILE_RESOURCE_DEADLINE:XR_COMPILE_RESOURCE_CANCELLED));
+        CHECK(probe.polls==2&&control.status==status&&xr_compile_state_status(state)==status);
+        if(operation==0) {
+            size_t copied=probe.chunk*(deadline?2:1);CHECK(!memcmp(destination,source,copied));
+            for(size_t i=copied;i<length;++i)CHECK((unsigned char)destination[i]==0xa5);
+        }
+        CHECK(nul.found&&nul.byte==17&&nul.line==19&&nul.column==23&&size==12345);
+        xr_compile_state_free(destination);xr_compile_state_release(state);
+        CHECK(sdk_stats(owner).held_bytes==baseline);xr_compile_resources_release(owner);CHECK(!runtime_live&&!runtime_bytes);
+        printf("Input-helper operation=%u deadline=%u exact_status=%u rollback=0/0\n",operation,deadline,(unsigned)status);
+    }
+    sdk_fixture_free(source);
+}
+
+static void input_prior_resource(void) {
+    uint64_t measured=0;
+    for(unsigned finite=0;finite<2;++finite) {
+        XrCompileResourceLimits limits=finite?(XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,measured,true}:sdk_unlimited;
+        XrCompileResources *owner=sdk_ledger(&limits);uint64_t baseline=sdk_stats(owner).held_bytes;
+        XrCompileState *state=NULL;CHECK(xr_compile_state_new(owner,&state)==XR_COMPILE_RESOURCE_OK);
+        if(!finite)measured=sdk_stats(owner).held_bytes;
+        void *rejected=NULL;size_t attempts=runtime_attempts;
+        if(!finite)runtime_fail_at=attempts;
+        XrCompileResourceStatus expected=finite?XR_COMPILE_RESOURCE_MEMORY_LIMIT:XR_COMPILE_RESOURCE_OUT_OF_MEMORY;
+        CHECK(xr_compile_state_alloc(state,8,&rejected)==expected&&!rejected);
+        if(!finite)CHECK(runtime_attempts>attempts);
+        runtime_fail_at=SIZE_MAX;
+        InputProbe probe={.at=1,.cancel=true};XrCompileRequestControl control={0};input_request(&probe,&control);
+        char output[]="keep";
+        CHECK(xr_source_input_copy(state,&control,output,"data",4,XR_SOURCE_INPUT_CHUNK_BYTES)==expected);
+        CHECK(!probe.polls&&control.status==XR_COMPILE_RESOURCE_OK&&!memcmp(output,"keep",5));
+        xr_compile_state_release(state);CHECK(sdk_stats(owner).held_bytes==baseline);
+        xr_compile_resources_release(owner);CHECK(!runtime_live&&!runtime_bytes);
+        printf("Input-first-resource finite=%u status=%u callback=0 rollback=0/0\n",finite,(unsigned)expected);
+    }
+}
+
+static XrSourceStatus controlled_parse(const XrSourceText *text,const XrSourceCompileOptions *options,
+    XrSourceAst **ast,XrSourceFailure *failure,XrSourceDiagnostic **report) {
+    CHECK(!calibration_capture&&!calibration_owner);calibration_capture=true;
+    XrSourceStatus status=xray_source_parse(text,options,ast,failure,report);
+    calibration_capture=false;calibration_owner=NULL;return status;
+}
+static void public_input_controls(void) {
+    const size_t padding=65536;static const char tail[]="*/\r\nexport fn answer()->i64{return 42}\r\n";
+    size_t length=padding+sizeof(tail)-1;char *source=sdk_fixture_malloc(length+1);CHECK(source);
+    memset(source,' ',padding);memcpy(source,"/*\xf0\x9f\x98\x80\r\n",8);memcpy(source+padding,tail,sizeof(tail));
+    memcpy(source+XR_SOURCE_INPUT_CHUNK_BYTES-2,"\xf0\x9f\x98\x80",4);
+    source[2*XR_SOURCE_INPUT_CHUNK_BYTES-1]='\r';source[2*XR_SOURCE_INPUT_CHUNK_BYTES]='\n';
+    InputProbe probe={0};XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+    options.profile_allocations=1;options.cancel_poll=input_public_poll;options.cancel_context=&probe;
+    XrSourceText text={NULL,"controlled-input",source,length};XrSourceAst *ast=NULL;XrSourceFailure failure={0};
+    CHECK(controlled_parse(&text,&options,&ast,&failure,NULL)==XR_SOURCE_OK&&ast&&probe.peak&&probe.polls>4);
+    size_t polls=probe.polls;uint64_t peak=probe.peak;xray_source_ast_free(ast);ast=NULL;CHECK(!runtime_live&&!runtime_bytes);
+    options.memory_mode=XR_SOURCE_MEMORY_FINITE;options.memory_limit=peak;
+    for(unsigned deadline=0;deadline<2;++deadline) {
+        probe=(InputProbe){.at=polls/2,.cancel=!deadline,.wait=deadline!=0,.timeout_ns=deadline?5000000000ULL:0};
+        options.deadline_mode=deadline?XR_SOURCE_DEADLINE_AFTER:XR_SOURCE_DEADLINE_NONE;options.timeout_ns=probe.timeout_ns;
+        XrSourceDiagnostic *report=NULL;XrSourceStatus expected=deadline?XR_SOURCE_DEADLINE:XR_SOURCE_CANCELLED;
+        CHECK(controlled_parse(&text,&options,&ast,&failure,&report)==expected&&!ast);
+        CHECK(failure.status==expected&&failure.cleanup_status==XR_SOURCE_OK&&failure.stage==XR_SOURCE_STAGE_INPUT&&probe.held);
+        xray_source_diagnostic_free(report);CHECK(!runtime_live&&!runtime_bytes);
+        printf("Public-input deadline=%u status=%u input-stage held=%llu rollback=0/0\n",deadline,(unsigned)expected,(unsigned long long)probe.held);
+    }
+    probe=(InputProbe){0};CHECK(controlled_parse(&text,&options,&ast,&failure,NULL)==XR_SOURCE_OK&&ast);
+    size_t count=probe.polls;memset(source,'!',length);probe.cancel=true;probe.at=1;
+    XrSourceCompileOptions ready_options=xray_source_compile_options_default();ready_options.stdlib_path=XR_PUBLIC_STDLIB;
+    XrSourceArtifact *artifact=NULL;CHECK(xray_source_build_ast(ast,&ready_options,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
+    xray_source_ast_free(ast);CHECK(probe.polls==count);Calibration unused={0};calibration_execute(artifact,source,length,&unused);
+    CHECK(probe.polls==count);sdk_fixture_free(source);CHECK(!runtime_live&&!runtime_bytes);
+}
+static void input_nul_location(void) {
+    char source[]="/*\xf0\x9f\x98\x80*/\r\nconst value:i64=1\0ignored\r\n";
+    XrSourceText text={NULL,"nul-input",source,sizeof(source)-1};XrSourceCompileOptions options=xray_source_compile_options_default();
+    options.stdlib_path=XR_PUBLIC_STDLIB;XrSourceAst *ast=NULL;XrSourceFailure failure={0};XrSourceDiagnostic *report=NULL;
+    CHECK(xray_source_parse(&text,&options,&ast,&failure,&report)==XR_SOURCE_INVALID&&!ast&&report);
+    CHECK(failure.status==XR_SOURCE_INVALID&&failure.cleanup_status==XR_SOURCE_OK&&failure.stage==XR_SOURCE_STAGE_INPUT);
+    XrSourceDiagnosticRoot root={0};CHECK(xray_source_diagnostic_root(report,0,&root)==XR_SOURCE_OK);
+    CHECK(root.primary.line==2&&root.primary.column==18&&!strcmp(root.message,"source text contains an embedded NUL"));
+    memset(source,'!',sizeof(source));CHECK(root.primary.line==2&&root.primary.column==18);
+    xray_source_diagnostic_free(report);CHECK(!runtime_live&&!runtime_bytes);
+}
+
+
+static XrSourceStatus controlled_file(const char *path,const XrSourceCompileOptions *options,
+    XrSourceArtifact **artifact,XrSourceFailure *failure,XrSourceDiagnostic **report) {
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_FILE,.value.absolute_path=path};
+    CHECK(!calibration_capture&&!calibration_owner);calibration_capture=true;
+    XrSourceStatus status=xray_source_build(&input,options,artifact,failure,report);
+    calibration_capture=false;calibration_owner=NULL;return status;
+}
+static void input_file_write(char *path,size_t capacity,const char *text,size_t length) {
+    XrCompileResources *owner=sdk_ledger(&sdk_unlimited);XrOsIoPolicy policy=xr_compile_io_policy(owner);
+    if(!path[0]) {
+        CHECK(xr_os_io_getcwd(&policy,path,capacity)==XR_OS_IO_OK);size_t base=strlen(path);
+        XrOsIoStatus status;
+        do {
+            int n=snprintf(path+base,capacity-base,"/source-input-%llu.xr",(unsigned long long)xr_time_monotonic_ns());
+            CHECK(n>0&&(size_t)n<capacity-base);
+            status=xr_os_io_write_new_file_sync(&policy,path,(const uint8_t *)text,length);
+        } while(status==XR_OS_IO_EXISTS);
+        CHECK(status==XR_OS_IO_OK);
+    } else CHECK(xr_os_io_write_new_file_sync(&policy,path,(const uint8_t *)text,length)==XR_OS_IO_OK);
+    xr_compile_resources_release(owner);
+}
+static void input_file_remove(const char *path) {
+    XrCompileResources *owner=sdk_ledger(&sdk_unlimited);XrOsIoPolicy policy=xr_compile_io_policy(owner);
+    CHECK(xr_os_io_remove(&policy,path)==XR_OS_IO_OK);xr_compile_resources_release(owner);
+}
+static void graph_input_controls(void) {
+    const size_t padding=65536;static const char tail[]="*/\r\nexport fn answer()->i64{return 42}\r\n";
+    size_t length=padding+sizeof(tail)-1;char *source=sdk_fixture_malloc(length+1);CHECK(source);
+    memset(source,' ',padding);memcpy(source,"/*\xf0\x9f\x98\x80\r\n",8);memcpy(source+padding,tail,sizeof(tail));
+    char path[XR_PATH_MAX]={0};input_file_write(path,sizeof(path),source,length);CHECK(!runtime_live&&!runtime_bytes);
+    InputProbe probe={0};XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+    options.profile_allocations=1;options.cancel_poll=input_public_poll;options.cancel_context=&probe;
+    XrSourceArtifact *artifact=NULL;XrSourceFailure failure={0};
+    CHECK(controlled_file(path,&options,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact&&probe.peak&&probe.polls>4);
+    size_t polls=probe.polls;uint64_t peak=probe.peak;xray_source_artifact_free(artifact);artifact=NULL;
+    CHECK(!runtime_live&&!runtime_bytes);options.memory_mode=XR_SOURCE_MEMORY_FINITE;options.memory_limit=peak;
+    for(unsigned deadline=0;deadline<2;++deadline) {
+        probe=(InputProbe){.at=polls/2,.cancel=!deadline,.wait=deadline!=0,.timeout_ns=deadline?5000000000ULL:0};
+        options.deadline_mode=deadline?XR_SOURCE_DEADLINE_AFTER:XR_SOURCE_DEADLINE_NONE;options.timeout_ns=probe.timeout_ns;
+        XrSourceDiagnostic *report=NULL;XrSourceStatus expected=deadline?XR_SOURCE_DEADLINE:XR_SOURCE_CANCELLED;
+        CHECK(controlled_file(path,&options,&artifact,&failure,&report)==expected&&!artifact);
+        CHECK(failure.status==expected&&failure.stage==XR_SOURCE_STAGE_COMPILE&&failure.cleanup_status==XR_SOURCE_OK&&probe.held);
+        xray_source_diagnostic_free(report);CHECK(!runtime_live&&!runtime_bytes);
+        printf("Graph-input deadline=%u status=%u compile-stage held=%llu rollback=0/0\n",deadline,(unsigned)expected,(unsigned long long)probe.held);
+    }
+    probe=(InputProbe){0};CHECK(controlled_file(path,&options,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
+    input_file_remove(path);size_t count=probe.polls;probe.cancel=true;probe.at=1;Calibration unused={0};
+    calibration_execute(artifact,source,length,&unused);artifact=NULL;CHECK(probe.polls==count&&!runtime_live&&!runtime_bytes);
+    memset(source,' ',padding);memcpy(source,"/*\xf0\x9f\x98\x80\r\n",8);memcpy(source+padding,tail,sizeof(tail));
+    const size_t nul_byte=32768;source[nul_byte]=0;input_file_write(path,sizeof(path),source,length);
+    options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+    XrSourceDiagnostic *report=NULL;
+    XrSourceStatus invalid=xray_source_build(&(XrSourceInput){.kind=XR_SOURCE_INPUT_FILE,.value.absolute_path=path},
+        &options,&artifact,&failure,&report);
+    printf("Graph-NUL status=%u stage=%u artifact=%u report=%u\n",(unsigned)invalid,(unsigned)failure.stage,artifact!=NULL,report!=NULL);
+    CHECK(invalid==XR_SOURCE_INVALID&&!artifact&&report);
+    CHECK(failure.status==XR_SOURCE_INVALID&&failure.cleanup_status==XR_SOURCE_OK&&failure.stage==XR_SOURCE_STAGE_COMPILE);
+    XrSourceDiagnosticRoot root={0};CHECK(xray_source_diagnostic_root(report,0,&root)==XR_SOURCE_OK);
+    CHECK(root.primary.line==2&&root.primary.column==(int)(nul_byte-8)+1&&!strcmp(root.message,"source text contains an embedded NUL"));
+    input_file_remove(path);memset(source,'!',length);
+    CHECK(root.primary.line==2&&root.primary.column==(int)(nul_byte-8)+1);xray_source_diagnostic_free(report);
+    sdk_fixture_free(source);CHECK(!runtime_live&&!runtime_bytes);
+}
+
 int main(void) {
+    input_helper_controls();input_prior_resource();public_input_controls();input_nul_location();graph_input_controls();
     compilation_controls();
     report_resources();report_control();unicode_report();module_binding_classes();partial_report_lifetime();
     module_report_lifetime(false);module_report_lifetime(true);
