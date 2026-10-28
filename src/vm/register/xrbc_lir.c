@@ -19,12 +19,17 @@
 struct XrRbcProgram {
     XrRbcModule module;
     XrtLocationOwner *locations;
-    XrRbcNativeI64 print;
+    XrRbcNativeKind natives[XR_RBC_NATIVE_COUNT];
     XrLirType parameters[XR_RBC_REGISTER_COUNT_MAX];
     uint32_t parameter_count;
 };
 
 #define RBC_LIR_PRINT_STRING (UINT32_MAX - 1)
+#define RBC_LIR_NATIVE_BASE (UINT32_MAX - 8)
+
+static bool rbc_lir_native(uint32_t mapping) {
+    return mapping >= RBC_LIR_NATIVE_BASE && mapping < RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_COUNT;
+}
 
 typedef struct {
     uint32_t literals[XR_RBC_REGISTER_COUNT_MAX + 1];
@@ -279,14 +284,16 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                     xr_lir_function_view(input, (XrLirFunction) {input, i.callee}, &callee);
                     if (callee.kind != XR_LIR_FUNCTION_DEFINITION) {
                         if (callee.kind != XR_LIR_FUNCTION_EXTERNAL ||
-                            (callee.extern_kind != XR_LIR_EXTERN_PRINT_I64 &&
-                             callee.extern_kind != XR_LIR_EXTERN_PRINT_STRING)) {
+                            (callee.extern_kind < XR_LIR_EXTERN_PRINT_I64 ||
+                             callee.extern_kind > XR_LIR_EXTERN_CLOCK_MONOTONIC)) {
                             rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
                                 "native call has no registered runtime leaf", i.source);
                             return false;
                         }
                         mapping[i.callee - 1] = callee.extern_kind == XR_LIR_EXTERN_PRINT_STRING ?
-                            RBC_LIR_PRINT_STRING : UINT32_MAX;
+                            RBC_LIR_PRINT_STRING : RBC_LIR_NATIVE_BASE +
+                            (callee.extern_kind == XR_LIR_EXTERN_PRINT_I64 ? XR_RBC_NATIVE_PRINT_I64 :
+                             XR_RBC_NATIVE_CLOCK_REALTIME + callee.extern_kind - XR_LIR_EXTERN_CLOCK_REALTIME);
                         continue;
                     }
                     if (*count == 65536) {
@@ -318,7 +325,9 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
             xr_lir_instruction_view(c->input, block, n, &i);
             if (i.op == XR_LIR_CALL) {
                 if (c->functions[i.callee - 1] == RBC_LIR_PRINT_STRING) continue;
-                uint32_t physical = c->functions[i.callee - 1] == UINT32_MAX ? 2 : i.operand_count;
+                uint32_t mapped = c->functions[i.callee - 1];
+                uint32_t physical = rbc_lir_native(mapped) ?
+                    (mapped == RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_PRINT_I64 ? 2u : 1u) : i.operand_count;
                 if (window < physical + 1) window = physical + 1;
             }
             if (i.op == XR_LIR_CONDBR && !c->scratch_count) c->scratch_count = 1;
@@ -449,12 +458,16 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
             return rbc_lir_literal(c, c->output.literals[i->operands[0]], &ordinal) &&
                 rbc_lir_emit(c, XR_RBC_PRINT_LITERAL, 0, 0, 0, ordinal);
         }
-        if (c->functions[i->callee - 1] == UINT32_MAX) {
-            uint32_t destination = c->register_count - 3;
-            return rbc_lir_emit(c, XR_RBC_MOV, destination + 1,
-                    c->slots[i->operands[0]], 0, 0) &&
-                rbc_lir_constant(c, destination + 2, i->source.path_length ? c->source_id : 0) &&
-                rbc_lir_emit(c, XR_RBC_CALLN, destination, 0, 0, 0);
+        if (rbc_lir_native(c->functions[i->callee - 1])) {
+            uint32_t kind = c->functions[i->callee - 1] - RBC_LIR_NATIVE_BASE;
+            bool printing = kind == XR_RBC_NATIVE_PRINT_I64;
+            uint32_t destination = c->register_count - (printing ? 3u : 2u);
+            if (printing && !rbc_lir_emit(c, XR_RBC_MOV, destination + 1,
+                    c->slots[i->operands[0]], 0, 0)) return false;
+            if (!rbc_lir_constant(c, destination + (printing ? 2u : 1u),
+                    i->source.path_length ? c->source_id : 0) ||
+                !rbc_lir_emit(c, XR_RBC_CALLN, destination, 0, 0, kind)) return false;
+            return !i->result || rbc_lir_emit(c, XR_RBC_MOV, result, destination, 0, 0);
         }
         uint32_t destination = c->register_count - i->operand_count - 1;
         for (uint32_t n = 0; n < i->operand_count; ++n)
@@ -676,10 +689,11 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     status = rbc_lir_locations(input, ids, count, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;
     for (size_t i = 0; i < all; ++i) {
-        if (mapping[i] != UINT32_MAX) continue;
-        p->print = xrt_print_i64;
-        p->module.natives = &p->print;
-        p->module.native_count = 1;
+        if (!rbc_lir_native(mapping[i])) continue;
+        for (uint32_t kind=0; kind<XR_RBC_NATIVE_COUNT; ++kind)
+            p->natives[kind] = (XrRbcNativeKind)kind;
+        p->module.natives = p->natives;
+        p->module.native_count = XR_RBC_NATIVE_COUNT;
         break;
     }
     status = XR_RBC_COMPILE_OUT_OF_MEMORY;

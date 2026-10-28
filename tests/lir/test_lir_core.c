@@ -665,7 +665,26 @@ static void literal_ownership(void) {
     for (uint32_t attack = 1; attack <= 7; ++attack) CHECK(!literal_program(attack));
 }
 
+static void clock_signatures(void) {
+    static const char *names[] = {"xrt_clock_realtime_nanos", "xrt_clock_process_cpu_nanos",
+        "xrt_clock_monotonic_nanos"};
+    for (uint32_t kind=0; kind<3; ++kind) {
+        XrLirModule *m = NULL; XrLirFunction f = {0};
+        OK(xr_lir_module_create(NULL, &m));
+        XrLirFunctionSpec spec = {.name=names[kind], .name_length=strlen(names[kind]),
+            .result=XR_LIR_I64, .kind=XR_LIR_FUNCTION_EXTERNAL,
+            .extern_kind=(XrLirExternKind)(XR_LIR_EXTERN_CLOCK_REALTIME + kind)};
+        OK(xr_lir_declare_function(m, &spec, &f));
+        OK(xr_lir_module_finish(m, NULL));
+        OK(xr_lir_verify(m, NULL)); xr_lir_module_destroy(m); m = NULL;
+        OK(xr_lir_module_create(NULL, &m));
+        spec.result = XR_LIR_UNIT;
+        CHECK(xr_lir_declare_function(m, &spec, &f) == XR_LIR_INVALID_ARGUMENT);
+        xr_lir_module_destroy(m);
+    }
+}
 int main(void) {
+    clock_signatures();
     queries();
     literal_ownership();
     builder_rejections();

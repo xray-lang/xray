@@ -26,9 +26,18 @@ typedef struct XrtArithmeticPanic {
     uint32_t code, source_id;
 } XrtArithmeticPanic;
 
+typedef enum XrtHostClockReason {
+    XRT_CLOCK_READ_FAILED, XRT_CLOCK_OUT_OF_RANGE
+} XrtHostClockReason;
+typedef struct XrtHostClockFailure {
+    uint32_t kind, source_id;
+    XrtHostClockReason reason;
+} XrtHostClockFailure;
+
 typedef enum XrtExecutionFailureKind {
     XRT_FAILURE_OUTPUT,
-    XRT_FAILURE_ARITHMETIC_PANIC
+    XRT_FAILURE_ARITHMETIC_PANIC,
+    XRT_FAILURE_HOST_CLOCK
 } XrtExecutionFailureKind;
 
 typedef struct XrtExecutionFailure {
@@ -36,6 +45,7 @@ typedef struct XrtExecutionFailure {
     union {
         XrtOutputFailure output;
         XrtArithmeticPanic panic;
+        XrtHostClockFailure clock;
     } detail;
 } XrtExecutionFailure;
 
@@ -60,4 +70,5 @@ XR_FUNC XR_NORET void xrt_end_execution(XrtIoResult failure,
     XrtOutputOperation operation, uint32_t source_id);
 XR_FUNC XR_NORET void xrt_output_exit(const XrtSourceMap *map, XrtIoResult failure,
     XrtOutputOperation operation, uint32_t source_id);
+XR_FUNC XR_NORET void xrt_clock_exit(const XrtSourceMap *map, XrtHostClockFailure failure);
 #endif // XNATIVE_EXECUTION_H

@@ -241,7 +241,7 @@ static void test_prepare_unreachable(void) {
     XrRbcFunction functions[] = {
         {&root, 1, NULL, 0, 1, 0, NULL, 0, 0},
         {code, 4, &constant, 1, 3, 0, NULL, 0, 0}};
-    const XrRbcNativeI64 native = xrt_print_i64;
+    const XrRbcNativeKind native = XR_RBC_NATIVE_PRINT_I64;
     XrRbcModule module = {functions, 2, &native, 1, NULL, 0};
     const uint32_t invalid[] = {
         255, XR_RBC_MOV | (3u << 8), XR_RBC_MOV | (3u << 16), XR_RBC_MOV | (1u << 24),
@@ -303,17 +303,12 @@ static void test_native_print(void) {
     immediate(code, 2, XR_RBC_CALLN, 252, 0);
     emit(code, 3, XR_RBC_RET0, 0, 0, 0);
     XrRbcFunction function = {code, 4, constants, 1, 255, 0, NULL, 0, 0};
-    const XrRbcNativeI64 natives[] = {xrt_print_i64};
+    const XrRbcNativeKind natives[] = {XR_RBC_NATIVE_PRINT_I64};
     XrRbcModule module = {&function, 1, natives, 1, NULL, 0};
     uint64_t result;
     CHECK(execute(&module, 0, NULL, 0, &result) == XR_RBC_OK);
 }
 
-static void unregistered(int64_t value, uint32_t id) {
-    (void) value;
-    (void) id;
-    CHECK(false);
-}
 
 static void test_owned_execution(void) {
     uint32_t code[2];
@@ -345,18 +340,22 @@ static void test_owned_execution(void) {
     CHECK(panic.code == 99 && panic.source_id == 88 && borrowed == owner);
     CHECK(!xr_rbc_outcome_arithmetic_panic(NULL, &panic, &borrowed));
     CHECK(panic.code == 99 && panic.source_id == 88 && borrowed == owner);
+    XrtHostClockFailure clock = {77, 88, XRT_CLOCK_OUT_OF_RANGE};
+    CHECK(!xr_rbc_outcome_host_clock_failure(outcome, &clock, &borrowed));
+    CHECK(clock.kind == 77 && clock.source_id == 88 && borrowed == owner);
+    CHECK(!xr_rbc_outcome_host_clock_failure(NULL, &clock, &borrowed));
     xr_rbc_outcome_free(&outcome);
     CHECK(!outcome && !xr_rbc_outcome_bits(NULL, &bits));
     CHECK(bits == UINT64_C(0x7ff0000000000001));
     CHECK(xr_rbc_module_prepare(&module, 0, &argument, 1, owner, &execution) == XR_RBC_OK);
     xr_rbc_execution_free(&execution); // Unrun preparation owns and frees its pending result.
     CHECK(!execution);
-    const XrRbcNativeI64 native[] = {unregistered};
+    const XrRbcNativeKind native[] = {(XrRbcNativeKind)XR_RBC_NATIVE_COUNT};
     module.natives = native;
     module.native_count = 1;
     CHECK(xr_rbc_module_prepare(&module, 0, &argument, 1, owner, &execution) == XR_RBC_INVALID);
     CHECK(!execution);
-    const XrRbcNativeI64 actual[] = {xrt_print_i64};
+    const XrRbcNativeKind actual[] = {XR_RBC_NATIVE_PRINT_I64};
     module.natives = actual;
     function.parameter_count = function.register_count = 3;
     function.code_count = 2;
@@ -421,7 +420,7 @@ static void test_source_maps(void) {
         {caller, 5, NULL, 0, 3, 0, ids, 5, 0},
         {callee, 2, NULL, 0, 2, 2, callee_ids, 2, 0},
         {callee, 2, NULL, 0, 2, 2, callee_ids, 2, 0}};
-    XrRbcNativeI64 native = xrt_print_i64;
+    XrRbcNativeKind native = XR_RBC_NATIVE_PRINT_I64;
     XrRbcModule module = {functions, 3, &native, 1, NULL, 0};
     XrtSourceLocation location = {"raw.xr", 6, 7, 3, 7, 4};
     XrtLocationOwner *owner = NULL;

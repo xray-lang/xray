@@ -318,6 +318,19 @@ int main(int argc, char **argv) {
         xr_rbc_program_destroy(program);
         return 0;
     }
+    if (!strcmp(mode, "clock-source")) {
+        XrRbcProgram *program = from_source("import time\nfn check()->i64{\n"
+            "const a=time.nanos()\nconst b=time.nanos()\n"
+            "if(a>0 && b>=a && time.clock()>=0 && time.now()>0){return 1}\n"
+            "return 0}\nprint(check())\n");
+        for (unsigned i=0; i<2; ++i) {
+            XrRbcOutcome *outcome = invoke(program);
+            CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK);
+            xr_rbc_outcome_free(&outcome);
+        }
+        xr_rbc_program_destroy(program);
+        return 0;
+    }
     if (!strcmp(mode, "source")) {
         XrRbcProgram *program = from_source(
             "fn sum(a:i64,b:i64,c:i64,d:i64)->i64{return a+b+c+d}\n"

@@ -38,8 +38,8 @@ def main():
                 label, result.returncode, output, result.stderr)
             return
         assert result.returncode == 0, (label, result.returncode, output, result.stderr)
-        if mode in ('source', 'literal-repeat', 'string-repeat'):
-            expected = (b'A\x00\xc3\xa9\n7\n\n'*2 if mode == 'string-repeat' else
+        if mode in ('source', 'literal-repeat', 'string-repeat', 'clock-source'):
+            expected = (b'1\n1\n' if mode == 'clock-source' else b'A\x00\xc3\xa9\n7\n\n'*2 if mode == 'string-repeat' else
                         b'7\n99\n7\n99\n' if mode == 'literal-repeat' else b'10\n21\n')
             assert output == expected and result.stderr == b'', (output, result.stderr)
         else:
@@ -47,6 +47,7 @@ def main():
             assert not output and result.stderr == marker, (label, output, result.stderr)
 
     run('source')
+    run('clock-source')
     run('literal-repeat')
     run('string-repeat')
     for mode in ('write', 'flush', 'pipe', 'pipe-flush', 'point', 'unknown', 'source-failure', 'literal-failure'):

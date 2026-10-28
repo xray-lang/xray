@@ -67,7 +67,10 @@ typedef enum XrLirFunctionKind {
 typedef enum XrLirExternKind {
     XR_LIR_EXTERN_NONE,
     XR_LIR_EXTERN_PRINT_I64,
-    XR_LIR_EXTERN_PRINT_STRING
+    XR_LIR_EXTERN_PRINT_STRING,
+    XR_LIR_EXTERN_CLOCK_REALTIME,
+    XR_LIR_EXTERN_CLOCK_CPU,
+    XR_LIR_EXTERN_CLOCK_MONOTONIC
 } XrLirExternKind;
 
 /* Handles are valid only while their module is alive. Zero IDs are invalid. */

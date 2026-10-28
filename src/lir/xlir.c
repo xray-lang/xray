@@ -252,6 +252,15 @@ XR_FUNC XrLirStatus xr_lir_literal_address(XrLirModule *m, XrLirBlock block,
     return xr_lir_emit_value(m, block, &op, output);
 }
 
+static const char *clock_external_name(XrLirExternKind kind) {
+    switch (kind) {
+    case XR_LIR_EXTERN_CLOCK_REALTIME: return "xrt_clock_realtime_nanos";
+    case XR_LIR_EXTERN_CLOCK_CPU: return "xrt_clock_process_cpu_nanos";
+    case XR_LIR_EXTERN_CLOCK_MONOTONIC: return "xrt_clock_monotonic_nanos";
+    default: return NULL;
+    }
+}
+
 static bool lir_function_spec_valid(const XrLirFunctionSpec *spec) {
     if (!spec || !spec->name || !spec->name_length || spec->name_length == SIZE_MAX ||
         memchr(spec->name, 0, spec->name_length) ||
@@ -260,7 +269,11 @@ static bool lir_function_spec_valid(const XrLirFunctionSpec *spec) {
         return false;
     if (spec->kind == XR_LIR_FUNCTION_DEFINITION)
         return spec->extern_kind == XR_LIR_EXTERN_NONE;
-    if (spec->kind != XR_LIR_FUNCTION_EXTERNAL || spec->result != XR_LIR_UNIT) return false;
+    if (spec->kind != XR_LIR_FUNCTION_EXTERNAL) return false;
+    const char *clock = clock_external_name(spec->extern_kind);
+    if (clock) return spec->result == XR_LIR_I64 && !spec->parameter_count &&
+        spec->name_length == strlen(clock) && !memcmp(spec->name, clock, spec->name_length);
+    if (spec->result != XR_LIR_UNIT) return false;
     if (spec->extern_kind == XR_LIR_EXTERN_PRINT_STRING)
         return spec->name_length == sizeof("xrt_print_string") - 1 &&
             !memcmp(spec->name, "xrt_print_string", sizeof("xrt_print_string") - 1) &&

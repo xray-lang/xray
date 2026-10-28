@@ -61,6 +61,16 @@ XRAY_API void xrt_print_i64(int64_t value, uint32_t source_location_id);
 // Flush/write failures use the same execution-ending protocol as integer output.
 XRAY_API void xrt_print_string(const char *bytes, size_t byte_length, uint32_t source_location_id);
 
+// Read the selected system clock in nanoseconds under an active synchronous
+// execution. Source zero is unknown; nonzero IDs belong to its prepared map.
+// Realtime/monotonic read failures and any reading beyond INT64_MAX end the
+// current execution as a host-clock failure, independently of output or panic.
+// Process CPU time may legitimately be zero. These calls do not allocate or
+// suspend. Standalone failure renders once and exits with 1.
+XRAY_API int64_t xrt_clock_realtime_nanos(uint32_t source_id);
+XRAY_API int64_t xrt_clock_process_cpu_nanos(uint32_t source_id);
+XRAY_API int64_t xrt_clock_monotonic_nanos(uint32_t source_id);
+
 // End the active synchronous execution with division (420) or modulo (421)
 // by zero. The source id must be zero or in the active image map. Invalid
 // bindings, codes or ids violate host preconditions and abort. Embedded roots

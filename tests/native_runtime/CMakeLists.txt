@@ -71,3 +71,20 @@ foreach(suite output failures link_contract)
     set_tests_properties(native_runtime_${suite} PROPERTIES
         LABELS "unit;native-runtime;fast" TIMEOUT 90 RUN_SERIAL TRUE)
 endforeach()
+
+add_executable(test_native_clock test_clock.c)
+target_link_libraries(test_native_clock PRIVATE xray_lir_bytecode xray_lir_lower)
+target_include_directories(test_native_clock PRIVATE "${PROJECT_SOURCE_DIR}/src")
+set_target_properties(test_native_clock PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(test_native_clock PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_native_clock PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME native_clock_scope COMMAND test_native_clock)
+set_tests_properties(native_clock_scope PROPERTIES LABELS "unit;native-runtime;fast" TIMEOUT 30)
+add_test(NAME native_clock_standalone
+    COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_CURRENT_SOURCE_DIR}/check_runtime.py"
+        --suite clock --build "${CMAKE_BINARY_DIR}" --clients "$<TARGET_FILE:test_native_clock>"
+        --logs "${CMAKE_CURRENT_BINARY_DIR}/results-clock")
+set_tests_properties(native_clock_standalone PROPERTIES LABELS "unit;native-runtime;fast" TIMEOUT 30)

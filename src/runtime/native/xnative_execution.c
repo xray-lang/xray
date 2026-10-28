@@ -12,6 +12,7 @@
  */
 #include "xnative_execution.h"
 #include "base/xchecks.h"
+#include "os/os_time.h"
 #include "shared/xr_value_format_core.h"
 #include <setjmp.h>
 
@@ -99,4 +100,30 @@ XRAY_API_NORET void xrt_arithmetic_panic(uint32_t code, uint32_t source_id) {
         (void)xrt_io_write(2, fallback, sizeof(fallback) - 1);
     }
     _Exit(1);
+}
+
+static int64_t clock_read(uint32_t kind, uint32_t source_id) {
+    const XrtExecutionBinding *binding = current_execution;
+    XR_CHECK(binding && kind >= 1 && kind <= 3 && source_id <= binding->map.count,
+        "Clock reads require an active execution, registered kind and source id");
+    uint64_t reading = kind == 1 ? xr_time_realtime_ns() : kind == 2 ?
+        xr_time_process_cpu_ns() : xr_time_monotonic_ns();
+    if (reading <= INT64_MAX && (reading || kind == 2)) return (int64_t)reading;
+    XrtHostClockFailure failure = {kind, source_id,
+        reading > INT64_MAX ? XRT_CLOCK_OUT_OF_RANGE : XRT_CLOCK_READ_FAILED};
+    if (binding->target) {
+        binding->failure->kind = XRT_FAILURE_HOST_CLOCK;
+        binding->failure->detail.clock = failure;
+        longjmp(*binding->target, 1);
+    }
+    xrt_clock_exit(&binding->map, failure);
+}
+XRAY_API int64_t xrt_clock_realtime_nanos(uint32_t source_id) {
+    return clock_read(1, source_id);
+}
+XRAY_API int64_t xrt_clock_process_cpu_nanos(uint32_t source_id) {
+    return clock_read(2, source_id);
+}
+XRAY_API int64_t xrt_clock_monotonic_nanos(uint32_t source_id) {
+    return clock_read(3, source_id);
 }

@@ -168,10 +168,21 @@ XR_RBC_CASE(CALL) {
 }
 XR_RBC_CASE(CALLN) {
     uint32_t target = instruction >> 16;
-    uint64_t id = XR_RBC_REG(a + 2);
+    XrRbcNativeKind kind = module->natives[target];
+    uint64_t id = XR_RBC_REG(a + (kind == XR_RBC_NATIVE_PRINT_I64 ? 2 : 1));
     if (id > UINT32_MAX || id > xrt_locations_count(locations))
         return XR_RBC_INVALID;
-    module->natives[target](xr_rbc_signed(XR_RBC_REG(a + 1)), (uint32_t) id);
+    switch (kind) {
+    case XR_RBC_NATIVE_PRINT_I64:
+        xrt_print_i64(xr_rbc_signed(XR_RBC_REG(a + 1)), (uint32_t)id); break;
+    case XR_RBC_NATIVE_CLOCK_REALTIME:
+        XR_RBC_REG(a) = (uint64_t)xrt_clock_realtime_nanos((uint32_t)id); break;
+    case XR_RBC_NATIVE_CLOCK_CPU:
+        XR_RBC_REG(a) = (uint64_t)xrt_clock_process_cpu_nanos((uint32_t)id); break;
+    case XR_RBC_NATIVE_CLOCK_MONOTONIC:
+        XR_RBC_REG(a) = (uint64_t)xrt_clock_monotonic_nanos((uint32_t)id); break;
+    default: return XR_RBC_INVALID;
+    }
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(PRINT_LITERAL) {

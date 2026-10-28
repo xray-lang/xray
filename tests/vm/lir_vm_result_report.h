@@ -31,8 +31,15 @@ static int lir_vm_result_report(const XrRbcOutcome *outcome, XrRbcStatus status)
             static const char fallback[] = "XR_RUN_6005: cannot render uncaught typed panic\n";
             (void)xrt_io_write(2, fallback, sizeof(fallback) - 1);
         }
-    } else
-        fprintf(stderr, "lir_vm_run: execution failed (%u)\n", (unsigned)status);
+    } else {
+        XrtHostClockFailure clock;
+        if (xr_rbc_outcome_host_clock_failure(outcome, &clock, &locations)) {
+            const XrtSourceLocation *source = xrt_locations_get(locations, clock.source_id);
+            fprintf(stderr, "lir_vm_run: host clock %u failed at %s:%u:%u\n", clock.kind,
+                source ? source->path : "unknown source", source ? source->line : 0,
+                source ? source->column : 0);
+        } else fprintf(stderr, "lir_vm_run: execution failed (%u)\n", (unsigned)status);
+    }
     return 1;
 }
 #endif // LIR_VM_RESULT_REPORT_H

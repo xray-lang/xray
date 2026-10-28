@@ -597,9 +597,32 @@ static void imported_time(const char *programs) {
     }
     xr_lir_lowered_free(&output);
 }
+static void clock_sources(const char *programs) {
+    char stdlib[2048];
+    int count=snprintf(stdlib, sizeof(stdlib), "%s/../../../stdlib", programs);
+    CHECK(count > 0 && (size_t)count < sizeof(stdlib));
+    SourceFixture fixture=source_fixture_stdlib("import time\nprint(time.nanos())\n"
+        "print(time.monotonic())\nprint(time.now())\nprint(time.clock())\n", stdlib);
+    XrLirLowered output={0};
+    XrLirLowerRequest request={fixture.closed, fixture.source.snapshot, false};
+    OK(xr_lir_lower_program_checked(&request, &output, NULL)); source_fixture_free(&fixture);
+    unsigned clocks=0;
+    for (uint32_t i=0; i<xr_lir_function_count(output.module); ++i) {
+        XrLirFunction f; XrLirFunctionView v;
+        OK(xr_lir_function_at(output.module, i, &f)); OK(xr_lir_function_view(output.module, f, &v));
+        if (v.extern_kind >= XR_LIR_EXTERN_CLOCK_REALTIME) {
+            CHECK(v.kind == XR_LIR_FUNCTION_EXTERNAL && v.result == XR_LIR_I64 && !v.parameter_count);
+            clocks |= 1u << (v.extern_kind-XR_LIR_EXTERN_CLOCK_REALTIME);
+        }
+    }
+    CHECK(clocks == 7); xr_lir_lowered_free(&output);
+    rejected("const divisor=0\nfn f(x:i64)->i64{return x/divisor}\nprint(f(1))\n",false,"DIV_INT");
+    rejected("print(f(1))\nconst divisor=2\nfn f(x:i64)->i64{return x/divisor}\n",false,"before complete publication");
+}
 int main(int argc, char **argv) {
     CHECK(argc == 3);
     imported_time(argv[1]);
+    clock_sources(argv[1]);
     supported_control();
     floating_negation_source();
     swapped_backedge();

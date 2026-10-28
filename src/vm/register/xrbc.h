@@ -83,9 +83,15 @@ typedef struct {
     uint32_t cell_count;
 } XrRbcFunction;
 
-// Only the registered output leaf is admitted. Both physical arguments are
-// passed by value; no native pointer refers into the movable register stack.
-typedef void (*XrRbcNativeI64)(int64_t value, uint32_t source_id);
+// The native set is closed. Dispatch calls each typed function directly;
+// no native function pointer or pointer into a movable frame is stored.
+typedef enum XrRbcNativeKind {
+    XR_RBC_NATIVE_PRINT_I64,
+    XR_RBC_NATIVE_CLOCK_REALTIME,
+    XR_RBC_NATIVE_CLOCK_CPU,
+    XR_RBC_NATIVE_CLOCK_MONOTONIC,
+    XR_RBC_NATIVE_COUNT
+} XrRbcNativeKind;
 
 typedef struct {
     const char *bytes;
@@ -95,7 +101,7 @@ typedef struct {
 typedef struct {
     const XrRbcFunction *functions;
     size_t function_count;
-    const XrRbcNativeI64 *natives;
+    const XrRbcNativeKind *natives;
     size_t native_count;
     // Immutable bytes share the same borrowed lifetime as code/descriptors.
     const XrRbcLiteral *literals;
@@ -107,7 +113,8 @@ typedef enum {
     XR_RBC_INVALID,
     XR_RBC_OUT_OF_MEMORY,
     XR_RBC_ARITHMETIC_PANIC,
-    XR_RBC_OUTPUT_FAILURE
+    XR_RBC_OUTPUT_FAILURE,
+    XR_RBC_HOST_CLOCK_FAILURE
 } XrRbcStatus;
 
 // Failure leaves the output untouched. Register 255 is reserved; every
@@ -131,7 +138,8 @@ typedef struct XrRbcOutcome XrRbcOutcome;
 // stack allocation failures remain execution-time concerns. Output is empty on entry;
 // failure never publishes one.
 // CALL A,Bx returns into A; the callee starts at A+1, the caller's top argument
-// window. CALLN reads value/id at A+1/A+2, with Bx selecting the actual leaf.
+// window. CALLN selects a fixed native kind with Bx. Integer output reads
+// value/id at A+1/A+2; clocks read id at A+1 and return I64 bits into A.
 // Callee locals may overwrite slots beyond the call window. LT/LE/EQ compare
 // A,B and execute the following JMP only when the comparison is true.
 // PRINT_LITERAL reserves A as zero and selects immutable bytes by Bx; its
@@ -153,6 +161,8 @@ XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
     XrtOutputFailure *facts, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_arithmetic_panic(const XrRbcOutcome *outcome,
     XrtArithmeticPanic *facts, const XrtLocationOwner **borrowed_locations);
+XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,
+    XrtHostClockFailure *facts, const XrtLocationOwner **borrowed_locations);
 XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome);
 XR_FUNC const char *xr_rbc_dispatch_name(void);
 

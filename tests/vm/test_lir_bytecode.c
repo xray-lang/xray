@@ -547,8 +547,8 @@ static void test_owned_diagnostic_and_rejection(void) {
     m = test_sum();
     OK(xr_lir_function_at(m, 2, &root));
     CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
-    CHECK(xr_rbc_program_view(program)->native_count == 1 &&
-        xr_rbc_program_view(program)->natives[0] == xrt_print_i64);
+    CHECK(xr_rbc_program_view(program)->native_count == XR_RBC_NATIVE_COUNT &&
+        xr_rbc_program_view(program)->natives[0] == XR_RBC_NATIVE_PRINT_I64);
     xr_lir_module_destroy(m);
     xr_rbc_program_destroy(program);
     program = NULL;

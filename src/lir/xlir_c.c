@@ -162,7 +162,7 @@ static bool c_scalar(LirC *c, XrLirType type) {
     c->f64 |= type == XR_LIR_F64;
     return c->status == XR_LIR_C_OK;
 }
-static bool c_print_call(LirC *c, const XrLirInstructionView *v) {
+static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
     if (v->op != XR_LIR_CALL)
         return false;
     XrLirFunction callee = {c->request->module, v->callee};
@@ -253,7 +253,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             break;
         case XR_LIR_CALL:
             c_visit(c, v->callee);
-            if (c_print_call(c, v) && c_located(&v->source)) {
+            if (c_runtime_call(c, v) && c_located(&v->source)) {
                 if (c->location_count == UINT32_MAX)
                     c_error(c, XR_LIR_C_UNSUPPORTED, "source map cannot represent another nonzero ID");
                 else
@@ -355,7 +355,7 @@ static void c_locations(LirC *c) {
             for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
-                if (!c_print_call(c, &v) || !c_located(&v.source))
+                if (!c_runtime_call(c, &v) || !c_located(&v.source))
                     continue;
                 ++id;
                 c_text(c, "    { ");
@@ -550,12 +550,17 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             if (v->result)
                 c_format(c, "v%" PRIu32 " = ", v->result);
             bool string_output = false;
-            if (c_print_call(c, v)) {
+            if (c_runtime_call(c, v)) {
                 XrLirFunctionView external;
                 xr_lir_function_view(c->request->module,
                     (XrLirFunction){c->request->module, v->callee}, &external);
                 string_output = external.extern_kind == XR_LIR_EXTERN_PRINT_STRING;
-                c_text(c, string_output ? "xrt_print_string" : "xrt_print_i64");
+                const char *name = string_output ? "xrt_print_string" :
+                    external.extern_kind == XR_LIR_EXTERN_PRINT_I64 ? "xrt_print_i64" :
+                    external.extern_kind == XR_LIR_EXTERN_CLOCK_REALTIME ? "xrt_clock_realtime_nanos" :
+                    external.extern_kind == XR_LIR_EXTERN_CLOCK_CPU ? "xrt_clock_process_cpu_nanos" :
+                    "xrt_clock_monotonic_nanos";
+                c_text(c, name);
             } else c_function_name(c, v->callee);
             c_text(c, "(");
             for (uint32_t a = 0; a < v->operand_count && c->status == XR_LIR_C_OK; ++a) {
@@ -564,9 +569,9 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
                 if (string_output && a == 1) c_text(c, "(size_t)");
                 c_value(c, v->operands[a]);
             }
-            if (c_print_call(c, v)) {
+            if (c_runtime_call(c, v)) {
                 uint32_t id = c_located(&v->source) ? ++c->location_cursor : 0;
-                c_format(c, ", UINT32_C(%" PRIu32 ")", id);
+                c_format(c, "%sUINT32_C(%" PRIu32 ")", v->operand_count ? ", " : "", id);
             }
             c_text(c, ");\n");
             break;

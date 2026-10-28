@@ -60,6 +60,7 @@ def main():
         run('early-reader', 'print(read())\nconst n=7\nfn read()->i64{return n}\n',
             1, b'before complete publication')
 
+        run('clock-properties', 'import time\nfn verifyClocks()->i64 {\n const a=time.nanos()\n const ms=time.monotonic()\n const b=time.nanos()\n const cpu1=time.clock()\n const cpu2=time.clock()\n const now=time.now()\n if(a>0 && b>=a && a/1000000<=ms && ms<=b/1000000 && cpu1>=0 && cpu2>=cpu1 && now>0){return 1}\n return 0\n}\nprint(verifyClocks())\n', stdout=b'1\n')
         run('empty', '')
         run('ordinary-main', 'fn main()->i64{print(99)\nreturn 7}\n')
         run('recursive-call', 'fn fib(n:i64)->i64{if(n<2){return n}\n'

@@ -137,7 +137,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
             a + 1 + module->functions[index].parameter_count != registers) return false;
         break;
     case XR_RBC_CALLN:
-        if (a + 2 >= registers || index >= module->native_count) return false;
+        if (index >= module->native_count ||
+            a + (module->natives[index] == XR_RBC_NATIVE_PRINT_I64 ? 2u : 1u) >= registers)
+            return false;
         break;
     case XR_RBC_RET:
         return a < registers && !(word >> 16);
@@ -255,7 +257,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
         !xr_rbc_source_maps_valid(module, locations))
         return XR_RBC_INVALID;
     for (size_t i = 0; i < module->native_count; ++i)
-        if (module->natives[i] != xrt_print_i64)
+        if ((unsigned)module->natives[i] >= XR_RBC_NATIVE_COUNT)
             return XR_RBC_INVALID;
     XrRbcExecution *execution = xr_calloc(1, sizeof(*execution));
     if (!execution) return XR_RBC_OUT_OF_MEMORY;
@@ -302,6 +304,8 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
         outcome->status = XR_RBC_OUTPUT_FAILURE;
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_ARITHMETIC_PANIC)
         outcome->status = XR_RBC_ARITHMETIC_PANIC;
+    else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_HOST_CLOCK)
+        outcome->status = XR_RBC_HOST_CLOCK_FAILURE;
     else {
         if (status != XRT_EXECUTION_COMPLETED) outcome->status = XR_RBC_INVALID;
         xrt_locations_release(outcome->locations);
@@ -347,6 +351,15 @@ XR_FUNC bool xr_rbc_outcome_arithmetic_panic(const XrRbcOutcome *outcome,
     if (!outcome || outcome->status != XR_RBC_ARITHMETIC_PANIC || !facts || !borrowed_locations)
         return false;
     *facts = outcome->failure.detail.panic;
+    *borrowed_locations = outcome->locations;
+    return true;
+}
+
+XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,
+    XrtHostClockFailure *facts, const XrtLocationOwner **borrowed_locations) {
+    if (!outcome || outcome->status != XR_RBC_HOST_CLOCK_FAILURE || !facts || !borrowed_locations)
+        return false;
+    *facts = outcome->failure.detail.clock;
     *borrowed_locations = outcome->locations;
     return true;
 }

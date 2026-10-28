@@ -111,13 +111,16 @@ def compile_command(args, source, executable):
                'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
         command = [args.compiler, '/nologo', '/std:c11', '/W4', '/WX', '/O2', '/utf-8', crt,
                    '/I' + str(args.include), '/I' + str(args.source_root / 'src'),
-                   source, args.library, '/Fe:' + str(executable)]
+                   source, '/Fe:' + str(executable),
+                   '/Fo' + str(executable.with_suffix('.obj'))]
         command += ['/clang:-fno-lto'] if 'clang' in args.compiler.name.lower() else ['/GL-']
         if args.asan:
             command += ['/fsanitize=address', '/Zi']
             if 'clang' in args.compiler.name.lower():
                 command += ['/clang:-fsanitize=undefined']
-            command += ['/link', '/INCREMENTAL:NO']
+        command += ['/link', args.library]
+        if args.asan:
+            command += ['/INCREMENTAL:NO']
     else:
         command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic',
                    '-O2', '-fno-lto', '-I' + str(args.include),
@@ -248,6 +251,9 @@ def main():
     diamond.write_bytes(b'import "./left" as left\nimport "./right" as right\n'
         b'print(left.read()+right.read())\n')
     cases.append(('diamond', diamond, b'23\n'))
+    clock_entry = inputs / 'clock-properties.xr'
+    clock_entry.write_text('import time\nfn verifyClocks()->i64 {\n const a=time.nanos()\n const ms=time.monotonic()\n const b=time.nanos()\n const cpu1=time.clock()\n const cpu2=time.clock()\n const now=time.now()\n if(a>0 && b>=a && a/1000000<=ms && ms<=b/1000000 && cpu1>=0 && cpu2>=cpu1 && now>0){return 1}\n return 0\n}\nprint(verifyClocks())\n', encoding='utf-8')
+    cases.append(('clock-properties', clock_entry, b'1\n'))
     compiler = Path(shutil.which(str(args.compiler)) or args.compiler).resolve()
     assert compiler.is_file()
     identity = {'compiler': str(compiler), 'compilerSHA256': digest(compiler),

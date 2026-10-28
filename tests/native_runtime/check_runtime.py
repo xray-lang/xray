@@ -35,7 +35,12 @@ def header_clients(build, logs):
             'const XrtSourceMap xrt_standalone_source_map = {NULL, 0};\n'
             'static void (*const leaf)(uint32_t, uint32_t) = xrt_arithmetic_panic;\n'
             'static void (*const text)(const char *, size_t, uint32_t) = xrt_print_string;\n'
-            'static void invoke(void *context) { text("header", 6, 0); leaf(*(uint32_t *)context, 0); }\n'
+            'static int64_t (*const realtime)(uint32_t) = xrt_clock_realtime_nanos;\n'
+            'static int64_t (*const cpu)(uint32_t) = xrt_clock_process_cpu_nanos;\n'
+            'static int64_t (*const monotonic)(uint32_t) = xrt_clock_monotonic_nanos;\n'
+            'static void invoke(void *context) { int64_t a = monotonic(0);\n'
+            ' if (a <= 0 || realtime(0) <= 0 || cpu(0) < 0 || monotonic(0) < a) return;\n'
+            ' text("header", 6, 0); leaf(*(uint32_t *)context, 0); }\n'
             'int main(void) { uint32_t code = 421;\n'
             'xrt_run_standalone(&xrt_standalone_source_map, invoke, &code); return 77; }\n')
     records = []
@@ -93,6 +98,21 @@ def main():
         assert b'AFTER_CALL' not in process.stderr and b'EXIT_CALLBACK' not in process.stderr, label
         return process.returncode, output, process.stderr
 
+    if args.suite == 'clock':
+        for mode in ('failed', 'range', 'unknown', 'bad-source'):
+            command = [args.clients[0], mode]
+            process = subprocess.run(command, capture_output=True, timeout=15)
+            (args.logs / (mode + '.stdout')).write_bytes(process.stdout)
+            (args.logs / (mode + '.stderr')).write_bytes(process.stderr)
+            (args.logs / (mode + '.exit')).write_text(str(process.returncode))
+            assert process.returncode != 0 and not process.stdout
+            assert b'AFTER_CALL' not in process.stderr and b'EXIT_CALLBACK' not in process.stderr
+            if mode != 'bad-source':
+                reason = b'out of range' if mode == 'range' else b'read failed'
+                source = b'unknown source' if mode == 'unknown' else b'clock.xr:7:9-7:12'
+                assert process.returncode == 1
+                assert process.stderr == b'xray: host clock monotonic ' + reason + b' at ' + source + b'\n'
+        return
     if args.suite == 'output':
         code, output, error = run('raw-values', mode='values')
         assert (code, output, error) == (0, b'-9223372036854775808\n0\n9223372036854775807\n', b'')
