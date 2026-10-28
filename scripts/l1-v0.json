@@ -112,7 +112,13 @@
     "test_xir_cleanup_replaced_wait_fault",
     "test_xir_cleanup_replaced_host_fault",
     "test_xir_cleanup_replaced_value_fault",
-    "test_xir_cleanup_replaced_sdk_reader"
+    "test_xir_cleanup_replaced_sdk_reader",
+    "test_xir_error_union_types",
+    "test_xir_error_union",
+    "test_xir_error_union_faults",
+    "test_xir_error_union_native_7",
+    "test_xir_error_union_native_300",
+    "test_xir_error_union_legacy"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -313,7 +319,17 @@
     "test_xir_cleanup_replaced_late_cancel",
     "test_xir_cleanup_replaced_host_wait",
     "test_xir_cleanup_replaced_resources",
-    "test_xir_cleanup_replaced_sdk_manifest"
+    "test_xir_cleanup_replaced_sdk_manifest",
+    "test_xir_error_union_types",
+    "test_xir_error_union_packet",
+    "test_xir_error_union_vm",
+    "test_xir_error_union_history",
+    "test_xir_error_union_native_7",
+    "test_xir_error_union_native_300",
+    "test_xir_error_union_faults",
+    "test_xir_error_union_inference",
+    "test_xir_error_union_legacy",
+    "test_xir_error_union_cli"
   ],
   "versionCommand": [
     "{build}/xray.exe",
