@@ -481,6 +481,7 @@ XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget
     if (!checked || !output || *output || !xir_compile_context_valid(&checked->context))
         return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
     XrXirStatus status=lower_control_poll(control);
+    if (status!=XR_XIR_OK) status=transition_error(status,diagnostic);
     if (status==XR_XIR_OK) status=transition_shape(&checked->module,XR_XIR_CHECKED,&checked->context,target,diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,diagnostic);
     const TransitionInputProof proof={checked->evaluation_only?checked_evaluation_encode:checked_encode,NULL,NULL};
@@ -499,6 +500,7 @@ XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **owned_input,
     *owned_input = NULL;
     XrXirCompileContext limits = checked->context;
     XrXirStatus status=lower_control_poll(control);
+    if (status!=XR_XIR_OK) status=transition_error(status,diagnostic);
     if (status==XR_XIR_OK) status=transition_shape(&checked->module,XR_XIR_CHECKED,&limits,target,diagnostic);
     if (status == XR_XIR_OK)
         status = xr_xir_compile_artifact_verify(checked, diagnostic);

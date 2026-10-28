@@ -860,8 +860,27 @@ static void lower_ready42(XrXirArtifact **lowered) {
     XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED && value.type==XR_XIR_I64 && value.payload==42);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_value_drop(&value);
 }
+static bool lower_entry_cancel(const void *context) { return *(const bool *)context; }
+static void lower_entry_controls(void) {
+    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    for (unsigned taking=0;taking<2;++taking) {
+        XrCompileResources *resources=sdk_ledger(&sdk_unlimited);uint64_t empty=sdk_stats(resources).held_bytes;
+        XrXirArtifact *closed=lower_source(resources),*lowered=NULL;uint64_t held=sdk_stats(resources).held_bytes;
+        bool cancelled=true;XrCompileRequestControl control={0};
+        XrCompileRequestOptions options={.cancel_poll=lower_entry_cancel,.cancel_context=&cancelled};
+        CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+        XrXirDiagnostic diagnostic={0};XrXirStatus status=taking?
+            xr_xir_compile_lower_take(&closed,&target,&control,&lowered,&diagnostic):
+            xr_xir_compile_lower(closed,&target,&control,&lowered,&diagnostic);
+        fprintf(stderr,"lower entry taking%u status%u diagnostic%u\n",taking,(unsigned)status,(unsigned)diagnostic.status);
+        CHECK(status==XR_XIR_CANCELLED && diagnostic.status==status && !lowered);
+        if (!taking) {CHECK(closed && sdk_stats(resources).held_bytes==held);xr_xir_compile_artifact_free(closed);}
+        else CHECK(!closed);
+        CHECK(sdk_stats(resources).held_bytes==empty);xr_compile_resources_release(resources);CHECK(!runtime_live&&!runtime_bytes);
+    }
+}
 static void lower_loop_controls(void) {
-    lower_copy_control();
+    lower_entry_controls();lower_copy_control();
     for (unsigned mode=0;mode<4;++mode) {
         XrCompileResources *resources=sdk_ledger(&sdk_unlimited);uint64_t empty=sdk_stats(resources).held_bytes;
         XrXirArtifact *closed=lower_source(resources),*lowered=NULL;uint64_t before=sdk_stats(resources).held_bytes;
