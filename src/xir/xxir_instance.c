@@ -1914,6 +1914,13 @@ XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type,
     if (instance!=instance_current(instance)) return XR_XIR_CALL_BAD_STATE;
     return xr_xir_task_executor_spawn_from_view(instance->executor, view, task_type, &request, output);
 }
+XR_FUNC XrXirCallStatus xr_xir_task_cancel(XrXirCallView *view,const XrXirValue *task) {
+    if (!view || !task || !instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance=view_instance(view);
+    if (!instance || instance!=instance_current(instance)) return XR_XIR_CALL_BAD_STATE;
+    XrXirCallStatus status=xr_xir_call_execution_status(view);
+    return status==XR_XIR_CALL_READY ? xr_xir_task_executor_cancel_task(instance->executor,view,task) : status;
+}
 XrXirCallStatus xr_xir_instance_cell(XrXirCallView *view, XrXirType type,
     const XrXirValue *initial, XrXirValue *output) {
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;

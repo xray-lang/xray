@@ -107,10 +107,14 @@ static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedT
     const XrXirTypeNode *type = xr_xir_type_node(&ctx->types, task.type);
     if (!type || type->kind != XR_XIR_TYPE_TASK)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "await requires an admitted Task value");
-    XrXirType element = type->element;
+    XrXirType element = type->element,declared_error=type->result;
     if (type->result==XR_XIR_UNIT)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Task error declaration is not yet supported");
-    if (!source_local_error(ctx,node,XR_XIR_ERROR,true)) return false;
+    XrXirType cancelled=xr_xir_cancelled_error_type(&ctx->types),error_type=XR_XIR_UNIT;
+    if (cancelled==XR_XIR_UNIT) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"await requires the governed Cancelled declaration");
+    XrXirCallableParameter errors[2]={{declared_error,0},{cancelled,0}};
+    if (!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,.parameters=errors,.parameter_count=2},&error_type) ||
+        !source_local_error(ctx,node,error_type,true)) return false;
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t origin = body->count, error = body->block_count;
@@ -128,4 +132,44 @@ static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedT
     if (element == XR_XIR_UNIT) { *value = (SourceValue){UINT32_MAX, XR_XIR_UNIT}; return true; }
     return source_recipe_append(ctx,
         (XrXirInstruction) {XR_XIR_INVOKE_RESULT, element, {0}, {0}, origin, {0}}, value);
+}
+
+static bool source_task_cancel_reference(SourceContext *ctx,AstNode *node,
+    const XrNativeMemberDeclaration *member) {
+    if (!ctx->task_cancel_member) {
+        SourceName symbol={0};symbol.name=source_owned_text(ctx,member->name);
+        if (!symbol.name || !source_query_declare(ctx,&symbol,XR_XIR_SOURCE_MEMBER,ctx->task_declaration,
+            (XrXirSourceRange){ctx->task_module,(int)member->line,(int)member->column,
+                (int)member->line,(int)(member->column+source_text_size(ctx,member->name))})) return false;
+        ctx->task_cancel_member=symbol.declaration;
+        const char *signature=source_owned_text(ctx,member->signature);
+        if (!signature) return false;
+        XrXirSourceDeclaration *record=(XrXirSourceDeclaration *)&ctx->query.declarations[symbol.declaration-1];
+        record->native_identity=member->id;record->signature=signature;
+        record->type=(XrXirSourceType){XR_XIR_UNIT,0,true};
+        record->exported=true;record->mutable=true;
+        record->generic_parent=ctx->task_declaration;record->generic_parent_count=2;
+    }
+    return source_query_target_token_reference(ctx,node,ctx->task_cancel_member,XR_XIR_SOURCE_CALL);
+}
+static bool source_task_cancel(SourceContext *ctx,AstNode *node,SourceValue *value) {
+    CallExprNode *call=&node->as.call_expr;
+    AstNode *callee=call->callee;
+    if (!source_native_task_declaration(ctx)) return false;
+    const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_TASK);
+    const XrNativeMemberDeclaration *member=source_native_member(ctx,native,callee->as.member_access.name);
+    if (!member || !member->is_public || !member->is_method || member->is_static || !member->lowered ||
+        member->receiver!=XR_NATIVE_RECEIVER_REF || member->operation!=XR_NATIVE_OPERATION_TASK_CANCEL ||
+        member->parameter_count || member->result!=XR_NATIVE_TERM_UNIT ||
+        call->arg_count || call->type_arg_count || call->default_arg_count)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Task member requires its admitted zero-argument cancellation recipe");
+    SourceValue cell,task;
+    if (!source_reference_place(ctx,callee->as.member_access.object,&cell)) return false;
+    XrXirType type=xr_xir_cell_element(&ctx->types,cell.type);
+    const XrXirTypeNode *shape=xr_xir_type_node(&ctx->types,type);
+    if (!shape || shape->kind!=XR_XIR_TYPE_TASK)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Task cancellation requires a mutable Task binding");
+    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,type,{cell.id,0},{0},0,{0}},&task) &&
+        source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TASK_CANCEL,XR_XIR_UNIT,{task.id,0},{0},0,{0}},value) &&
+        source_task_cancel_reference(ctx,callee,member);
 }

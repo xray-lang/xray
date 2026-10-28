@@ -37,12 +37,14 @@ static uint32_t local_answer(XrXirSourceProduct *product) {
     XrXirSourceProductPacketView packet={0};XrXirArtifact *checked=NULL;
     CHECK(xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK);
     CHECK(packet.length>64 && packet.bytes[8]==39 && !packet.bytes[9] && !packet.bytes[10] && !packet.bytes[11]);
-    CHECK(packet.bytes[12]==104 && !packet.bytes[13] && !packet.bytes[14] && !packet.bytes[15]);
+    CHECK(packet.bytes[12]==105 && !packet.bytes[13] && !packet.bytes[14] && !packet.bytes[15]);
     uint8_t *old=xr_malloc(packet.length);CHECK(old);memcpy(old,packet.bytes,packet.length);old[8]=37;local_packet_digest(old,packet.length);
     CHECK(xr_xir_compile_checked_read(xr_xir_compile_source_product_context(product),old,packet.length,&checked,NULL)==XR_XIR_BAD_STRUCTURE && !checked);
     old[8]=39;old[12]=102;local_packet_digest(old,packet.length);
     CHECK(xr_xir_compile_checked_read(xr_xir_compile_source_product_context(product),old,packet.length,&checked,NULL)==XR_XIR_BAD_STRUCTURE && !checked);
     old[12]=103;local_packet_digest(old,packet.length);
+    CHECK(xr_xir_compile_checked_read(xr_xir_compile_source_product_context(product),old,packet.length,&checked,NULL)==XR_XIR_BAD_STRUCTURE && !checked);
+    old[12]=104;local_packet_digest(old,packet.length);
     CHECK(xr_xir_compile_checked_read(xr_xir_compile_source_product_context(product),old,packet.length,&checked,NULL)==XR_XIR_BAD_STRUCTURE && !checked);
     xr_free(old);
     CHECK(xr_xir_compile_checked_read(xr_xir_compile_source_product_context(product),packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);

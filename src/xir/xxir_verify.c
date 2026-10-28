@@ -1015,6 +1015,11 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
         if (op->op==XR_XIR_TASK_AWAIT && context->module->stage == XR_XIR_LOWERED && !xr_xir_task_result_shape(context->module->types, result))
             return XR_XIR_UNSUPPORTED;
     }
+    if (op->op==XR_XIR_TASK_CANCEL) {
+        expected=xr_xir_operand_type(function,op->args[0]);
+        const XrXirTypeNode *task=xr_xir_type_node(context->module->types,expected);
+        if (!task || task->kind!=XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
+    }
     if (op->op == XR_XIR_NULLABLE_SOME)
         expected = xr_xir_nullable_element(context->module->types, op->type);
     if (op->op == XR_XIR_F64_TRY_PARSE) expected = XR_XIR_STRING;

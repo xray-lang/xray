@@ -85,6 +85,8 @@ XR_FUNC bool xr_xir_nominal_native_ordering(const XrXirTypes *types, XrXirType t
 /* Verified owned pools still require the exact instantiated payload projection. */
 XR_FUNC bool xr_xir_nominal_native_recv(const XrXirTypes *types, XrXirType type, XrXirType element);
 XR_FUNC bool xr_xir_nominal_native_send_result(const XrXirTypes *types, XrXirType type);
+/* A missing or unauthenticated governed declaration returns Unit. */
+XR_FUNC XrXirType xr_xir_cancelled_error_type(const XrXirTypes *types);
 /* Metadata helpers grant no executable type or source admission.
  * Outputs publish only after complete successful validation; work is never refunded. */
 XR_FUNC XrXirStatus xr_xir_compile_nominal_structure_verify(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, const XrXirTypes *types);

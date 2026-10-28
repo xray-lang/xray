@@ -61,6 +61,7 @@ tests/unit/xir/shared_current_checked.h text eol=lf
 
 # The source fixture oracle and CTFE suffix bind the original LF bytes.
 tests/unit/xir/error_union/fixtures/error_union.xr text eol=lf
+tests/unit/xir/typed_await/fixtures/typed_await.xr text eol=lf
 
 # Owner-registry generation and checkout use the same canonical LF bytes.
 src/plan/semantic/xr_semantic_ops_gen.h text eol=lf

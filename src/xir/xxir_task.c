@@ -259,6 +259,41 @@ XR_FUNC bool xr_xir_task_executor_view_member(const XrXirTaskExecutor *executor,
     *child = generator ? generator->child : activation->task != NULL;
     return true;
 }
+XR_FUNC XrXirCallStatus xr_xir_task_executor_cancel_task(XrXirTaskExecutor *executor,
+    XrXirCallView *view,const XrXirValue *value) {
+    bool child=false;
+    if (!executor || !value || !xr_xir_task_executor_view_member(executor,view,&child) ||
+        task_executor_observing(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirValueAdmission *admission=xr_xir_call_admission(view);
+    if (!admission || admission->domain!=executor->config.domain ||
+        admission->arena!=executor->config.program->arena ||
+        !xr_xir_value_argument(value,admission->arena,(XrXirType)value->type)) return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirTypeNode *node=xr_xir_type_node(executor->config.program->types,(XrXirType)value->type);
+    if (!node || node->kind!=XR_XIR_TYPE_TASK) return XR_XIR_CALL_BAD_ARGUMENT;
+    XirTask *target=(XirTask *)(uintptr_t)value->payload;
+    if (target->object.domain!=executor->config.domain || target->generation!=executor->generation ||
+        !target->identity || target->identity>executor->next_identity) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!task_pending_member_work(admission,1)) return XR_XIR_CALL_LIMIT;
+    if (atomic_load_explicit(&target->state,memory_order_acquire)==XIR_TASK_TERMINAL)
+        return XR_XIR_CALL_READY;
+    uint64_t walked=0;
+    for (XirTask *task=executor->active;task;task=task->active_next) {
+        if (++walked>executor->next_identity) return XR_XIR_CALL_BAD_STATE;
+        if (!task_pending_member_work(admission,1)) return XR_XIR_CALL_LIMIT;
+        if (task!=target) continue;
+        XirTaskActivation *activation=&task->activation;
+        const XrXirExecutorBinding binding={executor,activation,executor->generation,task->identity};
+        if (task->executor!=executor || !task->call || activation->task!=task ||
+            activation->call!=task->call || activation->ticket!=task->identity ||
+            !xr_xir_call_executor_member(task->call,&binding)) return XR_XIR_CALL_BAD_STATE;
+        XrXirCallStatus status=xr_xir_call_request_cancel(task->call);
+        if (status!=XR_XIR_CALL_CANCEL_REQUESTED) return status;
+        if (!activation->queued && activation!=executor->current &&
+            xr_xir_call_state(task->call)!=XR_XIR_CALL_SUSPENDED) task_core_enqueue(executor,activation);
+        return XR_XIR_CALL_READY;
+    }
+    return XR_XIR_CALL_BAD_STATE;
+}
 XR_FUNC bool xr_xir_task_executor_cleanup_active(const XrXirTaskExecutor *executor) {
     if (!task_executor_owner_current(executor)) return false;
     if (!executor || !executor->driving || !executor->current || !executor->current->call) return false;

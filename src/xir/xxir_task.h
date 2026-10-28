@@ -18,4 +18,6 @@ XR_FUNC XrXirCallStatus xr_xir_task_copy_outcome(const XrXirValue *task, XrXirCa
  * from this view's immutable Program arena; failure preserves an empty output. */
 XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type, uint32_t direct_entry,
     const XrXirValue *arguments, uint32_t count, XrXirValue *output);
+/* Request cancellation of this authenticated executor member without driving it. */
+XR_FUNC XrXirCallStatus xr_xir_task_cancel(XrXirCallView *view,const XrXirValue *task);
 #endif // XXIR_TASK_H

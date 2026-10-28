@@ -336,12 +336,14 @@ static void wire_digest(uint8_t *bytes,size_t length) {
 }
 static void checked_wire_boundary(const XrXirCompileContext *context,uint8_t *packet,size_t length,
     const XrXirModule *module,uint32_t members) {
-    uint64_t baseline=held(context);CHECK(length>=64 && XR_XIR_CHECKED_SCHEMA==39 && XR_XIR_CHECKED_CONTRACT==104);
-    CHECK(packet[12]==104 && !packet[13] && !packet[14] && !packet[15]);
+    uint64_t baseline=held(context);CHECK(length>=64 && XR_XIR_CHECKED_SCHEMA==39 && XR_XIR_CHECKED_CONTRACT==105);
+    CHECK(packet[12]==105 && !packet[13] && !packet[14] && !packet[15]);
     uint8_t digest[32];memcpy(digest,packet+32,sizeof(digest));
     XrXirArtifact *output=NULL;wire_word(packet+12,103);wire_digest(packet,length);
     CHECK(xr_xir_compile_checked_read(context,packet,length,&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
-    CHECK(held(context)==baseline);wire_word(packet+12,104);memcpy(packet+32,digest,sizeof(digest));
+    CHECK(held(context)==baseline);wire_word(packet+12,104);wire_digest(packet,length);
+    CHECK(xr_xir_compile_checked_read(context,packet,length,&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
+    CHECK(held(context)==baseline);wire_word(packet+12,105);memcpy(packet+32,digest,sizeof(digest));
     if (!members) return;
     uint32_t value=function_named(module,"value");CHECK(value!=UINT32_MAX);
     const XrXirTypeNode *node=xr_xir_type_node(module->types,module->functions[value].error_type);
@@ -378,7 +380,7 @@ static void checked_wire_boundary(const XrXirCompileContext *context,uint8_t *pa
     wire_word(shortened+position+8,members-1);wire_digest(shortened,length-4);
     XrXirStatus semantic=xr_xir_compile_checked_read(context,shortened,length-4,&output,NULL);
     CHECK(semantic==XR_XIR_BAD_TYPE && !output);xr_compile_resources_free(shortened);CHECK(held(context)==populated);
-    printf("Checked104 UNION%u: missing physical tail status%u, canonical prefix/body status%u, valid SHA PASS\n",
+    printf("Checked105 UNION%u: missing physical tail status%u, canonical prefix/body status%u, valid SHA PASS\n",
         members,(unsigned)physical,(unsigned)semantic);
     CHECK(xr_xir_compile_checked_read(context,packet,length,&output,NULL)==XR_XIR_OK && output);
     xr_xir_compile_artifact_free(output);xr_compile_resources_free(pattern);CHECK(held(context)==baseline);

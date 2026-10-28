@@ -731,6 +731,15 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         return vm_call_step(run, state, op, action, run->layout->offsets[result_id]);
     case XR_XIR_GENERATOR_NEW:
         return vm_generator_new(run,state,op,action,run->layout->offsets[result_id]);
+    case XR_XIR_TASK_CANCEL: {
+        if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
+        XrXirValue task=vm_value_operand(run,op->args[0]);
+        XrXirCallStatus status=xr_xir_task_cancel(run->view,&task);
+        if (status!=XR_XIR_CALL_READY)
+            *action=(XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};
+        else state->instruction=next;
+        return XR_XIR_RUN_OK;
+    }
     case XR_XIR_GO:
         return vm_go_step(run, state, op, action, run->layout->offsets[result_id]);
     case XR_XIR_TASK_AWAIT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:

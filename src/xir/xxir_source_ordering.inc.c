@@ -121,7 +121,7 @@ static bool source_prelude_scan(AstNode *node,void *pointer) {
     if (scan->depth==128) return source_fail(scan->ctx,node,XR_XIR_BUDGET,"native source discovery depth exhausted");
     if (node->type==AST_VARIABLE && !source_prelude_word(scan,node->as.variable.name)) return false;
     if (!source_prelude_signature(scan,node)) return false;
-    if (node->type==AST_RANGE) scan->needed=true;
+    if (node->type==AST_RANGE || node->type==AST_AWAIT_EXPR) scan->needed=true;
     if (node->type==AST_MEMBER_ACCESS && source_text_same(scan->ctx,node,node->as.member_access.name,"fromUtf8"))
         scan->needed=true;
     ++scan->depth;

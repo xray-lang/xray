@@ -375,12 +375,74 @@ static const TaskCase task_cases[] = {
         "print((try\? (part(31, false) + part(32, true) + part(33, false))) \?\? -3)\n"
         "try { const ignored = try\? divide(0); print(ignored \?\? -9) }\n"
         "catch panic (p) { print(p.code) }\n",
-        "17\n-1\n-2\n13\n-2\n7\nfalse\n-1\n19\n41\nowned \303\251\000\347\225\214\n31\n32\n-3\n420\n")
+        "17\n-1\n-2\n13\n-2\n7\nfalse\n-1\n19\n41\nowned \303\251\000\347\225\214\n31\n32\n-3\n420\n"),
+    TASK_CASE("typed-await",
+        "enum A { Bad { text: string } }\n"
+        "enum B { Bad }\n"
+        "fn value() -> string { return \"owned \303\251\\0\347\225\214\" }\n"
+        "fn failOne() throws(A) -> string { throw A.Bad { text: \"owned \303\251\\0\347\225\214\" } }\n"
+        "fn failUnion(first: bool) throws(A|B) -> i64 {\n"
+        "    if (first) { throw A.Bad { text: \"union \303\251\\0\347\225\214\" } }\n"
+        "    throw B.Bad\n"
+        "}\n"
+        "export fn awaitNever() throws(Cancelled) -> string {\n"
+        "    var task: Task<string> = go value()\n"
+        "    const first = try await task\n"
+        "    task.cancel()\n"
+        "    task.cancel()\n"
+        "    return try await task\n"
+        "}\n"
+        "export fn awaitOne() throws(A|Cancelled) -> string {\n"
+        "    const task: Task<string,A> = go failOne()\n"
+        "    return try await task\n"
+        "}\n"
+        "export fn awaitUnion(first: bool) throws(A|B|Cancelled) -> i64 {\n"
+        "    const task: Task<i64,A|B> = go failUnion(first)\n"
+        "    return try await task\n"
+        "}\n"
+        "fn spinning() -> i64 {\n"
+        "    defer { print(\"child-cleanup\") }\n"
+        "    while (true) { Coro.yield() }\n"
+        "    return 7\n"
+        "}\n"
+        "export fn childCancellation() -> i64 {\n"
+        "    var task: Task<i64> = go spinning()\n"
+        "    task.cancel()\n"
+        "    task.cancel()\n"
+        "    var caught = 0\n"
+        "    try { const ignored = try await task } catch (e: Cancelled) { caught += 1 }\n"
+        "    try { const ignored = try await task } catch (e: Cancelled) { caught += 1 }\n"
+        "    return caught\n"
+        "}\n"
+        "export fn cancelledError() throws(Cancelled) -> i64 {\n"
+        "    var task = go spinning()\n"
+        "    task.cancel()\n"
+        "    return try await task\n"
+        "}\n"
+        "export fn ownCancellation() -> i64 {\n"
+        "    var task = go spinning()\n"
+        "    defer { print(\"parent-cleanup\"); task.cancel() }\n"
+        "    try { return try await task }\n"
+        "    catch (e: Cancelled) { print(\"caught-own\"); return -1 }\n"
+        "}\n"
+        "export fn independentParent() -> i64 {\n"
+        "    defer { print(\"parent-cleanup\") }\n"
+        "    const task = go spinning()\n"
+        "    try { return try await task }\n"
+        "    catch (e: Cancelled) { print(\"caught-own\"); return -1 }\n"
+        "}\n"
+        "\n"
+        "print(childCancellation())\n"
+        "print(try awaitNever())\n"
+        "try { print(try awaitOne()) } catch (e: A) { print(\"one-error\") }\n"
+        "try { print(try awaitUnion(true)) } catch (e: A) { print(\"union-a\") } catch (e: B) { print(\"wrong-b\") }\n"
+        "try { print(try awaitUnion(false)) } catch (e: A) { print(\"wrong-a\") } catch (e: B) { print(\"union-b\") }\n"
+        , "child-cleanup\n2\nowned \303\251\000\347\225\214\none-error\nunion-a\nunion-b\n"),
 };
 static int constructed_task_case(const TaskCase *test, const char *stdlib, size_t ordinal) {
     XrSourceCompileOptions compiler = compile_options(stdlib);
-    char source[2048]; size_t length = strlen(test->source);
-    CHECK(length < sizeof(source)); memcpy(source, test->source, length);
+    size_t length = strlen(test->source);CHECK(length<SIZE_MAX);
+    char *source=malloc(length+1);CHECK(source);memcpy(source,test->source,length+1);
     XrSourceText text = {NULL, test->name, source, length};
     XrSourceArtifact *program = NULL; XrSourceDiagnostic *diagnostic = NULL;
     XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text=text};
@@ -389,7 +451,7 @@ static int constructed_task_case(const TaskCase *test, const char *stdlib, size_
     if (status != XR_SOURCE_OK || !program || diagnostic)
         fprintf(stderr, "[sdk-compile-failure] case=constructed_tasks/%s status=%u\n",
             test->name, (unsigned)status);
-    memset(source, '!', sizeof(source));
+    memset(source, '!', length+1);free(source);
 
     if (status != XR_SOURCE_OK) {
         CHECK(!program && diagnostic); XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};

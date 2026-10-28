@@ -191,6 +191,9 @@ XR_BUILTIN_ENUM("Endian", 0, ENDIAN,
 XR_BUILTIN_ENUM("Utf8Error", 0, UTF8_ERROR,
                 XR_BUILTIN_ENUM_VARIANT("InvalidUtf8", NONE))
 
+XR_BUILTIN_ENUM("Cancelled", 0, CANCELLED,
+                XR_BUILTIN_ENUM_VARIANT("Cancelled", NONE))
+
 XR_BUILTIN_ENUM("NumberParseError", 0, NUMBER_PARSE_ERROR,
                 XR_BUILTIN_ENUM_VARIANT("InvalidSyntax", NONE)
                 XR_BUILTIN_ENUM_VARIANT("OutOfRange", NONE))

@@ -65,7 +65,7 @@ def main():
     task_cases = (
         ('scalar-control', 11), ('array-i64', 6), ('nested-array-string', 16),
         ('nullable-i64', 4), ('nullable-array', 3), ('tuple-string', 9),
-        ('enum-array', 6), ('atomic-shared', 6), ('task-nested', 6), ('try-optional', 58))
+        ('enum-array', 6), ('atomic-shared', 6), ('task-nested', 6), ('try-optional', 58), ('typed-await', 55))
     expected = b''.join(f'case={name} PASS bytes={length} producers-dead\n'.encode('ascii')
                         for name, length in task_cases)
     expected += b'Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS\n'

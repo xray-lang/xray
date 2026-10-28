@@ -1265,6 +1265,12 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         break;
     case XR_XIR_GENERATOR_NEW:
         emit_resume_generator(buffer,function,op,layout,index,destination);return;
+    case XR_XIR_TASK_CANCEL:
+        append(buffer," { XrXirValue task=xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame,%uu));\n"
+            " XrXirCallStatus status=xr_xir_task_cancel(view,&task);\n"
+            " if (status!=XR_XIR_CALL_READY) return (XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{0},0}; }\n",
+            (uint32_t)xr_xir_operand_type(function,op->args[0]),layout->offsets[op->args[0]]);
+        break;
     case XR_XIR_GO:
         emit_resume_go(buffer, function, op, layout, destination);
         return;

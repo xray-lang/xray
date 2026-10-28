@@ -1335,6 +1335,9 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             if (!source_path_type(ctx,member->object,&path_type)) return false;
             if (xr_xir_type_is_map(&ctx->types, path_type) || xr_xir_type_is_set(&ctx->types, path_type))
                 return source_hash_call(ctx, node, NULL, path_type, value);
+            const XrXirTypeNode *task_path=xr_xir_type_node(&ctx->types,path_type);
+            if (task_path && task_path->kind==XR_XIR_TYPE_TASK)
+                return source_task_cancel(ctx,node,value);
             if (xr_xir_type_is_array(&ctx->types,path_type)) {
                 const XrNativeMemberDeclaration *native_member = source_array_member(ctx, callee, member->name);
                 if (!native_member) return false;

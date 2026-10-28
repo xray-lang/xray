@@ -654,7 +654,7 @@ def render_atomic_identities(root):
     return output
 
 def render_task_identity(root):
-    """Describe the governed handle without granting member execution recipes."""
+    """Bind the governed handle and its single admitted cancellation recipe."""
     source = (root / 'stdlib/types/coroutine.xr').read_text(encoding='utf-8').replace('\r\n', '\n')
     prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8')
     bindings = re.findall(r'^\s*XR_BUILTIN_TYPE\("Task",\s*([0-9]+)\)\s*$', prelude, re.M)
@@ -708,10 +708,14 @@ def render_task_identity(root):
         params = f'xr_native_task_parameters_{index}' if parameters else 'NULL'
         output.append('    {' + ', '.join([str(index + 1), c_string(name), c_string(signature),
             c_string(result_text), str(number), str(len(raw[:raw.index(name)].encode('utf-8')) + 1),
-            'XR_NATIVE_RECEIVER_' + receiver, 'false', str(method).lower(), 'false', 'true',
-            'XR_NATIVE_OPERATION_NONE', 'XR_NATIVE_ALLOCATION_UNKNOWN', '""',
-            'XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN', params, str(len(parameters)),
-            'XR_NATIVE_TERM_UNADMITTED']) + '},')
+            'XR_NATIVE_RECEIVER_' + receiver, 'false', str(method).lower(),
+            str(name == 'cancel').lower(), 'true',
+            'XR_NATIVE_OPERATION_TASK_CANCEL' if name == 'cancel' else 'XR_NATIVE_OPERATION_NONE',
+            'XR_NATIVE_ALLOCATION_NO_HEAP' if name == 'cancel' else 'XR_NATIVE_ALLOCATION_UNKNOWN',
+            '"Never"' if name == 'cancel' else '""',
+            'XR_NATIVE_RESULT_OWNERSHIP_UNIT' if name == 'cancel' else 'XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN',
+            params, str(len(parameters)),
+            'XR_NATIVE_TERM_UNIT' if name == 'cancel' else 'XR_NATIVE_TERM_UNADMITTED']) + '},')
     number, raw = rows[6]
     digest = hashlib.sha256(source.encode('utf-8')).digest()
     output += ['};', 'static const char *const xr_native_task_type_parameters[] = {"T", "E"};',
@@ -865,7 +869,8 @@ def channel_result_rows(root):
             ('CryptoError', 'CRYPTO_ERROR', [('InvalidLength','NONE')], 0, 0),
             ('Recv', 'RECV', [('Value','TYPE_PARAM_0'),('Empty','NONE'),('Timeout','NONE'),('Closed','NONE')], 7, 1),
             ('SendResult', 'SEND_RESULT', [('Sent','NONE'),('Full','NONE'),('Timeout','NONE'),('Closed','NONE')], 8, 0),
-            ('Endian', 'ENDIAN', [('Native','NONE'),('LE','NONE'),('BE','NONE')], 0, 0)]
+            ('Endian', 'ENDIAN', [('Native','NONE'),('LE','NONE'),('BE','NONE')], 0, 0),
+            ('Cancelled', 'CANCELLED', [('Cancelled','NONE')], 18, 0)]
     for name, kind, variants, _, arity in rows:
         registrations = re.findall(r'^\s*XR_BUILTIN_ENUM\(\s*"'+name+r'"', prelude, re.M)
         matches = list(re.finditer(r'XR_BUILTIN_ENUM\("'+name+r'",\s*'+str(arity)+r',\s*'+kind+r',', prelude))
@@ -884,8 +889,8 @@ def channel_result_rows(root):
 def render_channel_result_identities(root):
     prelude, rows = channel_result_rows(root);digest=hashlib.sha256(prelude.encode('utf-8')).digest();lines=[]
     for name, _, variants, native_id, arity in rows:
-        if native_id not in (7,8,17):continue
-        variable={7:'recv', 8:'send_result', 17:'utf8_error'}[native_id]
+        if native_id not in (7,8,17,18):continue
+        variable={7:'recv', 8:'send_result', 17:'utf8_error', 18:'cancelled'}[native_id]
         line,raw=next((number,raw) for number,raw in enumerate(prelude.splitlines(),1) if 'XR_BUILTIN_ENUM("'+name+'",' in raw)
         if arity:
             lines += ['static const XrNativeParameter xr_native_recv_value_parameters[] = {',

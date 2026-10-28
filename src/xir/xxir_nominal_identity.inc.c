@@ -14,6 +14,24 @@ static XrXirNominalIdentity nominal_identity_header(const XrXirNominalTable *tab
     const XrXirNominalDeclaration *d = &table->declarations[i];
     return (XrXirNominalIdentity) {d->module, d->name, d->exported, d->parameter_count, NULL, d->field_count, d->kind, d->variants, d->variant_count, d->flags, d->native};
 }
+XR_FUNC XrXirType xr_xir_cancelled_error_type(const XrXirTypes *types) {
+    if (!types || types->count>XR_XIR_CONSTRUCTED_TYPE_LIMIT-XR_XIR_CONSTRUCTED_TYPE_BASE ||
+        (types->count && !types->nodes) || !types->nominals ||
+        (!!types->nominals->declarations==!!types->nominals->identities)) return XR_XIR_UNIT;
+    XrXirType found=XR_XIR_UNIT;
+    for (uint32_t i=0;i<types->count;++i) {
+        const XrXirTypeNode *node=&types->nodes[i];
+        if (node->kind!=XR_XIR_TYPE_NOMINAL || node->nominal.declaration>=types->nominals->count ||
+            node->nominal.argument_count || node->nominal.arguments || node->nominal.field_count ||
+            node->nominal.fields || node->parameter_span || node->parameters || node->parameter_count ||
+            node->element!=XR_XIR_UNIT || node->result!=XR_XIR_UNIT || node->flags) continue;
+        XrXirNominalIdentity identity=nominal_identity_header(types->nominals,node->nominal.declaration);
+        if (identity.native.native_id!=XR_NATIVE_DECLARATION_CANCELLED) continue;
+        if (nominal_native_verify(&identity)!=XR_XIR_OK || found!=XR_XIR_UNIT) return XR_XIR_UNIT;
+        found=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i);
+    }
+    return found;
+}
 static XrXirNominalFieldIdentity nominal_identity_field(const XrXirNominalTable *table, uint32_t i, uint32_t f) {
     if (table->identities) return table->identities[i].fields[f];
     const XrXirNominalField *field = &table->declarations[i].fields[f];

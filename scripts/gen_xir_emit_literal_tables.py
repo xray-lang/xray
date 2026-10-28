@@ -259,7 +259,7 @@ def generate(spans, formats):
             pool.extend(table(pattern, value))
     if len(pool) > 4294967295: raise ValueError('transition offset exceeds uint32')
     out += ['static const uint8_t emit_literal_transitions[] = {']
-    out += ['    ' + ','.join(map(str, row)) + ',' for row in chunks(pool, 128)]
+    out += ['    ' + ','.join(map(str, row)) + ',' for row in chunks(pool, 256)]
     out += ['};', 'static const EmitSpan emit_literal_spans[] = {']
     out += [f'    {{{ids[v]}_text,{len(v)},{{emit_literal_transitions+{offsets[v][0]},'
             f'emit_literal_transitions+{offsets[v][1]}}}}},' for v in spans]

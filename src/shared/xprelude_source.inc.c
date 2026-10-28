@@ -5,6 +5,7 @@ static const char *const xir_prelude_variants_2[] = {"InvalidLength"};
 static const char *const xir_prelude_variants_3[] = {"Value", "Empty", "Timeout", "Closed"};
 static const char *const xir_prelude_variants_4[] = {"Sent", "Full", "Timeout", "Closed"};
 static const char *const xir_prelude_variants_5[] = {"Native", "LE", "BE"};
+static const char *const xir_prelude_variants_6[] = {"Cancelled"};
 static const XirPreludeEnum xir_prelude_enums[] = {
     {"Utf8Error", 17, 1, 0, 0, xir_prelude_variants_0},
     {"Ordering", 4, 5, 0, 0, xir_prelude_variants_1},
@@ -12,10 +13,11 @@ static const XirPreludeEnum xir_prelude_enums[] = {
     {"Recv", 7, 4, 1, 1, xir_prelude_variants_3},
     {"SendResult", 8, 4, 0, 0, xir_prelude_variants_4},
     {"Endian", 0, 3, 0, 0, xir_prelude_variants_5},
+    {"Cancelled", 18, 1, 0, 0, xir_prelude_variants_6},
 };
 static const XirPreludeSource xir_prelude_source = {
-    "// builtin_symbols.def sha256 e3ddcc070ab42dd8c2007e636fc5375936e3b9bf0511b38bb7c1a325656f589a\nexport enum Utf8Error { InvalidUtf8 }\nexport enum Ordering { Relaxed, Acquire, Release, AcquireRelease, SeqCst }\nexport enum CryptoError { InvalidLength }\nexport enum Recv<T> { Value { value: T }, Empty, Timeout, Closed }\nexport enum SendResult { Sent, Full, Timeout, Closed }\nexport enum Endian { Native, LE, BE }\n// range.xr sha256 b25e3a5dfd08040d2bc752edebd22e0f151ce38ae5f33389795e033b8bd89ad7\n// Integer range storage is immutable; public construction always uses a unit step.\nexport class Range {\n    const start: i64\n    const end: i64\n    private const _step: i64\n    private const _inclusive: bool\n\n    init(start: i64, end: i64, inclusive: bool) {\n        this.start = start\n        this.end = end\n        this._step = 1\n        this._inclusive = inclusive\n    }\n\n    count() -> i64 {\n        if (this.end < this.start) { return 0 }\n        const maximum: i64 = 9223372036854775807\n        var distance: i64 = 0\n        if (this.start < 0 && this.end >= 0) {\n            // Adding one before negation also handles the smallest signed integer.\n            const below: i64 = -(this.start + 1)\n            if (this.end >= maximum - below) { return maximum }\n            distance = this.end + below + 1\n        } else {\n            distance = this.end - this.start\n        }\n        if (this._inclusive && distance < maximum) { return distance + 1 }\n        return distance\n    }\n}\n",
-    {227, 221, 204, 7, 10, 180, 45, 216, 194, 0, 126, 99, 111, 197, 55, 89, 54, 227, 185, 191, 5, 17, 179, 139, 183, 193, 163, 37, 101, 111, 88, 154},
-    xir_prelude_enums, 6,
+    "// builtin_symbols.def sha256 aef6b43617456fbcd3a9121bbb9106e9640edfac7a53b9de9792ecb89aa622d6\nexport enum Utf8Error { InvalidUtf8 }\nexport enum Ordering { Relaxed, Acquire, Release, AcquireRelease, SeqCst }\nexport enum CryptoError { InvalidLength }\nexport enum Recv<T> { Value { value: T }, Empty, Timeout, Closed }\nexport enum SendResult { Sent, Full, Timeout, Closed }\nexport enum Endian { Native, LE, BE }\nexport enum Cancelled { Cancelled }\n// range.xr sha256 b25e3a5dfd08040d2bc752edebd22e0f151ce38ae5f33389795e033b8bd89ad7\n// Integer range storage is immutable; public construction always uses a unit step.\nexport class Range {\n    const start: i64\n    const end: i64\n    private const _step: i64\n    private const _inclusive: bool\n\n    init(start: i64, end: i64, inclusive: bool) {\n        this.start = start\n        this.end = end\n        this._step = 1\n        this._inclusive = inclusive\n    }\n\n    count() -> i64 {\n        if (this.end < this.start) { return 0 }\n        const maximum: i64 = 9223372036854775807\n        var distance: i64 = 0\n        if (this.start < 0 && this.end >= 0) {\n            // Adding one before negation also handles the smallest signed integer.\n            const below: i64 = -(this.start + 1)\n            if (this.end >= maximum - below) { return maximum }\n            distance = this.end + below + 1\n        } else {\n            distance = this.end - this.start\n        }\n        if (this._inclusive && distance < maximum) { return distance + 1 }\n        return distance\n    }\n}\n",
+    {174, 246, 180, 54, 23, 69, 111, 188, 211, 169, 18, 27, 187, 145, 6, 233, 100, 14, 223, 172, 122, 83, 185, 222, 151, 146, 236, 184, 154, 166, 34, 214},
+    xir_prelude_enums, 7,
     {178, 94, 58, 93, 253, 8, 4, 13, 43, 199, 82, 237, 235, 210, 46, 15, 21, 28, 227, 138, 229, 243, 51, 137, 121, 94, 3, 59, 139, 216, 154, 215}
 };

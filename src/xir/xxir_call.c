@@ -1526,7 +1526,34 @@ XR_FUNC XrXirCallStatus xr_xir_call_link_task_wait(XrXirCall *call, const XrXirT
     task->waiter_tail = call; call->wait_linked = true;
     return XR_XIR_CALL_SUSPENDED;
 }
+static XrXirCallStatus call_cancelled_error(XrXirCall *call,XrXirCallResult *outcome) {
+    XrXirValueAdmission *admission=&call->config.admission;
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(admission->arena);
+    if (!types || !admission->domain) return XR_XIR_CALL_BAD_STATE;
+    uint64_t work=(uint64_t)types->count+1;
+    if (work>admission->work || !xr_xir_domain_work(admission->domain,work)) return XR_XIR_CALL_LIMIT;
+    admission->work-=work;
+    XrXirType type=xr_xir_cancelled_error_type(types);
+    if (type==XR_XIR_UNIT) return XR_XIR_CALL_BAD_STATE;
+    XrXirValue concrete={0},erased={0};
+    call->admitting=true;
+    XrXirValueStatus status=xr_xir_enum_new(type,0,NULL,0,admission,&concrete);
+    if (status==XR_XIR_VALUE_OK) status=xr_xir_error_erase(&concrete,admission,&erased);
+    xr_xir_value_drop(&concrete);call->admitting=false;
+    if (status!=XR_XIR_VALUE_OK) {
+        xr_xir_value_drop(&erased);
+        return status==XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM :
+            status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_STATE;
+    }
+    xr_xir_call_result_drop(outcome);
+    *outcome=(XrXirCallResult){.status=XR_XIR_CALL_THROWN,.value=erased};
+    return XR_XIR_CALL_READY;
+}
 static XrXirCallStatus complete_owned_wait(XrXirCall *call,XrXirCallResult *outcome) {
+    if (outcome->status==XR_XIR_CALL_CANCELLED && call->wait.kind==XR_XIR_WAIT_TASK && !call->cancel_requested) {
+        XrXirCallStatus status=call_cancelled_error(call,outcome);
+        if (status!=XR_XIR_CALL_READY) { xr_xir_call_result_drop(outcome);outcome->status=status; }
+    }
     bool propagate = outcome->status == XR_XIR_CALL_CANCELLED ||
         (xr_xir_call_panic_status(outcome->status) && !call->top->protected_call);
     call->top->protected_call = false;
