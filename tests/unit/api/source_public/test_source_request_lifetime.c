@@ -16,7 +16,25 @@
 
 /* This TU observes the actual compiler allocator. Installed SDK consumers use
  * the canonical archive implementation separately. No runtime budget is changed. */
+#define xr_compile_resources_new calibration_resources_new
 #include "../../xir/xir_sdk_resource_test.h"
+#undef xr_compile_resources_new
+#include "os/os_time.h"
+
+/* Observe the actual provider returned to the synchronous public request.
+ * This borrows its owner only until build returns and copies no allocator layout. */
+static bool calibration_capture;
+static XrCompileResources *calibration_owner;
+static uint64_t calibration_initial_held;
+XR_FUNC XrCompileResourceStatus xr_compile_resources_new(
+    const XrCompileResourceLimits *limits,XrCompileResources **output) {
+    XrCompileResourceStatus status=calibration_resources_new(limits,output);
+    if(status==XR_COMPILE_RESOURCE_OK&&calibration_capture&&!calibration_owner) {
+        calibration_owner=*output;
+        calibration_initial_held=sdk_stats(*output).held_bytes;
+    }
+    return status;
+}
 #include "hir/xhir_items.h"
 #include "api/xsource_compile.h"
 
@@ -399,7 +417,124 @@ static void module_binding_classes(void) {
     xray_source_artifact_free(artifact);xray_source_execution_free(execution);
     CHECK(output.size==2&&!memcmp(output.bytes,"9\n",2));xray_source_result_free(result);CHECK(!runtime_live&&!runtime_bytes);
 }
+
+typedef struct Calibration {
+    size_t polls,at,hit,physical_live,physical_bytes;
+    uint64_t started,previous,max_gap_ns,held,peak,timeout_ns;
+    bool wait_deadline,cancel;
+} Calibration;
+static int calibration_poll(const void *context) {
+    Calibration *control=(Calibration *)context;
+    uint64_t now=xr_time_monotonic_ns();CHECK(now);
+    if(control->previous&&now-control->previous>control->max_gap_ns)
+        control->max_gap_ns=now-control->previous;
+    control->previous=now;++control->polls;
+    if(calibration_owner) {
+        uint64_t peak=sdk_stats(calibration_owner).peak_bytes;
+        if(peak>control->peak)control->peak=peak;
+    }
+    if(!control->at||control->polls!=control->at)return 0;
+    CHECK(calibration_owner);
+    control->held=sdk_stats(calibration_owner).held_bytes;
+    control->physical_live=runtime_live;control->physical_bytes=runtime_bytes;
+    CHECK(control->held>calibration_initial_held&&control->physical_live>1);
+    ++control->hit;
+    /* The deadline remains the real request's monotonic deadline. The callback
+     * never substitutes a clock or returns cancellation in the deadline case. */
+    if(control->wait_deadline) {
+        uint64_t wait_started=now;
+        do {xr_time_sleep_ns(1000000);now=xr_time_monotonic_ns();CHECK(now);}
+        while(now-wait_started<=control->timeout_ns);
+    }
+    return control->cancel;
+}
+static XrSourceStatus calibration_build(const XrSourceInput *input,
+    const XrSourceCompileOptions *options,Calibration *control,
+    XrSourceArtifact **artifact,XrSourceFailure *failure,XrSourceDiagnostic **report) {
+    CHECK(!calibration_capture&&!calibration_owner);
+    calibration_capture=true;control->started=xr_time_monotonic_ns();CHECK(control->started);
+    XrSourceStatus status=xray_source_build(input,options,artifact,failure,report);
+    calibration_capture=false;calibration_owner=NULL;
+    return status;
+}
+static void calibration_execute(XrSourceArtifact *artifact,char *source,size_t length,Calibration *control) {
+    size_t polls=control->polls;
+    memset(source,'!',length);control->at=1;control->cancel=true;
+    XrSourceExecution *execution=execution_new();XrSourceCallOptions runtime;
+    CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
+    XrSourceInvocation invocation;CHECK(xray_source_invocation_init(&invocation,sizeof(invocation))==XR_SOURCE_OK);
+    invocation.name="answer";invocation.name_length=6;XrSourceCall *call=NULL;
+    CHECK(xray_source_invoke_begin(execution,artifact,&invocation,&runtime,&call)==XR_SOURCE_OK&&call);
+    xray_source_artifact_free(artifact);xray_source_execution_free(execution);
+    CHECK(finish(call).state==XR_SOURCE_RUN_RETURNED);
+    XrSourceResult *result=NULL;CHECK(xray_source_call_take(call,&result)==XR_SOURCE_OK&&result);
+    CHECK(xray_source_call_drop(&call,NULL)==XR_SOURCE_OK&&!call);
+    int64_t value=0;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK&&value==42);
+    CHECK(control->polls==polls);xray_source_result_free(result);
+}
+static void calibration_failure(const XrSourceInput *input,XrSourceCompileOptions *options,
+    Calibration *control,XrSourceStatus expected,XrSourceStage stage) {
+    XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;XrSourceFailure failure={0};
+    XrSourceStatus status=calibration_build(input,options,control,&artifact,&failure,&report);
+    printf("Control bytes=%zu at=%zu polls=%zu hit=%zu status=%u stage=%u held=%llu physical=%zu/%zu\n",
+        input->value.text.length,control->at,control->polls,control->hit,(unsigned)status,(unsigned)failure.stage,
+        (unsigned long long)control->held,control->physical_live,control->physical_bytes);
+    CHECK(status==expected&&!artifact&&control->hit==1);
+    CHECK(failure.status==expected&&failure.cleanup_status==XR_SOURCE_OK&&failure.stage==stage);
+    CHECK(report);XrSourceDiagnosticReportInfo info={0};XrSourceDiagnosticRoot root={0};
+    CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots&&!info.complete);
+    CHECK(xray_source_diagnostic_root(report,0,&root)==XR_SOURCE_OK&&root.message&&root.message[0]);
+    xray_source_diagnostic_free(report);CHECK(!runtime_live&&!runtime_bytes);
+}
+static void compilation_controls(void) {
+    static const size_t padding[]={4096,16384,65536};
+    static const char suffix[]="*/\nexport fn answer()->i64 { return 42 }\n";
+    for(size_t i=0;i<sizeof(padding)/sizeof(*padding);++i) {
+        size_t length=padding[i]+sizeof(suffix)-1;
+        char *source=sdk_fixture_malloc(length+1);CHECK(source);
+        memset(source,' ',padding[i]);source[0]='/';source[1]='*';
+        memcpy(source+padding[i],suffix,sizeof(suffix));
+        XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,
+            .value.text={NULL,"mid-request-calibration",source,length}};
+        Calibration control={0};XrSourceCompileOptions options=xray_source_compile_options_default();
+        options.stdlib_path=XR_PUBLIC_STDLIB;options.profile_allocations=1;
+        options.cancel_poll=calibration_poll;options.cancel_context=&control;
+        XrSourceArtifact *artifact=NULL;XrSourceFailure failure={0};
+        CHECK(calibration_build(&input,&options,&control,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
+        uint64_t elapsed=xr_time_monotonic_ns()-control.started;size_t total=control.polls;
+        CHECK(total>4&&control.peak);uint64_t peak=control.peak;
+        xray_source_artifact_free(artifact);artifact=NULL;
+        CHECK(!runtime_live&&!runtime_bytes);
+        printf("Calibration bytes=%zu polls=%zu elapsed_ns=%llu max_callback_gap_ns=%llu\n",
+            length,total,(unsigned long long)elapsed,(unsigned long long)control.max_gap_ns);
+        /* The finite owner uses this run's observed held peak, not a public
+         * quota or a frozen allocator-size expectation. */
+        options.memory_mode=XR_SOURCE_MEMORY_FINITE;options.memory_limit=peak;
+        /* The public COMPILE stage is intentionally not a claim about an
+         * internal parser/copy/lower phase. No poll ordinal is a phase identity. */
+        control=(Calibration){.at=total/2,.cancel=true};
+        calibration_failure(&input,&options,&control,XR_SOURCE_CANCELLED,XR_SOURCE_STAGE_COMPILE);
+        control=(Calibration){.at=total,.cancel=true};
+        calibration_failure(&input,&options,&control,XR_SOURCE_CANCELLED,XR_SOURCE_STAGE_PUBLISH);
+        if(i==1) {
+            control=(Calibration){.at=total/2,.wait_deadline=true,.timeout_ns=5000000000ULL};
+            options.deadline_mode=XR_SOURCE_DEADLINE_AFTER;options.timeout_ns=control.timeout_ns;
+            calibration_failure(&input,&options,&control,XR_SOURCE_DEADLINE,XR_SOURCE_STAGE_COMPILE);
+            /* A cancellation first observed inside the callback stays primary
+             * even when the deadline expires before that callback returns. */
+            control=(Calibration){.at=total/2,.wait_deadline=true,.cancel=true,.timeout_ns=5000000000ULL};
+            calibration_failure(&input,&options,&control,XR_SOURCE_CANCELLED,XR_SOURCE_STAGE_COMPILE);
+        }
+        control=(Calibration){0};
+        CHECK(calibration_build(&input,&options,&control,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
+        CHECK(failure.status==XR_SOURCE_OK&&failure.cleanup_status==XR_SOURCE_OK);
+        calibration_execute(artifact,source,length,&control);
+        sdk_fixture_free(source);CHECK(!runtime_live&&!runtime_bytes);
+    }
+}
+
 int main(void) {
+    compilation_controls();
     report_resources();report_control();unicode_report();module_binding_classes();partial_report_lifetime();
     module_report_lifetime(false);module_report_lifetime(true);
     independent_requests();detached_ast_and_result();ready_c_artifact();execution_policy();
