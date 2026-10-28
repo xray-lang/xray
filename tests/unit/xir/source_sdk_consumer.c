@@ -568,6 +568,55 @@ static void installed_parameter_report(const char *stdlib) {
     int64_t value=99;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK&&!value);
     CHECK(out.length==2&&!memcmp(out.bytes,"9\n",2));xray_source_result_free(result);
 }
+static void installed_method_parameter_report(const char *stdlib) {
+    char text[]="const value:i64=99\r\nenum Fault{Bad}\r\nclass Box {\r\nvalue:i64\r\n"
+        "/*\303\251\360\237\230\200*/ init(value:i64,value:i64=0) throws(Fault){this.value=value}\r\n"
+        "/*\303\251\360\237\230\200*/ pick(value:i64,value:i64=0) throws(Fault)->i64{return this.value+value}\r\n"
+        "other(value:i64,other:i64=0)->i64{return value+other}\r\n}\r\n"
+        "var box=try Box(4)\r\nprint(try box.pick(5))\r\n";
+    _Static_assert(sizeof(text)-1==319,"Complete method and constructor source bytes");
+    XrSourceCompileOptions options=compile_options(stdlib);
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"method-parameter-report",text,sizeof(text)-1}};
+    XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;XrSourceFailure failure={0};
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_BAD_ARGUMENT&&!artifact&&report);
+    CHECK(failure.status==XR_SOURCE_BAD_ARGUMENT&&failure.cleanup_status==XR_SOURCE_OK&&failure.stage==XR_SOURCE_STAGE_COMPILE);
+    memset(text,'!',sizeof(text));XrSourceDiagnosticReportInfo info={0};
+    CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==2&&!info.complete);
+    const uint64_t original[]={77,149},duplicate[]={87,159};
+    /* Independent source identity: domain, little-endian byte length and full CRLF text. */
+    const uint8_t revision[]={0x9a,0xa1,0xa6,0xd4,0xbb,0xb2,0x2c,0xcb,0xc9,0xd9,0x29,0xb1,0xa9,0x81,0x5e,0x65,
+        0x08,0xee,0x3e,0xb9,0xc1,0xb5,0xc8,0x96,0x7f,0x6a,0x4b,0x66,0xf3,0x47,0xca,0x89};
+    for(uint32_t i=0;i<2;++i) {
+        XrSourceDiagnosticRoot root={0};XrSourceDiagnosticLabel label={0};
+        CHECK(xray_source_diagnostic_root(report,i,&root)==XR_SOURCE_OK&&root.code==302&&root.labels==1);
+        CHECK(!strcmp(root.message,"duplicate parameter name"));
+        CHECK(xray_source_diagnostic_label(report,i,0,&label)==XR_SOURCE_OK&&!strcmp(label.message,"first declaration is here"));
+        CHECK(root.primary.line==(int32_t)(5+i)&&root.primary.column==27);
+        CHECK(label.location.line==(int32_t)(5+i)&&label.location.column==17);
+        CHECK(root.primary.start_byte==duplicate[i]&&root.primary.end_byte==duplicate[i]+5);
+        CHECK(label.location.start_byte==original[i]&&label.location.end_byte==original[i]+5);
+        CHECK(root.primary.utf16_line==4+i&&root.primary.utf16_column==23);
+        CHECK(label.location.utf16_line==4+i&&label.location.utf16_column==13);
+        CHECK((root.primary.flags&(XR_SOURCE_LOCATION_LINE|XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16|XR_SOURCE_LOCATION_REVISION))==
+            (XR_SOURCE_LOCATION_LINE|XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16|XR_SOURCE_LOCATION_REVISION));
+        CHECK(root.primary.flags==label.location.flags&&!memcmp(root.primary.revision,label.location.revision,32));
+        CHECK(!memcmp(root.primary.revision,revision,sizeof(revision)));
+    }
+    XrSourceDiagnosticRoot preserved={.code=123};
+    CHECK(xray_source_diagnostic_root(report,2,&preserved)==XR_SOURCE_BAD_ARGUMENT&&preserved.code==123);
+    xray_source_diagnostic_free(report);
+    char corrected[]="const value:i64=99\r\nenum Fault{Bad}\r\nclass Box {\r\nvalue:i64\r\n"
+        "/*\303\251\360\237\230\200*/ init(value:i64,other:i64=0) throws(Fault){this.value=value}\r\n"
+        "/*\303\251\360\237\230\200*/ pick(value:i64,other:i64=0) throws(Fault)->i64{return this.value+value}\r\n"
+        "other(value:i64,other:i64=0)->i64{return value+other}\r\n}\r\n"
+        "var box=try Box(4)\r\nprint(try box.pick(5))\r\n";
+    artifact=compile(&options,corrected,__func__);Output output={0};XrSourceCallOptions runtime;
+    CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);runtime.write=capture;runtime.context=&output;
+    XrSourceResult *result=NULL;XrSourceEvent event={0};
+    CHECK(execute_owned(artifact,&runtime,&result,&event)==XR_SOURCE_OK&&result);xray_source_artifact_free(artifact);
+    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK&&event.state==XR_SOURCE_RUN_RETURNED);
+    CHECK(output.length==2&&!memcmp(output.bytes,"9\n",2));xray_source_result_free(result);
+}
 static XrSourceWriteStatus error_report_capture(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
     CHECK(stream==XR_SOURCE_STDERR);return capture(context,XR_SOURCE_STDOUT,bytes,length);
 }
@@ -634,6 +683,6 @@ static void installed_error_union_300(const char *stdlib) {
     CHECK(output.length==3 && !memcmp(output.bytes,"42\n",3));xray_source_result_free(result);
 }
 int main(int argc, char **argv) {
-    CHECK(argc == 2); installed_error_union(argv[1]); installed_error_union_300(argv[1]); installed_report(argv[1]); installed_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
+    CHECK(argc == 2); installed_error_union(argv[1]); installed_error_union_300(argv[1]); installed_report(argv[1]); installed_parameter_report(argv[1]); installed_method_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
     puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
 }

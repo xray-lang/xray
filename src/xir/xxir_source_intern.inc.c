@@ -33,6 +33,12 @@ static SourceName *source_name_bind(SourceContext *ctx,SourceName **head,const c
     symbol->name=name;symbol->node=node;symbol->hir_item=item;
     symbol->next=*head;*head=symbol;return symbol;
 }
+static bool source_method_parameter_scope(SourceContext *ctx,AstNode *node,uint32_t *out) {
+    uint32_t item=0;
+    if(!xr_hir_items_find_scope(ctx->items,ctx->module,node->node_id,&item))
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"method parameter scope was not reserved");
+    *out=item+1;return true;
+}
 static SourceName *source_parameter_name(SourceContext *ctx,AstNode *node,const XrParamNode *param,
     uint32_t parent) {
     uint32_t item=0;

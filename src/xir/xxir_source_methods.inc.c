@@ -257,6 +257,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             uint32_t index = (*next)++; ctx->function = index;
             symbol->kind = SOURCE_FUNCTION; symbol->index = index; symbol->module = owner->module;
             SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = owner->module;
+            if(!source_method_parameter_scope(ctx,node,&body->parameter_scope))return false;
             if (!source_nominal_function_scope(ctx,index,owner)) return false;
             if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_FUNCTION, owner->declaration,
                 source_query_range(ctx, node, method->name))) return false;
@@ -289,11 +290,6 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method parameter contract is not admitted");
                 if (parameter_reference && !source_cell_type(ctx, body->parameters[i + offset], &body->parameters[i + offset]))
                     return false;
-                for (int j = 0; j < i; ++j) {
-                    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-                    if (source_text_same(ctx, NULL, param->name, method->params[j]->name))
-                        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate method parameter");
-                }
             }
             uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE :
                 method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
@@ -311,7 +307,9 @@ static bool source_method_body(SourceContext *ctx) {
     uint32_t offset = method->is_static ? 0 : 1;
     for (uint32_t i = 0; i < (uint32_t)method->param_count + offset; ++i) {
         const char *name = i >= offset ? method->params[i - offset]->name : "this";
-        SourceName *symbol = add_name(ctx, &ctx->locals, name, body->node);
+        SourceName *symbol = i>=offset?
+            source_parameter_name(ctx,body->node,method->params[i-offset],body->parameter_scope):
+            add_name(ctx,&ctx->locals,name,body->node);
         if (!symbol) return false;
         symbol->kind = SOURCE_LOCAL; symbol->index = i; symbol->type = body->parameters[i];
         if (xr_xir_type_is_cell(&ctx->types, symbol->type)) {

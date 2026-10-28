@@ -911,12 +911,75 @@ static void lower_loop_controls(void) {
     }
 }
 
+static void method_scope_allocation_controls(void) {
+    CHECK(!runtime_live&&!runtime_bytes);
+    XrCompileResources *owner=sdk_ledger(&sdk_unlimited);XrCompileResourceStats baseline=sdk_stats(owner);
+    XrHirItems *items=NULL;CHECK(xr_hir_items_new(owner,&items)==XR_COMPILE_RESOURCE_OK);
+    XrHirItemSpec spec={"Box",0,0,1,1,7,XR_HIR_ITEM_DECLARATION};uint32_t declaration=0;
+    CHECK(xr_hir_items_reserve(items,&spec,&declaration)==XR_COMPILE_RESOURCE_OK);
+    spec=(XrHirItemSpec){"pick",0,declaration+1,2,1,1,XR_HIR_ITEM_PARAMETER_SCOPE};uint32_t first=123;
+    runtime_fail_at=runtime_attempts;
+    CHECK(xr_hir_items_reserve(items,&spec,&first)==XR_COMPILE_RESOURCE_OUT_OF_MEMORY&&first==123);
+    runtime_fail_at=SIZE_MAX;CHECK(!xr_hir_items_has_report(items));
+    CHECK(!xr_hir_items_find_scope(items,0,2,&first)&&first==123);
+    CHECK(xr_hir_items_reserve(items,&spec,&first)==XR_COMPILE_RESOURCE_OK);
+    uint32_t found=123;CHECK(xr_hir_items_find_scope(items,0,2,&found)&&found==first);
+    CHECK(!xr_hir_items_find(items,0,declaration+1,"pick",&found));
+    spec.node=3;uint32_t second=0;CHECK(xr_hir_items_reserve(items,&spec,&second)==XR_COMPILE_RESOURCE_OK&&second!=first);
+    spec=(XrHirItemSpec){"value",0,first+1,2,1,1,XR_HIR_ITEM_PARAMETER};uint32_t parameter=0;
+    CHECK(xr_hir_items_reserve(items,&spec,&parameter)==XR_COMPILE_RESOURCE_OK);
+    int binding=0;CHECK(xr_hir_items_bind(items,parameter,&binding));
+    CHECK(!xr_hir_items_binding_module(items,&binding,&found));
+    spec.parent=second+1;spec.node=3;CHECK(xr_hir_items_reserve(items,&spec,&parameter)==XR_COMPILE_RESOURCE_OK);
+    CHECK(!xr_hir_items_errors(items)&&!xr_hir_items_has_report(items));
+    xr_hir_items_free(items);CHECK(sdk_stats(owner).held_bytes==baseline.held_bytes);
+    xr_compile_resources_release(owner);CHECK(!runtime_live&&!runtime_bytes);
+    puts("Method scope allocation: physical OOM rollback, independent ordinals, no member namespace or module binding PASS");
+}
+static void method_report_lifetime(void) {
+    static const char original[]="const value:i64=99\r\nenum Fault{Bad}\r\nclass Box {\r\nvalue:i64\r\n"
+        "/*\303\251\360\237\230\200*/ init(value:i64,value:i64=0) throws(Fault){this.value=value}\r\n"
+        "/*\303\251\360\237\230\200*/ pick(value:i64,value:i64=0) throws(Fault)->i64{return this.value+value}\r\n"
+        "other(value:i64,other:i64=0)->i64{return value+other}\r\n}\r\n"
+        "var box=try Box(4)\r\nprint(try box.pick(5))\r\n";
+    char source[sizeof(original)];memcpy(source,original,sizeof(source));
+    XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+    XrSourceText text={NULL,"method-ast-report",source,sizeof(source)-1};XrSourceAst *ast=NULL;
+    XrSourceFailure failure={0};XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;
+    CHECK(xray_source_parse(&text,&options,&ast,&failure,NULL)==XR_SOURCE_OK&&ast);
+    CHECK(xray_source_build_ast(ast,&options,&artifact,&failure,&report)==XR_SOURCE_BAD_ARGUMENT&&!artifact&&report);
+    CHECK(failure.cleanup_status==XR_SOURCE_OK);xray_source_ast_free(ast);memset(source,'!',sizeof(source));
+    XrSourceDiagnosticReportInfo info={0};CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==2&&!info.complete);
+    const uint64_t original_bytes[]={77,149},duplicate_bytes[]={87,159};
+    for(uint32_t i=0;i<2;++i) {
+        XrSourceDiagnosticRoot root={0};XrSourceDiagnosticLabel label={0};
+        CHECK(xray_source_diagnostic_root(report,i,&root)==XR_SOURCE_OK&&!strcmp(root.message,"duplicate parameter name")&&root.labels==1);
+        CHECK(xray_source_diagnostic_label(report,i,0,&label)==XR_SOURCE_OK&&!strcmp(label.message,"first declaration is here"));
+        CHECK(root.primary.line==(int32_t)(5+i)&&root.primary.column==27&&root.primary.start_byte==duplicate_bytes[i]);
+        CHECK(label.location.line==(int32_t)(5+i)&&label.location.column==17&&label.location.start_byte==original_bytes[i]);
+        CHECK(root.primary.utf16_line==4+i&&root.primary.utf16_column==23&&label.location.utf16_column==13);
+    }
+    xray_source_diagnostic_free(report);CHECK(!runtime_live&&!runtime_bytes);
+    memcpy(source,original,sizeof(source));memcpy(source+87,"other",5);memcpy(source+159,"other",5);
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"method-cancel-control",source,sizeof(source)-1}};
+    Calibration control={0};options.cancel_poll=calibration_poll;options.cancel_context=&control;
+    CHECK(calibration_build(&input,&options,&control,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
+    size_t polls=control.polls;CHECK(polls>4);xray_source_artifact_free(artifact);artifact=NULL;
+    CHECK(!runtime_live&&!runtime_bytes);control=(Calibration){.at=polls/2,.cancel=true};
+    calibration_failure(&input,&options,&control,XR_SOURCE_CANCELLED,XR_SOURCE_STAGE_COMPILE);
+    options.cancel_poll=NULL;options.cancel_context=NULL;options.memory_mode=XR_SOURCE_MEMORY_FINITE;options.memory_limit=1;
+    report=NULL;CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_MEMORY_LIMIT&&!artifact);
+    CHECK(failure.status==XR_SOURCE_MEMORY_LIMIT&&failure.cleanup_status==XR_SOURCE_OK);xray_source_diagnostic_free(report);
+    CHECK(!runtime_live&&!runtime_bytes);
+    puts("Method/init owned AST report survives request/input retirement; cancellation and memory failure remain resources PASS");
+}
 int main(void) {
     lower_loop_controls();
     input_helper_controls();input_prior_resource();public_input_controls();input_nul_location();graph_input_controls();
     compilation_controls();
     report_resources();report_control();unicode_report();module_binding_classes();partial_report_lifetime();
     module_report_lifetime(false);module_report_lifetime(true);
+    method_scope_allocation_controls();method_report_lifetime();
     independent_requests();detached_ast_and_result();ready_c_artifact();execution_policy();
     global_array_lifetime();global_string_lifetime();
     CHECK(!runtime_live&&!runtime_bytes);

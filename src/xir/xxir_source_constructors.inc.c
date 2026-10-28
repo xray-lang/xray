@@ -121,6 +121,7 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
     XrXirNominalDeclaration *declaration = (XrXirNominalDeclaration *)&ctx->nominals.declarations[owner->index];
     if (declaration->kind == XR_XIR_NOMINAL_STRUCT) declaration->flags |= XR_XIR_NOMINAL_MODULE_LITERAL;
     SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = owner->module;
+    if(!source_method_parameter_scope(ctx,node,&body->parameter_scope))return false;
     if (!source_nominal_function_scope(ctx,index,owner)) return false;
     SourceName symbol = {0}; symbol.name = "init"; symbol.node = node;
     if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_FUNCTION, owner->declaration,
@@ -146,10 +147,6 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
             }
         }
         if (body->parameters[p] == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor parameter needs a declaration type");
-        for (uint32_t q = 0; q < p; ++q) {
-            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-            if (source_text_same(ctx, NULL, param->name, method->params[q]->name)) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate constructor parameter");
-        }
     }
     uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE : method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
     ctx->identities[index] = (XrXirFunctionIdentity) {owner->module, access ? 0 : decl->exported, owner->index + 1, access, 0,
@@ -257,7 +254,7 @@ static bool source_constructor_body(SourceContext *ctx) {
     body->constructor_places = decl->field_count ? source_alloc(ctx, decl->field_count, sizeof(*body->constructor_places)) : NULL;
     if (decl->field_count && !body->constructor_places) return false;
     for (uint32_t p = 0; p < (uint32_t)method->param_count; ++p) {
-        SourceName *symbol = add_name(ctx, &ctx->locals, method->params[p]->name, body->node);
+        SourceName *symbol = source_parameter_name(ctx,body->node,method->params[p],body->parameter_scope);
         if (!symbol) return false;
         symbol->kind = SOURCE_LOCAL; symbol->index = p; symbol->type = body->parameters[p];
         XrParamNode *parameter = method->params[p];

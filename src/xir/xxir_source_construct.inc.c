@@ -98,15 +98,33 @@ static bool source_item_reserve(SourceContext *ctx,AstNode *node,XrHirItemSpec s
     return source_item_resource(ctx,node,xr_hir_items_reserve(ctx->items,&spec,out?out:&ignored));
 }
 static bool source_parameter_items(SourceContext *ctx,uint32_t module,AstNode *node,uint32_t parent) {
-    const FunctionDeclNode *decl=&node->as.function_decl;
-    if(decl->param_count<0||decl->param_count>65536||(decl->param_count&&!decl->params))
+    bool method=node->type==AST_METHOD_DECL;
+    int count=method?node->as.method_decl.param_count:node->as.function_decl.param_count;
+    XrParamNode **parameters=method?node->as.method_decl.params:node->as.function_decl.params;
+    if(count<0||count>65536||(count&&!parameters))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"function parameters are malformed");
-    for(int p=0;p<decl->param_count;++p) {
+    for(int p=0;p<count;++p) {
         if(!source_request_poll(ctx,node))return false;
-        const XrParamNode *param=decl->params[p];
+        const XrParamNode *param=parameters[p];
         if(!param)return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"function parameter is missing");
         XrHirItemSpec spec={param->name,module,parent,node->node_id,param->line,param->column,XR_HIR_ITEM_PARAMETER};
         if(!source_item_reserve(ctx,node,spec,NULL))return false;
+    }
+    return true;
+}
+static bool source_nominal_parameter_items(SourceContext *ctx,uint32_t module,AstNode *node,uint32_t parent) {
+    SourceNominalDeclaration declaration;
+    if(!source_nominal_declaration(ctx,node,&declaration))return false;
+    for(int m=0;m<declaration.method_count;++m) {
+        AstNode *method=declaration.methods[m];
+        if(!source_request_poll(ctx,method))return false;
+        if(!method||method->type!=AST_METHOD_DECL)
+            return source_fail(ctx,method,XR_XIR_BAD_STRUCTURE,"nominal method declaration is malformed");
+        const char *name=method->as.method_decl.is_constructor?"init":method->as.method_decl.name;
+        if(!name||!*name)return source_fail(ctx,method,XR_XIR_BAD_STRUCTURE,"method name is missing");
+        uint32_t item=0;
+        XrHirItemSpec spec={name,module,parent,method->node_id,method->line,method->column,XR_HIR_ITEM_PARAMETER_SCOPE};
+        if(!source_item_reserve(ctx,method,spec,&item)||!source_parameter_items(ctx,module,method,item+1))return false;
     }
     return true;
 }
@@ -139,6 +157,8 @@ static bool source_items_prepare(SourceContext *ctx) {
                 XrHirItemSpec item_spec={name,m,0,node->node_id,node->line,node->column,XR_HIR_ITEM_DECLARATION};
                 if(!source_item_reserve(ctx,node,item_spec,&item))return false;
                 if(node->type==AST_FUNCTION_DECL&&!source_parameter_items(ctx,m,node,item+1))return false;
+                if((node->type==AST_STRUCT_DECL||node->type==AST_CLASS_DECL||node->type==AST_ENUM_DECL)&&
+                    !source_nominal_parameter_items(ctx,m,node,item+1))return false;
             }
             if(node->type==AST_DESTRUCTURE_DECL) {
                 SourceDestructurePlan plan={0};

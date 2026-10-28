@@ -3,7 +3,7 @@
 #define XHIR_ITEMS_H
 #include "xhir_diagnostics.h"
 typedef struct XrHirItems XrHirItems;
-typedef enum {XR_HIR_ITEM_DECLARATION,XR_HIR_ITEM_PARAMETER} XrHirItemKind;
+typedef enum {XR_HIR_ITEM_DECLARATION,XR_HIR_ITEM_PARAMETER,XR_HIR_ITEM_PARAMETER_SCOPE} XrHirItemKind;
 typedef struct XrHirItemSpec {
     const char *name;
     uint32_t module,parent,node; /* Zero parent is the module; otherwise item+1. */
@@ -20,6 +20,8 @@ XR_FUNC XrCompileResourceStatus xr_hir_items_reserve(XrHirItems *,const XrHirIte
 /* Parameters bind only reserved declarations; generated module names may join. */
 XR_FUNC XrCompileResourceStatus xr_hir_items_claim(XrHirItems *,const XrHirItemSpec *,uint32_t *);
 XR_FUNC bool xr_hir_items_find(const XrHirItems *,uint32_t,uint32_t,const char *,uint32_t *);
+/* A parameter scope is identified by its AST node, not a member namespace name. */
+XR_FUNC bool xr_hir_items_find_scope(const XrHirItems *,uint32_t,uint32_t,uint32_t *);
 XR_FUNC bool xr_hir_items_module(const XrHirItems *,uint32_t,uint32_t *);
 /* Receiving bindings are synchronous borrows, never part of a report. */
 XR_FUNC bool xr_hir_items_bind(XrHirItems *,uint32_t,void *);

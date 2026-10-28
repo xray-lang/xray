@@ -61,12 +61,14 @@ static bool hir_item_spec_valid(const XrHirItems *h,const XrHirItemSpec *spec) {
     return h&&spec&&spec->name&&*spec->name&&spec->parent<=h->count&&
         (!spec->parent||h->items[spec->parent-1].module==spec->module)&&
         (spec->kind==XR_HIR_ITEM_DECLARATION||
-         (spec->kind==XR_HIR_ITEM_PARAMETER&&spec->parent));
+         (spec->kind==XR_HIR_ITEM_PARAMETER&&spec->parent)||
+         (spec->kind==XR_HIR_ITEM_PARAMETER_SCOPE&&spec->parent&&spec->node));
 }
 XrCompileResourceStatus xr_hir_items_reserve(XrHirItems *h,const XrHirItemSpec *spec,uint32_t *out) {
     if(!out||!hir_item_spec_valid(h,spec))return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     uint32_t previous=UINT32_MAX;
-    for(uint32_t i=0;i<h->count;++i)if(h->items[i].module==spec->module&&
+    for(uint32_t i=0;spec->kind!=XR_HIR_ITEM_PARAMETER_SCOPE&&i<h->count;++i)if(h->items[i].module==spec->module&&
+        h->items[i].kind!=XR_HIR_ITEM_PARAMETER_SCOPE&&
         h->items[i].parent==spec->parent&&!strcmp(h->items[i].name,spec->name)){previous=i;break;}
     XrCompileResourceStatus s=XR_COMPILE_RESOURCE_OK;
     if(!hir_grow(h,(void **)&h->items,&h->capacity,h->count,sizeof(*h->items),&s))return s;
@@ -97,7 +99,16 @@ XrCompileResourceStatus xr_hir_items_claim(XrHirItems *h,const XrHirItemSpec *sp
 }
 bool xr_hir_items_find(const XrHirItems *h,uint32_t module,uint32_t parent,const char *name,uint32_t *out) {
     if(!h||!name||!out)return false;uint32_t found=UINT32_MAX;
-    for(uint32_t i=0;i<h->count;++i)if(h->items[i].module==module&&h->items[i].parent==parent&&!strcmp(h->items[i].name,name)) {
+    for(uint32_t i=0;i<h->count;++i)if(h->items[i].kind!=XR_HIR_ITEM_PARAMETER_SCOPE&&
+        h->items[i].module==module&&h->items[i].parent==parent&&!strcmp(h->items[i].name,name)) {
+        if(found!=UINT32_MAX)return false;found=i;
+    }
+    if(found==UINT32_MAX)return false;*out=found;return true;
+}
+bool xr_hir_items_find_scope(const XrHirItems *h,uint32_t module,uint32_t node,uint32_t *out) {
+    if(!h||!node||!out)return false;uint32_t found=UINT32_MAX;
+    for(uint32_t i=0;i<h->count;++i)if(h->items[i].kind==XR_HIR_ITEM_PARAMETER_SCOPE&&
+        h->items[i].module==module&&h->items[i].node==node) {
         if(found!=UINT32_MAX)return false;found=i;
     }
     if(found==UINT32_MAX)return false;*out=found;return true;
