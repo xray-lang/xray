@@ -12,14 +12,18 @@
  */
 #include "lir/xlir_c.h"
 #include "lir/xlir_lower.h"
+#include "lir/xlir_builder.h"
+#include "lir/xlir_sccp.h"
+#include "lir/xlir_inline.h"
+#include <string.h>
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_generic.h"
 #include <stdio.h>
 
 int main(int argc, char **argv) {
-    if (argc != 3) {
-        fputs("usage: lir_c_run <absolute-source.xr> <output.c>\n", stderr);
+    if ((argc != 3 && argc != 4) || (argc == 4 && strcmp(argv[3],"--optimize"))) {
+        fputs("usage: lir_c_run <absolute-source.xr> <output.c> [--optimize]\n", stderr);
         return 2;
     }
     int result = 1;
@@ -67,6 +71,19 @@ int main(int argc, char **argv) {
     session = NULL;
     xr_compile_resources_free(authority_root);
     authority_root = NULL;
+    if (argc == 4) {
+        XrLirModule *optimized = NULL;
+        if (xr_lir_sccp(lowered.module,&optimized) != XR_LIR_OK) {
+            fputs("SCCP failed\n",stderr); goto done;
+        }
+        xr_lir_module_destroy(lowered.module); lowered.module = optimized;
+        lowered.entry.module = optimized; optimized = NULL;
+        if (xr_lir_inline(lowered.module,&optimized) != XR_LIR_OK) {
+            fputs("inlining failed\n",stderr); goto done;
+        }
+        xr_lir_module_destroy(lowered.module); lowered.module = optimized;
+        lowered.entry.module = optimized;
+    }
     XrLirCRequest request = {lowered.module, lowered.entry, resources, argv[1], NULL};
     XrLirCDiagnostic diagnostic;
     if (xr_lir_emit_c(&request, &output, &diagnostic) != XR_LIR_C_OK) {

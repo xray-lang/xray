@@ -31,14 +31,16 @@ typedef struct Lower {
     XrLirStatus status;
     XrLirLowerFailure *failure;
     uint64_t literal;
-    bool prints;
+    uint32_t *module_slot_for_value, *module_publications;
+    uint32_t module_value_count;
+    bool prints, mutable_slots;
 } Lower;
 typedef struct LowerFunction {
     Lower *owner;
     const XrXirFunction *source;
     XrLirFunction function;
     XrLirBlock *blocks;
-    XrLirValue *values, *states, *current;
+    XrLirValue *values, *states, *current, *slots;
     XrLirType *cell_types;
     uint32_t *cell_for, *phis, *order, *stack, *next;
     uint8_t *reachable, *use, *define, *live;
@@ -216,12 +218,108 @@ static bool lower_known(XrXirOp op) {
     }
 }
 
+/* Only actual owned module Cells become activation-local physical storage.
+ * Slot ordinals retain their original declaration identity throughout lowering. */
+static uint32_t lower_module_cell(const Lower *c, uint32_t function, uint32_t value) {
+    if (!c->mutable_slots) return UINT32_MAX;
+    const XrXirDeclarations *d = c->source->declarations;
+    const XrXirFunction *f = &c->source->functions[function];
+    if (function == d->modules[0].initializer && value < c->module_value_count &&
+        c->module_slot_for_value[value] != UINT32_MAX)
+        return c->module_slot_for_value[value];
+    if (value >= f->parameter_count && value - f->parameter_count < f->instruction_count) {
+        const XrXirInstruction *op = &f->instructions[value - f->parameter_count];
+        if (op->op == XR_XIR_SLOT_LOAD && op->immediate >= 0 &&
+            (uint64_t)op->immediate < d->slot_count) return (uint32_t)op->immediate;
+    }
+    return UINT32_MAX;
+}
+static bool lower_mutable_slots(Lower *c) {
+    const XrXirDeclarations *d = c->source->declarations;
+    uint32_t init = d->modules[0].initializer;
+    if (!d->functions || d->entry_function == init || c->source->functions[init].parameter_count ||
+        c->source->functions[d->entry_function].parameter_count)
+        return lower_unsupported(c, "module execution roots");
+    for (uint32_t s = 0; s < d->slot_count; ++s)
+        if (d->slots[s].module != 0 || !d->slots[s].mutable ||
+            !xr_xir_type_is_cell(c->source->types, d->slots[s].type) ||
+            xr_xir_cell_element(c->source->types, d->slots[s].type) != XR_XIR_I64)
+            return lower_unsupported(c, "module slots other than mutable i64 Cells");
+    c->module_value_count = c->source->functions[init].instruction_count;
+    c->module_slot_for_value = lower_alloc(c, c->module_value_count,
+                                           sizeof(*c->module_slot_for_value));
+    c->module_publications = lower_alloc(c, d->slot_count, sizeof(*c->module_publications));
+    if (!c->module_slot_for_value || !c->module_publications) return false;
+    for (uint32_t v = 0; v < c->module_value_count; ++v)
+        c->module_slot_for_value[v] = UINT32_MAX;
+    for (uint32_t s = 0; s < d->slot_count; ++s)
+        c->module_publications[s] = UINT32_MAX;
+    uint32_t last = 0;
+    for (uint32_t f = 0; f < c->source->function_count; ++f) {
+        const XrXirFunction *function = &c->source->functions[f];
+        for (uint32_t b = 0; b < function->block_count; ++b) {
+            const XrXirBlock *block = &function->blocks[b];
+            for (uint32_t i = block->first; i < block->first + block->count; ++i) {
+                const XrXirInstruction *op = &function->instructions[i];
+                c->function=f; c->block=b; c->instruction=i;
+                if (op->op == XR_XIR_CALL && op->immediate == (int64_t)init)
+                    return lower_unsupported(c, "call back to module initializer");
+                if (op->op == XR_XIR_SLOT_STORE || op->op == XR_XIR_SLOT_PLACE ||
+                    op->op == XR_XIR_SLOT_GROUP_INIT)
+                    return lower_unsupported(c, "module slot replacement, address or group");
+                if (op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_LOAD) continue;
+                if (op->immediate < 0 || (uint64_t)op->immediate >= d->slot_count ||
+                    d->functions[f].module != d->slots[op->immediate].module)
+                    return lower_unsupported(c, "module slot authority");
+                uint32_t s = (uint32_t)op->immediate;
+                if (op->op == XR_XIR_SLOT_LOAD) {
+                    if (op->type != d->slots[s].type)
+                        return lower_unsupported(c, "module slot Cell type");
+                    continue;
+                }
+                if (f != init || b != 0 || c->module_publications[s] != UINT32_MAX ||
+                    op->args[0] < function->parameter_count)
+                    return lower_unsupported(c, "module Cell publication outside initializer entry");
+                uint32_t at = op->args[0] - function->parameter_count;
+                if (at < block->first || at >= i ||
+                    function->instructions[at].op != XR_XIR_CELL_NEW ||
+                    function->instructions[at].type != d->slots[s].type)
+                    return lower_unsupported(c, "module Cell publication without its direct constructor");
+                if (c->module_slot_for_value[at] != UINT32_MAX)
+                    return lower_unsupported(c, "aliased module Cell publication");
+                c->module_slot_for_value[at] = s; c->module_publications[s] = i;
+                if (i > last) last = i;
+            }
+        }
+    }
+    for (uint32_t s = 0; s < d->slot_count; ++s)
+        if (c->module_publications[s] == UINT32_MAX)
+            return lower_unsupported(c, "module Cell without publication");
+    const XrXirFunction *f = &c->source->functions[init];
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrXirBlock *block = &f->blocks[b];
+        for (uint32_t i = block->first; i < block->first + block->count; ++i) {
+            const XrXirInstruction *op = &f->instructions[i];
+            c->function=init; c->block=b; c->instruction=i;
+            if (!b && op->op == XR_XIR_CALL && i <= last)
+                return lower_unsupported(c, "module initialization call before complete publication");
+            if (!b && op->op == XR_XIR_SLOT_LOAD &&
+                i <= c->module_publications[op->immediate])
+                return lower_unsupported(c, "module Cell read before publication");
+        }
+    }
+    c->mutable_slots = true;
+    return true;
+}
+
 /* Inspect every original function, including bodies outside the retained
  * roots. Erasing storage must not hide a reader, address, or publication. */
 static bool lower_literal(Lower *c) {
     const XrXirDeclarations *d = c->source->declarations;
     if (!d->slot_count)
         return true;
+    if (d->slots && xr_xir_type_is_cell(c->source->types, d->slots[0].type))
+        return lower_mutable_slots(c);
     if (d->slot_count != 1 || !d->slots || d->slots[0].module != 0 ||
         d->slots[0].type != XR_XIR_I64 || d->slots[0].mutable)
         return lower_unsupported(c, "module slots other than one immutable i64 literal");
@@ -372,6 +470,8 @@ static bool lower_fixed_divisor(const XrXirFunction *f, const XrXirInstruction *
 static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
     if (!lower_known(op->op))
         return lower_unsupported(c, xr_xir_op_name(op->op));
+    if (c->mutable_slots && op->op == XR_XIR_SLOT_LOAD)
+        return true;
     if (op->op == XR_XIR_CELL_NEW) {
         if (!xr_xir_type_is_cell(c->source->types, op->type) ||
             lower_type(xr_xir_cell_element(c->source->types, op->type)) <= XR_LIR_UNIT)
@@ -404,6 +504,8 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     c->instruction = UINT32_MAX;
     const XrXirFunction *f = &c->source->functions[function];
     XR_DCHECK(c->active[function], "only executable functions enter admission");
+    if (c->mutable_slots && c->source->declarations->functions[function].module != 0)
+        return lower_unsupported(c, "module function owner");
     if (!lower_type(f->result))
         return lower_unsupported(c, "function result type");
     for (uint32_t p = 0; p < f->parameter_count; ++p)
@@ -479,8 +581,15 @@ static bool lower_declare(Lower *c, uint32_t index) {
         return false;
     }
     char *name = lower_alloc(c, (size_t) f->name_length + 32, 1);
-    XrLirType *parameters = lower_alloc(c, f->parameter_count, sizeof(*parameters));
-    if (!name || (f->parameter_count && !parameters)) {
+    uint32_t hidden = c->mutable_slots && index != c->source->declarations->modules[0].initializer
+        ? c->source->declarations->slot_count : 0;
+    if (hidden > UINT32_MAX - f->parameter_count) {
+        xr_free(name);
+        return lower_unsupported(c, "module parameter count");
+    }
+    uint32_t count = f->parameter_count + hidden;
+    XrLirType *parameters = lower_alloc(c, count, sizeof(*parameters));
+    if (!name || (count && !parameters)) {
         xr_free(name);
         xr_free(parameters);
         return false;
@@ -495,11 +604,15 @@ static bool lower_declare(Lower *c, uint32_t index) {
     memcpy(name + prefix, f->name, f->name_length);
     for (uint32_t p = 0; p < f->parameter_count; ++p)
         parameters[p] = lower_type(f->parameters[p]);
+    for (uint32_t s = 0; s < hidden; ++s)
+        parameters[f->parameter_count + s] = XR_LIR_I64_CELL;
+    XrXirType result = c->mutable_slots && index == c->source->declarations->modules[0].initializer
+        ? c->source->functions[c->source->declarations->entry_function].result : f->result;
     XrLirFunctionSpec spec = {.name = name,
                               .name_length = (size_t) prefix + f->name_length,
                               .parameters = parameters,
-                              .parameter_count = f->parameter_count,
-                              .result = lower_type(f->result)};
+                              .parameter_count = count,
+                              .result = lower_type(result)};
     bool good = lower_build(c, xr_lir_declare_function(c->module, &spec, &c->functions[index]));
     xr_free(name);
     xr_free(parameters);
@@ -507,6 +620,7 @@ static bool lower_declare(Lower *c, uint32_t index) {
 }
 
 static void lower_function_free(LowerFunction *f) {
+    xr_free(f->slots);
     xr_free(f->blocks);
     xr_free(f->values);
     xr_free(f->states);
@@ -582,7 +696,8 @@ static bool lower_cell_inventory(LowerFunction *f) {
             const XrXirBlock *block = &source->blocks[b];
             for (uint32_t i = block->first; i < block->first + block->count; ++i) {
                 const XrXirInstruction *op = &source->instructions[i];
-                if (lower_state_new(op->op)) {
+                if (lower_state_new(op->op) &&
+                    lower_module_cell(c, c->function, source->parameter_count + i) == UINT32_MAX) {
                     XR_DCHECK(f->cell_count < source->instruction_count,
                               "each state has one defining instruction");
                     uint32_t id = source->parameter_count + i;
@@ -626,6 +741,8 @@ static bool lower_liveness(LowerFunction *f) {
             const XrXirBlock *block = &source->blocks[b];
             for (uint32_t i = block->first; i < block->first + block->count; ++i) {
                 const XrXirInstruction *op = &source->instructions[i];
+                if (lower_module_cell(c, c->function, lower_state_new(op->op)
+                        ? source->parameter_count + i : op->args[0]) != UINT32_MAX) continue;
                 if (!lower_state_new(op->op) && !lower_state_read(op->op) &&
                     !lower_state_write(op->op))
                     continue;
@@ -822,8 +939,12 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
         lower_error(c, XR_LIR_VERIFY_ERROR, "invalid Checked call argument range");
         return false;
     }
-    XrLirValue *arguments = lower_alloc(c, op->args[1], sizeof(*arguments));
-    if (op->args[1] && !arguments)
+    uint32_t hidden = c->mutable_slots && op->op != XR_XIR_PRINT
+        ? c->source->declarations->slot_count : 0;
+    if (hidden > UINT32_MAX - op->args[1]) return lower_unsupported(c, "module argument count");
+    uint32_t count = op->args[1] + hidden;
+    XrLirValue *arguments = lower_alloc(c, count, sizeof(*arguments));
+    if (count && !arguments)
         return false;
     bool good = true;
     for (uint32_t a = 0; a < op->args[1]; ++a)
@@ -831,11 +952,15 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
             good = false;
             break;
         }
+    for (uint32_t s = 0; s < hidden && good; ++s) {
+        arguments[op->args[1] + s] = f->slots[s];
+        good = f->slots[s].id != 0;
+    }
     XrLirInstruction call = {
         .op = XR_LIR_CALL,
         .type = lower_type(op->type),
         .operands = arguments,
-        .operand_count = op->args[1],
+        .operand_count = count,
         .source = lower_source(c),
         .callee = op->op == XR_XIR_PRINT ? c->print : c->functions[(uint32_t) op->immediate]};
     if (good)
@@ -844,6 +969,34 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
                                   : xr_lir_emit_value(c->module, f->blocks[b], &call,
                                                       &f->values[f->source->parameter_count + i]));
     xr_free(arguments);
+    return good;
+}
+
+static bool lower_module_operation(LowerFunction *f, uint32_t b, uint32_t i, bool *handled) {
+    Lower *c = f->owner;
+    const XrXirInstruction *op = &f->source->instructions[i];
+    *handled = false;
+    if (!c->mutable_slots) return true;
+    uint32_t result = f->source->parameter_count + i;
+    if (op->op == XR_XIR_SLOT_LOAD) {
+        f->values[result] = f->slots[op->immediate]; *handled = true; return true;
+    }
+    bool create = op->op == XR_XIR_CELL_NEW;
+    uint32_t s = lower_module_cell(c, c->function, create ? result : op->args[0]);
+    if (s == UINT32_MAX || (!create && op->op != XR_XIR_CELL_READ && op->op != XR_XIR_CELL_WRITE))
+        return true;
+    *handled = true;
+    XrLirValue args[2] = {0};
+    if (!lower_value(f, op->args[0], &args[0])) return false;
+    if (op->op == XR_XIR_CELL_WRITE && !lower_value(f, op->args[1], &args[1])) return false;
+    XrLirInstruction v = {.op = create ? XR_LIR_CELL_NEW :
+        op->op == XR_XIR_CELL_READ ? XR_LIR_CELL_READ : XR_LIR_CELL_WRITE,
+        .type = create ? XR_LIR_I64_CELL : lower_type(op->type), .operands=args,
+        .operand_count=op->op == XR_XIR_CELL_WRITE ? 2u : 1u, .source=lower_source(c)};
+    bool good = lower_build(c, v.type == XR_LIR_UNIT
+        ? xr_lir_emit_effect(c->module,f->blocks[b],&v)
+        : xr_lir_emit_value(c->module,f->blocks[b],&v,&f->values[result]));
+    if (create && good) f->slots[s] = f->values[result];
     return good;
 }
 
@@ -866,6 +1019,9 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
         uint32_t result = f->source->parameter_count + i;
         if (op->op == XR_XIR_SLOT_INIT)
             continue;
+        bool handled;
+        if (!lower_module_operation(f, b, i, &handled)) return false;
+        if (handled) continue;
         if (lower_state_new(op->op) || lower_state_read(op->op) || lower_state_write(op->op)) {
             uint32_t cell;
             if (!lower_cell_index(f, lower_state_new(op->op) ? result : op->args[0], &cell))
@@ -948,7 +1104,20 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     XrLirValue value = {0};
     XrLirInstruction instruction = {.type = XR_LIR_UNIT, .source = lower_source(c)};
     bool good = true;
-    if (term->op == XR_XIR_RETURN) {
+    if (term->op == XR_XIR_RETURN && c->mutable_slots &&
+        c->function == c->source->declarations->modules[0].initializer) {
+        uint32_t entry = c->source->declarations->entry_function;
+        XrLirType type = lower_type(c->source->functions[entry].result);
+        XrLirInstruction call = {.op=XR_LIR_CALL,.type=type,.callee=c->functions[entry],
+            .operands=f->slots,.operand_count=c->source->declarations->slot_count,
+            .source=lower_source(c)};
+        good = lower_build(c, type == XR_LIR_UNIT
+            ? xr_lir_emit_effect(c->module,f->blocks[b],&call)
+            : xr_lir_emit_value(c->module,f->blocks[b],&call,&value));
+        instruction.op=XR_LIR_RET;
+        instruction.operands=type == XR_LIR_UNIT ? NULL : &value;
+        instruction.operand_count=type == XR_LIR_UNIT ? 0u : 1u;
+    } else if (term->op == XR_XIR_RETURN) {
         instruction.op = XR_LIR_RET;
         if (f->source->result != XR_XIR_UNIT) {
             good = lower_value(f, term->args[0], &value);
@@ -983,6 +1152,15 @@ static bool lower_function(Lower *c, uint32_t index) {
                 lower_cell_inventory(&f) && lower_liveness(&f) && lower_blocks(&f);
     for (uint32_t p = 0; p < f.source->parameter_count && good; ++p)
         good = lower_build(c, xr_lir_function_parameter(c->module, f.function, p, &f.values[p]));
+    if (c->mutable_slots && good) {
+        uint32_t count = c->source->declarations->slot_count;
+        f.slots = lower_alloc(c,count,sizeof(*f.slots));
+        good = f.slots != NULL;
+        if (index != c->source->declarations->modules[0].initializer)
+            for (uint32_t s=0; s<count && good; ++s)
+                good = lower_build(c,xr_lir_function_parameter(c->module,f.function,
+                    f.source->parameter_count+s,&f.slots[s]));
+    }
     for (uint32_t n = 0; n < f.ordered && good; ++n)
         good = lower_body(&f, f.order[n]);
     for (uint32_t b = 0; b < f.source->block_count && good; ++b)
@@ -1008,9 +1186,10 @@ static bool lower_wrapper(Lower *c, XrLirFunction *output) {
         !lower_build(c, xr_lir_set_entry(c->module, wrapper, block)))
         return false;
     uint32_t calls[] = {init, entry};
-    for (uint32_t i = 0; i < 2; ++i) {
+    for (uint32_t i = 0; i < (c->mutable_slots ? 1u : 2u); ++i) {
         XrLirInstruction call = {.op = XR_LIR_CALL,
-                                 .type = lower_type(c->source->functions[calls[i]].result),
+                                 .type = c->mutable_slots ? spec.result :
+                                     lower_type(c->source->functions[calls[i]].result),
                                  .callee = c->functions[calls[i]]};
         bool good = call.type == XR_LIR_UNIT
                         ? lower_build(c, xr_lir_emit_effect(c->module, block, &call))
@@ -1067,8 +1246,10 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     if (d->entry_function >= source->function_count ||
         d->modules[0].initializer >= source->function_count)
         return lower_error(&c, XR_LIR_VERIFY_ERROR, "invalid Checked program entry");
-    if (!lower_literal(&c))
+    if (!lower_literal(&c)) {
+        xr_free(c.module_slot_for_value); xr_free(c.module_publications);
         return c.status;
+    }
     c.functions = lower_alloc(&c, source->function_count, sizeof(*c.functions));
     c.active = lower_alloc(&c, source->function_count, 1);
     c.queue = lower_alloc(&c, source->function_count, sizeof(*c.queue));
@@ -1111,6 +1292,8 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         c.module = NULL;
     }
     xr_lir_module_destroy(c.module);
+    xr_free(c.module_slot_for_value);
+    xr_free(c.module_publications);
     xr_free(c.functions);
     xr_free(c.active);
     xr_free(c.queue);

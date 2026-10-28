@@ -19,7 +19,7 @@
 #include <string.h>
 
 static const char *const lir_type_names[] = {"invalid", "unit", "i1",  "i8",  "i16", "i32", "i64",
-                                             "u8",      "u16",  "u32", "u64", "f32", "f64", "ptr"};
+                                             "u8",      "u16",  "u32", "u64", "f32", "f64", "ptr", "i64_cell"};
 static const char *const lir_op_names[] = {
     "invalid",
 #define XR_LIR_OP(name, text, arity) text,
@@ -117,6 +117,12 @@ static bool lir_scalar_instruction_types(const XrLirFunctionData *f,
     switch (v->op) {
         case XR_LIR_CONST:
             return lir_constant_valid(v->type, v->bits);
+        case XR_LIR_CELL_NEW:
+            return v->type == XR_LIR_I64_CELL && a == XR_LIR_I64;
+        case XR_LIR_CELL_READ:
+            return v->type == XR_LIR_I64 && a == XR_LIR_I64_CELL;
+        case XR_LIR_CELL_WRITE:
+            return v->type == XR_LIR_UNIT && a == XR_LIR_I64_CELL && b == XR_LIR_I64;
         case XR_LIR_ADD:
         case XR_LIR_SUB:
         case XR_LIR_MUL:
@@ -225,7 +231,10 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             const XrLirIntrinsic *entry = &m->intrinsics[i];
             if (entry->id != v->intrinsic)
                 continue;
-            if (!entry->scalar_sync ||
+            bool cell = entry->result == XR_LIR_I64_CELL;
+            for (uint32_t p = 0; p < entry->parameter_count; ++p)
+                cell |= entry->parameters[p] == XR_LIR_I64_CELL;
+            if (cell || !entry->scalar_sync ||
                 !lir_signature_matches(f, v, entry->parameters, entry->parameter_count,
                                        entry->result))
                 goto invalid;
@@ -279,6 +288,9 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
         }
         for (uint32_t i = 0; i < block->instruction_count; ++i) {
             const XrLirInstructionView *v = &block->instructions[i].view;
+            if (v->op == XR_LIR_CELL_NEW && b + 1 != f->entry)
+                return xr_lir_internal_error(d, "Cell storage requires the activation entry block",
+                                             index + 1, b + 1, i + 1, &v->source);
             bool terminal = xr_lir_internal_terminal(v->op);
             if (terminal != (i == block->instruction_count - 1))
                 return xr_lir_internal_error(d, "terminator must be the final instruction",
@@ -464,6 +476,7 @@ static XrLirStatus lir_uses(const XrLirFunctionData *f, uint32_t function, const
 
 static bool lir_function_shape(const XrLirFunctionData *f) {
     if (!f->name || !f->name_length || !xr_lir_internal_type_valid(f->result, true) ||
+        f->result == XR_LIR_I64_CELL ||
         f->value_count > f->value_capacity || (f->value_count && !f->values) ||
         (f->parameter_count && (!f->parameters || !f->parameter_types)))
         return false;

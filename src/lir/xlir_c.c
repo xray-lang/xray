@@ -119,7 +119,7 @@ static void c_format(LirC *c, const char *format, ...) {
 static const char *c_type(XrLirType type) {
     static const char *const types[] = {NULL, "void", "_Bool", "int8_t", "int16_t",
         "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
-        NULL, "double", "void *"};
+        NULL, "double", "void *", "int64_t *"};
     return (unsigned) type < sizeof(types) / sizeof(types[0]) ? types[type] : NULL;
 }
 static unsigned c_width(XrLirType type) {
@@ -230,6 +230,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         return;
     c_scalar(c, v->type);
     switch (v->op) {
+        case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE:
         case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
         case XR_LIR_NEG: case XR_LIR_ICMP: case XR_LIR_INTCAST:
         case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
@@ -479,6 +480,20 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         return;
     static const char *const predicates[] = {NULL, "==", "!=", "<", "<=", ">", ">="};
     switch (v->op) {
+        case XR_LIR_CELL_NEW:
+            c_format(c, "    int64_t xrl_cell%" PRIu32 " = ", v->result);
+            c_value(c, v->operands[0]);
+            c_format(c, ";\n    v%" PRIu32 " = &xrl_cell%" PRIu32 ";\n", v->result, v->result);
+            break;
+        case XR_LIR_CELL_READ:
+            c_format(c, "    v%" PRIu32 " = *", v->result);
+            c_value(c, v->operands[0]);
+            c_text(c, ";\n");
+            break;
+        case XR_LIR_CELL_WRITE:
+            c_text(c, "    *"); c_value(c, v->operands[0]);
+            c_text(c, " = "); c_value(c, v->operands[1]); c_text(c, ";\n");
+            break;
         case XR_LIR_CONST:
             if (v->type == XR_LIR_PTR)
                 c_format(c, "    v%" PRIu32 " = 0;\n", v->result);

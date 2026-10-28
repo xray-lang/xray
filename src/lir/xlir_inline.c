@@ -21,7 +21,7 @@ typedef struct {
     size_t first, count;
     uint64_t instructions, scratch;
     uint32_t index, low, component, component_size;
-    bool active, self, returns, eligible;
+    bool active, self, returns, eligible, cell_storage;
 } InlineFunction;
 typedef struct { uint32_t function; size_t next; } InlineGraphFrame;
 typedef struct {
@@ -94,6 +94,7 @@ static XrLirStatus inline_graph_storage(Inliner *c) {
                 uint64_t scratch = inline_scratch(&v);
                 if (scratch > info->scratch) info->scratch = scratch;
                 info->returns |= v.op == XR_LIR_RET;
+                info->cell_storage |= v.op == XR_LIR_CELL_NEW;
                 if (v.op != XR_LIR_CALL) continue;
                 if (c->edge_count == SIZE_MAX) return XR_LIR_OUT_OF_MEMORY;
                 ++c->edge_count;
@@ -164,7 +165,7 @@ static void inline_components(Inliner *c) {
     for (uint32_t f = 0; f < c->count; ++f) {
         InlineFunction *info = &c->info[f + 1];
         info->eligible = info->view.kind == XR_LIR_FUNCTION_DEFINITION && info->returns &&
-            !info->self && c->info[info->component].component_size == 1 &&
+            !info->self && !info->cell_storage && c->info[info->component].component_size == 1 &&
             info->view.block_count <= 16 && info->view.value_count <= 128 &&
             info->instructions <= 256 && info->scratch <= 256;
     }

@@ -213,7 +213,7 @@ static bool lir_function_spec_valid(const XrLirFunctionSpec *spec) {
     if (!spec || !spec->name || !spec->name_length || spec->name_length == SIZE_MAX ||
         memchr(spec->name, 0, spec->name_length) ||
         !lir_types_valid(spec->parameters, spec->parameter_count) ||
-        !xr_lir_internal_type_valid(spec->result, true))
+        !xr_lir_internal_type_valid(spec->result, true) || spec->result == XR_LIR_I64_CELL)
         return false;
     if (spec->kind == XR_LIR_FUNCTION_DEFINITION)
         return spec->extern_kind == XR_LIR_EXTERN_NONE;
@@ -471,6 +471,8 @@ static XrLirStatus lir_emit(XrLirModule *m, XrLirBlock handle, const XrLirInstru
         return status;
     XrLirFunctionData *f = lir_block_function(m, handle);
     if (!f || !input)
+        return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    if (input->op == XR_LIR_CELL_NEW && handle.id != f->entry)
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     XrLirBlockData *block = &f->blocks[handle.id - 1];
     XrLirInstructionData instruction = {0};

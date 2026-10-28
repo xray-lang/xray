@@ -12,18 +12,39 @@
 #include "base/xchecks.h"
 
 static size_t attempts, fail_at = SIZE_MAX;
+typedef struct LowerBlock { void *pointer; size_t bytes; } LowerBlock;
+static LowerBlock observed_lower_blocks[1024];
+static size_t lower_live, lower_bytes;
+static void injected_release(void *pointer) {
+    if (pointer) {
+        size_t i=0;
+        while (i<lower_live && observed_lower_blocks[i].pointer != pointer) ++i;
+        CHECK(i<lower_live);
+        lower_bytes -= observed_lower_blocks[i].bytes;
+        observed_lower_blocks[i] = observed_lower_blocks[--lower_live];
+    }
+    xr_free(pointer);
+}
 
 static void *injected_allocate(size_t bytes) {
     if (attempts++ == fail_at)
         return NULL;
-    return xr_malloc(bytes);
+    void *pointer = xr_malloc(bytes);
+    if (pointer) {
+        CHECK(lower_live<1024 && bytes<=SIZE_MAX-lower_bytes);
+        observed_lower_blocks[lower_live++] = (LowerBlock){pointer,bytes}; lower_bytes += bytes;
+    }
+    return pointer;
 }
 
 #undef xr_malloc
 #define xr_malloc(bytes) injected_allocate(bytes)
+#undef xr_free
+#define xr_free(pointer) injected_release(pointer)
 #include "lir/xlir_lower.c"
 
 static XrLirStatus run(const SourceFixture *fixture) {
+    size_t prior_live=lower_live, prior_bytes=lower_bytes;
     XrLirLowerRequest request = {fixture->closed, fixture->source.snapshot, false};
     XrLirLowered output = {0};
     XrLirLowerFailure failure = {0};
@@ -38,6 +59,7 @@ static XrLirStatus run(const SourceFixture *fixture) {
     xr_lir_lowered_free(&output);
     xr_lir_lower_failure_free(&failure);
     CHECK(!output.module && !failure.owned_path);
+    CHECK(lower_live==prior_live && lower_bytes==prior_bytes);
     return status;
 }
 
@@ -202,8 +224,21 @@ int main(void) {
         OK(run(&fixture));
     }
     source_fixture_free(&fixture);
+    fixture = source_fixture("var n=1\nfn bump()->i64{n=n+1\nreturn n}\nprint(bump())\n");
+    fail_at = SIZE_MAX;
+    attempts = 0;
+    OK(run(&fixture));
+    CHECK(attempts > 2);
+    for (size_t point=0; point<2; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+        fail_at = SIZE_MAX;
+        OK(run(&fixture));
+    }
+    source_fixture_free(&fixture);
     diagnostic_copy_failure();
     literal_structure();
+    CHECK(!lower_live && !lower_bytes);
     puts("representative lowering workspace and diagnostic-copy failures passed");
     return 0;
 }

@@ -33,9 +33,10 @@ typedef struct XrLirLowerFailure {
 /* Output and optional failure must initially be empty. The snapshot must
  * correspond to the source of the supplied specialization. An unsupported
  * operation never publishes a partial module or selects another executor. */
-/* Each complete execution starts a fresh independent scalar domain, running
- * the actual declaration initializer before the declaration entry. No state
- * or lifecycle is attached to a canonical program instance. */
+/* Each complete execution starts fresh independent scalar storage. Mutable
+ * i64 module Cells remain in the initializer activation while ordinary calls
+ * and the actual declaration entry use them. No Cell address escapes its root;
+ * no state or lifecycle is attached to a canonical program instance. */
 XR_FUNC XrLirStatus xr_lir_lower_program_checked(const XrLirLowerRequest *, XrLirLowered *,
                                                  XrLirLowerFailure *);
 /* A local numerical observation skips initialization. The original program

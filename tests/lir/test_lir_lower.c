@@ -7,6 +7,7 @@
  * test_lir_lower.c - Source-backed Cell promotion and fail-closed lowering
  */
 #include "lir_source_fixture.h"
+#include "xir/xxir_types.h"
 #include "base/xmalloc.h"
 #include "lir/xlir_lower.h"
 #include "lir/xlir_builder.h"
@@ -466,7 +467,6 @@ static void literal_sources(void) {
     rejected("fn value()->i64{return 7}\nconst n=value()\nprint(n)\n", false,
              "direct same-block i64 literal");
     rejected("const s=\"managed\"\nprint(7)\n", false, "module slots");
-    rejected("var n=7\nprint(n)\n", false, "module slots");
     rejected("const n=7\nconst m=8\nprint(n+m)\n", false, "module slots");
     rejected("const n=7\nfn reader()->i64{return n}\nprint(reader())\n", false,
              "slot read outside");
@@ -474,6 +474,65 @@ static void literal_sources(void) {
              "slot read outside");
     rejected("const n=7\nif(true){print(n)}\n", false, "slot read outside");
 }
+static void module_cells_source(const char *directory) {
+    char *text = read_file(directory,
+        "../../diff/cases/semantics/default_params/default_evaluated_per_call", "xr");
+    SourceFixture fixture = source_fixture(text);
+    xr_free(text);
+    const XrXirModule *source = xr_xir_compile_artifact_module(fixture.closed);
+    const XrXirDeclarations *d = source->declarations;
+    CHECK(d->module_count == 1 && d->slot_count == 1 && d->slots[0].module == 0 &&
+        d->slots[0].mutable && xr_xir_type_is_cell(source->types,d->slots[0].type) &&
+        xr_xir_cell_element(source->types,d->slots[0].type) == XR_XIR_I64);
+    CHECK(d->functions[d->modules[0].initializer].module == 0);
+    XrLirLowerRequest request = {fixture.closed,fixture.source.snapshot,false};
+    XrLirLowered out = {0};
+    OK(xr_lir_lower_program_checked(&request,&out,NULL));
+    source_fixture_free(&fixture);
+    OK(xr_lir_verify(out.module,NULL));
+    XrLirFunctionView root;
+    OK(xr_lir_function_view(out.module,out.entry,&root));
+    CHECK(root.result == XR_LIR_I64 && root.parameter_count == 0);
+    XrLirBlock root_block; XrLirInstructionView root_call;
+    OK(xr_lir_block_at(out.module,out.entry,0,&root_block));
+    OK(xr_lir_instruction_view(out.module,root_block,0,&root_call));
+    CHECK(root_call.op == XR_LIR_CALL && root_call.type == XR_LIR_I64);
+    uint32_t storage_owner = root_call.callee;
+    uint32_t cells=0, reads=0, writes=0;
+    for (uint32_t f=0; f<xr_lir_function_count(out.module); ++f) {
+        XrLirFunction function; XrLirFunctionView view;
+        OK(xr_lir_function_at(out.module,f,&function));
+        OK(xr_lir_function_view(out.module,function,&view));
+        for (uint32_t b=0; b<view.block_count; ++b) {
+            XrLirBlock block; XrLirBlockView body;
+            OK(xr_lir_block_at(out.module,function,b,&block));
+            OK(xr_lir_block_view(out.module,block,&body));
+            for (uint32_t i=0; i<body.instruction_count; ++i) {
+                XrLirInstructionView op;
+                OK(xr_lir_instruction_view(out.module,block,i,&op));
+                if (op.op == XR_LIR_CELL_NEW) {
+                    CHECK(function.id == storage_owner && b == 0 && op.type == XR_LIR_I64_CELL);
+                    ++cells;
+                }
+                reads += op.op == XR_LIR_CELL_READ;
+                writes += op.op == XR_LIR_CELL_WRITE;
+            }
+        }
+    }
+    CHECK(cells == 1 && reads >= 2 && writes == 1);
+    xr_lir_lowered_free(&out);
+    rejected("fn read()->i64{return n}\nvar first=read()\nvar n=7\nprint(first)\n",
+        false,"module initialization call before complete publication");
+    rejected("if (true) {print(1)}\nvar n=7\nprint(n)\n",false,
+        "module Cell publication outside initializer entry");
+    rejected("var n=7\nfn bump(v:ref i64)->i64{v=v+1\nreturn v}\nprint(bump(ref n))\n",
+        false,"function parameter type");
+    rejected("var n=7\nfn outer()->i64{const f=fn()->i64{return n}\nreturn f()}\nprint(outer())\n",
+        false,"FUNCTION_REF");
+    rejected("var s=\"owned\"\nprint(7)\n",false,"module slots other than mutable i64 Cells");
+    puts("actual mutable module Cells retain identity, ordered publication and scoped plain calls");
+}
+
 static void local_boundaries(void) {
     static const char *texts[] = {
         "fn selected(x:i64)->i64{return x+1}\nprint(selected(7))\n",
@@ -518,6 +577,7 @@ int main(int argc, char **argv) {
     unsupported();
     argument_validation();
     literal_sources();
+    module_cells_source(argv[1]);
     local_boundaries();
     golden(argv[1], argv[2], "source-fib");
     golden(argv[1], argv[2], "source-sum");

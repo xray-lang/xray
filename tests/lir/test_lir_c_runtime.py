@@ -64,6 +64,16 @@ def main():
         b'-9223372036854775808\n0\n7\n0\n-7\n0\n-9223372036854775807\n0\n0\n0\n')
     cases['f64-source'] = ('fn carry(x:f64)->f64{print(7)\nreturn x}\ncarry(1.25)\nprint(2)\n', b'7\n2\n')
     cases['literal-slot'] = ('const n=7\nprint(n)\nprint(99)\n', b'7\n99\n')
+    original_counter = Path(__file__).resolve().parents[2] / 'tests/diff/cases/semantics/default_params/default_evaluated_per_call.xr'
+    cases['module-counter'] = (original_counter, b'1\n2\n99\n3\n3\n')
+    cases['module-counter-optimized'] = (original_counter, b'1\n2\n99\n3\n3\n')
+    cases['module-order'] = ('var first=3\nvar second=first+4\n'
+        'fn adjust(n:i64)->i64{first=first+n\nsecond=second+first\nreturn second}\n'
+        'print(first)\nprint(second)\nprint(adjust(2))\nprint(first)\nprint(second)\n',
+        b'3\n7\n12\n5\n12\n')
+    cases['module-loop'] = ('var counter=1\nvar total=0\n'
+        'fn bump(n:i64)->i64{var i=0\nwhile(i<n){counter=counter+2\ntotal=total+counter\ni=i+1}\nreturn total}\n'
+        'print(bump(3))\nprint(counter)\nprint(total)\n', b'15\n7\n15\n')
     cases['printing-closure'] = ('fn leaf(x:i64)->i64{print(x)\nreturn x}\n'
                                  'fn call(x:i64)->i64{return leaf(x)}\nprint(call(7))\n', b'7\n7\n')
     cases['f64-fneg-source'] = ('fn negative(x:f64)->f64{\nprint(13)\nreturn -x\n}\n'
@@ -86,7 +96,15 @@ def main():
         generated = root / (name + '.c')
         adapter = root / (name + '-adapter.c')
         executable = root / (name + ('.exe' if os.name == 'nt' else ''))
-        if program is None:
+        if isinstance(program, Path):
+            source.write_bytes(program.read_bytes())
+            command = [args.driver, source, generated]
+            if name.endswith('-optimized'): command.append('--optimize')
+            run(command, cwd=root)
+            identity[name + 'OriginalSource'] = {'path':str(program),
+                'SHA256':hashlib.sha256(program.read_bytes()).hexdigest(),
+                'copiedRawExactly':source.read_bytes() == program.read_bytes()}
+        elif program is None:
             run([args.fixture_driver, name, generated], cwd=root)
         else:
             source.write_text(program, encoding='utf-8')
@@ -139,7 +157,7 @@ def main():
         if args.kind == 'msvc':
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
-            command = [args.compiler, '/nologo', '/std:c11', '/W4', '/WX', '/O2', crt,
+            command = [args.compiler, '/nologo', '/std:c11', '/utf-8', '/W4', '/WX', '/O2', crt,
                        '/I' + str(args.include), adapter, args.library, '/Fe:' + str(executable)]
             if args.asan:
                 command += ['/fsanitize=address', '/Zi']
@@ -163,13 +181,14 @@ def main():
         run(command, cwd=root)
         completed = run([executable], cwd=root)
         assert completed.stdout == expected and completed.stderr == b'', (name, completed)
-        if name == 'literal-slot':
+        if name == 'literal-slot' or name.startswith('module-'):
             # Reuse the same compiled image and actual complete entry twice.
-            twice = root / 'literal-twice-adapter.c'
+            repeat_name = 'literal' if name == 'literal-slot' else name
+            twice = root / (repeat_name + '-twice-adapter.c')
             twice.write_text(f'#include "{generated.name}"\nint main(void) {{\n'
                              '    (void)xray_lir_entry();\n    (void)xray_lir_entry();\n'
                              '    return 0;\n}\n', encoding='ascii')
-            twice_exe = root / ('literal-twice.exe' if os.name == 'nt' else 'literal-twice')
+            twice_exe = root / (repeat_name + ('-twice.exe' if os.name == 'nt' else '-twice'))
             twice_command = [str(x) for x in command]
             twice_command = [str(twice) if x == str(adapter) else
                              str(twice_exe) if x == str(executable) else
@@ -178,7 +197,7 @@ def main():
             run(twice_command, cwd=root)
             repeated = run([twice_exe], cwd=root)
             assert repeated.stdout == expected * 2 and not repeated.stderr
-            identity['literalRepeatedEntry'] = {'calls': 2, 'stdoutHex': repeated.stdout.hex(),
+            identity['literalRepeatedEntry' if name == 'literal-slot' else name + 'RepeatedEntry'] = {'calls': 2, 'stdoutHex': repeated.stdout.hex(),
                                                'sameImage': True}
         executables[name] = executable
         if name in ('f64-source', 'f64-fneg-source'):
@@ -192,7 +211,8 @@ def main():
                  'output-point': b'odd"\\x5c\xc3\xa9\\x0a.xr:4:3-4:3 ',
                  'output-range': b'odd"\\x5c\xc3\xa9\\x0a.xr:4:3-5:8 ',
                  'typed-unit': b'typed-root.xr:2:1-2:1 ',
-                 'literal-slot': b'literal-slot.xr:2:1-2:1 '}
+                 'literal-slot': b'literal-slot.xr:2:1-2:1 ',
+                 'module-counter': b'module-counter.xr:12:1-12:1 '}
     for name, location in locations.items():
         with read_only.open('rb') as stream:
             failure = subprocess.run([str(executables[name]), 'fail'], stdout=stream,

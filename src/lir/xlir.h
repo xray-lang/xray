@@ -41,6 +41,7 @@ typedef enum XrLirType {
     XR_LIR_F32,
     XR_LIR_F64,
     XR_LIR_PTR,
+    XR_LIR_I64_CELL,
     XR_LIR_TYPE_COUNT
 } XrLirType;
 typedef enum XrLirOp {
