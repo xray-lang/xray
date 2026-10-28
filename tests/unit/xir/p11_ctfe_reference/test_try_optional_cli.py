@@ -13,6 +13,7 @@ def main():
     parser.add_argument('--binary',type=Path,required=True)
     parser.add_argument('--source',type=Path,required=True)
     parser.add_argument('--expect',type=Path,required=True)
+    parser.add_argument('--empty-source',type=Path)
     parser.add_argument('--native-driver',type=Path)
     args=parser.parse_args()
     sys.path.insert(0,str(args.root.resolve()/'scripts'))
@@ -20,7 +21,7 @@ def main():
     binary=args.binary.resolve();source=args.source.resolve()
     expected=json.loads(args.expect.read_text(encoding='utf-8'))['stdoutUtf8'].encode('utf-8')
     with tempfile.TemporaryDirectory(prefix='xray-try-optional-cli-') as temporary:
-        directory=Path(temporary);executable=directory/'try_optional.exe'
+        directory=Path(temporary)
         def check(name,command,wanted):
             with tempfile.TemporaryFile() as stdout,tempfile.TemporaryFile() as stderr:
                 status=run_child(command,cwd=directory,stdout=stdout,stderr=stderr,timeout=120)
@@ -32,11 +33,16 @@ def main():
             oracle=directory/'expected.stdout';oracle.write_bytes(expected)
             check('generated native',[str(args.native_driver.resolve()),'--expect',str(oracle)],b'Strict fromUtf8 generated C: owned Unicode/NUL and typed catch PASS'+os.linesep.encode())
             return
-        check('run',[str(binary),'run',str(source)],expected)
-        check('build',[str(binary),'build',str(source),'-o',str(executable)],
-            ('Built: '+str(executable)+'\n').encode('utf-8'))
-        assert executable.is_file()
-        check('native',[str(executable)],expected)
+        def run_source(source,wanted,name):
+            executable=directory/(name+'.exe')
+            check(name+' run',[str(binary),'run',str(source)],wanted)
+            check(name+' build',[str(binary),'build',str(source),'-o',str(executable)],
+                ('Built: '+str(executable)+'\n').encode('utf-8'))
+            assert executable.is_file()
+            check(name+' native',[str(executable)],wanted)
+        run_source(source,expected,'try_optional')
+        if args.empty_source:
+            run_source(args.empty_source.resolve(),b'','try_optional_never')
     print('Actual CLI run/build/native complete try? Unicode/NUL oracle PASS')
 
 

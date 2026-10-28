@@ -196,7 +196,8 @@ if(WIN32)
         "${CMAKE_CURRENT_LIST_DIR}/test_try_optional_cli.py"
         --root "${PROJECT_SOURCE_DIR}" --binary $<TARGET_FILE:xray>
         --source "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_optional.xr"
-        --expect "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_optional.expected.json")
+        --expect "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_optional.expected.json"
+        --empty-source "${CMAKE_CURRENT_LIST_DIR}/fixtures/try_optional_never.xr")
     set_tests_properties(test_xir_try_optional_cli PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE PROCESSORS 1
         LABELS "unit;xir;cli;errors;execution;ctfe;sdk")
 endif()
