@@ -26,7 +26,7 @@ static void sn_execution(bool direction) {
     CHECK(module->function_count==spec.entry_count && module->declarations->entry_function==spec.declarations->entry_function);
     XrXirCallEntry *entries=NULL;XrXirVmBinding *bindings=NULL;
     if (XR_SOURCE_NESTED_MIXED) {
-        CHECK(xr_xir_compile_lower(proof,&spec.target,&lowered,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_lower(proof,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);
         CHECK(xr_compile_resources_calloc(owner.context.resources,spec.entry_count,sizeof(*entries),(void**)&entries)==XR_COMPILE_RESOURCE_OK);
         CHECK(xr_compile_resources_calloc(owner.context.resources,spec.entry_count,sizeof(*bindings),(void**)&bindings)==XR_COMPILE_RESOURCE_OK);
         uint32_t vm=0,native=0;

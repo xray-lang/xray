@@ -69,7 +69,7 @@ static void capacity_vm_paths(CapacityCompile *run) {
     CHECK(xr_xir_compile_specialize(replay,&specialized,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(replay);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(specialized,&target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(specialized);
     XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK&&!lowered&&program);

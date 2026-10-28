@@ -29,7 +29,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xA5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
-    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);const char *names[]={"run","make","make_branch"};uint32_t entries[3]={UINT32_MAX,UINT32_MAX,UINT32_MAX};
     for(unsigned i=0;i<3;++i){for(uint32_t f=0;f<module->function_count;++f){const XrXirFunction *function=&module->functions[f];if(function->name_length!=strlen(names[i]) || memcmp(function->name,names[i],function->name_length))continue;CHECK(entries[i]==UINT32_MAX && function->parameter_count==(i?1u:2u));CHECK((module->declarations->functions[f].module==module->declarations->root_module)==(i==0));entries[i]=f;}CHECK(entries[i]!=UINT32_MAX);}
     XrXirCSource generated={0};CHECK(xr_xir_compile_emit_c(lowered,"p20_cycle_batch_fixture",4194304,&generated)==XR_XIR_OK);

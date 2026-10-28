@@ -192,7 +192,7 @@ static void cm_build(CmFixture *f, bool root_native) {
     CHECK(packet.length == native->packet.length && !memcmp(packet.bytes, native->packet.bytes, packet.length));
     memset(packet.bytes, 0xa5, packet.length);
     xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_lower(closed, &native->target, &f->lowered, &diagnostic) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &native->target, NULL, &f->lowered, &diagnostic) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     const XrXirModule *module = xr_xir_compile_artifact_module(f->lowered);
     CHECK(module && module->stage == XR_XIR_LOWERED && module->function_count == CN_FUNCTIONS);

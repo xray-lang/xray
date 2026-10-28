@@ -57,7 +57,7 @@ static XrXirStatus default_invoke_allocation_case(const XrXirCompileContext *con
         status=xr_xir_compile_specialize(checked,&special,NULL);if(status!=XR_XIR_OK)CHECK(!special);}
     if(status==XR_XIR_OK){status=xr_xir_compile_checked_write(special,&packet,NULL);if(status!=XR_XIR_OK)CHECK(!packet.bytes&&!packet.length);}
     if(status==XR_XIR_OK){status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);if(status!=XR_XIR_OK)CHECK(!read);}
-    if(status==XR_XIR_OK){status=xr_xir_compile_lower(read,&fixture_target,&lowered,NULL);if(status!=XR_XIR_OK)CHECK(!lowered);}
+    if(status==XR_XIR_OK){status=xr_xir_compile_lower(read,&fixture_target, NULL,&lowered,NULL);if(status!=XR_XIR_OK)CHECK(!lowered);}
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(read);xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_artifact_free(special);xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);
     return status;

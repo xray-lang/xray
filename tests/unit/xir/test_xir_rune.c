@@ -37,7 +37,7 @@ static XrXirStatus rune_build(const XrXirCompileContext *ctx,int64_t codepoint,b
     XrXirArtifact *checked=NULL;
     XrXirStatus status=xir_fixture_check(ctx, &built, &checked, NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    if(status==XR_XIR_OK)status=xr_xir_compile_lower(checked,&target,output,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_lower(checked,&target, NULL,output,NULL);
     xr_xir_compile_artifact_free(checked);return status;
 }
 static void rune_values(void) {
@@ -147,7 +147,7 @@ static XrXirStatus rune_resource_build(const XrXirCompileContext *ctx,XrXirArtif
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_read(ctx,packet.bytes,packet.length,&decoded,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(decoded,&closed,NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    if(status==XR_XIR_OK)status=xr_xir_compile_lower(closed,&target,&lowered,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_emit_leaf_c(lowered,"rune_resource",1048576,&source);
     xr_xir_compile_c_source_free(&source);xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(decoded);

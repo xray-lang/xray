@@ -40,7 +40,7 @@ static void effect_mixed(bool callback_native, bool methods) {
     EffectMixed *owner=NULL;
     CHECK(xr_compile_resources_calloc(context.resources,1,sizeof(*owner),(void **)&owner)==XR_COMPILE_RESOURCE_OK);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(checked, &target, &owner->artifact, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &target, NULL, &owner->artifact, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     const XrXirModule *module = xr_xir_compile_artifact_module(owner->artifact);
     CHECK(module->function_count == native->entry_count);

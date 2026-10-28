@@ -126,7 +126,7 @@ static XrXirProgram *class_exit_program(unsigned mode,uint32_t *entry) {
  XrXirDiagnostic diagnostic={0};XrXirStatus verify=xir_fixture_check(&owner.context, &f.module, &checked, &diagnostic);
  if(verify!=XR_XIR_OK)fprintf(stderr,"mode%u check %u function%u instruction%u reason%u\n",mode,verify,diagnostic.function,diagnostic.instruction,diagnostic.reason);CHECK(verify==XR_XIR_OK);
  CHECK(xr_xir_compile_specialize(checked,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
- XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(special,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
+ XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
  const XrXirModule *closed=xr_xir_compile_artifact_module(lowered);*entry=UINT32_MAX;
  for(uint32_t index=0;index<closed->function_count;++index)if(closed->functions[index].name_length==5&&!memcmp(closed->functions[index].name,"entry",5))*entry=index;CHECK(*entry!=UINT32_MAX);
  XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);class_pipeline_release_producer(&owner);return program;

@@ -83,7 +83,7 @@ static XrXirStatus iterator_source_pipeline(const XrXirCompileContext *c,const c
             CHECK(count==4);s=xr_xir_compile_specialize(decoded,&closed,NULL);
         }
         if (s==XR_XIR_OK) s=xr_xir_compile_lower(closed,
-            &(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL);
+            &(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);
         if (s==XR_XIR_OK) s=xr_xir_compile_artifact_verify(lowered,NULL);
     }
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(closed);

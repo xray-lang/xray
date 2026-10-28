@@ -17,7 +17,7 @@
 #include <stddef.h>
 
 typedef XrXirStatus (*Check)(const XrXirCompileContext *,const XrXirModule *,const XrXirConstruction *,XrXirArtifact **,XrXirDiagnostic *);
-typedef XrXirStatus (*Lower)(const XrXirArtifact *,const XrXirTarget *,XrXirArtifact **,XrXirDiagnostic *);
+typedef XrXirStatus (*Lower)(const XrXirArtifact *,const XrXirTarget *,XrCompileRequestControl *,XrXirArtifact **,XrXirDiagnostic *);
 typedef XrXirStatus (*Specialize)(const XrXirArtifact *,XrXirArtifact **,XrXirDiagnostic *);
 typedef XrXirStatus (*Seal)(const XrXirCompileContext *,const XrXirProgramSpec *,XrXirProgram **);
 typedef XrXirValueStatus (*ArenaNew)(const XrXirCompileContext *,const XrXirTypes *,XrXirTypeArena **);

@@ -112,7 +112,7 @@ static XrXirStatus effect_reproduce(const XrXirArtifact *source, const XrXirComp
     CHECK(m->stage == XR_XIR_LOWERED);
     XrXirArtifact *checked = NULL;
     XrXirStatus status = xr_xir_compile_checked_read(c, source->checked_packet.bytes, source->checked_packet.length, &checked, NULL);
-    if (status == XR_XIR_OK) status = xr_xir_compile_lower(checked, &source->target, out, NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_lower(checked, &source->target, NULL, out, NULL);
     xr_xir_compile_artifact_free(checked); return status;
 }
 /* Limits apply to the complete probe lifetime, never a replacement stage budget. */

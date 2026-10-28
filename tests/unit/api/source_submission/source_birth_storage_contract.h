@@ -33,7 +33,7 @@ static void birth_storage_contract(void) {
         xr_xir_compile_checked_packet_free(&encoded);
         if (i!=2) {
             CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
-            CHECK(xr_xir_compile_lower(closed,&owned.owner->target,&lowered,NULL)==XR_XIR_OK);
+            CHECK(xr_xir_compile_lower(closed,&owned.owner->target, NULL,&lowered,NULL)==XR_XIR_OK);
             XrXirProgram *program=NULL;
             CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
             CHECK(program->requires_birth_storage==(i==0));

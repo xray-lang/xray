@@ -70,7 +70,7 @@ static XrXirStatus class_owned_program(const XrXirCompileContext *context,
         made==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,definition->packet.bytes,
         definition->packet.length,&checked,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower(checked,&definition->target,&lowered,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_lower(checked,&definition->target, NULL,&lowered,NULL);
     xr_xir_compile_artifact_free(checked);
     const XrXirModule *module=status==XR_XIR_OK?xr_xir_compile_artifact_module(lowered):NULL;
     if (status==XR_XIR_OK && module->function_count!=definition->entry_count) status=XR_XIR_BAD_STRUCTURE;

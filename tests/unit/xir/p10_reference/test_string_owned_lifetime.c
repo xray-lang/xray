@@ -53,7 +53,7 @@ static void execute(unsigned mode) {
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
     XrXirProgramSpec spec=language_reference_program;XrXirArtifact *checked=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(&owner.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     uint32_t roots[]={find_function(module,"referenceAnswer"),find_function(module,"retainedText"),find_function(module,"retainedBytes")};
     XrXirCallEntry *entries=NULL;XrXirVmBinding *bindings=NULL;

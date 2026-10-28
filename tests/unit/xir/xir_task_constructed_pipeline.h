@@ -43,7 +43,7 @@ static XrXirArtifact *constructed_lower(const XrXirCompileContext *context,
     CHECK(xr_xir_compile_specialize(decoded, &closed, &diagnostic) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); CHECK(xr_xir_compile_artifact_verify(closed, &diagnostic) == XR_XIR_OK);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    status = xr_xir_compile_lower(closed, &target, &lowered, &diagnostic); xr_xir_compile_artifact_free(closed);
+    status = xr_xir_compile_lower(closed, &target, NULL, &lowered, &diagnostic); xr_xir_compile_artifact_free(closed);
     if (baseline) {
         CHECK(status == XR_XIR_UNSUPPORTED && !lowered);
         printf("TASK_CONSTRUCTED_BASELINE Source/Checked73/specialization=OK Lowered=UNSUPPORTED function=%u instruction=%u\n",

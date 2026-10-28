@@ -58,7 +58,7 @@ static void instance_batch_limits(void) {
     CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2)==XR_XIR_CTFE_BAD_ARGUMENT && !views[0].checked && views[1].instance_function==1);
     memset(views,0,sizeof(views));CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2)==XR_XIR_CTFE_OK);
     CHECK(views[0].value->payload!=views[1].value->payload);
-    CHECK(xr_xir_compile_lower(closed,&request.target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&request.target, NULL,&lowered,NULL)==XR_XIR_OK);
     XirCtfeBatchRequest call={lowered,functions,2,request.target,{0},request.limits,request.call_depth};
     memcpy(call.checked_identity,lowered->checked_identity,32);XrXirValue values[2]={0};
     CHECK(xr_xir_compile_ctfe_batch(&call,NULL,values)==XR_XIR_CTFE_OK);

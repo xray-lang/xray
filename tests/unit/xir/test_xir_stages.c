@@ -174,7 +174,7 @@ static void transitions_and_lifetime(void) {
     memset(&fixture, 0xa5, sizeof(fixture));
     CHECK(xir_fixture_verify(&stage_context, module, NULL) == XR_XIR_OK);
     CHECK(memcmp(module->functions[0].name, "entry", 5) == 0);
-    CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OK);
     CHECK(module->functions[0].instructions[0].op == XR_XIR_COPY);
     xr_xir_compile_artifact_free(checked);
     module = xr_xir_compile_artifact_module(lowered);
@@ -183,10 +183,10 @@ static void transitions_and_lifetime(void) {
     CHECK(module->functions[0].instructions[4].immediate == 9);
     CHECK(xir_fixture_verify(&stage_context, module, NULL) == XR_XIR_OK);
     XrXirArtifact *occupied = lowered;
-    CHECK(xr_xir_compile_lower(lowered, &fixture_target, &occupied, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_lower(lowered, &fixture_target, NULL, &occupied, NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(occupied == lowered);
     XrXirArtifact *rejected = NULL;
-    CHECK(xr_xir_compile_lower(lowered, &fixture_target, &rejected, NULL) == XR_XIR_BAD_STAGE);
+    CHECK(xr_xir_compile_lower(lowered, &fixture_target, NULL, &rejected, NULL) == XR_XIR_BAD_STAGE);
     CHECK(rejected == NULL);
     CHECK(xir_fixture_check(&stage_context, module, &rejected, NULL) == XR_XIR_BAD_STAGE);
     CHECK(rejected == NULL);
@@ -371,7 +371,7 @@ static void reverse_storage_and_boolean_values(void) {
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xir_fixture_check(&stage_context, &module, &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_module(lowered)->functions[0].instructions[4].op == XR_XIR_SCALAR_COPY);
     xr_xir_compile_artifact_free(checked);
     xr_xir_compile_artifact_free(lowered);
@@ -878,7 +878,7 @@ static void error_filter_guards(void) {
         CHECK(mode ? status != XR_XIR_OK && !checked : status == XR_XIR_OK);
         if (!mode) {
             error_filter_packets(checked);
-            CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OK);
             xr_xir_compile_artifact_free(lowered); xr_xir_compile_artifact_free(checked);
         }
     }
@@ -965,7 +965,7 @@ static void panic_handler_structure(void) {
         XrXirStatus status = xir_fixture_check(&stage_context, &module, &checked, NULL);
         CHECK(mode ? status != XR_XIR_OK && !checked : status == XR_XIR_OK);
         if (!mode) {
-            CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OK);
             CHECK(xr_xir_compile_artifact_module(lowered)->functions[0].blocks[1].panic == 2);
             panic_handler_packets(checked);
             xr_xir_compile_artifact_free(lowered);

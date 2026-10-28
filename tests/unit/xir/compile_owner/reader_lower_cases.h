@@ -109,7 +109,7 @@ static void reader_lower_occupied(const XrXirCompileContext *context,
         XrXirDiagnostic diagnostic={0};XrXirStatus status;
         if (!operation) status=xr_xir_compile_check_v2(context,&module,facts,&output,&diagnostic);
         else if (operation==1) status=xr_xir_compile_recheck_v2(context,view,facts,&output,&diagnostic);
-        else if (operation==2) status=xr_xir_compile_lower(checked,&target,&output,&diagnostic);
+        else if (operation==2) status=xr_xir_compile_lower(checked,&target, NULL,&output,&diagnostic);
         else if (operation==3) status=xr_xir_compile_checked_read_lower(context,packet->bytes,packet->length,&target,&output,&diagnostic);
         else if (operation==4) {
             status=xr_xir_compile_checked_read(context,packet->bytes,packet->length,&output,&diagnostic);
@@ -144,7 +144,7 @@ static void reader_lower_canonical(void) {
         CHECK(xr_xir_compile_checked_read_lower(&c,packet.bytes,packet.length,&target,&a,NULL) == XR_XIR_OK);
         CHECK(xr_xir_compile_checked_read(&c,packet.bytes,packet.length,&decoded,NULL) == XR_XIR_OK);
         reader_lower_occupied(&c,&packet,decoded);
-        CHECK(xr_xir_compile_lower(decoded,&target,&b,NULL) == XR_XIR_OK); reader_lower_equal(a,b);
+        CHECK(xr_xir_compile_lower(decoded,&target, NULL,&b,NULL) == XR_XIR_OK); reader_lower_equal(a,b);
         CHECK(b->module.functions != decoded->module.functions &&
             b->module.functions[0].instructions != decoded->module.functions[0].instructions);
         if (kind) {
@@ -157,7 +157,7 @@ static void reader_lower_canonical(void) {
         XrXirInstruction *instruction = (XrXirInstruction *)decoded->module.functions[0].instructions;
         XrXirOp saved = instruction->op; instruction->op = XR_XIR_INVALID;
         XrXirArtifact *out = NULL; uint64_t before = stats(owner).live_bytes;
-        CHECK(xr_xir_compile_lower(decoded,&target,&out,NULL) == XR_XIR_BAD_STRUCTURE && !out);
+        CHECK(xr_xir_compile_lower(decoded,&target, NULL,&out,NULL) == XR_XIR_BAD_STRUCTURE && !out);
         XrXirCheckedPacket refused = {0};
         CHECK(xr_xir_compile_checked_write(decoded,&refused,NULL) == XR_XIR_BAD_STRUCTURE);
         CHECK(!refused.bytes && !refused.length);
@@ -166,7 +166,7 @@ static void reader_lower_canonical(void) {
             XrXirArtifact *source = decoded->module.provenance->source;
             instruction = (XrXirInstruction *)source->module.functions[0].instructions;
             saved = instruction->op; instruction->op = XR_XIR_INVALID;
-            CHECK(xr_xir_compile_lower(decoded,&target,&out,NULL) == XR_XIR_BAD_STRUCTURE && !out);
+            CHECK(xr_xir_compile_lower(decoded,&target, NULL,&out,NULL) == XR_XIR_BAD_STRUCTURE && !out);
             CHECK(xr_xir_compile_checked_write(decoded,&refused,NULL) == XR_XIR_BAD_STRUCTURE);
             CHECK(!refused.bytes && !refused.length);
             CHECK(stats(owner).live_bytes == before); instruction->op = saved;
@@ -175,7 +175,7 @@ static void reader_lower_canonical(void) {
         CHECK(xr_xir_compile_checked_write(decoded,&refused,NULL) == XR_XIR_BAD_LAYOUT);
         CHECK(!refused.bytes && !refused.length);
         CHECK(stats(owner).live_bytes == before); decoded->target.architecture = 0;
-        out = NULL; CHECK(xr_xir_compile_lower(decoded,&target,&out,NULL) == XR_XIR_OK);
+        out = NULL; CHECK(xr_xir_compile_lower(decoded,&target, NULL,&out,NULL) == XR_XIR_OK);
         reader_lower_equal(a,out); xr_xir_compile_artifact_free(out);
         xr_xir_compile_artifact_free(decoded); decoded = NULL;
         CHECK(xr_xir_compile_artifact_verify(b,NULL) == XR_XIR_OK);
@@ -256,7 +256,7 @@ static void reader_lower_layout_admission(void) {
     XrXirCompileContext context={owner,xr_xir_compile_default_limits()};
     XrXirArtifact *closed=NULL, *lowered=NULL;
     CHECK(reader_lower_take_closed(&context,2,&closed)==XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed); closed=NULL;
     CHECK(lowered->module.types && lowered->module.types->count && lowered->module.declarations);
     uint64_t baseline=stats(owner).live_bytes;
@@ -313,15 +313,15 @@ static void reader_lower_take_requests(const XrXirCompileContext *context, XrXir
         XrCompileResourceStats before=stats(context->resources);
         size_t sites=attempts, blocks=live_count, bytes=live;
         XrXirDiagnostic diagnostic={0}; XrXirStatus status;
-        if (!request) status=xr_xir_compile_lower_take(NULL,&target,&output,&diagnostic);
-        else if (request==1) status=xr_xir_compile_lower_take(&empty,&target,&output,&diagnostic);
-        else if (request==2) status=xr_xir_compile_lower_take(&input,&target,NULL,&diagnostic);
-        else if (request==3) status=xr_xir_compile_lower_take(&input,&target,&input,&diagnostic);
+        if (!request) status=xr_xir_compile_lower_take(NULL,&target, NULL,&output,&diagnostic);
+        else if (request==1) status=xr_xir_compile_lower_take(&empty,&target, NULL,&output,&diagnostic);
+        else if (request==2) status=xr_xir_compile_lower_take(&input,&target, NULL,NULL,&diagnostic);
+        else if (request==3) status=xr_xir_compile_lower_take(&input,&target, NULL,&input,&diagnostic);
         else if (request==6) {
             XrCompileResources *saved=checked->context.resources; checked->context.resources=NULL;
-            status=xr_xir_compile_lower_take(&input,&target,&output,&diagnostic);
+            status=xr_xir_compile_lower_take(&input,&target, NULL,&output,&diagnostic);
             checked->context.resources=saved;
-        } else status=xr_xir_compile_lower_take(&input,&target,&output,&diagnostic);
+        } else status=xr_xir_compile_lower_take(&input,&target, NULL,&output,&diagnostic);
         CHECK(status==XR_XIR_BAD_STRUCTURE && diagnostic.status==status && input==checked && !empty);
         CHECK(output==(request==4?checked:request==5?other:NULL));
         XrCompileResourceStats after=stats(context->resources);
@@ -340,10 +340,10 @@ static void reader_lower_take_canonical(unsigned kind) {
     XrXirArtifact *closed=NULL, *borrowed=NULL, *taken=NULL;
     CHECK(reader_lower_take_closed(&context,kind,&closed)==XR_XIR_OK);
     reader_lower_take_requests(&context,closed);
-    CHECK(xr_xir_compile_lower(closed,&target,&borrowed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&borrowed,NULL)==XR_XIR_OK);
     XrXirArtifact *identity=closed;
     const XrXirFunction *functions=closed->module.functions;
-    CHECK(xr_xir_compile_lower_take(&closed,&target,&taken,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower_take(&closed,&target, NULL,&taken,NULL)==XR_XIR_OK);
     CHECK(!closed && taken==identity && taken!=borrowed && taken->module.functions==functions);
     CHECK(taken->context.resources==owner && borrowed->context.resources==owner);
     reader_lower_take_equal(borrowed,taken);
@@ -405,7 +405,7 @@ static void reader_lower_take_rejections(void) {
     XrXirCompileContext byte_context={byte_owner,xr_xir_compile_default_limits()};
     XrXirArtifact *byte_checked=NULL,*byte_lowered=NULL;
     CHECK(reader_lower_take_byte(&byte_context,&byte_checked)==XR_XIR_OK);
-    CHECK(xr_xir_compile_lower_take(&byte_checked,&target,&byte_lowered,NULL)==XR_XIR_OK && !byte_checked && byte_lowered);
+    CHECK(xr_xir_compile_lower_take(&byte_checked,&target, NULL,&byte_lowered,NULL)==XR_XIR_OK && !byte_checked && byte_lowered);
     CHECK(xr_xir_compile_artifact_module(byte_lowered)->functions[0].result==XR_XIR_U8 &&
         xr_xir_compile_artifact_verify(byte_lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(byte_lowered);xr_compile_resources_release(byte_owner);
@@ -429,7 +429,7 @@ static void reader_lower_take_rejections(void) {
         if (refusal==7) closed->target=target;
         if (refusal==8) CHECK(xr_xir_compile_checked_write(closed,&closed->checked_packet,NULL)==XR_XIR_OK);
         XrXirDiagnostic diagnostic={0};
-        XrXirStatus status=xr_xir_compile_lower_take(&closed,receiving,&output,&diagnostic);
+        XrXirStatus status=xr_xir_compile_lower_take(&closed,receiving, NULL,&output,&diagnostic);
         if (status!=expected) fprintf(stderr,"take refusal=%u actual=%u expected=%u f=%u b=%u i=%u\n",
             refusal,(unsigned)status,(unsigned)expected,diagnostic.function,diagnostic.block,diagnostic.instruction);
         CHECK(status==expected && !closed && !output && diagnostic.status==status);
@@ -442,7 +442,7 @@ static XrXirStatus reader_lower_take_pipeline(XrCompileResources *owner, unsigne
     XrXirArtifact *closed=NULL, *output=NULL;
     XrXirStatus status=reader_lower_take_closed(&context,kind,&closed);
     if (status==XR_XIR_OK) {
-        status=xr_xir_compile_lower_take(&closed,&target,&output,NULL); CHECK(!closed);
+        status=xr_xir_compile_lower_take(&closed,&target, NULL,&output,NULL); CHECK(!closed);
         if (status==XR_XIR_OK) {
             CHECK(output && output->context.resources==owner && output->module.stage==XR_XIR_LOWERED);
             status=xr_xir_compile_artifact_verify(output,NULL);

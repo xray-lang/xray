@@ -102,7 +102,7 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
     if (status==XR_XIR_OK && mode && oracle)
         status=invocation_lowered_return_oracle(xr_xir_compile_artifact_module(specialized));
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    if (status==XR_XIR_OK) { phase=4;status=xr_xir_compile_lower(specialized,&target,&lowered,&diagnostic); }
+    if (status==XR_XIR_OK) { phase=4;status=xr_xir_compile_lower(specialized,&target, NULL,&lowered,&diagnostic); }
     if (status==XR_XIR_OK) { phase=5;status=xr_xir_compile_artifact_verify(lowered,&diagnostic); }
     const XrXirModule *module=lowered?xr_xir_compile_artifact_module(lowered):NULL;
     if (status==XR_XIR_OK) { phase=6;status=invocation_core_storage(context,module,&effects); }

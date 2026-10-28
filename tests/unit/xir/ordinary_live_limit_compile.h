@@ -73,7 +73,7 @@ static XrXirArtifact *oll_lower(const XrXirCompileContext *context, XrXirArtifac
     xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
     *fixture = oll_fixture(closed);
-    CHECK(xr_xir_compile_lower(closed, target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
 #ifdef OLL_READY_GRAPH

@@ -32,7 +32,7 @@ static XrXirStatus literal_job(XrXirCompileContext *context,const char *kind) {
             if (specialized->module.provenance->origins[f].function==provider) function=f;
         CHECK(function!=UINT32_MAX);
         const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-        status=xr_xir_compile_lower(specialized,&target,&lowered,NULL);
+        status=xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL);
     }
     xr_xir_compile_artifact_free(specialized);
     if (status==XR_XIR_OK) {

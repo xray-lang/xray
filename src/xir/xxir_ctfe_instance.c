@@ -111,7 +111,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance(const XirCtfeInstanceReques
     if (status==XR_XIR_OK) {
         controlled=instance_control_poll(control);
         if (controlled!=XR_XIR_CTFE_OK) { xr_xir_compile_ctfe_instance_free(owner);return controlled; }
-        status=xr_xir_compile_lower(owner->checked,&request->target,&owner->lowered,NULL);
+        status=xr_xir_compile_lower(owner->checked,&request->target, control,&owner->lowered,NULL);
     }
     if (status!=XR_XIR_OK) { xr_xir_compile_ctfe_instance_free(owner);return instance_compile_status(status); }
     XrXirCtfeCallRequest call={.evaluation={.artifact=owner->lowered,.function=request->function,

@@ -119,7 +119,7 @@ static void source_fixed_callable_bounds(XrXirSourceRequest *request, SourceTest
     CHECK(xr_xir_compile_specialize(read, &closed, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(read);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed); source_fixed_callable_program(lowered);
     effects_source_owners_free();
     puts("fixed callable promise erased once, Source/files/packetDead before lower, CGen/VM=7 physical0/0");

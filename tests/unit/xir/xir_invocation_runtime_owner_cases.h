@@ -190,7 +190,7 @@ static XrXirStatus edge_runtime_seal(EdgeRuntimeWitness *w,XrXirProgram **output
     if (status==XR_XIR_OK) status=xr_xir_compile_specialize(checked,&closed,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(closed,NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&target,&lowered,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(lowered,NULL);
     if (status==XR_XIR_OK) {
         const XrXirModule *module=xr_xir_compile_artifact_module(lowered);

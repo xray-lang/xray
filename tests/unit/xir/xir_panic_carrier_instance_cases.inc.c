@@ -71,7 +71,7 @@ static void program_fixture(PanicProgramFixture *f) {
     CHECK(xir_fixture_check(&context, &built, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed, &target, &f->lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &target, NULL, &f->lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); xr_xir_compile_artifact_free(closed);
     xr_compile_resources_release(resources);
     const XrXirModule *owned = xr_xir_compile_artifact_module(f->lowered);

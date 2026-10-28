@@ -89,7 +89,7 @@ static XrXirStatus receiver_compile_operation(const XrXirCompileContext *context
     memset(second.bytes,0xa5,second.length);xr_xir_compile_checked_packet_free(&second);
     if(status!=XR_XIR_OK) {CHECK(!reloaded);goto done;}
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    ++receiver_compile_calls;status=xr_xir_compile_lower(reloaded,&target,&lowered,NULL);
+    ++receiver_compile_calls;status=xr_xir_compile_lower(reloaded,&target, NULL,&lowered,NULL);
     xr_xir_compile_artifact_free(reloaded);reloaded=NULL;
     if(status!=XR_XIR_OK) {CHECK(!lowered);goto done;}
     ++receiver_compile_calls;status=xr_xir_compile_artifact_verify(lowered,NULL);

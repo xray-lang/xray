@@ -57,7 +57,7 @@ static XrXirStatus atomic_source_control(const XrXirCompileContext *context,void
     xr_xir_compile_checked_packet_free(&packet);
     if(status==XR_XIR_OK){status=xr_xir_compile_specialize(read,&specialized,NULL);if(status!=XR_XIR_OK)CHECK(!specialized);}
     xr_xir_compile_artifact_free(read);
-    if(status==XR_XIR_OK){status=xr_xir_compile_lower(specialized,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL);if(status!=XR_XIR_OK)CHECK(!lowered);}
+    if(status==XR_XIR_OK){status=xr_xir_compile_lower(specialized,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);if(status!=XR_XIR_OK)CHECK(!lowered);}
     xr_xir_compile_artifact_free(specialized);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(lowered,NULL);
     xr_xir_compile_artifact_free(lowered);

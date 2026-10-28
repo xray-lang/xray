@@ -177,7 +177,7 @@ static void capture_source_check(const CaptureSourceCase *fixture,bool root,cons
         CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
         memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);capture_source_facts(decoded);
         CHECK(xr_xir_compile_specialize(decoded,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(decoded);
-        CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(closed);CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
         XrXirCSource c={0};CHECK(xr_xir_compile_emit_c(lowered,"generator_capture",1048576,&c)==XR_XIR_OK);
         CHECK(c.text && c.length && !strstr(c.text,"({"));

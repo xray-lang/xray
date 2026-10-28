@@ -64,7 +64,7 @@ static void nullable_native_mixed(const XrXirCompileContext *context,const XrXir
     XrXirArtifact *checked=NULL;
     CHECK(xr_xir_compile_checked_read(context,native->packet.bytes,native->packet.length,&checked,NULL)==XR_XIR_OK);
     NullableNativeOwner *owner=xr_calloc(1,sizeof(*owner));CHECK(owner);
-    CHECK(xr_xir_compile_lower(checked,&native->target,&owner->artifact,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_lower(checked,&native->target, NULL,&owner->artifact,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirModule *module=xr_xir_compile_artifact_module(owner->artifact);CHECK(module->function_count==native->entry_count);
     owner->entries=xr_calloc(module->function_count,sizeof(*owner->entries));
     owner->bindings=xr_calloc(module->function_count,sizeof(*owner->bindings));CHECK(owner->entries && owner->bindings);

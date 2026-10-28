@@ -50,7 +50,7 @@ static XrXirProgram *cycle_program(CellCycleFixture *fixture, unsigned backend) 
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, packet, native->proof.length, &checked, NULL) == XR_XIR_OK);
     memset(packet, 0xA5, native->proof.length); xr_compile_resources_free(packet);
-    CHECK(xr_xir_compile_lower(checked, &native->target, &lowered, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_lower(checked, &native->target, NULL, &lowered, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(checked);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     CHECK(module->function_count == native->entry_count && module->function_count < 64);
     CHECK(module->declarations->slot_count == 0 && module->declarations->module_count > 1);

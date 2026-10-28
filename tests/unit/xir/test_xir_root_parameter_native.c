@@ -117,7 +117,7 @@ static H1ExecFixture h1n_program(const XrXirProgramSpec *native, uint32_t run,
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL) == XR_XIR_OK);
     CHECK(packet.length == native->packet.length && !memcmp(packet.bytes,native->packet.bytes,packet.length));
     memset(packet.bytes,0xa5,packet.length); xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_lower(closed,&native->target,&owner->lowered,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&native->target, NULL,&owner->lowered,NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_artifact_verify(owner->lowered,NULL) == XR_XIR_OK);
     const XrXirModule *module = xr_xir_compile_artifact_module(owner->lowered);

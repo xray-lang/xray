@@ -68,7 +68,7 @@ static void execute_profile(int64_t expected, bool direction, unsigned suspensio
     CHECK(answer != UINT32_MAX);
     XrXirCallEntry *entries = NULL; XrXirVmBinding *bindings = NULL;
     if (XR_LANGUAGE_MIXED) {
-        CHECK(xr_xir_compile_lower(checked, &spec.target, &lowered, NULL) == XR_XIR_OK);
+        CHECK(xr_xir_compile_lower(checked, &spec.target, NULL, &lowered, NULL) == XR_XIR_OK);
         /* One table binding validates the complete artifact before selecting
          * either backend. Program reception still proves the mixed table. */
         CHECK(xr_xir_compile_vm_bind_table(lowered, &bindings, &entries) == XR_XIR_OK);

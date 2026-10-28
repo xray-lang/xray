@@ -107,7 +107,7 @@ static void fixture_free(Fixture *fixture) {
 static XrXirArtifact *lowered(Fixture *fixture) {
     XrXirArtifact *output = NULL;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(fixture->closed, &target, &output, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(fixture->closed, &target, NULL, &output, NULL) == XR_XIR_OK);
     return output;
 }
 static void registry(void) {

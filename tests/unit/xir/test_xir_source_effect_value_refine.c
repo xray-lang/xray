@@ -118,7 +118,7 @@ static XrXirStatus source_effect_value_operation(const XrXirCompileContext *cont
     xr_xir_compile_artifact_free(instance);instance=NULL;
     if(status==XR_XIR_OK){phase=6;status=xr_xir_compile_checked_read(context,second.bytes,second.length,&reloaded,&location);}
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    if(status==XR_XIR_OK){phase=7;status=xr_xir_compile_lower(reloaded,&target,&lowered,&location);}
+    if(status==XR_XIR_OK){phase=7;status=xr_xir_compile_lower(reloaded,&target, NULL,&lowered,&location);}
     xr_xir_compile_artifact_free(reloaded);reloaded=NULL;
     if(status==XR_XIR_OK){phase=8;status=xr_xir_compile_artifact_verify(lowered,&location);}
     if(status!=XR_XIR_OK && source_program_compile_fail_at==SIZE_MAX && status!=XR_XIR_BUDGET)

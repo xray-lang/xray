@@ -131,7 +131,7 @@ static ReorderCompile source_compile(size_t failure, uint64_t work) {
     if (run.status!=XR_XIR_OK) { CHECK(!specialized); goto done; }
     CHECK(xr_xir_compile_artifact_context(specialized)->resources==run.context.resources);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    run.status=xr_xir_compile_lower(specialized,&target,&run.lowered,NULL);
+    run.status=xr_xir_compile_lower(specialized,&target, NULL,&run.lowered,NULL);
     if (run.status!=XR_XIR_OK) CHECK(!run.lowered);
     else CHECK(xr_xir_compile_artifact_context(run.lowered)->resources==run.context.resources);
 done:

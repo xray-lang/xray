@@ -106,7 +106,7 @@ static void literal_normal(const char *kind) {
         if (closed->module.provenance->origins[f].function==providers[i]) { CHECK(functions[i]==UINT32_MAX);functions[i]=f; }
     CHECK(functions[0]!=UINT32_MAX && functions[1]!=UINT32_MAX);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirValue values[2]={0};
     for (unsigned i=0;i<2;++i) {
         XrXirCtfeCallRequest call=import_request(lowered,"run",NULL);call.evaluation.function=functions[i];

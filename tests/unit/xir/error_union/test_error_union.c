@@ -308,7 +308,7 @@ static void late_error(XrXirValue *error) {
 }
 static void vm_case(XrXirArtifact **checked,uint32_t entry,int64_t expected) {
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};XrXirArtifact *lowered=NULL;
-    CHECK(xr_xir_compile_lower(*checked,&target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(*checked,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(*checked);*checked=NULL;
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     uint32_t answer=function_named(module,"answer"),escaped=function_named(module,"escaped");CHECK(answer!=UINT32_MAX);
@@ -426,7 +426,7 @@ static XrXirProgram *generation_program(const XrXirSourceGenerationView *view,ui
     XrXirArtifact *closed=NULL,*lowered=NULL;XrXirProgram *program=NULL;
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_specialize(view->result->checked,&closed,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     *entry=module->declarations->entry_function;*escaped=function_named(module,"escaped");
     CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);return program;
@@ -455,7 +455,7 @@ static void history_case(bool erased) {
         CHECK(status==XR_XIR_OK && serial==i+1);
         XrXirSourceGenerationView view={0};CHECK(xr_xir_compile_source_generation_view(owner,serial,&view)==XR_XIR_OK);
         uint32_t entry=UINT32_MAX;XrXirProgram *program=generation_program(&view,&entry,&escaped);
-        status=xr_xir_compile_source_generation_bind_program(owner,serial,program);
+        status=xr_xir_compile_source_generation_bind_program(owner,serial,program, NULL);
         if (status!=XR_XIR_OK) fprintf(stderr,"history%u bind%u\n",i,status);
         CHECK(status==XR_XIR_OK);uint64_t runtime_serial=0;
         CHECK(xr_xir_source_generation_prepare_instance(owner,serial,instance,&runtime_serial)==XR_XIR_CALL_READY);

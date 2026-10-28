@@ -75,7 +75,7 @@ static XrXirArtifact *effect_enum_ops_lowered(const XrXirCompileContext *context
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length,&decoded,NULL) == XR_XIR_OK); xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(decoded,&closed,NULL) == XR_XIR_OK); effect_artifact_free(decoded);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed, &target,&lowered,NULL) == XR_XIR_OK); effect_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed, &target, NULL,&lowered,NULL) == XR_XIR_OK); effect_artifact_free(closed);
     return lowered;
 }
 
@@ -139,7 +139,7 @@ static void effect_enum_generic_cases(const XrXirCompileContext *context) {
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length,&decoded,NULL) == XR_XIR_OK); xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(decoded,&closed,NULL) == XR_XIR_OK); effect_artifact_free(decoded);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed, &target,&lowered,NULL) == XR_XIR_OK); effect_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed, &target, NULL,&lowered,NULL) == XR_XIR_OK); effect_artifact_free(closed);
     const XrXirTypes *types = xr_xir_compile_artifact_module(lowered)->types;
     CHECK(types && types->count == 1 && types->nodes[0].nominal.field_count == 1);
     CHECK(types->nodes[0].nominal.fields[0] == XR_XIR_I64 && types->nodes[0].nominal.arguments[0] == XR_XIR_I64);

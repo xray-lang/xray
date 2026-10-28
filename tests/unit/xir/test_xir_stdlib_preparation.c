@@ -76,7 +76,7 @@ static XrXirStatus preparation_pipeline(const XrXirCompileContext *context,
     preparation_stage_offsets[8] = effects_compile_attempts-first_attempt;
     preparation_stage_ticks[8] = clock();
     *stage = 8;
-    status = xr_xir_compile_lower(closed,&target,output,NULL);
+    status = xr_xir_compile_lower(closed,&target, NULL,output,NULL);
 finish:;
     size_t cleanup_first = effects_compile_attempts;
     preparation_stage_offsets[9] = cleanup_first-first_attempt;

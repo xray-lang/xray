@@ -46,7 +46,7 @@ static XrXirStatus resource_prepare(const XrXirCompileContext *context,
     status = xr_xir_compile_artifact_verify(closed,NULL);
     if (status != XR_XIR_OK) goto finish;
     XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    status = xr_xir_compile_lower(closed,&target,output,NULL);
+    status = xr_xir_compile_lower(closed,&target, NULL,output,NULL);
 finish:
     xr_xir_compile_artifact_free(closed); xr_xir_compile_artifact_free(decoded);
     xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_source_result_free(&result);

@@ -123,7 +123,7 @@ static XrXirStatus rps_operation(const XrXirCompileContext *context, void *opaqu
     if (status==XR_XIR_OK) status=xr_xir_compile_specialize(read,&instance,NULL);
     if (status==XR_XIR_OK) {
         if (operation->qualify) rps_instance(instance,oracle);
-        status=xr_xir_compile_lower(instance,&target,&lowered,NULL);
+        status=xr_xir_compile_lower(instance,&target, NULL,&lowered,NULL);
     }
     if (status==XR_XIR_OK) { CHECK(lowered);status=xr_xir_compile_artifact_verify(lowered,NULL); }
     if (status!=XR_XIR_OK && source_program_compile_fail_at==SIZE_MAX && status!=XR_XIR_BUDGET)

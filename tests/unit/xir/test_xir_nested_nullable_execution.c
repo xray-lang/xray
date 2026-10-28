@@ -120,7 +120,7 @@ static void nested_native_program(bool direction) {
     CHECK(spec.entry_count==8 && spec.declarations && spec.types && spec.packet.bytes && spec.packet.identity);
     CHECK(xr_xir_compile_checked_read(&owner.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
     if(XR_NESTED_NULLABLE_MIXED){
-        CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_lower(checked,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);
         CHECK(xr_compile_resources_calloc(owner.context.resources,8,sizeof(*entries),(void**)&entries)==XR_COMPILE_RESOURCE_OK);
         CHECK(xr_compile_resources_calloc(owner.context.resources,8,sizeof(*bindings),(void**)&bindings)==XR_COMPILE_RESOURCE_OK);
         unsigned vm=0,native=0;

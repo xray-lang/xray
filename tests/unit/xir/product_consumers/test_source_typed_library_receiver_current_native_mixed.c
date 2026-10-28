@@ -626,7 +626,7 @@ static bool detach_program(ReceiverRun *run, char **argv) {
     construction_owner(run, run->closed, "detached-CLOSED-full-v2"); (void)receiver_shape(run->closed);
     exact_packet(run, run->closed, &run->expected_closed);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    if (!completed(run, xr_xir_compile_lower(run->closed, &target, &run->lowered, NULL), "owned-Closed-lower")) return false;
+    if (!completed(run, xr_xir_compile_lower(run->closed, &target, NULL, &run->lowered, NULL), "owned-Closed-lower")) return false;
     xr_xir_compile_artifact_free(run->closed); run->closed = NULL;
     CHECK(completed(run, xr_xir_compile_artifact_verify(run->lowered, NULL), "detached-Lowered-full-verify"));
     construction_owner(run, run->lowered, "detached-Lowered-full-v2");
@@ -697,7 +697,7 @@ static bool admit_packet(ReceiverRun *run, char **argv) {
     construction_owner(run, run->closed, "receiver-input-dead-Construction-full-v2");
     (void)receiver_shape(run->closed);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    if (!completed(run, xr_xir_compile_lower(run->closed, &target, &run->lowered, NULL), "receiver-owned-Closed-lower")) return false;
+    if (!completed(run, xr_xir_compile_lower(run->closed, &target, NULL, &run->lowered, NULL), "receiver-owned-Closed-lower")) return false;
     xr_xir_compile_artifact_free(run->closed); run->closed = NULL;
     CHECK(completed(run, xr_xir_compile_artifact_verify(run->lowered, NULL), "receiver-Closed-dead-Lowered-full-verify"));
     construction_owner(run, run->lowered, "receiver-Lowered-real-Construction-full-v2");

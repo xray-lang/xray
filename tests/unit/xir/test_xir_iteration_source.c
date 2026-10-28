@@ -35,7 +35,7 @@ int main(int argc,char **argv){C(argc==1 || argc==2);const XrXirCompileContext *
  C(xr_xir_compile_specialize(checked,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
  C(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
  XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
- C(xr_xir_compile_lower(special,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
+ C(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
  const XrXirModule *module=xr_xir_compile_artifact_module(lowered);iteration_selected=iteration_entries(module);C(module->function_count==27);uint32_t answer=iteration_selected.answer,retained=iteration_selected.retained;
  XrXirProgram *program=NULL;C(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);XrXirValue saved[2]={{0},{0}};
  iteration_runtime_faults(program);iteration_exit_allocations(program);

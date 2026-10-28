@@ -215,7 +215,7 @@ static XrXirStatus source_generic_definition_operation(const XrXirCompileContext
     }
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK) {
-        phase=7; sgm_begin(context); status=xr_xir_compile_lower(reloaded,&target,&lowered,&location);
+        phase=7; sgm_begin(context); status=xr_xir_compile_lower(reloaded,&target, NULL,&lowered,&location);
         sgm_end(context,"lower-borrowed","public",status);
         if(status==XR_XIR_OK)sgm_artifact("lowered",lowered);
     }

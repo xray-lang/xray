@@ -36,7 +36,7 @@ static XrXirProgram *program(const XrXirSourceGenerationView *view,const char *n
     XrXirArtifact *closed=NULL,*lowered=NULL;XrXirProgram *output=NULL;
     CHECK(xr_xir_compile_specialize(view->result->checked,&closed,NULL)==XR_XIR_OK);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);bool found=false;
     for (uint32_t i=0;i<module->function_count;++i)
@@ -94,7 +94,7 @@ int main(int argc,char **argv) {
         CHECK(checked==XR_XIR_OK && serial==i+1);
         XrXirSourceGenerationView view={0};CHECK(xr_xir_compile_source_generation_view(owner,serial,&view)==XR_XIR_OK);
         programs[i]=program(&view,i==0 ? "seed" : i==3 ? "fail" : "answer",&entries[i]);
-        XrXirStatus bound=xr_xir_compile_source_generation_bind_program(owner,serial,programs[i]);
+        XrXirStatus bound=xr_xir_compile_source_generation_bind_program(owner,serial,programs[i], NULL);
         fprintf(stderr,"Class history generation%u bind=%u\n",i+1,bound);CHECK(bound==XR_XIR_OK);
         uint64_t candidate=0;CHECK(xr_xir_source_generation_prepare_instance(owner,serial,instance,&candidate)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance,entries[i],NULL,0)==XR_XIR_CALL_READY);

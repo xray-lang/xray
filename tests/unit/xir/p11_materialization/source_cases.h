@@ -71,7 +71,7 @@ static void source_library_case(bool fresh) {
     XrXirArtifact *closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&source);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     xr_compile_resources_release(context.resources);execute(&lowered,"answer",fresh?4:2);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     fprintf(stderr,"Checked library private materializer edges relocated, fresh declaration-born helpers=%u, caller packets/catalog dead; two Instance42\n",fresh?2:0);

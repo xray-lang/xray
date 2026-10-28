@@ -130,7 +130,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_abort(XrXirSourceGeneration
  * same Program is allocation-free; replacing a binding or binding after publish
  * is rejected. This code correspondence alone grants no storage permission. */
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_bind_program(XrXirSourceGenerations *owner,
-    uint64_t serial, struct XrXirProgram *program);
+    uint64_t serial, struct XrXirProgram *program, XrCompileRequestControl *control);
 /* Prepares the already bound Program using the actual prior receiving map.
  * Runtime-owned routes borrow existing birth slots and initialized modules;
  * ordinary value admission still rejects incompatible type-arena identities.

@@ -163,7 +163,7 @@ static XrXirStatus visibility_pipeline(const XrXirCompileContext *c, unsigned mo
     xr_xir_compile_checked_packet_free(&second);
     if (status==XR_XIR_OK && qualify) (void)visibility_shape(reloaded,mode);
     if (status==XR_XIR_OK) { phase="verify-instance";status=xr_xir_compile_artifact_verify(reloaded,&d); }
-    if (status==XR_XIR_OK) { phase="lower";status=xr_xir_compile_lower(reloaded,&target,&lowered,&d); }
+    if (status==XR_XIR_OK) { phase="lower";status=xr_xir_compile_lower(reloaded,&target, NULL,&lowered,&d); }
     if (status==XR_XIR_OK) { phase="verify-lowered";status=xr_xir_compile_artifact_verify(lowered,&d); }
     if (status==XR_XIR_OK) { *output=reloaded;reloaded=NULL; }
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(reloaded);
@@ -181,7 +181,7 @@ static void visibility_literals(void) {
         CHECK(status==XR_XIR_OK && artifact);
         const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
         XrXirArtifact *lowered=NULL;
-        CHECK(xr_xir_compile_lower(artifact,&target,&lowered,NULL)==XR_XIR_OK && lowered);
+        CHECK(xr_xir_compile_lower(artifact,&target, NULL,&lowered,NULL)==XR_XIR_OK && lowered);
         xr_xir_compile_artifact_free(artifact);
         CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(lowered);rp_owner_free(&c,baseline);rp_balanced(physical);

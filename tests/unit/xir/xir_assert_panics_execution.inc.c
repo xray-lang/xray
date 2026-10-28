@@ -23,7 +23,7 @@ static XrXirArtifact *panics_lower(XrXirSourceResult *source,bool default_contro
     }
     CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    diagnostic=(XrXirDiagnostic){0};status=xr_xir_compile_lower(closed,&target,&lowered,&diagnostic);
+    diagnostic=(XrXirDiagnostic){0};status=xr_xir_compile_lower(closed,&target, NULL,&lowered,&diagnostic);
     if (status!=XR_XIR_OK) {
         XrCompileResourceStats stats=library_compile_stats(assert_compile_context);
         fprintf(stderr,"panics lower=%u f=%u b=%u i=%u cumulative_work=%llu allocated=%llu live=%llu\n",status,

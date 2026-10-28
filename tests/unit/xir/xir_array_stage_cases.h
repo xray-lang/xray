@@ -46,7 +46,7 @@ static void array_stage_layout(void) {
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xir_fixture_check(&stage_context, &f.module, &checked, NULL) == XR_XIR_OK);
     memset(&f, 0xCC, sizeof(f));
-    CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &fixture_target, NULL, &lowered, NULL) == XR_XIR_OK);
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(lowered, 1);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     const XrXirFunction *function = &module->functions[1];
@@ -99,7 +99,7 @@ static void array_stage_frame_limits(void) {
         XrXirCompileContext context = stage_context_default(); context.limits.frame_bytes = frame;
         CHECK(xir_fixture_check(&context, &f.module, &checked, NULL) == XR_XIR_OK);
         CHECK(xr_xir_compile_artifact_context(checked)->limits.frame_bytes == frame);
-        CHECK(xr_xir_compile_lower(checked, &fixture_target, &lowered, NULL) ==
+        CHECK(xr_xir_compile_lower(checked, &fixture_target, NULL, &lowered, NULL) ==
             (frame == 103 ? XR_XIR_BUDGET : XR_XIR_OK));
         CHECK((lowered != NULL) == (frame == 104));
         xr_xir_compile_artifact_free(lowered); lowered = NULL;

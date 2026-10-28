@@ -32,7 +32,7 @@ static void program_batch_controls(void) {
     failed=UINT32_MAX;functions[1]=instance_named(closed,"scalar",1);
     CHECK(xr_xir_compile_ctfe_instance_batch_at(&request,NULL,&owner,&failed)==XR_XIR_CTFE_OK && failed==UINT32_MAX && owner);
     xr_xir_compile_ctfe_instance_batch_free(owner);owner=NULL;XrXirArtifact *lowered=NULL;
-    CHECK(xr_xir_compile_lower(closed,&request.target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&request.target, NULL,&lowered,NULL)==XR_XIR_OK);
     functions[1]=instance_named(closed,"identity",0);XrXirValue values[2]={0};
     XirCtfeBatchRequest call={lowered,functions,2,request.target,{0},request.limits,request.call_depth};
     memcpy(call.checked_identity,lowered->checked_identity,32);

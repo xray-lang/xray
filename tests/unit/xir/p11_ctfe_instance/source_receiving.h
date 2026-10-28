@@ -70,7 +70,7 @@ static void instance_source_receiving(const char *kind,unsigned ordinal) {
         else if (closed->module.provenance->origins[f].function==other_provider) { CHECK(other_function==UINT32_MAX);other_function=f; }
     CHECK(function!=UINT32_MAX && other_function!=UINT32_MAX);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     uint32_t entry=named(&lowered->module,"run");
     XrXirCtfeCallRequest evaluation=import_request(lowered,"run",NULL);evaluation.evaluation.function=function;
     XrXirValue constant={0};CHECK(xr_xir_compile_ctfe_calls(&evaluation,&constant)==XR_XIR_CTFE_OK);

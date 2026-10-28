@@ -141,7 +141,7 @@ static size_t range_pipeline(size_t failure, bool execute) {
         status = xr_xir_compile_checked_read(&context,checked_range76_golden,sizeof(checked_range76_golden),&decoded,NULL);
     }
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    if (status == XR_XIR_OK) status = xr_xir_compile_lower(decoded,&target,&lowered,NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_lower(decoded,&target, NULL,&lowered,NULL);
     if (failure == SIZE_MAX) { CHECK(status == XR_XIR_OK); if (execute) range_execute(lowered); }
     else {
         if (status != XR_XIR_OUT_OF_MEMORY || !instance_compile_injected)

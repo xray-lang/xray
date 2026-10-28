@@ -235,7 +235,7 @@ static XrXirArtifact *cold_fixture(const XrXirCompileContext *context,uint8_t id
 
 static XrXirArtifact *lower(const XrXirArtifact *closed) {
     XrXirArtifact *code=NULL;XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&code,NULL)==XR_XIR_OK);return code;
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&code,NULL)==XR_XIR_OK);return code;
 }
 
 static XrXirStatus foreign_source_owner(void *owner,const XrXirModule *module,uint32_t function,bool *preserved) {

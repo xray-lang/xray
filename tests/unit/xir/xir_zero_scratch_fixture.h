@@ -40,7 +40,7 @@ static XrXirArtifact *zero_scratch_cleanup_lowered(const XrXirCompileContext *co
         xr_xir_compile_effects_free(effects);
     }
     CHECK(status==XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(checked,&target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_artifact_layout(lowered,1)->outgoing_count==0);
     CHECK(xr_xir_compile_artifact_layout(lowered,2)->outgoing_count==0);return lowered;

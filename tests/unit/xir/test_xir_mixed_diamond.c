@@ -87,7 +87,7 @@ static XrXirProgram *diamond_program(unsigned backend) {
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, diamond_fixture_program.proof.bytes,
         diamond_fixture_program.proof.length, &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(checked, &diamond_fixture_program.target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &diamond_fixture_program.target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     CHECK(module->function_count == diamond_fixture_program.entry_count && module->function_count <= DIAMOND_FUNCTIONS);
     CHECK(module->declarations->module_count == 4 && module->declarations->slot_count == 6);

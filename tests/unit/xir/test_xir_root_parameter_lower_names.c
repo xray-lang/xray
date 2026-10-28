@@ -124,7 +124,7 @@ static XrXirStatus lower_name_pipeline(const XrXirCompileContext *c, bool ordina
     xr_xir_compile_artifact_free(instance);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(c,packet.bytes,packet.length,&read,&d);
     xr_xir_compile_checked_packet_free(&packet);
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower(read,&target,&lowered,&d);
+    if (status==XR_XIR_OK) status=xr_xir_compile_lower(read,&target, NULL,&lowered,&d);
     xr_xir_compile_artifact_free(read);
     if (status==XR_XIR_OK && qualify) lower_name_shape(lowered,ordinary,true);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(lowered,&d);

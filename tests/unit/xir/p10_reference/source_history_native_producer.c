@@ -54,7 +54,7 @@ static void produce_mode(const char *directory,FILE *header,unsigned kind) {
         XrXirArtifact *closed=NULL,*lowered=NULL;
         CHECK(xr_xir_compile_specialize(view.result->checked,&closed,NULL)==XR_XIR_OK);
         const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-        CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(closed);
         char prefix[80],path[4096];const char *mode=history_mode_name(kind);
         int n=snprintf(prefix,sizeof(prefix),"source_history_%s_%u",mode,generation);CHECK(n>0 && (size_t)n<sizeof(prefix));
@@ -74,7 +74,7 @@ static void produce_mode(const char *directory,FILE *header,unsigned kind) {
             }
         CHECK(entry!=UINT32_MAX);
         XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
-        CHECK(xr_xir_compile_source_generation_bind_program(owner,serial,program)==XR_XIR_OK);
+        CHECK(xr_xir_compile_source_generation_bind_program(owner,serial,program, NULL)==XR_XIR_OK);
         uint64_t candidate=0;
         CHECK(xr_xir_source_generation_prepare_instance(owner,serial,instance,&candidate)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);

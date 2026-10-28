@@ -48,7 +48,7 @@ static XrXirArtifact *unit_native_lower(const UnitNativeOracle *oracle, uint32_t
     CHECK(xr_xir_compile_artifact_verify(closed, &diagnostic) == XR_XIR_OK);
     unit_native_shape(xr_xir_compile_artifact_module(closed));
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    status = xr_xir_compile_lower(closed, &target, &lowered, &diagnostic);
+    status = xr_xir_compile_lower(closed, &target, NULL, &lowered, &diagnostic);
     xr_xir_compile_artifact_free(closed);
     if (status != XR_XIR_OK) fprintf(stderr, "%s lower=%u function=%u op=%u\n", oracle->name, status, diagnostic.function, diagnostic.instruction);
     CHECK(status == XR_XIR_OK && lowered);

@@ -17,7 +17,7 @@ static void library_comptime_emit(const char *kind,const char *path) {
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirCSource emitted={0};CHECK(xr_xir_compile_emit_c(lowered,"p11_library_native",1048576,&emitted)==XR_XIR_OK);
     CHECK(emitted.text && emitted.length);FILE *file=fopen(path,"wb");
     CHECK(file && fwrite(emitted.text,1,emitted.length,file)==emitted.length);

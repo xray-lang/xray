@@ -26,7 +26,7 @@ XR_FUNC void xr_test_initialization_source_run(XrXirArtifact **checked,bool faul
     xr_xir_compile_artifact_free(*checked);*checked=NULL;
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(special,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
+    CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
     const XrXirModule *observed=xr_xir_compile_artifact_module(lowered);
     for(uint32_t m=0;m<observed->declarations->module_count;++m){const XrXirSourceModule *mdecl=&observed->declarations->modules[m];fprintf(stderr,"init module %u name %.*s initializer %u\n",m,(int)mdecl->name_length,mdecl->name,mdecl->initializer);}
     init_module_roles(observed->declarations);

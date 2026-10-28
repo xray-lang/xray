@@ -49,7 +49,7 @@ XR_FUNC void xr_test_library_source_run(XrXirArtifact *owned) {
   CHECK(projected->provenance->source->module.defaults->count==defaults);}
 
  XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
- CHECK(xr_xir_compile_lower(specialized,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(specialized);
+ CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(specialized);
  const XrXirModule *executable=xr_xir_compile_artifact_module(lowered);uint32_t entry=UINT32_MAX;
  for(uint32_t f=0;f<executable->function_count;++f)if(executable->declarations->functions[f].module==executable->declarations->root_module &&
      executable->functions[f].name_length==6&&!memcmp(executable->functions[f].name,"result",6)) {CHECK(entry==UINT32_MAX);entry=f;}

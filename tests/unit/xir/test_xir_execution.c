@@ -94,10 +94,10 @@ int main(void) {
     XrXirArtifact *checked = fixture_checked(&scalar_owner.context);
     CHECK(xr_xir_compile_vm_run(checked, 0, &context, NULL, 0, &result) == XR_XIR_RUN_BAD_ARTIFACT);
     XrXirTarget invalid = {0, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(checked, &invalid, &artifact, NULL) == XR_XIR_BAD_LAYOUT);
+    CHECK(xr_xir_compile_lower(checked, &invalid, NULL, &artifact, NULL) == XR_XIR_BAD_LAYOUT);
     CHECK(!artifact);
     invalid = (XrXirTarget) {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION + 1};
-    CHECK(xr_xir_compile_lower(checked, &invalid, &artifact, NULL) == XR_XIR_BAD_LAYOUT);
+    CHECK(xr_xir_compile_lower(checked, &invalid, NULL, &artifact, NULL) == XR_XIR_BAD_LAYOUT);
     CHECK(!artifact);
     xr_xir_compile_artifact_free(checked);
     /* Lowering inherits the checked artifact limits, not the caller context. */
@@ -105,7 +105,7 @@ int main(void) {
     scalar_owner.context.limits.frame_bytes = 47;
     checked = fixture_checked(&scalar_owner.context);
     scalar_owner.context.limits.frame_bytes = frame_limit;
-    CHECK(xr_xir_compile_lower(checked, &target, &artifact, NULL) == XR_XIR_BUDGET);
+    CHECK(xr_xir_compile_lower(checked, &target, NULL, &artifact, NULL) == XR_XIR_BUDGET);
     CHECK(!artifact);
     xr_xir_compile_artifact_free(checked);
     scalar_compile_owner_free(&scalar_owner);

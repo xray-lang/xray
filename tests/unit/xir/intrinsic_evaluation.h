@@ -73,7 +73,7 @@ static void evaluation_transport(Fixture *fixture) {
         .target = target, .limits = limits}, .call_depth = XR_XIR_CTFE_MAX_CALL_DEPTH};
     xr_sha256(packet.bytes, packet.length, evaluation.evaluation.checked_identity);
     XrXirArtifact *code = NULL;
-    CHECK(xr_xir_compile_lower(received, &target, &code, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(received, &target, NULL, &code, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(received);
     xr_xir_compile_checked_packet_free(&packet);
     evaluation.evaluation.artifact = code;

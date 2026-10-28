@@ -91,7 +91,7 @@ static XrXirStatus task_types_pipeline(const XrXirCompileContext *c) {
         if (status == XR_XIR_OK) status = xr_xir_compile_artifact_verify(decoded, NULL);
         if (status == XR_XIR_OK) {
             status = xr_xir_compile_lower(decoded,
-                &(XrXirTarget){XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, &lowered, NULL);
+                &(XrXirTarget){XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL, &lowered, NULL);
             if (status == XR_XIR_OK) {
                 CHECK(lowered && xr_xir_compile_artifact_module(lowered)->stage == XR_XIR_LOWERED);
                 status = xr_xir_compile_artifact_verify(lowered, NULL);

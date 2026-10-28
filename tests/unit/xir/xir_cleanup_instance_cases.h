@@ -119,7 +119,7 @@ static XrXirStatus drain_proof(const XrXirCompileContext *context, const XrXirDe
     XrXirArtifact *checked = NULL;
     XrXirStatus status = xir_fixture_check(context, &built, &checked, NULL);
     XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    if (status == XR_XIR_OK) status = xr_xir_compile_lower(checked,&target,output,NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_lower(checked,&target, NULL,output,NULL);
     xr_xir_compile_artifact_free(checked); return status;
 }
 static void cleanup_instance_case(bool late_gate, bool malformed) {

@@ -24,6 +24,10 @@ static bool layout_equal(XrXirLayout left, XrXirLayout right) {
     return left.size == right.size && left.alignment == right.alignment;
 }
 
+static XrXirStatus layout_control_poll(XrCompileRequestControl *control) {
+    return control ? xir_compile_resource_status(xr_compile_request_control_poll(control)) : XR_XIR_OK;
+}
+
 #include "xxir_layout_input.inc.c"
 
 
@@ -53,6 +57,10 @@ static XrXirStatus layout_outgoing(const LayoutInputRequest *request,
     if (result_flags) outgoing=2;
     uint32_t phi_count=0;bool borrowed_phi=false;
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
+        if (request->control && !(i&255u)) {
+            XrXirStatus controlled=layout_control_poll(request->control);
+            if (controlled!=XR_XIR_OK) return controlled;
+        }
 
         XrXirInstruction storage;const XrXirInstruction *op=NULL;
         XrXirStatus reading=request->input->instruction(budget,request->input->owner,index,i,&storage,&op);
@@ -130,6 +138,10 @@ static XrXirStatus function_layout(const LayoutInputRequest *request,uint32_t in
     }
     uint32_t bytes = 0, owned = 0, outgoing = 0;
     for (uint32_t slot = 0; slot < slots; ++slot) {
+        if (request->control && !(slot&255u)) {
+            XrXirStatus controlled=layout_control_poll(request->control);
+            if (controlled!=XR_XIR_OK) return controlled;
+        }
 
         LayoutInputSlot field;
         XrXirStatus reading=layout_read_slot(request,function,index,slot,&field);
@@ -209,7 +221,7 @@ static XrXirStatus function_layout(const LayoutInputRequest *request,uint32_t in
     return XR_XIR_OK;
 }
 
-XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact) {
+XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact, XrCompileRequestControl *control) {
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!artifact) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = artifact->context;
@@ -221,8 +233,10 @@ XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact) {
     if (!artifact->layouts)
         return allocation_status;
     XirLayoutInput input=layout_raw_input(&artifact->module);
-    LayoutInputRequest request={budget,&input,&artifact->target};
+    LayoutInputRequest request={budget,&input,&artifact->target,control};
     for (uint32_t f = 0; f < artifact->module.function_count; ++f) {
+        status=layout_control_poll(control);
+        if (status!=XR_XIR_OK) return status;
         status = function_layout(&request,f,&artifact->layouts[f],true);
         if (status != XR_XIR_OK)
             return status;
@@ -237,7 +251,7 @@ XR_FUNC XrXirStatus xir_layout_input_match(const XrXirCompileContext *context,
     XrXirStatus status=layout_storage(context,layouts,input->domain.function_count,
         sizeof(XrXirFunctionLayout),_Alignof(XrXirFunctionLayout));
     if (status!=XR_XIR_OK) return status;
-    LayoutInputRequest request={context,input,target};
+    LayoutInputRequest request={context,input,target,NULL};
     for (uint32_t f=0;f<input->domain.function_count;++f) {
         status=function_layout(&request,f,&layouts[f],false);
         if (status!=XR_XIR_OK) return status;

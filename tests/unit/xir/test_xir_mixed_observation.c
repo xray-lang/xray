@@ -139,7 +139,7 @@ static XrXirProgram *observation_program(TerminalBackend backend) {
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, terminal_fixture_program.proof.bytes,
         terminal_fixture_program.proof.length, &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(checked, &terminal_fixture_program.target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &terminal_fixture_program.target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     CHECK(module->function_count == terminal_fixture_program.entry_count && module->function_count <= OBS_FUNCTIONS);

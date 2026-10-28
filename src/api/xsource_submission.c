@@ -99,7 +99,7 @@ typedef struct SubmissionBindingDraft {
 #include "xsource_submission_bindings.inc.c"
 static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram **output,uint32_t *entry,
     SubmissionBindingDraft *bindings,
-    XrXirSourceDiagnostic *diagnostic) {
+    XrXirSourceDiagnostic *diagnostic,XrCompileRequestControl *control) {
     XrXirSourceGenerationView view={0};
     XrXirStatus status=xr_xir_compile_source_generation_view(owner->source,owner->source_serial,&view);
     const char *stage="Source candidate view";
@@ -125,7 +125,7 @@ static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram 
         stage="Source specialization";status=xr_xir_compile_specialize_receive(view.result->checked,&receiver,&closed,NULL);
         if(status!=XR_XIR_OK && bindings->received)stage=bindings->failure ? bindings->failure : "Source ordinary declaration mapping";
     }
-    if(status==XR_XIR_OK) {stage="Source physical lowering";status=xr_xir_compile_lower(closed,&owner->target,&lowered,NULL);}
+    if(status==XR_XIR_OK) {stage="Source physical lowering";status=xr_xir_compile_lower(closed,&owner->target, control,&lowered,NULL);}
     if(status==XR_XIR_OK) {stage="Source physical declaration correspondence";status=submission_lowered_bindings(bindings,closed,lowered);}
     xr_xir_compile_artifact_free(closed);
     /* This private Program cannot escape the paired transaction. Binding below
@@ -145,7 +145,7 @@ static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram 
     if(status==XR_XIR_OK) {stage="Source Program transfer";status=xr_xir_compile_vm_program_take(&lowered,output);}
     if(status==XR_XIR_OK) {
         stage="Source sealed Program and storage correspondence";
-        status=xr_xir_compile_source_generation_bind_program(owner->source,owner->source_serial,*output);
+        status=xr_xir_compile_source_generation_bind_program(owner->source,owner->source_serial,*output, control);
     }
     xr_xir_compile_artifact_free(lowered);
     if(diagnostic) {
@@ -178,7 +178,7 @@ static XrSourceStatus submission_prepare(XrSourceSubmission *owner,const Submiss
         1,sizeof(*owner->pending_birth),(void **)&owner->pending_birth));
     XrXirProgram *program=NULL;uint32_t entry=UINT32_MAX;
     SubmissionBindingDraft bindings={0};
-    if(status==XR_SOURCE_OK)status=submission_program(owner,&program,&entry,&bindings,diagnostic);
+    if(status==XR_SOURCE_OK)status=submission_program(owner,&program,&entry,&bindings,diagnostic,input->repl?input->repl->request:NULL);
     if(status==XR_SOURCE_OK)status=submission_call(xr_xir_source_generation_prepare_instance(owner->source,
         owner->source_serial,owner->runtime,&owner->runtime_serial));
     xr_xir_compile_program_drop(program);

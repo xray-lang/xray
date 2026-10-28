@@ -43,7 +43,7 @@ int main(void) {
     ordinary_source(&context,0,&source);XrXirArtifact *closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL)==XR_XIR_OK);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     uint32_t factory=named(xr_xir_compile_artifact_module(lowered),"outer");
     XrXirCtfeCallRequest request={.evaluation={.artifact=lowered,.function=factory,.target=target,
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};

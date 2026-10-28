@@ -107,7 +107,7 @@ static XrXirStatus default_build(const XrXirCompileContext *context,unsigned var
 #endif
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&special,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
-    if(status==XR_XIR_OK){CHECK(!xr_xir_compile_artifact_module(special)->defaults);status=xr_xir_compile_lower(special,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL);}
+    if(status==XR_XIR_OK){CHECK(!xr_xir_compile_artifact_module(special)->defaults);status=xr_xir_compile_lower(special,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);}
     const XrXirModule *module=status==XR_XIR_OK?xr_xir_compile_artifact_module(lowered):NULL;
     if(status==XR_XIR_OK){CHECK(module->function_count<=64);for(uint32_t e=0;e<DEFAULT_COUNT;++e){default_ids[e]=UINT32_MAX;
         for(uint32_t f=0;f<module->function_count;++f)if(module->functions[f].name_length==strlen(default_names[e]) && !memcmp(module->functions[f].name,default_names[e],strlen(default_names[e])))default_ids[e]=f;

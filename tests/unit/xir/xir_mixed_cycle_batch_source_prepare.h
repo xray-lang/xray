@@ -65,7 +65,7 @@ static bool cb_source_prepare(CycleSourcePrepare *state) {
     if (!cb_source_stage(state, 6, status)) { CHECK(!state->closed); return false; }
     xr_xir_compile_artifact_free(state->checked); state->checked = NULL;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    status = xr_xir_compile_lower(state->closed, &target, &state->lowered, NULL);
+    status = xr_xir_compile_lower(state->closed, &target, NULL, &state->lowered, NULL);
     if (!cb_source_stage(state, 7, status)) { CHECK(!state->lowered); return false; }
     xr_xir_compile_artifact_free(state->closed); state->closed = NULL;
     cb_source_entries(xr_xir_compile_artifact_module(state->lowered), state->entries);

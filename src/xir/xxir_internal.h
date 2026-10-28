@@ -212,7 +212,7 @@ XR_FUNC XrXirStatus xir_compile_worker_error_verify(const XrXirCompileContext *c
 XR_FUNC XrXirStatus xr_xir_effects_go_safe(const XrXirEffects *effects, uint32_t function);
 XR_FUNC XrXirEffect xr_xir_effects_task_creation(const XrXirEffects *effects, uint32_t function);
 
-XR_FUNC XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact);
+XR_FUNC XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact, XrCompileRequestControl *control);
 XR_FUNC XrXirStatus xr_xir_compile_recheck_v2(const XrXirCompileContext *compile_context, const XrXirModule *checked, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 /* Rejection preserves both slots. Acceptance clears the unique provenance
  * slot and every subsequent failure releases that owner. The main body and
@@ -235,7 +235,7 @@ XR_FUNC XrXirStatus xr_xir_compile_layout_match_verified(const XrXirArtifact *ar
  * Same-slot and occupied-output aliases are rejected before acceptance.
  * The caller must own the Artifact exclusively; all full proofs still run. */
 XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **owned_input,
-    const XrXirTarget *target, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+    const XrXirTarget *target, XrCompileRequestControl *control, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 
 /* Couples fresh owned decoding and its full verification to immediate lowering.
  * Accepts bytes only; no published artifact grants a verification exemption. */

@@ -194,7 +194,7 @@ static XrXirStatus pipeline(const XrXirCompileContext *context,const PreparedMat
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,wire.bytes,wire.length,&closed,NULL);
     xr_xir_compile_checked_packet_free(&wire);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&target,output,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&target, NULL,output,NULL);
     xr_xir_compile_artifact_free(closed);
     return status;
 }
@@ -320,7 +320,7 @@ static void source_materializers(unsigned mode) {
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(read,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     xr_compile_resources_release(context.resources);execute(&lowered,"run",expected);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     fprintf(stderr,"Ordinary comptime Source mode=%u generated %u bound literal functions under actual private declarations; producer dead/two Instance42\n",mode,expected);
@@ -340,7 +340,7 @@ static void independent_wire(void) {
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     xr_compile_resources_release(context.resources);execute(&lowered,"entry",1);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     fprintf(stderr,"Independent complete private materialization wire literal/read/write/two Instance42\n");

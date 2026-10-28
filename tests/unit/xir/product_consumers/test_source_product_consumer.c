@@ -139,7 +139,7 @@ static XrXirStatus seal(Consumer *run, XrXirSourceProduct *product, XrXirArtifac
         return xr_xir_compile_program_seal(&run->context, &product_consumer_program, &run->program);
     XrXirArtifact *lowered = NULL;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    XrXirStatus status = xr_xir_compile_lower(closed, &target, &lowered, NULL);
+    XrXirStatus status = xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL);
     if (status != XR_XIR_OK)
         return status;
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);

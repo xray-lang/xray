@@ -12,6 +12,7 @@ typedef struct GenerationOrdinaryFunctions {
     uint32_t *functions;
     uint32_t count;
     XrXirArtifact *closed;
+    XrCompileRequestControl *control;
 } GenerationOrdinaryFunctions;
 static XrXirStatus generation_ordinary_receive(void *opaque,const XrXirSpecializationMapView *view) {
     GenerationOrdinaryFunctions *receive=opaque;
@@ -37,7 +38,7 @@ static XrXirStatus generation_actual_program(GenerationOrdinaryFunctions *receiv
     XrXirArtifact *closed=NULL,*lowered=NULL;
     const XrXirSpecializationReceiver receiver={receive,generation_ordinary_receive};
     XrXirStatus status=xr_xir_compile_specialize_receive(receive->source,&receiver,&closed,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&program->permissions->target,&lowered,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&program->permissions->target, receive->control,&lowered,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_program_body_match(receive->context,program->permissions,lowered);
     if (status==XR_XIR_OK) {receive->closed=closed;closed=NULL;}
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(closed);
@@ -113,14 +114,14 @@ static XrXirStatus generation_scalar_instances(const GenerationFunctionReceiving
  * this composition. Physical ordinals, names and matching signatures alone
  * never authorize a route to code in another Program. */
 static XrXirStatus generation_function_correspondence(const XrXirCompileContext *context,
-    SourceGenerationRecord *record,const XrXirProgram *program) {
+    SourceGenerationRecord *record,const XrXirProgram *program,XrCompileRequestControl *control) {
     const SourceHistoryCorrespondence *map=&record->capture.semantic->history;
-    GenerationOrdinaryFunctions after={.context=context,.source=record->result.checked},before={0};
+    GenerationOrdinaryFunctions after={.context=context,.source=record->result.checked,.control=control},before={0};
     XrXirStatus status=generation_actual_program(&after,program);
     if (status!=XR_XIR_OK || !map->unit) goto done;
     if (!map->unit->published || map->unit->owner!=record->unit.owner || !map->unit->checked ||
         !map->unit->program || map->unit->serial>=record->unit.serial) {status=XR_XIR_BAD_STAGE;goto done;}
-    before=(GenerationOrdinaryFunctions){.context=context,.source=map->unit->checked};
+    before=(GenerationOrdinaryFunctions){.context=context,.source=map->unit->checked,.control=control};
     status=generation_actual_program(&before,map->unit->program);
     if (status!=XR_XIR_OK) goto done;
     if (before.count!=map->function_count || !map->functions) {status=XR_XIR_BAD_STRUCTURE;goto done;}

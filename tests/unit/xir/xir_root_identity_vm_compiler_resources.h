@@ -184,7 +184,7 @@ static XrXirStatus rb_pipeline(const RbOwner *owner, RiFixture *f, RbTrace *trac
             case RB_READ: status = xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, &diagnostic); break;
             case RB_SPECIALIZE: status = xr_xir_compile_specialize(decoded, &closed, &diagnostic); break;
             case RB_REVERIFY: status = xr_xir_compile_artifact_verify(closed, &diagnostic); break;
-            case RB_LOWER: status = xr_xir_compile_lower(closed, &target, &f->lowered, &diagnostic); break;
+            case RB_LOWER: status = xr_xir_compile_lower(closed, &target, NULL, &f->lowered, &diagnostic); break;
             case RB_SEAL: status = rb_seal(owner, f, entries); break;
             default: CHECK(phase >= RB_BIND0 && phase < RB_SEAL);
                 status = rb_bind(f, phase - RB_BIND0, &entries[phase - RB_BIND0]); break;

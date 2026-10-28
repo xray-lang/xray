@@ -142,7 +142,7 @@ static XrXirArtifact *rn_lower_source(const XrXirCompileContext *context, unsign
     xr_xir_compile_artifact_free(replay);
     CHECK(xr_xir_compile_artifact_verify(closed, &checked) == XR_XIR_OK);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed, &target, &lowered, &checked) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, &checked) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_artifact_verify(lowered, &checked) == XR_XIR_OK);
     return lowered;

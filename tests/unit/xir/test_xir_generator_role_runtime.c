@@ -27,7 +27,7 @@ int main(int argc,char **argv) {
     CHECK(original->entry_count<=64);XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(&owner.context,original->packet.bytes,original->packet.length,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
-    CHECK(xr_xir_compile_lower(closed,&original->target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&original->target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirVmBinding *bindings=NULL;XrXirCallEntry *vm=NULL;
     CHECK(xr_xir_compile_vm_bind_table(lowered,&bindings,&vm)==XR_XIR_OK);XrXirCallEntry entries[64];
     for(uint32_t i=0;i<original->entry_count;++i) {

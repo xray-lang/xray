@@ -45,7 +45,7 @@ static XrXirArtifact *library_string_lower(XrXirArtifact *owned,uint32_t ids[LIB
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
     const XrXirModule *m=xr_xir_compile_artifact_module(special);CHECK(!m->defaults&&m->provenance&&m->provenance->source->module.defaults);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(special,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
+    CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);library_string_ids(xr_xir_compile_artifact_module(lowered),ids);return lowered;
 }
 #endif
@@ -90,7 +90,7 @@ int main(int argc,char **argv) {
     CHECK(argc==1);(void)argv;spec=library_string_program;memcpy(ids,library_string_export_indices,sizeof(ids));
 #if CONSUMER_KIND==2
     CHECK(xr_xir_compile_checked_read(&compiler.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
+    CHECK(xr_xir_compile_lower(checked,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
 #endif
 #endif
 #if CONSUMER_KIND!=1

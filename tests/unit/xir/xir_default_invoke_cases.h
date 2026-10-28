@@ -88,7 +88,7 @@ static void default_invoke_case(unsigned mode,bool generic) {
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &read, NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(read);read=NULL;
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(special, &target, &lowered, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(lowered);lowered=NULL;
+    CHECK(xr_xir_compile_lower(special, &target, NULL, &lowered, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(lowered);lowered=NULL;
     XrXirInstruction saved=*call;
     call->args[0]=2;CHECK(xr_xir_compile_artifact_verify(special, NULL)==XR_XIR_BAD_STRUCTURE);*call=saved;
     call->op=XR_XIR_CALL;CHECK(xr_xir_compile_artifact_verify(special, NULL)==XR_XIR_BAD_STRUCTURE);*call=saved;

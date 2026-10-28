@@ -22,7 +22,7 @@ static void policy_omitted_route(void) {
     XrXirSourceProductPacketView packet={0};XrXirArtifact *closed=NULL,*lowered=NULL;XrXirProgram *program=NULL;XrXirVmDebug *observer=NULL;
     CHECK(xr_xir_compile_source_product_packet(fixture.launch->source,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&closed,NULL)==XR_XIR_OK);
-    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);CHECK(xr_xir_vm_debug_new(fixture.domain,64,&observer)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_compile_vm_debug_program_take(&lowered,observer,&program)==XR_XIR_OK && !lowered);
     CHECK(xr_xir_vm_debug_break_on_throw(observer,XR_XIR_VM_DEBUG_EXCEPTION_CAUGHT)==XR_XIR_VALUE_UNSUPPORTED);

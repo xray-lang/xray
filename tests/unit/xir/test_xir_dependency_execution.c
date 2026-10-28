@@ -38,7 +38,7 @@ int main(void){
  XrXirCallEntry *entries=NULL;XrXirVmBinding *bindings=NULL;
  ReadyEntries selected={dependency_ready_functions[0],dependency_ready_functions[1],dependency_ready_functions[2]};
  if(XR_DEPENDENCY_MIXED){CHECK(xr_xir_compile_checked_read(&compile,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
- CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+ CHECK(xr_xir_compile_lower(checked,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
  CHECK(xr_compile_resources_calloc(compile.resources,spec.entry_count,sizeof(*entries),(void **)&entries)==XR_COMPILE_RESOURCE_OK);
  CHECK(xr_compile_resources_calloc(compile.resources,spec.entry_count,sizeof(*bindings),(void **)&bindings)==XR_COMPILE_RESOURCE_OK);
  unsigned native=0,vm=0;const XrXirModule *module=xr_xir_compile_artifact_module(lowered);ReadyEntries actual=ready_select(module);

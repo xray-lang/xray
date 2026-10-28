@@ -117,7 +117,7 @@ static void effect_cases(bool suspends) {
     xr_xir_compile_checked_packet_free(&packet);
     XrXirArtifact *lowered = NULL;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(artifact, &target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(artifact, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     for (unsigned stage = 0; stage < 2; ++stage) {
         XrXirEffects *effects = NULL;
         CHECK(effect_analyze(stage ? lowered : artifact, &effects) == XR_XIR_OK);
@@ -432,7 +432,7 @@ static void effect_declared_promises(void) {
                 xr_xir_compile_checked_packet_free(&packet);
                 CHECK(decoded->module.declarations->functions[f].promises == XR_XIR_FUNCTION_NO_SUSPEND);
                 XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-                CHECK(xr_xir_compile_lower(decoded, &target, &lowered, NULL) == XR_XIR_OK);
+                CHECK(xr_xir_compile_lower(decoded, &target, NULL, &lowered, NULL) == XR_XIR_OK);
                 CHECK(lowered->module.declarations->functions[f].promises == XR_XIR_FUNCTION_NO_SUSPEND);
                 effect_artifact_free(decoded); effect_artifact_free(lowered);
             }

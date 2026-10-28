@@ -682,7 +682,7 @@ static void enum_admission(const XrXirSourceRequest *request, const char *root) 
         XrXirArtifact *closed=NULL,*lowered=NULL;
         CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL)==XR_XIR_OK);
         XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-        CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(lowered); xr_xir_compile_artifact_free(closed);
         xr_xir_compile_source_result_free(&result);
     }
@@ -839,7 +839,7 @@ static void rejected_source_cases(const XrXirSourceRequest *request,const char *
             XrXirArtifact *closed=NULL,*lowered=NULL;
             CHECK(xr_xir_compile_specialize(artifact,&closed,NULL)==XR_XIR_OK);
             XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-            CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+            CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
             if(i==149)admission_array_capacity(lowered);
             if(i==263){
                 admission_atomic_bool(lowered);

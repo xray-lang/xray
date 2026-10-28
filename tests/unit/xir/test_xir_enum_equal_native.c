@@ -49,7 +49,7 @@ static XrXirProgram *mixed_program(unsigned index,unsigned mode,EnumEqualOwner *
     const XrXirProgramSpec *native=programs[index];XrXirArtifact *checked=NULL;
     CHECK(xr_xir_compile_checked_read(assert_compile_context,native->packet.bytes,native->packet.length,&checked,NULL)==XR_XIR_OK);
     EnumEqualOwner *owner=xr_calloc(1,sizeof(*owner));CHECK(owner);
-    CHECK(xr_xir_compile_lower(checked,&native->target,&owner->artifact,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_lower(checked,&native->target, NULL,&owner->artifact,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirModule *m=xr_xir_compile_artifact_module(owner->artifact);CHECK(m->function_count==native->entry_count);
     owner->entries=xr_calloc(m->function_count,sizeof(*owner->entries));
     owner->bindings=xr_calloc(m->function_count,sizeof(*owner->bindings));CHECK(owner->entries && owner->bindings);

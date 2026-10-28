@@ -30,7 +30,7 @@ XrXirVmBinding *bindings=NULL;
  CHECK(xr_xir_compile_checked_read(context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
 UnitEntries selected=unit_entries(xr_xir_compile_artifact_module(checked));
  if(XR_UNIT_SLOTS_MIXED){
-CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);
+CHECK(xr_xir_compile_lower(checked,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);
 xr_xir_compile_artifact_free(checked);checked=NULL;
 CHECK(xr_compile_resources_calloc(context->resources,spec.entry_count,sizeof(*entries),(void **)&entries)==XR_COMPILE_RESOURCE_OK);
 CHECK(xr_compile_resources_calloc(context->resources,spec.entry_count,sizeof(*bindings),(void **)&bindings)==XR_COMPILE_RESOURCE_OK);

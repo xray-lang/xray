@@ -37,7 +37,7 @@ static XrXirStatus atomic_source_pipeline(const XrXirCompileContext *context,voi
     xr_xir_compile_checked_packet_free(&packet);
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(read,&specialized,NULL);
     xr_xir_compile_artifact_free(read);
-    if(status==XR_XIR_OK)status=xr_xir_compile_lower(specialized,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_lower(specialized,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);
     xr_xir_compile_artifact_free(specialized);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(lowered,NULL);
     uint32_t entries[2]={UINT32_MAX,UINT32_MAX};

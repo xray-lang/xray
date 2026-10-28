@@ -175,7 +175,7 @@ static NominalRun graph_build(const SourceProductNominalFixture *fixture,
     run.status = xr_xir_compile_artifact_verify(checked, NULL);
     if (run.status != XR_XIR_OK) goto release;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    run.status = xr_xir_compile_lower(checked, &target, &lowered, NULL);
+    run.status = xr_xir_compile_lower(checked, &target, NULL, &lowered, NULL);
     if (run.status != XR_XIR_OK) goto release;
     graph_shape(xr_xir_compile_artifact_module(lowered), fixture->classes);
     run.status = xr_xir_compile_emit_c(lowered, "nominal_graph", UINT64_C(16777216), &regenerated);

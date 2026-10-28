@@ -55,7 +55,7 @@ static XrXirProgram *borrow_program_new(BorrowCodeOwner *owner) {
     CHECK(original->entry_count<=64);XrXirArtifact *checked=NULL,*closed=NULL;
     CHECK(xr_xir_compile_checked_read(&owner->compiler.context,original->proof.bytes,original->proof.length,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
-    CHECK(xr_xir_compile_lower(closed,&original->target,&owner->lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&original->target, NULL,&owner->lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_vm_bind_table(owner->lowered,&owner->bindings,&owner->vm)==XR_XIR_OK);
     XrXirCallEntry entries[64];
     for(uint32_t i=0;i<original->entry_count;++i) {

@@ -85,7 +85,7 @@ static XrXirStatus h1nc_action(H1NativeCompiler *c, unsigned p, const XrCompileR
             memset(c->packet.bytes,0xa5,c->packet.length); xr_xir_compile_checked_packet_free(&c->packet);
         } else CHECK(!c->packet.bytes && !c->packet.length); break;
     case H1C_LOWER:
-        status = xr_xir_compile_lower(c->closed,&h1nr_native->target,&h1nr_owner.lowered,NULL);
+        status = xr_xir_compile_lower(c->closed,&h1nr_native->target, NULL,&h1nr_owner.lowered,NULL);
         if (status == XR_XIR_OK) { xr_xir_compile_artifact_free(c->closed); c->closed = NULL; }
         else CHECK(!h1nr_owner.lowered); break;
     case H1C_LOWER_CHECK: {

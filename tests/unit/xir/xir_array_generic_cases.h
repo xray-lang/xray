@@ -56,7 +56,7 @@ static void array_generic_cases(void) {
         CHECK(ops[2].args[0] == 2 && ops[4].args[0] == 2 && ops[4].args[1] == 4);
     }
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed); closed=NULL;
     CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_module(lowered)->functions[1].instructions[1].op == XR_XIR_OWNED_LOCAL_NEW);

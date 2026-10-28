@@ -356,7 +356,7 @@ static void guard_checks(void) {
     CHECK(xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK);
     XrXirArtifact *closed=NULL,*code=NULL;CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&closed,NULL)==XR_XIR_OK);
     xr_xir_compile_source_product_free(product);xr_xir_compile_source_product_diagnostic_free(&failure);
-    CHECK(xr_xir_compile_lower(closed,&target,&code,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&code,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(code);CHECK(module->function_count<=8);uint32_t probe=UINT32_MAX;
     XrXirCallEntry entries[8];XrXirVmBinding bindings[8];
     for (uint32_t f=0;f<module->function_count;++f) {

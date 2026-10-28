@@ -179,7 +179,7 @@ static XrXirStatus conditional_operation(const XrXirCompileContext *context, voi
     xr_xir_compile_artifact_free(instance);instance=NULL;
     if (status==XR_XIR_OK) { phase=6;status=xr_xir_compile_checked_read(context,second.bytes,second.length,&reloaded,&xir_diagnostic);conditional_stage_observe(context,operation,6,status,&observation); }
     if (status==XR_XIR_OK && operation->inspect) conditional_closed(reloaded,oracle);
-    if (status==XR_XIR_OK) { phase=7;status=xr_xir_compile_lower(reloaded,&target,&lowered,&xir_diagnostic);conditional_stage_observe(context,operation,7,status,&observation); }
+    if (status==XR_XIR_OK) { phase=7;status=xr_xir_compile_lower(reloaded,&target, NULL,&lowered,&xir_diagnostic);conditional_stage_observe(context,operation,7,status,&observation); }
     xr_xir_compile_artifact_free(reloaded);reloaded=NULL;
     if (status==XR_XIR_OK) { phase=8;status=xr_xir_compile_artifact_verify(lowered,&xir_diagnostic);conditional_stage_observe(context,operation,8,status,&observation); }
     if (status!=XR_XIR_OK && source_program_compile_fail_at==SIZE_MAX && status!=XR_XIR_BUDGET) {

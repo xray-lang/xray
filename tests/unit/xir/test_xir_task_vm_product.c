@@ -62,7 +62,7 @@ static XrXirProgram *task_product_program(uint32_t mode) {
     CHECK(xr_xir_compile_specialize(decoded, &closed, &diagnostic) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    XrXirStatus status = xr_xir_compile_lower(closed, &target, &lowered, &diagnostic);
+    XrXirStatus status = xr_xir_compile_lower(closed, &target, NULL, &lowered, &diagnostic);
     xr_xir_compile_artifact_free(closed);
     if (status != XR_XIR_OK) fprintf(stderr, "mode=%u lower status=%u f=%u op=%u\n",
         mode, status, diagnostic.function, diagnostic.instruction);

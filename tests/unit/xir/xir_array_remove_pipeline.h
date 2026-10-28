@@ -195,7 +195,7 @@ static RemoveCompile remove_build(size_t failure, XrCompileResourceLimits limits
     if (run.status != XR_XIR_OK) { CHECK(!specialized); goto done; }
     remove_profile_stage(&run, "specialize");
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    run.stage = 5; run.status = xr_xir_compile_lower(specialized, &target, &run.lowered, NULL);
+    run.stage = 5; run.status = xr_xir_compile_lower(specialized, &target, NULL, &run.lowered, NULL);
     if (run.status != XR_XIR_OK) { CHECK(!run.lowered); goto done; }
     CHECK(xr_xir_compile_artifact_context(run.lowered)->resources == run.context.resources);
     remove_profile_stage(&run, "lower");

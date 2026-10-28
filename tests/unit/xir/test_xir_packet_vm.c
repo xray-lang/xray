@@ -46,7 +46,7 @@ static XrXirArtifact *source_packet_lower(const XrXirCompileContext *context,con
     xr_xir_compile_artifact_free(checked); checked = specialized;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     source_fixture_compile_phase="Lower";
-    CHECK(xr_xir_compile_lower(checked, &target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     return lowered;
 }

@@ -210,7 +210,7 @@ static void frame_boundary(const XrXirArtifact *decoded, uint32_t bytes) {
         CHECK(xir_fixture_check(&owner.context, &module, &checked, NULL) == XR_XIR_OK);
         CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(checked);
-        XrXirStatus status = xr_xir_compile_lower(closed, &target, &lowered, NULL);
+        XrXirStatus status = xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL);
         CHECK(status == (mode ? XR_XIR_BUDGET : XR_XIR_OK));
         CHECK((lowered != NULL) == (mode == 0));
         if (lowered) {
@@ -233,7 +233,7 @@ int main(int argc, char **argv) {
     xr_xir_compile_checked_packet_free(&packet);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     frame_boundary(decoded, xr_xir_compile_artifact_layout(lowered, 2)->frame_bytes);
     xr_xir_compile_artifact_free(decoded); xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_artifact_context(lowered)->resources == owner.context.resources);

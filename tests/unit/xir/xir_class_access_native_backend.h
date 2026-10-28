@@ -73,7 +73,7 @@ static void access_mixed_prepare(const XrXirCompileContext *context,const Access
     XrXirArtifact *checked=NULL;
     CHECK(xr_xir_compile_checked_read(context,generated->program->packet.bytes,
         generated->program->packet.length,&checked,NULL)==XR_XIR_OK && checked);
-    CHECK(xr_xir_compile_lower(checked,&generated->program->target,&access_native_owner.lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked,&generated->program->target, NULL,&access_native_owner.lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     const XrXirModule *module=xr_xir_compile_artifact_module(access_native_owner.lowered);
     CHECK(module && module->function_count==generated->count);

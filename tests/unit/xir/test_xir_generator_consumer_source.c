@@ -90,7 +90,7 @@ int main(int argc,char **argv) {
     XrXirDiagnostic detail={0};status=xr_xir_compile_specialize(decoded,&closed,&detail);
     if(status!=XR_XIR_OK) fprintf(stderr,"Factory specialize status%u function%u block%u instruction%u\n",status,detail.function,detail.block,detail.instruction);
     CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(decoded);
-    CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     const char *names[]={"run","unit_run","owned_run","fail_run","exhaust_run","make","probe","take"};
     uint32_t ids[8]={0};

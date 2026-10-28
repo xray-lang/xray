@@ -27,7 +27,7 @@ static XrXirArtifact *entries_artifact(const XrXirCompileContext *context) {
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xir_fixture_check(context,&module,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);xr_xir_compile_artifact_free(closed);return lowered;
 }
 static void receive_parts(const XrXirCompileContext *context,XrXirProgramInput **input,

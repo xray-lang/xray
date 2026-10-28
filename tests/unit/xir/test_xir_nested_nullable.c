@@ -39,7 +39,7 @@ static XrXirStatus nested_compile_pipeline(const XrXirCompileContext *context) {
         status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);}
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(read,&special,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
-    if(status==XR_XIR_OK)status=xr_xir_compile_lower(special,&target,&lowered,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_lower(special,&target, NULL,&lowered,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_emit_c(lowered,"nested_nullable",1048576,&source);
     if(status==XR_XIR_OK)status=xr_xir_compile_vm_program_take(&lowered,&program);
     xr_xir_compile_program_drop(program);xr_xir_compile_c_source_free(&source);
@@ -111,7 +111,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_specialize(read,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(special,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
+    CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     CHECK(module->declarations && module->function_count==8 && module->declarations->entry_function==1);
     XrXirCSource source={0};CHECK(xr_xir_compile_emit_c(lowered,"nested_nullable",1048576,&source)==XR_XIR_OK);

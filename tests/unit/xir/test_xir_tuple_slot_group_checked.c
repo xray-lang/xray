@@ -39,7 +39,7 @@ static XrXirStatus group_packet_pipeline(const uint8_t *bytes,size_t length,XrCo
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(checked,&written,NULL);
     if(status==XR_XIR_OK)CHECK(written.length==length && !memcmp(written.bytes,bytes,length));
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&closed,NULL);
-    if(status==XR_XIR_OK)status=xr_xir_compile_lower(closed,&target,&lowered,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);
     if(status==XR_XIR_OK) {
         const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(lowered,0);
         CHECK(layout && layout->outgoing_count==(length==sizeof(slot_group_unit76_golden)?0u:2u));

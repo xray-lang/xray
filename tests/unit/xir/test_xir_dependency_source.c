@@ -99,7 +99,7 @@ int main(int argc,char **argv){
  CHECK(xr_xir_compile_specialize(checked,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
  CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
  const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
- CHECK(xr_xir_compile_lower(special,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
+ CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
  ReadyEntries entries=ready_select(xr_xir_compile_artifact_module(lowered));XrXirProgram *program=NULL;
  CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
  XrXirValue held[2][2]={{{0}}};ready_pair(program,entries,held);ready_runtime_faults(program,entries);

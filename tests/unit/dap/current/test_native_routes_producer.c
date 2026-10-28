@@ -39,7 +39,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_specialize(read,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     XrXirDiagnostic lower_diagnostic={0};
-    status=xr_xir_compile_lower(closed,&target,&lowered,&lower_diagnostic);
+    status=xr_xir_compile_lower(closed,&target, NULL,&lowered,&lower_diagnostic);
     if(status!=XR_XIR_OK) {
         XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
         fprintf(stderr,"native route Lower: status=%u function=%u instruction=%u reason=%u work=%llu\n",

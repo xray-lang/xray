@@ -130,7 +130,7 @@ int main(int argc,char **argv) {
     if (status!=XR_XIR_OK) fprintf(stderr,"specialize=%u f=%u b=%u i=%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,&diagnostic)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,&diagnostic)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const char *names[]={"expected","unitNormal","integerNormal","ownedNormal"};uint32_t entries[4];
     for (uint32_t i=0;i<4;++i) entries[i]=panics_find(xr_xir_compile_artifact_module(lowered),names[i]);
     XrXirCSource output={0};CHECK(xr_xir_compile_emit_c(lowered,"panics_checked",16777216,&output)==XR_XIR_OK);

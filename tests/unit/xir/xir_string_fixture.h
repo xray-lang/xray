@@ -65,7 +65,7 @@ static XrXirArtifact *string_fixture(const XrXirCompileContext *context, uint32_
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
     XrXirArtifact *closed=NULL; CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     xr_xir_compile_artifact_free(checked);
     return lowered;

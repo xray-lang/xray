@@ -83,7 +83,7 @@ static void binding_program(bool boolean,int64_t answer,bool exported,unsigned *
     XrXirArtifact *checked=NULL;CHECK(xir_fixture_check(&compiler.context,&module,&checked,NULL)==XR_XIR_OK);
     BindingImage *image=xr_malloc(sizeof(*image));CHECK(image);memset(image,0,sizeof(*image));image->releases=releases;
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(checked,&target,&image->artifact,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked,&target, NULL,&image->artifact,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     const XrXirModule *lowered=xr_xir_compile_artifact_module(image->artifact);
     XrXirCallEntry entries[4];

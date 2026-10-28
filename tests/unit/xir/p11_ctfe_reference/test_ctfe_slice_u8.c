@@ -54,7 +54,7 @@ static XrXirArtifact *slice_lower(const XrXirCompileContext *context,XrXirSource
     uint8_t identity[32];CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     xr_sha256(packet.bytes,packet.length,identity);xr_xir_compile_checked_packet_free(&packet);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     CHECK(!memcmp(identity,lowered->checked_identity,32));return lowered;
 }
 static XrXirCtfeCallRequest slice_request(const XrXirArtifact *artifact,const char *function) {
@@ -418,7 +418,7 @@ static void slice_constant(const SliceConstantCase *selected) {
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirRunContext run={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,0,0,0,0};XrXirValue value={0};
     CHECK(xr_xir_compile_vm_run(lowered,slice_function(xr_xir_compile_artifact_module(lowered),"run"),&run,NULL,0,&value)==XR_XIR_RUN_OK);
     CHECK(!run.live_bytes && run.allocations==run.frees);xr_xir_compile_artifact_free(lowered);

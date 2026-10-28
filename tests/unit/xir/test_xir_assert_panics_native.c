@@ -51,7 +51,7 @@ static void panics_native_cases(XrXirProgram *program,bool matrix) {
 static void panics_native_mixed(const XrXirProgramSpec *native,bool matrix,bool root_native) {
     XrXirArtifact *checked=NULL;CHECK(xr_xir_compile_checked_read(assert_compile_context,native->packet.bytes,native->packet.length,&checked,NULL)==XR_XIR_OK);
     PanicsNativeOwner *owner=xr_calloc(1,sizeof(*owner));CHECK(owner);
-    CHECK(xr_xir_compile_lower(checked,&native->target,&owner->artifact,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_lower(checked,&native->target, NULL,&owner->artifact,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirModule *module=xr_xir_compile_artifact_module(owner->artifact);CHECK(module->function_count==native->entry_count);
     CHECK(xr_xir_compile_vm_bind_table(owner->artifact,&owner->bindings,&owner->entries)==XR_XIR_OK &&
         owner->entries && owner->bindings);

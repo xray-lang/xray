@@ -34,7 +34,7 @@ static void assert_mixed(bool root_native) {
     CHECK(xr_xir_compile_checked_read(assert_compile_context,assert_condition_program.packet.bytes,assert_condition_program.packet.length,&checked,NULL)==XR_XIR_OK);
     AssertMixed *owner=xr_calloc(1,sizeof(*owner));CHECK(owner);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(checked,&target,&owner->artifact,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_lower(checked,&target, NULL,&owner->artifact,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirModule *module=xr_xir_compile_artifact_module(owner->artifact);
     CHECK(module->function_count==assert_condition_program.entry_count);
     owner->entries=xr_calloc(module->function_count,sizeof(*owner->entries));

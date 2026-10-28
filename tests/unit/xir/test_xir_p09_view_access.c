@@ -1212,7 +1212,7 @@ static XrXirStatus module_view_metadata(const XrXirCompileContext *context,
     XrXirArtifact *checked=NULL,*closed=NULL;
     status=xir_fixture_check(context,&module,&checked,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_specialize(checked,&closed,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&spec->target,output,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&spec->target, NULL,output,NULL);
     xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(checked);xr_xir_compile_artifact_free(base);
     return status;
 }

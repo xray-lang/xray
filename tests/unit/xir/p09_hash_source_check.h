@@ -62,7 +62,7 @@ static XrXirArtifact *hash_source_replay(const XrXirCompileContext *context, XrX
     xr_xir_compile_artifact_free(read);
     XrXirDiagnostic lower_diagnostic = {0};
     XrXirStatus lower_status = xr_xir_compile_lower(specialized,
-        &(XrXirTarget){XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, &lowered, &lower_diagnostic);
+        &(XrXirTarget){XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL, &lowered, &lower_diagnostic);
     if (lower_status != XR_XIR_OK) {
         const XrXirModule *module = xr_xir_compile_artifact_module(specialized);
         XrCompileResourceStats stats = {0};

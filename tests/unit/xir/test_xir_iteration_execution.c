@@ -40,7 +40,7 @@ int main(void){
  const XrXirModule *roles=xr_xir_compile_artifact_module(checked);C(roles->function_count==27);iteration_selected=iteration_entries(roles);
  C(iteration_selected.answer==source_iteration_selected_entries[0]&&iteration_selected.retained==source_iteration_selected_entries[1]&&iteration_selected.suspended==source_iteration_selected_entries[2]);
  if(argc>1){C(spec.entry_count<=32);
- C(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
+ C(xr_xir_compile_lower(checked,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
  const XrXirModule *m=xr_xir_compile_artifact_module(lowered);unsigned native=0,vm=0;
  for(uint32_t f=0;f<spec.entry_count;++f){C(xr_xir_compile_vm_bind(lowered,f,&bindings[f],&entries[f])==XR_XIR_OK);
  if((f%2)==1){entries[f]=spec.entries[f];++native;}else{C(entries[f].resume!=spec.entries[f].resume);++vm;}}

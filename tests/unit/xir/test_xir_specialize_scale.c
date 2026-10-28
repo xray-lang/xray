@@ -75,7 +75,7 @@ static void scale_operation(uint32_t n) {
     xr_xir_compile_artifact_free(read);
     CHECK(xr_xir_compile_artifact_verify(closed,&diagnostic)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower_take(&closed,&target,&lowered,&diagnostic)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower_take(&closed,&target, NULL,&lowered,&diagnostic)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(lowered,&diagnostic)==XR_XIR_OK);xr_xir_compile_artifact_free(lowered);
     XrCompileResourceStats final=library_compile_stats(&owner.context);CHECK(final.live_bytes==start.live_bytes);
     printf("SPEC_CLOSURE_SCALE N%u keyElements%u functions%u rows%u calls%u specializeWork%llu specializeAllocated%llu specializeSites%llu wholeWork%llu wholeAllocated%llu wholeSites%llu live%llu peak%llu\n",

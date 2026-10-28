@@ -36,7 +36,7 @@ static XrXirArtifact *float_mixed_lower(const XrXirCompileContext *context) {
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&closed,NULL);
     xr_xir_compile_artifact_free(checked);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    if(status==XR_XIR_OK)status=xr_xir_compile_lower(closed,&target,&lowered,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);
     xr_xir_compile_artifact_free(closed);
     if(status!=XR_XIR_OK) {
         CHECK(!lowered);xr_compile_resources_release(context->resources);

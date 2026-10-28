@@ -43,7 +43,7 @@ static XrXirProgram *fault_cleanup_program(unsigned mode) {
     CHECK(xr_xir_compile_specialize(decoded, &closed, &diagnostic) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed, &target, &lowered, &diagnostic) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, &diagnostic) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);

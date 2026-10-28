@@ -475,16 +475,18 @@ static XrXirStatus generation_storage_admit(const XrXirCompileContext *context,
     xr_compile_resources_free(received);return status;
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_bind_program(XrXirSourceGenerations *owner,
-    uint64_t serial,XrXirProgram *program) {
+    uint64_t serial,XrXirProgram *program, XrCompileRequestControl *control) {
     if (!owner || !program || !serial) return XR_XIR_BAD_STRUCTURE;
     SourceGenerationRecord *record=owner->pending;
     if (!record || record->view.serial!=serial) return XR_XIR_BAD_STAGE;
     if (record->unit.program) return record->unit.program==program ? XR_XIR_OK : XR_XIR_BAD_STAGE;
     if (program->context.resources!=owner->config.context.resources) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=generation_function_correspondence(&owner->config.context,record,program);
+    XrXirStatus status=generation_function_correspondence(&owner->config.context,record,program,control);
     if (status!=XR_XIR_OK) return status;
     status=generation_program_correspondence(record,program);
     if (status==XR_XIR_OK) status=generation_storage_admit(&owner->config.context,record,program);
+    if (status!=XR_XIR_OK) return status;
+    if (control) status=xir_compile_resource_status(xr_compile_request_control_poll(control));
     if (status!=XR_XIR_OK) return status;
     if (!xr_xir_compile_program_retain(program)) return XR_XIR_BUDGET;
     status=generation_type_identities(&owner->config.context,record,program);

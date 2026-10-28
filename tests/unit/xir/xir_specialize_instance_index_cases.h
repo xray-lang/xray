@@ -122,7 +122,7 @@ static XrXirStatus spec_index_source_operation(const XrXirCompileContext *contex
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     xr_xir_compile_artifact_free(read);read=NULL;
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(instance,&diagnostic);
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower_take(&instance,&target,&lowered,&diagnostic);
+    if (status==XR_XIR_OK) status=xr_xir_compile_lower_take(&instance,&target, NULL,&lowered,&diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(lowered,&diagnostic);
     xr_xir_compile_artifact_free(instance);xr_xir_compile_artifact_free(lowered);xr_xir_compile_source_failure_free(&failure);
     XrCompileResourceStats final=library_compile_stats(context);CHECK(final.live_bytes==start.live_bytes);

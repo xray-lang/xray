@@ -60,7 +60,7 @@ static XrXirStatus iterator_pipeline(const XrXirCompileContext *c, bool unit) {
         s=xr_xir_compile_artifact_verify(checked,NULL);
         if (s==XR_XIR_OK) s=xr_xir_compile_artifact_verify(decoded,NULL);
         if (s==XR_XIR_OK) s=xr_xir_compile_lower(decoded,
-            &(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL);
+            &(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);
         if (s==XR_XIR_OK) s=xr_xir_compile_artifact_verify(lowered,NULL);
     }
     if (s==XR_XIR_OK) {

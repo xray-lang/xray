@@ -56,7 +56,7 @@ static void assert_pipeline_oom(const XrXirArtifact *checked) {
     instructions[0]=(XrXirInstruction){XR_XIR_OUTPUT,XR_XIR_UNIT,{1,0},{0},XR_XIR_STDOUT,{0}};
     XrXirArtifact *lowered=NULL;
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_BAD_STRUCTURE && !packet.bytes);
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_BAD_STRUCTURE && !lowered);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_BAD_STRUCTURE && !lowered);
     instructions[0]=saved;
     xr_xir_compile_artifact_free(closed);CHECK(runtime_live==baseline && runtime_bytes==bytes);
     puts("Locally typed counterfeit intrinsic body refused by owned provenance in reader/writer/lower PASS");

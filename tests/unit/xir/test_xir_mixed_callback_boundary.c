@@ -54,7 +54,7 @@ static XrXirProgram *callback_program(CallbackFixture *fixture, unsigned backend
     CHECK(xr_xir_compile_checked_read(&context, packet, native->packet.length, &checked, NULL) == XR_XIR_OK);
     memset(packet, 0xA5, native->packet.length); xr_compile_resources_free(packet);
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(checked);
-    CHECK(xr_xir_compile_lower(closed, &native->target, &lowered, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed, &native->target, NULL, &lowered, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(closed);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     CHECK(module->function_count == native->entry_count && module->function_count < 64);
     CHECK(module->declarations->slot_count == 0 && module->declarations->module_count > 1);

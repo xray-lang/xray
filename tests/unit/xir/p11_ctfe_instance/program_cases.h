@@ -65,7 +65,7 @@ static void program_normal(const char *kind) {
     }
     CHECK(edges==(!strcmp(kind,"nested-open")?2:bindings));xr_xir_compile_artifact_free(received);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirCtfeCallRequest call=import_request(lowered,"run",NULL);XrXirValue value={0};
     CHECK(xr_xir_compile_ctfe_calls(&call,&value)==XR_XIR_CTFE_OK && value.type==XR_XIR_I64 && value.payload==42);
     xr_xir_value_drop(&value);uint32_t run=named(&lowered->module,"run");XrXirProgram *program=NULL;

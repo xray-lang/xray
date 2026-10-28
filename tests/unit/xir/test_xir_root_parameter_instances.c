@@ -78,7 +78,7 @@ static void ri_roundtrip(void) {
     CHECK(!xr_xir_effects_read(effects,1).root.requires_root && xr_xir_effects_read(effects,1).root.unresolved);
     CHECK(!xr_xir_effects_read(effects,4).root.requires_root && !xr_xir_effects_read(effects,4).root.unresolved);
     xr_xir_compile_effects_free(effects);
-    CHECK(xr_xir_compile_lower(read,&target,&lowered,&d)==XR_XIR_OK && lowered);
+    CHECK(xr_xir_compile_lower(read,&target, NULL,&lowered,&d)==XR_XIR_OK && lowered);
     CHECK(xr_xir_compile_artifact_module(lowered)->stage==XR_XIR_LOWERED);
     CHECK(xr_xir_compile_artifact_verify(lowered,&d)==XR_XIR_OK);
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(read);

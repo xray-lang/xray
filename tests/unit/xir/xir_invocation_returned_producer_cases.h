@@ -295,7 +295,7 @@ static XrXirStatus invocation_returned_lowered(const XrXirCompileContext *contex
     }
     if (status==XR_XIR_OK) { phase=1;status=xr_xir_compile_artifact_verify(specialized,&diagnostic); }
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    if (status==XR_XIR_OK) { phase=2;status=xr_xir_compile_lower(specialized,&target,&lowered,&diagnostic); }
+    if (status==XR_XIR_OK) { phase=2;status=xr_xir_compile_lower(specialized,&target, NULL,&lowered,&diagnostic); }
     if (status==XR_XIR_OK) { phase=3;status=xr_xir_compile_artifact_verify(lowered,&diagnostic); }
     if (status==XR_XIR_OK) { phase=4;status=xr_xir_compile_effects_analyze(lowered,&effects); }
     if (status==XR_XIR_OK) status=invocation_returned_lowered_snapshot(context,effects->invocations,

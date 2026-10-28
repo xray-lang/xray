@@ -175,7 +175,7 @@ static void place_profile(unsigned mode,const char *operation) {
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
     XrXirProgramSpec spec=language_reference_program;XrXirArtifact *checked=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(&owner.context,spec.proof.bytes,spec.proof.length,&checked,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_lower(checked,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t answer=UINT32_MAX;
     for (uint32_t f=0;f<module->function_count;++f)
         if (module->functions[f].name_length==15 && !memcmp(module->functions[f].name,"referenceAnswer",15)) {

@@ -37,7 +37,7 @@ static XrXirProgram *sqrt_program(const XrXirCompileContext *context,
     CHECK(xr_xir_compile_specialize(decoded,&closed,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     *identity=UINT32_MAX;
     for (uint32_t f=0;f<module->function_count;++f) {

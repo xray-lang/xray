@@ -25,7 +25,7 @@ static XrXirArtifact *task_scalar_lower(const XrXirCompileContext *context,
     xr_xir_compile_artifact_free(decoded);
     CHECK(xr_xir_compile_artifact_verify(closed, &diagnostic) == XR_XIR_OK);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    status = xr_xir_compile_lower(closed, &target, &lowered, &diagnostic);
+    status = xr_xir_compile_lower(closed, &target, NULL, &lowered, &diagnostic);
     xr_xir_compile_artifact_free(closed);
     if (baseline) {
         CHECK(status == XR_XIR_UNSUPPORTED && !lowered);

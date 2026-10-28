@@ -74,7 +74,7 @@ static XrXirStatus library_state_task_i64_pipeline_operation(const XrXirCompileC
     if (status!=XR_XIR_OK) {CHECK(!special);goto done;}
     status=xr_xir_compile_artifact_verify(special,NULL);if (status!=XR_XIR_OK) goto done;
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    status=xr_xir_compile_lower(special,&target,&lowered,NULL);
+    status=xr_xir_compile_lower(special,&target, NULL,&lowered,NULL);
     if (status!=XR_XIR_OK) {CHECK(!lowered);goto done;}
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);CHECK(module->function_count<=128);
     XrXirCallEntry entries[128];XrXirVmBinding bindings[128];
@@ -99,7 +99,7 @@ static XrXirArtifact *library_state_task_i64_lower(XrXirArtifact *owned,uint32_t
     CHECK(xr_xir_compile_specialize(owned,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(special,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
+    CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
     library_state_task_i64_ids(xr_xir_compile_artifact_module(lowered),ids);return lowered;
 }
@@ -142,7 +142,7 @@ int main(int argc,char **argv) {
     CHECK(argc==1);(void)argv;spec=library_state_task_i64_program;memcpy(ids,library_state_task_i64_export_indices,sizeof(ids));
 #if CONSUMER_KIND==2
     CHECK(xr_xir_compile_checked_read(&compiler.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
+    CHECK(xr_xir_compile_lower(checked,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
 #endif
 #endif
 #if CONSUMER_KIND!=1

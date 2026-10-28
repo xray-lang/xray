@@ -91,7 +91,7 @@ static void source_qualified_vm(XrXirArtifact *checked, const char *output, bool
     xr_xir_compile_artifact_free(checked);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_lower(closed,&target,&lowered,&diagnostic);
+    XrXirStatus status=xr_xir_compile_lower(closed,&target, NULL,&lowered,&diagnostic);
     if (status!=XR_XIR_OK) {
         XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(context.resources,&stats)==XR_COMPILE_RESOURCE_OK);
         fprintf(stderr,"qualified lower strict=%u status=%u at=%u:%u:%u reason=%u work=%llu allocated=%llu peak=%llu live=%llu\n",

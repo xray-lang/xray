@@ -86,7 +86,7 @@ static XrXirStatus ctfe_phi_build(const XrXirCompileContext *context,
     xr_sha256(packet.bytes,packet.length,result.identity);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     ctfe_chain_mark(trace,CTFE_CHAIN_LOWER);
-    status=xr_xir_compile_lower(closed,&target,&result.lowered,NULL);
+    status=xr_xir_compile_lower(closed,&target, NULL,&result.lowered,NULL);
     xr_xir_compile_artifact_free(closed);closed=NULL;
     if (status!=XR_XIR_OK) { CHECK(!result.lowered);goto done; }
     ctfe_chain_mark(trace,CTFE_CHAIN_LOWER_VERIFY);

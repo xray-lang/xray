@@ -18,6 +18,7 @@
 #include "xxir_scalar.h"
 #include "xxir_compile_context.h"
 #include "xxir_declarations.h"
+#include "../base/xcompile_request.h"
 
 typedef enum XrXirStage {
     XR_XIR_BUILT = 1,
@@ -265,7 +266,8 @@ XR_FUNC XrXirStatus xr_xir_compile_defaults_verify(const XrXirCompileContext *co
 XR_FUNC XrXirStatus xr_xir_compile_default_lookup(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t owner, uint32_t ordinal, const XrXirDefaultBinding **binding);
 XR_FUNC XrXirStatus xr_xir_compile_verify_v2(const XrXirCompileContext *compile_context, const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_check_v2(const XrXirCompileContext *compile_context, const XrXirModule *built, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget *target, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+/* The optional control is borrowed only during this call; the output owns no request. */
+XR_FUNC XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget *target, XrCompileRequestControl *control, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 XR_FUNC const XrXirCompileContext *xr_xir_compile_artifact_context(const XrXirArtifact *artifact);
 XR_FUNC const XrXirModule *xr_xir_compile_artifact_module(const XrXirArtifact *artifact);
 XR_FUNC const XrXirTarget *xr_xir_compile_artifact_target(const XrXirArtifact *artifact);

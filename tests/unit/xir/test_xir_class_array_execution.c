@@ -60,7 +60,7 @@ static XrXirStatus class_execution_build(const XrXirCompileContext *context,unsi
     status=xr_xir_compile_checked_read(context,source_class_array_program.packet.bytes,source_class_array_program.packet.length,&checked,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&special,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
-    if(status==XR_XIR_OK)status=xr_xir_compile_lower(special,&source_class_array_program.target,&lowered,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_lower(special,&source_class_array_program.target, NULL,&lowered,NULL);
     const XrXirModule *module=status==XR_XIR_OK?xr_xir_compile_artifact_module(lowered):NULL;
     if(status==XR_XIR_OK){C(module->function_count==source_class_array_program.entry_count && module->function_count<=32);
         status=class_allocate(context,module->function_count,sizeof(*owner->entries),(void **)&owner->entries);}

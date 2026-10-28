@@ -10,6 +10,7 @@ typedef struct LayoutInputRequest {
     const XrXirCompileContext *context;
     const XirLayoutInput *input;
     const XrXirTarget *target;
+    XrCompileRequestControl *control;
 } LayoutInputRequest;
 typedef struct LayoutInputSlot {
     XrXirType type;
@@ -71,6 +72,10 @@ static XrXirStatus layout_path_capacity(const LayoutInputRequest *request,
     const XirInputFunctionHead *head,uint32_t function,uint32_t *capacity) {
     *capacity=0;
     for (uint32_t i=0;i<head->instruction_count;++i) {
+        if (request->control && !(i&255u)) {
+            XrXirStatus controlled=layout_control_poll(request->control);
+            if (controlled!=XR_XIR_OK) return controlled;
+        }
 
         XrXirInstruction storage;const XrXirInstruction *op=NULL;
         XrXirStatus status=request->input->instruction(request->context,request->input->owner,
@@ -87,6 +92,10 @@ static XrXirStatus layout_path_capacity(const LayoutInputRequest *request,
         uint32_t depth=0;
         bool cell_root=false;
         for (;;) {
+            if (request->control && !(depth&255u)) {
+                XrXirStatus controlled=layout_control_poll(request->control);
+                if (controlled!=XR_XIR_OK) return controlled;
+            }
             LayoutInputSlot slot;
             status=layout_read_slot(request,head,function,id,&slot);
             if (status!=XR_XIR_OK) return status;

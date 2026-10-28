@@ -31,7 +31,7 @@ int main(int argc,char **argv){
  C(xr_xir_compile_checked_read(context,bytes,(size_t)size,&checked,NULL)==XR_XIR_OK);free(bytes);
  C(xr_xir_compile_specialize(checked,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
  C(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
- XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};C(xr_xir_compile_lower(special,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
+ XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};C(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
  const XrXirModule *module=xr_xir_compile_artifact_module(lowered);C(module->function_count==27);iteration_selected=iteration_entries(module);
  C(module->functions[iteration_selected.answer].name_length==6 && !memcmp(module->functions[iteration_selected.answer].name,"answer",6));
  C(module->functions[iteration_selected.retained].name_length==8 && !memcmp(module->functions[iteration_selected.retained].name,"retained",8));

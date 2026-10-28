@@ -84,11 +84,11 @@ static void wide_boundary(const XrXirCompileContext *context) {
     XrXirCompileContext boundary = *context;
     boundary.limits.frame_bytes = 8 + 65536 * sizeof(XrXirValue) - 1;
     CHECK(xir_fixture_check(&boundary, &module, &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(checked, &target, &lowered, NULL) == XR_XIR_BUDGET && !lowered);
+    CHECK(xr_xir_compile_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_BUDGET && !lowered);
     xr_xir_compile_artifact_free(checked); checked = NULL;
     ++boundary.limits.frame_bytes;
     CHECK(xir_fixture_check(&boundary, &module, &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(checked, &target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_layout(lowered, 0)->outgoing_count == 65536);
     xr_xir_compile_artifact_free(lowered); xr_xir_compile_artifact_free(checked); xr_free(operands);
 }

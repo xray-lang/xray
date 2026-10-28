@@ -82,7 +82,7 @@ static void array_lowered_attack(ArrayAttack attack) {
     CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
     ArrayProgramEntries entries=array_entries(xr_xir_compile_artifact_module(checked));
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(checked,&target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     uint32_t entry=entries.entries[attack.entry];XrXirFunction *fn=(XrXirFunction *)(uintptr_t)(module->functions+entry);

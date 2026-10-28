@@ -39,6 +39,12 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_new(
 #include "api/xsource_compile.h"
 #include "frontend/xsource_input_control.h"
 #include "os/os_fs.h"
+#include "xir/xxir_lower_control.h"
+#include "xir/xxir_internal.h"
+#include "xir/xxir_generic.h"
+#include "xir/xxir_vm.h"
+#include "xir/xxir_source.h"
+#include "toolchain/xcompiler_session.h"
 
 typedef struct Cancel { int cancelled; size_t polls; } Cancel;
 static int cancel_poll(const void *context) {
@@ -756,7 +762,138 @@ static void graph_input_controls(void) {
     sdk_fixture_free(source);CHECK(!runtime_live&&!runtime_bytes);
 }
 
+/* These callbacks witness real copied bytes and unpublished physical layout,
+ * rather than interpreting a poll ordinal as a compiler phase. */
+typedef struct LowerCopyProbe {
+    unsigned char *destination;
+    const unsigned char *source;
+    size_t bytes,observed;
+} LowerCopyProbe;
+static bool lower_copy_cancel(const void *opaque) {
+    LowerCopyProbe *probe=(LowerCopyProbe *)opaque;
+    if (memcmp(probe->destination,probe->source,4096)) return false;
+    for (size_t i=4096;i<probe->bytes;++i) CHECK(probe->destination[i]==0xa5);
+    ++probe->observed;return true;
+}
+static void lower_copy_control(void) {
+    unsigned char source[9000],destination[9000];
+    for (size_t i=0;i<sizeof(source);++i) source[i]=(unsigned char)(i%127);
+    memset(destination,0xa5,sizeof(destination));
+    LowerCopyProbe probe={destination,source,sizeof(source),0};
+    XrCompileRequestOptions options={.cancel_poll=lower_copy_cancel,.cancel_context=&probe};
+    XrCompileRequestControl control={0};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xir_lower_copy_span(&control,destination,source,sizeof(source))==XR_COMPILE_RESOURCE_CANCELLED && probe.observed==1);
+    CHECK(!memcmp(destination,source,4096));
+    for (size_t i=4096;i<sizeof(destination);++i) CHECK(destination[i]==0xa5);
+    CHECK(xir_lower_copy_span(NULL,destination,source,sizeof(source))==XR_COMPILE_RESOURCE_OK && !memcmp(source,destination,sizeof(source)));
+    puts("lower copy: actual 4096-byte prefix, untouched canary tail and ordinary copy PASS");
+}
+typedef struct LowerLoopProbe {
+    const XrXirArtifact *artifact;
+    XrCompileResources *resources;
+    uint64_t baseline;
+    XrCompileRequestControl *control;
+    size_t polls,witnesses;
+    bool layout,deadline,disabled,oom;
+} LowerLoopProbe;
+static bool lower_loop_cancel(const void *opaque) {
+    LowerLoopProbe *probe=(LowerLoopProbe *)opaque;++probe->polls;
+    if (probe->disabled) return false;
+    bool reached=false;
+    if (!probe->layout) reached=sdk_stats(probe->resources).held_bytes>probe->baseline;
+    else if (probe->artifact->layouts) {
+        const XrXirModule *module=&probe->artifact->module;
+        for (uint32_t f=0;f<module->function_count;++f) {
+            const XrXirFunction *function=&module->functions[f];
+            if (function->name_length!=6 || memcmp(function->name,"answer",6)) continue;
+            const XrXirFunctionLayout *layout=&probe->artifact->layouts[f];
+            if (layout->offsets && layout->slot_count>256 && layout->offsets[layout->slot_count-1]==0) {
+                for (uint32_t i=0;i<256;++i) reached|=layout->offsets[i]!=0;
+            }
+        }
+    }
+    if (!reached) return false;
+    ++probe->witnesses;
+    if (probe->oom) {
+        /* The next actual clone allocation fails before another callback can
+         * observe cancellation; no private allocator layout is inspected. */
+        if (probe->witnesses==1) {runtime_fail_at=runtime_attempts;return false;}
+        return true;
+    }
+    if (probe->deadline) {
+        uint64_t now=xr_time_monotonic_ns();CHECK(now && probe->control->has_deadline);
+        while (now<probe->control->deadline_ns) {xr_time_sleep_ns(1000000);now=xr_time_monotonic_ns();CHECK(now);}
+        return false;
+    }
+    return true;
+}
+static XrXirArtifact *lower_source(XrCompileResources *resources) {
+    char text[8192];size_t used=0;
+    const char start[]="export fn answer()->i64{var total:i64=0\n";
+    memcpy(text,start,sizeof(start)-1);used=sizeof(start)-1;
+    for (unsigned i=0;i<256;++i) {const char step[]="total+=1\n";memcpy(text+used,step,sizeof(step)-1);used+=sizeof(step)-1;}
+    const char tail[]="return 42}\n";memcpy(text+used,tail,sizeof(tail));used+=sizeof(tail)-1;
+    XrXirCompileContext context={resources,xr_xir_compile_default_limits()};XrCompilerSession *session=NULL;
+    CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"lower-control",NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&context,XR_PUBLIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceText input={NULL,text,used};XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
+    if(status!=XR_XIR_OK)fprintf(stderr,"lower Source status%u %d:%d %s\n",(unsigned)status,diagnostic.line,diagnostic.column,diagnostic.message);
+    CHECK(status==XR_XIR_OK && source.checked && source.snapshot);
+    XrXirArtifact *closed=NULL;CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL)==XR_XIR_OK && closed);
+    memset(text,'!',sizeof(text));xr_compile_session_free(session);xr_xir_compile_source_result_free(&source);
+    return closed;
+}
+static void lower_ready42(XrXirArtifact **lowered) {
+    const XrXirModule *module=xr_xir_compile_artifact_module(*lowered);uint32_t answer=UINT32_MAX;
+    for (uint32_t f=0;f<module->function_count;++f)
+        if (module->functions[f].name_length==6 && !memcmp(module->functions[f].name,"answer",6))answer=f;
+    CHECK(answer!=UINT32_MAX);XrXirProgram *program=NULL;
+    CHECK(xr_xir_compile_vm_program_take(lowered,&program)==XR_XIR_OK && !*lowered && program);
+    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+    xr_xir_compile_program_drop(program);
+    CHECK(xr_xir_instance_start(instance,answer,NULL,0)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
+    XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED && value.type==XR_XIR_I64 && value.payload==42);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_value_drop(&value);
+}
+static void lower_loop_controls(void) {
+    lower_copy_control();
+    for (unsigned mode=0;mode<4;++mode) {
+        XrCompileResources *resources=sdk_ledger(&sdk_unlimited);uint64_t empty=sdk_stats(resources).held_bytes;
+        XrXirArtifact *closed=lower_source(resources),*lowered=NULL;uint64_t before=sdk_stats(resources).held_bytes;
+        bool taking=mode==1 || mode==2;
+        LowerLoopProbe probe={.artifact=closed,.resources=resources,.baseline=before,.layout=taking,.deadline=mode==2,.oom=mode==3};
+        XrCompileRequestControl control={0};probe.control=&control;
+        XrCompileRequestOptions options={.cancel_poll=lower_loop_cancel,.cancel_context=&probe,
+            .deadline_mode=mode==2?XR_COMPILE_DEADLINE_AFTER:XR_COMPILE_DEADLINE_NONE,.timeout_ns=mode==2?UINT64_C(5000000000):0};
+        CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+        const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};XrXirDiagnostic diagnostic={0};
+        XrXirStatus status=taking?xr_xir_compile_lower_take(&closed,&target,&control,&lowered,&diagnostic):
+            xr_xir_compile_lower(closed,&target,&control,&lowered,&diagnostic);
+        runtime_fail_at=SIZE_MAX;probe.artifact=NULL;
+        fprintf(stderr,"lower observed mode%u status%u witnesses%zu polls%zu remaining%u output%u\n",mode,(unsigned)status,probe.witnesses,probe.polls,closed!=NULL,lowered!=NULL);
+        CHECK(status==(mode==3?XR_XIR_OUT_OF_MEMORY:mode==2?XR_XIR_DEADLINE:XR_XIR_CANCELLED) && diagnostic.status==status && !lowered && probe.witnesses);
+        if(mode==3) CHECK(control.status==XR_COMPILE_RESOURCE_OK && probe.witnesses==1);
+        if(!taking) {CHECK(closed && sdk_stats(resources).held_bytes==before);CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);closed=NULL;}
+        else CHECK(!closed);
+        CHECK(sdk_stats(resources).held_bytes==empty);
+        /* An independent retry borrows a fresh control; the expired one stays failed. */
+        closed=lower_source(resources);LowerLoopProbe retry={.disabled=true};XrCompileRequestOptions retry_options={.cancel_poll=lower_loop_cancel,.cancel_context=&retry};XrCompileRequestControl retry_control={0};
+        CHECK(xr_compile_request_control_init(&retry_options,&retry_control)==XR_COMPILE_RESOURCE_OK);
+        CHECK(xr_xir_compile_lower_take(&closed,&target,&retry_control,&lowered,NULL)==XR_XIR_OK && !closed && lowered);
+        size_t polls=retry.polls;retry.disabled=false;retry.artifact=NULL;
+        lower_ready42(&lowered);CHECK(retry.polls==polls);
+        CHECK(sdk_stats(resources).held_bytes==empty);xr_compile_resources_release(resources);CHECK(!runtime_live && !runtime_bytes);
+        printf("lower mode%u: real %s witness%zu status%u, held rollback, fresh retry and retired ready42 PASS\n",mode,taking?"partial layout":"allocated clone",probe.witnesses,(unsigned)status);
+    }
+}
+
 int main(void) {
+    lower_loop_controls();
     input_helper_controls();input_prior_resource();public_input_controls();input_nul_location();graph_input_controls();
     compilation_controls();
     report_resources();report_control();unicode_report();module_binding_classes();partial_report_lifetime();

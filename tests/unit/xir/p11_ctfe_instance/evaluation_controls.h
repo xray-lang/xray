@@ -42,7 +42,7 @@ static void evaluation_controls(void) {
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_specialize(checked,&out,NULL)==XR_XIR_BAD_STAGE && !out);
     XirComptimePending *pending=NULL;CHECK(xr_xir_compile_comptime_pending(checked,&pending,NULL)==XR_XIR_BAD_STAGE && !pending);
-    CHECK(xr_xir_compile_lower(checked,&target,&lowered,NULL)==XR_XIR_OK && lowered->evaluation_only);
+    CHECK(xr_xir_compile_lower(checked,&target, NULL,&lowered,NULL)==XR_XIR_OK && lowered->evaluation_only);
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_BAD_STAGE && lowered && !program);
     XrXirVmBinding binding={0};XrXirCallEntry entry={0};
     CHECK(xr_xir_compile_vm_bind(lowered,lowered->module.provenance->evaluation.callee,&binding,&entry)==XR_XIR_BAD_STAGE);

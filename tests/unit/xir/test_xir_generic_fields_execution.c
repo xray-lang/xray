@@ -31,7 +31,7 @@ XrXirVmBinding *bindings=NULL;
  CHECK(xr_xir_compile_checked_read(&compiler.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
 GenericFieldEntries selected=generic_fields_entries(xr_xir_compile_artifact_module(checked));
  if(XR_GENERIC_FIELDS_MIXED){
-CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);
+CHECK(xr_xir_compile_lower(checked,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);
 xr_xir_compile_artifact_free(checked);checked=NULL;
 CHECK(xr_compile_resources_calloc(compiler.context.resources,spec.entry_count,sizeof(*entries),(void **)&entries)==XR_COMPILE_RESOURCE_OK);
 CHECK(xr_compile_resources_calloc(compiler.context.resources,spec.entry_count,sizeof(*bindings),(void **)&bindings)==XR_COMPILE_RESOURCE_OK);

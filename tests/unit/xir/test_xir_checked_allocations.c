@@ -198,11 +198,11 @@ static void nominal_lowering_failures(void) {
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     size_t baseline = live; packet_allocation_calls = 0; fail_at = SIZE_MAX;
-    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     size_t sites = packet_allocation_calls; xr_xir_compile_artifact_free(lowered); lowered=NULL; CHECK(live == baseline);
     for (size_t i = 0; i < sites; ++i) {
         packet_allocation_calls = 0; fail_at = i;
-        CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!lowered && live == baseline);
     }
     fail_at = SIZE_MAX; xr_xir_compile_artifact_free(closed);closed=NULL; CHECK(live==consumer_context_owner_count && live_bytes==consumer_context_ledger_bytes());
@@ -456,7 +456,7 @@ static void provenance_lowering(XrXirArtifact *closed) {
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *lowered = NULL;
     size_t baseline = live; packet_allocation_calls = 0;
-    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     size_t sites = packet_allocation_calls;
     CHECK(lowered->checked_packet.bytes && lowered->checked_packet.length >= 64);
     XrXirCheckedPacket expected = {0};
@@ -492,7 +492,7 @@ static void provenance_lowering(XrXirArtifact *closed) {
     xr_xir_compile_artifact_free(lowered); lowered=NULL; CHECK(live == baseline);
     for (size_t i = 0; i < sites; ++i) {
         packet_allocation_calls = 0; fail_at = i; lowered = NULL;
-        CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!lowered && live == baseline);
     }
     fail_at = SIZE_MAX;

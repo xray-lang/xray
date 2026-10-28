@@ -121,7 +121,7 @@ static void collector_bare_case(bool suspend) {
     collector_occupied(artifact);collector_faults(artifact,COLLECTOR_NONE,XR_XIR_OK);
     effect_budget_boundaries(artifact);
     XrXirArtifact *lowered=NULL;XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(artifact,&target,&lowered,NULL)==XR_XIR_OK && lowered);
+    CHECK(xr_xir_compile_lower(artifact,&target, NULL,&lowered,NULL)==XR_XIR_OK && lowered);
     collector_occupied(lowered);collector_faults(lowered,COLLECTOR_NONE,XR_XIR_OK);
     effect_budget_boundaries(lowered);effect_artifact_free(lowered);
     CHECK(effect_analyze(artifact,&summary)==XR_XIR_OK && summary && summary->count==1);

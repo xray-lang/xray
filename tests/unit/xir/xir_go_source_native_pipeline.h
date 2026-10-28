@@ -22,7 +22,7 @@ static XrXirArtifact *source17_lower(const XrXirCompileContext *context,
     CHECK(xr_xir_compile_specialize(decoded, &closed, &diagnostic) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    status = xr_xir_compile_lower(closed, &target, &lowered, &diagnostic);
+    status = xr_xir_compile_lower(closed, &target, NULL, &lowered, &diagnostic);
     xr_xir_compile_artifact_free(closed);
     if (status != XR_XIR_OK) fprintf(stderr, "%s lower=%u f=%u op=%u\n", name,
         status, diagnostic.function, diagnostic.instruction);

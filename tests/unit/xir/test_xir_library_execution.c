@@ -49,7 +49,7 @@ int main(int argc,char **argv){LibraryCompileOwner compiler={0};CHECK(library_co
  CHECK(xr_xir_compile_artifact_module(checked)->defaults&&xr_xir_compile_artifact_module(checked)->defaults->count==2);
  CHECK(xr_xir_compile_specialize(checked,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
  CHECK(!xr_xir_compile_artifact_module(special)->defaults&&xr_xir_compile_artifact_module(special)->provenance->source->module.defaults->count==2);
- XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(special,&target,&lowered,NULL)==XR_XIR_OK);
+ XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);
  xr_xir_compile_artifact_free(special);special=NULL;
  XrXirCSource generated={0};CHECK(xr_xir_compile_emit_c(lowered,"source_library",1048576,&generated)==XR_XIR_OK);
  if(argc==2){FILE *cfile=fopen(argv[1],"wb");CHECK(cfile);CHECK(fwrite(generated.text,1,generated.length,cfile)==generated.length);CHECK(!fclose(cfile));}xr_xir_compile_c_source_free(&generated);
@@ -58,7 +58,7 @@ int main(int argc,char **argv){LibraryCompileOwner compiler={0};CHECK(library_co
  XrXirProgramSpec spec=source_library_program;
 #if CONSUMER_KIND==2
  CHECK(xr_xir_compile_checked_read(&compiler.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
- CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
+ CHECK(xr_xir_compile_lower(checked,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
  XrXirCallEntry entries[8];XrXirVmBinding bindings[8];CHECK(spec.entry_count==8);
  for(uint32_t f=0;f<8;++f){CHECK(xr_xir_compile_vm_bind(lowered,f,&bindings[f],&entries[f])==XR_XIR_OK);if(f%2)entries[f]=spec.entries[f];}
  spec.entries=entries;const XrXirModule *module=xr_xir_compile_artifact_module(lowered);spec.types=module->types;spec.declarations=module->declarations;spec.packet=xir_program_packet_borrow(lowered);

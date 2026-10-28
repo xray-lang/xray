@@ -19,7 +19,7 @@ static void method_factory_promise_execute(XrXirArtifact *checked) {
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(decoded,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(decoded);
-    CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     uint32_t ids[2]={0};const char *names[]={"run","direct"};
     for(uint32_t f=0;f<module->function_count;++f) for(unsigned n=0;n<2;++n)

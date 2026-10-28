@@ -180,7 +180,7 @@ static XrXirStatus rci_pipeline(const XrXirCompileContext *c,
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(instance,&second,&d);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(c,second.bytes,second.length,&reloaded,&d);
     if (status==XR_XIR_OK && qualify) rci_shape(reloaded,probe);
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower(reloaded,&target,&lowered,&d);
+    if (status==XR_XIR_OK) status=xr_xir_compile_lower(reloaded,&target, NULL,&lowered,&d);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(lowered,&d);
     if (status==XR_XIR_OK) { *output=reloaded;reloaded=NULL; }
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(reloaded);

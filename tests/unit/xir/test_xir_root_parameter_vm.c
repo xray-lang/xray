@@ -166,7 +166,7 @@ static XrXirStatus h1c_action(H1Compiler *c, unsigned p, const XrCompileResource
         xr_xir_compile_effects_free(effects); break;
     }
     case H1C_LOWER:
-        status = xr_xir_compile_lower(c->closed, &target, &c->lowered, NULL);
+        status = xr_xir_compile_lower(c->closed, &target, NULL, &c->lowered, NULL);
         if (status == XR_XIR_OK) { xr_xir_compile_artifact_free(c->closed); c->closed = NULL; }
         else CHECK(!c->lowered); break;
     case H1C_LOWER_CHECK: {

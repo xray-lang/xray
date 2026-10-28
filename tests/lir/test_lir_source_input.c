@@ -157,7 +157,7 @@ static void lowered_origin_rejected(void) {
     XrXirArtifact *closed = NULL, *lowered = NULL;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XIR_OK(xr_xir_compile_specialize(result.checked, &closed, NULL));
-    XIR_OK(xr_xir_compile_lower(closed, &target, &lowered, NULL));
+    XIR_OK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL));
     xr_xir_compile_artifact_free(closed);
     xr_xir_compile_source_result_free(&result);
     XIR_OK(xr_xir_compile_artifact_verify(lowered, NULL));

@@ -134,7 +134,7 @@ static XrXirArtifact *path_program_fixture(const XrXirCompileContext *context, u
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);closed=NULL; return lowered;
 }
 #endif // XIR_PATH_PROGRAM_FIXTURE_H

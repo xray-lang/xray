@@ -107,7 +107,7 @@ static XrXirStatus operation(const XrXirCompileContext *context,const char *text
     status=xr_xir_compile_specialize(received,&closed,NULL);xr_xir_compile_artifact_free(received);received=NULL;
     if (status!=XR_XIR_OK) { CHECK(!closed);goto done; }
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    status=xr_xir_compile_lower(closed,&target,&lowered,NULL);xr_xir_compile_artifact_free(closed);closed=NULL;
+    status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);xr_xir_compile_artifact_free(closed);closed=NULL;
     if (status!=XR_XIR_OK) { CHECK(!lowered);goto done; }
     signatures(xr_xir_compile_artifact_module(lowered),count);status=xr_xir_compile_artifact_verify(lowered,NULL);
     if (status==XR_XIR_OK && run) execute(&lowered);

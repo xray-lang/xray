@@ -52,8 +52,8 @@ static XrXirStatus unit_destructure_cell_observe_verify(const XrXirArtifact *art
     ++unit_destructure_cell_verifications;return xr_xir_compile_artifact_verify(artifact,diagnostic);
 }
 static XrXirStatus unit_destructure_cell_observe_lower(const XrXirArtifact *artifact,const XrXirTarget *target,
-    XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
-    ++unit_destructure_cell_lowers;return xr_xir_compile_lower(artifact,target,output,diagnostic);
+    XrCompileRequestControl *control,XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
+    ++unit_destructure_cell_lowers;return xr_xir_compile_lower(artifact,target, control,output,diagnostic);
 }
 static XrXirStatus unit_destructure_cell_observe_emit(const XrXirArtifact *artifact,const char *prefix,
     size_t limit,XrXirCSource *output) {
@@ -119,7 +119,7 @@ static XrXirStatus unit_destructure_cell_pipeline_operation(const XrXirCompileCo
     if (status!=XR_XIR_OK) {CHECK(!special);goto done;}
     status=xr_xir_compile_artifact_verify(special,NULL);if (status!=XR_XIR_OK) goto done;
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    status=xr_xir_compile_lower(special,&target,&lowered,NULL);
+    status=xr_xir_compile_lower(special,&target, NULL,&lowered,NULL);
     if (status!=XR_XIR_OK) {CHECK(!lowered);goto done;}
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);CHECK(module->function_count<=128);
     status=xr_xir_compile_vm_bind_table(lowered,&bindings,&entries);
@@ -141,7 +141,7 @@ static XrXirArtifact *unit_destructure_cell_lower_verified(XrXirArtifact *owned,
     CHECK(xr_xir_compile_specialize(owned,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(special,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
+    CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
     unit_destructure_cell_ids(xr_xir_compile_artifact_module(lowered),ids);return lowered;
 }
@@ -228,7 +228,7 @@ int main(int argc,char **argv) {
     CHECK(argc==1);(void)argv;spec=unit_destructure_cell_program;memcpy(ids,unit_destructure_cell_export_indices,sizeof(ids));
 #if CONSUMER_KIND==2
     CHECK(xr_xir_compile_checked_read(&compiler.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
+    CHECK(xr_xir_compile_lower(checked,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
 #endif
 #endif
 #if CONSUMER_KIND!=1

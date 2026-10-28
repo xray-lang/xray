@@ -109,7 +109,7 @@ static bool atomic_runtime_prepare(AtomicRuntimeFixture *f,unsigned backend,bool
         memcpy(packet,native->proof.bytes,native->proof.length);
         CHECK(xr_xir_compile_checked_read(s.context,packet,native->proof.length,&s.checked,NULL)==XR_XIR_OK);
         memset(packet,0xA5,native->proof.length);xr_compile_resources_free(packet);
-        CHECK(xr_xir_compile_lower(s.checked,&native->target,&s.lowered,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_lower(s.checked,&native->target, NULL,&s.lowered,NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(s.checked);s.checked=NULL;atomic_source_entries(&s);
     }
     complete=atomic_runtime_images(&s,f,program);

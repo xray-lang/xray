@@ -137,7 +137,7 @@ static void source_witness_inheritance_execute(XrXirArtifact *checked) {
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK && closed);
     xr_xir_compile_artifact_free(checked);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK && lowered);
+    CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK && lowered);
     xr_xir_compile_artifact_free(closed);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     uint32_t measured = UINT32_MAX;

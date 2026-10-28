@@ -157,7 +157,7 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     /* Specialization returned this sole owner.
      * Lowering consumes it on success or failure; no later step reads closed. */
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower_take(&closed,&target,&lowered,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_lower_take(&closed,&target, ctx->request,&lowered,NULL);
     if (status!=XR_XIR_OK) source_fail(ctx,entry,status,"comptime thunk pipeline failed complete receiving");
     else source_comptime_batch(ctx,lowered,&target,expected);
     xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(lowered);

@@ -98,7 +98,7 @@ static XrXirProgram *deep_program(unsigned backend) {
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, worker_deep_fixture_program.proof.bytes,
         worker_deep_fixture_program.proof.length, &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(checked, &worker_deep_fixture_program.target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &worker_deep_fixture_program.target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     DeepCode *owner = NULL;
     CHECK(xr_compile_resources_calloc(context.resources, 1, sizeof(*owner), (void **)&owner) == XR_COMPILE_RESOURCE_OK);

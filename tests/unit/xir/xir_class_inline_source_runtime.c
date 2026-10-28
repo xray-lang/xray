@@ -43,7 +43,7 @@ XR_FUNC void xr_test_class_inline_source_run(const XrXirCompileContext *context,
  xr_xir_compile_artifact_free(*checked);*checked=NULL;
  C(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
  XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
- C(xr_xir_compile_lower(special,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
+ C(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
  const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t answer=UINT32_MAX,retained=UINT32_MAX;
  C(module->function_count==25);
  for(uint32_t f=0;f<module->function_count;++f){

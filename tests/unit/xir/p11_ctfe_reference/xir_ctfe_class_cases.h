@@ -42,7 +42,7 @@ static void reference_class_fault(const XrXirCheckedPacket *wire,const uint8_t *
     uint8_t digest[32]={0};CHECK(xr_compile_resources_work(context.resources,wire->length)==XR_COMPILE_RESOURCE_OK);
     xr_sha256(wire->bytes,wire->length,digest);CHECK(!memcmp(digest,identity,32));
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     /* Lowering publishes a verified artifact. Both evaluator calls below
      * independently repeat complete verification on this original owner. */
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),.target=target,

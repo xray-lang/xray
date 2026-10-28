@@ -47,7 +47,7 @@ static void job_new(ObserveJob *job) {
     CHECK(xr_xir_compile_source_check_text(&request,&input,&source,NULL,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&job->lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&job->lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);xr_xir_compile_source_result_free(&source);xr_compile_session_free(session);
     const XrXirTypes *types=job->lowered->module.types;XrXirType array=XR_XIR_UNIT,nullable=XR_XIR_UNIT,box=XR_XIR_UNIT;
     for (uint32_t i=0;i<types->count;++i) {

@@ -130,7 +130,7 @@ static XrXirStatus root_construction72_pipeline(XrCompileResources *resources) {
         CHECK(xr_xir_compile_artifact_construction(decoded) !=
             xr_xir_compile_artifact_construction(m->provenance->source));
         const XrXirTarget construction_target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-        status = xr_xir_compile_lower(decoded,&construction_target,&lowered,NULL);
+        status = xr_xir_compile_lower(decoded,&construction_target, NULL,&lowered,NULL);
     }
     xr_xir_compile_artifact_free(decoded);
     xr_xir_compile_artifact_free(lowered);

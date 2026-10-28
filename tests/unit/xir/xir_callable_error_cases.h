@@ -369,7 +369,7 @@ static void callable_error_program(const XrXirCompileContext *work,XrXirType err
     uint8_t identity[32];xr_sha256(packet.bytes,packet.length,identity);
     xr_xir_compile_checked_packet_free(&packet);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     XrXirCtfeCallRequest request={.evaluation={.artifact=lowered,.function=module->declarations->entry_function,

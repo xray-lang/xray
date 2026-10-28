@@ -103,7 +103,7 @@ static void root_source_cases(bool resources) {
     XrXirArtifact *specialized=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_specialize(checked,&specialized,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(specialized,&target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     effect_artifact_free(specialized);root_source_oracles(lowered,true);effect_artifact_free(lowered);
     XrXirEffects *summary=NULL;CHECK(effect_analyze(checked,&summary)==XR_XIR_OK);
     const XrXirModule *module=xr_xir_compile_artifact_module(checked);
@@ -151,7 +151,7 @@ static void root_var_atomic_case(void) {
     CHECK(xr_xir_compile_specialize(checked,&specialized,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(specialized,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(specialized,&target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
     XrXirArtifact *stages[3]={checked,specialized,lowered};
     for (uint32_t stage=0;stage<3;++stage) {

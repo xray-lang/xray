@@ -47,7 +47,7 @@ static XrXirStatus class_packet_build(const XrXirCompileContext *context,unsigne
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&special,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    if(status==XR_XIR_OK)status=xr_xir_compile_lower(special,&target,&lowered,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_lower(special,&target, NULL,&lowered,NULL);
     if(status==XR_XIR_OK)class_array_graph_verify(xr_xir_compile_artifact_module(lowered));
     if(status==XR_XIR_OK)status=xr_xir_compile_emit_c(lowered,"source_class_array",1048576,&source);
     if(status==XR_XIR_OK){C(source.text[source.length]==0 && !strstr(source.text,"({"));

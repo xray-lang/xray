@@ -35,7 +35,7 @@ static XrXirArtifact *float_transport_fixture(const XrXirCompileContext *context
     CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(decoded, &target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(decoded, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_artifact_free(decoded);
     xr_xir_compile_artifact_free(checked);

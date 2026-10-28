@@ -139,7 +139,7 @@ static void view_types_pipeline(const XrXirCompileContext *c) {
     CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     CHECK(xr_xir_compile_artifact_verify(decoded,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(decoded,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(decoded,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);xr_xir_compile_artifact_free(lowered);
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_checked_read(c,checked_scalar84_golden,sizeof(checked_scalar84_golden),&checked,NULL)==XR_XIR_BAD_STRUCTURE && !checked);

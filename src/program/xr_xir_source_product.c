@@ -17,6 +17,7 @@
 #include "../base/xsha256.h"
 #include "../xir/xxir_compile_memory.h"
 #include "../xir/xxir_internal.h"
+#include "../toolchain/xcompiler_session.h"
 #include <string.h>
 
 struct XrXirSourceProduct {
@@ -199,7 +200,7 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
     }
     if (status==XR_XIR_OK) {
         stage=XR_XIR_SOURCE_PRODUCT_LOWER;
-        status=xr_xir_compile_lower(closed,&request->target,&lowered,
+        status=xr_xir_compile_lower(closed,&request->target, xr_compile_session_request(request->source.session),&lowered,
             diagnostic ? &diagnostic->xir : NULL);
     }
     uint32_t entry=0;
@@ -392,7 +393,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_verify(const XrXirSourceProduc
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(closed,&packet,diagnostic);
     if (status==XR_XIR_OK) status=packet.length!=product->closed_packet.length ? XR_XIR_BAD_STRUCTURE :
         source_product_compare(packet.bytes,product->closed_packet.bytes,packet.length);
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&product->facts.target,&lowered,diagnostic);
+    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&product->facts.target, NULL,&lowered,diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(product->lowered,diagnostic);
     uint8_t layout_digest[32];
     if (status==XR_XIR_OK) status=source_product_layout_digest(lowered,&product->facts,layout_digest);

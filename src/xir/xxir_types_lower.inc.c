@@ -30,12 +30,13 @@ static bool lower_type_node(XrXirTypeNode *node, const uint32_t *map, uint32_t c
     return true;
 }
 static XrXirStatus lower_provenance(XrXirModule *module, const uint32_t *map,
-    uint32_t count, XrXirCompileContext *budget) {
+    uint32_t count, XrXirCompileContext *budget, XrCompileRequestControl *control) {
     XrXirStatus allocation_status = XR_XIR_OK;
     XrXirProvenance *proof = (XrXirProvenance *)module->provenance;
     if (!proof) return XR_XIR_OK;
     if (!xir_effect_kind_is_closed(proof->kind)) return XR_XIR_BAD_STAGE;
     for (uint32_t f = 0; f < proof->count; ++f) {
+        if (control) { XrXirStatus status=lower_control_poll(control);if (status!=XR_XIR_OK) return status; }
         XrXirOrigin *origin = &proof->origins[f];
 
         XrXirType *arguments = (XrXirType *)origin->arguments;
@@ -77,9 +78,10 @@ static XrXirStatus lower_provenance(XrXirModule *module, const uint32_t *map,
     return XR_XIR_OK;
 }
 
-static XrXirStatus lower_type_uses(XrXirModule *module, const uint32_t *map, uint32_t count, XrXirCompileContext *budget) {
+static XrXirStatus lower_type_uses(XrXirModule *module, const uint32_t *map, uint32_t count, XrXirCompileContext *budget, XrCompileRequestControl *control) {
     XrXirFunction *functions = (XrXirFunction *) module->functions;
     for (uint32_t f = 0; f < module->function_count; ++f) {
+        if (control) { XrXirStatus status=lower_control_poll(control);if (status!=XR_XIR_OK) return status; }
         XrXirFunction *function = &functions[f];
 
         if (!lower_type_id(&function->result, map, count)) return XR_XIR_BAD_TYPE;
@@ -89,6 +91,7 @@ static XrXirStatus lower_type_uses(XrXirModule *module, const uint32_t *map, uin
             if (!lower_type_id(&parameters[p], map, count)) return XR_XIR_BAD_TYPE;
         XrXirInstruction *ops = (XrXirInstruction *) function->instructions;
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
+            if (control && !(i&255u)) { XrXirStatus status=lower_control_poll(control);if (status!=XR_XIR_OK) return status; }
             if (!lower_type_id(&ops[i].type, map, count)) return XR_XIR_BAD_TYPE;
             if (ops[i].op == XR_XIR_ERROR_IS) {
                 XrXirType target = (XrXirType) ops[i].immediate;
@@ -104,17 +107,19 @@ static XrXirStatus lower_type_uses(XrXirModule *module, const uint32_t *map, uin
         for (uint32_t s = 0; s < module->declarations->slot_count; ++s)
             if (!lower_type_id(&slots[s].type, map, count)) return XR_XIR_BAD_TYPE;
     }
-    return lower_provenance(module, map, count, budget);
+    return lower_provenance(module, map, count, budget, control);
 }
-static XrXirStatus lower_nominal_types(XrXirModule *module, XrXirCompileContext *budget) {
+static XrXirStatus lower_nominal_types(XrXirModule *module, XrXirCompileContext *budget, XrCompileRequestControl *control) {
     XrXirStatus allocation_status = XR_XIR_OK;
     XrXirTypes *types = (XrXirTypes *) module->types;
     if (!types || !types->nominals) return XR_XIR_OK;
     const XrXirNominalTable *table = types->nominals;
     if (!table->declarations || table->identities) return XR_XIR_BAD_STAGE;
     uint32_t count = types->count;
+    XrXirStatus status=XR_XIR_OK;
 
     for (uint32_t i = 0; i < count; ++i) {
+        if (control && !(i&255u) && (status=lower_control_poll(control))!=XR_XIR_OK) return status;
         const XrXirTypeNode *node = &types->nodes[i];
         if (node->kind == XR_XIR_TYPE_NOMINAL && !node->parameter_span &&
             node->nominal.field_count != table->declarations[node->nominal.declaration].field_count) return XR_XIR_BAD_STAGE;
@@ -125,14 +130,17 @@ static XrXirStatus lower_nominal_types(XrXirModule *module, XrXirCompileContext 
     uint32_t *map = count ? xir_compile_alloc(budget, (size_t) bytes, &allocation_status) : NULL;
     if (count && !map) return allocation_status;
     uint32_t closed = 0;
-    for (uint32_t i = 0; i < count; ++i)
+    for (uint32_t i = 0; i < count; ++i) {
+        if (control && !(i&255u) && (status=lower_control_poll(control))!=XR_XIR_OK) { xr_compile_resources_free(map);return status; }
         map[i] = types->nodes[i].parameter_span ? UINT32_MAX : XR_XIR_CONSTRUCTED_TYPE_BASE + closed++;
+    }
     XrXirNominalTable *identities = NULL;
-    XrXirStatus status = xr_xir_compile_nominal_project(budget, table, &identities);
+    status = xr_xir_compile_nominal_project(budget, table, &identities);
     if (status != XR_XIR_OK) { xr_compile_resources_free(map); return status; }
     xr_xir_compile_nominal_free((XrXirNominalTable *) table); types->nominals = identities;
     XrXirTypeNode *nodes = (XrXirTypeNode *) types->nodes;
     for (uint32_t i = 0; i < count; ++i) {
+        if (control && !(i&255u) && (status=lower_control_poll(control))!=XR_XIR_OK) break;
         XrXirTypeNode *node = &nodes[i];
         if (map[i] == UINT32_MAX) {
 
@@ -150,7 +158,7 @@ static XrXirStatus lower_nominal_types(XrXirModule *module, XrXirCompileContext 
     if (status == XR_XIR_OK) {
         types->count = closed;
         if (!closed) { xr_compile_resources_free(nodes); types->nodes = NULL; }
-        status = lower_type_uses(module, map, count, budget);
+        status = lower_type_uses(module, map, count, budget, control);
     }
     xr_compile_resources_free(map); return status;
 }

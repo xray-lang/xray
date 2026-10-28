@@ -86,7 +86,7 @@ static void binding_normal(void) {
         ++edges;
     }
     CHECK(edges==2 && !xr_xir_compile_construction_comptime(closed->construction)->site_count);
-    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     uint32_t run=named(&lowered->module,"run");XrXirCtfeCallRequest call={.evaluation={.artifact=lowered,.function=run,
         .target=target,.limits=comptime_instances_limits()},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
     memcpy(call.evaluation.checked_identity,lowered->checked_identity,32);XrXirValue value={0};

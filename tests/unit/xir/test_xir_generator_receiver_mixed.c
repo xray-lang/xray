@@ -38,7 +38,7 @@ int main(int argc,char **argv) {
     CHECK(native->entry_count<=128);
     CHECK(xr_xir_compile_checked_read(&owner.context,native->packet.bytes,native->packet.length,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
-    CHECK(xr_xir_compile_lower(closed,&native->target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&native->target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirVmBinding *bindings=NULL;XrXirCallEntry *vm=NULL;CHECK(xr_xir_compile_vm_bind_table(lowered,&bindings,&vm)==XR_XIR_OK);
     XrXirCallEntry entries[128];
     for(uint32_t i=0;i<native->entry_count;++i) {

@@ -64,7 +64,7 @@ static bool deep_compile_lower(DeepCompileState *state) {
     status = xr_xir_compile_specialize(state->checked, &state->closed, NULL);
     if (!deep_compile_stage(state, 6, status)) { CHECK(!state->closed); return false; }
     xr_xir_compile_artifact_free(state->checked); state->checked = NULL;
-    status = xr_xir_compile_lower(state->closed, &worker_deep_fixture_program.target, &state->lowered, NULL);
+    status = xr_xir_compile_lower(state->closed, &worker_deep_fixture_program.target, NULL, &state->lowered, NULL);
     if (!deep_compile_stage(state, 7, status)) { CHECK(!state->lowered); return false; }
     xr_xir_compile_artifact_free(state->closed); state->closed = NULL; return true;
 }

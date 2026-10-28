@@ -44,9 +44,9 @@ static XrXirStatus bind_program(XrXirSourceGenerations *owner,uint64_t serial) {
     XrXirStatus status=xr_xir_compile_source_generation_view(owner,serial,&view);
     if (status==XR_XIR_OK) status=xr_xir_compile_specialize(view.result->checked,&closed,NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&target,&lowered,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_vm_program_take(&lowered,&program);
-    if (status==XR_XIR_OK) status=xr_xir_compile_source_generation_bind_program(owner,serial,program);
+    if (status==XR_XIR_OK) status=xr_xir_compile_source_generation_bind_program(owner,serial,program, NULL);
     xr_xir_compile_program_drop(program);xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(closed);
     return status;
 }

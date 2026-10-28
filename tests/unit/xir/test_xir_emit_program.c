@@ -149,7 +149,7 @@ int main(int argc, char **argv) {
     XrXirArtifact *enum_checked = enum_checked_fixture(suite_context), *enum_closed = NULL, *enum_lowered = NULL;
     const XrXirTarget enum_target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_specialize(enum_checked, &enum_closed, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_lower(enum_closed, &enum_target, &enum_lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(enum_closed, &enum_target, NULL, &enum_lowered, NULL) == XR_XIR_OK);
     XrXirCSource enum_source = {0};
     CHECK(xr_xir_compile_emit_c(enum_lowered, "enum_metadata", 200000, &enum_source) == XR_XIR_OK);
     CHECK(strstr(enum_source.text, "XrXirNominalVariant") && !strstr(enum_source.text, "xr_xir_vm"));

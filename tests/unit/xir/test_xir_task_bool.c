@@ -45,7 +45,7 @@ static XrXirProgram *bool_program(const BoolOracle *oracle, uint32_t *entry) {
     xr_xir_compile_artifact_free(read);
     CHECK(xr_xir_compile_artifact_verify(closed, &diagnostic) == XR_XIR_OK);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    status = xr_xir_compile_lower(closed, &target, &lowered, &diagnostic);
+    status = xr_xir_compile_lower(closed, &target, NULL, &lowered, &diagnostic);
     xr_xir_compile_artifact_free(closed);
     if (status != XR_XIR_OK) {
         fprintf(stderr, "%s lower=%u function=%u instruction=%u\n", oracle->name,

@@ -37,7 +37,7 @@ static void selector_closed_facts(HandlerFixture *fixture,bool generic) {
     CHECK(selected!=UINT32_MAX);
     if (generic) CHECK(generics==2 && targets[0]!=targets[1]);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_vm_debug_new(fixture->domain,64,&observer)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_compile_vm_debug_program_take(&lowered,observer,&program)==XR_XIR_OK && !lowered);
     const XrXirSourceDebugFunction *original=&debug->functions[selected];

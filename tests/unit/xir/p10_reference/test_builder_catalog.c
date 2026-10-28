@@ -64,7 +64,7 @@ static XrXirArtifact *owned_consumer(SourceFixtureOwner *owner,const XrXirLibrar
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(&owner->context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(decoded,&target,&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(decoded,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);xr_xir_compile_artifact_free(closed);
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_source_result_free(&source);
     xr_compile_session_free(session);return lowered;

@@ -244,7 +244,7 @@ static void packet_models(const XrXirCompileContext *context) {
             CHECK(packet.length==cases[i].length && !memcmp(packet.bytes,cases[i].bytes,packet.length));
             xr_xir_compile_checked_packet_free(&packet);
             XrXirArtifact *lowered=NULL;status=xr_xir_compile_lower(decoded,
-                &(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL);
+                &(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);
             if(status!=XR_XIR_OK) fprintf(stderr,"Independent packet%u lower status%u\n",i,status);
             CHECK(status==XR_XIR_OK);
             CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(lowered);
@@ -278,7 +278,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(decoded,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(decoded);
-    CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);const XrXirModule *m=xr_xir_compile_artifact_module(lowered);
     uint32_t numbers=find_function(m,"numbers"),units=find_function(m,"units"),identity=find_function(m,"identity");
     CHECK(numbers==1 && units==2 && m->function_count==6);

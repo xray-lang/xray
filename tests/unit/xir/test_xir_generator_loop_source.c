@@ -206,7 +206,7 @@ int main(int argc,char **argv) {
     XrXirDiagnostic detail={0};status=xr_xir_compile_specialize(decoded,&closed,&detail);
     if(status!=XR_XIR_OK) fprintf(stderr,"Waiting specialize status%u function%u block%u instruction%u\n",status,detail.function,detail.block,detail.instruction);
     CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(decoded);
-    CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     const char *names[]={"make","probe","take","empty","make_relay","task_root","make_self","make_cycle","loop_break","loop_continue","loop_return","loop_throw","closed_count","make_units","loop_units","make_owned","loop_panic","loop_nested","loop_captures","loop_generic","loop_builtin","loop_task","loop_task_error","loop_cold"};
     uint32_t ids[24]={0};

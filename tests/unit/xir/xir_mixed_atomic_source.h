@@ -75,7 +75,7 @@ static bool atomic_source_prepare(AtomicSourcePrepare *s) {
     if(!atomic_source_stage(s,6,status)){CHECK(!s->closed);return false;}
     xr_xir_compile_artifact_free(s->checked);s->checked=NULL;
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    status=xr_xir_compile_lower(s->closed,&target,&s->lowered,NULL);
+    status=xr_xir_compile_lower(s->closed,&target, NULL,&s->lowered,NULL);
     if(!atomic_source_stage(s,7,status)){CHECK(!s->lowered);return false;}
     xr_xir_compile_artifact_free(s->closed);s->closed=NULL;atomic_source_entries(s);
     status=xr_xir_compile_emit_c(s->lowered,"p20_atomic_runtime_fixture",4194304,&s->generated);

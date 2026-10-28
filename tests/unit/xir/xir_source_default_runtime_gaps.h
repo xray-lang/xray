@@ -52,7 +52,7 @@ static void default_gap_execute(XrXirArtifact *checked) {
     CHECK(xr_xir_compile_specialize(checked,&specialized,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_artifact_verify(specialized,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(specialized,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(specialized);
+    CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(specialized);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     const char *names[]={"order","retained","construct"};uint32_t entries[3]={UINT32_MAX,UINT32_MAX,UINT32_MAX};
     for(uint32_t f=0;f<module->function_count;++f)

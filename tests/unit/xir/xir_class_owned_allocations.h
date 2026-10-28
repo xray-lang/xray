@@ -40,7 +40,7 @@ static XrXirStatus class_owned_stages_init(const XrXirCompileContext *context,Cl
     XrXirStatus status=xir_fixture_check(context, &s->fixture.module, &s->checked, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(s->checked,&s->packet,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(s->checked,&s->specialized,NULL);
-    if(status==XR_XIR_OK)status=xr_xir_compile_lower(s->specialized,&fixture_target,&s->lowered,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_lower(s->specialized,&fixture_target, NULL,&s->lowered,NULL);
     if(status==XR_XIR_OK) {
         XrXirValueStatus ds=xr_xir_domain_new(1048576,&s->domain);
         status=ds==XR_XIR_VALUE_OK?XR_XIR_OK:ds==XR_XIR_VALUE_OOM?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_TYPE;
@@ -63,7 +63,7 @@ static XrXirStatus class_owned_phase(const XrXirCompileContext *context,ClassOwn
     case 4:return xr_xir_compile_checked_write(s->checked,&o->packet,NULL);
     case 5:return xr_xir_compile_checked_read(context,s->packet.bytes,s->packet.length,&o->artifact,NULL);
     case 6:return xr_xir_compile_specialize(s->checked,&o->artifact,NULL);
-    case 7:return xr_xir_compile_lower(s->specialized,&fixture_target,&o->artifact,NULL);
+    case 7:return xr_xir_compile_lower(s->specialized,&fixture_target, NULL,&o->artifact,NULL);
     case 8:
         o->storage.field_offsets=o->offsets;o->storage.field_count=2;
         return xr_xir_compile_storage_layouts(context,xr_xir_compile_artifact_module(s->lowered)->types,&fixture_target,&o->storage,1);
@@ -111,9 +111,9 @@ static void class_owned_poisoning(void) {
     CHECK(xr_xir_compile_artifact_verify(s.lowered,NULL)==XR_XIR_OK);
     XrXirNominalDeclaration *origin=(XrXirNominalDeclaration *)s.specialized->module.provenance->source->module.types->nominals->declarations;
     origin[0].flags=0;XrXirArtifact *output=NULL;
-    CHECK(xr_xir_compile_lower(s.specialized,&fixture_target,&output,NULL)==XR_XIR_BAD_TYPE && !output);
+    CHECK(xr_xir_compile_lower(s.specialized,&fixture_target, NULL,&output,NULL)==XR_XIR_BAD_TYPE && !output);
     output=s.specialized;
-    CHECK(xr_xir_compile_lower(s.specialized,&fixture_target,&output,NULL)==XR_XIR_BAD_STRUCTURE && output==s.specialized);
+    CHECK(xr_xir_compile_lower(s.specialized,&fixture_target, NULL,&output,NULL)==XR_XIR_BAD_STRUCTURE && output==s.specialized);
     origin[0].flags=XR_XIR_NOMINAL_FINAL;
     CHECK(xr_xir_compile_artifact_verify(s.specialized,NULL)==XR_XIR_OK);
     class_owned_stages_drop(&s);allocation_compile_owner_drop(&owner);

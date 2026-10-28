@@ -76,7 +76,7 @@ static void generic_witness_provenance_cases(XrXirSourceRequest *request) {
     xr_xir_compile_checked_packet_free(&packet);
     generic_witness_origin_mutations(copy);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(copy, &target, &lowered, NULL) == XR_XIR_OK && lowered);
+    CHECK(xr_xir_compile_lower(copy, &target, NULL, &lowered, NULL) == XR_XIR_OK && lowered);
     xr_xir_compile_artifact_free(copy);
     generic_witness_origin_mutations(lowered);
     xr_xir_compile_artifact_free(lowered);

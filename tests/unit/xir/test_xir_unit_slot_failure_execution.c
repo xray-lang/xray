@@ -28,7 +28,7 @@ XrXirCallEntry *entries=NULL;
 XrXirVmBinding *bindings=NULL;
 
  if(XR_UNIT_SLOT_FAILURE_MIXED){CHECK(xr_xir_compile_checked_read(context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
-CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);
+CHECK(xr_xir_compile_lower(checked,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);
 xr_xir_compile_artifact_free(checked);
 CHECK(xr_compile_resources_calloc(context->resources,spec.entry_count,sizeof(*entries),(void **)&entries)==XR_COMPILE_RESOURCE_OK);
 CHECK(xr_compile_resources_calloc(context->resources,spec.entry_count,sizeof(*bindings),(void **)&bindings)==XR_COMPILE_RESOURCE_OK);

@@ -58,7 +58,7 @@ static PublicationInput publication_input(unsigned backend) {
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&input.context, packet, length, &checked, NULL) == XR_XIR_OK);
     memset(packet, 0xA5, length); xr_compile_resources_free(packet);
-    CHECK(xr_xir_compile_lower(checked, &library_counter_fixture_program.target, &lowered, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(checked, &library_counter_fixture_program.target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     CHECK(module->function_count == library_counter_fixture_program.entry_count);

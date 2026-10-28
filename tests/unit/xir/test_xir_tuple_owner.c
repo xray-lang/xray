@@ -71,7 +71,7 @@ static XrXirStatus pipeline(const XrXirCompileContext *c) {
         if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(decoded,NULL);
     }
     if(status==XR_XIR_OK) {
-        status=xr_xir_compile_lower(decoded,&target,&lowered,NULL);
+        status=xr_xir_compile_lower(decoded,&target, NULL,&lowered,NULL);
         if(status==XR_XIR_OK) {
             CHECK(xr_xir_compile_artifact_module(lowered)->stage==XR_XIR_LOWERED);
             status=xr_xir_compile_artifact_verify(lowered,NULL);
@@ -225,7 +225,7 @@ static void hidden_tuple_ownership(void) {
         f.block.count=f.function.instruction_count=2;f.function.operand_count=0;f.function.operands=NULL;
         XrXirArtifact *checked=NULL,*lowered=NULL;
         CHECK(xir_fixture_check(&c, &f.module, &checked, NULL)==XR_XIR_OK);
-        CHECK(xr_xir_compile_lower(checked,&target,&lowered,NULL)==XR_XIR_OK && lowered);
+        CHECK(xr_xir_compile_lower(checked,&target, NULL,&lowered,NULL)==XR_XIR_OK && lowered);
         CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
         XrXirTypeArena *arena=NULL;
         CHECK(xr_xir_compile_type_arena_new(&c,xr_xir_compile_artifact_module(lowered)->types,&arena)==XR_XIR_VALUE_OK && arena);

@@ -136,7 +136,7 @@ static void source_requirement_value_provenance(XrXirSourceRequest *request) {
     CHECK(xr_xir_compile_checked_read(&packet_context, packet.bytes, packet.length, &copy, NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet); requirement_value_poison(copy);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(copy, &target, &lowered, NULL)==XR_XIR_OK); xr_xir_compile_artifact_free(copy);
+    CHECK(xr_xir_compile_lower(copy, &target, NULL, &lowered, NULL)==XR_XIR_OK); xr_xir_compile_artifact_free(copy);
     requirement_value_poison(lowered); xr_xir_compile_artifact_free(lowered);
     source_requirement_value_alternates(request);
 }

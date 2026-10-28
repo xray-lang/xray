@@ -57,7 +57,7 @@ static XrXirCtfeStatus instance_batch_receive(const XirCtfeInstanceBatchRequest 
     if (status==XR_XIR_OK) {
         controlled=instance_control_poll(control);
         if (controlled!=XR_XIR_CTFE_OK) { xr_xir_compile_ctfe_instance_batch_free(owner);return controlled; }
-        status=xr_xir_compile_lower(owner->checked,&request->target,&owner->lowered,NULL);
+        status=xr_xir_compile_lower(owner->checked,&request->target, control,&owner->lowered,NULL);
     }
     if (status!=XR_XIR_OK) { xr_xir_compile_ctfe_instance_batch_free(owner);return instance_compile_status(status); }
     XirCtfeBatchRequest call={owner->lowered,owner->functions,owner->count,request->target,{0},request->limits,request->call_depth};
