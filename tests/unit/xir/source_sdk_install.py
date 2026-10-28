@@ -14,6 +14,8 @@ def main():
     parser.add_argument('--build', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--compiler', required=True)
+    parser.add_argument('--consumers-only', action='store_true',
+                        help='Run relocated public consumers without the producer/file rejection matrix')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[3]
     build, parent = args.build.resolve(), args.output.resolve()
@@ -97,6 +99,17 @@ def main():
     cpp_stdout = run('cpp-run', [cpp_exe, stdlib])
     assert cpp_stdout.replace(b'\r\n', b'\n') == b'Installed C++ public Source SDK: detached ownership and NUL output PASS\n'
     assert not list(stdlib.rglob('*.xr')) and not list(stdlib.rglob('*.chk'))
+    if args.consumers_only:
+        assert len(records) == 10
+        summary = dict(status='PASS', scope='relocated-public-consumers', compiler=args.compiler,
+            sdk_only=True, old_prefix_unavailable=True, source_files=0, checked_files=0,
+            archives=len(manifest['archives']), actual_objects=sum(len(row['sources'])
+                for row in json.loads((source/'source_sdk_recipe.json').read_text())['archives']),
+            sdk_manifest_sha256=hashlib.sha256((source/'source_sdk_manifest.json').read_bytes()).hexdigest(),
+            commands=len(records), not_run=['producer/file rejection matrix'], production_release=False)
+        (output/'summary.json').write_text(json.dumps(summary, indent=2)+'\n', encoding='utf-8')
+        print(json.dumps(summary))
+        return
     attacks = []
     published = build/'source-sdk'
     publication_before = {path.relative_to(published).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
