@@ -85,3 +85,31 @@ set_tests_properties(xir_from_utf8_physical_header xir_from_utf8_physical_bytes 
 
 add_test(NAME xir_from_utf8_cancel_after_allocation COMMAND test_xir_from_utf8_fault --cancel-after-allocation)
 set_tests_properties(xir_from_utf8_cancel_after_allocation PROPERTIES LABELS "unit;xir;source;resource" TIMEOUT 60)
+
+add_executable(test_xir_module_limits xir/test_xir_module_limits.c)
+target_link_libraries(test_xir_module_limits PRIVATE xray_source_api)
+target_include_directories(test_xir_module_limits PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_definitions(test_xir_module_limits PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set(module_limits_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/module-limits.c")
+add_custom_command(OUTPUT "${module_limits_generated}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND $<TARGET_FILE:test_xir_module_limits> --emit "${module_limits_generated}"
+    DEPENDS test_xir_module_limits VERBATIM)
+add_executable(test_xir_module_limits_native xir/test_xir_module_limits.c "${module_limits_generated}")
+target_compile_definitions(test_xir_module_limits_native PRIVATE XR_MODULE_LIMITS_NATIVE=1)
+target_include_directories(test_xir_module_limits_native PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_link_libraries(test_xir_module_limits_native PRIVATE xray_xir_scalar xray_compile_resources)
+foreach(target test_xir_module_limits test_xir_module_limits_native)
+    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+        if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+            target_compile_options(${target} PRIVATE /experimental:c11atomics)
+        endif()
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
+    endif()
+endforeach()
+add_test(NAME xir_module_limits COMMAND test_xir_module_limits)
+add_test(NAME xir_module_limits_native COMMAND test_xir_module_limits_native)
+set_tests_properties(xir_module_limits xir_module_limits_native PROPERTIES LABELS "unit;xir;source;resource" TIMEOUT 300)
