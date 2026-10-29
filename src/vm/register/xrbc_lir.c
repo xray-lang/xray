@@ -52,7 +52,7 @@ typedef struct {
     RbcLirLiteralPool *literals;
     uint32_t *slots, *spill_home;
     uint32_t spill_count, reference_spill_count, temporary_strings, temporary_bits;
-    bool linear_spills;
+    bool typed_spills;
     uint32_t slot_count, scratch_count, register_count, source_id, current_source_id, cell_count;
     uint32_t *code, *source_ids;
     uint64_t *constants;
@@ -63,7 +63,7 @@ typedef struct {
     size_t patch_count, patch_capacity;
     XrRbcCompileDiagnostic *diagnostic;
     XrRbcCompileStatus status;
-    bool string_scratch;
+    bool string_scratch, control_scratch;
 } RbcLirCompiler;
 
 static XrRbcCompileStatus rbc_lir_error(XrRbcCompileDiagnostic *d,
@@ -232,11 +232,6 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
             rbc_lir_value_source(input, f, v, 0, d));
         return false;
     }
-    if (v->value_count > XR_RBC_REGISTER_COUNT_MAX && v->block_count != 1) {
-        rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED, "spilled functions require one straight-line block",
-            rbc_lir_value_source(input, f, v, 0, d));
-        return false;
-    }
     if (!rbc_lir_output_values(input, f, v, output,d)) return false;
     for (uint32_t value = 1; value <= v->value_count; ++value) {
         XrLirType type;
@@ -307,12 +302,6 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                         "operation has no admitted bytecode implementation", i.source);
                     goto rejected;
                 }
-                if (v.value_count>XR_RBC_REGISTER_COUNT_MAX &&
-                    (i.op==XR_LIR_BR || i.op==XR_LIR_CONDBR || i.op==XR_LIR_ICMP)) {
-                    rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,
-                        "spilled functions require straight-line instructions",i.source);
-                    goto rejected;
-                }
                 if (i.op == XR_LIR_CALL && !mapping[i.callee - 1]) {
                     XrLirFunctionView callee;
                     xr_lir_function_view(input, (XrLirFunction) {input, i.callee}, &callee);
@@ -373,6 +362,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                 return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"instruction temporary count exceeds index space");
             if(c->temporary_strings<strings)c->temporary_strings=(uint32_t)strings;
             if(c->temporary_bits<bits)c->temporary_bits=(uint32_t)bits;
+            if(i.op==XR_LIR_CONDBR)c->control_scratch=true;
             if(i.op==XR_LIR_CALL && c->functions[i.callee-1]!=RBC_LIR_PRINT_STRING) {
                 uint32_t mapped=c->functions[i.callee-1];
                 uint32_t physical=rbc_lir_native(mapped)?
@@ -430,13 +420,13 @@ static bool rbc_lir_kinds(RbcLirCompiler *c) {
         XrRbcRegisterKind kind = type == XR_LIR_STRING ? XR_RBC_STRING :
             type == XR_LIR_STRING_CELL ? XR_RBC_STRING_CELL : XR_RBC_BITS;
         uint32_t slot = c->slots[v];
-        if(c->linear_spills && c->spill_home[v]!=UINT32_MAX)continue;
+        if(c->typed_spills && c->spill_home[v]!=UINT32_MAX)continue;
         if (assigned[slot] && c->register_kinds[slot] != kind)
             return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "edge merges distinct register kinds");
         assigned[slot] = true;
         c->register_kinds[slot] = kind;
     }
-    if(c->linear_spills)
+    if(c->typed_spills)
         for(uint32_t r=0;r<c->temporary_strings;++r)c->register_kinds[c->slot_count+r]=XR_RBC_STRING;
     else if (c->string_scratch) c->register_kinds[c->slot_count + 1] = XR_RBC_STRING;
     for (uint32_t r = c->slot_count + c->scratch_count; r < c->register_count; ++r)
@@ -483,8 +473,9 @@ static bool rbc_lir_edge(RbcLirCompiler *c, XrLirEdgeView edge) {
 }
 
 static bool rbc_lir_conditional(RbcLirCompiler *c, const XrLirInstructionView *i) {
-    if (!rbc_lir_emit(c, XR_RBC_LOADI, c->slot_count, 0, 0, 0) ||
-        !rbc_lir_emit(c, XR_RBC_EQ, c->slots[i->operands[0]], c->slot_count, 0, 0))
+    uint32_t scratch = c->slot_count + (c->typed_spills ? c->temporary_strings+c->temporary_bits : 0);
+    if (!rbc_lir_emit(c, XR_RBC_LOADI, scratch, 0, 0, 0) ||
+        !rbc_lir_emit(c, XR_RBC_EQ, c->slots[i->operands[0]], scratch, 0, 0))
         return false;
     size_t failure = c->code_count;
     if (!rbc_lir_emit(c, XR_RBC_JMP, 0, 0, 0, 0) ||
@@ -664,7 +655,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
     c->blocks = xr_malloc(count * sizeof(*c->blocks));
     if (!c->blocks)
         return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot allocate block offsets");
-    if (!c->linear_spills && !rbc_lir_jump(c, c->view.entry)) return false;
+    if ((!c->typed_spills || c->view.block_count > 1) && !rbc_lir_jump(c, c->view.entry)) return false;
     for (uint32_t b = 0; b < c->view.block_count; ++b) {
         XrLirBlock block;
         XrLirBlockView bv;

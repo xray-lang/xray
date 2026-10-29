@@ -435,7 +435,7 @@ static void test_capacity(uint32_t count, bool scratch) {
             arguments[0] = 1;
             CHECK(run(program, arguments, count) == count - 1);
         }
-    } else CHECK(status == (scratch ? XR_RBC_COMPILE_UNSUPPORTED : XR_RBC_COMPILE_LIMIT) && !program);
+    } else CHECK(status == XR_RBC_COMPILE_LIMIT && !program);
     xr_lir_module_destroy(m);
     xr_rbc_program_destroy(program);
 }
@@ -1027,7 +1027,30 @@ static void test_scalar_spills(void) {
     CHECK(physical->register_count==255&&physical->spill_count&&!physical->reference_spill_count);
     xr_lir_module_destroy(m);CHECK(run(program,NULL,0)==259);xr_rbc_program_destroy(program);
 }
+static void test_scalar_spill_branches(void) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+    XrLirType integer=XR_LIR_I64;
+    XrLirFunction root=test_function(m,"virtual_branch_values",&integer,1,integer);
+    XrLirBlock entry=test_block(m,root,NULL,0),yes=test_block(m,root,NULL,0);
+    XrLirBlock no=test_block(m,root,NULL,0),join=test_block(m,root,&integer,1);
+    OK(xr_lir_set_entry(m,root,entry));
+    XrLirValue zero=test_constant(m,entry,integer,0);
+    XrLirValue condition=test_binary(m,entry,XR_LIR_ICMP,parameter(m,root,0),zero,XR_LIR_NE);
+    conditional(m,entry,condition,(XrLirEdge){yes,NULL,0},(XrLirEdge){no,NULL,0});
+    XrLirValue value={0};
+    for (uint32_t n=0; n<260; ++n) value=test_constant(m,yes,integer,n);
+    test_branch(m,yes,join,&value,1);
+    value=test_constant(m,no,integer,42);test_branch(m,no,join,&value,1);
+    test_return(m,join,block_parameter(m,join,0));OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *program=compile(m,root);
+    const XrRbcFunction *physical=&xr_rbc_program_view(program)->functions[0];
+    CHECK(physical->register_count<=255 && physical->spill_count && !physical->reference_spill_count);
+    xr_lir_module_destroy(m);
+    uint64_t flag=0;CHECK(run(program,&flag,1)==42);
+    flag=1;CHECK(run(program,&flag,1)==259);xr_rbc_program_destroy(program);
+}
 int main(void) {
+    test_scalar_spill_branches();
     test_scalar_spills();
     test_sequential_string_owners();
     test_loop_string_temporaries();

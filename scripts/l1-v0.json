@@ -153,7 +153,9 @@
     "test_source_sdk_consumer",
     "test_hir_contextual_conversion",
     "test_hir_binary",
-    "test_source_global_callable"
+    "test_source_global_callable",
+    "test_hir_unary",
+    "test_hir_unary_source"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -426,7 +428,10 @@
     "runtime_sdk_recipe_incremental",
     "hir_binary",
     "source_binary_sdk",
-    "hir_binary_cli"
+    "hir_binary_cli",
+    "hir_unary",
+    "source_unary_sdk",
+    "hir_unary_cli"
   ],
   "versionCommand": [
     "{build}/xray.exe",

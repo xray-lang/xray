@@ -9,13 +9,13 @@
 static bool source_binary_operator(AstNodeType syntax,XrHirBinaryOperator *operation) {
     switch(syntax) {
     case AST_BINARY_ADD:*operation=XR_HIR_BINARY_ADD;break;
-    case AST_UNARY_NEG:case AST_BINARY_SUB:*operation=XR_HIR_BINARY_SUB;break;
+    case AST_BINARY_SUB:*operation=XR_HIR_BINARY_SUB;break;
     case AST_BINARY_MUL:*operation=XR_HIR_BINARY_MUL;break;
     case AST_BINARY_DIV:*operation=XR_HIR_BINARY_DIV;break;
     case AST_BINARY_MOD:*operation=XR_HIR_BINARY_REM;break;
     case AST_BINARY_BAND:*operation=XR_HIR_BINARY_AND;break;
     case AST_BINARY_BOR:*operation=XR_HIR_BINARY_OR;break;
-    case AST_UNARY_BNOT:case AST_BINARY_BXOR:*operation=XR_HIR_BINARY_XOR;break;
+    case AST_BINARY_BXOR:*operation=XR_HIR_BINARY_XOR;break;
     case AST_BINARY_LSHIFT:*operation=XR_HIR_BINARY_SHL;break;
     case AST_BINARY_RSHIFT:*operation=XR_HIR_BINARY_SHR;break;
     case AST_BINARY_EQ:*operation=XR_HIR_BINARY_EQ;break;

@@ -17,6 +17,7 @@ static struct { void *pointer; size_t size; } blocks[4];
 static enum { NO_FAILURE, OUTCOME_FAILURE, INITIAL_STACK_FAILURE, GROWTH_FAILURE,
     CELL_INITIAL_FAILURE, CELL_GROWTH_FAILURE, STRING_INDEX_FAILURE, STRING_JOIN_FAILURE,
     SPILL_STATE_FAILURE, SPILL_INITIAL_FAILURE, SPILL_GROWTH_FAILURE } fault;
+static size_t spill_state_failure_bytes=2;
 
 static void *real_malloc(size_t size) { return xr_malloc(size); }
 static void *execution_malloc(size_t size);
@@ -70,7 +71,7 @@ static void moving_free(void *pointer) {
 #include "vm/register/xrbc.c"
 
 static void *execution_malloc(size_t size) {
-    if (fault == SPILL_STATE_FAILURE && size == 1) { fault=NO_FAILURE;return NULL; }
+    if (fault == SPILL_STATE_FAILURE && size == spill_state_failure_bytes) { fault=NO_FAILURE;return NULL; }
     if (fault == STRING_INDEX_FAILURE) { fault = NO_FAILURE; return NULL; }
     return real_malloc(size);
 }
@@ -231,6 +232,38 @@ static void string_admission_oom(void) {
     xrt_locations_release(owner);
     for(size_t i=0;i<4;++i)XR_CHECK(!blocks[i].pointer&&!blocks[i].size,"String execution buffers reclaimed");
 }
+static void spill_branch_admission_oom(void) {
+    uint32_t code[7];
+    immediate(code,0,XR_RBC_STRING_LITERAL,0,0);immediate(code,1,XR_RBC_SPILL,0,0);
+    XR_CHECK(xr_rbc_jump(code+2,2,4,7),"forward spilled String edge");
+    emit(code,3,XR_RBC_RET0,0,0,0);immediate(code,4,XR_RBC_RELOAD,0,0);
+    emit(code,5,XR_RBC_STRING_DROP,0,0,0);emit(code,6,XR_RBC_RET0,0,0,0);
+    XrRbcRegisterKind kind=XR_RBC_STRING;
+    XrRbcFunction function={.code=code,.code_count=7,.register_count=1,.register_kinds=&kind,
+        .register_kind_count=1,.spill_count=1,.reference_spill_count=1};
+    XrRbcLiteral literal={"\xc3\xa9\0",3};
+    XrRbcModule module={.functions=&function,.function_count=1,.literals=&literal,.literal_count=1};
+    XrtLocationOwner *owner=NULL;
+    XR_CHECK(xrt_locations_create(NULL,0,&owner)==XRT_LOCATION_OK,"spilled branch location owner");
+    /* Two saved entries and the current state have distinct spill storage. */
+    spill_state_failure_bytes=3*function.spill_count;
+    for (unsigned i=0; i<2; ++i) {
+        fault=i?NO_FAILURE:SPILL_STATE_FAILURE;
+        XrRbcExecution *execution=NULL;
+        XrRbcStatus status=xr_rbc_module_prepare(&module,0,NULL,0,owner,&execution);
+        XR_CHECK(fault==NO_FAILURE,"actual spilled branch admission allocation reached");
+        if (!i) XR_CHECK(status==XR_RBC_OUT_OF_MEMORY && !execution,"failed branch admission publishes nothing");
+        else {
+            XR_CHECK(status==XR_RBC_OK && execution,"identical spilled branch request recovers");
+            XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+            XR_CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK,"spilled branch String retires");
+            xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
+        }
+    }
+    spill_state_failure_bytes=2;
+    xrt_locations_release(owner);
+    for (size_t i=0; i<4; ++i) XR_CHECK(!blocks[i].pointer && !blocks[i].size,"branch execution buffers reclaimed");
+}
 static void spill_growth(bool panic) {
     uint32_t caller[11],callee[5];
     immediate(caller,0,XR_RBC_LOADI,3,5);immediate(caller,1,XR_RBC_CELL_NEW,3,0);
@@ -270,6 +303,7 @@ static void spill_growth(bool panic) {
     for(size_t i=0;i<4;++i)XR_CHECK(!blocks[i].pointer&&!blocks[i].size,"all four moving buffers reclaimed");
 }
 int main(void) {
+    spill_branch_admission_oom();
     spill_growth(false);
     fault=SPILL_STATE_FAILURE;spill_growth(false);
     fault=SPILL_INITIAL_FAILURE;spill_growth(false);

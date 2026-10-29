@@ -75,6 +75,7 @@ def main():
     long_source = args.source_root / 'tests/diff/cases/limits/string_parts_over_64.xr'
     cases = [('length-existing', length, b'2\n'),
              ('length-over-64', long_source, b'140\n'),
+             ('length-spill-branches', args.source_root / 'tests/lir/programs/owned-string-spill-branches.xr', b'140\n0\n'),
              ('length-unicode', unicode_length, b'3\n3\n\xc3\xa9\0' b'7\n4\n4\n\xc3\xa9\0-2\n0\n3\n'),
              ('hello', hello, oracle),
              ('join', args.source_root / 'tests/lir/programs/owned-string-join.xr', b'Xray1\n'),
@@ -91,7 +92,7 @@ def main():
             generated = folder / 'generated.c'
             result = run('rbc', [args.driver, source, mode, generated, folder / 'rbc.json', '0', '2', 'normal'], folder)
             assert (result.returncode, result.stdout, result.stderr) == (0, expected * 2, b''), (name, mode, folder)
-            if name=='length-over-64':
+            if name in ('length-over-64','length-spill-branches'):
                 actual=json.loads((folder/'rbc.json').read_text())
                 assert actual['rbc_registers_max']<=255 and actual['rbc_spills']>0
                 assert actual['rbc_reference_spills']>0

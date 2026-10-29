@@ -171,17 +171,15 @@ static XrLirType rbc_lir_value_type(RbcLirCompiler *c, uint32_t value) {
     xr_lir_value_type(c->input,(XrLirValue){c->input,c->function.id,value},&type);
     return type;
 }
+static bool rbc_lir_pin_value(RbcLirCompiler *c, uint32_t value, uint32_t budget) {
+    if (c->slots[value] != UINT32_MAX) return true;
+    if (c->slot_count == budget)
+        return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"resident control values and cell handles exceed register capacity");
+    c->slots[value] = c->slot_count++;
+    return true;
+}
 static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
-    if (c->view.block_count!=1)
-        return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"spilled functions require one straight-line block");
-    XrLirBlock block;XrLirBlockView view;
-    xr_lir_block_at(c->input,c->function,0,&block);xr_lir_block_view(c->input,block,&view);
-    for(uint32_t n=0;n<view.instruction_count;++n) {
-        XrLirInstructionView i;xr_lir_instruction_view(c->input,block,n,&i);
-        if(i.op==XR_LIR_BR || i.op==XR_LIR_CONDBR || i.op==XR_LIR_ICMP)
-            return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"spilled functions require straight-line instructions");
-    }
-    uint64_t reserved=(uint64_t)c->temporary_strings+c->temporary_bits+window;
+    uint64_t reserved=(uint64_t)c->temporary_strings+c->temporary_bits+window+(c->control_scratch?1u:0u);
     if(reserved>XR_RBC_REGISTER_COUNT_MAX)
         return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"instruction temporaries and call window exceed register capacity");
     uint32_t budget=XR_RBC_REGISTER_COUNT_MAX-(uint32_t)reserved;
@@ -190,12 +188,32 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
     for(uint32_t v=0;v<=c->view.value_count;++v)c->slots[v]=c->spill_home[v]=UINT32_MAX;
     c->slot_count=c->view.parameter_count;
     for(uint32_t p=0;p<c->view.parameter_count;++p)c->slots[c->view.parameters[p]]=p;
+    /* A terminator cannot restore staged operands after its jump. Keep its
+     * operands and parallel-copy endpoints resident until selected-edge TAKE. */
+    for (uint32_t b=0; b<c->view.block_count; ++b) {
+        XrLirBlock block;XrLirBlockView view;
+        xr_lir_block_at(c->input,c->function,b,&block);xr_lir_block_view(c->input,block,&view);
+        for (uint32_t p=0; p<view.parameter_count; ++p)
+            if (!rbc_lir_pin_value(c,view.parameters[p],budget)) return false;
+        for (uint32_t n=0; n<view.instruction_count; ++n) {
+            XrLirInstructionView i;xr_lir_instruction_view(c->input,block,n,&i);
+            if (i.op==XR_LIR_BR || i.op==XR_LIR_CONDBR || i.op==XR_LIR_ICMP) {
+                for (uint32_t a=0; a<i.operand_count; ++a)
+                    if (!rbc_lir_pin_value(c,i.operands[a],budget)) return false;
+                if (i.result && !rbc_lir_pin_value(c,i.result,budget)) return false;
+            }
+            for (uint32_t e=0; e<i.edge_count; ++e) {
+                if (i.edges[e].target<=block.id)
+                    return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"spilled functions require forward block edges");
+                for (uint32_t a=0; a<i.edges[e].argument_count; ++a)
+                    if (!rbc_lir_pin_value(c,i.edges[e].arguments[a],budget)) return false;
+            }
+        }
+    }
     for(uint32_t v=1;v<=c->view.value_count;++v) {
         XrLirType type=rbc_lir_value_type(c,v);
         if(c->slots[v]!=UINT32_MAX || (type!=XR_LIR_STRING_CELL && type!=XR_LIR_I64_CELL))continue;
-        if(c->slot_count==budget)
-            return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"resident cell handles exceed register capacity");
-        c->slots[v]=c->slot_count++;
+        if (!rbc_lir_pin_value(c,v,budget)) return false;
     }
     for(unsigned pool=0;pool<2;++pool) {
         for(uint32_t v=1;v<=c->view.value_count;++v) {
@@ -211,8 +229,8 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
             }
         }
     }
-    c->linear_spills=true;
-    c->scratch_count=c->temporary_strings+c->temporary_bits;
+    c->typed_spills=true;
+    c->scratch_count=c->temporary_strings+c->temporary_bits+(c->control_scratch?1u:0u);
     c->register_count=c->slot_count+c->scratch_count+window;
     if(!c->register_count)c->register_count=1;
     return true;

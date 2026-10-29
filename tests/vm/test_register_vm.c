@@ -627,7 +627,9 @@ static void test_spills(void) {
     uint32_t edge[4];immediate(edge,0,XR_RBC_LOADI,0,0);
     CHECK(xr_rbc_jump(edge+1,1,3,4));emit(edge,2,XR_RBC_RET0,0,0,0);emit(edge,3,XR_RBC_RET0,0,0,0);
     XrRbcFunction branching={.code=edge,.code_count=4,.register_count=1,.spill_count=1};
-    XrRbcModule rejected={.functions=&branching,.function_count=1};reject_prepare(&rejected,0,NULL,0);
+    XrRbcModule forward={.functions=&branching,.function_count=1};
+    CHECK(execute(&forward,0,NULL,0,&result)==XR_RBC_OK && !result);
+    CHECK(xr_rbc_jump(edge+1,1,1,4));reject_prepare(&forward,0,NULL,0);
     uint32_t upper[6];immediate(upper,0,XR_RBC_STRING_LITERAL,0,0);
     immediate(upper,1,XR_RBC_SPILL,0,65534);immediate(upper,2,XR_RBC_RELOAD,0,65534);
     emit(upper,3,XR_RBC_STRING_DROP,0,0,0);immediate(upper,4,XR_RBC_LOADI,1,42);emit(upper,5,XR_RBC_RET,1,0,0);
@@ -654,7 +656,51 @@ static void test_spills(void) {
     XrRbcModule borrowed={.functions=functions,.function_count=2,.literals=&literal,.literal_count=1};
     reject_prepare(&borrowed,0,NULL,0);
 }
+static void test_spill_branches(void) {
+    uint32_t code[13];
+    immediate(code,0,XR_RBC_LOADI,2,0);emit(code,1,XR_RBC_EQ,0,2,0);
+    CHECK(xr_rbc_jump(code+2,2,6,13));
+    immediate(code,3,XR_RBC_STRING_LITERAL,1,0);immediate(code,4,XR_RBC_SPILL,1,0);
+    CHECK(xr_rbc_jump(code+5,5,9,13));
+    immediate(code,6,XR_RBC_STRING_LITERAL,1,1);immediate(code,7,XR_RBC_SPILL,1,0);
+    CHECK(xr_rbc_jump(code+8,8,9,13));
+    immediate(code,9,XR_RBC_RELOAD,1,0);emit(code,10,XR_RBC_STRING_LEN,2,1,0);
+    emit(code,11,XR_RBC_STRING_DROP,1,0,0);emit(code,12,XR_RBC_RET,2,0,0);
+    XrRbcRegisterKind kinds[]={XR_RBC_BITS,XR_RBC_STRING,XR_RBC_BITS};
+    XrRbcLiteral literals[]={{"\xc3\xa9\0Z",4},{"no",2}};
+    XrRbcFunction f={.code=code,.code_count=13,.register_count=3,.parameter_count=1,
+        .register_kinds=kinds,.register_kind_count=3,.spill_count=1,.reference_spill_count=1};
+    XrRbcModule module={.functions=&f,.function_count=1,.literals=literals,.literal_count=2};
+    for (uint64_t flag=0; flag<2; ++flag) {
+        uint64_t result=99;
+        CHECK(execute(&module,0,&flag,1,&result)==XR_RBC_OK && result==(flag?3u:2u));
+    }
+    uint64_t flag=0;
+    uint32_t saved=code[7];emit(code,7,XR_RBC_STRING_DROP,1,0,0);
+    reject_prepare(&module,0,&flag,1);code[7]=saved;
+    saved=code[9];emit(code,9,XR_RBC_RET0,0,0,0);f.code_count=10;
+    reject_prepare(&module,0,&flag,1);code[9]=saved;f.code_count=13;
+    f.register_kinds=NULL;f.register_kind_count=0;reject_prepare(&module,0,&flag,1);
+    f.register_kinds=kinds;f.register_kind_count=3;
+    uint32_t scalar[11];
+    immediate(scalar,0,XR_RBC_LOADI,1,0);emit(scalar,1,XR_RBC_EQ,0,1,0);
+    CHECK(xr_rbc_jump(scalar+2,2,6,11));
+    immediate(scalar,3,XR_RBC_LOADI,1,42);immediate(scalar,4,XR_RBC_SPILL,1,0);
+    CHECK(xr_rbc_jump(scalar+5,5,9,11));
+    immediate(scalar,6,XR_RBC_LOADI,1,43);immediate(scalar,7,XR_RBC_SPILL,1,0);
+    CHECK(xr_rbc_jump(scalar+8,8,9,11));
+    immediate(scalar,9,XR_RBC_RELOAD,1,0);emit(scalar,10,XR_RBC_RET,1,0,0);
+    f=(XrRbcFunction){.code=scalar,.code_count=11,.register_count=2,.parameter_count=1,.spill_count=1};
+    module=(XrRbcModule){.functions=&f,.function_count=1};
+    for (flag=0; flag<2; ++flag) {
+        uint64_t result=99;
+        CHECK(execute(&module,0,&flag,1,&result)==XR_RBC_OK && result==(flag?42u:43u));
+    }
+    saved=scalar[7];immediate(scalar,7,XR_RBC_LOADI,1,0);
+    reject_prepare(&module,0,&flag,1);scalar[7]=saved;
+}
 int main(int argc, char **argv) {
+    test_spill_branches();
     test_spills();
     test_string_length();
     if (argc == 2 && strcmp(argv[1], "--native-print") == 0) {

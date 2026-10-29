@@ -38,6 +38,7 @@
 #include "../hir/xhir_literal.h"
 #include "../hir/xhir_conversion.h"
 #include "../hir/xhir_binary.h"
+#include "../hir/xhir_unary.h"
 #include "xxir_compile_memory.h"
 #include "../shared/xnative_declaration.h"
 #include "../shared/xr_core_intrinsic.h"
@@ -1528,13 +1529,15 @@ static bool source_arithmetic(SourceContext *ctx, AstNode *node, SourceExpectedT
         if (!source_direct_integer(ctx, node->as.unary.operand, &literal) ||
             !source_plan_expression(ctx, node->as.unary.operand, (SourceExpectedType){literal.present && expected.present && xr_xir_type_is_integer(expected.type),
                 expected.present ? expected.type : XR_XIR_UNIT, false, false}, &right)) return false;
-        if (node->type == AST_UNARY_NEG && xr_xir_float_bits(right.type))
-            return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_NEG_FLOAT, right.type, {right.id, 0}, {0}, 0, {0}}, value);
-        if (!xr_xir_type_is_integer(right.type)) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unary arithmetic requires an integer");
-        int64_t initial = 0;
-        if (node->type == AST_UNARY_BNOT) initial = xr_xir_integer_signed(right.type) || xr_xir_integer_bits(right.type) == 64 ?
-            -1 : (int64_t) ((UINT64_C(1) << xr_xir_integer_bits(right.type)) - 1);
-        if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, right.type, {0}, {0}, initial, {0}}, &left)) return false;
+        XrXirSourceRange range=source_query_range(ctx,node,NULL);
+        XrHirUnaryInput input={.origin={node->node_id,range.module,range.line,range.column,range.end_line,range.end_column},
+            .operation=node->type==AST_UNARY_NEG?XR_HIR_UNARY_NEGATE:XR_HIR_UNARY_COMPLEMENT,.operand=right.type};
+        XrHirUnary typed;const char *reason=NULL;
+        XrXirStatus status=xr_hir_unary_check(&ctx->types,&input,ctx->request,&typed,&reason);
+        if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason);
+        left=(SourceValue){0};
+        if(typed.has_seed && !source_recipe_record(ctx,xr_hir_unary_seed_instruction(&typed),&left))return false;
+        return source_recipe_record(ctx,xr_hir_unary_instruction(&typed,right.id,left.id),value);
     } else {
         SourceExpressionPlan *plan=ctx->active_expression;
         if (!plan->left || !plan->right)
@@ -1557,7 +1560,6 @@ static bool source_arithmetic(SourceContext *ctx, AstNode *node, SourceExpectedT
         return plan->binary ? source_binary_emit(ctx,plan->binary,left,right,value) :
             source_binary_apply(ctx,node,node->type,left,right,value);
     }
-    return source_binary_apply(ctx,node,node->type,left,right,value);
 }
 #include "xxir_source_update.inc.c"
 typedef struct SourceConditionalRecipe {
