@@ -51,6 +51,8 @@ def main():
     stdlib.mkdir()
     consumer = output/'consumer.c'
     consumer.write_bytes((root/'tests/unit/xir/source_sdk_consumer.c').read_bytes())
+    (output/'nominal_projection_fixture.h').write_bytes(
+        (root/'tests/unit/xir/nominal_projection_fixture.h').read_bytes())
     fixture = root/'tests/unit/xir/source_sdk_consumer'
 
     def configure(label, directory, success=True):

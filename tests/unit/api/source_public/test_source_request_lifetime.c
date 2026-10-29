@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if(!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while(0)
-#include "nominal_projection_fixture.h"
+#include "../../xir/nominal_projection_fixture.h"
 #include "nominal_projection_probe.h"
 
 /* This TU observes the actual compiler allocator. Installed SDK consumers use

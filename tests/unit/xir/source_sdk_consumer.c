@@ -900,7 +900,7 @@ static void installed_error_union_300(const char *stdlib) {
     CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
     CHECK(output.length==3 && !memcmp(output.bytes,"42\n",3));xray_source_result_free(result);
 }
-#include "../api/source_public/nominal_projection_fixture.h"
+#include "nominal_projection_fixture.h"
 static void installed_nominal_projection(const char *stdlib) {
     char source[88000];size_t length=nominal_fixture(source,sizeof(source));CHECK(length==87251);
     XrSourceCompileOptions compiler=compile_options(stdlib);
