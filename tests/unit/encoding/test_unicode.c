@@ -39,6 +39,12 @@ TEST(unicode_property_lookup_scripts) {
 
 TEST(unicode_property_lookup_invalid) {
     ASSERT_EQ_INT(xr_unicode_property_lookup("Unknown", 7), XR_UP_INVALID);
+    ASSERT_EQ_INT(xr_unicode_property_lookup("lAtIn", 5), XR_UP_Latin);
+    ASSERT_EQ_INT(xr_unicode_property_lookup("Uppercase_Letter", 16), XR_UP_Lu);
+    const char embedded[]={'L','u',0};
+    ASSERT_EQ_INT(xr_unicode_property_lookup(embedded,sizeof(embedded)), XR_UP_INVALID);
+    ASSERT_EQ_INT(xr_unicode_property_lookup(embedded,2), XR_UP_Lu);
+    ASSERT_EQ_INT(xr_unicode_property_lookup(NULL,1), XR_UP_INVALID);
     ASSERT_EQ_INT(xr_unicode_property_lookup("", 0), XR_UP_INVALID);
 }
 

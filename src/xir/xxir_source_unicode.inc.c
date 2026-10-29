@@ -1,4 +1,16 @@
-/* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xxir_source_unicode.inc.c - Authenticated private Unicode source declarations
+ *
+ * KEY CONCEPT:
+ *   Only the owning standard module receives generated callable names.
+ *   Ordinary declarations keep lexical resolution and one shared Items binding.
+ */
 static const uint32_t source_unicode_callables[]={
     XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID,XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY
 };

@@ -57,6 +57,8 @@ foreach(target test_xir_from_utf8 test_xir_from_utf8_native)
     endif()
 endforeach()
 add_test(NAME xir_from_utf8 COMMAND test_xir_from_utf8)
+add_test(NAME xir_unicode_property_core COMMAND test_xir_from_utf8 --unicode-core)
+set_tests_properties(xir_unicode_property_core PROPERTIES TIMEOUT 120 LABELS "unit;xir;native;ownership")
 add_test(NAME xir_from_utf8_native COMMAND test_xir_from_utf8_native)
 set_tests_properties(xir_from_utf8 xir_from_utf8_native PROPERTIES LABELS "unit;xir;source;fast" TIMEOUT 60)
 

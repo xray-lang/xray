@@ -69,6 +69,7 @@ void xr_test_from_utf8_fault_finish(size_t index) {
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "from_utf8_cases.h"
+#include "unicode_property_cases.h"
 #if defined(XR_FROM_UTF8_WITH_OBSERVER)
 void xr_test_from_utf8_fault_begin(size_t);
 void xr_test_from_utf8_fault_finish(size_t);
@@ -488,6 +489,7 @@ static int source_case(int argc,char **argv) {
 }
 
 int main(int argc,char **argv) {
+    if (argc==2&&!strcmp(argv[1],"--unicode-core")) return unicode_property_core();
     if (argc!=1) return source_case(argc,argv);
     CHECK(!source_case(argc,argv));
 #if !defined(XR_FROM_UTF8_WITH_OBSERVER)

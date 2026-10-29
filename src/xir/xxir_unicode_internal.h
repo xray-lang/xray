@@ -1,4 +1,16 @@
-/* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xxir_unicode_internal.h - Read-only canonical Unicode value adapters
+ *
+ * KEY CONCEPT:
+ *   Checked value handles stay borrowed for one synchronous query.
+ *   Scalar results retain no source value or compiler lifetime.
+ */
 #ifndef XXIR_UNICODE_INTERNAL_H
 #define XXIR_UNICODE_INTERNAL_H
 #include "xxir_value.h"
@@ -22,4 +34,4 @@ static inline XrXirValueStatus xir_unicode_has_property(const XrXirValue *codepo
         xr_unicode_is_property((uint32_t)cp,(XrUnicodeProperty)prop);
     *output=(XrXirValue){XR_XIR_BOOL,0,matches};return XR_XIR_VALUE_OK;
 }
-#endif
+#endif // XXIR_UNICODE_INTERNAL_H
