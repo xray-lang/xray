@@ -51,9 +51,9 @@ static XrXirStatus nominal_variants(uint32_t kind, const XrXirNominalVariant *va
             bool same=v->name.length==prior.length;
             for (size_t offset=0;same && offset<v->name.length;) {
                 status=nominal_control_poll(control);if (status!=XR_XIR_OK) return status;
-                size_t count=v->name.length-offset;
-                if (control && count>4096) count=4096;
-                same=!memcmp(v->name.bytes+offset,prior.bytes+offset,count);offset+=count;
+                size_t chunk=v->name.length-offset;
+                if (control && chunk>4096) chunk=4096;
+                same=!memcmp(v->name.bytes+offset,prior.bytes+offset,chunk);offset+=chunk;
             }
             if (same) return XR_XIR_BAD_STRUCTURE;
         }
