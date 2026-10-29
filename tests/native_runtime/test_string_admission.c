@@ -53,9 +53,43 @@ static void forward_string_owners(XrtLocationOwner *locations) {
     f=(XrRbcFunction){.code=swap,.code_count=8,.register_count=3,.register_kinds=strings,.register_kind_count=3};
     admitted(&f,1,locations);strings[2]=XR_RBC_BITS;rejected(&f,1,locations);
 }
+static void loop_entry_obligations(XrtLocationOwner *locations) {
+    uint32_t code[]={word(XR_RBC_LOADI,0,0,0,0),word(XR_RBC_LOADI,1,0,0,3),word(XR_RBC_LOADI,2,0,0,1),
+        word(XR_RBC_LT,0,1,0,0),0,0,word(XR_RBC_STRING_LITERAL,3,0,0,0),word(XR_RBC_STRING_DROP,3,0,0,0),
+        word(XR_RBC_ADD,0,0,2,0),0,word(XR_RBC_RET,0,0,0,0)};
+    CHECK(xr_rbc_jump(&code[4],4,6,11)&&xr_rbc_jump(&code[5],5,10,11)&&xr_rbc_jump(&code[9],9,3,11));
+    XrRbcRegisterKind kinds[]={XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_STRING};
+    XrRbcFunction functions[2]={{.code=code,.code_count=11,.register_count=4,.register_kinds=kinds,.register_kind_count=4}};
+    const XrRbcLiteral literal={"not printed",11};
+    const XrRbcModule module={.functions=functions,.function_count=1,.literals=&literal,.literal_count=1};
+    for(unsigned run=0;run<2;++run) {
+        XrRbcExecution *execution=NULL;CHECK(xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution)==XR_RBC_OK);
+        XrRbcOutcome *outcome=xr_rbc_execution_run(execution);CHECK(outcome&&xr_rbc_outcome_status(outcome)==XR_RBC_OK);
+        xr_rbc_execution_free(&execution);uint64_t count=99;CHECK(xr_rbc_outcome_bits(outcome,&count)&&count==3);xr_rbc_outcome_free(&outcome);
+    }
+    uint32_t saved=code[7];code[7]=word(XR_RBC_LOADI,2,0,0,1);rejected(functions,1,locations);code[7]=saved;
+    uint32_t head_owner[]={word(XR_RBC_STRING_LITERAL,3,0,0,0),word(XR_RBC_LOADI,0,0,0,0),
+        word(XR_RBC_LOADI,1,0,0,3),word(XR_RBC_LOADI,2,0,0,1),word(XR_RBC_LT,0,1,0,0),0,0,
+        word(XR_RBC_STRING_DROP,3,0,0,0),word(XR_RBC_ADD,0,0,2,0),0,word(XR_RBC_STRING_DROP,3,0,0,0),word(XR_RBC_RET,0,0,0,0)};
+    CHECK(xr_rbc_jump(&head_owner[5],5,7,12)&&xr_rbc_jump(&head_owner[6],6,10,12)&&xr_rbc_jump(&head_owner[9],9,4,12));
+    functions[0].code=head_owner;functions[0].code_count=12;rejected(functions,1,locations);
+    uint32_t unproved[]={0,word(XR_RBC_STRING_LITERAL,3,0,0,0),word(XR_RBC_STRING_DROP,3,0,0,0),
+        word(XR_RBC_LOADI,0,0,0,0),word(XR_RBC_LOADI,0,0,0,0),0,word(XR_RBC_RET,0,0,0,0)};
+    CHECK(xr_rbc_jump(&unproved[0],0,4,7)&&xr_rbc_jump(&unproved[5],5,1,7));
+    functions[0].code=unproved;functions[0].code_count=7;rejected(functions,1,locations);
+    uint32_t degrade[]={word(XR_RBC_LOADI,0,0,0,0),word(XR_RBC_LOADI,1,0,0,3),word(XR_RBC_LOADI,2,0,0,1),
+        word(XR_RBC_LOADI,5,0,0,12),word(XR_RBC_LT,0,1,0,0),0,0,word(XR_RBC_STRING_LITERAL,3,0,0,0),
+        word(XR_RBC_STRING_DROP,3,0,0,0),word(XR_RBC_CALL,4,0,0,1),word(XR_RBC_ADD,0,0,2,0),0,word(XR_RBC_RET,0,0,0,0)};
+    CHECK(xr_rbc_jump(&degrade[5],5,7,13)&&xr_rbc_jump(&degrade[6],6,12,13)&&xr_rbc_jump(&degrade[11],11,4,13));
+    XrRbcRegisterKind windows[]={XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_STRING,XR_RBC_CALL_WINDOW,XR_RBC_CALL_WINDOW};
+    functions[0]=(XrRbcFunction){.code=degrade,.code_count=13,.register_count=6,.register_kinds=windows,.register_kind_count=6};
+    uint32_t identity=word(XR_RBC_RET,0,0,0,0);functions[1]=(XrRbcFunction){.code=&identity,.code_count=1,.register_count=1,.parameter_count=1};
+    rejected(functions,2,locations);
+}
 int main(void) {
     XrtLocationOwner *locations = NULL;
     CHECK(xrt_locations_create(NULL,0,&locations)==XRT_LOCATION_OK);
+    loop_entry_obligations(locations);
     forward_string_owners(locations);
     uint32_t code[] = {word(XR_RBC_STRING_LITERAL,0,0,0,0),word(XR_RBC_STRING_DROP,0,0,0,0),
         word(XR_RBC_RET0,0,0,0,0)};

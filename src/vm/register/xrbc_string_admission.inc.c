@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xrbc_string_admission.inc.c - Validate explicit String owners across forward control flow
+ * xrbc_string_admission.inc.c - Validate String owners and empty managed loop-head obligations
  */
 enum { RBC_BITS, RBC_STRING_BORROWED, RBC_STRING_OWNED, RBC_CELL_BORROWED,
        RBC_CELL_OWNED, RBC_EMPTY };
@@ -214,8 +214,32 @@ static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *f
 }
 static bool rbc_string_jump(const XrRbcFunction *f, size_t pc, size_t *target) {
     uint32_t bits = f->code[pc] >> 8;
-    if (bits > XR_RBC_JUMP_MAX || bits >= f->code_count - pc - 1) return false;
-    *target = pc + 1 + bits;
+    int32_t offset = bits <= XR_RBC_JUMP_MAX ? (int32_t)bits : (int32_t)bits - 16777216;
+    size_t next = pc + 1;
+    if (offset < 0) {
+        if ((size_t)-offset > next) return false;
+        *target = next - (size_t)-offset;
+    } else {
+        if ((size_t)offset >= f->code_count - next) return false;
+        *target = next + (size_t)offset;
+    }
+    return true;
+}
+/* The initial forward visit proves one iteration for every branch. A backedge
+ * may repeat it only from the same empty managed entry obligations. Scalar
+ * call-window initialization can improve an empty slot, never weaken one. */
+static bool rbc_string_backedge(const RbcStringAdmission *from, const RbcStringAdmission *entry) {
+    if (from->published != entry->published) return false;
+    for (uint32_t r = 0; r < from->function->register_count; ++r) {
+        XrRbcRegisterKind kind = rbc_register_kind(from->function, r);
+        uint8_t old = entry->state[r], now = from->state[r];
+        if (kind == XR_RBC_STRING || kind == XR_RBC_STRING_CELL) {
+            if (old != RBC_EMPTY || now != RBC_EMPTY) return false;
+        } else if (kind == XR_RBC_CALL_WINDOW) {
+            if ((old != RBC_EMPTY && old != RBC_BITS) || (now != RBC_EMPTY && now != RBC_BITS) ||
+                (old == RBC_BITS && now != RBC_BITS)) return false;
+        } else if (old != RBC_BITS || now != RBC_BITS) return false;
+    }
     return true;
 }
 static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFunction *f) {
@@ -257,7 +281,7 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
             if (count == UINT32_MAX) { valid = false; break; }
             indices[pc] = (uint32_t)count++;
         }
-    typedef struct RbcStringIncoming { RbcStringAdmission state; bool seen; } RbcStringIncoming;
+    typedef struct RbcStringIncoming { RbcStringAdmission state; bool seen, processed; } RbcStringIncoming;
     if (!valid) { xr_free(indices); return XR_RBC_INVALID; }
     if (count > SIZE_MAX / sizeof(RbcStringIncoming)) { xr_free(indices); return XR_RBC_OUT_OF_MEMORY; }
     RbcStringIncoming *incoming = xr_calloc(count, sizeof(*incoming));
@@ -277,6 +301,10 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
             else { state = incoming[index].state; live = true; }
         }
         if (!live || !valid) continue;
+        if (index != UINT32_MAX) {
+            incoming[index].state = state;
+            incoming[index].seen = incoming[index].processed = true;
+        }
         uint32_t word = f->code[pc];
         XrRbcOperands v = {(XrRbcOp)(word & 255), (word >> 8) & 255,
             (word >> 16) & 255, word >> 24, word >> 16};
@@ -290,7 +318,9 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
             size_t target;
             if (!rbc_string_jump(f, pc, &target)) { valid = false; break; }
             RbcStringIncoming *next = &incoming[indices[target]];
-            valid = rbc_string_merge(&next->state, &state, &next->seen);
+            if (target <= pc)
+                valid = next->processed && rbc_string_backedge(&state, &next->state);
+            else valid = rbc_string_merge(&next->state, &state, &next->seen);
             live = false;
         } else {
             valid = rbc_string_step(&state, v);

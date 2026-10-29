@@ -68,7 +68,8 @@ def main():
     cases = [('hello', hello, oracle),
              ('join', args.source_root / 'tests/lir/programs/owned-string-join.xr', b'Xray1\n'),
              ('storage', args.source_root / 'tests/lir/programs/owned-string-storage.xr', b'\xc3\xa9\0\nv12\n\n'),
-             ('phi', args.source_root / 'tests/lir/programs/owned-string-phi.xr', b'\xc3\xa9\0' b'7\nright-2\n')]
+             ('phi', args.source_root / 'tests/lir/programs/owned-string-phi.xr', b'\xc3\xa9\0' b'7\nright-2\n'),
+             ('loop-temporary', args.source_root / 'tests/lir/programs/owned-string-loop-temporary.xr', b'n=0\nn=1\nn=2\n')]
     for name, source, expected in cases:
         before = source.read_bytes()
         for mode in ('raw', 'sccp', 'inline', 'sccp-inline-inline-sccp'):
@@ -127,7 +128,19 @@ def main():
     generated = root / 'managed-loop.c'
     result = run('managed-loop-refusal', [args.source_driver, loop, generated])
     assert result.returncode == 1 and not result.stdout and not generated.exists()
-    assert result.stderr.splitlines() == [b'lowering: managed String loop transfer is not supported by LIR lowering yet']
+    assert result.stderr.splitlines() == [b'lowering: loop-carried managed String transfer is not supported by LIR lowering yet']
+    aliases = [
+        ('loop-alias', 'fn alias(n:i64){const text="seed${n}";var i=0;while(i<n){print(text);i=i+1}}\nalias(2)\n',
+         b'String alias across blocks without owned parameters'),
+        ('loop-parameter', 'fn show(text:string){var i=0;while(i<2){print(text);i=i+1}}\nshow("kept")\n',
+         b'String parameter across a loop')]
+    for name, text, reason in aliases:
+        source = root / (name + '.xr')
+        source.write_text(text, encoding='utf-8')
+        generated = root / (name + '.c')
+        result = run(name + '-refusal', [args.source_driver, source, generated])
+        assert result.returncode == 1 and not result.stdout and not generated.exists()
+        assert reason in result.stderr, (name, result.stderr)
     folder = root / 'literal-only-loop'
     folder.mkdir()
     source = folder / 'literal-only-loop.xr'

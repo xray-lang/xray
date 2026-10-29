@@ -748,7 +748,35 @@ static void string_phi_owners(void) {
         xr_lir_module_destroy(m);
     }
 }
+static void string_loop_owners(void) {
+    for(unsigned attack=0;attack<4;++attack) {
+        XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+        XrLirType parameter=XR_LIR_STRING;
+        XrLirFunction f=test_function(m,"temporary_loop",attack==3?&parameter:NULL,attack==3?1u:0u,XR_LIR_I64);
+        XrLirBlock entry=test_block(m,f,NULL,0),header=test_block(m,f,(XrLirType[]){XR_LIR_I64},1),
+            body=test_block(m,f,NULL,0),done=test_block(m,f,NULL,0);OK(xr_lir_set_entry(m,f,entry));
+        XrLirValue zero=test_constant(m,entry,XR_LIR_I64,0);test_branch(m,entry,header,&zero,1);
+        XrLirValue iteration;OK(xr_lir_block_parameter(m,header,0,&iteration));
+        XrLirValue limit=test_constant(m,header,XR_LIR_I64,3),condition=test_binary(m,header,XR_LIR_ICMP,iteration,limit,XR_LIR_LT);
+        XrLirInstruction branch={.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&condition,.operand_count=1,
+            .edges={{body,NULL,0},{done,NULL,0}},.edge_count=2};OK(xr_lir_set_terminator(m,header,&branch));
+        XrLirLiteral literal={0};OK(xr_lir_add_literal(m,"temporary",9,&literal));XrLirValue text;
+        XrLirInstruction string={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
+        OK(xr_lir_emit_value(m,body,&string,&text));
+        XrLirInstruction drop={.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&text,.operand_count=1};
+        if(attack!=1)OK(xr_lir_emit_effect(m,body,&drop));
+        if(attack==2) {
+            XrLirValue after;XrLirInstruction retain={.op=XR_LIR_STRING_RETAIN,.type=XR_LIR_STRING,.operands=&text,.operand_count=1};
+            OK(xr_lir_emit_value(m,body,&retain,&after));drop.operands=&after;OK(xr_lir_emit_effect(m,body,&drop));
+        }
+        XrLirValue one=test_constant(m,body,XR_LIR_I64,1),next=test_binary(m,body,XR_LIR_ADD,iteration,one,XR_LIR_PREDICATE_NONE);
+        test_branch(m,body,header,&next,1);test_return(m,done,iteration);
+        CHECK(xr_lir_verify(m,NULL)==(attack?XR_LIR_VERIFY_ERROR:XR_LIR_OK));
+        if(!attack)OK(xr_lir_module_finish(m,NULL));xr_lir_module_destroy(m);
+    }
+}
 int main(void) {
+    string_loop_owners();
     string_phi_owners();
     offset_signature();
     clock_signatures();

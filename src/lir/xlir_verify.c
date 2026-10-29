@@ -585,7 +585,8 @@ static XrLirStatus lir_literal_consumers(const XrLirFunctionData *f, uint32_t fu
     return XR_LIR_OK;
 }
 
-/* Each acyclic block owns its String parameters and instruction results.
+/* Each block owns its String parameters and instruction results.
+ * Backedges cannot transport managed owners or parameter borrows.
  * Only explicit selected-edge or result transfers may leave that block. */
 static XrLirStatus lir_string_owners(const XrLirFunctionData *f, uint32_t function,
     const LirGraph *g, uint8_t *owned, XrLirDiagnostic *d) {
@@ -600,11 +601,19 @@ static XrLirStatus lir_string_owners(const XrLirFunctionData *f, uint32_t functi
         const XrLirInstructionView *term = lir_terminator(f, b);
         branches += term->op == XR_LIR_CONDBR;
         for (uint32_t e = 0; e < term->edge_count; ++e)
-            if (g->rank[term->edges[e].target - 1] <= g->rank[b])
-                return xr_lir_internal_error(d, "managed String loop transfer is not supported", function, b + 1, 0, NULL);
+            if (g->rank[term->edges[e].target - 1] <= g->rank[b]) {
+                for (uint32_t p = 0; p < f->parameter_count; ++p)
+                    if (f->parameter_types[p] == XR_LIR_STRING)
+                        return xr_lir_internal_error(d, "String parameter cannot cross a loop", function, b + 1, 0, &term->source);
+                for (uint32_t a = 0; a < term->edges[e].argument_count; ++a) {
+                    XrLirType type = f->values[term->edges[e].arguments[a] - 1].type;
+                    if (type == XR_LIR_STRING || type == XR_LIR_STRING_CELL)
+                        return xr_lir_internal_error(d, "loop-carried managed String transfer is not supported", function, b + 1, 0, &term->source);
+                }
+            }
     }
     if (branches > 1 || (cells && f->block_count != 1))
-        return xr_lir_internal_error(d, "managed String flow exceeds one Cell-free diamond", function, 0, 0, NULL);
+        return xr_lir_internal_error(d, "managed String flow exceeds one Cell-free branch", function, 0, 0, NULL);
     for (uint32_t b = 0; b < f->block_count; ++b) {
         memset(owned, 0, f->value_count);
         const XrLirBlockData *block = &f->blocks[b];

@@ -965,7 +965,30 @@ static void test_string_edge_swap(void) {
         CHECK(size==2&&!memcmp(bytes,flag_value?"AB":"BA",2));xr_rbc_outcome_free(&outcome);
     }
 }
+static void test_loop_string_temporaries(void) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));XrLirType type=XR_LIR_I64;
+    XrLirFunction f=test_function(m,"temporary_loop",&type,1,XR_LIR_I64),helper=test_function(m,"next",&type,1,XR_LIR_I64);
+    XrLirBlock increment=test_block(m,helper,NULL,0);OK(xr_lir_set_entry(m,helper,increment));
+    XrLirValue argument=parameter(m,helper,0),one=test_constant(m,increment,XR_LIR_I64,1);
+    test_return(m,increment,test_binary(m,increment,XR_LIR_ADD,argument,one,XR_LIR_PREDICATE_NONE));
+    XrLirBlock entry=test_block(m,f,NULL,0),header=test_block(m,f,&type,1),body=test_block(m,f,NULL,0),done=test_block(m,f,NULL,0);
+    OK(xr_lir_set_entry(m,f,entry));XrLirValue zero=test_constant(m,entry,XR_LIR_I64,0);test_branch(m,entry,header,&zero,1);
+    XrLirValue iteration=block_parameter(m,header,0),limit=parameter(m,f,0);
+    XrLirValue condition=test_binary(m,header,XR_LIR_ICMP,iteration,limit,XR_LIR_LT);
+    conditional(m,header,condition,(XrLirEdge){body,NULL,0},(XrLirEdge){done,NULL,0});
+    XrLirLiteral literal={0};const unsigned char bytes[]={0xc3,0xa9,0};OK(xr_lir_add_literal(m,bytes,sizeof(bytes),&literal));
+    XrLirValue pieces[3];XrLirInstruction string={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
+    OK(xr_lir_emit_value(m,body,&string,&pieces[0]));string=(XrLirInstruction){.op=XR_LIR_STRING_I64,.type=XR_LIR_STRING,.operands=&iteration,.operand_count=1};
+    OK(xr_lir_emit_value(m,body,&string,&pieces[1]));string=(XrLirInstruction){.op=XR_LIR_STRING_CONCAT,.type=XR_LIR_STRING,.operands=pieces,.operand_count=2};
+    OK(xr_lir_emit_value(m,body,&string,&pieces[2]));
+    for(unsigned i=0;i<3;++i){XrLirInstruction drop={.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&pieces[i],.operand_count=1};OK(xr_lir_emit_effect(m,body,&drop));}
+    XrLirValue next=call(m,body,helper,XR_LIR_I64,&iteration,1);test_branch(m,body,header,&next,1);test_return(m,done,iteration);
+    OK(xr_lir_module_finish(m,NULL));XrRbcProgram *program=compile(m,f);xr_lir_module_destroy(m);
+    const uint64_t counts[]={1000,3,0,1000};for(unsigned i=0;i<4;++i)CHECK(run(program,&counts[i],1)==counts[i]);
+    xr_rbc_program_destroy(program);
+}
 int main(void) {
+    test_loop_string_temporaries();
     test_string_edge_swap();
     test_literal_ownership();
     test_cell_escape_rejections();

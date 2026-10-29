@@ -752,7 +752,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
                 branches = 2;
         if (branches > 1) {
             xr_free(literal_uses);
-            return lower_unsupported(c, "managed String flow beyond one Cell-free diamond");
+            return lower_unsupported(c, "managed String flow beyond one Cell-free branch");
         }
     }
     uint8_t *seen = lower_alloc(c, f->block_count, 1);
@@ -896,10 +896,12 @@ static bool lower_order(LowerFunction *f) {
         if (f->next[b] < lower_edge_count(term)) {
             uint32_t target = term->targets[f->next[b]++];
             XR_DCHECK(target < count, "admission checked every reachable successor");
-            if (managed && f->reachable[target] == 1) {
-                c->block = b; c->instruction = (uint32_t)(term - f->source->instructions);
-                return lower_unsupported(c, "managed String loop transfer");
-            }
+            if (managed && f->reachable[target] == 1)
+                for (uint32_t p = 0; p < f->source->parameter_count; ++p)
+                    if (f->source->parameters[p] == XR_XIR_STRING) {
+                        c->block = b; c->instruction = (uint32_t)(term - f->source->instructions);
+                        return lower_unsupported(c, "String parameter across a loop");
+                    }
             if (!f->reachable[target]) {
                 f->reachable[target] = 1;
                 f->stack[depth++] = target;
@@ -915,6 +917,7 @@ static bool lower_order(LowerFunction *f) {
         f->order[i] = f->order[f->ordered - i - 1];
         f->order[f->ordered - i - 1] = saved;
     }
+    for (uint32_t i = 0; i < f->ordered; ++i) f->next[f->order[i]] = i;
     return true;
 }
 
@@ -1145,6 +1148,10 @@ static bool lower_value(LowerFunction *f, uint32_t id, XrLirValue *out) {
         return false;
     }
     *out = f->values[id];
+    const XrLirValueData *value = &f->owner->module->functions[f->function.id - 1].values[out->id - 1];
+    if (value->type == XR_LIR_STRING && value->block &&
+        value->block != f->blocks[f->owner->block].id)
+        return lower_unsupported(f->owner, "String alias across blocks without owned parameters");
     XR_DCHECK(out->module == f->owner->module && out->function == f->function.id,
               "SSA values remain in their defining output function");
     return true;
@@ -1395,6 +1402,12 @@ static bool lower_edge(LowerFunction *f, uint32_t from, uint32_t target, XrLirEd
             arguments[position++] = state;
         }
     XR_DCHECK(position == count, "edge argument order matches target parameters");
+    if (f->next[target] <= f->next[from])
+        for (uint32_t a = 0; a < count; ++a) {
+            XrLirType type = c->module->functions[f->function.id - 1].values[arguments[a].id - 1].type;
+            if (type == XR_LIR_STRING || type == XR_LIR_STRING_CELL)
+                return lower_unsupported(c, "loop-carried managed String transfer");
+        }
     return true;
 }
 static bool lower_string_copy(LowerFunction *f, uint32_t block, XrLirValue input, XrLirValue *output) {

@@ -1,0 +1,5 @@
+fn render(n:i64){
+    var i=0
+    while(i<n){print("n=${i}");i=i+1}
+}
+render(3)
