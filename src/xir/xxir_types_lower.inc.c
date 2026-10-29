@@ -135,7 +135,7 @@ static XrXirStatus lower_nominal_types(XrXirModule *module, XrXirCompileContext 
         map[i] = types->nodes[i].parameter_span ? UINT32_MAX : XR_XIR_CONSTRUCTED_TYPE_BASE + closed++;
     }
     XrXirNominalTable *identities = NULL;
-    status = xr_xir_compile_nominal_project(budget, table, &identities);
+    status = xr_xir_compile_nominal_project(budget, table, control, &identities);
     if (status != XR_XIR_OK) { xr_compile_resources_free(map); return status; }
     xr_xir_compile_nominal_free((XrXirNominalTable *) table); types->nominals = identities;
     XrXirTypeNode *nodes = (XrXirTypeNode *) types->nodes;

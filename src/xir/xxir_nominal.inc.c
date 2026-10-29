@@ -9,10 +9,22 @@
  * KEY CONCEPT:
  *   Every failed construction releases its initialized ownership prefix.
  */
-static XrXirStatus nominal_name(XrXirLiteral name) {
+#include "xxir_lower_control.h"
+static XrXirStatus nominal_control_poll(XrCompileRequestControl *control) {
+    return control ? xir_compile_resource_status(xr_compile_request_control_poll(control)) : XR_XIR_OK;
+}
+static XrXirStatus nominal_name(XrXirLiteral name, XrCompileRequestControl *control) {
     if (!name.bytes || !name.length) return XR_XIR_BAD_STRUCTURE;
     if (!(((uint64_t) name.length + 1) <= SIZE_MAX)) return XR_XIR_BUDGET;
-    return memchr(name.bytes, 0, name.length) ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
+    if (!control) return memchr(name.bytes, 0, name.length) ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
+    for (size_t offset=0;offset<name.length;) {
+        XrXirStatus status=nominal_control_poll(control);
+        if (status!=XR_XIR_OK) return status;
+        size_t count=name.length-offset;if (count>4096) count=4096;
+        if (memchr(name.bytes+offset,0,count)) return XR_XIR_BAD_STRUCTURE;
+        offset+=count;
+    }
+    return nominal_control_poll(control);
 }
 static XrXirStatus nominal_same_name(XrXirLiteral a, XrXirLiteral b, bool *same) {
     *same = false;
@@ -21,20 +33,28 @@ static XrXirStatus nominal_same_name(XrXirLiteral a, XrXirLiteral b, bool *same)
     return XR_XIR_OK;
 }
 static XrXirStatus nominal_variants(uint32_t kind, const XrXirNominalVariant *variants,
-    uint32_t count, uint32_t fields) {
+    uint32_t count, uint32_t fields, XrCompileRequestControl *control) {
     if (kind > XR_XIR_NOMINAL_CLASS || (count != 0) != (variants != NULL) ||
         (kind == XR_XIR_NOMINAL_ENUM) != (count != 0)) return XR_XIR_BAD_STRUCTURE;
     if (!(((uint64_t) count * sizeof(*variants)) <= SIZE_MAX)) return XR_XIR_BUDGET;
     uint32_t end = 0;
     for (uint32_t i = 0; i < count; ++i) {
+        XrXirStatus polled=nominal_control_poll(control);if (polled!=XR_XIR_OK) return polled;
         const XrXirNominalVariant *v = &variants[i];
         if (v->field_begin != end || v->field_count > fields - end) return XR_XIR_BAD_STRUCTURE;
         end += v->field_count;
-        XrXirStatus status = nominal_name(v->name);
+        XrXirStatus status = nominal_name(v->name,control);
         if (status != XR_XIR_OK) return status;
         for (uint32_t j = 0; j < i; ++j) {
-            bool same = false; status = nominal_same_name(v->name, variants[j].name, &same);
-            if (status != XR_XIR_OK) return status;
+            status=nominal_control_poll(control);if (status!=XR_XIR_OK) return status;
+            XrXirLiteral prior=variants[j].name;
+            bool same=v->name.length==prior.length;
+            for (size_t offset=0;same && offset<v->name.length;) {
+                status=nominal_control_poll(control);if (status!=XR_XIR_OK) return status;
+                size_t count=v->name.length-offset;
+                if (control && count>4096) count=4096;
+                same=!memcmp(v->name.bytes+offset,prior.bytes+offset,count);offset+=count;
+            }
             if (same) return XR_XIR_BAD_STRUCTURE;
         }
     }
@@ -84,8 +104,8 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
         (uint64_t) d->field_count * sizeof(*d->fields);
     if (!((bytes) <= SIZE_MAX)) return XR_XIR_BUDGET;
     b->limits.parameters -= d->parameter_count;
-    XrXirStatus status = nominal_name(d->module);
-    if (status == XR_XIR_OK) status = nominal_name(d->name);
+    XrXirStatus status = nominal_name(d->module,NULL);
+    if (status == XR_XIR_OK) status = nominal_name(d->name,NULL);
     if (status != XR_XIR_OK) return status;
     if (!nominal_flags_valid(d->kind,d->flags)) return XR_XIR_BAD_STRUCTURE;
     XrXirNominalIdentity native_identity = {d->module,d->name,d->exported,d->parameter_count,
@@ -110,7 +130,7 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
             if (status!=XR_XIR_OK) return status;
         }
     }
-    status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count);
+    status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count,NULL);
     if (status != XR_XIR_OK) return status;
     for (uint32_t p = 0; p < d->parameter_count; ++p) {
         status = xr_xir_compile_constraint_structure(b, types, d->constraints[p], d->parameter_count);
@@ -129,7 +149,7 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
         uint32_t visibility = field->flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED);
         if ((field->flags & ~(XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED | XR_XIR_FIELD_MUTABLE)) ||
             visibility == (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED)) return XR_XIR_BAD_STRUCTURE;
-        status = nominal_name(field->name);
+        status = nominal_name(field->name,NULL);
         if (status != XR_XIR_OK) return status;
         if (!nominal_field_type(types, field->type, d->parameter_count,d->native.native_id==XR_NATIVE_DECLARATION_RECV && !f)) return XR_XIR_BAD_TYPE;
         status = xr_xir_compile_type_expression_shape(b, types, field->type, d->parameter_count);
@@ -198,25 +218,29 @@ XR_FUNC void xr_xir_compile_nominal_free(XrXirNominalTable *table) {
     }
     xr_compile_resources_free((void *) table->declarations); xr_compile_resources_free(table);
 }
-static bool nominal_copy_name(const XrXirCompileContext *compile_context, XrXirLiteral source, XrXirLiteral *output, XrXirStatus *allocation_status) {
+static bool nominal_copy_name(const XrXirCompileContext *compile_context, XrXirLiteral source, XrXirLiteral *output, XrXirStatus *allocation_status, XrCompileRequestControl *control) {
     if ((uint64_t)source.length + 1 > SIZE_MAX) {
         *allocation_status = XR_XIR_BUDGET; return false;
     }
     char *bytes = xir_compile_alloc(compile_context, (size_t) source.length + 1, allocation_status);
     if (!bytes) return false;
-    memcpy(bytes, source.bytes, source.length); bytes[source.length] = 0;
+    *allocation_status=xir_compile_resource_status(xir_lower_copy_span(control,bytes,source.bytes,source.length));
+    if (*allocation_status!=XR_XIR_OK) { xr_compile_resources_free(bytes);return false; }
+    bytes[source.length] = 0;
     *output = (XrXirLiteral) {bytes, source.length}; return true;
 }
 static bool nominal_variants_copy(const XrXirCompileContext *compile_context, const XrXirNominalVariant *source, uint32_t count,
-    const XrXirNominalVariant **output, XrXirStatus *allocation_status) {
+    const XrXirNominalVariant **output, XrXirStatus *allocation_status, XrCompileRequestControl *control) {
 
     if (!count) return true;
     XrXirNominalVariant *copy = xir_compile_calloc(compile_context, count, sizeof(*copy), allocation_status);
     if (!copy) return false;
     *output = copy;
     for (uint32_t i = 0; i < count; ++i) {
+        *allocation_status=nominal_control_poll(control);
+        if (*allocation_status!=XR_XIR_OK) return false;
         copy[i].field_begin = source[i].field_begin; copy[i].field_count = source[i].field_count;
-        if (!nominal_copy_name(compile_context, source[i].name, &copy[i].name, allocation_status)) return false;
+        if (!nominal_copy_name(compile_context, source[i].name, &copy[i].name, allocation_status,control)) return false;
     }
     return true;
 }
@@ -227,9 +251,9 @@ static bool nominal_copy_declaration(const XrXirCompileContext *compile_context,
     d->variant_count = source->variant_count; d->flags = source->flags;
 
     d->native = source->native;
-    if (!nominal_variants_copy(compile_context, source->variants, source->variant_count, &d->variants, allocation_status)) return false;
-    if (!nominal_copy_name(compile_context, source->module, &d->module, allocation_status) ||
-        !nominal_copy_name(compile_context, source->name, &d->name, allocation_status)) return false;
+    if (!nominal_variants_copy(compile_context, source->variants, source->variant_count, &d->variants, allocation_status,NULL)) return false;
+    if (!nominal_copy_name(compile_context, source->module, &d->module, allocation_status,NULL) ||
+        !nominal_copy_name(compile_context, source->name, &d->name, allocation_status,NULL)) return false;
     XrXirConstraint *constraints = NULL;
     if ((*allocation_status = xr_xir_compile_constraint_array_copy_verified(compile_context, source->constraints, source->parameter_count, &constraints)) != XR_XIR_OK)
         return false;
@@ -240,7 +264,7 @@ static bool nominal_copy_declaration(const XrXirCompileContext *compile_context,
         d->fields = fields; d->field_count = source->field_count;
         for (uint32_t f = 0; f < source->field_count; ++f) {
             fields[f].type = source->fields[f].type; fields[f].flags = source->fields[f].flags;
-            if (!nominal_copy_name(compile_context, source->fields[f].name, &fields[f].name, allocation_status)) return false;
+            if (!nominal_copy_name(compile_context, source->fields[f].name, &fields[f].name, allocation_status,NULL)) return false;
         }
     }
     return true;
@@ -263,7 +287,7 @@ static XrXirStatus nominal_copy_table(const XrXirCompileContext *compile_context
     XrXirStatus allocation_status = XR_XIR_OK;
 
     if (!table) { *output = NULL; return XR_XIR_OK; }
-    if (table->identities) return nominal_copy_identities(compile_context, table, output);
+    if (table->identities) return nominal_copy_identities(compile_context, table, NULL, output);
 
     XrXirNominalTable *copy = xir_compile_calloc(compile_context, 1, sizeof(*copy), &allocation_status);
     if (!copy) return allocation_status;

@@ -65,7 +65,7 @@ XrXirStatus xr_xir_compile_callable_weakening(const XrXirCompileContext *context
     return XR_XIR_OK;
 }
 static XrXirStatus nominal_identities_verify(const XrXirNominalTable *table, XrXirCompileContext *budget);
-static XrXirStatus nominal_copy_identities(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, XrXirNominalTable **output);
+static XrXirStatus nominal_copy_identities(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, XrCompileRequestControl *control, XrXirNominalTable **output);
 static void nominal_free_identities(XrXirNominalTable *table);
 static XrXirStatus nominal_table_verify(const XrXirNominalTable *table,
     const XrXirTypes *types, XrXirCompileContext *budget);

@@ -88,11 +88,12 @@ XR_FUNC bool xr_xir_nominal_native_send_result(const XrXirTypes *types, XrXirTyp
 /* A missing or unauthenticated governed declaration returns Unit. */
 XR_FUNC XrXirType xr_xir_cancelled_error_type(const XrXirTypes *types);
 /* Metadata helpers grant no executable type or source admission.
- * Outputs publish only after complete successful validation; work is never refunded. */
+ * Outputs publish only after complete successful validation. */
 XR_FUNC XrXirStatus xr_xir_compile_nominal_structure_verify(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, const XrXirTypes *types);
 XR_FUNC XrXirStatus xr_xir_compile_nominal_clone(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, const XrXirTypes *types, XrXirNominalTable **output);
-/* Projection requires a verified declaration table and owns only identities. */
-XR_FUNC XrXirStatus xr_xir_compile_nominal_project(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, XrXirNominalTable **output);
+/* Projection requires a verified declaration table and owns only identities.
+ * Its optional control is borrowed synchronously and never enters the result. */
+XR_FUNC XrXirStatus xr_xir_compile_nominal_project(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, XrCompileRequestControl *control, XrXirNominalTable **output);
 XR_FUNC void xr_xir_compile_nominal_free(XrXirNominalTable *table);
 typedef enum XrXirNominalAccess {
     XR_XIR_NOMINAL_CONSTRUCT, XR_XIR_NOMINAL_READ, XR_XIR_NOMINAL_WRITE, XR_XIR_NOMINAL_TYPE
