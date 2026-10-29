@@ -1351,6 +1351,8 @@ var f: Mapper2<i64, string> = (n) -> string(n)
 
 **函数类型语法**：函数类型以 `fn` 引导，写作 `fn(T1, T2) -> R`；参数可带 `ref` / `move` mode（如 `fn(ref i64) -> i64`）。返回 `unit` 时省略箭头段，写作 `fn(T)` / `fn()`——类型位置**不允许**显式写 `-> ()`。这与函数声明位有意不对称：声明位 `fn f() -> ()` 与 `fn f()` 都合法（§5.2），而类型出现在参数、泛型实参、容器元素等密集内联位置，只保留一种拼写。类型位置的裸 `(` 只表示元组或分组括号，与表达式侧和 §2.7 一致——出现逗号才是元组，`(T)` 是分组；因此可空函数类型直接写作 `(fn() -> i64)?`。`CFn<...>` 内同样使用 `fn` 拼写（`CFn<fn(A, B) -> R>`，见 §3.12）。
 
+函数类型允许可选的上下文前缀 `nosuspend fn(T1, T2) throws(E) -> R`；无前缀的书写类型默认可能挂起。`nosuspend` 只在类型位置、紧接 `fn` 之前识别，其它位置仍可作普通名字；它不越过未分组的语句换行。该保证属于同一个 callable 类型身份，与 `throws(E)` 独立，并由别名替换、可空及嵌套类型、格式化和接收后的复验保留。直接处于该期望类型的函数字面量按此保证检查，未知或可能挂起的调用拒绝；已经构造的普通函数值不能根据其函数体被隐式强化。限定类型可放宽到普通 callable，反向需要已有真实承诺；不新增函数声明自身的效应注解。
+
 #### 2.8.1 函数的错误类型与闭包
 
 抛错函数类型在参数列表与返回类型之间写 `throws(E)`，例如 `fn(string) throws(ParseErr) -> i64`；返回 Unit 时写 `fn(string) throws(ParseErr)`。无子句的函数类型保证不抛业务错误。`throws` 是类型身份的一部分，参与函数值赋值、重载判定和接口匹配；panic 不进入错误类型。
@@ -3228,7 +3230,7 @@ no_suspend = true
 
 #### 完整可运行示例
 
-当匿名函数字面量直接处于已声明的 `no_suspend` callable 期望上下文时，该上下文为这个新函数建立必须验证的承诺。函数体在定义处按当前泛型约束检查，未知或可能挂起的调用均拒绝；特化不得补足缺失证明。捕获的普通 callable 不会因此获得承诺。该规则不添加源码效应注解，不把 `verify` 性能要求当作声明，也不允许将已构造的普通函数值按实现体推导强化；脱离受限上下文的匿名函数仍是普通 callable。
+当匿名函数字面量直接处于已声明的 `no_suspend` callable 期望上下文时，该上下文为这个新函数建立必须验证的承诺。函数体在定义处按当前泛型约束检查，未知或可能挂起的调用均拒绝；特化不得补足缺失证明。捕获的普通 callable 不会因此获得承诺。该期望上下文也可由 §2.8 的 `nosuspend fn` 类型前缀直接给出；该规则不添加函数声明自身的效应注解，不把 `verify` 性能要求当作声明，也不允许将已构造的普通函数值按实现体推导强化；脱离受限上下文的匿名函数仍是普通 callable。
 
 默认参数表达式采用参数声明的相同期望类型，并在定义处检查，即使没有调用省略该参数。返回受限 callable 不意味着默认值计算过程也承诺不挂起；省略参数时，默认值计算的效应仍属于调用方。
 
@@ -8646,7 +8648,7 @@ PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | Tupl
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
-FunctionType ::= 'fn' '(' FunctionTypeParams? ')' ThrowsClause? ReturnType?
+FunctionType ::= 'nosuspend'? 'fn' '(' FunctionTypeParams? ')' ThrowsClause? ReturnType?
 FunctionTypeParams ::= ParamType (',' ParamType)* ','?
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
@@ -8942,7 +8944,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## 附录 B. 关键字索引
 
-以下 **63 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 51 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`init`、`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
+以下 **63 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 51 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`init`、`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic`、`nosuspend` 是上下文词，不在本表；`parallel` 是标准库模块名。
 
 | 关键字 | 节 |
 |--|--|

@@ -1375,6 +1375,8 @@ matching the expression side and §2.7 — a comma makes a tuple, `(T)` groups �
 a nullable function type is written directly as `(fn() -> i64)?`. `CFn<...>`
 uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
 
+A function type may carry the contextual prefix `nosuspend fn(T1, T2) throws(E) -> R`; a written type without the prefix may suspend. `nosuspend` is recognized only in type position immediately before `fn`, without crossing an ungrouped statement line boundary, and remains an ordinary name elsewhere. The guarantee belongs to the same callable type identity, independently of `throws(E)`, and survives alias substitution, nullable and nested types, formatting and receiving revalidation. A function literal directly checked against this expected type must prove the guarantee; unknown or potentially suspending calls reject. An already constructed ordinary function value cannot be implicitly strengthened from its body. A restricted callable may weaken to an ordinary one; the reverse requires an actual existing promise. This adds no own-function declaration effect annotation.
+
 #### 2.8.1 Function Error Types and Closures
 
 A throwing function type places `throws(E)` between its parameters and result, as in `fn(string) throws(ParseErr) -> i64`; a Unit-returning type is `fn(string) throws(ParseErr)`. Omitting the clause guarantees no business error. The error clause is part of type identity for function-value assignment, overload resolution, and interface matching. Panic is not an error type.
@@ -3245,7 +3247,7 @@ Each manifest constrains only its owning project or package. A consumer cannot s
 
 #### Worked Examples
 
-A function literal directly checked against an explicitly declared `no_suspend` callable context receives that obligation for its new function definition. Its body is checked under the current generic constraints; unknown or potentially suspending calls reject, and specialization cannot supply a missing proof. Captured ordinary callables do not acquire the promise. This rule adds no source effect annotation, does not turn performance `verify` requirements into declarations, and cannot strengthen an already constructed ordinary function value from inferred body effects. Without a restricted context, a function literal remains an ordinary callable.
+A function literal directly checked against an explicitly declared `no_suspend` callable context receives that obligation for its new function definition. Its body is checked under the current generic constraints; unknown or potentially suspending calls reject, and specialization cannot supply a missing proof. Captured ordinary callables do not acquire the promise. The `nosuspend fn` type prefix in §2.8 can directly supply this expected context. This rule adds no own-function declaration effect annotation, does not turn performance `verify` requirements into declarations, and cannot strengthen an already constructed ordinary function value from inferred body effects. Without a restricted context, a function literal remains an ordinary callable.
 
 A default argument expression uses the parameter's declared expected type and is checked at its definition, even if no call omits that argument. Returning a restricted callable does not promise that computing the default cannot suspend; default evaluation effects still belong to the caller when an argument is omitted.
 
@@ -8868,7 +8870,7 @@ PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | Tupl
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
-FunctionType ::= 'fn' '(' FunctionTypeParams? ')' ThrowsClause? ReturnType?
+FunctionType ::= 'nosuspend'? 'fn' '(' FunctionTypeParams? ')' ThrowsClause? ReturnType?
 FunctionTypeParams ::= ParamType (',' ParamType)* ','?
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
@@ -9165,7 +9167,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## Appendix B. Keyword Index
 
-These **63 keywords** are the union of the 51 general keywords in `src/frontend/lexer/xkeywords.def` and the 12 exact scalar type names in `src/shared/xr_exact_scalar_registry.def`, shown in ASCII lexical order. `init`, `move`, `ref`, `out`, `linked`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
+These **63 keywords** are the union of the 51 general keywords in `src/frontend/lexer/xkeywords.def` and the 12 exact scalar type names in `src/shared/xr_exact_scalar_registry.def`, shown in ASCII lexical order. `init`, `move`, `ref`, `out`, `linked`, `from`, `to`, `after`, `panic`, and `nosuspend` are contextual words, not entries here; `parallel` is a standard-library module name.
 
 | Keyword | Section |
 |--|--|
