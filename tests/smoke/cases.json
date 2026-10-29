@@ -525,13 +525,9 @@
       "id": "stdlib/parallel/parallel.xr",
       "path": "stdlib/parallel/parallel.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/parallel/parallel.xr:37:0: error: indexed receiver is not an Array"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/path/path.xr",
@@ -712,6 +708,14 @@
     {
       "id": "native:stdlib/base64/base64.xr",
       "path": "stdlib/base64/base64.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
+    },
+    {
+      "id": "native:stdlib/parallel/parallel.xr",
+      "path": "stdlib/parallel/parallel.xr",
       "mode": "build-run",
       "expect": "pass",
       "exit_code": 0,

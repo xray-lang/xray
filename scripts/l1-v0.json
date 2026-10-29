@@ -143,7 +143,8 @@
     "test_xir_ctfe_cleanup",
     "test_hir_numeric_literal",
     "test_xir_range_index_native",
-    "test_nosuspend_type_syntax"
+    "test_nosuspend_type_syntax",
+    "test_source_sdk_consumer"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -401,5 +402,5 @@
     "--version",
     "--json"
   ],
-  "smokeStatus": "smoke: demos 3/23 stdlib 2/29 readme 0/6 native 5/5; PASS 10 GAP 53 FAIL 0 NOT_RUN 0"
+  "smokeStatus": "smoke: demos 3/23 stdlib 3/29 readme 0/6 native 6/6; PASS 12 GAP 52 FAIL 0 NOT_RUN 0"
 }
