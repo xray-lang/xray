@@ -21,6 +21,7 @@ static bool product_packet_poll(const void *context) {
     }
     CHECK(probe->mode==0);return true;
 }
+static int product_packet_public_poll(const void *context) {return product_packet_poll(context)?1:0;}
 static XrXirSourceProductRequest product_packet_request(XrCompileResources *resources,
     XrCompilerSession *session,const XrModuleIdentityAuthority *authority,XrXirCompileContext *context) {
     *context=(XrXirCompileContext){resources,xr_xir_compile_default_limits()};
@@ -121,6 +122,7 @@ static uint64_t product_packet_copy_case(unsigned mode,uint64_t timeout_ns) {
     xr_compile_resources_release(resources);CHECK(!runtime_live&&!runtime_bytes);
     if(mode!=3) {
         XrSourceCompileOptions recovery=xray_source_compile_options_default();recovery.stdlib_path=XR_PUBLIC_STDLIB;
+        recovery.cancel_poll=product_packet_public_poll;recovery.cancel_context=&probe;
         XrSourceInput source={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"packet-copy-recovery",text,length}};
         XrSourceArtifact *artifact=NULL;XrSourceFailure failure={0};
         if(mode==0) {
@@ -131,8 +133,9 @@ static uint64_t product_packet_copy_case(unsigned mode,uint64_t timeout_ns) {
             xray_source_ast_free(ast);
         } else CHECK(xray_source_build(&source,&recovery,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
         CHECK(failure.status==XR_SOURCE_OK&&failure.cleanup_status==XR_SOURCE_OK);
+        size_t polls=probe.polls;
         DeclarationsCopyProbe retired={0};implementation_execute(artifact,text,length,&retired);
-        CHECK(!runtime_live&&!runtime_bytes);
+        CHECK(probe.polls==polls&&!runtime_live&&!runtime_bytes);
     }
     return elapsed;
 }
