@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xvm_dispatch_collection.inc.c — array / map / set / range / string-builder
+ * xvm_dispatch_collection.inc.c — array / map / set / range
  *                                  + array R/W + map R/W + substring + index
  *                                  + slice dispatch
  *
@@ -21,7 +21,7 @@
  * Owns:
  *   Container creation:
  *     - OP_NEWARRAY / OP_NEWMAP / OP_NEWSET
- *     - OP_NEWRANGE / OP_RANGE_UNPACK / OP_NEWSTRINGBUILDER
+ *     - OP_NEWRANGE / OP_RANGE_UNPACK
  *   Array R/W:
  *     - OP_ARRAY_GET / GETC / SET / SETC / PUSH / LEN / INIT
  *   Map R/W:
@@ -31,8 +31,7 @@
  *   Generic:
  *     - OP_INDEX_GET / OP_INDEX_SET / OP_SLICE
  *
- * Inlined ARRAY_GET_NOCHECK and StringBuilder helpers stay in
- * xvm.c next to the rest of the data-manipulation hot path.
+ * Inlined ARRAY_GET_NOCHECK stays with the typed-payload helpers.
  */
 
 /* ========================================================
@@ -421,36 +420,6 @@ vmcase(OP_RANGE_UNPACK) {
     R(a) = xr_int(rng->start);     // start (loop variable)
     R(a + 1) = xr_int(rng->end);   // end (bound)
     R(a + 2) = xr_int(rng->step);  // step
-    vmbreak;
-}
-
-vmcase(OP_NEWSTRINGBUILDER) {
-    /* OP_NEWSTRINGBUILDER: create StringBuilder
-    ** A = destination register
-    ** B = storage mode (0=normal, 1=shared, 2=owned)
-    */
-    int a = GETARG_A(i);
-    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) GETARG_B(i));
-
-    XrStringBuilder *sb;
-    if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
-        // System storage: allocate on system heap
-        sb = (XrStringBuilder *) xr_sysheap_alloc_storage(
-            xr_isolate_get_sys_heap(isolate), sizeof(XrStringBuilder), XR_TINSTANCE, storage_mode);
-        if (sb) {
-            sb->klass = isolate->core->stringBuilderClass;
-            xr_stringbuilder_init_inplace(sb);
-            XR_OBJ_SET_STORAGE(&sb->hdr, storage_mode);
-            if (storage_mode == XR_OBJ_STORAGE_SHARED) {
-                xr_shared_set_refc(&sb->hdr, 1);
-            }
-        }
-    } else {
-        // normal: allocate on coroutine heap
-        sb = xr_stringbuilder_new(VM_CURRENT_CORO);
-    }
-
-    R(a) = xr_stringbuilder_value(sb);
     vmbreak;
 }
 
@@ -997,10 +966,6 @@ vmcase(OP_LEN) {
     }
     if (xr_value_is_work_queue(value)) {
         R(a) = xr_int((xr_Integer) xr_work_queue_length(xr_value_to_work_queue(value)));
-        vmbreak;
-    }
-    if (xr_is_stringbuilder(value)) {
-        R(a) = xr_int((xr_Integer) xr_stringbuilder_length(xr_to_stringbuilder(value)));
         vmbreak;
     }
     XrRange *range = xr_value_get_range_body(isolate, value);

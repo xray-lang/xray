@@ -683,8 +683,6 @@ vmcase(OP_RETURN) {
     // Get first return value for toString compatibility.
     XrValue ret_result = (nret > 0) ? R(a) : xr_null();
 
-    // Save print-group toString flags (before popping frame)
-    uint8_t frame_flags = ci->flags;
     ci->flags = 0;  // Clear flags
 
     /* Calculate return position and write multiple return values
@@ -727,17 +725,6 @@ vmcase(OP_RETURN) {
         if (VM_FRAME_COUNT == expected_frame_count) {
             isolate->vm.ctor_call_depth--;
         }
-    }
-
-    /* A toString() called by PRINT_GROUP_APPEND returns into the group buffer,
-     * never onto the output: the group leaves through its flush or not at all.
-     * PRINT_GROUP_APPEND placed the buffer two slots below this frame's base. */
-    if ((frame_flags & XR_FRAME_PRINT_GROUP_APPEND) != 0 &&
-        ci->base_offset >= (int) XI_PRINT_GROUP_CALL_SLOT) {
-        XrValue group_value = VM_STACK[ci->base_offset - (int) XI_PRINT_GROUP_CALL_SLOT];
-        XrStringBuilder *group = xr_to_stringbuilder(group_value);
-        if (group)
-            xr_stringbuilder_append_str(group, xr_value_to_string(isolate, ret_result));
     }
 
     if (VM_MODULE_BASE >= 0 && VM_FRAME_COUNT == VM_MODULE_BASE) {
@@ -844,8 +831,6 @@ vmcase(OP_RETURN1) {
 
     vm_ctx->last_nret = 1;
 
-    // Save print-group toString flags
-    uint8_t frame_flags = ci->flags;
     ci->flags = 0;
 
     // Write return value
@@ -882,16 +867,6 @@ vmcase(OP_RETURN1) {
         if (VM_FRAME_COUNT == expected) {
             isolate->vm.ctor_call_depth--;
         }
-    }
-
-    /* Same continuation as OP_RETURN: the rendered value joins the group buffer
-     * two slots below this frame's base and reaches the output only at flush. */
-    if ((frame_flags & XR_FRAME_PRINT_GROUP_APPEND) != 0 &&
-        ci->base_offset >= (int) XI_PRINT_GROUP_CALL_SLOT) {
-        XrValue group_value = VM_STACK[ci->base_offset - (int) XI_PRINT_GROUP_CALL_SLOT];
-        XrStringBuilder *group = xr_to_stringbuilder(group_value);
-        if (group)
-            xr_stringbuilder_append_str(group, xr_value_to_string(isolate, ret_val));
     }
 
     // Check module boundary

@@ -779,7 +779,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate,
     *out_proto = NULL;
     if (!input || !input->state)
         return XI_EMIT_ERR_INTERNAL;
-    if (xr_compile_state_work(input->state, 1) != XR_COMPILE_RESOURCE_OK)
+    if (xr_compile_state_status(input->state) != XR_COMPILE_RESOURCE_OK)
         return XI_EMIT_ERR_RESOURCE;
     if (!xr_target_data_layout_validate(input->target) ||
         (input->import_mode != XI_EMIT_IMPORT_PROGRAM &&
@@ -1135,72 +1135,4 @@ XR_FUNC const char *xi_emit_status_str(XiEmitStatus s) {
             return "internal emitter error";
     }
     return "unknown error";
-}
-
-/* One print group is OP_PRINT_GROUP_NEW, its appends, and one
- * OP_PRINT_GROUP_FLUSH, emitted as a contiguous run over one register.  Only
- * the flush reaches the output capability, so "a group publishes all of itself
- * or none of it" reduces to "a group has exactly one flush" — which this walk
- * decides from the bytecode alone, without trusting the emitter that produced
- * it.  An append or a flush with no group open is an orphan and is refused for
- * the same reason: it would write outside any group. */
-static bool xi_emit_verify_print_groups_in(const XrProto *proto, char *error, size_t error_size) {
-    if (!proto)
-        return true;
-    const XrInstruction *code = PROTO_CODE_BASE(proto);
-    uint32_t count = (uint32_t) PROTO_CODE_COUNT(proto);
-    bool open = false;
-    uint32_t open_reg = 0;
-    uint32_t open_pc = 0;
-    for (uint32_t pc = 0; pc < count; pc++) {
-        XrInstruction i = code[pc];
-        uint32_t op = GET_OPCODE(i);
-        if (op == OP_PRINT_GROUP_NEW) {
-            if (open) {
-                snprintf(error, error_size,
-                         "print group opened at %u is still open at %u: a group must reach "
-                         "exactly one flush",
-                         open_pc, pc);
-                return false;
-            }
-            open = true;
-            open_reg = (uint32_t) GETARG_A(i);
-            open_pc = pc;
-        } else if (op == OP_PRINT_GROUP_APPEND || op == OP_PRINT_GROUP_FLUSH) {
-            if (!open) {
-                snprintf(error, error_size,
-                         "print group instruction at %u has no open group: it would reach the "
-                         "output capability outside a group",
-                         pc);
-                return false;
-            }
-            if ((uint32_t) GETARG_A(i) != open_reg) {
-                snprintf(error, error_size,
-                         "print group instruction at %u names register %u, but the group opened "
-                         "at %u holds register %u",
-                         pc, (uint32_t) GETARG_A(i), open_pc, open_reg);
-                return false;
-            }
-            if (op == OP_PRINT_GROUP_FLUSH)
-                open = false;
-        }
-    }
-    if (open) {
-        snprintf(error, error_size,
-                 "print group opened at %u is never flushed: its buffer would be discarded",
-                 open_pc);
-        return false;
-    }
-    for (uint32_t k = 0; k < (uint32_t) PROTO_PROTO_COUNT(proto); k++) {
-        if (!xi_emit_verify_print_groups_in(PROTO_PROTO(proto, k), error, error_size))
-            return false;
-    }
-    return true;
-}
-
-XR_FUNC bool xi_emit_verify_print_groups(const struct XrProto *proto, char *error,
-                                         size_t error_size) {
-    if (error && error_size)
-        error[0] = '\0';
-    return xi_emit_verify_print_groups_in((const XrProto *) proto, error, error_size);
 }

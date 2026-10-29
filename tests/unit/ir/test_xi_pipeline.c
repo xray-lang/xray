@@ -128,8 +128,11 @@ static char *compile_source_module_identity(void) {
 
 /* Compile source through the full pipeline, return proto.
  * Caller must free both proto and result. */
-static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
+static XrProto *compile_source_checked(const char *source, XiPipelineConfig *cfg,
+                                       bool *print_refused) {
     PIPELINE_TEST_REQUIRE(g_iso != NULL);
+    if (print_refused)
+        *print_refused = false;
 
     /* Create analyzer first — its type pool must be active during parsing
      * so the parser can create type annotations (function types, etc.). */
@@ -169,6 +172,17 @@ static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
     xa_analyzer_free(analyzer);
     xr_program_destroy(program);
 
+    if (print_refused) {
+        PIPELINE_TEST_REQUIRE(res.status == XI_PIPE_ERR_EMIT);
+        PIPELINE_TEST_REQUIRE(res.error.stage == XI_PIPE_STAGE_EMIT);
+        PIPELINE_TEST_REQUIRE(strstr(res.error.detail,
+                                    xi_emit_status_str(XI_EMIT_ERR_UNSUPPORTED_OP)) != NULL);
+        PIPELINE_TEST_REQUIRE(res.proto == NULL);
+        xi_pipeline_result_free(&res);
+        *print_refused = true;
+        return NULL;
+    }
+
     if (res.status != XI_PIPE_OK) {
         fprintf(stderr, "  PIPELINE FAILED at %s: %s\n", xi_pipeline_stage_str(res.error.stage),
                 res.error.detail);
@@ -179,6 +193,21 @@ static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
     XrProto *proto = res.proto;
     xi_pipeline_result_free(&res);
     return proto;
+}
+
+static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
+    return compile_source_checked(source, cfg, NULL);
+}
+
+/* These exact legacy source fixtures no longer claim arithmetic, control-flow,
+ * formatting, or publication success in Proto. Xi PRINT must refuse the old
+ * backend and publish no artifact. Canonical Program fixtures below retain
+ * their own positive checks and expected output. */
+static void expect_proto_print_refusal(const char *source, XiPipelineConfig *cfg) {
+    PIPELINE_TEST_REQUIRE(source != NULL);
+    bool refused = false;
+    PIPELINE_TEST_REQUIRE(compile_source_checked(source, cfg, &refused) == NULL);
+    PIPELINE_TEST_REQUIRE(refused);
 }
 
 static XrProto *compile_source_with_module_graph(const char *namespace_id, const char *source) {
@@ -445,81 +474,54 @@ static int count_opcode(const XrProto *proto, OpCode op) {
 
 /* ========== Constant & Arithmetic Tests ========== */
 
-TEST(e2e_simple_const) {
+TEST(legacy_proto_e2e_simple_const_print_refused) {
     /* var x = 42
      * print(x)
      * Expect: LOADI + PRINT + RETURN */
-    XrProto *p = compile_source("var x = 42\nprint(x)", NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_PRINT_GROUP_FLUSH));
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal("var x = 42\nprint(x)", NULL);
 }
 
-TEST(e2e_arithmetic) {
+TEST(legacy_proto_e2e_arithmetic_print_refused) {
     /* var x = 1 + 2
      * var y = x * 3
      * After const folding: x=3, y=9 (both constants). */
-    XrProto *p = compile_source("var x = 1 + 2\nvar y = x * 3\nprint(y)", NULL);
-    assert(p != NULL);
-    /* After optimization, ADD and MUL should be folded away */
-    assert(!has_opcode(p, OP_ADD) && "1+2 should be folded");
-    assert(!has_opcode(p, OP_MUL) && "3*3 should be folded");
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal("var x = 1 + 2\nvar y = x * 3\nprint(y)", NULL);
 }
 
-TEST(e2e_variable_assignment) {
+TEST(legacy_proto_e2e_variable_assignment_print_refused) {
     /* var x = 10
      * x = x + 5
      * print(x) */
-    XrProto *p = compile_source("var x = 10\nx = x + 5\nprint(x)", NULL);
-    assert(p != NULL);
-    /* After const folding: x=15, so no ADD */
-    assert(!has_opcode(p, OP_ADD) && "10+5 should be folded");
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal("var x = 10\nx = x + 5\nprint(x)", NULL);
 }
 
 /* ========== Control Flow Tests ========== */
 
-TEST(e2e_if_else) {
+TEST(legacy_proto_e2e_if_else_print_refused) {
     /* if (true) { print(1) } else { print(2) } */
-    XrProto *p = compile_source("if (true) { print(1) } else { print(2) }", NULL);
-    assert(p != NULL);
-    /* With const folding, the branch may be eliminated */
-    assert(has_opcode(p, OP_PRINT_GROUP_FLUSH));
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal("if (true) { print(1) } else { print(2) }", NULL);
 }
 
-TEST(e2e_while_loop) {
+TEST(legacy_proto_e2e_while_loop_print_refused) {
     /* var i = 0
      * while i < 3 { i = i + 1 }
      * print(i) */
-    XrProto *p = compile_source("var i = 0\nwhile (i < 3) { i = i + 1 }\nprint(i)", NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_JMP) && "while loop needs JMP");
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal("var i = 0\nwhile (i < 3) { i = i + 1 }\nprint(i)", NULL);
 }
 
 /* ========== Pipeline Configuration Tests ========== */
 
-TEST(e2e_no_optimize) {
+TEST(legacy_proto_e2e_no_optimize_print_refused) {
     /* Verify that unoptimized path works */
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.run_optimize = false;
-    XrProto *p = compile_source("var x = 1 + 2\nprint(x)", &cfg);
-    assert(p != NULL);
-    /* Without optimization, constant folding doesn't run, so arithmetic remains.
-     * Instruction fusion may emit ADDI instead of ADD for small constant args. */
-    assert((has_opcode(p, OP_ADD) || has_opcode(p, OP_ADDI)) &&
-           "unoptimized should keep ADD or ADDI");
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal("var x = 1 + 2\nprint(x)", &cfg);
 }
 
-TEST(e2e_with_verify) {
+TEST(legacy_proto_e2e_with_verify_print_refused) {
     /* Verify passes by default */
     XiPipelineConfig cfg = xi_pipeline_default_config();
-    XrProto *p = compile_source("var x = 42\nprint(x)", &cfg);
-    assert(p != NULL);
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal("var x = 42\nprint(x)", &cfg);
 }
 
 static void check_module_initialization_facts(XiFunc *func) {
@@ -583,7 +585,7 @@ static void check_module_initialization_facts(XiFunc *func) {
     PIPELINE_TEST_REQUIRE(xi_verify(func, error, sizeof(error)));
 }
 
-TEST(e2e_module_slot_declarations_survive_analyzer_and_optimization) {
+TEST(legacy_proto_e2e_module_slot_declarations_survive_analyzer_and_optimization_print_refused) {
     const char *source = "var counter: i64 = 40\n"
                          "export const label: string = \"module\"\n"
                          "var items: Array<i64> = [1, 2]\n"
@@ -594,262 +596,127 @@ TEST(e2e_module_slot_declarations_survive_analyzer_and_optimization) {
                          "}\n"
                          "maybe = 7\n"
                          "print(label, next())\n";
-    XrProto *protos[2] = {NULL, NULL};
     for (int optimize = 0; optimize < 2; optimize++) {
         XiPipelineConfig config = xi_pipeline_default_config();
         config.run_optimize = optimize != 0;
-        protos[optimize] = compile_source(source, &config);
-        PIPELINE_TEST_REQUIRE(protos[optimize] != NULL);
-        check_module_initialization_facts((XiFunc *) protos[optimize]->xi_func);
+        expect_proto_print_refusal(source, &config);
     }
-    /* Both compilation sessions have destroyed their AST and analyzer. Even
-     * unused declarations must keep their own exact type and source identity. */
-    static const char *names[] = {"counter", "label", "items", "maybe", "next"};
-    for (size_t n = 0; n < sizeof(names) / sizeof(names[0]); n++) {
-        const XiModuleSlot *declarations[2] = {NULL, NULL};
-        for (int optimize = 0; optimize < 2; optimize++) {
-            const XiFunc *func = (const XiFunc *) protos[optimize]->xi_func;
-            PIPELINE_TEST_REQUIRE(func != NULL && func->module_slots != NULL);
-            for (uint16_t slot = 0; slot < func->nshared; slot++) {
-                const XiModuleSlot *candidate = &func->module_slots[slot];
-                if (candidate->name && strcmp(candidate->name, names[n]) == 0) {
-                    PIPELINE_TEST_REQUIRE(declarations[optimize] == NULL);
-                    declarations[optimize] = candidate;
-                }
-            }
-            const XiModuleSlot *decl = declarations[optimize];
-            PIPELINE_TEST_REQUIRE(decl != NULL && decl->type != NULL);
-            PIPELINE_TEST_REQUIRE(decl->source_line == n + 1u);
-            PIPELINE_TEST_REQUIRE(decl->is_const == (n == 1u));
-            PIPELINE_TEST_REQUIRE(decl->is_exported == (n == 1u || n == 4u));
-            PIPELINE_TEST_REQUIRE(decl->kind ==
-                                  (n == 4u ? XI_MODULE_SLOT_FUNCTION : XI_MODULE_SLOT_VALUE));
-            PIPELINE_TEST_REQUIRE(decl->type->kind == (n == 0u || n == 3u ? XR_KIND_INT
-                                                       : n == 1u          ? XR_KIND_STRING
-                                                       : n == 2u          ? XR_KIND_ARRAY
-                                                                          : XR_KIND_FUNCTION));
-            PIPELINE_TEST_REQUIRE(decl->type->is_nullable == (n == 3u));
-            if (n == 2u) {
-                PIPELINE_TEST_REQUIRE(decl->type->container.element_type != NULL);
-                PIPELINE_TEST_REQUIRE(decl->type->container.element_type->kind == XR_KIND_INT);
-            }
-            if (decl->is_exported) {
-                bool found = false;
-                for (uint16_t e = 0; func->module && e < func->module->nexports; e++) {
-                    const XiModuleExport *exported = &func->module->exports[e];
-                    if (strcmp(exported->name, decl->name) == 0) {
-                        PIPELINE_TEST_REQUIRE(exported->value_type == decl->type);
-                        found = true;
-                    }
-                }
-                PIPELINE_TEST_REQUIRE(found);
-            }
-        }
-        PIPELINE_TEST_REQUIRE(declarations[0]->source_column == declarations[1]->source_column);
-    }
-    xr_instruction_unit_free(protos[0]);
-    xr_instruction_unit_free(protos[1]);
 }
 
 /* ========== Boolean & Comparison ========== */
 
-TEST(e2e_bool_ops) {
+TEST(legacy_proto_e2e_bool_ops_print_refused) {
     /* var a = true
      * var b = false
      * print(a) */
-    XrProto *p = compile_source("var a = true\nvar b = false\nprint(a)", NULL);
-    assert(p != NULL);
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal("var a = true\nvar b = false\nprint(a)", NULL);
 }
 
-TEST(e2e_comparison) {
+TEST(legacy_proto_e2e_comparison_print_refused) {
     /* var x = 5 > 3
      * print(x)
      * After const folding: x=true */
-    XrProto *p = compile_source("var x = 5 > 3\nprint(x)", NULL);
-    assert(p != NULL);
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal("var x = 5 > 3\nprint(x)", NULL);
 }
 
 /* ========== Multiple Statements ========== */
 
-TEST(e2e_multi_print) {
+TEST(legacy_proto_e2e_multi_print_print_refused) {
     /* print(1)
      * print(2)
      * print(3) */
-    XrProto *p = compile_source("print(1)\nprint(2)\nprint(3)", NULL);
-    assert(p != NULL);
-    /* One flush per source group: the flush is what reaches the output. */
-    assert(count_opcode(p, OP_PRINT_GROUP_FLUSH) == 3 && "should have 3 print groups");
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal("print(1)\nprint(2)\nprint(3)", NULL);
 }
 
-/* One source `print` renders as one buffered group, and exactly one of its
- * instructions touches the output capability. A verifier can check that
- * mechanically: count the flushes, not the renders. */
-TEST(e2e_print_group_is_one_write) {
-    XrProto *p = compile_source("print(1, 2, 3)", NULL);
-    assert(p != NULL);
-    assert(count_opcode(p, OP_PRINT_GROUP_NEW) == 1 && "one group buffer per source print");
-    assert(count_opcode(p, OP_PRINT_GROUP_APPEND) == 3 && "one append per operand");
-    assert(count_opcode(p, OP_PRINT_GROUP_FLUSH) == 1 && "one write per source print");
-    xr_instruction_unit_free(p);
-}
-
-/* An empty group still owns a buffer and still writes its terminator through
- * the same single exit; arity zero is not a special case with its own path. */
-TEST(e2e_print_group_zero_arity_still_flushes) {
-    XrProto *p = compile_source("print()", NULL);
-    assert(p != NULL);
-    assert(count_opcode(p, OP_PRINT_GROUP_NEW) == 1);
-    assert(count_opcode(p, OP_PRINT_GROUP_APPEND) == 0);
-    assert(count_opcode(p, OP_PRINT_GROUP_FLUSH) == 1);
-    xr_instruction_unit_free(p);
+TEST(legacy_proto_print_group_sources_are_refused) {
+    expect_proto_print_refusal("print(1, 2, 3)", NULL);
+    expect_proto_print_refusal("print()", NULL);
 }
 
 /* ========== String Literals ========== */
 
-TEST(e2e_string_literal) {
-    XrProto *p = compile_source("var s = \"hello\"\nprint(s)", NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_PRINT_GROUP_FLUSH));
-    xr_instruction_unit_free(p);
+TEST(legacy_proto_e2e_string_literal_print_refused) {
+    expect_proto_print_refusal("var s = \"hello\"\nprint(s)", NULL);
 }
 
 /* ========== Unary Ops ========== */
 
-TEST(e2e_unary_neg) {
+TEST(legacy_proto_e2e_unary_neg_print_refused) {
     /* var x = -42
      * After const folding: x = -42 */
-    XrProto *p = compile_source("var x = -42\nprint(x)", NULL);
-    assert(p != NULL);
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal("var x = -42\nprint(x)", NULL);
 }
 
 /* ========== For Loop ========== */
 
-TEST(e2e_for_loop) {
-    XrProto *p = compile_source("var sum = 0\n"
+TEST(legacy_proto_e2e_for_loop_print_refused) {
+    expect_proto_print_refusal("var sum = 0\n"
                                 "for (var i = 0; i < 5; i = i + 1) { sum = sum + i }\n"
                                 "print(sum)",
                                 NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_JMP) && "for loop needs backward JMP");
-    assert(has_opcode(p, OP_PRINT_GROUP_FLUSH));
-    xr_instruction_unit_free(p);
 }
 
 /* ========== Function / Closure ========== */
 
-TEST(e2e_function_decl) {
+TEST(legacy_proto_e2e_function_decl_print_refused) {
     /* Function declaration should emit CLOSURE opcode and have a child proto */
-    XrProto *p = compile_source("fn add(a: i64, b: i64) -> i64 { return a + b }\n"
+    expect_proto_print_refusal("fn add(a: i64, b: i64) -> i64 { return a + b }\n"
                                 "print(add(1, 2))",
                                 NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_CLOSURE) && "function decl needs CLOSURE");
-    assert(PROTO_PROTO_COUNT(p) >= 1 && "should have child proto for add()");
-    xr_instruction_unit_free(p);
 }
 
-TEST(e2e_attached_ir_is_repped) {
-    XrProto *p = compile_source("fn add(a: i64, b: i64) -> i64 { return a + b }\n"
+TEST(legacy_proto_e2e_attached_ir_is_repped_print_refused) {
+    expect_proto_print_refusal("fn add(a: i64, b: i64) -> i64 { return a + b }\n"
                                 "print(add(1, 2))",
                                 NULL);
-    assert(p != NULL);
-    assert(p->xi_func != NULL);
-    XiFunc *root = (XiFunc *) p->xi_func;
-    assert(root->stage >= XI_STAGE_REPPED);
-    assert((root->invariant_mask & XI_INV_REPS_SELECTED) != 0);
-    assert(PROTO_PROTO_COUNT(p) >= 1);
-    XrProto *child = PROTO_PROTO(p, 0);
-    assert(child != NULL);
-    assert(child->xi_func != NULL);
-    XiFunc *child_ir = (XiFunc *) child->xi_func;
-    assert(child_ir->stage >= XI_STAGE_REPPED);
-    assert((child_ir->invariant_mask & XI_INV_REPS_SELECTED) != 0);
-    xr_instruction_unit_free(p);
 }
 
-TEST(e2e_recursive_func) {
-    XrProto *p = compile_source("fn fib(n: i64) -> i64 {\n"
+TEST(legacy_proto_e2e_recursive_func_print_refused) {
+    expect_proto_print_refusal("fn fib(n: i64) -> i64 {\n"
                                 "  if (n <= 1) { return n }\n"
                                 "  return fib(n - 1) + fib(n - 2)\n"
                                 "}\nprint(fib(5))",
                                 NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_CLOSURE));
-    /* Child proto should use CALLSELF for recursion */
-    XrProto *child = PROTO_PROTO(p, 0);
-    assert(has_opcode(child, OP_CALLSELF) && "recursive call should use CALLSELF");
-    xr_instruction_unit_free(p);
 }
 
-TEST(e2e_nested_call) {
+TEST(legacy_proto_e2e_nested_call_print_refused) {
     /* Tests the register clobber fix: nested calls to same function.
      * The callee branches so the inliner (which folds straight-line
      * shared-slot helpers into the caller) keeps both calls alive. */
-    XrProto *p = compile_source("fn add(a: i64, b: i64) -> i64 {\n"
+    expect_proto_print_refusal("fn add(a: i64, b: i64) -> i64 {\n"
                                 "  if (a < 0) { return b }\n"
                                 "  return a + b\n"
                                 "}\n"
                                 "print(add(1, add(2, 3)))",
                                 NULL);
-    assert(p != NULL);
-    /* Main proto should have 2 call instructions (not CALLSELF).  Calls to
-     * a statically known closure emit OP_CALL_STATIC; dynamic ones OP_CALL. */
-    int ncalls = count_opcode(p, OP_CALL) + count_opcode(p, OP_CALL_STATIC);
-    assert(ncalls >= 2 && "nested calls need >= 2 calls");
-    assert(!has_opcode(p, OP_CALLSELF) && "main proto must not self-call");
-    xr_instruction_unit_free(p);
 }
 
 /* ========== Constant Propagation Chain ========== */
 
-TEST(e2e_const_prop_chain) {
+TEST(legacy_proto_e2e_const_prop_chain_print_refused) {
     /* var a = 2; var b = a + 3; var c = b * 4; print(c)
      * After folding: a=2, b=5, c=20. No arithmetic ops. */
-    XrProto *p = compile_source("var a = 2\nvar b = a + 3\nvar c = b * 4\nprint(c)", NULL);
-    assert(p != NULL);
-    assert(!has_opcode(p, OP_ADD) && "chain should fold ADD away");
-    assert(!has_opcode(p, OP_MUL) && "chain should fold MUL away");
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal("var a = 2\nvar b = a + 3\nvar c = b * 4\nprint(c)", NULL);
 }
 
 /* ========== Dead Code Elimination ========== */
 
-TEST(e2e_dce_unused_var) {
+TEST(legacy_proto_e2e_dce_unused_var_print_refused) {
     /* Top-level vars are stored via SETSHARED (side effect) so DCE keeps
      * them.  Test inside a function where locals are register-only.
      *   fn f() -> int { var x = 42; var y = 99; return x }
      * y is unused → LOADI 99 should be eliminated from the child proto. */
-    XrProto *p =
-        compile_source("fn f() -> i64 { var x = 42\nvar y = 99\nreturn x }\nprint(f())", NULL);
-    assert(p != NULL);
-    /* Child proto (f) should have only one LOADI (for x=42); y=99 is dead */
-    int nch = DYNARRAY_COUNT(&p->protos);
-    assert(nch >= 1 && "need at least one child proto for f()");
-    XrProto *child = DYNARRAY_GET(&p->protos, 0, XrProto *);
-    int loads = count_opcode(child, OP_LOADI) + count_opcode(child, OP_LOADK);
-    assert(loads <= 1 && "unused y should be eliminated by DCE");
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal("fn f() -> i64 { var x = 42\nvar y = 99\nreturn x }\nprint(f())", NULL);
 }
 
 /* ========== Array Operations ========== */
 
-TEST(e2e_array_literal) {
-    XrProto *p = compile_source("var arr = [10, 20, 30]\nprint(arr[1])", NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_NEWARRAY) && "array literal needs NEWARRAY");
-    assert(has_opcode(p, OP_INDEX_GET) && "arr[1] needs INDEX_GET");
-    xr_instruction_unit_free(p);
+TEST(legacy_proto_e2e_array_literal_print_refused) {
+    expect_proto_print_refusal("var arr = [10, 20, 30]\nprint(arr[1])", NULL);
 }
 
-TEST(e2e_array_set) {
-    XrProto *p = compile_source("var arr = [1, 2, 3]\narr[0] = 99\nprint(arr[0])", NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_INDEX_SET) && "arr[0]=99 needs INDEX_SET");
-    xr_instruction_unit_free(p);
+TEST(legacy_proto_e2e_array_set_print_refused) {
+    expect_proto_print_refusal("var arr = [1, 2, 3]\narr[0] = 99\nprint(arr[0])", NULL);
 }
 
 TEST(e2e_native_pointer_store_narrows_to_pointee) {
@@ -879,283 +746,189 @@ TEST(e2e_inlined_ref_forwarding_remaps_place_origin) {
 
 /* ========== Bitwise Operations ========== */
 
-TEST(e2e_bitwise_ops) {
+TEST(legacy_proto_e2e_bitwise_ops_print_refused) {
     /* Variable-based bitwise ops should emit real instructions */
-    XrProto *p = compile_source("var a = 12\nvar b = 10\n"
+    expect_proto_print_refusal("var a = 12\nvar b = 10\n"
                                 "print(a & b)\nprint(a | b)\nprint(a ^ b)",
                                 NULL);
-    assert(p != NULL);
-    xr_instruction_unit_free(p);
 }
 
-TEST(e2e_bitwise_shift) {
-    XrProto *p = compile_source("var x = 1\nprint(x << 4)\nprint(x >> 0)", NULL);
-    assert(p != NULL);
-    xr_instruction_unit_free(p);
+TEST(legacy_proto_e2e_bitwise_shift_print_refused) {
+    expect_proto_print_refusal("var x = 1\nprint(x << 4)\nprint(x >> 0)", NULL);
 }
 
 /* ========== Compound Assignment ========== */
 
-TEST(e2e_compound_assign) {
-    XrProto *p = compile_source("var x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)", NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_PRINT_GROUP_FLUSH));
-    xr_instruction_unit_free(p);
+TEST(legacy_proto_e2e_compound_assign_print_refused) {
+    expect_proto_print_refusal("var x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)", NULL);
 }
 
 /* ========== Increment / Decrement ========== */
 
-TEST(e2e_inc_dec) {
-    XrProto *p = compile_source("var x = 0\nx++\nx++\nx++\nx--\nprint(x)", NULL);
-    assert(p != NULL);
-    xr_instruction_unit_free(p);
+TEST(legacy_proto_e2e_inc_dec_print_refused) {
+    expect_proto_print_refusal("var x = 0\nx++\nx++\nx++\nx--\nprint(x)", NULL);
 }
 
 /* ========== Break / Continue ========== */
 
-TEST(e2e_break) {
-    XrProto *p = compile_source("var i = 0\n"
+TEST(legacy_proto_e2e_break_print_refused) {
+    expect_proto_print_refusal("var i = 0\n"
                                 "while (i < 100) {\n"
                                 "  if (i == 5) { break }\n"
                                 "  i = i + 1\n"
                                 "}\nprint(i)",
                                 NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_JMP));
-    xr_instruction_unit_free(p);
 }
 
-TEST(e2e_continue) {
-    XrProto *p = compile_source("var sum = 0\nvar i = 0\n"
+TEST(legacy_proto_e2e_continue_print_refused) {
+    expect_proto_print_refusal("var sum = 0\nvar i = 0\n"
                                 "while (i < 10) {\n"
                                 "  i = i + 1\n"
                                 "  if (i % 2 == 0) { continue }\n"
                                 "  sum = sum + i\n"
                                 "}\nprint(sum)",
                                 NULL);
-    assert(p != NULL);
-    xr_instruction_unit_free(p);
 }
 
 /* ========== Multi-branch If-Else ========== */
 
-TEST(e2e_if_else_chain) {
-    XrProto *p = compile_source("var x = 7\n"
+TEST(legacy_proto_e2e_if_else_chain_print_refused) {
+    expect_proto_print_refusal("var x = 7\n"
                                 "if (x > 10) { print(1) }\n"
                                 "else if (x > 5) { print(2) }\n"
                                 "else { print(3) }",
                                 NULL);
-    assert(p != NULL);
-    /* Multiple branches means multiple conditional jumps */
-    xr_instruction_unit_free(p);
 }
 
 /* ========== Float Constants ========== */
 
-TEST(e2e_float_arith) {
+TEST(legacy_proto_e2e_float_arith_print_refused) {
     /* var x = 1.5 + 2.5 → folded to 4.0 */
-    XrProto *p = compile_source("var x = 1.5 + 2.5\nprint(x)", NULL);
-    assert(p != NULL);
-    assert(!has_opcode(p, OP_ADD) && "1.5+2.5 should be folded");
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal("var x = 1.5 + 2.5\nprint(x)", NULL);
 }
 
 /* ========== Ternary ========== */
 
-TEST(e2e_ternary) {
-    XrProto *p = compile_source("var x = 5\nvar r = x > 3 ? 1 : 0\nprint(r)", NULL);
-    assert(p != NULL);
-    xr_instruction_unit_free(p);
+TEST(legacy_proto_e2e_ternary_print_refused) {
+    expect_proto_print_refusal("var x = 5\nvar r = x > 3 ? 1 : 0\nprint(r)", NULL);
 }
 
 /* ========== Logical Short-Circuit ========== */
 
-TEST(e2e_short_circuit) {
+TEST(legacy_proto_e2e_short_circuit_print_refused) {
     /* Pure boolean operands may be speculated eagerly as BAND/BOR. */
-    XrProto *p = compile_source("var a = true\nvar b = false\n"
+    expect_proto_print_refusal("var a = true\nvar b = false\n"
                                 "if (a && b) { print(1) }\n"
                                 "if (a || b) { print(2) }",
                                 NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_BAND) && "pure && should use eager BAND");
-    assert(has_opcode(p, OP_BOR) && "pure || should use eager BOR");
-    xr_instruction_unit_free(p);
 }
 
 /* ========== Multiple Functions ========== */
 
-TEST(e2e_multi_func) {
-    XrProto *p = compile_source("fn double(x: i64) -> i64 { return x * 2 }\n"
+TEST(legacy_proto_e2e_multi_func_print_refused) {
+    expect_proto_print_refusal("fn double(x: i64) -> i64 { return x * 2 }\n"
                                 "fn negate(x: i64) -> i64 { return -x }\n"
                                 "print(negate(double(3)))",
                                 NULL);
-    assert(p != NULL);
-    assert(PROTO_PROTO_COUNT(p) >= 2 && "should have 2 child protos");
-    assert(count_opcode(p, OP_CLOSURE) >= 2 && "need 2 CLOSUREs");
-    xr_instruction_unit_free(p);
 }
 
-TEST(e2e_open_template_keeps_declaration_without_runtime_publication) {
-    XrProto *proto = compile_source("fn before() -> i64 { return 40 }\n"
+TEST(legacy_proto_e2e_open_template_keeps_declaration_without_runtime_publication_print_refused) {
+    expect_proto_print_refusal("fn before() -> i64 { return 40 }\n"
                                    "class Cell<T> {\n"
                                    "  value: T\n"
                                    "  init(value: T) { this.value = value }\n"
                                    "}\n"
                                    "fn after() -> i64 { return before() + 2 }\n"
                                    "print(after())\n", NULL);
-    PIPELINE_TEST_REQUIRE(proto != NULL && proto->xi_func != NULL);
-    XiFunc *root = (XiFunc *) proto->xi_func;
-    PIPELINE_TEST_REQUIRE(PROTO_PROTO_COUNT(proto) == 2 && root->nchildren == 3);
-    PIPELINE_TEST_REQUIRE(!root->children[0] && root->children[1] && !root->children[2]);
-    PIPELINE_TEST_REQUIRE(root->children[1]->is_generic_template);
-    PIPELINE_TEST_REQUIRE(!has_opcode(proto, OP_CLASS_CREATE_FROM_DESCRIPTOR));
-    const XiFunc *before = (XiFunc *) PROTO_PROTO(proto, 0)->xi_func;
-    const XiFunc *after = (XiFunc *) PROTO_PROTO(proto, 1)->xi_func;
-    PIPELINE_TEST_REQUIRE(before && after && strcmp(before->name, "before") == 0 &&
-                          strcmp(after->name, "after") == 0);
-    xr_instruction_unit_free(proto);
 }
 
 /* ========== String Concatenation ========== */
 
-TEST(e2e_string_concat) {
-    XrProto *p = compile_source("var a = \"hello\"\nvar b = \" world\"\n"
+TEST(legacy_proto_e2e_string_concat_print_refused) {
+    expect_proto_print_refusal("var a = \"hello\"\nvar b = \" world\"\n"
                                 "var c = a + b\nprint(c)",
                                 NULL);
-    assert(p != NULL);
-    /* Canonical typed string concatenation lowers to XI_STR_CONCAT. Two parts
-     * fit the VM emitter's bounded range form, so the bytecode shape is exact. */
-    assert(count_opcode(p, OP_STR_CONCAT_N) == 1 && "two-part string concat uses one STR_CONCAT_N");
-    xr_instruction_unit_free(p);
 }
 
 /* ========== Map Literal ========== */
 
-TEST(e2e_map_literal) {
-    XrProto *p = compile_source("var m = {\"a\": 1, \"b\": 2}\nprint(m)", NULL);
-    assert(p != NULL);
-    /* Map creation should emit NEWMAP or NEWJSON + field stores */
-    int total = PROTO_CODE_COUNT(p);
-    assert(total >= 3 && "map literal needs multiple instructions");
-    xr_instruction_unit_free(p);
+TEST(legacy_proto_e2e_map_literal_print_refused) {
+    expect_proto_print_refusal("var m = {\"a\": 1, \"b\": 2}\nprint(m)", NULL);
 }
 
 /* ========== Template String ========== */
 
-TEST(e2e_template_string) {
-    XrProto *p = compile_source("var x = \"world\"\nvar s = \"hello ${x}\"\nprint(s)", NULL);
-    assert(p != NULL);
-    assert(count_opcode(p, OP_STR_CONCAT_N) == 1 && "two-part template uses one STR_CONCAT_N");
-    xr_instruction_unit_free(p);
+TEST(legacy_proto_e2e_template_string_print_refused) {
+    expect_proto_print_refusal("var x = \"world\"\nvar s = \"hello ${x}\"\nprint(s)", NULL);
 }
 
 /* ========== Nullish Coalesce ========== */
 
-TEST(e2e_nullish_coalesce) {
-    XrProto *p = compile_source("var a: i64? = null\nvar b = a ?? 42\nprint(b)", NULL);
-    assert(p != NULL);
-    /* ?? lowers to ISNULL + conditional branch; verify enough instructions */
-    int total = PROTO_CODE_COUNT(p);
-    assert(total >= 3 && "nullish coalesce needs branch logic");
-    xr_instruction_unit_free(p);
+TEST(legacy_proto_e2e_nullish_coalesce_print_refused) {
+    expect_proto_print_refusal("var a: i64? = null\nvar b = a ?? 42\nprint(b)", NULL);
 }
 
 /* ========== Match Expression ========== */
 
-TEST(e2e_match_expr) {
-    XrProto *p = compile_source("var x = 2\n"
+TEST(legacy_proto_e2e_match_expr_print_refused) {
+    expect_proto_print_refusal("var x = 2\n"
                                 "var r = match (x) {\n"
                                 "  1 -> 10,\n"
                                 "  2 -> 20,\n"
                                 "  _ -> 0\n"
                                 "}\nprint(r)",
                                 NULL);
-    assert(p != NULL);
-    /* Match lowers to comparisons + branches; verify enough instructions */
-    int total = PROTO_CODE_COUNT(p);
-    assert(total >= 5 && "match needs comparison + branch logic");
-    xr_instruction_unit_free(p);
 }
 
 /* ========== Try-Catch ========== */
 
-TEST(e2e_try_catch) {
-    XrProto *p = compile_source("try { print(1) } catch (e) { print(e) }", NULL);
-    assert(p != NULL);
-    /* Try-catch should emit SETUP_TRY + POP_TRY or similar */
-    int total = PROTO_CODE_COUNT(p);
-    assert(total >= 3 && "try-catch requires setup/body/handler");
-    xr_instruction_unit_free(p);
+TEST(legacy_proto_e2e_try_catch_print_refused) {
+    expect_proto_print_refusal("try { print(1) } catch (e) { print(e) }", NULL);
 }
 
 /* ========== Slice ========== */
 
-TEST(e2e_slice) {
-    XrProto *p = compile_source("fn useSlice() {\n"
+TEST(legacy_proto_e2e_slice_print_refused) {
+    expect_proto_print_refusal("fn useSlice() {\n"
                                 "  var arr = [1, 2, 3, 4, 5]\n"
                                 "  var s: Slice<i64> = arr[1:3]\n"
                                 "  print(s)\n"
                                 "}\n"
                                 "useSlice()",
                                 NULL);
-    assert(p != NULL);
-    assert(PROTO_PROTO_COUNT(p) >= 1);
-    assert(has_opcode(PROTO_PROTO(p, 0), OP_SLICE) && "slice expression needs OP_SLICE");
-    xr_instruction_unit_free(p);
 }
 
-TEST(e2e_generator_completion_has_no_normal_return_value) {
-    XrProto *p = compile_source("fn counter(n: i64) -> Iterator<i64> {\n"
+TEST(legacy_proto_e2e_generator_completion_has_no_normal_return_value_print_refused) {
+    expect_proto_print_refusal("fn counter(n: i64) -> Iterator<i64> {\n"
                                 "  yield n\n"
                                 "}\n"
                                 "for (x in counter(1)) {\n"
                                 "  print(x)\n"
                                 "}",
                                 NULL);
-    assert(p != NULL);
-    assert(PROTO_PROTO_COUNT(p) >= 1);
-    assert(has_opcode(PROTO_PROTO(p, 0), OP_GEN_YIELD));
-    xr_instruction_unit_free(p);
 }
 
 /* ========== Closure (nested function) ========== */
 
-TEST(e2e_closure) {
-    XrProto *p = compile_source("fn make() -> fn() -> i64 {\n"
+TEST(legacy_proto_e2e_closure_print_refused) {
+    expect_proto_print_refusal("fn make() -> fn() -> i64 {\n"
                                 "  fn inner() -> i64 { return 42 }\n"
                                 "  return inner\n"
                                 "}\nvar f = make()\nprint(f())",
                                 NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_CLOSURE) && "nested func needs OP_CLOSURE");
-    assert(PROTO_PROTO_COUNT(p) >= 1 && "should have child proto");
-    xr_instruction_unit_free(p);
 }
 
 /* ========== Type Conversion ========== */
 
-TEST(e2e_type_convert) {
-    XrProto *p = compile_source("var x = 42\nvar s = x as string\nprint(s)", NULL);
-    assert(p != NULL);
-    /* XI_AS lowers to MOVE; just verify pipeline succeeds */
-    int total = PROTO_CODE_COUNT(p);
-    assert(total >= 2 && "type conversion pipeline must produce instructions");
-    xr_instruction_unit_free(p);
+TEST(legacy_proto_e2e_type_convert_print_refused) {
+    expect_proto_print_refusal("var x = 42\nvar s = x as string\nprint(s)", NULL);
 }
 
 /* ========== Range ========== */
 
-TEST(e2e_range) {
-    XrProto *p = compile_source("var r = 0..10\nprint(r)", NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_NEWRANGE) && "range expression needs OP_NEWRANGE");
-    xr_instruction_unit_free(p);
-
-    p = compile_source("var r = 0..=10\nprint(r)", NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_NEWRANGE_INCLUSIVE) &&
-           "inclusive range expression needs OP_NEWRANGE_INCLUSIVE");
-    xr_instruction_unit_free(p);
+TEST(legacy_proto_e2e_range_print_refused) {
+    expect_proto_print_refusal("var r = 0..10\nprint(r)", NULL);
+    expect_proto_print_refusal("var r = 0..=10\nprint(r)", NULL);
 }
 
 /* ========== Budget Stress Tests ========== */
@@ -1223,79 +996,47 @@ static uint64_t clock_ns(void) {
 #endif
 }
 
-TEST(stress_large_sequential_with_budget) {
+TEST(legacy_proto_stress_large_sequential_with_budget_print_refused) {
     char *src = gen_large_sequential(200);
     assert(src != NULL);
 
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.budget_ns = 2ULL * 1000 * 1000; /* 2 ms */
 
-    uint64_t t0 = clock_ns();
-    XrProto *p = compile_source(src, &cfg);
-    uint64_t elapsed_ms = (clock_ns() - t0) / 1000000;
-
-    assert(p != NULL);
-    assert(elapsed_ms < 5000 && "budget stress should finish in < 5s");
-    printf("  200 stmts, 2ms budget -> %llu ms\n", (unsigned long long) elapsed_ms);
-
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal(src, &cfg);
     free(src);
 }
 
-TEST(stress_large_sequential_no_budget) {
+TEST(legacy_proto_stress_large_sequential_no_budget_print_refused) {
     char *src = gen_large_sequential(200);
     assert(src != NULL);
 
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.budget_ns = 0; /* unlimited */
 
-    uint64_t t0 = clock_ns();
-    XrProto *p = compile_source(src, &cfg);
-    uint64_t elapsed_ms = (clock_ns() - t0) / 1000000;
-
-    assert(p != NULL);
-    assert(elapsed_ms < 10000 && "no-budget stress should finish in < 10s");
-    printf("  200 stmts, no budget -> %llu ms\n", (unsigned long long) elapsed_ms);
-
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal(src, &cfg);
     free(src);
 }
 
-TEST(stress_nested_loops_with_budget) {
+TEST(legacy_proto_stress_nested_loops_with_budget_print_refused) {
     char *src = gen_nested_loops(3, 20);
     assert(src != NULL);
 
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.budget_ns = 5ULL * 1000 * 1000; /* 5 ms */
 
-    uint64_t t0 = clock_ns();
-    XrProto *p = compile_source(src, &cfg);
-    uint64_t elapsed_ms = (clock_ns() - t0) / 1000000;
-
-    assert(p != NULL);
-    assert(elapsed_ms < 5000 && "nested-loop stress should finish in < 5s");
-    printf("  3-deep loops, 5ms budget -> %llu ms\n", (unsigned long long) elapsed_ms);
-
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal(src, &cfg);
     free(src);
 }
 
-TEST(stress_many_functions_with_budget) {
+TEST(legacy_proto_stress_many_functions_with_budget_print_refused) {
     char *src = gen_many_functions(20, 15);
     assert(src != NULL);
 
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.budget_ns = 3ULL * 1000 * 1000; /* 3 ms */
 
-    uint64_t t0 = clock_ns();
-    XrProto *p = compile_source(src, &cfg);
-    uint64_t elapsed_ms = (clock_ns() - t0) / 1000000;
-
-    assert(p != NULL);
-    assert(elapsed_ms < 5000 && "many-func stress should finish in < 5s");
-    printf("  20 funcs x 15 stmts, 3ms budget -> %llu ms\n", (unsigned long long) elapsed_ms);
-
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal(src, &cfg);
     free(src);
 }
 
@@ -1312,20 +1053,14 @@ static char *gen_large_reuse(int nstmts) {
     return buf;
 }
 
-TEST(stress_budget_truncation_still_valid) {
+TEST(legacy_proto_stress_budget_truncation_still_valid_print_refused) {
     char *src = gen_large_reuse(400);
     assert(src != NULL);
 
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.budget_ns = 1ULL * 1000 * 1000; /* 1 ms: very tight */
 
-    XrProto *p = compile_source(src, &cfg);
-    assert(p != NULL);
-
-    int total = PROTO_CODE_COUNT(p);
-    assert(total > 0 && "truncated pipeline must still emit bytecode");
-
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal(src, &cfg);
     free(src);
 }
 
@@ -5332,114 +5067,17 @@ TEST(e2e_program_input_stops_before_legacy_semantic_and_backend_owners) {
     xr_compiler_session_delete(session);
 }
 
-TEST(e2e_generic_this_method_call_uses_frozen_member_identity) {
+TEST(legacy_proto_e2e_generic_this_method_call_uses_frozen_member_identity_print_refused) {
     const char *source = "class Router {\n"
                          "    add<T>(value: T) -> i64 { return this.addRoute(value) }\n"
                          "    addRoute<T>(value: T) -> i64 { return 7 }\n"
                          "}\n"
                          "var router = Router()\n"
                          "print(router.add(1))\n";
-    XrProto *p = compile_source(source, NULL);
-    assert(p != NULL);
-    assert(has_opcode(p, OP_PRINT_GROUP_FLUSH));
-    xr_instruction_unit_free(p);
+    expect_proto_print_refusal(source, NULL);
 }
 
 /* ========== Main ========== */
-
-/* Release strips assert(), so a case whose only checks are asserts reports PASS
- * in a Release build without having checked anything.  The emission check below
- * is the one thing standing behind "a group publishes all of itself or none of
- * it", so it is checked in both builds. */
-#define PIPE_CHECK(cond, what)                                                                     \
-    do {                                                                                           \
-        if (!(cond)) {                                                                             \
-            printf("  FAIL: %s (%s:%d)\n", (what), __FILE__, __LINE__);                            \
-            tests_failed++;                                                                        \
-        }                                                                                          \
-    } while (0)
-
-/* The emission check must reject a group that writes twice, and it must be
- * observed rejecting it rather than assumed to.
- *
- * The mutation turns an append into a second flush, and the case asserts the
- * instruction was not already a flush before doing so.  Without that step a
- * mutation can land on an instruction that already held the target opcode: the
- * assignment changes nothing, the verifier correctly accepts an untampered
- * program, and the case reads as "tamper detection is broken" while nothing was
- * ever tampered with. */
-TEST(e2e_print_group_second_write_is_refused) {
-    XrProto *p = compile_source("print(1, 2, 3)", NULL);
-    PIPE_CHECK(p != NULL, "print fixture compiles");
-    if (!p)
-        return;
-
-    char err[256];
-    PIPE_CHECK(xi_emit_verify_print_groups(p, err, sizeof(err)),
-               "an unmutated group passes the emission check");
-
-    XrInstruction *code = PROTO_CODE_BASE(p);
-    uint32_t n = (uint32_t) PROTO_CODE_COUNT(p);
-    uint32_t at = n;
-    for (uint32_t i = 0; i < n; i++) {
-        if (GET_OPCODE(code[i]) == OP_PRINT_GROUP_APPEND) {
-            at = i;
-            break;
-        }
-    }
-    PIPE_CHECK(at < n, "the fixture contains an append to mutate");
-    if (at >= n) {
-        xr_instruction_unit_free(p);
-        return;
-    }
-    PIPE_CHECK(GET_OPCODE(code[at]) != OP_PRINT_GROUP_FLUSH,
-               "the mutation must change the opcode rather than restate it");
-
-    code[at] = CREATE_ABC(OP_PRINT_GROUP_FLUSH, GETARG_A(code[at]), 0, 0);
-    PIPE_CHECK(GET_OPCODE(code[at]) == OP_PRINT_GROUP_FLUSH, "the mutation took effect");
-    PIPE_CHECK(!xi_emit_verify_print_groups(p, err, sizeof(err)),
-               "a group that reaches the output capability twice is refused");
-    /* Printing the reason is what makes a silent pass distinguishable from a
-     * check that never ran: an empty reason means nothing was refused. */
-    printf("    refused with: %s\n", err);
-
-    xr_instruction_unit_free(p);
-}
-
-/* A group that never flushes is refused for the mirror-image reason: its buffer
- * would be discarded with the rendered text still inside. */
-TEST(e2e_print_group_without_write_is_refused) {
-    XrProto *p = compile_source("print(1, 2, 3)", NULL);
-    PIPE_CHECK(p != NULL, "print fixture compiles");
-    if (!p)
-        return;
-
-    XrInstruction *code = PROTO_CODE_BASE(p);
-    uint32_t n = (uint32_t) PROTO_CODE_COUNT(p);
-    uint32_t at = n;
-    for (uint32_t i = 0; i < n; i++) {
-        if (GET_OPCODE(code[i]) == OP_PRINT_GROUP_FLUSH) {
-            at = i;
-            break;
-        }
-    }
-    PIPE_CHECK(at < n, "the fixture contains a flush to remove");
-    if (at >= n) {
-        xr_instruction_unit_free(p);
-        return;
-    }
-    PIPE_CHECK(GET_OPCODE(code[at]) != OP_PRINT_GROUP_APPEND,
-               "the mutation must change the opcode rather than restate it");
-
-    char err[256];
-    code[at] = CREATE_ABC(OP_PRINT_GROUP_APPEND, GETARG_A(code[at]), 0, 0);
-    PIPE_CHECK(GET_OPCODE(code[at]) == OP_PRINT_GROUP_APPEND, "the mutation took effect");
-    PIPE_CHECK(!xi_emit_verify_print_groups(p, err, sizeof(err)),
-               "a group that never reaches the output capability is refused");
-    printf("    refused with: %s\n", err);
-
-    xr_instruction_unit_free(p);
-}
 
 int main(int argc, char **argv) {
     if (!backend_emission_owner_open((XrCompileResourceLimits) {
@@ -5490,129 +5128,127 @@ int main(int argc, char **argv) {
     }
 
     /* Constants & arithmetic */
-    run_e2e_simple_const();
-    run_e2e_arithmetic();
-    run_e2e_variable_assignment();
+    run_legacy_proto_e2e_simple_const_print_refused();
+    run_legacy_proto_e2e_arithmetic_print_refused();
+    run_legacy_proto_e2e_variable_assignment_print_refused();
 
     /* Control flow */
-    run_e2e_if_else();
-    run_e2e_while_loop();
+    run_legacy_proto_e2e_if_else_print_refused();
+    run_legacy_proto_e2e_while_loop_print_refused();
 
     /* Configuration */
-    run_e2e_no_optimize();
-    run_e2e_with_verify();
-    run_e2e_module_slot_declarations_survive_analyzer_and_optimization();
+    run_legacy_proto_e2e_no_optimize_print_refused();
+    run_legacy_proto_e2e_with_verify_print_refused();
+    run_legacy_proto_e2e_module_slot_declarations_survive_analyzer_and_optimization_print_refused();
 
     /* Boolean & comparison */
-    run_e2e_bool_ops();
-    run_e2e_comparison();
+    run_legacy_proto_e2e_bool_ops_print_refused();
+    run_legacy_proto_e2e_comparison_print_refused();
 
     /* Multiple statements */
-    run_e2e_multi_print();
-    run_e2e_print_group_is_one_write();
-    run_e2e_print_group_zero_arity_still_flushes();
-    run_e2e_print_group_second_write_is_refused();
-    run_e2e_print_group_without_write_is_refused();
+    run_legacy_proto_e2e_multi_print_print_refused();
+
+    run_legacy_proto_print_group_sources_are_refused();
 
     /* String */
-    run_e2e_string_literal();
+    run_legacy_proto_e2e_string_literal_print_refused();
 
     /* Unary */
-    run_e2e_unary_neg();
+    run_legacy_proto_e2e_unary_neg_print_refused();
 
     /* For loop */
-    run_e2e_for_loop();
+    run_legacy_proto_e2e_for_loop_print_refused();
 
     /* Functions / closures */
-    run_e2e_function_decl();
-    run_e2e_attached_ir_is_repped();
-    run_e2e_recursive_func();
-    run_e2e_nested_call();
+    run_legacy_proto_e2e_function_decl_print_refused();
+    run_legacy_proto_e2e_attached_ir_is_repped_print_refused();
+    run_legacy_proto_e2e_recursive_func_print_refused();
+    run_legacy_proto_e2e_nested_call_print_refused();
 
     /* Constant propagation chain */
-    run_e2e_const_prop_chain();
+    run_legacy_proto_e2e_const_prop_chain_print_refused();
 
     /* Dead code elimination */
-    run_e2e_dce_unused_var();
+    run_legacy_proto_e2e_dce_unused_var_print_refused();
 
     /* Array operations */
-    run_e2e_array_literal();
-    run_e2e_array_set();
+    run_legacy_proto_e2e_array_literal_print_refused();
+    run_legacy_proto_e2e_array_set_print_refused();
     run_e2e_native_pointer_store_narrows_to_pointee();
     run_e2e_inlined_ref_forwarding_remaps_place_origin();
 
     /* Bitwise operations */
-    run_e2e_bitwise_ops();
-    run_e2e_bitwise_shift();
+    run_legacy_proto_e2e_bitwise_ops_print_refused();
+    run_legacy_proto_e2e_bitwise_shift_print_refused();
 
     /* Compound assignment */
-    run_e2e_compound_assign();
+    run_legacy_proto_e2e_compound_assign_print_refused();
 
     /* Increment / decrement */
-    run_e2e_inc_dec();
+    run_legacy_proto_e2e_inc_dec_print_refused();
 
     /* Break / continue */
-    run_e2e_break();
-    run_e2e_continue();
+    run_legacy_proto_e2e_break_print_refused();
+    run_legacy_proto_e2e_continue_print_refused();
 
     /* Multi-branch if-else */
-    run_e2e_if_else_chain();
+    run_legacy_proto_e2e_if_else_chain_print_refused();
 
     /* Float arithmetic */
-    run_e2e_float_arith();
+    run_legacy_proto_e2e_float_arith_print_refused();
 
     /* Ternary */
-    run_e2e_ternary();
+    run_legacy_proto_e2e_ternary_print_refused();
 
     /* Logical short-circuit */
-    run_e2e_short_circuit();
+    run_legacy_proto_e2e_short_circuit_print_refused();
 
     /* Multiple functions */
-    run_e2e_multi_func();
-    run_e2e_open_template_keeps_declaration_without_runtime_publication();
+    run_legacy_proto_e2e_multi_func_print_refused();
+    run_legacy_proto_e2e_open_template_keeps_declaration_without_runtime_publication_print_refused();
 
     /* String concatenation */
-    run_e2e_string_concat();
+    run_legacy_proto_e2e_string_concat_print_refused();
 
     /* Map literal */
-    run_e2e_map_literal();
+    run_legacy_proto_e2e_map_literal_print_refused();
 
     run_e2e_program_prelude_enum_rejects_inconsistent_declarations();
 
     /* Template string */
-    run_e2e_template_string();
+    run_legacy_proto_e2e_template_string_print_refused();
 
     /* Nullish coalesce */
-    run_e2e_nullish_coalesce();
+    run_legacy_proto_e2e_nullish_coalesce_print_refused();
 
     /* Match expression */
-    run_e2e_match_expr();
+    run_legacy_proto_e2e_match_expr_print_refused();
 
     /* Try-catch */
-    run_e2e_try_catch();
+    run_legacy_proto_e2e_try_catch_print_refused();
 
     /* Slice */
-    run_e2e_slice();
+    run_legacy_proto_e2e_slice_print_refused();
 
     /* Generator completion */
-    run_e2e_generator_completion_has_no_normal_return_value();
+    run_legacy_proto_e2e_generator_completion_has_no_normal_return_value_print_refused();
 
     /* Closure (nested function) */
-    run_e2e_closure();
+    run_legacy_proto_e2e_closure_print_refused();
 
     /* Type conversion */
-    run_e2e_type_convert();
+    run_legacy_proto_e2e_type_convert_print_refused();
 
     /* Range */
-    run_e2e_range();
+    run_legacy_proto_e2e_range_print_refused();
 
     /* Budget stress tests */
     printf("\n--- Budget Stress Tests ---\n");
-    run_stress_large_sequential_with_budget();
-    run_stress_large_sequential_no_budget();
-    run_stress_nested_loops_with_budget();
-    run_stress_many_functions_with_budget();
-    run_stress_budget_truncation_still_valid();
+    run_legacy_proto_stress_large_sequential_with_budget_print_refused();
+    run_legacy_proto_stress_large_sequential_no_budget_print_refused();
+    run_legacy_proto_stress_nested_loops_with_budget_print_refused();
+    run_legacy_proto_stress_many_functions_with_budget_print_refused();
+    run_legacy_proto_stress_budget_truncation_still_valid_print_refused();
 
     /* API */
     run_e2e_analyzer_error_stops_before_lowering();
@@ -5630,7 +5266,7 @@ int main(int argc, char **argv) {
     run_e2e_program_typed_error_cleanup_trampoline_reuses_error_live_in();
     run_e2e_program_witness_move_operands_are_consumed_once();
     run_e2e_program_input_stops_before_legacy_semantic_and_backend_owners();
-    run_e2e_generic_this_method_call_uses_frozen_member_identity();
+    run_legacy_proto_e2e_generic_this_method_call_uses_frozen_member_identity_print_refused();
 
     teardown();
 

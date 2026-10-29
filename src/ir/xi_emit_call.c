@@ -1152,14 +1152,6 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_builtin_unary_opcode(ctx, v, dst, OP_CHR);
         return;
     }
-    if (bname && strcmp(bname, "StringBuilder") == 0) {
-        /* OP_NEWSTRINGBUILDER: A=dst, B=storage_mode (0=normal) */
-        emit_inst(
-            ctx, CREATE_ABC(
-                     OP_NEWSTRINGBUILDER, dst,
-                     xi_emit_allocation_storage_mode(ctx, xi_value_allocation_storage_mode(v)), 0));
-        return;
-    }
     if (bname && strcmp(bname, "array_copy_new") == 0) {
         emit_builtin_array_copy_new(ctx, v, dst);
         return;
@@ -1201,41 +1193,24 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 }
 
-/* String concatenation: STRBUF_NEW + STRBUF_APPEND*n + STRBUF_FINISH.
- *
- * STRBUF_NEW writes a StringBuilder into dst, destroying whatever was
- * there.  When the result is coalesced to the same register as one of
- * the operands (e.g. `result = result + "a"`), we must read that
- * operand into a temp register BEFORE STRBUF_NEW clobbers it. */
+/* The bounded ordinary-string instruction is the only remaining Proto
+ * projection. Larger groups have no private-buffer fallback. */
 XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     uint16_t n = v->nargs;
-
-    /* Pre-resolve all arg registers before STRBUF_NEW */
-    XiEmitReg stack_parts[64];
-    XiEmitReg *parts = stack_parts;
-    if (n > 64) {
-        parts = (XiEmitReg *) xr_malloc((size_t) n * sizeof(XiEmitReg));
-        if (!parts) {
-            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-            return;
-        }
+    if (!n || n > XR_STR_CONCAT_INLINE_PARTS) {
+        emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
+        return;
     }
+    XiEmitReg parts[XR_STR_CONCAT_INLINE_PARTS];
     for (uint16_t a = 0; a < n; a++) {
         parts[a] = reg_of(ctx, v->args[a]);
-        if (ctx->status != XI_EMIT_OK) {
-            if (parts != stack_parts)
-                xr_free(parts);
+        if (ctx->status != XI_EMIT_OK)
             return;
-        }
     }
-
-    /* Save args that alias dst to fresh temp registers */
     for (uint16_t a = 0; a < n; a++) {
         if (parts[a] == dst) {
             if (ctx->next_reg >= MAX_REGS) {
                 emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-                if (parts != stack_parts)
-                    xr_free(parts);
                 return;
             }
             XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
@@ -1245,18 +1220,13 @@ XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             parts[a] = tmp;
         }
     }
-
-    /* Static uint values share the raw i64 slot representation with signed
-     * integers. Convert them before dynamic StringBuilder append loses the
-     * unsigned type view. */
+    /* Raw integer slots do not retain the unsigned type view. */
     for (uint16_t a = 0; a < n; a++) {
         int hint = xi_emit_tostring_hint_for_type(v->args[a] ? v->args[a]->type : NULL);
         if (hint != 3)
             continue;
         if (ctx->next_reg >= MAX_REGS) {
             emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-            if (parts != stack_parts)
-                xr_free(parts);
             return;
         }
         XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
@@ -1265,102 +1235,23 @@ XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_TOSTRING, tmp, parts[a], hint));
         parts[a] = tmp;
     }
-
-    /* Two passes -- measure, then copy -- through the shared kernel, which is
-     * what the AOT path does. The instruction reads its parts from one
-     * consecutive run, so they are moved into place first; that costs n moves
-     * and saves the builder's repeated regrowth. Longer concatenations exceed
-     * the instruction's inline capacity and keep the builder. */
-    bool concat_inline =
-        n > 0 && n <= XR_STR_CONCAT_INLINE_PARTS && (size_t) ctx->next_reg + n < MAX_REGS;
-    if (concat_inline) {
-        XiEmitReg run = (XiEmitReg) ctx->next_reg;
-        ctx->next_reg = (uint16_t) (ctx->next_reg + n);
-        if (ctx->next_reg > ctx->max_reg)
-            ctx->max_reg = ctx->next_reg;
-        for (uint16_t a = 0; a < n; a++)
-            emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (run + a), parts[a], 0));
-        emit_inst(ctx, CREATE_ABC(OP_STR_CONCAT_N, dst, run, n));
-    } else {
-        emit_inst(ctx, CREATE_ABC(OP_STRBUF_NEW, dst, 0, 0));
-        for (uint16_t a = 0; a < n; a++) {
-            emit_inst(ctx, CREATE_ABC(OP_STRBUF_APPEND, dst, parts[a], 0));
-        }
-        emit_inst(ctx, CREATE_ABC(OP_STRBUF_FINISH, dst, 0, 0));
+    if ((size_t) ctx->next_reg + n >= MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
     }
-    if (parts != stack_parts)
-        xr_free(parts);
+    XiEmitReg run = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg = (uint16_t) (ctx->next_reg + n);
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    for (uint16_t a = 0; a < n; a++)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (run + a), parts[a], 0));
+    emit_inst(ctx, CREATE_ABC(OP_STR_CONCAT_N, dst, run, n));
 }
 
-/* Print
- *
- * The Xi operation is one group carrying one plan. Bytecode is a projection of
- * that group: separator placement and termination are derived here from the
- * plan and the operand ordinal, so no earlier stage encodes them per operand
- * and the two cannot disagree. A zero-operand group is still a group and emits
- * the buffer that frames it.
- *
- * The group stays several instructions because rendering an operand may call
- * back into the interpreter (a user `toString`), which leaves the dispatch; a
- * single instruction would have nowhere to keep the partially rendered group
- * across that call. The buffer is that place, and PRINT_GROUP_FLUSH is the one
- * instruction of the three that reaches the output capability: a group that
- * never gets there — a panic unwinding past it, a coroutine collected while
- * suspended inside a formatter — publishes nothing.
- *
- * The buffer needs its own registers because a `toString` frame is built on top
- * of them: the window is [group, toString return slot, toString callee base].
- * Reusing an operand's register the way a value-addressed print would means the
- * callee frame lands on the operands that have not rendered yet. */
+/* PRINT remains a semantic operation; the retired Proto executor has no
+ * output projection. Refuse it before publishing any bytecode artifact. */
 XR_FUNC void xi_emit_print(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) v;
     (void) dst;
-    const XrPrintPlan *plan = xi_print_plan(v);
-    if (!plan || plan->arity != v->nargs) {
-        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-        return;
-    }
-
-    /* Resolve every operand before the window is carved, so no register the
-     * group depends on is allocated between PRINT_GROUP_NEW and the flush. */
-    XiEmitReg stack_ops[16];
-    XiEmitReg *ops = stack_ops;
-    uint16_t n = v->nargs;
-    if (n > (uint16_t) (sizeof(stack_ops) / sizeof(stack_ops[0]))) {
-        ops = (XiEmitReg *) xr_malloc((size_t) n * sizeof(XiEmitReg));
-        if (!ops) {
-            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-            return;
-        }
-    }
-    for (uint16_t a = 0; a < n; a++) {
-        ops[a] = reg_of(ctx, v->args[a]);
-        if (ctx->status != XI_EMIT_OK) {
-            if (ops != stack_ops)
-                xr_free(ops);
-            return;
-        }
-    }
-
-    XiEmitReg group = 0;
-    bool have_window = emit_call_scratch_window(ctx, XI_PRINT_GROUP_WINDOW, &group);
-    if (!have_window) {
-        if (ops != stack_ops)
-            xr_free(ops);
-        return;
-    }
-
-    /* The operand fields are 16 bits wide; the flag words are not narrowed here
-     * so a later flag has room without a second encoding. */
-    emit_inst(ctx, CREATE_ABC(OP_PRINT_GROUP_NEW, group, 0, 0));
-    for (uint16_t a = 0; a < n; a++) {
-        uint16_t flags = xr_print_plan_operand_needs_separator(plan, a) ? XR_PRINT_BC_SEPARATE : 0u;
-        if (xi_print_operand_renders_unsigned(v->args[a]))
-            flags |= XR_PRINT_BC_UNSIGNED;
-        emit_inst(ctx, CREATE_ABC(OP_PRINT_GROUP_APPEND, group, ops[a], flags));
-    }
-    uint16_t terminates = plan->terminator != XR_PRINT_TERMINATOR_NONE ? XR_PRINT_BC_TERMINATE : 0u;
-    emit_inst(ctx, CREATE_ABC(OP_PRINT_GROUP_FLUSH, group, terminates, 0));
-
-    if (ops != stack_ops)
-        xr_free(ops);
+    emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
 }

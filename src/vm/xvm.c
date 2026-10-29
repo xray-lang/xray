@@ -85,7 +85,6 @@
 #include <stddef.h>
 #include "../base/xarena.h"
 #include "../os/os_time.h"
-#include "../runtime/object/xstringbuilder.h"
 #include "../runtime/object/xbuffer.h"
 
 #include "../runtime/object/xjson.h"
@@ -882,7 +881,7 @@ startfunc:
 
 /* Arithmetic + unary opcodes — see xvm_dispatch_arith.inc.c. */
 #include "xvm_dispatch_arith.inc.c"
-/* Box/unbox + StringBuilder helpers — see xvm_dispatch_data.inc.c. */
+/* Typed payload and ordinary string helpers. */
 #include "xvm_dispatch_data.inc.c"
 /* Bitwise opcodes — see xvm_dispatch_bitwise.inc.c. */
 #include "xvm_dispatch_bitwise.inc.c"

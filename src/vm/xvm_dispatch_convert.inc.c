@@ -15,7 +15,6 @@
  *
  * Owns:
  *   I/O / debug:
- *     OP_PRINT_GROUP_NEW / _APPEND / _FLUSH — one whole print group
  *     OP_TYPEOF    — runtime type id
  *     OP_TYPENAME  — runtime type name string
  *     OP_DUMP      — diagnostic value dump
@@ -27,123 +26,6 @@
  *   Char-from-int:
  *     OP_CHR       — single Unicode character string
  */
-
-vmcase(OP_PRINT_GROUP_NEW) {
-    /* Open one print group. Nothing reaches the output capability until
-    ** PRINT_GROUP_FLUSH, so a group abandoned between here and there — a panic
-    ** unwinding past this frame, a coroutine collected while suspended inside a
-    ** formatter — is discarded with its registers and publishes nothing. */
-    int a = GETARG_A(i);
-
-    XrStringBuilder *group = xr_stringbuilder_new(VM_CURRENT_CORO);
-    if (!group) {
-        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "out of memory opening print group");
-    }
-    R(a) = xr_stringbuilder_value(group);
-    vmbreak;
-}
-
-vmcase(OP_PRINT_GROUP_APPEND) {
-    /* Render one operand into the open group.
-    ** A: group window base — R[A] holds the buffer, R[A+1] is the return slot
-    **    of a user toString() and R[A+2] that call's frame base
-    ** B: value register
-    ** C: XR_PRINT_BC_SEPARATE | XR_PRINT_BC_UNSIGNED
-    **
-    ** Emission derives C from the group's plan, so this dispatch never decides
-    ** where a separator goes. A value whose class defines toString() renders by
-    ** calling it, which leaves this dispatch; the return path appends the
-    ** result to the same buffer rather than writing it out.
-    */
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    uint32_t c_field = GETARG_C(i);
-
-    XrStringBuilder *group = xr_to_stringbuilder(R(a));
-    if (!group) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "print group buffer was lost");
-    }
-    if ((c_field & XR_PRINT_BC_SEPARATE) != 0)
-        xr_stringbuilder_append_cstr(group, " ", 1);
-
-    /* The slot holds raw bits; only the operand's static type says whether they
-     * denote an unsigned value. */
-    if ((c_field & XR_PRINT_BC_UNSIGNED) != 0) {
-        char digits[24];
-        int n = snprintf(digits, sizeof(digits), "%llu", (unsigned long long) (uint64_t) R(b).i);
-        if (n > 0)
-            xr_stringbuilder_append_cstr(group, digits, (size_t) n);
-        vmbreak;
-    }
-
-    XrValue val = R(b);
-
-    // Check if instance has toString method
-    if (xr_value_is_instance(val)) {
-        XrObjectInstance *inst = xr_value_to_instance(val);
-        XrClass *cls = xr_instance_get_class(inst);
-        if (cls) {
-            XrMethod *method = xr_class_lookup_method(cls, SYMBOL_TOSTRING);
-            if (method && method->type == XMETHOD_CLOSURE && method->as.closure) {
-                // Call toString() method
-                XrClosure *closure = method->as.closure;
-                XrProto *proto = closure->proto;
-
-                /* The callee starts above the buffer and its return slot, so
-                 * the group survives the call and the operands still waiting to
-                 * render are not underneath the new frame. */
-                int call_base = a + (int) XI_PRINT_GROUP_CALL_SLOT;
-                VM_STACK_CHECK(call_base + proto->maxstacksize);
-                R(call_base) = val;
-
-                // Save current PC (continue after return)
-                savepc();
-
-                // Create new call frame
-                int _fidx = VM_FRAME_COUNT;
-                VM_INC_FRAME_COUNT;
-                XrBcCallFrame *new_frame = &VM_FRAMES[_fidx];
-                new_frame->closure = closure;
-                new_frame->pc = PROTO_CODE_BASE(proto);
-                new_frame->base_offset = (int) ((base + call_base) - VM_STACK);
-
-                /* Marks the return path: the value belongs in the group buffer
-                 * two slots below this frame's base, not on the output. */
-                new_frame->flags = XR_FRAME_PRINT_GROUP_APPEND;
-
-                goto startfunc;
-            }
-        }
-    }
-
-    // Default rendering: use unified xr_value_to_string
-    XrString *rendered = xr_value_to_string(isolate, val);
-    xr_stringbuilder_append_str(group, rendered);
-
-    vmbreak;
-}
-
-vmcase(OP_PRINT_GROUP_FLUSH) {
-    /* The one instruction of the group that touches the output capability.
-    ** A: group window base, B: XR_PRINT_BC_TERMINATE.
-    ** The terminator joins the buffer first so the group leaves as one write
-    ** and concurrent groups cannot interleave inside a line. */
-    int a = GETARG_A(i);
-    uint32_t b_field = GETARG_B(i);
-
-    XrStringBuilder *group = xr_to_stringbuilder(R(a));
-    if (!group) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "print group buffer was lost");
-    }
-    if ((b_field & XR_PRINT_BC_TERMINATE) != 0)
-        xr_stringbuilder_append_cstr(group, "\n", 1);
-
-    XrStrBuf *rendered = group->buffer;
-    if (rendered && rendered->length > 0)
-        fwrite(rendered->data, 1, rendered->length, xr_isolate_stdout(isolate));
-
-    vmbreak;
-}
 
 vmcase(OP_TYPEOF) {
     // Returns int (XrTypeId) for fast comparison

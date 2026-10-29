@@ -29,7 +29,6 @@
 #include "xvm_coro_api.h"
 #include "../runtime/xray_debug_hooks.h"
 #include "../runtime/xstrbuf.h"
-#include "../runtime/object/xstringbuilder.h"
 #include "../module/xstdlib_runtime_cache.h"
 
 #include "../runtime/object/xjson.h"

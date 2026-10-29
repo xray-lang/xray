@@ -86,9 +86,6 @@
 #define KOP_ABC_INPLACE_SYM XR_OPF_REG_INOUT, XR_OPF_SYMBOL_IDX, XR_OPF_REG_IN
 #define KOP_AB_K XR_OPF_REG_IN, XR_OPF_K_IDX, XR_OPF_NONE
 #define KOP_AB_FLAG XR_OPF_REG_IN, XR_OPF_LIT_FLAG, XR_OPF_NONE
-/* A is a three-register window: the group buffer, the toString return slot,
- * and the toString callee base. */
-#define KOP_PRINT_GROUP_APPEND XR_OPF_REG_BASE, XR_OPF_REG_IN, XR_OPF_LIT
 #define KOP_INVOKE_DIRECT XR_OPF_REG_BASE, XR_OPF_REG_IN, XR_OPF_LIT
 #define KOP_DUMP XR_OPF_REG_IN, XR_OPF_LIT, XR_OPF_NONE
 #define KOP_AB_UNARY_HINT XR_OPF_REG_OUT, XR_OPF_REG_IN, XR_OPF_LIT
@@ -122,9 +119,6 @@
     _(DIV_F32, FMT_ABC, KOP_ABC_BIN, "R[A] = f32(R[B]) / f32(R[C])")                               \
     _(UNM, FMT_AB, KOP_AB_UNARY, "R[A] = -R[B]")                                                   \
     _(NOT, FMT_AB, KOP_AB_UNARY, "R[A] = !R[B]")                                                   \
-    _(STRBUF_NEW, FMT_A, KOP_A_LOAD, "R[A] = new_strbuf()")                                        \
-    _(STRBUF_APPEND, FMT_AB, KOP_AB_INPLACE, "strbuf(R[A]).append(R[B])")                          \
-    _(STRBUF_FINISH, FMT_A, KOP_A_INOUT, "R[A] = strbuf(R[A]).to_string()")                        \
     _(STR_CONCAT_N, FMT_ABC, KOP_ABC_OUT_BASE_LIT,                                                 \
       "R[A] = concat(R[B]...R[B+C-1]) - one pass to measure, one to copy")                         \
     _(BAND, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B] & R[C]")                                            \
@@ -178,7 +172,6 @@
     _(NEWTUPLE, FMT_AB, KOP_AB_NEW_LIT, "R[A] = (R[A+1]..R[A+B]), B=arity")                        \
     _(TUPLE_GET, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B].C (tuple, C=field_index)")                 \
     _(NEWSET, FMT_AB, KOP_AB_NEW_LIT, "R[A] = #[], B=storage")                                     \
-    _(NEWSTRINGBUILDER, FMT_AB, KOP_AB_NEW_LIT, "R[A] = new StringBuilder(), B=storage")           \
     _(NEWRANGE, FMT_ABC, KOP_ABC_BIN, "R[A] = Range(R[B], R[C])")                                  \
     _(NEWRANGE_INCLUSIVE, FMT_ABC, KOP_ABC_BIN, "R[A] = Range inclusive(R[B], R[C])")              \
     _(RANGE_UNPACK, FMT_AB, KOP_AB_RECV, "R[A]=start, R[A+1]=end, R[A+2]=step from Range R[B]")    \
@@ -278,12 +271,6 @@
     _(JSON_PARSE_WITH_REST_IGNORE, FMT_ABC, KOP_ABC_BIN_LIT,                                       \
       "R[A] = parse_with_rest_ignore(R[B]:string, K[C]:WithRestShape)")                            \
     _(GETBUILTIN, FMT_GLOBAL, KOP_GLOBAL_GET, "R[A] = builtins[Bx]")                               \
-    /* One print group: NEW opens the buffer, APPEND renders one operand into                      \
-     * it, FLUSH is the only instruction that touches the output capability. */                    \
-    _(PRINT_GROUP_NEW, FMT_A, KOP_A_LOAD, "R[A] = new print group buffer")                         \
-    _(PRINT_GROUP_APPEND, FMT_ABC, KOP_PRINT_GROUP_APPEND,                                         \
-      "group(R[A]).append(render(R[B])), flags=C")                                                 \
-    _(PRINT_GROUP_FLUSH, FMT_AB, KOP_AB_FLAG, "write group(R[A]) out, terminate=B")                \
     _(TYPEOF, FMT_AB, KOP_AB_UNARY_HINT, "R[A] = typeof(R[B]) -> int")                             \
     _(TYPENAME, FMT_AB, KOP_AB_UNARY_HINT, "R[A] = typename(R[B]) -> string")                      \
     _(DUMP, FMT_AB, KOP_DUMP, "dump(R[A], indent=B)")                                              \

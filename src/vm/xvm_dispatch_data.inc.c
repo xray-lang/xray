@@ -5,21 +5,18 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xvm_dispatch_data.inc.c — typed-storage box/unbox + StringBuilder
+ * xvm_dispatch_data.inc.c — typed-storage box/unbox and string concatenation
  *
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, R, vmcase,
  * vmbreak, ...) provided by the surrounding scope. CMake
  * excludes *.inc.c from the VM_SRC glob.
  *
- * Owns the typed-payload boundary helpers and the inline
- * StringBuilder fast path that sit between the arithmetic and
- * bitwise blocks in source order:
+ * Owns the typed-payload boundary helpers and ordinary string concatenation:
  *
  *   OP_BOX_I64 / OP_BOX_F64           — raw payload -> tagged
  *   OP_UNBOX_I64 / OP_UNBOX_F64       — tagged -> raw payload
  *   OP_ARRAY_GET_NOCHECK              — checked-out array fetch
- *   OP_STRBUF_NEW / APPEND / FINISH   — StringBuilder hot path
  */
 
 // Box/Unbox: typed storage (typed array / compact field) to tagged boundary
@@ -106,36 +103,6 @@ vmcase(OP_ARRAY_GET_NOCHECK) {
     vmbreak;
 }
 
-/* === StringBuilder Instructions === */
-
-vmcase(OP_STRBUF_NEW) {
-    int a = GETARG_A(i);
-
-    XrStringBuilder *sb = xr_stringbuilder_new(VM_CURRENT_CORO);
-    R(a) = xr_stringbuilder_value(sb);
-    vmbreak;
-}
-
-vmcase(OP_STRBUF_APPEND) {
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-
-    XrStringBuilder *sb = xr_to_stringbuilder(R(a));
-
-    XrValue vb = R(b);
-    if (XR_IS_STRING(vb)) {
-        xr_stringbuilder_append_cstr(sb, xr_value_str_data(&vb), xr_value_str_len(&vb));
-    } else if (XR_IS_INT(vb)) {
-        xr_stringbuilder_append_int(sb, XR_TO_INT(vb));
-    } else if (XR_IS_FLOAT(vb)) {
-        xr_stringbuilder_append_float(sb, XR_TO_FLOAT(vb));
-    } else {
-        XrString *str = xr_value_to_string(isolate, vb);
-        xr_stringbuilder_append_str(sb, str);
-    }
-    vmbreak;
-}
-
 /* Concatenation in the two passes the shared kernel states: measure every
  * part, allocate once, copy. Non-string parts render first, since a rendered
  * length is what the measurement needs; their text is owned until copied. */
@@ -184,21 +151,10 @@ vmcase(OP_STR_CONCAT_N) {
     /* Interned, not coroutine-local: a concatenation can be a task's result,
      * and publishing one across a task boundary requires a shared or
      * transferable domain. xr_string_new produces an execution-local string,
-     * which the publish check rejects. The builder path this instruction
-     * replaced interned its result for the same reason. */
+     * which the publish check rejects. */
     XrString *result = xr_string_intern(isolate, buf, total, 0);
     if (buf != stack_buf)
         xr_free(buf);
-
-    R(a) = xr_string_value(result);
-    vmbreak;
-}
-
-vmcase(OP_STRBUF_FINISH) {
-    int a = GETARG_A(i);
-
-    XrStringBuilder *sb = xr_to_stringbuilder(R(a));
-    XrString *result = xr_stringbuilder_to_string(sb);
 
     R(a) = xr_string_value(result);
     vmbreak;

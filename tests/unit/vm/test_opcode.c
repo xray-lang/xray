@@ -70,6 +70,24 @@ TEST(opcode_name_nop) {
     ASSERT_STR_EQ(xr_opcode_name(OP_NOP), "NOP");
 }
 
+TEST(opcode_retired_builder_names_are_absent) {
+    static const char *names[] = {
+        "STRBUF_NEW", "STRBUF_APPEND", "STRBUF_FINISH", "NEWSTRINGBUILDER",
+        "PRINT_GROUP_NEW", "PRINT_GROUP_APPEND", "PRINT_GROUP_FLUSH"
+    };
+    for (int op = 0; op < NUM_OPCODES; ++op) {
+        const char *name = xr_opcode_name((OpCode) op);
+        for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); ++i)
+            ASSERT_TRUE(strcmp(name, names[i]) != 0);
+    }
+}
+
+TEST(opcode_unknown_values_are_rejected) {
+    ASSERT_STR_EQ(xr_opcode_name((OpCode) NUM_OPCODES), "UNKNOWN");
+    ASSERT_STR_EQ(xr_opcode_name((OpCode) UINT16_MAX), "UNKNOWN");
+    ASSERT_STR_EQ(xr_opcode_name((OpCode) -1), "UNKNOWN");
+}
+
 /* ========== Opcode Count Tests ========== */
 
 TEST(opcode_count) {
@@ -145,6 +163,8 @@ static void run_all_tests(void) {
     RUN_TEST(opcode_name_coroutine);
     RUN_TEST(opcode_name_channel);
     RUN_TEST(opcode_name_nop);
+    RUN_TEST(opcode_retired_builder_names_are_absent);
+    RUN_TEST(opcode_unknown_values_are_rejected);
 
     RUN_TEST_SUITE("Opcode Count");
     RUN_TEST(opcode_count);

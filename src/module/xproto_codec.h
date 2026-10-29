@@ -47,7 +47,7 @@ struct XrProto;
 /* Internal compiler/bootstrap container identity.  This is not an installed
  * artifact kind and is never accepted by the public runtime loader. */
 #define XR_BOOTSTRAP_CONTAINER_MAGIC_SIZE 4u
-#define XR_BOOTSTRAP_CONTAINER_VERSION UINT16_C(30)
+#define XR_BOOTSTRAP_CONTAINER_VERSION UINT16_C(31)
 
 /* Serialization flags for compiler/bootstrap-only containers. */
 #define XR_BOOTSTRAP_CONTAINER_STRIP_DEBUG (1 << 0)

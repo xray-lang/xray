@@ -118,33 +118,4 @@ static inline size_t xr_print_plan_framing_bytes(const XrPrintPlan *plan) {
     return separators + terminator;
 }
 
-/* Bytecode projection of one group.
- *
- * A group becomes several instructions because rendering an operand can call
- * back into the interpreter. These bits carry the group facts that each
- * instruction needs, derived from the plan at emission time; nothing upstream
- * of emission encodes them, so the plan stays the only place the group is
- * described.
- *
- * Every bit below means one thing across the whole projection, whichever
- * instruction and whichever operand slot carries it.  Separate and terminate
- * never share an instruction, so they could have shared a bit; they do not,
- * because then reading a flag word would first require knowing which
- * instruction it came from, and the operand field is 16 bits wide with room to
- * spare. */
-#define XR_PRINT_BC_SEPARATE 0x01u
-/* Unlike the group decisions here, this one projects the operand's static type:
- * a full-width unsigned integer shares its slot representation with a signed
- * one, so the renderer cannot recover the sign domain from the value alone. */
-#define XR_PRINT_BC_UNSIGNED 0x02u
-/* Rides the flush, the single instruction that reaches the output capability. */
-#define XR_PRINT_BC_TERMINATE 0x04u
-
-/* Registers PRINT_GROUP_APPEND reserves from its A operand, in order: the group
- * buffer, the return slot of a user `toString`, and that call's frame base.
- * The buffer sits below the callee, which is what keeps it alive across the
- * call; the two slots above it are why the window is wider than one register. */
-#define XI_PRINT_GROUP_WINDOW 3u
-#define XI_PRINT_GROUP_CALL_SLOT 2u
-
 #endif /* XR_PRINT_PLAN_H */

@@ -18,6 +18,7 @@
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_number_parse_error_shape.h"
 #include "../../../src/shared/xr_exact_scalar_registry.h"
+#include "../../../src/shared/xr_string_concat_core.h"
 #include "../../../include/xray_vm.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 
@@ -1674,6 +1675,44 @@ TEST(emit_str_concat_uint64_formats_before_range_concat) {
     xi_func_free(f);
 }
 
+TEST(emit_str_concat_outside_inline_range_is_refused) {
+    const uint16_t counts[] = {0, XR_STR_CONCAT_INLINE_PARTS + 1};
+    for (size_t index = 0; index < sizeof(counts) / sizeof(counts[0]); index++) {
+        XiFunc *f = make_func("concat_unsupported", &stub_string);
+        XiBlock *entry = f->entry;
+        XiValue *part = xi_const_str(f, entry, "part", &stub_string);
+        XiValue *v = xi_value_new(f, entry, XI_STR_CONCAT, &stub_string, counts[index]);
+        TEST_REQUIRE(v != NULL);
+        for (uint16_t arg = 0; arg < counts[index]; arg++)
+            v->args[arg] = part;
+        xi_block_set_return(entry, v);
+
+        XrProto *proto = NULL;
+        TEST_REQUIRE(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_UNSUPPORTED_OP);
+        TEST_REQUIRE(proto == NULL);
+        xi_func_free(f);
+    }
+}
+
+TEST(emit_print_is_refused_before_proto_publication) {
+    const uint16_t counts[] = {0, 1, 3};
+    for (size_t index = 0; index < sizeof(counts) / sizeof(counts[0]); index++) {
+        XiFunc *f = make_func("print_unsupported", &stub_void);
+        XiBlock *entry = f->entry;
+        XiValue *part = xi_const_str(f, entry, "part", &stub_string);
+        XiValue *v = xi_value_new(f, entry, XI_PRINT, &stub_void, counts[index]);
+        TEST_REQUIRE(v != NULL);
+        for (uint16_t arg = 0; arg < counts[index]; arg++)
+            v->args[arg] = part;
+        xi_block_set_return(entry, NULL);
+
+        XrProto *proto = NULL;
+        TEST_REQUIRE(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_UNSUPPORTED_OP);
+        TEST_REQUIRE(proto == NULL);
+        xi_func_free(f);
+    }
+}
+
 TEST(emit_closure_new) {
     /* CLOSURE_NEW -> OP_CLOSURE with recursive child emit */
     XiFunc *f = make_func("parent", &stub_int);
@@ -2144,12 +2183,14 @@ TEST(emit_preserves_original_resource_failure_before_reading_inputs) {
     XiFunc *f = make_func("failed-state", &stub_void);
     TEST_REQUIRE(f != NULL);
     xi_block_set_return(f->entry, NULL);
-    const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    const XrCompileResourceLimits limits = {
+        .memory_mode = XR_COMPILE_MEMORY_ORDINARY, .profile_allocations = true};
     XrCompileResources *resources = NULL;
     XrCompileState *state = NULL;
     TEST_REQUIRE(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
     TEST_REQUIRE(xr_compile_state_new(resources, &state) == XR_COMPILE_RESOURCE_OK);
-    TEST_REQUIRE(xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET) == XR_COMPILE_RESOURCE_BUDGET);
+    TEST_REQUIRE(xr_compile_state_fail(state, XR_COMPILE_RESOURCE_MEMORY_LIMIT) ==
+                 XR_COMPILE_RESOURCE_MEMORY_LIMIT);
     XrCompileResourceStats before = {0}, after = {0};
     TEST_REQUIRE(xr_compile_resources_stats(resources, &before) == XR_COMPILE_RESOURCE_OK);
     const XiEmitInput input = {.state = state,
@@ -2159,9 +2200,11 @@ TEST(emit_preserves_original_resource_failure_before_reading_inputs) {
     XrProto *proto = (XrProto *) (uintptr_t) 1;
     TEST_REQUIRE(xi_emit(f, NULL, &input, &proto) == XI_EMIT_ERR_RESOURCE);
     TEST_REQUIRE(proto == NULL);
-    TEST_REQUIRE(xr_compile_state_status(state) == XR_COMPILE_RESOURCE_BUDGET);
+    TEST_REQUIRE(xr_compile_state_status(state) == XR_COMPILE_RESOURCE_MEMORY_LIMIT);
     TEST_REQUIRE(xr_compile_resources_stats(resources, &after) == XR_COMPILE_RESOURCE_OK);
-    TEST_REQUIRE(after.work == before.work && after.allocation_count == before.allocation_count);
+    TEST_REQUIRE(after.held_bytes == before.held_bytes &&
+                 after.allocation_count == before.allocation_count &&
+                 after.allocated_bytes == before.allocated_bytes);
     xr_compile_state_release(state);
     xr_compile_resources_release(resources);
     xi_func_free(f);
@@ -2216,10 +2259,10 @@ TEST(emit_status_str) {
 /* ========== Main ========== */
 
 int main(void) {
-    /* One cumulative ledger governs the standalone IR suite. No emit or
-     * recursive child receives a new allowance. These are normal fixtures;
-     * dedicated resource cases supply their own exact bounded inputs. */
-    const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    /* One owned memory ledger serves the standalone IR suite. Dedicated
+     * first-error cases use a separate state on their own real owner. */
+    const XrCompileResourceLimits limits = {
+        .memory_mode = XR_COMPILE_MEMORY_ORDINARY, .profile_allocations = true};
     TEST_REQUIRE(xr_compile_resources_new(&limits, &emit_resources) == XR_COMPILE_RESOURCE_OK);
     TEST_REQUIRE(xr_compile_state_new(emit_resources, &emit_state) == XR_COMPILE_RESOURCE_OK);
     emit_input = (XiEmitInput) {.state = emit_state, .target = xr_target_data_layout_host(),
@@ -2298,6 +2341,8 @@ int main(void) {
     /* New op coverage */
     run_emit_str_concat();
     run_emit_str_concat_uint64_formats_before_range_concat();
+    run_emit_str_concat_outside_inline_range_is_refused();
+    run_emit_print_is_refused_before_proto_publication();
     run_emit_closure_new();
     run_attach_ir_uses_emitted_child_identity_and_retains_templates();
     run_emit_set_new();
