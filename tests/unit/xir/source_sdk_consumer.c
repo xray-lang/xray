@@ -671,6 +671,65 @@ static void installed_interface_parameter_report(const char *stdlib) {
     CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK&&event.state==XR_SOURCE_RUN_RETURNED);
     CHECK(output.length==2&&!memcmp(output.bytes,"9\n",2));xray_source_result_free(result);
 }
+static void installed_interface_member_report(const char *stdlib) {
+    static const char original[]=
+        "enum Fault{Bad}\r\n"
+        "interface Reader {\r\n"
+        "/*\303\251\360\237\230\200*/ read(value:i64) throws(Fault)->i64\r\n"
+        "/*\303\251\360\237\230\200*/ read(value:i64) throws(Fault)->i64\r\n"
+        "}\r\n"
+        "interface Writer {\r\n"
+        "/*\303\251\360\237\230\200*/ read(value:i64) throws(Fault)->i64\r\n"
+        "/*\303\251\360\237\230\200*/ read(value:i64) throws(Fault)->i64\r\n"
+        "}\r\n"
+        "struct Pair implements Reader {\r\n"
+        "read(value:i64) throws(Fault)->i64{return value}\r\n"
+        "next(value:i64) throws(Fault)->i64{return value}\r\n"
+        "}\r\n"
+        "struct Echo implements Writer {\r\n"
+        "read(value:i64) throws(Fault)->i64{return value}\r\n"
+        "next(value:i64) throws(Fault)->i64{return value}\r\n"
+        "}\r\n"
+        "fn first<T:Reader>(item:T) throws(Fault)->i64{return try item.read(4)}\r\n"
+        "fn second<T:Writer>(item:T) throws(Fault)->i64{return try item.read(5)}\r\n"
+        "print(try first(Pair{})+try second(Echo{}))\r\n";
+    _Static_assert(sizeof(original)-1==713,"Complete interface member source bytes");
+    char text[sizeof(original)];memcpy(text,original,sizeof(text));XrSourceCompileOptions options=compile_options(stdlib);
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"interface-member-report",text,sizeof(text)-1}};
+    XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;XrSourceFailure failure={0};
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_BAD_ARGUMENT&&!artifact&&report);
+    CHECK(failure.status==XR_SOURCE_BAD_ARGUMENT&&failure.cleanup_status==XR_SOURCE_OK&&failure.stage==XR_SOURCE_STAGE_COMPILE);
+    memset(text,'!',sizeof(text));
+    XrSourceDiagnosticReportInfo info={0};
+    CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==2&&!info.complete);
+    const uint64_t first[]={48,165},duplicate[]={95,212};
+    for(uint32_t i=0;i<2;++i) {
+        XrSourceDiagnosticRoot root={0};XrSourceDiagnosticLabel label={0};
+        CHECK(xray_source_diagnostic_root(report,i,&root)==XR_SOURCE_OK&&root.code==302&&root.labels==1);
+        CHECK(!strcmp(root.message,"duplicate declaration name"));
+        CHECK(xray_source_diagnostic_label(report,i,0,&label)==XR_SOURCE_OK&&!strcmp(label.message,"first declaration is here"));
+        CHECK(root.primary.line==(int32_t)(4+4*i)&&root.primary.column==12);
+        CHECK(label.location.line==(int32_t)(3+4*i)&&label.location.column==12);
+        CHECK(root.primary.start_byte==duplicate[i]&&root.primary.end_byte==duplicate[i]+4);
+        CHECK(label.location.start_byte==first[i]&&label.location.end_byte==first[i]+4);
+        CHECK(root.primary.utf16_line==3+4*i&&root.primary.utf16_column==8);
+        CHECK(label.location.utf16_line==2+4*i&&label.location.utf16_column==8);
+        CHECK((root.primary.flags&(XR_SOURCE_LOCATION_LINE|XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16|XR_SOURCE_LOCATION_REVISION))==
+            (XR_SOURCE_LOCATION_LINE|XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16|XR_SOURCE_LOCATION_REVISION));
+        CHECK(root.primary.flags==label.location.flags&&!memcmp(root.primary.revision,label.location.revision,32));
+    }
+    XrSourceDiagnosticRoot canary={.code=123};
+    CHECK(xray_source_diagnostic_root(report,2,&canary)==XR_SOURCE_BAD_ARGUMENT&&canary.code==123);
+    xray_source_diagnostic_free(report);
+    char corrected[sizeof(original)];memcpy(corrected,original,sizeof(corrected));
+    memcpy(corrected+95,"next",4);memcpy(corrected+212,"next",4);
+    artifact=compile(&options,corrected,__func__);memset(corrected,'!',sizeof(corrected));
+    Output output={0};XrSourceCallOptions runtime;CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
+    runtime.write=capture;runtime.context=&output;XrSourceResult *result=NULL;XrSourceEvent event={0};
+    CHECK(execute_owned(artifact,&runtime,&result,&event)==XR_SOURCE_OK&&result);xray_source_artifact_free(artifact);
+    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK&&event.state==XR_SOURCE_RUN_RETURNED);
+    CHECK(output.length==2&&!memcmp(output.bytes,"9\n",2));xray_source_result_free(result);
+}
 static void installed_closure_parameter_report(const char *stdlib) {
     static const char original[]=
         "enum Fault{Bad}\r\n"
@@ -789,6 +848,6 @@ static void installed_error_union_300(const char *stdlib) {
     CHECK(output.length==3 && !memcmp(output.bytes,"42\n",3));xray_source_result_free(result);
 }
 int main(int argc, char **argv) {
-    CHECK(argc == 2); installed_error_union(argv[1]); installed_error_union_300(argv[1]); installed_report(argv[1]); installed_parameter_report(argv[1]); installed_method_parameter_report(argv[1]); installed_interface_parameter_report(argv[1]); installed_closure_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
+    CHECK(argc == 2); installed_error_union(argv[1]); installed_error_union_300(argv[1]); installed_report(argv[1]); installed_parameter_report(argv[1]); installed_method_parameter_report(argv[1]); installed_interface_parameter_report(argv[1]); installed_interface_member_report(argv[1]); installed_closure_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
     puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
 }

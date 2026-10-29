@@ -199,7 +199,9 @@ def interface_parameter_cases(args, output, environment):
         path.write_text(guard, encoding="utf-8")
         child = invoke("guard-"+name, ["check", path])
         assert child.returncode == 1
-        if name == 'closure':
+        if name == 'member':
+            assert child.stderr.count(b'duplicate declaration name') == 1 and child.stderr.count(b'first declaration is here') == 1
+        elif name == 'closure':
             assert child.stderr.count(b'duplicate parameter name') == 1 and child.stderr.count(b'first declaration is here') == 1
         else:
             assert child.stderr.endswith((reason+"\n").encode("utf-8"))
@@ -207,6 +209,81 @@ def interface_parameter_cases(args, output, environment):
                 source_bytes=len(text), source_sha256=hashlib.sha256(text).hexdigest(),
                 corrected_sha256=hashlib.sha256(corrected).hexdigest(),
                 declared_errors=True, implements_and_generic=True, same_names_across_scopes=True, source_removed=True, commands=commands)
+
+def interface_member_cases(args, output, environment):
+    source = output/'interface-成员名.xr'
+    text = (
+        'enum Fault{Bad}\r\n'
+        'interface Reader {\r\n'
+        '/*é😀*/ read(value:i64) throws(Fault)->i64\r\n'
+        '/*é😀*/ read(value:i64) throws(Fault)->i64\r\n'
+        '}\r\n'
+        'interface Writer {\r\n'
+        '/*é😀*/ read(value:i64) throws(Fault)->i64\r\n'
+        '/*é😀*/ read(value:i64) throws(Fault)->i64\r\n'
+        '}\r\n'
+        'struct Pair implements Reader {\r\n'
+        'read(value:i64) throws(Fault)->i64{return value}\r\n'
+        'next(value:i64) throws(Fault)->i64{return value}\r\n'
+        '}\r\n'
+        'struct Echo implements Writer {\r\n'
+        'read(value:i64) throws(Fault)->i64{return value}\r\n'
+        'next(value:i64) throws(Fault)->i64{return value}\r\n'
+        '}\r\n'
+        'fn first<T:Reader>(item:T) throws(Fault)->i64{return try item.read(4)}\r\n'
+        'fn second<T:Writer>(item:T) throws(Fault)->i64{return try item.read(5)}\r\n'
+        'print(try first(Pair{})+try second(Echo{}))\r\n'
+    ).encode('utf-8')
+    assert len(text) == 713 and hashlib.sha256(text).hexdigest() == '7dcc1e33e8a6691c61d0328d6e68a9e5486e536a08e71343e7ef45173d6855a1'
+    source.write_bytes(text)
+    report = output/'interface-members.json'
+    commands = []
+
+    def invoke(label, arguments):
+        command = [str(args.xray.resolve()), *map(str, arguments)]
+        child = subprocess.run(command, env=environment, capture_output=True, timeout=90)
+        (output/('interface-members-'+label+'.stdout')).write_bytes(child.stdout)
+        (output/('interface-members-'+label+'.stderr')).write_bytes(child.stderr)
+        commands.append(dict(command=command, exit=child.returncode))
+        return child
+
+    child = invoke('test', ['test', source, '--report', report])
+    assert child.returncode == 1, (child.returncode, child.stdout, child.stderr)
+    result = json.loads(report.read_text(encoding='utf-8'))['files'][0]
+    assert result['sourceStatus'] == 'source-rejected' and result['sourceStage'] == 4
+    path = str(source).replace('\\', '/')
+    rows = ((4, 'error', 'duplicate declaration name'), (3, 'note', 'first declaration is here'),
+            (8, 'error', 'duplicate declaration name'), (7, 'note', 'first declaration is here'))
+    expected = ''.join(f'{path}:{line}:12: {kind}: {message}\n' for line, kind, message in rows)
+    assert result['error'].replace('\\', '/') == expected
+    child = invoke('check', ['check', source])
+    assert child.returncode == 1 and child.stderr.count(b'duplicate declaration name') == 2
+    assert child.stderr.count(b'first declaration is here') == 2
+    source.unlink()
+    assert json.loads(report.read_text(encoding='utf-8'))['files'][0]['error'] == result['error']
+    corrected = bytearray(text)
+    for offset in (95, 212):
+        assert corrected[offset:offset+4] == b'read'
+        corrected[offset:offset+4] = b'next'
+    assert hashlib.sha256(corrected).hexdigest() == '7944d263ffb2541725fe5c9d167e9be3eed9fbea27dda5ab0103e1908c31682c'
+    source.write_bytes(corrected)
+    child = invoke('run', ['run', source])
+    assert child.returncode == 0 and child.stdout == b'9\n' and not child.stderr
+    generated, native = output/'interface-members.c', output/'interface-members.exe'
+    child = invoke('c', ['build', '-c', source, '-o', generated])
+    assert child.returncode == 0 and generated.is_file() and not child.stderr
+    child = invoke('native-build', ['build', source, '-o', native])
+    assert child.returncode == 0 and native.is_file() and not child.stderr
+    assert source.read_bytes() == corrected
+    source.unlink()
+    child = subprocess.run([str(native)], env=environment, capture_output=True, timeout=90)
+    assert child.returncode == 0 and child.stdout == b'9\n' and not child.stderr
+    (output/'interface-members-native.stdout').write_bytes(child.stdout)
+    return dict(roots=2, labels=2, unicode_crlf=True, source_bytes=len(text),
+                source_sha256=hashlib.sha256(text).hexdigest(), corrected_sha256=hashlib.sha256(corrected).hexdigest(),
+                corrected_stdout_hex='390a', source_removed=True, same_names_across_interfaces=True,
+                declared_errors=True, implements_and_generic=True, commands=commands)
+
 
 def closure_parameter_cases(args, output, environment):
     source = output/'closure-参数.xr'
@@ -349,6 +426,7 @@ def main():
     summary['parameters'] = parameter_cases(args, output, environment)
     summary['method_parameters'] = method_parameter_cases(args, output, environment)
     summary['interface_parameters'] = interface_parameter_cases(args, output, environment)
+    summary['interface_members'] = interface_member_cases(args, output, environment)
     summary['closure_parameters'] = closure_parameter_cases(args, output, environment)
     (output/'result.json').write_text(json.dumps(summary, indent=2)+'\n', encoding='utf-8')
     print(json.dumps(summary))

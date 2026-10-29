@@ -1147,6 +1147,112 @@ static void interface_report_lifetime(void) {
     puts("Interface parameter report survives AST/request/input retirement; physical OOM, cancellation and finite memory remain resources PASS");
 }
 
+static void interface_member_item_controls(void) {
+    CHECK(!runtime_live&&!runtime_bytes);
+    XrCompileResources *owner=sdk_ledger(&sdk_unlimited);uint64_t empty=sdk_stats(owner).held_bytes;
+    XrHirItems *items=NULL;CHECK(xr_hir_items_new(owner,&items)==XR_COMPILE_RESOURCE_OK);
+    XrHirItemSpec spec={"Reader",0,0,1,1,1,XR_HIR_ITEM_DECLARATION};uint32_t reader=0,writer=0;
+    CHECK(xr_hir_items_reserve(items,&spec,&reader)==XR_COMPILE_RESOURCE_OK);
+    spec=(XrHirItemSpec){"Writer",0,0,2,1,1,XR_HIR_ITEM_DECLARATION};
+    CHECK(xr_hir_items_reserve(items,&spec,&writer)==XR_COMPILE_RESOURCE_OK);
+    spec=(XrHirItemSpec){"read",0,reader+1,3,1,1,XR_HIR_ITEM_INTERFACE_METHOD};uint32_t member=123;
+    runtime_fail_at=runtime_attempts;
+    CHECK(xr_hir_items_reserve(items,&spec,&member)==XR_COMPILE_RESOURCE_OUT_OF_MEMORY&&member==123);
+    runtime_fail_at=SIZE_MAX;CHECK(!xr_hir_items_has_report(items));
+    CHECK(!xr_hir_items_find_scope(items,0,3,&member)&&member==123);
+    CHECK(xr_hir_items_reserve(items,&spec,&member)==XR_COMPILE_RESOURCE_OK);
+    uint32_t found=123;CHECK(xr_hir_items_find_scope(items,0,3,&found)&&found==member);
+    CHECK(xr_hir_items_find(items,0,reader+1,"read",&found)&&found==member);
+    CHECK(xr_hir_items_claim(items,&spec,&found)==XR_COMPILE_RESOURCE_OK&&found==member);
+    int binding=0;CHECK(xr_hir_items_bind(items,member,&binding));
+    CHECK(xr_hir_items_binding(items,found)==&binding&&!xr_hir_items_binding_module(items,&binding,&found));
+    CHECK(xr_hir_items_claim(items,&spec,&found)==XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    spec=(XrHirItemSpec){"value",0,member+1,3,1,1,XR_HIR_ITEM_PARAMETER};uint32_t parameter=0;
+    CHECK(xr_hir_items_reserve(items,&spec,&parameter)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_hir_items_find(items,0,member+1,"value",&found)&&found==parameter);
+    spec=(XrHirItemSpec){"read",0,writer+1,4,1,1,XR_HIR_ITEM_INTERFACE_METHOD};uint32_t other=0;
+    CHECK(xr_hir_items_reserve(items,&spec,&other)==XR_COMPILE_RESOURCE_OK&&other!=member);
+    CHECK(!xr_hir_items_errors(items)&&!xr_hir_items_has_report(items));
+    CHECK(xr_hir_items_find_scope(items,0,4,&found)&&found==other);
+    spec.parent=reader+1;spec.node=5;
+    CHECK(xr_hir_items_reserve(items,&spec,&other)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_hir_items_errors(items)&&xr_hir_items_has_report(items));
+    CHECK(!xr_hir_items_find(items,0,reader+1,"read",&found));
+    xr_hir_items_free(items);CHECK(sdk_stats(owner).held_bytes==empty);
+    xr_compile_resources_release(owner);CHECK(!runtime_live&&!runtime_bytes);
+    puts("Interface member Items: one namespace/scope ordinal, one binding, independent parents and OOM rollback PASS");
+}
+
+static void interface_member_report_lifetime(void) {
+    static const char original[]=
+        "enum Fault{Bad}\r\n"
+        "interface Reader {\r\n"
+        "/*\303\251\360\237\230\200*/ read(value:i64) throws(Fault)->i64\r\n"
+        "/*\303\251\360\237\230\200*/ read(value:i64) throws(Fault)->i64\r\n"
+        "}\r\n"
+        "interface Writer {\r\n"
+        "/*\303\251\360\237\230\200*/ read(value:i64) throws(Fault)->i64\r\n"
+        "/*\303\251\360\237\230\200*/ read(value:i64) throws(Fault)->i64\r\n"
+        "}\r\n"
+        "struct Pair implements Reader {\r\n"
+        "read(value:i64) throws(Fault)->i64{return value}\r\n"
+        "next(value:i64) throws(Fault)->i64{return value}\r\n"
+        "}\r\n"
+        "struct Echo implements Writer {\r\n"
+        "read(value:i64) throws(Fault)->i64{return value}\r\n"
+        "next(value:i64) throws(Fault)->i64{return value}\r\n"
+        "}\r\n"
+        "fn first<T:Reader>(item:T) throws(Fault)->i64{return try item.read(4)}\r\n"
+        "fn second<T:Writer>(item:T) throws(Fault)->i64{return try item.read(5)}\r\n"
+        "print(try first(Pair{})+try second(Echo{}))\r\n";
+    _Static_assert(sizeof(original)-1==713,"Complete interface member source bytes");
+    char text[sizeof(original)];memcpy(text,original,sizeof(text));
+    XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+    XrSourceText source={NULL,"interface-member-ast-report",text,sizeof(text)-1};XrSourceAst *ast=NULL;
+    XrSourceFailure failure={0};XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;
+    CHECK(xray_source_parse(&source,&options,&ast,&failure,NULL)==XR_SOURCE_OK&&ast);
+    CHECK(xray_source_build_ast(ast,&options,&artifact,&failure,&report)==XR_SOURCE_BAD_ARGUMENT&&!artifact&&report);
+    CHECK(failure.status==XR_SOURCE_BAD_ARGUMENT&&failure.cleanup_status==XR_SOURCE_OK);
+    xray_source_ast_free(ast);memset(text,'!',sizeof(text));
+    XrSourceDiagnosticReportInfo info={0};
+    CHECK(xray_source_diagnostic_report(report,&info)==XR_SOURCE_OK&&info.roots==2&&!info.complete);
+    const uint64_t first[]={48,165},duplicate[]={95,212};
+    for(uint32_t i=0;i<2;++i) {
+        XrSourceDiagnosticRoot root={0};XrSourceDiagnosticLabel label={0};
+        CHECK(xray_source_diagnostic_root(report,i,&root)==XR_SOURCE_OK&&root.code==302&&root.labels==1);
+        CHECK(!strcmp(root.message,"duplicate declaration name"));
+        CHECK(xray_source_diagnostic_label(report,i,0,&label)==XR_SOURCE_OK&&!strcmp(label.message,"first declaration is here"));
+        CHECK(root.primary.line==(int32_t)(4+4*i)&&root.primary.column==12);
+        CHECK(label.location.line==(int32_t)(3+4*i)&&label.location.column==12);
+        CHECK(root.primary.start_byte==duplicate[i]&&root.primary.end_byte==duplicate[i]+4);
+        CHECK(label.location.start_byte==first[i]&&label.location.end_byte==first[i]+4);
+        CHECK(root.primary.utf16_line==3+4*i&&root.primary.utf16_column==8);
+        CHECK(label.location.utf16_line==2+4*i&&label.location.utf16_column==8);
+        CHECK((root.primary.flags&(XR_SOURCE_LOCATION_LINE|XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16|XR_SOURCE_LOCATION_REVISION))==
+            (XR_SOURCE_LOCATION_LINE|XR_SOURCE_LOCATION_BYTES|XR_SOURCE_LOCATION_UTF16|XR_SOURCE_LOCATION_REVISION));
+        CHECK(root.primary.flags==label.location.flags&&!memcmp(root.primary.revision,label.location.revision,32));
+    }
+    XrSourceDiagnosticRoot canary={.code=123};
+    CHECK(xray_source_diagnostic_root(report,2,&canary)==XR_SOURCE_BAD_ARGUMENT&&canary.code==123);
+    xray_source_diagnostic_free(report);report=NULL;CHECK(!runtime_live&&!runtime_bytes);
+    memcpy(text,original,sizeof(text));memcpy(text+95,"next",4);memcpy(text+212,"next",4);
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"interface-member-control",text,sizeof(text)-1}};
+    Calibration control={0};options.cancel_poll=calibration_poll;options.cancel_context=&control;
+    CHECK(calibration_build(&input,&options,&control,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
+    size_t polls=control.polls;CHECK(polls>4);xray_source_artifact_free(artifact);artifact=NULL;
+    CHECK(!runtime_live&&!runtime_bytes);control=(Calibration){.at=polls/2,.cancel=true};
+    calibration_failure(&input,&options,&control,XR_SOURCE_CANCELLED,XR_SOURCE_STAGE_COMPILE);
+    options.cancel_poll=NULL;options.cancel_context=NULL;size_t attempts=runtime_attempts;runtime_fail_at=attempts;
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_OUT_OF_MEMORY&&!artifact);
+    runtime_fail_at=SIZE_MAX;CHECK(runtime_attempts>attempts&&failure.cleanup_status==XR_SOURCE_OK);
+    xray_source_diagnostic_free(report);report=NULL;CHECK(!runtime_live&&!runtime_bytes);
+    options.memory_mode=XR_SOURCE_MEMORY_FINITE;options.memory_limit=1;
+    CHECK(xray_source_build(&input,&options,&artifact,&failure,&report)==XR_SOURCE_MEMORY_LIMIT&&!artifact);
+    CHECK(failure.status==XR_SOURCE_MEMORY_LIMIT&&failure.cleanup_status==XR_SOURCE_OK);xray_source_diagnostic_free(report);
+    CHECK(!runtime_live&&!runtime_bytes);
+    puts("Interface member report owns two roots after AST/request/input retirement; corrected cross-interface names and resources PASS");
+}
+
 static int defaults_copy_poll(const void *context) {
     DefaultsCopyProbe *probe=(DefaultsCopyProbe *)context;
     if(probe->cancelled)return 1;
@@ -1325,7 +1431,7 @@ int main(void) {
     compilation_controls();
     report_resources();report_control();unicode_report();module_binding_classes();partial_report_lifetime();
     module_report_lifetime(false);module_report_lifetime(true);
-    method_scope_allocation_controls();method_report_lifetime();interface_report_lifetime();
+    method_scope_allocation_controls();method_report_lifetime();interface_report_lifetime();interface_member_item_controls();interface_member_report_lifetime();
     closure_scope_allocation_controls();closure_report_lifetime();
     independent_requests();detached_ast_and_result();ready_c_artifact();execution_policy();
     global_array_lifetime();global_string_lifetime();

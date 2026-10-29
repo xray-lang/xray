@@ -142,7 +142,7 @@ static bool source_interface_parameter_items(SourceContext *ctx,uint32_t module,
         const char *name=method->as.interface_method.name;
         if(!name||!*name)return source_fail(ctx,method,XR_XIR_BAD_STRUCTURE,"interface method name is missing");
         uint32_t item=0;
-        XrHirItemSpec spec={name,module,parent,method->node_id,method->line,method->column,XR_HIR_ITEM_PARAMETER_SCOPE};
+        XrHirItemSpec spec={name,module,parent,method->node_id,method->line,method->column,XR_HIR_ITEM_INTERFACE_METHOD};
         if(!source_item_reserve(ctx,method,spec,&item)||!source_parameter_items(ctx,module,method,item+1))return false;
     }
     return true;
