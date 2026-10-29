@@ -1571,7 +1571,6 @@ int main(int argc,char **argv) {
         CHECK(!runtime_live&&!runtime_bytes&&!sdk_allocations&&!sdk_allocation_capacity);return 0;
     }
     CHECK(argc==1);
-    source_ctfe_cleanup_cases(XR_PUBLIC_STDLIB,XR_PUBLIC_STDLIB "/../tests/unit/xir/ctfe_cleanup/cleanup_owned.xr");
     nominal_projection_controls();
     defaults_copy_controls();lower_loop_controls();
     input_helper_controls();input_prior_resource();public_input_controls();input_nul_location();graph_input_controls();

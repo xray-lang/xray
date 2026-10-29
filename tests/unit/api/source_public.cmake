@@ -356,6 +356,9 @@ else()
 endif()
 add_test(NAME source_request_lifetime COMMAND test_source_request_lifetime)
 set_tests_properties(source_request_lifetime PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership")
+add_test(NAME source_ctfe_cleanup_lifetime COMMAND test_source_request_lifetime --ctfe-cleanup)
+set_tests_properties(source_ctfe_cleanup_lifetime PROPERTIES TIMEOUT 120
+    LABELS "unit;api;source;ctfe;cleanup;ownership")
 
 add_executable(test_source_request_ast_boundary "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_request_ast_boundary.c")
 target_link_libraries(test_source_request_ast_boundary PRIVATE xray_source_api)
