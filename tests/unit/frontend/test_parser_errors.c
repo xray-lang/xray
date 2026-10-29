@@ -84,6 +84,39 @@ static void expression_modes(XrCompilerSession *session) {
     CHECK(program->as.program.statements[0]->as.var_decl.initializer->as.try_expr.operand->type == AST_TERNARY);
     xr_program_destroy(program);
 }
+
+typedef struct RegexDiagnostic { unsigned count; int line, column; } RegexDiagnostic;
+static void regex_diagnostic(void *context, int line, int column, int end_line,
+                              int end_column, const char *message) {
+    RegexDiagnostic *diagnostic = context;
+    CHECK(message && *message && end_line >= line && end_column > 0);
+    if (!diagnostic->count) { diagnostic->line = line; diagnostic->column = column; }
+    diagnostic->count++;
+}
+
+static void regex_syntax(XrCompilerSession *session) {
+    AstNode *program = parse(session, "var re = 8\nvar r = re\"(?i)\\d+/${literal}\"\nvar q = re\n/ 2");
+    CHECK(program->as.program.count == 3);
+    AstNode *literal = program->as.program.statements[1]->as.var_decl.initializer;
+    CHECK(literal->type == AST_LITERAL_REGEX && literal->line == 2 && literal->column == 9);
+    CHECK(!strcmp(literal->as.literal.raw_value.regex.pattern, "(?i)\\d+/${literal}"));
+    CHECK(!strcmp(literal->as.literal.raw_value.regex.flags, ""));
+    CHECK(literal->as.literal.escape_mode == XR_LITERAL_RAW);
+    CHECK(program->as.program.statements[2]->as.var_decl.initializer->type == AST_BINARY_DIV);
+    xr_program_destroy(program);
+
+    const char *bad[] = {"var r = /a/i", "var r = /\\d+/", "var r = re\"a\"g",
+        "var r = re \"a\"", "var r = re\"a\n\"", "var r = re\"a", "var r = re\"\xc0\xaf\""};
+    for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i) {
+        RegexDiagnostic diagnostic = {0};
+        XrParseDiagnostics options = {regex_diagnostic, &diagnostic, 4};
+        program = NULL;
+        CHECK(xr_compile_parse_with_diagnostics(session, bad[i], "<regex>", &options, &program) == XR_PARSE_SYNTAX);
+        CHECK(!program && diagnostic.count && diagnostic.line == 1 && diagnostic.column >= 9);
+        CHECK(xr_compile_session_resource_status(session) == XR_COMPILE_RESOURCE_OK);
+    }
+}
+
 int main(void) {
     const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, 8 * 1024 * 1024, true};
     XrCompileResources *resources = NULL;
@@ -94,6 +127,7 @@ int main(void) {
     CHECK(xr_compile_session_new(resources,&session) == XR_COMPILE_RESOURCE_OK);
     clause_states(session);
     expression_modes(session);
+    regex_syntax(session);
     const char *sources[] = {
         "fn throws() {}\nvar throws = 1\nvar value: Never\n",
         "fn f<T,E:Error>(value:T) throws(E | IoErr) -> T { return value }\n",
@@ -112,7 +146,14 @@ int main(void) {
         "var x = (try? f()) ?? 1\nvar y = try? f(a ?? b)",
         "var value = try await task\n",
         "try { f() } catch (e) { print(1) }",
-        "fn f() { var g = fn() throws(E) {}\ntry g() }"
+        "fn f() { var g = fn() throws(E) {}\ntry g() }",
+        "var r = re\"(?ims)\\d+/[a-z]+${literal}\"\nvar e = re\"\"",
+        "var r = re\"\"\"\n    (?m)^a\\d+\"${literal}\n    \"\"\"\n",
+        "var r = [re\"a\", re\"(?i)b\"]\nvar q = 20\n/ 5\n",
+        "var text = \"${re\"${not_interpolated}\"}\"",
+        "var text = \"${re\"${\"}\"",
+        "var text = \"${re\"\\\"}\"",
+        "var r = re\"中😀+\\p{L}\""
     };
     for (size_t i = 0; i < sizeof(sources)/sizeof(sources[0]); ++i) roundtrip(session,sources[i]);
     xr_compile_session_free(session);

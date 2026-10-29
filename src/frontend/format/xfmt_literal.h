@@ -29,6 +29,7 @@ XR_FUNC void xfmt_emit_float_literal(XrFmtContext *ctx, double value);
 
 XR_FUNC void xfmt_emit_escaped_inline_string(XrFmtContext *ctx, const char *value, int length);
 XR_FUNC void xfmt_emit_string_literal(XrFmtContext *ctx, AstNode *node);
+XR_FUNC void xfmt_emit_regex_literal(XrFmtContext *ctx, AstNode *node);
 XR_FUNC void xfmt_emit_fixed_bytes_literal(XrFmtContext *ctx, AstNode *node);
 XR_FUNC void xfmt_emit_template_string(XrFmtContext *ctx, AstNode *node,
                                        XrFmtExprEmitter emit_expr);

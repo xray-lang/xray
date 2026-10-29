@@ -203,7 +203,6 @@ XR_FUNC AstNode *xr_parse_new_expression(Parser *parser);
 XR_FUNC AstNode *xr_parse_this_expression(Parser *parser);
 XR_FUNC AstNode *xr_parse_super_expression(Parser *parser);
 
-XR_FUNC AstNode *xr_parse_regex_prefix(Parser *parser);
 XR_FUNC AstNode *xr_parse_regex_literal(Parser *parser);
 XR_FUNC AstNode *xr_parse_fn_expression(Parser *parser);
 XR_FUNC AstNode *xr_parse_is(Parser *parser, AstNode *left);

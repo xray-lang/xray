@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   Xray ends statements at line breaks. The ambiguity only exists for tokens
  *   that carry BOTH a prefix and an infix role — `!` (logical not / force
- *   unwrap), `-` (negate / subtract), `/` (regex / divide), `++`, `--`, `(`,
+ *   unwrap), `-` (negate / subtract), `++`, `--`, `(`,
  *   `[`. For those, a new line must start a new statement instead of silently
  *   extending the previous expression:
  *
@@ -90,7 +90,6 @@ typedef struct {
 static const AsiCase k_asi_cases[] = {
     {TK_NOT, "!b"},             // force unwrap vs logical not
     {TK_MINUS, "-b"},           // subtract vs negate
-    {TK_SLASH, "/b/"},          // divide vs regex literal
     {TK_INC, "++b"},            // postfix vs prefix increment
     {TK_DEC, "--b"},            // postfix vs prefix decrement
     {TK_LPAREN, "(b, a) = t"},  // call vs tuple-destructure statement
@@ -212,6 +211,7 @@ TEST(single_role_infix_tokens_still_continue_the_line) {
     static const char *continuations[] = {
         "var x = 1 +\n    2\n",  // operator parked at end of line
         "var x = 1\n    + 2\n",  // `+` has no prefix role -> continues
+        "var x = 8\n    / 2\n",  // `/` is division in every expression context
         "var x = true\n    && false\n", "var x = 1\n    ?? 2\n",
         "var s = \"a\"\n    .len()\n",  NULL,
     };

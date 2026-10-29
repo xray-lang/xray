@@ -19,14 +19,14 @@ static XrXirArtifact *owner_lowered(const XrXirCompileContext *context) {
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     const XrXirBlock blocks[] = {{0,1,0,0},{0,2,0,0}};
     const XrXirFunction functions[] = {
-        {"init",4,NULL,0,XR_XIR_UNIT,blocks,1,&init,1,NULL,0},
-        {"main",4,NULL,0,XR_XIR_I64,blocks+1,1,main_code,2,NULL,0},
-        {"text",4,NULL,0,XR_XIR_STRING,blocks+1,1,text,2,NULL,0}};
+        {"init",4,NULL,0,XR_XIR_UNIT,blocks,1,&init,1,NULL,0,XR_XIR_NEVER},
+        {"main",4,NULL,0,XR_XIR_I64,blocks+1,1,main_code,2,NULL,0,XR_XIR_NEVER},
+        {"text",4,NULL,0,XR_XIR_STRING,blocks+1,1,text,2,NULL,0,XR_XIR_NEVER}};
     const XrXirSourceModule source = {"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity identities[] = {
-        {0,0,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0},
-        {0,0,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0},
-        {0,1,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0}};
+        {.method_kind=XR_XIR_NON_MEMBER},
+        {.method_kind=XR_XIR_NON_MEMBER},
+        {.exported=1,.method_kind=XR_XIR_NON_MEMBER}};
     const XrXirLiteral literal = {"A\0\xe4\xb8\xad",5};
     const XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1,NULL};
     const XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};

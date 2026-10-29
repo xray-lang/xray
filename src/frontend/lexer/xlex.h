@@ -207,7 +207,7 @@ typedef enum {
     TK_LITERAL_BYTE_STRING,  // b"..." fixed [u8; N] literal
     TK_LITERAL_C_STRING,     // c"..." fixed [u8; N+1] literal with trailing NUL
     TK_LITERAL_RUNE,         // rune literal: 'a', '\n', '\u{1F600}'
-    TK_LITERAL_REGEX,        // regex literal /pattern/flags
+    TK_LITERAL_REGEX,        // re"..." raw regex literal
     TK_NAME,                 // identifier
 
     // Template string
@@ -230,6 +230,7 @@ typedef enum {
     XR_QUOTED_STRING,
     XR_QUOTED_BYTES,
     XR_QUOTED_C_BYTES,
+    XR_QUOTED_REGEX,
 } XrQuotedLiteralKind;
 
 typedef enum {
@@ -301,9 +302,6 @@ XR_FUNC XrCompileResourceStatus xr_compile_scanner_open(Scanner *scanner, XrComp
 // in the caller's buffer, so byte offsets remain file-relative.
 XR_FUNC XrCompileResourceStatus xr_compile_scanner_open_source(Scanner *scanner, XrCompileState *state, XrArena *arena, const char *source, bool collect_trivia, XrCompileRequestControl *request);
 XR_FUNC Token xr_scanner_scan(Scanner *scanner);
-
-// Try to scan regex literal when expecting expression
-XR_FUNC Token xr_scanner_try_regex(Scanner *scanner);
 
 XR_FUNC const char *xr_token_name(XrTokenType type);
 

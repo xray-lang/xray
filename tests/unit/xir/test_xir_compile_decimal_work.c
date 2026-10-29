@@ -65,7 +65,9 @@ static void parse_failures(void) {
     ledger=(DecimalLedger){UINT64_MAX,0,0};work.failed=false;
     CHECK(xr_decimal_float_parse_work(&work,"?",1,64,&out)==XR_DECIMAL_INVALID && out==37);
     CHECK(ledger.used==796 && !work.failed);
-    CHECK(xr_decimal_float_parse_work(NULL,"0",1,64,&out)==XR_DECIMAL_INVALID && out==37);
+    CHECK(xr_decimal_float_parse_work(NULL,"0",1,64,&out)==XR_DECIMAL_OK && !out);
+    XrDecimalWork invalid={0};out=37;
+    CHECK(xr_decimal_float_parse_work(&invalid,"0",1,64,&out)==XR_DECIMAL_INVALID && out==37);
     CHECK(xr_decimal_float_parse_work(&work,"0",1,16,&out)==XR_DECIMAL_INVALID && out==37);
 }
 int main(void) { fixed_boundaries();parse_failures();decimal_cases();float_format_cases();return 0; }

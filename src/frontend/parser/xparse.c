@@ -53,7 +53,7 @@ static ParseRule rules[] = {
     [TK_PLUS] = {NULL, xr_parse_binary, PREC_TERM},
     [TK_MINUS] = {xr_parse_unary, xr_parse_binary, PREC_TERM},
     [TK_STAR] = {NULL, xr_parse_binary, PREC_FACTOR},
-    [TK_SLASH] = {xr_parse_regex_prefix, xr_parse_binary, PREC_FACTOR},
+    [TK_SLASH] = {NULL, xr_parse_binary, PREC_FACTOR},
     [TK_PERCENT] = {NULL, xr_parse_binary, PREC_FACTOR},
     [TK_HASH] = {NULL, NULL, PREC_NONE},  // # (standalone, reserved)
 
@@ -212,8 +212,8 @@ const ParseRule *xr_get_rule(XrTokenType type) {
  *     (3) the parser is not inside `(` / `[` — where no statement can begin.
  *
  * (1) and (2) are only ever both true for tokens carrying both a prefix and an
- * infix role: `!` (logical not / force unwrap), `-` (negate / subtract), `/`
- * (regex literal / divide), `++`, `--`, `(` and `[`. Without this rule
+ * infix role: `!` (logical not / force unwrap), `-` (negate / subtract),
+ * `++`, `--`, `(` and `[`. Without this rule
  *
  *     var x = a
  *     !b
@@ -223,8 +223,9 @@ const ParseRule *xr_get_rule(XrTokenType type) {
  *
  * Continuation lines starting with a token that has no prefix role — `.`, `?`,
  * `:`, `&&`, `||`, `+`, `*`, `as`, `is`, … — are unambiguous and keep working.
- * To continue a line with `-` or `/`, put the operator at the end of the
- * previous line or wrap the whole expression in parentheses.
+ * To continue a line with `-`, put the operator at the end of the previous
+ * line or wrap the whole expression in parentheses. Division is infix-only
+ * and can begin a continuation line.
  *
  * xr_token_can_end_expr() is the (1) half; keep it in sync with the prefix
  * column of the rules table above — tests/unit/frontend/test_parser_asi.c fails
@@ -888,26 +889,6 @@ static AstNode *try_generic_suffix(Parser *parser, AstNode *left) {
 static AstNode *parse_precedence_inner(Parser *parser, Precedence precedence) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_precedence: NULL parser");
-    // Special handling for regex literals starting with escape sequences like /\d+/
-    // When current is TK_SLASH, try regex scanning first to avoid TK_ERROR from backslash
-    if (parser->current.type == TK_SLASH) {
-        const char *slash_pos = parser->current.start;
-        parser->scanner.current = slash_pos;
-        Token regex_token = xr_scanner_try_regex(&parser->scanner);
-        if (!xr_parser_healthy(parser)) return NULL;
-
-        if (regex_token.type == TK_LITERAL_REGEX) {
-            parser->previous = regex_token;
-            do {
-                parser->current = xr_scanner_scan(&parser->scanner);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return xr_parse_regex_literal(parser);
-        }
-        // Not a regex, restore scanner and continue normal parsing
-        parser->scanner.current = slash_pos;
-    }
-
     do {
         xr_parser_advance(parser);
         if (!xr_parser_healthy(parser)) return NULL;

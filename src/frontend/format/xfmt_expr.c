@@ -97,12 +97,7 @@ static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
             break;
         }
         case AST_LITERAL_REGEX:
-            xfmt_write_char(ctx, '/');
-            xfmt_write_str(ctx, node->as.literal.raw_value.regex.pattern);
-            xfmt_write_char(ctx, '/');
-            if (node->as.literal.raw_value.regex.flags) {
-                xfmt_write_str(ctx, node->as.literal.raw_value.regex.flags);
-            }
+            xfmt_emit_regex_literal(ctx, node);
             break;
         case AST_LITERAL_NULL:
             xfmt_write_str(ctx, "null");

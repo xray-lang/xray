@@ -838,6 +838,11 @@ static bool scan_nested_quoted_literal(Scanner *scanner) {
     const char *p = scanner->current;
     if (p < scanner->end && scanner_read(scanner, p) == '"') {
         kind = XR_QUOTED_STRING;
+    } else if (p + 2 < scanner->end && scanner_read(scanner, p) == 'r' &&
+               scanner_read(scanner, p + 1) == 'e' && scanner_read(scanner, p + 2) == '"') {
+        kind = XR_QUOTED_REGEX;
+        escape_mode = XR_LITERAL_RAW;
+        prefix_length = 2;
     } else if (p + 1 < scanner->end && scanner_read(scanner, p + (0)) == 'r' && scanner_read(scanner, p + (1)) == '"') {
         kind = XR_QUOTED_STRING;
         escape_mode = XR_LITERAL_RAW;
@@ -961,7 +966,9 @@ static Token quoted_literal(Scanner *scanner, XrQuotedLiteralKind kind,
         return error_token(scanner, quoted_scan_error(result));
 
     XrTokenType type = TK_LITERAL_STRING;
-    if (kind == XR_QUOTED_BYTES) {
+    if (kind == XR_QUOTED_REGEX) {
+        type = TK_LITERAL_REGEX;
+    } else if (kind == XR_QUOTED_BYTES) {
         type = TK_LITERAL_BYTE_STRING;
     } else if (kind == XR_QUOTED_C_BYTES) {
         type = TK_LITERAL_C_STRING;
@@ -1003,90 +1010,6 @@ static Token rune_literal(Scanner *scanner) {
 
 // Backtick template strings are deprecated — use "" or '' with ${} instead
 
-// Regex literal: /pattern/flags
-static Token regex_literal(Scanner *scanner) {
-    // scanner->start already points to '/'
-    // scanner->current already skips the starting '/'
-
-    // Scan regex pattern
-    while (!is_at_end(scanner) && peek(scanner) != '/') {
-        if (peek(scanner) == '\\') {
-            // Escape character: skip the next character
-            advance(scanner);
-            if (!is_at_end(scanner)) {
-                advance(scanner);
-            }
-        } else if (peek(scanner) == '\n') {
-            // Regex cannot contain newline
-            return error_token(scanner, "Regex cannot contain newline");
-        } else if (peek(scanner) == '[') {
-            // Character class
-            advance(scanner);
-            while (!is_at_end(scanner) && peek(scanner) != ']') {
-                if (peek(scanner) == '\\') {
-                    advance(scanner);
-                    if (!is_at_end(scanner))
-                        advance(scanner);
-                } else if (peek(scanner) == '\n') {
-                    return error_token(scanner, "Regex cannot contain newline");
-                } else {
-                    advance(scanner);
-                }
-            }
-            if (!is_at_end(scanner))
-                advance(scanner);
-        } else {
-            advance(scanner);
-        }
-    }
-
-    if (is_at_end(scanner)) {
-        return error_token(scanner, "Unterminated regex");
-    }
-
-    // Consume the ending '/'
-    advance(scanner);
-
-    // Scan flags: i, m, s, g, u
-    while (!is_at_end(scanner)) {
-        char c = peek(scanner);
-        if (c == 'i' || c == 'm' || c == 's' || c == 'g' || c == 'u' || c == 'U') {
-            advance(scanner);
-        } else {
-            break;
-        }
-    }
-
-    return make_token(scanner, TK_LITERAL_REGEX);
-}
-
-// Try to scan regex literal (called when expecting expression)
-Token xr_scanner_try_regex(Scanner *scanner) {
-    if (!scanner_healthy(scanner)) return (Token) {.type = TK_EOF};
-    scanner->had_leading_space = skip_whitespace(scanner);
-    scanner_begin_token(scanner);
-
-    if (is_at_end(scanner) || peek(scanner) != '/') {
-        return xr_scanner_scan(scanner);
-    }
-
-    advance(scanner);
-
-    // Check for comment
-    if (peek(scanner) == '/' || peek(scanner) == '*') {
-        scanner->current = scanner->start;
-        return xr_scanner_scan(scanner);
-    }
-
-    // Check for /=
-    if (peek(scanner) == '=') {
-        scanner->current = scanner->start;
-        return xr_scanner_scan(scanner);
-    }
-
-    return regex_literal(scanner);
-}
-
 // Scan next token
 Token xr_scanner_scan(Scanner *scanner) {
     if (!scanner_healthy(scanner)) return (Token) {.type = TK_EOF};
@@ -1112,6 +1035,12 @@ Token xr_scanner_scan(Scanner *scanner) {
 
     char c = advance(scanner);
 
+    if (c == 'r' && scanner->current + 1 < scanner->end &&
+        peek(scanner) == 'e' && peek_next(scanner) == '"') {
+        advance(scanner);
+        advance(scanner);
+        return quoted_literal(scanner, XR_QUOTED_REGEX, XR_LITERAL_RAW, 2);
+    }
     if (c == 'r' && scanner->current + 1 < scanner->end &&
         (scanner_read(scanner, scanner->current + (0)) == 'b' || scanner_read(scanner, scanner->current + (0)) == 'c') && scanner_read(scanner, scanner->current + (1)) == '"') {
         scanner->current += 2;

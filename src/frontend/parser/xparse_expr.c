@@ -468,85 +468,26 @@ AstNode *xr_parse_literal(Parser *parser) {
     }
 }
 
-// Regex prefix parsing (when '/' appears at expression start)
-// Backtrack scanner and rescan as regex
-AstNode *xr_parse_regex_prefix(Parser *parser) {
-    if (!xr_parser_healthy(parser)) return NULL;
-    XR_DCHECK(parser != NULL, "parse_regex_prefix: NULL parser");
-    const char *slash_pos = parser->previous.start;
-    parser->scanner.current = slash_pos;
-
-    Token regex_token = xr_scanner_try_regex(&parser->scanner);
-    if (!xr_parser_healthy(parser)) return NULL;
-
-    if (regex_token.type == TK_LITERAL_REGEX) {
-        parser->previous = regex_token;
-        do {
-            parser->current = xr_scanner_scan(&parser->scanner);
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        return xr_parse_regex_literal(parser);
-    } else {
-        do {
-            xr_parser_error(parser, "invalid regex literal");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        return NULL;
-    }
-}
-
-// Parse regex literal: /pattern/flags
+// Regex bodies share raw quoted-literal normalization and arena ownership.
 AstNode *xr_parse_regex_literal(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_regex_literal: NULL parser");
-    const char *start = parser->previous.start;
-    int length = parser->previous.length;
-
-    // Skip opening '/'
-    start++;
-    length--;
-
-    // Find closing '/'
-    const char *end_slash = NULL;
-    for (int i = length - 1; xr_parser_healthy(parser) && (xr_parser_healthy(parser) && i >= 0); i--) {
-        if (xr_parser_read_byte(parser, start + (i)) == '/') {
-            end_slash = start + i;
-            break;
-        }
-    }
-
-    if (!end_slash) {
-        do {
-            xr_parser_error(parser, "invalid regex literal format");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
+    XrParsedQuoted payload = {0};
+    const char *error = NULL;
+    if (xr_parser_decode_quoted(parser, &parser->previous, false, &payload, &error) != XR_QUOTED_OK) {
+        xr_parser_error_at_previous(parser, error ? error : "invalid regex literal");
         return NULL;
     }
-
-    // Extract pattern
-    int pattern_len = (int) (end_slash - start);
-    char *pattern = (char *) ast_alloc(parser->compiler_session, pattern_len + 1);
-    if (!xr_parser_healthy(parser)) return NULL;
-    do { if (!ast_copy(parser->compiler_session, pattern, start, pattern_len)) return NULL; } while (0);
-    do { pattern[pattern_len] = '\0'; } while (0);
-
-    // Extract flags
-    const char *flags_start = end_slash + 1;
-    int flags_len = length - pattern_len - 1;
-    char *flags = (char *) ast_alloc(parser->compiler_session, flags_len + 1);
-    if (!xr_parser_healthy(parser)) return NULL;
-    if (flags_len > 0) {
-        do { if (!ast_copy(parser->compiler_session, flags, flags_start, flags_len)) return NULL; } while (0);
+    if (!xr_parser_utf8_validate(parser, (const char *) payload.bytes, payload.length)) {
+        xr_parser_error_at_previous(parser, "regex literal must be valid UTF-8");
+        return NULL;
     }
-    do { flags[flags_len] = '\0'; } while (0);
-
-    // Create AST node
-    AstNode *node =
-        xr_ast_literal_regex(parser->compiler_session, pattern, flags, parser->previous.line);
-    if (!xr_parser_healthy(parser)) return NULL;
-
-
-
+    AstNode *node = xr_ast_literal_regex(parser->compiler_session,
+        (const char *) payload.bytes, "", parser->previous.line);
+    if (!node || !xr_parser_healthy(parser)) return NULL;
+    node->column = parser->previous.column;
+    node->as.literal.escape_mode = XR_LITERAL_RAW;
+    node->as.literal.source_form = parser->previous.source_form;
     return node;
 }
 
@@ -743,6 +684,7 @@ static bool template_skip_quoted_token(Parser *parser, const char *src, int len,
         case TK_LITERAL_STRING:
         case TK_LITERAL_BYTE_STRING:
         case TK_LITERAL_C_STRING:
+        case TK_LITERAL_REGEX:
         case TK_TEMPLATE_STRING:
         case TK_RAW_STRING:
         case TK_RAW_TEMPLATE_STRING:

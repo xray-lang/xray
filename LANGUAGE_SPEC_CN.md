@@ -140,14 +140,14 @@ xray 不要求语句末尾的 `;`：**行结尾结束语句**。当一个表达�
 2. 新行的首个 token 可以**开始**一个表达式；且
 3. 当前不在 `(` 或 `[` 之内——括号组内不可能开始新语句，因此行结尾在其中完全透明。
 
-条件 1 与 2 只对**同时具有前缀与中缀两种角色**的 token 同时成立，即 `!`（逻辑非 / 强制解包）、`-`（取负 / 减法）、`/`（正则字面量 / 除法）、`++`、`--`、`(`、`[`。因此：
+条件 1 与 2 只对**同时具有前缀与中缀两种角色**的 token 同时成立，即 `!`（逻辑非 / 强制解包）、`-`（取负 / 减法）、`++`、`--`、`(`、`[`。因此：
 
 ```xray
 var x = a
 !b            // 两条语句；不是 var x = a!
 ```
 
-行首为**无前缀角色**的 token（`.`、`?`、`:`、`&&`、`||`、`+`、`*`、`as`、`is` 等）时不存在歧义，续行照常工作：
+行首为**无前缀角色**的 token（`.`、`?`、`:`、`&&`、`||`、`+`、`*`、`/`、`as`、`is` 等）时不存在歧义，续行照常工作：
 
 ```xray
 var ok = check(a)
@@ -155,9 +155,12 @@ var ok = check(a)
 
 var total = base +
             extra    // 运算符置于行尾，续行
+
+var quotient = total
+    / 2              // 除法只有中缀角色，续行
 ```
 
-若需要以 `-` 或 `/` 续行，把运算符移到上一行末尾，或用 `( )` 括住整个表达式：
+若需要以 `-` 续行，把运算符移到上一行末尾，或用 `( )` 括住整个表达式：
 
 ```xray
 var d = (total
@@ -492,17 +495,19 @@ var smile: rune = '\u{1F600}'
 #### 1.6.7 正则字面量
 
 ```ebnf
-RegexLiteral ::= '/' RegexBody '/' RegexFlag*
-RegexFlag ::= 'g' | 'i' | 'm' | 's'
+RegexLiteral ::= 're' (InlineQuoted | BlockQuoted)
 ```
 
-```xray
-/[a-z]+/i
-/\d+\.\d+/g
+```xray @fragment
+var letters = re"(?i)[a-z]+"
+var decimal = re"\d+\.\d+"
 ```
 
-- flags：`g`（全局）、`i`（忽略大小写）、`m`（多行）、`s`（dot 匹配换行）。
-- **歧义消解**：当 `/` 出现在能接受一元 `/` 的位置（如紧跟 `=`、`,`、`(`、操作符），扫描器识别为正则；其他位置识别为除法。
+- `re` 后面紧跟双引号时识别为正则字面量；其他位置的 `re` 是普通标识符。
+- 内容是合法 UTF-8，按 raw 规则保留反斜杠，不解释字符串转义，也不进行 `${...}` 插值。inline / block 引号、物理换行及缩进裁剪规则与 §1.6.5 的 raw 引号形式相同。
+- 标志写在正则内容内部：`(?i)` 忽略大小写、`(?m)` 多行、`(?s)` 允许点号匹配换行。字面量没有后缀标志；`g` 不是正则标志。全局匹配使用 `findAll` / `replaceAll`，首个匹配使用 `find` / `replace`。
+- 字面量在编译期解析并预编译为不可变 `RegexPlan`；无效模式产生带源码位置的编译错误。动态构造使用 `Regex(text)`，在运行时检查输入模式。
+- `/` 只有除法和 `/=` 复合赋值的操作符含义；注释仍使用 `//` 与 `/* ... */`。
 
 ### 1.7 操作符与 Token
 
@@ -8630,8 +8635,7 @@ QuoteRun ::= '"'{Q}                         // Q >= 3
 BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
-RegexLiteral ::= '/' RegexBody '/' RegexFlag*
-RegexFlag ::= 'i' | 'm' | 's' | 'g' | 'u'
+RegexLiteral ::= 're' (InlineQuoted | BlockQuoted)
 
 BoolLiteral ::= 'true' | 'false'
 NullLiteral ::= 'null'

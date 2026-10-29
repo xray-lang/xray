@@ -398,6 +398,40 @@ TEST(keyword_then_punctuation) {
     ASSERT_EQ_INT(b.type, TK_LBRACE);
 }
 
+TEST(regex_prefix_is_contextual_raw) {
+    const char *text = "re\"(?i)\\d+/${not_interpolated}\"";
+    Token token = scan_one(text);
+    ASSERT_EQ_INT(token.type, TK_LITERAL_REGEX);
+    ASSERT_EQ_INT(token.length, (int)strlen(text));
+    ASSERT_EQ_INT(token.quoted_kind, XR_QUOTED_REGEX);
+    ASSERT_EQ_INT(token.escape_mode, XR_LITERAL_RAW);
+    ASSERT_EQ_INT(token.source_form, XR_LITERAL_INLINE);
+    ASSERT_EQ_INT(token.prefix_length, 2);
+    ASSERT_EQ_INT(token.quote_count, 1);
+    ASSERT_EQ_INT(scan_one("re\"\"").type, TK_LITERAL_REGEX);
+    ASSERT_EQ_INT(scan_one("re").type, TK_NAME);
+    ASSERT_EQ_INT(scan_one("regex").type, TK_NAME);
+    ASSERT_EQ_INT(scan_one("re_name").type, TK_NAME);
+    Token first, second;
+    scan_two("re \"x\"", &first, &second);
+    ASSERT_EQ_INT(first.type, TK_NAME);
+    ASSERT_EQ_INT(second.type, TK_LITERAL_STRING);
+    scan_two("re\"x\"i", &first, &second);
+    ASSERT_EQ_INT(first.type, TK_LITERAL_REGEX);
+    ASSERT_EQ_INT(second.type, TK_NAME);
+    scan_two("/x/", &first, &second);
+    ASSERT_EQ_INT(first.type, TK_SLASH);
+    ASSERT_EQ_INT(second.type, TK_NAME);
+    ASSERT_EQ_INT(scan_one("re\"x\n\"").type, TK_ERROR);
+    ASSERT_EQ_INT(scan_one("re\"x").type, TK_ERROR);
+    token = scan_one("re\"\"\"\n  \\\"/${x}\n  \"\"\"");
+    ASSERT_EQ_INT(token.type, TK_LITERAL_REGEX);
+    ASSERT_EQ_INT(token.source_form, XR_LITERAL_BLOCK);
+    ASSERT_EQ_INT(token.quote_count, 3);
+    token = scan_one("\"${re\"${not_interpolated}\"}\"");
+    ASSERT_EQ_INT(token.type, TK_TEMPLATE_STRING);
+}
+
 /* ====================================================================== */
 /* Driver                                                                  */
 /* ====================================================================== */
@@ -414,5 +448,6 @@ RUN_TEST(keyword_prefix_identifiers_are_TK_NAME);
 RUN_TEST(keywords_are_case_sensitive);
 RUN_TEST(keyword_with_underscore_suffix_is_identifier);
 RUN_TEST(keyword_then_punctuation);
+RUN_TEST(regex_prefix_is_contextual_raw);
 keyword_fixture_close();
 TEST_MAIN_END()

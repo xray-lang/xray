@@ -16,7 +16,7 @@
 #include "xir_zero_scratch_fixture.h"
 int main(int argc,char **argv) {
     CHECK(argc==2);
-    const XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
+    const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
     XrXirCompileContext context={0};
     context.limits=xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);

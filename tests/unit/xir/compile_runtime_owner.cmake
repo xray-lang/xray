@@ -7,6 +7,7 @@ add_executable(test_xir_compile_snapshot_owner
     "${XIR_OWNER_ROOT}/src/xir/xxir_source_query.c")
 target_link_libraries(test_xir_compile_snapshot_owner PRIVATE compile_owner_core)
 add_library(xir_compile_owner_runtime STATIC
+    "${XIR_OWNER_ROOT}/src/base/xunicode.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_type_arena.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_value.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_scalar.c"
@@ -92,6 +93,9 @@ add_test(NAME test_xir_compile_api_rejection
         --compiler "${CMAKE_C_COMPILER}" --msvc "${XIR_OWNER_MSVC}" --root "${XIR_OWNER_ROOT}"
         --output "${CMAKE_CURRENT_BINARY_DIR}/compile-api-rejections")
 set_tests_properties(test_xir_compile_api_rejection PROPERTIES LABELS "unit;xir;abi" TIMEOUT 60)
+add_test(NAME test_xir_compile_emit_owner COMMAND test_xir_compile_emit_owner
+    "${CMAKE_CURRENT_BINARY_DIR}/compile-owner-test-generated.c")
+set_tests_properties(test_xir_compile_emit_owner PROPERTIES LABELS "unit;xir;compiler;ownership" TIMEOUT 60)
 foreach(owner_target test_xir_compile_decimal_work test_xir_compile_snapshot_owner test_xir_compile_api test_xir_compile_c_buffer test_xir_compile_runtime_owner test_xir_compile_native_owner)
     add_test(NAME ${owner_target} COMMAND ${owner_target})
     set_tests_properties(${owner_target} PROPERTIES LABELS "unit;xir;compiler;ownership;budget;abi" TIMEOUT 60)

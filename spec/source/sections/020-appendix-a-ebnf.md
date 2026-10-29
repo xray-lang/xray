@@ -46,8 +46,7 @@ QuoteRun ::= '"'{Q}                         // Q >= 3
 BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
-RegexLiteral ::= '/' RegexBody '/' RegexFlag*
-RegexFlag ::= 'i' | 'm' | 's' | 'g' | 'u'
+RegexLiteral ::= 're' (InlineQuoted | BlockQuoted)
 
 BoolLiteral ::= 'true' | 'false'
 NullLiteral ::= 'null'
@@ -400,8 +399,7 @@ QuoteRun ::= '"'{Q}                         // Q >= 3
 BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 CharLiteral ::= "'" CharBody "'"
 CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
-RegexLiteral ::= '/' RegexBody '/' RegexFlag*
-RegexFlag ::= 'i' | 'm' | 's' | 'g' | 'u'
+RegexLiteral ::= 're' (InlineQuoted | BlockQuoted)
 
 BoolLiteral ::= 'true' | 'false'
 NullLiteral ::= 'null'

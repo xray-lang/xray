@@ -209,6 +209,14 @@ XR_FUNC void xfmt_emit_string_literal(XrFmtContext *ctx, AstNode *node) {
                         literal->escape_mode, literal->source_form, false, false);
 }
 
+XR_FUNC void xfmt_emit_regex_literal(XrFmtContext *ctx, AstNode *node) {
+    if (!xfmt_healthy(ctx)) return;
+    const char *pattern = node->as.literal.raw_value.regex.pattern;
+    emit_quoted_payload(ctx, "re", (const uint8_t *) pattern,
+                        pattern ? xfmt_length(ctx, pattern) : 0,
+                        XR_LITERAL_RAW, node->as.literal.source_form, false, false);
+}
+
 XR_FUNC void xfmt_emit_fixed_bytes_literal(XrFmtContext *ctx, AstNode *node) {
     if (!xfmt_healthy(ctx)) return;
     FixedBytesLiteralNode *literal = &node->as.fixed_bytes_literal;

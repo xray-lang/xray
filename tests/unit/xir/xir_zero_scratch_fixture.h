@@ -21,9 +21,9 @@ static XrXirArtifact *zero_scratch_cleanup_lowered(const XrXirCompileContext *co
     const XrXirBlock one={0,1,0,0},blocks[]={{0,2,0,0},{2,1,0,2}};
     const XrXirBlock cleanup_block={0,2,0,0};
     const XrXirFunction functions[]={
-        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&done,1,NULL,0},
-        {"main",4,NULL,0,XR_XIR_I64,blocks,2,code,3,NULL,0},
-        {"cleanup",7,NULL,0,XR_XIR_UNIT,&cleanup_block,1,cleanup,2,NULL,0}};
+        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&done,1,NULL,0,XR_XIR_NEVER},
+        {"main",4,NULL,0,XR_XIR_I64,blocks,2,code,3,NULL,0,XR_XIR_NEVER},
+        {"cleanup",7,NULL,0,XR_XIR_UNIT,&cleanup_block,1,cleanup,2,NULL,0,XR_XIR_NEVER}};
     XrXirFunctionIdentity identities[3]={{0}};identities[2].cleanup_owner=2;
     const XrXirSourceModule source={.name="root",.name_length=4,.initializer=0};
     const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};

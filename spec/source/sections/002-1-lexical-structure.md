@@ -34,14 +34,14 @@ xray 不要求语句末尾的 `;`：**行结尾结束语句**。当一个表达�
 2. 新行的首个 token 可以**开始**一个表达式；且
 3. 当前不在 `(` 或 `[` 之内——括号组内不可能开始新语句，因此行结尾在其中完全透明。
 
-条件 1 与 2 只对**同时具有前缀与中缀两种角色**的 token 同时成立，即 `!`（逻辑非 / 强制解包）、`-`（取负 / 减法）、`/`（正则字面量 / 除法）、`++`、`--`、`(`、`[`。因此：
+条件 1 与 2 只对**同时具有前缀与中缀两种角色**的 token 同时成立，即 `!`（逻辑非 / 强制解包）、`-`（取负 / 减法）、`++`、`--`、`(`、`[`。因此：
 
 ```xray
 var x = a
 !b            // 两条语句；不是 var x = a!
 ```
 
-行首为**无前缀角色**的 token（`.`、`?`、`:`、`&&`、`||`、`+`、`*`、`as`、`is` 等）时不存在歧义，续行照常工作：
+行首为**无前缀角色**的 token（`.`、`?`、`:`、`&&`、`||`、`+`、`*`、`/`、`as`、`is` 等）时不存在歧义，续行照常工作：
 
 ```xray
 var ok = check(a)
@@ -49,9 +49,12 @@ var ok = check(a)
 
 var total = base +
             extra    // 运算符置于行尾，续行
+
+var quotient = total
+    / 2              // 除法只有中缀角色，续行
 ```
 
-若需要以 `-` 或 `/` 续行，把运算符移到上一行末尾，或用 `( )` 括住整个表达式：
+若需要以 `-` 续行，把运算符移到上一行末尾，或用 `( )` 括住整个表达式：
 
 ```xray
 var d = (total
@@ -386,17 +389,19 @@ var smile: rune = '\u{1F600}'
 #### 1.6.7 正则字面量
 
 ```ebnf
-RegexLiteral ::= '/' RegexBody '/' RegexFlag*
-RegexFlag ::= 'g' | 'i' | 'm' | 's'
+RegexLiteral ::= 're' (InlineQuoted | BlockQuoted)
 ```
 
-```xray
-/[a-z]+/i
-/\d+\.\d+/g
+```xray @fragment
+var letters = re"(?i)[a-z]+"
+var decimal = re"\d+\.\d+"
 ```
 
-- flags：`g`（全局）、`i`（忽略大小写）、`m`（多行）、`s`（dot 匹配换行）。
-- **歧义消解**：当 `/` 出现在能接受一元 `/` 的位置（如紧跟 `=`、`,`、`(`、操作符），扫描器识别为正则；其他位置识别为除法。
+- `re` 后面紧跟双引号时识别为正则字面量；其他位置的 `re` 是普通标识符。
+- 内容是合法 UTF-8，按 raw 规则保留反斜杠，不解释字符串转义，也不进行 `${...}` 插值。inline / block 引号、物理换行及缩进裁剪规则与 §1.6.5 的 raw 引号形式相同。
+- 标志写在正则内容内部：`(?i)` 忽略大小写、`(?m)` 多行、`(?s)` 允许点号匹配换行。字面量没有后缀标志；`g` 不是正则标志。全局匹配使用 `findAll` / `replaceAll`，首个匹配使用 `find` / `replace`。
+- 字面量在编译期解析并预编译为不可变 `RegexPlan`；无效模式产生带源码位置的编译错误。动态构造使用 `Regex(text)`，在运行时检查输入模式。
+- `/` 只有除法和 `/=` 复合赋值的操作符含义；注释仍使用 `//` 与 `/* ... */`。
 
 ### 1.7 操作符与 Token
 
@@ -522,14 +527,14 @@ A line ending **terminates** the current expression if and only if all of the fo
 2. The first token of the new line can **begin** an expression; and
 3. The parser is not inside `(` or `[` — no statement can begin inside a bracket group, so line endings are transparent there.
 
-Conditions 1 and 2 are only ever both true for tokens that carry **both a prefix and an infix role**: `!` (logical not / force unwrap), `-` (negate / subtract), `/` (regex literal / divide), `++`, `--`, `(`, `[`. Hence:
+Conditions 1 and 2 are only ever both true for tokens that carry **both a prefix and an infix role**: `!` (logical not / force unwrap), `-` (negate / subtract), `++`, `--`, `(`, `[`. Hence:
 
 ```xray
 var x = a
 !b            // two statements; NOT var x = a!
 ```
 
-When a line begins with a token that has **no prefix role** (`.`, `?`, `:`, `&&`, `||`, `+`, `*`, `as`, `is`, …) there is no ambiguity and continuation works as usual:
+When a line begins with a token that has **no prefix role** (`.`, `?`, `:`, `&&`, `||`, `+`, `*`, `/`, `as`, `is`, …) there is no ambiguity and continuation works as usual:
 
 ```xray
 var ok = check(a)
@@ -537,9 +542,12 @@ var ok = check(a)
 
 var total = base +
             extra    // operator parked at end of line; continuation
+
+var quotient = total
+    / 2              // division has only an infix role; continuation
 ```
 
-To continue a line with `-` or `/`, move the operator to the end of the previous line or wrap the whole expression in `( )`:
+To continue a line with `-`, move the operator to the end of the previous line or wrap the whole expression in `( )`:
 
 ```xray
 var d = (total
@@ -874,17 +882,19 @@ String templates use ordinary double quotes with `${...}` interpolation.
 #### 1.6.7 Regex Literals
 
 ```ebnf
-RegexLiteral ::= '/' RegexBody '/' RegexFlag*
-RegexFlag ::= 'g' | 'i' | 'm' | 's'
+RegexLiteral ::= 're' (InlineQuoted | BlockQuoted)
 ```
 
-```xray
-/[a-z]+/i
-/\d+\.\d+/g
+```xray @fragment
+var letters = re"(?i)[a-z]+"
+var decimal = re"\d+\.\d+"
 ```
 
-- Flags: `g` (global), `i` (case-insensitive), `m` (multi-line), `s` (dot matches newline).
-- **Disambiguation**: when `/` appears in a position that can accept a unary `/` (e.g., right after `=`, `,`, `(`, an operator), the scanner treats it as a regex; elsewhere it is division.
+- `re` immediately followed by a double quote starts a regex literal; elsewhere `re` is an ordinary identifier.
+- The body is valid UTF-8 and preserves backslashes under raw rules, without string escape processing or `${...}` interpolation. Inline / block fences, physical line endings and indentation stripping follow the raw quoted forms in §1.6.5.
+- Flags appear inside the pattern: `(?i)` ignores case, `(?m)` enables multiline matching, and `(?s)` lets a dot match a newline. Literals have no suffix flags; `g` is not a regex flag. Use `findAll` / `replaceAll` for global matching and `find` / `replace` for the first match.
+- A literal is parsed and precompiled into an immutable `RegexPlan` at compile time; an invalid pattern produces a compile error with a source location. Dynamic construction uses `Regex(text)` and validates the input pattern at runtime.
+- `/` has only the operator roles of division and `/=` compound assignment; comments continue to use `//` and `/* ... */`.
 
 ### 1.7 Operators and Tokens
 

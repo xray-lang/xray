@@ -7,7 +7,14 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 get_filename_component(XR_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
+if(WIN32)
+    set(XR_COMPILE_OWNER_CLOCK "${XR_ROOT}/src/os/win/time_win.c")
+else()
+    set(XR_COMPILE_OWNER_CLOCK "${XR_ROOT}/src/os/unix/time_unix.c")
+endif()
 add_library(compile_owner_core STATIC
+    "${XR_ROOT}/src/base/xcompile_request.c"
+    "${XR_COMPILE_OWNER_CLOCK}"
     "${XR_ROOT}/src/xir/xxir.c"
     "${XR_ROOT}/src/xir/xxir_input_owned.c"
     "${XR_ROOT}/src/xir/xxir_verify.c"
@@ -35,6 +42,9 @@ target_compile_definitions(compile_owner_core PRIVATE WIN32_LEAN_AND_MEAN NOMINM
 target_include_directories(compile_owner_core PUBLIC "${XR_ROOT}/src")
 if(MSVC)
     target_compile_options(compile_owner_core PRIVATE /utf-8 /W4 /WX)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(compile_owner_core PRIVATE /experimental:c11atomics)
+    endif()
 endif()
 enable_testing()
 

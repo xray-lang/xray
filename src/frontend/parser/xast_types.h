@@ -46,7 +46,7 @@ typedef enum {
     AST_LITERAL_BIGINT,  // BigInt: 123n
     AST_LITERAL_STRING,  // String: "hello"
     AST_LITERAL_RUNE,    // Char: 'a'
-    AST_LITERAL_REGEX,   // Regex: /pattern/flags
+    AST_LITERAL_REGEX,   // Regex: re"..."
     AST_LITERAL_NULL,    // null
     AST_LITERAL_TRUE,    // true
     AST_LITERAL_FALSE,   // false
