@@ -24,8 +24,8 @@ static bool implementation_raw_poll(const void *context) {
     return declarations_poll(context)!=0;
 }
 static void implementation_argument_controls(void) {
-    XrXirType arguments[2049];for(size_t i=0;i<2049;++i)arguments[i]=XR_XIR_I64;
-    XrXirImplementation record={.interface={0,arguments,2049}};
+    XrXirType arguments[4096];for(size_t i=0;i<4096;++i)arguments[i]=XR_XIR_I64;
+    XrXirImplementation record={.interface={0,arguments,4096}};
     XrXirImplementationTable source={&record,1};
     for(unsigned mode=0;mode<2;++mode) {
         XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
@@ -41,7 +41,7 @@ static void implementation_argument_controls(void) {
         XrXirStatus status=test_implementation_copy(&context,&source,&control,&copy);
         test_declarations_copy_end(&probe);
         CHECK(status==(mode==0?XR_XIR_CANCELLED:XR_XIR_DEADLINE)&&copy==(void *)(uintptr_t)1);
-        CHECK(probe.witnesses==1&&probe.argument_bytes==8196&&probe.copies==1);
+        CHECK(probe.witnesses==1&&probe.argument_bytes==16384&&probe.copies==1);
         CHECK(sdk_stats(resources).held_bytes==held);
         CHECK(xr_compile_request_control_poll(&control)==(mode==0?XR_COMPILE_RESOURCE_CANCELLED:XR_COMPILE_RESOURCE_DEADLINE));
         control=(XrCompileRequestControl){0};CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
@@ -53,10 +53,11 @@ static void implementation_argument_controls(void) {
         CHECK(!memcmp(copy->records[0].interface.arguments,arguments,sizeof(arguments)));
         xr_xir_compile_implementations_free(copy);CHECK(sdk_stats(resources).held_bytes==held);
         xr_compile_resources_release(resources);CHECK(!runtime_live&&!runtime_bytes);
-        fprintf(stderr,"implementation raw8196 mode%u prefix4096 tail4100 rollback and same-options retry PASS\n",mode);
+        fprintf(stderr,"implementation raw4096args/16384B mode%u prefix4096 tail12288 rollback and same-options retry PASS\n",mode);
     }
 }
 static void implementation_controls(const char *selected) {
+    if(selected&&!strcmp(selected,"raw_arguments")){implementation_argument_controls();return;}
     static const struct {const char *name;unsigned phase,mode;} cases[]={
         {"baseline",IC_RECORD,3},{"cancel_record",IC_RECORD,0},{"cancel_binding",IC_BINDING,0},
         {"cancel_publication",IC_PUBLICATION,0},{"deadline_publication",IC_PUBLICATION,1},
