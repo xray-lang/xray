@@ -178,16 +178,11 @@ XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **input,const XrXirT
     XrCompileRequestControl *control,XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
     XrXirStatus status=packet_actual_lower_take(input,target,control,output,diagnostic);
     ProductPacketProbe *probe=product_packet_probe;
-    if(status==XR_XIR_OK&&probe&&!probe->source) {
+    if(status==XR_XIR_OK&&probe) {
         const XrXirArtifact *lowered=*output;
-        const XrXirImplementationTable *table=lowered->module.declarations->implementations;
-        bool found=false;
-        if(table)for(uint32_t i=0;i<table->count;++i)if(table->records[i].binding_count==192)found=true;
-        if(found) {
-            CHECK(!*input&&probe->resources==lowered->context.resources&&probe->control==control);
-            CHECK(lowered->checked_packet.bytes&&lowered->checked_packet.length>4096);
-            probe->source=lowered->checked_packet.bytes;probe->bytes=lowered->checked_packet.length;probe->armed=true;
-        }
+        CHECK(!probe->source&&!*input&&probe->resources==lowered->context.resources&&probe->control==control);
+        CHECK(lowered->checked_packet.bytes&&lowered->checked_packet.length>4096);
+        probe->source=lowered->checked_packet.bytes;probe->bytes=lowered->checked_packet.length;probe->armed=true;
     }
     return status;
 }
