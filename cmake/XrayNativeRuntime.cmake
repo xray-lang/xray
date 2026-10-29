@@ -36,6 +36,9 @@ function(_xnr_collect target ancestry)
     if(NOT kind STREQUAL "STATIC_LIBRARY")
         message(FATAL_ERROR "Native runtime requires an owned static target: ${target}")
     endif()
+    # The global default was captured when these targets were created. Export
+    # their actual producers without changing unrelated targets or the cache.
+    set_property(TARGET "${target}" PROPERTY EXPORT_COMPILE_COMMANDS ON)
     set_property(GLOBAL APPEND PROPERTY XRAY_NATIVE_PACKAGE_TARGETS "${target}")
     list(APPEND ancestry "${target}")
     get_target_property(links ${target} LINK_LIBRARIES)
@@ -80,7 +83,6 @@ if(_xnr_eligible)
     endforeach()
     string(APPEND _xnr_json "]}\n")
     file(GENERATE OUTPUT "${_xnr_inputs}" CONTENT "${_xnr_json}")
-    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
     add_custom_target(native-runtime-bundle
         COMMAND ${XRAY_PYTHON} -B "${PROJECT_SOURCE_DIR}/scripts/build_native_runtime_bundle.py"
             --root "${PROJECT_SOURCE_DIR}" --build "${CMAKE_BINARY_DIR}"
