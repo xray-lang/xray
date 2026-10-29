@@ -187,6 +187,12 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m) {
             return XR_XIR_BAD_STAGE;
         for (uint32_t f=0; f<record->field_count; ++f) {
 
+            /* Complete common verification authenticates this native family.
+             * Its erased Error and PanicInfo payloads are owned relocatable
+             * values; ordinary nominal fields retain the existing subset. */
+            if (record->native.native_id==XR_NATIVE_DECLARATION_TASK_RESULT &&
+                ((f==1 && record->fields[f].type==XR_XIR_ERROR) ||
+                 (f==2 && record->fields[f].type==XR_XIR_PANIC_INFO))) continue;
             uint32_t parameter=(uint32_t)record->fields[f].type-XR_XIR_TYPE_PARAMETER_BASE;
             if (!library_catalog_builtin(record->fields[f].type) &&
                 !xr_xir_type_node(types,record->fields[f].type) &&
