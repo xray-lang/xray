@@ -17,7 +17,9 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_task_result.h"
 #include "xir/xxir_nominal.h"
+#include "xir/xxir_constraint_proof.h"
 #include "../test_win_compat.h"
+#include "initialization_cycle_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +32,51 @@ typedef struct LocalErrorCase {
     const char *name, *text, *diagnostic;
     int64_t expected;
 } LocalErrorCase;
+typedef struct LocalInitializerContract {
+    const char *owner,*error;
+    uint32_t constructors,helpers;
+} LocalInitializerContract;
+static void local_initializer_contracts(XrXirSourceProduct *product,
+    const LocalInitializerContract *expected,uint32_t count) {
+    const XrXirCompileContext *context=xr_xir_compile_source_product_context(product);
+    XrXirSourceProductPacketView packet={0};XrXirArtifact *checked=NULL;
+    CHECK(xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_SOURCE,&packet)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
+    const XrXirModule *module=xr_xir_compile_artifact_module(checked);uint32_t negative=UINT32_MAX;
+    for (uint32_t c=0;c<count;++c) {
+        uint32_t constructors=0,helpers=0;
+        for (uint32_t f=0;f<module->function_count;++f) {
+            const XrXirFunction *function=&module->functions[f];
+            const XrXirFunctionIdentity *identity=&module->declarations->functions[f];
+            bool constructor=function->name_length==8 && !memcmp(function->name,"$default",8);
+            bool helper=function->name_length==14 && !memcmp(function->name,"$field_default",14);
+            if ((!constructor && !helper) || !identity->nominal_owner) continue;
+            CHECK(function->error_type!=XR_XIR_UNIT);
+            const XrXirNominalDeclaration *owner=&module->types->nominals->declarations[identity->nominal_owner-1];
+            if (strlen(expected[c].owner)!=owner->name.length ||
+                memcmp(owner->name.bytes,expected[c].owner,owner->name.length)) continue;
+            bool error=false;
+            if (!strcmp(expected[c].error,"Never")) error=function->error_type==XR_XIR_NEVER;
+            else {
+                const XrXirTypeNode *type=xr_xir_type_node(module->types,function->error_type);
+                if (type && type->kind==XR_XIR_TYPE_NOMINAL) {
+                    const XrXirLiteral *name=&module->types->nominals->declarations[type->nominal.declaration].name;
+                    error=strlen(expected[c].error)==name->length && !memcmp(name->bytes,expected[c].error,name->length);
+                }
+            }
+            if (error) {constructors+=constructor;helpers+=helper;negative=f;}
+        }
+        CHECK(constructors==expected[c].constructors && helpers==expected[c].helpers);
+    }
+    CHECK(negative!=UINT32_MAX);
+    XrXirFunction *functions=xr_malloc((size_t)module->function_count*sizeof(*functions));CHECK(functions);
+    memcpy(functions,module->functions,(size_t)module->function_count*sizeof(*functions));
+    XrXirModule pending=*module;pending.functions=functions;functions[negative].error_type=XR_XIR_UNIT;
+    CHECK(xr_xir_compile_declaration_value_constraints_verify(context,&pending)==XR_XIR_OK);
+    CHECK(xr_xir_compile_declaration_constraints_verify(context,&pending)==XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_module_constraints_verify(context,&pending)==XR_XIR_BAD_TYPE);
+    xr_free(functions);xr_xir_compile_artifact_free(checked);
+}
 static void local_packet_digest(uint8_t *bytes,size_t length) {
     XrSHA256Context hash;xr_sha256_init(&hash);
     xr_sha256_update(&hash,bytes,32);xr_sha256_update(&hash,bytes+64,length-64);
@@ -169,7 +216,8 @@ static void local_execute(XrXirSourceProduct *product,const char *name,int64_t e
     }
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
 }
-static void local_case(const LocalErrorCase *test) {
+static void local_case_mode(const LocalErrorCase *test,bool execute,
+    const LocalInitializerContract *contracts,uint32_t count,XrXirStatus refusal) {
     XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats before={0},after={0};
@@ -188,22 +236,26 @@ static void local_case(const LocalErrorCase *test) {
     }
     memset(text,0xa5,length+1);xr_free(text);xr_compile_session_free(session);
     if (test->diagnostic) {
-        if (status!=XR_XIR_BAD_TYPE || !strstr(diagnostic_root.message,test->diagnostic) ||
+        if (status!=refusal || !strstr(diagnostic_root.message,test->diagnostic) ||
             diagnostic_root.primary.line<=0 || diagnostic_root.primary.column<=0)
             fprintf(stderr,"local rejection %s status%u stage%u %d:%d %s\n",test->name,(unsigned)status,
                 (unsigned)diagnostic.stage,diagnostic_root.primary.line,diagnostic_root.primary.column,diagnostic_root.message);
-        CHECK(status==XR_XIR_BAD_TYPE && !product && diagnostic_root.primary.line>0 && diagnostic_root.primary.column>0);
+        CHECK(status==refusal && !product && diagnostic_root.primary.line>0 && diagnostic_root.primary.column>0);
         CHECK(strstr(diagnostic_root.message,test->diagnostic));
     } else {
         if (status!=XR_XIR_OK) fprintf(stderr,"local product %s status%u stage%u %d:%d %s (function%u block%u instruction%u reason%u)\n",test->name,
             (unsigned)status,(unsigned)diagnostic.stage,diagnostic_root.primary.line,diagnostic_root.primary.column,diagnostic_root.message,
             diagnostic.xir.function,diagnostic.xir.block,diagnostic.xir.instruction,(unsigned)diagnostic.xir.reason);
-        CHECK(status==XR_XIR_OK && product);local_execute(product,test->name,test->expected);
+        CHECK(status==XR_XIR_OK && product);
+        if (contracts) local_initializer_contracts(product,contracts,count);
+        if (execute) local_execute(product,test->name,test->expected);
+        else {local_answer(product);xr_xir_compile_source_product_free(product);}
     }
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.held_bytes==before.held_bytes);xr_compile_resources_release(context.resources);
 }
+static void local_case(const LocalErrorCase *test) {local_case_mode(test,true,NULL,0,XR_XIR_BAD_TYPE);}
 typedef struct LocalOptionalCancel { size_t polls, stop; } LocalOptionalCancel;
 static bool local_optional_cancel(const void *pointer) {
     LocalOptionalCancel *state=(LocalOptionalCancel *)pointer;
@@ -317,6 +369,130 @@ static void local_optional_resources(void) {
     local_optional_runtime_limit();
     printf("try? held peak %llu: exact/minus1, frame, cancel, retirement and reuse PASS\n",(unsigned long long)peak);
 }
+static void local_initialization_cycles(void) {
+    static const LocalInitializerContract pure[]={{"Loop","Never",1,1}};
+    static const LocalErrorCase old_pure={"pure generated initializer cycle",
+        "struct Loop{value:i64=Loop().value}\nexport fn answer()->i64{return 42}\n",NULL,42};
+    local_case_mode(&old_pure,false,pure,1,XR_XIR_BAD_TYPE);
+    static const LocalErrorCase pure_callable={"pure generated callable ready",
+        initialization_pure_source,NULL,42};
+    local_case_mode(&pure_callable,false,pure,1,XR_XIR_BAD_TYPE);
+    static const LocalInitializerContract fallible[]={{"Node","ReadErr",1,2}};
+    static const LocalErrorCase ring={"generated callable exact error",
+        "enum ReadErr{Bad}\nfn read() throws(ReadErr)->i64{throw ReadErr.Bad}\n"
+        "struct Node{first:i64=try read()\nvalue:i64=try Node().value}\n"
+        "const f=fn()->Node{return try Node()}\n"
+        "export fn answer()->i64{try{const n=f();return n.value}catch(e:ReadErr){return 42}}\n",NULL,42};
+    local_case_mode(&ring,true,fallible,1,XR_XIR_BAD_TYPE);
+    static const LocalErrorCase owned={"complete generated product error payload",initialization_error_source,NULL,42};
+    local_case_mode(&owned,true,fallible,1,XR_XIR_BAD_TYPE);
+    static const LocalInitializerContract filtered[]={
+        {"A","Never",1,1},{"B","ReadErr",1,1},{"B","Never",0,1}};
+    static const LocalErrorCase optional={"per-node optional generated ring",
+        "enum ReadErr{Bad}\nfn read() throws(ReadErr)->i64{throw ReadErr.Bad}\n"
+        "struct A{value:i64=(try? B().value) ?? 42}\n"
+        "struct B{first:i64=try read()\nvalue:i64=A().value}\n"
+        "const f=fn()->A{return A()}\nexport fn answer()->i64{return f().value}\n",NULL,42};
+    local_case_mode(&optional,true,filtered,3,XR_XIR_BAD_TYPE);
+    static const LocalErrorCase generics={"generic generated error substitution",
+        "enum Failure<T>{Bad}\nfn read<T>() throws(Failure<T>)->i64{throw Failure<T>.Bad}\n"
+        "struct Node<T>{first:i64=try read<T>()\nvalue:i64=try Node<T>().value}\n"
+        "export fn answer()->i64{const f=fn()->Node<i64>{return try Node<i64>()};"
+        "try{const n=f();return n.value}catch(e:Failure<i64>){return 42}}\n",NULL,42};
+    static const LocalInitializerContract generic[]={{"Node","Failure",1,2}};
+    local_case_mode(&generics,true,generic,1,XR_XIR_BAD_TYPE);
+    static const LocalErrorCase argument={"argument helper participates in generated ring",
+        "enum ReadErr{Bad}\nfn read() throws(ReadErr)->i64{throw ReadErr.Bad}\n"
+        "fn selectValue(value:i64=try Node().value)->i64{return value}\n"
+        "struct Node{first:i64=try read()\nvalue:i64=try selectValue()}\n"
+        "export fn answer()->i64{try{const n=Node();return n.value}catch(e:ReadErr){return 42}}\n",NULL,42};
+    local_case_mode(&argument,true,fallible,1,XR_XIR_BAD_TYPE);
+    static const LocalErrorCase refusals[]={
+        {"generated closure marker remains required",
+            "enum ReadErr{Bad}\nfn read() throws(ReadErr)->i64{throw ReadErr.Bad}\n"
+            "struct Node{first:i64=try read()\nvalue:i64=try Node().value}\n"
+            "const f=fn()->Node{return Node()}\nexport fn answer()->i64{return 42}\n","E0330",0},
+        {"generated closure contextual bound remains required",
+            "enum ReadErr{Bad}\nfn read() throws(ReadErr)->i64{throw ReadErr.Bad}\n"
+            "struct Node{first:i64=try read()\nvalue:i64=try Node().value}\n"
+            "const f:fn()->Node=fn()->Node{return try Node()}\nexport fn answer()->i64{return 42}\n","E0331",0},
+        {"declared Error leaf stays broad",
+            "fn read() throws(Error)->i64{return 42}\n"
+            "struct Node{first:i64=try read()\nvalue:i64=try Node().value}\n"
+            "export fn answer()->i64{const n=Node();return n.value}\n","E0330",0},
+        {"unready nested callable cannot seed a cycle",
+            "struct Loop{value:i64=(fn()->i64{return Loop().value})()}\n"
+            "export fn answer()->i64{return 42}\n","not ready for this callable",0}
+    };
+    for(size_t i=0;i<sizeof(refusals)/sizeof(refusals[0]);++i)local_case(&refusals[i]);
+    static const LocalErrorCase unknown={"unknown slot cannot seed a callable",
+        "struct Box{value:i64=later}\nconst f=fn()->Box{return Box()}\n"
+        "const later=42\nexport fn answer()->i64{return 42}\n","name is not an initialized value",0};
+    local_case_mode(&unknown,false,NULL,0,XR_XIR_BAD_VALUE);
+    puts("Generated-only cycles: exact per-node errors, ready Callable, retired packets and strict unknown refusals PASS");
+}
+typedef struct LocalInitializerCancel {size_t polls,stop;bool active;} LocalInitializerCancel;
+static bool local_initializer_cancel(const void *context) {
+    LocalInitializerCancel *state=(LocalInitializerCancel *)context;
+    return ++state->polls>=state->stop && state->active;
+}
+static void local_initialization_resources(void) {
+    XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};XrXirCompileContext context={0};
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits();XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+    LocalInitializerCancel cancellation={0,SIZE_MAX,false};
+    XrCompileRequestOptions options={.cancel_poll=local_initializer_cancel,.cancel_context=&cancellation};
+    unsigned phases=3;
+#if defined(XR_LOCAL_ERROR_ALLOCATOR)
+    phases=5;size_t live=physical_live,allocations_before=allocation_count;
+#endif
+    for(unsigned phase=0;phase<phases;++phase) {
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
+        cancellation.polls=0;cancellation.active=phase==1;
+        XrCompileRequestControl control={0};
+        CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+        CHECK(xr_compile_session_bind_request(session,&control)==XR_COMPILE_RESOURCE_OK);
+        XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"initialization-resources",NULL};
+        XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
+            {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        XrXirSourceText input={NULL,initialization_error_source,sizeof(initialization_error_source)-1};
+        XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
+#if defined(XR_LOCAL_ERROR_ALLOCATOR)
+        attempt_count=0;fail_at=phase==3 ? 0 : SIZE_MAX;
+#endif
+        XrXirStatus expected=phase==1 ? XR_XIR_CANCELLED : phase==3 ? XR_XIR_OUT_OF_MEMORY : XR_XIR_OK;
+        XrXirStatus status=xr_xir_compile_source_product_build_text(&request,&input,&product,&diagnostic);
+#if defined(XR_LOCAL_ERROR_ALLOCATOR)
+        fail_at=SIZE_MAX;
+#endif
+        CHECK(status==expected && diagnostic.status==expected && (status==XR_XIR_OK ? product!=NULL : product==NULL));
+        if (!phase) {CHECK(cancellation.polls>2);cancellation.stop=cancellation.polls/2;}
+        if (phase==1) {
+            cancellation.active=false;
+            CHECK(xr_compile_request_control_poll(&control)==XR_COMPILE_RESOURCE_CANCELLED);
+        }
+        if (phase==3) {
+            cancellation.active=true;cancellation.polls=cancellation.stop;
+            CHECK(xr_compile_request_control_poll(&control)==XR_COMPILE_RESOURCE_CANCELLED);
+            CHECK(diagnostic.status==XR_XIR_OUT_OF_MEMORY);
+            cancellation.active=false;
+        }
+        xr_compile_session_free(session);
+        if(product)local_execute(product,"generated cycle resource survivor",42);
+        xr_xir_compile_source_product_diagnostic_free(&diagnostic);
+        CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==before.held_bytes);
+#if defined(XR_LOCAL_ERROR_ALLOCATOR)
+        CHECK(physical_live==live && allocation_count==allocations_before);
+#endif
+    }
+    xr_compile_resources_release(context.resources);
+#if defined(XR_LOCAL_ERROR_ALLOCATOR)
+    CHECK(!physical_live && !allocation_count);reset();
+    puts("Generated cycle physical prefix: OOM first cause, rollback and same-owner retry PASS");
+#endif
+    puts("Generated cycle Source controls: sticky cancellation, rollback and same-owner retry PASS");
+}
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"known-cleanup-panic")) {
         static const LocalErrorCase known={"optional cleanup panic",
@@ -350,7 +526,12 @@ int main(int argc,char **argv) {
         for(size_t i=0;i<sizeof(unit_cases)/sizeof(unit_cases[0]);++i)local_case(&unit_cases[i]);
         puts("Unit optional presence, owned packet retirement, CTFE and typed markers passed");return 0;
     }
+    if(argc==2 && !strcmp(argv[1],"initialization-cycles")) {local_initialization_cycles();return 0;}
+    if(argc==2 && !strcmp(argv[1],"initialization-resources")) {local_initialization_resources();return 0;}
+    if(argc!=1) {fprintf(stderr,"unknown local error test selection\n");return 2;}
     xr_test_suppress_dialogs();
+    local_initialization_cycles();
+    local_initialization_resources();
     static const LocalErrorCase cases[]={
         {"governed TaskResult physical metadata","export fn answer()->i64{const result=TaskResult<i64,Never>.Success{value:42};return result.ordinal+42}\n",NULL,42},
         {"typed propagation","enum Failure{Bad}\nfn value() throws(Failure)->i64{throw Failure.Bad}\n"
@@ -434,11 +615,9 @@ int main(int argc,char **argv) {
         {"synchronous iterator nonSendable error","enum Failure{Bad{payload:fn()->i64}}\n"
             "fn values()->Iterator<i64,Failure>{yield 42}\n"
             "export fn answer()->i64{const it=values();try{return it.next()}catch(e){return -1}}\n",NULL,42},
-        {"pure generated initializer cycle","struct Loop{value:i64=Loop().value}\n"
-            "export fn answer()->i64{return 42}\n","generated initialization error cycles are not yet supported",0},
         {"throwing generated initializer cycle","enum Failure{Bad}\nfn read() throws(Failure)->i64{throw Failure.Bad}\n"
             "struct Loop{first:i64=try read()\nsecond:i64=try Loop().second}\n"
-            "export fn answer()->i64{return 42}\n","generated initialization error cycles are not yet supported",0},
+            "export fn answer()->i64{return 42}\n",NULL,42},
         {"explicit initializer boundary","enum Failure{Bad}\nvar depth=0\n"
             "fn read() throws(Failure)->i64{if(depth==0){depth=1;const nested=try Box();return nested.value};return 42}\n"
             "struct Box{value:i64=try read()\ninit() throws(Failure){}}\n"

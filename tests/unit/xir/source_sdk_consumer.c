@@ -903,6 +903,49 @@ static void installed_error_union_300(const char *stdlib) {
 #include "nominal_projection_fixture.h"
 #include "source_ctfe_cleanup_cases.h"
 #include "declarations_control_fixture.h"
+#include "initialization_cycle_fixture.h"
+static size_t initialization_compile_polls;
+static int initialization_request_retired;
+static int initialization_cancel(const void *context) {
+    CHECK(!initialization_request_retired);++initialization_compile_polls;
+    return *(const int *)context;
+}
+static XrSourceArtifact *installed_initialization_build(const char *stdlib,int pure) {
+    char source[sizeof(initialization_error_source)];
+    const char *text=pure?initialization_pure_source:initialization_error_source;
+    CHECK(strlen(text)<sizeof(source));memcpy(source,text,strlen(text)+1);
+    int cancelled=0;initialization_request_retired=0;initialization_compile_polls=0;
+    XrSourceCompileOptions compiler=compile_options(stdlib);
+    compiler.cancel_poll=initialization_cancel;compiler.cancel_context=&cancelled;
+    XrSourceArtifact *artifact=compile(&compiler,source,__func__);
+    CHECK(initialization_compile_polls);cancelled=1;initialization_request_retired=1;
+    return artifact;
+}
+static void installed_initialization_cycles(const char *stdlib) {
+    XrSourceArtifact *artifact=installed_initialization_build(stdlib,1);
+    xray_source_artifact_free(artifact);
+    artifact=installed_initialization_build(stdlib,0);size_t polls=initialization_compile_polls;
+    XrSourceExecutionOptions policy=xray_source_execution_options_default();XrSourceExecution *execution=NULL;
+    CHECK(xray_source_execution_new(&policy,&execution)==XR_SOURCE_OK);
+    Output output={0};XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.write=capture;options.context=&output;
+    XrSourceInvocation invocation;CHECK(xray_source_invocation_init(&invocation,sizeof(invocation))==XR_SOURCE_OK);
+    invocation.name="answer";invocation.name_length=6;XrSourceCall *call=NULL;
+    CHECK(xray_source_invoke_begin(execution,artifact,&invocation,&options,&call)==XR_SOURCE_OK);
+    xray_source_artifact_free(artifact);xray_source_execution_free(execution);
+    XrSourceEvent event={0};
+    for(size_t steps=0;;++steps) {
+        CHECK(steps<4096 && xray_source_call_poll(call,64,&event)==XR_SOURCE_OK);
+        if(event.state!=XR_SOURCE_RUN_READY)break;
+    }
+    CHECK(event.state==XR_SOURCE_RUN_RETURNED);XrSourceResult *result=NULL;
+    CHECK(xray_source_call_take(call,&result)==XR_SOURCE_OK && result);
+    CHECK(xray_source_call_drop(&call,NULL)==XR_SOURCE_OK && !call);
+    int64_t value=0;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK && value==42);
+    CHECK(output.length==3 && !memcmp(output.bytes,"42\n",3) && initialization_compile_polls==polls);
+    xray_source_result_free(result);
+}
 typedef struct DeclarationsCancellation {size_t polls;int cancelled;} DeclarationsCancellation;
 static int declarations_cancel(const void *context) {
     DeclarationsCancellation *state=(DeclarationsCancellation *)context;
@@ -948,6 +991,10 @@ static void installed_nominal_projection(const char *stdlib) {
     CHECK(output.length==3 && !memcmp(output.bytes,"42\n",3));xray_source_result_free(result);
 }
 int main(int argc, char **argv) {
+    if(argc==3) {
+        CHECK(!strcmp(argv[2],"initialization-cycles"));installed_initialization_cycles(argv[1]);
+        puts("Installed Source SDK: generated cycle request retirement, named result42 and drop PASS");return 0;
+    }
     CHECK(argc == 2); installed_error_union(argv[1]); installed_error_union_300(argv[1]); installed_report(argv[1]); installed_parameter_report(argv[1]); installed_method_parameter_report(argv[1]); installed_interface_parameter_report(argv[1]); installed_interface_member_report(argv[1]); installed_nominal_method_report(argv[1]); installed_closure_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
     installed_nominal_projection(argv[1]);
     const char *source_path=__FILE__,*separator=strrchr(source_path,'/'),*windows_separator=strrchr(source_path,'\\');
@@ -959,5 +1006,6 @@ int main(int argc, char **argv) {
     memcpy(cleanup_path+directory_length,cleanup_leaf,sizeof(cleanup_leaf));
     source_ctfe_cleanup_cases(argv[1],cleanup_path);
     installed_declarations_receiver(argv[1]);
+    installed_initialization_cycles(argv[1]);
     puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
 }
