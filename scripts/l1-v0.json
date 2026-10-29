@@ -379,7 +379,8 @@
     "test_xr_execution",
     "test_xr_boundary_materialization",
     "test_xir_task_result_cli",
-    "test_program_identity_vectors"
+    "test_program_identity_vectors",
+    "test_api_inventory_native_declarations"
   ],
   "versionCommand": [
     "{build}/xray.exe",
