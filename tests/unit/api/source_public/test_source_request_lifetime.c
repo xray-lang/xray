@@ -19,6 +19,17 @@
 #include "../../xir/source_ctfe_cleanup_cases.h"
 #include "declarations_copy_probe.h"
 #include "../../xir/declarations_control_fixture.h"
+#include "base/xcompile_request.h"
+typedef struct ProductPacketProbe {
+    const unsigned char *source;
+    unsigned char *destination;
+    size_t bytes,allocations,witnesses,polls;
+    XrCompileResources *resources;
+    XrCompileRequestControl *control;
+    unsigned mode;
+    bool armed,oom_seen,disabled;
+} ProductPacketProbe;
+static ProductPacketProbe *product_packet_probe;
 
 /* This TU observes the actual compiler allocator. Installed SDK consumers use
  * the canonical archive implementation separately. No runtime budget is changed. */
@@ -56,7 +67,28 @@ static void sdk_test_free(void *pointer) {
 #undef xr_free
 #define xr_malloc sdk_test_malloc
 #define xr_free sdk_test_free
+#define xr_compile_resources_alloc packet_actual_resources_alloc
 #include "base/xcompile_resources.c"
+#undef xr_compile_resources_alloc
+XR_FUNC XrCompileResourceStatus xr_compile_resources_alloc(
+    XrCompileResources *resources,size_t bytes,void **output) {
+    ProductPacketProbe *probe=product_packet_probe;
+    bool observed=probe&&probe->armed&&resources==probe->resources&&bytes==probe->bytes;
+    if(observed){probe->armed=false;CHECK(output&&!*output);if(probe->mode==2)runtime_fail_at=runtime_attempts;}
+    XrCompileResourceStatus status=packet_actual_resources_alloc(resources,bytes,output);
+    if(observed) {
+        ++probe->allocations;
+        if(probe->mode==2) {
+            CHECK(status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY&&!*output&&runtime_attempts>runtime_fail_at);
+            runtime_fail_at=SIZE_MAX;probe->oom_seen=true;
+        } else {
+            CHECK(status==XR_COMPILE_RESOURCE_OK&&*output&&*output!=probe->source);
+            probe->destination=*output;memset(*output,0xa5,bytes);
+            probe->destination[bytes-1]=(unsigned char)~probe->source[bytes-1];
+        }
+    }
+    return status;
+}
 #undef xr_malloc
 #undef xr_free
 #define xr_malloc sdk_fixture_malloc
@@ -136,10 +168,29 @@ static XrCompileResourceStatus defaults_observe_span(XrCompileRequestControl *co
 #define xir_compile_alloc(context,bytes,status) defaults_observe_alloc(context,bytes,status,__func__)
 #define xir_lower_copy_span defaults_observe_span
 #define xr_xir_compile_check_refined_v2 defaults_actual_check
+#define xr_xir_compile_lower_take packet_actual_lower_take
 #include "xir/xxir.c"
+#undef xr_xir_compile_lower_take
 #undef xr_xir_compile_check_refined_v2
 #undef xir_lower_copy_span
 #undef xir_compile_alloc
+XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **input,const XrXirTarget *target,
+    XrCompileRequestControl *control,XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
+    XrXirStatus status=packet_actual_lower_take(input,target,control,output,diagnostic);
+    ProductPacketProbe *probe=product_packet_probe;
+    if(status==XR_XIR_OK&&probe&&!probe->source) {
+        const XrXirArtifact *lowered=*output;
+        const XrXirImplementationTable *table=lowered->module.declarations->implementations;
+        bool found=false;
+        if(table)for(uint32_t i=0;i<table->count;++i)if(table->records[i].binding_count==192)found=true;
+        if(found) {
+            CHECK(!*input&&probe->resources==lowered->context.resources&&probe->control==control);
+            CHECK(lowered->checked_packet.bytes&&lowered->checked_packet.length>4096);
+            probe->source=lowered->checked_packet.bytes;probe->bytes=lowered->checked_packet.length;probe->armed=true;
+        }
+    }
+    return status;
+}
 XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *context,
     const XrXirModule *built,const XrXirConstruction *construction,const XrXirRootRefiner *refiner,
     XrCompileRequestControl *control,XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
@@ -1642,7 +1693,9 @@ static void declarations_copy_controls(const char *selected) {
     printf("Original606-function Source declarations case=%s: full12584B, rollback, same-options retry and retired answer42 PASS\n",selected?selected:"all");
 }
 #include "implementation_control_cases.inc.c"
+#include "product_packet_cases.inc.c"
 int main(int argc,char **argv) {
+    if(argc==2&&!strcmp(argv[1],"--product-packets")){product_packet_cases();return 0;}
     if((argc==2||argc==3)&&!strcmp(argv[1],"--implementation-control")){implementation_controls(argc==3?argv[2]:NULL);return 0;}
     if((argc==2||argc==3) && !strcmp(argv[1],"--declarations-control")){declarations_copy_controls(argc==3?argv[2]:NULL);return 0;}
     if(argc==2 && !strcmp(argv[1],"--ctfe-cleanup")) {
