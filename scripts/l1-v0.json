@@ -144,7 +144,9 @@
     "test_hir_numeric_literal",
     "test_xir_range_index_native",
     "test_nosuspend_type_syntax",
-    "test_source_sdk_consumer"
+    "test_source_sdk_consumer",
+    "test_hir_contextual_conversion",
+    "test_source_global_callable"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -395,7 +397,13 @@
     "test_xir_range_index_native",
     "nosuspend_type_syntax",
     "source_nosuspend_sdk",
-    "test_xir_initialization_cycles_cli"
+    "test_xir_initialization_cycles_cli",
+    "hir_contextual_conversion",
+    "source_conversion_sdk",
+    "hir_contextual_conversion_cli",
+    "source_global_callable",
+    "source_global_callable_sdk",
+    "source_global_callable_cli"
   ],
   "versionCommand": [
     "{build}/xray.exe",
