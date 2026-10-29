@@ -35,6 +35,7 @@ static XrXirStatus nominal_native_verify(
     if (record->native_id==XR_NATIVE_DECLARATION_ORDERING) variants=5;
     else if (record->native_id==XR_NATIVE_DECLARATION_RECV) { arity=1; fields=1; variants=4; }
     else if (record->native_id==XR_NATIVE_DECLARATION_SEND_RESULT) variants=4;
+    else if (record->native_id==XR_NATIVE_DECLARATION_TASK_RESULT) { arity=2; fields=3; variants=4; }
     else if (record->native_id==XR_NATIVE_DECLARATION_UTF8_ERROR ||
         record->native_id==XR_NATIVE_DECLARATION_CANCELLED) variants=1;
     else return XR_XIR_BAD_STRUCTURE;
@@ -53,14 +54,18 @@ static XrXirStatus nominal_native_verify(
     if (status==XR_XIR_OK) status=nominal_native_name(identity->name,native->name);
     /* Raw declaration headers do not yet carry the field-name projection. */
     if (fields && identity->fields) {
-        if (identity->fields[0].flags) return XR_XIR_BAD_STRUCTURE;
-        if (status==XR_XIR_OK) status=nominal_native_name(identity->fields[0].name,"value");
+        const char *names[]={"value","error","info"};
+        for(uint32_t f=0;f<fields && status==XR_XIR_OK;++f) {
+            if(identity->fields[f].flags)return XR_XIR_BAD_STRUCTURE;
+            status=nominal_native_name(identity->fields[f].name,names[f]);
+        }
     }
     uint32_t begin=0;
     for (uint32_t i=0;i<variants && status==XR_XIR_OK;++i) {
 
         const XrXirNominalVariant *variant=&identity->variants[i];
-        uint32_t count=fields && !i ? 1u : 0u;
+        uint32_t count=record->native_id==XR_NATIVE_DECLARATION_TASK_RESULT ?
+            (i<3?1u:0u) : fields && !i ? 1u : 0u;
         if (variant->field_begin!=begin || variant->field_count!=count) return XR_XIR_BAD_STRUCTURE;
         begin+=count;
         status=nominal_native_name(variant->name,native->members[i].name);

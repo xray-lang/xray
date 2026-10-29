@@ -1,0 +1,115 @@
+enum A { Bad { text: string } }
+enum B { Bad { text: string } }
+fn scalar42() -> i64 { return 42 }
+fn unit() -> () { return () }
+fn failA() throws(A) -> i64 { throw A.Bad { text: "error é\0界" } }
+fn failB() throws(B) -> i64 { throw B.Bad { text: "panic é\0界" } }
+fn cleanupPanic() throws(A) -> i64 {
+    defer { const ignored = try! failB() }
+    throw A.Bad { text: "replaced é\0界" }
+}
+fn spinning() -> i64 {
+    defer { print("child-cleanup") }
+    while (true) { Coro.yield() }
+    return 7
+}
+export fn successResult() -> TaskResult<i64,Never> {
+    var task = go scalar42()
+    const before = task.poll()
+    return task.awaitResult()
+}
+export fn errorResult() -> TaskResult<i64,A> {
+    var task = go failA()
+    return task.awaitResult()
+}
+export fn panicResult() -> TaskResult<i64,A> {
+    var task = go cleanupPanic()
+    return task.awaitResult()
+}
+export fn cancelledResult() -> TaskResult<i64,Never> {
+    var task = go spinning()
+    task.cancel()
+    task.cancel()
+    return task.awaitResult()
+}
+export fn unitResult() -> TaskResult<null,Never> {
+    var task = go unit()
+    return task.awaitResult()
+}
+fn returnedResult() -> TaskResult<null,Never> {
+    return TaskResult<null,Never>.Success { value: () }
+}
+export fn nestedResult() -> TaskResult<TaskResult<null,Never>,Never> {
+    var task = go returnedResult()
+    return task.awaitResult()
+}
+export fn resultArray() -> Array<TaskResult<null,Never>> {
+    return [returnedResult()]
+}
+export fn runtimeProbe() throws(Cancelled) -> i64 {
+    var task = go scalar42()
+    const before = task.poll()
+    const wrapped = task.awaitResult()
+    return try await task
+}
+const success = successResult()
+const error = errorResult()
+const panic = panicResult()
+const cancelled = cancelledResult()
+print(success.ordinal)
+print(error.ordinal)
+print(panic.ordinal)
+print(cancelled.ordinal)
+print(match (success) { TaskResult.Success { value } -> value _ -> -1 })
+print(unitResult().ordinal)
+print(nestedResult().ordinal)
+print(len(resultArray()))
+
+final class LocalPayload { value: i64 init(value: i64) { this.value = value } }
+enum UnsafeError { Bad { hidden: LocalPayload } }
+fn failLocal() throws(UnsafeError) -> i64 {
+    throw UnsafeError.Bad { hidden: LocalPayload(7) }
+}
+fn panicLocal() throws(UnsafeError) -> i64 {
+    defer { const ignored = try! failB() }
+    return try failLocal()
+}
+export fn unsafePanicInfo() -> PanicInfo? {
+    try { const ignored = try panicLocal() }
+    catch (error: UnsafeError) { return null }
+    catch panic (info) { return info }
+    return null
+}
+export fn unsafeConstruct() -> TaskResult<null,Never> {
+    const info = unsafePanicInfo()!
+    return TaskResult<null,Never>.Panic { info: info }
+}
+export fn rethrowA(result: TaskResult<i64,A>) throws(A) -> i64 {
+    return match (result) { TaskResult.Error { error } -> { throw error } _ -> 0 }
+}
+
+fn divideZero(value: i64) -> i64 { return 1 / value }
+fn fatalChild() -> i64 {
+    defer { print("fatal-cleanup"); const ignored = divideZero(0) }
+    print("fatal-started")
+    while (true) { Coro.yield() }
+    return 0
+}
+export fn fatalResult() -> TaskResult<i64,Never> {
+    var task = go fatalChild()
+    Coro.yield()
+    task.cancel()
+    return task.awaitResult()
+}
+export fn ownAwaitResult() -> TaskResult<i64,Never> {
+    var task = go spinning()
+    defer { print("parent-cleanup"); task.cancel() }
+    try { return task.awaitResult() }
+    catch (error: Cancelled) { print("caught-own"); return TaskResult<i64,Never>.Cancelled }
+}
+
+export fn replacedGraph() -> Error? {
+    var task = go cleanupPanic()
+    const result = task.awaitResult()
+    return match (result) { TaskResult.Panic { info } -> info.replacedError _ -> null }
+}

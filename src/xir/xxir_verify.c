@@ -24,6 +24,7 @@
 #include "xxir_defaults_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_task_result.h"
 #include "xxir_native_callable.h"
 #include "xxir_view_types_internal.h"
 #include "xxir_view_access_internal.h"
@@ -1015,10 +1016,15 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
         if (op->op==XR_XIR_TASK_AWAIT && context->module->stage == XR_XIR_LOWERED && !xr_xir_task_result_shape(context->module->types, result))
             return XR_XIR_UNSUPPORTED;
     }
-    if (op->op==XR_XIR_TASK_CANCEL) {
+    if (op->op==XR_XIR_TASK_CANCEL || op->op==XR_XIR_TASK_POLL || op->op==XR_XIR_TASK_AWAIT_RESULT) {
         expected=xr_xir_operand_type(function,op->args[0]);
         const XrXirTypeNode *task=xr_xir_type_node(context->module->types,expected);
         if (!task || task->kind!=XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
+        if (op->op==XR_XIR_TASK_POLL) {
+            if (!xr_xir_type_is_nullable(context->module->types,op->type) ||
+                !xr_xir_task_result_matches_task(context->module->types,
+                    xr_xir_nullable_element(context->module->types,op->type),expected)) return XR_XIR_BAD_TYPE;
+        }
     }
     if (op->op == XR_XIR_NULLABLE_SOME)
         expected = xr_xir_nullable_element(context->module->types, op->type);

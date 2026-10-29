@@ -15,7 +15,7 @@
 #include <stdio.h>
 #include <string.h>
 
-_Static_assert(XR_PROGRAM_FORMAT_MAJOR == 3u && XR_PROGRAM_FORMAT_MINOR == 12u,
+_Static_assert(XR_PROGRAM_FORMAT_MAJOR == 3u && XR_PROGRAM_FORMAT_MINOR == 13u,
                "retirement controls require the current wire format");
 _Static_assert(XR_CORE_PROGRAM_BUILTIN_TYPE_COUNT == 19u,
                "retired type must not occupy a builtin row");
@@ -89,7 +89,7 @@ static bool xr_retired_builder_admission(const XrProgramArtifact *artifact,
     bool ok = decoded == expected &&
         (expected == XR_PROGRAM_DECODE_OK
              ? verified == XR_PROGRAM_VERIFY_OK && program != NULL &&
-                   view.format_major == 3u && view.format_minor == 12u
+                   view.format_major == 3u && view.format_minor == 13u
              : verified == XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED && program == NULL &&
                    diagnostic.kind == XR_PROGRAM_DIAGNOSTIC_STRUCTURAL &&
                    diagnostic.decode_status == expected);
@@ -145,14 +145,14 @@ static bool xr_program_retired_builder_admission_controls(void) {
         goto done;
     }
     size_t minor = XR_PROGRAM_MAGIC_SIZE + 2u;
-    if (minor + 1u >= artifact.size || artifact.bytes[minor] != 12u ||
+    if (minor + 1u >= artifact.size || artifact.bytes[minor] != 13u ||
         artifact.bytes[minor + 1u] != 0u) {
         ok = false;
         goto done;
     }
     artifact.bytes[minor] = UINT8_C(11);
     ok = xr_retired_builder_admission(&artifact, XR_PROGRAM_DECODE_UNSUPPORTED_VERSION);
-    artifact.bytes[minor] = UINT8_C(12);
+    artifact.bytes[minor] = UINT8_C(13);
     ok = ok && xr_retired_builder_admission(&artifact, XR_PROGRAM_DECODE_OK);
 done:
     xr_program_artifact_free(&artifact);

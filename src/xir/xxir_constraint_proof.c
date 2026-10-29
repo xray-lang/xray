@@ -15,6 +15,7 @@
 #include "xxir_compile_memory.h"
 #include "xxir_interface_members.h"
 #include "xxir_types.h"
+#include "xxir_task_result.h"
 #include "xxir_type_match_internal.h"
 #include "xxir_view_types_internal.h"
 #include "xxir_key.h"
@@ -122,6 +123,8 @@ static XrXirStatus constraint_hashable(const XrXirConstraintEnvironment *environ
     }
     return XR_XIR_BAD_TYPE;
 }
+static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environment,
+    XrXirType type,uint32_t required,const XrXirCompileContext *work,XirReadScratch *read);
 #include "xxir_tuple_sendable.inc.c"
 static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environment,
     XrXirType type, uint32_t required, const XrXirCompileContext *work,XirReadScratch *read) {
@@ -186,10 +189,12 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
 }
 static bool constraint_native_unit(const XrXirTypes *types, XrXirDeclarationContext owner,
     uint32_t parameter, uint32_t count, XrXirType type) {
-    if (type!=XR_XIR_UNIT || owner.kind!=XR_XIR_CONTEXT_NOMINAL || parameter || count!=1 ||
+    if (type!=XR_XIR_UNIT || owner.kind!=XR_XIR_CONTEXT_NOMINAL || parameter ||
         !types || !types->nominals || !types->nominals->declarations || owner.declaration>=types->nominals->count)
         return false;
-    return types->nominals->declarations[owner.declaration].native.native_id==XR_NATIVE_DECLARATION_RECV;
+    uint32_t native=types->nominals->declarations[owner.declaration].native.native_id;
+    return (native==XR_NATIVE_DECLARATION_RECV && count==1) ||
+        (native==XR_NATIVE_DECLARATION_TASK_RESULT && count==2);
 }
 static bool constraint_argument_shape(const XrXirTypes *types, XrXirType type, uint32_t count) {
     if (type == XR_XIR_UNIT || xr_xir_type_is_cell(types, type)) return false;

@@ -47,7 +47,7 @@ static XrXirStatus local_error_block(LocalErrorCfg *cfg,uint32_t b) {
     }
     uint32_t last=block->first+block->count-1;const XrXirInstruction *end=&cfg->operations[last];
     if (end->op==XR_XIR_JUMP || end->op==XR_XIR_CLEANUP_REGISTER || end->op==XR_XIR_CLEANUP_LEAVE ||
-        end->op==XR_XIR_CLEANUP_ERROR || end->op==XR_XIR_ITERATOR_CLOSE)
+        end->op==XR_XIR_CLEANUP_ERROR || end->op==XR_XIR_ITERATOR_CLOSE || end->op==XR_XIR_TASK_AWAIT_RESULT)
         return local_error_edge(cfg,end->targets[0],NULL,true);
     if (end->op==XR_XIR_BRANCH) {
         XrXirStatus status=local_error_edge(cfg,end->targets[0],end,true);

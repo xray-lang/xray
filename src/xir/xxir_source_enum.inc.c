@@ -57,9 +57,12 @@ static bool source_enum_fields(SourceContext *ctx) {
             for (int f = 0; f < member->payload_count; ++f, ++next) {
                 if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx, member->payload_types[f], &types[next]) || types[next] == XR_XIR_UNIT)
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum payload requires an admitted value type");
+                XrXirType logical=types[next];
+                if (record->native.native_id==XR_NATIVE_DECLARATION_TASK_RESULT && next==1)
+                    types[next]=XR_XIR_ERROR;
                 const char *name = member->payload_names[f];
                 fields[next] = (XrXirNominalField) {{name,(uint32_t)source_text_size(ctx, name)},types[next],0};
-                SourceName field = {0}; field.name = source_owned_text(ctx, name); field.node = node; field.type = types[next];
+                SourceName field = {0}; field.name = source_owned_text(ctx, name); field.node = node; field.type = logical;
                 XrNameSpan span = member->payload_name_spans[f];
                 XrXirSourceRange range = {ctx->module,span.line,span.column,span.line,span.column};
                 if (span.column > 0 && source_text_size(ctx, name) <= (size_t)(INT_MAX - span.column)) range.end_column += (int)source_text_size(ctx, name);
@@ -145,6 +148,10 @@ static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumS
     const SourceEnumFields *provided, SourceValue *value) {
     const XrXirNominalDeclaration *d = &ctx->nominals.declarations[selected->owner->index];
     const XrXirNominalVariant variant = d->variants[selected->variant];
+    XrXirTaskResultType outcome={0};
+    bool task_result=xr_xir_task_result_type_info(&ctx->types,selected->type,&outcome);
+    if (task_result && selected->variant==XR_XIR_TASK_RESULT_ERROR && outcome.error==XR_XIR_NEVER)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"TaskResult Error cannot be constructed with Never");
     int count = provided ? provided->count : 0;
     if (count < 0 || (uint32_t)count != variant.field_count || (!variant.field_count && provided))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum variant requires exactly its declared named payload");
@@ -176,8 +183,9 @@ static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumS
     uint32_t operands=(uint32_t)count;
     if (count==1 && fields[0].type==XR_XIR_UNIT) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        if (!xr_xir_nominal_native_recv(&ctx->types,selected->type,XR_XIR_UNIT))
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Unit payload requires the governed Recv value variant");
+        if (!xr_xir_nominal_native_recv(&ctx->types,selected->type,XR_XIR_UNIT) &&
+            !(task_result && selected->variant==XR_XIR_TASK_RESULT_SUCCESS && outcome.element==XR_XIR_UNIT))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Unit payload requires an admitted native value variant");
         operands=0;
     }
     return source_query_reference(ctx,selected->path,selected->binding,selected->owner,XR_XIR_SOURCE_TYPE_USE) &&

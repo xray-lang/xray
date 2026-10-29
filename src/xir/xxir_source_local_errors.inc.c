@@ -146,6 +146,28 @@ static XrXirType source_local_operand_type(SourceContext *ctx,uint32_t value) {
     const SourceInstructionRecipe *recipe=&body->recipes[ordinal];
     return recipe->owner==ctx->function && recipe->value==value ? recipe->instruction.type : XR_XIR_UNIT;
 }
+static XrXirType source_local_thrown_type(SourceContext *ctx,SourceValue value) {
+    if (value.type!=XR_XIR_ERROR) return value.type;
+    const XrXirFunction *function=&ctx->functions[ctx->function];
+    const SourceFunction *body=&ctx->bodies[ctx->function];
+    for (uint32_t walked=0;walked<body->count;++walked) {
+        if (value.id<function->parameter_count) break;
+        uint32_t ordinal=value.id-function->parameter_count;
+        if (ordinal>=body->count) break;
+        const XrXirInstruction *op=&body->recipes[ordinal].instruction;
+        if (op->op==XR_XIR_COPY || op->op==XR_XIR_OWNED_RETAIN) {
+            if (op->args[0]>=value.id) break;
+            value.id=op->args[0];continue;
+        }
+        if (op->op==XR_XIR_ENUM_GET && op->immediate==XR_XIR_TASK_RESULT_ERROR && !op->args[1]) {
+            XrXirTaskResultType outcome={0};
+            if (xr_xir_task_result_type_info(&ctx->types,source_local_operand_type(ctx,op->args[0]),&outcome))
+                return outcome.error;
+        }
+        break;
+    }
+    return XR_XIR_ERROR;
+}
 static bool source_local_call(SourceContext *ctx,const XrXirInstruction *op) {
     XrXirType error=XR_XIR_NEVER;uint32_t target=UINT32_MAX;
     if (op->op==XR_XIR_CALL) {

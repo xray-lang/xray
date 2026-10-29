@@ -32,6 +32,7 @@
 #include "xxir_source_query_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_task_result.h"
 #include "xxir_nominal.h"
 #include "xxir_float.h"
 #include "xxir_compile_memory.h"
@@ -1337,7 +1338,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 return source_hash_call(ctx, node, NULL, path_type, value);
             const XrXirTypeNode *task_path=xr_xir_type_node(&ctx->types,path_type);
             if (task_path && task_path->kind==XR_XIR_TYPE_TASK)
-                return source_task_cancel(ctx,node,value);
+                return source_task_member_call(ctx,node,value);
             if (xr_xir_type_is_array(&ctx->types,path_type)) {
                 const XrNativeMemberDeclaration *native_member = source_array_member(ctx, callee, member->name);
                 if (!native_member) return false;

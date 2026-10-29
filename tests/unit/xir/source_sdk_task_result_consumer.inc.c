@@ -20,22 +20,180 @@ static XrSourceValue *sdk_task_value(XrSourceResult *result,XrSourceValueKind ex
     CHECK(xray_source_value_kind(value,&kind)==XR_SOURCE_OK && kind==expected);
     return value;
 }
+static void sdk_task_language_cases(const char *stdlib_path) {
+    char source[]=
+        "enum A { Bad { text: string } }\n"
+        "enum B { Bad { text: string } }\n"
+        "fn scalar42() -> i64 { return 42 }\n"
+        "fn unit() -> () { return () }\n"
+        "fn failA() throws(A) -> i64 { throw A.Bad { text: \"error é\\0界\" } }\n"
+        "fn failB() throws(B) -> i64 { throw B.Bad { text: \"panic é\\0界\" } }\n"
+        "fn cleanupPanic() throws(A) -> i64 {\n"
+        "    defer { const ignored = try! failB() }\n"
+        "    throw A.Bad { text: \"replaced é\\0界\" }\n"
+        "}\n"
+        "fn spinning() -> i64 {\n"
+        "    defer { print(\"child-cleanup\") }\n"
+        "    while (true) { Coro.yield() }\n"
+        "    return 7\n"
+        "}\n"
+        "export fn successResult() -> TaskResult<i64,Never> {\n"
+        "    var task = go scalar42()\n"
+        "    const before = task.poll()\n"
+        "    return task.awaitResult()\n"
+        "}\n"
+        "export fn errorResult() -> TaskResult<i64,A> {\n"
+        "    var task = go failA()\n"
+        "    return task.awaitResult()\n"
+        "}\n"
+        "export fn panicResult() -> TaskResult<i64,A> {\n"
+        "    var task = go cleanupPanic()\n"
+        "    return task.awaitResult()\n"
+        "}\n"
+        "export fn cancelledResult() -> TaskResult<i64,Never> {\n"
+        "    var task = go spinning()\n"
+        "    task.cancel()\n"
+        "    task.cancel()\n"
+        "    return task.awaitResult()\n"
+        "}\n"
+        "export fn unitResult() -> TaskResult<null,Never> {\n"
+        "    var task = go unit()\n"
+        "    return task.awaitResult()\n"
+        "}\n"
+        "fn returnedResult() -> TaskResult<null,Never> {\n"
+        "    return TaskResult<null,Never>.Success { value: () }\n"
+        "}\n"
+        "export fn nestedResult() -> TaskResult<TaskResult<null,Never>,Never> {\n"
+        "    var task = go returnedResult()\n"
+        "    return task.awaitResult()\n"
+        "}\n"
+        "export fn resultArray() -> Array<TaskResult<null,Never>> {\n"
+        "    return [returnedResult()]\n"
+        "}\n"
+        "export fn runtimeProbe() throws(Cancelled) -> i64 {\n"
+        "    var task = go scalar42()\n"
+        "    const before = task.poll()\n"
+        "    const wrapped = task.awaitResult()\n"
+        "    return try await task\n"
+        "}\n"
+        "const success = successResult()\n"
+        "const error = errorResult()\n"
+        "const panic = panicResult()\n"
+        "const cancelled = cancelledResult()\n"
+        "print(success.ordinal)\n"
+        "print(error.ordinal)\n"
+        "print(panic.ordinal)\n"
+        "print(cancelled.ordinal)\n"
+        "print(match (success) { TaskResult.Success { value } -> value _ -> -1 })\n"
+        "print(unitResult().ordinal)\n"
+        "print(nestedResult().ordinal)\n"
+        "print(len(resultArray()))\n"
+        "\n"
+        "final class LocalPayload { value: i64 init(value: i64) { this.value = value } }\n"
+        "enum UnsafeError { Bad { hidden: LocalPayload } }\n"
+        "fn failLocal() throws(UnsafeError) -> i64 {\n"
+        "    throw UnsafeError.Bad { hidden: LocalPayload(7) }\n"
+        "}\n"
+        "fn panicLocal() throws(UnsafeError) -> i64 {\n"
+        "    defer { const ignored = try! failB() }\n"
+        "    return try failLocal()\n"
+        "}\n"
+        "export fn unsafePanicInfo() -> PanicInfo? {\n"
+        "    try { const ignored = try panicLocal() }\n"
+        "    catch (error: UnsafeError) { return null }\n"
+        "    catch panic (info) { return info }\n"
+        "    return null\n"
+        "}\n"
+        "export fn unsafeConstruct() -> TaskResult<null,Never> {\n"
+        "    const info = unsafePanicInfo()!\n"
+        "    return TaskResult<null,Never>.Panic { info: info }\n"
+        "}\n"
+        "export fn rethrowA(result: TaskResult<i64,A>) throws(A) -> i64 {\n"
+        "    return match (result) { TaskResult.Error { error } -> { throw error } _ -> 0 }\n"
+        "}\n"
+        "\n"
+        "fn divideZero(value: i64) -> i64 { return 1 / value }\n"
+        "fn fatalChild() -> i64 {\n"
+        "    defer { print(\"fatal-cleanup\"); const ignored = divideZero(0) }\n"
+        "    print(\"fatal-started\")\n"
+        "    while (true) { Coro.yield() }\n"
+        "    return 0\n"
+        "}\n"
+        "export fn fatalResult() -> TaskResult<i64,Never> {\n"
+        "    var task = go fatalChild()\n"
+        "    Coro.yield()\n"
+        "    task.cancel()\n"
+        "    return task.awaitResult()\n"
+        "}\n"
+        "export fn ownAwaitResult() -> TaskResult<i64,Never> {\n"
+        "    var task = go spinning()\n"
+        "    defer { print(\"parent-cleanup\"); task.cancel() }\n"
+        "    try { return task.awaitResult() }\n"
+        "    catch (error: Cancelled) { print(\"caught-own\"); return TaskResult<i64,Never>.Cancelled }\n"
+        "}\n"
+        "\n"
+        "export fn replacedGraph() -> Error? {\n"
+        "    var task = go cleanupPanic()\n"
+        "    const result = task.awaitResult()\n"
+        "    return match (result) { TaskResult.Panic { info } -> info.replacedError _ -> null }\n"
+        "}\n"
+        ;
+#ifdef __cplusplus
+    static_assert(sizeof(source)-1==3694,"Complete TaskResult Source bytes");
+#else
+    _Static_assert(sizeof(source)-1==3694,"Complete TaskResult Source bytes");
+#endif
+    XrSourceInput input;memset(&input,0,sizeof(input));input.kind=XR_SOURCE_INPUT_TEXT;
+    input.value.text.namespace_id="installed-task-result";
+    input.value.text.bytes=source;input.value.text.length=sizeof(source)-1;
+    XrSourceCompileOptions compiler=xray_source_compile_options_default();compiler.stdlib_path=stdlib_path;
+    XrSourceArtifact *program=NULL;XrSourceDiagnostic *diagnostic=NULL;XrSourceFailure failure;
+    memset(&failure,0,sizeof(failure));
+    CHECK(xray_source_build(&input,&compiler,&program,&failure,&diagnostic)==XR_SOURCE_OK && program && !diagnostic);
+    memset(source,0xa5,sizeof(source)-1);
+    XrSourceExecution *execution=sdk_execution_new();XrSourceCallOptions runtime;
+    CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
+    SdkTaskOutput output;memset(&output,0,sizeof(output));runtime.write=sdk_task_output;runtime.context=&output;
+    const char *names[]={"successResult","errorResult","panicResult","cancelledResult"};
+    XrSourceValue *survivors[4]={NULL,NULL,NULL,NULL};
+    for(size_t i=0;i<4;++i) {
+        output.length=0;XrSourceInvocation invoke=request(names[i],NULL,0);XrSourceResult *result=NULL;
+        CHECK(xray_source_invoke(execution,program,&invoke,&runtime,&result,NULL)==XR_SOURCE_OK && result);
+        XrSourceEvent event;CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
+        static const char root[]="child-cleanup\n0\n1\n2\n3\n42\n0\n0\n1\n";
+        CHECK(output.length==sizeof(root)-1+(i==3?14:0) && !memcmp(output.bytes,root,sizeof(root)-1));
+        XrSourceValue *original=sdk_task_value(result,XR_SOURCE_VALUE_ENUM);
+        CHECK(xray_source_value_copy(original,&survivors[i])==XR_SOURCE_OK && survivors[i]);
+        xray_source_value_free(original);xray_source_result_free(result);
+    }
+    xray_source_artifact_free(program);xray_source_execution_free(execution);
+    for(size_t i=0;i<4;++i) {
+        XrSourceValueKind kind;CHECK(xray_source_value_kind(survivors[i],&kind)==XR_SOURCE_OK && kind==XR_SOURCE_VALUE_ENUM);
+    }
+    output.length=0;CHECK(xray_source_value_format(survivors[0],sdk_task_output,&output)==XR_SOURCE_OK);
+    static const char success[]="TaskResult.Success(42)";
+    CHECK(output.length==sizeof(success)-1 && !memcmp(output.bytes,success,output.length));
+    output.length=0;CHECK(xray_source_value_format(survivors[3],sdk_task_output,&output)==XR_SOURCE_OK);
+    static const char cancelled[]="TaskResult.Cancelled";
+    CHECK(output.length==sizeof(cancelled)-1 && !memcmp(output.bytes,cancelled,output.length));
+    for(size_t i=0;i<4;++i)xray_source_value_free(survivors[i]);
+}
 static void sdk_terminal_task_cases(const char *stdlib_path) {
     static const char source[]=
         "enum Failure{Bad}\n"
         "fn number()->i64{return 42}\nfn text()->string{return \"A\\0中\"}\n"
         "fn array()->Array<string>{return [\"A\\0中\",\"next\"]}\n"
         "fn unit()->(){return ()}\n"
-        "fn nested()->Task<i64>{const t=go number();await t;return t}\n"
-        "fn broken()->i64{throw Failure.Bad}\n"
+        "fn nested() throws(Cancelled)->Task<i64>{const t=go number();try await t;return t}\n"
+        "fn broken() throws(Failure)->i64{throw Failure.Bad}\n"
         "fn panicValue()->i64{assert(false,\"panic\\0中\");return 0}\n"
-        "export fn numberTask()->Task<i64>{const t=go number();await t;return t}\n"
-        "export fn textTask()->Task<string>{const t=go text();await t;return t}\n"
-        "export fn arrayTask()->Task<Array<string>>{const t=go array();await t;return t}\n"
-        "export fn unitTask()->Task<()>{const t=go unit();await t;return t}\n"
-        "export fn nestedTask()->Task<Task<i64>>{const t=go nested();await t;return t}\n"
-        "export fn errorTask()->Task<i64>{const t=go broken();try{await t}catch(e){};return t}\n"
-        "export fn panicTask()->Task<i64>{const t=go panicValue();try{await t}catch panic(p){};return t}\n";
+        "export fn numberTask() throws(Cancelled)->Task<i64>{const t=go number();try await t;return t}\n"
+        "export fn textTask() throws(Cancelled)->Task<string>{const t=go text();try await t;return t}\n"
+        "export fn arrayTask() throws(Cancelled)->Task<Array<string>>{const t=go array();try await t;return t}\n"
+        "export fn unitTask() throws(Cancelled)->Task<()>{const t=go unit();try await t;return t}\n"
+        "export fn nestedTask() throws(Cancelled)->Task<Task<i64>,Cancelled>{const t=go nested();try await t;return t}\n"
+        "export fn errorTask()->Task<i64,Failure>{const t=go broken();try{try await t}catch(e){};return t}\n"
+        "export fn panicTask() throws(Cancelled)->Task<i64>{const t=go panicValue();try{try await t}catch panic(p){};return t}\n";
     static const char *names[]={"numberTask","textTask","arrayTask","unitTask","nestedTask","errorTask","panicTask"};
     XrSourceCompileOptions options=xray_source_compile_options_default();
     options.stdlib_path=stdlib_path;
@@ -87,5 +245,6 @@ static void sdk_terminal_task_cases(const char *stdlib_path) {
         length==sizeof("panic\0中")-1 && !memcmp(bytes,"panic\0中",length));
     for(size_t i=0;i<7;++i)xray_source_result_free(survivors[i]);
     CHECK(xray_source_value_task_result(NULL,&refused)==XR_SOURCE_BAD_ARGUMENT && !refused);
+    sdk_task_language_cases(stdlib_path);
     puts("Installed terminal Task outcomes: repeated owned data, nested Task42, thrown and NUL/UTF8 panic after all producers PASS");
 }

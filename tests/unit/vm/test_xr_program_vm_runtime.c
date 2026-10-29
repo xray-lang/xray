@@ -37,6 +37,19 @@ int main(void) {
                                 sizeof(xr_program_vm_embedded_fixture_v3_9), NULL, &program,
                                 &program_diagnostic) == XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED);
     REQUIRE(program == NULL);
+    REQUIRE(program_diagnostic.decode_status == XR_PROGRAM_DECODE_UNSUPPORTED_VERSION);
+    REQUIRE(xr_program_validate(xr_program_vm_embedded_fixture_v3_11,
+                                sizeof(xr_program_vm_embedded_fixture_v3_11), NULL, &program,
+                                &program_diagnostic) == XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED);
+    REQUIRE(program == NULL && program_diagnostic.decode_status == XR_PROGRAM_DECODE_UNSUPPORTED_VERSION);
+    XrProgramView retired_view;
+    REQUIRE(xr_program_decode_structure(xr_program_vm_embedded_fixture_v3_12,
+                                        sizeof(xr_program_vm_embedded_fixture_v3_12), NULL,
+                                        &retired_view, NULL, 0u) == XR_PROGRAM_DECODE_UNSUPPORTED_VERSION);
+    REQUIRE(xr_program_validate(xr_program_vm_embedded_fixture_v3_12,
+                                sizeof(xr_program_vm_embedded_fixture_v3_12), NULL, &program,
+                                &program_diagnostic) == XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED);
+    REQUIRE(program == NULL && program_diagnostic.decode_status == XR_PROGRAM_DECODE_UNSUPPORTED_VERSION);
     unsigned char corrupted[sizeof(xr_program_vm_embedded_fixture)];
     memcpy(corrupted, xr_program_vm_embedded_fixture, sizeof(corrupted));
     corrupted[XR_PROGRAM_MAGIC_SIZE + 2u] = UINT8_C(3);
