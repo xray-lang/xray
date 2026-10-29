@@ -148,6 +148,7 @@
     "test_nosuspend_type_syntax",
     "test_source_sdk_consumer",
     "test_hir_contextual_conversion",
+    "test_hir_binary",
     "test_source_global_callable"
   ],
   "tests": [
@@ -409,7 +410,10 @@
     "source_global_callable_cli",
     "test_compile_request_memory",
     "test_compile_request_deadline",
-    "runtime_sdk_recipe_incremental"
+    "runtime_sdk_recipe_incremental",
+    "hir_binary",
+    "source_binary_sdk",
+    "hir_binary_cli"
   ],
   "versionCommand": [
     "{build}/xray.exe",
