@@ -133,7 +133,13 @@
     "test_xir_module_limits_native",
     "test_vm_stack_growth",
     "test_instruction",
-    "test_opcode"
+    "test_opcode",
+    "test_xir_task_result_source",
+    "test_xir_task_result_runtime",
+    "test_xir_task_result_native",
+    "test_xir_task_result_cpp",
+    "test_xr_execution",
+    "test_xr_boundary_materialization"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -365,7 +371,15 @@
     "xir_module_limits_native",
     "test_vm_stack_growth",
     "test_instruction",
-    "test_opcode"
+    "test_opcode",
+    "test_xir_task_result_source",
+    "test_xir_task_result_runtime",
+    "test_xir_task_result_native",
+    "test_xir_task_result_cpp",
+    "test_xr_execution",
+    "test_xr_boundary_materialization",
+    "test_xir_task_result_cli",
+    "test_program_identity_vectors"
   ],
   "versionCommand": [
     "{build}/xray.exe",

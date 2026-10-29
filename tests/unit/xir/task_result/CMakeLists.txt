@@ -39,5 +39,11 @@ add_test(NAME test_xir_task_result_cpp COMMAND test_xir_task_result_cpp ${task_r
 add_test(NAME test_xir_task_result_runtime COMMAND test_xir_task_result_runtime)
 set_tests_properties(test_xir_task_result_source test_xir_task_result_native test_xir_task_result_cpp test_xir_task_result_runtime
     PROPERTIES LABELS "unit;xir;language;ownership;task" TIMEOUT 240)
+add_test(NAME test_xir_task_result_cli
+    COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_LIST_DIR}/test_task_result_cli.py"
+        --root "${PROJECT_SOURCE_DIR}" --binary $<TARGET_FILE:xray>
+        --source "${task_result_fixture}" --expect "${task_result_oracle}")
+set_tests_properties(test_xir_task_result_cli PROPERTIES
+    LABELS "unit;xir;language;ownership;task;cli" TIMEOUT 240)
 xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
 xray_prepend_windows_asan_runtime_to_directory_tests()
