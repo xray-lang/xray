@@ -13,9 +13,10 @@
 #include "register_vm_programs.h"
 #include "base/xmalloc.h"
 
-static struct { void *pointer; size_t size; } blocks[3];
+static struct { void *pointer; size_t size; } blocks[4];
 static enum { NO_FAILURE, OUTCOME_FAILURE, INITIAL_STACK_FAILURE, GROWTH_FAILURE,
-    CELL_INITIAL_FAILURE, CELL_GROWTH_FAILURE, STRING_INDEX_FAILURE, STRING_JOIN_FAILURE } fault;
+    CELL_INITIAL_FAILURE, CELL_GROWTH_FAILURE, STRING_INDEX_FAILURE, STRING_JOIN_FAILURE,
+    SPILL_STATE_FAILURE, SPILL_INITIAL_FAILURE, SPILL_GROWTH_FAILURE } fault;
 
 static void *real_malloc(size_t size) { return xr_malloc(size); }
 static void *execution_malloc(size_t size);
@@ -24,11 +25,13 @@ static void *execution_calloc(size_t count, size_t size);
 
 static void *moving_realloc(void *old, size_t size) {
     size_t index = 0;
-    while (index < 3 && blocks[index].pointer != old) ++index;
-    XR_CHECK(index < 3, "unknown stack allocation");
+    while (index < 4 && blocks[index].pointer != old) ++index;
+    XR_CHECK(index < 4, "unknown stack allocation");
     if ((fault == INITIAL_STACK_FAILURE && !old) || (fault == GROWTH_FAILURE && old) ||
         (fault == CELL_INITIAL_FAILURE && !old && index == 2) ||
-        (fault == CELL_GROWTH_FAILURE && old && index == 2)) {
+        (fault == CELL_GROWTH_FAILURE && old && index == 2) ||
+        (fault == SPILL_INITIAL_FAILURE && !old && index == 3) ||
+        (fault == SPILL_GROWTH_FAILURE && old && index == 3)) {
         fault = NO_FAILURE;
         return NULL;
     }
@@ -46,7 +49,7 @@ static void *moving_realloc(void *old, size_t size) {
 
 static void moving_free(void *pointer) {
     if (!pointer) return;
-    for (size_t i = 0; i < 3; ++i) {
+    for (size_t i = 0; i < 4; ++i) {
         if (blocks[i].pointer != pointer) continue;
         blocks[i].pointer = NULL;
         blocks[i].size = 0;
@@ -67,6 +70,7 @@ static void moving_free(void *pointer) {
 #include "vm/register/xrbc.c"
 
 static void *execution_malloc(size_t size) {
+    if (fault == SPILL_STATE_FAILURE && size == 1) { fault=NO_FAILURE;return NULL; }
     if (fault == STRING_INDEX_FAILURE) { fault = NO_FAILURE; return NULL; }
     return real_malloc(size);
 }
@@ -198,8 +202,8 @@ static void cell_growth(bool panic) {
     }
     xrt_locations_release(owner);
     XR_CHECK(fault == NO_FAILURE, "requested cell fault reached");
-    for (size_t i = 0; i < 3; ++i)
-        XR_CHECK(!blocks[i].pointer && !blocks[i].size, "all three moving buffers reclaimed");
+    for (size_t i = 0; i < 4; ++i)
+        XR_CHECK(!blocks[i].pointer && !blocks[i].size, "all moving buffers reclaimed");
 }
 
 static void string_admission_oom(void) {
@@ -225,9 +229,52 @@ static void string_admission_oom(void) {
         }
     }
     xrt_locations_release(owner);
-    for(size_t i=0;i<3;++i)XR_CHECK(!blocks[i].pointer&&!blocks[i].size,"String execution buffers reclaimed");
+    for(size_t i=0;i<4;++i)XR_CHECK(!blocks[i].pointer&&!blocks[i].size,"String execution buffers reclaimed");
+}
+static void spill_growth(bool panic) {
+    uint32_t caller[11],callee[5];
+    immediate(caller,0,XR_RBC_LOADI,3,5);immediate(caller,1,XR_RBC_CELL_NEW,3,0);
+    immediate(caller,2,XR_RBC_STRING_LITERAL,0,0);immediate(caller,3,XR_RBC_SPILL,0,0);
+    immediate(caller,4,XR_RBC_CALL,4,1);emit(caller,5,XR_RBC_MOV,2,4,0);
+    emit(caller,6,XR_RBC_CELL_READ,1,3,0);emit(caller,7,XR_RBC_ADD,2,2,1);
+    immediate(caller,8,XR_RBC_RELOAD,0,0);emit(caller,9,XR_RBC_STRING_DROP,0,0,0);
+    emit(caller,10,XR_RBC_RET,2,0,0);
+    immediate(callee,0,XR_RBC_LOADI,0,panic?0:42);immediate(callee,1,XR_RBC_SPILL,0,31);
+    immediate(callee,2,XR_RBC_RELOAD,0,31);
+    emit(callee,3,panic?XR_RBC_DIV:XR_RBC_RET,0,0,0);emit(callee,4,XR_RBC_RET,0,0,0);
+    XrRbcRegisterKind kinds[]={XR_RBC_STRING,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_CALL_WINDOW};
+    XrRbcFunction functions[]={
+        {.code=caller,.code_count=11,.register_count=5,.cell_count=1,.register_kinds=kinds,
+         .register_kind_count=5,.spill_count=1,.reference_spill_count=1},
+        {.code=callee,.code_count=panic?5u:4u,.register_count=1,.spill_count=32}};
+    XrRbcLiteral literal={"live across spill relocation",28};
+    XrRbcModule module={.functions=functions,.function_count=2,.literals=&literal,.literal_count=1};
+    XrtLocationOwner *owner=NULL;XR_CHECK(xrt_locations_create(NULL,0,&owner)==XRT_LOCATION_OK,"spill location owner");
+    unsigned expected_fault=fault;XrRbcExecution *execution=NULL;
+    XrRbcStatus status=xr_rbc_module_prepare(&module,0,NULL,0,owner,&execution);
+    if(expected_fault==SPILL_STATE_FAILURE || expected_fault==SPILL_INITIAL_FAILURE)
+        XR_CHECK(status==XR_RBC_OUT_OF_MEMORY&&!execution&&fault==NO_FAILURE,"spill prepare first OOM preserved");
+    else {
+        if(status!=XR_RBC_OK)fprintf(stderr,"spill prepare fault=%u panic=%u status=%u\n",
+            expected_fault,(unsigned)panic,(unsigned)status);
+        XR_CHECK(status==XR_RBC_OK&&execution,"spill caller prepared");
+        XrRbcOutcome *outcome=xr_rbc_execution_run(execution);uint64_t bits=99;
+        XrRbcStatus expected=expected_fault==SPILL_GROWTH_FAILURE?XR_RBC_OUT_OF_MEMORY:
+            panic?XR_RBC_ARITHMETIC_PANIC:XR_RBC_OK;
+        XR_CHECK(outcome&&xr_rbc_outcome_status(outcome)==expected&&fault==NO_FAILURE,"spill result first cause");
+        XR_CHECK(xr_rbc_outcome_bits(outcome,&bits)==(expected==XR_RBC_OK),"spill result status gates bits");
+        XR_CHECK(bits==(expected==XR_RBC_OK?47u:99u),"caller cell and String survive moving spill storage");
+        xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
+    }
+    xrt_locations_release(owner);
+    for(size_t i=0;i<4;++i)XR_CHECK(!blocks[i].pointer&&!blocks[i].size,"all four moving buffers reclaimed");
 }
 int main(void) {
+    spill_growth(false);
+    fault=SPILL_STATE_FAILURE;spill_growth(false);
+    fault=SPILL_INITIAL_FAILURE;spill_growth(false);
+    fault=SPILL_GROWTH_FAILURE;spill_growth(false);
+    spill_growth(true);
     string_admission_oom();
     uint32_t code[11];
     XrRbcFunction function = make_countdown(code);

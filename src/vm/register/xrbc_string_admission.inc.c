@@ -14,6 +14,7 @@ typedef struct RbcStringAdmission {
     uint8_t state[XR_RBC_REGISTER_COUNT_MAX];
     uint16_t origin[XR_RBC_REGISTER_COUNT_MAX];
     uint32_t published;
+    uint8_t *spills;
 } RbcStringAdmission;
 
 static XrRbcRegisterKind rbc_register_kind(const XrRbcFunction *f, uint32_t r) {
@@ -246,7 +247,59 @@ static bool rbc_string_backedge(const RbcStringAdmission *from, const RbcStringA
     }
     return true;
 }
+static bool rbc_spill_transfer(RbcStringAdmission *s, XrRbcOperands v) {
+    uint32_t index = (uint32_t)v.immediate;
+    bool string = index < s->function->reference_spill_count;
+    XrRbcRegisterKind kind = rbc_register_kind(s->function, v.a);
+    uint8_t initialized = string ? RBC_STRING_OWNED : RBC_BITS;
+    if (kind != (string ? XR_RBC_STRING : XR_RBC_BITS)) return false;
+    if (v.op == XR_RBC_SPILL) {
+        if (s->state[v.a] != initialized || s->spills[index] != RBC_EMPTY) return false;
+        s->spills[index] = initialized;
+        s->state[v.a] = RBC_EMPTY;
+        if (string) rbc_string_forget_borrows(s, v.a);
+    } else {
+        if (s->spills[index] != initialized || s->state[v.a] != RBC_EMPTY) return false;
+        s->state[v.a] = initialized;
+        s->spills[index] = RBC_EMPTY;
+    }
+    return true;
+}
+static XrRbcStatus rbc_spills_linear(const XrRbcModule *module, const XrRbcFunction *f) {
+    RbcStringAdmission state = {.module=module, .function=f};
+    state.spills = xr_malloc(f->spill_count * sizeof(*state.spills));
+    if (!state.spills) return XR_RBC_OUT_OF_MEMORY;
+    memset(state.spills, RBC_EMPTY, f->spill_count * sizeof(*state.spills));
+    for (uint32_t r=0; r<f->register_count; ++r) {
+        XrRbcRegisterKind kind=rbc_register_kind(f,r);
+        state.state[r]=RBC_EMPTY;
+        if (r<f->parameter_count)
+            state.state[r]=kind==XR_RBC_STRING?RBC_STRING_BORROWED:
+                kind==XR_RBC_STRING_CELL?RBC_CELL_BORROWED:RBC_BITS;
+    }
+    bool valid=true, returned=false;
+    for (size_t pc=0; pc<f->code_count && valid; ++pc) {
+        uint32_t word=f->code[pc];
+        XrRbcOperands v={(XrRbcOp)(word&255),(word>>8)&255,
+            (word>>16)&255,word>>24,word>>16};
+        if (v.op==XR_RBC_JMP || v.op==XR_RBC_LT || v.op==XR_RBC_LE || v.op==XR_RBC_EQ || returned) {
+            valid=false;
+        } else if (v.op==XR_RBC_SPILL || v.op==XR_RBC_RELOAD) {
+            valid=rbc_spill_transfer(&state,v);
+        } else {
+            valid=rbc_string_step(&state,v);
+            if (v.op==XR_RBC_RET || v.op==XR_RBC_RET0) {
+                returned=true;
+                for (uint32_t i=0; i<f->reference_spill_count; ++i)
+                    if (state.spills[i]!=RBC_EMPTY) valid=false;
+            }
+        }
+    }
+    xr_free(state.spills);
+    return valid && returned ? XR_RBC_OK : XR_RBC_INVALID;
+}
 static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFunction *f) {
+    if (f->spill_count) return rbc_spills_linear(module,f);
     bool managed = f->result_kind == XR_RBC_STRING;
     for (uint32_t r = 0; f->register_kinds && r < f->register_count; ++r)
         managed |= f->register_kinds[r] == XR_RBC_STRING || f->register_kinds[r] == XR_RBC_STRING_CELL;

@@ -27,12 +27,14 @@ static XrRbcStatus execute(XrRbcProgram *program, const uint64_t *arguments,
 }
 
 static size_t attempts, fail_at = SIZE_MAX, live_allocations;
+static size_t fail_home_size;
 static enum {LITERAL_NO_FAULT,LITERAL_MAP_FAULT,LITERAL_PAYLOAD_FAULT,LITERAL_TABLE_FAULT,LITERAL_TABLE_INITIAL_FAULT} literal_fault;
 static size_t literal_payload_count, literal_payload_failure, literal_table_requests;
 static struct { void *pointer; size_t size; } buffers[32];
 
 static void *allocate(size_t size) {
     if (++attempts == fail_at) return NULL;
+    if(fail_home_size && size==fail_home_size){fail_home_size=0;return NULL;}
     if (literal_fault == LITERAL_PAYLOAD_FAULT && size == 29 &&
         ++literal_payload_count == literal_payload_failure) {literal_fault=LITERAL_NO_FAULT;return NULL;}
     void *pointer=xr_malloc(size);if(pointer)++live_allocations;return pointer;
@@ -277,7 +279,27 @@ static void literal_allocation_failures(void) {
     xr_lir_module_destroy(m);
 }
 
+static void compiled_spills(void) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+    XrLirFunction root=test_function(m,"spilled_virtual_values",NULL,0,XR_LIR_I64);
+    XrLirBlock body=test_block(m,root,NULL,0);OK(xr_lir_set_entry(m,root,body));
+    XrLirValue value={0};for(uint32_t n=0;n<260;++n)value=test_constant(m,body,XR_LIR_I64,n);
+    test_return(m,body,value);OK(xr_lir_module_finish(m,NULL));
+    XrLirFunctionView input;OK(xr_lir_function_view(m,root,&input));
+    XrRbcProgram *program=NULL;XrRbcCompileDiagnostic diagnostic;
+    CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OK);
+    CHECK(xr_rbc_program_view(program)->functions[0].spill_count);
+    uint64_t bits=0;CHECK(execute(program,NULL,0,&bits)==XR_RBC_OK&&bits==259);
+    xr_rbc_program_destroy(program);program=NULL;CHECK(!live_allocations);
+    fail_home_size=((size_t)input.value_count+1)*sizeof(uint32_t);
+    CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OUT_OF_MEMORY);
+    CHECK(!program&&!fail_home_size&&!live_allocations);
+    CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OK);
+    CHECK(execute(program,NULL,0,&bits)==XR_RBC_OK&&bits==259);
+    xr_rbc_program_destroy(program);xr_lir_module_destroy(m);CHECK(!live_allocations);
+}
 int main(void) {
+    compiled_spills();
     literal_allocation_failures();
     register_workspace_failure();
     source_map_failures();

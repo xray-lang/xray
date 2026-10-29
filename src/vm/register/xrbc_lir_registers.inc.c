@@ -153,7 +153,7 @@ static void rbc_lir_coalesce(RbcLirCompiler *c, RbcLirRegisters *r) {
                 rbc_lir_join(r, target.parameters[p], edge.arguments[p]);
         }
     }
-    for (size_t v = 0; v < sizeof(c->slots) / sizeof(c->slots[0]); ++v)
+    for (uint32_t v = 0; v <= c->view.value_count; ++v)
         c->slots[v] = UINT32_MAX;
     c->slot_count = c->view.parameter_count;
     for (uint32_t p = 0; p < c->view.parameter_count; ++p)
@@ -166,6 +166,57 @@ static void rbc_lir_coalesce(RbcLirCompiler *c, RbcLirRegisters *r) {
         c->slots[v] = c->slots[rbc_lir_group(r, v)];
 }
 
+static XrLirType rbc_lir_value_type(RbcLirCompiler *c, uint32_t value) {
+    XrLirType type=XR_LIR_TYPE_INVALID;
+    xr_lir_value_type(c->input,(XrLirValue){c->input,c->function.id,value},&type);
+    return type;
+}
+static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
+    if (c->view.block_count!=1)
+        return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"spilled functions require one straight-line block");
+    XrLirBlock block;XrLirBlockView view;
+    xr_lir_block_at(c->input,c->function,0,&block);xr_lir_block_view(c->input,block,&view);
+    for(uint32_t n=0;n<view.instruction_count;++n) {
+        XrLirInstructionView i;xr_lir_instruction_view(c->input,block,n,&i);
+        if(i.op==XR_LIR_BR || i.op==XR_LIR_CONDBR || i.op==XR_LIR_ICMP)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"spilled functions require straight-line instructions");
+    }
+    uint64_t reserved=(uint64_t)c->temporary_strings+c->temporary_bits+window;
+    if(reserved>XR_RBC_REGISTER_COUNT_MAX)
+        return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"instruction temporaries and call window exceed register capacity");
+    uint32_t budget=XR_RBC_REGISTER_COUNT_MAX-(uint32_t)reserved;
+    if(c->view.parameter_count>budget)
+        return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"parameters and temporaries exceed register capacity");
+    for(uint32_t v=0;v<=c->view.value_count;++v)c->slots[v]=c->spill_home[v]=UINT32_MAX;
+    c->slot_count=c->view.parameter_count;
+    for(uint32_t p=0;p<c->view.parameter_count;++p)c->slots[c->view.parameters[p]]=p;
+    for(uint32_t v=1;v<=c->view.value_count;++v) {
+        XrLirType type=rbc_lir_value_type(c,v);
+        if(c->slots[v]!=UINT32_MAX || (type!=XR_LIR_STRING_CELL && type!=XR_LIR_I64_CELL))continue;
+        if(c->slot_count==budget)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"resident cell handles exceed register capacity");
+        c->slots[v]=c->slot_count++;
+    }
+    for(unsigned pool=0;pool<2;++pool) {
+        for(uint32_t v=1;v<=c->view.value_count;++v) {
+            if(c->slots[v]!=UINT32_MAX || c->output.literals[v] || c->output.lengths[v])continue;
+            XrLirType type=rbc_lir_value_type(c,v);
+            if((type==XR_LIR_STRING)!=(pool==0))continue;
+            if(c->slot_count<budget)c->slots[v]=c->slot_count++;
+            else {
+                if(c->spill_count==XR_RBC_SPILL_COUNT_MAX)
+                    return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"spill slots exceed sixteen-bit slot capacity");
+                c->spill_home[v]=c->spill_count++;
+                if(!pool)++c->reference_spill_count;
+            }
+        }
+    }
+    c->linear_spills=true;
+    c->scratch_count=c->temporary_strings+c->temporary_bits;
+    c->register_count=c->slot_count+c->scratch_count+window;
+    if(!c->register_count)c->register_count=1;
+    return true;
+}
 static bool rbc_lir_assign_slots(RbcLirCompiler *c) {
     size_t blocks = c->view.block_count;
     if (blocks == SIZE_MAX || blocks + 1 >

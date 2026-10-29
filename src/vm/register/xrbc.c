@@ -26,6 +26,7 @@ typedef struct {
     uint32_t destination;
     size_t cell_base;
     uint32_t initialized_cells;
+    size_t spill_base;
 } XrRbcFrame;
 
 typedef struct {
@@ -35,6 +36,8 @@ typedef struct {
     size_t frame_capacity, depth;
     XrRbcRegister *cells;
     size_t cell_capacity, cell_count;
+    XrRbcRegister *spills;
+    size_t spill_capacity, spill_count;
 } XrRbcStack;
 
 struct XrRbcOutcome {
@@ -75,7 +78,8 @@ static bool xr_rbc_grow(void **storage, size_t *capacity, size_t count, size_t i
     return true;
 }
 
-static bool xr_rbc_reserve(XrRbcStack *stack, size_t slots, size_t frames, size_t cells) {
+static bool xr_rbc_reserve(XrRbcStack *stack, size_t slots, size_t frames, size_t cells,
+    size_t spills) {
     // Use real void* objects, not a type-punned pointer-to-pointer.
     void *storage = stack->slots;
     if (!xr_rbc_grow(&storage, &stack->slot_capacity, slots, sizeof(*stack->slots)))
@@ -89,6 +93,10 @@ static bool xr_rbc_reserve(XrRbcStack *stack, size_t slots, size_t frames, size_
     if (!xr_rbc_grow(&storage, &stack->cell_capacity, cells, sizeof(*stack->cells)))
         return false;
     stack->cells = storage;
+    storage = stack->spills;
+    if (!xr_rbc_grow(&storage, &stack->spill_capacity, spills, sizeof(*stack->spills)))
+        return false;
+    stack->spills = storage;
     return true;
 }
 
@@ -96,7 +104,8 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
     if (!(function->code && function->code_count && function->register_count &&
            function->register_count <= XR_RBC_REGISTER_COUNT_MAX &&
            function->parameter_count <= function->register_count &&
-           function->cell_count <= 65536 &&
+           function->cell_count <= 65536 && function->spill_count <= XR_RBC_SPILL_COUNT_MAX &&
+           function->reference_spill_count <= function->spill_count &&
            (!function->constant_count || function->constants))) return false;
     if ((function->register_kinds ? function->register_kind_count != function->register_count :
          function->register_kind_count != 0) ||
@@ -135,6 +144,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
         break;
     case XR_RBC_LOADK:
         if (a >= registers || index >= function->constant_count) return false;
+        break;
+    case XR_RBC_SPILL: case XR_RBC_RELOAD:
+        if (a >= registers || index >= function->spill_count) return false;
         break;
     case XR_RBC_LOADI:
         if (a >= registers) return false;
@@ -240,17 +252,22 @@ static XrRbcStatus xr_rbc_call(const XrRbcModule *module, XrRbcStack *stack, uin
         return XR_RBC_OUT_OF_MEMORY;
     size_t base = caller.base + destination + 1;
     size_t cell_base = stack->cell_count;
+    size_t spill_base = stack->spill_count;
     if (base > SIZE_MAX - callee->register_count ||
         cell_base > SIZE_MAX - callee->cell_count ||
+        spill_base > SIZE_MAX - callee->spill_count ||
         !xr_rbc_reserve(stack, base + callee->register_count, stack->depth + 1,
-            cell_base + callee->cell_count))
+            cell_base + callee->cell_count, spill_base + callee->spill_count))
         return XR_RBC_OUT_OF_MEMORY;
     // Only arguments are live on entry; clearing the rest prevents stale
     // bits from an earlier invocation from becoming observable.
     memset(stack->slots + base + callee->parameter_count, 0,
            (callee->register_count - callee->parameter_count) * sizeof(*stack->slots));
-    stack->frames[stack->depth++] = (XrRbcFrame) {target, 0, base, destination, cell_base, 0};
+    if (callee->spill_count)
+        memset(stack->spills + spill_base, 0, callee->spill_count * sizeof(*stack->spills));
+    stack->frames[stack->depth++] = (XrRbcFrame) {target, 0, base, destination, cell_base, 0, spill_base};
     stack->cell_count = cell_base + callee->cell_count;
+    stack->spill_count = spill_base + callee->spill_count;
     return XR_RBC_OK;
 }
 
@@ -306,7 +323,8 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     execution->module = module;
     execution->pending = xr_calloc(1, sizeof(*execution->pending));
     if (!execution->pending ||
-        !xr_rbc_reserve(&execution->stack, function->register_count, 1, function->cell_count) ||
+        !xr_rbc_reserve(&execution->stack, function->register_count, 1, function->cell_count,
+            function->spill_count) ||
         !xrt_locations_retain(locations)) {
         xr_rbc_execution_free(&execution);
         return XR_RBC_OUT_OF_MEMORY;
@@ -317,9 +335,12 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     memset(execution->stack.slots, 0, function->register_count * sizeof(*execution->stack.slots));
     if (argument_count)
         for (size_t i = 0; i < argument_count; ++i) execution->stack.slots[i].bits = arguments[i];
-    execution->stack.frames[0] = (XrRbcFrame) {entry, 0, 0, 0, 0, 0};
+    if (function->spill_count)
+        memset(execution->stack.spills, 0, function->spill_count * sizeof(*execution->stack.spills));
+    execution->stack.frames[0] = (XrRbcFrame) {entry, 0, 0, 0, 0, 0, 0};
     execution->stack.depth = 1;
     execution->stack.cell_count = function->cell_count;
+    execution->stack.spill_count = function->spill_count;
     *output = execution;
     return XR_RBC_OK;
 }
@@ -333,6 +354,7 @@ static void xr_rbc_root(void *context) {
 }
 
 static void xr_rbc_stack_free(XrRbcStack *stack) {
+    xr_free(stack->spills);
     xr_free(stack->cells);
     xr_free(stack->frames);
     xr_free(stack->slots);

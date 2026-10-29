@@ -69,6 +69,18 @@ XR_RBC_CASE(LOADI) {
     XR_RBC_REG(a) = (uint64_t) value;
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(SPILL) {
+    size_t index = stack->frames[stack->depth - 1].spill_base + (instruction >> 16);
+    stack->spills[index] = XR_RBC_SLOT(a);
+    XR_RBC_SLOT(a) = (XrRbcRegister){0};
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(RELOAD) {
+    size_t index = stack->frames[stack->depth - 1].spill_base + (instruction >> 16);
+    XR_RBC_SLOT(a) = stack->spills[index];
+    stack->spills[index] = (XrRbcRegister){0};
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(CELL_NEW) {
     uint32_t ordinal = instruction >> 16;
     XrRbcFrame *frame = &stack->frames[stack->depth - 1];
@@ -266,6 +278,7 @@ XR_RBC_CASE(RET0) {
     XrRbcFrame retired = stack->frames[--stack->depth];
     uint32_t destination = retired.destination;
     stack->cell_count = retired.cell_base;
+    stack->spill_count = retired.spill_base;
     if (!stack->depth) {
         *result = value;
         return XR_RBC_OK;

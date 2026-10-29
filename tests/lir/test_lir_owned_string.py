@@ -72,7 +72,9 @@ def main():
     unicode_length.write_text('fn count(text:string)->i64{return len(text)}\n'
         'fn show(n:i64){const text="é\\0${n}"\nprint(len(text))\nprint(count(text))\nprint(text)}\n'
         'show(7)\nshow(-2)\nprint(len(""))\nprint(len("😀e\\u{301}"))\n', encoding='utf-8')
+    long_source = args.source_root / 'tests/diff/cases/limits/string_parts_over_64.xr'
     cases = [('length-existing', length, b'2\n'),
+             ('length-over-64', long_source, b'140\n'),
              ('length-unicode', unicode_length, b'3\n3\n\xc3\xa9\0' b'7\n4\n4\n\xc3\xa9\0-2\n0\n3\n'),
              ('hello', hello, oracle),
              ('join', args.source_root / 'tests/lir/programs/owned-string-join.xr', b'Xray1\n'),
@@ -89,6 +91,10 @@ def main():
             generated = folder / 'generated.c'
             result = run('rbc', [args.driver, source, mode, generated, folder / 'rbc.json', '0', '2', 'normal'], folder)
             assert (result.returncode, result.stdout, result.stderr) == (0, expected * 2, b''), (name, mode, folder)
+            if name=='length-over-64':
+                actual=json.loads((folder/'rbc.json').read_text())
+                assert actual['rbc_registers_max']<=255 and actual['rbc_spills']>0
+                assert actual['rbc_reference_spills']>0
             text = generated.read_text(encoding='utf-8')
             assert '({' not in text and 'XrtString *' in text and 'xrt_string_' in text
             main = folder / 'main.c'
@@ -115,25 +121,6 @@ def main():
                     records.append({'case': name, 'mode': mode, 'order': order,
                                     'result': 'OUTPUT_FAILURE_CLEANUP_PASS'})
         assert source.read_bytes() == before
-    long_source = args.source_root / 'tests/diff/cases/limits/string_parts_over_64.xr'
-    long_before = long_source.read_bytes()
-    for mode in ('raw', 'optimized'):
-        folder = root / ('length-over-64-' + mode)
-        folder.mkdir()
-        generated = folder / 'generated.c'
-        command = [args.source_driver, long_source, generated]
-        if mode == 'optimized':
-            command.append('--optimize')
-        result = run('source-length-over-64', command, folder)
-        assert (result.returncode, result.stdout, result.stderr) == (0, b'', b''), folder
-        main = folder / 'main.c'
-        main.write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
-                        'int main(void){if(xray_lir_entry()!=0)return 1;return xray_lir_entry()!=0;}\n', encoding='ascii')
-        compile_run(folder, generated, main, 'O2', b'140\n140\n')
-        records.append({'case': 'length-over-64', 'mode': mode,
-            'sourceSHA256': hashlib.sha256(long_before).hexdigest(), 'oracleHex': b'140\n'.hex(),
-            'result': 'C_NATIVE_PASS', 'rbc': 'UNRESOLVED_SSA_REGISTER_CAPACITY'})
-    assert long_source.read_bytes() == long_before
     folder = root / 'owned-result'
     folder.mkdir()
     generated = folder / 'generated.c'

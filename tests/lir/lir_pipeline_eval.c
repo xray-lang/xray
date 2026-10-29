@@ -53,6 +53,7 @@ typedef struct Eval {
     Snapshot snapshots[5];
     size_t snapshot_count;
     uint32_t comparisons;
+    uint32_t rbc_registers, rbc_spills, rbc_reference_spills;
     uint64_t source_retire, lir_retire, execution_retire, program_retire, observations, comparisons_ticks;
     XrtSourceLocation failure_location;
     XrtOutputFailure failure;
@@ -366,7 +367,8 @@ static void receipt(const char *path, const Eval *e, const Sample *samples, uint
         shape_json(f, &s->module); fputs(",\"ROOT_CFG_CLOSURE\":", f); shape_json(f, &s->cfg);
         fputs(",\"C_SELECTED_FUNCTION_ALL_BLOCKS\":", f); shape_json(f, &s->selected); fputc('}', f);
     }
-    fputs("],\"samples\":[", f);
+    fprintf(f,"],\"rbc_registers_max\":%u,\"rbc_spills\":%u,\"rbc_reference_spills\":%u,\"samples\":[",
+        e->rbc_registers,e->rbc_spills,e->rbc_reference_spills);
     for (uint64_t i = 0; i < (uint64_t)warmups + runs; ++i) {
         fprintf(f, "%s{\"warmup\":%s,\"prepare_ticks\":%" PRIu64 ",\"run_ticks\":%" PRIu64
             ",\"completed_entry\":%s,\"bits\":", i ? "," : "", i < warmups ? "true" : "false",
@@ -470,6 +472,12 @@ int main(int argc, char **argv) {
     XrRbcCompileStatus bs = xr_rbc_compile(lowered.module, lowered.entry, &program, &bd);
     if (bs != XR_RBC_COMPILE_OK) fprintf(stderr, "bytecode: %s\n", bd.message);
     CHECK(bs == XR_RBC_COMPILE_OK && program);
+    const XrRbcModule *rbc=xr_rbc_program_view(program);
+    for(size_t f=0;f<rbc->function_count;++f) {
+        const XrRbcFunction *body=&rbc->functions[f];
+        if(e.rbc_registers<body->register_count)e.rbc_registers=body->register_count;
+        e.rbc_spills+=body->spill_count;e.rbc_reference_spills+=body->reference_spill_count;
+    }
     stage(&e, "rbc_compile", start);
     start = clock_ticks(); xr_lir_lowered_free(&lowered); e.lir_retire += elapsed(start);
     write_bytes(argv[3], output.bytes, output.length);

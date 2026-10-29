@@ -21,6 +21,7 @@
 #include "runtime/native/xnative_execution.h"
 
 #define XR_RBC_REGISTER_COUNT_MAX 255u
+#define XR_RBC_SPILL_COUNT_MAX 65535u
 #define XR_RBC_JUMP_MIN (-8388608)
 #define XR_RBC_JUMP_MAX 8388607
 
@@ -62,7 +63,9 @@
     X(STRING_CELL_DROP, A)                                                                         \
     X(RET, A)                                                                                      \
     X(RET0, NONE)                                                                                  \
-    X(STRING_LEN, AB)
+    X(STRING_LEN, AB)                                                                              \
+    X(SPILL, ABX)                                                                                  \
+    X(RELOAD, ABX)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,
@@ -102,6 +105,9 @@ typedef struct {
     const XrRbcRegisterKind *cell_kinds;
     size_t cell_kind_count;
     XrRbcRegisterKind result_kind;
+    // Spills are activation-owned indexed storage. The String prefix is the
+    // immutable reference bitmap; the remaining slots contain scalar bits.
+    uint32_t spill_count, reference_spill_count;
 } XrRbcFunction;
 
 // The native set is closed. Dispatch calls each typed function directly;

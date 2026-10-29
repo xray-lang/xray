@@ -595,7 +595,67 @@ static void test_string_length(void) {
     XrRbcFunction missing={.code=bare,.code_count=2,.register_count=2};
     XrRbcModule untyped={.functions=&missing,.function_count=1};reject_prepare(&untyped,0,NULL,0);
 }
+static void test_spills(void) {
+    uint32_t code[10];
+    XrRbcRegisterKind kinds[]={XR_RBC_STRING,XR_RBC_BITS};
+    immediate(code,0,XR_RBC_STRING_LITERAL,0,0);
+    immediate(code,1,XR_RBC_SPILL,0,0);
+    immediate(code,2,XR_RBC_RELOAD,0,0);
+    emit(code,3,XR_RBC_STRING_LEN,1,0,0);
+    immediate(code,4,XR_RBC_SPILL,1,1);
+    immediate(code,5,XR_RBC_SPILL,0,0);
+    immediate(code,6,XR_RBC_RELOAD,0,0);
+    emit(code,7,XR_RBC_STRING_DROP,0,0,0);
+    immediate(code,8,XR_RBC_RELOAD,1,1);
+    emit(code,9,XR_RBC_RET,1,0,0);
+    XrRbcLiteral literal={"\xc3\xa9\0Z",4};
+    XrRbcFunction f={.code=code,.code_count=10,.register_count=2,.register_kinds=kinds,
+        .register_kind_count=2,.spill_count=2,.reference_spill_count=1};
+    XrRbcModule module={.functions=&f,.function_count=1,.literals=&literal,.literal_count=1};
+    uint64_t result=91;CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_OK && result==3);
+    uint32_t saved=code[1];immediate(code,1,XR_RBC_SPILL,0,1);reject_prepare(&module,0,NULL,0);code[1]=saved;
+    saved=code[5];immediate(code,5,XR_RBC_RELOAD,0,0);reject_prepare(&module,0,NULL,0);code[5]=saved;
+    saved=code[1];immediate(code,1,XR_RBC_RELOAD,0,0);reject_prepare(&module,0,NULL,0);code[1]=saved;
+    saved=code[0];immediate(code,0,XR_RBC_SPILL,0,0);reject_prepare(&module,0,NULL,0);code[0]=saved;
+    saved=code[4];immediate(code,4,XR_RBC_RELOAD,1,1);reject_prepare(&module,0,NULL,0);code[4]=saved;
+    saved=code[9];emit(code,9,XR_RBC_SPILL,1,0,0);reject_prepare(&module,0,NULL,0);code[9]=saved;
+    f.reference_spill_count=3;reject_prepare(&module,0,NULL,0);f.reference_spill_count=1;
+    f.spill_count=65536;reject_prepare(&module,0,NULL,0);f.spill_count=2;
+    uint32_t word=73;CHECK(!xr_rbc_encode(&word,(XrRbcOperands){XR_RBC_SPILL,0,0,0,65535})&&word==73);
+    CHECK(!xr_rbc_encode(&word,(XrRbcOperands){XR_RBC_RELOAD,0,0,0,65535})&&word==73);
+    saved=code[1];code[1]=(uint32_t)XR_RBC_SPILL+(UINT32_C(65535)<<16);reject_prepare(&module,0,NULL,0);code[1]=saved;
+    uint32_t edge[4];immediate(edge,0,XR_RBC_LOADI,0,0);
+    CHECK(xr_rbc_jump(edge+1,1,3,4));emit(edge,2,XR_RBC_RET0,0,0,0);emit(edge,3,XR_RBC_RET0,0,0,0);
+    XrRbcFunction branching={.code=edge,.code_count=4,.register_count=1,.spill_count=1};
+    XrRbcModule rejected={.functions=&branching,.function_count=1};reject_prepare(&rejected,0,NULL,0);
+    uint32_t upper[6];immediate(upper,0,XR_RBC_STRING_LITERAL,0,0);
+    immediate(upper,1,XR_RBC_SPILL,0,65534);immediate(upper,2,XR_RBC_RELOAD,0,65534);
+    emit(upper,3,XR_RBC_STRING_DROP,0,0,0);immediate(upper,4,XR_RBC_LOADI,1,42);emit(upper,5,XR_RBC_RET,1,0,0);
+    f.code=upper;f.code_count=6;f.spill_count=f.reference_spill_count=65535;
+    CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_OK&&result==42);
+    f.code_count=3;emit(upper,2,XR_RBC_RET0,0,0,0);reject_prepare(&module,0,NULL,0);
+    uint32_t collision[6];immediate(collision,0,XR_RBC_STRING_LITERAL,0,0);
+    immediate(collision,1,XR_RBC_SPILL,0,0);immediate(collision,2,XR_RBC_STRING_LITERAL,0,0);
+    immediate(collision,3,XR_RBC_RELOAD,0,0);emit(collision,4,XR_RBC_STRING_DROP,0,0,0);
+    emit(collision,5,XR_RBC_RET0,0,0,0);
+    f.code=collision;f.code_count=6;f.spill_count=f.reference_spill_count=1;
+    reject_prepare(&module,0,NULL,0);
+    uint32_t owner[6],borrow[4];
+    immediate(owner,0,XR_RBC_STRING_LITERAL,0,0);emit(owner,1,XR_RBC_MOV,3,0,0);
+    immediate(owner,2,XR_RBC_CALL,2,1);emit(owner,3,XR_RBC_MOV,1,2,0);
+    emit(owner,4,XR_RBC_STRING_DROP,0,0,0);emit(owner,5,XR_RBC_RET,1,0,0);
+    immediate(borrow,0,XR_RBC_SPILL,0,0);immediate(borrow,1,XR_RBC_RELOAD,0,0);
+    emit(borrow,2,XR_RBC_STRING_DROP,0,0,0);emit(borrow,3,XR_RBC_RET0,0,0,0);
+    XrRbcRegisterKind outer_kinds[]={XR_RBC_STRING,XR_RBC_BITS,XR_RBC_CALL_WINDOW,XR_RBC_CALL_WINDOW};
+    XrRbcFunction functions[]={
+        {.code=owner,.code_count=6,.register_count=4,.register_kinds=outer_kinds,.register_kind_count=4},
+        {.code=borrow,.code_count=4,.register_count=1,.parameter_count=1,.register_kinds=kinds,
+         .register_kind_count=1,.spill_count=1,.reference_spill_count=1}};
+    XrRbcModule borrowed={.functions=functions,.function_count=2,.literals=&literal,.literal_count=1};
+    reject_prepare(&borrowed,0,NULL,0);
+}
 int main(int argc, char **argv) {
+    test_spills();
     test_string_length();
     if (argc == 2 && strcmp(argv[1], "--native-print") == 0) {
         test_native_print();

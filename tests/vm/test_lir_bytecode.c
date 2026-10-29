@@ -435,7 +435,7 @@ static void test_capacity(uint32_t count, bool scratch) {
             arguments[0] = 1;
             CHECK(run(program, arguments, count) == count - 1);
         }
-    } else CHECK(status == XR_RBC_COMPILE_LIMIT && !program);
+    } else CHECK(status == (scratch ? XR_RBC_COMPILE_UNSUPPORTED : XR_RBC_COMPILE_LIMIT) && !program);
     xr_lir_module_destroy(m);
     xr_rbc_program_destroy(program);
 }
@@ -1015,7 +1015,20 @@ static void test_sequential_string_owners(void) {
         const unsigned char expected[]={'A',0,(choice&1u)?'L':'R',(choice&2u)?'L':'R',(choice&1u)?'L':'R'};
         CHECK(size==sizeof(expected)&&!memcmp(bytes,expected,size));xr_rbc_outcome_free(&outcomes[choice]);}
 }
+static void test_scalar_spills(void) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+    XrLirFunction root=test_function(m,"virtual_values",NULL,0,XR_LIR_I64);
+    XrLirBlock body=test_block(m,root,NULL,0);OK(xr_lir_set_entry(m,root,body));
+    XrLirValue value={0};
+    for(uint32_t n=0;n<260;++n)value=test_constant(m,body,XR_LIR_I64,n);
+    test_return(m,body,value);OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *program=compile(m,root);
+    const XrRbcFunction *physical=&xr_rbc_program_view(program)->functions[0];
+    CHECK(physical->register_count==255&&physical->spill_count&&!physical->reference_spill_count);
+    xr_lir_module_destroy(m);CHECK(run(program,NULL,0)==259);xr_rbc_program_destroy(program);
+}
 int main(void) {
+    test_scalar_spills();
     test_sequential_string_owners();
     test_loop_string_temporaries();
     test_string_edge_swap();
