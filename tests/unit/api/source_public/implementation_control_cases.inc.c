@@ -93,8 +93,17 @@ static void implementation_controls(const char *selected) {
             xray_source_diagnostic_free(report);report=NULL;
             CHECK(probe.resources&&sdk_stats(probe.resources).held_bytes==probe.held_empty);
             xr_compile_resources_release(probe.resources);probe.resources=NULL;CHECK(!runtime_live&&!runtime_bytes);
-            CHECK(xray_source_build(&input,&options,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
+            XrSourceCompileOptions recovery=options;
+            if(probe.mode==1) {
+                fprintf(stderr,"implementation finite deadline rejection: status%u firstCause%u cleanup%u timeoutNs%llu physical0; recovery is a fresh default request\n",
+                    (unsigned)status,(unsigned)failure.status,(unsigned)failure.cleanup_status,(unsigned long long)options.timeout_ns);
+                recovery=xray_source_compile_options_default();recovery.stdlib_path=options.stdlib_path;
+                recovery.cancel_poll=options.cancel_poll;recovery.cancel_context=options.cancel_context;
+            }
+            CHECK(xray_source_build(&input,&recovery,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
+            CHECK(failure.status==XR_SOURCE_OK&&failure.cleanup_status==XR_SOURCE_OK);
             implementation_execute(artifact,text,length,&probe);
+            if(probe.mode==1)fprintf(stderr,"implementation fresh default recovery: retired answer42, original output and result release PASS\n");
         }
         if(probe.resources){CHECK(sdk_stats(probe.resources).held_bytes==probe.held_empty);xr_compile_resources_release(probe.resources);}
         CHECK(!runtime_live&&!runtime_bytes);length=implementation_control_fixture(text,sizeof(text));
