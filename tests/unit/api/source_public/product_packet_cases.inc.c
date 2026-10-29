@@ -123,7 +123,13 @@ static uint64_t product_packet_copy_case(unsigned mode,uint64_t timeout_ns) {
         XrSourceCompileOptions recovery=xray_source_compile_options_default();recovery.stdlib_path=XR_PUBLIC_STDLIB;
         XrSourceInput source={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"packet-copy-recovery",text,length}};
         XrSourceArtifact *artifact=NULL;XrSourceFailure failure={0};
-        CHECK(xray_source_build(&source,&recovery,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
+        if(mode==0) {
+            XrSourceAst *ast=NULL;XrSourceText syntax={NULL,"packet-copy-retired-ast",text,length};
+            CHECK(xray_source_parse(&syntax,&recovery,&ast,&failure,NULL)==XR_SOURCE_OK&&ast);
+            memset(text,'!',length);
+            CHECK(xray_source_build_ast(ast,&recovery,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
+            xray_source_ast_free(ast);
+        } else CHECK(xray_source_build(&source,&recovery,&artifact,&failure,NULL)==XR_SOURCE_OK&&artifact);
         CHECK(failure.status==XR_SOURCE_OK&&failure.cleanup_status==XR_SOURCE_OK);
         DeclarationsCopyProbe retired={0};implementation_execute(artifact,text,length,&retired);
         CHECK(!runtime_live&&!runtime_bytes);
