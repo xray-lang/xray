@@ -243,5 +243,10 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower(const XrXirCompileContext 
     const void *bytes, size_t length, const XrXirTarget *target,
     XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 
+/* Encoding still requires fresh full admission. Request callbacks are borrowed
+ * synchronously and never become part of the packet or its input artifact. */
+XR_FUNC XrXirStatus xir_checked_write(const XrXirArtifact *artifact,
+    XrXirCheckedPacket *output, XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
+
 
 #endif // XXIR_INTERNAL_H

@@ -24,7 +24,8 @@
 void xr_xir_compile_checked_packet_free(XrXirCheckedPacket *packet) {
     if (packet) { xr_compile_resources_free(packet->bytes); *packet = (XrXirCheckedPacket) {0}; }
 }
-XrXirStatus xr_xir_compile_checked_write(const XrXirArtifact *artifact, XrXirCheckedPacket *output, XrXirDiagnostic *diagnostic) {
+XR_FUNC XrXirStatus xir_checked_write(const XrXirArtifact *artifact, XrXirCheckedPacket *output,
+    XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
     if (!artifact) return XR_XIR_BAD_STRUCTURE;
     if (!output || output->bytes || output->length) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
 
@@ -33,7 +34,11 @@ XrXirStatus xr_xir_compile_checked_write(const XrXirArtifact *artifact, XrXirChe
     if (xir_artifact_is_evaluation(artifact)) return checked_error(XR_XIR_BAD_STAGE,diagnostic);
     XrXirStatus status = xr_xir_compile_artifact_verify(artifact, diagnostic);
     if (status != XR_XIR_OK) return status;
-    return checked_encode(artifact, output, diagnostic, NULL);
+    return checked_encode(artifact, output, diagnostic, control);
+}
+XR_FUNC XrXirStatus xr_xir_compile_checked_write(const XrXirArtifact *artifact,
+    XrXirCheckedPacket *output, XrXirDiagnostic *diagnostic) {
+    return xir_checked_write(artifact,output,diagnostic,NULL);
 }
 static XrXirStatus checked_read_mode(const XrXirCompileContext *compile_context,const void *bytes,size_t length,
     XrXirArtifact **output,XrXirDiagnostic *diagnostic,bool evaluation) {

@@ -7,7 +7,7 @@
  * xr_xir_source_debug.inc.c - Source coordinates through verified specialization
  */
 static XrXirStatus source_product_debug(XrXirSourceProduct *product,const XrXirSourceSnapshot *snapshot,
-    const XrXirCheckedPacket *source_packet,const XrXirModule *module) {
+    const XrXirCheckedPacket *source_packet,const XrXirModule *module,XrCompileRequestControl *control) {
     const XrXirCompileContext *context=&product->context;
     const XrXirSourceDebugView *source=xr_xir_compile_source_snapshot_debug(snapshot);
     if (!source || (source->function_count && !source->functions)) return XR_XIR_BAD_STRUCTURE;
@@ -17,10 +17,10 @@ static XrXirStatus source_product_debug(XrXirSourceProduct *product,const XrXirS
     if (instances) {
         if (!provenance->source || provenance->count!=module->function_count || !provenance->origins)
             return XR_XIR_BAD_STRUCTURE;
-        status=xr_xir_compile_checked_write(provenance->source,&verified,NULL);
+        status=xir_checked_write(provenance->source,&verified,NULL,control);
         if (status==XR_XIR_OK && verified.length!=source_packet->length) status=XR_XIR_BAD_STRUCTURE;
         if (status==XR_XIR_OK)
-            status=source_product_compare(verified.bytes,source_packet->bytes,verified.length);
+            status=source_product_compare(verified.bytes,source_packet->bytes,verified.length,control);
         xr_xir_compile_checked_packet_free(&verified);
         if (status!=XR_XIR_OK) return status;
     } else if (source->function_count!=module->function_count) return XR_XIR_BAD_STRUCTURE;
@@ -28,7 +28,10 @@ static XrXirStatus source_product_debug(XrXirSourceProduct *product,const XrXirS
     if ((source->global_count && (!source->globals || !module->declarations || !module->declarations->slots || !module->declarations->modules)) ||
         !query || !module->declarations) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t g=0;g<source->global_count;++g) {
-
+        if (control && !(g%32)) {
+            status=xir_compile_resource_status(xr_compile_request_control_poll(control));
+            if (status!=XR_XIR_OK) return status;
+        }
         const XrXirSourceDebugGlobal *global=&source->globals[g];
         if (global->slot>=module->declarations->slot_count || !global->declaration ||
             global->declaration>query->declaration_count) return XR_XIR_BAD_STRUCTURE;
@@ -40,14 +43,24 @@ static XrXirStatus source_product_debug(XrXirSourceProduct *product,const XrXirS
         const char *identity=query->modules[declaration->range.module].identity;
         if (!identity || !owner->name) return XR_XIR_BAD_STRUCTURE;
         size_t length=0;
-        while (identity[length]) { ++length; }
-
-        if (length!=owner->name_length || memcmp(identity,owner->name,length)) return XR_XIR_BAD_STRUCTURE;
+        while (identity[length]) {
+            ++length;
+            if (control && !(length%4096)) {
+                status=xir_compile_resource_status(xr_compile_request_control_poll(control));
+                if (status!=XR_XIR_OK) return status;
+            }
+        }
+        if (length!=owner->name_length) return XR_XIR_BAD_STRUCTURE;
+        status=source_product_compare(identity,owner->name,length,length>=4096?control:NULL);
+        if (status!=XR_XIR_OK) return status;
     }
     XrXirSourceDebugFunction *functions=xir_compile_calloc(context,module->function_count,sizeof(*functions),&status);
     if (module->function_count && !functions) return status;
     for (uint32_t f=0;f<module->function_count;++f) {
-
+        if (control && !(f%32)) {
+            status=xir_compile_resource_status(xr_compile_request_control_poll(control));
+            if (status!=XR_XIR_OK) break;
+        }
         uint32_t origin=instances ? provenance->origins[f].function : f;
         if (origin>=source->function_count) { status=XR_XIR_BAD_STRUCTURE;break; }
         const XrXirSourceDebugFunction *original=&source->functions[origin];

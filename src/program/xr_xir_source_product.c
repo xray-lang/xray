@@ -165,13 +165,19 @@ done:
     return status;
 }
 static XrXirStatus source_product_compare(
-    const void *left, const void *right, size_t size) {
+    const void *left, const void *right, size_t size, XrCompileRequestControl *control) {
     const unsigned char *a = left, *b = right;
-    for (size_t i = 0; i < size; ++i) {
-
-        if (a[i] != b[i]) return XR_XIR_BAD_STRUCTURE;
+    for (size_t i = 0; i < size;) {
+        if (control) {
+            XrXirStatus status=xir_compile_resource_status(xr_compile_request_control_poll(control));
+            if (status!=XR_XIR_OK) return status;
+        }
+        size_t count=size-i;
+        if (count>4096) count=4096;
+        if (memcmp(a+i,b+i,count)) return XR_XIR_BAD_STRUCTURE;
+        i+=count;
     }
-    return XR_XIR_OK;
+    return control?xir_compile_resource_status(xr_compile_request_control_poll(control)):XR_XIR_OK;
 }
 #include "xr_xir_source_debug.inc.c"
 typedef enum SourceProductInputKind { SOURCE_PRODUCT_FILE, SOURCE_PRODUCT_TEXT, SOURCE_PRODUCT_AST } SourceProductInputKind;
@@ -192,6 +198,7 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
         request->target.abi_version!=XR_XIR_VALUE_ABI_VERSION)
         return source_product_reject(diagnostic,XR_XIR_SOURCE_PRODUCT_INPUT,XR_XIR_BAD_STRUCTURE);
     const XrXirCompileContext *context = request->source.context;
+    XrCompileRequestControl *control=xr_compile_session_request(request->source.session);
     if (diagnostic) memset(diagnostic,0,sizeof(*diagnostic));
     XrXirSourceResult source={0};XrXirArtifact *closed=NULL,*lowered=NULL;
     XrXirSourceFailure failure={0};XrXirSourceDiagnostic immediate={0};
@@ -210,8 +217,8 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
     XrXirSourceProductStage stage=XR_XIR_SOURCE_PRODUCT_CHECK;
     if (status==XR_XIR_OK) {
         stage=XR_XIR_SOURCE_PRODUCT_SOURCE_PACKET;
-        status=xr_xir_compile_checked_write(source.checked,&source_packet,
-            diagnostic ? &diagnostic->xir : NULL);
+        status=xir_checked_write(source.checked,&source_packet,
+            diagnostic ? &diagnostic->xir : NULL,control);
     }
     if (status==XR_XIR_OK) {
         stage=XR_XIR_SOURCE_PRODUCT_SPECIALIZE;
@@ -220,7 +227,7 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
     }
     if (status==XR_XIR_OK) {
         stage=XR_XIR_SOURCE_PRODUCT_LOWER;
-        status=xr_xir_compile_lower_take(&closed,&request->target, xr_compile_session_request(request->source.session),&lowered,
+        status=xr_xir_compile_lower_take(&closed,&request->target,control,&lowered,
             diagnostic ? &diagnostic->xir : NULL);
     }
     uint32_t entry=0;
@@ -229,7 +236,7 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
     xr_xir_compile_artifact_free(closed);
     if (status==XR_XIR_OK) {
         stage=XR_XIR_SOURCE_PRODUCT_CLOSED_PACKET;
-        status=source_product_closed_packet(lowered,xr_compile_session_request(request->source.session),
+        status=source_product_closed_packet(lowered,control,
             &closed_packet,diagnostic ? &diagnostic->xir : NULL);
     }
     XrXirSourceProduct *product=NULL;
@@ -243,13 +250,14 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
         product->facts.entry=entry;
         product->facts.target=*xr_xir_compile_artifact_target(lowered);
         product->facts.function_count=module->function_count;product->facts.module_count=module->declarations->module_count;
-        status=source_product_hash(&source_packet,product->facts.source_digest,
-            xr_compile_session_request(request->source.session));
+        status=source_product_hash(&source_packet,product->facts.source_digest,control);
         if (status==XR_XIR_OK) memcpy(product->facts.closed_digest,lowered->checked_identity,sizeof(product->facts.closed_digest));
         if (status==XR_XIR_OK)
             status=source_product_layout_digest(lowered,&product->facts,product->facts.lowered_layout_digest);
         if (status==XR_XIR_OK) status=source_product_tests(product,module);
-        if (status==XR_XIR_OK) status=source_product_debug(product,source.snapshot,&source_packet,module);
+        if (status==XR_XIR_OK) status=source_product_debug(product,source.snapshot,&source_packet,module,control);
+        if (status==XR_XIR_OK && control)
+            status=xir_compile_resource_status(xr_compile_request_control_poll(control));
     }
     if (status==XR_XIR_OK) {
         product->lowered=lowered;product->snapshot=source.snapshot;
