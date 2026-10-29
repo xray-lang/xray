@@ -626,6 +626,25 @@ static const XrNativeIntrinsicDeclaration xr_native_intrinsics[] = {
     {UINT32_C(4), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[7], true, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_SLICE, "xr_xir_string_slice"},
 };
 
+static const XrNativeParameter xr_native_unicode_property_parameters[] = {
+    {"name", "string", XR_NATIVE_TERM_STRING, false, false},
+};
+static const XrNativeParameter xr_native_unicode_has_property_parameters[] = {
+    {"cp", "i64", XR_NATIVE_TERM_I64, false, false},
+    {"propId", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_unicode_property = {
+    1, "__unicodePropId", "(name: string): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,
+    "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_unicode_property_parameters, 1, XR_NATIVE_TERM_I64
+};
+static const XrNativeMemberDeclaration xr_native_unicode_has_property = {
+    2, "__unicodeHasProp", "(cp: i64, propId: i64): bool", "bool", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,
+    "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_unicode_has_property_parameters, 2, XR_NATIVE_TERM_BOOL
+};
 static const XrNativeCallableDeclaration xr_native_callables[] = {
-    {UINT32_C(1), &xr_native_string, &xr_native_string_members[0], &xr_native_utf8_error, false}
+    {XR_NATIVE_CALLABLE_STRING_FROM_UTF8, &xr_native_string, &xr_native_string_members[0], &xr_native_utf8_error, false, NULL, NULL, {{0}}},
+    {XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID, NULL, &xr_native_unicode_property, NULL, true, "regex", "stdlib/defs/core.def", {{14,147,117,66,181,241,175,132,190,251,203,202,251,222,170,175,7,75,178,221,252,135,123,52,27,204,247,212,93,148,171,112}}},
+    {XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY, NULL, &xr_native_unicode_has_property, NULL, true, "regex", "stdlib/defs/core.def", {{14,147,117,66,181,241,175,132,190,251,203,202,251,222,170,175,7,75,178,221,252,135,123,52,27,204,247,212,93,148,171,112}}}
 };

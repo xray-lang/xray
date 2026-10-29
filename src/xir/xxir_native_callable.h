@@ -28,8 +28,30 @@ static inline bool xir_native_error_type(const XrXirTypes *types,XrXirType type,
 static inline bool xir_native_callable_types(uint32_t id,const XrXirTypes *types,
     const XrXirType *parameters,uint32_t count,XrXirType result,XrXirType error) {
     const XrNativeCallableDeclaration *canonical=xr_native_callable_by_id(id);
+    if (id==XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY) {
+        return canonical && !canonical->owner && !canonical->error_e_type && canonical->ctfe &&
+            canonical->namespace_id && !strcmp(canonical->namespace_id,"regex") &&
+            canonical->member && !canonical->member->is_method && !canonical->member->is_static &&
+            canonical->member->parameter_count==2 && canonical->member->parameters &&
+            canonical->member->parameters[0].type==XR_NATIVE_TERM_I64 &&
+            canonical->member->parameters[1].type==XR_NATIVE_TERM_I64 &&
+            canonical->member->result==XR_NATIVE_TERM_BOOL &&
+            canonical->member->allocation==XR_NATIVE_ALLOCATION_NO_HEAP &&
+            count==2 && parameters && parameters[0]==XR_XIR_I64 && parameters[1]==XR_XIR_I64 &&
+            result==XR_XIR_BOOL && error==XR_XIR_NEVER;
+    }
+    if (id==XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID) {
+        return canonical && !canonical->owner && !canonical->error_e_type && canonical->ctfe &&
+            canonical->namespace_id && !strcmp(canonical->namespace_id,"regex") &&
+            canonical->member && !canonical->member->is_method && !canonical->member->is_static &&
+            canonical->member->parameter_count==1 && canonical->member->parameters &&
+            canonical->member->parameters[0].type==XR_NATIVE_TERM_STRING &&
+            canonical->member->result==XR_NATIVE_TERM_I64 &&
+            canonical->member->allocation==XR_NATIVE_ALLOCATION_NO_HEAP &&
+            count==1 && parameters && parameters[0]==XR_XIR_STRING && result==XR_XIR_I64 && error==XR_XIR_NEVER;
+    }
     const XrXirTypeNode *slice=count==1 && parameters ? xr_xir_type_node(types,parameters[0]) : NULL;
-    return canonical && canonical->owner->id==XR_NATIVE_DECLARATION_STRING &&
+    return canonical && canonical->owner && canonical->error_e_type && canonical->owner->id==XR_NATIVE_DECLARATION_STRING &&
         canonical->member->operation==XR_NATIVE_OPERATION_STRING_FROM_UTF8 &&
         canonical->member->is_static && canonical->member->is_method &&
         canonical->member->parameter_count==1 && canonical->member->parameters[0].type==XR_NATIVE_TERM_SLICE_U8 &&
@@ -40,7 +62,7 @@ static inline bool xir_native_callable_types(uint32_t id,const XrXirTypes *types
 }
 static inline XrXirType xir_native_callable_error(const XrXirTypes *types,uint32_t id) {
     const XrNativeCallableDeclaration *native=xr_native_callable_by_id(id);
-    if (!native || !types) return XR_XIR_NEVER;
+    if (!native || !native->error_e_type || !types) return XR_XIR_NEVER;
     for (uint32_t i=0;i<types->count;++i) {
         XrXirType type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i);
         if (xir_native_error_type(types,type,native->error_e_type->id)) return type;

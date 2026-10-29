@@ -426,22 +426,21 @@ static const PropertyEntry property_table[] = {
 
 /* ========== API Implementation ========== */
 
-XrUnicodeProperty xr_unicode_property_lookup(const char *name, int len) {
-    XR_DCHECK(len >= 0, "unicode_property_lookup: negative len");
-    if (!name || len <= 0)
+XrUnicodeProperty xr_unicode_property_lookup(const char *name, size_t len) {
+    if (!name || !len)
         return XR_UP_INVALID;
 
     for (const PropertyEntry *e = property_table; e->name != NULL; e++) {
-        if ((int) strlen(e->name) == len && strncmp(e->name, name, len) == 0) {
+        if (strlen(e->name) == len && strncmp(e->name, name, len) == 0) {
             return e->prop;
         }
     }
 
     // Case-insensitive fallback
     for (const PropertyEntry *e = property_table; e->name != NULL; e++) {
-        if ((int) strlen(e->name) == len) {
+        if (strlen(e->name) == len) {
             bool match = true;
-            for (int i = 0; i < len; i++) {
+            for (size_t i = 0; i < len; i++) {
                 if (tolower((unsigned char) name[i]) != tolower((unsigned char) e->name[i])) {
                     match = false;
                     break;

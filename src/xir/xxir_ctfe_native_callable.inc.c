@@ -11,6 +11,7 @@
  *   to that frame until ordinary return or error delivery copies them onward.
  */
 #include "xxir_from_utf8_internal.h"
+#include "xxir_unicode_internal.h"
 
 static XrXirCtfeStatus ctfe_native_callable_step(CtfeCallExecution *execution,
     XirScalarCoreAction *action) {
@@ -28,7 +29,11 @@ static XrXirCtfeStatus ctfe_native_callable_step(CtfeCallExecution *execution,
     if (!ctfe_view_current(&context)) return XR_XIR_CTFE_BAD_ARTIFACT;
     XrXirValue argument=ctfe_nominal_operand(&frame->run,0),result={0};
     XrXirViewAccess access={&admission,ctfe_view_authorize,&context};
-    XrXirValueStatus converted=xir_from_utf8(&argument,&access,&result);
+    uint32_t id=module->declarations->functions[frame->function].native_callable;
+    XrXirValue second=id==XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY ? ctfe_nominal_operand(&frame->run,1) : (XrXirValue){0};
+    XrXirValueStatus converted=id==XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID ?
+        xir_unicode_property_id(&argument,&result) : id==XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY ?
+        xir_unicode_has_property(&argument,&second,&result) : xir_from_utf8(&argument,&access,&result);
     bool thrown=converted==XR_XIR_VALUE_BAD_UTF8;
     if (context.failure!=XR_XIR_CTFE_OK) status=context.failure;
     else {

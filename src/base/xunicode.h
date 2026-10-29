@@ -35,6 +35,7 @@
 #define XUNICODE_H
 
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
 #include "xdefs.h"
 
@@ -81,7 +82,7 @@ typedef enum {
 /* ========== Core API ========== */
 
 // Lookup property by name ("L", "Han", "Latin", etc.)
-XR_FUNC XrUnicodeProperty xr_unicode_property_lookup(const char *name, int len);
+XR_FUNC XrUnicodeProperty xr_unicode_property_lookup(const char *name, size_t len);
 
 // Get range table for property
 XR_FUNC bool xr_unicode_property_ranges(XrUnicodeProperty prop, const XrUnicodeRange **out_ranges,

@@ -30,7 +30,7 @@ static XrValue regex_unicode_prop_id(XrVMRuntime *isolate, XrValue *args, int ar
     XrString *name = XR_TO_STRING(args[0]);
     if (!name)
         return xr_int(-1);
-    XrUnicodeProperty prop = xr_unicode_property_lookup(name->data, (int) name->length);
+    XrUnicodeProperty prop = xr_unicode_property_lookup(name->data, name->length);
     if (prop == XR_UP_INVALID)
         return xr_int(-1);
     return xr_int((int) prop);

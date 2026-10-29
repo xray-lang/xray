@@ -20,6 +20,7 @@
 #include "xxir_instance_value.h"
 #include "xxir_native_callable.h"
 #include "xxir_from_utf8_internal.h"
+#include "xxir_unicode_internal.h"
 #include "xxir_call_view_internal.h"
 #include "xxir_enum.h"
 #include "xxir_instance_binding.h"
@@ -2010,15 +2011,18 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     XrXirType error=xir_native_callable_error(program->types,id);
     if (entry->resume!=xr_xir_instance_native_callable || entry->state_bytes!=sizeof(XrXirValue) ||
         entry->release!=xr_xir_instance_native_callable_release || entry->environment || entry->flags || entry->cleanup_owner ||
-        !view->state || (uintptr_t)view->state%_Alignof(XrXirValue) || view->argument_count!=1 || !view->arguments ||
-        !xir_native_callable_types(id,program->types,entry->parameters,entry->parameter_count,entry->result,error) ||
-        !xr_xir_value_argument(&view->arguments[0],view->arena,entry->parameters[0])) goto failed;
+        !view->state || (uintptr_t)view->state%_Alignof(XrXirValue) || view->argument_count!=entry->parameter_count || !view->arguments ||
+        !xir_native_callable_types(id,program->types,entry->parameters,entry->parameter_count,entry->result,error)) goto failed;
+    for (uint32_t p=0;p<entry->parameter_count;++p)
+        if (!xr_xir_value_argument(&view->arguments[p],view->arena,entry->parameters[p])) goto failed;
     XrXirValue *state=view->state;
     if (state->type || state->reserved || state->payload) goto failed;
     value=state;
     status=xr_xir_call_execution_status(view);if (status!=XR_XIR_CALL_READY) goto failed;
     XrXirViewAccess access={0};XrXirValueStatus converted=xr_xir_call_view_access(view,&access);
-    if (converted==XR_XIR_VALUE_OK) converted=xir_from_utf8(&view->arguments[0],&access,value);
+    if (converted==XR_XIR_VALUE_OK) converted=id==XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID ?
+        xir_unicode_property_id(&view->arguments[0],value) : id==XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY ?
+        xir_unicode_has_property(&view->arguments[0],&view->arguments[1],value) : xir_from_utf8(&view->arguments[0],&access,value);
     if (converted==XR_XIR_VALUE_BAD_UTF8) {
         converted=xr_xir_enum_new(error,0,NULL,0,xr_xir_call_admission(view),value);thrown=true;
     }
