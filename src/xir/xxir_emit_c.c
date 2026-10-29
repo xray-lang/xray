@@ -15,6 +15,7 @@
 
 #include "xxir_emit_c.h"
 #include "xxir_intrinsic.h"
+#include "xxir_task_result.h"
 #include "xxir_checked.h"
 #include "xxir_internal.h"
 #include "xxir_program.h"
@@ -597,14 +598,25 @@ static void emit_resume_generator(CBuffer *buffer,const XrXirFunction *function,
 static void emit_resume_await(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t index) {
     if (!((buffer)->status == XR_XIR_OK)) return;
+    bool task_wait=op->op==XR_XIR_TASK_AWAIT || op->op==XR_XIR_TASK_AWAIT_RESULT;
+    bool result_wait=op->op==XR_XIR_TASK_AWAIT_RESULT;
     XrXirType receiver=xr_xir_operand_type(function,op->args[0]);
-    XrXirType expected=op->op==XR_XIR_TASK_AWAIT ? xr_xir_task_element(buffer->types,receiver) :
+    XrXirType expected=task_wait ? xr_xir_task_element(buffer->types,receiver) :
         op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL : op->op==XR_XIR_ITERATOR_CLOSE ? XR_XIR_UNIT : xr_xir_iterator_element(buffer->types,receiver);
-    if(op->op!=XR_XIR_TASK_AWAIT && op->op!=XR_XIR_ITERATOR_CLOSE)
+    if(result_wait)
+        append(buffer," { XrXirValue task=xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame,%uu));\n"
+            " XrXirCallStatus status=xr_xir_instance_task_await_result_at(view,%uu,&task);\n"
+            " if (status!=XR_XIR_CALL_READY) return (XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{0},0}; }\n",
+            (uint32_t)receiver,layout->offsets[op->args[0]],index);
+    else if(!task_wait && op->op!=XR_XIR_ITERATOR_CLOSE)
         append(buffer," { XrXirCallStatus status = xr_xir_instance_iterator_at(view, %uu);\n"
             " if (status != XR_XIR_CALL_READY) return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0}; }\n",index);
     uint32_t normal = function->blocks[op->targets[0]].first;
-    uint32_t error = function->blocks[op->targets[1]].first;
+    uint32_t error = result_wait?normal:function->blocks[op->targets[1]].first;
+    if (result_wait) {
+        if (function->instructions[normal].op!=XR_XIR_INVOKE_RESULT) {emit_reject(buffer,XR_XIR_BAD_TYPE);return;}
+        expected=function->instructions[normal].type;
+    }
     bool discard = function->instructions[normal].op == XR_XIR_INVOKE_DISCARD;
     uint32_t destination = discard || expected == XR_XIR_UNIT ? UINT32_MAX :
         layout->offsets[function->parameter_count + normal];
@@ -628,8 +640,8 @@ static void emit_resume_await(CBuffer *buffer, const XrXirFunction *function,
         " return (XrXirAction) {%s, %uu, %s, %uu,\n"
         " {%uu, 0, xr_xir_scalar_load(state->frame, %uu)}, {0}, %s};\n",
         destination, (uint32_t) expected,
-        op->op==XR_XIR_TASK_AWAIT ? "XR_XIR_ACTION_AWAIT_TASK" : "XR_XIR_ACTION_AWAIT_ITERATOR",
-        op->op==XR_XIR_TASK_AWAIT ? 0u : op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_WAIT_ITERATOR_HAS_NEXT :
+        task_wait ? "XR_XIR_ACTION_AWAIT_TASK" : "XR_XIR_ACTION_AWAIT_ITERATOR",
+        task_wait ? 0u : op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_WAIT_ITERATOR_HAS_NEXT :
         op->op==XR_XIR_ITERATOR_NTH ? XR_XIR_WAIT_ITERATOR_NTH : op->op==XR_XIR_ITERATOR_CLOSE ? XR_XIR_WAIT_ITERATOR_CLOSE : XR_XIR_WAIT_ITERATOR_NEXT,
         op->op==XR_XIR_ITERATOR_NTH ? "state->arguments" : "NULL",op->op==XR_XIR_ITERATOR_NTH ? 1u : 0u,
         (uint32_t) xr_xir_operand_type(function, op->args[0]),
@@ -820,7 +832,10 @@ static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
             EMIT_LITERAL(buffer, ";\n");
         }
         if (op->op == XR_XIR_ENUM_NEW) {
-            bool unit_payload=!op->immediate && xr_xir_nominal_native_recv(buffer->types,op->type,XR_XIR_UNIT);
+            XrXirTaskResultType shape={0};
+            bool unit_payload=!op->immediate && !op->args[1] &&
+                (xr_xir_nominal_native_recv(buffer->types,op->type,XR_XIR_UNIT) ||
+                 (xr_xir_task_result_type_info(buffer->types,op->type,&shape) && shape.element==XR_XIR_UNIT));
             if (unit_payload) append(buffer," XrXirValue unit = {0};\n");
             append(buffer, " status = xr_xir_enum_new((XrXirType) %uu, %uu, %s, %uu, xr_xir_call_admission(view), &value);\n",
                 (uint32_t) op->type, (uint32_t) op->immediate, unit_payload ? "&unit" : op->args[1] ? "state->arguments" : "NULL",
@@ -1271,10 +1286,17 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
             " if (status!=XR_XIR_CALL_READY) return (XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{0},0}; }\n",
             (uint32_t)xr_xir_operand_type(function,op->args[0]),layout->offsets[op->args[0]]);
         break;
+    case XR_XIR_TASK_POLL:
+        append(buffer," { XrXirValue task=xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame,%uu)),result={0};\n"
+            " XrXirCallStatus status=xr_xir_instance_task_poll_at(view,%uu,&task,&result);\n"
+            " if (status!=XR_XIR_CALL_READY) return (XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{0},0};\n"
+            " xr_xir_owned_slot_move(state->frame,%uu,&result); }\n",
+            (uint32_t)xr_xir_operand_type(function,op->args[0]),layout->offsets[op->args[0]],index,destination);
+        break;
     case XR_XIR_GO:
         emit_resume_go(buffer, function, op, layout, destination);
         return;
-    case XR_XIR_TASK_AWAIT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
+    case XR_XIR_TASK_AWAIT: case XR_XIR_TASK_AWAIT_RESULT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
         emit_resume_await(buffer, function, op, layout, index);
         return;
     case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:
@@ -1932,12 +1954,13 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     EMIT_LITERAL(buffer,"#include \"xir/xxir_call_view_operation_internal.h\"\n");
     EMIT_LITERAL(buffer,"#include \"xir/xxir_call_view_moves_internal.h\"\n");
     append(buffer,"_Static_assert(XIR_CALL_NATIVE_SOURCE_VERSION==%uu,\"native source observation version\");\n",XIR_CALL_NATIVE_SOURCE_VERSION);
-    EMIT_FORMAT(buffer, et_403de8a738e2f845, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
+    EMIT_FORMAT(buffer, et_d764f24a0c1d87b2, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_generator_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#include \"xir/xxir_atomic.h\"\n"
            "#include \"xir/xxir_channel.h\"\n"
            "#include \"xir/xxir_task.h\"\n"
+           "#include \"xir/xxir_task_result_internal.h\"\n"
            "#include \"xir/xxir_types.h\"\n#include \"xir/xxir_type_arena.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_CALL_ABI_VERSION == %uu, \"XIR call ABI\");\n"

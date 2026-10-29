@@ -27,6 +27,8 @@
 #include "xxir_atomic.h"
 #include "xxir_channel.h"
 #include "xxir_task.h"
+#include "xxir_task_result_internal.h"
+#include "xxir_task_result.h"
 #include "xxir_compile_memory.h"
 #include "xxir_equal.h"
 #include "xxir_nullable.h"
@@ -327,7 +329,10 @@ static XrXirRunStatus vm_nominal_step(ScalarRun *run, VmState *state,
     if (op->op == XR_XIR_STRUCT_NEW || op->op == XR_XIR_ENUM_NEW) {
         for (uint32_t i = 0; i < op->args[1]; ++i)
             state->arguments[i] = vm_value_operand(run, run->function->operands[op->args[0] + i]);
-        bool unit_payload=op->op==XR_XIR_ENUM_NEW && !op->immediate && xr_xir_nominal_native_recv(run->module->types,op->type,XR_XIR_UNIT);
+        XrXirTaskResultType shape={0};
+        bool unit_payload=op->op==XR_XIR_ENUM_NEW && !op->immediate && !op->args[1] &&
+            (xr_xir_nominal_native_recv(run->module->types,op->type,XR_XIR_UNIT) ||
+             (xr_xir_task_result_type_info(run->module->types,op->type,&shape) && shape.element==XR_XIR_UNIT));
         XrXirValue unit={0};
         status = op->op == XR_XIR_ENUM_NEW ?
             xr_xir_enum_new(op->type, (uint32_t) op->immediate, unit_payload ? &unit : op->args[1] ? state->arguments : NULL,
@@ -455,18 +460,26 @@ static XrXirRunStatus vm_await_step(ScalarRun *run, VmState *state, const XrXirI
     XrXirAction *action) {
     if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
     XrXirValue task = vm_value_operand(run, op->args[0]);
+    bool task_wait=op->op==XR_XIR_TASK_AWAIT || op->op==XR_XIR_TASK_AWAIT_RESULT;
+    bool result_wait=op->op==XR_XIR_TASK_AWAIT_RESULT;
     const XrXirTypeNode *task_type = xr_xir_type_node(run->module->types, (XrXirType)task.type);
-    if (!task_type || task_type->kind != (uint32_t)(op->op==XR_XIR_TASK_AWAIT ? XR_XIR_TYPE_TASK : XR_XIR_TYPE_ITERATOR))
+    if (!task_type || task_type->kind != (uint32_t)(task_wait ? XR_XIR_TYPE_TASK : XR_XIR_TYPE_ITERATOR))
         return XR_XIR_RUN_BAD_ARTIFACT;
     XrXirType element = op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL : op->op==XR_XIR_ITERATOR_CLOSE ? XR_XIR_UNIT : task_type->element;
+    if (result_wait) {
+        uint32_t first=run->function->blocks[op->targets[0]].first;
+        if (run->function->instructions[first].op!=XR_XIR_INVOKE_RESULT) return XR_XIR_RUN_BAD_ARTIFACT;
+        element=run->function->instructions[first].type;
+    }
     bool nth=op->op==XR_XIR_ITERATOR_NTH;
     if(nth) {
         if(!run->layout->outgoing_count) return XR_XIR_RUN_BAD_ARTIFACT;
         state->arguments[0]=vm_value_operand(run,op->args[1]);
     }
     uint32_t at = (uint32_t)(op - run->function->instructions);
-    if(op->op!=XR_XIR_TASK_AWAIT && op->op!=XR_XIR_ITERATOR_CLOSE) {
-        XrXirCallStatus status=xr_xir_instance_iterator_at(run->view,at);
+    if(result_wait || (!task_wait && op->op!=XR_XIR_ITERATOR_CLOSE)) {
+        XrXirCallStatus status=result_wait?xr_xir_instance_task_await_result_at(run->view,at,&task):
+            xr_xir_instance_iterator_at(run->view,at);
         if(status!=XR_XIR_CALL_READY) {
             *action=(XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{0},0};
             return XR_XIR_RUN_OK;
@@ -478,8 +491,8 @@ static XrXirRunStatus vm_await_step(ScalarRun *run, VmState *state, const XrXirI
     state->expected = element;
     ++state->instruction;
     /* The frame owns this handle until the driver prepares its wait lease. */
-    *action = (XrXirAction){op->op==XR_XIR_TASK_AWAIT ? XR_XIR_ACTION_AWAIT_TASK : XR_XIR_ACTION_AWAIT_ITERATOR,
-        op->op==XR_XIR_TASK_AWAIT ? 0 : op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_WAIT_ITERATOR_HAS_NEXT :
+    *action = (XrXirAction){task_wait ? XR_XIR_ACTION_AWAIT_TASK : XR_XIR_ACTION_AWAIT_ITERATOR,
+        task_wait ? 0 : op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_WAIT_ITERATOR_HAS_NEXT :
         nth ? XR_XIR_WAIT_ITERATOR_NTH : op->op==XR_XIR_ITERATOR_CLOSE ? XR_XIR_WAIT_ITERATOR_CLOSE : XR_XIR_WAIT_ITERATOR_NEXT,
         nth ? state->arguments : NULL, nth ? 1u : 0u, task, {0},
         state->panic ? XR_XIR_ACTION_PROTECTED : 0};
@@ -740,9 +753,19 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         else state->instruction=next;
         return XR_XIR_RUN_OK;
     }
+    case XR_XIR_TASK_POLL: {
+        if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
+        XrXirValue task=vm_value_operand(run,op->args[0]),polled={0};
+        XrXirCallStatus status=xr_xir_instance_task_poll_at(run->view,
+            (uint32_t)(op-run->function->instructions),&task,&polled);
+        if (status!=XR_XIR_CALL_READY)
+            *action=(XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};
+        else {xr_xir_owned_slot_move(run->frame,run->layout->offsets[result_id],&polled);state->instruction=next;}
+        return XR_XIR_RUN_OK;
+    }
     case XR_XIR_GO:
         return vm_go_step(run, state, op, action, run->layout->offsets[result_id]);
-    case XR_XIR_TASK_AWAIT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
+    case XR_XIR_TASK_AWAIT: case XR_XIR_TASK_AWAIT_RESULT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
         return vm_await_step(run, state, op, action);
     case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE: case XR_XIR_PANIC_REPLACED_ERROR: {
         if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
@@ -928,9 +951,11 @@ static XrXirAction vm_resume_observed(XrXirCallView *view, const XrXirVmBinding 
         if (state->invoke) {
             const XrXirInstruction *op = &function->instructions[state->invoke - 1];
             bool error = view->inbox.status == XR_XIR_CALL_THROWN;
+            if (op->op==XR_XIR_TASK_AWAIT_RESULT && view->inbox.status!=XR_XIR_CALL_RETURNED)
+                return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
             if (!error && view->inbox.status != XR_XIR_CALL_RETURNED) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
             uint32_t first = function->blocks[op->targets[error ? 1 : 0]].first;
-            state->expected = error ? XR_XIR_ERROR : op->op == XR_XIR_TASK_AWAIT ?
+            state->expected = error ? XR_XIR_ERROR : op->op==XR_XIR_TASK_AWAIT_RESULT ? function->instructions[first].type : op->op == XR_XIR_TASK_AWAIT ?
                 xr_xir_task_element(module->types, xr_xir_operand_type(function, op->args[0])) :
                 op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL : op->op==XR_XIR_ITERATOR_NEXT || op->op==XR_XIR_ITERATOR_NTH ?
                 xr_xir_iterator_element(module->types,xr_xir_operand_type(function,op->args[0])) : op->type;

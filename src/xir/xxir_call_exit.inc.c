@@ -13,6 +13,7 @@
 static void request_exit(XrXirCall *call, XrXirCallResult *result, bool scope) {
     clear_channel_wait(call);
     CallFrame *frame = call->top;
+    frame->task_result=XR_XIR_UNIT;frame->task_result_subject=NULL;
     if (call->budget && call->budget->native_hold==call) call->budget->native_hold=NULL;
     frame->native_pending=false;
     if (result->status == XR_XIR_CALL_CANCELLED && call->abort_reason != XR_XIR_CALL_READY) {
