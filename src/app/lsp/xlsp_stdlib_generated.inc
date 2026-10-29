@@ -557,7 +557,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_path_symbols[] = {
 
 // regex module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_regex_symbols[] = {
-    {"compile", XLSP_SYM_FUNCTION, "fn(pattern: string, flags?: string): Regex", "", NULL, 0},
+    {"compile", XLSP_SYM_FUNCTION, "fn(pattern: string, flags?: string) throws(RegexError): Regex", "", NULL, 0},
     {"isValid", XLSP_SYM_FUNCTION, "fn(pattern: string): bool", "", NULL, 0},
     {"test", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string): bool", "", NULL, 0},
     {"count", XLSP_SYM_FUNCTION, "fn(pattern: Regex, s: string): i64", "", NULL, 0},
