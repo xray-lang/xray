@@ -4,98 +4,51 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_source_binary_plan.inc.c - One numeric and string operator type recipe
- *
- * KEY CONCEPT:
- *   Operator admission and operand conversions are planned without values;
- *   emission consumes the completed recipe without repeating type decisions.
+ * xxir_source_binary_plan.inc.c - Syntax adapters and mechanical binary lowering
  */
-typedef struct SourceBinaryRecipe {
-    XrHirConversion left, right;
-    XrXirOp operation;
-    XrXirType result;
-    int64_t immediate;
-} SourceBinaryRecipe;
-static bool source_binary_plan(SourceContext *ctx,AstNode *node,AstNodeType operation,
-    XrXirType left,XrXirType right,SourceBinaryRecipe *output) {
-    SourceBinaryRecipe recipe={0};XrXirType target=left;
-    if (operation==AST_BINARY_EQ || operation==AST_BINARY_NE) {
-        if (left!=right) {
-            if (xr_xir_type_is_nullable(&ctx->types,left) && xr_xir_nullable_element(&ctx->types,left)==right) target=left;
-            else if (xr_xir_type_is_nullable(&ctx->types,right) && xr_xir_nullable_element(&ctx->types,right)==left) target=right;
-            else return source_fail(ctx,node,XR_XIR_BAD_TYPE,"equality requires the same declared operand type");
-        }
-        XrXirDeclarations declarations;
-        XrXirModule module=source_module_view(ctx,&declarations);
-        XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
-        XrXirStatus status=xr_xir_compile_type_markers_prove(&ctx->compile, &proof, target, XR_XIR_CONSTRAINT_EQUAL);
-        if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"equality requires its declaration predicate");
-        recipe.operation=XR_XIR_EQUAL; recipe.result=XR_XIR_BOOL; recipe.immediate=operation==AST_BINARY_NE;
-    } else if (left==XR_XIR_STRING && right==XR_XIR_STRING && operation==AST_BINARY_ADD) {
-        recipe.operation=XR_XIR_CONCAT_STRING;recipe.result=XR_XIR_STRING;
-    } else if (left==XR_XIR_STRING && right==XR_XIR_STRING) {
-        switch(operation) {
-        case AST_BINARY_LT:recipe.operation=XR_XIR_LT_STRING;break;
-        case AST_BINARY_LE:recipe.operation=XR_XIR_LE_STRING;break;
-        case AST_BINARY_GT:recipe.operation=XR_XIR_GT_STRING;break;
-        case AST_BINARY_GE:recipe.operation=XR_XIR_GE_STRING;break;
-        default:return source_fail(ctx,node,XR_XIR_BAD_TYPE,"operator is not defined for string operands");
-        }
-        recipe.result=XR_XIR_BOOL;
-    } else if (xr_xir_float_bits(left) && xr_xir_float_bits(right)) {
-        target=left==XR_XIR_F64 || right==XR_XIR_F64 ? XR_XIR_F64 : XR_XIR_F32;
-        switch(operation) {
-        case AST_BINARY_ADD:recipe.operation=XR_XIR_ADD_FLOAT;break;
-        case AST_BINARY_SUB:recipe.operation=XR_XIR_SUB_FLOAT;break;
-        case AST_BINARY_MUL:recipe.operation=XR_XIR_MUL_FLOAT;break;
-        case AST_BINARY_DIV:recipe.operation=XR_XIR_DIV_FLOAT;break;
-        case AST_BINARY_LT:recipe.operation=XR_XIR_LT_FLOAT;break;
-        case AST_BINARY_LE:recipe.operation=XR_XIR_LE_FLOAT;break;
-        case AST_BINARY_GT:recipe.operation=XR_XIR_GT_FLOAT;break;
-        case AST_BINARY_GE:recipe.operation=XR_XIR_GE_FLOAT;break;
-        default:return source_fail(ctx,node,XR_XIR_BAD_TYPE,"operator is not defined for floating operands");
-        }
-        recipe.result=recipe.operation>=XR_XIR_ADD_FLOAT && recipe.operation<=XR_XIR_DIV_FLOAT ? target : XR_XIR_BOOL;
-    } else {
-        if (!xr_xir_type_is_integer(left) || !xr_xir_type_is_integer(right))
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"operator requires a declared concrete operand contract");
-        bool shift=operation==AST_BINARY_LSHIFT || operation==AST_BINARY_RSHIFT;
-        if (!shift) {
-            if (xr_xir_integer_signed(left)!=xr_xir_integer_signed(right))
-                return source_fail(ctx,node,XR_XIR_BAD_TYPE,"integer signedness requires an explicit cast");
-            target=xr_xir_integer_bits(left)<xr_xir_integer_bits(right) ? right : left;
-        }
-        switch(operation) {
-        case AST_BINARY_ADD:recipe.operation=XR_XIR_ADD_INT;break;
-        case AST_UNARY_NEG:case AST_BINARY_SUB:recipe.operation=XR_XIR_SUB_INT;break;
-        case AST_BINARY_MUL:recipe.operation=XR_XIR_MUL_INT;break;
-        case AST_BINARY_DIV:recipe.operation=XR_XIR_DIV_INT;break;
-        case AST_BINARY_MOD:recipe.operation=XR_XIR_REM_INT;break;
-        case AST_BINARY_BAND:recipe.operation=XR_XIR_AND_INT;break;
-        case AST_BINARY_BOR:recipe.operation=XR_XIR_OR_INT;break;
-        case AST_UNARY_BNOT:case AST_BINARY_BXOR:recipe.operation=XR_XIR_XOR_INT;break;
-        case AST_BINARY_LSHIFT:recipe.operation=XR_XIR_SHL_INT;break;
-        case AST_BINARY_RSHIFT:recipe.operation=XR_XIR_SHR_INT;break;
-        case AST_BINARY_LT:recipe.operation=XR_XIR_LT_INT;break;
-        case AST_BINARY_LE:recipe.operation=XR_XIR_LE_INT;break;
-        case AST_BINARY_GT:recipe.operation=XR_XIR_GT_INT;break;
-        case AST_BINARY_GE:recipe.operation=XR_XIR_GE_INT;break;
-        default:return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"unknown arithmetic operator");
-        }
-        recipe.result=operation>=AST_BINARY_EQ && operation<=AST_BINARY_GE ? XR_XIR_BOOL : target;
+static bool source_binary_operator(AstNodeType syntax,XrHirBinaryOperator *operation) {
+    switch(syntax) {
+    case AST_BINARY_ADD:*operation=XR_HIR_BINARY_ADD;break;
+    case AST_UNARY_NEG:case AST_BINARY_SUB:*operation=XR_HIR_BINARY_SUB;break;
+    case AST_BINARY_MUL:*operation=XR_HIR_BINARY_MUL;break;
+    case AST_BINARY_DIV:*operation=XR_HIR_BINARY_DIV;break;
+    case AST_BINARY_MOD:*operation=XR_HIR_BINARY_REM;break;
+    case AST_BINARY_BAND:*operation=XR_HIR_BINARY_AND;break;
+    case AST_BINARY_BOR:*operation=XR_HIR_BINARY_OR;break;
+    case AST_UNARY_BNOT:case AST_BINARY_BXOR:*operation=XR_HIR_BINARY_XOR;break;
+    case AST_BINARY_LSHIFT:*operation=XR_HIR_BINARY_SHL;break;
+    case AST_BINARY_RSHIFT:*operation=XR_HIR_BINARY_SHR;break;
+    case AST_BINARY_EQ:*operation=XR_HIR_BINARY_EQ;break;
+    case AST_BINARY_NE:*operation=XR_HIR_BINARY_NE;break;
+    case AST_BINARY_LT:*operation=XR_HIR_BINARY_LT;break;
+    case AST_BINARY_LE:*operation=XR_HIR_BINARY_LE;break;
+    case AST_BINARY_GT:*operation=XR_HIR_BINARY_GT;break;
+    case AST_BINARY_GE:*operation=XR_HIR_BINARY_GE;break;
+    default:return false;
     }
-    bool shift=operation==AST_BINARY_LSHIFT || operation==AST_BINARY_RSHIFT;
-    if (!source_conversion_plan(ctx,node,left,(SourceExpectedType){true,target, false, false},&recipe.left) ||
-        !source_conversion_plan(ctx,node,right,(SourceExpectedType){true,shift ? right : target, false, false},&recipe.right)) return false;
-    *output=recipe;return true;
+    return true;
 }
-static bool source_binary_emit(SourceContext *ctx,const SourceBinaryRecipe *recipe,
+static bool source_binary_check(SourceContext *ctx,AstNode *site,AstNodeType operation,
+    XrXirType left,XrXirType right,XrHirBinary *output) {
+    XrHirBinaryOperator logical;
+    if(!source_binary_operator(operation,&logical))return source_fail(ctx,site,XR_XIR_BAD_STRUCTURE,"unknown arithmetic operator");
+    XrXirSourceRange range=source_query_range(ctx,site,NULL);
+    XrHirBinaryInput input={.origin={site?site->node_id:0,range.module,range.line,range.column,range.end_line,range.end_column},
+        .operation=logical,.left=left,.right=right,
+        .argument_bound=ctx->effect_argument && ctx->effect_argument->owner==ctx->function && ctx->effect_argument->syntax==site};
+    XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);
+    XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
+    XrHirConversionContext context={&ctx->compile,&ctx->types,&proof,ctx->request,ctx,source_conversion_intern};
+    const char *reason=NULL;XrXirStatus status=xr_hir_binary_check(&context,&input,output,&reason);
+    return status==XR_XIR_OK || source_fail(ctx,site,status,reason);
+}
+static bool source_binary_emit(SourceContext *ctx,const XrHirBinary *node,
     SourceValue left,SourceValue right,SourceValue *value) {
-    return source_conversion_emit(ctx,&recipe->left,&left) && source_conversion_emit(ctx,&recipe->right,&right) &&
-        source_recipe_record(ctx,(XrXirInstruction){recipe->operation,recipe->result,{left.id,right.id},{0},recipe->immediate,{0}},value);
+    return source_conversion_emit(ctx,&node->left,&left) && source_conversion_emit(ctx,&node->right,&right) &&
+        source_recipe_record(ctx,xr_hir_binary_instruction(node,left.id,right.id),value);
 }
 static bool source_binary_apply(SourceContext *ctx,AstNode *node,AstNodeType operation,
     SourceValue left,SourceValue right,SourceValue *value) {
-    SourceBinaryRecipe recipe;
-    return source_binary_plan(ctx,node,operation,left.type,right.type,&recipe) && source_binary_emit(ctx,&recipe,left,right,value);
+    XrHirBinary typed;
+    return source_binary_check(ctx,node,operation,left.type,right.type,&typed) && source_binary_emit(ctx,&typed,left,right,value);
 }

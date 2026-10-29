@@ -1037,7 +1037,34 @@ static void source_global_callable(const char *stdlib) {
     char source[sizeof(global_callable_source)];memcpy(source,global_callable_source,sizeof(source));
     source_conversion_case(stdlib,source,global_callable_expected,sizeof(global_callable_expected)-1);
 }
+#include "binary_fixture.h"
+typedef struct BinaryOutput {char bytes[sizeof(binary_expected)];size_t length;} BinaryOutput;
+static XrSourceWriteStatus binary_capture(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
+    BinaryOutput *output=context;
+    CHECK(stream==XR_SOURCE_STDOUT && length<=sizeof(output->bytes)-output->length);
+    memcpy(output->bytes+output->length,bytes,length);output->length+=length;return XR_SOURCE_WRITE_OK;
+}
+static void source_binary_operators(const char *stdlib) {
+    char source[sizeof(binary_source)];memcpy(source,binary_source,sizeof(source));
+    XrSourceCompileOptions compiler=compile_options(stdlib);
+    XrSourceArtifact *artifact=compile(&compiler,source,__func__);
+    BinaryOutput output={0};XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.write=binary_capture;options.context=&output;
+    XrSourceResult *result=NULL;XrSourceEvent event={0};
+    CHECK(execute_owned(artifact,&options,&result,&event)==XR_SOURCE_OK && result);
+    xray_source_artifact_free(artifact);
+    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
+    int64_t value=-1;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK && value==0);
+    CHECK(output.length==sizeof(binary_expected)-1 && !memcmp(output.bytes,binary_expected,output.length));
+    xray_source_result_free(result);
+}
 int main(int argc, char **argv) {
+    if(argc==3 && !strcmp(argv[1],"--binary")) {
+        source_binary_operators(argv[2]);compiler_constants(argv[2]);source_contextual_conversions(argv[2]);
+        source_global_callable(argv[2]);source_nosuspend_types(argv[2]);
+        puts("Source SDK binary HIR: original control flow and contextual sources after request retirement PASS");return 0;
+    }
     if(argc==3 && !strcmp(argv[1],"--global-callable")) {
         source_global_callable(argv[2]);puts("Source SDK global callable: original704 bytes, owned result after request retirement PASS");return 0;
     }

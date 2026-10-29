@@ -51,6 +51,7 @@ def main():
     stdlib.mkdir()
     consumer = output/'consumer.c'
     consumer.write_bytes((root/'tests/unit/xir/source_sdk_consumer.c').read_bytes())
+    (output/'binary_fixture.h').write_bytes((root/'tests/unit/xir/binary_fixture.h').read_bytes())
     (output/'conversion_fixture.h').write_bytes((root/'tests/unit/xir/conversion_fixture.h').read_bytes())
     (output/'global_callable_fixture.h').write_bytes((root/'tests/unit/xir/global_callable_fixture.h').read_bytes())
     (output/'nominal_projection_fixture.h').write_bytes(

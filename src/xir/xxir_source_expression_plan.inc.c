@@ -70,9 +70,9 @@ static bool source_plan_binary_prepare(SourceContext *ctx,SourceExpressionPlan *
     if (!source_plan_binary_prepare(ctx,right,right_hint,defaults) ||
         !source_plan_numeric_prepare(ctx,right,right_hint,defaults)) return false;
     if (!left->type_ready || !right->type_ready) return true;
-    SourceBinaryRecipe recipe;
-    if (!source_binary_plan(ctx,plan->syntax,plan->syntax->type,left->ground_type,right->ground_type,&recipe)) return false;
-    SourceBinaryRecipe *recorded_recipe=source_recipe_storage(ctx,1,sizeof(*recorded_recipe));
+    XrHirBinary recipe;
+    if (!source_binary_check(ctx,plan->syntax,plan->syntax->type,left->ground_type,right->ground_type,&recipe)) return false;
+    XrHirBinary *recorded_recipe=source_recipe_storage(ctx,1,sizeof(*recorded_recipe));
     if (!recorded_recipe) return false;
     *recorded_recipe=recipe;plan->binary=recorded_recipe;plan->type_ready=true;plan->ground_type=recipe.result;
     return true;

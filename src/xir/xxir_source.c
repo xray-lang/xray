@@ -37,6 +37,7 @@
 #include "xxir_float.h"
 #include "../hir/xhir_literal.h"
 #include "../hir/xhir_conversion.h"
+#include "../hir/xhir_binary.h"
 #include "xxir_compile_memory.h"
 #include "../shared/xnative_declaration.h"
 #include "../shared/xr_core_intrinsic.h"
@@ -115,7 +116,7 @@ typedef struct SourceExpressionPlan {
     struct SourceConditionalRecipe *conditional;
     struct SourceMatchPlan *match;
 
-    struct SourceBinaryRecipe *binary;
+    XrHirBinary *binary;
     union { struct SourceTuplePrefix *tuple_prefix; struct SourceCallProjection *call_projection; };
     AstNode *syntax;
     SourceName *binding;
