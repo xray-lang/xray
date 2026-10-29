@@ -10,6 +10,25 @@
  *   Each form inspects only the outermost Nullable layer; none requires the element to be
  *   comparable, and only the unwrapping forms can fail, with the null-unwrap panic.
  */
+static bool source_nullable_prepare(SourceContext *ctx,AstNode *site,XrHirNullableInput input,
+    XrHirNullablePlan *output) {
+    XrXirSourceRange range=source_query_range(ctx,site,NULL);
+    input.origin=(XrHirNullableOrigin){site?site->node_id:0,range.module,range.line,range.column,range.end_line,range.end_column};
+    XrHirNullableContext context={&ctx->types,ctx->request,ctx,source_conversion_intern};
+    const char *reason=NULL;XrXirStatus status=xr_hir_nullable_prepare(&context,&input,output,&reason);
+    return status==XR_XIR_OK || source_fail(ctx,site,status,reason);
+}
+static bool source_nullable_check(SourceContext *ctx,AstNode *site,const XrHirNullablePlan *plan,
+    XrXirType actual_default,XrHirNullable *output) {
+    const char *reason=NULL;XrXirStatus status=xr_hir_nullable_check(plan,actual_default,ctx->request,output,&reason);
+    return status==XR_XIR_OK || source_fail(ctx,site,status,reason);
+}
+static bool source_nullable_value(SourceContext *ctx,AstNode *site,XrHirNullableInput input,
+    uint32_t operand,SourceValue *value) {
+    XrHirNullablePlan plan;XrHirNullable typed;
+    return source_nullable_prepare(ctx,site,input,&plan) && source_nullable_check(ctx,site,&plan,XR_XIR_UNIT,&typed) &&
+        source_recipe_record(ctx,xr_hir_nullable_instruction(&typed,operand),value);
+}
 static bool source_null_syntax(SourceContext *ctx,const AstNode *node) {
     uint32_t depth=0;
     while (node && node->type==AST_GROUPING) {
@@ -46,16 +65,12 @@ static bool source_null_test(SourceContext *ctx, AstNode *node, SourceValue *val
     if (!source_null_discard(ctx,null_on_left?plan->left:plan->right)) return false;
     SourceValue operand;
     if (!source_plan_complete(ctx, subject, &operand)) return false;
-    if (!xr_xir_type_is_nullable(&ctx->types, operand.type))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "comparison with null requires a nullable operand");
-    return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_NULLABLE_IS_SOME, XR_XIR_BOOL, {operand.id, 0}, {0},
-        node->type == AST_BINARY_EQ ? 1 : 0, {0}}, value);
+    return source_nullable_value(ctx,node,(XrHirNullableInput){.role=node->type==AST_BINARY_EQ?
+        XR_HIR_NULLABLE_EQUAL_NULL:XR_HIR_NULLABLE_UNEQUAL_NULL,.source=operand.type},operand.id,value);
 }
 static bool source_unwrap_value(SourceContext *ctx, AstNode *node, SourceValue nullable, SourceValue *value) {
-    if (!xr_xir_type_is_nullable(&ctx->types, nullable.type))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unwrap requires a nullable operand");
-    return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_NULLABLE_UNWRAP, xr_xir_nullable_element(&ctx->types, nullable.type),
-        {nullable.id, 0}, {0}, 0, {0}}, value);
+    return source_nullable_value(ctx,node,(XrHirNullableInput){.role=XR_HIR_NULLABLE_UNWRAP,
+        .source=nullable.type},nullable.id,value);
 }
 /* Explicit consumption first claims the matching layer of this read. */
 static bool source_force_unwrap(SourceContext *ctx,AstNode *node,SourceValue *value) {
@@ -63,15 +78,18 @@ static bool source_force_unwrap(SourceContext *ctx,AstNode *node,SourceValue *va
     if (!plan->left || !source_plan_complete(ctx,plan->left,&operand)) return false;
     source_read_forward(plan,plan->left);
     if (plan->read_claims) {--plan->read_claims;*value=operand;return true;}
-    if (!xr_xir_type_is_nullable(&ctx->types,operand.type)) {*value=operand;return true;}
+    XrHirNullablePlan types;XrHirNullable typed;
+    if(!source_nullable_prepare(ctx,node,(XrHirNullableInput){.role=XR_HIR_NULLABLE_FORCE,.source=operand.type},&types) ||
+        !source_nullable_check(ctx,node,&types,XR_XIR_UNIT,&typed))return false;
+    if (typed.kind==XR_HIR_NULLABLE_IDENTITY) {*value=operand;return true;}
     if (plan->present_prefix) --plan->present_prefix;
-    return source_unwrap_value(ctx,node,operand,value);
+    return source_recipe_record(ctx,xr_hir_nullable_instruction(&typed,operand.id),value);
 }
 /* The unreachable alternative is still a real member of the same Built /
  * Checked program: ordinary planning checks its contracts and effects once.
  * Its result never participates in the already narrowed read's SSA value. */
 static bool source_nullable_dead_default(SourceContext *ctx,SourceExpressionPlan *plan,
-    SourceExpectedType expected) {
+    SourceExpectedType expected,XrXirType *actual_default) {
     SourceValue always,ignored;SourceFunction *body=&ctx->bodies[ctx->function];
     SourceFact *facts=ctx->facts;SourceEpoch *epochs=ctx->epochs;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_BOOL,XR_XIR_BOOL,{0},{0},1,{0}},&always)) return false;
@@ -90,12 +108,15 @@ static bool source_nullable_dead_default(SourceContext *ctx,SourceExpressionPlan
     if (!begin_block(ctx)) return false;
     body->recipes[branch].instruction.targets[0]=yes;body->recipes[branch].instruction.targets[1]=no;
     body->recipes[yes_jump].instruction.targets[0]=join;body->recipes[no_jump].instruction.targets[0]=join;
+    *actual_default=ignored.type;
     return true;
 }
 static bool source_coalesce(SourceContext *ctx,AstNode *node,SourceExpectedType expected,SourceValue *value) {
     SourceExpressionPlan *plan=ctx->active_expression;SourceValue subject,some;
     if (!plan->left || !source_plan_complete(ctx,plan->left,&subject)) return false;
-    if (plan->left->read_claims || !xr_xir_type_is_nullable(&ctx->types,subject.type)) {
+    XrHirNullablePlan types;XrHirNullable typed;
+    bool claimed=plan->left->read_claims!=0;
+    if (claimed) {
         source_read_forward(plan,plan->left);
         XrXirType element=subject.type;
         if (plan->read_claims) {
@@ -109,21 +130,27 @@ static bool source_coalesce(SourceContext *ctx,AstNode *node,SourceExpectedType 
             }
             --plan->read_claims;
         }
-        if (source_null_syntax(ctx,node->as.binary.right) && !xr_xir_type_is_nullable(&ctx->types,element) &&
-            !source_nullable_type(ctx,element,&element)) return false;
-        if (!source_nullable_dead_default(ctx,plan,(SourceExpectedType){true,element,false, false})) return false;
+        if(!source_nullable_prepare(ctx,node,(XrHirNullableInput){.role=XR_HIR_NULLABLE_DEAD_DEFAULT,
+            .source=subject.type,.default_base=element,.null_default=source_null_syntax(ctx,node->as.binary.right)},&types))return false;
+    } else if(!source_nullable_prepare(ctx,node,(XrHirNullableInput){.role=XR_HIR_NULLABLE_COALESCE,
+        .source=subject.type,.has_expected=expected.present,.expected=expected.type,
+        .null_default=source_null_syntax(ctx,node->as.binary.right)},&types))return false;
+    if (types.kind==XR_HIR_NULLABLE_IDENTITY) {
+        if(!claimed)source_read_forward(plan,plan->left);
+        XrXirType actual_default;
+        if (!source_nullable_dead_default(ctx,plan,(SourceExpectedType){true,types.default_type,false, false},&actual_default) ||
+            !source_nullable_check(ctx,node,&types,actual_default,&typed)) return false;
         *value=subject;return true;
     }
-    XrXirType element=xr_xir_nullable_element(&ctx->types,subject.type),result=element;
-    if (expected.present && expected.type==subject.type) result=subject.type;
-    else if (source_null_syntax(ctx,node->as.binary.right) && !xr_xir_type_is_nullable(&ctx->types,element)) result=subject.type;
-    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_NULLABLE_IS_SOME,XR_XIR_BOOL,{subject.id,0},{0},0,{0}},&some)) return false;
+    XrXirType result=types.result;
+    if (!source_nullable_value(ctx,node,(XrHirNullableInput){.role=XR_HIR_NULLABLE_UNEQUAL_NULL,
+        .source=subject.type},subject.id,&some)) return false;
     SourceFunction *body=&ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t branch=body->count,yes_block=body->block_count;
     SourceValue yes=subject,no;SourceFact *entry_facts=ctx->facts;SourceEpoch *entry_epochs=ctx->epochs;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_BRANCH,XR_XIR_UNIT,{some.id},{0},0,{0}},NULL) || !begin_block(ctx)) return false;
-    if (result==element && !source_unwrap_value(ctx,node,subject,&yes)) return false;
+    if (types.unwrap_present && !source_unwrap_value(ctx,node,subject,&yes)) return false;
     uint32_t yes_end=body->current_block.identity,yes_jump=body->count;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0,{0}},NULL)) return false;
     uint32_t no_block=body->block_count;
@@ -133,7 +160,8 @@ static bool source_coalesce(SourceContext *ctx,AstNode *node,SourceExpectedType 
     SourceFact *no_facts=ctx->facts,*joined=NULL;
     if (!source_facts_join(ctx,entry_facts,entry_epochs,no_facts,ctx->epochs,&joined)) return false;
     ctx->facts=joined;
-    if (no.type!=result) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"?? default must match the unwrapped element or its nullable context");
+    if (!source_nullable_check(ctx,node,&types,no.type,&typed)) return false;
+    result=typed.result;
     uint32_t no_end=body->current_block.identity,no_jump=body->count;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0,{0}},NULL)) return false;
     uint32_t join=body->block_count;

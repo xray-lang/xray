@@ -41,6 +41,7 @@
 #include "../hir/xhir_unary.h"
 #include "../hir/xhir_boolean.h"
 #include "../hir/xhir_cast.h"
+#include "../hir/xhir_nullable.h"
 #include "xxir_compile_memory.h"
 #include "../shared/xnative_declaration.h"
 #include "../shared/xr_core_intrinsic.h"
@@ -1711,9 +1712,8 @@ static bool source_defer(SourceContext *ctx, AstNode *node);
 static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
     switch (node->type) {
     case AST_LITERAL_NULL:
-        if (!context.present || !xr_xir_type_is_nullable(&ctx->types,context.type))
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"null requires an exact nullable context");
-        return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_NULLABLE_NONE,context.type,{0},{0},0,{0}},value);
+        return source_nullable_value(ctx,node,(XrHirNullableInput){.role=XR_HIR_NULLABLE_NULL,
+            .has_expected=context.present,.expected=context.type},0,value);
     case AST_MAP_LITERAL: case AST_SET_LITERAL:
         if (context.present && xr_xir_type_is_nullable(&ctx->types, context.type))
             context.type = xr_xir_nullable_element(&ctx->types, context.type);
