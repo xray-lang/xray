@@ -75,10 +75,13 @@ int main(int argc,char **argv){
  XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILER_SESSION_OK);
  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
  XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compile,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
- SourceContext context={0};context.compile=compile;SourceConversionRecipe conversion={0};
- CHECK(source_conversion_plan(&context,NULL,XR_XIR_UNIT,(SourceExpectedType){true,XR_XIR_UNIT,false,false},&conversion)&&!conversion.needed);
- CHECK(source_conversion_plan(&context,NULL,XR_XIR_I8,(SourceExpectedType){false,XR_XIR_UNIT,false,false},&conversion)&&conversion.target==XR_XIR_I8);
- CHECK(!source_conversion_plan(&context,NULL,XR_XIR_I8,(SourceExpectedType){true,XR_XIR_UNIT,false,false},&conversion));
+ XrXirTypes conversion_types={0};XrHirConversionContext context={.compile=&compile,.types=&conversion_types};
+ XrHirConversion conversion={0};XrHirConversionInput input={.actual=XR_XIR_UNIT,.expected=XR_XIR_UNIT,.has_expected=true};
+ CHECK(xr_hir_conversion_check(&context,&input,&conversion,NULL)==XR_XIR_OK && conversion.kind==XR_HIR_CONVERSION_IDENTITY);
+ input=(XrHirConversionInput){.actual=XR_XIR_I8};
+ CHECK(xr_hir_conversion_check(&context,&input,&conversion,NULL)==XR_XIR_OK && conversion.target==XR_XIR_I8);
+ input=(XrHirConversionInput){.actual=XR_XIR_I8,.expected=XR_XIR_UNIT,.has_expected=true};
+ CHECK(xr_hir_conversion_check(&context,&input,&conversion,NULL)==XR_XIR_BAD_TYPE);
  XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
  XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
  if(status!=XR_XIR_OK)fprintf(stderr,"%u %d %s\n",status,diagnostic.line,diagnostic.message);

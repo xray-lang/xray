@@ -1013,7 +1013,28 @@ static void source_nosuspend_types(const char *stdlib) {
     CHECK(output.length==sizeof(expected)-1 && !memcmp(output.bytes,expected,sizeof(expected)-1));
     xray_source_result_free(result);
 }
+#include "conversion_fixture.h"
+static void source_contextual_conversions(const char *stdlib) {
+    char source[sizeof(conversion_source)];memcpy(source,conversion_source,sizeof(source));
+    XrSourceCompileOptions compiler=compile_options(stdlib);
+    XrSourceArtifact *artifact=compile(&compiler,source,__func__);
+    Output output={0};XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.write=capture;options.context=&output;
+    XrSourceResult *result=NULL;XrSourceEvent event={0};
+    CHECK(execute_owned(artifact,&options,&result,&event)==XR_SOURCE_OK && result);
+    xray_source_artifact_free(artifact);
+    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
+    int64_t value=-1;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK && value==0);
+    CHECK(output.length==sizeof(conversion_expected)-1 && !memcmp(output.bytes,conversion_expected,sizeof(conversion_expected)-1));
+    xray_source_result_free(result);
+}
 int main(int argc, char **argv) {
+    if(argc==3 && !strcmp(argv[1],"--conversion")) {
+        compiler_constants(argv[2]);source_nosuspend_types(argv[2]);installed_error_union(argv[2]);
+        source_contextual_conversions(argv[2]);
+        puts("Source SDK contextual conversions: complete constants, owned nullable/callable/Error and retired producers PASS");return 0;
+    }
     if(argc==3 && !strcmp(argv[1],"--nosuspend")) {
         source_nosuspend_types(argv[2]);puts("Source SDK nosuspend: owned generic/typed-error callbacks and retired producers PASS");return 0;
     }

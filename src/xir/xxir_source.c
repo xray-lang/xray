@@ -36,6 +36,7 @@
 #include "xxir_nominal.h"
 #include "xxir_float.h"
 #include "../hir/xhir_literal.h"
+#include "../hir/xhir_conversion.h"
 #include "xxir_compile_memory.h"
 #include "../shared/xnative_declaration.h"
 #include "../shared/xr_core_intrinsic.h"
@@ -99,14 +100,6 @@ typedef struct SourceErrorContext SourceErrorContext;
 typedef struct SourceErrorEdge SourceErrorEdge;
 /* `infer_result` leaves a callable context's result open so a closure's own body decides it. */
 typedef struct SourceExpectedType { bool present; XrXirType type; bool infer_result, inferred; } SourceExpectedType;
-typedef struct SourceConversionRecipe {
-    bool needed, inferred;
-    XrXirOp operation;
-    XrXirType source, target;
-    bool effect_binding;
-    XrXirType declared_bound;
-} SourceConversionRecipe;
-
 typedef struct SourceInteger { bool present, negative; uint64_t magnitude; } SourceInteger;
 
 typedef struct SourceDecimal { AstNode *node; bool negative; } SourceDecimal;
@@ -133,7 +126,7 @@ typedef struct SourceExpressionPlan {
     SourceTermState state;
     bool type_ready, conversion_ready, statement_match;
     XrXirType ground_type;
-    SourceConversionRecipe conversion;
+    XrHirConversion conversion;
     SourceInteger integer;
     SourceDecimal decimal;
     XrHirLiteral numeric;
@@ -522,7 +515,7 @@ static bool source_query_declare(SourceContext *ctx, SourceName *symbol,
         ((XrXirSourceDeclarationSyntax *)ctx->syntax.declarations)[symbol->declaration-1].flags|=XR_XIR_SOURCE_SYNTAX_INFERRED_BINDING;
     return true;
 }
-static bool source_root_type(SourceContext *ctx, XrXirType type, uint32_t depth);
+static bool source_root_type(SourceContext *ctx, XrXirType type);
 static bool source_root_query_record(SourceContext *ctx, uint32_t value, uint32_t record,
     bool expression, bool cell) {
     if (value == UINT32_MAX) return true;
@@ -534,7 +527,7 @@ static bool source_root_query_record(SourceContext *ctx, uint32_t value, uint32_
 static void source_query_binding_type(SourceContext *ctx, SourceName *symbol) {
     XrXirSourceDeclaration *records = (XrXirSourceDeclaration *) ctx->query.declarations;
     if (symbol->declaration) records[symbol->declaration - 1].type = source_query_type(ctx, symbol->type);
-    if (symbol->declaration && symbol->kind == SOURCE_LOCAL && source_root_type(ctx,symbol->type,0))
+    if (symbol->declaration && symbol->kind == SOURCE_LOCAL && source_root_type(ctx,symbol->type))
         (void)source_root_query_record(ctx,symbol->index,symbol->declaration - 1,false,symbol->mutable);
 }
 static bool source_query_reference(SourceContext *ctx, AstNode *node, SourceName *binding,
@@ -843,22 +836,15 @@ static bool source_recipe_append(SourceContext *ctx, XrXirInstruction op, Source
 #include "xxir_source_borrow_call.inc.c"
 #include "xxir_source_invoke.inc.c"
 #include "xxir_source_binding_cell.inc.c"
-static bool source_root_type(SourceContext *ctx, XrXirType type, uint32_t depth) {
-    const XrXirTypeNode *node = xr_xir_type_node(&ctx->types,type);
-    if (!node) return false;
-    if (!((ctx)->diagnostic.status == XR_XIR_OK) || depth >= 128) {
-        source_fail(ctx,NULL,XR_XIR_BUDGET,"callable flow nesting exhausted"); return false;
-    }
-    if (node->kind == XR_XIR_TYPE_CALLABLE) return true;
-    if (source_root_type(ctx,node->element,depth + 1)) return true;
-    for (uint32_t p = 0; p < node->parameter_count; ++p)
-        if (source_root_type(ctx,node->parameters[p].type,depth + 1)) return true;
-    for (uint32_t a = 0; a < node->nominal.argument_count; ++a)
-        if (source_root_type(ctx,node->nominal.arguments[a],depth + 1)) return true;
-    return false;
+static bool source_root_type(SourceContext *ctx, XrXirType type) {
+    if(ctx->diagnostic.status!=XR_XIR_OK)return false;
+    bool contains=false;const char *reason=NULL;
+    XrXirStatus status=xr_hir_conversion_contains_callable(&ctx->types,type,ctx->request,&contains,&reason);
+    if(status!=XR_XIR_OK)source_fail(ctx,NULL,status,reason);
+    return status==XR_XIR_OK && contains;
 }
 static bool source_root_join_record(SourceContext *ctx, SourceValue *value) {
-    if (!source_root_type(ctx,value->type,0)) return ctx->diagnostic.status == XR_XIR_OK;
+    if (!source_root_type(ctx,value->type)) return ctx->diagnostic.status == XR_XIR_OK;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_COPY,value->type,{value->id},{0},0,{0}},value)) return false;
     ctx->bodies[ctx->function].recipes[value->id - ctx->functions[ctx->function].parameter_count].root.kind = 2;
     return true;
@@ -1574,7 +1560,7 @@ static bool source_arithmetic(SourceContext *ctx, AstNode *node, SourceExpectedT
 }
 #include "xxir_source_update.inc.c"
 typedef struct SourceConditionalRecipe {
-    SourceConversionRecipe yes,no;
+    XrHirConversion yes,no;
     XrXirType result;
 } SourceConditionalRecipe;
 static bool source_conditional_plan(SourceContext *ctx,AstNode *node,XrXirType yes,XrXirType no,
@@ -1629,7 +1615,7 @@ static bool source_conditional(SourceContext *ctx, AstNode *node, SourceExpected
     if (!source_conversion_emit(ctx,&recipe->no,&no)) return false;
     uint32_t no_end = body->current_block.identity, no_jump = body->count;
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {0}, 0, {0}}, NULL)) return false;
-    if (recipe->yes.needed) {
+    if (recipe->yes.kind!=XR_HIR_CONVERSION_IDENTITY) {
         body->recipes[yes_jump].instruction.targets[0] = body->block_count;
         if (!begin_block(ctx) || !source_conversion_emit(ctx,&recipe->yes,&yes)) return false;
         yes_end = body->current_block.identity; yes_jump = body->count;

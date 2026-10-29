@@ -385,7 +385,7 @@ typedef struct SourceCallConversions {
 static bool source_call_conversions(SourceContext *ctx, AstNode *node, const SourceCallConversions *request) {
     if (!request->count) return true;
     uint32_t first=request->count;
-    SourceConversionRecipe *recipes=NULL;
+    XrHirConversion *recipes=NULL;
     bool ok=false;
     for (uint32_t p=0;p<request->count;++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
@@ -398,14 +398,14 @@ static bool source_call_conversions(SourceContext *ctx, AstNode *node, const Sou
         if (binding) {
             if (recipes) {
                 XrXirType actual = request->values[p+request->value_offset].type;
-                recipes[p-first] = (SourceConversionRecipe){false,false,XR_XIR_INVALID,actual,actual,false,actual};
+                recipes[p-first] = (XrHirConversion){.source=actual,.target=actual,.declared_bound=actual};
             }
             continue;
         }
-        SourceConversionRecipe recipe;
+        XrHirConversion recipe;
         if (!source_conversion_plan(ctx,node,request->values[p+request->value_offset].type,
             (SourceExpectedType){true,expected, false, false},&recipe)) goto done;
-        if (!recipes && recipe.needed) {
+        if (!recipes && recipe.kind!=XR_HIR_CONVERSION_IDENTITY) {
             recipes=source_scratch(ctx,request->count-p,sizeof(*recipes),true);
             if (!recipes) goto done;
             first=p;

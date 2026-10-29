@@ -157,11 +157,11 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
         if (!plan->left) return NULL;
         if (binding && !source_plan_numeric_prepare(ctx,plan->left,hint,true)) return NULL;
         if (binding && plan->left->type_ready) {
-            SourceConversionRecipe recipe;
+            XrHirConversion recipe;
             if (!source_conversion_plan(ctx,node,plan->left->ground_type,hint,&recipe)) return NULL;
             plan->type_ready=true;plan->ground_type=binding->type;
-            plan->present_prefix=recipe.needed?0:plan->left->present_prefix;
-            if (recipe.needed && recipe.operation==XR_XIR_NULLABLE_SOME)
+            plan->present_prefix=recipe.kind!=XR_HIR_CONVERSION_IDENTITY?0:plan->left->present_prefix;
+            if (recipe.kind==XR_HIR_CONVERSION_NULLABLE)
                 plan->present_prefix=plan->left->present_prefix+1;
         }
         break;
@@ -279,7 +279,7 @@ static bool source_plan_complete(SourceContext *ctx, SourceExpressionPlan *plan,
     AstNode *node=plan->syntax;
     if (ctx->depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"source expression depth exhausted");
     SourceExpectedType context=plan->expected;
-    SourceConversionRecipe checked_conversion={0};
+    XrHirConversion checked_conversion={0};
     if (plan->read_binding && (node->type==AST_VARIABLE || node->type==AST_THIS_EXPR)) {
         uint64_t epoch=source_epoch(ctx,ctx->epochs,plan->read_binding);
         if (ctx->diagnostic.status!=XR_XIR_OK) return false;
@@ -305,13 +305,13 @@ static bool source_plan_complete(SourceContext *ctx, SourceExpressionPlan *plan,
         if (context.present && context.type!=checked_conversion.target)
             result=source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"prepared expression context changed");
     } else if (result) result=source_conversion_plan(ctx,node,plan->value.type,context,&checked_conversion);
-    if (result && checked_conversion.needed) {
-        if (checked_conversion.operation==XR_XIR_NULLABLE_SOME) ++plan->present_prefix;
+    if (result && checked_conversion.kind!=XR_HIR_CONVERSION_IDENTITY) {
+        if (checked_conversion.kind==XR_HIR_CONVERSION_NULLABLE) ++plan->present_prefix;
         else plan->present_prefix=0;
         plan->read_binding=NULL;plan->read_declared=XR_XIR_UNIT;plan->read_prefix=0;plan->read_claims=0;
     }
     result=result && source_conversion_emit(ctx,&checked_conversion,&plan->value) && source_query_expression(ctx,node,plan->value.type);
-    if (result && source_root_type(ctx,plan->value.type,0))
+    if (result && source_root_type(ctx,plan->value.type))
         result = source_root_query_record(ctx,plan->value.id,ctx->query.expression_count - 1,true,false);
     if (result && node->type==AST_GROUPING && plan->left)
         plan->condition_flow=plan->left->condition_flow;

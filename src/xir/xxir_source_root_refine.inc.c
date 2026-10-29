@@ -20,12 +20,12 @@ static bool source_root_lock(SourceContext *ctx, uint32_t f) {
     for (uint32_t i = 0; i < body->instruction_count; ++i) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirInstruction *op = &body->instructions[i];
-        if (flow[i].kind == 1 && !xr_xir_type_is_callable(&ctx->types,op->type) && source_root_type(ctx,op->type,0))
+        if (flow[i].kind == 1 && !xr_xir_type_is_callable(&ctx->types,op->type) && source_root_type(ctx,op->type))
             flow[i].kind = 3;
         if (op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_ARRAY_PUSH) {
             bool table = xr_xir_op_uses_operand_table(op->op);
             uint32_t path = table ? body->operands[op->args[0]] : op->args[0];
-            if (source_root_type(ctx,source_root_operand(ctx,f,path),0)) {
+            if (source_root_type(ctx,source_root_operand(ctx,f,path))) {
                 uint32_t count = table ? op->args[1] : 2;
                 for (uint32_t a = 0; a < count; ++a) {
                     uint32_t input = table ? body->operands[op->args[0] + a] : op->args[a];
@@ -111,7 +111,7 @@ static bool source_root_instruction(SourceContext *ctx, uint32_t f, uint32_t i,
     XrXirInstruction *op = (XrXirInstruction *)body->instructions + i;
     SourceRootValue *flow = &ctx->bodies[f].root_values[i];
     if (flow->kind == 3 || flow->kind == 4) return true;
-    if (!source_root_type(ctx,flow->declared,0)) return ctx->diagnostic.status == XR_XIR_OK;
+    if (!source_root_type(ctx,flow->declared)) return ctx->diagnostic.status == XR_XIR_OK;
     if (op->op == XR_XIR_FUNCTION_REF) return source_root_reference(ctx,f,i,effects,changed);
     if (flow->kind == 1) {
         if (op->op == XR_XIR_COPY || op->op == XR_XIR_FUNCTION_WEAKEN)
@@ -190,7 +190,7 @@ struct SourceRootFlow {
 #include "xxir_source_root_slots.inc.c"
 static bool source_root_value_bottom(SourceContext *ctx, uint32_t f, uint32_t i) {
     SourceRootValue *flow = &ctx->bodies[f].root_values[i];
-    if (flow->kind == 1 || flow->kind == 3 || !source_root_type(ctx,flow->declared,0))
+    if (flow->kind == 1 || flow->kind == 3 || !source_root_type(ctx,flow->declared))
         return ctx->diagnostic.status == XR_XIR_OK;
     XrXirInstruction *op = (XrXirInstruction *)ctx->functions[f].instructions + i;
     switch (op->op) {

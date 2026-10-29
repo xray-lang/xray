@@ -10,16 +10,6 @@
  *   A real argument COPY preserves its input identity. Complete shared checking
  *   authenticates its consuming edge and derives whether that role is variable.
  */
-static bool source_effect_argument_recipe(SourceContext *ctx, AstNode *node,
-    XrXirType actual, XrXirType declared, SourceConversionRecipe *recipe) {
-    XrXirStatus status = xr_xir_compile_callable_weakening(&ctx->compile,
-        &ctx->types,actual,declared);
-    if (status != XR_XIR_OK) return source_fail(ctx,node,status,
-        "callback argument requires exact shape and an admitted advertised bound");
-    *recipe = (SourceConversionRecipe){true,true,XR_XIR_COPY,actual,actual,true,declared};
-    return true;
-}
-
 /* The role is recorded on this real producer. A fixed Fn8 input remains Fn8;
  * this helper never follows a weakening opcode or resolves a target body. */
 static bool source_effect_argument_bound(SourceContext *ctx, SourceValue value,
@@ -34,12 +24,15 @@ static bool source_effect_argument_bound(SourceContext *ctx, SourceValue value,
     if (producer->root.kind != 5) return true;
     if (producer->instruction.op != XR_XIR_COPY || producer->instruction.type != value.type)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"callback argument lost its actual COPY producer");
-    XrXirStatus status = xr_xir_compile_callable_weakening(&ctx->compile,
-        &ctx->types,value.type,declared);
+    XrHirConversionInput input={.actual=value.type,.expected=declared,.has_expected=true,.argument_bound=true};
+    XrHirConversionContext context={.compile=&ctx->compile,.types=&ctx->types,.control=ctx->request};
+    XrHirConversion conversion={0};const char *reason=NULL;
+    XrXirStatus status=xr_hir_conversion_check(&context,&input,&conversion,&reason);
+    if(status==XR_XIR_OK && conversion.root!=XR_HIR_CONVERSION_ROOT_ARGUMENT)status=XR_XIR_BAD_TYPE;
     if (status != XR_XIR_OK) return source_fail(ctx,NULL,status,
         "callback argument no longer satisfies the final declaration shape");
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-    producer->root.declared = declared;
+    producer->root.declared = conversion.declared_bound;
     *present = true; return true;
 }
 

@@ -85,7 +85,7 @@ static bool source_root_slots_prepare(SourceContext *ctx) {
             if (op->op == XR_XIR_SLOT_INIT) {
                 uint32_t slot = (uint32_t)op->immediate;
                 SourceName *name = flow->slot_names[slot];
-                if (!name || !name->inferred || !source_root_type(ctx,name->type,0)) continue;
+                if (!name || !name->inferred || !source_root_type(ctx,name->type)) continue;
                 uint32_t value;
                 if (!source_root_slot_initial(ctx,f,slot,op->args[0],&value) ||
                     !source_root_slot_link(ctx,flow,f,slot,value,&at)) return false;
@@ -94,7 +94,7 @@ static bool source_root_slots_prepare(SourceContext *ctx) {
                 if (ctx->diagnostic.status != XR_XIR_OK) return false;
                 if (slot == UINT32_MAX) continue;
                 SourceName *name = flow->slot_names[slot];
-                if (name && name->inferred && source_root_type(ctx,name->type,0) &&
+                if (name && name->inferred && source_root_type(ctx,name->type) &&
                     !source_root_slot_link(ctx,flow,f,slot,op->args[1],&at)) return false;
             } else if (op->op == XR_XIR_SLOT_GROUP_INIT) {
                 uint32_t slot = (uint32_t)((uint64_t)op->immediate >> 32), payload = 0;
@@ -103,7 +103,7 @@ static bool source_root_slots_prepare(SourceContext *ctx) {
                     if (ctx->slots[slot + s].type == XR_XIR_UNIT) continue;
                     uint32_t owner = body->operands[op->args[0] + payload++];
                     SourceName *name = flow->slot_names[slot + s];
-                    if (!name || !name->inferred || !source_root_type(ctx,name->type,0)) continue;
+                    if (!name || !name->inferred || !source_root_type(ctx,name->type)) continue;
                     uint32_t value;
                     if (!source_root_slot_initial(ctx,f,slot + s,owner,&value) ||
                         !source_root_slot_link(ctx,flow,f,slot + s,value,&at)) return false;
@@ -118,7 +118,7 @@ static bool source_root_slots(SourceContext *ctx, bool *changed) {
     for (uint32_t slot = 0; slot < ctx->slot_count; ++slot) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceName *name = flow->slot_names[slot];
-        if (!name || !name->inferred || !source_root_type(ctx,name->type,0)) continue;
+        if (!name || !name->inferred || !source_root_type(ctx,name->type)) continue;
         XrXirType common = XR_XIR_UNIT;
         for (uint32_t e = flow->slot_heads[slot]; e != UINT32_MAX; e = flow->slots[e].next) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;

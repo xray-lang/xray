@@ -11,7 +11,7 @@
  *   emission consumes the completed recipe without repeating type decisions.
  */
 typedef struct SourceBinaryRecipe {
-    SourceConversionRecipe left, right;
+    XrHirConversion left, right;
     XrXirOp operation;
     XrXirType result;
     int64_t immediate;

@@ -100,7 +100,7 @@ static bool source_tuple_append(SourceContext *ctx,AstNode *node,const SourceTup
     if (context && *count>=context->count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple literal requires an exact ordered arity context");
     SourceExpectedType hint=source_tuple_field_context(context,*count);
-    SourceConversionRecipe conversion;
+    XrHirConversion conversion;
     if (!source_conversion_plan(ctx,node,element.type,hint,&conversion) ||
         !source_conversion_emit(ctx,&conversion,&element)) return false;
     if ((!hint.present || hint.inferred || hint.infer_result) && !source_root_join_record(ctx,&element)) return false;

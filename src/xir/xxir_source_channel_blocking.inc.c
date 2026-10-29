@@ -22,7 +22,7 @@ static bool source_channel_send_closed(SourceContext *ctx,AstNode *node,SourceVa
     if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"closed Channel send requires its authenticated enum value error");
     if (!source_local_error(ctx,node,error_type,true)) return false;
     if (ctx->bodies[owner].error_context) {
-        SourceConversionRecipe conversion={0};
+        XrHirConversion conversion={0};
         if (!source_conversion_plan(ctx,node,error.type,(SourceExpectedType){true,XR_XIR_ERROR,false,false},&conversion) ||
             !source_conversion_emit(ctx,&conversion,&error) || !source_error_edge(ctx,error)) return false;
     } else if (!source_recipe_record(ctx,(XrXirInstruction){.op=XR_XIR_THROW,.type=XR_XIR_UNIT,.args={error.id,0}},NULL)) return false;

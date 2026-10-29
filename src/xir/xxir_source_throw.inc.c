@@ -15,7 +15,7 @@ static bool source_throw(SourceContext *ctx,AstNode *node) {
     if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"throw requires a proved enum error value");
     if (!source_local_error(ctx,node,source_local_thrown_type(ctx,value),false)) return false;
     if (ctx->bodies[ctx->function].error_context) {
-        SourceConversionRecipe conversion;
+        XrHirConversion conversion;
         if (!source_conversion_plan(ctx,node,value.type,(SourceExpectedType){true,XR_XIR_ERROR,false,false},&conversion) ||
             !source_conversion_emit(ctx,&conversion,&value) || !source_error_edge(ctx,value)) return false;
     } else {
