@@ -151,7 +151,7 @@ static XrXirArtifact *clone_module_receiving(const XrXirCompileContext *compile_
     *allocation_status = xir_construction_clone(compile_context, types, construction, &copy->construction);
     if (*allocation_status != XR_XIR_OK) { xr_xir_compile_artifact_free(copy); return NULL; }
     XrXirDeclarations *declarations = NULL;
-    if ((*allocation_status = xr_xir_compile_declarations_clone(compile_context, source->declarations, source->function_count, &declarations)) != XR_XIR_OK) {
+    if ((*allocation_status = xr_xir_compile_declarations_clone(compile_context, source->declarations, source->function_count, control, &declarations)) != XR_XIR_OK) {
         xr_xir_compile_artifact_free(copy);
         return NULL;
     }

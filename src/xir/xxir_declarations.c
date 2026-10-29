@@ -15,6 +15,7 @@
 #include "xxir_native_callable.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_compile_memory.h"
+#include "xxir_lower_control.h"
 #include "xxir_type_scratch_internal.h"
 #include "xxir_implementation.h"
 #include "../base/xmalloc.h"
@@ -285,8 +286,19 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
     xr_compile_resources_free(order);
     return status;
 }
-static void *declaration_copy(const XrXirCompileContext *compile_context, const void *input, size_t bytes, XrXirStatus *allocation_status) {
-    return xir_compile_copy(compile_context, input, bytes, allocation_status);
+static XrXirStatus declaration_poll(XrCompileRequestControl *control) {
+    return control ? xir_compile_resource_status(xr_compile_request_control_poll(control)) : XR_XIR_OK;
+}
+static void *declaration_copy(const XrXirCompileContext *compile_context, const void *input,
+    size_t bytes, XrXirStatus *allocation_status, XrCompileRequestControl *control) {
+    if (!control) return xir_compile_copy(compile_context,input,bytes,allocation_status);
+    if (*allocation_status!=XR_XIR_OK || !bytes) return NULL;
+    if (!input) { *allocation_status=XR_XIR_BAD_STRUCTURE;return NULL; }
+    void *memory=xir_compile_alloc(compile_context,bytes,allocation_status);
+    if (!memory) return NULL;
+    *allocation_status=xir_compile_resource_status(xir_lower_copy_span(control,memory,input,bytes));
+    if (*allocation_status!=XR_XIR_OK) { xr_compile_resources_free(memory);return NULL; }
+    return memory;
 }
 void xr_xir_compile_declarations_free(XrXirDeclarations *d) {
     if (!d) return;
@@ -299,42 +311,48 @@ void xr_xir_compile_declarations_free(XrXirDeclarations *d) {
     xr_compile_resources_free((void *) d->modules); xr_compile_resources_free((void *) d->functions);
     xr_compile_resources_free((void *) d->slots); xr_compile_resources_free((void *) d->literals); xr_compile_resources_free(d);
 }
-XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile_context, const XrXirDeclarations *source, uint32_t functions, XrXirDeclarations **output) {
+XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile_context, const XrXirDeclarations *source, uint32_t functions, XrCompileRequestControl *control, XrXirDeclarations **output) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus allocation_status = XR_XIR_OK;
 
-    if (!output) return XR_XIR_BAD_STRUCTURE;
+    if (!output || *output) return XR_XIR_BAD_STRUCTURE;
     if (!source) { *output = NULL; return XR_XIR_OK; }
 
+    allocation_status=declaration_poll(control);if (allocation_status!=XR_XIR_OK) return allocation_status;
     XrXirDeclarations *copy = xir_compile_calloc(compile_context, 1, sizeof(*copy), &allocation_status);
     if (!copy) return allocation_status;
     *copy = *source;
     copy->implementations = NULL;
+    copy->modules=NULL;copy->functions=NULL;copy->slots=NULL;copy->literals=NULL;
     copy->modules = xir_compile_calloc(compile_context, source->module_count, sizeof(*source->modules), &allocation_status);
-    copy->functions = declaration_copy(compile_context, source->functions, (size_t) functions * sizeof(*source->functions), &allocation_status);
-    copy->slots = declaration_copy(compile_context, source->slots, (size_t) source->slot_count * sizeof(*source->slots), &allocation_status);
+    copy->functions = declaration_copy(compile_context, source->functions, (size_t) functions * sizeof(*source->functions), &allocation_status,control);
+    copy->slots = declaration_copy(compile_context, source->slots, (size_t) source->slot_count * sizeof(*source->slots), &allocation_status,control);
     copy->literals = source->literal_count ? xir_compile_calloc(compile_context, source->literal_count, sizeof(*source->literals), &allocation_status) : NULL;
     if (!copy->modules || !copy->functions || (source->slot_count && !copy->slots) ||
         (source->literal_count && !copy->literals)) goto failed;
     for (uint32_t i = 0; i < source->module_count; ++i) {
+        allocation_status=declaration_poll(control);if (allocation_status!=XR_XIR_OK) goto failed;
         XrXirSourceModule *to = &((XrXirSourceModule *) copy->modules)[i];
         const XrXirSourceModule *from = &source->modules[i];
-        *to = *from;
-        to->name = declaration_copy(compile_context, from->name, from->name_length, &allocation_status);
-        to->dependencies = declaration_copy(compile_context, from->dependencies, (size_t) from->dependency_count * 4, &allocation_status);
+        *to = *from;to->name=NULL;to->dependencies=NULL;
+        to->name = declaration_copy(compile_context, from->name, from->name_length, &allocation_status,control);
+        to->dependencies = declaration_copy(compile_context, from->dependencies, (size_t) from->dependency_count * 4, &allocation_status,control);
         if (!to->name || (from->dependency_count && !to->dependencies)) goto failed;
     }
     for (uint32_t i = 0; i < source->literal_count; ++i) {
+        allocation_status=declaration_poll(control);if (allocation_status!=XR_XIR_OK) goto failed;
         XrXirLiteral *to = &((XrXirLiteral *) copy->literals)[i];
         const XrXirLiteral *from = &source->literals[i];
         to->length = from->length;
-        to->bytes = declaration_copy(compile_context, from->bytes, from->length, &allocation_status);
+        to->bytes = declaration_copy(compile_context, from->bytes, from->length, &allocation_status,control);
         if (from->length && !to->bytes) goto failed;
     }
+    allocation_status=declaration_poll(control);if (allocation_status!=XR_XIR_OK) goto failed;
     XrXirImplementationTable *implementations = NULL;
     XrXirStatus status = xr_xir_compile_implementations_copy_verified(compile_context, source->implementations, &implementations);
     if (status != XR_XIR_OK) { xr_xir_compile_declarations_free(copy); return status; }
     copy->implementations = implementations;
+    allocation_status=declaration_poll(control);if (allocation_status!=XR_XIR_OK) goto failed;
     *output = copy;
     return XR_XIR_OK;
  failed:

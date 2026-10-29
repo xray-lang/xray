@@ -90,7 +90,7 @@ static void effect_invocation_declarations_free(XrXirDeclarations *declarations)
 static XrXirStatus effect_invocation_declarations_empty(const XrXirCompileContext *work,
     const XrXirDeclarations *source,uint32_t functions) {
     XrXirDeclarations *copy=NULL;
-    XrXirStatus status=xr_xir_compile_declarations_clone(work,source,functions,&copy);
+    XrXirStatus status=xr_xir_compile_declarations_clone(work,source,functions,NULL,&copy);
     if (copy) { xr_xir_compile_declarations_free(copy);return XR_XIR_BAD_STRUCTURE; }
     return status;
 }

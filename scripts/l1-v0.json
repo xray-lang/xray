@@ -384,7 +384,8 @@
     "test_api_inventory_native_declarations",
     "test_xir_ctfe_cleanup",
     "test_xir_ctfe_cleanup_cli",
-    "source_ctfe_cleanup_lifetime"
+    "source_ctfe_cleanup_lifetime",
+    "source_declarations_control_baseline"
   ],
   "versionCommand": [
     "{build}/xray.exe",

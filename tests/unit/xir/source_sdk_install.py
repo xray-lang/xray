@@ -58,6 +58,8 @@ def main():
     (output/'ctfe_cleanup').mkdir()
     (output/'ctfe_cleanup/cleanup_owned.xr').write_bytes(
         (root/'tests/unit/xir/ctfe_cleanup/cleanup_owned.xr').read_bytes())
+    (output/'declarations_control_fixture.h').write_bytes(
+        (root/'tests/unit/xir/declarations_control_fixture.h').read_bytes())
     fixture = root/'tests/unit/xir/source_sdk_consumer'
 
     def configure(label, directory, success=True):

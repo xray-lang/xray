@@ -246,7 +246,7 @@ static XrXirStatus effect_ordinary_snapshot(EffectOrdinaryContexts *contexts,
     const XrXirModule *source) {
     const XrXirCompileContext *context=contexts->terms.remaining;
     XrXirStatus status=xr_xir_compile_declarations_clone(context,source->declarations,
-        source->function_count,&contexts->source_declarations);
+        source->function_count,NULL,&contexts->source_declarations);
     if (status==XR_XIR_OK && source->generics)
         status=xr_xir_compile_generics_clone(context,source,&contexts->source_generics);
     if (status==XR_XIR_OK && source->defaults) {

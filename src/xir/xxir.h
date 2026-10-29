@@ -288,7 +288,7 @@ XR_FUNC XrXirStatus xr_xir_compile_declarations_order(const XrXirCompileContext 
  * may be partial on failure; no execution or storage authority is granted. */
 XR_FUNC XrXirStatus xr_xir_compile_declarations_active(const XrXirCompileContext *,
     const XrXirDeclarations *, uint32_t *order, uint8_t *active, uint32_t *count);
-XR_FUNC XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile_context, const XrXirDeclarations *source, uint32_t functions, XrXirDeclarations **output);
+XR_FUNC XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile_context, const XrXirDeclarations *source, uint32_t functions, XrCompileRequestControl *control, XrXirDeclarations **output);
 XR_FUNC void xr_xir_compile_declarations_free(XrXirDeclarations *declarations);
 XR_FUNC bool xr_xir_module_imports(const XrXirDeclarations *declarations, uint32_t from, uint32_t target);
 XR_FUNC bool xr_xir_module_same_scope(const XrXirDeclarations *declarations, uint32_t from, uint32_t target);

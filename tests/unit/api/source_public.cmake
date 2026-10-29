@@ -345,7 +345,8 @@ add_test(NAME source_debug_identity COMMAND test_source_debug_identity)
 set_tests_properties(source_debug_identity PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;repl;debug")
 
 add_executable(test_source_request_lifetime "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_request_lifetime.c"
-    "${CMAKE_CURRENT_LIST_DIR}/source_public/nominal_projection_probe.c")
+    "${CMAKE_CURRENT_LIST_DIR}/source_public/nominal_projection_probe.c"
+    "${CMAKE_CURRENT_LIST_DIR}/source_public/declarations_copy_probe.c")
 target_link_libraries(test_source_request_lifetime PRIVATE xray_source_api)
 target_compile_definitions(test_source_request_lifetime PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
 set_target_properties(test_source_request_lifetime PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
@@ -359,6 +360,17 @@ set_tests_properties(source_request_lifetime PROPERTIES TIMEOUT 120 LABELS "unit
 add_test(NAME source_ctfe_cleanup_lifetime COMMAND test_source_request_lifetime --ctfe-cleanup)
 set_tests_properties(source_ctfe_cleanup_lifetime PROPERTIES TIMEOUT 120
     LABELS "unit;api;source;ctfe;cleanup;ownership")
+foreach(case baseline cancel_functions cancel_module_name cancel_publication deadline_functions deadline_publication oom_functions)
+    add_test(NAME source_declarations_control_${case} COMMAND test_source_request_lifetime --declarations-control ${case})
+    set_tests_properties(source_declarations_control_${case} PROPERTIES TIMEOUT 240 PROCESSORS 1 LABELS "unit;api;source;ownership;resources")
+endforeach()
+set_tests_properties(source_declarations_control_baseline PROPERTIES COST 47)
+set_tests_properties(source_declarations_control_cancel_functions PROPERTIES COST 47)
+set_tests_properties(source_declarations_control_cancel_module_name PROPERTIES COST 48)
+set_tests_properties(source_declarations_control_cancel_publication PROPERTIES COST 51)
+set_tests_properties(source_declarations_control_deadline_functions PROPERTIES COST 164)
+set_tests_properties(source_declarations_control_deadline_publication PROPERTIES COST 149)
+set_tests_properties(source_declarations_control_oom_functions PROPERTIES COST 66)
 
 add_executable(test_source_request_ast_boundary "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_request_ast_boundary.c")
 target_link_libraries(test_source_request_ast_boundary PRIVATE xray_source_api)
