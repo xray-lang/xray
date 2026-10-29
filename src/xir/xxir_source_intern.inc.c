@@ -175,6 +175,8 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
 }
 static bool source_signature(SourceContext *ctx, const XrXirCallableParameter *parameters,
     uint32_t count, XrXirType result, XrXirType error_type, XrXirType *type) {
+    if (error_type==XR_XIR_UNIT)
+        return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"callable error contract is not ready");
     return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_CALLABLE, error_type,
         parameters, count, result, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}}, type);
 }

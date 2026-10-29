@@ -178,6 +178,12 @@ typedef struct SourcePendingError {
     uint32_t target, first_argument, argument_count;
     bool marked, asserted;
 } SourcePendingError;
+typedef enum SourceInitializerState {
+    SOURCE_INITIALIZER_UNPREPARED,
+    SOURCE_INITIALIZER_PREPARING,
+    SOURCE_INITIALIZER_PREPARED,
+    SOURCE_INITIALIZER_READY
+} SourceInitializerState;
 typedef struct SourceFunction {
     AstNode *node, *type_owner;
     bool checked_library;
@@ -221,6 +227,8 @@ typedef struct SourceFunction {
     SourceErrorContext *error_context;
     SourceLocalHandler *local_handler;
     bool infer_errors, infer_initializer;
+    SourceInitializerState initializer_state;
+    XrXirType initializer_seed, initializer_bound;
     SourcePendingError *pending_errors;
     XrXirInitializationRegion *initialization_regions, *initialization_parent;
 } SourceFunction;
@@ -1639,6 +1647,7 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
     if (!symbol || symbol->kind != SOURCE_FUNCTION)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "function value requires a declared function");
     if (!source_query_reference(ctx, node, binding, symbol, XR_XIR_SOURCE_FUNCTION_VALUE)) return false;
+    if (!source_initialization_require(ctx,symbol->index)) return false;
     const XrXirFunction *function = &ctx->functions[symbol->index];
     for (uint32_t p = 0; p < function->parameter_count; ++p)
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
@@ -2836,6 +2845,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
         signature.flags |= XR_XIR_CALLABLE_NO_SUSPEND;
         ok = source_intern_type(ctx, signature, &type);
     }
+    body=&ctx->bodies[index];
     if (ok) {
         XrXirSourceType *query_parameters = decl->param_count ? source_alloc(ctx, (size_t) decl->param_count, sizeof(*query_parameters)) : NULL;
         ok = !decl->param_count || query_parameters;
@@ -2881,6 +2891,46 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
 #include "xxir_source_comptime_expression.inc.c"
 #include "xxir_source_materialization_finish.inc.c"
 #include "xxir_source_instance_writer.inc.c"
+/* Preparing another generated body is a synchronous scope switch. Shared tables
+ * may grow, so only function identities survive this call in its consumers. */
+static bool source_initialization_prepare(SourceContext *ctx,uint32_t function) {
+    if (function>=ctx->function_count || !ctx->bodies[function].infer_initializer)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"generated initialization declaration is missing");
+    if (ctx->bodies[function].initializer_state>=SOURCE_INITIALIZER_PREPARED) return true;
+    if (ctx->bodies[function].initializer_state==SOURCE_INITIALIZER_PREPARING)
+        return source_fail(ctx,ctx->bodies[function].node,XR_XIR_BAD_TYPE,
+            "initialization error contract is not ready for this callable");
+    SourceComptimeScope saved=source_comptime_scope(ctx);
+    XrXirSourceDebugPoint debug_point=ctx->debug_point;
+    uint32_t debug_function=ctx->debug_function;
+    bool debug_entry=ctx->debug_entry,debug_jump_entry=ctx->debug_jump_entry,ok=false;
+    ctx->function=function;ctx->module=ctx->bodies[function].module;ctx->depth=0;
+    ctx->locals=ctx->scope=NULL;ctx->facts=NULL;ctx->epochs=NULL;ctx->flow_alternatives=0;
+    ctx->loop=NULL;ctx->returned=false;ctx->active_expression=NULL;ctx->effect_argument=NULL;
+    ctx->type_scope=(SourceTypeScope){0};ctx->debug_function=UINT32_MAX;
+    ctx->debug_entry=ctx->debug_jump_entry=false;
+    ctx->bodies[function].initializer_state=SOURCE_INITIALIZER_PREPARING;
+    ctx->bodies[function].initializer_seed=XR_XIR_NEVER;
+    if (!source_request_poll(ctx,ctx->bodies[function].node)) goto done;
+    AstNode *node=ctx->bodies[function].node;
+    if (node && (node->type==AST_STRUCT_DECL || node->type==AST_CLASS_DECL)) {
+        if (!source_struct_constructor_body(ctx)) goto done;
+    } else if (node && (ctx->bodies[function].default_expression || node->type==AST_FIELD_DECL)) {
+        SourceValue value;XrXirType result=ctx->functions[function].result;
+        AstNode *expression=ctx->bodies[function].default_expression ? ctx->bodies[function].default_expression :
+            node->as.field_decl.initializer;
+        if (!source_plan_expression(ctx,expression,(SourceExpectedType){result!=XR_XIR_UNIT,result,false,false},&value) ||
+            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.id,0},{0},0,{0}},NULL)) goto done;
+        ctx->returned=true;
+    } else {
+        source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"generated initialization body is missing");goto done;
+    }
+    if (!finish_body(ctx)) goto done;
+    ctx->bodies[function].initializer_state=SOURCE_INITIALIZER_PREPARED;ok=true;
+done:
+    source_comptime_restore(ctx,&saved);ctx->debug_point=debug_point;ctx->debug_function=debug_function;
+    ctx->debug_entry=debug_entry;ctx->debug_jump_entry=debug_jump_entry;return ok;
+}
 static bool build_bodies(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count;
     for (int t = 0; t < ctx->graph->topo_count; ++t) {
@@ -2895,21 +2945,12 @@ static bool build_bodies(SourceContext *ctx) {
     for (uint32_t f = count; f < ctx->first_closure; ++f) {
         if (!source_request_poll(ctx, ctx->bodies[f].node)) return false;
         if(ctx->bodies[f].checked_library)continue;
+        if (ctx->bodies[f].infer_initializer) {
+            if (!source_initialization_prepare(ctx,f)) return false;
+            continue;
+        }
         ctx->function = f; ctx->module = ctx->bodies[f].module; ctx->returned = false;
         ctx->locals = ctx->scope = NULL; ctx->facts = NULL;ctx->epochs=NULL; ctx->flow_alternatives = 0;
-        if (ctx->bodies[f].node->type == AST_STRUCT_DECL || ctx->bodies[f].node->type == AST_CLASS_DECL) {
-            if (!source_struct_constructor_body(ctx) || !finish_body(ctx)) return false;
-            continue;
-        }
-        if (ctx->bodies[f].default_expression || ctx->bodies[f].node->type == AST_FIELD_DECL) {
-            SourceValue value;
-            if (!source_plan_expression(ctx, ctx->bodies[f].default_expression ? ctx->bodies[f].default_expression :
-                ctx->bodies[f].node->as.field_decl.initializer, (SourceExpectedType){ctx->functions[f].result != XR_XIR_UNIT,ctx->functions[f].result, false, false}, &value) ||
-                !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.id, 0}, {0}, 0, {0}}, NULL)) return false;
-            ctx->returned = true;
-            if (!finish_body(ctx)) return false;
-            continue;
-        }
         if (ctx->bodies[f].node->type == AST_METHOD_DECL) {
             if (!(ctx->bodies[f].node->as.method_decl.is_constructor ? source_constructor_body(ctx) : source_method_body(ctx)) || !finish_body(ctx)) return false;
             continue;

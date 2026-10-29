@@ -984,20 +984,24 @@ static XrXirStatus proof_static_owner(const XrXirProofContext *context, XrXirCom
     }
     xr_compile_resources_free(arguments);  return status;
 }
-static XrXirStatus proof_function_declaration(const XrXirModule *module, uint32_t index, XrXirCompileContext *budget, XirConstraintScratch *scratch) {
+typedef enum XirDeclarationProofStage {
+    XIR_DECLARATION_VALUES,
+    XIR_DECLARATION_COMPLETE
+} XirDeclarationProofStage;
+static XrXirStatus proof_function_declaration(const XrXirModule *module, uint32_t index, XrXirCompileContext *budget, XirConstraintScratch *scratch, XirDeclarationProofStage stage) {
     XrXirProofContext context = {module,{XR_XIR_CONTEXT_FUNCTION,index,0}};
     const XrXirFunction *function = &module->functions[index];
     if (function->parameter_count && !function->parameters) return XR_XIR_BAD_STRUCTURE;
-    if (function->error_type == XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
+    if (stage==XIR_DECLARATION_COMPLETE && function->error_type==XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
     XrXirStatus status = xr_xir_compile_method_signature_verify(budget, module, index);
     if (status == XR_XIR_OK) status = xr_xir_compile_context_constraints_verify(budget, &context);
     if (status == XR_XIR_OK) status = proof_static_owner(&context,budget);
     for (uint32_t p = 0; status == XR_XIR_OK && p < function->parameter_count; ++p)
         status = xr_xir_compile_type_use_verify_scratch(budget, &context, function->parameters[p], scratch);
     if (status == XR_XIR_OK) status = xr_xir_compile_type_use_verify_scratch(budget, &context, function->result, scratch);
-    if (status == XR_XIR_OK && function->error_type != XR_XIR_NEVER)
+    if (status == XR_XIR_OK && function->error_type != XR_XIR_NEVER && function->error_type != XR_XIR_UNIT)
         status = xr_xir_compile_type_use_verify_scratch(budget, &context, function->error_type, scratch);
-    if (status == XR_XIR_OK) status = xr_xir_compile_type_markers_prove(budget, &context,
+    if (status == XR_XIR_OK && function->error_type != XR_XIR_UNIT) status = xr_xir_compile_type_markers_prove(budget, &context,
         function->error_type, XR_XIR_CONSTRAINT_ERROR);
     const XrXirGeneric *g = module->generics ? &module->generics[index] : NULL;
     for (uint32_t a = 0; status == XR_XIR_OK && g && a < g->argument_count; ++a) {
@@ -1009,7 +1013,7 @@ static XrXirStatus proof_function_declaration(const XrXirModule *module, uint32_
 }
 /* One declaration operation owns bytes; each type-use query rebuilds facts. */
 static XrXirStatus declaration_constraints_verify_scratch(XrXirCompileContext *budget,
-    const XrXirModule *module, XirConstraintScratch *scratch) {
+    const XrXirModule *module, XirConstraintScratch *scratch, XirDeclarationProofStage stage) {
     XrXirStatus status = XR_XIR_OK;
     const XrXirNominalTable *nominals = module->types ? module->types->nominals : NULL;
     const XrXirInterfaceTable *interfaces = module->types ? module->types->interfaces : NULL;
@@ -1018,7 +1022,7 @@ static XrXirStatus declaration_constraints_verify_scratch(XrXirCompileContext *b
     for (uint32_t d = 0; status == XR_XIR_OK && interfaces && d < interfaces->count; ++d)
         status = proof_interface_declaration(module,d,budget,scratch);
     for (uint32_t f = 0; status == XR_XIR_OK && f < module->function_count; ++f)
-        status = proof_function_declaration(module,f,budget,scratch);
+        status = proof_function_declaration(module,f,budget,scratch,stage);
     XrXirProofContext closed = {module,{XR_XIR_CONTEXT_CLOSED,0,0}};
     for (uint32_t n = 0; status == XR_XIR_OK && module->types && n < module->types->count; ++n)
         if (!module->types->nodes[n].parameter_span && module->types->nodes[n].kind == XR_XIR_TYPE_NOMINAL)
@@ -1031,8 +1035,16 @@ XrXirStatus xr_xir_compile_declaration_constraints_verify(const XrXirCompileCont
     XrXirCompileContext *budget = &compile_state;
     if (!module || !budget || (module->function_count && !module->functions)) return XR_XIR_BAD_STRUCTURE;
     XirConstraintScratch scratch = {budget->resources,NULL};
-    XrXirStatus status = declaration_constraints_verify_scratch(budget,module,&scratch);
+    XrXirStatus status = declaration_constraints_verify_scratch(budget,module,&scratch,XIR_DECLARATION_COMPLETE);
     xr_xir_constraint_scratch_free(&scratch); return status;
+}
+XrXirStatus xr_xir_compile_declaration_value_constraints_verify(const XrXirCompileContext *compile_context, const XrXirModule *module) {
+    if (!xir_compile_context_valid(compile_context) || !module ||
+        (module->function_count && !module->functions)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext budget=*compile_context;
+    XirConstraintScratch scratch={budget.resources,NULL};
+    XrXirStatus status=declaration_constraints_verify_scratch(&budget,module,&scratch,XIR_DECLARATION_VALUES);
+    xr_xir_constraint_scratch_free(&scratch);return status;
 }
 XrXirStatus xr_xir_compile_module_constraints_verify(const XrXirCompileContext *compile_context, const XrXirModule *module) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
@@ -1041,7 +1053,7 @@ XrXirStatus xr_xir_compile_module_constraints_verify(const XrXirCompileContext *
     if (!module || !budget || (module->function_count && !module->functions)) return XR_XIR_BAD_STRUCTURE;
     XirConstraintScratch scratch = {budget->resources,NULL};
     /* Every function has an error declaration, including a scalar-only module. */
-    XrXirStatus status = declaration_constraints_verify_scratch(budget,module,&scratch);
+    XrXirStatus status = declaration_constraints_verify_scratch(budget,module,&scratch,XIR_DECLARATION_COMPLETE);
     XrXirProofContext closed = {module,{XR_XIR_CONTEXT_CLOSED,0,0}};
     const XrXirDeclarations *declarations = module->declarations;
     for (uint32_t s = 0; status == XR_XIR_OK && declarations && s < declarations->slot_count; ++s) {

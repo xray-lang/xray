@@ -30,6 +30,8 @@ static bool source_binding_cell(SourceContext *ctx, const SourceName *symbol, So
         {0}, {0}, symbol->index, {0}}, cell);
 }
 static bool source_binding_read(SourceContext *ctx, const SourceName *symbol, SourceValue *value) {
+    if (ctx->bodies[ctx->function].infer_initializer && symbol->kind==SOURCE_SLOT && symbol->type==XR_XIR_UNIT)
+        return source_fail(ctx,symbol->node,XR_XIR_BAD_TYPE,"initializer depends on a binding whose type is not ready");
     if (symbol->kind == SOURCE_UNIT_LOCAL) {
         *value = (SourceValue){UINT32_MAX, XR_XIR_UNIT};
         return true;

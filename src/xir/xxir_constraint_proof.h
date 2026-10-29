@@ -56,6 +56,10 @@ XR_FUNC XrXirStatus xr_xir_compile_type_use_verify(const XrXirCompileContext *co
 XR_FUNC XrXirStatus xr_xir_compile_type_storage_prove(const XrXirCompileContext *compile_context, const XrXirProofContext *context, XrXirType type);
 XR_FUNC XrXirStatus xr_xir_compile_type_markers_prove(const XrXirCompileContext *compile_context, const XrXirProofContext *context, XrXirType type, uint32_t markers);
 XR_FUNC XrXirStatus xr_xir_compile_context_constraints_verify(const XrXirCompileContext *compile_context, const XrXirProofContext *context);
+/* Source prepares generated error contracts only after value declarations are
+ * proven. This proves values and every already declared error; it grants no
+ * readiness to a pending error, Callable, Checked artifact or packet reader. */
+XR_FUNC XrXirStatus xr_xir_compile_declaration_value_constraints_verify(const XrXirCompileContext *compile_context, const XrXirModule *module);
 /* Catalog admission reads no initializer bodies or inferred instance slots. */
 XR_FUNC XrXirStatus xr_xir_compile_declaration_constraints_verify(const XrXirCompileContext *compile_context, const XrXirModule *module);
 /* Complete signature structure is a prior of the full module pass; all slots
