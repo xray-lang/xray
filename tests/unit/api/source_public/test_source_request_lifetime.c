@@ -29,7 +29,11 @@ static void sdk_fixture_free(void *pointer) {xr_free(pointer);}
 /* The aligned observer header is outside requested-byte accounting. Each real
  * provider attempt remains one allocation and retires its exact original base. */
 typedef union SdkAllocation {
+#if defined(XR_COMPILER_MSVC)
+    union {long double floating;uint64_t integer;void *pointer;} alignment;
+#else
     max_align_t alignment;
+#endif
     struct {size_t bytes;uintptr_t active;} record;
 } SdkAllocation;
 static size_t runtime_attempts,runtime_fail_at=SIZE_MAX,runtime_live,runtime_bytes;
