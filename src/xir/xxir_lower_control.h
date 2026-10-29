@@ -11,6 +11,7 @@
 #ifndef XXIR_LOWER_CONTROL_H
 #define XXIR_LOWER_CONTROL_H
 #include "../base/xcompile_request.h"
+#include "../base/xsha256.h"
 #include <string.h>
 
 static inline XrCompileResourceStatus xir_lower_copy_span(XrCompileRequestControl *control,
@@ -23,6 +24,20 @@ static inline XrCompileResourceStatus xir_lower_copy_span(XrCompileRequestContro
         size_t count=bytes-offset;
         if (count>4096) count=4096;
         memcpy((unsigned char *)destination+offset,(const unsigned char *)source+offset,count);
+        offset+=count;
+    }
+    return xr_compile_request_control_poll(control);
+}
+static inline XrCompileResourceStatus xir_lower_sha256_span(XrCompileRequestControl *control,
+    XrSHA256Context *hash,const void *source,size_t bytes) {
+    if (!hash || (bytes && !source)) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    if (!control) { xr_sha256_update(hash,source,bytes);return XR_COMPILE_RESOURCE_OK; }
+    for (size_t offset=0;offset<bytes;) {
+        XrCompileResourceStatus status=xr_compile_request_control_poll(control);
+        if (status!=XR_COMPILE_RESOURCE_OK) return status;
+        size_t count=bytes-offset;
+        if (count>4096) count=4096;
+        xr_sha256_update(hash,(const unsigned char *)source+offset,count);
         offset+=count;
     }
     return xr_compile_request_control_poll(control);

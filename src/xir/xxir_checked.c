@@ -33,7 +33,7 @@ XrXirStatus xr_xir_compile_checked_write(const XrXirArtifact *artifact, XrXirChe
     if (xir_artifact_is_evaluation(artifact)) return checked_error(XR_XIR_BAD_STAGE,diagnostic);
     XrXirStatus status = xr_xir_compile_artifact_verify(artifact, diagnostic);
     if (status != XR_XIR_OK) return status;
-    return checked_encode(artifact, output, diagnostic);
+    return checked_encode(artifact, output, diagnostic, NULL);
 }
 static XrXirStatus checked_read_mode(const XrXirCompileContext *compile_context,const void *bytes,size_t length,
     XrXirArtifact **output,XrXirDiagnostic *diagnostic,bool evaluation) {
@@ -46,7 +46,7 @@ static XrXirStatus checked_read_mode(const XrXirCompileContext *compile_context,
     XrXirCompileContext limits = *budget;
     if (!bytes || length < 64) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
 
-    CheckedCursor c = {bytes, NULL, 8, length, limits.limits, limits, XR_XIR_OK, true};
+    CheckedCursor c = {bytes, NULL, 8, length, limits.limits, limits, XR_XIR_OK, true, NULL, 0};
     XrXirArtifact *artifact = NULL;
     if (memcmp(bytes,evaluation?"XRCEV\0\0\0":"XRCHK\0\0\0",8)) { c.status=XR_XIR_BAD_STRUCTURE; goto decode_failure; }
     uint32_t schema = checked_u32(&c,0), contract = checked_u32(&c,0);
@@ -58,7 +58,7 @@ static XrXirStatus checked_read_mode(const XrXirCompileContext *compile_context,
     }
     if (stage != XR_XIR_CHECKED) { c.status=XR_XIR_BAD_STAGE; goto decode_failure; }
     /* Hash reads length-32 bytes; comparing the stored digest reads another 32. */
-    uint8_t digest[32]; checked_digest(bytes,length,digest);
+    uint8_t digest[32]; checked_digest(bytes,length,digest,NULL);
     if (memcmp(digest,(const uint8_t *)bytes+32,32)) { c.status=XR_XIR_BAD_STRUCTURE; goto decode_failure; }
     artifact=xir_compile_calloc(compile_context, 1,sizeof(*artifact), &allocation_status);
     if (!artifact) { c.status=allocation_status; goto decode_failure; }
@@ -97,5 +97,5 @@ XR_FUNC XrXirStatus xir_evaluation_write(const XrXirArtifact *artifact,XrXirChec
     XrXirDiagnostic *diagnostic) {
     if (!artifact || !output || output->bytes || output->length) return checked_error(XR_XIR_BAD_STRUCTURE,diagnostic);
     XrXirStatus status=xr_xir_compile_artifact_verify(artifact,diagnostic);
-    return status==XR_XIR_OK?checked_evaluation_encode(artifact,output,diagnostic):status;
+    return status==XR_XIR_OK?checked_evaluation_encode(artifact,output,diagnostic,NULL):status;
 }

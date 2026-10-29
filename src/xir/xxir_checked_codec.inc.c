@@ -18,6 +18,7 @@
 #include "xxir_interface.h"
 #include "xxir_implementation.h"
 #include "xxir_internal.h"
+#include "xxir_lower_control.h"
 #include "../base/xsha256.h"
 
 typedef struct CheckedCursor {
@@ -28,10 +29,17 @@ typedef struct CheckedCursor {
     XrXirCompileContext remaining;
     XrXirStatus status;
     bool reading;
+    XrCompileRequestControl *control;
+    size_t next_poll;
 } CheckedCursor;
 
 static bool checked_room(CheckedCursor *c, size_t size) {
     if (c->status != XR_XIR_OK) return false;
+    if (c->control && (c->position>=c->next_poll || size>c->next_poll-c->position)) {
+        c->status=xir_compile_resource_status(xr_compile_request_control_poll(c->control));
+        if (c->status!=XR_XIR_OK) return false;
+        c->next_poll=c->position>SIZE_MAX-4096?SIZE_MAX:c->position+4096;
+    }
     if (size > c->capacity - c->position) {
         c->status = c->reading ? XR_XIR_BAD_STRUCTURE : XR_XIR_BUDGET;
         return false;
@@ -39,7 +47,7 @@ static bool checked_room(CheckedCursor *c, size_t size) {
     return true;
 }
 static uint64_t checked_integer(CheckedCursor *c, uint64_t value, unsigned width) {
-    if (!checked_room(c, width)) return 0;
+    if (!checked_room(c, width)) return c->reading?0:value;
     if (!c->reading && !c->output) {
         if (!(c->status == XR_XIR_OK)) return 0;
         c->position += width;
@@ -69,15 +77,16 @@ static uint32_t checked_count(CheckedCursor *c, uint32_t value, uint32_t *remain
         (!wire_minimum || count > (c->capacity - c->position) / wire_minimum))
         c->status = XR_XIR_BAD_STRUCTURE;
     if (c->status == XR_XIR_OK && count > *remaining) c->status = XR_XIR_BUDGET;
-    if (c->status != XR_XIR_OK) return 0;
+    if (c->status != XR_XIR_OK) return c->reading?0:value;
     *remaining -= count;
     return count;
 }
 static void *checked_array_storage(CheckedCursor *c, const void *source, uint32_t count,
     size_t size, size_t wire_minimum, bool zero) {
     XrXirStatus allocation_status = XR_XIR_OK;
-    if (c->status != XR_XIR_OK || !count) return NULL;
+    /* A writer only borrows its input, including after cancellation. */
     if (!c->reading) return (void *) source;
+    if (c->status != XR_XIR_OK || !count) return NULL;
     if (count > (c->capacity - c->position) / wire_minimum) {
         c->status = XR_XIR_BAD_STRUCTURE; return NULL;
     }
@@ -95,7 +104,7 @@ static void *checked_array(CheckedCursor *c, const void *source, uint32_t count,
 }
 static const char *checked_blob(CheckedCursor *c, const char *bytes, uint32_t *length) {
     *length = checked_u32(c, *length);
-    if (!checked_room(c, *length)) return NULL;
+    if (!checked_room(c, *length)) return c->reading?NULL:bytes;
     if (!c->reading && !c->output) {
         if (!(c->status == XR_XIR_OK)) return NULL;
         c->position += *length;
@@ -107,7 +116,12 @@ static const char *checked_blob(CheckedCursor *c, const char *bytes, uint32_t *l
         if (*length && !copy) return NULL;
         if (*length) memcpy(copy, c->input + c->position, *length);
         bytes = copy;
-    } else if (c->output && *length) memcpy(c->output + c->position, bytes, *length);
+    } else if (c->output && *length) {
+        if (*length<=4096) memcpy(c->output+c->position,bytes,*length);
+        else c->status=xir_compile_resource_status(xir_lower_copy_span(c->control,
+            c->output+c->position,bytes,*length));
+        if (c->status!=XR_XIR_OK) return bytes;
+    }
     c->position += *length;
     return bytes;
 }
@@ -316,14 +330,19 @@ static void checked_generics(CheckedCursor *c, XrXirModule *m) {
 }
 static XrXirLiteral checked_nominal_name(CheckedCursor *c, XrXirLiteral name) {
     name.length = checked_u32(c, name.length);
-    if (!checked_room(c, name.length)) return (XrXirLiteral) {0};
+    if (!checked_room(c, name.length)) return c->reading?(XrXirLiteral){0}:name;
     if (c->reading) {
         if (name.length == UINT32_MAX) { c->status = XR_XIR_BUDGET; return (XrXirLiteral) {0}; }
         char *bytes = checked_array(c, NULL, name.length + 1, 1, 1);
         if (!bytes) return (XrXirLiteral) {0};
         memcpy(bytes, c->input + c->position, name.length);
         name.bytes = bytes;
-    } else if (c->output && name.length) memcpy(c->output + c->position, name.bytes, name.length);
+    } else if (c->output && name.length) {
+        if (name.length<=4096) memcpy(c->output+c->position,name.bytes,name.length);
+        else c->status=xir_compile_resource_status(xir_lower_copy_span(c->control,
+            c->output+c->position,name.bytes,name.length));
+        if (c->status!=XR_XIR_OK) return name;
+    }
     c->position += name.length;
     return name;
 }
@@ -749,20 +768,24 @@ static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction *
     checked_module_fields(&module, m, construction, evidence_limit);
     c->position = module.position;
     c->status = module.status;
+    c->next_poll = module.next_poll;
 }
-static void checked_digest(const uint8_t *bytes, size_t size, uint8_t digest[32]) {
+static XrXirStatus checked_digest(const uint8_t *bytes,size_t size,uint8_t digest[32],
+    XrCompileRequestControl *control) {
     XrSHA256Context sha;
     xr_sha256_init(&sha);
-    xr_sha256_update(&sha, bytes, 32);
-    xr_sha256_update(&sha, bytes + 64, size - 64);
-    xr_sha256_final(&sha, digest);
+    XrXirStatus status=xir_compile_resource_status(xir_lower_sha256_span(control,&sha,bytes,32));
+    if (status==XR_XIR_OK)
+        status=xir_compile_resource_status(xir_lower_sha256_span(control,&sha,bytes+64,size-64));
+    if (status==XR_XIR_OK) xr_sha256_final(&sha,digest);
+    return status;
 }
 static XrXirStatus checked_error(XrXirStatus status, XrXirDiagnostic *diagnostic) {
     if (diagnostic) *diagnostic = (XrXirDiagnostic) {status, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
     return status;
 }
 static XrXirStatus checked_encode_mode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,
-    XrXirDiagnostic *diagnostic,bool evaluation) {
+    XrXirDiagnostic *diagnostic,bool evaluation,XrCompileRequestControl *control) {
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!artifact) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = artifact->context;
@@ -775,7 +798,7 @@ static XrXirStatus checked_encode_mode(const XrXirArtifact *artifact,XrXirChecke
         xir_artifact_is_evaluation(artifact)) return checked_error(XR_XIR_BAD_STAGE,diagnostic);
     XrXirCompileContext limits = *budget;
     size_t capacity = SIZE_MAX;
-    CheckedCursor c = {NULL, NULL, evaluation?76u:64u, capacity, limits.limits, limits, XR_XIR_OK, false};
+    CheckedCursor c = {NULL, NULL, evaluation?76u:64u, capacity, limits.limits, limits, XR_XIR_OK, false, control, 0};
     XrXirModule module = artifact->module;
     XrXirConstruction *construction = artifact->construction;
     checked_module(&c,&module,&construction,evaluation?XR_XIR_EVIDENCE_EVALUATION:XR_XIR_EVIDENCE_INSTANCE);
@@ -785,7 +808,7 @@ static XrXirStatus checked_encode_mode(const XrXirArtifact *artifact,XrXirChecke
     if (!bytes) return checked_error(allocation_status, diagnostic);
 
     memcpy(bytes,evaluation?"XRCEV\0\0\0":"XRCHK\0\0\0",8);
-    c = (CheckedCursor) {NULL, bytes, 8, size, limits.limits, limits, XR_XIR_OK, false};
+    c = (CheckedCursor) {NULL, bytes, 8, size, limits.limits, limits, XR_XIR_OK, false, control, 0};
     checked_u32(&c,evaluation?1u:XR_XIR_CHECKED_SCHEMA); checked_u32(&c, XR_XIR_CHECKED_CONTRACT);
     checked_u32(&c, XR_XIR_CHECKED); checked_u32(&c, 0);
     checked_integer(&c, size - 64, 8);
@@ -799,15 +822,20 @@ static XrXirStatus checked_encode_mode(const XrXirArtifact *artifact,XrXirChecke
         xr_compile_resources_free(bytes); return checked_error(c.status != XR_XIR_OK ? c.status : XR_XIR_BAD_STRUCTURE, diagnostic);
     }
 
-    checked_digest(bytes, size, bytes + 32);
+    XrXirStatus status=checked_digest(bytes,size,bytes+32,control);
+    if (status==XR_XIR_OK && control)
+        status=xir_compile_resource_status(xr_compile_request_control_poll(control));
+    if (status!=XR_XIR_OK) {xr_compile_resources_free(bytes);return checked_error(status,diagnostic);}
     *output = (XrXirCheckedPacket) {bytes, size};
     return XR_XIR_OK;
 }
-static XrXirStatus checked_encode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,XrXirDiagnostic *diagnostic) {
-    return checked_encode_mode(artifact,output,diagnostic,false);
+static XrXirStatus checked_encode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,
+    XrXirDiagnostic *diagnostic,XrCompileRequestControl *control) {
+    return checked_encode_mode(artifact,output,diagnostic,false,control);
 }
-static inline XrXirStatus checked_evaluation_encode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,XrXirDiagnostic *diagnostic) {
-    return checked_encode_mode(artifact,output,diagnostic,true);
+static inline XrXirStatus checked_evaluation_encode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,
+    XrXirDiagnostic *diagnostic,XrCompileRequestControl *control) {
+    return checked_encode_mode(artifact,output,diagnostic,true,control);
 }
 
 #endif // XXIR_CHECKED_CODEC_INC_C

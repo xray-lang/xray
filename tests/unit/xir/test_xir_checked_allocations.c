@@ -129,7 +129,7 @@ static void packet_failures(unsigned kind) {
     /* Exercise partial metadata teardown after valid integrity checks too. */
     for (size_t i = 64; i < packet.length; ++i) {
         packet.bytes[i] ^= 0xFF;
-        checked_digest(packet.bytes, packet.length, packet.bytes + 32);
+        checked_digest(packet.bytes, packet.length, packet.bytes + 32,NULL);
         XrXirStatus status = xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL);
         CHECK((status == XR_XIR_OK) == (decoded != NULL));
         xr_xir_compile_artifact_free(decoded); decoded=NULL; CHECK(live==consumer_context_owner_count+1);
@@ -350,18 +350,18 @@ static void provenance_packet_roundtrip(XrXirArtifact *closed) {
     CHECK(nested_kind + 4 < packet.length && !packet.bytes[nested_kind] &&
         !packet.bytes[nested_kind + 1] && !packet.bytes[nested_kind + 2] && !packet.bytes[nested_kind + 3]);
     packet.bytes[nested_kind] = XR_XIR_EVIDENCE_INSTANCE;
-    checked_digest(packet.bytes, packet.length, packet.bytes + 32);
+    checked_digest(packet.bytes, packet.length, packet.bytes + 32,NULL);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(!decoded && live == baseline + 1);
     packet.bytes[nested_kind] = XR_XIR_EVIDENCE_ABSENT;
     for (size_t i = 64; i < packet.length; ++i) {
-        packet.bytes[i] ^= 0xff; checked_digest(packet.bytes, packet.length, packet.bytes + 32);
+        packet.bytes[i] ^= 0xff; checked_digest(packet.bytes, packet.length, packet.bytes + 32,NULL);
         XrXirStatus status = xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL);
         CHECK((status == XR_XIR_OK) == (decoded != NULL));
         xr_xir_compile_artifact_free(decoded); decoded=NULL; CHECK(live == baseline + 1);
         packet.bytes[i] ^= 0xff;
     }
-    checked_digest(packet.bytes, packet.length, packet.bytes + 32);
+    checked_digest(packet.bytes, packet.length, packet.bytes + 32,NULL);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     memset(packet.bytes, 0xa5, packet.length); xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_artifact_verify(decoded, NULL) == XR_XIR_OK);

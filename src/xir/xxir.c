@@ -312,7 +312,7 @@ static XrXirStatus transition_shape(const XrXirModule *input, XrXirStage source,
 }
 
 typedef XrXirStatus (*TransitionPacketWriter)(const XrXirArtifact *,
-    XrXirCheckedPacket *, XrXirDiagnostic *);
+    XrXirCheckedPacket *, XrXirDiagnostic *, XrCompileRequestControl *);
 typedef struct TransitionInputProof {
     TransitionPacketWriter writer;
     XrXirArtifact **owned_input;
@@ -340,10 +340,14 @@ static XrXirStatus transition_owned(const XrXirModule *input, const XrXirConstru
     copy->context = limits;
     budget = &limits;
     if (source == XR_XIR_CHECKED) {
-        status = proof->writer(copy, &copy->checked_packet, diagnostic);
+        status = proof->writer(copy, &copy->checked_packet, diagnostic, control);
         if (status != XR_XIR_OK) { xr_xir_compile_artifact_free(copy); return status; }
 
-        xr_sha256(copy->checked_packet.bytes, copy->checked_packet.length, copy->checked_identity);
+        XrSHA256Context hash;xr_sha256_init(&hash);
+        status=xir_compile_resource_status(xir_lower_sha256_span(control,&hash,
+            copy->checked_packet.bytes,copy->checked_packet.length));
+        if (status!=XR_XIR_OK) {xr_xir_compile_artifact_free(copy);return transition_error(status,diagnostic);}
+        xr_sha256_final(&hash,copy->checked_identity);
     }
     if (copy->source_facts) { xir_source_facts_release(copy->source_facts);copy->source_facts=NULL; }
     copy->module.stage = source == XR_XIR_BUILT ? XR_XIR_CHECKED : XR_XIR_LOWERED;

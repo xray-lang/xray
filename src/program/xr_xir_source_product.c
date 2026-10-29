@@ -136,9 +136,12 @@ static XrXirStatus source_product_layout_digest(const XrXirArtifact *lowered,
     xr_sha256_final(&hash,output);return XR_XIR_OK;
 }
 static XrXirStatus source_product_hash(
-    const XrXirCheckedPacket *packet, uint8_t digest[32]) {
-    xr_sha256(packet->bytes, packet->length, digest);
-    return XR_XIR_OK;
+    const XrXirCheckedPacket *packet,uint8_t digest[32],XrCompileRequestControl *control) {
+    XrSHA256Context hash;xr_sha256_init(&hash);
+    XrXirStatus status=xir_compile_resource_status(xir_lower_sha256_span(control,&hash,
+        packet->bytes,packet->length));
+    if (status==XR_XIR_OK) xr_sha256_final(&hash,digest);
+    return status;
 }
 /* Lowering already owns the canonical Closed bytes. The product needs its own
  * copy because its packet views can outlive the transferred VM program. */
@@ -240,7 +243,8 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
         product->facts.entry=entry;
         product->facts.target=*xr_xir_compile_artifact_target(lowered);
         product->facts.function_count=module->function_count;product->facts.module_count=module->declarations->module_count;
-        status=source_product_hash(&source_packet,product->facts.source_digest);
+        status=source_product_hash(&source_packet,product->facts.source_digest,
+            xr_compile_session_request(request->source.session));
         if (status==XR_XIR_OK) memcpy(product->facts.closed_digest,lowered->checked_identity,sizeof(product->facts.closed_digest));
         if (status==XR_XIR_OK)
             status=source_product_layout_digest(lowered,&product->facts,product->facts.lowered_layout_digest);

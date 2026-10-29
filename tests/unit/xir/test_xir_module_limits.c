@@ -85,7 +85,7 @@ static void reject_packet(const XrXirCompileContext *context,const XrXirCheckedP
     CHECK(status==expected&&!output&&diagnostic.status==expected&&stats(context->resources).held_bytes==before);
 }
 static CheckedCursor cursor(const XrXirCompileContext *context,size_t position) {
-    return (CheckedCursor){NULL,NULL,position,SIZE_MAX,context->limits,*context,XR_XIR_OK,false};
+    return (CheckedCursor){NULL,NULL,position,SIZE_MAX,context->limits,*context,XR_XIR_OK,false,NULL,0};
 }
 /* Locate fields by the same completed typed producer, never by scanning for a
  * repeated byte pattern. No allocation or mutation occurs on this size pass. */
@@ -108,20 +108,20 @@ static void malformed(const XrXirCompileContext *context,XrXirArtifact *closed,X
     CheckedCursor locate=cursor(context,64);prefix(&locate,closed);CHECK(closed->module.provenance->kind==XR_XIR_EVIDENCE_INSTANCE);
     size_t nested=locate.position+4;locate=cursor(context,nested);prefix(&locate,closed->module.provenance->source);size_t leaf=locate.position;
     CHECK(packet->bytes[leaf]==XR_XIR_EVIDENCE_TEMPLATE);
-    put_u32(packet->bytes+leaf,XR_XIR_EVIDENCE_INSTANCE);checked_digest(packet->bytes,packet->length,packet->bytes+32);
+    put_u32(packet->bytes+leaf,XR_XIR_EVIDENCE_INSTANCE);checked_digest(packet->bytes,packet->length,packet->bytes+32,NULL);
     reject_packet(context,packet,XR_XIR_BAD_STRUCTURE);
-    put_u32(packet->bytes+leaf,XR_XIR_EVIDENCE_TEMPLATE);checked_digest(packet->bytes,packet->length,packet->bytes+32);
+    put_u32(packet->bytes+leaf,XR_XIR_EVIDENCE_TEMPLATE);checked_digest(packet->bytes,packet->length,packet->bytes+32,NULL);
     uint32_t functions=closed->module.provenance->source->module.function_count;
     XrXirCompileContext tight=*context;tight.limits.functions=functions;
-    put_u32(packet->bytes+nested+4,functions+1);checked_digest(packet->bytes,packet->length,packet->bytes+32);
+    put_u32(packet->bytes+nested+4,functions+1);checked_digest(packet->bytes,packet->length,packet->bytes+32,NULL);
     reject_packet(&tight,packet,XR_XIR_BUDGET);
-    put_u32(packet->bytes+nested+4,UINT32_MAX);checked_digest(packet->bytes,packet->length,packet->bytes+32);
+    put_u32(packet->bytes+nested+4,UINT32_MAX);checked_digest(packet->bytes,packet->length,packet->bytes+32,NULL);
     reject_packet(context,packet,XR_XIR_BAD_STRUCTURE);
-    put_u32(packet->bytes+nested+4,functions);checked_digest(packet->bytes,packet->length,packet->bytes+32);
+    put_u32(packet->bytes+nested+4,functions);checked_digest(packet->bytes,packet->length,packet->bytes+32,NULL);
     XrXirCheckedPacket truncated=*packet;truncated.length-=4;
     uint8_t header[64];memcpy(header,packet->bytes,sizeof(header));
     uint64_t payload=truncated.length-64;for(unsigned i=0;i<8;++i)packet->bytes[24+i]=(uint8_t)(payload>>(8*i));
-    checked_digest(packet->bytes,truncated.length,packet->bytes+32);reject_packet(context,&truncated,XR_XIR_BAD_STRUCTURE);memcpy(packet->bytes,header,sizeof(header));
+    checked_digest(packet->bytes,truncated.length,packet->bytes+32,NULL);reject_packet(context,&truncated,XR_XIR_BAD_STRUCTURE);memcpy(packet->bytes,header,sizeof(header));
     XrXirModule m=closed->module;XrXirProvenance p=*m.provenance;XrXirArtifact source=*p.source;m.provenance=&p;p.source=&source;
     uint64_t held=stats(context->resources).held_bytes;source.module.provenance=&p;
     CHECK(xr_xir_compile_verify_v2(context,&m,closed->construction,NULL)==XR_XIR_BAD_STRUCTURE);

@@ -115,7 +115,7 @@ static void abi_cases(void) {
     CHECK(proof.length >= 64);
     uint8_t *old = xr_malloc(proof.length); CHECK(old);
     memcpy(old, proof.bytes, proof.length); old[12] = 53; old[13] = old[14] = old[15] = 0;
-    uint8_t digest[32]; checked_digest(old, proof.length, digest); memcpy(old + 32, digest, 32);
+    uint8_t digest[32]; checked_digest(old, proof.length, digest,NULL); memcpy(old + 32, digest, 32);
     /* Even a correctly rehashed old contract rejects before body allocation. */
     XrXirArtifact *output = NULL; runtime_attempts = 0;
     CHECK(xr_xir_compile_checked_read(xr_xir_compile_artifact_context(fixture.lowered), old, proof.length, &output, NULL) == XR_XIR_BAD_STRUCTURE);

@@ -98,7 +98,7 @@ static void sizing_historical_rejections(void) {
 }
 static CheckedCursor sizing_cursor(XrCompileResources *owner, size_t position, size_t capacity) {
     XrXirCompileContext context = {owner,xr_xir_compile_default_limits()};
-    return (CheckedCursor){NULL,NULL,position,capacity,context.limits,context,XR_XIR_OK,false};
+    return (CheckedCursor){NULL,NULL,position,capacity,context.limits,context,XR_XIR_OK,false,NULL,0};
 }
 static void sizing_fields(void) {
     /* Two integers, two length fields and two blob advances are six operations. */
@@ -192,7 +192,7 @@ static XrXirStatus sizing_packet(XrCompileResources *owner, unsigned variant) {
     artifact.context = (XrXirCompileContext){owner,xr_xir_compile_default_limits()};
     uint8_t sentinel = 0x5a; XrXirCheckedPacket packet = {&sentinel,17};
     XrXirStatus status = xir_construction_empty(&artifact.context,artifact.module.types,&artifact.construction);
-    if (status==XR_XIR_OK) status=checked_encode(&artifact,&packet,NULL);
+    if (status==XR_XIR_OK) status=checked_encode(&artifact,&packet,NULL,NULL);
     if (status != XR_XIR_OK) CHECK(packet.bytes == &sentinel && packet.length == 17 && sentinel == 0x5a);
     else {
         CHECK(packet.bytes != &sentinel && packet.length == (variant == 2 ? 236 : 240));

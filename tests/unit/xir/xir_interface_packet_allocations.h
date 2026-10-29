@@ -72,13 +72,13 @@ static void interface_packet_allocation_failures(void) {
     fail_at = SIZE_MAX;
     for (size_t i = 64; i < packet.length; ++i) {
         packet.bytes[i] ^= 0xff;
-        checked_digest(packet.bytes,packet.length,packet.bytes + 32);
+        checked_digest(packet.bytes,packet.length,packet.bytes + 32,NULL);
         XrXirStatus status = xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL);
         if (status == XR_XIR_OK) { xr_xir_compile_artifact_free(decoded); decoded=NULL; }
         else CHECK(!decoded);
         CHECK(live == baseline); packet.bytes[i] ^= 0xff;
     }
-    checked_digest(packet.bytes,packet.length,packet.bytes + 32);
+    checked_digest(packet.bytes,packet.length,packet.bytes + 32,NULL);
     CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL) == XR_XIR_OK);
     memset(packet.bytes,0xcc,packet.length); xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_artifact_verify(decoded,NULL) == XR_XIR_OK);

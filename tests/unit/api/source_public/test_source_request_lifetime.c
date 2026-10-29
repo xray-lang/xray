@@ -20,6 +20,7 @@
 #include "declarations_copy_probe.h"
 #include "../../xir/declarations_control_fixture.h"
 #include "base/xcompile_request.h"
+#include "base/xsha256.h"
 typedef struct ProductPacketProbe {
     const unsigned char *source;
     unsigned char *destination;
@@ -30,6 +31,18 @@ typedef struct ProductPacketProbe {
     bool armed,oom_seen,disabled;
 } ProductPacketProbe;
 static ProductPacketProbe *product_packet_probe;
+typedef struct PacketCodecProbe {
+    const unsigned char *expected[2];
+    size_t lengths[2],polls,witnesses,allocations,hash_bytes;
+    unsigned char *packet;
+    XrSHA256Context prefix_hash;
+    XrCompileResources *resources;
+    XrCompileRequestControl *control;
+    uint64_t held_empty;
+    unsigned phase,mode;
+    bool in_lower,wanted,disabled;
+} PacketCodecProbe;
+static PacketCodecProbe *packet_codec_probe;
 
 /* This TU observes the actual compiler allocator. Installed SDK consumers use
  * the canonical archive implementation separately. No runtime budget is changed. */
@@ -68,8 +81,10 @@ static void sdk_test_free(void *pointer) {
 #define xr_malloc sdk_test_malloc
 #define xr_free sdk_test_free
 #define xr_compile_resources_alloc packet_actual_resources_alloc
+#define xr_compile_resources_calloc packet_actual_resources_calloc
 #include "base/xcompile_resources.c"
 #undef xr_compile_resources_alloc
+#undef xr_compile_resources_calloc
 XR_FUNC XrCompileResourceStatus xr_compile_resources_alloc(
     XrCompileResources *resources,size_t bytes,void **output) {
     ProductPacketProbe *probe=product_packet_probe;
@@ -88,6 +103,35 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_alloc(
         }
     }
     return status;
+}
+XR_FUNC XrCompileResourceStatus xr_compile_resources_calloc(
+    XrCompileResources *resources,size_t count,size_t size,void **output) {
+    XrCompileResourceStatus status=packet_actual_resources_calloc(resources,count,size,output);
+    PacketCodecProbe *probe=packet_codec_probe;
+    if(status==XR_COMPILE_RESOURCE_OK && probe && !probe->disabled && probe->in_lower &&
+        resources==probe->resources && count && size<=SIZE_MAX/count &&
+        count*size==probe->lengths[1]) {
+        CHECK(!probe->packet && output && *output);probe->packet=*output;++probe->allocations;
+        memset(probe->packet,0xa5,probe->lengths[1]);
+        probe->packet[probe->lengths[1]-1]=(unsigned char)~probe->expected[1][probe->lengths[1]-1];
+    }
+    return status;
+}
+/* Record the real SHA update; neither the algorithm nor its input is replayed. */
+#define xr_sha256_update packet_actual_sha256_update
+#include "base/xsha256.c"
+#undef xr_sha256_update
+XR_FUNC void xr_sha256_update(XrSHA256Context *hash,const uint8_t *bytes,size_t length) {
+    packet_actual_sha256_update(hash,bytes,length);
+    PacketCodecProbe *probe=packet_codec_probe;
+    if(!probe || probe->disabled || probe->wanted || length!=4096)return;
+    bool matched=probe->phase==1 && probe->in_lower && probe->packet &&
+        bytes==probe->packet+64 && hash->count==4128;
+    matched|=probe->phase==2 && probe->in_lower && probe->packet &&
+        bytes==probe->packet && hash->count==4096;
+    matched|=probe->phase==3 && !probe->in_lower && hash->count==4096 &&
+        !memcmp(bytes,probe->expected[0],4096);
+    if(matched){probe->hash_bytes=hash->count;probe->prefix_hash=*hash;probe->wanted=true;}
 }
 #undef xr_malloc
 #undef xr_free
@@ -176,7 +220,19 @@ static XrCompileResourceStatus defaults_observe_span(XrCompileRequestControl *co
 #undef xir_compile_alloc
 XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **input,const XrXirTarget *target,
     XrCompileRequestControl *control,XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
+    PacketCodecProbe *codec=packet_codec_probe;
+    if(codec && !codec->disabled) {
+        CHECK(input && *input && !codec->in_lower && control);
+        codec->in_lower=true;codec->control=control;
+        if(!codec->resources) {
+            codec->resources=(*input)->context.resources;
+            CHECK(calibration_owner==codec->resources);
+            CHECK(xr_compile_resources_retain(codec->resources)==XR_COMPILE_RESOURCE_OK);
+            codec->held_empty=calibration_initial_held;
+        }
+    }
     XrXirStatus status=packet_actual_lower_take(input,target,control,output,diagnostic);
+    if(codec && !codec->disabled){codec->in_lower=false;codec->packet=NULL;}
     ProductPacketProbe *probe=product_packet_probe;
     if(status==XR_XIR_OK&&probe) {
         const XrXirArtifact *lowered=*output;
@@ -1689,7 +1745,10 @@ static void declarations_copy_controls(const char *selected) {
 }
 #include "implementation_control_cases.inc.c"
 #include "product_packet_cases.inc.c"
+#include "packet_codec_cases.inc.c"
 int main(int argc,char **argv) {
+    if(argc==2&&!strcmp(argv[1],"--packet-codec-vectors")){packet_codec_vectors();return 0;}
+    if((argc==2||argc==3)&&!strcmp(argv[1],"--packet-codec")){packet_codec_cases(argc==3?argv[2]:NULL);return 0;}
     if(argc==2&&!strcmp(argv[1],"--product-packet-receivers")){product_packet_receive_cases();return 0;}
     if(argc==2&&!strcmp(argv[1],"--product-packets")){product_packet_cases();return 0;}
     if((argc==2||argc==3)&&!strcmp(argv[1],"--implementation-control")){implementation_controls(argc==3?argv[2]:NULL);return 0;}
