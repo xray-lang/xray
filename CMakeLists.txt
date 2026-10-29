@@ -2545,6 +2545,7 @@ include(src/frontend/format/xformatter.cmake)
 target_link_libraries(xray PRIVATE xray_frontend_format)
 include(src/api/xsource_compile.cmake)
 include(cmake/XraySourceSdk.cmake)
+include(cmake/XrayNativeRuntime.cmake)
 include(src/app/toolchain/xir_target.cmake)
 
 if(BUILD_TESTS)

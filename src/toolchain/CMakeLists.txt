@@ -47,10 +47,17 @@ if(WIN32)
         VERBATIM)
     add_custom_target(xir-runtime-sdk-recipe DEPENDS ${XIR_SDK_DIR}/sdk_recipe.json)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${XIR_SDK_DIR}/sdk_recipe.json)
+    set(xir_sdk_build_jobs 4)
+    if(DEFINED ENV{XR_BUILD_JOBS})
+        set(xir_sdk_build_jobs "$ENV{XR_BUILD_JOBS}")
+        if(NOT xir_sdk_build_jobs MATCHES "^[1-9][0-9]*$" OR xir_sdk_build_jobs GREATER 64)
+            message(FATAL_ERROR "XR_BUILD_JOBS must be an integer from 1 to 64")
+        endif()
+    endif()
     add_custom_command(OUTPUT ${XIR_SDK_DIR}/sdk_generated.h ${XIR_SDK_DIR}/sdk_manifest.json
         COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/scripts/build_xir_runtime_sdk.py
             --root ${PROJECT_SOURCE_DIR} --output ${XIR_SDK_DIR}
-            --compiler ${CMAKE_C_COMPILER} --crt MD --jobs 4
+            --compiler ${CMAKE_C_COMPILER} --crt MD --jobs ${xir_sdk_build_jobs}
         DEPENDS ${XIR_SDK_DIR}/sdk_recipe.json ${XIR_SDK_DEPENDENCIES}
             ${PROJECT_SOURCE_DIR}/src/xir/CMakeLists.txt
             ${PROJECT_SOURCE_DIR}/src/execution/xir_runtime_host.cmake

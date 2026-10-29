@@ -1,4 +1,13 @@
 set(native_runtime_clients)
+add_test(NAME native_runtime_installed
+    COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_CURRENT_SOURCE_DIR}/test_installed_native_runtime.py"
+        --source "${PROJECT_SOURCE_DIR}" --build "${CMAKE_BINARY_DIR}"
+        --c-driver "$<TARGET_FILE:lir_c_run>" --pipeline-driver "$<TARGET_FILE:lir_pipeline_eval>"
+        --result-driver "$<TARGET_FILE:test_lir_bytecode_source>"
+        --eligible "$<BOOL:${_xnr_eligible}>"
+        --work "${CMAKE_BINARY_DIR}/native-runtime-installed-results")
+set_tests_properties(native_runtime_installed PROPERTIES
+    LABELS "unit;native-runtime;installation" TIMEOUT 900 COST 280 PROCESSORS 2 RUN_SERIAL TRUE)
 add_executable(test_native_string_admission test_string_admission.c)
 target_link_libraries(test_native_string_admission PRIVATE xray_register_vm)
 target_include_directories(test_native_string_admission PRIVATE "${PROJECT_SOURCE_DIR}/src")

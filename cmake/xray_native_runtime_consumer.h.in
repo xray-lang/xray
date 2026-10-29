@@ -1,0 +1,31 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xray_native_runtime_consumer.h - Enforce the distributed archive tuple
+ */
+#ifndef XRAY_NATIVE_RUNTIME_CONSUMER_H
+#define XRAY_NATIVE_RUNTIME_CONSUMER_H
+#if !defined(_MSC_VER) || defined(__clang__) || _MSC_VER != 1944 || _MSC_FULL_VER != 194435219
+#error XrayNativeRuntime requires the qualified MSVC provider version
+#endif
+#if !defined(_M_X64) || defined(_M_ARM64EC) || defined(_M_ARM64) || defined(_M_IX86)
+#error XrayNativeRuntime requires Microsoft x64
+#endif
+#if !defined(_MT) || defined(_DLL) || defined(_DEBUG) || !defined(NDEBUG)
+#error XrayNativeRuntime requires Release MT
+#endif
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__) || defined(__SANITIZE_UNDEFINED__)
+#error XrayNativeRuntime does not distribute sanitizer variants
+#endif
+#if defined(_M_FP_FAST) || defined(__FAST_MATH__)
+#error XrayNativeRuntime requires nonfast floating point
+#endif
+#if defined(__cplusplus)
+static_assert(sizeof(void *) == 8, "XrayNativeRuntime pointer ABI");
+#else
+_Static_assert(sizeof(void *) == 8, "XrayNativeRuntime pointer ABI");
+#endif
+#endif

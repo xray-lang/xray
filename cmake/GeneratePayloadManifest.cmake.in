@@ -1,5 +1,9 @@
 # GeneratePayloadManifest.cmake - installed payload inventory for xray-installer.
 
+if(CMAKE_INSTALL_COMPONENT STREQUAL "XrayNativeRuntime")
+    return()
+endif()
+
 get_filename_component(_xray_install_prefix "${CMAKE_INSTALL_PREFIX}" ABSOLUTE)
 set(_xray_root "$ENV{DESTDIR}${_xray_install_prefix}")
 set(_xray_manifest_dir "${_xray_root}/share/xray/install")
@@ -39,6 +43,9 @@ file(GLOB_RECURSE _xray_entries
     RELATIVE "${_xray_root}"
     "${_xray_root}/*")
 list(REMOVE_ITEM _xray_entries "share/xray/install/payload-manifest.json")
+# The independent native package keeps its own manifest across component installs.
+list(FILTER _xray_entries EXCLUDE REGEX "^lib/xray/native-runtime(/|$)")
+list(FILTER _xray_entries EXCLUDE REGEX "^lib/cmake/XrayNativeRuntime(/|$)")
 list(SORT _xray_entries)
 
 set(_xray_files "")
