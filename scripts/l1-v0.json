@@ -433,5 +433,5 @@
     "--version",
     "--json"
   ],
-  "smokeStatus": "smoke: demos 3/23 stdlib 4/29 readme 0/6 native 6/6; PASS 13 GAP 51 FAIL 0 NOT_RUN 0"
+  "smokeStatus": "smoke: demos 3/23 stdlib 4/29 readme 0/6 native 7/7; PASS 14 GAP 51 FAIL 0 NOT_RUN 0"
 }

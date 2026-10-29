@@ -716,6 +716,14 @@
       "expect": "pass",
       "exit_code": 0,
       "stdout": "tests/smoke/expected/one.txt"
+    },
+    {
+      "id": "native:stdlib/regex/regex.xr",
+      "path": "stdlib/regex/regex.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     }
   ]
 }
