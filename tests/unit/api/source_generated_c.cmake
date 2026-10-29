@@ -7,3 +7,11 @@ if(MSVC)
 else()
     target_compile_options(test_source_generated_c PRIVATE -Wall -Wextra -Werror -pedantic)
 endif()
+
+add_test(NAME source_native_projection_ownership COMMAND test_source_generated_c
+    "${PROJECT_SOURCE_DIR}/demos/01-basics/control_flow.xr"
+    "${CMAKE_CURRENT_BINARY_DIR}/source-native-projection-ownership.c"
+    "${PROJECT_SOURCE_DIR}/stdlib"
+    "${CMAKE_CURRENT_BINARY_DIR}/source-native-projection-ownership.json" --guards)
+set_tests_properties(source_native_projection_ownership PROPERTIES
+    TIMEOUT 120 LABELS "unit;api;source;ownership;generated-c")
