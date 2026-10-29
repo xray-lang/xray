@@ -383,7 +383,8 @@
     "test_program_identity_vectors",
     "test_api_inventory_native_declarations",
     "test_xir_ctfe_cleanup",
-    "test_xir_ctfe_cleanup_cli"
+    "test_xir_ctfe_cleanup_cli",
+    "source_ctfe_cleanup_lifetime"
   ],
   "versionCommand": [
     "{build}/xray.exe",
