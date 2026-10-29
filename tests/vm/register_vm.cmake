@@ -98,3 +98,12 @@ add_test(NAME f64_negate_native COMMAND ${XRAY_PYTHON} -X utf8
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --work ${CMAKE_CURRENT_BINARY_DIR}/f64-negate-native ${skeleton_native_options})
 set_tests_properties(f64_negate_native PROPERTIES LABELS "unit;vm;lir;native;fast" TIMEOUT 60)
+
+add_test(NAME i64_equality_native COMMAND ${XRAY_PYTHON} -X utf8
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_i64_equality_native.py
+    --driver $<TARGET_FILE:test_lir_bytecode_source> --compiler "${CMAKE_C_COMPILER}"
+    --kind "${skeleton_provider_kind}" --include ${CMAKE_CURRENT_SOURCE_DIR}/include
+    --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --work ${CMAKE_CURRENT_BINARY_DIR}/i64-equality-native ${skeleton_native_options})
+set_tests_properties(i64_equality_native PROPERTIES LABELS "unit;vm;lir;native;fast" TIMEOUT 60)

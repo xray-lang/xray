@@ -1070,12 +1070,13 @@ static bool lower_blocks(LowerFunction *f) {
     return lower_build(c, xr_lir_set_entry(c->module, f->function, f->blocks[0]));
 }
 
-static XrLirPredicate lower_predicate(XrXirOp op) {
-    switch (op) {
+static XrLirPredicate lower_predicate(const XrXirInstruction *op) {
+    switch (op->op) {
         case XR_XIR_EQ_INT:
         case XR_XIR_EQ_FLOAT:
-        case XR_XIR_EQUAL:
             return XR_LIR_EQ;
+        case XR_XIR_EQUAL:
+            return op->immediate ? XR_LIR_NE : XR_LIR_EQ;
         case XR_XIR_NE_INT:
         case XR_XIR_NE_FLOAT:
             return XR_LIR_NE;
@@ -1127,7 +1128,7 @@ static XrLirOp lower_operation(const LowerFunction *f, const XrXirInstruction *o
                        ? (op->type == XR_XIR_I64 ? XR_LIR_INTCAST : XR_LIR_ITOF)
                        : XR_LIR_FCAST;
         default:
-            if (lower_predicate(op->op))
+            if (lower_predicate(op))
                 return xr_xir_operand_type(f->source, op->args[0]) == XR_XIR_F64 ? XR_LIR_FCMP
                                                                                  : XR_LIR_ICMP;
             return XR_LIR_OP_INVALID;
@@ -1195,7 +1196,7 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
     }
     XrLirInstruction instruction = {.op = lower_operation(f, op),
                                     .type = lower_type(op->type),
-                                    .predicate = lower_predicate(op->op),
+                                    .predicate = lower_predicate(op),
                                     .source = lower_source(c)};
     XrLirValue operands[2] = {{0}};
     if (instruction.op == XR_LIR_CONST)

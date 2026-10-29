@@ -84,6 +84,63 @@ static uint64_t run(XrRbcProgram *program, uint64_t argument) {
     return result;
 }
 
+static const char i64_equality_source[] =
+    "fn equality(x:i64,y:i64)->i64{if(x==y){return 1}\n"
+    "if(x!=y){return 2}\nreturn 3}\nprint(equality(1,2))\n";
+
+static void i64_equality(void) {
+    static const uint64_t vectors[][3] = {
+        {0,0,1},{1,2,2},{1,1,1},{0,UINT64_MAX,2},{UINT64_MAX,UINT64_MAX,1},
+        {UINT64_C(0x8000000000000000),UINT64_C(0x8000000000000000),1},
+        {UINT64_C(0x8000000000000000),INT64_MAX,2},{INT64_MAX,INT64_MAX,1}
+    };
+    XrRbcProgram *program = callable(i64_equality_source);
+    for (unsigned i=0;i<sizeof(vectors)/sizeof(*vectors);++i) {
+        uint64_t result = 99;
+        CHECK(execute(program,vectors[i],2,&result) == XR_RBC_OK && result == vectors[i][2]);
+    }
+    xr_rbc_program_destroy(program);
+}
+
+static uint32_t equality_callee(XrLirModule *module) {
+    uint32_t selected = 0, mask = 0, comparisons = 0;
+    for (uint32_t n=0;n<xr_lir_function_count(module);++n) {
+        XrLirFunction f; XrLirFunctionView fv;
+        OK(xr_lir_function_at(module,n,&f)); OK(xr_lir_function_view(module,f,&fv));
+        for (uint32_t b=0;b<fv.block_count;++b) {
+            XrLirBlock block; XrLirBlockView bv;
+            OK(xr_lir_block_at(module,f,b,&block)); OK(xr_lir_block_view(module,block,&bv));
+            for (uint32_t i=0;i<bv.instruction_count;++i) {
+                XrLirInstructionView v; OK(xr_lir_instruction_view(module,block,i,&v));
+                if (v.op!=XR_LIR_ICMP) continue;
+                CHECK((!selected || selected==f.id) && fv.parameter_count==2 &&
+                    fv.parameter_types[0]==XR_LIR_I64 && fv.parameter_types[1]==XR_LIR_I64 &&
+                    fv.result==XR_LIR_I64 && (v.predicate==XR_LIR_EQ || v.predicate==XR_LIR_NE));
+                selected=f.id;mask|=1u<<v.predicate;++comparisons;
+            }
+        }
+    }
+    CHECK(selected && comparisons==2 && mask==((1u<<XR_LIR_EQ)|(1u<<XR_LIR_NE)));
+    return selected;
+}
+
+static void i64_equality_c(const char *path) {
+    XrLirLowered local=lower(i64_equality_source,true);
+    CHECK(equality_callee(local.module)==local.entry.id);xr_lir_lowered_free(&local);
+    XrLirLowered whole=lower(i64_equality_source,false);
+    uint32_t callee=equality_callee(whole.module);
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
+    XrCompileResources *resources=NULL;
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+    XrLirCRequest request={whole.module,whole.entry,resources,"source-i64-equality",NULL};
+    XrLirCOutput output={0};CHECK(xr_lir_emit_c(&request,&output,NULL)==XR_LIR_C_OK);
+    xr_lir_lowered_free(&whole);xr_compile_resources_release(resources);
+    FILE *file=fopen(path,"wb");CHECK(file);
+    CHECK(fwrite(output.bytes,1,output.length,file)==output.length && fclose(file)==0);
+    xr_lir_c_output_free(&output);
+    printf("{\"callee\":%u,\"sourceLocalBothPredicates\":true,\"sourceWholeBothPredicates\":true}\n",callee);
+}
+
 static void i64_identity_cast(void) {
     XrLirLowered lowered = lower("fn identity(x:i64)->i64{\nreturn x as i64\n}\nidentity(17)\n", true);
     XrLirFunction selected = lowered.entry;
@@ -442,6 +499,7 @@ static void constant_string_branch(const char *directory) {
 }
 
 int main(int argc, char **argv) {
+    if(argc==3&&!strcmp(argv[1],"--i64-equality-c")){i64_equality_c(argv[2]);return 0;}
     if(argc==3&&!strcmp(argv[1],"--fneg-c")){f64_negation_c(argv[2]);return 0;}
     if(argc==3&&!strcmp(argv[1],"--constant-branch")){constant_string_branch(argv[2]);return 0;}
     CHECK(argc==1 || argc==2);
@@ -449,6 +507,7 @@ int main(int argc, char **argv) {
     owned_string_result(argc==2 ? argv[1] : NULL);
     if (argc==2) return 0;
     i64_identity_cast();
+    i64_equality();
     metadata_lifetime();
     numerical_oracles();
     actual_entry_and_refusal();
