@@ -12,6 +12,12 @@
 #include "base/xcompile_request.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
+#ifdef XR_OS_WINDOWS
+#include <windows.h>
+#else
+#include <pthread.h>
+#include <sched.h>
+#endif
 
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == XR_COMPILE_RESOURCE_OK)
@@ -186,6 +192,167 @@ static void allocation_failure_and_profile(void) {
     stats = snapshot(owner); CHECK(!stats.allocated_bytes && !stats.allocation_count);
     xr_compile_resources_free(memory); xr_compile_resources_release(owner); CHECK(!held);
 }
+typedef struct LiveRange {void *memory;size_t bytes;unsigned char value;} LiveRange;
+static bool range_oracle(const LiveRange *live,size_t count,uintptr_t address,size_t bytes,bool exact) {
+    if(!address||!bytes)return false;
+    for(size_t i=0;i<count;++i)if(live[i].memory) {
+        uintptr_t begin=(uintptr_t)live[i].memory;
+        if(address>=begin&&(!exact||address==begin)&&address-begin<live[i].bytes&&
+            bytes<=live[i].bytes-(size_t)(address-begin))return true;
+    }
+    return false;
+}
+static void range_compare(XrCompileResources *owner,const LiveRange *live,size_t count,
+    uintptr_t address,size_t bytes,bool exact) {
+    XrCompileResourceStatus status=exact?xr_compile_resources_allocation(owner,(const void *)address,bytes):
+        xr_compile_resources_extent(owner,(const void *)address,bytes);
+    CHECK(status==(range_oracle(live,count,address,bytes,exact)?XR_COMPILE_RESOURCE_OK:XR_COMPILE_RESOURCE_BAD_ARGUMENT));
+}
+static unsigned index_shape(XrCompileResources *owner,CompileAllocation *node,uintptr_t lower,uintptr_t upper,
+    const LiveRange *live,size_t count,size_t *seen) {
+    if(!node)return 0;
+    uintptr_t address=(uintptr_t)(node+1);CHECK(address>lower&&address<upper&&node->info.resources==owner);
+    bool found=false;
+    for(size_t i=0;i<count;++i)if(live[i].memory==(void *)address){CHECK(live[i].bytes==node->info.bytes);found=true;break;}
+    CHECK(found);++*seen;
+    unsigned left=index_shape(owner,node->info.left,lower,address,live,count,seen);
+    unsigned right=index_shape(owner,node->info.right,address,upper,live,count,seen);
+    CHECK(left<=right+1&&right<=left+1&&node->info.height==1+(left>right?left:right));
+    return node->info.height;
+}
+static void range_set_check(XrCompileResources *owner,const LiveRange *live,size_t count) {
+    size_t expected=0,seen=0;
+    for(size_t i=0;i<count;++i)if(live[i].memory) {
+        ++expected;uintptr_t begin=(uintptr_t)live[i].memory;size_t bytes=live[i].bytes;
+        CHECK(begin%_Alignof(CompileMaxAlignment)==0);
+        for(size_t b=0;b<bytes;++b)CHECK(((unsigned char *)live[i].memory)[b]==live[i].value);
+        range_compare(owner,live,count,begin,1,true);range_compare(owner,live,count,begin,bytes,true);
+        range_compare(owner,live,count,begin+bytes-1,1,false);
+        range_compare(owner,live,count,begin+bytes-1,2,false);
+        range_compare(owner,live,count,begin+bytes,1,false);
+        range_compare(owner,live,count,begin-1,1,false);
+        range_compare(owner,live,count,begin,0,false);
+        range_compare(owner,live,count,begin,SIZE_MAX,false);
+        range_compare(owner,live,count,begin+1,1,true);
+    }
+    range_compare(owner,live,count,0,1,false);range_compare(owner,live,count,1,1,true);
+    range_compare(owner,live,count,UINTPTR_MAX,SIZE_MAX,false);
+    (void)index_shape(owner,owner->allocations,0,UINTPTR_MAX,live,count,&seen);CHECK(seen==expected);
+}
+static void indexed_ranges(void) {
+    reset_observer();XrCompileResources *owner=NULL,*foreign=NULL;
+    OK(xr_compile_resources_new(&ordinary,&owner));OK(xr_compile_resources_new(&ordinary,&foreign));
+    LiveRange live[96]={{0}};
+    for(unsigned i=0;i<96;++i) {
+        unsigned slot=(i*37)%96;live[slot].bytes=1+slot%31;live[slot].value=(unsigned char)(slot+1);
+        OK(xr_compile_resources_alloc(owner,live[slot].bytes,&live[slot].memory));
+        memset(live[slot].memory,live[slot].value,live[slot].bytes);range_set_check(owner,live,96);
+    }
+    void *other=NULL;OK(xr_compile_resources_alloc(foreign,8,&other));
+    range_compare(owner,live,96,(uintptr_t)other,1,false);
+    CHECK(xr_compile_resources_extent(foreign,live[0].memory,1)==XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    /* Erase a real two-child root. Every surviving payload and owner identity
+     * is checked against the independent live-set oracle after relinking. */
+    CompileAllocation *root=owner->allocations;CHECK(root->info.left&&root->info.right);
+    size_t removed=0;while(removed<96&&live[removed].memory!=(void *)(root+1))++removed;CHECK(removed<96);
+    uintptr_t retired=(uintptr_t)live[removed].memory;xr_compile_resources_free(live[removed].memory);live[removed].memory=NULL;
+    range_compare(owner,live,96,retired,1,false);range_set_check(owner,live,96);
+    size_t chosen=removed?0:1;void *saved=live[chosen].memory;size_t old_bytes=live[chosen].bytes;
+    retired=(uintptr_t)saved;
+    XrCompileResourceStats before_stats={0},after_stats={0};OK(xr_compile_resources_stats(owner,&before_stats));
+    root=owner->allocations;uint64_t references=owner->references;size_t physical_before=held;fail_at=attempts;
+    CHECK(xr_compile_resources_resize(owner,&live[chosen].memory,old_bytes+17)==XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    OK(xr_compile_resources_stats(owner,&after_stats));
+    CHECK(live[chosen].memory==saved&&owner->allocations==root&&owner->references==references&&held==physical_before);
+    CHECK(!memcmp(&before_stats,&after_stats,sizeof(before_stats)));
+    fail_at=SIZE_MAX;range_set_check(owner,live,96);
+    OK(xr_compile_resources_resize(owner,&live[chosen].memory,old_bytes+17));
+    for(size_t b=0;b<old_bytes;++b)CHECK(((unsigned char *)live[chosen].memory)[b]==live[chosen].value);
+    live[chosen].bytes=old_bytes+17;memset(live[chosen].memory,live[chosen].value,live[chosen].bytes);
+    range_compare(owner,live,96,retired,1,false);range_set_check(owner,live,96);
+    OK(xr_compile_resources_resize(owner,&live[chosen].memory,1));live[chosen].bytes=1;range_set_check(owner,live,96);
+    saved=live[chosen].memory;size_t count=attempts;
+    OK(xr_compile_resources_resize(owner,&live[chosen].memory,1));CHECK(saved==live[chosen].memory&&attempts==count);
+    OK(xr_compile_resources_resize(owner,&live[chosen].memory,0));range_set_check(owner,live,96);
+    for(unsigned i=0;i<96;++i) {
+        unsigned slot=(i*53)%96;if(!live[slot].memory)continue;
+        xr_compile_resources_free(live[slot].memory);live[slot].memory=NULL;range_set_check(owner,live,96);
+    }
+    CHECK(!owner->allocations);xr_compile_resources_free(other);xr_compile_resources_release(foreign);
+    xr_compile_resources_release(owner);CHECK(!held);
+    puts("indexed ranges: mixed live-set oracle, balanced mutations, two-child identity, boundaries and OOM rollback PASS");
+}
+
+typedef struct RangeWorker {XrCompileResources *owner;unsigned id;} RangeWorker;
+static atomic_uint range_ready;
+static atomic_bool range_go;
+static void range_yield(void) {
+#ifdef XR_OS_WINDOWS
+    SwitchToThread();
+#else
+    sched_yield();
+#endif
+}
+#ifdef XR_OS_WINDOWS
+static DWORD WINAPI range_worker(void *context) {
+#else
+static void *range_worker(void *context) {
+#endif
+    RangeWorker *worker=context;OK(xr_compile_resources_retain(worker->owner));
+    atomic_fetch_add_explicit(&range_ready,1,memory_order_release);
+    while(!atomic_load_explicit(&range_go,memory_order_acquire))range_yield();
+    for(unsigned round=0;round<32;++round) {
+        void *payloads[12]={0};size_t sizes[12];
+        for(unsigned i=0;i<12;++i) {
+            sizes[i]=17+(i+worker->id+round)%23;OK(xr_compile_resources_alloc(worker->owner,sizes[i],&payloads[i]));
+            memset(payloads[i],(int)(worker->id+1),sizes[i]);
+        }
+        for(unsigned i=12;i>0;--i) {
+            unsigned slot=i-1;OK(xr_compile_resources_allocation(worker->owner,payloads[slot],1));
+            OK(xr_compile_resources_extent(worker->owner,(unsigned char *)payloads[slot]+sizes[slot]-1,1));
+            CHECK(((unsigned char *)payloads[slot])[sizes[slot]-1]==worker->id+1);
+        }
+        unsigned slot=(round+worker->id)%12;OK(xr_compile_resources_resize(worker->owner,&payloads[slot],64));
+        for(size_t b=0;b<sizes[slot];++b)CHECK(((unsigned char *)payloads[slot])[b]==worker->id+1);
+        for(unsigned i=0;i<12;++i)xr_compile_resources_free(payloads[(i*5)%12]);
+    }
+    xr_compile_resources_release(worker->owner);
+#ifdef XR_OS_WINDOWS
+    return 0;
+#else
+    return NULL;
+#endif
+}
+static void indexed_concurrency(void) {
+    reset_observer();XrCompileResources *owner=NULL;OK(xr_compile_resources_new(&ordinary,&owner));
+    uint64_t baseline=snapshot(owner).held_bytes;RangeWorker workers[4];
+    atomic_init(&range_ready,0);atomic_init(&range_go,false);
+#ifdef XR_OS_WINDOWS
+    HANDLE threads[4];
+#else
+    pthread_t threads[4];
+#endif
+    for(unsigned i=0;i<4;++i) {
+        workers[i]=(RangeWorker){owner,i};
+#ifdef XR_OS_WINDOWS
+        threads[i]=CreateThread(NULL,0,range_worker,&workers[i],0,NULL);CHECK(threads[i]);
+#else
+        CHECK(!pthread_create(&threads[i],NULL,range_worker,&workers[i]));
+#endif
+    }
+    while(atomic_load_explicit(&range_ready,memory_order_acquire)!=4)range_yield();
+    atomic_store_explicit(&range_go,true,memory_order_release);
+    for(unsigned i=0;i<4;++i) {
+#ifdef XR_OS_WINDOWS
+        CHECK(WaitForSingleObject(threads[i],INFINITE)==WAIT_OBJECT_0);CHECK(CloseHandle(threads[i]));
+#else
+        CHECK(!pthread_join(threads[i],NULL));
+#endif
+    }
+    CHECK(!owner->allocations&&snapshot(owner).held_bytes==baseline);xr_compile_resources_release(owner);CHECK(!held);
+    puts("indexed ranges: shared owner, independent payloads, concurrent lookup/resize/free and physical0 PASS");
+}
+
 typedef struct CancelContext { XrCompileResources *owner; unsigned polls; bool cancel; } CancelContext;
 static bool cancel_observe(const void *pointer) {
     CancelContext *context = (CancelContext *)pointer;
@@ -216,5 +383,6 @@ static void request_isolation(void) {
 }
 int main(void) {
     memory_policy(); extent_and_transfer(); allocation_failure_and_profile(); request_isolation();
+    indexed_ranges();indexed_concurrency();
     puts("request memory ownership and isolation: PASS"); return 0;
 }

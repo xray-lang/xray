@@ -31,6 +31,10 @@ foreach(request_target compile_request_foundation_production test_compile_reques
         target_compile_options(${request_target} PRIVATE -Wall -Wextra -Werror -pedantic)
     endif()
 endforeach()
+if(NOT WIN32)
+    find_package(Threads REQUIRED)
+    target_link_libraries(test_compile_request_memory PRIVATE Threads::Threads)
+endif()
 add_test(NAME test_compile_request_memory COMMAND test_compile_request_memory)
 add_test(NAME test_compile_request_deadline COMMAND test_compile_request_deadline)
 set_tests_properties(test_compile_request_memory test_compile_request_deadline
