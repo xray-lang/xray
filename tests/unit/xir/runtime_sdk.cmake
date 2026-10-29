@@ -1,5 +1,11 @@
 include("${CMAKE_CURRENT_LIST_DIR}/source_sdk.cmake")
 if(WIN32)
+    add_test(NAME runtime_sdk_recipe_incremental COMMAND ${XRAY_PYTHON} -X utf8
+        ${PROJECT_SOURCE_DIR}/tests/cmake/test_runtime_sdk_recipe_incremental.py
+        --root ${PROJECT_SOURCE_DIR} --compiler ${CMAKE_C_COMPILER}
+        --output ${CMAKE_BINARY_DIR}/tests/unit/sdk-recipe-incremental)
+    set_tests_properties(runtime_sdk_recipe_incremental PROPERTIES
+        LABELS "unit;build;sdk;dependencies" RUN_SERIAL TRUE TIMEOUT 120 COST 10)
     add_executable(test_xir_host_execution ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_xir_host_execution.c
         ${XIR_ASSERT_PANICS_C} ${XIR_ASSERT_PANICS_MATRIX_C})
     target_link_libraries(test_xir_host_execution PRIVATE xray_xir_runtime_host)

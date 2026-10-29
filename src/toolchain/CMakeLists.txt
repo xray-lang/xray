@@ -17,7 +17,8 @@ if(WIN32)
     file(MAKE_DIRECTORY ${XIR_SDK_DIR})
     execute_process(COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/scripts/gen_xir_runtime_sdk_recipe.py
         --root ${PROJECT_SOURCE_DIR} --output ${XIR_SDK_DIR}/sdk_recipe.inc.c
-        --record ${XIR_SDK_DIR}/sdk_recipe.json COMMAND_ERROR_IS_FATAL ANY)
+        --record ${XIR_SDK_DIR}/sdk_recipe.json --depfile ${XIR_SDK_DIR}/sdk_recipe.d
+        COMMAND_ERROR_IS_FATAL ANY)
     file(READ ${XIR_SDK_DIR}/sdk_recipe.json XIR_SDK_RECIPE)
     string(JSON XIR_SDK_FILE_COUNT LENGTH ${XIR_SDK_RECIPE} files)
     math(EXPR XIR_SDK_FILE_LAST "${XIR_SDK_FILE_COUNT}-1")
@@ -31,14 +32,27 @@ if(WIN32)
         get_filename_component(parent ${path} DIRECTORY)
         install(FILES ${XIR_SDK_DIR}/${path} DESTINATION lib/xray/xir-runtime-sdk/${parent} COMPONENT XraySDK)
     endforeach()
-    # Include edges can change without adding a source file. Refresh the recipe
-    # before the bundle so its consumer and manifest retain the same file list.
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${XIR_SDK_DEPENDENCIES})
+    # Refresh the dependency closure before deciding whether the build graph changed.
+    # Body edits still rebuild the bundle without regenerating every target.
+    add_custom_command(OUTPUT ${XIR_SDK_DIR}/sdk_recipe.json ${XIR_SDK_DIR}/sdk_recipe.inc.c
+        COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/scripts/gen_xir_runtime_sdk_recipe.py
+            --root ${PROJECT_SOURCE_DIR} --output ${XIR_SDK_DIR}/sdk_recipe.inc.c
+            --record ${XIR_SDK_DIR}/sdk_recipe.json --depfile ${XIR_SDK_DIR}/sdk_recipe.d
+        DEPENDS ${PROJECT_SOURCE_DIR}/scripts/gen_xir_runtime_sdk_recipe.py
+            ${PROJECT_SOURCE_DIR}/src/base/CMakeLists.txt
+            ${PROJECT_SOURCE_DIR}/src/xir/CMakeLists.txt
+            ${PROJECT_SOURCE_DIR}/src/execution/xir_runtime_host.cmake
+        DEPFILE ${XIR_SDK_DIR}/sdk_recipe.d
+        COMMENT "Refreshing runtime SDK dependency structure"
+        VERBATIM)
+    add_custom_target(xir-runtime-sdk-recipe DEPENDS ${XIR_SDK_DIR}/sdk_recipe.json)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${XIR_SDK_DIR}/sdk_recipe.json)
     add_custom_command(OUTPUT ${XIR_SDK_DIR}/sdk_generated.h ${XIR_SDK_DIR}/sdk_manifest.json
         COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/scripts/build_xir_runtime_sdk.py
             --root ${PROJECT_SOURCE_DIR} --output ${XIR_SDK_DIR}
             --compiler ${CMAKE_C_COMPILER} --crt MD --jobs 4
-        DEPENDS ${XIR_SDK_DEPENDENCIES} ${PROJECT_SOURCE_DIR}/src/xir/CMakeLists.txt
+        DEPENDS ${XIR_SDK_DIR}/sdk_recipe.json ${XIR_SDK_DEPENDENCIES}
+            ${PROJECT_SOURCE_DIR}/src/xir/CMakeLists.txt
             ${PROJECT_SOURCE_DIR}/src/execution/xir_runtime_host.cmake
             ${PROJECT_SOURCE_DIR}/scripts/gen_xir_runtime_sdk_recipe.py
             ${PROJECT_SOURCE_DIR}/scripts/derive_xir_sdk_abi.py

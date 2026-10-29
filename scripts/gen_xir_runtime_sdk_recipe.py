@@ -77,6 +77,7 @@ def main() -> None:
     parser.add_argument('--root', required=True)
     parser.add_argument('--output', required=True)
     parser.add_argument('--record')
+    parser.add_argument('--depfile')
     args = parser.parse_args()
     result = recipe(Path(args.root))
     lines = ['/* Generated from the actual runtime CMake source owners. */',
@@ -87,6 +88,17 @@ def main() -> None:
     write_if_changed(Path(args.output), '\n'.join(lines) + '\n')
     if args.record:
         write_if_changed(Path(args.record), json.dumps(result, indent=2) + '\n')
+    if args.depfile:
+        def escape(path: Path) -> str:
+            return path.resolve().as_posix().replace('\\', '\\\\').replace('$', '$$').replace(
+                ' ', '\\ ').replace('#', '\\#').replace(':', '\\:')
+        root = Path(args.root).resolve()
+        dependencies = [root / entry['path'] for entry in result['files'] if entry['kind'] != 5]
+        dependencies += [root / name for name in OWNERS]
+        dependencies.append(Path(__file__))
+        target = Path(args.record or args.output)
+        write_if_changed(Path(args.depfile), escape(target) + ': ' +
+                         ' '.join(escape(path) for path in sorted(set(dependencies))) + '\n')
 
 if __name__ == '__main__':
     main()
