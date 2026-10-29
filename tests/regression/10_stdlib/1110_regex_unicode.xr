@@ -10,8 +10,8 @@ import regex
 
 // \p{Han} - 匹配汉字
 @test
-fn test_p_han() {
-    var re = regex.compile("\\p{Han}+")
+fn test_p_han() throws(regex.RegexError) {
+    var re = (try regex.compile("\\p{Han}+"))
     var result = regex.find(re, "Hello你好World世界")
     assertEqual(result != null, true)
     assertEqual(result!.text, "你好")
@@ -19,8 +19,8 @@ fn test_p_han() {
 
 // \p{L} - 匹配所有字母（包括汉字）
 @test
-fn test_p_letter() {
-    var re = regex.compile("\\p{L}+")
+fn test_p_letter() throws(regex.RegexError) {
+    var re = (try regex.compile("\\p{L}+"))
     var result = regex.find(re, "123abc")
     assertEqual(result != null, true)
     assertEqual(result!.text, "abc")
@@ -28,8 +28,8 @@ fn test_p_letter() {
 
 // \p{N} - 匹配数字
 @test
-fn test_p_number() {
-    var re = regex.compile("\\p{N}+")
+fn test_p_number() throws(regex.RegexError) {
+    var re = (try regex.compile("\\p{N}+"))
     var result = regex.find(re, "abc123def")
     assertEqual(result != null, true)
     assertEqual(result!.text, "123")
@@ -37,8 +37,8 @@ fn test_p_number() {
 
 // \p{Latin} - 匹配拉丁字母
 @test
-fn test_p_latin() {
-    var re = regex.compile("\\p{Latin}+")
+fn test_p_latin() throws(regex.RegexError) {
+    var re = (try regex.compile("\\p{Latin}+"))
     var result = regex.find(re, "你好HelloWorld")
     assertEqual(result != null, true)
     assertEqual(result!.text, "HelloWorld")
@@ -46,8 +46,8 @@ fn test_p_latin() {
 
 // \P{Han} - 匹配非汉字
 @test
-fn test_P_not_han() {
-    var re = regex.compile("\\P{Han}+")
+fn test_P_not_han() throws(regex.RegexError) {
+    var re = (try regex.compile("\\P{Han}+"))
     var result = regex.find(re, "你好World")
     assertEqual(result != null, true)
     assertEqual(result!.text, "World")
@@ -55,8 +55,8 @@ fn test_P_not_han() {
 
 // \p{ASCII} - 匹配 ASCII 字符
 @test
-fn test_p_ascii() {
-    var re = regex.compile("\\p{ASCII}+")
+fn test_p_ascii() throws(regex.RegexError) {
+    var re = (try regex.compile("\\p{ASCII}+"))
     var result = regex.find(re, "Hello世界")
     assertEqual(result != null, true)
     assertEqual(result!.text, "Hello")
@@ -64,8 +64,8 @@ fn test_p_ascii() {
 
 // \p{Hiragana} - 匹配平假名
 @test
-fn test_p_hiragana() {
-    var re = regex.compile("\\p{Hiragana}+")
+fn test_p_hiragana() throws(regex.RegexError) {
+    var re = (try regex.compile("\\p{Hiragana}+"))
     var result = regex.find(re, "Helloひらがな世界")
     assertEqual(result != null, true)
     assertEqual(result!.text, "ひらがな")
@@ -73,8 +73,8 @@ fn test_p_hiragana() {
 
 // \p{Katakana} - 匹配片假名
 @test
-fn test_p_katakana() {
-    var re = regex.compile("\\p{Katakana}+")
+fn test_p_katakana() throws(regex.RegexError) {
+    var re = (try regex.compile("\\p{Katakana}+"))
     var result = regex.find(re, "Helloカタカナ世界")
     assertEqual(result != null, true)
     assertEqual(result!.text, "カタカナ")
@@ -82,16 +82,16 @@ fn test_p_katakana() {
 
 // 混合匹配
 @test
-fn test_unicode_mixed() {
+fn test_unicode_mixed() throws(regex.RegexError) {
     var text = "abc你好123"
     
     // All letters (including CJK)
-    var re_l = regex.compile("\\p{L}+")
+    var re_l = (try regex.compile("\\p{L}+"))
     var result = regex.find(re_l, text)
     assertEqual(result!.text, "abc你好")
     
     // 所有数字
-    var re_n = regex.compile("\\p{N}+")
+    var re_n = (try regex.compile("\\p{N}+"))
     result = regex.find(re_n, text)
     assertEqual(result!.text, "123")
 }

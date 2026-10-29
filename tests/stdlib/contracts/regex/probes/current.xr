@@ -1,12 +1,12 @@
 import regex
 
-var digits = regex.compile("\\d+")
+var digits = (try regex.compile("\\d+"))
 assert(regex.test(digits, "abc123"))
 assert(!regex.test(digits, "abc"))
 assert(regex.count(digits, "a1 b22 c333") == 3)
 assert(regex.findText(digits, "a1 b22") == "1")
 assert(regex.replaceAll(digits, "a1 b22", "N") == "aN bN")
-var parts = regex.split(regex.compile(",\\s*"), "a, b, c")
+var parts = regex.split((try regex.compile(",\\s*")), "a, b, c")
 assert(len(parts) == 3)
 assert(parts[0] == "a")
 assert(parts[2] == "c")

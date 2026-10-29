@@ -192,6 +192,12 @@ typedef struct XrNativeTypeDeclaration {
     uint32_t member_count;
 } XrNativeTypeDeclaration;
 
+typedef enum XrNativeCallableId {
+    XR_NATIVE_CALLABLE_STRING_FROM_UTF8 = 1,
+    XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID = 2,
+    XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY = 3
+} XrNativeCallableId;
+
 /* Callable IDs authenticate ordinary function bodies, independently of inline intrinsics. */
 typedef struct XrNativeCallableDeclaration {
     uint32_t id;
@@ -199,6 +205,9 @@ typedef struct XrNativeCallableDeclaration {
     const XrNativeMemberDeclaration *member;
     const XrNativeTypeDeclaration *error_e_type;
     bool ctfe;
+    /* Free functions have no nominal owner. Their governed source owns identity. */
+    const char *namespace_id, *source_path;
+    XrFingerprint source_fingerprint;
 } XrNativeCallableDeclaration;
 XR_FUNC const XrNativeCallableDeclaration *xr_native_callable_by_id(uint32_t id);
 typedef enum XrNativeIntrinsicImplementation {

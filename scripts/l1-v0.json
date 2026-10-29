@@ -285,6 +285,7 @@
     "test_xir_ctfe_slice_u8_argument-cancel",
     "test_xir_ctfe_slice_u8_argument-memory",
     "xir_from_utf8",
+    "xir_unicode_property_core",
     "xir_from_utf8_native",
     "xir_from_utf8_physical_header",
     "xir_from_utf8_physical_bytes",

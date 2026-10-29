@@ -2,7 +2,7 @@ import text
 
 import regex
 
-var xray_no_alloc_string_materialization_pattern = regex.compile("[a-z]+")
+var xray_no_alloc_string_materialization_pattern = (try regex.compile("[a-z]+"))
 var xray_no_alloc_string_materialization_translate: Map<string, string> = #{"a": "b"}
 
 fn xray_no_alloc_string_runes_reject(value: string) -> rune {

@@ -5,9 +5,9 @@ fn makeDynamicPattern(seed: i64) -> string {
     return "([a-z]+)(" + string(seed) + "+)"
 }
 
-fn makeRegexAcrossFrame(seed: i64) -> Regex {
+fn makeRegexAcrossFrame(seed: i64) throws(regex.RegexError) -> Regex {
     var pattern = makeDynamicPattern(seed)
-    return regex.compile(pattern)
+    return (try regex.compile(pattern))
 }
 
 fn makeMatchAcrossFrame(pattern: Regex, seed: i64) -> RegexMatch {
@@ -37,8 +37,8 @@ fn churnReleasedStorage(seed: i64) {
     }
 }
 
-fn constructReadAndDropResults(round: i64) {
-    var pattern = makeRegexAcrossFrame(7)
+fn constructReadAndDropResults(round: i64) throws(regex.RegexError) {
+    var pattern = (try makeRegexAcrossFrame(7))
     var matches = makeMatchesAcrossFrame(pattern, 7)
     assertEqual(len(matches), 3)
     assertEqual(matches[0].text, "alpha7")
@@ -50,8 +50,8 @@ fn constructReadAndDropResults(round: i64) {
 }
 
 @test
-fn test_regex_source_fields_own_borrowed_values() {
-    var pattern = makeRegexAcrossFrame(7)
+fn test_regex_source_fields_own_borrowed_values() throws(regex.RegexError) {
+    var pattern = (try makeRegexAcrossFrame(7))
     churnReleasedStorage(11)
     assertEqual(pattern.pattern, "([a-z]+)(7+)")
     assertEqual(regex.test(pattern, "target777"), true)
@@ -78,7 +78,7 @@ fn test_regex_source_fields_own_borrowed_values() {
     assertEqual(regex.find(pattern, noMatchText), null)
 
     for (var round = 0; round < 200; round++) {
-        constructReadAndDropResults(round)
+        (try constructReadAndDropResults(round))
     }
 }
 

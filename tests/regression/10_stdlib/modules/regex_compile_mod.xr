@@ -5,8 +5,8 @@
 
 import regex
 
-const RE_DIGIT = regex.compile(r"^\d+$")
-const RE_WORD = regex.compile(r"^[a-zA-Z_]\w*$")
+const RE_DIGIT = (try regex.compile(r"^\d+$"))
+const RE_WORD = (try regex.compile(r"^[a-zA-Z_]\w*$"))
 
 export fn isDigit(s: string) -> bool {
     return regex.test(RE_DIGIT, s)

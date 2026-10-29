@@ -66,7 +66,7 @@ fn generateFasta(n: i64): string {
 }
 
 // 主程序
-fn main() {
+fn main() throws(regex.RegexError) {
     // 生成测试数据（从命令行读取，默认 100000）
     // n = 100000 生成约 1MB 数据，用于基准测试
     // n = 1000 生成约 10KB 数据，用于快速验证
@@ -74,14 +74,14 @@ fn main() {
     var data = generateFasta(n)
     var initialLen = len(data.bytes())
     // 步骤 1：移除 FASTA 描述行和换行符
-    var cleanPattern = regex.compile("^>.*\n|\n", "m")
+    var cleanPattern = (try regex.compile("^>.*\n|\n", "m"))
     var cleaned = regex.replaceAll(cleanPattern, data, "")
     var cleanedLen = len(cleaned.bytes())
     // 步骤 2：计数 9 个 DNA 模式
     var patterns = ["agggtaaa|tttaccct", "[cgt]gggtaaa|tttaccc[acg]", "a[act]ggtaaa|tttacc[agt]t", "ag[act]gtaaa|tttac[agt]ct", "agg[act]taaa|ttta[agt]cct", "aggg[acg]aaa|ttt[cgt]ccct", "agggt[cgt]aa|tt[acg]accct", "agggta[cgt]a|t[acg]taccct", "agggtaa[cgt]|[acg]ttaccct"]
     var i = 0
     while (i < len(patterns)) {
-        var re = regex.compile(patterns[i], "i")
+        var re = (try regex.compile(patterns[i], "i"))
         var count = countMatches(re, cleaned)
         print(patterns[i], count)
         i++
@@ -92,7 +92,7 @@ fn main() {
     var current = cleaned
     i = 0
     while (i < len(magicPatterns)) {
-        var re = regex.compile(magicPatterns[i], "")
+        var re = (try regex.compile(magicPatterns[i], ""))
         current = regex.replaceAll(re, current, magicReplacements[i])
         i++
     }
@@ -104,4 +104,4 @@ fn main() {
     print(endLen)
 }
 
-main()
+(try main())

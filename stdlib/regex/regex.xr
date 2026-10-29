@@ -667,7 +667,7 @@ fn rxAstDump(t: RxAst, n: i64) -> string {
     var op = t.op[n]
     if (op == AN_LITERAL) {
         var ch = t.a[n]
-        if (ch >= 32 && ch < 127) { return "'" + chr(ch)! + "'" }
+        if (ch >= 32 && ch < 127) { return "'" + string(rune(ch)) + "'" }
         return "LIT(${ch})"
     }
     if (op == AN_EMPTY) { return "EMPTY" }
@@ -1725,7 +1725,8 @@ fn rxReplace(prog: Array<i64>, s: string, repl: string, all: bool) -> string {
         buf.b.push(text[k])
         k = k + 1
     }
-    return try! string.fromUtf8(buf.b[:])
+    const bytes = buf.b
+    return try! string.fromUtf8(bytes[:])
 }
 
 // Mine 7 (FIXED): the C split silently truncated at 256 parts and dropped the
@@ -1844,7 +1845,7 @@ fn rxProgValid(prog: Array<i64>) -> bool {
     return prog[PH_MAGIC] == PH_MAGIC_VALUE
 }
 
-export fn compile(pattern: string, flags: string = "") -> Regex {
+export fn compile(pattern: string, flags: string = "") throws(RegexError) -> Regex {
     var re = Regex(pattern, flags)
     // Compile eagerly so a bad pattern is reported by compile(), where C
     // reported it. C answered null after xr_runtime_error

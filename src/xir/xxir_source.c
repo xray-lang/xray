@@ -2231,6 +2231,7 @@ static bool source_resolved_identity(SourceContext *ctx, const XrModuleSpec *spe
 #include "xxir_source_declaration_storage.inc.c"
 #include "xxir_source_entry.inc.c"
 
+#include "xxir_source_unicode.inc.c"
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
     uint32_t readers = ctx->repl_tail ? 1u : 0u, function_values=0;
@@ -2340,6 +2341,11 @@ static bool collect_declarations(SourceContext *ctx) {
     /* Each source module can own one canonical decoder body. */
     if (count>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"native callable capacity overflow");
     capacity+=count;
+    for (uint32_t m=0;m<count;++m) if (source_unicode_module(ctx,m) && !source_owned_checked(&ctx->graph->specs[m])) {
+        uint32_t natives=(uint32_t)(sizeof(source_unicode_callables)/sizeof(*source_unicode_callables));
+        if (natives>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"native callable capacity overflow");
+        capacity+=natives;
+    }
     if (!ctx->core_factory && capacity <= UINT32_MAX - 7) capacity += 7;
     if (readers>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_BUDGET,"binding reader capacity exhausted");
     capacity+=readers;
@@ -2421,7 +2427,7 @@ static bool collect_declarations(SourceContext *ctx) {
         for (SourceName *p = ctx->names[m]; p; p = p->next)
             if (p->kind == SOURCE_IMPORT && !source_import_selectors(ctx,p)) return false;
     }
-    return source_exported_const_reserve(ctx);
+    return source_unicode_declare(ctx) && source_exported_const_reserve(ctx);
 }
 static bool source_parameter_promise(SourceContext *ctx, uint32_t function, uint32_t parameter) {
     SourceFunction *body = &ctx->bodies[function];

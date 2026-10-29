@@ -1,12 +1,12 @@
 import regex
 
-fn regex_dynamic_match_ok(pattern: string, text: string) -> bool {
-    var re = regex.compile(pattern)
+fn regex_dynamic_match_ok(pattern: string, text: string) throws(regex.RegexError) -> bool {
+    var re = (try regex.compile(pattern))
     return regex.find(re, text) != null
 }
 
-fn regex_dynamic_match_text(pattern: string, text: string, expected: string) -> bool {
-    var re = regex.compile(pattern)
+fn regex_dynamic_match_text(pattern: string, text: string, expected: string) throws(regex.RegexError) -> bool {
+    var re = (try regex.compile(pattern))
     var result = regex.find(re, text)
     if (result == null) {
         return false
@@ -15,20 +15,20 @@ fn regex_dynamic_match_text(pattern: string, text: string, expected: string) -> 
 }
 
 @test
-fn test_jit_regex_find_null_and_index_get() {
+fn test_jit_regex_find_null_and_index_get() throws(regex.RegexError) {
     for (var i = 0; i < 260; i++) {
-        assertEqual(regex_dynamic_match_ok("(?s)a.b", "a\nb"), true)
-        assertEqual(regex_dynamic_match_ok("hello", "hello"), true)
-        assertEqual(regex_dynamic_match_text("\\P{Han}+", "你好World", "World"), true)
+        assertEqual((try regex_dynamic_match_ok("(?s)a.b", "a\nb")), true)
+        assertEqual((try regex_dynamic_match_ok("hello", "hello")), true)
+        assertEqual((try regex_dynamic_match_text("\\P{Han}+", "你好World", "World")), true)
     }
 
-    var ignorecase = regex.compile("hello", "i")
+    var ignorecase = (try regex.compile("hello", "i"))
     assertEqual(regex.find(ignorecase, "HeLLo") != null, true)
-    assertEqual(regex_dynamic_match_ok("hello", "HELLO"), false)
+    assertEqual((try regex_dynamic_match_ok("hello", "HELLO")), false)
 
-    var dotall = regex.compile("(?s)a.b")
+    var dotall = (try regex.compile("(?s)a.b"))
     assertEqual(regex.find(dotall, "a\nb") != null, true)
-    assertEqual(regex_dynamic_match_ok("a.b", "a\nb"), false)
+    assertEqual((try regex_dynamic_match_ok("a.b", "a\nb")), false)
 
-    assertEqual(regex_dynamic_match_ok("a", ""), false)
+    assertEqual((try regex_dynamic_match_ok("a", "")), false)
 }

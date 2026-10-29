@@ -502,6 +502,11 @@ add_custom_command(
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/gen_native_declarations.py
             --root ${CMAKE_SOURCE_DIR}
     DEPENDS ${CMAKE_SOURCE_DIR}/scripts/gen_native_declarations.py
+            ${XRAY_STDLIB_DEF_FILES}
+            ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py
+            ${CMAKE_SOURCE_DIR}/tools/stdlibgen/provider_declarations.py
+            ${CMAKE_SOURCE_DIR}/tools/stdlibgen/provider_types.py
+            ${CMAKE_SOURCE_DIR}/tools/stdlibgen/provider_codegen.py
             ${CMAKE_SOURCE_DIR}/stdlib/types/array.xr
             ${CMAKE_SOURCE_DIR}/stdlib/types/string.xr
             ${CMAKE_SOURCE_DIR}/stdlib/types/atomic.xr

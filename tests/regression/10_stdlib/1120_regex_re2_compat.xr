@@ -12,13 +12,13 @@ import regex
 // 辅助函数
 // ============================================================================
 
-fn match_ok(pattern: string, text: string) -> bool {
-    var re = regex.compile(pattern)
+fn match_ok(pattern: string, text: string) throws(regex.RegexError) -> bool {
+    var re = (try regex.compile(pattern))
     return regex.find(re, text) != null
 }
 
-fn match_eq(pattern: string, text: string, expected: string) -> bool {
-    var re = regex.compile(pattern)
+fn match_eq(pattern: string, text: string, expected: string) throws(regex.RegexError) -> bool {
+    var re = (try regex.compile(pattern))
     var result = regex.find(re, text)
     if (result == null) {
         return false
@@ -31,24 +31,24 @@ fn match_eq(pattern: string, text: string, expected: string) -> bool {
 // ============================================================================
 
 @test
-fn test_literal_single_char() {
-    assertEqual(match_ok("a", "a"), true)
-    assertEqual(match_ok("a", "b"), false)
-    assertEqual(match_ok("a", ""), false)
+fn test_literal_single_char() throws(regex.RegexError) {
+    assertEqual((try match_ok("a", "a")), true)
+    assertEqual((try match_ok("a", "b")), false)
+    assertEqual((try match_ok("a", "")), false)
 }
 
 @test
-fn test_literal_in_string() {
-    assertEqual(match_ok("a", "zyzzyva"), true)
-    assertEqual(match_ok("a", "cab"), true)
-    assertEqual(match_ok("hello", "hello world"), true)
+fn test_literal_in_string() throws(regex.RegexError) {
+    assertEqual((try match_ok("a", "zyzzyva")), true)
+    assertEqual((try match_ok("a", "cab")), true)
+    assertEqual((try match_ok("hello", "hello world")), true)
 }
 
 @test
-fn test_literal_multi_char() {
-    assertEqual(match_ok("abc", "abc"), true)
-    assertEqual(match_ok("abc", "xabcy"), true)
-    assertEqual(match_ok("abc", "ab"), false)
+fn test_literal_multi_char() throws(regex.RegexError) {
+    assertEqual((try match_ok("abc", "abc")), true)
+    assertEqual((try match_ok("abc", "xabcy")), true)
+    assertEqual((try match_ok("abc", "ab")), false)
 }
 
 // ============================================================================
@@ -56,49 +56,49 @@ fn test_literal_multi_char() {
 // ============================================================================
 
 @test
-fn test_star_quantifier() {
-    assertEqual(match_ok("a*", ""), true)
-    assertEqual(match_ok("a*", "a"), true)
-    assertEqual(match_ok("a*", "aaa"), true)
-    assertEqual(match_ok("a*", "b"), true)  // 空匹配
+fn test_star_quantifier() throws(regex.RegexError) {
+    assertEqual((try match_ok("a*", "")), true)
+    assertEqual((try match_ok("a*", "a")), true)
+    assertEqual((try match_ok("a*", "aaa")), true)
+    assertEqual((try match_ok("a*", "b")), true)  // 空匹配
 }
 
 @test
-fn test_plus_quantifier() {
-    assertEqual(match_ok("a+", ""), false)
-    assertEqual(match_ok("a+", "a"), true)
-    assertEqual(match_ok("a+", "aaa"), true)
-    assertEqual(match_ok("a+", "b"), false)
+fn test_plus_quantifier() throws(regex.RegexError) {
+    assertEqual((try match_ok("a+", "")), false)
+    assertEqual((try match_ok("a+", "a")), true)
+    assertEqual((try match_ok("a+", "aaa")), true)
+    assertEqual((try match_ok("a+", "b")), false)
 }
 
 @test
-fn test_question_quantifier() {
-    assertEqual(match_ok("a?", ""), true)
-    assertEqual(match_ok("a?", "a"), true)
-    assertEqual(match_ok("a?", "aa"), true)
-    assertEqual(match_ok("a?", "b"), true)  // 空匹配
+fn test_question_quantifier() throws(regex.RegexError) {
+    assertEqual((try match_ok("a?", "")), true)
+    assertEqual((try match_ok("a?", "a")), true)
+    assertEqual((try match_ok("a?", "aa")), true)
+    assertEqual((try match_ok("a?", "b")), true)  // 空匹配
 }
 
 @test
-fn test_repeat_exact() {
-    assertEqual(match_ok("a{2}", "a"), false)
-    assertEqual(match_ok("a{2}", "aa"), true)
-    assertEqual(match_ok("a{2}", "aaa"), true)
+fn test_repeat_exact() throws(regex.RegexError) {
+    assertEqual((try match_ok("a{2}", "a")), false)
+    assertEqual((try match_ok("a{2}", "aa")), true)
+    assertEqual((try match_ok("a{2}", "aaa")), true)
 }
 
 @test
-fn test_repeat_range() {
-    assertEqual(match_ok("a{2,3}", "a"), false)
-    assertEqual(match_ok("a{2,3}", "aa"), true)
-    assertEqual(match_ok("a{2,3}", "aaa"), true)
-    assertEqual(match_ok("a{2,3}", "aaaa"), true)
+fn test_repeat_range() throws(regex.RegexError) {
+    assertEqual((try match_ok("a{2,3}", "a")), false)
+    assertEqual((try match_ok("a{2,3}", "aa")), true)
+    assertEqual((try match_ok("a{2,3}", "aaa")), true)
+    assertEqual((try match_ok("a{2,3}", "aaaa")), true)
 }
 
 @test
-fn test_repeat_min() {
-    assertEqual(match_ok("a{2,}", "a"), false)
-    assertEqual(match_ok("a{2,}", "aa"), true)
-    assertEqual(match_ok("a{2,}", "aaaa"), true)
+fn test_repeat_min() throws(regex.RegexError) {
+    assertEqual((try match_ok("a{2,}", "a")), false)
+    assertEqual((try match_ok("a{2,}", "aa")), true)
+    assertEqual((try match_ok("a{2,}", "aaaa")), true)
 }
 
 // ============================================================================
@@ -106,35 +106,35 @@ fn test_repeat_min() {
 // ============================================================================
 
 @test
-fn test_anchor_begin() {
-    assertEqual(match_ok("^a", "a"), true)
-    assertEqual(match_ok("^a", "ba"), false)
-    assertEqual(match_ok("^", "x"), true)
-    assertEqual(match_ok("^", ""), true)
+fn test_anchor_begin() throws(regex.RegexError) {
+    assertEqual((try match_ok("^a", "a")), true)
+    assertEqual((try match_ok("^a", "ba")), false)
+    assertEqual((try match_ok("^", "x")), true)
+    assertEqual((try match_ok("^", "")), true)
 }
 
 @test
-fn test_anchor_end() {
-    assertEqual(match_ok("a$", "a"), true)
-    assertEqual(match_ok("a$", "ab"), false)
-    assertEqual(match_ok("$", "x"), true)
-    assertEqual(match_ok("$", ""), true)
+fn test_anchor_end() throws(regex.RegexError) {
+    assertEqual((try match_ok("a$", "a")), true)
+    assertEqual((try match_ok("a$", "ab")), false)
+    assertEqual((try match_ok("$", "x")), true)
+    assertEqual((try match_ok("$", "")), true)
 }
 
 @test
-fn test_anchor_both() {
-    assertEqual(match_ok("^a$", "a"), true)
-    assertEqual(match_ok("^a$", "ab"), false)
-    assertEqual(match_ok("^a$", "ba"), false)
-    assertEqual(match_ok("^$", ""), true)
-    assertEqual(match_ok("^$", "a"), false)
+fn test_anchor_both() throws(regex.RegexError) {
+    assertEqual((try match_ok("^a$", "a")), true)
+    assertEqual((try match_ok("^a$", "ab")), false)
+    assertEqual((try match_ok("^a$", "ba")), false)
+    assertEqual((try match_ok("^$", "")), true)
+    assertEqual((try match_ok("^$", "a")), false)
 }
 
 @test
-fn test_anchor_with_alt() {
-    assertEqual(match_ok("^(foo|bar)$", "foo"), true)
-    assertEqual(match_ok("^(foo|bar)$", "bar"), true)
-    assertEqual(match_ok("^(foo|bar)$", "baz"), false)
+fn test_anchor_with_alt() throws(regex.RegexError) {
+    assertEqual((try match_ok("^(foo|bar)$", "foo")), true)
+    assertEqual((try match_ok("^(foo|bar)$", "bar")), true)
+    assertEqual((try match_ok("^(foo|bar)$", "baz")), false)
 }
 
 // ============================================================================
@@ -142,38 +142,38 @@ fn test_anchor_with_alt() {
 // ============================================================================
 
 @test
-fn test_char_class_simple() {
-    assertEqual(match_ok("[abc]", "a"), true)
-    assertEqual(match_ok("[abc]", "b"), true)
-    assertEqual(match_ok("[abc]", "c"), true)
-    assertEqual(match_ok("[abc]", "d"), false)
+fn test_char_class_simple() throws(regex.RegexError) {
+    assertEqual((try match_ok("[abc]", "a")), true)
+    assertEqual((try match_ok("[abc]", "b")), true)
+    assertEqual((try match_ok("[abc]", "c")), true)
+    assertEqual((try match_ok("[abc]", "d")), false)
 }
 
 @test
-fn test_char_class_range() {
-    assertEqual(match_ok("[a-z]", "a"), true)
-    assertEqual(match_ok("[a-z]", "m"), true)
-    assertEqual(match_ok("[a-z]", "z"), true)
-    assertEqual(match_ok("[a-z]", "A"), false)
-    assertEqual(match_ok("[a-z]", "0"), false)
+fn test_char_class_range() throws(regex.RegexError) {
+    assertEqual((try match_ok("[a-z]", "a")), true)
+    assertEqual((try match_ok("[a-z]", "m")), true)
+    assertEqual((try match_ok("[a-z]", "z")), true)
+    assertEqual((try match_ok("[a-z]", "A")), false)
+    assertEqual((try match_ok("[a-z]", "0")), false)
 }
 
 @test
-fn test_char_class_negated() {
-    assertEqual(match_ok("[^a]", "b"), true)
-    assertEqual(match_ok("[^a]", "a"), false)
-    assertEqual(match_ok("[^a-z]", "A"), true)
-    assertEqual(match_ok("[^a-z]", "0"), true)
-    assertEqual(match_ok("[^a-z]", "a"), false)
-    assertEqual(match_ok("[^0-9]", "a"), true)
-    assertEqual(match_ok("[^0-9]", "5"), false)
+fn test_char_class_negated() throws(regex.RegexError) {
+    assertEqual((try match_ok("[^a]", "b")), true)
+    assertEqual((try match_ok("[^a]", "a")), false)
+    assertEqual((try match_ok("[^a-z]", "A")), true)
+    assertEqual((try match_ok("[^a-z]", "0")), true)
+    assertEqual((try match_ok("[^a-z]", "a")), false)
+    assertEqual((try match_ok("[^0-9]", "a")), true)
+    assertEqual((try match_ok("[^0-9]", "5")), false)
 }
 
 @test
-fn test_char_class_combined() {
-    assertEqual(match_ok("[a-zA-Z]", "a"), true)
-    assertEqual(match_ok("[a-zA-Z]", "Z"), true)
-    assertEqual(match_ok("[a-zA-Z0-9]", "5"), true)
+fn test_char_class_combined() throws(regex.RegexError) {
+    assertEqual((try match_ok("[a-zA-Z]", "a")), true)
+    assertEqual((try match_ok("[a-zA-Z]", "Z")), true)
+    assertEqual((try match_ok("[a-zA-Z0-9]", "5")), true)
 }
 
 // ============================================================================
@@ -181,38 +181,38 @@ fn test_char_class_combined() {
 // ============================================================================
 
 @test
-fn test_digit_class() {
-    assertEqual(match_ok("\\d", "0"), true)
-    assertEqual(match_ok("\\d", "9"), true)
-    assertEqual(match_ok("\\d", "a"), false)
-    assertEqual(match_ok("\\d+", "123"), true)
+fn test_digit_class() throws(regex.RegexError) {
+    assertEqual((try match_ok("\\d", "0")), true)
+    assertEqual((try match_ok("\\d", "9")), true)
+    assertEqual((try match_ok("\\d", "a")), false)
+    assertEqual((try match_ok("\\d+", "123")), true)
 }
 
 @test
-fn test_word_class() {
-    assertEqual(match_ok("\\w", "a"), true)
-    assertEqual(match_ok("\\w", "Z"), true)
-    assertEqual(match_ok("\\w", "0"), true)
-    assertEqual(match_ok("\\w", "_"), true)
-    assertEqual(match_ok("\\w", "-"), false)
+fn test_word_class() throws(regex.RegexError) {
+    assertEqual((try match_ok("\\w", "a")), true)
+    assertEqual((try match_ok("\\w", "Z")), true)
+    assertEqual((try match_ok("\\w", "0")), true)
+    assertEqual((try match_ok("\\w", "_")), true)
+    assertEqual((try match_ok("\\w", "-")), false)
 }
 
 @test
-fn test_space_class() {
-    assertEqual(match_ok("\\s", " "), true)
-    assertEqual(match_ok("\\s", "\t"), true)
-    assertEqual(match_ok("\\s", "\n"), true)
-    assertEqual(match_ok("\\s", "a"), false)
+fn test_space_class() throws(regex.RegexError) {
+    assertEqual((try match_ok("\\s", " ")), true)
+    assertEqual((try match_ok("\\s", "\t")), true)
+    assertEqual((try match_ok("\\s", "\n")), true)
+    assertEqual((try match_ok("\\s", "a")), false)
 }
 
 @test
-fn test_negated_classes() {
-    assertEqual(match_ok("\\D", "a"), true)
-    assertEqual(match_ok("\\D", "0"), false)
-    assertEqual(match_ok("\\W", "-"), true)
-    assertEqual(match_ok("\\W", "a"), false)
-    assertEqual(match_ok("\\S", "a"), true)
-    assertEqual(match_ok("\\S", " "), false)
+fn test_negated_classes() throws(regex.RegexError) {
+    assertEqual((try match_ok("\\D", "a")), true)
+    assertEqual((try match_ok("\\D", "0")), false)
+    assertEqual((try match_ok("\\W", "-")), true)
+    assertEqual((try match_ok("\\W", "a")), false)
+    assertEqual((try match_ok("\\S", "a")), true)
+    assertEqual((try match_ok("\\S", " ")), false)
 }
 
 // ============================================================================
@@ -220,24 +220,24 @@ fn test_negated_classes() {
 // ============================================================================
 
 @test
-fn test_alternation_simple() {
-    assertEqual(match_ok("a|b", "a"), true)
-    assertEqual(match_ok("a|b", "b"), true)
-    assertEqual(match_ok("a|b", "c"), false)
+fn test_alternation_simple() throws(regex.RegexError) {
+    assertEqual((try match_ok("a|b", "a")), true)
+    assertEqual((try match_ok("a|b", "b")), true)
+    assertEqual((try match_ok("a|b", "c")), false)
 }
 
 @test
-fn test_alternation_words() {
-    assertEqual(match_ok("foo|bar", "foo"), true)
-    assertEqual(match_ok("foo|bar", "bar"), true)
-    assertEqual(match_ok("foo|bar", "baz"), false)
+fn test_alternation_words() throws(regex.RegexError) {
+    assertEqual((try match_ok("foo|bar", "foo")), true)
+    assertEqual((try match_ok("foo|bar", "bar")), true)
+    assertEqual((try match_ok("foo|bar", "baz")), false)
 }
 
 @test
-fn test_alternation_in_group() {
-    assertEqual(match_ok("(a|b)c", "ac"), true)
-    assertEqual(match_ok("(a|b)c", "bc"), true)
-    assertEqual(match_ok("(a|b)c", "cc"), false)
+fn test_alternation_in_group() throws(regex.RegexError) {
+    assertEqual((try match_ok("(a|b)c", "ac")), true)
+    assertEqual((try match_ok("(a|b)c", "bc")), true)
+    assertEqual((try match_ok("(a|b)c", "cc")), false)
 }
 
 // ============================================================================
@@ -245,28 +245,28 @@ fn test_alternation_in_group() {
 // ============================================================================
 
 @test
-fn test_capture_group() {
-    assertEqual(match_ok("(a)", "a"), true)
-    assertEqual(match_ok("(ab)", "ab"), true)
-    assertEqual(match_ok("(a)(b)", "ab"), true)
+fn test_capture_group() throws(regex.RegexError) {
+    assertEqual((try match_ok("(a)", "a")), true)
+    assertEqual((try match_ok("(ab)", "ab")), true)
+    assertEqual((try match_ok("(a)(b)", "ab")), true)
 }
 
 @test
-fn test_noncapture_group() {
-    assertEqual(match_ok("(?:a)", "a"), true)
-    assertEqual(match_ok("(?:ab)+", "abab"), true)
+fn test_noncapture_group() throws(regex.RegexError) {
+    assertEqual((try match_ok("(?:a)", "a")), true)
+    assertEqual((try match_ok("(?:ab)+", "abab")), true)
 }
 
 @test
-fn test_nested_groups() {
-    assertEqual(match_ok("((a))", "a"), true)
-    assertEqual(match_ok("(a(b)c)", "abc"), true)
-    assertEqual(match_ok("((a)(b))", "ab"), true)
+fn test_nested_groups() throws(regex.RegexError) {
+    assertEqual((try match_ok("((a))", "a")), true)
+    assertEqual((try match_ok("(a(b)c)", "abc")), true)
+    assertEqual((try match_ok("((a)(b))", "ab")), true)
 }
 
 @test
-fn test_deeply_nested() {
-    assertEqual(match_ok("((((((((((x))))))))))", "x"), true)
+fn test_deeply_nested() throws(regex.RegexError) {
+    assertEqual((try match_ok("((((((((((x))))))))))", "x")), true)
 }
 
 // ============================================================================
@@ -274,24 +274,24 @@ fn test_deeply_nested() {
 // ============================================================================
 
 @test
-fn test_word_boundary() {
-    assertEqual(match_ok("\\bfoo\\b", "foo"), true)
-    assertEqual(match_ok("\\bfoo\\b", "foo bar"), true)
-    assertEqual(match_ok("\\bfoo\\b", "foobar"), false)
-    assertEqual(match_ok("\\bfoo\\b", "barfoo"), false)
+fn test_word_boundary() throws(regex.RegexError) {
+    assertEqual((try match_ok("\\bfoo\\b", "foo")), true)
+    assertEqual((try match_ok("\\bfoo\\b", "foo bar")), true)
+    assertEqual((try match_ok("\\bfoo\\b", "foobar")), false)
+    assertEqual((try match_ok("\\bfoo\\b", "barfoo")), false)
 }
 
 @test
-fn test_word_boundary_single() {
-    assertEqual(match_ok("\\bx\\b", "x"), true)
-    assertEqual(match_ok("\\bx\\b", "<x>"), true)
-    assertEqual(match_ok("\\bx\\b", "ax"), false)
+fn test_word_boundary_single() throws(regex.RegexError) {
+    assertEqual((try match_ok("\\bx\\b", "x")), true)
+    assertEqual((try match_ok("\\bx\\b", "<x>")), true)
+    assertEqual((try match_ok("\\bx\\b", "ax")), false)
 }
 
 @test
-fn test_not_word_boundary() {
-    assertEqual(match_ok("\\Bfoo", "xfoo"), true)
-    assertEqual(match_ok("foo\\B", "foobar"), true)
+fn test_not_word_boundary() throws(regex.RegexError) {
+    assertEqual((try match_ok("\\Bfoo", "xfoo")), true)
+    assertEqual((try match_ok("foo\\B", "foobar")), true)
 }
 
 // ============================================================================
@@ -299,18 +299,18 @@ fn test_not_word_boundary() {
 // ============================================================================
 
 @test
-fn test_dot() {
-    assertEqual(match_ok(".", "a"), true)
-    assertEqual(match_ok(".", "1"), true)
-    assertEqual(match_ok(".", " "), true)
-    assertEqual(match_ok(".", "\n"), false)  // 默认不匹配换行
+fn test_dot() throws(regex.RegexError) {
+    assertEqual((try match_ok(".", "a")), true)
+    assertEqual((try match_ok(".", "1")), true)
+    assertEqual((try match_ok(".", " ")), true)
+    assertEqual((try match_ok(".", "\n")), false)  // 默认不匹配换行
 }
 
 @test
-fn test_dot_star() {
-    assertEqual(match_ok("a.*b", "ab"), true)
-    assertEqual(match_ok("a.*b", "axxb"), true)
-    assertEqual(match_ok("a.*b", "a\nb"), false)  // 不跨行
+fn test_dot_star() throws(regex.RegexError) {
+    assertEqual((try match_ok("a.*b", "ab")), true)
+    assertEqual((try match_ok("a.*b", "axxb")), true)
+    assertEqual((try match_ok("a.*b", "a\nb")), false)  // 不跨行
 }
 
 // ============================================================================
@@ -318,31 +318,31 @@ fn test_dot_star() {
 // ============================================================================
 
 @test
-fn test_escape_metachar() {
-    assertEqual(match_ok("\\.", "a.b"), true)
-    assertEqual(match_ok("\\.", "ab"), false)
-    assertEqual(match_ok("\\^", "^"), true)
-    assertEqual(match_ok("\\$", "$"), true)
-    assertEqual(match_ok("\\\\", "\\"), true)
+fn test_escape_metachar() throws(regex.RegexError) {
+    assertEqual((try match_ok("\\.", "a.b")), true)
+    assertEqual((try match_ok("\\.", "ab")), false)
+    assertEqual((try match_ok("\\^", "^")), true)
+    assertEqual((try match_ok("\\$", "$")), true)
+    assertEqual((try match_ok("\\\\", "\\")), true)
 }
 
 @test
-fn test_escape_special() {
-    assertEqual(match_ok("\\|", "|"), true)
-    assertEqual(match_ok("\\(", "("), true)
-    assertEqual(match_ok("\\)", ")"), true)
-    assertEqual(match_ok("\\[", "["), true)
-    assertEqual(match_ok("\\]", "]"), true)
-    assertEqual(match_ok("\\*", "*"), true)
-    assertEqual(match_ok("\\+", "+"), true)
-    assertEqual(match_ok("\\?", "?"), true)
+fn test_escape_special() throws(regex.RegexError) {
+    assertEqual((try match_ok("\\|", "|")), true)
+    assertEqual((try match_ok("\\(", "(")), true)
+    assertEqual((try match_ok("\\)", ")")), true)
+    assertEqual((try match_ok("\\[", "[")), true)
+    assertEqual((try match_ok("\\]", "]")), true)
+    assertEqual((try match_ok("\\*", "*")), true)
+    assertEqual((try match_ok("\\+", "+")), true)
+    assertEqual((try match_ok("\\?", "?")), true)
 }
 
 @test
-fn test_escape_sequences() {
-    assertEqual(match_ok("\\t", "\t"), true)
-    assertEqual(match_ok("\\n", "\n"), true)
-    assertEqual(match_ok("\\r", "\r"), true)
+fn test_escape_sequences() throws(regex.RegexError) {
+    assertEqual((try match_ok("\\t", "\t")), true)
+    assertEqual((try match_ok("\\n", "\n")), true)
+    assertEqual((try match_ok("\\r", "\r")), true)
 }
 
 // ============================================================================
@@ -350,37 +350,37 @@ fn test_escape_sequences() {
 // ============================================================================
 
 @test
-fn test_unicode_han() {
-    assertEqual(match_ok("\\p{Han}", "你"), true)
-    assertEqual(match_ok("\\p{Han}", "a"), false)
-    assertEqual(match_ok("\\p{Han}+", "你好世界"), true)
+fn test_unicode_han() throws(regex.RegexError) {
+    assertEqual((try match_ok("\\p{Han}", "你")), true)
+    assertEqual((try match_ok("\\p{Han}", "a")), false)
+    assertEqual((try match_ok("\\p{Han}+", "你好世界")), true)
 }
 
 @test
-fn test_unicode_latin() {
-    assertEqual(match_ok("\\p{Latin}", "a"), true)
-    assertEqual(match_ok("\\p{Latin}", "Z"), true)
-    assertEqual(match_ok("\\p{Latin}", "你"), false)
+fn test_unicode_latin() throws(regex.RegexError) {
+    assertEqual((try match_ok("\\p{Latin}", "a")), true)
+    assertEqual((try match_ok("\\p{Latin}", "Z")), true)
+    assertEqual((try match_ok("\\p{Latin}", "你")), false)
 }
 
 @test
-fn test_unicode_number() {
-    assertEqual(match_ok("\\p{N}", "0"), true)
-    assertEqual(match_ok("\\p{N}", "9"), true)
-    assertEqual(match_ok("\\p{N}+", "123"), true)
+fn test_unicode_number() throws(regex.RegexError) {
+    assertEqual((try match_ok("\\p{N}", "0")), true)
+    assertEqual((try match_ok("\\p{N}", "9")), true)
+    assertEqual((try match_ok("\\p{N}+", "123")), true)
 }
 
 @test
-fn test_unicode_negated() {
-    assertEqual(match_ok("\\P{Han}", "a"), true)
-    assertEqual(match_ok("\\P{Han}", "你"), false)
-    assertEqual(match_eq("\\P{Han}+", "你好World", "World"), true)
+fn test_unicode_negated() throws(regex.RegexError) {
+    assertEqual((try match_ok("\\P{Han}", "a")), true)
+    assertEqual((try match_ok("\\P{Han}", "你")), false)
+    assertEqual((try match_eq("\\P{Han}+", "你好World", "World")), true)
 }
 
 @test
-fn test_unicode_mixed() {
-    assertEqual(match_eq("\\p{Han}+", "Hello你好World", "你好"), true)
-    assertEqual(match_eq("\\p{Latin}+", "你好Hello世界", "Hello"), true)
+fn test_unicode_mixed() throws(regex.RegexError) {
+    assertEqual((try match_eq("\\p{Han}+", "Hello你好World", "你好")), true)
+    assertEqual((try match_eq("\\p{Latin}+", "你好Hello世界", "Hello")), true)
 }
 
 // ============================================================================
@@ -388,21 +388,21 @@ fn test_unicode_mixed() {
 // ============================================================================
 
 @test
-fn test_utf8_literal() {
-    assertEqual(match_ok("本", "本"), true)
-    assertEqual(match_ok("日本語", "日本語"), true)
+fn test_utf8_literal() throws(regex.RegexError) {
+    assertEqual((try match_ok("本", "本")), true)
+    assertEqual((try match_ok("日本語", "日本語")), true)
 }
 
 @test
-fn test_utf8_dot() {
-    assertEqual(match_ok("...", "日本語"), true)
-    assertEqual(match_ok("..", "你好"), true)
+fn test_utf8_dot() throws(regex.RegexError) {
+    assertEqual((try match_ok("...", "日本語")), true)
+    assertEqual((try match_ok("..", "你好")), true)
 }
 
 @test
-fn test_utf8_greek() {
-    assertEqual(match_ok("α", "α"), true)
-    assertEqual(match_ok("α+", "αβγ"), true)
+fn test_utf8_greek() throws(regex.RegexError) {
+    assertEqual((try match_ok("α", "α")), true)
+    assertEqual((try match_ok("α+", "αβγ")), true)
 }
 
 // ============================================================================
@@ -410,23 +410,23 @@ fn test_utf8_greek() {
 // ============================================================================
 
 @test
-fn test_lazy_star() {
-    assertEqual(match_eq("a*?", "aaa", ""), true)
+fn test_lazy_star() throws(regex.RegexError) {
+    assertEqual((try match_eq("a*?", "aaa", "")), true)
 }
 
 @test
-fn test_lazy_plus() {
-    assertEqual(match_eq("a+?", "aaa", "a"), true)
+fn test_lazy_plus() throws(regex.RegexError) {
+    assertEqual((try match_eq("a+?", "aaa", "a")), true)
 }
 
 @test
-fn test_lazy_question() {
-    assertEqual(match_eq("a??", "a", ""), true)
+fn test_lazy_question() throws(regex.RegexError) {
+    assertEqual((try match_eq("a??", "a", "")), true)
 }
 
 @test
-fn test_lazy_repeat() {
-    assertEqual(match_eq("a{2,}?", "aaaa", "aa"), true)
+fn test_lazy_repeat() throws(regex.RegexError) {
+    assertEqual((try match_eq("a{2,}?", "aaaa", "aa")), true)
 }
 
 // ============================================================================
@@ -434,24 +434,24 @@ fn test_lazy_repeat() {
 // ============================================================================
 
 @test
-fn test_ignorecase_inline() {
-    var re = regex.compile("(?i)hello")
+fn test_ignorecase_inline() throws(regex.RegexError) {
+    var re = (try regex.compile("(?i)hello"))
     var result = regex.find(re, "HELLO")
     assertEqual(result != null, true)
     assertEqual(result!.text, "HELLO")
 }
 
 @test
-fn test_ignorecase_flag() {
-    var re = regex.compile("hello", "i")
+fn test_ignorecase_flag() throws(regex.RegexError) {
+    var re = (try regex.compile("hello", "i"))
     var result = regex.find(re, "HeLLo")
     assertEqual(result != null, true)
     assertEqual(result!.text, "HeLLo")
 }
 
 @test
-fn test_case_sensitive() {
-    assertEqual(match_ok("hello", "HELLO"), false)
+fn test_case_sensitive() throws(regex.RegexError) {
+    assertEqual((try match_ok("hello", "HELLO")), false)
 }
 
 // ============================================================================
@@ -459,15 +459,15 @@ fn test_case_sensitive() {
 // ============================================================================
 
 @test
-fn test_multiline_begin() {
-    var re = regex.compile("(?m)^world")
+fn test_multiline_begin() throws(regex.RegexError) {
+    var re = (try regex.compile("(?m)^world"))
     var result = regex.find(re, "hello\nworld")
     assertEqual(result != null, true)
 }
 
 @test
-fn test_multiline_end() {
-    var re = regex.compile("(?m)hello$")
+fn test_multiline_end() throws(regex.RegexError) {
+    var re = (try regex.compile("(?m)hello$"))
     var result = regex.find(re, "hello\nworld")
     assertEqual(result != null, true)
 }
@@ -477,15 +477,15 @@ fn test_multiline_end() {
 // ============================================================================
 
 @test
-fn test_dotall() {
-    var re = regex.compile("(?s)a.b")
+fn test_dotall() throws(regex.RegexError) {
+    var re = (try regex.compile("(?s)a.b"))
     var result = regex.find(re, "a\nb")
     assertEqual(result != null, true)
 }
 
 @test
-fn test_dot_no_newline() {
-    assertEqual(match_ok("a.b", "a\nb"), false)
+fn test_dot_no_newline() throws(regex.RegexError) {
+    assertEqual((try match_ok("a.b", "a\nb")), false)
 }
 
 // ============================================================================
@@ -493,22 +493,22 @@ fn test_dot_no_newline() {
 // ============================================================================
 
 @test
-fn test_replace() {
-    var re = regex.compile("\\d+")
+fn test_replace() throws(regex.RegexError) {
+    var re = (try regex.compile("\\d+"))
     var result = regex.replace(re, "abc123def", "XXX")
     assertEqual(result, "abcXXXdef")
 }
 
 @test
-fn test_replace_all() {
-    var re = regex.compile("\\d+")
+fn test_replace_all() throws(regex.RegexError) {
+    var re = (try regex.compile("\\d+"))
     var result = regex.replaceAll(re, "a1b2c3", "X")
     assertEqual(result, "aXbXcX")
 }
 
 @test
-fn test_split() {
-    var re = regex.compile(",\\s*")
+fn test_split() throws(regex.RegexError) {
+    var re = (try regex.compile(",\\s*"))
     var parts = regex.split(re, "a, b, c")
     assertEqual(len(parts), 3)
     assertEqual(parts[0], "a")
@@ -521,22 +521,22 @@ fn test_split() {
 // ============================================================================
 
 @test
-fn test_empty_pattern() {
-    assertEqual(match_ok("", "abc"), true)  // 空模式匹配空字符串
+fn test_empty_pattern() throws(regex.RegexError) {
+    assertEqual((try match_ok("", "abc")), true)  // 空模式匹配空字符串
 }
 
 @test
-fn test_empty_text() {
-    assertEqual(match_ok("a", ""), false)
-    assertEqual(match_ok("a*", ""), true)
-    assertEqual(match_ok("a?", ""), true)
+fn test_empty_text() throws(regex.RegexError) {
+    assertEqual((try match_ok("a", "")), false)
+    assertEqual((try match_ok("a*", "")), true)
+    assertEqual((try match_ok("a?", "")), true)
 }
 
 @test
-fn test_complex_pattern() {
-    assertEqual(match_ok("(a+|b)+", "ab"), true)
-    assertEqual(match_ok("((a|b)+)", "abab"), true)
-    assertEqual(match_ok("a(b|c)*d", "abbbcd"), true)
+fn test_complex_pattern() throws(regex.RegexError) {
+    assertEqual((try match_ok("(a+|b)+", "ab")), true)
+    assertEqual((try match_ok("((a|b)+)", "abab")), true)
+    assertEqual((try match_ok("a(b|c)*d", "abbbcd")), true)
 }
 
 print("=== RE2 兼容性回归测试完成 ===")

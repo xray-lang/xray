@@ -4,8 +4,8 @@ import regex
 
 // @test compile and test
 @test
-fn test_compile_and_test() {
-    var re = regex.compile("\\d+")
+fn test_compile_and_test() throws(regex.RegexError) {
+    var re = (try regex.compile("\\d+"))
     assertEqual(regex.test(re, "abc123"), true)
     assertEqual(regex.test(re, "no digits"), false)
 }
@@ -15,8 +15,8 @@ fn test_compile_and_test() {
 // that forwarded into Xray would be exactly the compatibility shim this
 // migration exists to avoid. Every operation is a module function.
 @test
-fn test_module_functions() {
-    var re = regex.compile("([a-z]+)(\\d+)")
+fn test_module_functions() throws(regex.RegexError) {
+    var re = (try regex.compile("([a-z]+)(\\d+)"))
     assertEqual(regex.test(re, "abc123"), true)
 
     var found = regex.find(re, "abc123 xyz456")
@@ -32,7 +32,7 @@ fn test_module_functions() {
 
     assertEqual(regex.replace(re, "abc123 xyz456", "N"), "N xyz456")
 
-    var comma = regex.compile(",\\s*")
+    var comma = (try regex.compile(",\\s*"))
     var parts = regex.split(comma, "a, b, c")
     assertEqual(len(parts), 3)
     assertEqual(parts[2], "c")
@@ -40,8 +40,8 @@ fn test_module_functions() {
 
 // @test find with positions
 @test
-fn test_find() {
-    var re = regex.compile("\\d+")
+fn test_find() throws(regex.RegexError) {
+    var re = (try regex.compile("\\d+"))
     var result = regex.find(re, "abc123def")
     assert(result != null)
     assertEqual(result!.start, 3)
@@ -51,8 +51,8 @@ fn test_find() {
 
 // @test capture groups
 @test
-fn test_capture_groups() {
-    var re = regex.compile("(\\w+)@(\\w+)")
+fn test_capture_groups() throws(regex.RegexError) {
+    var re = (try regex.compile("(\\w+)@(\\w+)"))
     var result = regex.find(re, "contact: user@host.com")
     assert(result != null)
     var groups = result!.groups
@@ -63,30 +63,30 @@ fn test_capture_groups() {
 
 // @test fullFind (entire string must match)
 @test
-fn test_full_find() {
-    var re = regex.compile("[a-z]+")
+fn test_full_find() throws(regex.RegexError) {
+    var re = (try regex.compile("[a-z]+"))
     assert(regex.fullFind(re, "hello") != null)
     assertEqual(regex.fullFind(re, "hello123"), null)
 }
 
 // @test replace (first occurrence)
 @test
-fn test_replace() {
-    var re = regex.compile("\\s+")
+fn test_replace() throws(regex.RegexError) {
+    var re = (try regex.compile("\\s+"))
     assertEqual(regex.replace(re, "hello   world", "_"), "hello_world")
 }
 
 // @test replaceAll
 @test
-fn test_replace_all() {
-    var re = regex.compile("\\s+")
+fn test_replace_all() throws(regex.RegexError) {
+    var re = (try regex.compile("\\s+"))
     assertEqual(regex.replaceAll(re, "a   b   c", "-"), "a-b-c")
 }
 
 // @test split
 @test
-fn test_split() {
-    var re = regex.compile(",\\s*")
+fn test_split() throws(regex.RegexError) {
+    var re = (try regex.compile(",\\s*"))
     var parts = regex.split(re, "a, b, c, d")
     assertEqual(len(parts), 4)
     assertEqual(parts[0], "a")

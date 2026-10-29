@@ -13,48 +13,48 @@ import regex
 // ========================================
 
 @test
-fn test_lazy_plus() {
-    var re = regex.compile("a+?")
+fn test_lazy_plus() throws(regex.RegexError) {
+    var re = (try regex.compile("a+?"))
     var result = regex.find(re, "aaa")
     assertEqual(result != null, true)
     assertEqual(result!.text, "a")
 }
 
 @test
-fn test_lazy_star() {
-    var re = regex.compile("a*?")
+fn test_lazy_star() throws(regex.RegexError) {
+    var re = (try regex.compile("a*?"))
     var result = regex.find(re, "aaa")
     assertEqual(result != null, true)
     assertEqual(result!.text, "")
 }
 
 @test
-fn test_lazy_question() {
-    var re = regex.compile("a??")
+fn test_lazy_question() throws(regex.RegexError) {
+    var re = (try regex.compile("a??"))
     var result = regex.find(re, "a")
     assertEqual(result != null, true)
     assertEqual(result!.text, "")
 }
 
 @test
-fn test_lazy_repeat() {
-    var re = regex.compile("a{2,}?")
+fn test_lazy_repeat() throws(regex.RegexError) {
+    var re = (try regex.compile("a{2,}?"))
     var result = regex.find(re, "aaaa")
     assertEqual(result != null, true)
     assertEqual(result!.text, "aa")
 }
 
 @test
-fn test_greedy_plus() {
-    var re = regex.compile("a+")
+fn test_greedy_plus() throws(regex.RegexError) {
+    var re = (try regex.compile("a+"))
     var result = regex.find(re, "aaa")
     assertEqual(result != null, true)
     assertEqual(result!.text, "aaa")
 }
 
 @test
-fn test_greedy_star() {
-    var re = regex.compile("a*")
+fn test_greedy_star() throws(regex.RegexError) {
+    var re = (try regex.compile("a*"))
     var result = regex.find(re, "aaa")
     assertEqual(result != null, true)
     assertEqual(result!.text, "aaa")
@@ -65,24 +65,24 @@ fn test_greedy_star() {
 // ========================================
 
 @test
-fn test_ignorecase_inline() {
-    var re = regex.compile("(?i)hello")
+fn test_ignorecase_inline() throws(regex.RegexError) {
+    var re = (try regex.compile("(?i)hello"))
     var result = regex.find(re, "HELLO World")
     assertEqual(result != null, true)
     assertEqual(result!.text, "HELLO")
 }
 
 @test
-fn test_ignorecase_flag() {
-    var re = regex.compile("hello", "i")
+fn test_ignorecase_flag() throws(regex.RegexError) {
+    var re = (try regex.compile("hello", "i"))
     var result = regex.find(re, "HeLLo")
     assertEqual(result != null, true)
     assertEqual(result!.text, "HeLLo")
 }
 
 @test
-fn test_case_sensitive() {
-    var re = regex.compile("hello")
+fn test_case_sensitive() throws(regex.RegexError) {
+    var re = (try regex.compile("hello"))
     var result = regex.find(re, "HELLO")
     assertEqual(result, null)
 }
@@ -92,16 +92,16 @@ fn test_case_sensitive() {
 // ========================================
 
 @test
-fn test_multiline_caret() {
-    var re = regex.compile("(?m)^world")
+fn test_multiline_caret() throws(regex.RegexError) {
+    var re = (try regex.compile("(?m)^world"))
     var result = regex.find(re, "hello\nworld")
     assertEqual(result != null, true)
     assertEqual(result!.text, "world")
 }
 
 @test
-fn test_multiline_dollar() {
-    var re = regex.compile("(?m)hello$")
+fn test_multiline_dollar() throws(regex.RegexError) {
+    var re = (try regex.compile("(?m)hello$"))
     var result = regex.find(re, "hello\nworld")
     assertEqual(result != null, true)
     assertEqual(result!.text, "hello")
@@ -112,16 +112,16 @@ fn test_multiline_dollar() {
 // ========================================
 
 @test
-fn test_dotall() {
-    var re = regex.compile("(?s)a.b")
+fn test_dotall() throws(regex.RegexError) {
+    var re = (try regex.compile("(?s)a.b"))
     var result = regex.find(re, "a\nb")
     assertEqual(result != null, true)
     assertEqual(result!.text, "a\nb")
 }
 
 @test
-fn test_dot_no_newline() {
-    var re = regex.compile("a.b")
+fn test_dot_no_newline() throws(regex.RegexError) {
+    var re = (try regex.compile("a.b"))
     var result = regex.find(re, "a\nb")
     assertEqual(result, null)
 }
@@ -131,9 +131,9 @@ fn test_dot_no_newline() {
 // ========================================
 
 @test
-fn test_combined_flags() {
+fn test_combined_flags() throws(regex.RegexError) {
     // (?im) 忽略大小写 + 多行
-    var re = regex.compile("(?im)^hello")
+    var re = (try regex.compile("(?im)^hello"))
     var result = regex.find(re, "world\nHELLO")
     assertEqual(result != null, true)
     assertEqual(result!.text, "HELLO")

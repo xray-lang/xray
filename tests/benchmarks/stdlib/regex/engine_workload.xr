@@ -24,13 +24,13 @@ print("haystack bytes=${len(hay.bytes())}")
 var t0 = time.nanos()
 var i = 0
 while (i < 200) {
-    var r = regex.compile("([a-z]+)([0-9]+)@([a-z.]+)")
+    var r = (try regex.compile("([a-z]+)([0-9]+)@([a-z.]+)"))
     i = i + 1
 }
 var t1 = time.nanos()
 print("compile_200_ns=${t1 - t0}")
 
-var re = regex.compile("([a-z]+)([0-9]+)@([a-z.]+)")
+var re = (try regex.compile("([a-z]+)([0-9]+)@([a-z.]+)"))
 var t2 = time.nanos()
 var j = 0
 var acc = 0
@@ -71,7 +71,7 @@ while (n < 20) {
 var t9 = time.nanos()
 print("replaceAll_20_ns=${t9 - t8} rlen=${rlen}")
 
-var comma = regex.compile(",\\s*")
+var comma = (try regex.compile(",\\s*"))
 var ta = time.nanos()
 var p = 0
 var nparts = 0
