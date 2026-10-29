@@ -16,6 +16,7 @@
 #include "../xir/xxir_types.h"
 #include "../base/xsha256.h"
 #include "../xir/xxir_compile_memory.h"
+#include "../xir/xxir_lower_control.h"
 #include "../xir/xxir_internal.h"
 #include "../toolchain/xcompiler_session.h"
 #include <string.h>
@@ -139,6 +140,27 @@ static XrXirStatus source_product_hash(
     xr_sha256(packet->bytes, packet->length, digest);
     return XR_XIR_OK;
 }
+/* Lowering already owns the canonical Closed bytes. The product needs its own
+ * copy because its packet views can outlive the transferred VM program. */
+static XrXirStatus source_product_closed_packet(const XrXirArtifact *lowered,
+    XrCompileRequestControl *control,XrXirCheckedPacket *output,XrXirDiagnostic *diagnostic) {
+    XrXirStatus status=XR_XIR_BAD_STRUCTURE;
+    if (!lowered || lowered->module.stage!=XR_XIR_LOWERED ||
+        !output || output->bytes || output->length ||
+        !lowered->checked_packet.bytes || lowered->checked_packet.length<64) goto done;
+    status=control?xir_compile_resource_status(xr_compile_request_control_poll(control)):XR_XIR_OK;
+    if (status!=XR_XIR_OK) goto done;
+    uint8_t *bytes=xir_compile_alloc(&lowered->context,lowered->checked_packet.length,&status);
+    if (!bytes) goto done;
+    status=xir_compile_resource_status(xir_lower_copy_span(control,bytes,
+        lowered->checked_packet.bytes,lowered->checked_packet.length));
+    if (status!=XR_XIR_OK) {xr_compile_resources_free(bytes);goto done;}
+    *output=(XrXirCheckedPacket){bytes,lowered->checked_packet.length};
+done:
+    if (diagnostic && status!=XR_XIR_OK)
+        *diagnostic=(XrXirDiagnostic){status,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    return status;
+}
 static XrXirStatus source_product_compare(
     const void *left, const void *right, size_t size) {
     const unsigned char *a = left, *b = right;
@@ -194,19 +216,19 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
             diagnostic ? &diagnostic->xir : NULL);
     }
     if (status==XR_XIR_OK) {
-        stage=XR_XIR_SOURCE_PRODUCT_CLOSED_PACKET;
-        status=xr_xir_compile_checked_write(closed,&closed_packet,
-            diagnostic ? &diagnostic->xir : NULL);
-    }
-    if (status==XR_XIR_OK) {
         stage=XR_XIR_SOURCE_PRODUCT_LOWER;
-        status=xr_xir_compile_lower(closed,&request->target, xr_compile_session_request(request->source.session),&lowered,
+        status=xr_xir_compile_lower_take(&closed,&request->target, xr_compile_session_request(request->source.session),&lowered,
             diagnostic ? &diagnostic->xir : NULL);
     }
     uint32_t entry=0;
     if (status==XR_XIR_OK && !source_product_entry(xr_xir_compile_artifact_module(lowered),&entry))
         status=XR_XIR_BAD_STRUCTURE;
     xr_xir_compile_artifact_free(closed);
+    if (status==XR_XIR_OK) {
+        stage=XR_XIR_SOURCE_PRODUCT_CLOSED_PACKET;
+        status=source_product_closed_packet(lowered,xr_compile_session_request(request->source.session),
+            &closed_packet,diagnostic ? &diagnostic->xir : NULL);
+    }
     XrXirSourceProduct *product=NULL;
     if (status==XR_XIR_OK) {
         stage=XR_XIR_SOURCE_PRODUCT_FACTS;
@@ -219,7 +241,7 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
         product->facts.target=*xr_xir_compile_artifact_target(lowered);
         product->facts.function_count=module->function_count;product->facts.module_count=module->declarations->module_count;
         status=source_product_hash(&source_packet,product->facts.source_digest);
-        if (status==XR_XIR_OK) status=source_product_hash(&closed_packet,product->facts.closed_digest);
+        if (status==XR_XIR_OK) memcpy(product->facts.closed_digest,lowered->checked_identity,sizeof(product->facts.closed_digest));
         if (status==XR_XIR_OK)
             status=source_product_layout_digest(lowered,&product->facts,product->facts.lowered_layout_digest);
         if (status==XR_XIR_OK) status=source_product_tests(product,module);
