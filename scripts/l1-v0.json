@@ -13,6 +13,8 @@
     "check_owner_injected",
     "test_xir_task_executor",
     "test_source_public_instance",
+    "test_compile_request_memory",
+    "test_compile_request_deadline",
     "test_register_vm",
     "test_register_vm_alloc",
     "test_xir_p11_ctfe_instance",
@@ -403,7 +405,10 @@
     "hir_contextual_conversion_cli",
     "source_global_callable",
     "source_global_callable_sdk",
-    "source_global_callable_cli"
+    "source_global_callable_cli",
+    "test_compile_request_memory",
+    "test_compile_request_deadline",
+    "runtime_sdk_recipe_incremental"
   ],
   "versionCommand": [
     "{build}/xray.exe",
