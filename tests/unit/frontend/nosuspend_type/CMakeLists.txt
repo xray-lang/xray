@@ -1,0 +1,13 @@
+add_executable(test_nosuspend_type_syntax test_nosuspend_type.c)
+target_link_libraries(test_nosuspend_type_syntax PRIVATE xray_compiler_parser)
+set_target_properties(test_nosuspend_type_syntax PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_nosuspend_type_syntax PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_nosuspend_type_syntax PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME nosuspend_type_syntax COMMAND test_nosuspend_type_syntax)
+set_tests_properties(nosuspend_type_syntax PROPERTIES TIMEOUT 60 LABELS "unit;frontend;types;ownership")
+add_test(NAME source_nosuspend_sdk COMMAND test_source_sdk_consumer --nosuspend
+    "${PROJECT_BINARY_DIR}/tests/unit/source-sdk-empty-stdlib")
+set_tests_properties(source_nosuspend_sdk PROPERTIES TIMEOUT 120 LABELS "unit;api;source;sdk;ownership")

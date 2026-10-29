@@ -546,6 +546,8 @@ static void sig_type_ref(SigBuf *s, const XrTypeRef *ref) {
         sig_add(s, "/s%u", (unsigned) ref->scalar_rep);
     if (ref->requires_nothrow)
         sig_add(s, "/nothrow");
+    if (ref->requires_nosuspend)
+        sig_add(s, "/nosuspend");
     if (ref->throws_clause.syntax != XR_THROWS_OMITTED) {
         sig_add(s, "/throws%u", (unsigned) ref->throws_clause.syntax);
         sig_type_ref(s, ref->throws_clause.type);

@@ -79,6 +79,7 @@ typedef struct XrTypeRef {
     int column;
     uint8_t scalar_rep;                /* XrNativeType scalar representation */
     bool requires_nothrow;             /* FUNCTION: compiler-inferred HOF specialization */
+    bool requires_nosuspend;           /* FUNCTION: explicit source type qualifier */
     XrThrowsClause throws_clause;      /* FUNCTION: explicit source error clause */
     int fixed_length;                  /* FIXED_ARRAY: literal length if known, 0 otherwise */
     struct AstNode *fixed_length_expr; /* FIXED_ARRAY: source expression for N */

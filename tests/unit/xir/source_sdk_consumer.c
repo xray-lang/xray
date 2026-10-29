@@ -990,7 +990,33 @@ static void installed_nominal_projection(const char *stdlib) {
     int64_t value=-1;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK && value==0);
     CHECK(output.length==3 && !memcmp(output.bytes,"42\n",3));xray_source_result_free(result);
 }
+static void source_nosuspend_types(const char *stdlib) {
+    char source[] =
+        "enum Failure{Bad{message:string}}\n"
+        "type Callback<E> = nosuspend fn(i64) throws(E)->i64\n"
+        "class Plan<S>{const value:S;init(seed:i64,make:nosuspend fn(i64)->S){this.value=make(seed)}}\n"
+        "fn apply(callback:Callback<Failure>) throws(Failure)->i64{return try callback(41)}\n"
+        "print(Plan<i64>(41,fn(x:i64)->i64{return x+1}).value,"
+        "try apply(fn(x:i64) throws(Failure)->i64{return x+1}))\n"
+        "print(\"ns\\0\xe4\xb8\xad\")\n";
+    const char expected[] = "42 42\nns\0\xe4\xb8\xad\n";
+    XrSourceCompileOptions compiler=compile_options(stdlib);
+    XrSourceArtifact *artifact=compile(&compiler,source,__func__);
+    Output output={0};XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.write=capture;options.context=&output;
+    XrSourceResult *result=NULL;XrSourceEvent event={0};
+    CHECK(execute_owned(artifact,&options,&result,&event)==XR_SOURCE_OK && result);
+    xray_source_artifact_free(artifact);
+    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
+    int64_t value=-1;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK && value==0);
+    CHECK(output.length==sizeof(expected)-1 && !memcmp(output.bytes,expected,sizeof(expected)-1));
+    xray_source_result_free(result);
+}
 int main(int argc, char **argv) {
+    if(argc==3 && !strcmp(argv[1],"--nosuspend")) {
+        source_nosuspend_types(argv[2]);puts("Source SDK nosuspend: owned generic/typed-error callbacks and retired producers PASS");return 0;
+    }
     if(argc==3) {
         CHECK(!strcmp(argv[2],"initialization-cycles"));installed_initialization_cycles(argv[1]);
         puts("Installed Source SDK: generated cycle request retirement, named result42 and drop PASS");return 0;

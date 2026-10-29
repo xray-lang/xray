@@ -66,10 +66,15 @@ static void tref_to_str_impl(XrCompileState *state, const XrTypeRef *t, char *bu
             do { tref_append(buf, pos, cap, ">"); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
             break;
 
-        case XR_TREF_OPTIONAL:
+        case XR_TREF_OPTIONAL: {
+            bool grouped = t->children[0] &&
+                (t->children[0]->kind == XR_TREF_FUNCTION || t->children[0]->kind == XR_TREF_UNION);
+            if (grouped) tref_append(buf, pos, cap, "(");
             do { tref_to_str_impl(state, t->children[0], buf, pos, cap); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
+            if (grouped) tref_append(buf, pos, cap, ")");
             do { tref_append(buf, pos, cap, "?"); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
             break;
+        }
 
         case XR_TREF_UNION:
             for (int i = 0; i < t->nchildren && *pos < cap - 1 && xr_compile_state_status(state) == XR_COMPILE_RESOURCE_OK; i++) {
@@ -80,6 +85,7 @@ static void tref_to_str_impl(XrCompileState *state, const XrTypeRef *t, char *bu
             break;
 
         case XR_TREF_FUNCTION: {
+            if (t->requires_nosuspend) tref_append(buf, pos, cap, "nosuspend ");
             do { tref_append(buf, pos, cap, "fn("); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
             int nparam = t->nchildren > 0 ? t->nchildren - 1 : 0;
             for (int i = 0; i < nparam && *pos < cap - 1 && xr_compile_state_status(state) == XR_COMPILE_RESOURCE_OK; i++) {

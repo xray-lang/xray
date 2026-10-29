@@ -8,7 +8,7 @@ order: 021
 
 ## 附录 B. 关键字索引
 
-以下 **63 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 51 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`init`、`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
+以下 **63 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 51 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`init`、`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic`、`nosuspend` 是上下文词，不在本表；`parallel` 是标准库模块名。
 
 | 关键字 | 节 |
 |--|--|
@@ -82,7 +82,7 @@ order: 021
 
 ## Appendix B. Keyword Index
 
-These **63 keywords** are the union of the 51 general keywords in `src/frontend/lexer/xkeywords.def` and the 12 exact scalar type names in `src/shared/xr_exact_scalar_registry.def`, shown in ASCII lexical order. `init`, `move`, `ref`, `out`, `linked`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
+These **63 keywords** are the union of the 51 general keywords in `src/frontend/lexer/xkeywords.def` and the 12 exact scalar type names in `src/shared/xr_exact_scalar_registry.def`, shown in ASCII lexical order. `init`, `move`, `ref`, `out`, `linked`, `from`, `to`, `after`, `panic`, and `nosuspend` are contextual words, not entries here; `parallel` is a standard-library module name.
 
 | Keyword | Section |
 |--|--|

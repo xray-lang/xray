@@ -328,6 +328,7 @@ static bool type_ref_syntax_key_inner(const XrTypeRef *type_ref, int depth, uint
     *hash = type_ref_syntax_fold(*hash, (uint64_t) type_ref->nchildren);
     *hash = type_ref_syntax_fold(*hash, (uint64_t) type_ref->scalar_rep);
     *hash = type_ref_syntax_fold(*hash, (uint64_t) type_ref->requires_nothrow);
+    *hash = type_ref_syntax_fold(*hash, (uint64_t) type_ref->requires_nosuspend);
     *hash = type_ref_syntax_fold(*hash, (uint64_t) (uint32_t) type_ref->fixed_length);
     *hash = type_ref_syntax_fold(
         *hash, type_ref->fixed_length_expr ? (uint64_t) type_ref->fixed_length_expr->node_id : 0u);

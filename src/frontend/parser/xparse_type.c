@@ -291,9 +291,18 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
             XrTypeRef *ret =
                 clone_subst_type_ref(parser, src->children[total - 1], subst_alias, type_args);
             if (!xr_parser_healthy(parser)) return NULL;
-            return xr_tref_function_signature(
+            XrTypeRef *result = xr_tref_function_signature(
                 parser->compiler_session, params, modes, src->function_param_names, nparam, ret,
                 src->borrow_origin_syntax, src->borrow_origins, src->borrow_origin_count);
+            if (!xr_parser_healthy(parser) || !result) return NULL;
+            result->requires_nothrow = src->requires_nothrow;
+            result->requires_nosuspend = src->requires_nosuspend;
+            result->throws_clause = src->throws_clause;
+            if (src->throws_clause.type) {
+                result->throws_clause.type = clone_subst_type_ref(parser, src->throws_clause.type, subst_alias, type_args);
+                if (!xr_parser_healthy(parser)) return NULL;
+            }
+            return result;
         }
         case XR_TREF_TUPLE: {
             XrTypeRef *elems[256];
@@ -859,8 +868,17 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
      * only ever a tuple or a grouping (handled below). A missing arrow means
      * the function returns unit; an explicit `-> ()` is rejected, since a unit
      * return is spelled by omitting the arrow. */
+    bool no_suspend = false;
+    Token function_token = parser->current;
+    if (xr_parser_check_name(parser, "nosuspend")) {
+        XrParserStreamState saved = xr_parser_stream_save(parser);
+        xr_parser_advance(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
+        if (xr_parser_check(parser, TK_FN) &&
+            (xr_parser_in_group(parser) || parser->current.line == function_token.line)) no_suspend = true;
+        else xr_parser_stream_restore(parser, &saved);
+    }
     if (xr_parser_match(parser, TK_FN)) {
-        Token function_token = parser->previous;
         if (xr_parser_check(parser, TK_LT)) {
             /* fn<T>(...) is a diagnostics-only rendering: a generic function is
              * not a first-class value, so it cannot be written in source. */
@@ -1020,7 +1038,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             parser->compiler_session, elems, param_modes, param_names, count, ret,
             borrow_origin_syntax, borrow_origins, borrow_origin_count);
         if (!xr_parser_healthy(parser)) return NULL;
-        if (result) result->throws_clause = throws_clause;
+        if (result) {result->throws_clause = throws_clause;result->requires_nosuspend = no_suspend;}
         xr_tref_set_source_position(result, function_token.line, function_token.column);
 
 

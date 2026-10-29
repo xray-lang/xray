@@ -68,7 +68,7 @@ export class Plan<S> {
     private _active: bool
     private _releasePending: bool
 
-    init(options: Options, init: fn(i64) -> S) throws(ParallelError) {
+    init(options: Options, init: nosuspend fn(i64) -> S) throws(ParallelError) {
         var laneCount = try _referenceLaneCount(options)
         var states: Array<S> = []
         for (lane in 0..laneCount) {

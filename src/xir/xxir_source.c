@@ -659,7 +659,12 @@ static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *
     XrXirType result, error;
     if (!source_type(ctx, ref->children[count], &result) ||
         !source_error_clause_type(ctx, NULL, &ref->throws_clause, &error)) return false;
-    --ctx->depth; return source_signature(ctx, parameters, count, result, error, type);
+    --ctx->depth;
+    if (!source_signature(ctx, parameters, count, result, error, type)) return false;
+    if (!ref->requires_nosuspend) return true;
+    XrXirTypeNode qualified = *xr_xir_callable_signature(&ctx->types, *type);
+    qualified.flags |= XR_XIR_CALLABLE_NO_SUSPEND;
+    return source_intern_type(ctx, qualified, type);
 }
 static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);
 static bool source_tuple_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *type) {

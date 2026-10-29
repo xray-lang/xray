@@ -759,6 +759,8 @@ var f: Mapper2<i64, string> = (n) -> string(n)
 
 **函数类型语法**：函数类型以 `fn` 引导，写作 `fn(T1, T2) -> R`；参数可带 `ref` / `move` mode（如 `fn(ref i64) -> i64`）。返回 `unit` 时省略箭头段，写作 `fn(T)` / `fn()`——类型位置**不允许**显式写 `-> ()`。这与函数声明位有意不对称：声明位 `fn f() -> ()` 与 `fn f()` 都合法（§5.2），而类型出现在参数、泛型实参、容器元素等密集内联位置，只保留一种拼写。类型位置的裸 `(` 只表示元组或分组括号，与表达式侧和 §2.7 一致——出现逗号才是元组，`(T)` 是分组；因此可空函数类型直接写作 `(fn() -> i64)?`。`CFn<...>` 内同样使用 `fn` 拼写（`CFn<fn(A, B) -> R>`，见 §3.12）。
 
+函数类型允许可选的上下文前缀 `nosuspend fn(T1, T2) throws(E) -> R`；无前缀的书写类型默认可能挂起。`nosuspend` 只在类型位置、紧接 `fn` 之前识别，其它位置仍可作普通名字；它不越过未分组的语句换行。该保证属于同一个 callable 类型身份，与 `throws(E)` 独立，并由别名替换、可空及嵌套类型、格式化和接收后的复验保留。直接处于该期望类型的函数字面量按此保证检查，未知或可能挂起的调用拒绝；已经构造的普通函数值不能根据其函数体被隐式强化。限定类型可放宽到普通 callable，反向需要已有真实承诺；不新增函数声明自身的效应注解。
+
 #### 2.8.1 函数的错误类型与闭包
 
 抛错函数类型在参数列表与返回类型之间写 `throws(E)`，例如 `fn(string) throws(ParseErr) -> i64`；返回 Unit 时写 `fn(string) throws(ParseErr)`。无子句的函数类型保证不抛业务错误。`throws` 是类型身份的一部分，参与函数值赋值、重载判定和接口匹配；panic 不进入错误类型。
@@ -1899,6 +1901,8 @@ a single spelling. A bare `(` in type position is only a tuple or a grouping,
 matching the expression side and §2.7 — a comma makes a tuple, `(T)` groups — so
 a nullable function type is written directly as `(fn() -> i64)?`. `CFn<...>`
 uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
+
+A function type may carry the contextual prefix `nosuspend fn(T1, T2) throws(E) -> R`; a written type without the prefix may suspend. `nosuspend` is recognized only in type position immediately before `fn`, without crossing an ungrouped statement line boundary, and remains an ordinary name elsewhere. The guarantee belongs to the same callable type identity, independently of `throws(E)`, and survives alias substitution, nullable and nested types, formatting and receiving revalidation. A function literal directly checked against this expected type must prove the guarantee; unknown or potentially suspending calls reject. An already constructed ordinary function value cannot be implicitly strengthened from its body. A restricted callable may weaken to an ordinary one; the reverse requires an actual existing promise. This adds no own-function declaration effect annotation.
 
 #### 2.8.1 Function Error Types and Closures
 
