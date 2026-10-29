@@ -83,6 +83,8 @@ def main():
     base.write_text('int payload(void){return 2;}\n')
     log = make('body-only', 1)
     assert 'base.c' in log and recipe.read_bytes() == before and recipe.stat().st_mtime_ns == initial_time
+    log = make('body-no-op', 1)
+    assert 'base.c' not in log and 'Refreshing runtime SDK dependency structure' not in log
     (source/'src/base/detail.h').write_text('#define DETAIL 3\n')
     base.write_text('#include "detail.h"\nint payload(void){return DETAIL;}\n')
     make('include-add', 2)
@@ -91,6 +93,8 @@ def main():
     (source/'src/base/detail.h').write_text('#define DETAIL 4\n')
     log = make('header-body-only', 2)
     assert 'base.c' in log and recipe.read_bytes() == structure and recipe.stat().st_mtime_ns == struct_time
+    log = make('header-no-op', 2)
+    assert 'base.c' not in log and 'Refreshing runtime SDK dependency structure' not in log
     base.write_text('int payload(void){return 2;}\n');(source/'src/base/detail.h').unlink()
     make('include-remove-and-delete', 3)
     assert 'src/base/detail.h' not in recipe.read_text()
