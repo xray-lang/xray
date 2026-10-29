@@ -585,40 +585,77 @@ static XrLirStatus lir_literal_consumers(const XrLirFunctionData *f, uint32_t fu
     return XR_LIR_OK;
 }
 
-/* This initial owned subset has no managed PHI or loop-carried reference.
- * Explicit typed releases, rather than last-use guesses, retire each owner. */
+/* Each acyclic block owns its String parameters and instruction results.
+ * Only explicit selected-edge or result transfers may leave that block. */
 static XrLirStatus lir_string_owners(const XrLirFunctionData *f, uint32_t function,
-    uint8_t *owned, XrLirDiagnostic *d) {
-    bool managed = false;
-    for (uint32_t i = 0; i < f->value_count; ++i)
+    const LirGraph *g, uint8_t *owned, XrLirDiagnostic *d) {
+    bool managed = false, cells = false;
+    for (uint32_t i = 0; i < f->value_count; ++i) {
         managed |= f->values[i].type == XR_LIR_STRING || f->values[i].type == XR_LIR_STRING_CELL;
-    if (!managed) return XR_LIR_OK;
-    if (f->block_count != 1)
-        return xr_lir_internal_error(d, "managed String CFG transfer is not supported", function, 0, 0, NULL);
-    memset(owned, 0, f->value_count);
-    const XrLirBlockData *block = &f->blocks[0];
-    for (uint32_t i = 0; i < block->instruction_count; ++i) {
-        const XrLirInstructionView *v = &block->instructions[i].view;
-        for (uint32_t a = 0; a < v->operand_count; ++a) {
-            uint32_t id = v->operands[a];
-            const XrLirValueData *value = &f->values[id - 1];
-            if ((value->type == XR_LIR_STRING || value->type == XR_LIR_STRING_CELL) &&
-                !value->parameter && !owned[id - 1])
-                return xr_lir_internal_error(d, "String use follows release or precedes ownership", function, 1, i + 1, &v->source);
-        }
-        if (v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_STRING_CELL_DROP ||
-            (v->op == XR_LIR_RET && v->operand_count && f->result == XR_LIR_STRING)) {
-            uint32_t id = v->operands[0];
-            if (!owned[id - 1])
-                return xr_lir_internal_error(d, "String transfer requires an owned reference", function, 1, i + 1, &v->source);
-            owned[id - 1] = 0;
-        }
-        if (v->result && (v->type == XR_LIR_STRING || v->type == XR_LIR_STRING_CELL))
-            owned[v->result - 1] = 1;
+        cells |= f->values[i].type == XR_LIR_STRING_CELL;
     }
-    for (uint32_t i = 0; i < f->value_count; ++i)
-        if (owned[i])
-            return xr_lir_internal_error(d, "String owner requires release or result transfer", function, 1, 0, NULL);
+    if (!managed) return XR_LIR_OK;
+    uint32_t branches = 0;
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrLirInstructionView *term = lir_terminator(f, b);
+        branches += term->op == XR_LIR_CONDBR;
+        for (uint32_t e = 0; e < term->edge_count; ++e)
+            if (g->rank[term->edges[e].target - 1] <= g->rank[b])
+                return xr_lir_internal_error(d, "managed String loop transfer is not supported", function, b + 1, 0, NULL);
+    }
+    if (branches > 1 || (cells && f->block_count != 1))
+        return xr_lir_internal_error(d, "managed String flow exceeds one Cell-free diamond", function, 0, 0, NULL);
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        memset(owned, 0, f->value_count);
+        const XrLirBlockData *block = &f->blocks[b];
+        for (uint32_t p = 0; p < block->parameter_count; ++p)
+            if (f->values[block->parameters[p] - 1].type == XR_LIR_STRING)
+                owned[block->parameters[p] - 1] = 1;
+        for (uint32_t i = 0; i < block->instruction_count; ++i) {
+            const XrLirInstructionView *v = &block->instructions[i].view;
+            for (uint32_t a = 0; a < v->operand_count; ++a) {
+                uint32_t id = v->operands[a];
+                const XrLirValueData *value = &f->values[id - 1];
+                if ((value->type == XR_LIR_STRING || value->type == XR_LIR_STRING_CELL) &&
+                    (!value->parameter || value->block) && !owned[id - 1])
+                    return xr_lir_internal_error(d, "String use follows release or precedes ownership", function, b + 1, i + 1, &v->source);
+            }
+            if (v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_STRING_CELL_DROP ||
+                (v->op == XR_LIR_RET && v->operand_count && f->result == XR_LIR_STRING)) {
+                uint32_t id = v->operands[0];
+                if (!owned[id - 1])
+                    return xr_lir_internal_error(d, "String transfer requires an owned reference", function, b + 1, i + 1, &v->source);
+                owned[id - 1] = 0;
+            }
+            if (v->result && (v->type == XR_LIR_STRING || v->type == XR_LIR_STRING_CELL))
+                owned[v->result - 1] = 1;
+        }
+        const XrLirInstructionView *term = lir_terminator(f, b);
+        for (uint32_t e = 0; e < term->edge_count; ++e) {
+            const XrLirEdgeView *edge = &term->edges[e];
+            for (uint32_t a = 0; a < edge->argument_count; ++a) {
+                uint32_t id = edge->arguments[a];
+                if (f->values[id - 1].type != XR_LIR_STRING) continue;
+                if (!owned[id - 1])
+                    return xr_lir_internal_error(d, "String edge requires a distinct owned reference", function, b + 1, 0, &term->source);
+                for (uint32_t p = 0; p < a; ++p)
+                    if (edge->arguments[p] == id)
+                        return xr_lir_internal_error(d, "String edge duplicates one owned reference", function, b + 1, 0, &term->source);
+            }
+            for (uint32_t id = 1; id <= f->value_count; ++id) {
+                if (!owned[id - 1]) continue;
+                bool transferred = false;
+                for (uint32_t a = 0; a < edge->argument_count; ++a)
+                    transferred |= edge->arguments[a] == id;
+                if (!transferred)
+                    return xr_lir_internal_error(d, "String owner is not released or transferred on every edge", function, b + 1, 0, &term->source);
+            }
+        }
+        if (!term->edge_count)
+            for (uint32_t id = 0; id < f->value_count; ++id)
+                if (owned[id])
+                    return xr_lir_internal_error(d, "String owner requires release or result transfer", function, b + 1, 0, NULL);
+    }
     return XR_LIR_OK;
 }
 
@@ -648,11 +685,7 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         XrLirStatus status = lir_definitions(m, index, seen, d);
         if (status == XR_LIR_OK)
             status = lir_literal_consumers(f, index + 1, seen, d);
-        if (status == XR_LIR_OK)
-            status = lir_string_owners(f, index + 1, seen, d);
-        xr_free(seen);
-        if (status != XR_LIR_OK)
-            return status;
+        if (status != XR_LIR_OK) { xr_free(seen); return status; }
         LirGraph graph = {0};
         status = lir_graph_create(f, &graph);
         if (status == XR_LIR_OK && !lir_graph_order(f, &graph))
@@ -660,6 +693,9 @@ XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
         if (status == XR_LIR_VERIFY_ERROR)
             xr_lir_internal_error(d, "entry has an incoming edge or a block is unreachable",
                                   index + 1, 0, 0, NULL);
+        if (status == XR_LIR_OK)
+            status = lir_string_owners(f, index + 1, &graph, seen, d);
+        xr_free(seen);
         if (status == XR_LIR_OK) {
             lir_graph_dominators(&graph);
             status = lir_uses(f, index + 1, &graph, d);

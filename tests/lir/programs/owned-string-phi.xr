@@ -1,0 +1,7 @@
+fn choose(n:i64)->string {
+    var text = ""
+    if (n > 0) { text = "é\0${n}" } else { text = "right${n}" }
+    return text
+}
+print(choose(7))
+print(choose(-2))

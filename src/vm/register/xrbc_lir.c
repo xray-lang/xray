@@ -61,6 +61,7 @@ typedef struct {
     size_t patch_count, patch_capacity;
     XrRbcCompileDiagnostic *diagnostic;
     XrRbcCompileStatus status;
+    bool string_scratch;
 } RbcLirCompiler;
 
 static XrRbcCompileStatus rbc_lir_error(XrRbcCompileDiagnostic *d,
@@ -339,7 +340,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
             for (uint32_t e = 0; e < i.edge_count; ++e) {
                 bool scratch = false;
                 if (!rbc_lir_copies(c, i.edges[e], false, &scratch)) return false;
-                if (scratch) c->scratch_count = 1;
+                if (scratch) c->scratch_count = c->string_scratch ? 2u : 1u;
             }
         }
     }
@@ -369,6 +370,7 @@ static bool rbc_lir_kinds(RbcLirCompiler *c) {
         assigned[slot] = true;
         c->register_kinds[slot] = kind;
     }
+    if (c->string_scratch) c->register_kinds[c->slot_count + 1] = XR_RBC_STRING;
     for (uint32_t r = c->slot_count + c->scratch_count; r < c->register_count; ++r)
         c->register_kinds[r] = XR_RBC_CALL_WINDOW;
     return true;

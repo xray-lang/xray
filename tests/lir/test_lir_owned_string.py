@@ -67,7 +67,8 @@ def main():
     assert hashlib.sha256(oracle).hexdigest() == 'dc78af31cd0213663f3af6b48b23a3a9e82ee11d593dcc4b10fac47a2cf0d3f3'
     cases = [('hello', hello, oracle),
              ('join', args.source_root / 'tests/lir/programs/owned-string-join.xr', b'Xray1\n'),
-             ('storage', args.source_root / 'tests/lir/programs/owned-string-storage.xr', b'\xc3\xa9\0\nv12\n\n')]
+             ('storage', args.source_root / 'tests/lir/programs/owned-string-storage.xr', b'\xc3\xa9\0\nv12\n\n'),
+             ('phi', args.source_root / 'tests/lir/programs/owned-string-phi.xr', b'\xc3\xa9\0' b'7\nright-2\n')]
     for name, source, expected in cases:
         before = source.read_bytes()
         for mode in ('raw', 'sccp', 'inline', 'sccp-inline-inline-sccp'):
@@ -104,6 +105,39 @@ def main():
         ' xrt_run_standalone(&map,consume,NULL);xrt_run_standalone(&map,consume,NULL);return 0;}\n',encoding='ascii')
     for optimization in ('Od','O1','O2','Ox'):
         compile_run(folder,generated,main,optimization,b'')
+    folder = root / 'constant-branch'
+    folder.mkdir()
+    result = run('constant-branch-rbc', [args.result_driver, '--constant-branch', folder], folder)
+    assert (result.returncode, result.stdout, result.stderr) == (0, b'', b''), folder
+    main = folder / 'main.c'
+    main.write_text('#include "xray_native_runtime.h"\n#include <stdlib.h>\n#include <string.h>\n'
+        'extern XrtString *xray_lir_entry(void);\n'
+        'static void consume(void *context){XrtString *s=xray_lir_entry();size_t length=0;\n'
+        ' const char *bytes=xrt_string_bytes(s,&length);(void)context;\n'
+        ' if(length!=4||memcmp(bytes,"kept",4))abort();xrt_string_owned_drop(&s);}\n'
+        'int main(void){const XrtSourceMap map={NULL,0};xrt_run_standalone(&map,consume,NULL);\n'
+        ' xrt_run_standalone(&map,consume,NULL);return 0;}\n', encoding='ascii')
+    for variant in ('raw', 'sccp'):
+        child = folder / variant
+        child.mkdir()
+        for optimization in ('Od', 'O2'):
+            compile_run(child, folder / (variant + '.c'), main, optimization, b'')
+    loop = root / 'managed-loop.xr'
+    loop.write_text('fn repeat(n:i64)->string{var text="";var i=0;while(i<n){text="v${i}";i=i+1};return text}\nprint(repeat(2))\n', encoding='utf-8')
+    generated = root / 'managed-loop.c'
+    result = run('managed-loop-refusal', [args.source_driver, loop, generated])
+    assert result.returncode == 1 and not result.stdout and not generated.exists()
+    assert result.stderr.splitlines() == [b'lowering: managed String loop transfer is not supported by LIR lowering yet']
+    folder = root / 'literal-only-loop'
+    folder.mkdir()
+    source = folder / 'literal-only-loop.xr'
+    source.write_text('fn count(n:i64){var i=0;while(i<n){print("tick");i=i+1}}\ncount(2)\n', encoding='utf-8')
+    generated = folder / 'generated.c'
+    result = run('literal-loop-rbc', [args.driver, source, 'raw', generated, folder / 'rbc.json', 0, 1, 'normal'], folder)
+    assert (result.returncode, result.stdout, result.stderr) == (0, b'tick\ntick\n', b''), folder
+    main = folder / 'main.c'
+    main.write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\nint main(void){return xray_lir_entry()!=0;}\n', encoding='ascii')
+    compile_run(folder, generated, main, 'O2', b'tick\ntick\n')
     source = root / 'unpublished-global-reader.xr'
     source.write_text('var n=1\nfn read()->i64{return n}\nvar observed=read()\nprint(observed)\n', encoding='ascii')
     generated = root / 'unpublished.c'

@@ -929,7 +929,44 @@ static void test_literal_ownership(void) {
     }
 }
 
+static void test_string_edge_swap(void) {
+    XrLirModule *m = NULL; OK(xr_lir_module_create(NULL,&m));
+    XrLirType flag = XR_LIR_I1, types[] = {XR_LIR_STRING,XR_LIR_STRING};
+    XrLirFunction f = test_function(m,"string_swap",&flag,1,XR_LIR_STRING);
+    XrLirBlock entry=test_block(m,f,NULL,0), left=test_block(m,f,types,2),
+        right=test_block(m,f,types,2), join=test_block(m,f,types,2);
+    OK(xr_lir_set_entry(m,f,entry));
+    XrLirValue values[2];
+    for (unsigned i=0;i<2;++i) {
+        XrLirLiteral literal = {0}; const char *text=i?"B":"A"; OK(xr_lir_add_literal(m,text,1,&literal));
+        XrLirInstruction v={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
+        OK(xr_lir_emit_value(m,entry,&v,&values[i]));
+    }
+    conditional(m,entry,parameter(m,f,0),(XrLirEdge){left,values,2},(XrLirEdge){right,values,2});
+    XrLirValue order[]={block_parameter(m,left,0),block_parameter(m,left,1)};
+    test_branch(m,left,join,order,2);
+    order[0]=block_parameter(m,right,1);order[1]=block_parameter(m,right,0);test_branch(m,right,join,order,2);
+    order[0]=block_parameter(m,join,0);order[1]=block_parameter(m,join,1);
+    XrLirInstruction concat={.op=XR_LIR_STRING_CONCAT,.type=XR_LIR_STRING,.operands=order,.operand_count=2};
+    XrLirValue result; OK(xr_lir_emit_value(m,join,&concat,&result));
+    for (unsigned i=0;i<2;++i) {
+        XrLirInstruction drop={.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&order[i],.operand_count=1};
+        OK(xr_lir_emit_effect(m,join,&drop));
+    }
+    test_return(m,join,result);OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *program=compile(m,f);xr_lir_module_destroy(m);
+    for (uint64_t flag_value=0;flag_value<2;++flag_value) {
+        XrRbcExecution *execution=NULL;CHECK(xr_rbc_program_prepare(program,&flag_value,1,&execution)==XR_RBC_OK);
+        XrRbcOutcome *outcome=xr_rbc_execution_run(execution);CHECK(outcome&&xr_rbc_outcome_status(outcome)==XR_RBC_OK);
+        xr_rbc_execution_free(&execution);
+        if(flag_value){xr_rbc_program_destroy(program);program=NULL;}
+        const XrtString *text=NULL;CHECK(xr_rbc_outcome_string(outcome,&text));
+        size_t size=0;const char *bytes=xrt_string_bytes(text,&size);
+        CHECK(size==2&&!memcmp(bytes,flag_value?"AB":"BA",2));xr_rbc_outcome_free(&outcome);
+    }
+}
 int main(void) {
+    test_string_edge_swap();
     test_literal_ownership();
     test_cell_escape_rejections();
     test_cell_transport();

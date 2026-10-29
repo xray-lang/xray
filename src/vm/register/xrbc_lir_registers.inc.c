@@ -198,10 +198,14 @@ static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
     xr_lir_block_view(c->input,
         (XrLirBlock) {c->input, c->function.id, edge.target}, &target);
     uint32_t destinations[255], sources[255], count = 0;
+    bool strings[255];
     for (uint32_t p = 0; p < edge.argument_count; ++p) {
         uint32_t destination = c->slots[target.parameters[p]], source = c->slots[edge.arguments[p]];
         if (destination != source) {
             destinations[count] = destination;
+            XrLirType type = XR_LIR_TYPE_INVALID;
+            xr_lir_value_type(c->input, (XrLirValue){c->input,c->function.id,edge.arguments[p]}, &type);
+            strings[count] = type == XR_LIR_STRING;
             sources[count++] = source;
         }
     }
@@ -216,7 +220,8 @@ static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
             for (uint32_t q = 0; q < count; ++q)
                 if (destinations[q] != UINT32_MAX && sources[q] == destinations[p]) used = true;
             if (used) continue;
-            if (emit && !rbc_lir_emit(c, XR_RBC_MOV, destinations[p], sources[p], 0, 0))
+            if (emit && !rbc_lir_emit(c, strings[p] ? XR_RBC_STRING_TAKE : XR_RBC_MOV,
+                    destinations[p], sources[p], 0, 0))
                 return false;
             destinations[p] = UINT32_MAX;
             --remaining;
@@ -225,10 +230,13 @@ static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
         if (progress) continue;
         XR_DCHECK(first != UINT32_MAX, "a pending parallel copy has an old source");
         uint32_t source = sources[first];
-        if (emit && !rbc_lir_emit(c, XR_RBC_MOV, c->slot_count, source, 0, 0)) return false;
+        uint32_t temporary = c->slot_count + (strings[first] ? 1u : 0u);
+        if (strings[first]) c->string_scratch = true;
+        if (emit && !rbc_lir_emit(c, strings[first] ? XR_RBC_STRING_TAKE : XR_RBC_MOV,
+                temporary, source, 0, 0)) return false;
         *scratch = true;
         for (uint32_t p = 0; p < count; ++p)
-            if (destinations[p] != UINT32_MAX && sources[p] == source) sources[p] = c->slot_count;
+            if (destinations[p] != UINT32_MAX && sources[p] == source) sources[p] = temporary;
     }
     return true;
 }

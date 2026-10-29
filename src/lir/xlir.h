@@ -49,6 +49,8 @@ typedef enum XrLirType {
 
 /* String instruction results own references. Ordinary call parameters borrow
  * through that call; a language binding explicitly retains its parameter.
+ * Selected edges transfer each String argument into an owned block parameter.
+ * One reference cannot fill two parameters without an explicit retain.
  * RET transfers an owned result. String Cells own one independent reference
  * and their storage remains in the defining activation. */
 typedef enum XrLirOp {

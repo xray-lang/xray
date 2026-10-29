@@ -15,8 +15,10 @@
 
 static struct { void *pointer; size_t size; } blocks[3];
 static enum { NO_FAILURE, OUTCOME_FAILURE, INITIAL_STACK_FAILURE, GROWTH_FAILURE,
-    CELL_INITIAL_FAILURE, CELL_GROWTH_FAILURE } fault;
+    CELL_INITIAL_FAILURE, CELL_GROWTH_FAILURE, STRING_INDEX_FAILURE, STRING_JOIN_FAILURE } fault;
 
+static void *real_malloc(size_t size) { return xr_malloc(size); }
+static void *execution_malloc(size_t size);
 static void *real_calloc(size_t count, size_t size) { return xr_calloc(count, size); }
 static void *execution_calloc(size_t count, size_t size);
 
@@ -54,6 +56,8 @@ static void moving_free(void *pointer) {
 
 // Only this VM instance's allocator is interposed. The common execution
 // boundary and location owner remain the actual linked production runtime.
+#undef xr_malloc
+#define xr_malloc(size) execution_malloc(size)
 #undef xr_calloc
 #undef xr_realloc
 #undef xr_free
@@ -62,7 +66,12 @@ static void moving_free(void *pointer) {
 #define xr_free(pointer) moving_free(pointer)
 #include "vm/register/xrbc.c"
 
+static void *execution_malloc(size_t size) {
+    if (fault == STRING_INDEX_FAILURE) { fault = NO_FAILURE; return NULL; }
+    return real_malloc(size);
+}
 static void *execution_calloc(size_t count, size_t size) {
+    if (fault == STRING_JOIN_FAILURE) { fault = NO_FAILURE; return NULL; }
     if (fault == OUTCOME_FAILURE && size == sizeof(XrRbcOutcome)) {
         fault = NO_FAILURE;
         return NULL;
@@ -193,7 +202,33 @@ static void cell_growth(bool panic) {
         XR_CHECK(!blocks[i].pointer && !blocks[i].size, "all three moving buffers reclaimed");
 }
 
+static void string_admission_oom(void) {
+    uint32_t code[5];
+    XR_CHECK(xr_rbc_encode(&code[0],(XrRbcOperands){XR_RBC_STRING_LITERAL,0,0,0,0}),"String producer");
+    XR_CHECK(xr_rbc_jump(&code[1],1,3,5),"forward String edge");
+    XR_CHECK(xr_rbc_encode(&code[2],(XrRbcOperands){XR_RBC_RET0,0,0,0,0}),"unreachable return");
+    XR_CHECK(xr_rbc_encode(&code[3],(XrRbcOperands){XR_RBC_STRING_DROP,0,0,0,0}),"owned String retirement");
+    code[4]=code[2];
+    XrRbcRegisterKind kind=XR_RBC_STRING;
+    XrRbcFunction function={.code=code,.code_count=5,.register_count=1,.register_kinds=&kind,.register_kind_count=1};
+    XrRbcLiteral literal={"s",1}; XrRbcModule module={.functions=&function,.function_count=1,.literals=&literal,.literal_count=1};
+    XrtLocationOwner *owner=NULL; XR_CHECK(xrt_locations_create(NULL,0,&owner)==XRT_LOCATION_OK,"String image");
+    for (unsigned i=0;i<3;++i) {
+        fault=i==0?STRING_INDEX_FAILURE:i==1?STRING_JOIN_FAILURE:NO_FAILURE;
+        XrRbcExecution *execution=NULL; XrRbcStatus status=xr_rbc_module_prepare(&module,0,NULL,0,owner,&execution);
+        XR_CHECK(fault==NO_FAILURE,"representative String admission allocation reached");
+        if(i<2) XR_CHECK(status==XR_RBC_OUT_OF_MEMORY&&!execution,"String verifier OOM publishes nothing");
+        else {
+            XR_CHECK(status==XR_RBC_OK&&execution,"String admission recovers after allocation failures");
+            XrRbcOutcome *outcome=xr_rbc_execution_run(execution);XR_CHECK(outcome&&xr_rbc_outcome_status(outcome)==XR_RBC_OK,"same String graph executes");
+            xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
+        }
+    }
+    xrt_locations_release(owner);
+    for(size_t i=0;i<3;++i)XR_CHECK(!blocks[i].pointer&&!blocks[i].size,"String execution buffers reclaimed");
+}
 int main(void) {
+    string_admission_oom();
     uint32_t code[11];
     XrRbcFunction function = make_countdown(code);
     XrRbcModule module = {&function, 1, NULL, 0, NULL, 0};

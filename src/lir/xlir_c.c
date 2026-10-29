@@ -500,6 +500,10 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge) {
         c_text(c, ";\n");
     }
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a)
+        if (c_value_type(c, edge->arguments[a]) == XR_LIR_STRING) {
+            c_text(c, "        "); c_value(c, edge->arguments[a]); c_text(c, " = NULL;\n");
+        }
+    for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a)
         c_format(c, "        v%" PRIu32 " = v%" PRIu32 ";\n", block.parameters[a],
                  c->scratch + 1 + a);
     c_format(c, "        goto bb%" PRIu32 ";\n    }\n", edge->target);

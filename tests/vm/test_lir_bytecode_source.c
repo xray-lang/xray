@@ -8,8 +8,10 @@
  */
 #include "../lir/lir_source_fixture.h"
 #include "lir/xlir_lower.h"
+#include "lir/xlir_builder.h"
 #include "lir/xlir_verify.h"
 #include "lir/xlir_c.h"
+#include "lir/xlir_sccp.h"
 #include "vm/register/xrbc_lir.h"
 #include <fenv.h>
 #if defined(XR_ARCH_X86_64)
@@ -297,8 +299,60 @@ static void owned_string_result(const char *path) {
     xr_lir_c_output_free(&output);
 }
 
+static void constant_string_branch(const char *directory) {
+    XrLirModule *modules[2]={NULL,NULL}; OK(xr_lir_module_create(NULL,&modules[0]));
+    XrLirModule *m=modules[0];XrLirFunction f={0};
+    XrLirFunctionSpec spec={.name="constant_string",.name_length=15,.result=XR_LIR_STRING};
+    OK(xr_lir_declare_function(m,&spec,&f));OK(xr_lir_define_function(m,f));
+    XrLirBlock blocks[4];XrLirType type=XR_LIR_STRING;
+    for(unsigned i=0;i<4;++i)OK(xr_lir_add_block(m,f,i==3?&type:NULL,i==3?1u:0u,&blocks[i]));
+    OK(xr_lir_set_entry(m,f,blocks[0]));
+    XrLirValue condition;XrLirInstruction truth={.op=XR_LIR_CONST,.type=XR_LIR_I1,.bits=1};
+    OK(xr_lir_emit_value(m,blocks[0],&truth,&condition));
+    XrLirInstruction branch={.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&condition,.operand_count=1,
+        .edges={{blocks[1],NULL,0},{blocks[2],NULL,0}},.edge_count=2};
+    OK(xr_lir_set_terminator(m,blocks[0],&branch));
+    for(unsigned i=1;i<=2;++i) {
+        XrLirLiteral literal={0};const char *bytes=i==1?"kept":"dead";OK(xr_lir_add_literal(m,bytes,4,&literal));
+        XrLirValue value;XrLirInstruction string={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
+        OK(xr_lir_emit_value(m,blocks[i],&string,&value));
+        XrLirInstruction edge={.op=XR_LIR_BR,.type=XR_LIR_UNIT,.edges={{blocks[3],&value,1}},.edge_count=1};
+        OK(xr_lir_set_terminator(m,blocks[i],&edge));
+    }
+    XrLirValue result;OK(xr_lir_block_parameter(m,blocks[3],0,&result));
+    XrLirInstruction ret={.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&result,.operand_count=1};
+    OK(xr_lir_set_terminator(m,blocks[3],&ret));OK(xr_lir_module_finish(m,NULL));
+    OK(xr_lir_sccp(m,&modules[1]));
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};XrCompileResources *resources=NULL;
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+    for(unsigned i=0;i<2;++i) {
+        XrLirFunction root;XrLirFunctionView view;OK(xr_lir_function_at(modules[i],0,&root));
+        OK(xr_lir_function_view(modules[i],root,&view));CHECK(view.block_count==(i?3u:4u));
+        OK(xr_lir_verify(modules[i],NULL));
+        XrLirCRequest request={modules[i],root,resources,"constant-string",NULL};XrLirCOutput output={0};
+        CHECK(xr_lir_emit_c(&request,&output,NULL)==XR_LIR_C_OK&&output.entry_result==XR_LIR_STRING);
+        XrRbcProgram *program=NULL;CHECK(xr_rbc_compile(modules[i],root,&program,NULL)==XR_RBC_COMPILE_OK);
+        xr_lir_module_destroy(modules[i]);modules[i]=NULL;
+        XrRbcExecution *execution=NULL;CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+        XrRbcOutcome *outcome=xr_rbc_execution_run(execution);CHECK(outcome&&xr_rbc_outcome_status(outcome)==XR_RBC_OK);
+        xr_rbc_execution_free(&execution);xr_rbc_program_destroy(program);
+        const XrtString *text=NULL;CHECK(xr_rbc_outcome_string(outcome,&text));
+        size_t length=0;const char *bytes=xrt_string_bytes(text,&length);CHECK(length==4&&!memcmp(bytes,"kept",4));
+        xr_rbc_outcome_free(&outcome);
+        if(directory) {
+            char path[1024];int size=snprintf(path,sizeof(path),"%s/%s.c",directory,i?"sccp":"raw");
+            CHECK(size>0&&(size_t)size<sizeof(path));FILE *file=fopen(path,"wb");CHECK(file);
+            CHECK(fwrite(output.bytes,1,output.length,file)==output.length&&fclose(file)==0);
+        }
+        xr_lir_c_output_free(&output);
+    }
+    xr_compile_resources_release(resources);
+}
+
 int main(int argc, char **argv) {
+    if(argc==3&&!strcmp(argv[1],"--constant-branch")){constant_string_branch(argv[2]);return 0;}
     CHECK(argc==1 || argc==2);
+    if(argc==1)constant_string_branch(NULL);
     owned_string_result(argc==2 ? argv[1] : NULL);
     if (argc==2) return 0;
     i64_identity_cast();

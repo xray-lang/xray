@@ -184,20 +184,21 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
 
 #include "xrbc_string_admission.inc.c"
 
-static bool xr_rbc_module_valid(const XrRbcModule *module) {
+static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
     for (size_t i = 0; i < module->literal_count; ++i)
         if (module->literals[i].length == SIZE_MAX ||
-            (module->literals[i].length && !module->literals[i].bytes)) return false;
+            (module->literals[i].length && !module->literals[i].bytes)) return XR_RBC_INVALID;
     // Validate descriptors before using any call target's parameter count.
     for (size_t f = 0; f < module->function_count; ++f)
-        if (!xr_rbc_function_valid(&module->functions[f])) return false;
+        if (!xr_rbc_function_valid(&module->functions[f])) return XR_RBC_INVALID;
     for (size_t f = 0; f < module->function_count; ++f) {
         const XrRbcFunction *function = &module->functions[f];
         for (size_t pc = 0; pc < function->code_count; ++pc)
-            if (!xr_rbc_instruction_valid(module, function, pc)) return false;
-        if (!xr_rbc_strings_valid(module, function)) return false;
+            if (!xr_rbc_instruction_valid(module, function, pc)) return XR_RBC_INVALID;
+        XrRbcStatus status = xr_rbc_strings_valid(module, function);
+        if (status != XR_RBC_OK) return status;
     }
-    return true;
+    return XR_RBC_OK;
 }
 
 static bool xr_rbc_source_maps_valid(const XrRbcModule *module, const XrtLocationOwner *locations) {
@@ -290,9 +291,10 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
         (module->literal_count && !module->literals) || module->literal_count > 65536)
         return XR_RBC_INVALID;
     const XrRbcFunction *function = &module->functions[entry];
-    if (argument_count != function->parameter_count || !xr_rbc_module_valid(module) ||
-        !xr_rbc_source_maps_valid(module, locations))
-        return XR_RBC_INVALID;
+    if (argument_count != function->parameter_count) return XR_RBC_INVALID;
+    XrRbcStatus validation = xr_rbc_module_valid(module);
+    if (validation != XR_RBC_OK) return validation;
+    if (!xr_rbc_source_maps_valid(module, locations)) return XR_RBC_INVALID;
     for (size_t p = 0; function->register_kinds && p < argument_count; ++p)
         if (function->register_kinds[p] != XR_RBC_BITS) return XR_RBC_INVALID;
     for (size_t i = 0; i < module->native_count; ++i)

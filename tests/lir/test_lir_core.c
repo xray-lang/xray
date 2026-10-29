@@ -700,7 +700,56 @@ static void offset_signature(void) {
     CHECK(xr_lir_declare_function(m, &spec, &f) == XR_LIR_INVALID_ARGUMENT);
     xr_lir_module_destroy(m);
 }
+static void string_phi_owners(void) {
+    for (unsigned attack = 0; attack < 7; ++attack) {
+        XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
+        XrLirType types[] = {XR_LIR_I1, XR_LIR_STRING};
+        XrLirFunction f = test_function(m, "choose", types, 2, XR_LIR_STRING);
+        XrLirBlock entry = test_block(m,f,NULL,0), left = test_block(m,f,NULL,0), right = test_block(m,f,NULL,0);
+        XrLirType outputs[] = {XR_LIR_STRING,XR_LIR_STRING};
+        XrLirBlock join = test_block(m,f,outputs,attack == 2 ? 2u : 1u);
+        OK(xr_lir_set_entry(m,f,entry));
+        XrLirValue condition,borrowed; OK(xr_lir_function_parameter(m,f,0,&condition));
+        OK(xr_lir_function_parameter(m,f,1,&borrowed));
+        XrLirInstruction branch = {.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&condition,.operand_count=1,
+            .edges={{left,NULL,0},{right,NULL,0}},.edge_count=2};
+        OK(xr_lir_set_terminator(m,entry,&branch));
+        XrLirLiteral literal = {0}; OK(xr_lir_add_literal(m,"x",1,&literal));
+        XrLirValue values[2]; XrLirBlock arms[] = {left,right};
+        for (unsigned arm = 0; arm < 2; ++arm) {
+            XrLirInstruction string = {.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
+            OK(xr_lir_emit_value(m,arms[arm],&string,&values[arm]));
+            if (attack == 4 && !arm) { XrLirValue leaked; OK(xr_lir_emit_value(m,left,&string,&leaked)); }
+            if (attack == 1 && !arm) {
+                XrLirInstruction drop = {.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&values[arm],.operand_count=1};
+                OK(xr_lir_emit_effect(m,left,&drop)); values[arm]=borrowed;
+            }
+            XrLirValue arguments[] = {values[arm],values[arm]};
+            if (attack == 6 && arm) test_branch(m,right,right,NULL,0);
+            else test_branch(m,arms[arm],join,arguments,attack == 2 ? 2u : 1u);
+        }
+        XrLirValue result; OK(xr_lir_block_parameter(m,join,0,&result));
+        if (attack == 2) {
+            XrLirValue second; OK(xr_lir_block_parameter(m,join,1,&second));
+            XrLirInstruction drop = {.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&second,.operand_count=1};
+            OK(xr_lir_emit_effect(m,join,&drop));
+        }
+        if (attack == 3 || attack == 5) {
+            XrLirInstruction drop = {.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&result,.operand_count=1};
+            OK(xr_lir_emit_effect(m,join,&drop));
+            if (attack == 3) {
+                XrLirValue retained; XrLirInstruction retain = {.op=XR_LIR_STRING_RETAIN,.type=XR_LIR_STRING,.operands=&result,.operand_count=1};
+                OK(xr_lir_emit_value(m,join,&retain,&retained)); result=retained;
+            } else OK(xr_lir_emit_effect(m,join,&drop));
+        }
+        test_return(m,join,result);
+        CHECK(xr_lir_verify(m,NULL) == (attack ? XR_LIR_VERIFY_ERROR : XR_LIR_OK));
+        if (!attack) OK(xr_lir_module_finish(m,NULL));
+        xr_lir_module_destroy(m);
+    }
+}
 int main(void) {
+    string_phi_owners();
     offset_signature();
     clock_signatures();
     queries();

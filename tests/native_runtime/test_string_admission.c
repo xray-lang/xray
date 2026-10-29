@@ -31,9 +31,32 @@ static void admitted(XrRbcFunction *functions, size_t count, XrtLocationOwner *l
     CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK);
     xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
 }
+static void forward_string_owners(XrtLocationOwner *locations) {
+    uint32_t code[] = {word(XR_RBC_LOADI,0,0,0,1),word(XR_RBC_LOADI,1,0,0,0),
+        word(XR_RBC_EQ,0,1,0,0),0,word(XR_RBC_STRING_LITERAL,2,0,0,0),
+        word(XR_RBC_STRING_TAKE,3,2,0,0),0,word(XR_RBC_STRING_LITERAL,4,0,0,0),
+        word(XR_RBC_STRING_TAKE,3,4,0,0),word(XR_RBC_STRING_DROP,3,0,0,0),word(XR_RBC_RET0,0,0,0,0)};
+    CHECK(xr_rbc_jump(&code[3],3,7,11)); CHECK(xr_rbc_jump(&code[6],6,9,11));
+    XrRbcRegisterKind kinds[] = {XR_RBC_BITS,XR_RBC_BITS,XR_RBC_STRING,XR_RBC_STRING,XR_RBC_STRING};
+    XrRbcFunction f = {.code=code,.code_count=11,.register_count=5,.register_kinds=kinds,.register_kind_count=5};
+    admitted(&f,1,locations);code[0]=word(XR_RBC_LOADI,0,0,0,0);admitted(&f,1,locations);
+    uint32_t saved=code[8];code[8]=word(XR_RBC_STRING_DROP,4,0,0,0);rejected(&f,1,locations);code[8]=saved;
+    code[8]=word(XR_RBC_MOV,3,4,0,0);rejected(&f,1,locations);code[8]=saved;
+    kinds[3]=XR_RBC_BITS;rejected(&f,1,locations);kinds[3]=XR_RBC_STRING;
+    saved=code[5];code[5]=word(XR_RBC_STRING_RETAIN,3,2,0,0);rejected(&f,1,locations);code[5]=saved;
+    saved=code[6];CHECK(xr_rbc_jump(&code[6],6,4,11));rejected(&f,1,locations);code[6]=saved;
+    uint32_t swap[] = {word(XR_RBC_STRING_LITERAL,0,0,0,0),word(XR_RBC_STRING_LITERAL,1,0,0,0),
+        word(XR_RBC_STRING_TAKE,2,0,0,0),word(XR_RBC_STRING_TAKE,0,1,0,0),
+        word(XR_RBC_STRING_TAKE,1,2,0,0),word(XR_RBC_STRING_DROP,0,0,0,0),
+        word(XR_RBC_STRING_DROP,1,0,0,0),word(XR_RBC_RET0,0,0,0,0)};
+    XrRbcRegisterKind strings[] = {XR_RBC_STRING,XR_RBC_STRING,XR_RBC_STRING};
+    f=(XrRbcFunction){.code=swap,.code_count=8,.register_count=3,.register_kinds=strings,.register_kind_count=3};
+    admitted(&f,1,locations);strings[2]=XR_RBC_BITS;rejected(&f,1,locations);
+}
 int main(void) {
     XrtLocationOwner *locations = NULL;
     CHECK(xrt_locations_create(NULL,0,&locations)==XRT_LOCATION_OK);
+    forward_string_owners(locations);
     uint32_t code[] = {word(XR_RBC_STRING_LITERAL,0,0,0,0),word(XR_RBC_STRING_DROP,0,0,0,0),
         word(XR_RBC_RET0,0,0,0,0)};
     XrRbcRegisterKind kinds[] = {XR_RBC_STRING,XR_RBC_CALL_WINDOW,XR_RBC_CALL_WINDOW};
@@ -62,6 +85,11 @@ int main(void) {
         word(XR_RBC_STRING_TAKE,1,2,0,0),word(XR_RBC_STRING_DROP,1,0,0,0),word(XR_RBC_RET0,0,0,0,0)};
     functions[0].code=borrowed_call;
     rejected(functions,2,locations);
+    uint32_t transferred_borrow[] = {code[0],word(XR_RBC_MOV,3,0,0,0),word(XR_RBC_STRING_TAKE,1,0,0,0),
+        word(XR_RBC_STRING_DROP,1,0,0,0),word(XR_RBC_CALL,2,0,0,1),word(XR_RBC_STRING_TAKE,1,2,0,0),
+        word(XR_RBC_STRING_DROP,1,0,0,0),word(XR_RBC_RET0,0,0,0,0)};
+    functions[0].code=transferred_borrow;functions[0].code_count=8;rejected(functions,2,locations);
+    functions[0].code_count=7;
     uint32_t borrowed_return[] = {word(XR_RBC_RET,0,0,0,0)};
     functions[0].code=call;
     functions[1].code=borrowed_return;functions[1].code_count=1;functions[1].result_kind=XR_RBC_STRING;
