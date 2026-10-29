@@ -9,9 +9,9 @@
  *
  * KEY CONCEPT:
  *   Wrapping arithmetic widens to unsigned before operations. Signed
- *   reconstruction uses only representable conversions. Fixed-divisor i64
- *   division excludes zero at admission and selects the wrapping MIN/-1
- *   result before evaluating signed C operators.
+ *   reconstruction uses only representable conversions. I64 division guards
+ *   possible zero through the located runtime panic boundary, then selects
+ *   the wrapping MIN/-1 result before evaluating signed C operators.
  *   No interpreter frame is emitted.
  */
 #include "xlir_c.h"
@@ -212,6 +212,10 @@ static bool c_has_division(LirC *c) {
 /* SSA verification already supplies unique definitions and dominance. Facts
  * are local to this function and never inferred through aliases or edges. */
 static void c_prepare_divisors(LirC *c) {
+    c->block = c->instruction = 0;
+    c->source = (XrLirSource) {0};
+    xr_compile_resources_free(c->fixed_divisors);
+    c->fixed_divisors = NULL;
     if (!c_has_division(c) || c->status != XR_LIR_C_OK)
         return;
     void *facts = NULL;
@@ -234,6 +238,10 @@ static void c_prepare_divisors(LirC *c) {
                 c->fixed_divisors[v.result] = 1;
         }
     }
+}
+static bool c_arithmetic_point(const LirC *c, const XrLirInstructionView *v) {
+    return (v->op == XR_LIR_DIV || v->op == XR_LIR_REM) &&
+        c->fixed_divisors && !c->fixed_divisors[v->operands[1]];
 }
 static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
@@ -261,9 +269,17 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
             break;
         case XR_LIR_DIV: case XR_LIR_REM:
-            if (v->type != XR_LIR_I64 || !c->fixed_divisors ||
-                !c->fixed_divisors[v->operands[1]])
-                c_error(c, XR_LIR_C_UNSUPPORTED, "division requires a direct nonzero i64 constant");
+            if (v->type != XR_LIR_I64)
+                c_error(c, XR_LIR_C_UNSUPPORTED, "division requires i64 operands");
+            else if (c_arithmetic_point(c, v)) {
+                c->runtime = true;
+                if (c_located(&v->source)) {
+                    if (c->location_count == UINT32_MAX)
+                        c_error(c, XR_LIR_C_OVERFLOW, "source location count exceeds 32 bits");
+                    else
+                        ++c->location_count;
+                }
+            }
             break;
         case XR_LIR_FNEG:
             if (v->type == XR_LIR_F64)
@@ -311,8 +327,6 @@ static void c_admit(LirC *c) {
     c->seen = seen;
     c_visit(c, c->request->entry.id);
     for (uint32_t cursor = 0; cursor < c->closure_count && c->status == XR_LIR_C_OK; ++cursor) {
-        xr_compile_resources_free(c->fixed_divisors);
-        c->fixed_divisors = NULL;
         c->block = c->instruction = 0;
         c->source = (XrLirSource) {0};
         c->function = (XrLirFunction) {c->request->module, c->closure[cursor]};
@@ -374,6 +388,7 @@ static void c_locations(LirC *c) {
         xr_lir_function_view(c->request->module, c->function, &c->view);
         if (!c_request_poll(c))
             return;
+        c_prepare_divisors(c);
         for (uint32_t b = 0; b < c->view.block_count && c->status == XR_LIR_C_OK; ++b) {
             XrLirBlock block;
             XrLirBlockView view;
@@ -385,7 +400,8 @@ static void c_locations(LirC *c) {
             for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
-                if ((!c_runtime_call(c, &v) && !c_string_point(c, &v)) || !c_located(&v.source))
+                if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) &&
+                     !c_arithmetic_point(c, &v)) || !c_located(&v.source))
                     continue;
                 ++id;
                 c_text(c, "    { ");
@@ -544,6 +560,39 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge) {
                  c->scratch + 1 + a);
     c_format(c, "        goto bb%" PRIu32 ";\n    }\n", edge->target);
 }
+static void c_division(LirC *c, const XrLirInstructionView *v) {
+    bool guarded = c_arithmetic_point(c, v);
+    if (guarded) {
+        uint32_t source = c_located(&v->source) ? ++c->location_cursor : 0;
+        /* One volatile read keeps host constant propagation from diagnosing
+         * guest code after a known panic as unreachable. The check and the
+         * operation share the same captured value. */
+        c_text(c, "    { volatile int64_t xrl_guard = ");
+        c_value(c, v->operands[1]);
+        c_text(c, ";\n    int64_t xrl_divisor = xrl_guard;\n");
+        c_format(c, "    if (xrl_divisor == INT64_C(0)) "
+            "xrt_arithmetic_panic(UINT32_C(%u), UINT32_C(%" PRIu32 "));\n",
+            v->op == XR_LIR_DIV ? 420u : 421u, source);
+    }
+    /* Select the wrapping pair before C can evaluate signed overflow. */
+    c_format(c, "    v%" PRIu32 " = ", v->result);
+    c_value(c, v->operands[0]);
+    c_text(c, " == INT64_MIN && ");
+    if (guarded)
+        c_text(c, "xrl_divisor");
+    else
+        c_value(c, v->operands[1]);
+    c_text(c, " == -INT64_C(1) ? ");
+    c_text(c, v->op == XR_LIR_DIV ? "INT64_MIN" : "INT64_C(0)");
+    c_text(c, " : ");
+    c_value(c, v->operands[0]);
+    c_text(c, v->op == XR_LIR_DIV ? " / " : " % ");
+    if (guarded)
+        c_text(c, "xrl_divisor");
+    else
+        c_value(c, v->operands[1]);
+    c_text(c, guarded ? "; }\n" : ";\n");
+}
 static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
@@ -635,18 +684,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_integer(c, v);
             break;
         case XR_LIR_DIV: case XR_LIR_REM:
-            /* Select the wrapping pair before C can evaluate signed overflow. */
-            c_format(c, "    v%" PRIu32 " = ", v->result);
-            c_value(c, v->operands[0]);
-            c_text(c, " == INT64_MIN && ");
-            c_value(c, v->operands[1]);
-            c_text(c, " == -INT64_C(1) ? ");
-            c_text(c, v->op == XR_LIR_DIV ? "INT64_MIN" : "INT64_C(0)");
-            c_text(c, " : ");
-            c_value(c, v->operands[0]);
-            c_text(c, v->op == XR_LIR_DIV ? " / " : " % ");
-            c_value(c, v->operands[1]);
-            c_text(c, ";\n");
+            c_division(c, v);
             break;
         case XR_LIR_FNEG:
             c_fneg(c, v);
@@ -809,6 +847,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
             return;
         if (c->view.kind == XR_LIR_FUNCTION_EXTERNAL)
             continue;
+        c_prepare_divisors(c);
         c_signature(c, true);
         c_declarations(c);
         c_format(c, "    goto bb%" PRIu32 ";\n", c->view.entry);

@@ -575,21 +575,6 @@ static bool lower_mark(Lower *c, uint32_t function) {
     return true;
 }
 
-/* Only a direct nonzero constant excludes division by zero for every lhs. */
-static bool lower_fixed_divisor(const Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
-    uint32_t rhs = op->args[1];
-    if (op->type != XR_XIR_I64 || xr_xir_operand_type(f, op->args[0]) != XR_XIR_I64 ||
-        rhs < f->parameter_count || rhs - f->parameter_count >= f->instruction_count)
-        return false;
-    const XrXirInstruction *definition = &f->instructions[rhs - f->parameter_count];
-    if (definition->op == XR_XIR_CONST_INT && definition->type == XR_XIR_I64)
-        return definition->immediate != 0;
-    return c->literals && definition->op == XR_XIR_SLOT_LOAD && definition->type == XR_XIR_I64 &&
-        definition->immediate >= 0 && (uint64_t)definition->immediate < c->source->declarations->slot_count &&
-        c->literals[definition->immediate].publication != UINT32_MAX &&
-        c->literals[definition->immediate].bits != 0;
-}
-
 static void lower_literal_use(const XrXirFunction *f, uint32_t value, bool direct,
     uint8_t *uses) {
     if (value < f->parameter_count || value - f->parameter_count >= f->instruction_count)
@@ -665,7 +650,7 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     } else if (!lower_type(op->type))
         return lower_unsupported(c, xr_xir_op_name(op->op));
     if ((op->op == XR_XIR_DIV_INT || op->op == XR_XIR_REM_INT) &&
-        !lower_fixed_divisor(c, f, op))
+        op->type != XR_XIR_I64)
         return lower_unsupported(c, xr_xir_op_name(op->op));
     if (op->op == XR_XIR_CALL) {
         if (op->immediate < 0 || (uint64_t) op->immediate >= c->source->function_count)

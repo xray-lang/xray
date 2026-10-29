@@ -218,6 +218,7 @@
     "test_lir_c_faults",
     "test_lir_c_native",
     "test_lir_c_runtime",
+    "test_lir_divrem",
     "test_source_entry",
     "test_xir_never_type",
     "test_xir_local_errors",

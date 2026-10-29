@@ -185,8 +185,6 @@ static void unsupported(void) {
              "b=Box(42)\nreturn b.value}\nprint(answer())\n",
              false, "CALL");
     rejected("print(1)\n", true, "overflow-checks");
-    rejected("fn quotient(n:i64,d:i64)->i64{return n/d}\nprint(quotient(8,2))\n", false, "DIV_INT");
-    rejected("fn remainder(n:i64,d:i64)->i64{return n%d}\nprint(remainder(8,2))\n", false, "REM_INT");
     rejected("fn convert(x:f64)->i64{return x as i64}\nprint(convert(1.0))\n", false,
              "floating to integer");
 }
@@ -273,21 +271,47 @@ static void fixed_division_source(const char *text, bool slot_frontier) {
     CHECK(lir_ops == source_ops);
     xr_lir_lowered_free(&output);
 }
+static void dynamic_division_source(const char *text) {
+    XrLirLowered output = lower_text(text);
+    unsigned operations = 0;
+    for (uint32_t f = 0; f < xr_lir_function_count(output.module); ++f) {
+        XrLirFunction function; XrLirFunctionView view;
+        OK(xr_lir_function_at(output.module, f, &function));
+        OK(xr_lir_function_view(output.module, function, &view));
+        for (uint32_t b = 0; b < view.block_count; ++b) {
+            XrLirBlock block; XrLirBlockView bv;
+            OK(xr_lir_block_at(output.module, function, b, &block));
+            OK(xr_lir_block_view(output.module, block, &bv));
+            for (uint32_t i = 0; i < bv.instruction_count; ++i) {
+                XrLirInstructionView v;
+                OK(xr_lir_instruction_view(output.module, block, i, &v));
+                if (v.op == XR_LIR_DIV || v.op == XR_LIR_REM) {
+                    CHECK(v.type == XR_LIR_I64 && v.source.path && v.source.line && v.source.column);
+                    ++operations;
+                }
+            }
+        }
+    }
+    CHECK(operations > 0);
+    xr_lir_lowered_free(&output);
+}
 static void fixed_division(const char *fixtures) {
+    dynamic_division_source("fn quotient(n:i64,d:i64)->i64{return n/d}\nprint(quotient(8,2))\n");
+    dynamic_division_source("fn remainder(n:i64,d:i64)->i64{return n%d}\nprint(remainder(8,2))\n");
     fixed_division_source("fn quotient(n:i64)->i64{return n/2}\nprint(quotient(8))\n", false);
     fixed_division_source("fn remainder(n:i64)->i64{return n%2}\nprint(remainder(8))\n", false);
     char *original = read_file(fixtures, "../../../bench/native/integer_loop", "xr");
     fixed_division_source(original, true);
     xr_free(original);
-    rejected("fn f(n:i64)->i64{return n/0}\nprint(f(8))\n", false, "DIV_INT");
-    rejected("fn f(n:i64)->i64{return n%0}\nprint(f(8))\n", false, "REM_INT");
+    dynamic_division_source("fn f(n:i64)->i64{return n/0}\nprint(f(8))\n");
+    dynamic_division_source("fn f(n:i64)->i64{return n%0}\nprint(f(8))\n");
     fixed_division_source("fn q(n:i64)->i64{return n/(-1)}\n"
                           "print(q(-9223372036854775807-1))\n", false);
     fixed_division_source("fn r(n:i64)->i64{return n%(-1)}\n"
                           "print(r(-9223372036854775807-1))\n", false);
-    rejected("fn f(n:i64,d:i64)->i64{return n/(d+2)}\nprint(f(8,1))\n", false, "DIV_INT");
-    rejected("fn f(n:i64)->i64{return n/(3 as i64)}\nprint(f(8))\n", false, "DIV_INT");
-    rejected("fn f(n:i64,flag:bool)->i64{return n%(flag?3:7)}\nprint(f(8,true))\n", false, "REM_INT");
+    dynamic_division_source("fn f(n:i64,d:i64)->i64{return n/(d+2)}\nprint(f(8,1))\n");
+    dynamic_division_source("fn f(n:i64)->i64{return n/(3 as i64)}\nprint(f(8))\n");
+    dynamic_division_source("fn f(n:i64,flag:bool)->i64{return n%(flag?3:7)}\nprint(f(8,true))\n");
 }
 static void floating_negation_source(void) {
     const char *text = "fn negative(x:f64)->f64{\nprint(13)\nreturn -x\n}\nnegative(1.25)\nprint(2)\n";
@@ -620,7 +644,7 @@ static void clock_sources(const char *programs) {
         }
     }
     CHECK(clocks == 7); xr_lir_lowered_free(&output);
-    rejected("const divisor=0\nfn f(x:i64)->i64{return x/divisor}\nprint(f(1))\n",false,"DIV_INT");
+    dynamic_division_source("const divisor=0\nfn f(x:i64)->i64{return x/divisor}\nprint(f(1))\n");
     rejected("print(f(1))\nconst divisor=2\nfn f(x:i64)->i64{return x/divisor}\n",false,"before complete publication");
 }
 static void offset_sources(void) {

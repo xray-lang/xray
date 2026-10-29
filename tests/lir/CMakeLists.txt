@@ -87,6 +87,13 @@ add_test(NAME test_lir_c_runtime COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --work "${CMAKE_CURRENT_BINARY_DIR}/runtime" ${lir_c_native_options})
 set_tests_properties(test_lir_c_runtime PROPERTIES LABELS "unit;lir;native" TIMEOUT 120)
+add_test(NAME test_lir_divrem COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_divrem.py"
+    --driver $<TARGET_FILE:lir_c_run> --vm-driver $<TARGET_FILE:lir_vm_run> --fixture-driver $<TARGET_FILE:test_lir_c>
+    --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/divrem" ${lir_c_native_options})
+set_tests_properties(test_lir_divrem PROPERTIES LABELS "unit;lir;native" TIMEOUT 120)
 add_test(NAME test_lir_owned_string COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_owned_string.py"
     --driver $<TARGET_FILE:lir_pipeline_eval> --source-driver $<TARGET_FILE:lir_c_run>
     --result-driver $<TARGET_FILE:test_lir_bytecode_source>

@@ -336,7 +336,7 @@ static void emit(const char *name, const char *path) {
     xr_lir_c_output_free(&output);
     CHECK(!output.bytes && !output.length && !output.entry_result);
 }
-static void reject_division(unsigned kind, XrLirOp op) {
+static void division_admission(unsigned kind, XrLirOp op, const char *path) {
     OK(xr_lir_module_create(NULL, &module));
     XrLirBlock b = root_block();
     XrLirType type = kind == 5 ? XR_LIR_I32 : XR_LIR_I64;
@@ -361,10 +361,10 @@ static void reject_division(unsigned kind, XrLirOp op) {
         XrLirValue args[] = {lhs, lhs};
         ret(b, call(b, dynamic, args, 2));
     } else {
-        rhs = constant(b, type, kind == 0 ? 0 : kind == 1 ? UINT64_MAX : 3);
+        rhs = constant(b, type, kind == 0 || kind == 7 ? 0 : kind == 1 ? UINT64_MAX : 3);
         if (kind == 3)
             rhs = operation(b, XR_LIR_ADD, type, rhs, rhs);
-        /* Even a nonzero constant behind INTCAST is outside direct-definition admission. */
+        /* Aliases keep the guarded path even when their current input is nonzero. */
         if (kind == 1 || kind == 6)
             rhs = operation(b, XR_LIR_INTCAST, type, rhs, (XrLirValue) {0});
         if (kind == 4) {
@@ -373,7 +373,13 @@ static void reject_division(unsigned kind, XrLirOp op) {
             b = next;
             OK(xr_lir_block_parameter(module, b, 0, &rhs));
         }
-        XrLirValue result = operation(b, op, type, lhs, rhs);
+        XrLirValue operands[] = {lhs, rhs}, result;
+        XrLirInstruction arithmetic = {.op = op, .type = type, .operands = operands, .operand_count = 2};
+        if (kind == 7) {
+            static const char source_path[] = "arithmetic-owned.xr";
+            arithmetic.source = (XrLirSource) {source_path, sizeof(source_path) - 1, 7, 3, 8, 9};
+        }
+        OK(xr_lir_emit_value(module, b, &arithmetic, &result));
         if (type != XR_LIR_I64)
             result = operation(b, XR_LIR_INTCAST, XR_LIR_I64, result, (XrLirValue){0});
         ret(b, result);
@@ -383,8 +389,27 @@ static void reject_division(unsigned kind, XrLirOp op) {
     XrLirCRequest request = {module, root, r, "rejected", NULL};
     XrLirCOutput output = {0};
     XrLirCDiagnostic diagnostic;
-    CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_UNSUPPORTED);
-    CHECK(diagnostic.message[0] && !output.bytes && !output.length && !output.entry_result);
+    XrLirCStatus status = xr_lir_emit_c(&request, &output, &diagnostic);
+    if (kind == 5) {
+        CHECK(status == XR_LIR_C_UNSUPPORTED && diagnostic.message[0]);
+        CHECK(!output.bytes && !output.length && !output.entry_result && !path);
+    } else {
+        CHECK(status == XR_LIR_C_OK && output.bytes && output.entry_result == XR_LIR_I64);
+        /* These fixtures have no output call, so arithmetic alone must bind the root. */
+        CHECK(strstr(output.bytes, "xrt_run_standalone(") &&
+              strstr(output.bytes, "volatile int64_t xrl_guard") &&
+              strstr(output.bytes, op == XR_LIR_DIV ? "UINT32_C(420)" : "UINT32_C(421)"));
+        CHECK(strstr(output.bytes, kind == 7 ? "arithmetic-owned.xr" : "{ NULL, UINT32_C(0) }"));
+        xr_lir_module_destroy(module); module = NULL;
+        xr_compile_resources_release(r); r = NULL;
+        if (path) {
+            FILE *file = fopen(path, "wb");
+            CHECK(file && fwrite(output.bytes, 1, output.length, file) == output.length);
+            CHECK(fclose(file) == 0);
+        }
+        xr_lir_c_output_free(&output);
+        return;
+    }
     request.entry = (XrLirFunction) {0};
     CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_BAD_ARGUMENT);
     CHECK(!output.bytes);
@@ -394,6 +419,12 @@ static void reject_division(unsigned kind, XrLirOp op) {
 }
 int main(int argc, char **argv) {
     if (argc == 3) {
+        unsigned kind, opcode; char extra;
+        if (sscanf(argv[1], "division-%u-%u%c", &kind, &opcode, &extra) == 2) {
+            CHECK(kind < 8 && kind != 5 && opcode < 2);
+            division_admission(kind, opcode ? XR_LIR_REM : XR_LIR_DIV, argv[2]);
+            return 0;
+        }
         emit(argv[1], argv[2]);
         return 0;
     }
@@ -404,9 +435,9 @@ int main(int argc, char **argv) {
         "typed-bool", "typed-unit", "typed-root-call"};
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
         emit(cases[i], NULL);
-    for (unsigned kind = 0; kind < 7; ++kind) {
-        reject_division(kind, XR_LIR_DIV);
-        reject_division(kind, XR_LIR_REM);
+    for (unsigned kind = 0; kind < 8; ++kind) {
+        division_admission(kind, XR_LIR_DIV, NULL);
+        division_admission(kind, XR_LIR_REM, NULL);
     }
     puts("owned scalar C publication and rejection passed");
     return 0;

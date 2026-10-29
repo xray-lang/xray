@@ -24,6 +24,7 @@ static uint64_t request_clock(void) {
 #include "base/xcompile_request.c"
 #undef xr_time_monotonic_ns
 static bool fail_workspace, fail_text, fail_divisors, corrupt_text, injected;
+static unsigned divisor_attempt, failed_divisor_attempt;
 static bool *cancel_at_publication;
 static XrCompileResourceStatus workspace_allocate(XrCompileResources *r, size_t n, void **out) {
     if (fail_workspace && !injected) {
@@ -34,7 +35,8 @@ static XrCompileResourceStatus workspace_allocate(XrCompileResources *r, size_t 
 }
 static XrCompileResourceStatus facts_allocate(XrCompileResources *r, size_t n, size_t size, void **out) {
     /* The closure seen set is first; the new per-function facts are next. */
-    if (fail_divisors && size == 1 && n == 4 && !injected) {
+    if (fail_divisors && size == 1 && n == 4 &&
+        ++divisor_attempt == failed_divisor_attempt) {
         injected = true;
         return XR_COMPILE_RESOURCE_OUT_OF_MEMORY;
     }
@@ -254,13 +256,15 @@ int main(int argc, char **argv) {
     XrLirInstruction constant = {.op = XR_LIR_CONST, .type = XR_LIR_I64, .bits = 42};
     CHECK(xr_lir_emit_value(module, block, &constant, &value) == XR_LIR_OK);
     XrLirValue divisor;
-    constant.bits = 3;
+    constant.bits = 0;
     CHECK(xr_lir_emit_value(module, block, &constant, &divisor) == XR_LIR_OK);
     XrLirValue operands[] = {value, divisor};
     XrLirInstruction division = {.op = XR_LIR_DIV, .type = XR_LIR_I64,
         .operands = operands, .operand_count = 2};
     CHECK(xr_lir_emit_value(module, block, &division, &value) == XR_LIR_OK);
-    XrLirInstruction ret = {.op = XR_LIR_RET, .type = XR_LIR_UNIT, .operands = &value, .operand_count = 1};
+    static const char last_point[] = "last-instruction.xr";
+    XrLirInstruction ret = {.op = XR_LIR_RET, .type = XR_LIR_UNIT, .operands = &value, .operand_count = 1,
+        .source = {last_point, sizeof(last_point) - 1, 9, 2, 9, 2}};
     CHECK(xr_lir_set_terminator(module, block, &ret) == XR_LIR_OK);
     CHECK(xr_lir_module_finish(module, NULL) == XR_LIR_OK);
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, true};
@@ -274,14 +278,18 @@ int main(int argc, char **argv) {
         puts("UNEXPECTED_PUBLICATION");
         return 1;
     }
-    for (unsigned point = 0; point < 3; ++point) {
+    for (unsigned point = 0; point < 5; ++point) {
         fail_workspace = point == 0;
         fail_text = point == 1;
-        fail_divisors = point == 2;
+        fail_divisors = point >= 2;
+        divisor_attempt = 0;
+        failed_divisor_attempt = point >= 2 ? point - 1 : 0;
         injected = false;
         CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_OUT_OF_MEMORY);
         CHECK(injected && !output.bytes && !output.length && !output.entry_result);
         CHECK(diagnostic.status == XR_LIR_C_OUT_OF_MEMORY);
+        if (fail_divisors)
+            CHECK(diagnostic.function == entry.id && !diagnostic.instruction && !diagnostic.source.path);
         fail_workspace = fail_text = fail_divisors = false;
         CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_OK);
         xr_lir_c_output_free(&output);
