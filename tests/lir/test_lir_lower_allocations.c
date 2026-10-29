@@ -63,15 +63,28 @@ static XrLirStatus run(const SourceFixture *fixture) {
     return status;
 }
 
-static void diagnostic_copy_failure(void) {
+static void supported_length(void) {
     SourceFixture fixture =
         source_fixture("fn answer()->i64{return len(\"unsupported\")}\nprint(answer())\n");
+    attempts=0;fail_at=SIZE_MAX;OK(run(&fixture));
+    size_t total=attempts;CHECK(total>1);
+    const size_t points[]={0,total/2};
+    for(size_t i=0;i<sizeof(points)/sizeof(points[0]);++i) {
+        attempts=0;fail_at=points[i];CHECK(run(&fixture)==XR_LIR_OUT_OF_MEMORY);
+        fail_at=SIZE_MAX;OK(run(&fixture));
+    }
+    source_fixture_free(&fixture);
+}
+static void diagnostic_copy_failure(void) {
+    SourceFixture fixture = source_fixture(
+        "struct Pair{x:i64}\nfn answer()->i64{const p=Pair{x:42}\nreturn p.x}\nprint(answer())\n");
     XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
     XrLirLowered output = {0};
     XrLirLowerFailure failure = {0};
     attempts = 0;
     fail_at = SIZE_MAX;
     CHECK(xr_lir_lower_program_checked(&request, &output, &failure) == XR_LIR_UNSUPPORTED);
+    CHECK(strstr(failure.diagnostic.message,"STRUCT_NEW"));
     CHECK(!output.module && failure.owned_path && failure.diagnostic.source.path == failure.owned_path);
     CHECK(attempts > 0);
     size_t path_point = attempts - 1;
@@ -258,6 +271,7 @@ int main(void) {
         OK(run(&fixture));
     }
     source_fixture_free(&fixture);
+    supported_length();
     diagnostic_copy_failure();
     literal_structure();
     CHECK(!lower_live && !lower_bytes);
