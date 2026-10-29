@@ -64,7 +64,8 @@ union CompileAllocation {
     struct {
         XrCompileResources *resources;
         size_t bytes;
-        CompileAllocation *previous, *next;
+        CompileAllocation *left, *right;
+        unsigned height;
     } info;
     CompileMaxAlignment alignment;
 };
@@ -127,16 +128,87 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_stats(
     return XR_COMPILE_RESOURCE_OK;
 }
 
-/* Only trusted live allocation headers are followed. Proposed addresses are
- * compared numerically and never read or used to locate preceding storage. */
+/* The intrusive AVL is the sole live registry. Its links are charged in each
+ * allocation header, so index insertion and deletion cannot fail or allocate.
+ * Balanced height bounds recursion by the number of addressable live blocks. */
+static unsigned compile_index_height(const CompileAllocation *node) {
+    return node ? node->info.height : 0;
+}
+static void compile_index_height_update(CompileAllocation *node) {
+    unsigned left=compile_index_height(node->info.left),right=compile_index_height(node->info.right);
+    node->info.height=1+(left>right?left:right);
+}
+static CompileAllocation *compile_index_left(CompileAllocation *node) {
+    CompileAllocation *root=node->info.right;
+    node->info.right=root->info.left;root->info.left=node;
+    compile_index_height_update(node);compile_index_height_update(root);return root;
+}
+static CompileAllocation *compile_index_right(CompileAllocation *node) {
+    CompileAllocation *root=node->info.left;
+    node->info.left=root->info.right;root->info.right=node;
+    compile_index_height_update(node);compile_index_height_update(root);return root;
+}
+static CompileAllocation *compile_index_balance(CompileAllocation *node) {
+    compile_index_height_update(node);
+    unsigned left=compile_index_height(node->info.left),right=compile_index_height(node->info.right);
+    if(left>right+1) {
+        if(compile_index_height(node->info.left->info.right)>compile_index_height(node->info.left->info.left))
+            node->info.left=compile_index_left(node->info.left);
+        return compile_index_right(node);
+    }
+    if(right>left+1) {
+        if(compile_index_height(node->info.right->info.left)>compile_index_height(node->info.right->info.right))
+            node->info.right=compile_index_right(node->info.right);
+        return compile_index_left(node);
+    }
+    return node;
+}
+static CompileAllocation *compile_index_insert(CompileAllocation *root,CompileAllocation *node) {
+    if(!root)return node;
+    uintptr_t address=(uintptr_t)(node+1),begin=(uintptr_t)(root+1);
+    XR_CHECK(address!=begin,"Live allocation starts are distinct");
+    if(address<begin)root->info.left=compile_index_insert(root->info.left,node);
+    else root->info.right=compile_index_insert(root->info.right,node);
+    return compile_index_balance(root);
+}
+static CompileAllocation *compile_index_detach_min(CompileAllocation *root,CompileAllocation **minimum) {
+    if(!root->info.left){*minimum=root;return root->info.right;}
+    root->info.left=compile_index_detach_min(root->info.left,minimum);
+    return compile_index_balance(root);
+}
+static CompileAllocation *compile_index_remove(CompileAllocation *root,CompileAllocation *node) {
+    XR_CHECK(root,"A released live block belongs to its owner's index");
+    if(root==node) {
+        if(!root->info.left)return root->info.right;
+        if(!root->info.right)return root->info.left;
+        CompileAllocation *successor=NULL;
+        CompileAllocation *right=compile_index_detach_min(root->info.right,&successor);
+        /* Reconnect the actual successor allocation. Payloads, byte counts and
+         * owners never move between headers when a two-child node is erased. */
+        successor->info.left=root->info.left;successor->info.right=right;
+        return compile_index_balance(successor);
+    }
+    if((uintptr_t)(node+1)<(uintptr_t)(root+1))root->info.left=compile_index_remove(root->info.left,node);
+    else root->info.right=compile_index_remove(root->info.right,node);
+    return compile_index_balance(root);
+}
+/* Only trusted live headers are traversed. Proposed addresses are numeric
+ * keys, never pointer probes. Disjoint payloads need only a predecessor search. */
 static CompileAllocation *compile_find_locked(XrCompileResources *resources,
     const void *memory, size_t bytes, bool exact) {
     uintptr_t address = (uintptr_t)memory;
-    for (CompileAllocation *allocation = resources->allocations; allocation; allocation = allocation->info.next) {
-        uintptr_t begin = (uintptr_t)(allocation + 1);
-        if (exact && address != begin) continue;
-        if (address >= begin && address - begin < allocation->info.bytes &&
-            bytes <= allocation->info.bytes - (size_t)(address - begin)) return allocation;
+    CompileAllocation *node=resources->allocations,*hit=NULL;
+    while(node) {
+        uintptr_t begin=(uintptr_t)(node+1);
+        if(address<begin)node=node->info.left;
+        else {
+            hit=node;if(address==begin)break;node=node->info.right;
+        }
+    }
+    if(hit) {
+        uintptr_t begin=(uintptr_t)(hit+1),offset=address-begin;
+        if((!exact||address==begin)&&offset<hit->info.bytes&&
+            bytes<=hit->info.bytes-(size_t)offset)return hit;
     }
     return NULL;
 }
@@ -166,14 +238,6 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *
     if (!resources || !memory || !bytes) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     compile_lock(resources);
     CompileAllocation *hit = compile_find_locked(resources, memory, bytes, false);
-    if (hit && hit->info.previous) {
-        hit->info.previous->info.next = hit->info.next;
-        if (hit->info.next) hit->info.next->info.previous = hit->info.previous;
-        hit->info.previous = NULL;
-        hit->info.next = resources->allocations;
-        resources->allocations->info.previous = hit;
-        resources->allocations = hit;
-    }
     compile_unlock(resources);
     return hit ? XR_COMPILE_RESOURCE_OK : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
 }
@@ -205,10 +269,9 @@ static XrCompileResourceStatus compile_allocate_locked(XrCompileResources *resou
     if (!allocation) return XR_COMPILE_RESOURCE_OUT_OF_MEMORY;
     allocation->info.resources = resources;
     allocation->info.bytes = bytes;
-    allocation->info.previous = NULL;
-    allocation->info.next = resources->allocations;
-    if (resources->allocations) resources->allocations->info.previous = allocation;
-    resources->allocations = allocation;
+    allocation->info.left = allocation->info.right = NULL;
+    allocation->info.height = 1;
+    resources->allocations = compile_index_insert(resources->allocations,allocation);
     ++resources->references;
     if (resources->limits.profile_allocations) {
         resources->stats.allocation_count = compile_saturated_add(resources->stats.allocation_count, 1);
@@ -249,9 +312,7 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_calloc(
 static bool compile_free_locked(XrCompileResources *resources, CompileAllocation *allocation) {
     size_t charged = sizeof(*allocation) + allocation->info.bytes;
     XR_CHECK(resources->stats.held_bytes >= charged, "Held compiler bytes cover the released block");
-    if (allocation->info.previous) allocation->info.previous->info.next = allocation->info.next;
-    else resources->allocations = allocation->info.next;
-    if (allocation->info.next) allocation->info.next->info.previous = allocation->info.previous;
+    resources->allocations = compile_index_remove(resources->allocations,allocation);
     xr_free(allocation);
     resources->stats.held_bytes -= charged;
     return compile_release_locked(resources);
