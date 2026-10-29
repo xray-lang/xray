@@ -15,6 +15,8 @@
 #include "xir/xxir_types.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_checked.h"
+#include "xir/xxir_task_result.h"
+#include "xir/xxir_nominal.h"
 #include "../test_win_compat.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +34,57 @@ static void local_packet_digest(uint8_t *bytes,size_t length) {
     XrSHA256Context hash;xr_sha256_init(&hash);
     xr_sha256_update(&hash,bytes,32);xr_sha256_update(&hash,bytes+64,length-64);
     xr_sha256_final(&hash,bytes+32);
+}
+static void local_raw_task_result(const XrXirCompileContext *context,
+    XrXirTypes *types,uint32_t index) {
+    XrXirType type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+index);
+    XrXirTaskResultType info={0};
+    CHECK(xr_xir_task_result_type_info(types,type,&info) && types->nominals->declarations);
+    XrXirTypeNode *node=(XrXirTypeNode *)&types->nodes[index];
+    XrXirTypeNode original=*node;XrXirNominalTable table=*types->nominals;
+    const XrXirNominalTable *original_table=types->nominals;
+    size_t bytes=(size_t)table.count*sizeof(*table.declarations);
+    XrXirNominalDeclaration *declarations=xr_malloc(bytes);CHECK(declarations);
+    memcpy(declarations,table.declarations,bytes);table.declarations=declarations;types->nominals=&table;
+    XrXirNominalDeclaration *declaration=&declarations[node->nominal.declaration];
+    XrXirNominalDeclaration original_declaration=*declaration;
+    CHECK(declaration->field_count==3 && declaration->fields && declaration->variant_count==4);
+    for (unsigned mutation=0;mutation<11;++mutation) {
+        *node=original;*declaration=original_declaration;
+        XrXirNominalField fields[3];memcpy(fields,declaration->fields,sizeof(fields));
+        XrXirNominalVariant variants[5]={0};memcpy(variants,declaration->variants,4*sizeof(*variants));
+        XrXirType projected[3]={info.element,XR_XIR_I64,XR_XIR_PANIC_INFO};
+        if (mutation==0) declaration->native.native_id=UINT32_MAX;
+        if (mutation==1) declaration->native.source_fingerprint[0]^=1;
+        if (mutation==2) declaration->module=(XrXirLiteral){"memory:forged",13};
+        if (mutation==3) declaration->parameter_count=1;
+        if (mutation==4) {declaration->variant_count=5;declaration->variants=variants;}
+        if (mutation>=5 && mutation<=7) {
+            const XrXirType wrong[]={XR_XIR_STRING,XR_XIR_NEVER,XR_XIR_ERROR};
+            if (original.nominal.field_count) {
+                CHECK(original.nominal.field_count==3 && original.nominal.fields);
+                memcpy(projected,original.nominal.fields,sizeof(projected));
+                projected[mutation-5]=wrong[mutation-5];node->nominal.fields=projected;
+            } else {
+                fields[mutation-5].type=wrong[mutation-5];declaration->fields=fields;
+            }
+        }
+        if (mutation==8) node->nominal.argument_count=1;
+        if (mutation==9) {node->nominal.fields=projected;node->nominal.field_count=3;}
+        if (mutation==10) declaration->native=(XrXirNominalNativeRecord){0};
+        XrXirTaskResultType untouched={XR_XIR_I64,XR_XIR_BOOL,XR_XIR_STRING};
+        CHECK(!xr_xir_task_result_type_info(types,type,&untouched));
+        CHECK(untouched.type==XR_XIR_I64 && untouched.element==XR_XIR_BOOL && untouched.error==XR_XIR_STRING);
+        if (mutation!=10) {
+            XrXirStatus status=xr_xir_compile_types_structure_verify(context,types);
+            CHECK(status==XR_XIR_BAD_TYPE || status==XR_XIR_BAD_STRUCTURE);
+        }
+    }
+    *node=original;*declaration=original_declaration;
+    CHECK(xr_xir_task_result_type_info(types,type,&info) &&
+        xr_xir_compile_types_structure_verify(context,types)==XR_XIR_OK);
+    types->nominals=original_table;xr_free(declarations);
+    puts("Native19 raw identity, old arity/tags, physical T/Error/PanicInfo and lookalike refusals preserve output; restored type admits PASS");
 }
 static uint32_t local_answer(XrXirSourceProduct *product) {
     XrXirSourceProductPacketView packet={0};XrXirArtifact *checked=NULL;
@@ -56,6 +109,9 @@ static uint32_t local_answer(XrXirSourceProduct *product) {
         XrXirTypeNode *nodes=xr_malloc(bytes);CHECK(nodes);memcpy(nodes,module->types->nodes,bytes);
         XrXirTypes raw=*module->types;raw.nodes=nodes;
         for (uint32_t t=0;t<raw.count;++t) {
+            XrXirTaskResultType native={0};
+            if (xr_xir_task_result_type_info(&raw,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t),&native))
+                local_raw_task_result(xr_xir_compile_source_product_context(product),&raw,t);
             if (nodes[t].kind!=XR_XIR_TYPE_TASK && nodes[t].kind!=XR_XIR_TYPE_ITERATOR) continue;
             XrXirType error=nodes[t].result;CHECK(error!=XR_XIR_UNIT);
             nodes[t].result=XR_XIR_UNIT;
@@ -294,6 +350,7 @@ int main(int argc,char **argv) {
     }
     xr_test_suppress_dialogs();
     static const LocalErrorCase cases[]={
+        {"governed TaskResult physical metadata","export fn answer()->i64{const result=TaskResult<i64,Never>.Success{value:42};return result.ordinal+42}\n",NULL,42},
         {"typed propagation","enum Failure{Bad}\nfn value() throws(Failure)->i64{throw Failure.Bad}\n"
             "export fn answer()->i64{try{return value()}catch(e:Failure){return 42}}\n",NULL,42},
         {"declared pure","enum Failure{Bad}\nfn pure() throws(Error)->i64{return 42}\n"
