@@ -135,6 +135,9 @@ typedef struct XrXirTaskWaitToken {
 } XrXirTaskWaitToken;
 XR_FUNC XrXirCallStatus xr_xir_call_bind_executor(XrXirCall *call, const XrXirExecutorBinding *binding);
 XR_FUNC bool xr_xir_call_executor_member(const XrXirCall *call, const XrXirExecutorBinding *binding);
+/* Pure observation of an authenticated root's current external yield. No
+ * polling, clock reads, channel completion, allocation or callbacks occur. */
+XR_FUNC bool xir_call_bound_yield_pending(const XrXirCall *call,const XrXirExecutorBinding *binding);
 /* Observe the stable first driver failure for this exact executor activation.
  * Rejected bindings leave output untouched and never grant entry authority. */
 /* Physical release only; never resumes guest cleanup in a failed group. */
