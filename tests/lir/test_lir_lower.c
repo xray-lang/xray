@@ -141,6 +141,7 @@ static void supported_control(void) {
         "fn unused()->string{return \"unreachable\"}\nprint(17)\n",
         "fn main()->string{return \"ordinary\"}\nprint(17)\n",
         "fn main()->i64{return 42}\nprint(main())\n",
+        "fn answer()->i64{const s=\"a\"+\"b\"\nreturn len(s)}\nprint(answer())\n",
         "fn effect(value:i64){print(value)}\neffect(7)\n",
         "fn choose_number(flag:bool,n:i64)->i64{var total=0\nvar i=0\nwhile(i<n){"
         "const value=flag ? i+10 : i+20\ntotal=total+value\ni=i+1}\nreturn "
@@ -177,8 +178,6 @@ static void unsupported(void) {
     rejected(
         "struct Pair{x:i64}\nfn answer()->i64{const p=Pair{x:42}\nreturn p.x}\nprint(answer())\n",
         false, "STRUCT_NEW");
-    rejected("fn answer()->i64{const s=\"a\"+\"b\"\nreturn len(s)}\nprint(answer())\n", false,
-             "STRING_LEN");
     rejected("fn answer()->i64{var n=40\nconst f=fn()->i64{n=n+1\nreturn n}\nreturn "
              "f()}\nprint(answer())\n",
              false, "FUNCTION_REF");

@@ -467,7 +467,9 @@ int main(int argc, char **argv) {
     CHECK(output.entry_result == XR_LIR_I64); stage(&e, "emit_c_with_verifier", start);
     XrRbcProgram *program = NULL; XrRbcCompileDiagnostic bd = {0};
     start = clock_ticks();
-    CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, &bd) == XR_RBC_COMPILE_OK && program);
+    XrRbcCompileStatus bs = xr_rbc_compile(lowered.module, lowered.entry, &program, &bd);
+    if (bs != XR_RBC_COMPILE_OK) fprintf(stderr, "bytecode: %s\n", bd.message);
+    CHECK(bs == XR_RBC_COMPILE_OK && program);
     stage(&e, "rbc_compile", start);
     start = clock_ticks(); xr_lir_lowered_free(&lowered); e.lir_retire += elapsed(start);
     write_bytes(argv[3], output.bytes, output.length);

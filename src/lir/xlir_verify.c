@@ -143,6 +143,8 @@ static bool lir_scalar_instruction_types(const XrLirFunctionData *f,
             return v->type == XR_LIR_STRING && a == XR_LIR_STRING && b == XR_LIR_STRING;
         case XR_LIR_STRING_RETAIN:
             return v->type == XR_LIR_STRING && a == XR_LIR_STRING;
+        case XR_LIR_STRING_LEN:
+            return v->type == XR_LIR_I64 && a == XR_LIR_STRING;
         case XR_LIR_STRING_DROP: case XR_LIR_STRING_PRINT:
             return v->type == XR_LIR_UNIT && a == XR_LIR_STRING;
         case XR_LIR_STRING_CELL_DROP:

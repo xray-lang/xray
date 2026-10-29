@@ -54,6 +54,8 @@ XRAY_API void xrt_string_drop(XrtString **string);
 XRAY_API void xrt_string_owned_drop(XrtString **string);
 // Borrow the exact byte span, including NUL, while the String owner is alive.
 XRAY_API const char *xrt_string_bytes(const XrtString *string, size_t *length);
+// Borrow the cached Unicode scalar count while the String owner is alive.
+XRAY_API int64_t xrt_string_length(const XrtString *string, uint32_t source_id);
 
 // Define this strong external symbol once in the standalone program. The
 // descriptor, locations and path bytes remain immutable and image-owned.

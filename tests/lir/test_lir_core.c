@@ -807,7 +807,36 @@ static void string_sequential_owners(void) {
         if(!attack)OK(xr_lir_module_finish(m,NULL));xr_lir_module_destroy(m);
     }
 }
+static void string_length_types(void) {
+    for(unsigned attack=0;attack<3;++attack) {
+        XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+        XrLirType type=attack==1?XR_LIR_I64:XR_LIR_STRING;
+        XrLirFunction f=test_function(m,"borrowed_length",&type,1,XR_LIR_I64);
+        XrLirBlock block=test_block(m,f,NULL,0);OK(xr_lir_set_entry(m,f,block));
+        XrLirValue input,result={0};OK(xr_lir_function_parameter(m,f,0,&input));
+        XrLirInstruction length={.op=XR_LIR_STRING_LEN,.type=attack==2?XR_LIR_STRING:XR_LIR_I64,
+            .operands=&input,.operand_count=1};
+        XrLirStatus status=xr_lir_emit_value(m,block,&length,&result);
+        if(attack) CHECK(status!=XR_LIR_OK&&!result.id);
+        else {OK(status);test_return(m,block,result);OK(xr_lir_verify(m,NULL));OK(xr_lir_module_finish(m,NULL));}
+        xr_lir_module_destroy(m);
+    }
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+    XrLirLiteral literal={0};OK(xr_lir_add_literal(m,"kept",4,&literal));
+    XrLirFunction f=test_function(m,"released_length",NULL,0,XR_LIR_I64);
+    XrLirBlock block=test_block(m,f,NULL,0);OK(xr_lir_set_entry(m,f,block));
+    XrLirValue text,result;
+    XrLirInstruction create={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
+    OK(xr_lir_emit_value(m,block,&create,&text));
+    XrLirInstruction drop={.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_effect(m,block,&drop));
+    XrLirInstruction length={.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_value(m,block,&length,&result));test_return(m,block,result);
+    CHECK(xr_lir_verify(m,NULL)==XR_LIR_VERIFY_ERROR);
+    xr_lir_module_destroy(m);
+}
 int main(void) {
+    string_length_types();
     string_sequential_owners();
     string_loop_owners();
     string_phi_owners();

@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -20,11 +21,11 @@ def main():
     root = Path(tempfile.mkdtemp(prefix='owned-string-', dir=args.work)).resolve()
     records = []
 
-    def run(label, command, directory=root):
+    def run(label, command, directory=root, stdout=subprocess.PIPE):
         command = list(map(str, command))
-        result = subprocess.run(command, cwd=directory, capture_output=True, timeout=60)
+        result = subprocess.run(command, cwd=directory, stdout=stdout, stderr=subprocess.PIPE, timeout=60)
         (directory / (label + '.command.json')).write_text(json.dumps(command, indent=2) + '\n')
-        (directory / (label + '.stdout')).write_bytes(result.stdout)
+        (directory / (label + '.stdout')).write_bytes(result.stdout or b'')
         (directory / (label + '.stderr')).write_bytes(result.stderr)
         (directory / (label + '.exit')).write_text(str(result.returncode))
         return result
@@ -65,7 +66,15 @@ def main():
     oracle = (args.source_root / 'tests/smoke/expected/hello.txt').read_bytes().replace(b'\r\n', b'\n')
     assert hashlib.sha256(hello.read_bytes().replace(b'\r\n', b'\n')).hexdigest() == '9615546fa72feb2d46cd0d5131a15aee3e1c6407a954697fe999e4956bce44e4'
     assert hashlib.sha256(oracle).hexdigest() == 'dc78af31cd0213663f3af6b48b23a3a9e82ee11d593dcc4b10fac47a2cf0d3f3'
-    cases = [('hello', hello, oracle),
+    length = root / 'length-existing.xr'
+    length.write_text('fn answer()->i64{const s="a"+"b"\nreturn len(s)}\nprint(answer())\n', encoding='utf-8')
+    unicode_length = root / 'length-unicode.xr'
+    unicode_length.write_text('fn count(text:string)->i64{return len(text)}\n'
+        'fn show(n:i64){const text="é\\0${n}"\nprint(len(text))\nprint(count(text))\nprint(text)}\n'
+        'show(7)\nshow(-2)\nprint(len(""))\nprint(len("😀e\\u{301}"))\n', encoding='utf-8')
+    cases = [('length-existing', length, b'2\n'),
+             ('length-unicode', unicode_length, b'3\n3\n\xc3\xa9\0' b'7\n4\n4\n\xc3\xa9\0-2\n0\n3\n'),
+             ('hello', hello, oracle),
              ('join', args.source_root / 'tests/lir/programs/owned-string-join.xr', b'Xray1\n'),
              ('storage', args.source_root / 'tests/lir/programs/owned-string-storage.xr', b'\xc3\xa9\0\nv12\n\n'),
              ('phi', args.source_root / 'tests/lir/programs/owned-string-phi.xr', b'\xc3\xa9\0' b'7\nright-2\n'),
@@ -89,7 +98,42 @@ def main():
                 compile_run(folder,generated,main,optimization,expected * 2)
             records.append({'case': name, 'mode': mode, 'sourceSHA256': hashlib.sha256(before).hexdigest(),
                             'oracleHex': expected.hex(), 'result': 'PASS'})
+            if name.startswith('length-'):
+                for order in ('program-first', 'outcome-first'):
+                    failure = folder / (order + '.json')
+                    sink = folder / (order + '-read-only-output')
+                    sink.write_bytes(b'')
+                    with sink.open('rb') as stream:
+                        result = run('length-output-failure-' + order, [args.driver, source, mode,
+                            folder / (order + '.c'), failure, '0', '1', order], folder, stdout=stream)
+                    marker = b'HOST_ALIVE\r\n' if os.name == 'nt' else b'HOST_ALIVE\n'
+                    assert (result.returncode, result.stdout, result.stderr) == (0, None, marker), folder
+                    assert sink.read_bytes() == b''
+                    facts = json.loads(failure.read_text())
+                    assert facts['status'] == 'XR_RBC_OUTPUT_FAILURE' and facts['host_continued']
+                    assert facts['owner_path_matches_original'] and not facts['failure_facts']['broken_pipe']
+                    records.append({'case': name, 'mode': mode, 'order': order,
+                                    'result': 'OUTPUT_FAILURE_CLEANUP_PASS'})
         assert source.read_bytes() == before
+    long_source = args.source_root / 'tests/diff/cases/limits/string_parts_over_64.xr'
+    long_before = long_source.read_bytes()
+    for mode in ('raw', 'optimized'):
+        folder = root / ('length-over-64-' + mode)
+        folder.mkdir()
+        generated = folder / 'generated.c'
+        command = [args.source_driver, long_source, generated]
+        if mode == 'optimized':
+            command.append('--optimize')
+        result = run('source-length-over-64', command, folder)
+        assert (result.returncode, result.stdout, result.stderr) == (0, b'', b''), folder
+        main = folder / 'main.c'
+        main.write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
+                        'int main(void){if(xray_lir_entry()!=0)return 1;return xray_lir_entry()!=0;}\n', encoding='ascii')
+        compile_run(folder, generated, main, 'O2', b'140\n140\n')
+        records.append({'case': 'length-over-64', 'mode': mode,
+            'sourceSHA256': hashlib.sha256(long_before).hexdigest(), 'oracleHex': b'140\n'.hex(),
+            'result': 'C_NATIVE_PASS', 'rbc': 'UNRESOLVED_SSA_REGISTER_CAPACITY'})
+    assert long_source.read_bytes() == long_before
     folder = root / 'owned-result'
     folder.mkdir()
     generated = folder / 'generated.c'

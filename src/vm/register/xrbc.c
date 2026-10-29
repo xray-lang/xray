@@ -121,6 +121,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     switch (op) {
     case XR_RBC_MOV: case XR_RBC_NEG: case XR_RBC_CELL_READ: case XR_RBC_CELL_WRITE:
     case XR_RBC_STRING_I64: case XR_RBC_STRING_RETAIN: case XR_RBC_STRING_TAKE:
+    case XR_RBC_STRING_LEN:
     case XR_RBC_LT: case XR_RBC_LE: case XR_RBC_EQ:
         if (a >= registers || b >= registers || c) return false;
         if (comparison && (remaining <= 2 || (function->code[pc + 1] & 255) != XR_RBC_JMP))

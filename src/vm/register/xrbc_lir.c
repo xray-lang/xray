@@ -249,7 +249,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE:
     case XR_LIR_STRING_LITERAL: case XR_LIR_STRING_I64: case XR_LIR_STRING_CONCAT:
     case XR_LIR_STRING_RETAIN: case XR_LIR_STRING_DROP: case XR_LIR_STRING_CELL_DROP:
-    case XR_LIR_STRING_PRINT:
+    case XR_LIR_STRING_PRINT: case XR_LIR_STRING_LEN:
         return true;
     case XR_LIR_INTCAST: {
         XrLirType source = XR_LIR_TYPE_INVALID;
@@ -477,6 +477,8 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         return rbc_lir_emit(c, i->op == XR_LIR_STRING_I64 ? XR_RBC_STRING_I64 :
             i->op == XR_LIR_STRING_RETAIN ? XR_RBC_STRING_RETAIN : XR_RBC_STRING_CONCAT,
             result, c->slots[i->operands[0]], i->operand_count == 2 ? c->slots[i->operands[1]] : 0, 0);
+    case XR_LIR_STRING_LEN:
+        return rbc_lir_emit(c, XR_RBC_STRING_LEN, result, c->slots[i->operands[0]], 0, 0);
     case XR_LIR_STRING_DROP: case XR_LIR_STRING_CELL_DROP: case XR_LIR_STRING_PRINT:
         return rbc_lir_emit(c, i->op == XR_LIR_STRING_DROP ? XR_RBC_STRING_DROP :
             i->op == XR_LIR_STRING_CELL_DROP ? XR_RBC_STRING_CELL_DROP : XR_RBC_STRING_PRINT,

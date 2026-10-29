@@ -564,7 +564,36 @@ static void test_offset_window(void) {
     native=XR_RBC_NATIVE_UTC_OFFSET_AT;immediate(code,1,XR_RBC_LOADI,254,1);result=91;
     CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_INVALID && result==91);
 }
+static void test_string_length(void) {
+    uint32_t code[6];
+    XrRbcRegisterKind kinds[]={XR_RBC_STRING,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS};
+    immediate(code,0,XR_RBC_STRING_LITERAL,0,0);
+    emit(code,1,XR_RBC_STRING_LEN,1,0,0);
+    emit(code,2,XR_RBC_STRING_LEN,2,0,0);
+    emit(code,3,XR_RBC_STRING_DROP,0,0,0);
+    emit(code,4,XR_RBC_ADD,3,1,2);
+    emit(code,5,XR_RBC_RET,3,0,0);
+    XrRbcLiteral literal={"\xc3\xa9\0Z",4};
+    XrRbcFunction f={.code=code,.code_count=6,.register_count=4,
+        .register_kinds=kinds,.register_kind_count=4};
+    XrRbcModule module={.functions=&f,.function_count=1,.literals=&literal,.literal_count=1};
+    uint64_t result=UINT64_MAX;
+    CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_OK && result==6);
+    literal=(XrRbcLiteral){"",0};
+    CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_OK && result==0);
+    literal=(XrRbcLiteral){"\xc3\xa9\0Z",4};
+    kinds[1]=XR_RBC_STRING;reject_prepare(&module,0,NULL,0);kinds[1]=XR_RBC_BITS;
+    kinds[0]=XR_RBC_BITS;reject_prepare(&module,0,NULL,0);kinds[0]=XR_RBC_STRING;
+    f.register_kinds=NULL;f.register_kind_count=0;reject_prepare(&module,0,NULL,0);
+    f.register_kinds=kinds;f.register_kind_count=4;
+    code[1]|=UINT32_C(1)<<24;reject_prepare(&module,0,NULL,0);
+    emit(code,1,XR_RBC_STRING_LEN,1,0,0);
+    emit(code,0,XR_RBC_STRING_LEN,1,0,0);reject_prepare(&module,0,NULL,0);
+    immediate(code,0,XR_RBC_STRING_LITERAL,0,0);
+    emit(code,1,XR_RBC_STRING_DROP,0,0,0);reject_prepare(&module,0,NULL,0);
+}
 int main(int argc, char **argv) {
+    test_string_length();
     if (argc == 2 && strcmp(argv[1], "--native-print") == 0) {
         test_native_print();
         return 0;

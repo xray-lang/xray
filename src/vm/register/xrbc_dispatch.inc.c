@@ -115,6 +115,10 @@ XR_RBC_CASE(STRING_CONCAT) {
     XR_RBC_STRING(a) = xrt_string_concat(XR_RBC_STRING(b), XR_RBC_STRING(c), XR_RBC_SOURCE());
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(STRING_LEN) {
+    XR_RBC_REG(a) = (uint64_t)xrt_string_length(XR_RBC_STRING(b), XR_RBC_SOURCE());
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(STRING_DROP) {
     xrt_string_drop(&XR_RBC_STRING(a));
     XR_RBC_NEXT();

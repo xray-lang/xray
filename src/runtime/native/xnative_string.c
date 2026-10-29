@@ -114,6 +114,13 @@ XRAY_API const char *xrt_string_bytes(const XrtString *string, size_t *length) {
     XR_CHECK(length && xr_xir_string_view(&value, &bytes, length), "String bytes require a live canonical String");
     return bytes;
 }
+XRAY_API int64_t xrt_string_length(const XrtString *string, uint32_t source_id) {
+    XrXirValue value = string_borrow(string);
+    int64_t length = 0;
+    XrXirValueStatus status = xr_xir_string_length(&value, &length);
+    if (status != XR_XIR_VALUE_OK) xrt_value_failure(status, source_id);
+    return length;
+}
 XR_FUNC void xrt_string_root_drain(XrtStringRoot *root) {
     while (root->owners) {
         XrtStringOwner *owner = root->owners;

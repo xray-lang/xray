@@ -61,7 +61,8 @@
     X(STRING_CELL_NEW, ABC)                                                                        \
     X(STRING_CELL_DROP, A)                                                                         \
     X(RET, A)                                                                                      \
-    X(RET0, NONE)
+    X(RET0, NONE)                                                                                  \
+    X(STRING_LEN, AB)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,

@@ -89,6 +89,10 @@ static bool rbc_strings_value(RbcStringAdmission *s, XrRbcOperands v) {
         return true;
     case XR_RBC_STRING_PRINT:
         return rbc_string_source(s, v.a);
+    case XR_RBC_STRING_LEN:
+        if (!rbc_bits_destination(s, v.a) || !rbc_string_source(s, v.b)) return false;
+        state[v.a] = RBC_BITS;
+        return true;
     default: return false;
     }
     state[v.a] = RBC_STRING_OWNED;
@@ -168,7 +172,7 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
         switch (v.op) {
         case XR_RBC_MOV: case XR_RBC_STRING_LITERAL: case XR_RBC_STRING_I64:
         case XR_RBC_STRING_RETAIN: case XR_RBC_STRING_CONCAT: case XR_RBC_STRING_TAKE:
-        case XR_RBC_STRING_DROP: case XR_RBC_STRING_PRINT:
+        case XR_RBC_STRING_DROP: case XR_RBC_STRING_PRINT: case XR_RBC_STRING_LEN:
             if (!rbc_strings_value(s, v)) return false; break;
         case XR_RBC_CELL_NEW: case XR_RBC_CELL_READ: case XR_RBC_CELL_WRITE:
         case XR_RBC_STRING_CELL_NEW: case XR_RBC_STRING_CELL_DROP:

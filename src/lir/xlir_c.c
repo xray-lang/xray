@@ -174,7 +174,7 @@ static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
 static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
     if (v->op == XR_LIR_STRING_LITERAL || v->op == XR_LIR_STRING_I64 ||
         v->op == XR_LIR_STRING_CONCAT || v->op == XR_LIR_STRING_RETAIN ||
-        v->op == XR_LIR_STRING_PRINT) return true;
+        v->op == XR_LIR_STRING_PRINT || v->op == XR_LIR_STRING_LEN) return true;
     return (v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_STRING_CELL) ||
         (v->op == XR_LIR_CELL_READ && v->type == XR_LIR_STRING) ||
         (v->op == XR_LIR_CELL_WRITE && c_value_type(c, v->operands[0]) == XR_LIR_STRING_CELL);
@@ -251,6 +251,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE:
         case XR_LIR_STRING_I64: case XR_LIR_STRING_CONCAT: case XR_LIR_STRING_RETAIN:
         case XR_LIR_STRING_DROP: case XR_LIR_STRING_CELL_DROP: case XR_LIR_STRING_PRINT:
+        case XR_LIR_STRING_LEN:
             break;
         case XR_LIR_LITERAL_ADDR: case XR_LIR_STRING_LITERAL:
             c->used_literals[v->bits - 1] = 1;
@@ -529,6 +530,11 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
                 v->op == XR_LIR_STRING_RETAIN ? "xrt_string_retain" : "xrt_string_concat");
             c_value(c, v->operands[0]);
             if (v->operand_count == 2) { c_text(c, ", "); c_value(c, v->operands[1]); }
+            c_format(c, ", UINT32_C(%" PRIu32 "));\n", string_source);
+            break;
+        case XR_LIR_STRING_LEN:
+            c_format(c, "    v%" PRIu32 " = xrt_string_length(", v->result);
+            c_value(c, v->operands[0]);
             c_format(c, ", UINT32_C(%" PRIu32 "));\n", string_source);
             break;
         case XR_LIR_STRING_DROP:

@@ -388,6 +388,7 @@ static void owned_string_nested(void *data) {
     CHECK(xr_rbc_outcome_string(context->outcome,&borrowed));
     XrtString *local = xrt_string_retain(borrowed,1);
     CHECK(local==borrowed);
+    CHECK(xrt_string_length(borrowed,1)==3);
     if (!context->mode) {
         XrtExecutionFailure failure = {0};
         CHECK(xrt_run_embedded(context->locations,&failure,owned_string_inner,context)==XRT_EXECUTION_COMPLETED);
@@ -406,14 +407,21 @@ static void owned_string_nested(void *data) {
 }
 static void owned_string_root(void *data) {
     OwnedStringContext *context = data;
+    XrtString *empty = xrt_string_new("",0,1);
+    CHECK(xrt_string_length(empty,1)==0);
+    xrt_string_drop(&empty);
     XrtString *left = xrt_string_new("\xc3\xa9\0",3,1);
     XrtString *right = xrt_string_i64(-71,1);
     XrtString *joined = xrt_string_concat(left,right,1);
+    CHECK(xrt_string_length(left,1)==2 && xrt_string_length(right,1)==3 &&
+        xrt_string_length(joined,1)==5);
     XrtString *copy = xrt_string_retain(joined,1), *moved = NULL;
     uint64_t before = xr_xir_domain_stats(context->strings.domain).live_bytes;
     xrt_string_move(&moved,&copy);
     CHECK(!copy && moved==joined && xr_xir_domain_stats(context->strings.domain).live_bytes==before);
     owned_string_equal(moved,"\xc3\xa9\0-71",6);
+    CHECK(xrt_string_length(moved,1)==5 &&
+        xr_xir_domain_stats(context->strings.domain).live_bytes==before);
     context->peak = before;
     if (context->mode==1) xrt_print_string("fail",4,1);
     if (context->mode==2 || context->mode==3) xrt_arithmetic_panic(418+context->mode,1);
