@@ -187,11 +187,12 @@ def main():
                        '-I' + str(args.include), adapter, *args.library, '-pthread', '-o', executable]
             if args.asan:
                 command += ['-fsanitize=address,undefined', '-g']
-        if name in ('f64-source', 'f64-fneg-source'):
+        if name in ('f64-source', 'f64-fneg-source', 'f64-fadd-source'):
             options = [str(x) for x in command[1:] if isinstance(x, str) and x.startswith(('/', '-'))
                        and not x.startswith(('/Fe:', '/INCREMENTAL:')) and x not in ('/link', '-o', '-pthread')]
             profile = _f64_profile(args.compiler, args.kind, options, root)
-            key = 'f64Source' if name == 'f64-source' else 'f64NegationSource'
+            key = {'f64-source': 'f64Source', 'f64-fneg-source': 'f64NegationSource',
+                   'f64-fadd-source': 'f64AdditionSource'}[name]
             identity[key + 'Profile'] = profile
             if not profile['supported']:
                 identity[key] = _f64_reject(command, root, profile['expectedGuard'], executable)
@@ -218,8 +219,9 @@ def main():
             identity['literalRepeatedEntry' if name == 'literal-slot' else name + 'RepeatedEntry'] = {'calls': 2, 'stdoutHex': repeated.stdout.hex(),
                                                'sameImage': True}
         executables[name] = executable
-        if name in ('f64-source', 'f64-fneg-source'):
-            key = 'f64Source' if name == 'f64-source' else 'f64NegationSource'
+        if name in ('f64-source', 'f64-fneg-source', 'f64-fadd-source'):
+            key = {'f64-source': 'f64Source', 'f64-fneg-source': 'f64NegationSource',
+                   'f64-fadd-source': 'f64AdditionSource'}[name]
             identity[key] = {'status': 'PASS_SOURCE_ADMISSION_AND_EFFECTS',
                              'stdoutHex': completed.stdout.hex(), 'payloadQualification': False}
     # A read-only stdout handle exercises a real write failure, without a stub.
