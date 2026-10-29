@@ -106,7 +106,7 @@ static XrXirStatus metadata_copy(const XrXirCompileContext *context, unsigned ki
         XrXirArtifact *producer = NULL;
         result = implementation_built(context,&producer);
         if (result == XR_XIR_OK) result = xr_xir_compile_implementations_copy_verified(context,
-            xr_xir_compile_artifact_module(producer)->declarations->implementations,&copy);
+            xr_xir_compile_artifact_module(producer)->declarations->implementations,NULL,&copy);
         xr_xir_compile_artifact_free(producer);
         if (result != XR_XIR_OK) CHECK(copy == &sentinel);
         else {

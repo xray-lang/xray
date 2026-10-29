@@ -349,7 +349,7 @@ XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile
     }
     allocation_status=declaration_poll(control);if (allocation_status!=XR_XIR_OK) goto failed;
     XrXirImplementationTable *implementations = NULL;
-    XrXirStatus status = xr_xir_compile_implementations_copy_verified(compile_context, source->implementations, &implementations);
+    XrXirStatus status = xr_xir_compile_implementations_copy_verified(compile_context, source->implementations, control, &implementations);
     if (status != XR_XIR_OK) { xr_xir_compile_declarations_free(copy); return status; }
     copy->implementations = implementations;
     allocation_status=declaration_poll(control);if (allocation_status!=XR_XIR_OK) goto failed;

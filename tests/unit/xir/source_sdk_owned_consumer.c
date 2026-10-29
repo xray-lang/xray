@@ -200,8 +200,41 @@ static void sdk_repl_inspection_cases(const char *stdlib_path) {
 #include "source_sdk_repl_write_consumer.inc.c"
 #include "source_sdk_repl_hosted_consumer.inc.c"
 #include "source_sdk_task_result_consumer.inc.c"
+#include "implementation_control_fixture.h"
+
+typedef struct SdkImplementationControl {size_t polls;int retired;} SdkImplementationControl;
+typedef struct SdkImplementationOutput {char bytes[3];size_t count;} SdkImplementationOutput;
+static XrSourceWriteStatus sdk_implementation_output(void *context,XrSourceOutputStream stream,const char *bytes,size_t count) {
+    SdkImplementationOutput *output=(SdkImplementationOutput *)context;
+    CHECK(stream==XR_SOURCE_STDOUT&&count<=sizeof(output->bytes)-output->count);
+    memcpy(output->bytes+output->count,bytes,count);output->count+=count;return XR_SOURCE_WRITE_OK;
+}
+static int sdk_implementation_poll(const void *context) {
+    SdkImplementationControl *control=(SdkImplementationControl *)context;
+    CHECK(!control->retired);++control->polls;return 0;
+}
+static void sdk_implementation_case(const char *stdlib_path) {
+    char source[8000];size_t length=implementation_control_fixture(source,sizeof(source));
+    XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=stdlib_path;
+    SdkImplementationControl control={0,0};options.cancel_poll=sdk_implementation_poll;options.cancel_context=&control;
+    XrSourceText text={NULL,"installed-implementation",source,length};XrSourceAst *ast=NULL;
+    CHECK(xray_source_parse(&text,&options,&ast,NULL,NULL)==XR_SOURCE_OK&&ast);
+    memset(source,'!',length);XrSourceArtifact *artifact=NULL;
+    CHECK(xray_source_build_ast(ast,&options,&artifact,NULL,NULL)==XR_SOURCE_OK&&artifact);
+    xray_source_ast_free(ast);CHECK(control.polls);size_t polls=control.polls;control.retired=1;memset(&options,0,sizeof(options));
+    XrSourceExecution *execution=sdk_execution_new();XrSourceCallOptions runtime;
+    CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
+    SdkImplementationOutput output={{0},0};runtime.write=sdk_implementation_output;runtime.context=&output;
+    XrSourceInstance *instance=NULL;CHECK(xray_source_instance_new(execution,artifact,&runtime,&instance)==XR_SOURCE_OK&&instance);
+    xray_source_artifact_free(artifact);xray_source_execution_free(execution);
+    XrSourceInvocation invocation=request("answer",NULL,0);XrSourceValue *answer=execute(instance,&invocation);
+    CHECK(xray_source_instance_drop(&instance,NULL)==XR_SOURCE_OK&&!instance);
+    CHECK(control.polls==polls&&output.count==3&&!memcmp(output.bytes,"42\n",3));integer(answer,42);xray_source_value_free(answer);
+    puts("Installed complete7658B generic implementation: retired request/AST, ready answer42 and owned result release PASS");
+}
 
 int main(int argc,char **argv) {
+    if(argc==3&&!strcmp(argv[1],"--implementation")){sdk_implementation_case(argv[2]);return 0;}
     CHECK(argc==4);
     char source[]="fn initial()->i64{return 40}\nvar state=initial()\n"
         "export fn next(delta:i64)->i64{state+=delta;return state}\n"

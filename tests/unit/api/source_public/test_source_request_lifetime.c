@@ -1641,7 +1641,9 @@ static void declarations_copy_controls(const char *selected) {
     }
     printf("Original606-function Source declarations case=%s: full12584B, rollback, same-options retry and retired answer42 PASS\n",selected?selected:"all");
 }
+#include "implementation_control_cases.inc.c"
 int main(int argc,char **argv) {
+    if((argc==2||argc==3)&&!strcmp(argv[1],"--implementation-control")){implementation_controls(argc==3?argv[2]:NULL);return 0;}
     if((argc==2||argc==3) && !strcmp(argv[1],"--declarations-control")){declarations_copy_controls(argc==3?argv[2]:NULL);return 0;}
     if(argc==2 && !strcmp(argv[1],"--ctfe-cleanup")) {
         source_ctfe_cleanup_cases(XR_PUBLIC_STDLIB,XR_PUBLIC_STDLIB "/../tests/unit/xir/ctfe_cleanup/cleanup_owned.xr");

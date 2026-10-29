@@ -18,8 +18,10 @@
 static DeclarationsCopyProbe *dc_probe;
 XR_FUNC void test_declarations_copy_begin(DeclarationsCopyProbe *probe) {DC_CHECK(probe&&!dc_probe);dc_probe=probe;}
 XR_FUNC void test_declarations_copy_end(DeclarationsCopyProbe *probe) {
-    DC_CHECK(probe==dc_probe&&!probe->source&&!probe->copy&&!probe->destination&&!probe->control);dc_probe=NULL;
+    DC_CHECK(probe==dc_probe&&!probe->source&&!probe->copy&&!probe->destination&&!probe->control);
+    DC_CHECK(!probe->implementation_source&&!probe->implementation_copy&&!probe->argument_source);dc_probe=NULL;
 }
+#include "implementation_copy_probe.inc.c"
 static XrCompileResourceStatus dc_poll(XrCompileRequestControl *control) {
     DeclarationsCopyProbe *p=dc_probe;
     if(p && p->control==control && p->phase==DC_PUBLICATION && p->implementations_returned) {
@@ -33,7 +35,7 @@ static XrCompileResourceStatus dc_poll(XrCompileRequestControl *control) {
     return xr_compile_request_control_poll(control);
 }
 static void *dc_alloc(const XrXirCompileContext *context,size_t bytes,XrXirStatus *status,const char *caller) {
-    DeclarationsCopyProbe *p=dc_probe;bool fail=p&&p->source&&p->mode==2&&!p->oom_seen&&
+    DeclarationsCopyProbe *p=dc_probe;bool fail=p&&!p->implementation&&p->source&&p->mode==2&&!p->oom_seen&&
         bytes==p->bytes&&!strcmp(caller,"declaration_copy");
     if(fail)p->fail_next();void *memory=xir_compile_alloc(context,bytes,status);
     if(fail){DC_CHECK(!memory&&*status==XR_XIR_OUT_OF_MEMORY);p->oom_seen=true;p->wanted=true;}
@@ -48,13 +50,14 @@ static void *dc_calloc(const XrXirCompileContext *context,size_t count,size_t by
 }
 static XrCompileResourceStatus dc_span(XrCompileRequestControl *control,void *destination,const void *source,size_t bytes) {
     DeclarationsCopyProbe *p=dc_probe;bool functions=p&&p->source&&source==p->source->functions;
-    if(functions){DC_CHECK(bytes==24240&&!p->destination);p->destination=destination;memset(destination,0xa5,bytes);++p->copies;}
+    if(functions&&!p->implementation){DC_CHECK(bytes==24240&&!p->destination);p->destination=destination;memset(destination,0xa5,bytes);++p->copies;}
     if(p&&p->source&&p->phase==DC_MODULE_NAME&&source==p->source->modules[0].name)p->wanted=true;
     XrCompileResourceStatus status=xir_lower_copy_span(control,destination,source,bytes);
-    if(functions)p->destination=NULL;return status;
+    if(functions&&!p->implementation)p->destination=NULL;return status;
 }
-static XrXirStatus dc_implementations(const XrXirCompileContext *context,const XrXirImplementationTable *source,XrXirImplementationTable **output) {
-    XrXirStatus status=xr_xir_compile_implementations_copy_verified(context,source,output);
+static XrXirStatus dc_implementations(const XrXirCompileContext *context,const XrXirImplementationTable *source,XrCompileRequestControl *control,XrXirImplementationTable **output) {
+    XrXirStatus status=dc_probe&&dc_probe->implementation&&dc_probe->source?
+        test_implementation_copy(context,source,control,output):xr_xir_compile_implementations_copy_verified(context,source,control,output);
     if(dc_probe&&dc_probe->source)dc_probe->implementations_returned=true;
     return status;
 }
@@ -75,9 +78,14 @@ static XrXirStatus dc_actual(const XrXirCompileContext *,const XrXirDeclarations
 XR_FUNC XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *context,
     const XrXirDeclarations *source,uint32_t functions,XrCompileRequestControl *control,XrXirDeclarations **output) {
     DeclarationsCopyProbe *p=dc_probe;
-    if(!p||!source||!control||functions!=606)return dc_actual(context,source,functions,control,output);
+    if(!p||!source||!control||(!p->implementation&&functions!=606))return dc_actual(context,source,functions,control,output);
+    if(p->implementation) {
+        bool found=false;if(source->implementations)for(uint32_t i=0;i<source->implementations->count;++i)
+            if(source->implementations->records[i].binding_count==192)found=true;
+        if(!found)return dc_actual(context,source,functions,control,output);
+    }
     DC_CHECK(source->module_count && !p->source&&!p->control&&!p->copy);
-    p->source=source;p->control=control;p->bytes=(size_t)functions*sizeof(*source->functions);DC_CHECK(p->bytes==24240);
+    p->source=source;p->control=control;p->bytes=(size_t)functions*sizeof(*source->functions);if(!p->implementation)DC_CHECK(p->bytes==24240);
     if(!p->resources)p->capture(p,context->resources);else DC_CHECK(p->resources==context->resources);
     p->implementations_returned=false;XrCompileResourceStats before={0},after={0};
     DC_CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);p->held_before=before.held_bytes;

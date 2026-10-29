@@ -357,6 +357,8 @@ else()
 endif()
 add_test(NAME source_request_lifetime COMMAND test_source_request_lifetime)
 set_tests_properties(source_request_lifetime PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership")
+add_test(NAME source_implementation_control COMMAND test_source_request_lifetime --implementation-control)
+set_tests_properties(source_implementation_control PROPERTIES TIMEOUT 120 PROCESSORS 1 LABELS "unit;api;source;ownership;resources")
 add_test(NAME source_ctfe_cleanup_lifetime COMMAND test_source_request_lifetime --ctfe-cleanup)
 set_tests_properties(source_ctfe_cleanup_lifetime PROPERTIES TIMEOUT 120
     LABELS "unit;api;source;ctfe;cleanup;ownership")

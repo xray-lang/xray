@@ -13,6 +13,7 @@
 #ifndef XXIR_IMPLEMENTATION_H
 #define XXIR_IMPLEMENTATION_H
 #include "xxir_interface.h"
+#include "../base/xcompile_request.h"
 
 typedef struct XrXirImplementationBinding {
     XrXirInterfaceApplication requirement;
@@ -29,7 +30,8 @@ struct XrXirImplementationTable {
     uint32_t count;
 };
 /* NULL is the only empty table. Nested arrays use NULL iff count is zero.
- * Copies require verified identities and preserve the source type pool IDs. */
-XR_FUNC XrXirStatus xr_xir_compile_implementations_copy_verified(const XrXirCompileContext *compile_context, const XrXirImplementationTable *source, XrXirImplementationTable **output);
+ * Copies require verified identities and preserve the source type pool IDs.
+ * Control is borrowed synchronously and never retained. Failure preserves output. */
+XR_FUNC XrXirStatus xr_xir_compile_implementations_copy_verified(const XrXirCompileContext *compile_context, const XrXirImplementationTable *source, XrCompileRequestControl *control, XrXirImplementationTable **output);
 XR_FUNC void xr_xir_compile_implementations_free(XrXirImplementationTable *table);
 #endif // XXIR_IMPLEMENTATION_H

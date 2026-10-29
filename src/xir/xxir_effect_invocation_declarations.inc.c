@@ -140,7 +140,7 @@ static XrXirStatus effect_invocation_declarations_clone(const XrXirCompileContex
         bytes+=from->length;if (status!=XR_XIR_OK) goto failed;
     }
     XrXirImplementationTable *implementations=NULL;
-    status=xr_xir_compile_implementations_copy_verified(work,source->implementations,&implementations);
+    status=xr_xir_compile_implementations_copy_verified(work,source->implementations,NULL,&implementations);
     if (status!=XR_XIR_OK) goto failed;
     copy->implementations=implementations;*output=copy;return XR_XIR_OK;
 failed:

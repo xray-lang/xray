@@ -15,6 +15,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--compiler', required=True)
     parser.add_argument('--secondary-compiler')
+    parser.add_argument('--implementation-only', action='store_true')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[3]
     build, parent = args.build.resolve(), args.output.resolve()
@@ -52,6 +53,7 @@ def main():
     assert not (moved/'bin/xray.exe').exists() and not any(p.suffix == '.xr' for p in moved.rglob('*'))
     source = out/'consumer.c'
     source.write_bytes((root/'tests/unit/xir/source_sdk_owned_consumer.c').read_bytes())
+    (out/'implementation_control_fixture.h').write_bytes((root/'tests/unit/xir/implementation_control_fixture.h').read_bytes())
     fragment = 'source_sdk_repl_input_consumer.inc.c'
     (out/fragment).write_bytes((root/'tests/unit/xir'/fragment).read_bytes())
     fragment = 'source_sdk_repl_array_consumer.inc.c'
@@ -88,6 +90,8 @@ def main():
                 b'Installed hosted lifecycle: explicit owners, child and root yields, busy drop, defaults reset and owned survivors PASS\n'
                 b'Installed owning AST, typed values, persistent state, callable authority and producer death PASS\n'
                 b'Installed terminal Task outcomes: repeated owned data, nested Task42, thrown and NUL/UTF8 panic after all producers PASS\n')
+    if args.implementation_only:
+        expected = b'Installed complete7658B generic implementation: retired request/AST, ready answer42 and owned result release PASS\n'
     for index, compiler in enumerate(compilers):
         for language in ('c', 'cpp'):
             label = f'provider{index}-{language}'
@@ -102,9 +106,17 @@ def main():
                            '/std:c++17' if language == 'cpp' else '/std:c11', '/utf-8', '/MD', '/O2',
                            '/W4', '/WX', '/I'+str(sdk/'include'), '/c', source, '/Fo'+str(obj)]
             run(label+'-compile', command)
-            run(label+'-link', ['link', '/nologo', '/incremental:no', '/out:'+str(exe), obj,
+            linker = compiler.parent/'link.exe'
+            if not linker.is_file():
+                registered = Path(shutil.which('cl', path=environment.get('Path', environment.get('PATH'))) or '')
+                linker = registered.parent/'link.exe'
+            assert linker.is_file(), 'registered MSVC linker is missing'
+            run(label+'-link', [linker, '/nologo', '/incremental:no', '/out:'+str(exe), obj,
                               *[sdk/p for p in manifest['archives']], 'kernel32.lib',
                               '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
+            if args.implementation_only:
+                assert run(label+'-run', [exe, '--implementation', empty]).replace(b'\r\n', b'\n') == expected
+                continue
             snapshot = out/'installed-owned-snapshot.xr'
             with snapshot.open('xb') as stream:
                 stream.write(b'const snapshot=72\nsnapshot\n')
@@ -112,6 +124,15 @@ def main():
             assert run(label+'-run', [exe, empty, fixtures/'source_public_repl_rooted',
                                      fixtures/'source_public_repl_file']).replace(b'\r\n', b'\n') == expected
             assert not (out/'installed-owned-snapshot.xr').exists()
+    if args.implementation_only:
+        summary = dict(status='PASS', sdk_only=True, providers=list(map(str, compilers)), languages=['C11', 'C++17'],
+                       source_bytes=7658, interface_bindings=192, retired_request_and_AST=True,
+                       ready_named_answer42=True, owned_result_after_producers=True,
+                       manifest_sha256=hashlib.sha256((sdk/'source_sdk_manifest.json').read_bytes()).hexdigest(),
+                       scope='Focused implementation consumer; existing default ownership/integrity matrix unchanged', production_release=False)
+        (out/'summary.json').write_text(json.dumps(summary, indent=2)+'\n', encoding='utf-8')
+        print(json.dumps(summary))
+        return
     probe = out/'config-probe'
     probe.mkdir()
     (probe/'CMakeLists.txt').write_text('cmake_minimum_required(VERSION 3.20)\n'

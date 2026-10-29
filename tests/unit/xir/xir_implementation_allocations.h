@@ -8,7 +8,7 @@ static XrXirStatus implementation_copy_operation(const XrXirCompileContext *cont
     XrXirImplementationBinding bindings[]={{{0,arguments,1},0,2},{{0,arguments+1,1},0,3}};
     XrXirImplementation records[]={{0,{1,arguments,1},bindings,2},{1,{2,NULL,0},NULL,0}};
     XrXirImplementationTable table={records,2},*copy=NULL;
-    XrXirStatus status=xr_xir_compile_implementations_copy_verified(context,&table,&copy);
+    XrXirStatus status=xr_xir_compile_implementations_copy_verified(context,&table,NULL,&copy);
     if(status==XR_XIR_OK) {
         CHECK(copy && copy->records!=records && copy->records[0].bindings!=bindings);
         CHECK(copy->records[0].interface.arguments!=copy->records[0].bindings[0].requirement.arguments);
@@ -23,10 +23,10 @@ static void implementation_copy_allocations(void) {
     allocation_compile_operation_cases("implementation ownership",implementation_copy_operation,NULL);
     AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits);
     XrXirImplementationTable empty={0},*copy=NULL;
-    CHECK(xr_xir_compile_implementations_copy_verified(&owner.context,&empty,&copy)==XR_XIR_BAD_STRUCTURE && !copy);
-    CHECK(xr_xir_compile_implementations_copy_verified(&owner.context,NULL,&copy)==XR_XIR_OK && !copy);
+    CHECK(xr_xir_compile_implementations_copy_verified(&owner.context,&empty,NULL,&copy)==XR_XIR_BAD_STRUCTURE && !copy);
+    CHECK(xr_xir_compile_implementations_copy_verified(&owner.context,NULL,NULL,&copy)==XR_XIR_OK && !copy);
     copy=(void *)(uintptr_t)1;
-    CHECK(xr_xir_compile_implementations_copy_verified(&owner.context,&empty,&copy)==XR_XIR_BAD_STRUCTURE && copy==(void *)(uintptr_t)1);
+    CHECK(xr_xir_compile_implementations_copy_verified(&owner.context,&empty,NULL,&copy)==XR_XIR_BAD_STRUCTURE && copy==(void *)(uintptr_t)1);
     allocation_compile_owner_drop(&owner);
 }
 #endif // XIR_IMPLEMENTATION_ALLOCATIONS_H
