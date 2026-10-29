@@ -98,9 +98,9 @@ static bool source_scalar_ground_result(SourceContext *ctx,AstNode *node,
             SourceDecimal decimal;
             if (!source_direct_decimal(ctx,object,&decimal)) return false;
             if (!decimal.node) return true;
-            SourceNumericRecipe recipe;
+            XrHirLiteral recipe={0};
             SourceNumericRequest request={NULL,&decimal,{false,XR_XIR_UNIT,false,false},true};
-            if (!source_numeric_plan(ctx,object,&request,&recipe)) return false;
+            if (!source_hir_literal(ctx,object,&request,&recipe)) return false;
             receiver=(SourceExpectedType){true,recipe.type,false,false};
         }
     }

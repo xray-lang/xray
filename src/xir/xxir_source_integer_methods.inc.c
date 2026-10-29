@@ -326,9 +326,9 @@ static bool source_integer_ground_result(SourceContext *ctx,AstNode *node,
         AstNode *object=node->as.call_expr.callee->as.member_access.object;
         if (!source_direct_integer(ctx,object,&integer)) return false;
         if (!integer.present) return true;
-        SourceNumericRecipe recipe;
+        XrHirLiteral recipe={0};
         SourceNumericRequest request={&integer,NULL,{false,XR_XIR_UNIT,false,false},true};
-        if (!source_numeric_plan(ctx,object,&request,&recipe)) return false;
+        if (!source_hir_literal(ctx,object,&request,&recipe)) return false;
         receiver=(SourceExpectedType){true,recipe.type,false,false};
     }
     if (!xr_xir_type_is_integer(receiver.type)) return true;

@@ -35,8 +35,8 @@
 #include "xxir_task_result.h"
 #include "xxir_nominal.h"
 #include "xxir_float.h"
+#include "../hir/xhir_literal.h"
 #include "xxir_compile_memory.h"
-#include "../shared/xr_decimal_float.h"
 #include "../shared/xnative_declaration.h"
 #include "../shared/xr_core_intrinsic.h"
 #include "../shared/xr_type_names_core.h"
@@ -111,12 +111,7 @@ typedef struct SourceInteger { bool present, negative; uint64_t magnitude; } Sou
 
 typedef struct SourceDecimal { AstNode *node; bool negative; } SourceDecimal;
 
-typedef struct SourceNumericRecipe {
-    bool ready;
-    XrXirOp operation;
-    XrXirType type;
-    int64_t payload;
-} SourceNumericRecipe;
+
 
 typedef struct SourceValue { uint32_t id; XrXirType type; } SourceValue;
 typedef struct SourceBlockReference { uint32_t owner, identity; } SourceBlockReference;
@@ -141,7 +136,7 @@ typedef struct SourceExpressionPlan {
     SourceConversionRecipe conversion;
     SourceInteger integer;
     SourceDecimal decimal;
-    SourceNumericRecipe numeric;
+    XrHirLiteral numeric;
     SourceValue value;
     /* One checked read owns the automatic-layer claims. They are never a
      * property of a runtime value and never cross calls, conversions or phi. */
@@ -895,40 +890,6 @@ static bool source_direct_decimal(SourceContext *ctx, AstNode *node, SourceDecim
     }
     return true;
 }
-static bool source_decimal_payload(SourceContext *ctx, const SourceDecimal *literal, XrXirType type, uint64_t *bits) {
-    AstNode *node = literal->node;
-    size_t length = node->as.literal.decimal_length;
-    if (!node->as.literal.decimal_text || !length) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "decimal spelling is missing");
-    if (!source_request_poll(ctx, node)) return false;
-    if (!xr_decimal_float_parse(node->as.literal.decimal_text, length, xr_xir_float_bits(type), bits))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"invalid decimal literal");
-    if (literal->negative) *bits ^= UINT64_C(1) << (xr_xir_float_bits(type) - 1);
-    return true;
-}
-static bool source_integer_float_payload(SourceContext *ctx, AstNode *node, const SourceInteger *literal,
-    XrXirType type, uint64_t *bits) {
-    int64_t magnitude;
-    if (!source_copy_bytes(ctx, node, &magnitude, &literal->magnitude, sizeof(magnitude))) return false;
-    *bits = 0; int64_t exact = 0;
-    XrXirIntegerFormat format = {64, false};
-    if (xr_xir_integer_to_float(format, xr_xir_float_bits(type), magnitude, bits) != XR_XIR_NUMERIC_OK ||
-        xr_xir_float_to_integer(xr_xir_float_bits(type), format, *bits, &exact) != XR_XIR_NUMERIC_OK ||
-        (uint64_t) exact != literal->magnitude)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "integer literal is not exactly representable in its floating context");
-    if (literal->negative) *bits ^= UINT64_C(1) << (xr_xir_float_bits(type) - 1);
-    return true;
-}
-static bool source_integer_payload(SourceContext *ctx, AstNode *node, const SourceInteger *literal,
-    XrXirType type, uint64_t *bits) {
-    uint32_t width = xr_xir_integer_bits(type);
-    bool sign = xr_xir_integer_signed(type);
-    uint64_t limit = sign ? (UINT64_C(1) << (width - 1)) - (literal->negative ? 0 : 1) :
-        (width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1);
-    if (literal->magnitude > limit || (!sign && literal->negative && literal->magnitude))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "integer literal is outside its contextual type");
-    *bits = literal->negative ? UINT64_C(0) - literal->magnitude : literal->magnitude;
-    return true;
-}
 #include "xxir_source_numeric_plan.inc.c"
 static bool source_recipe_group(SourceContext *ctx, XrXirInstruction op, const SourceValue *args,
                        uint32_t count, SourceValue *value) {
@@ -1582,13 +1543,13 @@ static bool source_arithmetic(SourceContext *ctx, AstNode *node, SourceExpectedT
         bool shift=node->type==AST_BINARY_LSHIFT || node->type==AST_BINARY_RSHIFT;
         bool first_literal=first->integer.present || first->decimal.node || first->syntax->type==AST_LITERAL_NULL;
         bool second_literal=second->integer.present || second->decimal.node || second->syntax->type==AST_LITERAL_NULL;
-        if (!shift && first_literal && !second_literal && !first->numeric.ready) {
+        if (!shift && first_literal && !second_literal && !first->numeric.kind) {
             if (!source_plan_complete(ctx,second,&right)) return false;
             first->expected=(SourceExpectedType){true,right.type, false, false};
             if (!source_plan_complete(ctx,first,&left)) return false;
         } else {
             if (!source_plan_complete(ctx,first,&left)) return false;
-            if (!second->numeric.ready && second_literal && !shift)
+            if (!second->numeric.kind && second_literal && !shift)
                 second->expected=(SourceExpectedType){true,left.type, false, false};
             if (!source_plan_complete(ctx,second,&right)) return false;
         }

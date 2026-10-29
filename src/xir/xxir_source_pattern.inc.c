@@ -36,7 +36,8 @@ static bool source_pattern_integer_key(SourceContext *ctx, AstNode *node, XrXirT
     SourceInteger literal; uint64_t bits;
     if (!source_direct_integer(ctx,node,&literal)) return false;
     if (!literal.present) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"range endpoint constant is not admitted");
-    if (!source_integer_payload(ctx,node,&literal,type,&bits)) return false;
+    SourceNumericRequest request={&literal,NULL,{true,type,false,false},true};XrHirLiteral checked={0};
+    if (!source_hir_literal(ctx,node,&request,&checked)) return false;bits=checked.bits;
     *key=(bits&source_pattern_integer_max(type))^source_pattern_integer_bias(type);
     return true;
 }
@@ -104,15 +105,17 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
         if (atom->type==AST_LITERAL_INT) {
             SourceInteger integer;
             if (!source_direct_integer(ctx,path,&integer) || !integer.present) return false;
+            SourceNumericRequest request={&integer,NULL,{true,type,false,false},true};XrHirLiteral checked={0};
+            if (!source_hir_literal(ctx,path,&request,&checked)) return false;bits=checked.bits;
             if (xr_xir_type_is_integer(type)) {
-                if (!source_integer_payload(ctx,path,&integer,type,&bits)) return false;
                 out->interval=true;
                 out->low=(bits&source_pattern_integer_max(type))^source_pattern_integer_bias(type); out->high=out->low;
-            } else if (!source_integer_float_payload(ctx,path,&integer,type,&bits)) return false;
+            }
         } else if (atom->type==AST_LITERAL_FLOAT) {
             SourceDecimal decimal;
-            if (!source_direct_decimal(ctx,path,&decimal) || !decimal.node ||
-                !source_decimal_payload(ctx,&decimal,type,&bits)) return false;
+            if (!source_direct_decimal(ctx,path,&decimal) || !decimal.node) return false;
+            SourceNumericRequest request={NULL,&decimal,{true,type,false,false},true};XrHirLiteral checked={0};
+            if (!source_hir_literal(ctx,path,&request,&checked)) return false;bits=checked.bits;
         }
         if (!source_copy_bytes(ctx, path, &out->literal_payload, &bits, sizeof(bits))) return false;
         return source_query_expression(ctx,path,type);

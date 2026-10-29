@@ -22,8 +22,8 @@ static bool source_plan_numeric_prepare(SourceContext *ctx,SourceExpressionPlan 
     if (!plan->integer.present && !plan->decimal.node) return true;
     SourceNumericRequest request={plan->integer.present ? &plan->integer : NULL,
         plan->decimal.node ? &plan->decimal : NULL,hint,defaults};
-    if (!source_numeric_plan(ctx,plan->syntax,&request,&plan->numeric)) return false;
-    if (plan->numeric.ready) {plan->type_ready=true;plan->ground_type=plan->numeric.type;}
+    if (!source_hir_literal(ctx,plan->syntax,&request,&plan->numeric)) return false;
+    if (plan->numeric.kind) {plan->type_ready=true;plan->ground_type=plan->numeric.type;}
     return true;
 }
 static bool source_plan_binary_prepare(SourceContext *ctx,SourceExpressionPlan *plan,SourceExpectedType hint,bool defaults) {
@@ -296,7 +296,7 @@ static bool source_plan_complete(SourceContext *ctx, SourceExpressionPlan *plan,
     plan->entry=body->block_count ? body->current_block : (SourceBlockReference){ctx->function,0};
     plan->state=SOURCE_TERM_CHECKING;ctx->active_expression=plan;++ctx->depth;
     bool result=node->type==AST_SPREAD_EXPR && plan->call_projection ? source_call_projection_complete(ctx,plan,&plan->value) :
-        plan->numeric.ready ? source_numeric_emit(ctx,&plan->numeric,&plan->value) :
+        plan->numeric.kind ? source_hir_literal_emit(ctx,&plan->numeric,&plan->value) :
         (plan->integer.present ? source_integer(ctx,node,&plan->integer,context,&plan->value) : plan->decimal.node ?
         source_decimal(ctx,&plan->decimal,context,&plan->value) : expression_body(ctx,node,context,&plan->value));
     --ctx->depth;ctx->active_expression=parent;
