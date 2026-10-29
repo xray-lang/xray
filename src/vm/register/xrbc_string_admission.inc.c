@@ -253,6 +253,7 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
     for (size_t pc = 0; pc < f->code_count; ++pc) {
         uint32_t word = f->code[pc], op = word & 255;
         managed |= op >= XR_RBC_STRING_LITERAL && op <= XR_RBC_STRING_CELL_DROP;
+        managed |= op == XR_RBC_STRING_LEN;
         if (op == XR_RBC_CALL) {
             const XrRbcFunction *callee = &module->functions[word >> 16];
             managed |= callee->result_kind == XR_RBC_STRING;

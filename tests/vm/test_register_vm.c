@@ -591,6 +591,9 @@ static void test_string_length(void) {
     emit(code,0,XR_RBC_STRING_LEN,1,0,0);reject_prepare(&module,0,NULL,0);
     immediate(code,0,XR_RBC_STRING_LITERAL,0,0);
     emit(code,1,XR_RBC_STRING_DROP,0,0,0);reject_prepare(&module,0,NULL,0);
+    uint32_t bare[]={XR_RBC_STRING_LEN+(UINT32_C(1)<<16),XR_RBC_RET0};
+    XrRbcFunction missing={.code=bare,.code_count=2,.register_count=2};
+    XrRbcModule untyped={.functions=&missing,.function_count=1};reject_prepare(&untyped,0,NULL,0);
 }
 int main(int argc, char **argv) {
     test_string_length();
