@@ -90,13 +90,14 @@ def main():
                                  'fn call(x:i64)->i64{return leaf(x)}\nprint(call(7))\n', b'7\n7\n')
     cases['f64-fneg-source'] = ('fn negative(x:f64)->f64{\nprint(13)\nreturn -x\n}\n'
                                 'negative(1.25)\nprint(2)\n', b'13\n2\n')
-    refused_source, refused_c = root / 'refused-fadd.xr', root / 'refused-fadd.c'
-    refused_source.write_text('print(1)\nfn add(x:f64)->f64{return x+1.0}\nadd(2.0)\nprint(2)\n', encoding='utf-8')
+    cases['f64-fadd-source'] = ('print(1)\nfn add(x:f64)->f64{return x+1.0}\nadd(2.0)\nprint(2)\n', b'1\n2\n')
+    refused_source, refused_c = root / 'refused-f32.xr', root / 'refused-f32.c'
+    refused_source.write_text('print(1)\nfn add(x:f32)->f32{return x+1.0}\nadd(2.0)\nprint(2)\n', encoding='utf-8')
     refused = subprocess.run([str(args.driver), str(refused_source), str(refused_c)], capture_output=True, timeout=30)
-    (root / 'refused-fadd.stderr').write_bytes(refused.stderr)
+    (root / 'refused-f32.stderr').write_bytes(refused.stderr)
     assert refused.returncode == 1 and refused.stdout == b'' and not refused_c.exists()
-    assert b'C emission:' in refused.stderr and b'operation has no admitted portable C implementation' in refused.stderr
-    identity['selectedFadd'] = {'exit': refused.returncode, 'stdoutHex': refused.stdout.hex(),
+    assert b'lowering: CONST_FLOAT is not supported by LIR lowering yet' in refused.stderr
+    identity['selectedF32'] = {'exit': refused.returncode, 'stdoutHex': refused.stdout.hex(),
                                 'stderrHex': refused.stderr.hex(), 'publishedC': False}
     typed_results = {'typed-i64-min': ('int64_t', 'INT64_MIN'),
                      'typed-u64': ('uint64_t', 'UINT64_MAX'),
