@@ -1,0 +1,9 @@
+fn choose(n:i64)->string{
+    var text="a${n}"
+    if(n<0){text="L${n}"}else{text="R${n}"}
+    print(text)
+    if(n<2){text="low${n}"}else{text="high${n}"}
+    return text
+}
+print(choose(-1))
+print(choose(3))

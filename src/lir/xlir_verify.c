@@ -596,10 +596,8 @@ static XrLirStatus lir_string_owners(const XrLirFunctionData *f, uint32_t functi
         cells |= f->values[i].type == XR_LIR_STRING_CELL;
     }
     if (!managed) return XR_LIR_OK;
-    uint32_t branches = 0;
     for (uint32_t b = 0; b < f->block_count; ++b) {
         const XrLirInstructionView *term = lir_terminator(f, b);
-        branches += term->op == XR_LIR_CONDBR;
         for (uint32_t e = 0; e < term->edge_count; ++e)
             if (g->rank[term->edges[e].target - 1] <= g->rank[b]) {
                 for (uint32_t p = 0; p < f->parameter_count; ++p)
@@ -612,8 +610,8 @@ static XrLirStatus lir_string_owners(const XrLirFunctionData *f, uint32_t functi
                 }
             }
     }
-    if (branches > 1 || (cells && f->block_count != 1))
-        return xr_lir_internal_error(d, "managed String flow exceeds one Cell-free branch", function, 0, 0, NULL);
+    if (cells && f->block_count != 1)
+        return xr_lir_internal_error(d, "physical String Cell requires one block", function, 0, 0, NULL);
     for (uint32_t b = 0; b < f->block_count; ++b) {
         memset(owned, 0, f->value_count);
         const XrLirBlockData *block = &f->blocks[b];

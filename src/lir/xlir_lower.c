@@ -738,23 +738,14 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         return lower_unsupported(c, "function without a scalar body");
     uint8_t *literal_uses = lower_literal_uses(c, f);
     bool managed = literal_uses && lower_managed(c, f, literal_uses);
-    if (managed && f->block_count != 1) {
-        uint32_t branches = 0;
-        for (uint32_t b = 0; b < f->block_count; ++b) {
-            const XrXirInstruction *term = lower_term(c, f, b);
-            if (!term) { xr_free(literal_uses); return false; }
-            branches += term->op == XR_XIR_BRANCH;
-        }
+    if (managed && f->block_count != 1)
         for (uint32_t i = 0; i < f->instruction_count; ++i)
             if (xr_xir_type_is_cell(c->source->types, f->instructions[i].type) &&
                 xr_xir_cell_element(c->source->types, f->instructions[i].type) == XR_XIR_STRING &&
-                !lower_promoted_string(c, f, &f->instructions[i]))
-                branches = 2;
-        if (branches > 1) {
-            xr_free(literal_uses);
-            return lower_unsupported(c, "managed String flow beyond one Cell-free branch");
-        }
-    }
+                !lower_promoted_string(c, f, &f->instructions[i])) {
+                xr_free(literal_uses);
+                return lower_unsupported(c, "physical String Cell across blocks");
+            }
     uint8_t *seen = lower_alloc(c, f->block_count, 1);
     uint32_t *queue = lower_alloc(c, f->block_count, sizeof(*queue));
     if (!literal_uses || !seen || !queue) {

@@ -987,7 +987,36 @@ static void test_loop_string_temporaries(void) {
     const uint64_t counts[]={1000,3,0,1000};for(unsigned i=0;i<4;++i)CHECK(run(program,&counts[i],1)==counts[i]);
     xr_rbc_program_destroy(program);
 }
+static void test_sequential_string_owners(void) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));XrLirType flags[]={XR_LIR_I1,XR_LIR_I1},owned=XR_LIR_STRING;
+    XrLirFunction f=test_function(m,"three_owned_branches",flags,2,XR_LIR_STRING);
+    XrLirBlock current=test_block(m,f,NULL,0);OK(xr_lir_set_entry(m,f,current));
+    const unsigned char prefix[]={'A',0};XrLirLiteral literal={0};OK(xr_lir_add_literal(m,prefix,sizeof(prefix),&literal));
+    XrLirValue value;XrLirInstruction string={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};OK(xr_lir_emit_value(m,current,&string,&value));
+    for(unsigned stage=0;stage<3;++stage) {
+        XrLirBlock arms[]={test_block(m,f,&owned,1),test_block(m,f,&owned,1)},join=test_block(m,f,&owned,1);
+        conditional(m,current,parameter(m,f,stage%2),(XrLirEdge){arms[0],&value,1},(XrLirEdge){arms[1],&value,1});
+        for(unsigned arm=0;arm<2;++arm) {
+            XrLirValue pieces[]={block_parameter(m,arms[arm],0),{0}};XrLirLiteral suffix={0};OK(xr_lir_add_literal(m,arm?"R":"L",1,&suffix));
+            string=(XrLirInstruction){.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=suffix.id};OK(xr_lir_emit_value(m,arms[arm],&string,&pieces[1]));
+            XrLirValue next;XrLirInstruction concat={.op=XR_LIR_STRING_CONCAT,.type=XR_LIR_STRING,.operands=pieces,.operand_count=2};OK(xr_lir_emit_value(m,arms[arm],&concat,&next));
+            for(unsigned part=0;part<2;++part){XrLirInstruction drop={.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&pieces[part],.operand_count=1};OK(xr_lir_emit_effect(m,arms[arm],&drop));}
+            test_branch(m,arms[arm],join,&next,1);
+        }
+        current=join;value=block_parameter(m,join,0);
+    }
+    test_return(m,current,value);OK(xr_lir_module_finish(m,NULL));XrRbcProgram *program=compile(m,f);xr_lir_module_destroy(m);
+    XrRbcOutcome *outcomes[4]={0};
+    for(unsigned choice=0;choice<4;++choice){uint64_t arguments[]={choice&1u,(choice>>1)&1u};XrRbcExecution *execution=NULL;
+        CHECK(xr_rbc_program_prepare(program,arguments,2,&execution)==XR_RBC_OK);outcomes[choice]=xr_rbc_execution_run(execution);
+        CHECK(outcomes[choice]&&xr_rbc_outcome_status(outcomes[choice])==XR_RBC_OK);xr_rbc_execution_free(&execution);}
+    xr_rbc_program_destroy(program);
+    for(unsigned choice=0;choice<4;++choice){const XrtString *text=NULL;CHECK(xr_rbc_outcome_string(outcomes[choice],&text));size_t size=0;const char *bytes=xrt_string_bytes(text,&size);
+        const unsigned char expected[]={'A',0,(choice&1u)?'L':'R',(choice&2u)?'L':'R',(choice&1u)?'L':'R'};
+        CHECK(size==sizeof(expected)&&!memcmp(bytes,expected,size));xr_rbc_outcome_free(&outcomes[choice]);}
+}
 int main(void) {
+    test_sequential_string_owners();
     test_loop_string_temporaries();
     test_string_edge_swap();
     test_literal_ownership();

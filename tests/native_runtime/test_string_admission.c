@@ -9,6 +9,7 @@
 #include "vm/register/xrbc.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while(0)
 
 static uint32_t word(XrRbcOp op, uint32_t a, uint32_t b, uint32_t c, int64_t immediate) {
@@ -86,9 +87,30 @@ static void loop_entry_obligations(XrtLocationOwner *locations) {
     uint32_t identity=word(XR_RBC_RET,0,0,0,0);functions[1]=(XrRbcFunction){.code=&identity,.code_count=1,.register_count=1,.parameter_count=1};
     rejected(functions,2,locations);
 }
+static void sequential_and_loop_branches(XrtLocationOwner *locations) {
+    uint32_t stage[]={word(XR_RBC_LOADI,0,0,0,1),word(XR_RBC_LOADI,1,0,0,0),word(XR_RBC_EQ,0,1,0,0),0,
+        word(XR_RBC_STRING_LITERAL,2,0,0,0),word(XR_RBC_STRING_TAKE,3,2,0,0),0,
+        word(XR_RBC_STRING_LITERAL,4,0,0,0),word(XR_RBC_STRING_TAKE,3,4,0,0),word(XR_RBC_STRING_DROP,3,0,0,0)};
+    uint32_t code[21];memcpy(code,stage,sizeof(stage));memcpy(code+10,stage,sizeof(stage));code[20]=word(XR_RBC_RET0,0,0,0,0);
+    CHECK(xr_rbc_jump(&code[3],3,7,21)&&xr_rbc_jump(&code[6],6,9,21)&&xr_rbc_jump(&code[13],13,17,21)&&xr_rbc_jump(&code[16],16,19,21));
+    XrRbcRegisterKind kinds[]={XR_RBC_BITS,XR_RBC_BITS,XR_RBC_STRING,XR_RBC_STRING,XR_RBC_STRING};
+    XrRbcFunction f={.code=code,.code_count=21,.register_count=5,.register_kinds=kinds,.register_kind_count=5};
+    for(unsigned choice=0;choice<4;++choice){code[0]=word(XR_RBC_LOADI,0,0,0,choice&1u);code[10]=word(XR_RBC_LOADI,0,0,0,(choice>>1)&1u);admitted(&f,1,locations);}
+    uint32_t saved=code[18];code[18]=word(XR_RBC_STRING_DROP,4,0,0,0);rejected(&f,1,locations);code[18]=saved;
+    code[18]=word(XR_RBC_MOV,3,4,0,0);rejected(&f,1,locations);code[18]=saved;
+    uint32_t loop[]={word(XR_RBC_LOADI,0,0,0,0),word(XR_RBC_LOADI,1,0,0,3),word(XR_RBC_LOADI,2,0,0,1),word(XR_RBC_LOADI,4,0,0,0),
+        word(XR_RBC_LT,0,1,0,0),0,0,word(XR_RBC_EQ,0,4,0,0),0,0,word(XR_RBC_STRING_LITERAL,3,0,0,0),word(XR_RBC_STRING_DROP,3,0,0,0),0,
+        word(XR_RBC_STRING_LITERAL,3,0,0,0),word(XR_RBC_STRING_DROP,3,0,0,0),word(XR_RBC_ADD,0,0,2,0),0,word(XR_RBC_RET,0,0,0,0)};
+    CHECK(xr_rbc_jump(&loop[5],5,7,18)&&xr_rbc_jump(&loop[6],6,17,18)&&xr_rbc_jump(&loop[8],8,10,18)&&xr_rbc_jump(&loop[9],9,13,18)&&xr_rbc_jump(&loop[12],12,15,18)&&xr_rbc_jump(&loop[16],16,4,18));
+    XrRbcRegisterKind loop_kinds[]={XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_STRING,XR_RBC_BITS};
+    f=(XrRbcFunction){.code=loop,.code_count=18,.register_count=5,.register_kinds=loop_kinds,.register_kind_count=5};admitted(&f,1,locations);admitted(&f,1,locations);
+    saved=loop[11];loop[11]=word(XR_RBC_LOADI,4,0,0,0);rejected(&f,1,locations);loop[11]=saved;
+    CHECK(xr_rbc_jump(&loop[16],16,11,18));rejected(&f,1,locations);
+}
 int main(void) {
     XrtLocationOwner *locations = NULL;
     CHECK(xrt_locations_create(NULL,0,&locations)==XRT_LOCATION_OK);
+    sequential_and_loop_branches(locations);
     loop_entry_obligations(locations);
     forward_string_owners(locations);
     uint32_t code[] = {word(XR_RBC_STRING_LITERAL,0,0,0,0),word(XR_RBC_STRING_DROP,0,0,0,0),

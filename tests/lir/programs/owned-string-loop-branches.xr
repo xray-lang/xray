@@ -1,0 +1,9 @@
+fn render(n:i64){
+    var i=0
+    while(i<n){
+        if(i<1){print("left${i}")}else{print("right${i}")}
+        i=i+1
+    }
+}
+render(3)
+render(-1)

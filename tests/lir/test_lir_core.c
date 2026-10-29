@@ -775,7 +775,40 @@ static void string_loop_owners(void) {
         if(!attack)OK(xr_lir_module_finish(m,NULL));xr_lir_module_destroy(m);
     }
 }
+static void string_sequential_owners(void) {
+    for(unsigned attack=0;attack<5;++attack) {
+        XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));XrLirType flag=XR_LIR_I1,owned=XR_LIR_STRING;
+        XrLirFunction f=test_function(m,"three_owned_branches",&flag,1,XR_LIR_STRING);
+        XrLirBlock current=test_block(m,f,NULL,0);OK(xr_lir_set_entry(m,f,current));
+        XrLirValue condition;OK(xr_lir_function_parameter(m,f,0,&condition));
+        XrLirLiteral literal={0};OK(xr_lir_add_literal(m,"A",1,&literal));XrLirValue value;
+        XrLirInstruction string={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};OK(xr_lir_emit_value(m,current,&string,&value));
+        if(attack==4) {
+            XrLirValue cell;XrLirInstruction create={.op=XR_LIR_CELL_NEW,.type=XR_LIR_STRING_CELL,.operands=&value,.operand_count=1};
+            OK(xr_lir_emit_value(m,current,&create,&cell));XrLirInstruction drop={.op=XR_LIR_STRING_CELL_DROP,.type=XR_LIR_UNIT,.operands=&cell,.operand_count=1};
+            OK(xr_lir_emit_effect(m,current,&drop));
+        }
+        for(unsigned stage=0;stage<3;++stage) {
+            XrLirType pair[]={owned,owned};bool duplicate=attack==2&&stage==1;
+            XrLirBlock arms[]={test_block(m,f,pair,duplicate?2u:1u),test_block(m,f,&owned,1)},join=test_block(m,f,&owned,1);
+            XrLirValue arguments[]={value,value};
+            if(attack==3&&stage==1){XrLirInstruction drop={.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&value,.operand_count=1};OK(xr_lir_emit_effect(m,current,&drop));}
+            XrLirInstruction branch={.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&condition,.operand_count=1,
+                .edges={{arms[0],arguments,duplicate?2u:1u},{arms[1],arguments,1}},.edge_count=2};OK(xr_lir_set_terminator(m,current,&branch));
+            for(unsigned arm=0;arm<2;++arm) {
+                XrLirValue incoming;OK(xr_lir_block_parameter(m,arms[arm],0,&incoming));
+                if(duplicate&&!arm){XrLirValue second;OK(xr_lir_block_parameter(m,arms[arm],1,&second));XrLirInstruction drop={.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&second,.operand_count=1};OK(xr_lir_emit_effect(m,arms[arm],&drop));}
+                if(attack==1&&stage==1&&!arm){XrLirValue leaked;OK(xr_lir_emit_value(m,arms[arm],&string,&leaked));}
+                test_branch(m,arms[arm],join,&incoming,1);
+            }
+            current=join;OK(xr_lir_block_parameter(m,join,0,&value));
+        }
+        test_return(m,current,value);CHECK(xr_lir_verify(m,NULL)==(attack?XR_LIR_VERIFY_ERROR:XR_LIR_OK));
+        if(!attack)OK(xr_lir_module_finish(m,NULL));xr_lir_module_destroy(m);
+    }
+}
 int main(void) {
+    string_sequential_owners();
     string_loop_owners();
     string_phi_owners();
     offset_signature();
