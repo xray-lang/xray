@@ -14,6 +14,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir/xir_instance_compile_observer.h"
 
@@ -36,9 +37,50 @@ static void generated_facts(const char *path,const XrXirNativeProjection *projec
     generated_fingerprint(file,"GENERATED",facts->generated_digest.bytes);fputs("}\n",file);
     CHECK(!ferror(file)&&fclose(file)==0);
 }
+static void generated_guards(XrXirSourceProduct *product,const XrXirNativeProjectionRequest *request,
+    XrXirNativeProjection *projection) {
+    XrCompileResources *resources=xr_compile_native_projection_context(projection)->resources;
+    XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(resources,&before)==XR_COMPILE_RESOURCE_OK);
+    size_t live=instance_compile_live,bytes=instance_compile_bytes;
+    const char *prefixes[]={"","9invalid","bad-path"};
+    for(unsigned i=0;i<sizeof(prefixes)/sizeof(*prefixes);++i) {
+        XrXirNativeProjectionRequest invalid=*request;invalid.prefix=prefixes[i];XrXirNativeProjection *output=NULL;
+        CHECK(xr_compile_native_projection_prepare(&invalid,&output)==XR_XIR_BAD_STRUCTURE&&!output);
+    }
+    XrXirNativeProjectionRequest invalid=*request;invalid.code_limit=0;XrXirNativeProjection *output=NULL;
+    CHECK(xr_compile_native_projection_prepare(&invalid,&output)==XR_XIR_BAD_STRUCTURE&&!output);
+    output=projection;CHECK(xr_compile_native_projection_prepare(request,&output)==XR_XIR_BAD_STRUCTURE&&output==projection);
+    CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==before.held_bytes);
+    CHECK(instance_compile_live==live&&instance_compile_bytes==bytes);
+
+    /* The owner is allocated first. Fail the first actual emission allocation
+     * so its prefix and owner both need normal rollback before publication. */
+    output=NULL;instance_compile_injected=false;instance_compile_fail_at=instance_compile_attempts+1;
+    XrXirStatus status=xr_compile_native_projection_prepare(request,&output);
+    CHECK(status==XR_XIR_OUT_OF_MEMORY&&!output&&instance_compile_injected&&instance_compile_attempts>instance_compile_fail_at);
+    instance_compile_fail_at=SIZE_MAX;
+    CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==before.held_bytes);
+    CHECK(instance_compile_live==live&&instance_compile_bytes==bytes);
+    CHECK(xr_compile_native_projection_prepare(request,&output)==XR_XIR_OK&&output);
+    const XrXirNativeProjectionSource *original=xr_compile_native_projection_source(projection),*recovered=xr_compile_native_projection_source(output);
+    const XrXirNativeProjectionFacts *facts=xr_compile_native_projection_facts(projection),*retry=xr_compile_native_projection_facts(output);
+    CHECK(original->text!=recovered->text&&original->length==recovered->length&&!memcmp(original->text,recovered->text,original->length));
+    CHECK(!memcmp(&facts->source,&retry->source,sizeof(facts->source))&&!strcmp(facts->prefix,retry->prefix));
+    CHECK(!memcmp(facts->codegen_policy_id.bytes,retry->codegen_policy_id.bytes,32)&&!memcmp(facts->generated_digest.bytes,retry->generated_digest.bytes,32));
+    xr_compile_native_projection_owner_free(output);output=NULL;
+    CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==before.held_bytes);
+    CHECK(instance_compile_live==live&&instance_compile_bytes==bytes);
+    XrXirProgram *program=NULL;CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK&&program);
+    CHECK(xr_compile_resources_stats(resources,&before)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_compile_native_projection_prepare(request,&output)==XR_XIR_BAD_STAGE&&!output);
+    CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==before.held_bytes);
+    xr_xir_compile_program_drop(program);
+    puts("Native projection guards: prefix/limit/occupied output, actual emission OOM rollback/recovery and post-VM-take refusal PASS");
+}
 int main(int argc, char **argv) {
-    if (argc != 4 && argc != 5) {
-        fprintf(stderr, "usage: source-generated-c ABSOLUTE_SOURCE OUTPUT_C ABSOLUTE_STDLIB [OUTPUT_FACTS]\n");
+    if ((argc != 4 && argc != 5 && argc != 6)||(argc==6&&strcmp(argv[5],"--guards"))) {
+        fprintf(stderr, "usage: source-generated-c ABSOLUTE_SOURCE OUTPUT_C ABSOLUTE_STDLIB [OUTPUT_FACTS [--guards]]\n");
         return 2;
     }
     XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
@@ -47,7 +89,7 @@ int main(int argc, char **argv) {
     XrCompileResourceStats baseline = {0};
     CHECK(xr_compile_resources_stats(resources, &baseline) == XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
-    const XrSourceCompileRequest request = {&context, argv[1], argv[3], NULL,
+    XrSourceCompileRequest request = {&context, argv[1], argv[3], NULL,
         xr_source_compile_default_manifest_limits(),
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL};
     XrXirSourceProduct *product = NULL;
@@ -60,13 +102,16 @@ int main(int argc, char **argv) {
         fprintf(stderr,"%s\n",message?message:"diagnostic unavailable");xr_compile_resources_free(message);
         goto cleanup;
     }
-    const XrXirNativeProjectionRequest prepare = {product, "source_fixture", (size_t)UINT64_C(64) << 20};
+    char prefix[]="source_fixture";
+    const XrXirNativeProjectionRequest prepare = {product, prefix, (size_t)UINT64_C(64) << 20};
     XrXirStatus status = xr_compile_native_projection_prepare(&prepare, &projection);
     if (status != XR_XIR_OK) {
         fprintf(stderr, "Source C projection failed: status=%u\n", (unsigned)status);
         goto cleanup;
     }
-    if(argc==5)generated_facts(argv[4],projection);
+    if(argc==6)generated_guards(product,&prepare,projection);
+    memset(prefix,'x',sizeof(prefix));memset(&request,0xCE,sizeof(request));memset(&context,0xCE,sizeof(context));
+    if(argc>=5)generated_facts(argv[4],projection);
     /* The C projection owns its bytes after the producing Source owner dies. */
     xr_xir_compile_source_product_free(product);
     product = NULL;
