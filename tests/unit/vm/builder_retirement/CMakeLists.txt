@@ -1,9 +1,9 @@
-add_executable(test_vm_builder_instruction
+add_executable(test_instruction
     ${CMAKE_CURRENT_LIST_DIR}/../test_instruction.c)
-add_executable(test_vm_builder_opcode
+add_executable(test_opcode
     ${CMAKE_CURRENT_LIST_DIR}/../test_opcode.c
     ${PROJECT_SOURCE_DIR}/src/runtime/value/xopcode_info.c)
-foreach(target test_vm_builder_instruction test_vm_builder_opcode)
+foreach(target test_instruction test_opcode)
     target_include_directories(${target} PRIVATE
         $<TARGET_PROPERTY:xray_core_objs,INCLUDE_DIRECTORIES>)
     target_compile_definitions(${target} PRIVATE

@@ -1401,8 +1401,6 @@ add_xray_bootstrap_unit_test(test_xglobal_cache_payload analysis/test_xglobal_ca
 # vm/ — Instruction encoding, opcode
 # ============================================================================
 
-add_xray_unit_test(test_instruction vm/test_instruction.c)
-add_xray_unit_test(test_opcode vm/test_opcode.c)
 add_xray_unit_test(test_bytecode_io vm/test_bytecode_io.c)
 add_xray_unit_test(test_ffi_callback vm/test_ffi_callback.c)
 add_xray_unit_test(test_ffi_scalar vm/test_ffi_scalar.c)
