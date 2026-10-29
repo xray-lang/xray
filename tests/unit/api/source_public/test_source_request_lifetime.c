@@ -44,6 +44,22 @@ typedef struct PacketCodecProbe {
 } PacketCodecProbe;
 static PacketCodecProbe *packet_codec_probe;
 
+typedef struct SourceWriterProbe {
+    const unsigned char *expected;
+    unsigned char *packet;
+    void *debug_table;
+    size_t length,writes,active,selected,phase,mode,polls,witnesses,allocations;
+    size_t hash_bytes,compare_polls,debug_count,debug_unit;
+    size_t measure_bytes,compare_bytes;
+    const char *poll_function;
+    XrSHA256Context prefix_hash;
+    XrCompileResources *resources;
+    XrCompileRequestControl *control;
+    uint64_t held_empty;
+    bool wanted,disabled,oom_seen,direct;
+} SourceWriterProbe;
+static SourceWriterProbe *source_writer_probe;
+
 /* This TU observes the actual compiler allocator. Installed SDK consumers use
  * the canonical archive implementation separately. No runtime budget is changed. */
 #define xr_compile_resources_new calibration_resources_new
@@ -106,7 +122,26 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_alloc(
 }
 XR_FUNC XrCompileResourceStatus xr_compile_resources_calloc(
     XrCompileResources *resources,size_t count,size_t size,void **output) {
+    SourceWriterProbe *writer=source_writer_probe;
+    bool packet=writer&&!writer->disabled&&writer->active==writer->selected&&writer->active&&
+        resources==writer->resources&&size==1&&count==writer->length;
+    if(packet&&writer->mode==2){CHECK(!writer->allocations);runtime_fail_at=runtime_attempts;}
     XrCompileResourceStatus status=packet_actual_resources_calloc(resources,count,size,output);
+    if(packet) {
+        ++writer->allocations;
+        if(writer->mode==2) {
+            CHECK(status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY&&!*output&&runtime_attempts>runtime_fail_at);
+            runtime_fail_at=SIZE_MAX;writer->oom_seen=true;
+        } else {
+            CHECK(status==XR_COMPILE_RESOURCE_OK&&*output&&!writer->packet);
+            writer->packet=*output;memset(*output,0xa5,writer->length);
+            writer->packet[writer->length-1]=(unsigned char)~writer->expected[writer->length-1];
+        }
+    }
+    if(status==XR_COMPILE_RESOURCE_OK&&writer&&!writer->disabled&&(writer->phase==4||writer->phase==6)&&
+        writer->writes==2&&!writer->active&&count==writer->debug_count&&size==writer->debug_unit) {
+        CHECK(!writer->debug_table&&*output);writer->debug_table=*output;
+    }
     PacketCodecProbe *probe=packet_codec_probe;
     if(status==XR_COMPILE_RESOURCE_OK && probe && !probe->disabled && probe->in_lower &&
         resources==probe->resources && count && size<=SIZE_MAX/count &&
@@ -123,6 +158,12 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_calloc(
 #undef xr_sha256_update
 XR_FUNC void xr_sha256_update(XrSHA256Context *hash,const uint8_t *bytes,size_t length) {
     packet_actual_sha256_update(hash,bytes,length);
+    SourceWriterProbe *writer=source_writer_probe;
+    if(writer&&!writer->disabled&&!writer->wanted&&writer->phase==2&&
+        writer->active==writer->selected&&writer->packet&&length==4096&&
+        bytes==writer->packet+64&&hash->count==4128) {
+        writer->prefix_hash=*hash;writer->hash_bytes=hash->count;writer->wanted=true;
+    }
     PacketCodecProbe *probe=packet_codec_probe;
     if(!probe || probe->disabled || probe->wanted || length!=4096)return;
     bool matched=probe->phase==1 && probe->in_lower && probe->packet &&
@@ -213,11 +254,75 @@ static XrCompileResourceStatus defaults_observe_span(XrCompileRequestControl *co
 #define xir_lower_copy_span defaults_observe_span
 #define xr_xir_compile_check_refined_v2 defaults_actual_check
 #define xr_xir_compile_lower_take packet_actual_lower_take
+static XrCompileResourceStatus source_writer_observe_poll(XrCompileRequestControl *control,
+    const void *field,const char *caller);
+static int source_writer_observe_compare(const void *left,const void *right,size_t size,const char *caller);
+#define xr_compile_request_control_poll(value) source_writer_observe_poll((value),&(value),__func__)
 #include "xir/xxir.c"
+#undef xr_compile_request_control_poll
 #undef xr_xir_compile_lower_take
 #undef xr_xir_compile_check_refined_v2
 #undef xir_lower_copy_span
 #undef xir_compile_alloc
+
+/* Observe the actual complete writer without adding a production hook.
+ * Archive-linked SDK consumers exercise the canonical implementation apart. */
+#define xir_checked_write source_writer_actual_write
+#define xr_compile_request_control_poll(value) source_writer_observe_poll((value),&(value),__func__)
+#include "xir/xxir_checked.c"
+#undef xr_compile_request_control_poll
+#undef xir_checked_write
+XR_FUNC XrXirStatus xir_checked_write(const XrXirArtifact *artifact,XrXirCheckedPacket *output,
+    XrXirDiagnostic *diagnostic,XrCompileRequestControl *control) {
+    SourceWriterProbe *probe=source_writer_probe;
+    bool observed=probe&&!probe->disabled&&control;
+    if(observed) {
+        CHECK(!probe->active&&probe->writes<2);probe->active=++probe->writes;probe->control=control;
+        if(!probe->resources) {
+            probe->resources=artifact->context.resources;
+            CHECK(probe->direct||calibration_owner==probe->resources);
+            CHECK(xr_compile_resources_retain(probe->resources)==XR_COMPILE_RESOURCE_OK);
+            probe->held_empty=probe->direct?sdk_stats(probe->resources).held_bytes:calibration_initial_held;
+        }
+    }
+    XrXirStatus status=source_writer_actual_write(artifact,output,diagnostic,control);
+    if(observed){probe->active=0;probe->packet=NULL;}
+    return status;
+}
+#define xr_compile_request_control_poll(value) source_writer_observe_poll((value),&(value),__func__)
+#define memcmp(left,right,size) source_writer_observe_compare((left),(right),(size),__func__)
+#include "program/xr_xir_source_product.c"
+#undef memcmp
+#undef xr_compile_request_control_poll
+static XrCompileResourceStatus source_writer_observe_poll(XrCompileRequestControl *control,
+    const void *field,const char *caller) {
+    SourceWriterProbe *probe=source_writer_probe;
+    const char *previous=probe?probe->poll_function:NULL;
+    if(probe&&!probe->disabled) {
+        probe->poll_function=caller;
+        if(probe->phase==0&&probe->active==probe->selected&&!strcmp(caller,"checked_room")) {
+            const CheckedCursor *cursor=(const void *)((const unsigned char *)field-
+                offsetof(CheckedCursor,control));
+            CHECK(cursor->control==control);
+            if(!cursor->reading&&!cursor->output&&cursor->position>=4096) {
+                CHECK(!probe->allocations);probe->measure_bytes=cursor->position;probe->wanted=true;
+            }
+        }
+    }
+    XrCompileResourceStatus status=xr_compile_request_control_poll(control);
+    if(probe)probe->poll_function=previous;
+    return status;
+}
+static int source_writer_observe_compare(const void *left,const void *right,size_t size,const char *caller) {
+    int result=memcmp(left,right,size);SourceWriterProbe *probe=source_writer_probe;
+    if(probe&&!probe->disabled&&probe->phase==3&&probe->writes==2&&!probe->active&&
+        !strcmp(caller,"source_product_compare")&&!result) {
+        CHECK(size<=4096&&size<=SIZE_MAX-probe->compare_bytes);
+        probe->compare_bytes+=size;
+        if(probe->compare_bytes>=4096)probe->wanted=true;
+    }
+    return result;
+}
 XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **input,const XrXirTarget *target,
     XrCompileRequestControl *control,XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
     PacketCodecProbe *codec=packet_codec_probe;
@@ -232,6 +337,11 @@ XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **input,const XrXirT
         }
     }
     XrXirStatus status=packet_actual_lower_take(input,target,control,output,diagnostic);
+    SourceWriterProbe *writer=source_writer_probe;
+    if(status==XR_XIR_OK&&writer&&!writer->disabled) {
+        writer->debug_count=(*output)->module.function_count;
+        writer->debug_unit=sizeof(XrXirSourceDebugFunction);
+    }
     if(codec && !codec->disabled){codec->in_lower=false;codec->packet=NULL;}
     ProductPacketProbe *probe=product_packet_probe;
     if(status==XR_XIR_OK&&probe) {
@@ -1746,7 +1856,9 @@ static void declarations_copy_controls(const char *selected) {
 #include "implementation_control_cases.inc.c"
 #include "product_packet_cases.inc.c"
 #include "packet_codec_cases.inc.c"
+#include "source_writer_control_cases.inc.c"
 int main(int argc,char **argv) {
+    if((argc==2||argc==3)&&!strcmp(argv[1],"--source-writer")){source_writer_cases(argc==3?argv[2]:NULL);return 0;}
     if(argc==2&&!strcmp(argv[1],"--packet-codec-vectors")){packet_codec_vectors();return 0;}
     if((argc==2||argc==3)&&!strcmp(argv[1],"--packet-codec")){packet_codec_cases(argc==3?argv[2]:NULL);return 0;}
     if(argc==2&&!strcmp(argv[1],"--product-packet-receivers")){product_packet_receive_cases();return 0;}

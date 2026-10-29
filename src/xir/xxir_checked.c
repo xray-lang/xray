@@ -32,7 +32,9 @@ XR_FUNC XrXirStatus xir_checked_write(const XrXirArtifact *artifact, XrXirChecke
     if (!artifact || artifact->module.stage != XR_XIR_CHECKED)
         return checked_error(XR_XIR_BAD_STAGE, diagnostic);
     if (xir_artifact_is_evaluation(artifact)) return checked_error(XR_XIR_BAD_STAGE,diagnostic);
-    XrXirStatus status = xr_xir_compile_artifact_verify(artifact, diagnostic);
+    XrXirStatus status=control?xir_compile_resource_status(xr_compile_request_control_poll(control)):XR_XIR_OK;
+    if (status!=XR_XIR_OK) return checked_error(status,diagnostic);
+    status = xr_xir_compile_artifact_verify(artifact, diagnostic);
     if (status != XR_XIR_OK) return status;
     return checked_encode(artifact, output, diagnostic, control);
 }
