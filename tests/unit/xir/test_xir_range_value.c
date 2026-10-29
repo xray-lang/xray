@@ -22,6 +22,7 @@
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%s:%d: %s\n",__FILE__,__LINE__,#c);exit(1);}}while(0)
 #include "xir_range_value_cases.h"
 #include "xir_range_value_runtime.h"
+#include "xir_task_result_catalog_cases.h"
 #define RANGE_PRELUDE_CANONICAL "stdlib-module-v1:module=7:prelude:path=27:prelude/builtin_symbols.def"
 static void range_file(const char *logical,const void *bytes,size_t size) {
     char path[1024];int length=snprintf(path,sizeof(path),"%s/%s",XR_RANGE_VALUE_WORK,logical);
@@ -80,6 +81,7 @@ static XrXirLibraryCatalog *range_catalog(const XrXirCompileContext *context,con
     xr_sha256(packet.bytes,packet.length,input.sha256);XrXirLibraryCatalog *catalog=NULL;
     XrXirStatus status=xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog);
     fprintf(stderr,"Range Catalog status%u expected-valid%u\n",status,valid?1u:0u);
+    if(valid && status==XR_XIR_OK)task_catalog_rejections(context,&packet,&input);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);xr_compile_resources_free(bindings);
     CHECK(valid?(status==XR_XIR_OK && catalog):(status==XR_XIR_BAD_STRUCTURE && !catalog));return catalog;
 }
@@ -193,8 +195,51 @@ static void range_flow(unsigned mode,const char *packet_path) {
     XrXirValue kept=range_runtime_cases(program,selection);xr_compile_resources_release(context.resources);range_retained(&kept);
     fprintf(stderr,"Range flow%u complete: actual fields/count/len, once, all producer deaths\n",mode);
 }
+static void task_result_catalog(void) {
+    XrXirCompileContext context=range_context();
+    range_file("range-lib.xr",task_catalog_library_source,strlen(task_catalog_library_source));
+    XrXirSourceResult producer=range_source(&context,task_catalog_library_source,"range-lib.xr",XR_XIR_LIBRARY,NULL);
+    XrXirLibraryCatalog *catalog=range_catalog(&context,producer.checked,true);
+    xr_xir_compile_source_result_free(&producer);
+    range_file("range-lib.xr","unavailable",11);
+    XrXirSourceResult source=range_source(&context,task_catalog_consumer_source,"task-catalog.xr",XR_XIR_PROGRAM,catalog);
+    xr_xir_compile_library_catalog_free(catalog);
+    XrXirArtifact *closed=NULL,*lowered=NULL;
+    CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&source);
+    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    const char *names[]={"success","failure","panicked","cancelled"};uint32_t functions[4];
+    for(unsigned n=0;n<4;++n)functions[n]=range_entry(xr_xir_compile_artifact_module(lowered),names[n]);
+    XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
+    XrXirInstanceConfig options;CHECK(xr_xir_instance_config_init(&options,sizeof(options))==XR_XIR_CALL_READY);
+    XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&options,&instance)==XR_XIR_CALL_READY);
+    XrXirValue kept[4]={0};
+    for(unsigned n=0;n<4;++n) {
+        CHECK(xr_xir_instance_start(instance,functions[n],NULL,0)==XR_XIR_CALL_READY);
+        XrXirInstanceResult result={0};unsigned polls=0;
+        do {CHECK(++polls<1024);result=xr_xir_instance_poll_bounded(instance,64);}while(result.outcome.status==XR_XIR_CALL_READY);
+        CHECK(result.outcome.status==XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_take_result(instance,&kept[n])==XR_XIR_CALL_RETURNED);
+    }
+    xr_xir_compile_program_drop(program);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+    xr_compile_resources_release(context.resources);
+    const char *members[]={"Success","Error","Panic","Cancelled"};
+    for(unsigned n=0;n<4;++n) {
+        uint32_t tag=UINT32_MAX;CHECK(xr_xir_enum_variant(&kept[n],&tag)==XR_XIR_VALUE_OK && tag==n);
+        XrXirEnumBorrow borrowed={0};CHECK(xr_xir_enum_borrow(&kept[n],&borrowed)==XR_XIR_VALUE_OK);
+        CHECK(borrowed.name.length==10 && !memcmp(borrowed.name.bytes,"TaskResult",10));
+        CHECK(borrowed.member.length==strlen(members[n]) && !memcmp(borrowed.member.bytes,members[n],borrowed.member.length));
+        CHECK(borrowed.field_count==(n<3?1u:0u));
+        if(n<3)CHECK(borrowed.fields[0].type==(uint32_t)(n==0?XR_XIR_I64:n==1?XR_XIR_ERROR:XR_XIR_PANIC_INFO));
+        if(!n)CHECK(borrowed.fields[0].payload==42);
+        xr_xir_value_drop(&kept[n]);
+    }
+    fprintf(stderr,"Cold TaskResult Catalog: four owned terminal payloads survive every producer and program\n");
+}
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--authority")){range_authority();return 0;}
     CHECK(argc==1 || argc==3);
-    range_flow(0,argc==3?argv[1]:NULL);range_flow(1,NULL);range_flow(2,argc==3?argv[2]:NULL);return 0;
+    range_flow(0,argc==3?argv[1]:NULL);range_flow(1,NULL);range_flow(2,argc==3?argv[2]:NULL);
+    task_result_catalog();return 0;
 }
