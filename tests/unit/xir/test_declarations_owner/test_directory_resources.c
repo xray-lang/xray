@@ -39,7 +39,7 @@ static XrXirStatus directory(const XrCompileResourceLimits *limits,size_t failed
     const XrXirDeclarations declarations={.functions=identities,.root_module=0};
     const XrXirModule module={.functions=functions,.function_count=3,.declarations=&declarations};
     XrXirSourceProduct product={.context={resources,xr_xir_compile_default_limits()}};
-    XrXirStatus status=source_product_tests(&product,&module);
+    XrXirStatus status=source_product_tests(&product,&module,NULL);
     CHECK(xr_compile_resources_stats(resources,stats)==XR_COMPILE_RESOURCE_OK);
     if(status==XR_XIR_OK) CHECK(product.tests.count==1 && !strcmp(product.tests.entries[0].name,"A"));
     else CHECK(!product.tests.entries && !product.tests.count);

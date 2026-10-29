@@ -30,15 +30,20 @@ struct XrXirSourceProduct {
     XrXirSourceTests tests;
     XrXirSourceDebugView debug;
 };
-static XrXirStatus source_product_tests(XrXirSourceProduct *product, const XrXirModule *module) {
+static XrXirStatus source_product_tests(XrXirSourceProduct *product, const XrXirModule *module,
+    XrCompileRequestControl *control) {
     const XrXirCompileContext *context = &product->context;
     const XrXirDeclarations *d = module->declarations;
-
+    XrXirStatus status=control?xir_compile_resource_status(xr_compile_request_control_poll(control)):XR_XIR_OK;
+    if(status!=XR_XIR_OK)return status;
     uint32_t root = d->root_module;
     uint32_t count = 0;
     size_t names = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
-
+        if(control&&f&&f%32==0) {
+            status=xir_compile_resource_status(xr_compile_request_control_poll(control));
+            if(status!=XR_XIR_OK)return status;
+        }
         XrXirFunctionIdentity identity = d->functions[f];
         if (!identity.test_role || identity.module != root) continue;
 
@@ -47,29 +52,35 @@ static XrXirStatus source_product_tests(XrXirSourceProduct *product, const XrXir
         names += (size_t)function.name_length + 1;
         ++count;
     }
-    if (!count) return XR_XIR_OK;
+    if(control)status=xir_compile_resource_status(xr_compile_request_control_poll(control));
+    if(status!=XR_XIR_OK||!count)return status;
     uint64_t rows = (uint64_t)count * sizeof(XrXirSourceTestEntry);
     if (rows > SIZE_MAX || names > SIZE_MAX - (size_t)rows) return XR_XIR_BUDGET;
     size_t size = (size_t)rows + names;
-    XrXirStatus status = XR_XIR_OK;
     XrXirSourceTestEntry *entries = xir_compile_calloc(context, 1, size, &status);
     if (!entries) return status;
     char *name = (char *)(entries + count);
     uint32_t index = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
-
+        if(control&&f&&f%32==0) {
+            status=xir_compile_resource_status(xr_compile_request_control_poll(control));
+            if(status!=XR_XIR_OK)goto done;
+        }
         XrXirFunctionIdentity identity = d->functions[f];
         if (!identity.test_role || identity.module != root) continue;
 
         XrXirFunction function = module->functions[f];
 
-        memcpy(name, function.name, function.name_length);
+        status=xir_compile_resource_status(xir_lower_copy_span(control,name,function.name,function.name_length));
+        if(status!=XR_XIR_OK)goto done;
         name[function.name_length] = 0;
         entries[index++] = (XrXirSourceTestEntry){f, identity.test_role,
             identity.test_timeout_seconds, name, function.name_length};
         name += (size_t)function.name_length + 1;
     }
 
+    if(control)status=xir_compile_resource_status(xr_compile_request_control_poll(control));
+done:
     if (status != XR_XIR_OK) { xr_compile_resources_free(entries); return status; }
     product->tests = (XrXirSourceTests){entries, count};
     return XR_XIR_OK;
@@ -90,14 +101,28 @@ static bool source_product_entry(const XrXirModule *module,uint32_t *entry) {
         module->functions[function].result!=XR_XIR_I64) return false;
     *entry=function;return true;
 }
-static void source_layout_word(XrSHA256Context *hash,uint32_t word) {
-
-    uint8_t bytes[4];
-    for (unsigned i=0;i<4;++i) bytes[i]=(uint8_t)(word>>(i*8));
-    xr_sha256_update(hash,bytes,sizeof(bytes));
+typedef struct SourceLayoutHash {
+    XrSHA256Context hash;
+    XrCompileRequestControl *control;
+    size_t words;
+} SourceLayoutHash;
+/* Progress measures only canonical bytes already hashed by this call. */
+static XrXirStatus source_layout_words(SourceLayoutHash *hash,const uint32_t *words,size_t count) {
+    for(size_t word=0;word<count;++word) {
+        if(hash->words==1024) {
+            XrXirStatus status=hash->control?
+                xir_compile_resource_status(xr_compile_request_control_poll(hash->control)):XR_XIR_OK;
+            if(status!=XR_XIR_OK)return status;
+            hash->words=0;
+        }
+        uint8_t bytes[4];
+        for(unsigned i=0;i<4;++i)bytes[i]=(uint8_t)(words[word]>>(i*8));
+        xr_sha256_update(&hash->hash,bytes,sizeof(bytes));++hash->words;
+    }
+    return XR_XIR_OK;
 }
 static XrXirStatus source_product_layout_digest(const XrXirArtifact *lowered,
-    const XrXirSourceProductFacts *facts,uint8_t output[32]) {
+    const XrXirSourceProductFacts *facts,uint8_t output[32],XrCompileRequestControl *control) {
     static const uint8_t domain[]="xray:xir-lowered-layout:v1";
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     const XrXirTarget *target=xr_xir_compile_artifact_target(lowered);uint32_t entry=0;
@@ -106,12 +131,14 @@ static XrXirStatus source_product_layout_digest(const XrXirArtifact *lowered,
         target->architecture!=facts->target.architecture || target->abi_version!=facts->target.abi_version)
         return XR_XIR_BAD_STRUCTURE;
 
-    XrSHA256Context hash;xr_sha256_init(&hash);
-    xr_sha256_update(&hash,domain,sizeof(domain)-1);
+    XrXirStatus status=control?xir_compile_resource_status(xr_compile_request_control_poll(control)):XR_XIR_OK;
+    if(status!=XR_XIR_OK)return status;
+    SourceLayoutHash hash={.control=control};xr_sha256_init(&hash.hash);
+    xr_sha256_update(&hash.hash,domain,sizeof(domain)-1);
     uint32_t prefix[]={1,facts->target.architecture,facts->target.abi_version,
         XR_XIR_CALL_ABI_VERSION,XR_XIR_PROGRAM_ABI_VERSION,facts->entry,facts->function_count,facts->module_count};
-    for (size_t i=0;i<sizeof(prefix)/sizeof(*prefix);++i)
-        source_layout_word(&hash,prefix[i]);
+    status=source_layout_words(&hash,prefix,sizeof(prefix)/sizeof(*prefix));
+    if(status!=XR_XIR_OK)return status;
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(lowered,f);
         uint32_t parameters=module->functions[f].parameter_count;
@@ -120,20 +147,22 @@ static XrXirStatus source_product_layout_digest(const XrXirArtifact *lowered,
             return XR_XIR_BAD_LAYOUT;
         uint32_t words[]={f,parameters,layout->slot_count,layout->frame_bytes,layout->result.size,
             layout->result.alignment,layout->owned_count,layout->outgoing_count,layout->path_count};
-        for (size_t i=0;i<sizeof(words)/sizeof(*words);++i)
-            source_layout_word(&hash,words[i]);
-        for (uint32_t i=0;i<layout->slot_count;++i)
-            source_layout_word(&hash,layout->offsets[i]);
+        status=source_layout_words(&hash,words,sizeof(words)/sizeof(*words));
+        if(status!=XR_XIR_OK)return status;
+        status=source_layout_words(&hash,layout->offsets,layout->slot_count);
+        if(status!=XR_XIR_OK)return status;
         for (uint32_t i=0;i<parameters;++i)
             {
-                source_layout_word(&hash,layout->parameters[i].size);
-                source_layout_word(&hash,layout->parameters[i].alignment);
+                uint32_t parameter[]={layout->parameters[i].size,layout->parameters[i].alignment};
+                status=source_layout_words(&hash,parameter,sizeof(parameter)/sizeof(*parameter));
+                if(status!=XR_XIR_OK)return status;
             }
-        for (uint32_t i=0;i<layout->owned_count;++i)
-            source_layout_word(&hash,layout->owned_offsets[i]);
+        status=source_layout_words(&hash,layout->owned_offsets,layout->owned_count);
+        if(status!=XR_XIR_OK)return status;
     }
-
-    xr_sha256_final(&hash,output);return XR_XIR_OK;
+    if(control)status=xir_compile_resource_status(xr_compile_request_control_poll(control));
+    if(status!=XR_XIR_OK)return status;
+    xr_sha256_final(&hash.hash,output);return XR_XIR_OK;
 }
 static XrXirStatus source_product_hash(
     const XrXirCheckedPacket *packet,uint8_t digest[32],XrCompileRequestControl *control) {
@@ -253,8 +282,8 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
         status=source_product_hash(&source_packet,product->facts.source_digest,control);
         if (status==XR_XIR_OK) memcpy(product->facts.closed_digest,lowered->checked_identity,sizeof(product->facts.closed_digest));
         if (status==XR_XIR_OK)
-            status=source_product_layout_digest(lowered,&product->facts,product->facts.lowered_layout_digest);
-        if (status==XR_XIR_OK) status=source_product_tests(product,module);
+            status=source_product_layout_digest(lowered,&product->facts,product->facts.lowered_layout_digest,control);
+        if (status==XR_XIR_OK) status=source_product_tests(product,module,control);
         if (status==XR_XIR_OK) status=source_product_debug(product,source.snapshot,&source_packet,module,control);
         if (status==XR_XIR_OK && control)
             status=xir_compile_resource_status(xr_compile_request_control_poll(control));

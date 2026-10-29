@@ -273,7 +273,7 @@ static void product_layout_vector(void) {
         if (bound) CHECK(xr_compile_resources_work(context.resources,UINT64_MAX-before.work-units+(bound==2))==XR_COMPILE_RESOURCE_OK);
         CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
         uint8_t digest[32];memset(digest,0x5a,sizeof(digest));uint8_t saved[32];memcpy(saved,digest,32);
-        XrXirStatus status=source_product_layout_digest(lowered,&facts,digest);
+        XrXirStatus status=source_product_layout_digest(lowered,&facts,digest,NULL);
         if (bound==2) CHECK(status==XR_XIR_BUDGET && !memcmp(digest,saved,32));
         else {
             CHECK(status==XR_XIR_OK && !memcmp(digest,product_layout_program36_digest,32));
@@ -310,7 +310,7 @@ static void product_layout_vector(void) {
                 facts.target.abi_version=previous;
                 memset(digest,0x5a,sizeof(digest));memcpy(saved,digest,sizeof(saved));
                 CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
-                CHECK(source_product_layout_digest(lowered,&facts,digest)==XR_XIR_BAD_STRUCTURE);
+                CHECK(source_product_layout_digest(lowered,&facts,digest,NULL)==XR_XIR_BAD_STRUCTURE);
                 CHECK(!memcmp(digest,saved,sizeof(digest)));
                 CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
                 CHECK(after.work==before.work && after.live_bytes==before.live_bytes);
