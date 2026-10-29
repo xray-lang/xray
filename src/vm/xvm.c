@@ -539,20 +539,19 @@ XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx) {
                 int _old_cap = vm_ctx->stack_capacity;                                             \
                 bool _grow_ok;                                                                     \
                 _grow_ok = xr_coro_grow_stack(_coro, _extra);                                      \
-                if (!_grow_ok) {                                                                   \
-                    VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW,                                        \
-                                     "Stack overflow: recursion exceeds %d levels (grow failed)",  \
-                                     vm_ctx->frame_count);                                         \
-                }                                                                                  \
                 (void) _old_stack;                                                                 \
                 (void) _old_cap;                                                                   \
-                /* Update cached local variables (don't goto startfunc - that restarts execution!) \
-                 */                                                                                \
+                /* A later allocation can fail after either buffer has moved. */                   \
                 ci = &VM_FRAMES[VM_FRAME_COUNT - 1];                                               \
                 frame = ci;                                                                        \
                 cl = ci->closure;                                                                  \
                 base = VM_STACK + ci->base_offset;                                                 \
                 k = (XrValue *) cl->proto->constants.data;                                         \
+                if (!_grow_ok) {                                                                   \
+                    VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW,                                        \
+                                     "Stack overflow: recursion exceeds %d levels (grow failed)",  \
+                                     vm_ctx->frame_count);                                         \
+                }                                                                                  \
             }                                                                                      \
         } else if (vm_ctx) {                                                                       \
             /* Defensive: static stack boundary check (no growth possible) */                      \

@@ -1407,6 +1407,7 @@ add_xray_unit_test(test_bytecode_io vm/test_bytecode_io.c)
 add_xray_unit_test(test_ffi_callback vm/test_ffi_callback.c)
 add_xray_unit_test(test_ffi_scalar vm/test_ffi_scalar.c)
 add_xray_unit_test(test_vm_api vm/test_vm_api.c)
+add_subdirectory(vm/stack_growth)
 add_xray_unit_test(test_run_closure_blocking vm/test_run_closure_blocking.c)
 add_xray_unit_test(test_ic vm/test_ic.c)
 # xray_core already PUBLIC-links pthread (coroutines need it), so the

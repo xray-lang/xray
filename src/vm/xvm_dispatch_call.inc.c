@@ -627,17 +627,18 @@ vmcase(OP_TAILCALL) {
         XrCoroutine *grow_coro = (XrCoroutine *) VMCTX_CORO(vm_ctx);
         size_t stack_used = (size_t) (VM_STACK_TOP - VM_STACK);
         int grow_by = (int) (required_stack_size - stack_max) + 64;
-        if (!grow_coro || required_stack_size > (size_t) XR_STACK_MAX ||
-            !xr_coro_grow_stack(grow_coro, grow_by)) {
-            VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow: need %zu, max %zu",
-                             required_stack_size, stack_max);
-        }
-        /* Growing reallocates both the value stack and the frame array; every
-         * pointer derived from either is stale from here on. */
+        bool grown = grow_coro && required_stack_size <= (size_t) XR_STACK_MAX &&
+                     xr_coro_grow_stack(grow_coro, grow_by);
+        /* Rebind before the error path saves pc: a later allocation can fail
+         * after both the value stack and frame array have moved. */
         ci = &VM_FRAMES[VM_FRAME_COUNT - 1];
         frame = ci;
         base = VM_STACK + ci->base_offset;
         VM_SET_STACK_TOP(VM_STACK + stack_used);
+        if (!grown) {
+            VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow: need %zu, max %zu",
+                             required_stack_size, stack_max);
+        }
     }
 
     /* Step 1: move arguments to base position

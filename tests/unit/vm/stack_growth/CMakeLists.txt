@@ -1,7 +1,7 @@
 # Direct storage tests compile the same owner used by the legacy VM.
 add_executable(test_vm_stack_growth
-    test_vm_stack_growth.c
-    stack_growth_faults.c
+    ${CMAKE_CURRENT_LIST_DIR}/test_vm_stack_growth.c
+    ${CMAKE_CURRENT_LIST_DIR}/stack_growth_faults.c
     ${PROJECT_SOURCE_DIR}/src/vm/xvm_stack.c)
 target_include_directories(test_vm_stack_growth PRIVATE
     $<TARGET_PROPERTY:xray_core_objs,INCLUDE_DIRECTORIES>)
@@ -22,3 +22,6 @@ enable_testing()
 add_test(NAME test_vm_stack_growth COMMAND test_vm_stack_growth)
 set_tests_properties(test_vm_stack_growth PROPERTIES
     LABELS "unit;vm;ownership;fault-injection" TIMEOUT 30)
+
+xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
+xray_prepend_windows_asan_runtime_to_directory_tests()

@@ -259,7 +259,10 @@ vm_ready_operation_next_or_yield(XrVMRuntime *isolate, XrCoroutine *current, XrB
 static inline bool vm_ensure_call_stack(XrVMContext *vm_ctx, int needed_slots, XrValue **base_inout,
                                         XrBcCallFrame **frame_inout, XrInstruction *pc) {
     XrVMStackCursor cursor = {*base_inout, *frame_inout, pc};
-    bool grown = xr_vm_ensure_call_stack(vm_ctx, vm_get_coro(vm_ctx), needed_slots, &cursor);
+    bool need_grow = needed_slots > vm_ctx->stack_capacity ||
+                     vm_ctx->frame_count + 1 >= vm_ctx->frame_capacity;
+    XrCoroutine *owner = need_grow ? vm_get_coro(vm_ctx) : NULL;
+    bool grown = xr_vm_ensure_call_stack(vm_ctx, owner, needed_slots, &cursor);
     *base_inout = cursor.base;
     *frame_inout = cursor.frame;
     return grown;
@@ -300,8 +303,15 @@ static inline bool vm_rebind_after_native_call(XrVMContext *vm_ctx, int base_off
 static inline XrBcCallFrame *vm_push_bc_frame(XrVMContext *vm_ctx, XrClosure *closure,
                                               int new_base_off_from_caller, XrValue **base_inout,
                                               XrBcCallFrame **frame_inout, XrInstruction *pc) {
+    if (XR_UNLIKELY(vm_ctx->frame_count >= XR_FRAMES_MAX))
+        return NULL;
     XrVMStackCursor cursor = {*base_inout, *frame_inout, pc};
-    XrBcCallFrame *next = xr_vm_push_frame(vm_ctx, vm_get_coro(vm_ctx), closure,
+    int needed = (int) (*base_inout - vm_ctx->stack) + new_base_off_from_caller +
+                 closure->proto->maxstacksize;
+    bool need_grow = needed > vm_ctx->stack_capacity ||
+                     vm_ctx->frame_count + 1 >= vm_ctx->frame_capacity;
+    XrCoroutine *owner = need_grow ? vm_get_coro(vm_ctx) : NULL;
+    XrBcCallFrame *next = xr_vm_push_frame(vm_ctx, owner, closure,
                                           new_base_off_from_caller, &cursor);
     *base_inout = cursor.base;
     *frame_inout = cursor.frame;

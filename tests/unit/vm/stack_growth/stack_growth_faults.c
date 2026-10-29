@@ -155,6 +155,8 @@ static int dispatch_failure(bool combined) {
     XrVMContext *ctx = &f.state.ctx;
     XrValue *base = ctx->stack + 1;
     XrBcCallFrame *frame = &ctx->frames[0];
+    uintptr_t stack_address = (uintptr_t) ctx->stack;
+    uintptr_t frame_address = (uintptr_t) ctx->frames;
     XrInstruction code[1] = {0};
     XrProto proto = {0};
     XrClosure closure = {0};
@@ -176,6 +178,12 @@ static int dispatch_failure(bool combined) {
         return 1;
     }
     XR_CHECK(frame->pc == code && ctx->frame_count == 1, "failed dispatch installed frame");
+    XR_CHECK((uintptr_t) ctx->stack != stack_address, "failure did not relocate stack");
+    if (combined) {
+        XR_CHECK((uintptr_t) ctx->frames != frame_address, "third allocation failed before frame move");
+        XR_CHECK(ctx->frame_capacity == 4, "failed frame expansion changed capacity");
+        XR_CHECK(live_count == 2, "combined slab ownership was not transferred");
+    }
     XR_CHECK(XR_TO_INT(ctx->pending_error) == 119, "dispatch replaced original error");
     refuse_frames = false;
     fail_at = 0;
