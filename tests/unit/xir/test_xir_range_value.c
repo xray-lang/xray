@@ -233,6 +233,7 @@ static void task_result_catalog(void) {
         CHECK(borrowed.field_count==(n<3?1u:0u));
         if(n<3)CHECK(borrowed.fields[0].type==(uint32_t)(n==0?XR_XIR_I64:n==1?XR_XIR_ERROR:XR_XIR_PANIC_INFO));
         if(!n)CHECK(borrowed.fields[0].payload==42);
+        if(n==1 || n==2)task_catalog_nested(&borrowed.fields[0],n);
         xr_xir_value_drop(&kept[n]);
     }
     fprintf(stderr,"Cold TaskResult Catalog: four owned terminal payloads survive every producer and program\n");

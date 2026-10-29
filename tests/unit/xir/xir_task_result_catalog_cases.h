@@ -9,6 +9,24 @@
 #ifndef XIR_TASK_RESULT_CATALOG_CASES_H
 #define XIR_TASK_RESULT_CATALOG_CASES_H
 #include "xir/xxir_enum.h"
+#include "xir/xxir_error.h"
+#include "xir/xxir_panic.h"
+static void task_catalog_nested(const XrXirValue *field,unsigned variant) {
+    if(variant==1) {
+        XrXirValue concrete={0};CHECK(xr_xir_error_borrow(field,&concrete));
+        XrXirEnumBorrow business={0};CHECK(xr_xir_enum_borrow(&concrete,&business)==XR_XIR_VALUE_OK);
+        CHECK(business.name.length==9 && !memcmp(business.name.bytes,"ColdError",9));
+        CHECK(business.member.length==3 && !memcmp(business.member.bytes,"Bad",3));
+        CHECK(business.field_count==1 && business.fields[0].type==XR_XIR_I64 && business.fields[0].payload==9);
+    } else {
+        CHECK(variant==2);XrXirFaultDetail detail={0};CHECK(xr_xir_panic_info_detail(field,&detail));
+        CHECK(detail.code==XR_XIR_PANIC_TRY_ASSERT && !detail.reserved && !detail.index && !detail.length);
+        XrXirValue message={0};CHECK(xr_xir_panic_info_message(field,&message)==XR_XIR_VALUE_OK);
+        const char expected[]="try! failed: ColdError.Bad(9)";const char *bytes=NULL;size_t length=0;
+        CHECK(xr_xir_string_view(&message,&bytes,&length) && length==sizeof(expected)-1 && !memcmp(bytes,expected,length));
+        xr_xir_value_drop(&message);
+    }
+}
 static uint32_t task_catalog_word(const XrXirCheckedPacket *packet,size_t offset) {
     CHECK(offset<=packet->length && packet->length-offset>=4);
     uint32_t value=0;
