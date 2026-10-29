@@ -61,11 +61,26 @@ def main():
         clients.append(name)
         cases[name] = dict(sources=[str(p) for p in sources], stdoutHex=stdout.hex(), stderrHex=stderr.hex(), exit=exit)
 
+    source_inputs = {}
+
+    def source_input(relative, length, digest):
+        source = args.source/relative
+        raw = source.read_bytes()
+        # Verify fixed fixture content across Git checkout EOL settings. The
+        # production drivers below still receive this untouched original path.
+        canonical = raw.replace(b'\r\n', b'\n')
+        assert len(canonical) == length and hashlib.sha256(canonical).hexdigest() == digest
+        source_inputs[relative] = dict(path=str(source), rawBytes=len(raw),
+            rawSHA256=hashlib.sha256(raw).hexdigest(), CRLF=raw.count(b'\r\n'),
+            bareLF=raw.count(b'\n')-raw.count(b'\r\n'), canonicalLFBytes=length,
+            canonicalLFSHA256=digest)
+        return source
+
     expected = args.source/'tests/diff/cases/semantics/output/print_terminator_exact.xr.expected'
     oracle = expected.read_bytes().replace(b'\r\n', b'\n')
     assert len(oracle) == 31 and hashlib.sha256(oracle).hexdigest() == 'cc9ebe4b7bd9fdc01c27cc79ff6c43c1e90e78115cad7795157f67b316d11c21'
-    literal = args.source/'tests/diff/cases/semantics/output/print_terminator_exact.xr'
-    assert len(literal.read_bytes().replace(b'\r\n', b'\n')) == 497
+    literal = source_input('tests/diff/cases/semantics/output/print_terminator_exact.xr', 497,
+        '32f13c28e415c770c81bd0eafbfb7d4008b8bdf192f7cb6cade5c01f2845a6a2')
     for optimized in (False, True):
         name = 'literal_opt' if optimized else 'literal'
         folder = project/name;folder.mkdir()
@@ -73,20 +88,21 @@ def main():
         (folder/'main.c').write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
             'int main(void){if(xray_lir_entry()!=0)return 1;return xray_lir_entry()!=0;}\n', encoding='ascii')
         add(name, [folder/'generated.c', folder/'main.c'], oracle*2)
-    sources = [('long_string', 'tests/diff/cases/limits/string_parts_over_64.xr', 882, b'140\n'),
-               ('spill_branches', 'tests/lir/programs/owned-string-spill-branches.xr', 965, b'140\n0\n'),
-               ('unicode_nul', 'tests/lir/programs/owned-string-storage.xr', None, b'\xc3\xa9\0\nv12\n\n')]
-    for name, relative, length, stdout in sources:
-        source = args.source/relative
-        if length is not None:
-            assert len(source.read_bytes()) == length
+    sources = [('long_string', 'tests/diff/cases/limits/string_parts_over_64.xr', 876,
+                '0a6919aec0be3b82c556aa7237e2d99b2e272b4792333a78e8395139d23c8f34', b'140\n'),
+               ('spill_branches', 'tests/lir/programs/owned-string-spill-branches.xr', 959,
+                'ee150edc9acc304a7f12185f43c41fd326f47f7a18e7d38eceffa0ba9c36e3a9', b'140\n0\n'),
+               ('unicode_nul', 'tests/lir/programs/owned-string-storage.xr', 150,
+                '5b53b0ed4708c139c981c76e91d60d9326d612d7bb80ca9b61ba2d09d498a88b', b'\xc3\xa9\0\nv12\n\n')]
+    for name, relative, length, digest, stdout in sources:
+        source = source_input(relative, length, digest)
         for mode in ('raw', 'sccp', 'inline', 'sccp-inline-inline-sccp'):
             client = name + '_' + mode.replace('-', '_')
             folder = project/client;folder.mkdir()
             generated = folder/'generated.c'
             result = run(client + '-generate', [args.pipeline_driver, source, mode, generated, folder/'rbc.json', '0', '2', 'normal'])
             assert result.stdout == stdout*2 and not result.stderr
-            if length:
+            if name != 'unicode_nul':
                 receipt = json.loads((folder/'rbc.json').read_text())
                 assert receipt['rbc_registers_max'] <= 255 and receipt['rbc_spills'] > 0 and receipt['rbc_reference_spills'] > 0
             (folder/'main.c').write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
@@ -335,10 +351,13 @@ def main():
         assert b'XrayNativeRuntime requires' in result.stdout + result.stderr or b'XrayNativeRuntime does not distribute' in result.stdout + result.stderr
         assert not (target/'f64_public_c.exe').exists()
         negative.append(label)
+    for relative, facts in source_inputs.items():
+        assert hashlib.sha256((args.source/relative).read_bytes()).hexdigest() == facts['rawSHA256']
     summary = dict(state='PASS', sourceCommit=manifest['sourceCommit'], component='XrayNativeRuntime',
         installedPrefix=str(prefix), movedPrefix=str(moved), originalPrefixAbsent=not prefix.exists(),
         manifestSHA256=hashlib.sha256((runtime/'native_runtime_manifest.json').read_bytes()).hexdigest(),
-        clients=cases, clientCount=len(cases), negative=negative, arithmeticRows=3216, comparisonPairs=676,
+        clients=cases, clientCount=len(cases), sourceInputs=source_inputs,
+        negative=negative, arithmeticRows=3216, comparisonPairs=676,
         roundingModes=4, ftzDazStates=4, hello='GAP: H3; complete 369B source and 76B oracle unchanged')
     (work/'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     print(work)
