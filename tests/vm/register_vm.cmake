@@ -90,3 +90,11 @@ add_test(NAME skeleton_diff COMMAND ${XRAY_PYTHON} -X utf8
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --work ${CMAKE_CURRENT_BINARY_DIR}/skeleton-diff ${skeleton_native_options})
 set_tests_properties(skeleton_diff PROPERTIES LABELS "unit;vm;lir;native;fast" TIMEOUT 120)
+
+add_test(NAME f64_negate_native COMMAND ${XRAY_PYTHON} -X utf8
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_f64_negate_native.py
+    --driver $<TARGET_FILE:test_lir_bytecode_source> --compiler "${CMAKE_C_COMPILER}"
+    --kind "${skeleton_provider_kind}"
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --work ${CMAKE_CURRENT_BINARY_DIR}/f64-negate-native ${skeleton_native_options})
+set_tests_properties(f64_negate_native PROPERTIES LABELS "unit;vm;lir;native;fast" TIMEOUT 60)

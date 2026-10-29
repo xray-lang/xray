@@ -275,6 +275,12 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
             xr_lir_value_type(input, (XrLirValue){input, function.id, i->operands[0]},
                 &source) == XR_LIR_OK && source == XR_LIR_I64;
     }
+    case XR_LIR_FNEG: {
+        XrLirType source = XR_LIR_TYPE_INVALID;
+        return i->type == XR_LIR_F64 && i->operand_count == 1 &&
+            xr_lir_value_type(input, (XrLirValue){input, function.id, i->operands[0]},
+                &source) == XR_LIR_OK && source == XR_LIR_F64;
+    }
     default: return false;
     }
 }
@@ -596,6 +602,7 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         case XR_LIR_DIV: op = XR_RBC_DIV; break;
         case XR_LIR_REM: op = XR_RBC_REM; break;
         case XR_LIR_NEG: op = XR_RBC_NEG; break;
+        case XR_LIR_FNEG: op = XR_RBC_FNEG; break;
         default: return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "unsupported operation");
         }
         return rbc_lir_emit(c, op, result, c->slots[i->operands[0]],

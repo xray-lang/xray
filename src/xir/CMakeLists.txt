@@ -28,7 +28,7 @@ target_link_libraries(xray_xir_vm PUBLIC xray_xir xray_xir_scalar xray_xir_ctfe)
 add_library(xray_xir_cgen STATIC xxir_emit_c.c ../aot/xi_cgen_verify_output.c)
 target_link_libraries(xray_xir_cgen PUBLIC xray_xir)
 add_library(xray_xir_source STATIC xxir_source.c xxir_source_query.c xxir_source_failure.c xxir_type_inference.c xxir_library_catalog.c
-    ../hir/xhir_items.c ../hir/xhir_diagnostics.c ../hir/xhir_literal.c ../hir/xhir_conversion.c ../hir/xhir_binary.c ../hir/xhir_unary.c)
+    ../hir/xhir_items.c ../hir/xhir_diagnostics.c ../hir/xhir_literal.c ../hir/xhir_conversion.c ../hir/xhir_binary.c ../hir/xhir_unary.c ../hir/xhir_boolean.c)
 target_sources(xray_xir_source PRIVATE
     ../module/xmodule_graph.c ../module/xmodule_position.c ../module/xmodule_resolver.c ../module/xmodule_identity.c ../module/xmodule_overlay.c
     ../module/xmodule_identity_view.c ../module/xmodule_fingerprint.c

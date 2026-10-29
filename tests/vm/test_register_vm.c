@@ -94,6 +94,66 @@ static uint64_t run_function(XrRbcFunction function, const uint64_t *args, size_
     return result;
 }
 
+static void test_f64_negation(void) {
+    static const uint64_t vectors[][2] = {
+#define XR_FNEG(input, expected) {UINT64_C(0x##input),UINT64_C(0x##expected)},
+#include "f64_negate_vectors.def"
+#undef XR_FNEG
+    };
+    uint32_t code[4];
+    emit(code,0,XR_RBC_FNEG,254,0,0); emit(code,1,XR_RBC_RET,254,0,0);
+    XrRbcFunction f = {.code=code,.code_count=2,.register_count=255,.parameter_count=1};
+    for (unsigned i=0;i<sizeof(vectors)/sizeof(*vectors);++i)
+        CHECK(run_function(f,&vectors[i][0],1) == vectors[i][1]);
+    // The result may reuse the operand or a typed scalar spill home.
+    emit(code,0,XR_RBC_FNEG,0,0,0); immediate(code,1,XR_RBC_SPILL,0,0);
+    immediate(code,2,XR_RBC_RELOAD,1,0); emit(code,3,XR_RBC_RET,1,0,0);
+    f.code_count=4; f.register_count=2; f.spill_count=1;
+    for (unsigned i=0;i<sizeof(vectors)/sizeof(*vectors);++i)
+        CHECK(run_function(f,&vectors[i][0],1) == vectors[i][1]);
+    f.spill_count=0; f.code_count=2;
+    emit(code,1,XR_RBC_RET,0,0,0);
+    XrRbcModule module = {.functions=&f,.function_count=1};
+    uint64_t argument = 0;
+    const uint32_t invalid[] = {XR_RBC_FNEG | (1u<<24),
+        XR_RBC_FNEG | (2u<<8),XR_RBC_FNEG | (2u<<16),
+        XR_RBC_FNEG | (255u<<8),XR_RBC_FNEG | (255u<<16)};
+    for (unsigned i=0;i<sizeof(invalid)/sizeof(*invalid);++i) {
+        code[0]=invalid[i]; reject_prepare(&module,0,&argument,1);
+    }
+    uint32_t sentinel = UINT32_C(0xdeadbeef);
+    const XrRbcOperands bad[] = {{XR_RBC_FNEG,255,0,0,0},{XR_RBC_FNEG,0,255,0,0},
+        {XR_RBC_FNEG,0,0,1,0},{XR_RBC_FNEG,0,0,0,1}};
+    for (unsigned i=0;i<sizeof(bad)/sizeof(*bad);++i) {
+        CHECK(!xr_rbc_encode(&sentinel,bad[i]) && sentinel==UINT32_C(0xdeadbeef));
+    }
+    // Invalid reference use in an unreachable callee rejects the entire module
+    // before an execution or any guest effect can be published.
+    uint32_t root = XR_RBC_RET0;
+    XrRbcFunction functions[2] = {{.code=&root,.code_count=1,.register_count=1},f};
+    XrRbcRegisterKind kinds[] = {XR_RBC_BITS,XR_RBC_BITS};
+    functions[1].register_kinds=kinds; functions[1].register_kind_count=2;
+    emit(code,0,XR_RBC_FNEG,1,0,0); emit(code,1,XR_RBC_RET,1,0,0);
+    module.functions=functions; module.function_count=2;
+    for (unsigned position=0;position<2;++position) {
+        for (unsigned kind=XR_RBC_STRING;kind<=XR_RBC_STRING_CELL;++kind) {
+            kinds[position]=(XrRbcRegisterKind)kind;
+            reject_prepare(&module,0,NULL,0);
+            kinds[position]=XR_RBC_BITS;
+        }
+    }
+    // Scalar unary work remains valid beside a live owned String.
+    emit(code,0,XR_RBC_STRING_LITERAL,2,0,0); emit(code,1,XR_RBC_FNEG,1,0,0);
+    emit(code,2,XR_RBC_STRING_DROP,2,0,0); emit(code,3,XR_RBC_RET,1,0,0);
+    XrRbcRegisterKind managed[] = {XR_RBC_BITS,XR_RBC_BITS,XR_RBC_STRING};
+    f=(XrRbcFunction){.code=code,.code_count=4,.register_count=3,.parameter_count=1,
+        .register_kinds=managed,.register_kind_count=3};
+    XrRbcLiteral literal = {"kept",4};
+    module=(XrRbcModule){.functions=&f,.function_count=1,.literals=&literal,.literal_count=1};
+    uint64_t result=99;
+    CHECK(execute(&module,0,&argument,1,&result)==XR_RBC_OK && result==UINT64_C(0x8000000000000000));
+}
+
 static void test_workloads(bool timing) {
     uint32_t fib_code[13], loop_code[10], countdown_code[11];
     XrRbcFunction fib = make_fib(fib_code), loop = make_loop(loop_code);
@@ -700,6 +760,7 @@ static void test_spill_branches(void) {
     reject_prepare(&module,0,&flag,1);scalar[7]=saved;
 }
 int main(int argc, char **argv) {
+    test_f64_negation();
     test_spill_branches();
     test_spills();
     test_string_length();

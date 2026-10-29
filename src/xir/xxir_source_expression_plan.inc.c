@@ -190,7 +190,7 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
             else if (xr_xir_type_is_nullable(&ctx->types,plan->ground_type))
                 plan->ground_type=xr_xir_nullable_element(&ctx->types,plan->ground_type);
         }else if (node->type!=AST_NULLISH_COALESCE && node->type!=AST_FORCE_UNWRAP) {
-            plan->type_ready=true;plan->ground_type=XR_XIR_BOOL;
+            plan->type_ready=true;plan->ground_type=xr_hir_boolean_result_type(source_boolean_operation(node->type));
         }
         break;
     }

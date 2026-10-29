@@ -65,7 +65,8 @@
     X(RET0, NONE)                                                                                  \
     X(STRING_LEN, AB)                                                                              \
     X(SPILL, ABX)                                                                                  \
-    X(RELOAD, ABX)
+    X(RELOAD, ABX)                                                                                 \
+    X(FNEG, AB)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,

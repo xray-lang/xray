@@ -330,23 +330,28 @@ static void observe_negation(XrLirModule *m, bool report) {
         "\"operand\":%u,\"returned\":%u,\"line\":7,\"column\":5}\n",
         fv.parameters[0], v.operands[0], v.result);
 }
-/* Native admission must not turn the old VM transport success path into a
- * bypass. This fixture requires the VM's distinct FNEG refusal explicitly. */
+// Both backends consume the dynamic operand after the input module retires.
 static void emit_negation(XrLirModule *m, const char *path, bool output) {
     observe_negation(m, path != NULL);
     XrLirFunction root; OK(xr_lir_function_at(m, 0, &root));
-    XrRbcCompileDiagnostic diagnostic;
+    XrRbcProgram *programs[2] = {NULL,NULL};
     for (uint32_t i = 0; i < 2; ++i) {
-        XrLirFunction f; OK(xr_lir_function_at(m, i, &f)); XrRbcProgram *program = NULL;
-        CHECK(xr_rbc_compile(m, f, &program, &diagnostic) == XR_RBC_COMPILE_UNSUPPORTED && !program);
-        CHECK(diagnostic.line == 7 && diagnostic.column == 5 && !strcmp(diagnostic.path, "negation.xr"));
+        XrLirFunction f; OK(xr_lir_function_at(m, i, &f));
+        CHECK(xr_rbc_compile(m, f, &programs[i], NULL) == XR_RBC_COMPILE_OK && programs[i]);
     }
     XrCompileResources *resources = resources_new(); XrLirCOutput out = {0};
     XrLirCRequest request = {.module = m, .entry = root, .resources = resources,
         .translation_unit = path ? path : "native-negation.c", .control = NULL};
     CHECK(xr_lir_emit_c(&request, &out, NULL) == XR_LIR_C_OK && out.entry_result == XR_LIR_F64);
     xr_lir_module_destroy(m); xr_compile_resources_release(resources);
-    CHECK(diagnostic.line == 7 && !strcmp(diagnostic.path, "negation.xr"));
+    static const uint64_t vectors[][2] = {
+#define XR_FNEG(input, expected) {UINT64_C(0x##input),UINT64_C(0x##expected)},
+#include "../vm/f64_negate_vectors.def"
+#undef XR_FNEG
+    };
+    for (unsigned n=0;n<sizeof(vectors)/sizeof(*vectors);++n)
+        check_vm(programs[1],&vectors[n][0],1,vectors[n][1]);
+    xr_rbc_program_destroy(programs[0]); xr_rbc_program_destroy(programs[1]);
     const char *policy = strstr(out.bytes, "#pragma STDC FENV_ACCESS ON");
     const char *definitions = strstr(out.bytes, "double ");
     CHECK(policy && definitions && policy < definitions && strstr(out.bytes, "#pragma fenv_access(on)"));

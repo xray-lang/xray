@@ -256,6 +256,98 @@ static void f64_transport(void) {
     xr_rbc_program_destroy(recurse);
 }
 
+static const char f64_negation_source[] =
+    "fn negate(x:f64)->f64{return -x}\nnegate(1.25)\n";
+
+static void f64_negation(void) {
+    static const uint64_t vectors[][2] = {
+#define XR_FNEG(input, expected) {UINT64_C(0x##input),UINT64_C(0x##expected)},
+#include "f64_negate_vectors.def"
+#undef XR_FNEG
+    };
+    XrRbcProgram *program = callable(f64_negation_source);
+    const int modes[] = {FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO};
+    fenv_t original; CHECK(fegetenv(&original) == 0);
+#if defined(XR_ARCH_X86_64)
+    unsigned original_control = _mm_getcsr();
+    const unsigned control_cases = 4;
+#else
+    const unsigned control_cases = 1;
+#endif
+    for (unsigned m=0;m<4;++m) for (unsigned c=0;c<control_cases;++c) {
+        CHECK(fesetround(modes[m]) == 0 && feclearexcept(FE_ALL_EXCEPT) == 0 &&
+            feraiseexcept(FE_INEXACT) == 0);
+#if defined(XR_ARCH_X86_64)
+        unsigned mask = (1u<<6)|(1u<<15);
+        _mm_setcsr((_mm_getcsr() & ~mask) | ((c&1u)<<6) | (((c>>1)&1u)<<15));
+        unsigned expected_control = _mm_getcsr();
+#endif
+        int flags = fetestexcept(FE_ALL_EXCEPT);
+        for (unsigned i=0;i<sizeof(vectors)/sizeof(*vectors);++i) {
+            CHECK(run(program,vectors[i][0]) == vectors[i][1]);
+            CHECK(fegetround() == modes[m] && fetestexcept(FE_ALL_EXCEPT) == flags);
+#if defined(XR_ARCH_X86_64)
+            CHECK(_mm_getcsr() == expected_control);
+#endif
+        }
+    }
+    CHECK(fesetenv(&original) == 0);
+#if defined(XR_ARCH_X86_64)
+    _mm_setcsr(original_control);
+#endif
+    uint64_t input = UINT64_C(0xfff0000000000001);
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_program_prepare(program,&input,1,&execution) == XR_RBC_OK);
+    input = 0;
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    CHECK(outcome && xr_rbc_outcome_status(outcome) == XR_RBC_OK);
+    xr_rbc_execution_free(&execution); xr_rbc_program_destroy(program);
+    uint64_t result = 0;
+    CHECK(xr_rbc_outcome_bits(outcome,&result) && result == UINT64_C(0x7ff8000000000000));
+    xr_rbc_outcome_free(&outcome);
+}
+
+static uint32_t negation_callee(XrLirModule *module) {
+    uint32_t selected = 0;
+    for (uint32_t n = 0; n < xr_lir_function_count(module); ++n) {
+        XrLirFunction f; XrLirFunctionView fv;
+        OK(xr_lir_function_at(module,n,&f)); OK(xr_lir_function_view(module,f,&fv));
+        for (uint32_t b = 0; b < fv.block_count; ++b) {
+            XrLirBlock block; XrLirBlockView bv;
+            OK(xr_lir_block_at(module,f,b,&block)); OK(xr_lir_block_view(module,block,&bv));
+            for (uint32_t i = 0; i < bv.instruction_count; ++i) {
+                XrLirInstructionView v; OK(xr_lir_instruction_view(module,block,i,&v));
+                if (v.op != XR_LIR_FNEG) continue;
+                CHECK(!selected && fv.parameter_count == 1 && fv.parameter_types[0] == XR_LIR_F64 &&
+                    fv.result == XR_LIR_F64 && v.type == XR_LIR_F64 && v.operand_count == 1 &&
+                    v.operands[0] == fv.parameters[0] && v.source.line == 1);
+                selected = f.id;
+            }
+        }
+    }
+    CHECK(selected);
+    return selected;
+}
+
+static void f64_negation_c(const char *path) {
+    XrLirLowered local = lower(f64_negation_source,true);
+    CHECK(negation_callee(local.module) == local.entry.id);
+    xr_lir_lowered_free(&local);
+    XrLirLowered whole = lower(f64_negation_source,false);
+    uint32_t callee = negation_callee(whole.module);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,false};
+    XrCompileResources *resources = NULL;
+    CHECK(xr_compile_resources_new(&limits,&resources) == XR_COMPILE_RESOURCE_OK);
+    XrLirCRequest request = {whole.module,whole.entry,resources,"source-fneg",NULL};
+    XrLirCOutput output = {0};
+    CHECK(xr_lir_emit_c(&request,&output,NULL) == XR_LIR_C_OK);
+    xr_lir_lowered_free(&whole); xr_compile_resources_release(resources);
+    FILE *file = fopen(path,"wb"); CHECK(file);
+    CHECK(fwrite(output.bytes,1,output.length,file) == output.length && fclose(file) == 0);
+    xr_lir_c_output_free(&output);
+    printf("{\"callee\":%u,\"sourceLocalFneg\":true,\"sourceWholeFneg\":true}\n",callee);
+}
+
 static void owned_string_result(const char *path) {
     XrLirLowered lowered = lower("fn produce()->string{return \"é\\0${73}\"}\nproduce()\n",true);
     XrRbcProgram *program = NULL;
@@ -350,6 +442,7 @@ static void constant_string_branch(const char *directory) {
 }
 
 int main(int argc, char **argv) {
+    if(argc==3&&!strcmp(argv[1],"--fneg-c")){f64_negation_c(argv[2]);return 0;}
     if(argc==3&&!strcmp(argv[1],"--constant-branch")){constant_string_branch(argv[2]);return 0;}
     CHECK(argc==1 || argc==2);
     if(argc==1)constant_string_branch(NULL);
@@ -360,6 +453,7 @@ int main(int argc, char **argv) {
     numerical_oracles();
     actual_entry_and_refusal();
     f64_transport();
+    f64_negation();
     puts("Source-backed bytecode integration passed");
     return 0;
 }

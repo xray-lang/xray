@@ -15,6 +15,7 @@
 #include "xrbc.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
+#include "xir/xxir_float.h"
 
 typedef union {
     uint64_t bits;
@@ -128,7 +129,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     size_t remaining = function->code_count - pc;
     bool comparison = op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ;
     switch (op) {
-    case XR_RBC_MOV: case XR_RBC_NEG: case XR_RBC_CELL_READ: case XR_RBC_CELL_WRITE:
+    case XR_RBC_MOV: case XR_RBC_NEG: case XR_RBC_FNEG: case XR_RBC_CELL_READ: case XR_RBC_CELL_WRITE:
     case XR_RBC_STRING_I64: case XR_RBC_STRING_RETAIN: case XR_RBC_STRING_TAKE:
     case XR_RBC_STRING_LEN:
     case XR_RBC_LT: case XR_RBC_LE: case XR_RBC_EQ:

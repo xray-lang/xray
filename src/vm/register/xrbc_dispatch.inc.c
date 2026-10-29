@@ -178,6 +178,13 @@ XR_RBC_CASE(NEG) {
     XR_RBC_REG(a) = 0 - XR_RBC_REG(b);
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(FNEG) {
+    uint64_t result;
+    if (xr_xir_float_negate(64, XR_RBC_REG(b), &result) != XR_XIR_NUMERIC_OK)
+        return XR_RBC_INVALID;
+    XR_RBC_REG(a) = result;
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(DIV)
 XR_RBC_CASE(REM) {
     int64_t lhs = xr_rbc_signed(XR_RBC_REG(b)), rhs = xr_rbc_signed(XR_RBC_REG(c));

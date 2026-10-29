@@ -39,6 +39,7 @@
 #include "../hir/xhir_conversion.h"
 #include "../hir/xhir_binary.h"
 #include "../hir/xhir_unary.h"
+#include "../hir/xhir_boolean.h"
 #include "xxir_compile_memory.h"
 #include "../shared/xnative_declaration.h"
 #include "../shared/xr_core_intrinsic.h"
@@ -1460,22 +1461,36 @@ static bool source_template(SourceContext *ctx, AstNode *node, SourceValue *valu
     *value = result;
     return true;
 }
+static XrHirBooleanOperation source_boolean_operation(AstNodeType syntax) {
+    return syntax==AST_UNARY_NOT?XR_HIR_BOOLEAN_NOT:syntax==AST_BINARY_AND?XR_HIR_BOOLEAN_AND:
+        syntax==AST_BINARY_OR?XR_HIR_BOOLEAN_OR:XR_HIR_BOOLEAN_INVALID;
+}
+static bool source_boolean_check(SourceContext *ctx,AstNode *node,XrHirBooleanOperation operation,
+    SourceValue *operand,XrHirBoolean *typed) {
+    XrXirSourceRange range=source_query_range(ctx,node,NULL);
+    XrHirBooleanInput input={.origin={node->node_id,range.module,range.line,range.column,range.end_line,range.end_column},
+        .operation=operation,.operand=operand->type};const char *reason=NULL;
+    XrXirStatus status=xr_hir_boolean_check(&ctx->types,&input,ctx->request,typed,&reason);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason);
+    operand->type=typed->type;return true;
+}
 static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) {
-    bool negate = node->type == AST_UNARY_NOT;
     SourceValue left, initial, place, right;
     SourceExpressionPlan *plan=ctx->active_expression;
     if (!plan->left || !source_plan_complete(ctx,plan->left,&left)) return false;
-    if (left.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "logical operand must be bool");
+    XrHirBoolean typed;
+    if (!source_boolean_check(ctx,node,source_boolean_operation(node->type),&left,&typed)) return false;
+    bool negate=typed.operation==XR_HIR_BOOLEAN_NOT;
     initial = left;
-    if (negate && !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 0, {0}}, &initial)) return false;
-    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_NEW, XR_XIR_BOOL, {initial.id, 0}, {0}, 0, {0}}, &place)) return false;
+    if (negate && !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, typed.type, {0}, {0}, 0, {0}}, &initial)) return false;
+    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_NEW, typed.type, {initial.id, 0}, {0}, 0, {0}}, &place)) return false;
     SourceFunction *body = &ctx->bodies[ctx->function];
     uint32_t branch = body->count, rhs = body->block_count;
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {left.id, 0}, {0}, 0, {0}}, NULL) || !begin_block(ctx)) return false;
     SourceConditionFlow *left_flow=plan->left->condition_flow;
     if (!left_flow || !source_condition_enter(ctx,plan->left,node->type==AST_BINARY_AND)) return false;
     if (negate) {
-        if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1, {0}}, &right)) return false;
+        if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, typed.type, {0}, {0}, 1, {0}}, &right)) return false;
     } else if (!plan->right || !source_plan_complete(ctx,plan->right,&right)) return false;
     SourceConditionFlow *flow=NULL;
     if (!source_condition_combine(ctx,node,left_flow,negate?NULL:plan->right->condition_flow,&flow)) return false;
@@ -1483,14 +1498,14 @@ static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) 
     SourceFact *continuation=NULL;
     if (!source_facts_join(ctx,flow->facts[0],flow->epochs[0],flow->facts[1],flow->epochs[1],&continuation)) return false;
     ctx->facts=continuation;
-    if (right.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "logical operand must be bool");
+    if (!source_boolean_check(ctx,node,typed.operation,&right,&typed)) return false;
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {place.id, right.id}, {0}, 0, {0}}, NULL)) return false;
     uint32_t join = body->block_count;
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {join, 0}, 0, {0}}, NULL) || !begin_block(ctx)) return false;
     bool conjunction = node->type == AST_BINARY_AND;
     body->recipes[branch].instruction.targets[0] = conjunction ? rhs : join;
     body->recipes[branch].instruction.targets[1] = conjunction ? join : rhs;
-    return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_BOOL, {place.id, 0}, {0}, 0, {0}}, value);
+    return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, typed.type, {place.id, 0}, {0}, 0, {0}}, value);
 }
 #include "xxir_source_nullable.inc.c"
 #include "xxir_source_try_optional.inc.c"
@@ -1592,7 +1607,8 @@ static bool source_conditional(SourceContext *ctx, AstNode *node, SourceExpected
         if (!plan->right->type_ready) plan->right->expected=expected;
     }
     if (!source_plan_complete(ctx,plan->condition,&condition)) return false;
-    if (condition.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "conditional requires bool");
+    XrHirBoolean typed;
+    if (!source_boolean_check(ctx,node,XR_HIR_BOOLEAN_CONDITIONAL,&condition,&typed)) return false;
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t branch = body->count, yes_block = body->block_count;
@@ -1963,7 +1979,8 @@ static bool source_if(SourceContext *ctx, AstNode *node) {
     SourceValue condition;
     SourceExpressionPlan *condition_plan=source_plan_collect(ctx,node->as.if_stmt.condition,(SourceExpectedType){0});
     if (!condition_plan || !source_plan_complete(ctx,condition_plan,&condition)) return false;
-    if (condition.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "if requires bool");
+    XrHirBoolean typed;
+    if (!source_boolean_check(ctx,node,XR_HIR_BOOLEAN_IF,&condition,&typed)) return false;
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t branch = body->count, yes = body->block_count;
@@ -2059,7 +2076,8 @@ static bool source_loop(SourceContext *ctx, AstNode *node, AstNode *condition_no
         if (!condition_plan || !source_plan_complete(ctx,condition_plan,&condition)) return false;
     }
     else if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0}, {0}, 1, {0}}, &condition)) return false;
-    if (condition.type != XR_XIR_BOOL) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "loop condition requires bool");
+    XrHirBoolean typed;
+    if (!source_boolean_check(ctx,node,XR_HIR_BOOLEAN_LOOP,&condition,&typed)) return false;
     uint32_t branch = body->count, entry = body->block_count;
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {condition.id, 0}, {entry, 0}, 0, {0}}, NULL) || !begin_block(ctx) ||
         (condition_plan && !source_condition_enter(ctx,condition_plan,true))) return false;

@@ -155,7 +155,9 @@
     "test_hir_binary",
     "test_source_global_callable",
     "test_hir_unary",
-    "test_hir_unary_source"
+    "test_hir_unary_source",
+    "test_hir_boolean",
+    "test_hir_boolean_source"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -431,7 +433,11 @@
     "hir_binary_cli",
     "hir_unary",
     "source_unary_sdk",
-    "hir_unary_cli"
+    "hir_unary_cli",
+    "hir_boolean",
+    "source_boolean_sdk",
+    "hir_boolean_cli",
+    "f64_negate_native"
   ],
   "versionCommand": [
     "{build}/xray.exe",
