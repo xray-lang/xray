@@ -8,7 +8,7 @@
  *
  * KEY CONCEPT:
  *   Each activation owns its pending panic independently. Cleanup may handle
- *   its own panic; an escaping cleanup panic fails compilation without abort.
+ *   its own panic; only a second panic during unwind fails the whole evaluation.
  */
 static XrXirCtfeStatus ctfe_panic_status(uint32_t code) {
     switch (code) {
@@ -75,10 +75,46 @@ static XrXirCtfeStatus ctfe_panic_land(CtfeCallExecution *execution) {
     xr_xir_panic_drop(&frame->panic);frame->exit_kind=CTFE_EXIT_NONE;
     frame->state.landing=0;frame->state.leaving=false;frame->state.instruction=first+1;return XR_XIR_CTFE_OK;
 }
+/* The registered cleanup has no result slot. Its lexical registration owns
+ * panic routing, while the parent's previous exit owns any replaced Error. */
+static XrXirCtfeStatus ctfe_cleanup_panic_escape(CtfeCallExecution *execution) {
+    CtfeCallFrame *frame=execution->top,*parent=frame->parent;
+    if (!parent || !parent->state.leaving || !parent->state.cleanup_waiting ||
+        !parent->state.frontier || parent->state.frontier>parent->run.function->instruction_count)
+        return XR_XIR_CTFE_BAD_ARTIFACT;
+    uint32_t at=parent->state.frontier-1;
+    const XrXirInstruction *registration=&parent->run.function->instructions[at];
+    if (registration->op!=XR_XIR_CLEANUP_REGISTER || registration->immediate!=(int64_t)frame->function)
+        return XR_XIR_CTFE_BAD_ARTIFACT;
+    if (parent->exit_kind==CTFE_EXIT_PANIC) return XR_XIR_CTFE_CLEANUP_PANIC;
+    if (!xr_xir_panic_empty(&parent->panic)) return XR_XIR_CTFE_BAD_ARTIFACT;
+    uint32_t frontier=frame->cleanup_parent;XrXirPanicPayload held={0};
+    xr_xir_panic_move(&frame->panic,&held);
+    execution->top=parent;--execution->depth;execution->live_bytes-=frame->bytes;ctfe_call_frame_free(frame);
+    execution->owned.activation=parent;execution->owned.authority=(XrXirCellAuthority){execution,parent,parent->epoch};
+    execution->owned.frame_spare=execution->request->evaluation.limits.frame_bytes-execution->live_bytes-execution->loan_bytes;
+    execution->owned.loan_base=execution->loan_bytes;
+    XrXirCtfeStatus status=XR_XIR_CTFE_OK;
+    if (parent->exit_kind==CTFE_EXIT_ERROR || parent->exit_kind==CTFE_EXIT_LOCAL_ERROR) {
+        XrXirValue error={0};XrXirValueAdmission admission=ctfe_value_admission(&execution->owned);
+        status=ctfe_value_graph_admit(&parent->run,&execution->owned,&parent->returned);
+        if (status==XR_XIR_CTFE_OK) status=ctfe_value_status(xr_xir_error_erase(&parent->returned,&admission,&error));
+        if (status==XR_XIR_CTFE_OK) {
+            xr_xir_value_drop(&held.replaced_error);xr_xir_value_move(&error,&held.replaced_error);
+        }
+        xr_xir_value_drop(&error);
+    }
+    if (status==XR_XIR_CTFE_OK) {
+        xr_xir_value_drop(&parent->returned);parent->exit_kind=CTFE_EXIT_NONE;
+        parent->state.frontier=frontier;parent->state.cleanup_waiting=false;
+        status=ctfe_panic_begin(execution,&held,at);
+    }
+    xr_xir_panic_drop(&held);return status;
+}
 static XrXirCtfeStatus ctfe_panic_continue(CtfeCallExecution *execution,bool *done) {
     CtfeCallFrame *frame=execution->top,*parent=frame->parent;
     if (frame->state.landing) return ctfe_panic_land(execution);
-    if (frame->cleanup) return XR_XIR_CTFE_CLEANUP_PANIC;
+    if (frame->cleanup) return ctfe_cleanup_panic_escape(execution);
     if (!parent) { *done=true;return ctfe_panic_status(frame->panic.detail.code); }
     if (frame->return_value<parent->run.function->parameter_count) return XR_XIR_CTFE_BAD_ARTIFACT;
     uint32_t at=frame->return_value-parent->run.function->parameter_count;

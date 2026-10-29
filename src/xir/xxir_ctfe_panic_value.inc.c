@@ -20,10 +20,13 @@ static XrXirCtfeStatus ctfe_panic_value_step(ScalarRun *run,VmState *vm,CtfeOwne
         XrXirFaultDetail detail={0};
         if (!xr_xir_panic_info_detail(&info,&detail)) return XR_XIR_CTFE_BAD_ARTIFACT;
         result=(XrXirValue){XR_XIR_I64,0,detail.code};
+    } else if (op->op==XR_XIR_PANIC_REPLACED_ERROR) {
+        XrXirValueAdmission admission=ctfe_value_admission(state);
+        status=ctfe_value_status(xr_xir_panic_info_replaced_error(&info,op->type,&admission,&result));
     } else status=ctfe_value_status(xr_xir_panic_info_message(&info,&result));
     if (status==XR_XIR_CTFE_OK) {
         uint32_t offset=run->layout->offsets[run->function->parameter_count+vm->instruction];
-        if (op->op==XR_XIR_PANIC_MESSAGE) xr_xir_owned_slot_move(run->frame,offset,&result);
+        if (op->op!=XR_XIR_PANIC_CODE) xr_xir_owned_slot_move(run->frame,offset,&result);
         else xr_xir_scalar_store(run->frame,offset,result.payload);
         ++vm->instruction;
     }

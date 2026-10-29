@@ -53,6 +53,11 @@ def main():
     consumer.write_bytes((root/'tests/unit/xir/source_sdk_consumer.c').read_bytes())
     (output/'nominal_projection_fixture.h').write_bytes(
         (root/'tests/unit/xir/nominal_projection_fixture.h').read_bytes())
+    (output/'source_ctfe_cleanup_cases.h').write_bytes(
+        (root/'tests/unit/xir/source_ctfe_cleanup_cases.h').read_bytes())
+    (output/'ctfe_cleanup').mkdir()
+    (output/'ctfe_cleanup/cleanup_owned.xr').write_bytes(
+        (root/'tests/unit/xir/ctfe_cleanup/cleanup_owned.xr').read_bytes())
     fixture = root/'tests/unit/xir/source_sdk_consumer'
 
     def configure(label, directory, success=True):

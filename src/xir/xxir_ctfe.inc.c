@@ -60,12 +60,12 @@ static bool ctfe_error_operation(XrXirOp op) {
         op==XR_XIR_ERROR_IS || op==XR_XIR_ERROR_NARROW;
 }
 static bool ctfe_panic_operation(XrXirOp op) {
-    return op==XR_XIR_PANIC_CATCH || op==XR_XIR_PANIC_CODE || op==XR_XIR_PANIC_MESSAGE ||
+    return op==XR_XIR_PANIC_CATCH || op==XR_XIR_PANIC_CODE || op==XR_XIR_PANIC_MESSAGE || op==XR_XIR_PANIC_REPLACED_ERROR ||
         op==XR_XIR_ASSERT_CONDITION || op==XR_XIR_PANIC_ERROR || op==XR_XIR_MATCH_FAIL;
 }
 static bool ctfe_opcode_admitted(XrXirOp op) {
     switch (op) {
-    case XR_XIR_PANIC_CATCH: case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE:
+    case XR_XIR_PANIC_CATCH: case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE: case XR_XIR_PANIC_REPLACED_ERROR:
     case XR_XIR_ASSERT_CONDITION: case XR_XIR_PANIC_ERROR: case XR_XIR_MATCH_FAIL: return true;
     case XR_XIR_CONST_FLOAT: case XR_XIR_CONST_RUNE: case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: return true;
     case XR_XIR_THROW: case XR_XIR_CLEANUP_ERROR: case XR_XIR_ERROR_ERASE: case XR_XIR_ERROR_IS: case XR_XIR_ERROR_NARROW:

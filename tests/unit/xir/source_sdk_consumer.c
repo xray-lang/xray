@@ -901,6 +901,7 @@ static void installed_error_union_300(const char *stdlib) {
     CHECK(output.length==3 && !memcmp(output.bytes,"42\n",3));xray_source_result_free(result);
 }
 #include "nominal_projection_fixture.h"
+#include "source_ctfe_cleanup_cases.h"
 static void installed_nominal_projection(const char *stdlib) {
     char source[88000];size_t length=nominal_fixture(source,sizeof(source));CHECK(length==87251);
     XrSourceCompileOptions compiler=compile_options(stdlib);
@@ -917,5 +918,13 @@ static void installed_nominal_projection(const char *stdlib) {
 int main(int argc, char **argv) {
     CHECK(argc == 2); installed_error_union(argv[1]); installed_error_union_300(argv[1]); installed_report(argv[1]); installed_parameter_report(argv[1]); installed_method_parameter_report(argv[1]); installed_interface_parameter_report(argv[1]); installed_interface_member_report(argv[1]); installed_nominal_method_report(argv[1]); installed_closure_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
     installed_nominal_projection(argv[1]);
+    const char *source_path=__FILE__,*separator=strrchr(source_path,'/'),*windows_separator=strrchr(source_path,'\\');
+    if(windows_separator && (!separator || windows_separator>separator))separator=windows_separator;
+    CHECK(separator);size_t directory_length=(size_t)(separator-source_path)+1;char cleanup_path[2048];
+    CHECK(directory_length<sizeof(cleanup_path));memcpy(cleanup_path,source_path,directory_length);
+    const char cleanup_leaf[]="ctfe_cleanup/cleanup_owned.xr";
+    CHECK(sizeof(cleanup_leaf)<=sizeof(cleanup_path)-directory_length);
+    memcpy(cleanup_path+directory_length,cleanup_leaf,sizeof(cleanup_leaf));
+    source_ctfe_cleanup_cases(argv[1],cleanup_path);
     puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
 }

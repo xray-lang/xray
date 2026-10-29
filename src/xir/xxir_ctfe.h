@@ -92,9 +92,11 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
  * Tuple/Nullable/Array and admitted struct/enum exports retain their actual type
  * arena and active fields. External Cell/Function and other identity arguments, Function
  * exports remain unadmitted. Internal PanicInfo values originate only at real
- * panic handlers; code/message use ordinary immutable Value operations. Panic
+ * panic handlers; code/message/replacedError use ordinary immutable Value operations. Panic
  * propagates through applicable cleanup to the actual caller's handler. An
- * escaping cleanup panic returns CLEANUP_PANIC without aborting the host.
+ * escaping cleanup panic replaces a normal or business exit and carries its
+ * replaced Error. A second panic during unwind returns CLEANUP_PANIC without
+ * aborting the host; ordinary handlers can catch a single cleanup panic.
  * External PanicInfo inputs and exports remain refused. Internal enum Error values use
  * authentic Value erasure/matching and explicit invoke/error continuations.
  * An uncaught error follows applicable cleanup before UNCAUGHT_ERROR; compiler

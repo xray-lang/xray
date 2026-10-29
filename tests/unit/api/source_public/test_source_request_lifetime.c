@@ -15,6 +15,7 @@
 #define CHECK(c) do { if(!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while(0)
 #include "../../xir/nominal_projection_fixture.h"
 #include "nominal_projection_probe.h"
+#include "../../xir/source_ctfe_cleanup_cases.h"
 
 /* This TU observes the actual compiler allocator. Installed SDK consumers use
  * the canonical archive implementation separately. No runtime budget is changed. */
@@ -1565,6 +1566,7 @@ static void nominal_projection_controls(void) {
     puts("Actual wide Source nominal projection: bounded scans/copies, variants, final publication, cancellation/deadline/OOM, retry and retired42 PASS");
 }
 int main(void) {
+    source_ctfe_cleanup_cases(XR_PUBLIC_STDLIB,XR_PUBLIC_STDLIB "/../tests/unit/xir/ctfe_cleanup/cleanup_owned.xr");
     nominal_projection_controls();
     defaults_copy_controls();lower_loop_controls();
     input_helper_controls();input_prior_resource();public_input_controls();input_nul_location();graph_input_controls();
