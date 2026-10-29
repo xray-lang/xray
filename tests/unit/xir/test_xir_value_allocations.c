@@ -490,7 +490,7 @@ static void enum_arena_allocations(void) {
     CHECK(xr_xir_compile_nominal_structure_verify(&owner.context,&f.table,NULL)==XR_XIR_OK);
     const ValueCompileProbe project_probe={NULL,&f.table,XR_XIR_UNIT,1,100};
     value_compile_boundaries(&project_probe,limits);
-    CHECK(xr_xir_compile_nominal_project(&owner.context,&f.table,&projection)==XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_project(&owner.context,&f.table,NULL,&projection)==XR_XIR_OK);
     CHECK(projection->count==1 && projection->identities[0].kind==XR_XIR_NOMINAL_ENUM);
     XrXirTypes types={NULL,0,projection,NULL};XrXirDomain *domain=NULL;
     CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);

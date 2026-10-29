@@ -170,7 +170,7 @@ static XrXirValueStatus core_arena(const XrXirCompileContext *context, XrXirType
     XrXirNominalTable *copy = NULL, *projected = NULL;
     XrXirStatus status = xr_xir_compile_nominal_clone(context, &table, &types, &copy);
     if (status != XR_XIR_OK) CHECK(!copy);
-    if (status == XR_XIR_OK) status = xr_xir_compile_nominal_project(context, copy, &projected);
+    if (status == XR_XIR_OK) status = xr_xir_compile_nominal_project(context, copy,NULL, &projected);
     if (status != XR_XIR_OK) CHECK(!projected);
     xr_xir_compile_nominal_free(copy); xr_compile_resources_free(module);
     XrXirValueStatus result = status == XR_XIR_OK ? XR_XIR_VALUE_OK :

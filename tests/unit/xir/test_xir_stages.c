@@ -718,7 +718,7 @@ static void nominal_kind_boundaries(void) {
     CHECK(xr_xir_type_is_enum(&types, type) && !xr_xir_type_is_struct(&types, type));
     XrXirCompileContext budget = stage_context_default();
     XrXirNominalTable *projected = NULL;
-    CHECK(xr_xir_compile_nominal_project(&budget, &f.table, &projected) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_project(&budget, &f.table,NULL, &projected) == XR_XIR_OK);
     if (!projected) return;
     types.nominals = projected;
     CHECK(xr_xir_type_is_enum(&types, type) && !xr_xir_type_is_struct(&types, type));
@@ -772,7 +772,7 @@ static void enum_metadata_cases(void) {
     enum_metadata_fixture(&f); XrXirNominalTable *copy = NULL, *projected = NULL, *second = NULL;
     b = stage_context_default(); CHECK(xr_xir_compile_nominal_clone(&b, &f.table, NULL, &copy) == XR_XIR_OK);
     memset(&f, 0xCC, sizeof(f));
-    CHECK(xr_xir_compile_nominal_project(&b, copy, &projected) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_project(&b, copy,NULL, &projected) == XR_XIR_OK);
     xr_xir_compile_nominal_free(copy); copy = NULL;
     CHECK(xr_xir_compile_nominal_clone(&b, projected, NULL, &second) == XR_XIR_OK);
     xr_xir_compile_nominal_free(projected);

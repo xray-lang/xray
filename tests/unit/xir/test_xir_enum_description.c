@@ -93,7 +93,7 @@ int main(void) {
     fixture.declaration.variants = saved_variants;
     description_budget(&types); description_authority(&context,&types,&fixture);
     XrXirNominalTable *projected = NULL;
-    CHECK(xr_xir_compile_nominal_project(&context,&fixture.table,&projected) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_project(&context,&fixture.table,NULL,&projected) == XR_XIR_OK);
     memset(&fixture,0xcc,sizeof(fixture)); types.nominals = projected;
     CHECK(xr_xir_compile_types_structure_verify(&context,&types) == XR_XIR_OK);
     CHECK(xr_xir_compile_type_description(&context,&types,(XrXirType)256,&view) == XR_XIR_OK);

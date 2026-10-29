@@ -111,7 +111,7 @@ int main(void) {
     CHECK(xr_xir_compile_type_description(&c,&types,(XrXirType)256,&view)==XR_XIR_OK && view.nominal_kind==XR_XIR_NOMINAL_CLASS);
     declaration.kind=XR_XIR_NOMINAL_STRUCT;
     budget_cases(&types);XrXirNominalTable *projected=NULL;
-    CHECK(xr_xir_compile_nominal_project(&c,&table,&projected)==XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_project(&c,&table,NULL,&projected)==XR_XIR_OK);
     memset(names,0xcc,sizeof(names));memset(fields,0xcc,sizeof(fields));memset(&declaration,0xcc,sizeof(declaration));
     types.nominals=projected;
     CHECK(xr_xir_compile_types_structure_verify(&c,&types)==XR_XIR_OK);

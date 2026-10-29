@@ -48,7 +48,7 @@ static XrXirStatus ordering_projection_pipeline(const XrXirCompileContext *conte
         status=xr_xir_compile_nominal_clone(context,&borrowed,&types,&copy);if(status!=XR_XIR_OK)CHECK(!copy);}
     xr_compile_resources_free(name);name=NULL;
     if(status==XR_XIR_OK){CHECK(copy->declarations[0].module.bytes!=d.module.bytes);
-        status=xr_xir_compile_nominal_project(context,copy,&projected);if(status!=XR_XIR_OK)CHECK(!projected);}
+        status=xr_xir_compile_nominal_project(context,copy,NULL,&projected);if(status!=XR_XIR_OK)CHECK(!projected);}
     xr_xir_compile_nominal_free(copy);copy=NULL;
     if(status==XR_XIR_OK){types.nominals=projected;XrXirValueStatus value_status=xr_xir_compile_type_arena_new(context,&types,&arena);
         status=value_status==XR_XIR_VALUE_OK?XR_XIR_OK:value_status==XR_XIR_VALUE_OOM?XR_XIR_OUT_OF_MEMORY:

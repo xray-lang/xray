@@ -89,7 +89,7 @@ static XrXirValueStatus result_owner_new(ResultOwner *owner) {
         if (compiled!=XR_XIR_OK) fprintf(stderr,"Result definition type=%u status=%u\n",type,compiled);
     }
     XrXirNominalTable *identities=NULL;
-    if (compiled==XR_XIR_OK) compiled=xr_xir_compile_nominal_project(&owner->context,&table,&identities);
+    if (compiled==XR_XIR_OK) compiled=xr_xir_compile_nominal_project(&owner->context,&table,NULL,&identities);
     XrXirValueStatus status=result_compile_status(compiled);
     if (status==XR_XIR_VALUE_OK) {
         types.nominals=identities;

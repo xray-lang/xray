@@ -104,7 +104,7 @@ typedef struct ValueCompileResult {
 static XrXirStatus value_compile_probe(const XrXirCompileContext *c,
     const ValueCompileProbe *probe, ValueCompileResult *result) {
     if (probe->operation == 1)
-        return xr_xir_compile_nominal_project(c, probe->nominals, &result->nominals);
+        return xr_xir_compile_nominal_project(c, probe->nominals,NULL, &result->nominals);
     if (probe->operation == 2) {
         const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
         return xr_xir_compile_nominal_layout(c, probe->types, probe->type, &target,

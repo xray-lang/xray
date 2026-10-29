@@ -900,7 +900,22 @@ static void installed_error_union_300(const char *stdlib) {
     CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
     CHECK(output.length==3 && !memcmp(output.bytes,"42\n",3));xray_source_result_free(result);
 }
+#include "../api/source_public/nominal_projection_fixture.h"
+static void installed_nominal_projection(const char *stdlib) {
+    char source[88000];size_t length=nominal_fixture(source,sizeof(source));CHECK(length==87251);
+    XrSourceCompileOptions compiler=compile_options(stdlib);
+    XrSourceArtifact *artifact=compile(&compiler,source,__func__);
+    Output output={0};XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.write=capture;options.context=&output;XrSourceResult *result=NULL;XrSourceEvent event={0};
+    CHECK(execute_owned(artifact,&options,&result,&event)==XR_SOURCE_OK && result);
+    xray_source_artifact_free(artifact);
+    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
+    int64_t value=-1;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK && value==0);
+    CHECK(output.length==3 && !memcmp(output.bytes,"42\n",3));xray_source_result_free(result);
+}
 int main(int argc, char **argv) {
     CHECK(argc == 2); installed_error_union(argv[1]); installed_error_union_300(argv[1]); installed_report(argv[1]); installed_parameter_report(argv[1]); installed_method_parameter_report(argv[1]); installed_interface_parameter_report(argv[1]); installed_interface_member_report(argv[1]); installed_nominal_method_report(argv[1]); installed_closure_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
+    installed_nominal_projection(argv[1]);
     puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
 }

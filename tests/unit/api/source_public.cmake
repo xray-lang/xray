@@ -344,7 +344,8 @@ endif()
 add_test(NAME source_debug_identity COMMAND test_source_debug_identity)
 set_tests_properties(source_debug_identity PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;repl;debug")
 
-add_executable(test_source_request_lifetime "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_request_lifetime.c")
+add_executable(test_source_request_lifetime "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_request_lifetime.c"
+    "${CMAKE_CURRENT_LIST_DIR}/source_public/nominal_projection_probe.c")
 target_link_libraries(test_source_request_lifetime PRIVATE xray_source_api)
 target_compile_definitions(test_source_request_lifetime PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
 set_target_properties(test_source_request_lifetime PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)

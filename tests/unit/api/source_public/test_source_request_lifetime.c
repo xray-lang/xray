@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if(!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while(0)
+#include "nominal_projection_fixture.h"
+#include "nominal_projection_probe.h"
 
 /* This TU observes the actual compiler allocator. Installed SDK consumers use
  * the canonical archive implementation separately. No runtime budget is changed. */
@@ -1489,7 +1491,81 @@ static void defaults_copy_controls(void) {
     puts("Actual 300-parameter Source defaults receiving: 302 records, copied prefix, canary tail, cancel/deadline/OOM, original table, retry and retired ready42 PASS");
 
 }
+static void nominal_capture(NominalProjectionProbe *probe,XrCompileResources *resources) {
+    CHECK(calibration_owner==resources && !probe->resources);
+    CHECK(xr_compile_resources_retain(resources)==XR_COMPILE_RESOURCE_OK);
+    probe->resources=resources;probe->held_empty=calibration_initial_held;
+}
+static void nominal_fail_next(void) {runtime_fail_at=runtime_attempts;}
+static int nominal_poll(const void *context) {
+    NominalProjectionProbe *probe=(NominalProjectionProbe *)context;
+    ++probe->polls;
+    if(!probe->control || probe->mode==3)return 0;
+    if(probe->phase==NP_LONG_COPY && probe->destination && !probe->wanted &&
+        !memcmp(probe->destination,probe->long_name,4096)) {
+        for(size_t i=4096;i<4617;++i)CHECK(probe->destination[i]==0xa5);
+        probe->wanted=true;
+    }
+    if(!probe->wanted)return 0;
+    if(!probe->witnesses)++probe->witnesses;
+    if(probe->mode==0)return 1;
+    CHECK(probe->mode==1 && probe->control->has_deadline);
+    uint64_t now=xr_time_monotonic_ns();CHECK(now);
+    while(now<probe->control->deadline_ns){xr_time_sleep_ns(1000000);now=xr_time_monotonic_ns();CHECK(now);}
+    return 0;
+}
+static void nominal_execute(XrSourceArtifact *artifact,char *source,size_t length) {
+    memset(source,'!',length);ArrayOutput output={0};
+    XrSourceExecution *execution=execution_new();XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.context=&output;options.write=array_write;XrSourceResult *result=NULL;
+    CHECK(xray_source_artifact_execute(execution,artifact,&options,&result,NULL)==XR_SOURCE_OK && result);
+    xray_source_artifact_free(artifact);xray_source_execution_free(execution);
+    XrSourceEvent event={0};CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
+    int64_t value=-1;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK && value==0);
+    CHECK(output.size==3 && !memcmp(output.bytes,"42\n",3));xray_source_result_free(result);
+}
+static void nominal_projection_controls(void) {
+    char text[88000];size_t length=nominal_fixture(text,sizeof(text));
+    XrSourceInput input={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"nominal-projection",text,length}};
+    static const struct {unsigned phase,mode;} cases[]={
+        {NP_LONG_COPY,3},{NP_LONG_SCAN,0},{NP_FIELD_SCAN,0},{NP_VARIANT_SCAN,0},
+        {NP_LONG_COPY,0},{NP_VARIANT_COPY,0},{NP_PUBLICATION,0},
+        {NP_LONG_COPY,1},{NP_PUBLICATION,1},{NP_LONG_COPY,2}};
+    uint64_t baseline_ns=0;
+    for(unsigned n=0;n<sizeof(cases)/sizeof(*cases);++n) {
+        NominalProjectionProbe probe={.phase=cases[n].phase,.mode=cases[n].mode,.capture=nominal_capture,.fail_next=nominal_fail_next};
+        XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
+        options.cancel_poll=nominal_poll;options.cancel_context=&probe;
+        if(probe.mode==1){options.deadline_mode=XR_SOURCE_DEADLINE_AFTER;options.timeout_ns=baseline_ns+UINT64_C(5000000000);}
+        XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *report=NULL;XrSourceFailure failure={0};Calibration request={0};
+        test_nominal_projection_begin(&probe);uint64_t start=xr_time_monotonic_ns();CHECK(start);
+        XrSourceStatus status=calibration_build(&input,&options,&request,&artifact,&failure,&report);
+        uint64_t elapsed=xr_time_monotonic_ns()-start;test_nominal_projection_end(&probe);runtime_fail_at=SIZE_MAX;
+        fprintf(stderr,"nominal phase%u mode%u status%u scanned%u tail%u witnesses%u oom%u held%llu/%llu\n",probe.phase,probe.mode,(unsigned)status,probe.scanned,probe.tail_scanned,probe.witnesses,probe.oom_seen?1u:0u,(unsigned long long)probe.held_before,(unsigned long long)probe.held_after);
+        if(status!=XR_SOURCE_OK && report) {
+            XrSourceDiagnosticReportInfo details={0};CHECK(xray_source_diagnostic_report(report,&details)==XR_SOURCE_OK);
+            for(uint32_t i=0;i<details.roots;++i){XrSourceDiagnosticRoot root={0};CHECK(xray_source_diagnostic_root(report,i,&root)==XR_SOURCE_OK);fprintf(stderr,"nominal failure stage%u %s\n",(unsigned)failure.stage,root.message);}
+        }
+        if(probe.mode==3){CHECK(status==XR_SOURCE_OK && artifact && !report && probe.resources);baseline_ns=elapsed;size_t polls=probe.polls;nominal_execute(artifact,text,length);CHECK(probe.polls==polls);}
+        else {
+            XrSourceStatus expected=probe.mode==0?XR_SOURCE_CANCELLED:probe.mode==1?XR_SOURCE_DEADLINE:XR_SOURCE_OUT_OF_MEMORY;
+            CHECK(status==expected && !artifact && failure.status==expected && failure.cleanup_status==XR_SOURCE_OK && failure.stage==XR_SOURCE_STAGE_COMPILE);
+            CHECK(probe.mode==2?probe.oom_seen:probe.witnesses==1);
+            if(probe.phase==NP_LONG_SCAN)CHECK(probe.scanned==4096 && !probe.tail_scanned);
+            xray_source_diagnostic_free(report);report=NULL;
+            CHECK(probe.resources && sdk_stats(probe.resources).held_bytes==probe.held_empty);
+            xr_compile_resources_release(probe.resources);probe.resources=NULL;CHECK(!runtime_live&&!runtime_bytes);
+            CHECK(xray_source_build(&input,&options,&artifact,&failure,NULL)==XR_SOURCE_OK && artifact);
+            size_t polls=probe.polls;nominal_execute(artifact,text,length);CHECK(probe.polls==polls);
+        }
+        if(probe.resources){CHECK(sdk_stats(probe.resources).held_bytes==probe.held_empty);xr_compile_resources_release(probe.resources);}
+        CHECK(!runtime_live&&!runtime_bytes);length=nominal_fixture(text,sizeof(text));input.value.text.length=length;
+    }
+    puts("Actual wide Source nominal projection: bounded scans/copies, variants, final publication, cancellation/deadline/OOM, retry and retired42 PASS");
+}
 int main(void) {
+    nominal_projection_controls();
     defaults_copy_controls();lower_loop_controls();
     input_helper_controls();input_prior_resource();public_input_controls();input_nul_location();graph_input_controls();
     compilation_controls();
