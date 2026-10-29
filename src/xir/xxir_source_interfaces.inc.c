@@ -139,7 +139,7 @@ static bool source_interface_method(SourceContext *ctx, SourceName *owner,
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface method contract is not admitted");
     uint32_t parameter_scope=0;
     if(!source_method_parameter_scope(ctx,node,&parameter_scope))return false;
-    SourceName *symbol = source_interface_member_name(ctx,owner,node);
+    SourceName *symbol = source_member_name(ctx,owner,&ctx->interface_members[owner->index],node,method->name);
     if (!symbol) return false;
     symbol->kind = SOURCE_INTERFACE; symbol->index = member; symbol->module = owner->module;
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_MEMBER, owner->declaration,

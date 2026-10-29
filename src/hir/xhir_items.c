@@ -63,7 +63,7 @@ static bool hir_item_spec_valid(const XrHirItems *h,const XrHirItemSpec *spec) {
         (spec->kind==XR_HIR_ITEM_DECLARATION||
          (spec->kind==XR_HIR_ITEM_PARAMETER&&spec->parent)||
          (spec->kind==XR_HIR_ITEM_PARAMETER_SCOPE&&spec->node)||
-         (spec->kind==XR_HIR_ITEM_INTERFACE_METHOD&&spec->parent&&spec->node));
+         (spec->kind==XR_HIR_ITEM_METHOD&&spec->parent&&spec->node));
 }
 XrCompileResourceStatus xr_hir_items_reserve(XrHirItems *h,const XrHirItemSpec *spec,uint32_t *out) {
     if(!out||!hir_item_spec_valid(h,spec))return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
@@ -109,7 +109,7 @@ bool xr_hir_items_find(const XrHirItems *h,uint32_t module,uint32_t parent,const
 bool xr_hir_items_find_scope(const XrHirItems *h,uint32_t module,uint32_t node,uint32_t *out) {
     if(!h||!node||!out)return false;uint32_t found=UINT32_MAX;
     for(uint32_t i=0;i<h->count;++i)if((h->items[i].kind==XR_HIR_ITEM_PARAMETER_SCOPE||
-        h->items[i].kind==XR_HIR_ITEM_INTERFACE_METHOD)&&h->items[i].module==module&&h->items[i].node==node) {
+        h->items[i].kind==XR_HIR_ITEM_METHOD)&&h->items[i].module==module&&h->items[i].node==node) {
         if(found!=UINT32_MAX)return false;found=i;
     }
     if(found==UINT32_MAX)return false;*out=found;return true;

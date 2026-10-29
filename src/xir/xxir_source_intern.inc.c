@@ -54,14 +54,15 @@ static SourceName *source_parameter_name(SourceContext *ctx,AstNode *node,const 
     if(!source_parameter_item(ctx,node,param,parent,&item))return NULL;
     return source_name_bind(ctx,&ctx->locals,param->name,node,item+1);
 }
-static SourceName *source_interface_member_name(SourceContext *ctx,SourceName *owner,AstNode *node) {
-    const char *name=node->as.interface_method.name;uint32_t item=0;
+static SourceName *source_member_name(SourceContext *ctx,SourceName *owner,SourceName **head,
+    AstNode *node,const char *name) {
+    uint32_t item=0;
     XrHirItemSpec spec={name,owner->module,owner->hir_item,node->node_id,node->line,node->column,
-        XR_HIR_ITEM_INTERFACE_METHOD};
+        XR_HIR_ITEM_METHOD};
     if(!owner->hir_item||xr_hir_items_claim(ctx->items,&spec,&item)!=XR_COMPILE_RESOURCE_OK) {
-        source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"interface member declaration was not reserved");return NULL;
+        source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"method declaration was not reserved");return NULL;
     }
-    return source_name_bind(ctx,&ctx->interface_members[owner->index],name,node,item+1);
+    return source_name_bind(ctx,head,name,node,item+1);
 }
 static SourceName *add_name(SourceContext *ctx, SourceName **head, const char *name, AstNode *node) {
     if(name && ctx->interactive && ctx->names && ctx->graph && ctx->graph->entry_index>=0 &&

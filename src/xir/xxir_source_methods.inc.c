@@ -250,7 +250,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"field and method names must be distinct");
                 }
             }
-            SourceName *symbol = add_name(ctx, &ctx->nominal_methods[d], method->name, node);
+            SourceName *symbol = source_member_name(ctx,owner,&ctx->nominal_methods[d],node,method->name);
             if (!symbol) return false;
             if (*next >= ctx->first_closure)
                 return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "method function inventory mismatch");

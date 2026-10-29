@@ -125,7 +125,8 @@ static bool source_nominal_parameter_items(SourceContext *ctx,uint32_t module,As
         const char *name=method->as.method_decl.is_constructor?"init":method->as.method_decl.name;
         if(!name||!*name)return source_fail(ctx,method,XR_XIR_BAD_STRUCTURE,"method name is missing");
         uint32_t item=0;
-        XrHirItemSpec spec={name,module,parent,method->node_id,method->line,method->column,XR_HIR_ITEM_PARAMETER_SCOPE};
+        XrHirItemKind kind=method->as.method_decl.is_constructor?XR_HIR_ITEM_PARAMETER_SCOPE:XR_HIR_ITEM_METHOD;
+        XrHirItemSpec spec={name,module,parent,method->node_id,method->line,method->column,kind};
         if(!source_item_reserve(ctx,method,spec,&item))return false;
     }
     return true;
@@ -142,7 +143,7 @@ static bool source_interface_parameter_items(SourceContext *ctx,uint32_t module,
         const char *name=method->as.interface_method.name;
         if(!name||!*name)return source_fail(ctx,method,XR_XIR_BAD_STRUCTURE,"interface method name is missing");
         uint32_t item=0;
-        XrHirItemSpec spec={name,module,parent,method->node_id,method->line,method->column,XR_HIR_ITEM_INTERFACE_METHOD};
+        XrHirItemSpec spec={name,module,parent,method->node_id,method->line,method->column,XR_HIR_ITEM_METHOD};
         if(!source_item_reserve(ctx,method,spec,&item)||!source_parameter_items(ctx,module,method,item+1))return false;
     }
     return true;
