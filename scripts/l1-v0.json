@@ -437,7 +437,8 @@
     "hir_boolean",
     "source_boolean_sdk",
     "hir_boolean_cli",
-    "f64_negate_native"
+    "f64_negate_native",
+    "i64_equality_native"
   ],
   "versionCommand": [
     "{build}/xray.exe",
