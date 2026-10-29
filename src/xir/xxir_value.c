@@ -26,6 +26,7 @@
 #include "xxir_type_arena.h"
 #include "xxir_type_arena_internal.h"
 #include "xxir_types.h"
+#include "xxir_task_result.h"
 #include "xxir_array.h"
 #include "xxir_struct.h"
 #include "xxir_class.h"
@@ -344,6 +345,26 @@ static bool value_header_argument(const XrXirValue *value,const XrXirTypeArena *
             xir_type_arena_same_type(object_pointer(value)->arena,(XrXirType)value->type,arena,type);
     return value->type==(uint32_t)type;
 }
+static bool task_result_error_header(const XrXirTypeArena *arena,XrXirType bound,
+    const XrXirValue *value) {
+    if (!value || value->type!=XR_XIR_ERROR || !value_header_argument(value,arena,XR_XIR_ERROR)) return false;
+    const XirObject *actual=object_pointer(value);
+    XrXirType local=actual->type;
+    if (actual->arena!=arena && !xir_type_arena_local_type(arena,actual->arena,actual->type,&local)) return false;
+    return xr_xir_error_bound_accepts(xr_xir_compile_type_arena_types(arena),local,bound);
+}
+static bool task_result_panic_header(const XrXirTypeArena *arena,const XrXirValue *value) {
+    if (!value || value->type!=XR_XIR_PANIC_INFO || !value_header_valid(value)) return false;
+    const XrXirPanicPayload *panic=&((const XirPanicInfo *)object_pointer(value))->panic;
+    const XrXirValue *errors[]={&panic->error,&panic->replaced_error};
+    for (uint32_t i=0;i<2;++i) {
+        if (unit_value(errors[i])) continue;
+        if (!task_result_error_header(arena,XR_XIR_ERROR,errors[i])) return false;
+        const XirObject *error=object_pointer(errors[i]);
+        if (error->arena!=arena || !xr_xir_compile_type_arena_enum_sendable(error->arena,error->type)) return false;
+    }
+    return true;
+}
 /* Restricting an already admitted Cell needs its body header, not another
  * traversal of the logical aggregate. Payload admission stays independent. */
 static bool cell_root_header_valid(const XirCell *cell) {
@@ -410,6 +431,13 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
         if (record->count != count || record->fields != (const XrXirValue *) (record + 1)) return false;
         for (uint32_t i = 0; i < count; ++i)
             if (!value_header_argument(&record->fields[i],object->arena,node->nominal.fields[begin+i])) return false;
+        XrXirTaskResultType outcome={0};
+        if (xr_xir_task_result_type_info(types,object->type,&outcome)) {
+            if (record->variant==XR_XIR_TASK_RESULT_ERROR &&
+                !task_result_error_header(object->arena,outcome.error,&record->fields[0])) return false;
+            if (record->variant==XR_XIR_TASK_RESULT_PANIC &&
+                !task_result_panic_header(object->arena,&record->fields[0])) return false;
+        }
         return true;
     }
     if (object->kind == XR_XIR_TYPE_ARRAY) return array_storage_valid((XirArray *) object);
@@ -1749,18 +1777,25 @@ typedef struct FormatEnumStorage {
 } FormatEnumStorage;
 static bool format_enum_storage(const XrXirFormatCursor *cursor,FormatEnumStorage *output) {
     if (!cursor || !cursor->arena || !output) return false;
-    const XrXirTypes *types=xr_xir_compile_type_arena_types(cursor->arena);
-    if (!xr_xir_type_is_enum(types,cursor->type)) return false;
-    const XrXirTypeNode *node=xr_xir_type_node(types,cursor->type);
+    const XrXirTypeArena *arena=cursor->arena;XrXirType type=cursor->type;
+    XrXirValue erased={0};bool error=type==XR_XIR_ERROR;
+    if (error) {
+        if (!xr_xir_value_format_leaf(cursor,&erased)) return false;
+        const XirObject *object=object_pointer(&erased);arena=object->arena;type=object->type;
+    }
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(arena);
+    if (!xr_xir_type_is_enum(types,type)) return false;
+    const XrXirTypeNode *node=xr_xir_type_node(types,type);
     const XrXirNominalIdentity *identity=&types->nominals->identities[node->nominal.declaration];
     FormatEnumStorage result={.node=node,.identity=identity};
-    if (cursor->compact) {
+    if (cursor->compact && !error) {
         result.layout=xr_xir_compile_type_arena_storage(cursor->arena,cursor->type);
         if (!result.layout || (result.layout->value.size && !cursor->storage)) return false;
         if (result.layout->tag_bytes) memcpy(&result.variant,cursor->storage,result.layout->tag_bytes);
     } else {
         XrXirValue value={0};
-        if (!xr_xir_value_format_leaf(cursor,&value)) return false;
+        if (error) value=erased;
+        else if (!xr_xir_value_format_leaf(cursor,&value)) return false;
         const XirNominalValue *record=(const XirNominalValue *)object_pointer(&value);
         result.variant=record->variant;result.fields=record->fields;
     }
@@ -1794,7 +1829,7 @@ XR_FUNC bool xr_xir_value_format_child(const XrXirFormatCursor *cursor,uint32_t 
     FormatEnumStorage storage={0};
     if (!format_enum_storage(cursor,&storage) || index>=storage.count) return false;
     if (!cursor->compact && !storage.fields) return false;
-    if (!cursor->compact) return xr_xir_value_format_cursor(&storage.fields[index],output);
+    if (storage.fields) return xr_xir_value_format_cursor(&storage.fields[index],output);
     XrXirType type=storage.node->nominal.fields[storage.begin+index];
     const void *field=storage.fields ? (const void *)&storage.fields[index] :
         cursor->storage ? (const unsigned char *)cursor->storage+storage.layout->field_offsets[storage.begin+index] : NULL;

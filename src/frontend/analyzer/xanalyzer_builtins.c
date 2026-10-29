@@ -405,13 +405,6 @@ XrType *xa_builtin_get_method_return_type(XaAnalyzer *analyzer, XrType *containe
         }
     }
 
-    if (xr_type_is_builtin_named_class(container_type, "Task") &&
-        container_type->instance.type_arg_count == 1 &&
-        (sym == SYMBOL_POLL || sym == SYMBOL_AWAIT_RESULT || sym == SYMBOL_AWAIT_TIMEOUT)) {
-        XrType *args[1] = {container_type->instance.type_args[0]};
-        return builtin_prelude_enum_type(X, analyzer, "TaskResult", args, 1);
-    }
-
     // Get element type for generic substitution
     XrType *elem_type = NULL;
     if (XR_TYPE_IS_ARRAY(container_type)) {

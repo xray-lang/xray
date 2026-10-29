@@ -21,7 +21,7 @@ static void sdk_repl_hosted_cases(const char *stdlib_path) {
     sdk_repl_hosted_options();SdkReplTrace traces[2];memset(traces,0,sizeof(traces));
     XrSourceRepl *first=sdk_repl_open(stdlib_path,&traces[0]),*second=sdk_repl_open(stdlib_path,&traces[1]);
     CHECK(sdk_repl_begin(first,"fn worker()->i64{print(7);Coro.yield();return 41}\n"
-        "fn run()->i64{const n=await go worker();Coro.yield();return n}\nvar value=run()\nprint(value)\n",NULL)==XR_SOURCE_OK);
+        "fn run() throws(Cancelled)->i64{const n=try await go worker();Coro.yield();return n}\nvar value=try run()\nprint(value)\n",NULL)==XR_SOURCE_OK);
     XrSourceEvent progress;unsigned polls=0;
     while(!traces[0].count) {
         CHECK(xray_source_repl_poll(first,1,&progress)==XR_SOURCE_OK && progress.state==XR_SOURCE_RUN_READY);

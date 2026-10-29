@@ -94,12 +94,12 @@ def main():
             obj, exe = out/(label+'.obj'), out/(label+'.exe')
             if 'clang' in compiler.name.lower() and 'clang-cl' not in compiler.name.lower():
                 command = [compiler, '--target=x86_64-windows-msvc', '-x', 'c++' if language == 'cpp' else 'c',
-                           '-std=c++20' if language == 'cpp' else '-std=c11', '-O2', '-Wall', '-Wextra',
+                           '-std=c++17' if language == 'cpp' else '-std=c11', '-O2', '-Wall', '-Wextra',
                            '-Werror', '-pedantic-errors', '-fms-runtime-lib=dll', '-I'+str(sdk/'include'),
                            '-c', source, '-o', obj]
             else:
                 command = [compiler, '/nologo', '/TP' if language == 'cpp' else '/TC',
-                           '/std:c++20' if language == 'cpp' else '/std:c11', '/utf-8', '/MD', '/O2',
+                           '/std:c++17' if language == 'cpp' else '/std:c11', '/utf-8', '/MD', '/O2',
                            '/W4', '/WX', '/I'+str(sdk/'include'), '/c', source, '/Fo'+str(obj)]
             run(label+'-compile', command)
             run(label+'-link', ['link', '/nologo', '/incremental:no', '/out:'+str(exe), obj,
@@ -132,7 +132,7 @@ def main():
                         '-DCMAKE_C_COMPILER='+str(compilers[0]), '-DCMAKE_PREFIX_PATH='+str(moved)], False)
             path.write_bytes(saved)
             attacks.append(label)
-    summary = dict(status='PASS', sdk_only=True, providers=list(map(str, compilers)), languages=['C11', 'C++20'],
+    summary = dict(status='PASS', sdk_only=True, providers=list(map(str, compilers)), languages=['C11', 'C++17'],
                    published_headers=sorted(headers), exact_NUL_UTF8=True, independent_persistent_instances=True,
                    foreign_callable_refused=True, all_producers_dead=True, owned_tuple_child=True, attacks=attacks,
                    public_REPL_functions=14, borrowed_binding_facts=True, type_query_actual_side_effects=True,

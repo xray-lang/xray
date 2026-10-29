@@ -42,7 +42,7 @@
 #define XR_GLOBAL_VAR_RECV 24
 #define XR_GLOBAL_VAR_SEND_RESULT 25
 #define XR_GLOBAL_VAR_TASK_RESULT 26
-#define XR_GLOBAL_VAR_TASK_STATUS 27
+/* Global slot 27 is retired; later builtin indices stay stable. */
 #define XR_GLOBAL_VAR_WORKQUEUE 28
 #define XR_GLOBAL_VAR_RESULTGROUP 29
 #define XR_GLOBAL_VAR_NUMBER_PARSE_ERROR 30

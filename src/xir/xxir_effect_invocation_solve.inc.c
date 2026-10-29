@@ -475,7 +475,7 @@ static XrXirStatus effect_invocation_local_type_edge(EffectInvocationLocalRead *
         if (id-XR_XIR_CONSTRUCTED_TYPE_BASE>=earlier) return XR_XIR_BAD_TYPE;
         *span=node->parameter_span;return XR_XIR_OK;
     }
-    if (type!=XR_XIR_UNIT && type!=XR_XIR_BOOL && type!=XR_XIR_RUNE &&
+    if (type!=XR_XIR_UNIT && type!=XR_XIR_NEVER && type!=XR_XIR_BOOL && type!=XR_XIR_RUNE &&
         !xr_xir_type_is_number(type) && type!=XR_XIR_STRING && type!=XR_XIR_ERROR &&
         type!=XR_XIR_PANIC_INFO) return XR_XIR_BAD_TYPE;
     *span=0;return XR_XIR_OK;

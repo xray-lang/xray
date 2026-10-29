@@ -12,6 +12,7 @@
  *   retained after this synchronous check of the actual current input.
  */
 #include "xxir_native_callable.h"
+#include "xxir_task_result.h"
 
 typedef struct LocalErrorAtom { XrXirType type;uint32_t variant; } LocalErrorAtom;
 typedef struct LocalErrorCfg {
@@ -87,13 +88,16 @@ static void local_error_type(LocalErrorCfg *cfg,XrXirType type,uint64_t *set) {
     for (uint32_t a=0;a<cfg->atom_count;++a)
         if (xr_xir_error_bound_accepts(&cfg->terms.types,cfg->atoms[a].type,type)) set[(a+1)/64]|=UINT64_C(1)<<((a+1)%64);
 }
-static XrXirStatus local_error_subset(LocalErrorCfg *cfg,const uint64_t *set) {
-    if (cfg->bound==XR_XIR_ERROR) return XR_XIR_OK;
+static XrXirStatus local_error_subset_bound(LocalErrorCfg *cfg,const uint64_t *set,XrXirType bound) {
+    if (bound==XR_XIR_ERROR) return XR_XIR_OK;
     if (set[0]&1) return local_error_failure(cfg,XR_XIR_BAD_TYPE);
     for (uint32_t a=0;a<cfg->atom_count;++a)
-        if ((set[(a+1)/64]&(UINT64_C(1)<<((a+1)%64))) && !xr_xir_error_bound_accepts(&cfg->terms.types,cfg->atoms[a].type,cfg->bound))
+        if ((set[(a+1)/64]&(UINT64_C(1)<<((a+1)%64))) && !xr_xir_error_bound_accepts(&cfg->terms.types,cfg->atoms[a].type,bound))
             return local_error_failure(cfg,XR_XIR_BAD_TYPE);
     return XR_XIR_OK;
+}
+static XrXirStatus local_error_subset(LocalErrorCfg *cfg,const uint64_t *set) {
+    return local_error_subset_bound(cfg,set,cfg->bound);
 }
 static XrXirStatus local_error_substitute(LocalErrorCfg *cfg,const XrXirInstruction *op,
     XrXirType type,XrXirType *output) {

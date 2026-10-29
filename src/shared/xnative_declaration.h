@@ -31,7 +31,8 @@ typedef enum XrNativeDeclarationId { XR_NATIVE_DECLARATION_ARRAY = 1, XR_NATIVE_
     /* Retired identities are never assigned to another declaration. */
     XR_NATIVE_DECLARATION_RETIRED_16 = 16,
     XR_NATIVE_DECLARATION_UTF8_ERROR = 17,
-    XR_NATIVE_DECLARATION_CANCELLED = 18 } XrNativeDeclarationId;
+    XR_NATIVE_DECLARATION_CANCELLED = 18,
+    XR_NATIVE_DECLARATION_TASK_RESULT = 19 } XrNativeDeclarationId;
 typedef enum XrNativeTypeTerm {
     XR_NATIVE_TERM_UNADMITTED, XR_NATIVE_TERM_UNIT, XR_NATIVE_TERM_I64,
     XR_NATIVE_TERM_ELEMENT, XR_NATIVE_TERM_STRING, XR_NATIVE_TERM_BOOL,
@@ -47,7 +48,8 @@ typedef enum XrNativeTypeTerm {
     XR_NATIVE_TERM_SEND_RESULT, XR_NATIVE_TERM_RECV_ELEMENT, XR_NATIVE_TERM_F64, XR_NATIVE_TERM_NULLABLE_I64, XR_NATIVE_TERM_U32,
     XR_NATIVE_TERM_ARRAY_U8,
     /* The two retired type-term slots remain unassigned. */
-    XR_NATIVE_TERM_NULLABLE_F64 = 35, XR_NATIVE_TERM_SLICE_U8 = 36
+    XR_NATIVE_TERM_NULLABLE_F64 = 35, XR_NATIVE_TERM_SLICE_U8 = 36,
+    XR_NATIVE_TERM_TASK_RESULT, XR_NATIVE_TERM_NULLABLE_TASK_RESULT
 } XrNativeTypeTerm;
 /* RESULT_VARIABLE and the callback terms require an admitted recipe's exact
  * signature. They never grant authority to an arbitrary unparsed signature. */
@@ -148,6 +150,8 @@ typedef enum XrNativeOperation {
     XR_NATIVE_OPERATION_STRING_SLICE,
     XR_NATIVE_OPERATION_STRING_FROM_UTF8,
     XR_NATIVE_OPERATION_TASK_CANCEL,
+    XR_NATIVE_OPERATION_TASK_POLL,
+    XR_NATIVE_OPERATION_TASK_AWAIT_RESULT,
     XR_NATIVE_OPERATION_COUNT
 } XrNativeOperation;
 typedef enum XrNativeAllocation {

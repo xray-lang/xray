@@ -460,22 +460,21 @@ static void test_execution_identity_and_lifecycle(void) {
     XrInstance *first = create_instance(program, first_profile, &first_bindings, 1);
     XrInstance *same = create_instance(program, same_profile, &same_bindings, 1);
     XrInstance *foreign = create_instance(program, foreign_profile, &foreign_bindings, 1);
-    /* Independently framed format 3.11 includes the affine string-builder
-     * builtin and current normative CoreSpec. The full wire assertion above
-     * preserves every provider and function field; obsolete wire is rejected. */
+    /* Independently framed format 3.13 pins every provider and function
+     * field. Obsolete task outcome layouts are rejected at version admission. */
     XrProgramId program_id = xr_validated_program_id(program);
     XrFingerprint program_fingerprint;
     memcpy(program_fingerprint.bytes, program_id.bytes, sizeof(program_fingerprint.bytes));
     require_fingerprint(program_fingerprint,
-                        "3d109c21dda6e6d45f0c3699ce5a04a9cc1273dc3c3ce4bc6569ca84ae81f6cb");
+                        "b60c37ba30f2d0f62e6bc23c86be73129dbb417376022ea5feadd6f45bd6a0d8");
     require_fingerprint(xr_target_profile_fingerprint(first_profile),
                         "2484cd1d386a6d2b8d98be381bf9effe558961efb05455afd1dfdd62e994df4a");
     require_fingerprint(xr_target_profile_fingerprint(foreign_profile),
                         "64f2f74782b9273b0f7d0863a94c5b2e8e4ef223dca48b38ff6cce04ff50ea66");
     require_fingerprint(xr_execution_instance_id(first),
-                        "9dbd6b8bbb34f74551040535be983e593a0592c71ae74eae9b8538335226e6a7");
+                        "f334f97a999b8ba322e0cc66f43603c887bf9d2ef219fe23d56ca9b2872ba745");
     require_fingerprint(xr_execution_instance_id(foreign),
-                        "5a4b70581e2aee10aafd5eb8d00d2515718ae96e5b8a5249d341242338354547");
+                        "3e219daa74f41a027205aaf56f0670afe4866570182f9ba66b6331644ba4d1f4");
     REQUIRE(xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(same)));
     REQUIRE(
         !xr_fingerprint_equal(xr_execution_instance_id(first), xr_execution_instance_id(foreign)));

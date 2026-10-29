@@ -300,7 +300,7 @@ def main() -> None:
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[3]
     schema = json.loads((root / "xisa/program/schema.json").read_text(encoding="utf-8"))
-    assert schema["format"] == {"major": 3, "minor": 12, "magic_hex": "585250524f470d0a",
+    assert schema["format"] == {"major": 3, "minor": 13, "magic_hex": "585250524f470d0a",
                                "program_id_domain": "xray-program-id-v3"}
     assert schema["type_system"]["builtin_rows"] == [
         "0:void", "1:bool", "2:i64", "3:u32", "4:error", "5:panic-info", "6:u16",
@@ -338,6 +338,21 @@ def main() -> None:
     assert fixed_array(vm_text, retired_name) == vm_retired
     assert len(vm_retired) == 244
     print("PASS retired VM format 3.11: all 244 literal wire bytes reproduced independently")
+    vm_3_12 = minimal_vm_wire(12, current_core, False)
+    prior_vm_name = "xr_program_vm_embedded_fixture_v3_12"
+    if prior_vm_name not in vm_text:
+        prior_vm_name = "xr_program_vm_embedded_fixture"
+    assert fixed_array(vm_text, prior_vm_name) == vm_3_12
+    prior_wires = (root / "tests/unit/program/xr_program_identity_vectors.h").read_text(encoding="utf-8")
+    for family, encoder in (("execution", execution_wire), ("boundary", boundary_wire)):
+        prior_name = "xr_identity_" + family + "_v3_12_wire"
+        if prior_name not in prior_wires:
+            prior_name = "xr_identity_" + family + "_current_wire"
+        encoded = encoder(12, current_core, False)
+        if family == "boundary":
+            encoded = encoded[0]
+        assert fixed_array(prior_wires, prior_name) == encoded
+    print("PASS retired format 3.12: all VM, execution and boundary bytes reproduced independently")
     execution_legacy = execution_wire(9, vm_legacy[13:45], False)
     assert program_id(execution_legacy) == "3cbcea9370fb5d06fc10aa641a58dedf1980b991060a830c952d3b2cfd355076"
     print("PASS legacy execution format 3.9: provider signature, imports, logical contract, ProgramId")
@@ -348,13 +363,17 @@ def main() -> None:
               "program_retired_3_11_wire": retired_program.hex(),
               "core_projection": projected_core,
               "vm_legacy_id": program_id(vm_legacy),
-              "vm_current_id": program_id(minimal_vm_wire(12, current_core, False)),
-              "vm_current_wire": minimal_vm_wire(12, current_core, False).hex()}
+              "vm_current_id": program_id(minimal_vm_wire(13, current_core, False)),
+              "vm_current_wire": minimal_vm_wire(13, current_core, False).hex()}
+    result["vm_v3_12_id"] = program_id(vm_3_12)
+    result["vm_v3_12_wire"] = vm_3_12.hex()
+    result["execution_v3_12_wire"] = execution_wire(12, current_core, False).hex()
+    result["boundary_v3_12_wire"] = boundary_wire(12, current_core, False)[0].hex()
     result["execution_legacy_id"] = program_id(execution_legacy)
-    result["execution_current_id"] = program_id(execution_wire(12, current_core, False))
+    result["execution_current_id"] = program_id(execution_wire(13, current_core, False))
     result["execution_legacy_wire"] = execution_legacy.hex()
-    result["execution_current_wire"] = execution_wire(12, current_core, False).hex()
-    boundary_current, boundary_types = boundary_wire(12, current_core, False)
+    result["execution_current_wire"] = execution_wire(13, current_core, False).hex()
+    boundary_current, boundary_types = boundary_wire(13, current_core, False)
     boundary_legacy, boundary_old_types = boundary_wire(0, bytes.fromhex("229dbce42ce7276fa1052fd042d48abae285a4bb589819b85837be22e8754312"), False, 1)
     result["boundary_current_id"] = program_id(boundary_current)
     result["boundary_current_wire"] = boundary_current.hex()
@@ -408,7 +427,8 @@ def main() -> None:
 #define XR_PROGRAM_IDENTITY_VECTORS_H
 
 """
-        for name in ("execution_legacy", "execution_current", "boundary_legacy", "boundary_current"):
+        for name in ("execution_legacy", "execution_v3_12", "execution_current",
+                     "boundary_legacy", "boundary_v3_12", "boundary_current"):
             payload = bytes.fromhex(result[name + "_wire"])
             header += f"static const unsigned char xr_identity_{name}_wire[] = {{\n"
             for offset in range(0, len(payload), 16):
@@ -420,7 +440,8 @@ def main() -> None:
         header = vm_text[:vm_text.index("static const unsigned char")]
         for name, payload in (("xr_program_vm_embedded_fixture_v3_9", vm_legacy),
                               ("xr_program_vm_embedded_fixture_v3_11", vm_retired),
-                              ("xr_program_vm_embedded_fixture", minimal_vm_wire(12, current_core, False))):
+                              ("xr_program_vm_embedded_fixture_v3_12", vm_3_12),
+                              ("xr_program_vm_embedded_fixture", minimal_vm_wire(13, current_core, False))):
             header += f"static const unsigned char {name}[] = {{\n"
             for offset in range(0, len(payload), 16):
                 header += "    " + ", ".join(f"0x{value:02x}" for value in payload[offset:offset + 16]) + ",\n"
@@ -429,14 +450,15 @@ def main() -> None:
         header += "#endif  // XR_PROGRAM_VM_EMBEDDED_FIXTURE_H\n"
         (root / "tests/unit/vm/xr_program_vm_embedded_fixture.h").write_text(header, encoding="utf-8")
     else:
-        assert fixed_array(vm_text, "xr_program_vm_embedded_fixture") == minimal_vm_wire(12, current_core, False)
-        current_vm = minimal_vm_wire(12, current_core, False)
+        assert fixed_array(vm_text, "xr_program_vm_embedded_fixture") == minimal_vm_wire(13, current_core, False)
+        current_vm = minimal_vm_wire(13, current_core, False)
         # Removing four row bytes also shortens three directory offsets by one byte.
         assert len(current_vm) == 237
         size = re.search(r"xr_program_vm_embedded_fixture_size\s*=\s*(\d+)UL", vm_text)
         assert size and int(size.group(1)) == len(current_vm)
     fixture = (root / "tests/unit/program/xr_program_identity_vectors.h").read_text(encoding="utf-8")
-    for name in ("execution_legacy", "execution_current", "boundary_legacy", "boundary_current"):
+    for name in ("execution_legacy", "execution_v3_12", "execution_current",
+                     "boundary_legacy", "boundary_v3_12", "boundary_current"):
         assert fixed_array(fixture, "xr_identity_" + name + "_wire").hex() == result[name + "_wire"]
     print("PASS current fixed C wire fixtures: every byte matches independent field encoder")
     print(json.dumps({key: value for key, value in result.items() if not isinstance(value, dict) and not key.endswith("wire")}, indent=2))

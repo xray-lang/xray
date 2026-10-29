@@ -116,7 +116,6 @@ static int xi_lower_builtin_class_global_index(const char *name) {
         {"Recv", XR_GLOBAL_VAR_RECV},
         {"SendResult", XR_GLOBAL_VAR_SEND_RESULT},
         {"TaskResult", XR_GLOBAL_VAR_TASK_RESULT},
-        {"TaskStatus", XR_GLOBAL_VAR_TASK_STATUS},
         {"Utf8Error", XR_GLOBAL_VAR_UTF8_ERROR},
         {XR_NUMBER_PARSE_ERROR_NAME, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR},
         {"StringSliceError", XR_GLOBAL_VAR_STRING_SLICE_ERROR},

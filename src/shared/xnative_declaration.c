@@ -50,7 +50,8 @@ const XrNativeTypeDeclaration *xr_native_declaration_by_id(uint32_t id) {
         id == xr_native_map.id ? &xr_native_map :
         id == xr_native_set.id ? &xr_native_set :
         id == xr_native_utf8_error.id ? &xr_native_utf8_error :
-        id == xr_native_cancelled.id ? &xr_native_cancelled : NULL;
+        id == xr_native_cancelled.id ? &xr_native_cancelled :
+        id == xr_native_task_result.id ? &xr_native_task_result : NULL;
 }
 static bool native_text_equal(const char *left, const char *right) {
     return left && right && strcmp(left, right) == 0;
@@ -61,7 +62,8 @@ XR_FUNC const XrNativeTypeDeclaration *xr_native_declaration_by_name(const char 
         &xr_native_string, &xr_native_atomic, &xr_native_ordering, &xr_native_task,
         &xr_native_channel, &xr_native_recv, &xr_native_send_result, &xr_native_iterator,
         &xr_native_map, &xr_native_set, &xr_native_i64, &xr_native_f64,
-        &xr_native_bool, &xr_native_rune, &xr_native_utf8_error, &xr_native_cancelled};
+        &xr_native_bool, &xr_native_rune, &xr_native_utf8_error, &xr_native_cancelled,
+        &xr_native_task_result};
     for (size_t i = 0; i < sizeof(declarations) / sizeof(*declarations); ++i) {
         if (native_text_equal(name, declarations[i]->name)) return declarations[i];
     }

@@ -10,6 +10,7 @@
  *   Earlier node edges form a finite graph whose exact contracts have one identity.
  */
 #include "xxir_types.h"
+#include "xxir_task_result.h"
 #include "xxir_task_shapes.h"
 #include "xxir_map.h"
 #include "xxir_type_match_internal.h"
@@ -383,7 +384,9 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
                 (uint32_t) argument - XR_XIR_CONSTRUCTED_TYPE_BASE < index;
             const XrXirNominalNativeRecord *native=xr_xir_nominal_native_record(types,
                 (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+index));
-            bool unit_payload=argument==XR_XIR_UNIT && count==1 && native && native->native_id==XR_NATIVE_DECLARATION_RECV;
+            bool unit_payload=argument==XR_XIR_UNIT && !a && native &&
+                ((count==1 && native->native_id==XR_NATIVE_DECLARATION_RECV) ||
+                 (count==2 && native->native_id==XR_NATIVE_DECLARATION_TASK_RESULT));
             if (argument != XR_XIR_NEVER && !unit_payload && !nominal &&
                 !(error_union_node(types,argument) && (uint32_t)argument-XR_XIR_CONSTRUCTED_TYPE_BASE<index) &&
                 !type_component(types, argument, index)) return XR_XIR_BAD_TYPE;

@@ -136,11 +136,16 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
     const XrXirTypeNode *parent=xr_xir_type_node(types,frame->boxed.inline_storage?
         frame->packed.type:frame->boxed.object->type);
     bool unit_nullable=parent && parent->kind==XR_XIR_TYPE_NULLABLE && parent->element==XR_XIR_UNIT;
+    XrXirTaskResultType outcome={0};
+    bool unit_outcome=parent && xr_xir_task_result_type_info(types,
+        frame->boxed.inline_storage?frame->packed.type:frame->boxed.object->type,&outcome) &&
+        outcome.element==XR_XIR_UNIT && (frame->boxed.inline_storage?frame->packed.begin==0:
+            ((const XirNominalValue *)frame->boxed.object)->variant==XR_XIR_TASK_RESULT_SUCCESS);
     if (frame->boxed.inline_storage && span->type==XR_XIR_UNIT &&
-        (unit_nullable || xr_xir_nominal_native_recv(types,frame->packed.type,XR_XIR_UNIT))) {
+        (unit_nullable || unit_outcome || xr_xir_nominal_native_recv(types,frame->packed.type,XR_XIR_UNIT))) {
         *value=(XrXirValue){0}; *inlined=false; *tuple_field=true;
     } else if (!frame->boxed.inline_storage && !*inlined && value->type==XR_XIR_UNIT &&
-        (unit_nullable || xr_xir_nominal_native_recv(types,frame->boxed.object->type,XR_XIR_UNIT))) *tuple_field=true;
+        (unit_nullable || unit_outcome || xr_xir_nominal_native_recv(types,frame->boxed.object->type,XR_XIR_UNIT))) *tuple_field=true;
 }
 static XrXirValueStatus admission_inline(ValueAdmissionStack *stack,
     StorageSpan span,const XrXirTypeArena *arena,XrXirValueAdmission *admission) {
@@ -293,6 +298,40 @@ static XrXirValueStatus value_admit_summary_mode(const XrXirValue *value, XrXirT
         arena=admission_frame_arena(&stack.frames[stack.depth-1]);
         admission_child(&stack.frames[stack.depth - 1], arena, &current, &span, &inlined, &tuple_field);
         type = inlined ? span.type : (XrXirType)current.type;
+        ValueAdmissionFrame *parent=&stack.frames[stack.depth-1];
+        XrXirType parent_type=parent->boxed.inline_storage?parent->packed.type:parent->boxed.object->type;
+        XrXirTaskResultType outcome={0};
+        if (xr_xir_task_result_type_info(xr_xir_compile_type_arena_types(arena),parent_type,&outcome)) {
+            uint32_t field=parent->boxed.inline_storage?parent->packed.begin:
+                ((const XirNominalValue *)parent->boxed.object)->variant;
+            if (field==XR_XIR_TASK_RESULT_ERROR || field==XR_XIR_TASK_RESULT_PANIC) {
+                XrXirValue payload=current;
+                if (inlined) {
+                    XrXirLayout layout={0};
+                    if (!xr_xir_compile_type_arena_layout(arena,type,&layout) ||
+                        !storage_leaf_value(arena,type,span.bytes,layout.size,&payload)) {
+                        status=XR_XIR_VALUE_BAD_ARGUMENT;break;
+                    }
+                }
+                if (field==XR_XIR_TASK_RESULT_ERROR) {
+                    uint64_t work=xir_type_arena_lookup_work(arena);
+                    if (!admission_is_compile(admission)) {
+                        if (admission->work<work || !xr_xir_domain_work(admission->domain,work)) {
+                            status=XR_XIR_VALUE_LIMIT;break;
+                        }
+                        admission->work-=work;
+                    }
+                    if (!task_result_error_header(arena,outcome.error,&payload)) {
+                        status=XR_XIR_VALUE_BAD_ARGUMENT;break;
+                    }
+                } else if (!task) {
+                    /* Strong admission is local to this family. The task-mode
+                     * walk never recursively re-enters this family check. */
+                    status=value_admit_summary_mode(&payload,XR_XIR_PANIC_INFO,admission,NULL,true);
+                    if (status!=XR_XIR_VALUE_OK) break;
+                }
+            }
+        }
     }
     if (stack.frames) {
         if (stack.frames != &stack.first)

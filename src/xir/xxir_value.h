@@ -103,7 +103,7 @@ XR_FUNC bool xr_xir_value_from_payload(const XrXirTypeArena *arena,XrXirType exp
 /* Borrowing expression for verified frame operands. Invalid storage yields
  * Unit, which ordinary typed operation admission rejects. */
 static inline XrXirValue xr_xir_value_load(const XrXirTypeArena *arena,XrXirType expected,int64_t payload) {
-    XrXirValue value={0};
+    XrXirValue value={XR_XIR_UNIT,0,0};
     (void)xr_xir_value_from_payload(arena,expected,payload,&value);
     return value;
 }

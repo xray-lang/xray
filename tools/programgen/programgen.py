@@ -313,7 +313,7 @@ def validate(schema: dict[str, Any]) -> None:
     require(schema["schema"] == "xray-program-format-schema/3", "program schema version drifted")
     fmt = schema["format"]
     require(isinstance(fmt, dict) and set(fmt) == FORMAT_KEYS, "format fields drifted")
-    require(fmt["major"] == 3 and fmt["minor"] == 12, "XrProgram format must be 3.12")
+    require(fmt["major"] == 3 and fmt["minor"] == 13, "XrProgram format must be 3.13")
     require(isinstance(fmt["magic_hex"], str) and re.fullmatch(r"[0-9a-f]{16}", fmt["magic_hex"]),
             "program magic must be eight canonical lowercase hex bytes")
     require(fmt["program_id_domain"] == "xray-program-id-v3", "ProgramId domain drifted")
@@ -956,6 +956,9 @@ def self_test(schema: dict[str, Any], projection: dict[str, Any], core: dict[str
     mutation = copy.deepcopy(schema)
     mutation["format"]["minor"] = 11
     mutations.append(("retired builtin wire layout", mutation))
+    mutation = copy.deepcopy(schema)
+    mutation["format"]["minor"] = 12
+    mutations.append(("retired task outcome wire layout", mutation))
     mutation = copy.deepcopy(schema)
     mutation["type_system"]["builtin_rows"].append("20:string-builder")
     mutations.append(("retired builtin type row", mutation))

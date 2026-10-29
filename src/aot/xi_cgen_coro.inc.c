@@ -177,7 +177,6 @@ static bool cg_coro_builtin_field_needs_xrt_bridge(const XiValue *builtin, const
         case XR_GLOBAL_VAR_ORDERING:
         case XR_GLOBAL_VAR_ENDIAN:
         case XR_GLOBAL_VAR_SEND_RESULT:
-        case XR_GLOBAL_VAR_TASK_STATUS:
         case XR_GLOBAL_VAR_UTF8_ERROR:
         case XR_GLOBAL_VAR_NUMBER_PARSE_ERROR:
         case XR_GLOBAL_VAR_STRING_SLICE_ERROR:
@@ -186,8 +185,6 @@ static bool cg_coro_builtin_field_needs_xrt_bridge(const XiValue *builtin, const
             return false;
         case XR_GLOBAL_VAR_RECV:
             return strcmp(field, "Value") == 0;
-        case XR_GLOBAL_VAR_TASK_RESULT:
-            return strcmp(field, "Success") == 0 || strcmp(field, "Failed") == 0;
         default:
             return true;
     }
@@ -4247,67 +4244,6 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
             emit_bridge_stored_tagged_value(ctx, out, v);
         }
-        return;
-    }
-
-    if (xi_value_is_task_method_call(v, "poll", 0)) {
-        fprintf(out, "    XrValue _task_method_%u = xr_aot_task_poll(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ");\n");
-        if (cg_coro_value_has_storage(ctx, f, v)) {
-            char tmp[32];
-            snprintf(tmp, sizeof(tmp), "_task_method_%u", v->id);
-            emit_assign_from_xrvalue_temp(ctx, out, v, tmp);
-            emit_bridge_stored_tagged_value(ctx, out, v);
-        }
-        return;
-    }
-
-    if (xi_value_is_task_method_call(v, "awaitResult", 0) ||
-        xi_value_is_task_method_call(v, "awaitTimeout", 1)) {
-        emit_value_generated_line_reset(ctx, out, v);
-        bool timeout_enabled = xi_value_is_task_method_call(v, "awaitTimeout", 1);
-        int sid = cg_coro_claim_state(ctx, f, v, state_id);
-        fprintf(out, "    f->state = %d;\n", sid);
-        emit_value_source_line(ctx, out, v);
-        fprintf(out, "    XrAotResult _task_await_%u = xr_aot_task_await_result(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
-        emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
-        fprintf(out, ", ");
-        if (timeout_enabled)
-            emit_int64_arg(ctx, out, v->args[1]);
-        else
-            fprintf(out, "-1");
-        fprintf(out, ", %s);\n", timeout_enabled ? "true" : "false");
-        emit_value_generated_line_reset(ctx, out, v);
-        fprintf(out, "    if (_task_await_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        return _task_await_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    if (_task_await_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _task_await_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "    goto S%d_DONE;\n", sid);
-        fprintf(out, "S%d:;\n", sid);
-        fprintf(out, "    f->state = 0;\n");
-        emit_value_source_line(ctx, out, v);
-        fprintf(out, "    _task_await_%u = xr_aot_task_await_result_resume(ctx, ", v->id);
-        emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
-        fprintf(out, ", %s);\n", timeout_enabled ? "true" : "false");
-        emit_value_generated_line_reset(ctx, out, v);
-        fprintf(out, "    if (_task_await_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
-        fprintf(out, "        return _task_await_%u;\n", v->id);
-        fprintf(out, "    if (_task_await_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _task_await_%u;\n", v->id);
-        fprintf(out, "    }\n");
-        fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "S%d_DONE:;\n", sid);
-        if (cg_coro_value_has_storage(ctx, f, v))
-            emit_bridge_stored_tagged_value(ctx, out, v);
-        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
 

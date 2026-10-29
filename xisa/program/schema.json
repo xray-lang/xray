@@ -2,7 +2,7 @@
   "schema": "xray-program-format-schema/3",
   "format": {
     "major": 3,
-    "minor": 12,
+    "minor": 13,
     "magic_hex": "585250524f470d0a",
     "program_id_domain": "xray-program-id-v3"
   },

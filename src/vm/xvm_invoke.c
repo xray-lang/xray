@@ -105,58 +105,10 @@ XR_FUNC XrValue xr_send_result_value(XrVMRuntime *isolate, uint32_t member_index
     return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_SEND_RESULT, member_index);
 }
 
-static XrValue vm_task_status_value(XrVMRuntime *isolate, const XrTask *task) {
-    uint8_t state = task ? atomic_load_explicit(&((XrTask *) task)->state, memory_order_acquire)
-                         : XR_TASK_CANCELLED;
-    uint32_t member_index = 0;
-    switch (state) {
-        case XR_TASK_ACTIVE:
-        case XR_TASK_COMPLETING:
-            member_index = 1;  // Running
-            break;
-        case XR_TASK_COMPLETED:
-            member_index = 2;  // Success
-            break;
-        case XR_TASK_FAILED:
-            member_index = 3;  // Failed
-            break;
-        case XR_TASK_CANCELLING:
-        case XR_TASK_CANCELLED:
-        default:
-            member_index = 4;  // Cancelled
-            break;
-    }
-    return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_TASK_STATUS, member_index);
-}
 
-static XrValue vm_task_result_success(XrVMRuntime *isolate, XrValue value) {
-    XrValue args[1] = {value};
-    return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_TASK_RESULT, 0, args, 1);
-}
 
-static XrValue vm_task_result_failed(XrVMRuntime *isolate, XrTask *task, XrCoroutine *dst_coro) {
-    XrValue error =
-        task ? xr_task_observe_error(xr_isolate_get_runtime_core(isolate), task, dst_coro)
-             : xr_null();
-    if (XR_IS_NULL(error))
-        error = xr_panic_info_new(isolate, XR_ERR_RUNTIME, "Task failed");
-    XrValue args[1] = {error};
-    return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_TASK_RESULT, 1, args, 1);
-}
 
-static XrValue vm_task_result_already_taken(XrVMRuntime *isolate) {
-    XrValue error = xr_panic_info_new(isolate, XR_ERR_TASK_ALREADY_TAKEN,
-                                      "Task transferable result has already been taken");
-    XrValue args[1] = {error};
-    return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_TASK_RESULT, 1, args, 1);
-}
 
-/* TaskResult is an ADT enum (Success/Failed carry payloads), so its non-payload
- * variants (Cancelled/Timeout/Pending) must also use the tagged-instance
- * representation for uniform ordinal-based pattern matching. */
-static XrValue vm_task_result_member(XrVMRuntime *isolate, uint32_t member_index) {
-    return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_TASK_RESULT, member_index, NULL, 0);
-}
 
 static void vm_task_recycle_cancelled_executor(XrTask *task, XrCoroutine *coro,
                                                uint32_t before_cancel_flags) {
@@ -191,38 +143,7 @@ static void vm_task_recycle_cancelled_executor(XrTask *task, XrCoroutine *coro,
     }
 }
 
-static XrValue vm_task_result_from_terminal(XrVMRuntime *isolate, XrTask *task,
-                                            XrCoroutine *dst_coro) {
-    uint8_t state =
-        task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
-    if (state == XR_TASK_COMPLETED) {
-        XrValue value =
-            xr_coro_await_result_value(xr_isolate_get_runtime_core(isolate), dst_coro, task, false);
-        if (xr_task_result_was_already_taken(task, value))
-            return vm_task_result_already_taken(isolate);
-        return vm_task_result_success(isolate, value);
-    }
-    if (state == XR_TASK_FAILED)
-        return vm_task_result_failed(isolate, task, dst_coro);
-    if (state == XR_TASK_CANCELLED || state == XR_TASK_CANCELLING)
-        return vm_task_result_member(isolate, 2);
-    return vm_task_result_member(isolate, 4);
-}
 
-static XrValue vm_task_result_from_block(XrVMRuntime *isolate, XrTask *task, XrCoroutine *dst_coro,
-                                         XrCoroBlockResult block, XrValue raw_value,
-                                         bool timeout_enabled) {
-    if (block.kind == XR_CORO_BLOCK_READY && xr_task_result_was_already_taken(task, raw_value))
-        return vm_task_result_already_taken(isolate);
-    if (block.kind == XR_CORO_BLOCK_READY)
-        return vm_task_result_success(isolate, raw_value);
-    if (block.kind == XR_CORO_BLOCK_TIMEOUT)
-        return timeout_enabled ? vm_task_result_member(isolate, 3)
-                               : vm_task_result_from_terminal(isolate, task, dst_coro);
-    if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_NO_CORO)
-        return vm_task_result_from_terminal(isolate, task, dst_coro);
-    return vm_task_result_member(isolate, 4);
-}
 
 static XrDispatchAction
 vm_call_yieldable_primitive_method(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrMethod *method,
@@ -514,6 +435,7 @@ XR_FUNC XrDispatchAction vm_invoke_task_handle(XrVMRuntime *isolate, XrVMContext
                                                XrValue *base, int a, XrBcCallFrame *frame,
                                                XrInstruction *pc) {
     XrTask *task = xr_value_to_task(receiver);
+    (void)vm_ctx;
     if (nargs == 0 && method_symbol == SYMBOL_CANCEL) {
         XrCoroutine *coro = xr_task_executor_peek(task);
         if (!xr_task_is_done(task) && coro) {
@@ -538,92 +460,8 @@ XR_FUNC XrDispatchAction vm_invoke_task_handle(XrVMRuntime *isolate, XrVMContext
         base[a] = xr_null();
         return XR_DISP_NEXT;
     }
-    if (nargs == 0 && method_symbol == SYMBOL_POLL) {
-        base[a] = xr_task_is_done(task)
-                      ? vm_task_result_from_terminal(isolate, task, vm_get_coro(vm_ctx))
-                      : vm_task_result_member(isolate, 4);
-        return XR_DISP_NEXT;
-    }
-    if ((nargs == 0 && method_symbol == SYMBOL_AWAIT_RESULT) ||
-        (nargs == 1 && method_symbol == SYMBOL_AWAIT_TIMEOUT)) {
-        bool timeout_enabled = method_symbol == SYMBOL_AWAIT_TIMEOUT;
-        int64_t timeout_ms = -1;
-        if (timeout_enabled) {
-            XrValue timeout_val = base[a + 2];
-            if (XR_IS_INT(timeout_val))
-                timeout_ms = XR_TO_INT(timeout_val);
-            else if (XR_IS_FLOAT(timeout_val))
-                timeout_ms = (int64_t) XR_TO_FLOAT(timeout_val);
-            if (timeout_ms < 0)
-                timeout_ms = 0;
-        }
-
-        XrCoroutine *current = vm_get_coro(vm_ctx);
-        XrSlotRef result_slot = xr_slot_xvalue_ptr(&base[a]);
-        if (current) {
-            XrCoroBlockResult resumed =
-                xr_coro_await_task_resume_slot(current, task, result_slot, false);
-            if (resumed.kind == XR_CORO_BLOCK_READY || resumed.kind == XR_CORO_BLOCK_TIMEOUT ||
-                resumed.kind == XR_CORO_BLOCK_CLOSED || resumed.kind == XR_CORO_BLOCK_NO_CORO) {
-                base[a] = vm_task_result_from_block(isolate, task, current, resumed, base[a],
-                                                    timeout_enabled);
-                return XR_DISP_NEXT;
-            }
-            if (resumed.kind == XR_CORO_BLOCK_ERROR) {
-                VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Task await failed");
-            }
-        }
-
-        if (xr_task_is_done(task)) {
-            base[a] = vm_task_result_from_terminal(isolate, task, current);
-            return XR_DISP_NEXT;
-        }
-        if (timeout_enabled && timeout_ms == 0) {
-            base[a] = vm_task_result_member(isolate, 3);
-            return XR_DISP_NEXT;
-        }
-
-        if (current) {
-            if (frame && frame->closure && frame->closure->proto)
-                vm_ctx->stack_top = base + frame->closure->proto->maxstacksize;
-            vm_suspend_replay_current(frame, pc);
-            XrCoroBlockResult awaited =
-                xr_coro_await_task_slot(current, task, result_slot, timeout_ms, false);
-            if (awaited.kind == XR_CORO_BLOCK_BLOCKED) {
-                return XR_DISP_BLOCKED;
-            }
-            vm_suspend_continue_from_next(frame, pc);
-            if (awaited.kind == XR_CORO_BLOCK_ERROR) {
-                VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Task await failed");
-            }
-            base[a] = vm_task_result_from_block(isolate, task, current, awaited, base[a],
-                                                timeout_enabled);
-            return XR_DISP_NEXT;
-        }
-
-        uint64_t start_ns = xr_time_monotonic_ns();
-        int spin_count = 0;
-        while (!xr_task_is_done(task)) {
-            if (timeout_enabled) {
-                int64_t elapsed_ms = (int64_t) ((xr_time_monotonic_ns() - start_ns) / 1000000ULL);
-                if (elapsed_ms >= timeout_ms) {
-                    base[a] = vm_task_result_member(isolate, 3);
-                    return XR_DISP_NEXT;
-                }
-            }
-            XrWorker *w = xr_current_worker();
-            if (w && w->p.timer_wheel) {
-                int64_t tnow = xr_monotonic_ticks();
-                xr_bump_timers(w->p.timer_wheel, tnow);
-            }
-            if (++spin_count > 1000) {
-                spin_count = 0;
-                xr_thread_yield();
-            }
-        }
-
-        base[a] = vm_task_result_from_terminal(isolate, task, NULL);
-        return XR_DISP_NEXT;
+    if (method_symbol==SYMBOL_POLL || method_symbol==SYMBOL_AWAIT_RESULT || method_symbol==SYMBOL_AWAIT_TIMEOUT) {
+        VM_THROW(frame,pc,XR_ERR_TYPE_NO_METHOD,"Task outcome observation requires canonical Source execution");
     }
     if (nargs == 0 && method_symbol == SYMBOL_MONITOR) {
         // task.monitor() — create buffered Channel that receives completion event

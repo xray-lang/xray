@@ -13,7 +13,7 @@
  *   prelude type table, a hand-written enum registration function, a builtin
  *   interface array, and two strcmp arity chains in the type resolver. The
  *   language specification's built-in symbol table was a fourth, hand-copied
- *   list, so symbols such as Ordering, Recv<T>, TaskResult<T>, Lengthable and
+ *   list, so symbols such as Ordering, Recv<T>, TaskResult<T, E>, Lengthable and
  *   Iterator<T> were normative in the compiler but absent from the spec.
  *   Everything the user can name without importing it is declared here once,
  *   and scripts/check_builtin_symbol_registry.py reconciles this file with the
@@ -219,18 +219,10 @@ XR_BUILTIN_ENUM("SendResult", 0, SEND_RESULT,
                 XR_BUILTIN_ENUM_VARIANT("Timeout", NONE)
                 XR_BUILTIN_ENUM_VARIANT("Closed", NONE))
 
-XR_BUILTIN_ENUM("TaskResult", 1, TASK_RESULT,
+XR_BUILTIN_ENUM("TaskResult", 2, TASK_RESULT,
                 XR_BUILTIN_ENUM_VARIANT("Success", TYPE_PARAM_0)
-                XR_BUILTIN_ENUM_VARIANT("Failed", ERROR)
-                XR_BUILTIN_ENUM_VARIANT("Cancelled", NONE)
-                XR_BUILTIN_ENUM_VARIANT("Timeout", NONE)
-                XR_BUILTIN_ENUM_VARIANT("Pending", NONE))
-
-XR_BUILTIN_ENUM("TaskStatus", 0, TASK_STATUS,
-                XR_BUILTIN_ENUM_VARIANT("Pending", NONE)
-                XR_BUILTIN_ENUM_VARIANT("Running", NONE)
-                XR_BUILTIN_ENUM_VARIANT("Success", NONE)
-                XR_BUILTIN_ENUM_VARIANT("Failed", NONE)
+                XR_BUILTIN_ENUM_VARIANT("Error", ERROR)
+                XR_BUILTIN_ENUM_VARIANT("Panic", PANIC_INFO)
                 XR_BUILTIN_ENUM_VARIANT("Cancelled", NONE))
 
 /* ========== Built-in constraint interfaces ==========
@@ -246,7 +238,8 @@ XR_BUILTIN_PREDICATE("AtomicBoolean", 0, ATOMIC_BOOLEAN)
 XR_BUILTIN_IFACE("Equatable",  0)
 /* Every enum value satisfies Error, and nothing else does: `throw` already
  * requires an enum error value (E0370), so this is the type of "the error a
- * body raised" -- what `catch (e)` binds and what TaskResult.Failed carries. */
+ * body raised" -- what `catch (e)` binds and TaskResult.Error stores physically.
+ * TaskResult's logical E remains an independently checked type argument. */
 XR_BUILTIN_IFACE("Error",      0)
 XR_BUILTIN_IFACE("Hashable",   0)
 XR_BUILTIN_IFACE("Indexable",  2)

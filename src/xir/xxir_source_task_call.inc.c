@@ -134,42 +134,86 @@ static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedT
         (XrXirInstruction) {XR_XIR_INVOKE_RESULT, element, {0}, {0}, origin, {0}}, value);
 }
 
-static bool source_task_cancel_reference(SourceContext *ctx,AstNode *node,
+static bool source_task_result_type(SourceContext *ctx,XrXirType element,XrXirType error,XrXirType *type) {
+    SourceName *symbol=source_prelude_name(ctx,"TaskResult");
+    if (!symbol || symbol->kind!=SOURCE_NOMINAL ||
+        ctx->nominals.declarations[symbol->index].native.native_id!=XR_NATIVE_DECLARATION_TASK_RESULT)
+        return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"Task outcome requires the governed TaskResult declaration");
+    XrXirType *arguments=source_alloc(ctx,2,sizeof(*arguments));if (!arguments) return false;
+    arguments[0]=element;arguments[1]=error;
+    return source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NOMINAL,
+        .nominal={symbol->index,arguments,2,NULL,0}},type);
+}
+static bool source_task_member_reference(SourceContext *ctx,AstNode *node,
     const XrNativeMemberDeclaration *member) {
-    if (!ctx->task_cancel_member) {
+    if (!member->id || member->id>3)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Task member identity is not admitted");
+    uint32_t slot=member->id-1;
+    if (!ctx->task_members[slot]) {
+        XrXirType result=XR_XIR_UNIT;
+        if (member->result!=XR_NATIVE_TERM_UNIT) {
+            if (!source_task_result_type(ctx,(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,
+                (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+1),&result)) return false;
+            if (member->result==XR_NATIVE_TERM_NULLABLE_TASK_RESULT &&
+                !source_nullable_type(ctx,result,&result)) return false;
+        }
         SourceName symbol={0};symbol.name=source_owned_text(ctx,member->name);
         if (!symbol.name || !source_query_declare(ctx,&symbol,XR_XIR_SOURCE_MEMBER,ctx->task_declaration,
             (XrXirSourceRange){ctx->task_module,(int)member->line,(int)member->column,
                 (int)member->line,(int)(member->column+source_text_size(ctx,member->name))})) return false;
-        ctx->task_cancel_member=symbol.declaration;
+        ctx->task_members[slot]=symbol.declaration;
         const char *signature=source_owned_text(ctx,member->signature);
         if (!signature) return false;
         XrXirSourceDeclaration *record=(XrXirSourceDeclaration *)&ctx->query.declarations[symbol.declaration-1];
         record->native_identity=member->id;record->signature=signature;
-        record->type=(XrXirSourceType){XR_XIR_UNIT,0,true};
+        record->type=(XrXirSourceType){result,member->result==XR_NATIVE_TERM_UNIT?0:ctx->task_declaration,true};
         record->exported=true;record->mutable=true;
         record->generic_parent=ctx->task_declaration;record->generic_parent_count=2;
     }
-    return source_query_target_token_reference(ctx,node,ctx->task_cancel_member,XR_XIR_SOURCE_CALL);
+    return source_query_target_token_reference(ctx,node,ctx->task_members[slot],XR_XIR_SOURCE_CALL);
 }
-static bool source_task_cancel(SourceContext *ctx,AstNode *node,SourceValue *value) {
+static bool source_task_member_call(SourceContext *ctx,AstNode *node,SourceValue *value) {
     CallExprNode *call=&node->as.call_expr;
     AstNode *callee=call->callee;
     if (!source_native_task_declaration(ctx)) return false;
     const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_TASK);
     const XrNativeMemberDeclaration *member=source_native_member(ctx,native,callee->as.member_access.name);
     if (!member || !member->is_public || !member->is_method || member->is_static || !member->lowered ||
-        member->receiver!=XR_NATIVE_RECEIVER_REF || member->operation!=XR_NATIVE_OPERATION_TASK_CANCEL ||
-        member->parameter_count || member->result!=XR_NATIVE_TERM_UNIT ||
+        member->receiver!=XR_NATIVE_RECEIVER_REF ||
+        (member->operation!=XR_NATIVE_OPERATION_TASK_CANCEL && member->operation!=XR_NATIVE_OPERATION_TASK_POLL &&
+         member->operation!=XR_NATIVE_OPERATION_TASK_AWAIT_RESULT) || member->parameter_count ||
         call->arg_count || call->type_arg_count || call->default_arg_count)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Task member requires its admitted zero-argument cancellation recipe");
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Task member requires its admitted zero-argument recipe");
     SourceValue cell,task;
     if (!source_reference_place(ctx,callee->as.member_access.object,&cell)) return false;
     XrXirType type=xr_xir_cell_element(&ctx->types,cell.type);
     const XrXirTypeNode *shape=xr_xir_type_node(&ctx->types,type);
     if (!shape || shape->kind!=XR_XIR_TYPE_TASK)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Task cancellation requires a mutable Task binding");
-    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,type,{cell.id,0},{0},0,{0}},&task) &&
-        source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TASK_CANCEL,XR_XIR_UNIT,{task.id,0},{0},0,{0}},value) &&
-        source_task_cancel_reference(ctx,callee,member);
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Task member requires a mutable Task binding");
+    XrXirType element=shape->element,error=shape->result;
+    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,type,{cell.id,0},{0},0,{0}},&task)) return false;
+    if (member->operation==XR_NATIVE_OPERATION_TASK_CANCEL) {
+        if (member->result!=XR_NATIVE_TERM_UNIT)
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Task cancellation result identity is invalid");
+        return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TASK_CANCEL,XR_XIR_UNIT,{task.id,0},{0},0,{0}},value) &&
+            source_task_member_reference(ctx,callee,member);
+    }
+    XrXirType result=XR_XIR_UNIT;
+    if (!source_task_result_type(ctx,element,error,&result)) return false;
+    if (member->operation==XR_NATIVE_OPERATION_TASK_POLL) {
+        if (member->result!=XR_NATIVE_TERM_NULLABLE_TASK_RESULT)
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Task poll result identity is invalid");
+        if (!source_nullable_type(ctx,result,&result) ||
+            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TASK_POLL,result,{task.id,0},{0},0,{0}},value)) return false;
+    } else {
+        if (member->result!=XR_NATIVE_TERM_TASK_RESULT)
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Task outcome result identity is invalid");
+        SourceFunction *body=&ctx->bodies[ctx->function];
+        if (!body->block_count && !begin_block(ctx)) return false;
+        uint32_t origin=body->count,next=body->block_count;
+        if (!source_recipe_append(ctx,(XrXirInstruction){XR_XIR_TASK_AWAIT_RESULT,XR_XIR_UNIT,{task.id,0},{next,0},0,{0}},NULL) ||
+            !begin_block(ctx) || !source_recipe_append(ctx,
+                (XrXirInstruction){XR_XIR_INVOKE_RESULT,result,{0},{0},origin,{0}},value)) return false;
+    }
+    return source_task_member_reference(ctx,callee,member);
 }

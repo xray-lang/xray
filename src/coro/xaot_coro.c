@@ -843,14 +843,11 @@ static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
     char *endian_members[] = {"Native", "LE", "BE"};
     char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
     char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
-    char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout", "Pending"};
-    char *task_status_members[] = {"Pending", "Running", "Success", "Failed", "Cancelled"};
     char *utf8_error_members[] = {"InvalidUtf8"};
     char *string_slice_error_members[] = {"InvalidByteRange"};
     char *compression_error_members[] = {"InvalidData"};
     char *crypto_error_members[] = {"InvalidLength"};
     const int recv_payloads[] = {1, 0, 0, 0};
-    const int task_result_payloads[] = {1, 1, 0, 0, 0};
 
     return aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_ORDERING, "Ordering",
                                              ordering_members, 5, NULL) &&
@@ -860,10 +857,6 @@ static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
                                              recv_payloads) &&
            aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_SEND_RESULT, "SendResult",
                                              send_result_members, 4, NULL) &&
-           aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_TASK_RESULT, "TaskResult",
-                                             task_result_members, 5, task_result_payloads) &&
-           aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_TASK_STATUS, "TaskStatus",
-                                             task_status_members, 5, NULL) &&
            aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_UTF8_ERROR, "Utf8Error",
                                              utf8_error_members, 1, NULL) &&
            aot_runtime_register_number_parse_error(runtime) &&
@@ -896,7 +889,6 @@ static const char *aot_script_dir_bounds(const char *file, size_t *out_len) {
 static bool aot_builtin_index_is_prelude_enum(int32_t index) {
     return index == XR_GLOBAL_VAR_ORDERING || index == XR_GLOBAL_VAR_RECV ||
            index == XR_GLOBAL_VAR_ENDIAN || index == XR_GLOBAL_VAR_SEND_RESULT ||
-           index == XR_GLOBAL_VAR_TASK_RESULT || index == XR_GLOBAL_VAR_TASK_STATUS ||
            index == XR_GLOBAL_VAR_UTF8_ERROR || index == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR ||
            index == XR_GLOBAL_VAR_STRING_SLICE_ERROR || index == XR_GLOBAL_VAR_COMPRESSION_ERROR ||
            index == XR_GLOBAL_VAR_CRYPTO_ERROR;
@@ -2270,32 +2262,7 @@ static XrValue aot_send_result_from_block(const XrAotContext *ctx, XrCoroBlockRe
     return aot_send_result(ctx, 1);
 }
 
-static XrValue aot_task_status_from_state(const XrAotContext *ctx, uint8_t state) {
-    uint32_t member_index = 0;
-    switch (state) {
-        case XR_TASK_ACTIVE:
-        case XR_TASK_COMPLETING:
-            member_index = 1;  // Running
-            break;
-        case XR_TASK_COMPLETED:
-            member_index = 2;  // Success
-            break;
-        case XR_TASK_FAILED:
-            member_index = 3;  // Failed
-            break;
-        case XR_TASK_CANCELLING:
-        case XR_TASK_CANCELLED:
-        default:
-            member_index = 4;  // Cancelled
-            break;
-    }
-    return aot_builtin_enum_member(ctx, XR_GLOBAL_VAR_TASK_STATUS, member_index);
-}
 
-static XrValue aot_task_result_success(const XrAotContext *ctx, XrValue value) {
-    XrValue args[1] = {value};
-    return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, 0, args, 1);
-}
 
 static XrValue aot_task_already_taken_value(const XrAotContext *ctx, XrTask *task) {
     static const char message[] = "Task transferable result has already been taken";
@@ -2307,11 +2274,6 @@ static XrValue aot_task_already_taken_value(const XrAotContext *ctx, XrTask *tas
     return msg ? xr_string_value(msg) : xr_null();
 }
 
-static XrValue aot_task_result_already_taken(const XrAotContext *ctx, XrTask *task) {
-    XrValue error = aot_task_already_taken_value(ctx, task);
-    XrValue args[1] = {error};
-    return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, 1, args, 1);
-}
 
 static XrValue aot_task_failure_value(const XrAotContext *ctx, XrTask *task) {
     XrAotVmHost vm_host = aot_context_vm_host(ctx, task);
@@ -2327,55 +2289,9 @@ static XrValue aot_task_failure_value(const XrAotContext *ctx, XrTask *task) {
     return error;
 }
 
-static XrValue aot_task_result_failed(const XrAotContext *ctx, XrTask *task) {
-    XrValue error = aot_task_failure_value(ctx, task);
-    XrValue args[1] = {error};
-    return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, 1, args, 1);
-}
 
-/* TaskResult is an ADT enum (Success/Failed carry payloads), so the native
- * backend matches every TaskResult by reading an ADT array tag (field[0])
- * whenever the match binds a payload arm. The non-payload variants
- * (Cancelled/Timeout/Pending) must therefore use the same ADT-instance
- * representation — returning a plain enum singleton here makes the native match
- * read an XrEnumCtor as an array and crash. */
-static XrValue aot_task_result_member(const XrAotContext *ctx, uint32_t member_index) {
-    return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, member_index, NULL, 0);
-}
 
-static XrValue aot_task_result_from_terminal(const XrAotContext *ctx, XrTask *task) {
-    uint8_t state =
-        task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
-    if (state == XR_TASK_COMPLETED) {
-        XrAotVmHost vm_host = aot_context_vm_host(ctx, task);
-        XrCoroutine *coro = aot_context_coro(ctx, vm_host, task);
-        XrValue value =
-            xr_coro_await_result_value(aot_context_runtime_core(ctx), coro, task, false);
-        if (xr_task_result_was_already_taken(task, value))
-            return aot_task_result_already_taken(ctx, task);
-        return aot_task_result_success(ctx, value);
-    }
-    if (state == XR_TASK_FAILED)
-        return aot_task_result_failed(ctx, task);
-    if (state == XR_TASK_CANCELLED || state == XR_TASK_CANCELLING)
-        return aot_task_result_member(ctx, 2);
-    return aot_task_result_member(ctx, 4);
-}
 
-static XrValue aot_task_result_from_block(const XrAotContext *ctx, XrTask *task,
-                                          XrCoroBlockResult block, XrValue raw_value,
-                                          bool timeout_enabled) {
-    if (block.kind == XR_CORO_BLOCK_READY && xr_task_result_was_already_taken(task, raw_value))
-        return aot_task_result_already_taken(ctx, task);
-    if (block.kind == XR_CORO_BLOCK_READY)
-        return aot_task_result_success(ctx, raw_value);
-    if (block.kind == XR_CORO_BLOCK_TIMEOUT)
-        return timeout_enabled ? aot_task_result_member(ctx, 3)
-                               : aot_task_result_from_terminal(ctx, task);
-    if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_NO_CORO)
-        return aot_task_result_from_terminal(ctx, task);
-    return aot_task_result_member(ctx, 4);
-}
 
 /* Re-raise an awaited task's terminal failure on the channel the child raised
  * it on.  A cancellation is always a panic: nobody in this frame
@@ -3221,75 +3137,9 @@ XrValue xr_aot_task_done(const XrAotContext *ctx, XrValue task_value) {
     return xr_bool(xr_task_is_done(xr_value_to_task(task_value)));
 }
 
-XrValue xr_aot_task_status(const XrAotContext *ctx, XrValue task_value) {
-    if (!xr_value_is_task(task_value))
-        return aot_task_status_from_state(ctx, XR_TASK_CANCELLED);
-    XrTask *task = xr_value_to_task(task_value);
-    uint8_t state = atomic_load_explicit(&task->state, memory_order_acquire);
-    return aot_task_status_from_state(ctx, state);
-}
 
-XrValue xr_aot_task_poll(const XrAotContext *ctx, XrValue task_value) {
-    if (!xr_value_is_task(task_value))
-        return aot_task_result_member(ctx, 4);
-    XrTask *task = xr_value_to_task(task_value);
-    return xr_task_is_done(task) ? aot_task_result_from_terminal(ctx, task)
-                                 : aot_task_result_member(ctx, 4);
-}
 
-XrAotResult xr_aot_task_await_result(const XrAotContext *ctx, XrValue task_value,
-                                     XrSlotRef result_slot, int64_t timeout_ms,
-                                     bool timeout_enabled) {
-    if (!ctx || !ctx->coro || !xr_value_is_task(task_value))
-        return xr_aot_error(XR_NULL_VAL, false);
 
-    if (!timeout_enabled)
-        timeout_ms = -1;
-    else if (timeout_ms < 0)
-        timeout_ms = 0;
-
-    XrTask *task = xr_value_to_task(task_value);
-    XrValue raw_value = XR_NULL_VAL;
-    XrSlotRef raw_slot = xr_slot_xvalue_ptr(&raw_value);
-    XrCoroBlockResult block = xr_coro_await_task_slot(ctx->coro, task, raw_slot, timeout_ms, false);
-    if (block.kind == XR_CORO_BLOCK_BLOCKED)
-        return xr_aot_blocked();
-    if (block.kind == XR_CORO_BLOCK_ERROR)
-        return xr_aot_error(XR_NULL_VAL, false);
-
-    if (block.kind == XR_CORO_BLOCK_READY)
-        aot_finish_completed_executor(task, false);
-
-    XrValue result = aot_task_result_from_block(ctx, task, block, raw_value, timeout_enabled);
-    return aot_store_slot_result(result_slot, result);
-}
-
-XrAotResult xr_aot_task_await_result_resume(const XrAotContext *ctx, XrSlotRef result_slot,
-                                            bool timeout_enabled) {
-    if (!ctx || !ctx->coro)
-        return xr_aot_error(XR_NULL_VAL, false);
-
-    XrCoroWaitState *wait = xr_coro_wait_state(ctx->coro);
-    XrTask *task = aot_resume_await_task(wait);
-    if (!task)
-        return xr_aot_error(XR_NULL_VAL, false);
-
-    XrValue raw_value = XR_NULL_VAL;
-    XrSlotRef raw_slot = xr_slot_xvalue_ptr(&raw_value);
-    XrCoroBlockResult block = xr_coro_await_task_resume_slot(ctx->coro, task, raw_slot, false);
-    if (block.kind == XR_CORO_BLOCK_NOT_RESUMED)
-        block = xr_coro_await_task_slot(ctx->coro, task, raw_slot, -1, false);
-    if (block.kind == XR_CORO_BLOCK_BLOCKED)
-        return xr_aot_blocked();
-    if (block.kind == XR_CORO_BLOCK_ERROR)
-        return xr_aot_error(XR_NULL_VAL, false);
-
-    if (block.kind == XR_CORO_BLOCK_READY)
-        aot_finish_completed_executor(task, false);
-
-    XrValue result = aot_task_result_from_block(ctx, task, block, raw_value, timeout_enabled);
-    return aot_store_slot_result(result_slot, result);
-}
 
 XrAotResult xr_aot_await_all_tasks(const XrAotContext *ctx, XrValue tasks_value, XrSlotRef out_slot,
                                    uint8_t result_elem_type, bool aggregate_one_shot) {

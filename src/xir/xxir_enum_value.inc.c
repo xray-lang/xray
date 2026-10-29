@@ -16,6 +16,10 @@ static XrXirValueStatus xr_xir_enum_new_graph_operation(XrXirType type, uint32_t
     const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
     if (variant >= identity->variant_count || count != identity->variants[variant].field_count)
         return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirTaskResultType outcome={0};
+    bool task_result=xr_xir_task_result_type_info(types,type,&outcome);
+    if (task_result && variant==XR_XIR_TASK_RESULT_ERROR && outcome.error==XR_XIR_NEVER)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!admission_is_compile(admission) && (!admission->work || count > admission->work - 1)) return XR_XIR_VALUE_LIMIT;
     if (!admission_is_compile(admission)) admission->work -= (uint64_t) count + 1;
     XrXirTypeArena *arena = (XrXirTypeArena *) admission->arena;
@@ -29,7 +33,9 @@ static XrXirValueStatus xr_xir_enum_new_graph_operation(XrXirType type, uint32_t
     uint32_t begin = identity->variants[variant].field_begin;
     for (uint32_t i = 0; i < count; ++i) {
         if (node->nominal.fields[begin+i]==XR_XIR_UNIT) {
-            if (!xr_xir_nominal_native_recv(types,type,XR_XIR_UNIT) || !unit_value(&fields[i]))
+            if ((!xr_xir_nominal_native_recv(types,type,XR_XIR_UNIT) &&
+                !(task_result && variant==XR_XIR_TASK_RESULT_SUCCESS && outcome.element==XR_XIR_UNIT)) ||
+                !unit_value(&fields[i]))
                 return XR_XIR_VALUE_BAD_ARGUMENT;
             if (!admission_is_compile(admission) && (!admission->work || !xr_xir_domain_work(admission->domain,1))) return XR_XIR_VALUE_LIMIT;
             if (!admission_is_compile(admission)) --admission->work;
@@ -37,6 +43,18 @@ static XrXirValueStatus xr_xir_enum_new_graph_operation(XrXirType type, uint32_t
             XrXirValueStatus status=xr_xir_value_admit(&fields[i],node->nominal.fields[begin+i],admission);
             if (status!=XR_XIR_VALUE_OK) return status;
         }
+    }
+    if (task_result && variant==XR_XIR_TASK_RESULT_ERROR) {
+        uint64_t work=xir_type_arena_lookup_work(arena);
+        if (!admission_is_compile(admission)) {
+            if (admission->work<work || !xr_xir_domain_work(admission->domain,work)) return XR_XIR_VALUE_LIMIT;
+            admission->work-=work;
+        }
+        if (!task_result_error_header(arena,outcome.error,fields)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
+    if (task_result && variant==XR_XIR_TASK_RESULT_PANIC) {
+        XrXirValueStatus status=xr_xir_panic_graph_admit(fields,XR_XIR_PANIC_INFO,admission);
+        if (status!=XR_XIR_VALUE_OK) return status;
     }
     uint64_t bytes = sizeof(XirNominalValue) + (uint64_t) count * sizeof(XrXirValue);
     if (bytes > SIZE_MAX) return XR_XIR_VALUE_LIMIT;

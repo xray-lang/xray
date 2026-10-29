@@ -45,10 +45,12 @@ static inline const XrBuiltinEnumRow *xr_builtin_enum_registry(size_t *count) {
 #define XR_ENUM_PAYLOAD_NONE false
 #define XR_ENUM_PAYLOAD_TYPE_PARAM_0 true
 #define XR_ENUM_PAYLOAD_ERROR true
+#define XR_ENUM_PAYLOAD_PANIC_INFO true
 #include "../../stdlib/prelude/builtin_symbols.def"
 #undef XR_ENUM_PAYLOAD_NONE
 #undef XR_ENUM_PAYLOAD_TYPE_PARAM_0
 #undef XR_ENUM_PAYLOAD_ERROR
+#undef XR_ENUM_PAYLOAD_PANIC_INFO
     };
     if (count)
         *count = sizeof(rows) / sizeof(rows[0]);

@@ -2173,9 +2173,13 @@ target_include_directories(test_xr_typed_provider_allocations PRIVATE ${XRAY_COM
 target_link_libraries(test_xr_typed_provider_allocations PRIVATE xr_program_test_core xray_program_vm_runtime)
 add_test(NAME test_xr_typed_provider_allocations COMMAND $<TARGET_FILE:test_xr_typed_provider_allocations>)
 set_tests_properties(test_xr_typed_provider_allocations PROPERTIES LABELS "unit;execution;provider;ownership;allocation-failure")
-add_xray_unit_test(test_xr_boundary_materialization
+add_executable(test_xr_boundary_materialization
     execution/test_xr_boundary_materialization.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
+target_include_directories(test_xr_boundary_materialization PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_xr_boundary_materialization PRIVATE
+    xr_program_test_core xray_program_vm_runtime)
+add_test(NAME test_xr_boundary_materialization COMMAND $<TARGET_FILE:test_xr_boundary_materialization>)
 set_tests_properties(test_xr_boundary_materialization PROPERTIES
     LABELS "unit;execution;boundary-abi;aggregate;variant;task-298;task-301")
 add_executable(test_xr_program_vm vm/test_xr_program_vm.c

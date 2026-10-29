@@ -27,7 +27,8 @@ static XrXirStatus library_governed_ordering_module(
         const XrXirNominalDeclaration *record=&table->declarations[n];
         if (record->native.native_id!=XR_NATIVE_DECLARATION_ORDERING &&
             record->native.native_id!=XR_NATIVE_DECLARATION_UTF8_ERROR &&
-            record->native.native_id!=XR_NATIVE_DECLARATION_CANCELLED) continue;
+            record->native.native_id!=XR_NATIVE_DECLARATION_CANCELLED &&
+            record->native.native_id!=XR_NATIVE_DECLARATION_TASK_RESULT) continue;
 
         if (record->module.length==view->name_length &&
             !memcmp(record->module.bytes,view->name,view->name_length)) owned=true;

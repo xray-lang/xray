@@ -397,13 +397,13 @@ static const XrNativeMemberDeclaration xr_native_ordering_members[] = {
 };
 static const XrNativeTypeDeclaration xr_native_ordering = {
     4, XR_NATIVE_DECLARATION_VALUE, "Ordering", NULL, 0,
-    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Ordering", {{174, 246, 180, 54, 23, 69, 111, 188, 211, 169, 18, 27, 187, 145, 6, 233, 100, 14, 223, 172, 122, 83, 185, 222, 151, 146, 236, 184, 154, 166, 34, 214}},
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Ordering", {{151, 1, 187, 108, 250, 178, 58, 174, 240, 64, 122, 215, 61, 147, 25, 235, 47, 14, 222, 65, 114, 94, 164, 84, 26, 66, 28, 204, 197, 191, 214, 90}},
     179, 18, xr_native_ordering_members, 5
 };
 static const XrNativeMemberDeclaration xr_native_task_members[] = {
     {1, "cancel", "()", "()", 10, 9, XR_NATIVE_RECEIVER_REF, false, true, true, true, XR_NATIVE_OPERATION_TASK_CANCEL, XR_NATIVE_ALLOCATION_NO_HEAP, "Never", XR_NATIVE_RESULT_OWNERSHIP_UNIT, NULL, 0, XR_NATIVE_TERM_UNIT},
-    {2, "poll", "() -> TaskResult<T, E>?", "TaskResult<T, E>?", 11, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {3, "awaitResult", "() -> TaskResult<T, E>", "TaskResult<T, E>", 12, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {2, "poll", "() -> TaskResult<T, E>?", "TaskResult<T, E>?", 11, 9, XR_NATIVE_RECEIVER_REF, false, true, true, true, XR_NATIVE_OPERATION_TASK_POLL, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_NULLABLE_TASK_RESULT},
+    {3, "awaitResult", "() -> TaskResult<T, E>", "TaskResult<T, E>", 12, 9, XR_NATIVE_RECEIVER_REF, false, true, true, true, XR_NATIVE_OPERATION_TASK_AWAIT_RESULT, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_TASK_RESULT},
 };
 static const char *const xr_native_task_type_parameters[] = {"T", "E"};
 static const XrNativeTypeDeclaration xr_native_task = {
@@ -450,7 +450,7 @@ static const XrNativeMemberDeclaration xr_native_utf8_error_members[] = {
 };
 static const XrNativeTypeDeclaration xr_native_utf8_error = {
     17, XR_NATIVE_DECLARATION_VALUE, "Utf8Error", NULL, 0,
-    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Utf8Error", {{174, 246, 180, 54, 23, 69, 111, 188, 211, 169, 18, 27, 187, 145, 6, 233, 100, 14, 223, 172, 122, 83, 185, 222, 151, 146, 236, 184, 154, 166, 34, 214}},
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Utf8Error", {{151, 1, 187, 108, 250, 178, 58, 174, 240, 64, 122, 215, 61, 147, 25, 235, 47, 14, 222, 65, 114, 94, 164, 84, 26, 66, 28, 204, 197, 191, 214, 90}},
     191, 18, xr_native_utf8_error_members, 1
 };
 static const XrNativeParameter xr_native_recv_value_parameters[] = {
@@ -465,7 +465,7 @@ static const XrNativeMemberDeclaration xr_native_recv_members[] = {
 static const char *const xr_native_recv_type_parameters[] = {"T"};
 static const XrNativeTypeDeclaration xr_native_recv = {
     7, XR_NATIVE_DECLARATION_VALUE, "Recv", xr_native_recv_type_parameters, 1,
-    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Recv", {{174, 246, 180, 54, 23, 69, 111, 188, 211, 169, 18, 27, 187, 145, 6, 233, 100, 14, 223, 172, 122, 83, 185, 222, 151, 146, 236, 184, 154, 166, 34, 214}},
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Recv", {{151, 1, 187, 108, 250, 178, 58, 174, 240, 64, 122, 215, 61, 147, 25, 235, 47, 14, 222, 65, 114, 94, 164, 84, 26, 66, 28, 204, 197, 191, 214, 90}},
     210, 18, xr_native_recv_members, 4
 };
 static const XrNativeMemberDeclaration xr_native_send_result_members[] = {
@@ -476,7 +476,7 @@ static const XrNativeMemberDeclaration xr_native_send_result_members[] = {
 };
 static const XrNativeTypeDeclaration xr_native_send_result = {
     8, XR_NATIVE_DECLARATION_VALUE, "SendResult", NULL, 0,
-    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/SendResult", {{174, 246, 180, 54, 23, 69, 111, 188, 211, 169, 18, 27, 187, 145, 6, 233, 100, 14, 223, 172, 122, 83, 185, 222, 151, 146, 236, 184, 154, 166, 34, 214}},
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/SendResult", {{151, 1, 187, 108, 250, 178, 58, 174, 240, 64, 122, 215, 61, 147, 25, 235, 47, 14, 222, 65, 114, 94, 164, 84, 26, 66, 28, 204, 197, 191, 214, 90}},
     216, 18, xr_native_send_result_members, 4
 };
 static const XrNativeMemberDeclaration xr_native_cancelled_members[] = {
@@ -484,8 +484,29 @@ static const XrNativeMemberDeclaration xr_native_cancelled_members[] = {
 };
 static const XrNativeTypeDeclaration xr_native_cancelled = {
     18, XR_NATIVE_DECLARATION_VALUE, "Cancelled", NULL, 0,
-    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Cancelled", {{174, 246, 180, 54, 23, 69, 111, 188, 211, 169, 18, 27, 187, 145, 6, 233, 100, 14, 223, 172, 122, 83, 185, 222, 151, 146, 236, 184, 154, 166, 34, 214}},
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Cancelled", {{151, 1, 187, 108, 250, 178, 58, 174, 240, 64, 122, 215, 61, 147, 25, 235, 47, 14, 222, 65, 114, 94, 164, 84, 26, 66, 28, 204, 197, 191, 214, 90}},
     194, 18, xr_native_cancelled_members, 1
+};
+static const XrNativeParameter xr_native_task_result_parameters_0[] = {
+    {"value", "T", XR_NATIVE_TERM_ELEMENT, false, false}
+};
+static const XrNativeParameter xr_native_task_result_parameters_1[] = {
+    {"error", "E", XR_NATIVE_TERM_UNADMITTED, false, false}
+};
+static const XrNativeParameter xr_native_task_result_parameters_2[] = {
+    {"info", "PanicInfo", XR_NATIVE_TERM_UNADMITTED, false, false}
+};
+static const XrNativeMemberDeclaration xr_native_task_result_members[] = {
+    {1, "Success", "Success", "TaskResult<T, E>", 223, 42, XR_NATIVE_RECEIVER_READ, true, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_task_result_parameters_0, 1, XR_NATIVE_TERM_UNADMITTED},
+    {2, "Error", "Error", "TaskResult<T, E>", 224, 42, XR_NATIVE_RECEIVER_READ, true, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_task_result_parameters_1, 1, XR_NATIVE_TERM_UNADMITTED},
+    {3, "Panic", "Panic", "TaskResult<T, E>", 225, 42, XR_NATIVE_RECEIVER_READ, true, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_task_result_parameters_2, 1, XR_NATIVE_TERM_UNADMITTED},
+    {4, "Cancelled", "Cancelled", "TaskResult<T, E>", 226, 42, XR_NATIVE_RECEIVER_READ, true, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+};
+static const char *const xr_native_task_result_type_parameters[] = {"T", "E"};
+static const XrNativeTypeDeclaration xr_native_task_result = {
+    19, XR_NATIVE_DECLARATION_VALUE, "TaskResult", xr_native_task_result_type_parameters, 2,
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/TaskResult", {{151, 1, 187, 108, 250, 178, 58, 174, 240, 64, 122, 215, 61, 147, 25, 235, 47, 14, 222, 65, 114, 94, 164, 84, 26, 66, 28, 204, 197, 191, 214, 90}},
+    222, 18, xr_native_task_result_members, 4
 };
 static const XrNativeParameter xr_native_iterator_parameters_2[] = {
     {"index", "i64", XR_NATIVE_TERM_I64, false, false},

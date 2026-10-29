@@ -354,7 +354,7 @@ typedef enum EffectSeedProjection {
  * Metadata-dependent calls require their actual operand/signature fields. */
 static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *effect) {
     switch (op) {
-    case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT: case XR_XIR_GENERATOR_YIELD:
+    case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT: case XR_XIR_TASK_AWAIT_RESULT: case XR_XIR_GENERATOR_YIELD:
     case XR_XIR_CHANNEL_SEND: case XR_XIR_CHANNEL_RECV: case XR_XIR_CHANNEL_RECV_OR:
     case XR_XIR_CHANNEL_SEND_TIMEOUT: case XR_XIR_CHANNEL_RECV_TIMEOUT:
         effect->suspend = XR_XIR_EFFECT_MAY; return EFFECT_SEED_LOCAL;
@@ -372,7 +372,7 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
     case XR_XIR_F64_TRY_PARSE: case XR_XIR_STRING_COPY_BYTES: case XR_XIR_STRING_REPLACE:
     case XR_XIR_CONST_RUNE: case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_LT_STRING: case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING:
-    case XR_XIR_TASK_CANCEL:
+    case XR_XIR_TASK_CANCEL: case XR_XIR_TASK_POLL:
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING:
     case XR_XIR_SLOT_LOAD: case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE: case XR_XIR_SLOT_GROUP_INIT:
     case XR_XIR_CHANNEL_TRY_SEND: case XR_XIR_CHANNEL_TRY_RECV:
@@ -732,7 +732,7 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph) {
  * Native, child execution and any new opcode need their own access facts. */
 static bool effect_default_access_local(XrXirOp op) {
     switch (op) {
-    case XR_XIR_TASK_CANCEL:
+    case XR_XIR_TASK_CANCEL: case XR_XIR_TASK_POLL:
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_FLOAT:
     case XR_XIR_CONST_STRING: case XR_XIR_CONST_RUNE: case XR_XIR_COPY:
     case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN: case XR_XIR_CONCAT_STRING:
@@ -852,7 +852,7 @@ static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *eff
             XrXirEffectCause cause = XR_XIR_EFFECT_CAUSE_NONE;
             if (fact == XR_XIR_EFFECT_MAY && (op == XR_XIR_GENERATOR_YIELD || op==XR_XIR_CHANNEL_SEND || op==XR_XIR_CHANNEL_RECV || op==XR_XIR_CHANNEL_RECV_OR ||
                 op==XR_XIR_CHANNEL_SEND_TIMEOUT || op==XR_XIR_CHANNEL_RECV_TIMEOUT || op == XR_XIR_SUSPEND || op == XR_XIR_TIMER_AFTER_MS ||
-                op == XR_XIR_TASK_AWAIT || op==XR_XIR_ITERATOR_HAS_NEXT || (op==XR_XIR_ITERATOR_NEXT || op==XR_XIR_ITERATOR_NTH))) cause = XR_XIR_EFFECT_CAUSE_SUSPEND;
+                op == XR_XIR_TASK_AWAIT || op==XR_XIR_TASK_AWAIT_RESULT || op==XR_XIR_ITERATOR_HAS_NEXT || (op==XR_XIR_ITERATOR_NEXT || op==XR_XIR_ITERATOR_NTH))) cause = XR_XIR_EFFECT_CAUSE_SUSPEND;
             else if (fact == XR_XIR_EFFECT_UNKNOWN && local.suspend == XR_XIR_EFFECT_UNKNOWN)
                 cause = XR_XIR_EFFECT_CAUSE_INDIRECT;
             if (!cause) continue;

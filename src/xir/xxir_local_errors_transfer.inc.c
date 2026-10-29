@@ -26,7 +26,7 @@ static void local_error_assign(LocalErrorCfg *cfg,uint64_t *row,uint32_t target,
 static bool local_error_boundary(XrXirOp op) {
     return op==XR_XIR_CALL || op==XR_XIR_CALL_DEFAULT || op==XR_XIR_CALL_INDIRECT || op==XR_XIR_CALL_REQUIREMENT ||
         op==XR_XIR_INVOKE || op==XR_XIR_INVOKE_DEFAULT || op==XR_XIR_INVOKE_INDIRECT ||
-        op==XR_XIR_GO || op==XR_XIR_GENERATOR_NEW || op==XR_XIR_TASK_AWAIT ||
+        op==XR_XIR_TASK_POLL || op==XR_XIR_TASK_AWAIT_RESULT || op==XR_XIR_GO || op==XR_XIR_GENERATOR_NEW || op==XR_XIR_TASK_AWAIT ||
         op==XR_XIR_ITERATOR_HAS_NEXT || op==XR_XIR_ITERATOR_NEXT || op==XR_XIR_ITERATOR_NTH ||
         op==XR_XIR_ITERATOR_CLOSE || op==XR_XIR_SUSPEND || op==XR_XIR_TIMER_AFTER_MS ||
         op==XR_XIR_PRINT || op==XR_XIR_OUTPUT || op==XR_XIR_WRITE_STREAM ||
@@ -58,7 +58,23 @@ static XrXirStatus local_error_instruction(LocalErrorCfg *cfg,uint32_t index) {
         } else if (op->op==XR_XIR_INVOKE_ERROR) {
             if (op->immediate<0 || (uint64_t)op->immediate>=cfg->head.instruction_count) return XR_XIR_BAD_STRUCTURE;
             local_error_type(cfg,cfg->calls[(uint32_t)op->immediate],out);
+        } else if (op->op==XR_XIR_ENUM_GET && op->args[0]<cfg->values) {
+            XrXirTaskResultType outcome={0};
+            if (op->immediate==XR_XIR_TASK_RESULT_ERROR && !op->args[1] &&
+                xr_xir_task_result_type_info(&cfg->terms.types,cfg->types[op->args[0]],&outcome))
+                local_error_type(cfg,outcome.error,out);
+            else local_error_type(cfg,op->type,out);
         } else local_error_type(cfg,op->type,out);
+    }
+    if (op->op==XR_XIR_ENUM_NEW && op->immediate==XR_XIR_TASK_RESULT_ERROR) {
+        XrXirTaskResultType outcome={0};
+        if (xr_xir_task_result_type_info(&cfg->terms.types,op->type,&outcome)) {
+            if (op->args[1]!=1 || op->args[0]>=cfg->head.operand_count) return XR_XIR_BAD_STRUCTURE;
+            uint32_t value=cfg->head.operands[op->args[0]];
+            if (value>=cfg->values || outcome.error==XR_XIR_NEVER) return XR_XIR_BAD_TYPE;
+            XrXirStatus status=local_error_subset_bound(cfg,local_error_read(cfg,cfg->row,value),outcome.error);
+            if (status!=XR_XIR_OK) return status;
+        }
     }
     if (op->op==XR_XIR_LOCAL_WRITE || op->op==XR_XIR_OWNED_LOCAL_WRITE || op->op==XR_XIR_SCALAR_LOCAL_WRITE) {
         if (op->args[0]>=cfg->values) return XR_XIR_BAD_STRUCTURE;

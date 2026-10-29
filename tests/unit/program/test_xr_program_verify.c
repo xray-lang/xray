@@ -4,6 +4,7 @@
  */
 
 #include "xr_program_retired_builder_fixture.h"
+#include "xr_program_identity_vectors.h"
 #include "xr_program_array_default_fixture.h"
 #include "xr_program_array_append_fixture.h"
 #include "xr_program_string_slice_fixture.h"
@@ -7279,7 +7280,25 @@ static void test_channel_operation_admission(void) {
     }
 }
 
+static void test_retired_task_outcome_wire(void) {
+    const unsigned char *wires[] = {xr_identity_execution_v3_12_wire,
+                                   xr_identity_boundary_v3_12_wire};
+    const size_t sizes[] = {sizeof(xr_identity_execution_v3_12_wire),
+                            sizeof(xr_identity_boundary_v3_12_wire)};
+    for (size_t index = 0u; index < sizeof(wires) / sizeof(wires[0]); ++index) {
+        XrProgramView view;
+        XrValidatedProgram *program = NULL;
+        XrProgramDiagnostic diagnostic;
+        CHECK(xr_program_decode_structure(wires[index], sizes[index], NULL, &view, NULL, 0u) ==
+              XR_PROGRAM_DECODE_UNSUPPORTED_VERSION);
+        CHECK(xr_program_validate(wires[index], sizes[index], NULL, &program, &diagnostic) ==
+              XR_PROGRAM_VERIFY_STRUCTURAL_REJECTED);
+        CHECK(program == NULL && diagnostic.decode_status == XR_PROGRAM_DECODE_UNSUPPORTED_VERSION);
+    }
+}
+
 int main(void) {
+    test_retired_task_outcome_wire();
     for (unsigned scenario = 0u; scenario < 9u; ++scenario) {
         XrProgramArtifact artifact = {0}; XrValidatedProgram *program = NULL;
         CHECK(xr_program_byte_compare_fixture_write(scenario, 0u, &artifact) == XR_PROGRAM_BUILD_OK);

@@ -47,33 +47,6 @@
 #include "../runtime/class/xenum.h"
 #include "../base/xglobal_indices.h"
 
-static XrValue vm_task_status_property_value(XrVMRuntime *isolate, uint8_t tstate) {
-    XrValue value = isolate->vm.builtins[XR_GLOBAL_VAR_TASK_STATUS];
-    if (!XR_IS_PTR(value))
-        return xr_null();
-    XrEnumType *type = (XrEnumType *) XR_TO_PTR(value);
-    uint32_t member_index = 0;
-    switch (tstate) {
-        case XR_TASK_ACTIVE:
-        case XR_TASK_COMPLETING:
-            member_index = 1;  // Running
-            break;
-        case XR_TASK_COMPLETED:
-            member_index = 2;  // Success
-            break;
-        case XR_TASK_FAILED:
-            member_index = 3;  // Failed
-            break;
-        case XR_TASK_CANCELLING:
-        case XR_TASK_CANCELLED:
-        default:
-            member_index = 4;  // Cancelled
-            break;
-    }
-    if (member_index >= type->member_count || !type->members[member_index].ctor)
-        return xr_null();
-    return XR_FROM_PTR(type->members[member_index].ctor);
-}
 #include <stdatomic.h>
 
 /* ========== Dispatch: OP_SETPROP Type Dispatch ========== */
@@ -334,7 +307,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         if (prop_symbol == SYMBOL_DONE) {
             base[a] = xr_bool(tstate >= XR_TASK_COMPLETED);
         } else if (prop_symbol == SYMBOL_STATUS) {
-            base[a] = vm_task_status_property_value(isolate, tstate);
+            VM_THROW(frame,pc,XR_ERR_TYPE_NO_METHOD,"TaskStatus is not an admitted Task property");
         } else if (prop_symbol == SYMBOL_CANCELLED) {
             base[a] = xr_bool(tstate == XR_TASK_CANCELLING || tstate == XR_TASK_CANCELLED);
         } else if (prop_symbol == SYMBOL_RESULT) {
