@@ -16,7 +16,12 @@ def main():
     parser.add_argument('--compiler', required=True)
     parser.add_argument('--secondary-compiler')
     parser.add_argument('--implementation-only', action='store_true')
+    parser.add_argument('--regex-only', action='store_true')
+    parser.add_argument('--regex-source', type=Path)
+    parser.add_argument('--stdlib-path', type=Path)
     args = parser.parse_args()
+    if args.regex_only and (args.implementation_only or not args.regex_source or not args.stdlib_path):
+        parser.error('--regex-only requires --regex-source and --stdlib-path, without --implementation-only')
     root = Path(__file__).resolve().parents[3]
     build, parent = args.build.resolve(), args.output.resolve()
     assert parent.is_relative_to(build) and parent != build
@@ -54,6 +59,8 @@ def main():
     source = out/'consumer.c'
     source.write_bytes((root/'tests/unit/xir/source_sdk_owned_consumer.c').read_bytes())
     (out/'implementation_control_fixture.h').write_bytes((root/'tests/unit/xir/implementation_control_fixture.h').read_bytes())
+    fragment = 'source_sdk_regex_consumer.inc.c'
+    (out/fragment).write_bytes((root/'tests/unit/xir'/fragment).read_bytes())
     fragment = 'source_sdk_repl_input_consumer.inc.c'
     (out/fragment).write_bytes((root/'tests/unit/xir'/fragment).read_bytes())
     fragment = 'source_sdk_repl_array_consumer.inc.c'
@@ -92,6 +99,17 @@ def main():
                 b'Installed terminal Task outcomes: repeated owned data, nested Task42, thrown and NUL/UTF8 panic after all producers PASS\n')
     if args.implementation_only:
         expected = b'Installed complete7658B generic implementation: retired request/AST, ready answer42 and owned result release PASS\n'
+    if args.regex_only:
+        regex_source = out/'complete-regex-input.xr'
+        regex_source.write_bytes(args.regex_source.resolve().read_bytes())
+        assert regex_source.stat().st_size == 891
+        regex_library = args.stdlib_path.resolve()/'regex/regex.xr'
+        assert regex_library.stat().st_size == 73078
+        regex_case = next(case for case in json.loads((root/'tests/regex/absolute/v1/manifest.json').read_text())['cases']
+                          if case['id'] == 'unicode_properties')
+        regex_golden = subprocess.check_output(['git', '-C', str(root), 'show',
+                                                'HEAD:tests/regex/absolute/v1/'+regex_case['expected_stdout']])
+        assert len(regex_golden) == 92 and hashlib.sha256(regex_golden).hexdigest() == regex_case['expected_sha256']
     for index, compiler in enumerate(compilers):
         for language in ('c', 'cpp'):
             label = f'provider{index}-{language}'
@@ -104,6 +122,7 @@ def main():
             else:
                 command = [compiler, '/nologo', '/TP' if language == 'cpp' else '/TC',
                            '/std:c++17' if language == 'cpp' else '/std:c11', '/utf-8', '/MD', '/O2',
+                           '/D_CRT_SECURE_NO_WARNINGS',
                            '/W4', '/WX', '/I'+str(sdk/'include'), '/c', source, '/Fo'+str(obj)]
             run(label+'-compile', command)
             linker = compiler.parent/'link.exe'
@@ -114,6 +133,11 @@ def main():
             run(label+'-link', [linker, '/nologo', '/incremental:no', '/out:'+str(exe), obj,
                               *[sdk/p for p in manifest['archives']], 'kernel32.lib',
                               '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
+            if args.regex_only:
+                actual_output = out/(label+'.regex.stdout')
+                run(label+'-regex', [exe, '--regex', regex_source, args.stdlib_path.resolve(), actual_output])
+                assert actual_output.read_bytes() == regex_golden
+                continue
             if args.implementation_only:
                 assert run(label+'-run', [exe, '--implementation', empty]).replace(b'\r\n', b'\n') == expected
                 continue
@@ -124,6 +148,20 @@ def main():
             assert run(label+'-run', [exe, empty, fixtures/'source_public_repl_rooted',
                                      fixtures/'source_public_repl_file']).replace(b'\r\n', b'\n') == expected
             assert not (out/'installed-owned-snapshot.xr').exists()
+    if args.regex_only:
+        summary = dict(status='PASS', sdk_only=True, providers=list(map(str, compilers)), languages=['C11', 'C++17'],
+                       source_bytes=891, source_sha256=hashlib.sha256(regex_source.read_bytes()).hexdigest(),
+                       regex_bytes=73078, regex_sha256=hashlib.sha256(regex_library.read_bytes()).hexdigest(),
+                       output_bytes=92, output_sha256=regex_case['expected_sha256'], exact_output_bytes=True,
+                       retired_input_AST_and_request=True, control_not_used_after_compile=True,
+                       ready_execution_after_artifact_and_execution_retirement=True,
+                       result_read_copied_and_released_after_all_producers=True,
+                       manifest_sha256=hashlib.sha256((sdk/'source_sdk_manifest.json').read_bytes()).hexdigest(),
+                       scope='Complete regex public Source consumer; existing default ownership matrix unchanged',
+                       production_release=False)
+        (out/'summary.json').write_text(json.dumps(summary, indent=2)+'\n', encoding='utf-8')
+        print(json.dumps(summary))
+        return
     if args.implementation_only:
         summary = dict(status='PASS', sdk_only=True, providers=list(map(str, compilers)), languages=['C11', 'C++17'],
                        source_bytes=7658, interface_bindings=192, retired_request_and_AST=True,

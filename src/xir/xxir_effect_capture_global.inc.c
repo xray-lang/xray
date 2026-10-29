@@ -41,8 +41,6 @@ typedef struct EffectCaptureRead {
     EffectCaptureActualRead *actuals;
     EffectCaptureCompleteTypes *complete_types;
     const uint32_t *fact_nodes;
-    uint64_t *support_bits;
-    uint32_t support_first,support_count;
     uint32_t node_view_count,edge_view_count,maximum;
     bool fixed_only,fallback,class_results,active,changed,supported,complete_scope;
 } EffectCaptureRead;
@@ -109,14 +107,6 @@ static XrXirStatus effect_capture_emit(EffectCaptureRead *read,EffectCaptureFact
     if(found && effect_capture_before(&fact,found)) found=NULL;
     if(!read->builder) {
         if(!found || found->rank>fact.rank) return XR_XIR_BAD_STRUCTURE;
-        /* Closure bounds every actual cause from below. Equality also proves
-         * this stored coordinate has its own authentic descending support. */
-        if(read->support_bits && at>=read->support_first && at-read->support_first<read->support_count &&
-            found->rank==fact.rank) {
-
-            uint32_t bit=at-read->support_first;
-            read->support_bits[bit/64]|=UINT64_C(1)<<(bit%64);
-        }
         return XR_XIR_OK;
     }
     EffectCaptureProof *proof=read->builder;
@@ -642,33 +632,45 @@ static XrXirStatus effect_capture_fallback_build(EffectCaptureRead *read) {
 }
 #include "xxir_effect_capture_scalar.inc.c"
 #include "xxir_effect_capture_schedule.inc.c"
-/* One complete current-clause replay proves closure and marks each individual
- * positive witness. A bounded stack window avoids allocation and keeps every
- * mark inside this read; larger proofs repeat the same full clauses per window.
- * Fixed support is finished before origins may consume a negative fixed query. */
+/* Closure constrains every cause before a stored witness may claim support.
+ * Equal-node/value groups project only their actual local and edge clauses;
+ * one machine word holds the conjunction without allocation or callbacks. */
 static XrXirStatus effect_capture_receiving_domain(EffectCaptureRead *read) {
-    uint64_t support[8];uint32_t first=0,count=read->final->capture.count;
-    do {
-        uint32_t length=count-first;
-        if(length>XR_COUNTOF(support)*64) length=XR_COUNTOF(support)*64;
-        uint32_t words=(length+63)/64;
-
-        memset(support,0,(size_t)words*sizeof(*support));
-        read->support_bits=support;read->support_first=first;read->support_count=length;
-        XrXirStatus status=effect_capture_clauses(read);
-        read->support_bits=NULL;read->support_first=read->support_count=0;
-        if(status!=XR_XIR_OK) return status;
-        for(uint32_t p=0;p<length;++p) {
-
-            const EffectCaptureFact *fact=&read->final->capture.facts[first+p];
-            if(fact->word==EFFECT_CAPTURE_FLAGS && fact->bit>=EFFECT_CAPTURE_COMPLETE) continue;
-            if(read->fixed_only && (fact->word!=EFFECT_CAPTURE_FLAGS || fact->bit!=EFFECT_CAPTURE_FIXED)) continue;
-            if(!(support[p/64]&(UINT64_C(1)<<(p%64)))) return XR_XIR_BAD_STRUCTURE;
+    read->selected=NULL;read->node_view=NULL;
+    XrXirStatus status=effect_capture_clauses(read);
+    if(status!=XR_XIR_OK) return status;
+    const EffectCaptureProof *proof=&read->final->capture;
+    EffectCaptureNode node={0};uint32_t current=UINT32_MAX;
+    for(uint32_t p=0;p<proof->count;) {
+        const EffectCaptureFact *first=&proof->facts[p];
+        if((first->word==EFFECT_CAPTURE_FLAGS && first->bit>=EFFECT_CAPTURE_COMPLETE) ||
+            (read->fixed_only && (first->word!=EFFECT_CAPTURE_FLAGS || first->bit!=EFFECT_CAPTURE_FIXED))) {
+            ++p;continue;
         }
-        first+=length;
-    } while(first<count);
-    return XR_XIR_OK;
+        uint32_t count=1;
+        if(!read->fixed_only) while(count<64 && count<proof->count-p) {
+            const EffectCaptureFact *next=&proof->facts[p+count];
+            if(next->node!=first->node || next->value!=first->value ||
+                (next->word==EFFECT_CAPTURE_FLAGS && next->bit>=EFFECT_CAPTURE_COMPLETE)) break;
+            ++count;
+        }
+        if(current!=first->node) {
+            read->node_view=NULL;
+            status=effect_capture_node(read,first->node,&node);if(status!=XR_XIR_OK) goto done;
+            current=first->node;
+        }
+        read->node_view=&node;read->selected=first;read->selected_count=count;
+        read->selected_mask=0;read->supported=false;
+        status=effect_capture_clauses(read);
+        if(status!=XR_XIR_OK) goto done;
+        if(!read->supported) { status=XR_XIR_BAD_STRUCTURE;goto done; }
+        p+=count;
+    }
+done:
+    read->selected=NULL;read->selected_count=0;read->selected_mask=0;
+    read->node_view=NULL;read->supported=false;return status;
 }
+
 static XrXirStatus effect_capture_current_match(const XrXirCompileContext *work,
     const EffectInvocationFinal *final,const EffectBodyCurrentRead *current) {
     if(!final) return XR_XIR_BAD_STRUCTURE;
@@ -683,31 +685,9 @@ static XrXirStatus effect_capture_current_match(const XrXirCompileContext *work,
     bool scalar=false;status=effect_capture_scalar_domain(&read,&scalar);
     if(status!=XR_XIR_OK) return status;
     if(scalar) return final->capture.count?XR_XIR_BAD_STRUCTURE:effect_capture_inputs_match(&read);
-    /* These are fresh projections of the actual framed Input. The complete
-     * request is allocation-free; no borrowed projection survives a callback
-     * or this call, and every semantic closure/support check still runs. */
-    EffectCaptureNode views[32];EffectCaptureActualRead actuals;uint32_t fact_nodes[33];
-    if(final->count<=XR_COUNTOF(views)) {
-        uint32_t at=0;
-        for(uint32_t n=0;n<final->count;++n) {
-
-            fact_nodes[n]=at;
-            while(at<final->capture.count) {
-
-                if(final->capture.facts[at].node!=n) break;
-                ++at;
-            }
-        }
-        if(at!=final->capture.count) return XR_XIR_BAD_STRUCTURE;
-
-        fact_nodes[final->count]=at;read.fact_nodes=fact_nodes;
-        for(uint32_t n=0;n<final->count;++n) {
-            status=effect_capture_node(&read,n,&views[n]);if(status!=XR_XIR_OK) return status;
-        }
-        read.node_views=views;read.node_view_count=final->count;
-    }
-    /* Fixedness is independent of origins, so negative fixed queries consume
-     * its complete local closure and positive support before origin clauses. */
+    EffectCaptureActualRead actuals;
+    /* This receiving interval performs no allocation, release or callback.
+     * The next nested receiver therefore cannot invalidate an earlier proof. */
     for(uint32_t domain=0;domain<2;++domain) {
         read.fixed_only=domain==0;read.selected=NULL;read.node_view=NULL;
         if(domain) {
@@ -720,6 +700,7 @@ static XrXirStatus effect_capture_current_match(const XrXirCompileContext *work,
     status=effect_capture_complete_clauses(&read);if(status!=XR_XIR_OK) return status;
     return effect_capture_inputs_match(&read);
 }
+
 static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const EffectInvocationFinal *final) {
     return effect_capture_current_match(work,final,NULL);
 }

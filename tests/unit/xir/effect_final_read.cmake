@@ -81,3 +81,15 @@ endif()
 add_test(NAME test_xir_effect_source_terminal_ordinary COMMAND test_xir_effect_source_terminal_ordinary)
 set_tests_properties(test_xir_effect_source_terminal_ordinary PROPERTIES
     TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;metadata;ownership;final-input;producer-lifetime")
+
+add_executable(test_xir_capture_terminal ${CMAKE_CURRENT_LIST_DIR}/test_xir_capture_terminal.c)
+target_include_directories(test_xir_capture_terminal PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_xir_capture_terminal PRIVATE xray_xir)
+if(MSVC)
+    target_compile_options(test_xir_capture_terminal PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_capture_terminal PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_capture_terminal COMMAND test_xir_capture_terminal)
+set_tests_properties(test_xir_capture_terminal PROPERTIES
+    LABELS "unit;xir;metadata;ownership;final-read" TIMEOUT 120)

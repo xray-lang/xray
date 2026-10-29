@@ -233,7 +233,10 @@ static void sdk_implementation_case(const char *stdlib_path) {
     puts("Installed complete7658B generic implementation: retired request/AST, ready answer42 and owned result release PASS");
 }
 
+#include "source_sdk_regex_consumer.inc.c"
+
 int main(int argc,char **argv) {
+    if(argc==5&&!strcmp(argv[1],"--regex")){sdk_regex_case(argv[2],argv[3],argv[4]);return 0;}
     if(argc==3&&!strcmp(argv[1],"--implementation")){sdk_implementation_case(argv[2]);return 0;}
     CHECK(argc==4);
     char source[]="fn initial()->i64{return 40}\nvar state=initial()\n"

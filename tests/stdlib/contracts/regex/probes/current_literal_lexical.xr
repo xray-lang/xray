@@ -1,0 +1,26 @@
+import regex
+
+// Slash delimiters and suffix flags are retired; raw prefixes use inline flags.
+var slash_text = re"(?i)a/b"
+print(regex.test(slash_text, "A/b"))
+
+var slash_class = re"[/]+"
+print(regex.findText(slash_class, "a///b"))
+
+var multiline = re"(?m)^b"
+print(regex.test(multiline, "a\nb"))
+
+var dotall = re"(?s)a.b"
+print(regex.test(dotall, "a\nb"))
+
+var quotient = 20 / 5
+print(quotient)
+print(regex.test(re"(?i)[a-z]+", "ABC"))
+
+var literal_pair = re"(?i)[a-z]+"
+var dynamic_pair = (try regex.compile("[a-z]+", "i"))
+print(regex.findText(literal_pair, "ABC"))
+print(regex.findText(dynamic_pair, "ABC"))
+
+var literal_array = [re"a", re"(?i)b"]
+print(regex.test(literal_array[1], "B"))
