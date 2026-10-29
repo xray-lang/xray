@@ -634,7 +634,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Enum | user-defined (incl. ADT enum, see §5.6) |
 | Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
 
-The built-in registry is an implementation projection, not the new XIR declaration-family admission list. Registration of `Never`, `Task<T, E>`, and the new `TaskResult<T, E>` shape from §2.2.2 is pending; the old Task arguments and result variants in the table do not override those language rules. The `MutSlice` contract in §2.4.2 is not yet represented in this registry. Full view registration and admission remain implementation work for that declaration family; describing the type does not count as current implementation coverage.
+The built-in registry is an implementation projection, not the new XIR declaration-family admission list. `TaskResult<T, E>` is registered through native19 with the four terminal variants below. The complete registry projections of `Never` and `Task<T, E>` from §2.2.2 remain pending; the existing Task arguments in the table do not override those language rules. The `MutSlice` contract in §2.4.2 is not yet represented in this registry. Full view registration and admission remain implementation work for that declaration family; describing the type does not count as current implementation coverage.
 
 <!-- xr-builtin-registry:begin -->
 
@@ -695,8 +695,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `CryptoError` | `InvalidLength` |
 | `Recv<T>` | `Value` \| `Empty` \| `Timeout` \| `Closed` |
 | `SendResult` | `Sent` \| `Full` \| `Timeout` \| `Closed` |
-| `TaskResult<T>` | `Success` \| `Failed` \| `Cancelled` \| `Timeout` \| `Pending` |
-| `TaskStatus` | `Pending` \| `Running` \| `Success` \| `Failed` \| `Cancelled` |
+| `TaskResult<T, E>` | `Success` \| `Error` \| `Panic` \| `Cancelled` |
 
 **Built-in constraint interfaces**
 
@@ -6810,9 +6809,13 @@ The `datetime` module provides factory functions through `import datetime`: `now
 
 The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `init(message: string = "", cause: PanicInfo? = null)`, and `toString()`.
 
-### 14.17 `Task<T>` and Enum Values
+### 14.17 `Task<T, E>` and Enum Values
 
-`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` as `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, or `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation; results must be copyable and Sendable; the Task keeps its complete owned sticky outcome and repeated awaits obtain logical copies, stopping at class and synchronization identities, without an `await (move task)` form or reference-count-selected single take. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
+`Task<T, E>` provides three `ref` methods, which require a mutable Task binding: `cancel()` requests cancellation idempotently; `poll()` returns `TaskResult<T, E>?`; `awaitResult()` returns `TaskResult<T, E>`. `poll()` only reads an authenticated terminal snapshot and does not schedule or execute the child; it returns `null` while unfinished. `awaitResult()` may suspend for a terminal outcome and reports the child's business error as a value without rethrowing E. Cancellation of the waiter itself, engine or protocol failures, and fatal outcomes retain their independent channels.
+
+The four terminal outcomes of `TaskResult<T, E>` are `Success(T)`, `Error(E)`, `Panic(PanicInfo)`, and `Cancelled`; parentheses denote payload types. Logical type arguments T and E retain their actual declaration bounds. The Error variant uses the canonical `Error` execution carrier; erasure does not widen E, `Never` cannot construct that variant, and an error union gains no ordinary value layout. Even a local `TaskResult.Panic(info)` construction requires the entire owned PanicInfo graph, including cause and replacedError, to be copyable and Sendable. This rule does not make general PanicInfo unconditionally Sendable.
+
+`try await task` returns T on success and propagates the declared `E | Cancelled`; panic keeps its independent channel. A Task retains its complete owned terminal outcome and repeated observations obtain independent logical snapshots, with value copies stopping at class and synchronization identities. There is no `await (move task)` form or reference-count-selected single take. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
 
 ### 14.18 Thread and Synchronization Handles
 
@@ -7201,7 +7204,7 @@ Reference-count updates are themselves memory accesses: concurrent retain/releas
 | 2 | Channel recv → later send (capacity edge) | On a channel of capacity N, completion of the k-th `recv` happens-before completion of the (k + N)-th `send`. This edge is what makes `Channel(N)` correct as a semaphore or rate limiter |
 | 3 | Channel close | Everything before `close()` happens-before everything after any observation of `Recv.Closed` or `isClosed == true` |
 | 4 | `go` spawn | Evaluation of the arguments, capture plan and `move` transfers at the `go expr` happens-before the first statement of the coroutine body |
-| 5 | Task completion → await | The task body's last action happens-before everything after any `await t` / `awaitResult()` / `awaitTimeout()` return, or after observing `t.done == true`, a terminal `t.poll()` result, or a terminal `t.status` |
+| 5 | Task completion → terminal observation | The task body's last action happens-before operations after a waiter successfully observes that terminal outcome through `await t`, `awaitResult()`, or `poll()`; a `null` poll establishes no completion edge and does not drive the child |
 | 6 | scope exit | Completion of every child task in a scope happens-before the statements after the scope block. `await all` / `any` / `anySuccess` establish the same edge under their respective completion conditions |
 | 7 | `const` publish / seal | Initialisation and sealing of a top-level `const` happens-before any agent's first read of that const root |
 | 8 | Atomic release / acquire | `store(v, Release)` synchronizes-with the `load(Acquire)` that reads v; RMWs form a release sequence; `SeqCst` operations additionally participate in one single total order. `AcquireRelease` carries both sides |

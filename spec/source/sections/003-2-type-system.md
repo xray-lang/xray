@@ -43,7 +43,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
 | Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
 
-内置登记表是实现投影，不是新 XIR 声明族的准入清单。§2.2.2 的 `Never`、`Task<T, E>` 与 `TaskResult<T, E>` 新形状尚待实现登记；下表中的旧 Task 参数和结果变体不能覆盖这些语言规则。§2.4.2 规定的 `MutSlice` 尚未列入该表；完整视图注册与准入仍待对应声明族实现，不能把规范中的类型说明计作当前实现覆盖。
+内置登记表是实现投影，不是新 XIR 声明族的准入清单。`TaskResult<T, E>` 已按 native19 登记为下表四种终态。§2.2.2 的 `Never`、`Task<T, E>` 在本表中的完整投影仍待同步；下表中的既有 Task 参数不能覆盖这些语言规则。§2.4.2 规定的 `MutSlice` 尚未列入该表；完整视图注册与准入仍待对应声明族实现，不能把规范中的类型说明计作当前实现覆盖。
 
 <!-- xr-builtin-registry:begin -->
 
@@ -104,8 +104,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `CryptoError` | `InvalidLength` |
 | `Recv<T>` | `Value` \| `Empty` \| `Timeout` \| `Closed` |
 | `SendResult` | `Sent` \| `Full` \| `Timeout` \| `Closed` |
-| `TaskResult<T>` | `Success` \| `Failed` \| `Cancelled` \| `Timeout` \| `Pending` |
-| `TaskStatus` | `Pending` \| `Running` \| `Success` \| `Failed` \| `Cancelled` |
+| `TaskResult<T, E>` | `Success` \| `Error` \| `Panic` \| `Cancelled` |
 
 **内置约束接口**
 
@@ -1160,7 +1159,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Enum | user-defined (incl. ADT enum, see §5.6) |
 | Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
 
-The built-in registry is an implementation projection, not the new XIR declaration-family admission list. Registration of `Never`, `Task<T, E>`, and the new `TaskResult<T, E>` shape from §2.2.2 is pending; the old Task arguments and result variants in the table do not override those language rules. The `MutSlice` contract in §2.4.2 is not yet represented in this registry. Full view registration and admission remain implementation work for that declaration family; describing the type does not count as current implementation coverage.
+The built-in registry is an implementation projection, not the new XIR declaration-family admission list. `TaskResult<T, E>` is registered through native19 with the four terminal variants below. The complete registry projections of `Never` and `Task<T, E>` from §2.2.2 remain pending; the existing Task arguments in the table do not override those language rules. The `MutSlice` contract in §2.4.2 is not yet represented in this registry. Full view registration and admission remain implementation work for that declaration family; describing the type does not count as current implementation coverage.
 
 <!-- xr-builtin-registry:begin -->
 
@@ -1221,8 +1220,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `CryptoError` | `InvalidLength` |
 | `Recv<T>` | `Value` \| `Empty` \| `Timeout` \| `Closed` |
 | `SendResult` | `Sent` \| `Full` \| `Timeout` \| `Closed` |
-| `TaskResult<T>` | `Success` \| `Failed` \| `Cancelled` \| `Timeout` \| `Pending` |
-| `TaskStatus` | `Pending` \| `Running` \| `Success` \| `Failed` \| `Cancelled` |
+| `TaskResult<T, E>` | `Success` \| `Error` \| `Panic` \| `Cancelled` |
 
 **Built-in constraint interfaces**
 

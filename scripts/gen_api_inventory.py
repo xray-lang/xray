@@ -344,9 +344,10 @@ TYPE_ALIAS_RE = re.compile(
     r"(?m)^(?:export\s+)?type\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*=\s*"
 )
 MEMBER_METHOD_RE = re.compile(
-    r"^\s*(static\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:<[^>]+>)?\s*\("
+    r"^\s*(?:(?P<static>static)\s+|(?P<receiver>ref)\s+)?"
+    r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?:<[^>]+>)?\s*\("
 )
-MEMBER_SIGNATURE_START_RE = re.compile(r"^\s*(?:static\s+)?[A-Za-z_][A-Za-z0-9_]*(?:<[^>]+>)?\s*\(")
+MEMBER_SIGNATURE_START_RE = MEMBER_METHOD_RE
 MEMBER_FIELD_RE = re.compile(r"^\s*(?:const\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([^=\n]+)$")
 
 
@@ -358,6 +359,20 @@ def parse_signature_tail(line: str, open_index: int) -> tuple[str, str | None] |
     tail_start = close_index + 1
     while tail_start < len(line) and line[tail_start].isspace():
         tail_start += 1
+    after_throws = tail_start + len("throws")
+    if line.startswith("throws", tail_start) and (
+        after_throws == len(line) or line[after_throws].isspace() or line[after_throws] == "("
+    ):
+        tail_start = after_throws
+        while tail_start < len(line) and line[tail_start].isspace():
+            tail_start += 1
+        if tail_start < len(line) and line[tail_start] == "(":
+            error_end = matching_paren_index(line, tail_start)
+            if error_end < 0:
+                return None
+            tail_start = error_end + 1
+        while tail_start < len(line) and line[tail_start].isspace():
+            tail_start += 1
     ret: str | None = None
     if line.startswith("->", tail_start):
         ret_start = tail_start + 2
@@ -377,7 +392,7 @@ def parse_member_method_line(line: str) -> tuple[bool, str, str, str | None] | N
     if parsed is None:
         return None
     params, ret = parsed
-    return bool(match.group(1)), match.group(2), params, ret
+    return bool(match.group("static")), match.group("name"), params, ret
 
 
 def parse_top_functions(text: str) -> list[tuple[re.Match[str], str, str, str | None]]:
@@ -453,19 +468,20 @@ def parse_class_body(
             static, name, params, ret = method
             kind = "static-method" if static else "method"
             surface, module = stdlib_doc_surface_for_name(doc_surface, doc_module, name)
-            out.append(
-                item(
-                    category=category,
-                    namespace=class_name,
-                    name=name,
-                    kind=kind,
-                    signature=normalize_signature(params, ret),
-                    source=rel(root, path),
-                    line=line_for_offset(text, body_offset) + local_lineno - 1,
-                    doc_surface=surface,
-                    doc_module=module,
-                )
+            entry = item(
+                category=category,
+                namespace=class_name,
+                name=name,
+                kind=kind,
+                signature=normalize_signature(params, ret),
+                source=rel(root, path),
+                line=line_for_offset(text, body_offset) + local_lineno - 1,
+                doc_surface=surface,
+                doc_module=module,
             )
+            if MEMBER_METHOD_RE.match(line).group("receiver"):
+                entry["receiver"] = "ref"
+            out.append(entry)
             depth = max(0, depth + signature_delta)
             line_index += 1
             continue

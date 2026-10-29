@@ -232,7 +232,7 @@ class PanicInfo {
 | 2 | Channel recv → 后续 send（容量边） | 容量为 N 的 channel 上，第 k 次 `recv` 完成 happens-before 第 (k + N) 次 `send` 完成。这条边是把 `Channel(N)` 当信号量/限流器使用的正确性基础 |
 | 3 | Channel close | `close()` 之前发生的一切，happens-before 任何观测到 `Recv.Closed` 或 `isClosed == true` 之后发生的一切 |
 | 4 | `go` 启动 | `go expr` 处对实参、capture plan 与 `move` 转移的求值，happens-before 协程体的第一条语句 |
-| 5 | Task 完成 → await | 任务体的最后一个动作，happens-before 任何 `await t` / `awaitResult()` / `awaitTimeout()` 返回之后、或观测到 `t.done == true`、`t.poll()` 返回终态、`t.status` 为终态之后发生的一切 |
+| 5 | Task 完成 → 终态观察 | 任务体的最后一个动作，happens-before 等待者通过 `await t`、`awaitResult()` 或 `poll()` 成功观察到该终态后的操作；`poll()` 返回 `null` 不建立这条完成边，也不驱动子任务 |
 | 6 | scope 退出 | scope 内全部子任务的完成，happens-before scope 块之后的语句。`await all` / `any` / `anySuccess` 按其各自的完成条件建立同样的边 |
 | 7 | `const` publish / seal | 顶层 `const` 的初始化与 seal，happens-before 任何执行体对该 const 根的首次读取 |
 | 8 | Atomic release / acquire | `store(v, Release)` synchronizes-with 读到 v 的 `load(Acquire)`；RMW 构成 release sequence；`SeqCst` 操作另外参与一个单一全序。`AcquireRelease` 同时具备两侧 |
@@ -519,7 +519,7 @@ Reference-count updates are themselves memory accesses: concurrent retain/releas
 | 2 | Channel recv → later send (capacity edge) | On a channel of capacity N, completion of the k-th `recv` happens-before completion of the (k + N)-th `send`. This edge is what makes `Channel(N)` correct as a semaphore or rate limiter |
 | 3 | Channel close | Everything before `close()` happens-before everything after any observation of `Recv.Closed` or `isClosed == true` |
 | 4 | `go` spawn | Evaluation of the arguments, capture plan and `move` transfers at the `go expr` happens-before the first statement of the coroutine body |
-| 5 | Task completion → await | The task body's last action happens-before everything after any `await t` / `awaitResult()` / `awaitTimeout()` return, or after observing `t.done == true`, a terminal `t.poll()` result, or a terminal `t.status` |
+| 5 | Task completion → terminal observation | The task body's last action happens-before operations after a waiter successfully observes that terminal outcome through `await t`, `awaitResult()`, or `poll()`; a `null` poll establishes no completion edge and does not drive the child |
 | 6 | scope exit | Completion of every child task in a scope happens-before the statements after the scope block. `await all` / `any` / `anySuccess` establish the same edge under their respective completion conditions |
 | 7 | `const` publish / seal | Initialisation and sealing of a top-level `const` happens-before any agent's first read of that const root |
 | 8 | Atomic release / acquire | `store(v, Release)` synchronizes-with the `load(Acquire)` that reads v; RMWs form a release sequence; `SeqCst` operations additionally participate in one single total order. `AcquireRelease` carries both sides |

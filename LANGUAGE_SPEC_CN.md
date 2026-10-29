@@ -635,7 +635,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
 | Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
 
-内置登记表是实现投影，不是新 XIR 声明族的准入清单。§2.2.2 的 `Never`、`Task<T, E>` 与 `TaskResult<T, E>` 新形状尚待实现登记；下表中的旧 Task 参数和结果变体不能覆盖这些语言规则。§2.4.2 规定的 `MutSlice` 尚未列入该表；完整视图注册与准入仍待对应声明族实现，不能把规范中的类型说明计作当前实现覆盖。
+内置登记表是实现投影，不是新 XIR 声明族的准入清单。`TaskResult<T, E>` 已按 native19 登记为下表四种终态。§2.2.2 的 `Never`、`Task<T, E>` 在本表中的完整投影仍待同步；下表中的既有 Task 参数不能覆盖这些语言规则。§2.4.2 规定的 `MutSlice` 尚未列入该表；完整视图注册与准入仍待对应声明族实现，不能把规范中的类型说明计作当前实现覆盖。
 
 <!-- xr-builtin-registry:begin -->
 
@@ -696,8 +696,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `CryptoError` | `InvalidLength` |
 | `Recv<T>` | `Value` \| `Empty` \| `Timeout` \| `Closed` |
 | `SendResult` | `Sent` \| `Full` \| `Timeout` \| `Closed` |
-| `TaskResult<T>` | `Success` \| `Failed` \| `Cancelled` \| `Timeout` \| `Pending` |
-| `TaskStatus` | `Pending` \| `Running` \| `Success` \| `Failed` \| `Cancelled` |
+| `TaskResult<T, E>` | `Success` \| `Error` \| `Panic` \| `Cancelled` |
 
 **内置约束接口**
 
@@ -6759,9 +6758,13 @@ print(len(empty))           // 0
 
 内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `init(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
 
-### 14.17 `Task<T>` 与 enum 值
+### 14.17 `Task<T, E>` 与 enum 值
 
-`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`：`Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径；结果必须可复制且 Sendable；Task 保留完整拥有式粘滞终态，重复 await 各取得逻辑副本，复制在 class 与同步身份边界停止，不使用 `await (move task)`，也不依引用计数选择单次 take。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
+`Task<T, E>` 提供三个 `ref` 方法，调用者须有可变的 Task 绑定：`cancel()` 幂等请求取消；`poll()` 返回 `TaskResult<T, E>?`；`awaitResult()` 返回 `TaskResult<T, E>`。`poll()` 只读取经过认证的终态快照，不驱动调度或执行子任务，未完成时返回 `null`。`awaitResult()` 可挂起等待终态，将子任务的业务错误作为结果值报告而不重抛 E；等待者自身的取消、引擎或协议失败及 fatal 继续走各自独立通道。
+
+`TaskResult<T, E>` 的四种终态为 `Success(T)`、`Error(E)`、`Panic(PanicInfo)`、`Cancelled`，括号表示载荷类型。逻辑类型参数 T、E 保持真实声明边界；Error 变体的规范执行载体是 `Error`，擦除不扩大 E 的上界，E 为 `Never` 时不能构造该变体，错误 union 也不因此取得普通值布局。`TaskResult.Panic(info)` 即便在本地构造，完整 PanicInfo 图（包括 cause 与 replacedError）也须拥有式、可复制且 Sendable；此规则不赋予一般 PanicInfo 无条件的 Sendable 资格。
+
+`try await task` 成功时返回 T，并按声明传播 `E | Cancelled`；panic 保持独立通道。Task 保留完整拥有式终态，重复观察取得独立逻辑快照，值复制在 class 与同步身份边界停止，不使用 `await (move task)`，也不依引用计数选择单次 take。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
 
 ### 14.18 线程与同步 handle
 
@@ -7150,7 +7153,7 @@ class PanicInfo {
 | 2 | Channel recv → 后续 send（容量边） | 容量为 N 的 channel 上，第 k 次 `recv` 完成 happens-before 第 (k + N) 次 `send` 完成。这条边是把 `Channel(N)` 当信号量/限流器使用的正确性基础 |
 | 3 | Channel close | `close()` 之前发生的一切，happens-before 任何观测到 `Recv.Closed` 或 `isClosed == true` 之后发生的一切 |
 | 4 | `go` 启动 | `go expr` 处对实参、capture plan 与 `move` 转移的求值，happens-before 协程体的第一条语句 |
-| 5 | Task 完成 → await | 任务体的最后一个动作，happens-before 任何 `await t` / `awaitResult()` / `awaitTimeout()` 返回之后、或观测到 `t.done == true`、`t.poll()` 返回终态、`t.status` 为终态之后发生的一切 |
+| 5 | Task 完成 → 终态观察 | 任务体的最后一个动作，happens-before 等待者通过 `await t`、`awaitResult()` 或 `poll()` 成功观察到该终态后的操作；`poll()` 返回 `null` 不建立这条完成边，也不驱动子任务 |
 | 6 | scope 退出 | scope 内全部子任务的完成，happens-before scope 块之后的语句。`await all` / `any` / `anySuccess` 按其各自的完成条件建立同样的边 |
 | 7 | `const` publish / seal | 顶层 `const` 的初始化与 seal，happens-before 任何执行体对该 const 根的首次读取 |
 | 8 | Atomic release / acquire | `store(v, Release)` synchronizes-with 读到 v 的 `load(Acquire)`；RMW 构成 release sequence；`SeqCst` 操作另外参与一个单一全序。`AcquireRelease` 同时具备两侧 |

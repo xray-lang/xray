@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Keep native Array inventory complete and bound to compiler admission metadata."""
+"""Keep native API inventory bound to declarations and receiver syntax."""
 
 from __future__ import annotations
 
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -149,16 +149,21 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             self.assertEqual(entry["operation"], member.operation)
             self.assertEqual(entry["xir_admitted"], member.name in {
                 "contains", "startsWith", "endsWith", "indexOf", "lastIndexOf", "toString", "repeat",
-                "copyBytes", "replace", "replaceAll"})
+                "copyBytes", "replace", "replaceAll", "fromUtf8", "slice"})
             if entry["xir_admitted"]:
-                self.assertEqual(entry["allocation"], "may_heap" if member.name in {"repeat", "copyBytes", "replace", "replaceAll"} else "no_heap")
+                self.assertEqual(entry["allocation"], "may_heap" if member.name in {
+                    "repeat", "copyBytes", "replace", "replaceAll", "fromUtf8", "slice"} else "no_heap")
                 failures = {"indexOf": ["bounds", "limit"], "lastIndexOf": ["limit"],
                             "toString": ["retain"], "repeat": ["allocation", "retain", "limit"],
                             "copyBytes": ["allocation", "retain", "limit"],
                             "replace": ["allocation", "retain", "limit"],
-                            "replaceAll": ["allocation", "retain", "limit"]}
+                            "replaceAll": ["allocation", "retain", "limit"],
+                            "fromUtf8": ["utf8", "allocation", "retain", "limit"],
+                            "slice": ["bounds", "allocation", "retain", "limit"]}
                 self.assertEqual(entry["failures"], failures.get(member.name, []))
                 self.assertEqual(entry["ownership"], "owned")
+        self.assertEqual(actual["fromUtf8"]["operation"], "STRING_FROM_UTF8")
+        self.assertEqual(actual["slice"]["operation"], "STRING_SLICE")
         with self.assertRaises(ValueError):
             inventory.collect_native_declaration(ROOT, path,
                 source.replace("contains(search: string)", "contains(search: i64)"), "stdlib", "string")
@@ -175,9 +180,10 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
     def test_collector_uses_shared_parser_and_rejects_invalid_admission(self) -> None:
         with patch.object(declarations, "parse_source", wraps=declarations.parse_source) as parse:
             inventory.collect_native_types(ROOT)
-        self.assertEqual(parse.call_count, 9)
-        parse.assert_any_call(self.source, self.prelude)
-        parse.assert_any_call((ROOT / "stdlib/types/string.xr").read_text(encoding="utf-8"), self.prelude)
+        sources = ("array", "string", "map", "set", "i64", "f64", "bool", "rune")
+        self.assertCountEqual(parse.call_args_list, [
+            call((ROOT / "stdlib/types" / (name + ".xr")).read_text(encoding="utf-8"), self.prelude)
+            for name in sources])
         for source in (self.source.replace("struct Array", "class Array"),
                        self.source.replace("get(index: i64)", "get(index: i32)"),
                        self.source.replace("ARRAY_PUSH", "UNKNOWN_OP")):
@@ -202,6 +208,56 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     inventory.collect_native_declaration(ROOT, source.with_name("imposter.xr"),
                         source.read_text(encoding="utf-8"), "", "")
+
+
+class TaskReceiverInventoryTest(unittest.TestCase):
+    def test_real_throwing_stdlib_declarations_keep_result_types(self) -> None:
+        rows = {row["qualified"]: row for row in inventory.collect_pure_stdlib(ROOT)}
+        expected = {"base64.decode": "Array<u8>", "encoding.hexDecode": "Array<u8>",
+                    "encoding.utf16Decode": "string", "parallel.map": "Array<T>",
+                    "parallel.reduce": "A", "Plan.map": "Array<T>", "Plan.reduce": "A"}
+        for name, result in expected.items():
+            with self.subTest(name=name):
+                self.assertTrue(rows[name]["signature"].endswith(": " + result))
+
+    def test_throws_clause_preserves_result_and_callback_parameters(self) -> None:
+        parameters = "body: fn() throws(Inner) -> i64"
+        for clause in ("", " throws(Outer)"):
+            with self.subTest(clause=clause):
+                self.assertEqual(inventory.parse_member_method_line(
+                    "ref transform(" + parameters + ")" + clause + " -> string"),
+                    (False, "transform", parameters, "string"))
+
+    def test_real_task_ref_methods_keep_their_signatures(self) -> None:
+        rows = [row for row in inventory.collect_native_types(ROOT)
+                if row["namespace"] == "Task" and row["kind"] != "type"]
+        self.assertEqual({row["name"] for row in rows}, {"cancel", "poll", "awaitResult"})
+        expected = {"cancel": "(): ()", "poll": "(): TaskResult<T, E>?",
+                    "awaitResult": "(): TaskResult<T, E>"}
+        for row in rows:
+            self.assertEqual(row["receiver"], "ref")
+            self.assertEqual(row["source"], "stdlib/types/coroutine.xr")
+            self.assertEqual(row["signature"], expected[row["name"]])
+
+    def test_ordinary_static_and_ref_methods_share_the_source_parser(self) -> None:
+        source = "class Probe {\n  readValue() -> i64\n  static make() -> Probe\n  ref update(value: i64)\n}\n"
+        start = source.index("{") + 1
+        rows = inventory.parse_class_body(ROOT, ROOT / "receiver_fixture.xr", source,
+                                          "Probe", source[start:source.rindex("}")],
+                                          start, "native-type")
+        self.assertEqual([(row["name"], row["kind"], row["signature"]) for row in rows],
+                         [("readValue", "method", "(): i64"),
+                          ("make", "static-method", "(): Probe"),
+                          ("update", "method", "(value: i64): ()")])
+        self.assertNotIn("receiver", rows[0])
+        self.assertNotIn("receiver", rows[1])
+        self.assertEqual(rows[2]["receiver"], "ref")
+
+    def test_real_prelude_keeps_four_task_outcomes(self) -> None:
+        rows = inventory.collect_prelude(ROOT)
+        result = next(row for row in rows if row["name"] == "TaskResult")
+        self.assertEqual(result["signature"], "Success | Error | Panic | Cancelled")
+        self.assertFalse(any(row["name"] == "TaskStatus" for row in rows))
 
 
 if __name__ == "__main__":

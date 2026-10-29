@@ -373,9 +373,13 @@ print(len(empty))           // 0
 
 内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `init(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
 
-### 14.17 `Task<T>` 与 enum 值
+### 14.17 `Task<T, E>` 与 enum 值
 
-`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`：`Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径；结果必须可复制且 Sendable；Task 保留完整拥有式粘滞终态，重复 await 各取得逻辑副本，复制在 class 与同步身份边界停止，不使用 `await (move task)`，也不依引用计数选择单次 take。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
+`Task<T, E>` 提供三个 `ref` 方法，调用者须有可变的 Task 绑定：`cancel()` 幂等请求取消；`poll()` 返回 `TaskResult<T, E>?`；`awaitResult()` 返回 `TaskResult<T, E>`。`poll()` 只读取经过认证的终态快照，不驱动调度或执行子任务，未完成时返回 `null`。`awaitResult()` 可挂起等待终态，将子任务的业务错误作为结果值报告而不重抛 E；等待者自身的取消、引擎或协议失败及 fatal 继续走各自独立通道。
+
+`TaskResult<T, E>` 的四种终态为 `Success(T)`、`Error(E)`、`Panic(PanicInfo)`、`Cancelled`，括号表示载荷类型。逻辑类型参数 T、E 保持真实声明边界；Error 变体的规范执行载体是 `Error`，擦除不扩大 E 的上界，E 为 `Never` 时不能构造该变体，错误 union 也不因此取得普通值布局。`TaskResult.Panic(info)` 即便在本地构造，完整 PanicInfo 图（包括 cause 与 replacedError）也须拥有式、可复制且 Sendable；此规则不赋予一般 PanicInfo 无条件的 Sendable 资格。
+
+`try await task` 成功时返回 T，并按声明传播 `E | Cancelled`；panic 保持独立通道。Task 保留完整拥有式终态，重复观察取得独立逻辑快照，值复制在 class 与同步身份边界停止，不使用 `await (move task)`，也不依引用计数选择单次 take。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
 
 ### 14.18 线程与同步 handle
 
@@ -770,9 +774,13 @@ The `datetime` module provides factory functions through `import datetime`: `now
 
 The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `init(message: string = "", cause: PanicInfo? = null)`, and `toString()`.
 
-### 14.17 `Task<T>` and Enum Values
+### 14.17 `Task<T, E>` and Enum Values
 
-`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` as `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, or `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation; results must be copyable and Sendable; the Task keeps its complete owned sticky outcome and repeated awaits obtain logical copies, stopping at class and synchronization identities, without an `await (move task)` form or reference-count-selected single take. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
+`Task<T, E>` provides three `ref` methods, which require a mutable Task binding: `cancel()` requests cancellation idempotently; `poll()` returns `TaskResult<T, E>?`; `awaitResult()` returns `TaskResult<T, E>`. `poll()` only reads an authenticated terminal snapshot and does not schedule or execute the child; it returns `null` while unfinished. `awaitResult()` may suspend for a terminal outcome and reports the child's business error as a value without rethrowing E. Cancellation of the waiter itself, engine or protocol failures, and fatal outcomes retain their independent channels.
+
+The four terminal outcomes of `TaskResult<T, E>` are `Success(T)`, `Error(E)`, `Panic(PanicInfo)`, and `Cancelled`; parentheses denote payload types. Logical type arguments T and E retain their actual declaration bounds. The Error variant uses the canonical `Error` execution carrier; erasure does not widen E, `Never` cannot construct that variant, and an error union gains no ordinary value layout. Even a local `TaskResult.Panic(info)` construction requires the entire owned PanicInfo graph, including cause and replacedError, to be copyable and Sendable. This rule does not make general PanicInfo unconditionally Sendable.
+
+`try await task` returns T on success and propagates the declared `E | Cancelled`; panic keeps its independent channel. A Task retains its complete owned terminal outcome and repeated observations obtain independent logical snapshots, with value copies stopping at class and synchronization identities. There is no `await (move task)` form or reference-count-selected single take. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
 
 ### 14.18 Thread and Synchronization Handles
 
