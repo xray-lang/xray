@@ -116,13 +116,12 @@ static XrXirStatus product_limited_pipeline(const XrXirSourceProductRequest *req
     }
     }
     xr_compile_session_free(session);
-    if (stop==4 && status==XR_XIR_OK) {
+    if (stop==3 && status==XR_XIR_OK) {
         XrXirNativeProjectionRequest project={product,"original_source",16777216};
-        if (status==XR_XIR_OK) status=xr_compile_native_projection_prepare(&project,&projection,NULL);
+        if (status==XR_XIR_OK) status=xr_compile_native_projection_prepare(&project, &projection);
     } else {
-        if (status==XR_XIR_OK && stop>=1) status=xr_xir_compile_source_product_verify(product,16777216,NULL);
-        if (status==XR_XIR_OK && stop>=2) status=xr_xir_compile_source_product_emit(product,"original_source",16777216,&code);
-        if (status==XR_XIR_OK && stop>=3) status=xr_xir_compile_source_product_vm_take(product,&program);
+        if (status==XR_XIR_OK && stop>=1) status=xr_xir_compile_source_product_emit(product,"original_source",16777216,&code);
+        if (status==XR_XIR_OK && stop>=2) status=xr_xir_compile_source_product_vm_take(product,&program);
     }
     if (resources) {
         CHECK(xr_compile_resources_stats(resources,stats)==XR_COMPILE_RESOURCE_OK);
@@ -138,7 +137,7 @@ static XrXirStatus product_limited_pipeline(const XrXirSourceProductRequest *req
     return status;
 }
 static void product_cumulative_limits(const XrXirSourceProductRequest *request) {
-    for (unsigned stage=0;stage<5;++stage) {
+    for (unsigned stage=0;stage<4;++stage) {
         const XrCompileResourceLimits unlimited={UINT64_MAX,UINT64_MAX,UINT64_MAX};
         XrCompileResourceStats normal={0},actual={0};
         CHECK(product_limited_pipeline(request,&unlimited,stage,&normal)==XR_XIR_OK);
@@ -157,20 +156,6 @@ static void product_cumulative_limits(const XrXirSourceProductRequest *request) 
         printf("cumulative stage=%u physical_total=%llu peak=%llu work=%llu exact/minus1 PASS\n",stage,
             (unsigned long long)normal.allocated_bytes,(unsigned long long)normal.peak_bytes,(unsigned long long)normal.work);
     }
-}
-static void product_verify_oom(const XrXirSourceProduct *product) {
-    size_t live=runtime_live,bytes=runtime_bytes,sites=0;
-    for (size_t point=0;point<=sites;++point) {
-        runtime_attempts=0;runtime_fail_at=point ? point-1 : SIZE_MAX;
-        XrXirStatus status=xr_xir_compile_source_product_verify(product,16777216,NULL);
-        if (!point) {CHECK(status==XR_XIR_OK);sites=runtime_attempts;}
-        else {
-            if (status!=XR_XIR_OUT_OF_MEMORY) fprintf(stderr,"verify allocation %zu status=%u\n",point-1,status);
-            CHECK(status==XR_XIR_OUT_OF_MEMORY && runtime_attempts>runtime_fail_at);
-        }
-        runtime_fail_at=SIZE_MAX;CHECK(runtime_live==live && runtime_bytes==bytes);
-    }
-    printf("ordinary Source/closed/lower re-admission actual inserted allocations=%zu; physical baseline PASS\n",sites);
 }
 static void product_emit_oom(const XrXirSourceProduct *product) {
     size_t live=runtime_live,bytes=runtime_bytes,sites=0,length=0;
@@ -215,10 +200,9 @@ static void product_packet_gates(const XrXirSourceProduct *product,bool has_lowe
     XrXirSourceProductPacketView saved=source;
     CHECK(xr_xir_compile_source_product_packet(product,(XrXirSourceProductPacketKind)9,&source)==XR_XIR_BAD_STRUCTURE);
     CHECK(!memcmp(&source,&saved,sizeof(source)));
-    CHECK(xr_xir_compile_source_product_verify(product,16777216,NULL)==(has_lowered ? XR_XIR_OK : XR_XIR_BAD_STAGE));
     CHECK(runtime_live==live && runtime_bytes==bytes);
     printf("owned original Checked=%zu and closed=%zu; ordinary reader and %s PASS\n",source.length,closed.length,
-        has_lowered ? "specialize/lower correspondence" : "post-take packet lifetime");
+        has_lowered ? "pre-take strict packet read" : "post-take packet lifetime");
 }
 int main(int argc,char **argv) {
     CHECK(argc==8);product_layout_vector();
@@ -251,10 +235,9 @@ int main(int argc,char **argv) {
         xr_xir_compile_source_product_diagnostic_free(&diagnostic);CHECK(!runtime_live && !runtime_bytes);return 0;
     }
     const XrXirSourceView *view=xr_xir_compile_source_product_view(product);CHECK(view && view->complete);
-    product_packet_gates(product,true);product_corruptions(product);
-    if (!strcmp(argv[6],"tiny")) product_crossed_owners(product,argv[1],argv[3]);
+    product_packet_gates(product,true);
     product_projection_guards(product);
-    if (scan) {product_verify_oom(product);product_emit_oom(product);product_projection_oom(product);}
+    if (scan) {product_emit_oom(product);product_projection_oom(product);}
     const XrXirSourceProductFacts facts=*xr_xir_compile_source_product_facts(product);
     CHECK(facts.function_count && facts.module_count && facts.entry<facts.function_count);
     for (uint32_t f=0;f<facts.function_count;++f) {
@@ -262,7 +245,7 @@ int main(int argc,char **argv) {
     }
     XrXirNativeProjectionRequest project={product,"original_source",16777216};
     XrXirNativeProjection *projection=NULL;
-    CHECK(xr_compile_native_projection_prepare(&project,&projection,NULL)==XR_XIR_OK);
+    CHECK(xr_compile_native_projection_prepare(&project, &projection)==XR_XIR_OK);
     projection_expectations_check(product,projection,false);
     FILE *file=fopen(argv[5],"wb");CHECK(file && fwrite(xr_compile_native_projection_source(projection)->text,1,xr_compile_native_projection_source(projection)->length,file)==xr_compile_native_projection_source(projection)->length && !fclose(file));
     XrXirProgram *program=NULL;
@@ -275,7 +258,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_source_product_emit(product,"original_source",16777216,&unavailable)==XR_XIR_BAD_STAGE);
     CHECK(!unavailable.text && !unavailable.length);
     XrXirNativeProjection *refused=NULL,*saved_projection=refused;
-    CHECK(xr_compile_native_projection_prepare(&project,&refused,NULL)==XR_XIR_BAD_STAGE);
+    CHECK(xr_compile_native_projection_prepare(&project, &refused)==XR_XIR_BAD_STAGE);
     CHECK(!memcmp(&refused,&saved_projection,sizeof(refused)));
     CHECK(xr_xir_compile_source_product_vm_take(product,&transferred)==XR_XIR_BAD_STAGE);
     CHECK(!transferred);

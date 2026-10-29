@@ -28,11 +28,11 @@ typedef struct XrXirNativeProjectionFacts {
     XrFingerprint codegen_policy_id, generated_digest;
 } XrXirNativeProjectionFacts;
 
-/* Output must be NULL and is preserved on failure. One ordinary product verify
- * and one actual emission produce owned C and copied facts on the original
+/* Output must be NULL and is preserved on failure. One emission from the
+ * immutable Lowered product produces owned C and copied facts on the original
  * ledger. The product and its context may be destroyed after this returns. */
 XR_FUNC XrXirStatus xr_compile_native_projection_prepare(const XrXirNativeProjectionRequest *request,
-    XrXirNativeProjection **output, XrXirDiagnostic *diagnostic);
+    XrXirNativeProjection **output);
 /* Immutable borrows last until owner_free. Queries allocate nothing. */
 XR_FUNC const XrXirCompileContext *xr_compile_native_projection_context(const XrXirNativeProjection *owner);
 XR_FUNC const XrXirNativeProjectionSource *xr_compile_native_projection_source(const XrXirNativeProjection *owner);

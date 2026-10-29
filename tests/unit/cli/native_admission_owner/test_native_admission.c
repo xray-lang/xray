@@ -59,7 +59,7 @@ static XrXirNativeProjection *real_projection(XrCompileResources *r,const char *
     XrXirSourceProduct *product=NULL; CHECK(xr_xir_compile_source_product_build(&request,&product,NULL)==XR_XIR_OK);
     xr_compile_session_free(session);
     XrXirNativeProjectionRequest prepare={product,"admission_source",16777216};
-    XrXirNativeProjection *result=NULL; CHECK(xr_compile_native_projection_prepare(&prepare,&result,NULL)==XR_XIR_OK);
+    XrXirNativeProjection *result=NULL; CHECK(xr_compile_native_projection_prepare(&prepare, &result)==XR_XIR_OK);
     xr_xir_compile_source_product_free(product); return result;
 }
 static XrXirRuntimeSdk *real_sdk(XrCompileResources *r,const char *root) {

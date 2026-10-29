@@ -1690,6 +1690,7 @@ static void declarations_copy_controls(const char *selected) {
 #include "implementation_control_cases.inc.c"
 #include "product_packet_cases.inc.c"
 int main(int argc,char **argv) {
+    if(argc==2&&!strcmp(argv[1],"--product-packet-receivers")){product_packet_receive_cases();return 0;}
     if(argc==2&&!strcmp(argv[1],"--product-packets")){product_packet_cases();return 0;}
     if((argc==2||argc==3)&&!strcmp(argv[1],"--implementation-control")){implementation_controls(argc==3?argv[2]:NULL);return 0;}
     if((argc==2||argc==3) && !strcmp(argv[1],"--declarations-control")){declarations_copy_controls(argc==3?argv[2]:NULL);return 0;}

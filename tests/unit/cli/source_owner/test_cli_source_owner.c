@@ -32,7 +32,6 @@ static DWORD handles(void) { DWORD count=0;CHECK(GetProcessHandleCount(GetCurren
 static void execute(XrXirSourceProduct *product,const char *expected) {
     const XrXirSourceView *view=xr_xir_compile_source_product_view(product);
     CHECK(view && view->complete && view->module_count && view->modules[0].path[0]);
-    CHECK(xr_xir_compile_source_product_verify(product,16777216,NULL)==XR_XIR_OK);
     XrXirCSource source={0};CHECK(xr_xir_compile_source_product_emit(product,"cli_owner",16777216,&source)==XR_XIR_OK);
     CHECK(source.text && source.length);
     uint32_t entry=xr_xir_compile_source_product_facts(product)->entry;

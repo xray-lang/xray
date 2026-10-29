@@ -52,7 +52,6 @@ static void owned_ast_compiler(void) {
     CHECK(xr_source_compiler_build_ast(compiler,NULL,NULL,&products[0],NULL)==XR_SOURCE_COMPILE_BAD_ARGUMENT);
     xr_source_compiler_free(compiler); xr_compile_resources_release(resources);
     for(unsigned i=0;i<2;++i) {
-        CHECK(xr_xir_compile_source_product_verify(products[i],1048576,NULL)==XR_XIR_OK);
         XrXirSourceProductPacketView packet={0}; XrXirArtifact *checked=NULL;
         CHECK(xr_xir_compile_source_product_packet(products[i],XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK);
         CHECK(xr_xir_compile_checked_read(xr_xir_compile_source_product_context(products[i]),packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
@@ -130,8 +129,6 @@ static void caller_ast_compiler(void) {
     uint32_t entry=xr_xir_compile_source_product_facts(product)->entry;
     xr_program_destroy(ast);memset(source,'!',sizeof(source));
     xr_compile_resources_release(resources);xr_source_compiler_free(compiler);
-    CHECK(xr_xir_compile_source_product_verify(rooted,1048576,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_source_product_verify(product,1048576,NULL)==XR_XIR_OK);
     xr_xir_compile_source_product_free(rooted);
     XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK);
@@ -189,10 +186,6 @@ static void owned_compiler(void) {
     memset(source,'!',sizeof(source)); xr_source_compiler_free(compiler);
     CHECK(strstr(diagnostic_root.message,"initialized value"));
     CHECK(strstr(diagnostic.source.failure.path,"unsaved-compiler.xr"));
-    CHECK(xr_xir_compile_source_product_verify(first,1048576,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_source_product_verify(second,1048576,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_source_product_verify(rooted,1048576,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_source_product_verify(file,1048576,NULL)==XR_XIR_OK);
     xr_xir_compile_source_product_free(second); xr_xir_compile_source_product_free(rooted);
     xr_xir_compile_source_product_free(file); xr_xir_compile_source_product_free(first);
     xr_source_compile_diagnostic_free(&diagnostic); CHECK(!runtime_live && !runtime_bytes);

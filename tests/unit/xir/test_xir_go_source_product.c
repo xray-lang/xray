@@ -57,7 +57,6 @@ int main(int argc, char **argv) {
     if (status != XR_XIR_OK) fprintf(stderr, "product compile stage=%u status=%u %s\n",
         diagnostic.stage, status, diagnostic_root.message);
     CHECK(status == XR_XIR_OK && product);
-    CHECK(xr_xir_compile_source_product_verify(product, 4194304, NULL) == XR_XIR_OK);
     XrXirSourceProductFacts facts = *xr_xir_compile_source_product_facts(product);
     XrXirSourceProductPacketView packet = {0}; XrXirArtifact *closed = NULL;
     CHECK(xr_xir_compile_source_product_packet(product, XR_XIR_SOURCE_PRODUCT_CLOSED, &packet) == XR_XIR_OK);

@@ -39,7 +39,6 @@ int main(void) {
             cases[i].name,status,cases[i].expected,diagnostic.stage,diagnostic_root.primary.line,diagnostic_root.message);
         if (cases[i].expected==XR_XIR_OK) {
             CHECK(status==XR_XIR_OK && product);
-            CHECK(xr_xir_compile_source_product_verify(product,1048576,NULL)==XR_XIR_OK);
             XrXirSourceProductPacketView packet={0};XrXirArtifact *checked=NULL;
             CHECK(xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_SOURCE,&packet)==XR_XIR_OK);
             CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);

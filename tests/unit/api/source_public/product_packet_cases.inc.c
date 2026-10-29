@@ -50,6 +50,26 @@ static void product_packet_after_program(XrXirSourceProduct *product) {
         xr_xir_compile_artifact_free(received);
     }
 }
+static void product_packet_receive_refusals(const XrXirSourceProduct *product) {
+    const XrXirCompileContext *context=xr_xir_compile_source_product_context(product);
+    size_t live=runtime_live,bytes=runtime_bytes;uint64_t held=sdk_stats(context->resources).held_bytes;
+    for(unsigned kind=0;kind<2;++kind) {
+        XrXirSourceProductPacketView packet={0};
+        CHECK(xr_xir_compile_source_product_packet(product,(XrXirSourceProductPacketKind)kind,&packet)==XR_XIR_OK);
+        CHECK(packet.length>=64);uint8_t *copy=xr_malloc(packet.length);CHECK(copy);
+        static const unsigned positions[]={8,12,20};
+        for(unsigned n=0;n<sizeof(positions)/sizeof(*positions);++n) {
+            memcpy(copy,packet.bytes,packet.length);copy[positions[n]]^=1;
+            XrSHA256Context hash;xr_sha256_init(&hash);xr_sha256_update(&hash,copy,32);
+            xr_sha256_update(&hash,copy+64,packet.length-64);xr_sha256_final(&hash,copy+32);
+            XrXirArtifact *received=NULL;
+            CHECK(xr_xir_compile_checked_read(context,copy,packet.length,&received,NULL)==XR_XIR_BAD_STRUCTURE&&!received);
+            CHECK(sdk_stats(context->resources).held_bytes==held&&runtime_live==live&&runtime_bytes==bytes);
+        }
+        xr_free(copy);
+    }
+    puts("External SOURCE/Closed receive: six valid-rehash schema/semantic/reserved refusals preserve output and owner PASS");
+}
 static void product_packet_equal(char *text,size_t length,const char *name) {
     XrCompileResources *resources=sdk_ledger(&sdk_unlimited);uint64_t held=sdk_stats(resources).held_bytes;
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
@@ -74,7 +94,7 @@ static void product_packet_equal(char *text,size_t length,const char *name) {
         fprintf(stderr,"product packet %s kind%u same-authority bytes%zu wholeSHA and post-Program strict read\n",name,i,packet.length);
         xr_xir_compile_checked_packet_free(&expected[i]);
     }
-    product_packet_after_program(product);xr_xir_compile_source_product_free(product);
+    product_packet_after_program(product);product_packet_receive_refusals(product);xr_xir_compile_source_product_free(product);
     CHECK(sdk_stats(resources).held_bytes==held);xr_compile_resources_release(resources);CHECK(!runtime_live&&!runtime_bytes);
 }
 static uint64_t product_packet_copy_case(unsigned mode,uint64_t timeout_ns) {
@@ -139,12 +159,15 @@ static uint64_t product_packet_copy_case(unsigned mode,uint64_t timeout_ns) {
     }
     return elapsed;
 }
-static void product_packet_cases(void) {
+static void product_packet_receive_cases(void) {
     char implementation[8000];size_t length=implementation_control_fixture(implementation,sizeof(implementation));
     product_packet_equal(implementation,length,"packet-implementation");
     char flow[4096];FILE *file=fopen(XR_PUBLIC_STDLIB "/../demos/01-basics/control_flow.xr","rb");CHECK(file);
     size_t flow_length=fread(flow,1,sizeof(flow),file);CHECK(!ferror(file)&&feof(file)&&flow_length==2127&&fclose(file)==0);
     product_packet_equal(flow,flow_length,"packet-control-flow");
+}
+static void product_packet_cases(void) {
+    product_packet_receive_cases();
     uint64_t baseline=product_packet_copy_case(3,0);CHECK(baseline<UINT64_MAX-UINT64_C(5000000000));
     product_packet_copy_case(0,0);product_packet_copy_case(4,0);product_packet_copy_case(2,0);
     product_packet_copy_case(1,baseline+UINT64_C(5000000000));

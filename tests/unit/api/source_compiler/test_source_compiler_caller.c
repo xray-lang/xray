@@ -76,8 +76,6 @@ static void caller_ast_compiler(void) {
     uint32_t entry=xr_xir_compile_source_product_facts(product)->entry;
     xr_program_destroy(ast);memset(source,'!',sizeof(source));
     xr_compile_resources_release(resources);xr_source_compiler_free(compiler);
-    CHECK(xr_xir_compile_source_product_verify(rooted,1048576,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_source_product_verify(product,1048576,NULL)==XR_XIR_OK);
     xr_xir_compile_source_product_free(rooted);
     XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK);
@@ -135,10 +133,6 @@ static void owned_compiler(void) {
     memset(source,'!',sizeof(source)); xr_source_compiler_free(compiler);
     CHECK(strstr(diagnostic_root.message,"initialized value"));
     CHECK(strstr(diagnostic.source.failure.path,"unsaved-compiler.xr"));
-    CHECK(xr_xir_compile_source_product_verify(first,1048576,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_source_product_verify(second,1048576,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_source_product_verify(rooted,1048576,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_source_product_verify(file,1048576,NULL)==XR_XIR_OK);
     xr_xir_compile_source_product_free(second); xr_xir_compile_source_product_free(rooted);
     xr_xir_compile_source_product_free(file); xr_xir_compile_source_product_free(first);
     xr_source_compile_diagnostic_free(&diagnostic); CHECK(!runtime_live && !runtime_bytes);

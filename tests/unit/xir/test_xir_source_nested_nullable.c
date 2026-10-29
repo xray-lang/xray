@@ -61,7 +61,6 @@ static void sn_permission_control(void) {
     if (status!=XR_XIR_OK) fprintf(stderr,"Source writable-default control status=%u stage=%u %u:%u: %s\n",
         status,diagnostic.stage,diagnostic_root.primary.line,diagnostic_root.primary.column,diagnostic_root.message);
     CHECK(status==XR_XIR_OK && product && xr_xir_compile_source_product_view(product)->complete);
-    CHECK(xr_xir_compile_source_product_verify(product,1048576,NULL)==XR_XIR_OK);
     XrXirSourceProductPacketView packet={0};XrXirArtifact *closed=NULL;
     CHECK(xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&closed,NULL)==XR_XIR_OK);

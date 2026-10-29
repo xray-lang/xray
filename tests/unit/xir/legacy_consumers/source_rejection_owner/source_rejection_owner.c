@@ -61,7 +61,6 @@ static bool positive_owner(const XrXirCompileContext *context, XrXirSourceProduc
     XrXirSourceProductPacketView packet = {0};
     XrXirSourceDiagnostic admission = {0};
     bool ok = product && *product &&
-        xr_xir_compile_source_product_verify(*product, 16777216, NULL) == XR_XIR_OK &&
         xr_xir_compile_source_product_public_admit(*product, &admission) == XR_XIR_OK &&
         xr_xir_compile_source_product_packet(*product, XR_XIR_SOURCE_PRODUCT_SOURCE, &packet) == XR_XIR_OK &&
         xr_xir_compile_checked_read(context, packet.bytes, packet.length, &owned, NULL) == XR_XIR_OK;

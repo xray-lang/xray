@@ -29,8 +29,6 @@ static XrXirStatus sn_build(const XrXirCompileContext *context,const char *outpu
     if (status==XR_XIR_OK) {
         CHECK(product && xr_xir_compile_source_product_view(product)->complete);
         CHECK(xr_xir_compile_source_product_context(product)->resources==context->resources);
-        status=xr_xir_compile_source_product_verify(product,1048576,NULL);
-        sn_metadata_checkpoint(context,"verify",status);
     }
     XrXirSourceProductPacketView packet={0};
     if (status==XR_XIR_OK) status=xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet);

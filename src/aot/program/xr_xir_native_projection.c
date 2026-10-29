@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xr_xir_native_projection.c - Rechecked source to owned native C projection
+ * xr_xir_native_projection.c - Verified Source to owned native C projection
  */
 #include "xr_xir_native_projection.h"
 #include "../../base/xsha256.h"
@@ -46,7 +46,7 @@ struct XrXirNativeProjection {
     char prefix[65];
 };
 XR_FUNC XrXirStatus xr_compile_native_projection_prepare(const XrXirNativeProjectionRequest *request,
-    XrXirNativeProjection **output, XrXirDiagnostic *diagnostic) {
+    XrXirNativeProjection **output) {
     if (!request || !output || *output || !request->product || !request->code_limit)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirCompileContext *context = xr_xir_compile_source_product_context(request->product);
@@ -54,8 +54,8 @@ XR_FUNC XrXirStatus xr_compile_native_projection_prepare(const XrXirNativeProjec
     uint32_t length = 0;
     XrXirStatus status = projection_prefix(request->prefix, &length);
     if (status != XR_XIR_OK) return status;
-    status = xr_xir_compile_source_product_verify(request->product, request->code_limit, diagnostic);
-    if (status != XR_XIR_OK) return status;
+    const XrXirModule *module = xr_xir_compile_source_product_module(request->product);
+    if (!module || module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
     const XrXirSourceProductFacts *facts = xr_xir_compile_source_product_facts(request->product);
     if (!facts) return XR_XIR_BAD_STRUCTURE;
     XrXirNativeProjection *owner = NULL;

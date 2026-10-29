@@ -17,9 +17,28 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir/xir_instance_compile_observer.h"
 
+static void generated_fingerprint(FILE *file,const char *name,const uint8_t bytes[32]) {
+    fprintf(file,"\"%s\":\"",name);
+    for(unsigned i=0;i<32;++i)fprintf(file,"%02x",bytes[i]);
+    fputc('"',file);
+}
+static void generated_facts(const char *path,const XrXirNativeProjection *projection) {
+    const XrXirNativeProjectionFacts *facts=xr_compile_native_projection_facts(projection);
+    const XrXirNativeProjectionSource *source=xr_compile_native_projection_source(projection);
+    CHECK(facts&&source);FILE *file=fopen(path,"wb");CHECK(file);
+    fprintf(file,"{\"architecture\":%u,\"abi\":%u,\"entry\":%u,\"functions\":%u,\"modules\":%u,\"prefix\":\"%s\",\"CBytes\":%zu,",
+        (unsigned)facts->source.target.architecture,(unsigned)facts->source.target.abi_version,
+        facts->source.entry,facts->source.function_count,facts->source.module_count,facts->prefix,source->length);
+    generated_fingerprint(file,"SOURCE",facts->source.source_digest);fputc(',',file);
+    generated_fingerprint(file,"CLOSED",facts->source.closed_digest);fputc(',',file);
+    generated_fingerprint(file,"LAYOUT",facts->source.lowered_layout_digest);fputc(',',file);
+    generated_fingerprint(file,"POLICY",facts->codegen_policy_id.bytes);fputc(',',file);
+    generated_fingerprint(file,"GENERATED",facts->generated_digest.bytes);fputs("}\n",file);
+    CHECK(!ferror(file)&&fclose(file)==0);
+}
 int main(int argc, char **argv) {
-    if (argc != 4) {
-        fprintf(stderr, "usage: source-generated-c ABSOLUTE_SOURCE OUTPUT_C ABSOLUTE_STDLIB\n");
+    if (argc != 4 && argc != 5) {
+        fprintf(stderr, "usage: source-generated-c ABSOLUTE_SOURCE OUTPUT_C ABSOLUTE_STDLIB [OUTPUT_FACTS]\n");
         return 2;
     }
     XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
@@ -42,13 +61,12 @@ int main(int argc, char **argv) {
         goto cleanup;
     }
     const XrXirNativeProjectionRequest prepare = {product, "source_fixture", (size_t)UINT64_C(64) << 20};
-    XrXirDiagnostic emitted = {0};
-    XrXirStatus status = xr_compile_native_projection_prepare(&prepare, &projection, &emitted);
+    XrXirStatus status = xr_compile_native_projection_prepare(&prepare, &projection);
     if (status != XR_XIR_OK) {
-        fprintf(stderr, "Source C projection failed: status=%u function=%u instruction=%u\n",
-            (unsigned)status, emitted.function, emitted.instruction);
+        fprintf(stderr, "Source C projection failed: status=%u\n", (unsigned)status);
         goto cleanup;
     }
+    if(argc==5)generated_facts(argv[4],projection);
     /* The C projection owns its bytes after the producing Source owner dies. */
     xr_xir_compile_source_product_free(product);
     product = NULL;

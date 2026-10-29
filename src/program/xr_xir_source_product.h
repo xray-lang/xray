@@ -117,9 +117,6 @@ XR_FUNC const XrXirConstruction *xr_xir_compile_source_product_construction(cons
 /* Layout borrows end when the Lowered artifact transfers to a VM program. */
 XR_FUNC XrXirStatus xr_xir_compile_source_product_layout(const XrXirSourceProduct *product,
     uint32_t function,XrXirSourceProductLayoutView *output);
-/* Rebuild packet correspondence and compare the complete native projection. */
-XR_FUNC XrXirStatus xr_xir_compile_source_product_verify(const XrXirSourceProduct *product,
-    size_t code_limit,XrXirDiagnostic *diagnostic);
 /* Successful VM projection transfers code ownership and leaves queries owned. */
 XR_FUNC XrXirStatus xr_xir_compile_source_product_vm_take(XrXirSourceProduct *product,
     XrXirProgram **output);

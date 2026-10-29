@@ -555,7 +555,6 @@ static bool program_source_build(ReceiverRun *run) {
         return false;
     }
     CHECK(run->product && xr_xir_compile_source_product_context(run->product)->resources == run->context->resources);
-    CHECK(completed(run, xr_xir_compile_source_product_verify(run->product, 16777216, NULL), "Program-SourceProduct-full-verify"));
     XrXirSourceDiagnostic admission = {0};
     CHECK(completed(run, xr_xir_compile_source_product_public_admit(run->product, &admission), "Program-SourceProduct-public-admit"));
     XrXirSourceProductPacketView packet = {0};

@@ -16,11 +16,11 @@ static void product_projection_guards(const XrXirSourceProduct *product) {
     size_t live = runtime_live, bytes = runtime_bytes;
     for (size_t i = 0; i < sizeof(invalid) / sizeof(*invalid); ++i) {
         request.prefix = invalid[i];
-        CHECK(xr_compile_native_projection_prepare(&request, &output, NULL) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_compile_native_projection_prepare(&request, &output) == XR_XIR_BAD_STRUCTURE);
         CHECK(!memcmp(&output, &saved, sizeof(saved)));
     }
     request.prefix = "original_source"; output = (XrXirNativeProjection *)(uintptr_t)17; saved = output;
-    CHECK(xr_compile_native_projection_prepare(&request, &output, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_compile_native_projection_prepare(&request, &output) == XR_XIR_BAD_STRUCTURE);
     CHECK(!memcmp(&output, &saved, sizeof(saved)));
     CHECK(runtime_live == live && runtime_bytes == bytes);
 }
@@ -30,7 +30,7 @@ static void product_projection_oom(const XrXirSourceProduct *product) {
     for (size_t point = 0; point <= sites; ++point) {
         XrXirNativeProjection *output = NULL, *saved = output;
         runtime_attempts = 0; runtime_fail_at = point ? point - 1 : SIZE_MAX;
-        XrXirStatus status = xr_compile_native_projection_prepare(&request, &output, NULL);
+        XrXirStatus status = xr_compile_native_projection_prepare(&request, &output);
         if (!point) {
             CHECK(status == XR_XIR_OK); sites = runtime_attempts;
             projection_expectations_check(product, output, false);

@@ -569,7 +569,6 @@ static void emit_case(const char *path,const char *output) {
     XrXirSourceText source={NULL,text,length};XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
     CHECK(xr_xir_compile_source_product_build_text(&request,&source,&product,&diagnostic)==XR_XIR_OK);
     memset(text,0xa5,length);xr_free(text);xr_compile_session_free(session);
-    CHECK(xr_xir_compile_source_product_verify(product,SIZE_MAX,NULL)==XR_XIR_OK);
     const XrXirModule *module=xr_xir_compile_source_product_module(product);
     uint32_t escaped=function_named(module,"escaped"),answer=function_named(module,"answer");CHECK(answer!=UINT32_MAX);
     XrXirCSource code={0};CHECK(xr_xir_compile_source_product_emit(product,"error_union",SIZE_MAX,&code)==XR_XIR_OK);

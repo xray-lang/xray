@@ -86,7 +86,7 @@ static bool probe_source(XrCliNativeProbe *owner) {
         return probe_fail(owner,mapped,"COMPILE_PROBE_FAILED","source-program",(unsigned)status,(int)owner->source_diagnostic.stage);
     }
     XrXirNativeProjectionRequest project={owner->product,"xray_toolchain_probe",UINT64_C(64)<<20};
-    XrXirStatus projected=xr_compile_native_projection_prepare(&project,&owner->projection,NULL);
+    XrXirStatus projected=xr_compile_native_projection_prepare(&project, &owner->projection);
     if (projected==XR_XIR_OK) return true;
     XrCliNativeProbeStatus mapped=projected==XR_XIR_BUDGET ? XR_CLI_NATIVE_PROBE_BUDGET :
         projected==XR_XIR_OUT_OF_MEMORY ? XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY :

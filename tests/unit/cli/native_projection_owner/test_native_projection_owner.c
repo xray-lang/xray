@@ -35,11 +35,11 @@ static XrXirNativeProjection *prepare(const char *root,const char *source,const 
     xr_compile_session_free(session);
     char prefix[]="bound_source";
     XrXirNativeProjectionRequest request_c={product,prefix,16777216};
-    XrXirNativeProjection *owner=NULL;CHECK(xr_compile_native_projection_prepare(&request_c,&owner,NULL)==XR_XIR_OK);
+    XrXirNativeProjection *owner=NULL;CHECK(xr_compile_native_projection_prepare(&request_c, &owner)==XR_XIR_OK);
     memset(prefix,'x',sizeof(prefix));memset(&context,0xCE,sizeof(context));
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK);
     request_c.prefix="bound_source";
-    XrXirNativeProjection *refused=NULL;CHECK(xr_compile_native_projection_prepare(&request_c,&refused,NULL)==XR_XIR_BAD_STAGE&&!refused);
+    XrXirNativeProjection *refused=NULL;CHECK(xr_compile_native_projection_prepare(&request_c, &refused)==XR_XIR_BAD_STAGE&&!refused);
     xr_xir_compile_source_product_free(product);xr_xir_compile_program_drop(program);
     CHECK(!strcmp(xr_compile_native_projection_facts(owner)->prefix,"bound_source"));
     return owner;
@@ -59,7 +59,7 @@ static XrXirStatus bounded(const char *root,const char *source,const char *stdli
     if(status==XR_XIR_OK)status=xr_xir_compile_source_product_build(&request,&product,NULL);
     xr_compile_session_free(session);
     XrXirNativeProjectionRequest project={product,"bound_source",16777216};
-    if(status==XR_XIR_OK)status=xr_compile_native_projection_prepare(&project,&owner,NULL);
+    if(status==XR_XIR_OK)status=xr_compile_native_projection_prepare(&project, &owner);
     xr_xir_compile_source_product_free(product);
     if(status==XR_XIR_OK) {
         *prepared_work=sdk_stats(resources).work;size_t attempts_before=runtime_attempts;

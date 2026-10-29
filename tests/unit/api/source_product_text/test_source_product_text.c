@@ -72,7 +72,6 @@ static void text_owned_execution(void) {
     memset(bytes, '!', sizeof(bytes));
     world_close(&w);
     CHECK(xr_xir_compile_source_product_view(product)->complete);
-    CHECK(xr_xir_compile_source_product_verify(product, 1048576, NULL) == XR_XIR_OK);
     const XrXirSourceProductFacts *facts = xr_xir_compile_source_product_facts(product);
     CHECK(facts && facts->module_count == 1); uint32_t entry = facts->entry;
     XrXirProgram *program = NULL;
@@ -193,7 +192,6 @@ static void rooted_text_authority(void) {
         &ast_product, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_source_product_facts(ast_product)->module_count == 2);
     xr_program_destroy(rooted_ast);
-    CHECK(xr_xir_compile_source_product_verify(ast_product, 1048576, NULL) == XR_XIR_OK);
     xr_xir_compile_source_product_free(ast_product);
     const XrXirSourceView *view = xr_xir_compile_source_product_view(product);
     bool found = false;
@@ -207,7 +205,6 @@ static void rooted_text_authority(void) {
     XrXirSourceProduct *rejected = NULL;
     CHECK(xr_xir_compile_source_product_build_text(&w.request, &text, &rejected, NULL) == XR_XIR_BAD_STRUCTURE && !rejected);
     world_close(&w);
-    CHECK(xr_xir_compile_source_product_verify(product, 1048576, NULL) == XR_XIR_OK);
     xr_xir_compile_source_product_free(product);
     CHECK(!runtime_live && !runtime_bytes);
 }
@@ -324,7 +321,6 @@ static void ast_owned_execution_and_guards(void) {
     uint32_t entry=xr_xir_compile_source_product_facts(product)->entry;
     xr_program_destroy(ast); world_close(&w);
     CHECK(xr_xir_compile_source_product_view(product)->complete);
-    CHECK(xr_xir_compile_source_product_verify(product,1048576,NULL)==XR_XIR_OK);
     XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK);
     xr_xir_compile_source_product_free(product);

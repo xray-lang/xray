@@ -125,8 +125,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     source=xr_source_compile_build(&request,&product,&diagnostic);
     if (source!=XR_SOURCE_COMPILE_OK) { build_source_report(&diagnostic,resources);result=build_source_exit(source);goto cleanup; }
     XrXirNativeProjectionRequest prepare={product,"xray_app",(size_t)BUILD_C_LIMIT};
-    XrXirDiagnostic projection_diagnostic={0};
-    XrXirStatus projected=xr_compile_native_projection_prepare(&prepare,&projection,&projection_diagnostic);
+    XrXirStatus projected=xr_compile_native_projection_prepare(&prepare, &projection);
     if (projected!=XR_XIR_OK) {
         fprintf(stderr,"XR_BUILD_6004: C projection failed (status=%u)\n",(unsigned)projected);
         result=projected==XR_XIR_OUT_OF_MEMORY || projected==XR_XIR_BAD_STRUCTURE ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;

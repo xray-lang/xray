@@ -137,7 +137,6 @@ int main(int argc, char **argv) {
     uint32_t product_entry = UINT32_MAX;
     if (status == XR_XIR_OK) {
         CHECK(product && xr_xir_compile_source_product_context(product)->resources == context->resources);
-        CHECK(xr_xir_compile_source_product_verify(product, 16777216, NULL) == XR_XIR_OK);
         XrXirSourceDiagnostic admission = {0};
         CHECK(xr_xir_compile_source_product_public_admit(product, &admission) == XR_XIR_OK);
         const XrXirSourceProductFacts *facts = xr_xir_compile_source_product_facts(product);

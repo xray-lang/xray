@@ -62,10 +62,6 @@ static XrCliCompileSourceStatus observed_build(const XrCliCompileSourceRequest *
     return status;
 }
 
-static XrXirStatus observed_verify(const XrXirSourceProduct *product, size_t limit, XrXirDiagnostic *diagnostic) {
-    return observe_xir(xr_xir_compile_source_product_verify(product, limit, diagnostic));
-}
-
 static XrXirStatus observed_admit(const XrXirSourceProduct *product, XrXirSourceDiagnostic *diagnostic) {
     return observe_xir(xr_xir_compile_source_product_public_admit(product, diagnostic));
 }
@@ -94,7 +90,6 @@ static int muted_consumer_report(const char *format, ...) { (void)format; return
 #define xr_compile_resources_new observed_new
 #define xr_compile_resources_stats observed_statistics
 #define xr_cli_compile_source_build observed_build
-#define xr_xir_compile_source_product_verify observed_verify
 #define xr_xir_compile_source_product_public_admit observed_admit
 #define xr_xir_compile_checked_read observed_read
 #define xr_xir_compile_type_storage_prove observed_storage
@@ -108,7 +103,6 @@ static int muted_consumer_report(const char *format, ...) { (void)format; return
 #undef xr_compile_resources_new
 #undef xr_compile_resources_stats
 #undef xr_cli_compile_source_build
-#undef xr_xir_compile_source_product_verify
 #undef xr_xir_compile_source_product_public_admit
 #undef xr_xir_compile_checked_read
 #undef xr_xir_compile_type_storage_prove
