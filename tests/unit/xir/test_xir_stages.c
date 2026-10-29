@@ -472,11 +472,11 @@ static void constructed_metadata(void) {
     budget = stage_context_limited(1, STAGE_LIVE_BYTES, STAGE_WORK);
     CHECK(xr_xir_compile_types_structure_verify(&budget, &types) == XR_XIR_OK);
     XrXirTypes *denied_copy = NULL;
-    CHECK(xr_xir_compile_types_clone(&budget, &types, &denied_copy) == XR_XIR_BUDGET && !denied_copy);
+    CHECK(xr_xir_compile_types_clone(&budget, &types, NULL, &denied_copy) == XR_XIR_BUDGET && !denied_copy);
     budget = stage_context_limited(STAGE_ALLOCATED_BYTES, STAGE_LIVE_BYTES, (types.count));
     CHECK(xr_xir_compile_types_structure_verify(&budget, &types) == XR_XIR_BUDGET);
     XrXirTypes *copy = NULL;
-    CHECK(xr_xir_compile_types_clone(&stage_context, &types, &copy) == XR_XIR_OK && copy && copy->nodes != nodes);
+    CHECK(xr_xir_compile_types_clone(&stage_context, &types, NULL, &copy) == XR_XIR_OK && copy && copy->nodes != nodes);
     CHECK(copy->nodes[2].parameters != &input);
     memset(nodes,0xCC,sizeof(nodes)); memset(&input,0xCC,sizeof(input));
     CHECK(xr_xir_compile_types_structure_verify(&stage_context, copy) == XR_XIR_OK);
@@ -585,7 +585,7 @@ static void nominal_pool_ownership(void) {
     XrXirCompileContext budget = stage_context_default();
     CHECK(xr_xir_compile_types_structure_verify(&budget, &types) == XR_XIR_OK);
     XrXirTypes *copy = NULL;
-    CHECK(xr_xir_compile_types_clone(&stage_context, &types, &copy) == XR_XIR_OK && copy && copy->nominals);
+    CHECK(xr_xir_compile_types_clone(&stage_context, &types, NULL, &copy) == XR_XIR_OK && copy && copy->nominals);
     CHECK(copy->nominals != &f.table && copy->nominals->declarations != f.declarations);
     memset(&f, 0xCC, sizeof(f));
     budget = stage_context_default();
@@ -635,7 +635,7 @@ static void nominal_instance_metadata(void) {
     CHECK(xr_xir_compile_types_structure_verify(&budget, &types) == XR_XIR_BAD_STRUCTURE);
     nodes[0].nominal.declaration = 0;
     XrXirTypes *copy = NULL;
-    CHECK(xr_xir_compile_types_clone(&stage_context, &types, &copy) == XR_XIR_OK);
+    CHECK(xr_xir_compile_types_clone(&stage_context, &types, NULL, &copy) == XR_XIR_OK);
     CHECK(copy->nodes[1].nominal.arguments != &argument);
     argument = XR_XIR_UNIT; memset(&f, 0xCC, sizeof(f)); memset(nodes, 0xCC, sizeof(nodes));
     budget = stage_context_default();

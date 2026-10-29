@@ -233,11 +233,11 @@ static bool nominal_variants_copy(const XrXirCompileContext *compile_context, co
     const XrXirNominalVariant **output, XrXirStatus *allocation_status, XrCompileRequestControl *control) {
 
     if (!count) return true;
-    XrXirNominalVariant *copy = xir_compile_calloc(compile_context, count, sizeof(*copy), allocation_status);
+    XrXirNominalVariant *copy = xir_type_copy_zero(compile_context, count, sizeof(*copy), allocation_status,control);
     if (!copy) return false;
     *output = copy;
     for (uint32_t i = 0; i < count; ++i) {
-        *allocation_status=nominal_control_poll(control);
+        *allocation_status=xir_type_copy_rows(control,i);
         if (*allocation_status!=XR_XIR_OK) return false;
         copy[i].field_begin = source[i].field_begin; copy[i].field_count = source[i].field_count;
         if (!nominal_copy_name(compile_context, source[i].name, &copy[i].name, allocation_status,control)) return false;
@@ -246,25 +246,26 @@ static bool nominal_variants_copy(const XrXirCompileContext *compile_context, co
 }
 
 static bool nominal_copy_declaration(const XrXirCompileContext *compile_context, const XrXirNominalDeclaration *source,
-                                     XrXirNominalDeclaration *d, XrXirStatus *allocation_status) {
+                                     XrXirNominalDeclaration *d, XrCompileRequestControl *control, XrXirStatus *allocation_status) {
     d->exported = source->exported; d->kind = source->kind;
     d->variant_count = source->variant_count; d->flags = source->flags;
 
     d->native = source->native;
-    if (!nominal_variants_copy(compile_context, source->variants, source->variant_count, &d->variants, allocation_status,NULL)) return false;
-    if (!nominal_copy_name(compile_context, source->module, &d->module, allocation_status,NULL) ||
-        !nominal_copy_name(compile_context, source->name, &d->name, allocation_status,NULL)) return false;
+    if (!nominal_variants_copy(compile_context, source->variants, source->variant_count, &d->variants, allocation_status,control)) return false;
+    if (!nominal_copy_name(compile_context, source->module, &d->module, allocation_status,control) ||
+        !nominal_copy_name(compile_context, source->name, &d->name, allocation_status,control)) return false;
     XrXirConstraint *constraints = NULL;
-    if ((*allocation_status = xr_xir_compile_constraint_array_copy_verified(compile_context, source->constraints, source->parameter_count, &constraints)) != XR_XIR_OK)
+    if ((*allocation_status = xr_xir_compile_constraint_array_copy_verified(compile_context, source->constraints, source->parameter_count, control, &constraints)) != XR_XIR_OK)
         return false;
     d->constraints = constraints; d->parameter_count = source->parameter_count;
     if (source->field_count) {
-        XrXirNominalField *fields = xir_compile_calloc(compile_context, source->field_count, sizeof(*fields), allocation_status);
+        XrXirNominalField *fields = xir_type_copy_zero(compile_context, source->field_count, sizeof(*fields), allocation_status,control);
         if (!fields) return false;
         d->fields = fields; d->field_count = source->field_count;
         for (uint32_t f = 0; f < source->field_count; ++f) {
+            *allocation_status=xir_type_copy_rows(control,f);if(*allocation_status!=XR_XIR_OK)return false;
             fields[f].type = source->fields[f].type; fields[f].flags = source->fields[f].flags;
-            if (!nominal_copy_name(compile_context, source->fields[f].name, &fields[f].name, allocation_status,NULL)) return false;
+            if (!nominal_copy_name(compile_context, source->fields[f].name, &fields[f].name, allocation_status,control)) return false;
         }
     }
     return true;
@@ -279,25 +280,31 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_clone(const XrXirCompileContext *comp
     XrXirCompileContext remaining = *budget;
     XrXirStatus status = xr_xir_compile_nominal_structure_verify(&remaining, table, types);
     if (status != XR_XIR_OK || !table) return status;
-    return nominal_copy_table(compile_context, table, output);
+    return nominal_copy_table(compile_context, table, NULL, output);
 }
 
-static XrXirStatus nominal_copy_table(const XrXirCompileContext *compile_context, const XrXirNominalTable *table,
+static XrXirStatus nominal_copy_table(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, XrCompileRequestControl *control,
                                      XrXirNominalTable **output) {
     XrXirStatus allocation_status = XR_XIR_OK;
 
+    allocation_status=xir_type_copy_poll(control);if(allocation_status!=XR_XIR_OK)return allocation_status;
     if (!table) { *output = NULL; return XR_XIR_OK; }
-    if (table->identities) return nominal_copy_identities(compile_context, table, NULL, output);
+    if (table->identities) return nominal_copy_identities(compile_context, table, control, output);
 
     XrXirNominalTable *copy = xir_compile_calloc(compile_context, 1, sizeof(*copy), &allocation_status);
     if (!copy) return allocation_status;
-    XrXirNominalDeclaration *declarations = xir_compile_calloc(compile_context, table->count, sizeof(*declarations), &allocation_status);
+    XrXirNominalDeclaration *declarations = xir_type_copy_zero(compile_context, table->count, sizeof(*declarations), &allocation_status,control);
     if (!declarations) { xr_compile_resources_free(copy); return allocation_status; }
     copy->declarations = declarations; copy->count = table->count;
-    for (uint32_t i = 0; i < table->count; ++i)
-        if (!nominal_copy_declaration(compile_context, &table->declarations[i], &declarations[i], &allocation_status)) {
+    for (uint32_t i = 0; i < table->count; ++i) {
+        allocation_status=xir_type_copy_rows(control,i);
+        if(allocation_status!=XR_XIR_OK) {xr_xir_compile_nominal_free(copy);return allocation_status;}
+        if (!nominal_copy_declaration(compile_context, &table->declarations[i], &declarations[i], control, &allocation_status)) {
             xr_xir_compile_nominal_free(copy); return allocation_status;
         }
+    }
+    allocation_status=xir_type_copy_poll(control);
+    if(allocation_status!=XR_XIR_OK) {xr_xir_compile_nominal_free(copy);return allocation_status;}
     *output = copy; return XR_XIR_OK;
 }
 

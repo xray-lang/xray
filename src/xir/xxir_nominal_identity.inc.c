@@ -104,11 +104,11 @@ static XrXirStatus nominal_copy_identities(const XrXirCompileContext *compile_co
 
     XrXirNominalTable *copy = xir_compile_calloc(compile_context, 1, sizeof(*copy), &allocation_status);
     if (!copy) return allocation_status;
-    XrXirNominalIdentity *identities = xir_compile_calloc(compile_context, table->count, sizeof(*identities), &allocation_status);
+    XrXirNominalIdentity *identities = xir_type_copy_zero(compile_context, table->count, sizeof(*identities), &allocation_status,control);
     if (!identities) { xr_compile_resources_free(copy); return allocation_status; }
     copy->identities = identities; copy->count = table->count;
     for (uint32_t i = 0; i < table->count; ++i) {
-        allocation_status=nominal_control_poll(control);if (allocation_status!=XR_XIR_OK) goto fail;
+        allocation_status=xir_type_copy_rows(control,i);if (allocation_status!=XR_XIR_OK) goto fail;
         XrXirNominalIdentity from = nominal_identity_header(table, i), *to = &identities[i];
         to->exported = from.exported; to->arity = from.arity; to->kind = from.kind;
         to->variant_count = from.variant_count; to->flags = from.flags;
@@ -116,10 +116,11 @@ static XrXirStatus nominal_copy_identities(const XrXirCompileContext *compile_co
         to->native = from.native;
         if (!nominal_variants_copy(compile_context, from.variants, from.variant_count, &to->variants, &allocation_status,control)) goto fail;
         if (!nominal_copy_name(compile_context, from.module, &to->module, &allocation_status,control) || !nominal_copy_name(compile_context, from.name, &to->name, &allocation_status,control)) goto fail;
-        XrXirNominalFieldIdentity *fields = from.field_count ? xir_compile_calloc(compile_context, from.field_count, sizeof(*fields), &allocation_status) : NULL;
+        XrXirNominalFieldIdentity *fields = from.field_count ? xir_type_copy_zero(compile_context, from.field_count, sizeof(*fields), &allocation_status,control) : NULL;
         if (from.field_count && !fields) goto fail;
         to->fields = fields; to->field_count = from.field_count;
         for (uint32_t f = 0; f < from.field_count; ++f) {
+            allocation_status=xir_type_copy_rows(control,f);if(allocation_status!=XR_XIR_OK)goto fail;
             XrXirNominalFieldIdentity field = nominal_identity_field(table, i, f);
             fields[f].flags = field.flags;
             if (!nominal_copy_name(compile_context, field.name, &fields[f].name, &allocation_status,control)) goto fail;

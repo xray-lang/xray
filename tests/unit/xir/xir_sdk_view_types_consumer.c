@@ -30,7 +30,7 @@ int main(void) {
     XrXirTypes types={nodes,5,NULL,NULL};XrXirTypes *owned=NULL;uint32_t value=99;
     CHECK(xr_xir_compile_types_structure_verify(&c,&types)==XR_XIR_BAD_TYPE);
     types.count=4;CHECK(xr_xir_compile_types_structure_verify(&c,&types)==XR_XIR_OK);
-    CHECK(xr_xir_compile_types_clone(&c,&types,&owned)==XR_XIR_OK);
+    CHECK(xr_xir_compile_types_clone(&c,&types, NULL,&owned)==XR_XIR_OK);
     memset(nodes,0xcc,sizeof(nodes));memset(fields,0xcc,sizeof(fields));memset(&parameter,0xcc,sizeof(parameter));
     CHECK(xr_xir_compile_types_structure_verify(&c,owned)==XR_XIR_OK);
     CHECK(xr_xir_compile_view_type_flags(&c,owned,(XrXirType)258,&value)==XR_XIR_OK && value==3);

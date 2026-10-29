@@ -60,7 +60,7 @@ static XrXirStatus pipeline(const XrXirCompileContext *c) {
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(checked,&packet,NULL);
     if(status==XR_XIR_OK)CHECK(packet.length==sizeof(tuple72_golden) && !memcmp(packet.bytes,tuple72_golden,packet.length));
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_read(c,packet.bytes,packet.length,&decoded,NULL);
-    if(status==XR_XIR_OK)status=xr_xir_compile_types_clone(c,xr_xir_compile_artifact_module(decoded)->types,&clone);
+    if(status==XR_XIR_OK)status=xr_xir_compile_types_clone(c,xr_xir_compile_artifact_module(decoded)->types, NULL,&clone);
     if(status==XR_XIR_OK) {
         CHECK(xr_xir_compile_artifact_module(checked)->types->nodes[0].parameters!=f.fields);
         CHECK(clone->nodes[0].parameters!=f.fields && clone->nodes[0].parameter_count==3);
@@ -396,7 +396,7 @@ static XrXirStatus closure(const XrXirCompileContext *c) {
         status=xr_xir_compile_type_expression_shape(c,pool,signature->result,0);
         if(status==XR_XIR_OK)status=xr_xir_compile_type_substitution_matches_between(c,&types,pool,actuals,2,constructed(0),signature->result);
         /* A closure borrows the caller's base pool; the receiving owner clones its complete view. */
-        if(status==XR_XIR_OK)status=xr_xir_compile_types_clone(c,pool,&owned);
+        if(status==XR_XIR_OK)status=xr_xir_compile_types_clone(c,pool, NULL,&owned);
         xr_xir_compile_interface_closure_free(out);out=NULL;
         memset(fields,0xcc,sizeof(fields));memset(call_params,0xcc,sizeof(call_params));
         if(status==XR_XIR_OK)status=xr_xir_compile_types_structure_verify(c,owned);

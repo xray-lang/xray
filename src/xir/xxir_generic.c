@@ -134,7 +134,7 @@ XrXirStatus xr_xir_compile_generics_clone(const XrXirCompileContext *compile_con
         const XrXirGeneric *from = &module->generics[f];
         copy[f].parameter_count = from->parameter_count; copy[f].argument_count = from->argument_count;
         XrXirConstraint *constraints = NULL;
-        XrXirStatus status = xr_xir_compile_constraint_array_copy_verified(compile_context, from->constraints, from->parameter_count, &constraints);
+        XrXirStatus status = xr_xir_compile_constraint_array_copy_verified(compile_context, from->constraints, from->parameter_count, NULL, &constraints);
         copy[f].constraints = constraints;
         /* Constraint copying has its own failure status. Propagate it before
          * sibling copies can allocate through the still-successful status. */

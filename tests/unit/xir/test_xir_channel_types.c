@@ -62,7 +62,7 @@ static void obligations(const XrXirCompileContext *context, const XrXirTypes *ty
 }
 static void ownership(const XrXirCompileContext *context, XrXirTypeNode *nodes, XrXirTypes types) {
     XrXirTypes *copy=NULL;
-    CHECK(xr_xir_compile_types_clone(context,&types,&copy)==XR_XIR_OK);
+    CHECK(xr_xir_compile_types_clone(context,&types, NULL,&copy)==XR_XIR_OK);
     CHECK(copy && copy->nodes!=nodes && copy->nodes[5].element==(XrXirType)XR_XIR_TYPE_PARAMETER_BASE);
     XrXirTypeArena *arena=NULL; types.count=5;
     CHECK(xr_xir_compile_type_arena_new(context,&types,&arena)==XR_XIR_VALUE_OK);

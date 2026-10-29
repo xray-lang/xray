@@ -556,7 +556,7 @@ static void nominal_allocation_failures(void) {
 }
 static XrXirStatus nominal_pool_copy_operation(const XrXirCompileContext *context,void *opaque) {
     XrXirTypes *types=opaque,*copy=NULL;
-    XrXirStatus status=xr_xir_compile_types_clone(context,types,&copy);
+    XrXirStatus status=xr_xir_compile_types_clone(context,types, NULL,&copy);
     if(status==XR_XIR_OK)CHECK(copy && copy->nominals && copy->nodes!=types->nodes);
     else CHECK(!copy);
     xr_xir_compile_types_free(copy);return status;

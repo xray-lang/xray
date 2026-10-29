@@ -782,7 +782,7 @@ static void nominal_projection_cases(void) {
         XrXirModule forged = *module; forged.stage = XR_XIR_CHECKED;
         CHECK(xir_fixture_recheck(suite_context, &forged, &rejected_artifact, NULL) == XR_XIR_BAD_STAGE && !rejected_artifact);
         XrXirTypes *copy = NULL;
-        CHECK(xr_xir_compile_types_clone(suite_context, types, &copy) == XR_XIR_OK);
+        CHECK(xr_xir_compile_types_clone(suite_context, types, NULL, &copy) == XR_XIR_OK);
         xr_xir_compile_artifact_free(lowered);lowered=NULL;
         XrXirCompileContext budget = consumer_context_default();
         CHECK(xr_xir_compile_types_structure_verify(&budget, copy) == XR_XIR_OK);

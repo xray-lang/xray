@@ -50,6 +50,7 @@ typedef struct XrXirInterfaceTable {
 XR_FUNC XrXirStatus xr_xir_compile_interfaces_verify_structure(const XrXirCompileContext *compile_context, const XrXirInterfaceTable *table, const XrXirTypes *types);
 XR_FUNC XrXirStatus xr_xir_compile_interfaces_clone(const XrXirCompileContext *compile_context, const XrXirInterfaceTable *table, const XrXirTypes *types, XrXirInterfaceTable **output);
 XR_FUNC void xr_xir_compile_interfaces_free(XrXirInterfaceTable *table);
-/* Requires a previously verified table; copies no external type-pool owner. */
-XR_FUNC XrXirStatus xr_xir_compile_interfaces_copy_verified(const XrXirCompileContext *compile_context, const XrXirInterfaceTable *table, XrXirInterfaceTable **output);
+/* Requires a previously verified table; copies no external type-pool owner.
+ * Optional control is synchronously borrowed through all copied children. */
+XR_FUNC XrXirStatus xr_xir_compile_interfaces_copy_verified(const XrXirCompileContext *compile_context, const XrXirInterfaceTable *table, XrCompileRequestControl *control, XrXirInterfaceTable **output);
 #endif // XXIR_INTERFACE_H

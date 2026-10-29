@@ -49,7 +49,7 @@ static XrXirStatus spec_pending_receive(SpecContext *c) {
     const XrXirTypes *types=c->types.count || c->types.nominals || c->types.interfaces?&c->types:NULL;
     if (status==XR_XIR_OK) status=xr_xir_compile_types_structure_verify(&c->remaining,types);
     if (status==XR_XIR_OK) status=spec_pending_arguments(c);
-    if (status==XR_XIR_OK) status=xr_xir_compile_types_clone(&c->remaining,types,&c->pending->types);
+    if (status==XR_XIR_OK) status=xr_xir_compile_types_clone(&c->remaining,types, NULL,&c->pending->types);
     if (status==XR_XIR_OK) c->pending->arguments=xir_compile_copy(&c->remaining,c->pending->borrowed_arguments,
         (size_t)c->pending->count*sizeof(*c->pending->arguments),&status);
     return status;

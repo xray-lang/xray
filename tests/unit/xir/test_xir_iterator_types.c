@@ -53,7 +53,7 @@ static XrXirStatus iterator_pipeline(const XrXirCompileContext *c, bool unit) {
         CHECK(!memcmp(packet.bytes,golden,packet.length));
         s=xr_xir_compile_checked_read(c,golden,sizeof(iterator_types_golden),&decoded,NULL);
     }
-    if (s==XR_XIR_OK) s=xr_xir_compile_types_clone(c,xr_xir_compile_artifact_module(decoded)->types,&clone);
+    if (s==XR_XIR_OK) s=xr_xir_compile_types_clone(c,xr_xir_compile_artifact_module(decoded)->types, NULL,&clone);
     if (s==XR_XIR_OK) {
         memset(f.nodes,0xcc,sizeof(f.nodes)); memset(f.parameters,0xcc,sizeof(f.parameters));
         CHECK(clone->nodes[0].kind==XR_XIR_TYPE_ITERATOR && clone->nodes[0].element==(unit ? XR_XIR_UNIT : XR_XIR_I64));

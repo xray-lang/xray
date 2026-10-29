@@ -18,7 +18,7 @@ static void constraint_copy_allocation_failures(void) {
         AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits);
         allocation_calls = 0; fail_at = site ? site - 1 : SIZE_MAX;
         XrXirConstraint *copy=NULL;
-        XrXirStatus status = xr_xir_compile_constraint_array_copy_verified(&owner.context,constraints,3,&copy);
+        XrXirStatus status = xr_xir_compile_constraint_array_copy_verified(&owner.context,constraints,3, NULL,&copy);
         if (!site) {
             CHECK(status == XR_XIR_OK && copy); sites = allocation_calls;
             memset(arguments,0xcc,sizeof(arguments)); memset(applications,0xcc,sizeof(applications));

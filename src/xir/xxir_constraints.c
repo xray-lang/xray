@@ -8,6 +8,7 @@
  */
 #include "xxir_constraints.h"
 #include "xxir_compile_memory.h"
+#include "xxir_type_copy_control.h"
 #include "xxir_types.h"
 #include "../base/xmalloc.h"
 #include <string.h>
@@ -17,28 +18,31 @@ void xr_xir_compile_interface_applications_free(XrXirInterfaceApplication *appli
     for (uint32_t i = 0; i < count; ++i) xr_compile_resources_free((void *)applications[i].arguments);
     xr_compile_resources_free(applications);
 }
-XrXirStatus xr_xir_compile_interface_applications_copy_verified(const XrXirCompileContext *compile_context, const XrXirInterfaceApplication *source, uint32_t count, XrXirInterfaceApplication **output) {
+XR_FUNC XrXirStatus xr_xir_compile_interface_applications_copy_verified(const XrXirCompileContext *compile_context, const XrXirInterfaceApplication *source, uint32_t count, XrCompileRequestControl *control, XrXirInterfaceApplication **output) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!output) return XR_XIR_BAD_STRUCTURE;
 
     if (!!source != !!count) return XR_XIR_BAD_STRUCTURE;
+    allocation_status=xir_type_copy_poll(control);if(allocation_status!=XR_XIR_OK)return allocation_status;
     if (!count) { *output = NULL; return XR_XIR_OK; }
     if ((uint64_t)count * sizeof(*source) > SIZE_MAX) return XR_XIR_BUDGET;
 
-    XrXirInterfaceApplication *copy = xir_compile_calloc(compile_context, count, sizeof(*copy), &allocation_status);
+    XrXirInterfaceApplication *copy = xir_type_copy_zero(compile_context, count, sizeof(*copy), &allocation_status,control);
     if (!copy) return allocation_status;
     XrXirStatus status = XR_XIR_OK;
     for (uint32_t i = 0; i < count; ++i) {
+        status=xir_type_copy_rows(control,i);if(status!=XR_XIR_OK)break;
         const XrXirInterfaceApplication *from = &source[i];
         if (!!from->arguments != !!from->argument_count) { status = XR_XIR_BAD_STRUCTURE; break; }
         uint64_t bytes = (uint64_t)from->argument_count * sizeof(*from->arguments);
         if (bytes > SIZE_MAX) { status = XR_XIR_BUDGET; break; }
-        XrXirType *arguments = xir_compile_copy(compile_context, from->arguments, (size_t)bytes, &allocation_status);
+        XrXirType *arguments = xir_type_copy_bytes(compile_context, from->arguments, from->argument_count, sizeof(*arguments), &allocation_status,control);
         if (bytes && !arguments) { status = allocation_status; break; }
 
         copy[i] = (XrXirInterfaceApplication){from->declaration, arguments, from->argument_count};
     }
+    if(status==XR_XIR_OK)status=xir_type_copy_poll(control);
     if (status != XR_XIR_OK) { xr_xir_compile_interface_applications_free(copy, count); return status; }
     *output = copy; return XR_XIR_OK;
 }
@@ -48,23 +52,28 @@ void xr_xir_compile_constraint_array_free(XrXirConstraint *constraints, uint32_t
         xr_xir_compile_interface_applications_free((XrXirInterfaceApplication *)constraints[i].interfaces, constraints[i].interface_count);
     xr_compile_resources_free(constraints);
 }
-XrXirStatus xr_xir_compile_constraint_array_copy_verified(const XrXirCompileContext *compile_context, const XrXirConstraint *source, uint32_t count, XrXirConstraint **output) {
+XR_FUNC XrXirStatus xr_xir_compile_constraint_array_copy_verified(const XrXirCompileContext *compile_context, const XrXirConstraint *source, uint32_t count, XrCompileRequestControl *control, XrXirConstraint **output) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!output) return XR_XIR_BAD_STRUCTURE;
 
     if (!!source != !!count) return XR_XIR_BAD_STRUCTURE;
+    allocation_status=xir_type_copy_poll(control);if(allocation_status!=XR_XIR_OK)return allocation_status;
     if (!count) { *output = NULL; return XR_XIR_OK; }
     if ((uint64_t)count * sizeof(*source) > SIZE_MAX) return XR_XIR_BUDGET;
 
-    XrXirConstraint *copy = xir_compile_calloc(compile_context, count, sizeof(*copy), &allocation_status);
+    XrXirConstraint *copy = xir_type_copy_zero(compile_context, count, sizeof(*copy), &allocation_status,control);
     if (!copy) return allocation_status;
     for (uint32_t i = 0; i < count; ++i) {
+        allocation_status=xir_type_copy_rows(control,i);
+        if(allocation_status!=XR_XIR_OK) {xr_xir_compile_constraint_array_free(copy,count);return allocation_status;}
         XrXirInterfaceApplication *applications = NULL;
-        XrXirStatus status = xr_xir_compile_interface_applications_copy_verified(compile_context, source[i].interfaces, source[i].interface_count, &applications);
+        XrXirStatus status = xr_xir_compile_interface_applications_copy_verified(compile_context, source[i].interfaces, source[i].interface_count, control, &applications);
         if (status != XR_XIR_OK) { xr_xir_compile_constraint_array_free(copy, count); return status; }
         copy[i] = (XrXirConstraint){source[i].markers, applications, source[i].interface_count};
     }
+    allocation_status=xir_type_copy_poll(control);
+    if(allocation_status!=XR_XIR_OK) {xr_xir_compile_constraint_array_free(copy,count);return allocation_status;}
     *output = copy; return XR_XIR_OK;
 }
 static XrXirStatus constraint_record_name(XrXirLiteral from, XrXirLiteral to) {

@@ -738,7 +738,7 @@ int main(void) {
     check_error_expression(&work,&producer->types);
     check_no_value(&work,&producer->types);
     XrXirTypes *owned=NULL;
-    CHECK(xr_xir_compile_types_clone(&work,&producer->types,&owned)==XR_XIR_OK);
+    CHECK(xr_xir_compile_types_clone(&work,&producer->types, NULL,&owned)==XR_XIR_OK);
     xr_free(producer);
     CHECK(owned && owned->nodes[0].nominal.arguments[0]==XR_XIR_NEVER);
     CHECK(xr_xir_compile_type_descriptors_verify(&work,owned)==XR_XIR_OK);

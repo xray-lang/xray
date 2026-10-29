@@ -9,6 +9,7 @@
 #include "nominal_projection_probe.h"
 #include "xir/xxir_compile_memory.h"
 #include "xir/xxir_lower_control.h"
+#include "xir/xxir_type_copy_control.h"
 #include "os/os_time.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -78,6 +79,14 @@ static void *np_calloc(const XrXirCompileContext *context,size_t count,size_t by
     }
     return memory;
 }
+static void *np_zero(const XrXirCompileContext *context,size_t count,size_t bytes,
+    XrXirStatus *status,XrCompileRequestControl *control) {
+    void *memory=xir_type_copy_zero(context,count,bytes,status,control);
+    if(np_probe && np_probe->table && count==np_probe->table->count && bytes==sizeof(XrXirNominalIdentity)) {
+        NP_CHECK(!np_probe->identities);np_probe->identities=memory;
+    }
+    return memory;
+}
 static XrCompileResourceStatus np_span(XrCompileRequestControl *control,void *destination,const void *source,size_t bytes) {
     NominalProjectionProbe *p=np_probe;
     bool observe=p && p->table && source==p->long_name;
@@ -91,10 +100,12 @@ static XrXirStatus np_project_actual(const XrXirCompileContext *,const XrXirNomi
 #define xr_xir_compile_nominal_project np_project_actual
 #define xir_compile_alloc(c,b,s) np_alloc(c,b,s,__func__)
 #define xir_compile_calloc np_calloc
+#define xir_type_copy_zero np_zero
 #define xir_lower_copy_span np_span
 #define xr_compile_request_control_poll np_poll
 #define memchr np_scan
 #include "xir/xxir_types.c"
+#undef xir_type_copy_zero
 #undef memchr
 #undef xr_compile_request_control_poll
 #undef xir_lower_copy_span

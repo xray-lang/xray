@@ -423,7 +423,7 @@ static void provenance_source_types_controls(void) {
     xr_compile_session_free(session);xr_xir_compile_source_failure_free(&failure);
     XrXirEffects *effects=NULL;CHECK(xr_xir_compile_artifact_verify_owned_effects(result.checked,&effects,NULL)==XR_XIR_OK);
     XrCompileResourceStats baseline=library_compile_stats(&owner.context);
-    XrXirTypes *types=NULL;CHECK(xr_xir_compile_types_clone(&owner.context,result.checked->module.types,&types)==XR_XIR_OK && types);
+    XrXirTypes *types=NULL;CHECK(xr_xir_compile_types_clone(&owner.context,result.checked->module.types, NULL,&types)==XR_XIR_OK && types);
     XrXirModule changed=result.checked->module;changed.types=types;
     CHECK(xr_xir_compile_structure_verify_v2(&owner.context,&changed,result.checked->construction,NULL)==XR_XIR_OK);
     provenance_source_type_status(&owner.context,&changed,effects,XR_XIR_OK);

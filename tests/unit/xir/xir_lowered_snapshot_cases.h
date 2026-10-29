@@ -137,7 +137,7 @@ static XrXirStatus conditional_lowered_snapshot(const XrXirCompileContext *conte
     LoweredSnapshotFixture fixture;lowered_snapshot_fixture(&fixture);
     XrXirTypes *owned = NULL;
     XrXirStatus status = xr_xir_compile_types_structure_verify(context, &fixture.types);
-    if (status == XR_XIR_OK) status = xr_xir_compile_types_clone(context, &fixture.types, &owned);
+    if (status == XR_XIR_OK) status = xr_xir_compile_types_clone(context, &fixture.types, NULL, &owned);
     if (status == XR_XIR_OK) {
         if (oracle) CHECK(owned && owned->nodes != fixture.nodes && owned->nominals != &fixture.table &&
             owned->nominals->identities != &fixture.identity &&

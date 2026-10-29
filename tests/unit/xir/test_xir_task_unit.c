@@ -216,7 +216,7 @@ static void unit_fixed_codec(void) {
     CHECK(sizeof(task_unit73_golden) == sizeof(task_unit72_golden) &&
         !memcmp(task_unit73_golden + 64, task_unit72_golden + 64, sizeof(task_unit73_golden) - 64));
     CHECK(xr_xir_compile_checked_read(context, task_unit76_golden, sizeof(task_unit76_golden), &decoded, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_types_clone(context, xr_xir_compile_artifact_module(decoded)->types, &clone) == XR_XIR_OK);
+    CHECK(xr_xir_compile_types_clone(context, xr_xir_compile_artifact_module(decoded)->types, NULL, &clone) == XR_XIR_OK);
     CHECK(clone->nodes != nodes && clone->nodes[0].kind == XR_XIR_TYPE_TASK && clone->nodes[0].element == XR_XIR_UNIT);
     memset(nodes, 0xa5, sizeof(nodes)); memset(parameters, 0xa5, sizeof(parameters));
     CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);

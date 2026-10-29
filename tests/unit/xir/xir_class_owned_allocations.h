@@ -58,7 +58,7 @@ static XrXirStatus class_owned_phase(const XrXirCompileContext *context,ClassOwn
     switch(phase) {
     case 0:return xr_xir_compile_nominal_clone(context,&s->fixture.nominals,&s->fixture.types,&o->nominals);
     case 1:return xr_xir_compile_nominal_project(context,&s->fixture.nominals,NULL,&o->nominals);
-    case 2:return xr_xir_compile_types_clone(context,&s->fixture.types,&o->types);
+    case 2:return xr_xir_compile_types_clone(context,&s->fixture.types, NULL,&o->types);
     case 3:return xir_fixture_check(context, &s->fixture.module, &o->artifact, NULL);
     case 4:return xr_xir_compile_checked_write(s->checked,&o->packet,NULL);
     case 5:return xr_xir_compile_checked_read(context,s->packet.bytes,s->packet.length,&o->artifact,NULL);

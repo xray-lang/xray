@@ -29,7 +29,7 @@ static void constraint_formula(void) {
         CHECK(xr_compile_resources_new(&limits,&owner) == XR_COMPILE_RESOURCE_OK);
         XrXirCompileContext context = {owner,xr_xir_compile_default_limits()};
         XrXirConstraint sentinel = {0}, *copy = &sentinel;
-        XrXirStatus result = xr_xir_compile_constraint_array_copy_verified(&context,&copy_constraint,1,&copy);
+        XrXirStatus result = xr_xir_compile_constraint_array_copy_verified(&context,&copy_constraint,1, NULL,&copy);
         CHECK(result == (below ? XR_XIR_BUDGET : XR_XIR_OK));
         if (below) CHECK(copy == &sentinel);
         else {
@@ -40,7 +40,7 @@ static void constraint_formula(void) {
             xr_xir_compile_constraint_array_free(copy,1);
             CHECK(live_count == 1);
             copy = &sentinel;
-            CHECK(xr_xir_compile_constraint_array_copy_verified(&context,&copy_constraint,1,&copy) == XR_XIR_BUDGET);
+            CHECK(xr_xir_compile_constraint_array_copy_verified(&context,&copy_constraint,1, NULL,&copy) == XR_XIR_BUDGET);
             CHECK(copy == &sentinel && stats(owner).work == 1 + work);
         }
         CHECK(live_count == 1);
@@ -52,7 +52,7 @@ static void constraint_formula(void) {
         CHECK(xr_compile_resources_new(&unlimited,&owner) == XR_COMPILE_RESOURCE_OK);
         XrXirCompileContext context = {owner,xr_xir_compile_default_limits()};
         XrXirConstraint sentinel = {0}, *copy = &sentinel;
-        CHECK(xr_xir_compile_constraint_array_copy_verified(&context,&copy_constraint,1,&copy) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_constraint_array_copy_verified(&context,&copy_constraint,1, NULL,&copy) == XR_XIR_OUT_OF_MEMORY);
         uint64_t spent = failure == 1 ? 3 : failure == 2 ? 5 + sizeof(XrXirConstraint) :
             6 + sizeof(XrXirConstraint) + sizeof(XrXirInterfaceApplication);
         CHECK(copy == &sentinel && stats(owner).work == spent && live_count == 1);
@@ -92,7 +92,7 @@ static XrXirStatus metadata_copy(const XrXirCompileContext *context, unsigned ki
     } else if (kind == 0) {
         XrXirInterfaceTable sentinel = {0}, *copy = &sentinel;
         result = xr_xir_compile_types_structure_verify(context,&copied_types);
-        if (result == XR_XIR_OK) result = xr_xir_compile_interfaces_copy_verified(context,&copied_interfaces,&copy);
+        if (result == XR_XIR_OK) result = xr_xir_compile_interfaces_copy_verified(context,&copied_interfaces, NULL,&copy);
         if (result != XR_XIR_OK) CHECK(copy == &sentinel);
         else {
             CHECK(copy->declarations[1].methods != &copied_method);
@@ -162,11 +162,11 @@ static void mandatory_context(void) {
     CHECK(xr_xir_compile_witness_resolve(&context,NULL,NULL,&witness) == XR_XIR_BAD_STRUCTURE);
     CHECK(witness.function == 99 && witness.arguments == copy_arguments && witness.argument_count == 2);
     XrXirTypes sentinel = {0}, *types = &sentinel;
-    CHECK(xr_xir_compile_types_clone(&context,NULL,&types) == XR_XIR_OK && !types);
+    CHECK(xr_xir_compile_types_clone(&context,NULL, NULL,&types) == XR_XIR_OK && !types);
     XrXirConstraint constraint = {0}, *copy = &constraint;
-    CHECK(xr_xir_compile_constraint_array_copy_verified(&context,NULL,1,&copy) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_constraint_array_copy_verified(&context,NULL,1, NULL,&copy) == XR_XIR_BAD_STRUCTURE);
     CHECK(copy == &constraint);
-    CHECK(xr_xir_compile_constraint_array_copy_verified(&context,NULL,0,&copy) == XR_XIR_OK && !copy);
+    CHECK(xr_xir_compile_constraint_array_copy_verified(&context,NULL,0, NULL,&copy) == XR_XIR_OK && !copy);
     XrXirLayout layout = {99,77};
     CHECK(xr_xir_compile_layout(&context,NULL,(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,&target,XR_XIR_LAYOUT_STORAGE,&layout) == XR_XIR_BAD_LAYOUT);
     CHECK(layout.size == 99 && layout.alignment == 77);

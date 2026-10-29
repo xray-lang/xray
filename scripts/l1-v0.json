@@ -161,7 +161,9 @@
     "test_hir_cast",
     "test_hir_cast_source",
     "test_hir_nullable",
-    "test_hir_nullable_source"
+    "test_hir_nullable_source",
+    "test_type_clone_control",
+    "test_type_clone_source"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -453,7 +455,24 @@
     "f64_family_native",
     "hir_nullable",
     "source_nullable_sdk",
-    "hir_nullable_cli"
+    "hir_nullable_cli",
+    "type_clone_control",
+    "source_type_clone_methods_cancel",
+    "source_type_clone_parameters_cancel",
+    "source_type_clone_name_cancel",
+    "source_type_clone_type-name_cancel",
+    "source_type_clone_fields_cancel",
+    "source_type_clone_publication_cancel",
+    "source_type_clone_methods_deadline",
+    "source_type_clone_parameters_deadline",
+    "source_type_clone_name_deadline",
+    "source_type_clone_type-name_deadline",
+    "source_type_clone_fields_deadline",
+    "source_type_clone_publication_deadline",
+    "source_type_clone_methods_oom",
+    "source_type_clone_parameters_oom",
+    "source_type_clone_sdk",
+    "source_type_clone_cli"
   ],
   "versionCommand": [
     "{build}/xray.exe",

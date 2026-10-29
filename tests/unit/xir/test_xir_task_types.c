@@ -82,7 +82,7 @@ static XrXirStatus task_types_pipeline(const XrXirCompileContext *c) {
         CHECK(packet.length == sizeof(task_types76_golden) && !memcmp(packet.bytes, task_types76_golden, packet.length));
     }
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_types76_golden, sizeof(task_types76_golden), &decoded, NULL);
-    if (status == XR_XIR_OK) status = xr_xir_compile_types_clone(c, xr_xir_compile_artifact_module(decoded)->types, &clone);
+    if (status == XR_XIR_OK) status = xr_xir_compile_types_clone(c, xr_xir_compile_artifact_module(decoded)->types, NULL, &clone);
     if (status == XR_XIR_OK) {
         CHECK(clone->nodes != f.nodes && clone->nodes[0].kind == XR_XIR_TYPE_TASK &&
             clone->nodes[0].element == XR_XIR_I64 && clone->nodes[1].element == XR_XIR_STRING);
@@ -252,7 +252,7 @@ static XrXirStatus task_interface_paths(const XrXirCompileContext *c) {
             xr_xir_task_element(view, signature->result) == XR_XIR_I64);
         result = signature->result;
         status = xr_xir_compile_type_substitution_matches_between(c, &types, view, &actual, 1, (XrXirType)256, result);
-        if (status == XR_XIR_OK) status = xr_xir_compile_types_clone(c, view, &owned);
+        if (status == XR_XIR_OK) status = xr_xir_compile_types_clone(c, view, NULL, &owned);
     }
     xr_xir_compile_interface_closure_free(closure);
     if (status == XR_XIR_OK) {

@@ -68,7 +68,7 @@ static XrXirStatus effect_body_types_copy(EffectBodyMaterial *body,const XrXirMo
     if (!types->count && !types->nominals && !types->interfaces) {
         terms->types=(XrXirTypes){0};terms->capacity=0;
     } else {
-        status=xr_xir_compile_types_clone(terms->remaining,types,&body->owned_types);
+        status=xr_xir_compile_types_clone(terms->remaining,types, NULL,&body->owned_types);
         if (status==XR_XIR_OK) { terms->types=*body->owned_types;terms->capacity=types->count; }
     }
     if (status==XR_XIR_OK) body->domain.types=&terms->types;

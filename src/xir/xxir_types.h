@@ -130,8 +130,10 @@ XR_FUNC XrXirStatus xr_xir_compile_types_structure_verify(const XrXirCompileCont
 /* Counts parameter slots in a structurally verified pool, bounded by its context. */
 XR_FUNC XrXirStatus xr_xir_compile_types_parameter_count(const XrXirCompileContext *context,
     const XrXirTypes *types, uint32_t *output);
-/* Snapshot cloning requires successful descriptor-pool verification first. */
-XR_FUNC XrXirStatus xr_xir_compile_types_clone(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirTypes **output);
+/* Snapshot cloning requires successful descriptor-pool verification first.
+ * Control is synchronously borrowed and never enters the result. Failure
+ * releases initialized children and preserves the caller's output. */
+XR_FUNC XrXirStatus xr_xir_compile_types_clone(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrCompileRequestControl *control, XrXirTypes **output);
 XR_FUNC void xr_xir_compile_types_free(XrXirTypes *types);
 /* Complete inline field storage; output offsets publish only after success. */
 XR_FUNC XrXirStatus xr_xir_compile_nominal_layout(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirType type, const XrXirTarget *target, XrXirLayout *layout, uint32_t *field_offsets, uint32_t field_count);

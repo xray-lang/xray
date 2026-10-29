@@ -53,7 +53,7 @@ static XrXirStatus effect_terms_seed(EffectTerms *pool, const XrXirTypes *source
     XrXirStatus status=source->nominals ? xr_xir_compile_nominal_clone(pool->remaining,
         source->nominals,source,&pool->owned_nominals) : XR_XIR_OK;
     if (status==XR_XIR_OK && source->interfaces)
-        status=xr_xir_compile_interfaces_copy_verified(pool->remaining,source->interfaces,&pool->owned_interfaces);
+        status=xr_xir_compile_interfaces_copy_verified(pool->remaining,source->interfaces, NULL,&pool->owned_interfaces);
     if (status!=XR_XIR_OK) return status;
     pool->types.nominals=pool->owned_nominals;pool->types.interfaces=pool->owned_interfaces;
     return XR_XIR_OK;

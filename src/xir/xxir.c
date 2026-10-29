@@ -144,7 +144,7 @@ static XrXirArtifact *clone_module_receiving(const XrXirCompileContext *compile_
     }
     copy->module.generics = generics;
     XrXirTypes *types = NULL;
-    if ((*allocation_status = xr_xir_compile_types_clone(compile_context, source->types, &types)) != XR_XIR_OK) {
+    if ((*allocation_status = xr_xir_compile_types_clone(compile_context, source->types, control, &types)) != XR_XIR_OK) {
         xr_xir_compile_artifact_free(copy); return NULL;
     }
     copy->module.types = types;
