@@ -25,6 +25,16 @@ add_executable(test_xir_range_value_packet "${CMAKE_CURRENT_LIST_DIR}/test_xir_r
 target_compile_definitions(test_xir_range_value_packet PRIVATE RANGE_CONSUMER_KIND=0)
 target_link_libraries(test_xir_range_value_packet PRIVATE xray_xir_vm xray_xir_cgen)
 set(XR_RANGE_VALUE_TARGETS test_xir_range_value_packet)
+set(XR_RANGE_INDEX_C "${CMAKE_CURRENT_BINARY_DIR}/generated/range-index.c")
+add_custom_command(OUTPUT "${XR_RANGE_INDEX_C}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND $<TARGET_FILE:test_xir_range_value> --index-raw "${XR_RANGE_INDEX_C}"
+    DEPENDS test_xir_range_value VERBATIM)
+add_executable(test_xir_range_index_native "${CMAKE_CURRENT_LIST_DIR}/test_xir_range_index_execution.c" "${XR_RANGE_INDEX_C}")
+target_link_libraries(test_xir_range_index_native PRIVATE xray_xir_vm)
+list(APPEND XR_RANGE_VALUE_TARGETS test_xir_range_index_native)
+add_test(NAME test_xir_range_index_native COMMAND test_xir_range_index_native)
+set_tests_properties(test_xir_range_index_native PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;range;native;bounds")
 foreach(range_flow IN ITEMS source catalog)
     if(range_flow STREQUAL "source")
         set(range_packet "${XR_RANGE_VALUE_SOURCE_PACKET}")

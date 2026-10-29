@@ -245,6 +245,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if (op->op <= XR_XIR_INVALID || op->op >= XR_XIR_OP_COUNT)
         return XR_XIR_BAD_STRUCTURE;
 
+    if (op->op == XR_XIR_INDEX_CHECK && (op->immediate || op->targets[0] || op->targets[1] ||
+        op->type_arguments[0] || op->type_arguments[1])) return XR_XIR_BAD_STRUCTURE;
     const OpRule *rule = &op_rules[op->op];
     if (!(rule->stages & stage))
         return XR_XIR_BAD_STAGE;
@@ -1064,7 +1066,7 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
     }
     if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
         expected = context->module->declarations->slots[op->immediate].type;
-    if (op->op == XR_XIR_TIMER_AFTER_MS || op->op == XR_XIR_RANGE_CHECK) expected = XR_XIR_I64;
+    if (op->op == XR_XIR_TIMER_AFTER_MS || op->op == XR_XIR_RANGE_CHECK || op->op == XR_XIR_INDEX_CHECK) expected = XR_XIR_I64;
     if (op->op == XR_XIR_NULLABLE_IS_SOME || op->op == XR_XIR_NULLABLE_UNWRAP) {
         expected = xr_xir_operand_type(function, op->args[0]);
         if (!xr_xir_type_is_nullable(context->module->types, expected) ||

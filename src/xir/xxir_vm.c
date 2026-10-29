@@ -862,6 +862,15 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         value = op->immediate ? !equal : equal;
         break;
     }
+    case XR_XIR_INDEX_CHECK: {
+        int64_t index = xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]]);
+        int64_t length = xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[1]]);
+        if (length < 0) return XR_XIR_RUN_BAD_ARTIFACT;
+        if (index < 0 || index >= length) {
+            *action = xr_xir_call_bounds(index,length);return XR_XIR_RUN_OK;
+        }
+        break;
+    }
     case XR_XIR_RANGE_CHECK: {
         const uint32_t *ids = &run->function->operands[op->args[0]];
         if (!xr_xir_range_valid(

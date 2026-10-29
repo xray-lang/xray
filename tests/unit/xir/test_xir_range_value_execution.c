@@ -18,7 +18,7 @@
 #include "xir_range_value_runtime.h"
 #if RANGE_CONSUMER_KIND!=0
 XR_DATA const XrXirProgramSpec range_value_program;
-XR_DATA const uint32_t range_value_selection[9];
+XR_DATA const uint32_t range_value_selection[RANGE_SELECTION_COUNT];
 #endif
 #if RANGE_CONSUMER_KIND!=1
 static XrXirArtifact *range_packet(const XrXirCompileContext *context,const char *path) {
@@ -35,9 +35,10 @@ static XrXirArtifact *range_packet(const XrXirCompileContext *context,const char
 }
 #endif
 #if RANGE_CONSUMER_KIND==0
-static void range_packet_selection(const XrXirModule *module,uint32_t selection[9]) {
-    const char *names[]={"literal","inclusive","constructed","rangeCount","endpoints","once","accept","rangeLength","lenOnce"};
-    for(unsigned s=0;s<9;++s) {
+static void range_packet_selection(const XrXirModule *module,uint32_t selection[RANGE_SELECTION_COUNT]) {
+    const char *names[]={"literal","inclusive","constructed","rangeCount","endpoints","once","accept","rangeLength","lenOnce",
+        "indexed","indexedOnce","indexedRebind","indexedCode"};
+    for(unsigned s=0;s<RANGE_SELECTION_COUNT;++s) {
         selection[s]=UINT32_MAX;
         for(uint32_t f=0;f<module->function_count;++f) {
             const XrXirFunction *fn=&module->functions[f];const XrXirFunctionIdentity *id=&module->declarations->functions[f];
@@ -47,11 +48,11 @@ static void range_packet_selection(const XrXirModule *module,uint32_t selection[
         CHECK(selection[s]!=UINT32_MAX);
     }
 }
-static void range_emit(XrXirArtifact *artifact,const char *path,const uint32_t selection[9]) {
+static void range_emit(XrXirArtifact *artifact,const char *path,const uint32_t selection[RANGE_SELECTION_COUNT]) {
     XrXirCSource source={0};CHECK(xr_xir_compile_emit_c(artifact,"range_value",SIZE_MAX,&source)==XR_XIR_OK);
     FILE *file=fopen(path,"wb");CHECK(file && fwrite(source.text,1,source.length,file)==source.length);
-    CHECK(fputs("\nconst uint32_t range_value_selection[9]={",file)>=0);
-    for(unsigned s=0;s<9;++s)CHECK(fprintf(file,"%s%uu",s?",":"",selection[s])>0);
+    CHECK(fprintf(file,"\nconst uint32_t range_value_selection[%u]={",RANGE_SELECTION_COUNT)>0);
+    for(unsigned s=0;s<RANGE_SELECTION_COUNT;++s)CHECK(fprintf(file,"%s%uu",s?",":"",selection[s])>0);
     CHECK(fputs("};\n",file)>=0 && !fclose(file));xr_xir_compile_c_source_free(&source);
 }
 #endif
@@ -100,7 +101,7 @@ static XrXirProgram *range_mixed_program(const XrXirCompileContext *context,XrXi
 }
 #endif
 int main(int argc,char **argv) {
-    XrXirCompileContext context=range_context();XrXirProgram *program=NULL;uint32_t selection[9];
+    XrXirCompileContext context=range_context();XrXirProgram *program=NULL;uint32_t selection[RANGE_SELECTION_COUNT];
 #if RANGE_CONSUMER_KIND==0
     CHECK(argc==3);XrXirArtifact *artifact=range_packet(&context,argv[1]);
     range_packet_selection(xr_xir_compile_artifact_module(artifact),selection);range_emit(artifact,argv[2],selection);

@@ -31,6 +31,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_INVOKE_ERROR:
     case XR_XIR_ERROR_ERASE:
     case XR_XIR_THROW:
+    case XR_XIR_INDEX_CHECK: /* two local scalar reads; common verification owns bounds shape */
     case XR_XIR_RETURN:
     case XR_XIR_CONST_INT:
     case XR_XIR_CONVERT_NUMBER:

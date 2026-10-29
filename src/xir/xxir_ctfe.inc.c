@@ -61,7 +61,7 @@ static bool ctfe_error_operation(XrXirOp op) {
 }
 static bool ctfe_panic_operation(XrXirOp op) {
     return op==XR_XIR_PANIC_CATCH || op==XR_XIR_PANIC_CODE || op==XR_XIR_PANIC_MESSAGE || op==XR_XIR_PANIC_REPLACED_ERROR ||
-        op==XR_XIR_ASSERT_CONDITION || op==XR_XIR_PANIC_ERROR || op==XR_XIR_MATCH_FAIL;
+        op==XR_XIR_ASSERT_CONDITION || op==XR_XIR_PANIC_ERROR || op==XR_XIR_MATCH_FAIL || op==XR_XIR_INDEX_CHECK;
 }
 static bool ctfe_opcode_admitted(XrXirOp op) {
     switch (op) {
@@ -104,7 +104,7 @@ static bool ctfe_opcode_admitted(XrXirOp op) {
     case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT: case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT:
     case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT: return true;
     case XR_XIR_EQUAL: return true;
-    case XR_XIR_RANGE_CHECK: return true;
+    case XR_XIR_RANGE_CHECK: case XR_XIR_INDEX_CHECK: return true;
     case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
     case XR_XIR_DIV_INT: case XR_XIR_REM_INT: case XR_XIR_AND_INT:
     case XR_XIR_OR_INT: case XR_XIR_XOR_INT: case XR_XIR_SHL_INT:
@@ -118,7 +118,7 @@ static bool ctfe_opcode_admitted(XrXirOp op) {
 }
 /* Local writes produce Unit but keep ordinary fallthrough control flow. */
 static bool ctfe_unit_result(XrXirOp op) {
-    return op == XR_XIR_VIEW_END || op == XR_XIR_VIEW_CLEANUP || op == XR_XIR_CLASS_SET || op == XR_XIR_ASSERT_CONDITION || op == XR_XIR_PANIC_ERROR || op == XR_XIR_MATCH_FAIL || op == XR_XIR_THROW || op == XR_XIR_CLEANUP_ERROR || op == XR_XIR_INVOKE_DISCARD || op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_CLEANUP_LEAVE || op == XR_XIR_STRUCT_SET || op == XR_XIR_RANGE_CHECK || op == XR_XIR_PLACE_WRITE || op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH || op == XR_XIR_JUMP || op == XR_XIR_BRANCH || op == XR_XIR_RETURN ||
+    return op == XR_XIR_VIEW_END || op == XR_XIR_VIEW_CLEANUP || op == XR_XIR_CLASS_SET || op == XR_XIR_ASSERT_CONDITION || op == XR_XIR_PANIC_ERROR || op == XR_XIR_MATCH_FAIL || op == XR_XIR_THROW || op == XR_XIR_CLEANUP_ERROR || op == XR_XIR_INVOKE_DISCARD || op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_CLEANUP_LEAVE || op == XR_XIR_STRUCT_SET || op == XR_XIR_RANGE_CHECK || op == XR_XIR_INDEX_CHECK || op == XR_XIR_PLACE_WRITE || op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH || op == XR_XIR_JUMP || op == XR_XIR_BRANCH || op == XR_XIR_RETURN ||
         op == XR_XIR_SCALAR_LOCAL_WRITE || op == XR_XIR_CELL_WRITE || op == XR_XIR_CELL_LOCAL_WRITE || op == XR_XIR_CELL_STRING_APPEND || op == XR_XIR_OWNED_LOCAL_WRITE;
 }
 static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t selected) {

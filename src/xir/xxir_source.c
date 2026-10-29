@@ -1112,6 +1112,7 @@ static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceAr
     const SourceValue *evaluated, SourceValue *value);
 static bool source_range_is(SourceContext *ctx,XrXirType type);
 static bool source_range_length(SourceContext *ctx,AstNode *node,SourceValue receiver,SourceValue *value);
+static bool source_range_index(SourceContext *ctx,AstNode *node,SourceValue receiver,AstNode *index,SourceValue *value);
 #include "xxir_source_array.inc.c"
 static bool source_hash_for_each(SourceContext *ctx, AstNode *node, const SourceValue *evaluated,
     XrXirType receiver_type, SourceValue *value);

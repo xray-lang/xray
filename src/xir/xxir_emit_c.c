@@ -1066,6 +1066,16 @@ static bool emit_resume_value_step(CBuffer *buffer,const XrXirFunction *function
         " status == XR_XIR_VALUE_UNSUPPORTED \? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n"
             " xr_xir_scalar_store(state->frame,%uu,%sequal); }\n",destination,op->immediate ? "!" : "");
         break;
+    case XR_XIR_INDEX_CHECK: {
+        EMIT_FORMAT(buffer, et_eee86956efd85f69, " { int64_t checked_index = xr_xir_scalar_load(state->frame,%uu);\n"
+            " int64_t checked_length = xr_xir_scalar_load(state->frame,%uu);\n if (checked_length < 0) ",
+            layout->offsets[op->args[0]],layout->offsets[op->args[1]]);
+        emit_fault_return(buffer,function,layout,index,"xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT)");
+        EMIT_LITERAL(buffer,"\n if (checked_index < 0 || checked_index >= checked_length) ");
+        emit_fault_return(buffer,function,layout,index,"xr_xir_call_bounds(checked_index,checked_length)");
+        EMIT_LITERAL(buffer,"\n }\n");
+        break;
+    }
     case XR_XIR_RANGE_CHECK: {
         const uint32_t *ids = &function->operands[op->args[0]];
         EMIT_FORMAT(buffer, et_48fb925d685d10af, " if (!xr_xir_range_valid(xr_xir_scalar_load(state->frame,%uu),"
@@ -1410,6 +1420,16 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         " status == XR_XIR_VALUE_UNSUPPORTED \? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n"
             " xr_xir_scalar_store(state->frame,%uu,%sequal); }\n",destination,op->immediate ? "!" : "");
         break;
+    case XR_XIR_INDEX_CHECK: {
+        EMIT_FORMAT(buffer, et_eee86956efd85f69, " { int64_t checked_index = xr_xir_scalar_load(state->frame,%uu);\n"
+            " int64_t checked_length = xr_xir_scalar_load(state->frame,%uu);\n if (checked_length < 0) ",
+            layout->offsets[op->args[0]],layout->offsets[op->args[1]]);
+        emit_fault_return(buffer,function,layout,index,"xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT)");
+        EMIT_LITERAL(buffer,"\n if (checked_index < 0 || checked_index >= checked_length) ");
+        emit_fault_return(buffer,function,layout,index,"xr_xir_call_bounds(checked_index,checked_length)");
+        EMIT_LITERAL(buffer,"\n }\n");
+        break;
+    }
     case XR_XIR_RANGE_CHECK: {
         const uint32_t *ids = &function->operands[op->args[0]];
         EMIT_FORMAT(buffer, et_48fb925d685d10af, " if (!xr_xir_range_valid(xr_xir_scalar_load(state->frame,%uu),"

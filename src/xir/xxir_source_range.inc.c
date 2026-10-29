@@ -60,3 +60,20 @@ static bool source_range_value(SourceContext *ctx,AstNode *node,SourceValue *val
         node->as.range.inclusive_end?1:0,{0}},&arguments[2])) return false;
     return source_constructor_emit(ctx,node,type,constructor,arguments,value);
 }
+/* The authenticated canonical constructor/count bodies establish immutable unit
+ * steps. Indexing reads the captured receiver after evaluating its index once. */
+static bool source_range_index(SourceContext *ctx,AstNode *node,SourceValue receiver,
+    AstNode *index,SourceValue *value) {
+    SourceValue key={0},length={0},start={0};
+    if (!source_range_is(ctx,receiver.type))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"index requires the actual canonical Range declaration");
+    if (!source_plan_expression(ctx,index,(SourceExpectedType){true,XR_XIR_I64,false,false},&key)) return false;
+    if (key.type!=XR_XIR_I64) return source_fail(ctx,index,XR_XIR_BAD_TYPE,"Range index requires exact i64");
+    uint32_t declaration=xr_xir_type_node(&ctx->types,receiver.type)->nominal.declaration;
+    XrXirStatus status=library_range_record(&ctx->nominals.declarations[declaration]);
+    if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"canonical Range fields are invalid");
+    if (!source_range_length(ctx,node,receiver,&length) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_INDEX_CHECK,XR_XIR_UNIT,{key.id,length.id},{0},0,{0}},NULL) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CLASS_GET,XR_XIR_I64,{receiver.id,0},{0},0,{0}},&start)) return false;
+    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ADD_INT,XR_XIR_I64,{start.id,key.id},{0},0,{0}},value);
+}

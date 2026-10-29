@@ -16,6 +16,7 @@ static bool source_index_get(SourceContext *ctx, AstNode *node, SourceValue *val
     AstNode *receiver = node->as.index_get.array, *index = node->as.index_get.index;
     SourceValue container = {0}, key = {0};
     if (!source_array_receiver(ctx, receiver, index, false, &container)) return false;
+    if (source_range_is(ctx,container.type)) return source_range_index(ctx,node,container,index,value);
     uint32_t view_kind=0;XrXirType view_element=XR_XIR_UNIT;
     if (source_view_shape(ctx,container.type,&view_kind,&view_element)) {
         if (!source_plan_expression(ctx,index,(SourceExpectedType){true,XR_XIR_I64,false,false},&key)) return false;

@@ -33,7 +33,10 @@ int main(void) {
         "export fn echo(r:Range)->Range{return r}\n"
         "export fn count(r:Range)->i64{return r.count()}\n"
         "export fn length(r:Range)->i64{return len(r)}\n"
-        "export fn start(r:Range)->i64{return r.start}\n";
+        "export fn start(r:Range)->i64{return r.start}\n"
+        "export fn indexFirst(r:Range)->i64{return r[0]}\n"
+        "export fn indexLast(r:Range)->i64{return r[len(r)-1]}\n"
+        "export fn indexNegative(r:Range)->i64{try{return r[-1]}catch panic(p){return p.code}}\n";
     XrSourceCompileOptions options=xray_source_compile_options_default();
     options.stdlib_path=XR_RANGE_VALUE_STDLIB;XrSourceExecution *execution=NULL;
     XrSourceExecutionOptions policy=xray_source_execution_options_default();
@@ -57,6 +60,9 @@ int main(void) {
     range_sdk_integer(range_sdk_call(instance,"count",actual,1),INT64_MAX);
     range_sdk_integer(range_sdk_call(instance,"length",actual,1),INT64_MAX);
     range_sdk_integer(range_sdk_call(instance,"start",actual,1),INT64_MIN);
+    range_sdk_integer(range_sdk_call(instance,"indexFirst",actual,1),INT64_MIN);
+    range_sdk_integer(range_sdk_call(instance,"indexLast",actual,1),-2);
+    range_sdk_integer(range_sdk_call(instance,"indexNegative",actual,1),430);
     xray_source_value_free(range);CHECK(xray_source_instance_drop(&instance,NULL)==XR_SOURCE_OK && !instance);
     CHECK(xray_source_value_kind(copy,&kind)==XR_SOURCE_OK && kind==XR_SOURCE_VALUE_CLASS);
     XrSourceValue *survivor=NULL;CHECK(xray_source_value_copy(copy,&survivor)==XR_SOURCE_OK && survivor);
