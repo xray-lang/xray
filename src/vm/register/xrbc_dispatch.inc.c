@@ -185,6 +185,44 @@ XR_RBC_CASE(FNEG) {
     XR_RBC_REG(a) = result;
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(FADD)
+XR_RBC_CASE(FSUB)
+XR_RBC_CASE(FMUL)
+XR_RBC_CASE(FDIV) {
+    XrXirFloatOperation operation;
+    switch (op) {
+        case XR_RBC_FADD: operation=XR_XIR_FLOAT_ADD; break;
+        case XR_RBC_FSUB: operation=XR_XIR_FLOAT_SUBTRACT; break;
+        case XR_RBC_FMUL: operation=XR_XIR_FLOAT_MULTIPLY; break;
+        default: operation=XR_XIR_FLOAT_DIVIDE; break;
+    }
+    uint64_t result;
+    if (xr_xir_float_arithmetic(64,operation,XR_RBC_REG(b),XR_RBC_REG(c),&result)!=XR_XIR_NUMERIC_OK)
+        return XR_RBC_INVALID;
+    XR_RBC_REG(a)=result;
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(FEQ)
+XR_RBC_CASE(FNE)
+XR_RBC_CASE(FLT)
+XR_RBC_CASE(FLE)
+XR_RBC_CASE(FGT)
+XR_RBC_CASE(FGE) {
+    XrXirFloatOrder order;
+    if (xr_xir_float_compare(64,XR_RBC_REG(b),XR_RBC_REG(c),&order)!=XR_XIR_NUMERIC_OK)
+        return XR_RBC_INVALID;
+    bool result;
+    switch (op) {
+        case XR_RBC_FEQ: result=order==XR_XIR_FLOAT_EQUAL; break;
+        case XR_RBC_FNE: result=order!=XR_XIR_FLOAT_EQUAL; break;
+        case XR_RBC_FLT: result=order==XR_XIR_FLOAT_LESS; break;
+        case XR_RBC_FLE: result=order==XR_XIR_FLOAT_LESS || order==XR_XIR_FLOAT_EQUAL; break;
+        case XR_RBC_FGT: result=order==XR_XIR_FLOAT_GREATER; break;
+        default: result=order==XR_XIR_FLOAT_GREATER || order==XR_XIR_FLOAT_EQUAL; break;
+    }
+    XR_RBC_REG(a)=result;
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(DIV)
 XR_RBC_CASE(REM) {
     int64_t lhs = xr_rbc_signed(XR_RBC_REG(b)), rhs = xr_rbc_signed(XR_RBC_REG(c));

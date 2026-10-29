@@ -66,7 +66,17 @@
     X(STRING_LEN, AB)                                                                              \
     X(SPILL, ABX)                                                                                  \
     X(RELOAD, ABX)                                                                                 \
-    X(FNEG, AB)
+    X(FNEG, AB)                                                                                    \
+    X(FADD, ABC)                                                                                   \
+    X(FSUB, ABC)                                                                                   \
+    X(FMUL, ABC)                                                                                   \
+    X(FDIV, ABC)                                                                                   \
+    X(FEQ, ABC)                                                                                    \
+    X(FNE, ABC)                                                                                    \
+    X(FLT, ABC)                                                                                    \
+    X(FLE, ABC)                                                                                    \
+    X(FGT, ABC)                                                                                    \
+    X(FGE, ABC)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,

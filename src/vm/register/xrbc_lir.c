@@ -281,6 +281,13 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
             xr_lir_value_type(input, (XrLirValue){input, function.id, i->operands[0]},
                 &source) == XR_LIR_OK && source == XR_LIR_F64;
     }
+    case XR_LIR_FADD: case XR_LIR_FSUB: case XR_LIR_FMUL: case XR_LIR_FDIV: case XR_LIR_FCMP: {
+        XrLirType left=XR_LIR_TYPE_INVALID,right=XR_LIR_TYPE_INVALID;
+        return i->operand_count==2 && i->type==(i->op==XR_LIR_FCMP?XR_LIR_I1:XR_LIR_F64) &&
+            xr_lir_value_type(input,(XrLirValue){input,function.id,i->operands[0]},&left)==XR_LIR_OK &&
+            xr_lir_value_type(input,(XrLirValue){input,function.id,i->operands[1]},&right)==XR_LIR_OK &&
+            left==XR_LIR_F64 && right==XR_LIR_F64;
+    }
     default: return false;
     }
 }
@@ -561,6 +568,19 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
     case XR_LIR_CELL_WRITE:
         return rbc_lir_emit(c, XR_RBC_CELL_WRITE, c->slots[i->operands[0]],
             c->slots[i->operands[1]], 0, 0);
+    case XR_LIR_FCMP: {
+        XrRbcOp op;
+        switch (i->predicate) {
+            case XR_LIR_EQ: op=XR_RBC_FEQ;break;
+            case XR_LIR_NE: op=XR_RBC_FNE;break;
+            case XR_LIR_LT: op=XR_RBC_FLT;break;
+            case XR_LIR_LE: op=XR_RBC_FLE;break;
+            case XR_LIR_GT: op=XR_RBC_FGT;break;
+            case XR_LIR_GE: op=XR_RBC_FGE;break;
+            default:return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"invalid floating predicate");
+        }
+        return rbc_lir_emit(c,op,result,c->slots[i->operands[0]],c->slots[i->operands[1]],0);
+    }
     case XR_LIR_ICMP: return rbc_lir_comparison(c, i);
     case XR_LIR_BR: return rbc_lir_edge(c, i->edges[0]);
     case XR_LIR_CONDBR: return rbc_lir_conditional(c, i);
@@ -603,6 +623,10 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         case XR_LIR_REM: op = XR_RBC_REM; break;
         case XR_LIR_NEG: op = XR_RBC_NEG; break;
         case XR_LIR_FNEG: op = XR_RBC_FNEG; break;
+        case XR_LIR_FADD: op = XR_RBC_FADD; break;
+        case XR_LIR_FSUB: op = XR_RBC_FSUB; break;
+        case XR_LIR_FMUL: op = XR_RBC_FMUL; break;
+        case XR_LIR_FDIV: op = XR_RBC_FDIV; break;
         default: return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "unsupported operation");
         }
         return rbc_lir_emit(c, op, result, c->slots[i->operands[0]],

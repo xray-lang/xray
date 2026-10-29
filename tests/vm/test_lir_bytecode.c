@@ -573,12 +573,12 @@ static void test_f64_constants_and_refusals(void) {
         xr_rbc_program_destroy(program);
     }
     const struct { XrLirOp op; XrLirType input, output; uint32_t arity; } cases[] = {
-        {XR_LIR_FADD, XR_LIR_F64, XR_LIR_F64, 2},
-        {XR_LIR_FSUB, XR_LIR_F64, XR_LIR_F64, 2},
-        {XR_LIR_FMUL, XR_LIR_F64, XR_LIR_F64, 2},
-        {XR_LIR_FDIV, XR_LIR_F64, XR_LIR_F64, 2},
+        {XR_LIR_FADD, XR_LIR_F32, XR_LIR_F32, 2},
+        {XR_LIR_FSUB, XR_LIR_F32, XR_LIR_F32, 2},
+        {XR_LIR_FMUL, XR_LIR_F32, XR_LIR_F32, 2},
+        {XR_LIR_FDIV, XR_LIR_F32, XR_LIR_F32, 2},
         {XR_LIR_FNEG, XR_LIR_F32, XR_LIR_F32, 1},
-        {XR_LIR_FCMP, XR_LIR_F64, XR_LIR_I1, 2},
+        {XR_LIR_FCMP, XR_LIR_F32, XR_LIR_I1, 2},
         {XR_LIR_ITOF, XR_LIR_I64, XR_LIR_F64, 1},
         {XR_LIR_FCAST, XR_LIR_F64, XR_LIR_F64, 1},
         {XR_LIR_INTCAST, XR_LIR_I8, XR_LIR_I64, 1},

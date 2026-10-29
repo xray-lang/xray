@@ -13,6 +13,7 @@
 #include "lir/xlir_c.h"
 #include "lir/xlir_sccp.h"
 #include "vm/register/xrbc_lir.h"
+#include "f64_family_vectors.h"
 #include <fenv.h>
 #if defined(XR_ARCH_X86_64)
 #include <xmmintrin.h>
@@ -231,14 +232,14 @@ static void actual_entry_and_refusal(void) {
     CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 0);
     xr_rbc_program_destroy(program);
 
-    lowered = lower("print(1)\nfn value(x:f64)->f64{return x+1.0}\nprint(2)\nvalue(3.0)\n", false);
+    lowered = lower("print(1)\nfn value(x:i64)->f64{return x as f64}\nprint(2)\nvalue(3)\n", false);
     program = NULL;
     CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, &diagnostic) ==
         XR_RBC_COMPILE_UNSUPPORTED && !program);
     xr_lir_lowered_free(&lowered);
     CHECK(diagnostic.message[0] && diagnostic.path[0] && diagnostic.line == 2 &&
         diagnostic.column && diagnostic.block && diagnostic.instruction);
-    lowered = lower("fn value(x:f64)->f64{\nreturn x+1.0\n}\nvalue(3.0)\n", false);
+    lowered = lower("fn value(x:i64)->f64{\nreturn x as f64\n}\nvalue(3)\n", false);
     CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, &diagnostic) ==
         XR_RBC_COMPILE_UNSUPPORTED && !program);
     xr_lir_lowered_free(&lowered);
@@ -405,6 +406,118 @@ static void f64_negation_c(const char *path) {
     printf("{\"callee\":%u,\"sourceLocalFneg\":true,\"sourceWholeFneg\":true}\n",callee);
 }
 
+static const char f64_arithmetic_source[] =
+    "fn arithmetic(op:i64,x:f64,y:f64)->f64{if(op==0){return x+y}\n"
+    "if(op==1){return x-y}\nif(op==2){return x*y}\nreturn x/y}\n"
+    "arithmetic(0,1.25,2.5)\n";
+static const char f64_relations_source[] =
+    "fn relations(x:f64,y:f64)->i64{var flags=0\n"
+    "if(x==y){flags=flags+1}\nif(x!=y){flags=flags+2}\nif(x<y){flags=flags+4}\n"
+    "if(x<=y){flags=flags+8}\nif(x>y){flags=flags+16}\nif(x>=y){flags=flags+32}\n"
+    "return flags}\nprint(relations(1.0,2.0))\n";
+
+static void f64_family(void) {
+    XrRbcProgram *arithmetic=callable(f64_arithmetic_source),*relations=callable(f64_relations_source);
+    const int modes[]={FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO};
+    fenv_t original;CHECK(fegetenv(&original)==0);
+#if defined(XR_ARCH_X86_64)
+    unsigned original_control=_mm_getcsr();const unsigned control_cases=4;
+#else
+    const unsigned control_cases=1;
+#endif
+    for(unsigned m=0;m<4;++m)for(unsigned c=0;c<control_cases;++c) {
+        CHECK(fesetround(modes[m])==0 && feclearexcept(FE_ALL_EXCEPT)==0 && feraiseexcept(FE_INEXACT)==0);
+#if defined(XR_ARCH_X86_64)
+        unsigned mask=(1u<<6)|(1u<<15);
+        _mm_setcsr((_mm_getcsr()&~mask)|((c&1u)<<6)|(((c>>1)&1u)<<15));
+        unsigned control=_mm_getcsr();
+#endif
+        int flags=fetestexcept(FE_ALL_EXCEPT);uint32_t arithmetic_count=0,relation_count=0;
+        for(unsigned i=0;i<sizeof(float_arithmetic_witnesses)/sizeof(*float_arithmetic_witnesses);++i) {
+            if(float_arithmetic_witnesses[i].width!=64)continue;
+            uint64_t args[]={float_arithmetic_witnesses[i].operation,
+                float_arithmetic_witnesses[i].left,float_arithmetic_witnesses[i].right},result=0;
+            CHECK(execute(arithmetic,args,3,&result)==XR_RBC_OK && result==float_arithmetic_witnesses[i].expected);
+            CHECK(fegetround()==modes[m] && fetestexcept(FE_ALL_EXCEPT)==flags);
+#if defined(XR_ARCH_X86_64)
+            CHECK(_mm_getcsr()==control);
+#endif
+            ++arithmetic_count;
+        }
+        for(unsigned a=0;a<26;++a)for(unsigned b=0;b<26;++b) {
+            uint64_t args[]={float_order_witnesses[a].bits,float_order_witnesses[b].bits},result=0;
+            CHECK(execute(relations,args,2,&result)==XR_RBC_OK && result==float_relation_mask(a,b));
+            CHECK(fegetround()==modes[m] && fetestexcept(FE_ALL_EXCEPT)==flags);
+#if defined(XR_ARCH_X86_64)
+            CHECK(_mm_getcsr()==control);
+#endif
+            ++relation_count;
+        }
+        CHECK(arithmetic_count==3216 && relation_count==676);
+    }
+    CHECK(fesetenv(&original)==0);
+#if defined(XR_ARCH_X86_64)
+    _mm_setcsr(original_control);
+#endif
+    xr_rbc_program_destroy(arithmetic);xr_rbc_program_destroy(relations);
+}
+
+static uint32_t float_family_callee(XrLirModule *module,bool relation) {
+    uint32_t selected=0,count=0,mask=0;
+    for(uint32_t n=0;n<xr_lir_function_count(module);++n) {
+        XrLirFunction f;XrLirFunctionView fv;OK(xr_lir_function_at(module,n,&f));
+        OK(xr_lir_function_view(module,f,&fv));
+        for(uint32_t b=0;b<fv.block_count;++b) {
+            XrLirBlock block;XrLirBlockView bv;OK(xr_lir_block_at(module,f,b,&block));
+            OK(xr_lir_block_view(module,block,&bv));
+            for(uint32_t i=0;i<bv.instruction_count;++i) {
+                XrLirInstructionView v;OK(xr_lir_instruction_view(module,block,i,&v));
+                unsigned bit=0;
+                if(relation) {if(v.op==XR_LIR_FCMP)bit=1u<<v.predicate;}
+                else switch(v.op) {
+                    case XR_LIR_FADD:bit=1;break;case XR_LIR_FSUB:bit=2;break;
+                    case XR_LIR_FMUL:bit=4;break;case XR_LIR_FDIV:bit=8;break;default:break;
+                }
+                if(!bit)continue;
+                CHECK((!selected || selected==f.id) && fv.parameter_count==(relation?2u:3u) &&
+                    fv.result==(relation?XR_LIR_I64:XR_LIR_F64));
+                if(relation)CHECK(fv.parameter_types[0]==XR_LIR_F64 && fv.parameter_types[1]==XR_LIR_F64);
+                else CHECK(fv.parameter_types[0]==XR_LIR_I64 && fv.parameter_types[1]==XR_LIR_F64 &&
+                    fv.parameter_types[2]==XR_LIR_F64);
+                selected=f.id;mask|=bit;++count;
+            }
+        }
+    }
+    CHECK(selected && count==(relation?6u:4u) && mask==(relation?126u:15u));
+    return selected;
+}
+
+static void f64_family_c(const char *directory) {
+    const char *sources[]={f64_arithmetic_source,f64_relations_source};uint32_t callees[2]={0};
+    for(unsigned i=0;i<2;++i) {
+        XrLirLowered local=lower(sources[i],true);
+        CHECK(float_family_callee(local.module,i!=0)==local.entry.id);xr_lir_lowered_free(&local);
+        XrLirLowered whole=lower(sources[i],false);callees[i]=float_family_callee(whole.module,i!=0);
+        XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};XrCompileResources *resources=NULL;
+        CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+        XrLirCRequest request={whole.module,whole.entry,resources,"source-f64-family",NULL};
+        XrLirCOutput output={0};CHECK(xr_lir_emit_c(&request,&output,NULL)==XR_LIR_C_OK);
+        xr_lir_lowered_free(&whole);xr_compile_resources_release(resources);
+        char path[1024];int size=snprintf(path,sizeof(path),"%s/%s.c",directory,i?"relations":"arithmetic");
+        CHECK(size>0 && (size_t)size<sizeof(path));FILE *file=fopen(path,"wb");CHECK(file);
+        CHECK(fwrite(output.bytes,1,output.length,file)==output.length && fclose(file)==0);
+        xr_lir_c_output_free(&output);
+    }
+    printf("{\"arithmeticCallee\":%u,\"relationsCallee\":%u,\"arithmeticOps\":4,\"relationPredicates\":6}\n",callees[0],callees[1]);
+}
+
+static void f64_family_whole(void) {
+    XrLirLowered whole=lower(f64_relations_source,false);XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(whole.module,whole.entry,&program,NULL)==XR_RBC_COMPILE_OK);
+    xr_lir_lowered_free(&whole);uint64_t result=99;
+    CHECK(execute(program,NULL,0,&result)==XR_RBC_OK && result==0);xr_rbc_program_destroy(program);
+}
+
 static void owned_string_result(const char *path) {
     XrLirLowered lowered = lower("fn produce()->string{return \"é\\0${73}\"}\nproduce()\n",true);
     XrRbcProgram *program = NULL;
@@ -499,6 +612,8 @@ static void constant_string_branch(const char *directory) {
 }
 
 int main(int argc, char **argv) {
+    if(argc==3&&!strcmp(argv[1],"--f64-family-c")){f64_family_c(argv[2]);return 0;}
+    if(argc==2&&!strcmp(argv[1],"--f64-family-rbc")){f64_family_whole();return 0;}
     if(argc==3&&!strcmp(argv[1],"--i64-equality-c")){i64_equality_c(argv[2]);return 0;}
     if(argc==3&&!strcmp(argv[1],"--fneg-c")){f64_negation_c(argv[2]);return 0;}
     if(argc==3&&!strcmp(argv[1],"--constant-branch")){constant_string_branch(argv[2]);return 0;}
@@ -513,6 +628,7 @@ int main(int argc, char **argv) {
     actual_entry_and_refusal();
     f64_transport();
     f64_negation();
+    f64_family();
     puts("Source-backed bytecode integration passed");
     return 0;
 }

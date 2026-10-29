@@ -36,6 +36,19 @@ typedef struct XrtSourceMap {
 
 typedef void (*XrtSynchronousRoot)(void *context);
 
+// Pure binary64 leaves consume and return object bits. They need no active
+// execution, allocate nothing and preserve the host floating environment.
+// Arithmetic rounds once to nearest with ties to even, gradually underflows,
+// and canonicalizes every NaN result to positive quiet 0x7ff8000000000000.
+// Division by zero produces the canonical IEEE value, without an integer panic.
+XRAY_API uint64_t xrt_f64_add(uint64_t left, uint64_t right);
+XRAY_API uint64_t xrt_f64_subtract(uint64_t left, uint64_t right);
+XRAY_API uint64_t xrt_f64_multiply(uint64_t left, uint64_t right);
+XRAY_API uint64_t xrt_f64_divide(uint64_t left, uint64_t right);
+// Return -1/0/1 for less/equal/greater and 2 for unordered. Both zeros compare
+// equal; any quiet or signaling NaN operand is unordered without changing flags.
+XRAY_API int32_t xrt_f64_compare(uint64_t left, uint64_t right);
+
 // These handles point to the canonical shared String object, never a second
 // native representation. New/retain results own one reference in this root.
 // Inputs are borrowed synchronously. Allocation/refcount failures end the root

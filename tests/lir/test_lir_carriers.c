@@ -249,9 +249,9 @@ static void f64_owned_programs(void) {
 }
 static void reject_float_operations(void) {
     const struct { XrLirOp op; XrLirType input, result; uint32_t arity; } cases[] = {
-        {XR_LIR_FADD, XR_LIR_F64, XR_LIR_F64, 2}, {XR_LIR_FSUB, XR_LIR_F64, XR_LIR_F64, 2},
-        {XR_LIR_FMUL, XR_LIR_F64, XR_LIR_F64, 2}, {XR_LIR_FDIV, XR_LIR_F64, XR_LIR_F64, 2},
-        {XR_LIR_FNEG, XR_LIR_F32, XR_LIR_F32, 1}, {XR_LIR_FCMP, XR_LIR_F64, XR_LIR_I1, 2},
+        {XR_LIR_FADD, XR_LIR_F32, XR_LIR_F32, 2}, {XR_LIR_FSUB, XR_LIR_F32, XR_LIR_F32, 2},
+        {XR_LIR_FMUL, XR_LIR_F32, XR_LIR_F32, 2}, {XR_LIR_FDIV, XR_LIR_F32, XR_LIR_F32, 2},
+        {XR_LIR_FNEG, XR_LIR_F32, XR_LIR_F32, 1}, {XR_LIR_FCMP, XR_LIR_F32, XR_LIR_I1, 2},
         {XR_LIR_ITOF, XR_LIR_I64, XR_LIR_F64, 1}, {XR_LIR_FCAST, XR_LIR_F64, XR_LIR_F64, 1}
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(*cases); ++i) {

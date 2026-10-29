@@ -5,7 +5,7 @@ if(WIN32)
     set(native_output_platform "${PROJECT_SOURCE_DIR}/src/os/native_output/native_output_win.c")
 endif()
 add_library(xray_native_runtime STATIC xnative_output.c xnative_locations.c
-    xnative_execution.c xnative_string.c "${native_output_platform}" "${native_clock_platform}")
+    xnative_execution.c xnative_string.c xnative_float.c "${native_output_platform}" "${native_clock_platform}")
 target_link_libraries(xray_native_runtime PUBLIC xray_xir_scalar)
 target_include_directories(xray_native_runtime PUBLIC "${PROJECT_SOURCE_DIR}/include"
     PRIVATE "${PROJECT_SOURCE_DIR}/src")

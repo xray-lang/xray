@@ -196,6 +196,8 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
             if (s->state[v.b] != RBC_BITS || !rbc_bits_destination(s, v.a)) return false;
             s->state[v.a] = RBC_BITS; break;
         case XR_RBC_ADD: case XR_RBC_SUB: case XR_RBC_MUL: case XR_RBC_DIV: case XR_RBC_REM:
+        case XR_RBC_FADD: case XR_RBC_FSUB: case XR_RBC_FMUL: case XR_RBC_FDIV:
+        case XR_RBC_FEQ: case XR_RBC_FNE: case XR_RBC_FLT: case XR_RBC_FLE: case XR_RBC_FGT: case XR_RBC_FGE:
         case XR_RBC_AND: case XR_RBC_OR: case XR_RBC_XOR: case XR_RBC_SHL: case XR_RBC_SHR: case XR_RBC_USHR:
             if (s->state[v.b] != RBC_BITS || s->state[v.c] != RBC_BITS || !rbc_bits_destination(s, v.a)) return false;
             s->state[v.a] = RBC_BITS; break;

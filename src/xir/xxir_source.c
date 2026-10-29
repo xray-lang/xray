@@ -40,6 +40,7 @@
 #include "../hir/xhir_binary.h"
 #include "../hir/xhir_unary.h"
 #include "../hir/xhir_boolean.h"
+#include "../hir/xhir_cast.h"
 #include "xxir_compile_memory.h"
 #include "../shared/xnative_declaration.h"
 #include "../shared/xr_core_intrinsic.h"
@@ -1185,7 +1186,7 @@ static bool source_generator_yield(SourceContext *ctx,AstNode *node,bool top);
 #include "xxir_source_requirement_values.inc.c"
 #include "xxir_source_methods.inc.c"
 static SourceName *source_core_assertion(SourceContext *ctx, AstNode *site, uint32_t intrinsic);
-static bool source_text_conversion(SourceContext *ctx, AstNode *node, SourceValue input, SourceValue *value);
+static bool source_scalar_text(SourceContext *ctx,AstNode *node,SourceValue input,XrHirCastRole role,SourceValue *value);
 #include "xxir_source_rune.inc.c"
 static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *binding,
     SourceName *target,SourceExpectedType result_context,SourceValue *value) {
@@ -1242,7 +1243,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                     (call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN))
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string conversion takes one value");
                 return source_plan_expression(ctx, call->arguments[0], (SourceExpectedType){false, XR_XIR_UNIT, false, false}, &input) &&
-                    source_text_conversion(ctx, node, input, value);
+                    source_scalar_text(ctx,node,input,XR_HIR_CAST_TEXT,value);
             }
             if (source_text_same(ctx, NULL, name, "typeName")) {
                 SourceValue input;
@@ -1447,11 +1448,7 @@ static bool source_template(SourceContext *ctx, AstNode *node, SourceValue *valu
             if (!source_literal(ctx, part, &piece)) return false;
         } else {
             if (!expression(ctx, part, &piece)) return false;
-            if (piece.type == XR_XIR_BOOL || piece.type == XR_XIR_RUNE || xr_xir_type_is_number(piece.type)) {
-                if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_TO_STRING, XR_XIR_STRING, {piece.id, 0}, {0}, 0, {0}}, &piece))
-                    return false;
-            } else if (piece.type != XR_XIR_STRING)
-                return source_fail(ctx, part, XR_XIR_BAD_TYPE, "interpolated value has no admitted string conversion");
+            if (!source_scalar_text(ctx,part,piece,XR_HIR_CAST_INTERPOLATION,&piece)) return false;
         }
         if (!started) { result = piece; started = true; continue; }
         if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {result.id, piece.id}, {0}, 0, {0}}, &result))
@@ -1509,30 +1506,37 @@ static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) 
 }
 #include "xxir_source_nullable.inc.c"
 #include "xxir_source_try_optional.inc.c"
-/* The text of a bool or number, as `print` writes it; a string converts to itself. */
-static bool source_text_conversion(SourceContext *ctx, AstNode *node, SourceValue input, SourceValue *value) {
-    if (input.type == XR_XIR_STRING) { *value = input; return true; }
-    if (input.type != XR_XIR_BOOL && input.type != XR_XIR_RUNE && !xr_xir_type_is_number(input.type))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "value has no admitted string conversion");
-    return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_TO_STRING, XR_XIR_STRING, {input.id, 0}, {0}, 0, {0}}, value);
+static bool source_cast_target(SourceContext *ctx,AstNode *node,XrHirCastTargetInput input,XrHirCastTarget *target) {
+    XrXirSourceRange range=source_query_range(ctx,node,NULL);
+    input.origin=(XrHirCastOrigin){node->node_id,range.module,range.line,range.column,range.end_line,range.end_column};
+    const char *reason=NULL;XrXirStatus status=xr_hir_cast_target_check(&ctx->types,&input,ctx->request,target,&reason);
+    return status==XR_XIR_OK || source_fail(ctx,node,status,reason);
 }
-static bool source_number_cast(SourceContext *ctx, AstNode *node, SourceValue *value) {
+static bool source_cast_emit(SourceContext *ctx,AstNode *node,const XrHirCastTarget *target,SourceValue input,SourceValue *value) {
+    XrHirCast typed;const char *reason=NULL;
+    XrXirStatus status=xr_hir_cast_check(&ctx->types,target,input.type,ctx->request,&typed,&reason);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason);
+    if(typed.kind==XR_HIR_CAST_IDENTITY){*value=input;return true;}
+    return source_recipe_record(ctx,xr_hir_cast_instruction(&typed,input.id),value);
+}
+static bool source_scalar_text(SourceContext *ctx,AstNode *node,SourceValue input,XrHirCastRole role,SourceValue *value) {
+    XrHirCastTarget target;
+    return source_cast_target(ctx,node,(XrHirCastTargetInput){.role=role,.target=XR_XIR_STRING},&target) &&
+        source_cast_emit(ctx,node,&target,input,value);
+}
+static bool source_explicit_cast(SourceContext *ctx,AstNode *node,SourceValue *value) {
     AsExprNode *cast = &node->as.as_expr;
-    XrXirType target; SourceValue input;
-    if (!cast->is_safe && source_type(ctx, cast->type, &target) && target == XR_XIR_STRING) {
-        return source_plan_expression(ctx, cast->expr, (SourceExpectedType){false, XR_XIR_UNIT, false, false}, &input) &&
-            source_text_conversion(ctx, node, input, value);
+    XrXirType type=XR_XIR_UNIT;SourceValue input;XrHirCastTarget target;
+    if(!cast->is_safe && !source_type(ctx,cast->type,&type))return false;
+    if(!source_cast_target(ctx,node,(XrHirCastTargetInput){.role=XR_HIR_CAST_EXPLICIT,.target=type,.safe=cast->is_safe},&target))return false;
+    SourceExpectedType context={0};
+    if(target.kind==XR_HIR_CAST_NUMBER) {
+        SourceInteger literal;
+        if(!source_direct_integer(ctx,cast->expr,&literal))return false;
+        XrHirCastLiteralContext hint=xr_hir_cast_literal_context(&target,literal.present,literal.negative,literal.magnitude);
+        context=(SourceExpectedType){hint.present,hint.type,false,false};
     }
-    if (ctx->diagnostic.status != XR_XIR_OK) return false;
-    if (cast->is_safe || !source_type(ctx, cast->type, &target) || !xr_xir_type_is_number(target))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "numeric cast requires a concrete nonnullable numeric target");
-    SourceInteger literal;
-    if (!source_direct_integer(ctx, cast->expr, &literal)) return false;
-    SourceExpectedType context = {literal.present && !literal.negative && literal.magnitude > INT64_MAX,XR_XIR_U64, false, false};
-    if (!source_plan_expression(ctx, cast->expr, context, &input)) return false;
-    if (!xr_xir_type_is_number(input.type))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "numeric cast requires a concrete numeric operand");
-    return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONVERT_NUMBER, target, {input.id, 0}, {0}, 0, {0}}, value);
+    return source_plan_expression(ctx,cast->expr,context,&input) && source_cast_emit(ctx,node,&target,input,value);
 }
 #include "xxir_source_binary_plan.inc.c"
 static bool source_arithmetic(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
@@ -1742,7 +1746,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
              source_text_same(ctx, NULL, node->as.new_expr.class_name, "Set")))
             return source_hash_construct(ctx, node, value);
         return source_array_construct(ctx, node, value);
-    case AST_AS_EXPR: return source_number_cast(ctx, node, value);
+    case AST_AS_EXPR: return source_explicit_cast(ctx,node,value);
     case AST_TRY_EXPR:
         if (!ctx->active_expression->left)
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "try expression has no operand");

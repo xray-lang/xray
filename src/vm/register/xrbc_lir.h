@@ -36,8 +36,8 @@ typedef struct {
 // Entry identifies the execution root. Only its direct-call closure is
 // admitted, but the whole input is verified at this trust boundary. Output
 // must initially be NULL and remains NULL on failure. I64, I1, unit and raw
-// F64 transport and canonical F64 FNEG are supported, as is an I64-to-I64
-// INTCAST. Other integer conversions and floating operations or comparisons are
+// F64 transport, canonical F64 negation, arithmetic and comparisons are supported,
+// as is an I64-to-I64 INTCAST. Other integer and floating conversions are
 // not admitted. Native calls bind the shared i64 output and fixed typed system
 // clocks and the I64-to-I64 UTC offset query. F64 arguments
 // retain every payload bit. I64 cells belong to an activation and may be

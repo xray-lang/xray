@@ -38,7 +38,7 @@ typedef struct LirC {
     uint32_t block, instruction, scratch;
     XrLirSource source;
     uint32_t location_count, location_cursor;
-    bool runtime, f64, fneg;
+    bool runtime, f64, fenv;
 } LirC;
 
 static void c_error(LirC *c, XrLirCStatus status, const char *message) {
@@ -267,9 +267,19 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             break;
         case XR_LIR_FNEG:
             if (v->type == XR_LIR_F64)
-                c->fneg = true;
+                c->fenv = true;
             else
                 c_error(c, XR_LIR_C_UNSUPPORTED, "floating negation requires f64");
+            break;
+        case XR_LIR_FADD: case XR_LIR_FSUB: case XR_LIR_FMUL: case XR_LIR_FDIV:
+        case XR_LIR_FCMP:
+            if (c_value_type(c,v->operands[0]) != XR_LIR_F64 ||
+                c_value_type(c,v->operands[1]) != XR_LIR_F64)
+                c_error(c,XR_LIR_C_UNSUPPORTED,"floating operation requires f64 operands");
+            else {
+                c->runtime=true;
+                c->fenv=true;
+            }
             break;
         case XR_LIR_CALL:
             c_visit(c, v->callee);
@@ -484,6 +494,31 @@ static void c_fneg(LirC *c, const XrLirInstructionView *v) {
     c_format(c, "    memcpy(&v%" PRIu32 ", &v%" PRIu32 ", sizeof(v%" PRIu32 "));\n",
         v->result, c->scratch, v->result);
 }
+static void c_float_operation(LirC *c, const XrLirInstructionView *v) {
+    c_text(c,"    { uint64_t xrl_left, xrl_right;\n        memcpy(&xrl_left, &");
+    c_value(c,v->operands[0]);c_text(c,", sizeof(xrl_left));\n        memcpy(&xrl_right, &");
+    c_value(c,v->operands[1]);c_text(c,", sizeof(xrl_right));\n");
+    if (v->op==XR_LIR_FCMP) {
+        c_text(c,"        int32_t xrl_order = xrt_f64_compare(xrl_left, xrl_right);\n");
+        c_format(c,"        v%" PRIu32 " = ",v->result);
+        switch (v->predicate) {
+            case XR_LIR_EQ:c_text(c,"xrl_order == INT32_C(0)");break;
+            case XR_LIR_NE:c_text(c,"xrl_order != INT32_C(0)");break;
+            case XR_LIR_LT:c_text(c,"xrl_order == -INT32_C(1)");break;
+            case XR_LIR_LE:c_text(c,"xrl_order == -INT32_C(1) || xrl_order == INT32_C(0)");break;
+            case XR_LIR_GT:c_text(c,"xrl_order == INT32_C(1)");break;
+            case XR_LIR_GE:c_text(c,"xrl_order == INT32_C(1) || xrl_order == INT32_C(0)");break;
+            default:c_error(c,XR_LIR_C_INVALID_LIR,"invalid floating predicate");return;
+        }
+        c_text(c,";\n");
+    } else {
+        const char *name=v->op==XR_LIR_FADD?"xrt_f64_add":v->op==XR_LIR_FSUB?"xrt_f64_subtract":
+            v->op==XR_LIR_FMUL?"xrt_f64_multiply":"xrt_f64_divide";
+        c_format(c,"        uint64_t xrl_bits = %s(xrl_left, xrl_right);\n        memcpy(&",name);
+        c_value(c,v->result);c_text(c,", &xrl_bits, sizeof(xrl_bits));\n");
+    }
+    c_text(c,"    }\n");
+}
 static void c_edge(LirC *c, const XrLirEdgeView *edge) {
     XrLirBlock target = {c->request->module, c->function.id, edge->target};
     XrLirBlockView block;
@@ -616,6 +651,9 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_FNEG:
             c_fneg(c, v);
             break;
+        case XR_LIR_FADD: case XR_LIR_FSUB: case XR_LIR_FMUL: case XR_LIR_FDIV: case XR_LIR_FCMP:
+            c_float_operation(c,v);
+            break;
         case XR_LIR_ICMP:
             c_format(c, "    v%" PRIu32 " = ", v->result);
             c_value(c, v->operands[0]);
@@ -747,7 +785,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
         c_text(c, "#include \"xray_native_runtime.h\"\n\n");
     if (root_result == XR_LIR_STRING)
         c_text(c, "extern XrtString *xrt_string_root_take(XrtString *string);\n\n");
-    if (c->fneg)
+    if (c->fenv)
         c_text(c, "#if defined(_MSC_VER) && defined(_M_X64) && !defined(_M_ARM64EC) && "
             "!defined(_M_FP_FAST) && !defined(__FAST_MATH__) && "
             "(!defined(__FINITE_MATH_ONLY__) || __FINITE_MATH_ONLY__ <= 0)\n"

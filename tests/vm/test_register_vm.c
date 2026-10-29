@@ -14,6 +14,11 @@
 
 #include "register_vm_programs.h"
 #include "shared/xr_time_offset.h"
+#include "f64_family_vectors.h"
+#include <fenv.h>
+#if defined(XR_ARCH_X86_64)
+#include <xmmintrin.h>
+#endif
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
@@ -152,6 +157,102 @@ static void test_f64_negation(void) {
     module=(XrRbcModule){.functions=&f,.function_count=1,.literals=&literal,.literal_count=1};
     uint64_t result=99;
     CHECK(execute(&module,0,&argument,1,&result)==XR_RBC_OK && result==UINT64_C(0x8000000000000000));
+}
+
+static void test_f64_family(void) {
+    const XrRbcOp arithmetic[]={XR_RBC_FADD,XR_RBC_FSUB,XR_RBC_FMUL,XR_RBC_FDIV};
+    const XrRbcOp comparisons[]={XR_RBC_FEQ,XR_RBC_FNE,XR_RBC_FLT,XR_RBC_FLE,XR_RBC_FGT,XR_RBC_FGE};
+    const int modes[]={FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO};
+    fenv_t original;CHECK(fegetenv(&original)==0);
+#if defined(XR_ARCH_X86_64)
+    unsigned original_control=_mm_getcsr();const unsigned controls=4;
+#define RAW_FLOAT_ENV() (fetestexcept(FE_ALL_EXCEPT)==flags && fegetround()==modes[m] && _mm_getcsr()==control)
+#else
+    const unsigned controls=1;
+#define RAW_FLOAT_ENV() (fetestexcept(FE_ALL_EXCEPT)==flags && fegetround()==modes[m])
+#endif
+    for(unsigned m=0;m<4;++m)for(unsigned c=0;c<controls;++c) {
+        CHECK(fesetround(modes[m])==0 && feclearexcept(FE_ALL_EXCEPT)==0 && feraiseexcept(FE_INEXACT)==0);
+#if defined(XR_ARCH_X86_64)
+        unsigned mask=(1u<<6)|(1u<<15);
+        _mm_setcsr((_mm_getcsr()&~mask)|((c&1u)<<6)|(((c>>1)&1u)<<15));
+        unsigned control=_mm_getcsr();
+#endif
+        int flags=fetestexcept(FE_ALL_EXCEPT);unsigned kernel_rows=0,raw_rows=0;
+        for(unsigned i=0;i<sizeof(float_arithmetic_witnesses)/sizeof(*float_arithmetic_witnesses);++i) {
+            uint64_t result=0;
+            XrXirNumericStatus status=xr_xir_float_arithmetic(float_arithmetic_witnesses[i].width,
+                float_arithmetic_witnesses[i].operation,float_arithmetic_witnesses[i].left,
+                float_arithmetic_witnesses[i].right,&result);
+            CHECK(RAW_FLOAT_ENV());CHECK(status==XR_XIR_NUMERIC_OK && result==float_arithmetic_witnesses[i].expected);
+            ++kernel_rows;
+            if(float_arithmetic_witnesses[i].width!=64)continue;
+            uint64_t args[]={float_arithmetic_witnesses[i].left,float_arithmetic_witnesses[i].right};
+            for(unsigned destination=0;destination<3;++destination) {
+                uint32_t code[2];emit(code,0,arithmetic[float_arithmetic_witnesses[i].operation],destination,0,1);
+                emit(code,1,XR_RBC_RET,destination,0,0);
+                XrRbcFunction f={.code=code,.code_count=2,.register_count=3,.parameter_count=2};
+                result=run_function(f,args,2);CHECK(RAW_FLOAT_ENV());CHECK(result==float_arithmetic_witnesses[i].expected);
+            }
+            ++raw_rows;
+        }
+        CHECK(kernel_rows==6432 && raw_rows==3216);
+        for(unsigned a=0;a<26;++a)for(unsigned b=0;b<26;++b)for(unsigned p=0;p<6;++p) {
+            uint64_t args[]={float_order_witnesses[a].bits,float_order_witnesses[b].bits};
+            for(unsigned destination=0;destination<3;++destination) {
+                uint32_t code[2];emit(code,0,comparisons[p],destination,0,1);emit(code,1,XR_RBC_RET,destination,0,0);
+                XrRbcFunction f={.code=code,.code_count=2,.register_count=3,.parameter_count=2};
+                uint64_t result=run_function(f,args,2);CHECK(RAW_FLOAT_ENV());
+                CHECK(result==((float_relation_mask(a,b)>>p)&1u));
+            }
+        }
+    }
+    CHECK(fesetenv(&original)==0);
+#if defined(XR_ARCH_X86_64)
+    _mm_setcsr(original_control);
+#endif
+#undef RAW_FLOAT_ENV
+}
+
+static void test_float_kinds_and_spills(void) {
+    const XrRbcOp ops[]={XR_RBC_FADD,XR_RBC_FSUB,XR_RBC_FMUL,XR_RBC_FDIV,
+        XR_RBC_FEQ,XR_RBC_FNE,XR_RBC_FLT,XR_RBC_FLE,XR_RBC_FGT,XR_RBC_FGE};
+    uint32_t code[4],root=XR_RBC_RET0;emit(code,1,XR_RBC_RET,2,0,0);
+    XrRbcRegisterKind kinds[]={XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS};
+    XrRbcFunction functions[2]={{.code=&root,.code_count=1,.register_count=1},
+        {.code=code,.code_count=2,.register_count=3,.parameter_count=2,
+         .register_kinds=kinds,.register_kind_count=3}};
+    XrRbcModule module={.functions=functions,.function_count=2};
+    for(unsigned op=0;op<10;++op) {
+        emit(code,0,ops[op],2,0,1);
+        for(unsigned position=0;position<3;++position) {
+            for(unsigned kind=XR_RBC_STRING;kind<=XR_RBC_STRING_CELL;++kind) {
+                kinds[position]=(XrRbcRegisterKind)kind;reject_prepare(&module,0,NULL,0);kinds[position]=XR_RBC_BITS;
+            }
+            uint32_t original=code[0];code[0]=(original & ~(255u<<(8*(position+1)))) | (3u<<(8*(position+1)));
+            reject_prepare(&module,0,NULL,0);code[0]=original;
+            uint32_t sentinel=UINT32_C(0xdeadbeef);XrRbcOperands bad={ops[op],2,0,1,0};
+            if(position==0)bad.a=255;else if(position==1)bad.b=255;else bad.c=255;
+            CHECK(!xr_rbc_encode(&sentinel,bad) && sentinel==UINT32_C(0xdeadbeef));
+        }
+    }
+    uint64_t args[]={UINT64_C(0x3ff0000000000000),UINT64_C(0x4000000000000000)},result=0;
+    immediate(code,0,XR_RBC_SPILL,0,1);immediate(code,1,XR_RBC_RELOAD,0,1);
+    emit(code,2,XR_RBC_FADD,2,0,1);emit(code,3,XR_RBC_RET,2,0,0);
+    XrRbcFunction f={.code=code,.code_count=4,.register_count=3,.parameter_count=2,
+        .register_kinds=kinds,.register_kind_count=3,.spill_count=2,.reference_spill_count=1};
+    module=(XrRbcModule){.functions=&f,.function_count=1};
+    CHECK(execute(&module,0,args,2,&result)==XR_RBC_OK && result==UINT64_C(0x4008000000000000));
+    immediate(code,0,XR_RBC_SPILL,0,0);reject_prepare(&module,0,args,2);
+    immediate(code,0,XR_RBC_SPILL,0,1);immediate(code,1,XR_RBC_RELOAD,0,0);reject_prepare(&module,0,args,2);
+    immediate(code,0,XR_RBC_STRING_LITERAL,3,0);emit(code,1,XR_RBC_FADD,2,0,1);
+    emit(code,2,XR_RBC_STRING_DROP,3,0,0);emit(code,3,XR_RBC_RET,2,0,0);
+    XrRbcRegisterKind managed[]={XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_STRING};
+    f=(XrRbcFunction){.code=code,.code_count=4,.register_count=4,.parameter_count=2,
+        .register_kinds=managed,.register_kind_count=4};
+    XrRbcLiteral literal={"kept",4};module.literals=&literal;module.literal_count=1;
+    CHECK(execute(&module,0,args,2,&result)==XR_RBC_OK && result==UINT64_C(0x4008000000000000));
+    emit(code,1,XR_RBC_FADD,2,3,1);reject_prepare(&module,0,args,2);
 }
 
 static void test_workloads(bool timing) {
@@ -760,6 +861,8 @@ static void test_spill_branches(void) {
     reject_prepare(&module,0,&flag,1);scalar[7]=saved;
 }
 int main(int argc, char **argv) {
+    test_f64_family();
+    test_float_kinds_and_spills();
     test_f64_negation();
     test_spill_branches();
     test_spills();

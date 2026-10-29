@@ -139,6 +139,8 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
         break;
     case XR_RBC_STRING_CONCAT:
     case XR_RBC_ADD: case XR_RBC_SUB: case XR_RBC_MUL:
+    case XR_RBC_FADD: case XR_RBC_FSUB: case XR_RBC_FMUL: case XR_RBC_FDIV:
+    case XR_RBC_FEQ: case XR_RBC_FNE: case XR_RBC_FLT: case XR_RBC_FLE: case XR_RBC_FGT: case XR_RBC_FGE:
     case XR_RBC_DIV: case XR_RBC_REM: case XR_RBC_AND: case XR_RBC_OR:
     case XR_RBC_XOR: case XR_RBC_SHL: case XR_RBC_SHR: case XR_RBC_USHR:
         if (a >= registers || b >= registers || c >= registers) return false;
