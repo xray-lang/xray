@@ -361,6 +361,8 @@ add_test(NAME source_implementation_control COMMAND test_source_request_lifetime
 set_tests_properties(source_implementation_control PROPERTIES TIMEOUT 120 PROCESSORS 1 LABELS "unit;api;source;ownership;resources")
 add_test(NAME source_packet_request_control COMMAND test_source_request_lifetime --packet-codec)
 add_test(NAME source_packet_writer_control COMMAND test_source_request_lifetime --source-writer)
+add_test(NAME source_product_facts_control COMMAND test_source_request_lifetime --product-facts)
+set_tests_properties(source_product_facts_control PROPERTIES TIMEOUT 120 PROCESSORS 1 LABELS "unit;api;source;ownership;resources")
 set_tests_properties(source_packet_writer_control PROPERTIES TIMEOUT 120 PROCESSORS 1 LABELS "unit;api;source;ownership;resources")
 set_tests_properties(source_packet_request_control PROPERTIES
     TIMEOUT 120 LABELS "unit;api;source;ownership;cancel;deadline")

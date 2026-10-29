@@ -414,6 +414,7 @@
     "source_product_packet_lifetime",
     "source_packet_request_control",
     "source_packet_writer_control",
+    "source_product_facts_control",
     "source_native_projection_ownership",
     "dap_original_stdio_line-breakpoint",
     "hir_numeric_literal",

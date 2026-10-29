@@ -64,7 +64,16 @@ typedef struct ProductFactsProbe {
     unsigned char preimage[65536];
     size_t bytes;
     uint8_t prefix_digest[32];
-    bool prefix_seen;
+    const struct XrXirSourceTestEntry *expected_entries;
+    void *product,*directory;
+    char *name_destination;
+    const char *name_source,*poll_function;
+    XrCompileResources *resources;
+    XrCompileRequestControl *control;
+    uint64_t held_empty;
+    size_t directory_count,name_bytes,witnesses,polls,allocations;
+    unsigned phase,mode;
+    bool prefix_seen,armed,disabled,oom_seen;
 } ProductFactsProbe;
 static ProductFactsProbe *product_facts_probe;
 
@@ -301,15 +310,23 @@ XR_FUNC XrXirStatus xir_checked_write(const XrXirArtifact *artifact,XrXirChecked
 #define memcmp(left,right,size) source_writer_observe_compare((left),(right),(size),__func__)
 static void product_facts_observe_sha(XrSHA256Context *hash,const uint8_t *bytes,
     size_t length,const char *caller);
+static void *product_facts_observe_calloc(const XrXirCompileContext *context,size_t count,
+    size_t size,XrXirStatus *status,const char *caller);
+static XrCompileResourceStatus product_facts_observe_copy(XrCompileRequestControl *control,
+    void *destination,const void *source,size_t bytes,const char *caller);
 #define xr_sha256_update(hash,bytes,length) product_facts_observe_sha((hash),(bytes),(length),__func__)
+#define xir_compile_calloc(context,count,size,status) product_facts_observe_calloc((context),(count),(size),(status),__func__)
+#define xir_lower_copy_span(control,destination,source,bytes) product_facts_observe_copy((control),(destination),(source),(bytes),__func__)
 #include "program/xr_xir_source_product.c"
+#undef xir_lower_copy_span
+#undef xir_compile_calloc
 #undef xr_sha256_update
 #undef memcmp
 #undef xr_compile_request_control_poll
 static void product_facts_observe_sha(XrSHA256Context *hash,const uint8_t *bytes,
     size_t length,const char *caller) {
     ProductFactsProbe *probe=product_facts_probe;
-    bool observed=probe&&(!strcmp(caller,"source_layout_word")||
+    bool observed=probe&&!probe->disabled&&(!strcmp(caller,"source_layout_word")||
         !strcmp(caller,"source_layout_words")||!strcmp(caller,"source_product_layout_digest"));
     if(observed) {
         CHECK(!probe->hash||probe->hash==hash);probe->hash=hash;
@@ -322,10 +339,55 @@ static void product_facts_observe_sha(XrSHA256Context *hash,const uint8_t *bytes
         xr_sha256_final(&prefix,probe->prefix_digest);probe->prefix_seen=true;
     }
 }
+static void *product_facts_observe_calloc(const XrXirCompileContext *context,size_t count,
+    size_t size,XrXirStatus *status,const char *caller) {
+    ProductFactsProbe *probe=product_facts_probe;
+    bool directory=probe&&probe->armed&&!probe->disabled&&!strcmp(caller,"source_product_tests");
+    if(directory&&probe->mode==2)runtime_fail_at=runtime_attempts;
+    void *memory=xir_compile_calloc(context,count,size,status);
+    if(directory) {
+        ++probe->allocations;
+        if(probe->mode==2) {
+            CHECK(!memory&&*status==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>runtime_fail_at);
+            runtime_fail_at=SIZE_MAX;probe->oom_seen=true;
+        } else {CHECK(memory&&!probe->directory);probe->directory=memory;}
+    }
+    if(probe&&probe->armed&&!probe->disabled&&!strcmp(caller,"source_product_build")) {
+        CHECK(memory&&count==1&&size==sizeof(XrXirSourceProduct)&&!probe->product);probe->product=memory;
+    }
+    return memory;
+}
+static XrCompileResourceStatus product_facts_observe_copy(XrCompileRequestControl *control,
+    void *destination,const void *source,size_t bytes,const char *caller) {
+    ProductFactsProbe *probe=product_facts_probe;
+    bool observed=probe&&probe->armed&&!probe->disabled&&bytes==5000&&!strcmp(caller,"source_product_tests");
+    if(observed) {
+        CHECK(!probe->name_destination);probe->name_destination=destination;probe->name_source=source;
+        probe->name_bytes=bytes;memset(destination,0xa5,bytes);
+    }
+    XrCompileResourceStatus status=xir_lower_copy_span(control,destination,source,bytes);
+    if(observed){probe->name_destination=NULL;probe->name_source=NULL;}
+    return status;
+}
 static XrCompileResourceStatus source_writer_observe_poll(XrCompileRequestControl *control,
     const void *field,const char *caller) {
     SourceWriterProbe *probe=source_writer_probe;
     const char *previous=probe?probe->poll_function:NULL;
+    ProductFactsProbe *facts=product_facts_probe;
+    const char *previous_facts=facts?facts->poll_function:NULL;
+    if(facts&&facts->armed&&!facts->disabled) {
+        facts->poll_function=caller;facts->control=control;
+        if(!facts->resources) {
+            CHECK(calibration_owner);facts->resources=calibration_owner;
+            CHECK(xr_compile_resources_retain(facts->resources)==XR_COMPILE_RESOURCE_OK);
+            facts->held_empty=calibration_initial_held;
+        }
+        if(!strcmp(caller,"source_layout_words")) {
+            const SourceLayoutHash *cursor=(const void *)((const unsigned char *)field-
+                offsetof(SourceLayoutHash,control));
+            CHECK(cursor->control==control&&cursor->words==1024&&facts->hash==&cursor->hash);
+        }
+    }
     if(probe&&!probe->disabled) {
         probe->poll_function=caller;
         if(probe->phase==0&&probe->active==probe->selected&&!strcmp(caller,"checked_room")) {
@@ -339,6 +401,7 @@ static XrCompileResourceStatus source_writer_observe_poll(XrCompileRequestContro
     }
     XrCompileResourceStatus status=xr_compile_request_control_poll(control);
     if(probe)probe->poll_function=previous;
+    if(facts)facts->poll_function=previous_facts;
     return status;
 }
 static int source_writer_observe_compare(const void *left,const void *right,size_t size,const char *caller) {
@@ -1888,6 +1951,7 @@ static void declarations_copy_controls(const char *selected) {
 #include "product_facts_control_cases.inc.c"
 int main(int argc,char **argv) {
     if(argc==2&&!strcmp(argv[1],"--product-facts-baseline")){product_facts_baseline();return 0;}
+    if((argc==2||argc==3)&&!strcmp(argv[1],"--product-facts")){product_facts_cases(argc==3?argv[2]:NULL);return 0;}
     if((argc==2||argc==3)&&!strcmp(argv[1],"--source-writer")){source_writer_cases(argc==3?argv[2]:NULL);return 0;}
     if(argc==2&&!strcmp(argv[1],"--packet-codec-vectors")){packet_codec_vectors();return 0;}
     if((argc==2||argc==3)&&!strcmp(argv[1],"--packet-codec")){packet_codec_cases(argc==3?argv[2]:NULL);return 0;}

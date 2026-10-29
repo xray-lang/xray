@@ -16,11 +16,14 @@ def main():
     parser.add_argument('--compiler', required=True)
     parser.add_argument('--secondary-compiler')
     parser.add_argument('--implementation-only', action='store_true')
+    parser.add_argument('--facts-only', action='store_true')
     parser.add_argument('--regex-only', action='store_true')
     parser.add_argument('--regex-source', type=Path)
     parser.add_argument('--stdlib-path', type=Path)
     args = parser.parse_args()
-    if args.regex_only and (args.implementation_only or not args.regex_source or not args.stdlib_path):
+    if sum((args.implementation_only, args.facts_only, args.regex_only)) > 1:
+        parser.error('focused SDK modes are mutually exclusive')
+    if args.regex_only and (not args.regex_source or not args.stdlib_path):
         parser.error('--regex-only requires --regex-source and --stdlib-path, without --implementation-only')
     root = Path(__file__).resolve().parents[3]
     build, parent = args.build.resolve(), args.output.resolve()
@@ -59,6 +62,7 @@ def main():
     source = out/'consumer.c'
     source.write_bytes((root/'tests/unit/xir/source_sdk_owned_consumer.c').read_bytes())
     (out/'implementation_control_fixture.h').write_bytes((root/'tests/unit/xir/implementation_control_fixture.h').read_bytes())
+    (out/'product_facts_control_fixture.h').write_bytes((root/'tests/unit/xir/product_facts_control_fixture.h').read_bytes())
     fragment = 'source_sdk_regex_consumer.inc.c'
     (out/fragment).write_bytes((root/'tests/unit/xir'/fragment).read_bytes())
     fragment = 'source_sdk_repl_input_consumer.inc.c'
@@ -141,6 +145,12 @@ def main():
             if args.implementation_only:
                 assert run(label+'-run', [exe, '--implementation', empty]).replace(b'\r\n', b'\n') == expected
                 continue
+            if args.facts_only:
+                implementation = b'Installed complete7658B generic implementation: retired request/AST, ready answer42 and owned result release PASS\n'
+                directory = b'Installed complete6746B test directory: retired request/AST, ready answer42 and owned result release PASS\n'
+                assert run(label+'-implementation', [exe, '--implementation', empty]).replace(b'\r\n', b'\n') == implementation
+                assert run(label+'-directory', [exe, '--facts-directory', empty]).replace(b'\r\n', b'\n') == directory
+                continue
             snapshot = out/'installed-owned-snapshot.xr'
             with snapshot.open('xb') as stream:
                 stream.write(b'const snapshot=72\nsnapshot\n')
@@ -158,6 +168,17 @@ def main():
                        result_read_copied_and_released_after_all_producers=True,
                        manifest_sha256=hashlib.sha256((sdk/'source_sdk_manifest.json').read_bytes()).hexdigest(),
                        scope='Complete regex public Source consumer; existing default ownership matrix unchanged',
+                       production_release=False)
+        (out/'summary.json').write_text(json.dumps(summary, indent=2)+'\n', encoding='utf-8')
+        print(json.dumps(summary))
+        return
+    if args.facts_only:
+        summary = dict(status='PASS', sdk_only=True, providers=list(map(str, compilers)), languages=['C11', 'C++17'],
+                       source_bytes=[7658, 6746], interface_bindings=192, directory_roles=46, long_test_name_bytes=5000,
+                       active_compile_control=True, retired_request_and_AST=True, ready_named_answer42=True,
+                       owned_result_after_producers=True,
+                       manifest_sha256=hashlib.sha256((sdk/'source_sdk_manifest.json').read_bytes()).hexdigest(),
+                       scope='Complete implementation and test-directory consumers; default ownership/integrity matrix unchanged',
                        production_release=False)
         (out/'summary.json').write_text(json.dumps(summary, indent=2)+'\n', encoding='utf-8')
         print(json.dumps(summary))
