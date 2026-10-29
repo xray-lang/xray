@@ -69,3 +69,7 @@ src/shared/xr_semantic_owner_ids_gen.h text eol=lf
 
 # Preserve raw output oracle bytes, including NUL and explicit line endings.
 tests/unit/xir/p11_ctfe_reference/fixtures/try_assert*.stdout -text
+
+# Task outcome fixtures bind exact source and query-oracle bytes.
+tests/unit/xir/task_result/fixtures/task_result.xr text eol=lf
+tests/unit/xir/task_result/fixtures/task_result.expected.json text eol=lf
