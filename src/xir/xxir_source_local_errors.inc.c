@@ -329,6 +329,7 @@ static bool source_initialization_require(SourceContext *ctx,uint32_t function) 
             }
         }
     }
+    ctx->function=function;ctx->module=ctx->bodies[function].module;
     if (!source_request_poll(ctx,ctx->bodies[function].node)) goto done;
     for (SourceInitializationFrame *frame=head;frame;frame=frame->next) {
         uint32_t current=frame->function;

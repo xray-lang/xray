@@ -451,7 +451,7 @@ static bool local_initializer_cancel(const void *context) {
     LocalInitializerCancel *state=(LocalInitializerCancel *)context;
     return ++state->polls>=state->stop && state->active;
 }
-static void local_initialization_location(size_t stop) {
+static void local_initialization_location(size_t stop,bool publishing) {
     char directory[]="xir-init-location-XXXXXX",absolute[4096],paths[2][8192];
     CHECK(xr_test_mkdtemp(directory) && xr_test_realpath_buf(directory,absolute,sizeof(absolute)));
     for(char *p=absolute;*p;++p)if(*p=='\\')*p='/';
@@ -459,6 +459,10 @@ static void local_initialization_location(size_t stop) {
     CHECK(snprintf(paths[1],sizeof(paths[1]),"%s/lib.xr",absolute)>0);
     static const char root[]="import \"./lib\" as Lib\nconst factory=fn()->Lib.Node{return Lib.Node()}\nexport fn answer()->i64{return 42}\n";
     static const char library[]="\n\n\n\n\n\n\n\n\n\n\n\nexport struct Node{value:i64=Node().value}\n";
+    static const char publication_root[]="import \"./lib\" as Lib\n\n\n\n\n\n\n\n\n\n\n\n"
+        "struct Wrap{value:i64=Lib.Node().value}\nconst factory=fn()->Wrap{return Wrap()}\nexport fn answer()->i64{return 42}\n";
+    static const char publication_library[]="\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nexport struct Node{value:i64=42}\n";
+
     XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats before={0},after={0};
@@ -467,7 +471,8 @@ static void local_initialization_location(size_t stop) {
     XrModuleOverlayInput inputs[2]={0};char *identity[2]={0},*logical[2]={0};
     for(unsigned i=0;i<2;++i) {
         CHECK(xr_compile_module_identity_from_source(context.resources,&authority,paths[i],&identity[i],&logical[i])==XR_MODULE_OK);
-        inputs[i]=(XrModuleOverlayInput){authority,logical[i],paths[i],i?library:root,i?sizeof(library)-1:sizeof(root)-1};
+        const char *text=publishing ? (i?publication_library:publication_root) : (i?library:root);
+        inputs[i]=(XrModuleOverlayInput){authority,logical[i],paths[i],text,strlen(text)};
     }
     LocalInitializerCancel cancellation={0,stop,true};XrCompileRequestControl control={0};
     XrCompileRequestOptions options={.cancel_poll=local_initializer_cancel,.cancel_context=&cancellation};
@@ -482,10 +487,10 @@ static void local_initialization_location(size_t stop) {
     xr_compile_session_free(session);
     if(stop==SIZE_MAX)CHECK(status==XR_XIR_OK && result.checked);
     else {
-        CHECK(status==XR_XIR_CANCELLED && !result.checked && diagnostic.module==1 && diagnostic.line==13);
-        CHECK(failure.path && !strcmp(failure.path,paths[1]));
+        CHECK(status==XR_XIR_CANCELLED && !result.checked && diagnostic.module==(publishing?0u:1u) && diagnostic.line==13);
+        CHECK(failure.path && !strcmp(failure.path,paths[publishing?0:1]));
         XrFrontendRoot cause={0};CHECK(failure.report && xr_frontend_report_root(failure.report,0,&cause));
-        CHECK(cause.primary.path && !strcmp(cause.primary.path,paths[1]) && cause.primary.line==13);
+        CHECK(cause.primary.path && !strcmp(cause.primary.path,paths[publishing?0:1]) && cause.primary.line==13);
     }
     xr_xir_compile_source_result_free(&result);xr_xir_compile_source_failure_free(&failure);
     for(unsigned i=0;i<2;++i) {xr_compile_resources_free(identity[i]);xr_compile_resources_free(logical[i]);}
@@ -584,10 +589,11 @@ int main(int argc,char **argv) {
     }
     if(argc==2 && !strcmp(argv[1],"initialization-cycles")) {local_initialization_cycles();return 0;}
     if(argc==2 && !strcmp(argv[1],"initialization-resources")) {local_initialization_resources();return 0;}
-    if((argc==2 || argc==3) && !strcmp(argv[1],"initialization-location")) {
+    if((argc==2 || argc==3) && (!strcmp(argv[1],"initialization-location") ||
+        !strcmp(argv[1],"initialization-publication-location"))) {
         size_t stop=SIZE_MAX;
         if(argc==3) {char *end=NULL;unsigned long long value=strtoull(argv[2],&end,10);CHECK(end && !*end && value<=SIZE_MAX);stop=(size_t)value;}
-        local_initialization_location(stop);return 0;
+        local_initialization_location(stop,!strcmp(argv[1],"initialization-publication-location"));return 0;
     }
     if(argc!=1) {fprintf(stderr,"unknown local error test selection\n");return 2;}
     xr_test_suppress_dialogs();
