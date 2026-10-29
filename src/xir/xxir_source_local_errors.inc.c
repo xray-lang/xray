@@ -265,6 +265,7 @@ static bool source_initialization_require(SourceContext *ctx,uint32_t function) 
     for (SourceInitializationFrame *frame=head;frame;frame=frame->next) {
         uint32_t current=frame->function;
         if (ctx->bodies[current].initializer_state==SOURCE_INITIALIZER_READY) continue;
+        ctx->function=current;ctx->module=ctx->bodies[current].module;
         if (!source_request_poll(ctx,ctx->bodies[current].node) ||
             !source_initialization_prepare(ctx,current)) goto done;
         for (SourcePendingError *site=ctx->bodies[current].pending_errors;site;site=site->next) {
@@ -341,8 +342,10 @@ done:
 }
 static bool source_local_errors_finish(SourceContext *ctx) {
     uint32_t saved_function=ctx->function,saved_module=ctx->module;bool ok=false;
-    for (uint32_t f=0;f<ctx->function_count;++f)
+    for (uint32_t f=0;f<ctx->function_count;++f) {
+        ctx->function=f;ctx->module=ctx->bodies[f].module;
         if (!source_request_poll(ctx,ctx->bodies[f].node) || !source_initialization_require(ctx,f)) goto done;
+    }
     for (uint32_t f=0;f<ctx->function_count;++f) {
         if (ctx->bodies[f].infer_initializer) continue;
         ctx->function=f;ctx->module=ctx->bodies[f].module;
