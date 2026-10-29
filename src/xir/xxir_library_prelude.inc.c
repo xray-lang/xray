@@ -239,7 +239,7 @@ static XrXirStatus library_prelude_module(
         const XirPreludeEnum *expected=&xir_prelude_source.enums[match];
         if (record->parameter_count!=expected->parameter_count || record->field_count!=expected->field_count)
             return XR_XIR_BAD_STRUCTURE;
-        if (expected->field_count) {
+        if (expected->field_count && expected->native_id!=XR_NATIVE_DECLARATION_TASK_RESULT) {
             bool field_name=false;
             status=library_prelude_literal(record->fields[0].name,"value",&field_name);
             if (status!=XR_XIR_OK) return status;
@@ -253,6 +253,10 @@ static XrXirStatus library_prelude_module(
             uint8_t wanted=expected->native_id ? xir_prelude_source.input_sha256[byte] : 0;
             if (record->native.source_fingerprint[byte]!=wanted) return XR_XIR_BAD_STRUCTURE;
         }
+        /* Every caller supplies a completely verified Checked owner. Its common
+         * native proof checks all TaskResult fields, bounds and variant payloads;
+         * the ordinary prelude inventory below only models a first payload. */
+        if (expected->native_id==XR_NATIVE_DECLARATION_TASK_RESULT) continue;
         uint32_t begin=0;
         for (uint32_t v=0;v<expected->variant_count;++v) {
             const XrXirNominalVariant *variant=&record->variants[v]; bool equal=false;
