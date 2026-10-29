@@ -131,7 +131,9 @@
     "test_xr_program_vm_runtime",
     "test_xir_module_limits",
     "test_xir_module_limits_native",
-    "test_vm_stack_growth"
+    "test_vm_stack_growth",
+    "test_instruction",
+    "test_opcode"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -361,7 +363,9 @@
     "test_xr_program_vm_runtime",
     "xir_module_limits",
     "xir_module_limits_native",
-    "test_vm_stack_growth"
+    "test_vm_stack_growth",
+    "test_instruction",
+    "test_opcode"
   ],
   "versionCommand": [
     "{build}/xray.exe",
