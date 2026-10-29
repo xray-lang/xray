@@ -35,9 +35,12 @@ static XrXirStatus effect_capture_finish(EffectCaptureRead *read,const EffectCap
     if(status!=XR_XIR_OK) return status;
     if(fixed) {
         EffectCaptureFact destination={node->node,value,0,0,fixed->rank+1};
-        const XrXirTypeNode *signature=xr_xir_callable_signature(read->body.domain.types,type);
-        if(!signature) return XR_XIR_BAD_STRUCTURE;
-        status=effect_capture_opaque(read,node,&destination,signature->flags,true);if(status!=XR_XIR_OK) return status;
+        if(!xr_xir_callable_signature(read->body.domain.types,type)) return XR_XIR_BAD_STRUCTURE;
+        uint32_t mask=0;
+        status=effect_invocation_bounds_mask(read->work,read->final->material->declared,
+            read->final->nodes[node->node].body,value,&mask);
+        if(status==XR_XIR_OK) status=effect_capture_opaque(read,node,&destination,mask,true);
+        if(status!=XR_XIR_OK) return status;
     }
     if(read->fallback) {
         const EffectCaptureFact *present=NULL;
@@ -295,9 +298,14 @@ static XrXirStatus effect_capture_instruction(EffectCaptureRead *read,const Effe
             (op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_RESULT))
             status=effect_capture_iterator_call(read,node,instruction,op);
         else {
-            const XrXirTypeNode *signature=xr_xir_callable_signature(read->body.domain.types,op->type);
+            /* Opaque ROOT facts belong to the original owned advertisement.
+             * A narrowed physical type cannot erase its UNKNOWN contribution. */
+            uint32_t mask=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
+            if(!effect_physical_iterator(read->body.domain.types,op->type))
+                status=effect_invocation_bounds_mask(read->work,read->final->material->declared,
+                    read->final->nodes[node->node].body,value,&mask);
             EffectCaptureFact destination={node->node,value,0,0,0};
-            status=effect_capture_opaque(read,node,&destination,signature?signature->flags:XR_XIR_CALLABLE_ROOT_UNRESOLVED,true);
+            if(status==XR_XIR_OK) status=effect_capture_opaque(read,node,&destination,mask,true);
         }
         if(status!=XR_XIR_OK) return status;
     } else if(!read->fixed_only && kind==EFFECT_CAPTURE_CLASS) {
