@@ -12,6 +12,9 @@ else()
 endif()
 add_test(NAME test_xir_ctfe_cleanup COMMAND test_xir_ctfe_cleanup)
 set_tests_properties(test_xir_ctfe_cleanup PROPERTIES TIMEOUT 120 LABELS "unit;xir;ctfe;cleanup;ownership;resources")
+add_test(NAME source_ctfe_cleanup_lifetime COMMAND test_source_request_lifetime --ctfe-cleanup)
+set_tests_properties(source_ctfe_cleanup_lifetime PROPERTIES TIMEOUT 120
+    LABELS "unit;api;source;ctfe;cleanup;ownership")
 if(WIN32)
     add_test(NAME test_xir_ctfe_cleanup_cli COMMAND ${XRAY_PYTHON} -X utf8
         "${CMAKE_CURRENT_SOURCE_DIR}/test_ctfe_cleanup_cli.py"

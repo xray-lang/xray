@@ -1565,7 +1565,12 @@ static void nominal_projection_controls(void) {
     }
     puts("Actual wide Source nominal projection: bounded scans/copies, variants, final publication, cancellation/deadline/OOM, retry and retired42 PASS");
 }
-int main(void) {
+int main(int argc,char **argv) {
+    if(argc==2 && !strcmp(argv[1],"--ctfe-cleanup")) {
+        source_ctfe_cleanup_cases(XR_PUBLIC_STDLIB,XR_PUBLIC_STDLIB "/../tests/unit/xir/ctfe_cleanup/cleanup_owned.xr");
+        CHECK(!runtime_live&&!runtime_bytes&&!sdk_allocations&&!sdk_allocation_capacity);return 0;
+    }
+    CHECK(argc==1);
     source_ctfe_cleanup_cases(XR_PUBLIC_STDLIB,XR_PUBLIC_STDLIB "/../tests/unit/xir/ctfe_cleanup/cleanup_owned.xr");
     nominal_projection_controls();
     defaults_copy_controls();lower_loop_controls();
