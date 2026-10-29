@@ -59,6 +59,14 @@ typedef struct SourceWriterProbe {
     bool wanted,disabled,oom_seen,direct;
 } SourceWriterProbe;
 static SourceWriterProbe *source_writer_probe;
+typedef struct ProductFactsProbe {
+    const XrSHA256Context *hash;
+    unsigned char preimage[65536];
+    size_t bytes;
+    uint8_t prefix_digest[32];
+    bool prefix_seen;
+} ProductFactsProbe;
+static ProductFactsProbe *product_facts_probe;
 
 /* This TU observes the actual compiler allocator. Installed SDK consumers use
  * the canonical archive implementation separately. No runtime budget is changed. */
@@ -291,9 +299,29 @@ XR_FUNC XrXirStatus xir_checked_write(const XrXirArtifact *artifact,XrXirChecked
 }
 #define xr_compile_request_control_poll(value) source_writer_observe_poll((value),&(value),__func__)
 #define memcmp(left,right,size) source_writer_observe_compare((left),(right),(size),__func__)
+static void product_facts_observe_sha(XrSHA256Context *hash,const uint8_t *bytes,
+    size_t length,const char *caller);
+#define xr_sha256_update(hash,bytes,length) product_facts_observe_sha((hash),(bytes),(length),__func__)
 #include "program/xr_xir_source_product.c"
+#undef xr_sha256_update
 #undef memcmp
 #undef xr_compile_request_control_poll
+static void product_facts_observe_sha(XrSHA256Context *hash,const uint8_t *bytes,
+    size_t length,const char *caller) {
+    ProductFactsProbe *probe=product_facts_probe;
+    bool observed=probe&&(!strcmp(caller,"source_layout_word")||
+        !strcmp(caller,"source_layout_words")||!strcmp(caller,"source_product_layout_digest"));
+    if(observed) {
+        CHECK(!probe->hash||probe->hash==hash);probe->hash=hash;
+        CHECK(length<=sizeof(probe->preimage)-probe->bytes);
+        memcpy(probe->preimage+probe->bytes,bytes,length);probe->bytes+=length;
+    }
+    xr_sha256_update(hash,bytes,length);
+    if(observed&&hash->count==4122) {
+        CHECK(!probe->prefix_seen);XrSHA256Context prefix=*hash;
+        xr_sha256_final(&prefix,probe->prefix_digest);probe->prefix_seen=true;
+    }
+}
 static XrCompileResourceStatus source_writer_observe_poll(XrCompileRequestControl *control,
     const void *field,const char *caller) {
     SourceWriterProbe *probe=source_writer_probe;
@@ -1857,7 +1885,9 @@ static void declarations_copy_controls(const char *selected) {
 #include "product_packet_cases.inc.c"
 #include "packet_codec_cases.inc.c"
 #include "source_writer_control_cases.inc.c"
+#include "product_facts_control_cases.inc.c"
 int main(int argc,char **argv) {
+    if(argc==2&&!strcmp(argv[1],"--product-facts-baseline")){product_facts_baseline();return 0;}
     if((argc==2||argc==3)&&!strcmp(argv[1],"--source-writer")){source_writer_cases(argc==3?argv[2]:NULL);return 0;}
     if(argc==2&&!strcmp(argv[1],"--packet-codec-vectors")){packet_codec_vectors();return 0;}
     if((argc==2||argc==3)&&!strcmp(argv[1],"--packet-codec")){packet_codec_cases(argc==3?argv[2]:NULL);return 0;}
