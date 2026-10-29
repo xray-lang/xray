@@ -141,7 +141,8 @@
     "test_xr_execution",
     "test_xr_boundary_materialization",
     "test_xir_ctfe_cleanup",
-    "test_hir_numeric_literal"
+    "test_hir_numeric_literal",
+    "test_xir_range_index_native"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -388,7 +389,8 @@
     "source_ctfe_cleanup_lifetime",
     "source_declarations_control_baseline",
     "hir_numeric_literal",
-    "hir_numeric_literal_cli"
+    "hir_numeric_literal_cli",
+    "test_xir_range_index_native"
   ],
   "versionCommand": [
     "{build}/xray.exe",
