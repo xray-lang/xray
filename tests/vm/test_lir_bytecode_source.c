@@ -232,14 +232,32 @@ static void actual_entry_and_refusal(void) {
     CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 0);
     xr_rbc_program_destroy(program);
 
-    lowered = lower("print(1)\nfn value(x:i64)->f64{return x as f64}\nprint(2)\nvalue(3)\n", false);
+    const char *conversions[] = {
+        "print(1)\nfn value(x:i64)->f64{return x as f64}\nprint(2)\nvalue(3)\n",
+        "fn value(x:i64)->f64{\nreturn x as f64\n}\nvalue(3)\n"
+    };
+    for (size_t n = 0; n < sizeof(conversions) / sizeof(conversions[0]); ++n) {
+        lowered = lower(conversions[n], false);
+        program = NULL;
+        CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, &diagnostic) ==
+            XR_RBC_COMPILE_OK && program);
+        xr_lir_lowered_free(&lowered);
+        result = UINT64_MAX;
+        CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 0);
+        xr_rbc_program_destroy(program);
+        program = callable(conversions[n]);
+        CHECK(run(program, 3) == UINT64_C(0x4008000000000000));
+        CHECK(run(program, (uint64_t) -INT64_C(3)) == UINT64_C(0xc008000000000000));
+        xr_rbc_program_destroy(program);
+    }
+    lowered = lower("print(1)\nfn value(x:f64)->f64{return x as f64}\nprint(2)\nvalue(3.0)\n", false);
     program = NULL;
     CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, &diagnostic) ==
         XR_RBC_COMPILE_UNSUPPORTED && !program);
     xr_lir_lowered_free(&lowered);
     CHECK(diagnostic.message[0] && diagnostic.path[0] && diagnostic.line == 2 &&
         diagnostic.column && diagnostic.block && diagnostic.instruction);
-    lowered = lower("fn value(x:i64)->f64{\nreturn x as f64\n}\nvalue(3)\n", false);
+    lowered = lower("fn value(x:f64)->f64{\nreturn x as f64\n}\nvalue(3.0)\n", false);
     CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, &diagnostic) ==
         XR_RBC_COMPILE_UNSUPPORTED && !program);
     xr_lir_lowered_free(&lowered);

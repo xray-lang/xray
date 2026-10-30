@@ -555,6 +555,30 @@ static void test_owned_diagnostic_and_rejection(void) {
     CHECK(xr_rbc_compile(NULL, (XrLirFunction) {0}, &program, &diagnostic) == XR_RBC_COMPILE_INVALID);
 }
 
+static void test_i64_to_f64_admission(void) {
+    XrLirModule *m = NULL;
+    OK(xr_lir_module_create(NULL, &m));
+    XrLirType input = XR_LIR_I64;
+    XrLirFunction f = test_function(m, "conversion", &input, 1, XR_LIR_F64);
+    XrLirBlock b = test_block(m, f, NULL, 0);
+    OK(xr_lir_set_entry(m, f, b));
+    XrLirValue a = parameter(m, f, 0), result;
+    XrLirInstruction i = {.op = XR_LIR_ITOF, .type = XR_LIR_F64,
+        .operands = &a, .operand_count = 1,
+        .source = {"conversion.xr", 13, 3, 5, 3, 9}};
+    OK(xr_lir_emit_value(m, b, &i, &result));
+    test_return(m, b, result);
+    OK(xr_lir_module_finish(m, NULL));
+    XrRbcProgram *program = compile(m, f);
+    xr_lir_module_destroy(m);
+    const uint64_t arguments[] = {3, (uint64_t) -INT64_C(3), INT64_MAX};
+    const uint64_t expected[] = {UINT64_C(0x4008000000000000),
+        UINT64_C(0xc008000000000000), UINT64_C(0x43e0000000000000)};
+    for (size_t n = 0; n < sizeof(arguments) / sizeof(arguments[0]); ++n)
+        CHECK(run(program, &arguments[n], 1) == expected[n]);
+    xr_rbc_program_destroy(program);
+}
+
 static void test_f64_constants_and_refusals(void) {
     const uint64_t bits[] = {0, UINT64_C(0x8000000000000000),
         UINT64_C(0x7ff0000000000000), UINT64_C(0xfff0000000000000),
@@ -579,7 +603,6 @@ static void test_f64_constants_and_refusals(void) {
         {XR_LIR_FDIV, XR_LIR_F32, XR_LIR_F32, 2},
         {XR_LIR_FNEG, XR_LIR_F32, XR_LIR_F32, 1},
         {XR_LIR_FCMP, XR_LIR_F32, XR_LIR_I1, 2},
-        {XR_LIR_ITOF, XR_LIR_I64, XR_LIR_F64, 1},
         {XR_LIR_FCAST, XR_LIR_F64, XR_LIR_F64, 1},
         {XR_LIR_INTCAST, XR_LIR_I8, XR_LIR_I64, 1},
         {XR_LIR_INTCAST, XR_LIR_U64, XR_LIR_I64, 1},
@@ -1180,6 +1203,7 @@ int main(void) {
     test_call_capacity(254);
     test_unused_and_invalid();
     test_owned_diagnostic_and_rejection();
+    test_i64_to_f64_admission();
     test_f64_constants_and_refusals();
     puts("lir_bytecode: passed");
     return 0;

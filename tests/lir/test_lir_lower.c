@@ -174,6 +174,67 @@ static void rejected(const char *text, bool overflow, const char *message) {
     xr_lir_lower_failure_free(&failure);
     CHECK(!failure.owned_path && !failure.diagnostic.source.path);
 }
+static void floating_conversion_source(void) {
+    SourceFixture fixture = source_fixture(
+        "fn convert(x:f64)->i64{return x as i64}\nprint(convert(1.0))\n");
+    const XrXirModule *closed = xr_xir_compile_artifact_module(fixture.closed);
+    const XrXirSourceDebugView *debug = xr_xir_compile_source_snapshot_debug(fixture.source.snapshot);
+    CHECK(closed && debug);
+    XrXirSourceRange expected = {0};
+    unsigned source_conversions = 0;
+    for (uint32_t f = 0; f < closed->function_count; ++f) {
+        const XrXirFunction *function = &closed->functions[f];
+        for (uint32_t i = 0; i < function->instruction_count; ++i) {
+            if (function->instructions[i].op != XR_XIR_CONVERT_NUMBER) continue;
+            uint32_t origin = UINT32_MAX;
+            CHECK(!source_conversions++);
+            CHECK(xr_xir_compile_specialization_origin(fixture.closed, f, &origin) == XR_XIR_OK);
+            CHECK(origin < debug->function_count && debug->functions[origin].points &&
+                i < debug->functions[origin].instruction_count);
+            expected = debug->functions[origin].points[i].range;
+        }
+    }
+    CHECK(source_conversions == 1 && expected.line == 1 && expected.column > 0);
+    XrLirLowered output = {0};
+    XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
+    OK(xr_lir_lower_program_checked(&request, &output, NULL));
+    source_fixture_free(&fixture);
+    OK(xr_lir_verify(output.module, NULL));
+    unsigned conversions = 0;
+    for (uint32_t f = 0; f < xr_lir_function_count(output.module); ++f) {
+        XrLirFunction function;
+        XrLirFunctionView fv;
+        OK(xr_lir_function_at(output.module, f, &function));
+        OK(xr_lir_function_view(output.module, function, &fv));
+        for (uint32_t b = 0; b < fv.block_count; ++b) {
+            XrLirBlock block;
+            XrLirBlockView bv;
+            OK(xr_lir_block_at(output.module, function, b, &block));
+            OK(xr_lir_block_view(output.module, block, &bv));
+            for (uint32_t i = 0; i < bv.instruction_count; ++i) {
+                XrLirInstructionView instruction;
+                OK(xr_lir_instruction_view(output.module, block, i, &instruction));
+                if (instruction.op != XR_LIR_FTOI) continue;
+                XrLirType input;
+                CHECK(!conversions++ && instruction.type == XR_LIR_I64 &&
+                    instruction.operand_count == 1);
+                CHECK(fv.parameter_count == 1 && fv.parameter_types[0] == XR_LIR_F64 &&
+                    fv.result == XR_LIR_I64 && instruction.operands[0] == fv.parameters[0]);
+                XrLirValue value = {output.module, function.id, instruction.operands[0]};
+                OK(xr_lir_value_type(output.module, value, &input));
+                CHECK(input == XR_LIR_F64 && instruction.source.line == (uint32_t) expected.line &&
+                    instruction.source.column == (uint32_t) expected.column);
+                CHECK(instruction.source.end_line == (uint32_t)
+                    (expected.end_line ? expected.end_line : expected.line));
+                CHECK(instruction.source.end_column == (uint32_t)
+                    (expected.end_line ? expected.end_column : expected.column));
+            }
+        }
+    }
+    CHECK(conversions == 1);
+    xr_lir_lowered_free(&output);
+}
+
 static void unsupported(void) {
     rejected(
         "struct Pair{x:i64}\nfn answer()->i64{const p=Pair{x:42}\nreturn p.x}\nprint(answer())\n",
@@ -185,8 +246,6 @@ static void unsupported(void) {
              "b=Box(42)\nreturn b.value}\nprint(answer())\n",
              false, "CALL");
     rejected("print(1)\n", true, "overflow-checks");
-    rejected("fn convert(x:f64)->i64{return x as i64}\nprint(convert(1.0))\n", false,
-             "floating to integer");
 }
 static void fixed_division_source(const char *text, bool slot_frontier) {
     SourceFixture fixture = source_fixture(text);
@@ -804,6 +863,7 @@ int main(int argc, char **argv) {
     clock_sources(argv[1]);
     supported_control();
     floating_negation_source();
+    floating_conversion_source();
     swapped_backedge();
     fixed_division(argv[1]);
     unsupported();
