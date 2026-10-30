@@ -282,6 +282,13 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
             xr_lir_value_type(input, (XrLirValue){input, function.id, i->operands[0]},
                 &source) == XR_LIR_OK && source == XR_LIR_F64;
     }
+    case XR_LIR_ITOF: case XR_LIR_FTOI: {
+        XrLirType source = XR_LIR_TYPE_INVALID;
+        bool to_float = i->op == XR_LIR_ITOF;
+        return i->type == (to_float ? XR_LIR_F64 : XR_LIR_I64) && i->operand_count == 1 &&
+            xr_lir_value_type(input, (XrLirValue){input, function.id, i->operands[0]},
+                &source) == XR_LIR_OK && source == (to_float ? XR_LIR_I64 : XR_LIR_F64);
+    }
     case XR_LIR_FADD: case XR_LIR_FSUB: case XR_LIR_FMUL: case XR_LIR_FDIV: case XR_LIR_FCMP: {
         XrLirType left=XR_LIR_TYPE_INVALID,right=XR_LIR_TYPE_INVALID;
         return i->operand_count==2 && i->type==(i->op==XR_LIR_FCMP?XR_LIR_I1:XR_LIR_F64) &&
@@ -560,6 +567,9 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         return true;
     case XR_LIR_INTCAST:
         return rbc_lir_emit(c, XR_RBC_MOV, result, c->slots[i->operands[0]], 0, 0);
+    case XR_LIR_ITOF: case XR_LIR_FTOI:
+        return rbc_lir_emit(c, i->op == XR_LIR_ITOF ? XR_RBC_ITOF : XR_RBC_FTOI,
+            result, c->slots[i->operands[0]], 0, 0);
     case XR_LIR_STRING_LITERAL: {
         uint32_t ordinal;
         return rbc_lir_literal(c, (uint32_t)i->bits, &ordinal) &&

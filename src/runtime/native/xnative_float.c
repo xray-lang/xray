@@ -7,8 +7,9 @@
  * xnative_float.c - Canonical binary64 operations for native bit consumers
  *
  * KEY CONCEPT:
- *   Pure leaves share the integer-only kernel without an execution root or
- *   any dependency on the caller's floating environment.
+ *   Bit operations share the integer-only kernel without depending on the
+ *   caller's floating environment. Failed integer conversions use the active
+ *   execution's arithmetic panic owner and source location.
  */
 #include "xray_native_runtime.h"
 #include "base/xchecks.h"
@@ -39,4 +40,19 @@ XRAY_API int32_t xrt_f64_compare(uint64_t left, uint64_t right) {
     XrXirNumericStatus status = xr_xir_float_compare(64, left, right, &order);
     XR_CHECK(status == XR_XIR_NUMERIC_OK, "binary64 comparison accepts every operand bit pattern");
     return (int32_t) order;
+}
+XRAY_API uint64_t xrt_i64_to_f64(int64_t value) {
+    uint64_t result = 0;
+    XrXirNumericStatus status = xr_xir_integer_to_float(
+        (XrXirIntegerFormat){64, true}, 64, value, &result);
+    XR_CHECK(status == XR_XIR_NUMERIC_OK, "every signed64 value has a binary64 conversion");
+    return result;
+}
+XRAY_API int64_t xrt_f64_to_i64(uint64_t bits, uint32_t source_id) {
+    int64_t result = 0;
+    XrXirNumericStatus status = xr_xir_float_to_integer(
+        64, (XrXirIntegerFormat){64, true}, bits, &result);
+    if (status == XR_XIR_NUMERIC_RANGE) xrt_arithmetic_panic(422, source_id);
+    XR_CHECK(status == XR_XIR_NUMERIC_OK, "binary64 conversion uses a valid signed64 format");
+    return result;
 }

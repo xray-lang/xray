@@ -139,7 +139,7 @@ static XR_NORET void native_failure_exit(const XrtSourceMap *map, const XrtExecu
 
 XRAY_API_NORET void xrt_arithmetic_panic(uint32_t code, uint32_t source_id) {
     const XrtExecutionBinding *binding = current_execution;
-    XR_CHECK(binding && (code == 420 || code == 421) && source_id <= binding->map.count,
+    XR_CHECK(binding && (code == 420 || code == 421 || code == 422) && source_id <= binding->map.count,
         "Arithmetic panic requires an active execution, valid code and source id");
     if (binding->target) {
         binding->failure->kind = XRT_FAILURE_ARITHMETIC_PANIC;

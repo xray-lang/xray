@@ -1,0 +1,7 @@
+fn toFloat(value: i64) -> f64 { return value as f64 }
+fn toInteger(value: f64) -> i64 { return value as i64 }
+fn roundtrip(value: i64) -> i64 { return toInteger(toFloat(value)) }
+print(toFloat(42))
+print(toInteger(-42.75))
+print(roundtrip(-123))
+print(toInteger(-0.0))

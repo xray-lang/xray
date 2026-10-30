@@ -1,0 +1,5 @@
+fn convert(value: i64) -> f64 { return value as f64 }
+print(convert(42))
+print(convert(-42))
+if (convert(-9223372036854775808) == -9223372036854775808.0) { print(1) } else { print(0) }
+if (convert(9223372036854775807) == 9223372036854775808.0) { print(1) } else { print(0) }

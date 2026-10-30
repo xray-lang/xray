@@ -227,6 +227,17 @@ XR_RBC_CASE(FGE) {
     XR_RBC_REG(a)=result;
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(ITOF) {
+    int64_t source = xr_rbc_signed(XR_RBC_REG(b));
+    XR_RBC_REG(a) = xrt_i64_to_f64(source);
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(FTOI) {
+    uint64_t source = XR_RBC_REG(b);
+    int64_t result = xrt_f64_to_i64(source, function->source_ids ? function->source_ids[pc - 1] : 0);
+    XR_RBC_REG(a) = (uint64_t) result;
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(DIV)
 XR_RBC_CASE(REM) {
     int64_t lhs = xr_rbc_signed(XR_RBC_REG(b)), rhs = xr_rbc_signed(XR_RBC_REG(c));

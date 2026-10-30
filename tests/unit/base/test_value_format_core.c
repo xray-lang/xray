@@ -173,6 +173,15 @@ TEST(value_format_array_uses_original_count_and_depth_limits) {
     ASSERT_FALSE(xr_value_format_value(reader,(XrValueFormatNode){&array,0},sink,0));
 }
 
+TEST(value_format_numeric_range_panic_keeps_its_message) {
+    FormatCapture capture = {.capacity = sizeof(capture.bytes)};
+    XrValueFormatSink sink = {&capture, capture_bytes};
+    ASSERT_TRUE(xr_value_format_panic(sink, 422, 0, 0, 0, 0, NULL, 0, 0));
+    const char expected[] = "[Uncaught Panic] E0422: numeric conversion is out of range\n";
+    ASSERT_EQ_INT(capture.size, sizeof(expected) - 1);
+    ASSERT_TRUE(!memcmp(capture.bytes, expected, sizeof(expected) - 1));
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Value Format Core");
@@ -183,5 +192,6 @@ RUN_TEST(value_format_preserves_typed_error_payload);
 RUN_TEST(value_format_streams_long_and_embedded_zero_strings);
 RUN_TEST(value_format_names_are_spans_and_style_only_colors_labels);
 RUN_TEST(value_format_array_uses_original_count_and_depth_limits);
+RUN_TEST(value_format_numeric_range_panic_keeps_its_message);
 
 TEST_MAIN_END()

@@ -65,7 +65,8 @@ typedef struct XrLirCDiagnostic {
  * xray_lir_entry has no parameters and keeps entry_result as its C result type.
  * With an output or possible arithmetic panic dependency it establishes the
  * runtime scope before invoking the complete selected root. Ordinary calls target typed workers;
- * without that dependency the root stays a direct function with no runtime.
+ * without that dependency the root stays a direct function. Pure numeric leaves
+ * can require the public runtime declarations without establishing an execution.
  * The complete TU, including the bound wrapper, is verified before publication.
  * There is no process exit-code mapping. */
 XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *, XrLirCOutput *, XrLirCDiagnostic *);

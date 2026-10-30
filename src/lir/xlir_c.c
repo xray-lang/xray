@@ -38,7 +38,7 @@ typedef struct LirC {
     uint32_t block, instruction, scratch;
     XrLirSource source;
     uint32_t location_count, location_cursor;
-    bool runtime, f64, fenv;
+    bool runtime, runtime_header, f64, fenv;
 } LirC;
 
 static void c_error(LirC *c, XrLirCStatus status, const char *message) {
@@ -240,8 +240,8 @@ static void c_prepare_divisors(LirC *c) {
     }
 }
 static bool c_arithmetic_point(const LirC *c, const XrLirInstructionView *v) {
-    return (v->op == XR_LIR_DIV || v->op == XR_LIR_REM) &&
-        c->fixed_divisors && !c->fixed_divisors[v->operands[1]];
+    return v->op == XR_LIR_FTOI || ((v->op == XR_LIR_DIV || v->op == XR_LIR_REM) &&
+        c->fixed_divisors && !c->fixed_divisors[v->operands[1]]);
 }
 static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
@@ -287,6 +287,25 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             else
                 c_error(c, XR_LIR_C_UNSUPPORTED, "floating negation requires f64");
             break;
+        case XR_LIR_ITOF: case XR_LIR_FTOI: {
+            bool to_float = v->op == XR_LIR_ITOF;
+            if (v->type != (to_float ? XR_LIR_F64 : XR_LIR_I64) ||
+                c_value_type(c, v->operands[0]) != (to_float ? XR_LIR_I64 : XR_LIR_F64)) {
+                c_error(c, XR_LIR_C_UNSUPPORTED, "numeric conversion requires signed64 and binary64");
+                break;
+            }
+            c->runtime_header = true;
+            c->fenv = true;
+            if (!to_float) {
+                c->runtime = true;
+                if (c_located(&v->source)) {
+                    if (c->location_count == UINT32_MAX)
+                        c_error(c, XR_LIR_C_OVERFLOW, "source location count exceeds 32 bits");
+                    else ++c->location_count;
+                }
+            }
+            break;
+        }
         case XR_LIR_FADD: case XR_LIR_FSUB: case XR_LIR_FMUL: case XR_LIR_FDIV:
         case XR_LIR_FCMP:
             if (c_value_type(c,v->operands[0]) != XR_LIR_F64 ||
@@ -535,6 +554,20 @@ static void c_float_operation(LirC *c, const XrLirInstructionView *v) {
     }
     c_text(c,"    }\n");
 }
+static void c_float_conversion(LirC *c, const XrLirInstructionView *v) {
+    if (v->op == XR_LIR_ITOF) {
+        c_text(c, "    { uint64_t xrl_bits = xrt_i64_to_f64(");
+        c_value(c, v->operands[0]);
+        c_text(c, ");\n        memcpy(&"); c_value(c, v->result);
+        c_text(c, ", &xrl_bits, sizeof(xrl_bits));\n    }\n");
+    } else {
+        uint32_t source = c_located(&v->source) ? ++c->location_cursor : 0;
+        c_text(c, "    { uint64_t xrl_bits;\n        memcpy(&xrl_bits, &");
+        c_value(c, v->operands[0]); c_text(c, ", sizeof(xrl_bits));\n        ");
+        c_value(c, v->result);
+        c_format(c, " = xrt_f64_to_i64(xrl_bits, UINT32_C(%" PRIu32 "));\n    }\n", source);
+    }
+}
 static void c_edge(LirC *c, const XrLirEdgeView *edge) {
     XrLirBlock target = {c->request->module, c->function.id, edge->target};
     XrLirBlockView block;
@@ -695,6 +728,9 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_FNEG:
             c_fneg(c, v);
             break;
+        case XR_LIR_ITOF: case XR_LIR_FTOI:
+            c_float_conversion(c, v);
+            break;
         case XR_LIR_FADD: case XR_LIR_FSUB: case XR_LIR_FMUL: case XR_LIR_FDIV: case XR_LIR_FCMP:
             c_float_operation(c,v);
             break;
@@ -825,7 +861,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
     XR_DCHECK(c->closure_count && c->closure[0] == c->request->entry.id,
               "emission starts from the explicit execution root");
     c_preamble(c);
-    if (c->runtime)
+    if (c->runtime || c->runtime_header)
         c_text(c, "#include \"xray_native_runtime.h\"\n\n");
     if (root_result == XR_LIR_STRING)
         c_text(c, "extern XrtString *xrt_string_root_take(XrtString *string);\n\n");

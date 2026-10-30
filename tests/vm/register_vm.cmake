@@ -134,3 +134,13 @@ add_test(NAME f64_text_native COMMAND ${XRAY_PYTHON} -X utf8
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --work ${CMAKE_CURRENT_BINARY_DIR}/f64-text-native ${skeleton_native_options})
 set_tests_properties(f64_text_native PROPERTIES LABELS "unit;vm;lir;native;ownership;float" TIMEOUT 120)
+add_test(NAME f64_i64_native COMMAND ${XRAY_PYTHON} -X utf8
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_f64_i64_native.py
+    --bit-driver $<TARGET_FILE:test_native_f64_i64_conversion>
+    --driver $<TARGET_FILE:lir_pipeline_eval> --source-driver $<TARGET_FILE:lir_c_run>
+    --compiler "${CMAKE_C_COMPILER}" --cxx-compiler "${CMAKE_CXX_COMPILER}" --kind "${skeleton_provider_kind}"
+    --source-root ${CMAKE_CURRENT_SOURCE_DIR} --include ${CMAKE_CURRENT_SOURCE_DIR}/include
+    --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --work ${CMAKE_CURRENT_BINARY_DIR}/f64-i64-native ${skeleton_native_options})
+set_tests_properties(f64_i64_native PROPERTIES LABELS "unit;vm;lir;native;float" TIMEOUT 180)

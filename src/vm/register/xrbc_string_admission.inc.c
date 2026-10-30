@@ -31,6 +31,7 @@ typedef struct RbcStringGraph {
     uint8_t *spills;
     size_t count;
     uint32_t head, tail;
+    bool parameters_only;
 } RbcStringGraph;
 
 static XrRbcRegisterKind rbc_register_kind(const XrRbcFunction *f, uint32_t r) {
@@ -217,6 +218,11 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
         case XR_RBC_NEG: case XR_RBC_FNEG:
             if (s->state[v.b] != RBC_BITS || !rbc_bits_destination(s, v.a)) return false;
             s->state[v.a] = RBC_BITS; break;
+        case XR_RBC_ITOF: case XR_RBC_FTOI:
+            if (rbc_register_kind(s->function, v.a) != XR_RBC_BITS ||
+                rbc_register_kind(s->function, v.b) != XR_RBC_BITS ||
+                s->state[v.b] != RBC_BITS || !rbc_bits_destination(s, v.a)) return false;
+            s->state[v.a] = RBC_BITS; break;
         case XR_RBC_ADD: case XR_RBC_SUB: case XR_RBC_MUL: case XR_RBC_DIV: case XR_RBC_REM:
         case XR_RBC_FADD: case XR_RBC_FSUB: case XR_RBC_FMUL: case XR_RBC_FDIV:
         case XR_RBC_FEQ: case XR_RBC_FNE: case XR_RBC_FLT: case XR_RBC_FLE: case XR_RBC_FGT: case XR_RBC_FGE:
@@ -372,7 +378,8 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
     g->work.spills = g->spills;
     for (uint32_t r = 0; r < f->register_count; ++r) {
         XrRbcRegisterKind kind = rbc_register_kind(f,r);
-        g->work.state[r] = kind == XR_RBC_BITS && (!f->spill_count || r<f->parameter_count) ? RBC_BITS : RBC_EMPTY;
+        g->work.state[r] = kind == XR_RBC_BITS &&
+            (!g->parameters_only || r<f->parameter_count) ? RBC_BITS : RBC_EMPTY;
         if (r < f->parameter_count && kind == XR_RBC_STRING) g->work.state[r] = RBC_STRING_BORROWED;
         if (r < f->parameter_count && kind == XR_RBC_STRING_CELL) {
             g->work.state[r] = RBC_CELL_BORROWED;
@@ -432,10 +439,12 @@ static bool rbc_string_block(RbcStringGraph *g, uint32_t index) {
 
 static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFunction *f) {
     bool managed = f->result_kind == XR_RBC_STRING;
+    bool numeric_conversion = false;
     for (uint32_t r = 0; f->register_kinds && r < f->register_count; ++r)
         managed |= f->register_kinds[r] == XR_RBC_STRING || f->register_kinds[r] == XR_RBC_STRING_CELL;
     for (size_t pc = 0; pc < f->code_count; ++pc) {
         uint32_t word = f->code[pc], op = word & 255;
+        numeric_conversion |= op == XR_RBC_ITOF || op == XR_RBC_FTOI;
         managed |= op >= XR_RBC_STRING_LITERAL && op <= XR_RBC_STRING_CELL_DROP;
         managed |= op == XR_RBC_STRING_LEN || op == XR_RBC_STRING_F64;
         if (op == XR_RBC_CALL) {
@@ -445,10 +454,11 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
                 managed |= rbc_register_kind(callee, p) != XR_RBC_BITS;
         }
     }
-    if (!managed && !f->spill_count) return XR_RBC_OK;
+    if (!managed && !f->spill_count && !numeric_conversion) return XR_RBC_OK;
     if (!f->register_kinds && (managed || f->reference_spill_count)) return XR_RBC_INVALID;
     RbcStringGraph g = {.work = {.module = module, .function = f},
-        .head = UINT32_MAX, .tail = UINT32_MAX};
+        .head = UINT32_MAX, .tail = UINT32_MAX,
+        .parameters_only = numeric_conversion || f->spill_count != 0};
     XrRbcStatus status = rbc_string_graph_build(&g);
     if (status == XR_RBC_OK) {
         /* This initial merge remains a virtual predecessor even for a jump to

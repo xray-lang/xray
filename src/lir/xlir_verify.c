@@ -176,6 +176,8 @@ static bool lir_scalar_instruction_types(const XrLirFunctionData *f,
             return lir_integer(a) && lir_integer(v->type);
         case XR_LIR_ITOF:
             return lir_integer(a) && lir_float(v->type);
+        case XR_LIR_FTOI:
+            return a == XR_LIR_F64 && v->type == XR_LIR_I64;
         case XR_LIR_FCAST:
             return lir_float(a) && lir_float(v->type);
         case XR_LIR_BR:

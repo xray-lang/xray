@@ -1,0 +1,4 @@
+fn convert(value: f64) -> i64 { return value as i64 }
+print("before")
+print(convert(1.0 / 0.0))
+print("after")

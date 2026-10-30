@@ -77,7 +77,9 @@
     X(FLE, ABC)                                                                                    \
     X(FGT, ABC)                                                                                    \
     X(FGE, ABC)                                                                                    \
-    X(STRING_F64, AB)
+    X(STRING_F64, AB)                                                                               \
+    X(ITOF, AB)                                                                                     \
+    X(FTOI, AB)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,

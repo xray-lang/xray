@@ -1,0 +1,4 @@
+fn convert(value: f64) -> i64 { return value as i64 }
+print("before")
+const unused = convert(9223372036854775808.0)
+print("after")

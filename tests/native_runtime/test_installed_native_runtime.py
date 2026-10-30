@@ -13,7 +13,7 @@ import tempfile
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ('source', 'build', 'c-driver', 'pipeline-driver', 'result-driver', 'work'):
+    for name in ('source', 'build', 'c-driver', 'pipeline-driver', 'result-driver', 'bit-driver', 'work'):
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--eligible', choices=('0', '1'), required=True)
     args = parser.parse_args()
@@ -186,6 +186,68 @@ def main():
                     'const XrtSourceMap *f64_text_source_map(void){return &xrt_standalone_source_map;}\n',encoding='ascii')
                 objects.append(folder/'gateway.c')
             add(name,objects)
+    conversion_path=args.source/'tests/vm/test_f64_i64_native.py'
+    conversion_spec=importlib.util.spec_from_file_location('native_conversion_witness',conversion_path)
+    conversion_module=importlib.util.module_from_spec(conversion_spec);conversion_spec.loader.exec_module(conversion_module)
+    conversion_vectors,conversion_ranges=conversion_module.vectors(args.source)
+    assert len(conversion_ranges)==16
+    conversion_public=[]
+    for cpp in (False,True):
+        name='f64_conversion_public_'+('cpp' if cpp else 'c')
+        folder=project/name;folder.mkdir();(folder/'vectors.h').write_text(conversion_vectors,encoding='ascii')
+        client=folder/('adapter.cpp' if cpp else 'adapter.c')
+        client.write_text(conversion_module.adapter(cpp),encoding='ascii')
+        add(name,[client]);conversion_public.append(name)
+    pure=project/'f64_conversion_pure';pure.mkdir()
+    run('conversion-pure-generate',[args.bit_driver,'--pure-c',pure/'generated.c'])
+    pure_text=(pure/'generated.c').read_text()
+    assert 'xrt_i64_to_f64(' in pure_text and 'xrt_run_standalone(' not in pure_text and 'xrl_invoke(' not in pure_text
+    (pure/'main.c').write_text('#include <stdint.h>\n#include <string.h>\n#include <fenv.h>\n'
+        'extern double xray_lir_entry(void);\nint main(void){\n'
+        ' if(fesetround(FE_DOWNWARD)||feclearexcept(FE_ALL_EXCEPT)||feraiseexcept(FE_INEXACT))return 1;\n'
+        ' int flags=fetestexcept(FE_ALL_EXCEPT);double value=xray_lir_entry();uint64_t bits;memcpy(&bits,&value,8);\n'
+        ' return bits!=UINT64_C(0x43e0000000000000)||fegetround()!=FE_DOWNWARD||fetestexcept(FE_ALL_EXCEPT)!=flags;}\n',encoding='ascii')
+    add('f64_conversion_pure',[pure/'generated.c',pure/'main.c'])
+    conversion_sources=[
+        ('i64_to_f64','i64-to-f64',275,'c77861ca62ec131932e137f01e2b56df9ba1328dcffbbd709dab49dc7b808032',b'42.0\n-42.0\n1\n1\n',False),
+        ('f64_to_i64','f64-to-i64',159,'601c6286a0fa9f62a9a7774818d0c87751f8aa9aaa45b771215dfcebd91cb2c9',b'-42\n42\n0\n-9223372036854775808\n',False),
+        ('roundtrip','f64-i64-roundtrip',269,'fab1f8ea86a98709a94a034dcf4abbec120575c330b6256056a43ae37b6c0e27',b'42.0\n-42\n-123\n0\n',False),
+        ('side_effect','f64-i64-side-effect',336,'5b52f12617aa14c85975f173093ae818740b293437ebd094b7406862819f34c5',b'9\n-42\n6\n',False),
+        ('spill','f64-i64-spill',31638,'0e18a22b2cbe3d5e1f43c19cc2bd8c9f137118870e5104b69c12728b368126a5',b'36855\n',False),
+        ('range','f64-i64-range',111,'783c3748b59fd1da1dcc13c1f815718555bbd2aa81ea50cb03f70bd42de5606a',b'before\n',True),
+        ('unused_range','f64-i64-unused-range',198,'a749e6def45cc44f582b50024ed8b77c790f6abe18853400dafe5e1c2e583d41',b'before\n',True)]
+    conversion_main=('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
+        'int main(void){if(xray_lir_entry()!=0)return 1;return xray_lir_entry()!=0;}\n')
+    conversion_panic_main=('#include <stdint.h>\n#include <stdlib.h>\n#include <stdio.h>\n'
+        'extern int64_t xray_lir_entry(void);\nstatic void callback(void){fputs("EXIT_CALLBACK",stderr);}\n'
+        'int main(void){if(atexit(callback))return 2;(void)xray_lir_entry();fputs("AFTER_ENTRY",stderr);return 77;}\n')
+    for label,name,length,digest,stdout,failure in conversion_sources:
+        source=source_input('tests/lir/programs/'+name+'.xr',length,digest)
+        for mode in ('raw','sccp','inline','sccp-inline-inline-sccp'):
+            client='conversion_'+label+'_'+mode.replace('-','_');folder=project/client;folder.mkdir()
+            generated=folder/'generated.c';receipt=folder/'rbc.json';count=1 if failure else 2
+            result=run(client+'-generate',[args.pipeline_driver,source,mode,generated,receipt,'0',str(count),
+                'arithmetic-program-first' if failure else 'normal'])
+            assert result.stdout==stdout*count
+            assert result.stderr==(conversion_module.HOST_ALIVE if failure else b'')
+            facts=json.loads(receipt.read_text())
+            if failure:
+                assert facts['status']=='XR_RBC_ARITHMETIC_PANIC' and facts['arithmetic_facts']['code']==422
+                assert facts['owner_path_matches_original'] and facts['samples'][0]['bits'] is None
+            elif label=='spill':
+                assert facts['rbc_spills']>0 and facts['rbc_registers_max']<=255
+            (folder/'main.c').write_text(conversion_panic_main if failure else conversion_main,encoding='ascii')
+            add(client,[generated,folder/'main.c'],stdout*count,1 if failure else 0,
+                conversion_module.PANIC if failure else b'')
+    conversion_rejections=[]
+    for name,marker in [('f64-same-width-unsupported',b'xr_lir_emit_c'),
+                        ('f64-i64-module-slot-unsupported',b'module slot without a direct same-block i64 literal')]:
+        source=args.source/'tests/lir/programs'/(name+'.xr')
+        for mode in ('raw','sccp','inline','sccp-inline-inline-sccp'):
+            label=name+'-'+mode;generated=work/(label+'.c');receipt=work/(label+'.json')
+            rejected=run(label,[args.pipeline_driver,source,mode,generated,receipt,'0','1','normal'],1)
+            assert not rejected.stdout and marker in rejected.stderr and not generated.exists() and not receipt.exists()
+            conversion_rejections.append(label)
     panic = project/'panic.c'
     panic.write_text('#include "xray_native_runtime.h"\n#include <stdlib.h>\n#include <stdio.h>\n'
         'const XrtSourceMap xrt_standalone_source_map={NULL,0};\n'
@@ -207,6 +269,7 @@ def main():
         cpp.write_text(text, encoding='ascii')
         add(name + '_cpp', [*[Path(p) for p in case['sources'][:-1]],cpp],
             bytes.fromhex(case['stdoutHex']), case['exit'], bytes.fromhex(case['stderrHex']))
+    assert len(cases)==109
     (project/'cases.cmake').write_text('set(CLIENTS ' + ' '.join(clients) + ')\n' + ''.join(
         'set(' + name + '_SOURCES ' + ' '.join('"' + path.replace('\\','/') + '"' for path in case['sources']) + ')\n' for name,case in cases.items()), encoding='utf-8')
     external = work/'external-build'
@@ -228,6 +291,15 @@ def main():
     for name, case in cases.items():
         result = run('execute-' + name, [external/(name + '.exe')], case['exit'])
         assert result.stdout.hex() == case['stdoutHex'] and result.stderr.hex() == case['stderrHex'], name
+    conversion_range_executions=[]
+    for name in conversion_public:
+        for index in conversion_ranges:
+            label='execute-'+name+'-range-'+str(index);argv=[external/(name+'.exe'),str(index)]
+            result=run(label,argv,1)
+            assert result.stdout==b'before\n' and result.stderr==conversion_module.PANIC
+            conversion_range_executions.append(dict(name=label,argv=list(map(str,argv)),exit=1,
+                stdoutHex=result.stdout.hex(),stderrHex=result.stderr.hex()))
+    assert len(conversion_range_executions)==32
     cold_commands = (external/'compile_commands.json').read_text()
     normalized_commands = cold_commands.replace('\\','/')
     assert (args.source/'include').as_posix() not in normalized_commands
@@ -380,12 +452,18 @@ def main():
         assert b'XrayNativeRuntime requires' in result.stdout + result.stderr or b'XrayNativeRuntime does not distribute' in result.stdout + result.stderr
         assert not (target/'f64_public_c.exe').exists()
         negative.append(label)
+    assert len(negative)==54 and len(conversion_rejections)==8
     for relative, facts in source_inputs.items():
         assert hashlib.sha256((args.source/relative).read_bytes()).hexdigest() == facts['rawSHA256']
     summary = dict(state='PASS', sourceCommit=manifest['sourceCommit'], component='XrayNativeRuntime',
         installedPrefix=str(prefix), movedPrefix=str(moved), originalPrefixAbsent=not prefix.exists(),
         manifestSHA256=hashlib.sha256((runtime/'native_runtime_manifest.json').read_bytes()).hexdigest(),
         clients=cases, clientCount=len(cases), sourceInputs=source_inputs,
+        clientExecutions=len(cases)+len(conversion_range_executions),
+        conversion=dict(integerRows=49,fractionRows=37,validFractionRows=21,rangeRows=16,
+            publicImages=conversion_public,rangeExecutions=conversion_range_executions,
+            sourceRejections=conversion_rejections,pureUnboundImage='f64_conversion_pure',
+            boundary='Original50 images and54 installation negatives remain. Source rejections are separate; two public images each execute1 normal+16 standalone range processes.'),
         negative=negative, arithmeticRows=3216, comparisonPairs=676,
         roundingModes=4, ftzDazStates=4, textRows=290, textSourceBytes=138, textOracleBytes=24,
         hello='NOT_RUN_IN_THIS_INSTALLED_MATRIX')

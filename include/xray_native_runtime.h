@@ -48,6 +48,12 @@ XRAY_API uint64_t xrt_f64_divide(uint64_t left, uint64_t right);
 // Return -1/0/1 for less/equal/greater and 2 for unordered. Both zeros compare
 // equal; any quiet or signaling NaN operand is unordered without changing flags.
 XRAY_API int32_t xrt_f64_compare(uint64_t left, uint64_t right);
+// Integer conversion preserves the floating environment. Conversion to binary64
+// rounds to nearest with ties to even. Conversion to integer truncates toward
+// zero; NaN, infinity and out-of-range values require an active execution and
+// end it with numeric conversion panic 422 at the supplied source id.
+XRAY_API uint64_t xrt_i64_to_f64(int64_t value);
+XRAY_API int64_t xrt_f64_to_i64(uint64_t bits, uint32_t source_id);
 
 // These handles point to the canonical shared String object, never a second
 // native representation. New/retain results own one reference in this root.
@@ -111,7 +117,8 @@ XRAY_API int64_t xrt_clock_monotonic_nanos(uint32_t source_id);
 XRAY_API int64_t xrt_clock_utc_offset_at(int64_t seconds, uint32_t source_id);
 
 // End the active synchronous execution with division (420) or modulo (421)
-// by zero. The source id must be zero or in the active image map. Invalid
+// by zero, or numeric conversion out of range (422). The source id must be zero
+// or in the active image map. Invalid
 // bindings, codes or ids violate host preconditions and abort. Embedded roots
 // capture facts for the host; standalone roots render once and exit with 1,
 // even if the diagnostic sink fails. No guest cleanup or exit callback runs.

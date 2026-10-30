@@ -1,0 +1,11 @@
+fn seed(value: f64) -> f64 { print(9); return value }
+fn toFloat(value: i64) -> f64 { return value as f64 }
+fn toInteger(value: f64) -> i64 { return value as i64 }
+print(toInteger(seed(-42.75)))
+var index: i64 = 0
+var total: i64 = 0
+while (index < 4) {
+    total = total + toInteger(toFloat(index))
+    index = index + 1
+}
+print(total)

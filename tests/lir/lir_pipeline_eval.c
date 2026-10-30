@@ -57,7 +57,8 @@ typedef struct Eval {
     uint64_t source_retire, lir_retire, execution_retire, program_retire, observations, comparisons_ticks;
     XrtSourceLocation failure_location;
     XrtOutputFailure failure;
-    bool output_failure;
+    XrtArithmeticPanic panic;
+    bool output_failure, arithmetic_failure;
 } Eval;
 
 static uint64_t clock_frequency(void) {
@@ -353,6 +354,7 @@ static void shape_json(FILE *f, const Shape *s) {
 }
 static void receipt(const char *path, const Eval *e, const Sample *samples, uint32_t warmups,
                     uint32_t runs, size_t c_bytes) {
+    bool failed = e->output_failure || e->arithmetic_failure;
     FILE *f = fopen(path, "wb"); CHECK(f);
     fprintf(f, "{\"clock_frequency\":%" PRIu64 ",\"comparisons\":%u,\"c_bytes\":%zu,"
         "\"root_result_type\":\"i64\",\"warmups\":%u,\"runs\":%u,\"stages\":[",
@@ -372,8 +374,8 @@ static void receipt(const char *path, const Eval *e, const Sample *samples, uint
     for (uint64_t i = 0; i < (uint64_t)warmups + runs; ++i) {
         fprintf(f, "%s{\"warmup\":%s,\"prepare_ticks\":%" PRIu64 ",\"run_ticks\":%" PRIu64
             ",\"completed_entry\":%s,\"bits\":", i ? "," : "", i < warmups ? "true" : "false",
-            samples[i].prepare, samples[i].run, e->output_failure ? "false" : "true");
-        if (e->output_failure) fputs("null}", f);
+            samples[i].prepare, samples[i].run, failed ? "false" : "true");
+        if (failed) fputs("null}", f);
         else fprintf(f, "%" PRIu64 "}", samples[i].bits);
     }
     fprintf(f, "],\"retirement_ticks\":{\"source_inputs\":%" PRIu64 ",\"lir_modules\":%" PRIu64
@@ -383,12 +385,15 @@ static void receipt(const char *path, const Eval *e, const Sample *samples, uint
         e->observations, e->comparisons_ticks);
     fprintf(f, ",\"status\":\"%s\",\"host_continued\":%s,\"failure_location\":[%u,%u,%u,%u],"
         "\"owner_path_matches_original\":%s,\"failure_facts\":{\"domain\":%u,\"code\":%u,"
-        "\"operation\":%u,\"source_id\":%u,\"broken_pipe\":%s},\"formal_performance\":false}\n",
-        e->output_failure ? "XR_RBC_OUTPUT_FAILURE" : "XR_RBC_OK",
-        e->output_failure ? "true" : "false", e->failure_location.line, e->failure_location.column,
-        e->failure_location.end_line, e->failure_location.end_column, e->output_failure ? "true" : "false",
+        "\"operation\":%u,\"source_id\":%u,\"broken_pipe\":%s},"
+        "\"arithmetic_facts\":{\"code\":%u,\"source_id\":%u},\"formal_performance\":false}\n",
+        e->arithmetic_failure ? "XR_RBC_ARITHMETIC_PANIC" :
+            e->output_failure ? "XR_RBC_OUTPUT_FAILURE" : "XR_RBC_OK",
+        failed ? "true" : "false", e->failure_location.line, e->failure_location.column,
+        e->failure_location.end_line, e->failure_location.end_column, failed ? "true" : "false",
         (unsigned)e->failure.io.domain, (unsigned)e->failure.io.code, (unsigned)e->failure.operation,
-        e->failure.source_id, e->failure.io.broken_pipe ? "true" : "false");
+        e->failure.source_id, e->failure.io.broken_pipe ? "true" : "false",
+        e->panic.code, e->panic.source_id);
     CHECK(!ferror(f) && fclose(f) == 0);
 }
 static void program_free(Eval *e, XrRbcProgram **program) {
@@ -408,33 +413,44 @@ static void run_vm(Eval *e, XrRbcProgram **program, Sample *sample, const char *
     sample->run = elapsed(start);
     CHECK(!xr_rbc_execution_run(execution));
     start = clock_ticks(); xr_rbc_execution_free(&execution); e->execution_retire += elapsed(start);
-    if (failure_order == 1) program_free(e, program);
+    if (failure_order == 1 || failure_order == 3) program_free(e, program);
     if (!failure_order) {
         CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK);
         CHECK(xr_rbc_outcome_bits(outcome, &sample->bits) && sample->bits == 0);
     } else {
-        CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OUTPUT_FAILURE);
+        bool arithmetic = failure_order >= 3;
+        CHECK(xr_rbc_outcome_status(outcome) ==
+            (arithmetic ? XR_RBC_ARITHMETIC_PANIC : XR_RBC_OUTPUT_FAILURE));
         uint64_t missing_bits = UINT64_MAX;
         CHECK(!xr_rbc_outcome_bits(outcome, &missing_bits) && missing_bits == UINT64_MAX);
         XrtOutputFailure facts = {0}; const XrtLocationOwner *owner = NULL;
-        CHECK(xr_rbc_outcome_output_failure(outcome, &facts, &owner));
-        CHECK(facts.io.failed && facts.io.code && facts.io.domain != XRT_IO_NONE &&
-            facts.operation == XRT_OUTPUT_WRITE && !facts.io.broken_pipe);
-        const XrtSourceLocation *location = xrt_locations_get(owner, facts.source_id);
+        uint32_t source_id = 0;
+        if (arithmetic) {
+            CHECK(xr_rbc_outcome_arithmetic_panic(outcome, &e->panic, &owner));
+            CHECK(e->panic.code == 422 && e->panic.source_id);
+            source_id = e->panic.source_id;
+            e->arithmetic_failure = true;
+        } else {
+            CHECK(xr_rbc_outcome_output_failure(outcome, &facts, &owner));
+            CHECK(facts.io.failed && facts.io.code && facts.io.domain != XRT_IO_NONE &&
+                facts.operation == XRT_OUTPUT_WRITE && !facts.io.broken_pipe);
+            source_id = facts.source_id;
+            e->failure = facts;
+            e->output_failure = true;
+        }
+        const XrtSourceLocation *location = xrt_locations_get(owner, source_id);
         CHECK(location && location->path_length == strlen(expected));
         CHECK(!memcmp(location->path, expected, location->path_length));
         e->failure_location = *location;
         e->failure_location.path = NULL; e->failure_location.path_length = 0;
-        e->failure = facts;
-        e->output_failure = true;
     }
     start = clock_ticks(); xr_rbc_outcome_free(&outcome); e->execution_retire += elapsed(start);
-    if (failure_order == 2) program_free(e, program);
+    if (failure_order == 2 || failure_order == 4) program_free(e, program);
 }
 
 int main(int argc, char **argv) {
     if (argc != 8 && argc != 9) {
-        fputs("usage: lir_pipeline_eval <source> <mode> <output.c> <receipt.json> <warmups> <runs> <normal|program-first|outcome-first> [stdlib-directory]\n", stderr);
+        fputs("usage: lir_pipeline_eval <source> <mode> <output.c> <receipt.json> <warmups> <runs> <normal|program-first|outcome-first|arithmetic-program-first|arithmetic-outcome-first> [stdlib-directory]\n", stderr);
         return 2;
     }
     const char *mode = argv[2];
@@ -442,8 +458,10 @@ int main(int argc, char **argv) {
     bool combined = !strcmp(mode, "sccp-inline-inline-sccp");
     if (!raw && !sccp && !inlining && !combined) return 2;
     unsigned failure_order = !strcmp(argv[7], "normal") ? 0u :
-        !strcmp(argv[7], "program-first") ? 1u : !strcmp(argv[7], "outcome-first") ? 2u : 3u;
-    if (failure_order == 3) return 2;
+        !strcmp(argv[7], "program-first") ? 1u : !strcmp(argv[7], "outcome-first") ? 2u :
+        !strcmp(argv[7], "arithmetic-program-first") ? 3u :
+        !strcmp(argv[7], "arithmetic-outcome-first") ? 4u : 5u;
+    if (failure_order == 5) return 2;
     uint32_t warmups = 0, runs = 0;
     if (!number(argv[5], &warmups) || !number(argv[6], &runs) || !runs ||
         (failure_order && (warmups || runs != 1))) return 2;

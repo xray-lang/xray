@@ -1,0 +1,5 @@
+fn convert(value: f64) -> i64 { return value as i64 }
+print(convert(-42.75))
+print(convert(42.75))
+print(convert(-0.0))
+print(convert(-9223372036854775808.0))

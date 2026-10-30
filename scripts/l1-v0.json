@@ -172,7 +172,9 @@
     "test_xir_specialize_control",
     "test_native_ready",
     "test_native_f64_text",
-    "test_native_execution_allocations"
+    "test_native_execution_allocations",
+    "test_native_f64_i64_conversion",
+    "test_value_format_core"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -502,7 +504,10 @@
     "native_ready_probe",
     "native_f64_text",
     "f64_text_native",
-    "native_execution_string_allocations"
+    "native_execution_string_allocations",
+    "native_f64_i64_conversion",
+    "f64_i64_native",
+    "test_value_format_core"
   ],
   "versionCommand": [
     "{build}/xray.exe",

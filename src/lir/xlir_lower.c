@@ -774,9 +774,6 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
         } else if (type == XR_XIR_I64) c->prints = true;
         else return lower_unsupported(c, "print other than one supported value");
     }
-    if (op->op == XR_XIR_CONVERT_NUMBER && xr_xir_operand_type(f, op->args[0]) == XR_XIR_F64 &&
-        op->type == XR_XIR_I64)
-        return lower_unsupported(c, "floating to integer conversion");
     return true;
 }
 
@@ -1192,6 +1189,8 @@ static XrLirOp lower_operation(const LowerFunction *f, const XrXirInstruction *o
         case XR_XIR_NEG_FLOAT:
             return XR_LIR_FNEG;
         case XR_XIR_CONVERT_NUMBER:
+            if (xr_xir_operand_type(f->source, op->args[0]) == XR_XIR_F64 && op->type == XR_XIR_I64)
+                return XR_LIR_FTOI;
             return xr_xir_operand_type(f->source, op->args[0]) == XR_XIR_I64
                        ? (op->type == XR_XIR_I64 ? XR_LIR_INTCAST : XR_LIR_ITOF)
                        : XR_LIR_FCAST;

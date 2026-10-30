@@ -252,11 +252,13 @@ static void reject_float_operations(void) {
         {XR_LIR_FADD, XR_LIR_F32, XR_LIR_F32, 2}, {XR_LIR_FSUB, XR_LIR_F32, XR_LIR_F32, 2},
         {XR_LIR_FMUL, XR_LIR_F32, XR_LIR_F32, 2}, {XR_LIR_FDIV, XR_LIR_F32, XR_LIR_F32, 2},
         {XR_LIR_FNEG, XR_LIR_F32, XR_LIR_F32, 1}, {XR_LIR_FCMP, XR_LIR_F32, XR_LIR_I1, 2},
-        {XR_LIR_ITOF, XR_LIR_I64, XR_LIR_F64, 1}, {XR_LIR_FCAST, XR_LIR_F64, XR_LIR_F64, 1}
+        {XR_LIR_ITOF, XR_LIR_I8, XR_LIR_F64, 1}, {XR_LIR_ITOF, XR_LIR_I64, XR_LIR_F32, 1},
+        {XR_LIR_FCAST, XR_LIR_F64, XR_LIR_F64, 1}
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(*cases); ++i) {
         XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
-        XrLirType root_type = cases[i].input == XR_LIR_F32 ? XR_LIR_UNIT : cases[i].result;
+        XrLirType root_type = cases[i].input == XR_LIR_F32 || cases[i].result == XR_LIR_F32 ?
+            XR_LIR_UNIT : cases[i].result;
         XrLirFunction f = function(m, "refused", NULL, 0, root_type);
         XrLirBlock b = block(m, f, NULL, 0); OK(xr_lir_set_entry(m, f, b));
         XrLirValue a, value;

@@ -1,0 +1,5 @@
+fn convert(value: f64) -> i64 { return value as i64 }
+fn discard(value: f64) -> i64 { const unused = convert(value); return 17 }
+print("before")
+print(discard(9223372036854775808.0))
+print("after")

@@ -1,4 +1,16 @@
 set(native_runtime_clients)
+add_executable(test_native_f64_i64_conversion test_f64_i64_conversion.c)
+target_link_libraries(test_native_f64_i64_conversion PRIVATE xray_lir_bytecode xray_lir_c xray_native_runtime)
+target_include_directories(test_native_f64_i64_conversion PRIVATE "${PROJECT_SOURCE_DIR}/src")
+set_target_properties(test_native_f64_i64_conversion PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(test_native_f64_i64_conversion PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_native_f64_i64_conversion PRIVATE -Wall -Wextra -Werror -pedantic)
+    target_link_libraries(test_native_f64_i64_conversion PRIVATE m)
+endif()
+add_test(NAME native_f64_i64_conversion COMMAND test_native_f64_i64_conversion)
+set_tests_properties(native_f64_i64_conversion PROPERTIES LABELS "unit;native-runtime;float" TIMEOUT 30)
 add_executable(test_native_f64_text test_f64_text.c)
 target_link_libraries(test_native_f64_text PRIVATE xray_lir_bytecode xray_native_runtime)
 target_include_directories(test_native_f64_text PRIVATE "${PROJECT_SOURCE_DIR}/src")
@@ -16,6 +28,7 @@ add_test(NAME native_runtime_installed
         --source "${PROJECT_SOURCE_DIR}" --build "${CMAKE_BINARY_DIR}"
         --c-driver "$<TARGET_FILE:lir_c_run>" --pipeline-driver "$<TARGET_FILE:lir_pipeline_eval>"
         --result-driver "$<TARGET_FILE:test_lir_bytecode_source>"
+        --bit-driver "$<TARGET_FILE:test_native_f64_i64_conversion>"
         --eligible "$<BOOL:${_xnr_eligible}>"
         --work "${CMAKE_BINARY_DIR}/native-runtime-installed-results")
 set_tests_properties(native_runtime_installed PROPERTIES

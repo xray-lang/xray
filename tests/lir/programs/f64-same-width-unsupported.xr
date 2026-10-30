@@ -1,0 +1,3 @@
+fn same(value: f64) -> f64 { return value as f64 }
+print(same(-0.0))
+print(same(0.0 / 0.0))

@@ -132,7 +132,8 @@ XR_VALUE_FORMAT_FUNCTION int xr_value_format_panic(XrValueFormatSink sink, uint3
                xr_value_format_write(sink, prefix, (size_t)size);
     }
     const char *cause = code == 420u ? "division by zero" :
-                        code == 421u ? "modulo by zero" : "uncaught panic";
+                        code == 421u ? "modulo by zero" :
+                        code == 422u ? "numeric conversion is out of range" : "uncaught panic";
     return xr_value_format_text(sink, cause) && xr_value_format_text(sink, "\n");
 }
 
