@@ -32,6 +32,15 @@ static void admitted(XrRbcFunction *functions, size_t count, XrtLocationOwner *l
     CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK);
     xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
 }
+static void admitted_without_invocation(XrRbcFunction *functions,size_t count,XrtLocationOwner *locations) {
+    const XrRbcLiteral literal={"not printed",11};
+    const XrRbcModule module={.functions=functions,.function_count=count,.literals=&literal,.literal_count=1};
+    for(unsigned entry=0;entry<2;++entry) {
+        XrRbcExecution *execution=NULL;
+        CHECK(xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution)==XR_RBC_OK && execution);
+        xr_rbc_execution_free(&execution);CHECK(!execution);
+    }
+}
 static void frame_cell_backedges(XrtLocationOwner *locations) {
     uint32_t code[]={word(XR_RBC_STRING_LITERAL,0,0,0,0),word(XR_RBC_STRING_CELL_NEW,1,0,0,0),
         word(XR_RBC_STRING_DROP,0,0,0,0),word(XR_RBC_LOADI,2,0,0,0),word(XR_RBC_LOADI,3,0,0,3),
@@ -153,10 +162,14 @@ static void loop_entry_obligations(XrtLocationOwner *locations) {
         word(XR_RBC_STRING_DROP,3,0,0,0),word(XR_RBC_ADD,0,0,2,0),0,word(XR_RBC_STRING_DROP,3,0,0,0),word(XR_RBC_RET,0,0,0,0)};
     CHECK(xr_rbc_jump(&head_owner[5],5,7,12)&&xr_rbc_jump(&head_owner[6],6,10,12)&&xr_rbc_jump(&head_owner[9],9,4,12));
     functions[0].code=head_owner;functions[0].code_count=12;rejected(functions,1,locations);
-    uint32_t unproved[]={0,word(XR_RBC_STRING_LITERAL,3,0,0,0),word(XR_RBC_STRING_DROP,3,0,0,0),
+    uint32_t late_target[]={0,word(XR_RBC_STRING_LITERAL,3,0,0,0),word(XR_RBC_STRING_DROP,3,0,0,0),
         word(XR_RBC_LOADI,0,0,0,0),word(XR_RBC_LOADI,0,0,0,0),0,word(XR_RBC_RET,0,0,0,0)};
-    CHECK(xr_rbc_jump(&unproved[0],0,4,7)&&xr_rbc_jump(&unproved[5],5,1,7));
-    functions[0].code=unproved;functions[0].code_count=7;rejected(functions,1,locations);
+    CHECK(xr_rbc_jump(&late_target[0],0,4,7)&&xr_rbc_jump(&late_target[5],5,1,7));
+    functions[0].code=late_target;functions[0].code_count=7;
+    // A stable empty managed state can reach an earlier, initially unseen
+    // label. This guest loop is infinite: validate and free, never invoke it.
+    admitted_without_invocation(functions,1,locations);
+    CHECK(xr_rbc_jump(&late_target[5],5,2,7));rejected(functions,1,locations);
     uint32_t degrade[]={word(XR_RBC_LOADI,0,0,0,0),word(XR_RBC_LOADI,1,0,0,3),word(XR_RBC_LOADI,2,0,0,1),
         word(XR_RBC_LOADI,5,0,0,12),word(XR_RBC_LT,0,1,0,0),0,0,word(XR_RBC_STRING_LITERAL,3,0,0,0),
         word(XR_RBC_STRING_DROP,3,0,0,0),word(XR_RBC_CALL,4,0,0,1),word(XR_RBC_ADD,0,0,2,0),0,word(XR_RBC_RET,0,0,0,0)};
