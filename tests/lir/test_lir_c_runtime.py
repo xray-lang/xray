@@ -10,6 +10,23 @@ import tempfile
 from test_lir_c_native import run
 from test_lir_carriers_native import _f64_profile, _f64_reject
 
+MODULE_CALL_CLOSURES = {
+    'closure-chain': ('fn leaf(n:i64)->i64{return n+1}\n'
+        'fn middle(n:i64)->i64{return leaf(n)}\nfn top(n:i64)->i64{return middle(n)}\n'
+        'print(top(40))\nvar state=7\nprint(state)\n', b'41\n7\n'),
+    'closure-string': ('fn leaf(s:string)->string{return s+"!"}\n'
+        'fn middle(s:string)->string{return leaf(s)}\nfn top(s:string)->string{return middle(s)}\n'
+        'print(top("value"))\nvar state=7\nprint(state)\n', b'value!\n7\n'),
+    'closure-self': ('fn down(n:i64)->i64{if(n==0){return 9}\nreturn down(n-1)}\n'
+        'print(down(4))\nvar state=7\nprint(state)\n', b'9\n7\n'),
+    'closure-mutual': ('fn even(n:i64)->i64{if(n==0){return 1}\nreturn odd(n-1)}\n'
+        'fn odd(n:i64)->i64{if(n==0){return 0}\nreturn even(n-1)}\n'
+        'print(even(4))\nprint(odd(4))\nvar state=7\nprint(state)\n', b'1\n0\n7\n'),
+    'closure-effects': ('fn leaf(n:i64)->i64{print(n)\nreturn n+1}\n'
+        'fn top(n:i64)->i64{return leaf(n)}\nfn unused()->i64{return state}\n'
+        'print(top(6))\nvar state=7\nfn readstate()->i64{return state}\nprint(readstate())\n', b'6\n7\n7\n'),
+}
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -44,6 +61,9 @@ def main():
         'typed-unit': (None, b'5\n'),
         'typed-root-call': (None, b'5\n'),
     }
+    for name, case in MODULE_CALL_CLOSURES.items():
+        cases[name] = case
+        cases[name + '-optimized'] = case
     cases['fixed-divrem'] = (
         'fn q(n:i64)->i64{return n/3}\n'
         'fn r(n:i64)->i64{return n%97}\n'
@@ -99,6 +119,32 @@ def main():
     assert b'lowering: CONST_FLOAT is not supported by LIR lowering yet' in refused.stderr
     identity['selectedF32'] = {'exit': refused.returncode, 'stdoutHex': refused.stdout.hex(),
                                 'stderrHex': refused.stderr.hex(), 'publishedC': False}
+    original_parameter = Path(__file__).resolve().parents[2] / 'tests/diff/cases/semantics/string_owning_parameter.xr'
+    original_bytes = original_parameter.read_bytes()
+    assert len(original_bytes.replace(b'\r\n', b'\n')) == 1403 and original_bytes.count(b'while (i < 50)') == 1
+    original_copy, original_c = root / 'original-string-parameter.xr', root / 'original-string-parameter.c'
+    original_copy.write_bytes(original_bytes)
+    refused = subprocess.run([str(args.driver), str(original_copy), str(original_c)], capture_output=True, timeout=30)
+    assert refused.returncode == 1 and refused.stdout == b'' and not original_c.exists()
+    assert b'lowering: physical String Cell across blocks is not supported by LIR lowering yet' in refused.stderr
+    identity['originalStringParameter'] = {'path': str(original_parameter), 'bytes': len(original_bytes),
+        'sha256': hashlib.sha256(original_bytes).hexdigest(), 'copiedRawExactly': original_copy.read_bytes() == original_bytes,
+        'stderrHex': refused.stderr.hex(), 'publishedC': False}
+    for name, text in {
+        'transitive': 'fn leaf()->i64{return state}\nfn middle()->i64{return leaf()}\n'
+            'fn top()->i64{return middle()}\nprint(top())\nvar state=7\n',
+        'unselected': 'fn leaf(flag:bool)->i64{if(flag){return state}\nreturn 1}\n'
+            'fn top()->i64{return leaf(false)}\nprint(top())\nvar state=7\n',
+        'cycle': 'fn first(n:i64)->i64{if(n==0){return state}\nreturn second(n-1)}\n'
+            'fn second(n:i64)->i64{return first(n)}\nprint(second(0))\nvar state=7\n',
+        'local': 'fn leaf()->i64{var local=1\nreturn local}\n'
+            'fn top()->i64{return leaf()}\nprint(top())\nvar state=7\n',
+    }.items():
+        path, generated = root / ('refused-closure-' + name + '.xr'), root / ('refused-closure-' + name + '.c')
+        path.write_text(text, encoding='utf-8')
+        refused = subprocess.run([str(args.driver), str(path), str(generated)], capture_output=True, timeout=30)
+        assert refused.returncode == 1 and refused.stdout == b'' and not generated.exists(), (name, refused)
+        assert b'module initialization call before complete publication' in refused.stderr, (name, refused.stderr)
     typed_results = {'typed-i64-min': ('int64_t', 'INT64_MIN'),
                      'typed-u64': ('uint64_t', 'UINT64_MAX'),
                      'typed-bool': ('_Bool', '1'), 'typed-unit': ('void', None),
@@ -123,7 +169,9 @@ def main():
             run([args.fixture_driver, name, generated], cwd=root)
         else:
             source.write_text(program, encoding='utf-8')
-            run([args.driver, source, generated], cwd=root)
+            command = [args.driver, source, generated]
+            if name.endswith('-optimized'): command.append('--optimize')
+            run(command, cwd=root)
         text = generated.read_text(encoding='ascii')
         assert text.count('const XrtSourceMap xrt_standalone_source_map =') == 1
         assert text.count('xrt_run_standalone(') == 1

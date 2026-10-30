@@ -566,6 +566,94 @@ static void module_cells_source(const char *directory) {
     puts("actual mutable module Cells retain identity, ordered publication and scoped plain calls");
 }
 
+static void module_call_closure(const char *text) {
+    SourceFixture fixture = source_fixture(text);
+    const XrXirModule *source = xr_xir_compile_artifact_module(fixture.closed);
+    uint32_t init = source->declarations->modules[0].initializer;
+    uint32_t entry = source->declarations->entry_function;
+    CHECK(source->function_count < 64 && source->declarations->slot_count == 1);
+    uint32_t counts[64] = {0};
+    bool hidden[64] = {0};
+    for (uint32_t f = 0; f < source->function_count; ++f) {
+        bool reader = source->functions[f].name_length == 9 &&
+            !memcmp(source->functions[f].name, "readstate", 9);
+        hidden[f] = reader;
+        counts[f] = source->functions[f].parameter_count + reader;
+    }
+    counts[init] = 0;
+    XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
+    XrLirLowered out = {0};
+    OK(xr_lir_lower_program_checked(&request, &out, NULL));
+    source_fixture_free(&fixture);
+    OK(xr_lir_verify(out.module, NULL));
+    unsigned selected = 0;
+    for (uint32_t n = 0; n < xr_lir_function_count(out.module); ++n) {
+        XrLirFunction function; XrLirFunctionView view;
+        OK(xr_lir_function_at(out.module, n, &function));
+        OK(xr_lir_function_view(out.module, function, &view));
+        uint32_t original = 0;
+        for (; original < 64; ++original) {
+            char prefix[32];
+            int length = snprintf(prefix, sizeof(prefix), "f%u_", original);
+            CHECK(length > 0 && (size_t)length < sizeof(prefix));
+            if (view.name_length >= (size_t)length && !memcmp(view.name, prefix, (size_t)length)) break;
+        }
+        if (original == 64) continue;
+        if (view.parameter_count != counts[original])
+            fprintf(stderr, "closure signature %.*s expected %u actual %u (init %u entry %u)\n",
+                (int)view.name_length, view.name, counts[original], view.parameter_count, init, entry);
+        CHECK(original < 64 && view.parameter_count == counts[original]);
+        if (hidden[original])
+            CHECK(view.parameter_types[view.parameter_count-1] == XR_LIR_I64_CELL);
+        ++selected;
+        for (uint32_t b = 0; b < view.block_count; ++b) {
+            XrLirBlock block; XrLirBlockView bv;
+            OK(xr_lir_block_at(out.module, function, b, &block));
+            OK(xr_lir_block_view(out.module, block, &bv));
+            for (uint32_t i = 0; i < bv.instruction_count; ++i) {
+                XrLirInstructionView op;
+                OK(xr_lir_instruction_view(out.module, block, i, &op));
+                if (op.op != XR_LIR_CALL) continue;
+                XrLirFunction callee = {out.module, op.callee}; XrLirFunctionView target;
+                OK(xr_lir_function_view(out.module, callee, &target));
+                CHECK(op.operand_count == target.parameter_count);
+            }
+        }
+    }
+    CHECK(selected >= 3);
+    xr_lir_lowered_free(&out);
+}
+
+static void module_call_closures(void) {
+    module_call_closure("fn leaf(n:i64)->i64{return n+1}\n"
+        "fn middle(n:i64)->i64{return leaf(n)}\nfn top(n:i64)->i64{return middle(n)}\n"
+        "print(top(40))\nvar state=7\nprint(state)\n");
+    module_call_closure("fn leaf(s:string)->string{return s+\"!\"}\n"
+        "fn middle(s:string)->string{return leaf(s)}\nfn top(s:string)->string{return middle(s)}\n"
+        "print(top(\"value\"))\nvar state=7\nprint(state)\n");
+    module_call_closure("fn down(n:i64)->i64{if(n==0){return 9}\nreturn down(n-1)}\n"
+        "print(down(4))\nvar state=7\nprint(state)\n");
+    module_call_closure("fn even(n:i64)->i64{if(n==0){return 1}\nreturn odd(n-1)}\n"
+        "fn odd(n:i64)->i64{if(n==0){return 0}\nreturn even(n-1)}\n"
+        "print(even(4))\nprint(odd(4))\nvar state=7\nprint(state)\n");
+    module_call_closure("fn leaf(n:i64)->i64{print(n)\nreturn n+1}\n"
+        "fn top(n:i64)->i64{return leaf(n)}\nfn unused()->i64{return state}\n"
+        "print(top(6))\nvar state=7\nfn readstate()->i64{return state}\nprint(readstate())\n");
+    rejected("fn leaf()->i64{return state}\nfn middle()->i64{return leaf()}\n"
+        "fn top()->i64{return middle()}\nprint(top())\nvar state=7\n", false,
+        "module initialization call before complete publication");
+    rejected("fn leaf(flag:bool)->i64{if(flag){return state}\nreturn 1}\n"
+        "fn top()->i64{return leaf(false)}\nprint(top())\nvar state=7\n", false,
+        "module initialization call before complete publication");
+    rejected("fn first(n:i64)->i64{if(n==0){return state}\nreturn second(n-1)}\n"
+        "fn second(n:i64)->i64{return first(n)}\nprint(second(0))\nvar state=7\n", false,
+        "module initialization call before complete publication");
+    rejected("fn leaf()->i64{var local=1\nreturn local}\n"
+        "fn top()->i64{return leaf()}\nprint(top())\nvar state=7\n", false,
+        "module initialization call before complete publication");
+    puts("complete direct-call storage closures share physical signatures after Source retirement");
+}
+
 static void local_boundaries(void) {
     static const char *texts[] = {
         "fn selected(x:i64)->i64{return x+1}\nprint(selected(7))\n",
@@ -675,6 +763,7 @@ int main(int argc, char **argv) {
     argument_validation();
     literal_sources();
     module_cells_source(argv[1]);
+    module_call_closures();
     local_boundaries();
     golden(argv[1], argv[2], "source-fib");
     golden(argv[1], argv[2], "source-sum");

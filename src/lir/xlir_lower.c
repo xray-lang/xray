@@ -36,8 +36,9 @@ typedef struct Lower {
     uint32_t initialization_count;
     struct LowerLiteral *literals;
     uint32_t *module_slot_for_value, *module_publications;
+    uint8_t *storage_bad;
     uint32_t module_value_count;
-    bool prints, string_prints, mutable_slots;
+    bool prints, string_prints, mutable_slots, storage_ready;
     uint8_t clock_kinds;
 } Lower;
 typedef struct LowerLiteral {
@@ -235,31 +236,121 @@ static bool lower_known(XrXirOp op) {
     }
 }
 
-/* A complete body with only fixed typed leaves cannot observe module storage.
- * Unknown operations and explicit storage parameters keep the ordinary gate. */
-static bool lower_storage_free_leaf(const Lower *c, uint32_t index) {
-    const XrXirFunction *f = &c->source->functions[index];
+typedef struct LowerStorageCall { uint32_t caller; size_t next; } LowerStorageCall;
+
+static bool lower_storage_body(const XrXirFunction *f) {
+    if (!lower_type(f->result) || !f->block_count || !f->blocks ||
+        !f->instruction_count || !f->instructions ||
+        (f->parameter_count && !f->parameters) || (f->operand_count && !f->operands)) return false;
     for (uint32_t p = 0; p < f->parameter_count; ++p)
         if (lower_type(f->parameters[p]) <= XR_LIR_UNIT) return false;
-    for (uint32_t b = 0; b < f->block_count; ++b) {
-        const XrXirBlock *block = &f->blocks[b];
-        for (uint32_t i = block->first; i < block->first + block->count; ++i) {
-            const XrXirInstruction *op = &f->instructions[i];
-            if (!lower_known(op->op) || !lower_type(op->type)) return false;
-            switch (op->op) {
-            case XR_XIR_CALL: case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_LOAD:
-            case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
-            case XR_XIR_LOCAL_NEW: case XR_XIR_LOCAL_READ: case XR_XIR_LOCAL_WRITE:
-                return false;
-            default: break;
-            }
-        }
-    }
+    for (uint32_t b = 0; b < f->block_count; ++b)
+        if (f->blocks[b].first > f->instruction_count ||
+            f->blocks[b].count > f->instruction_count - f->blocks[b].first) return false;
     return true;
 }
+
+static bool lower_storage_call(const Lower *c, const XrXirFunction *f,
+    const XrXirInstruction *op, uint32_t *target) {
+    if ((f->parameter_count && !f->parameters) ||
+        op->immediate < 0 || (uint64_t)op->immediate >= c->source->function_count ||
+        op->args[0] > f->operand_count || op->args[1] > f->operand_count - op->args[0] ||
+        (op->args[1] && !f->operands)) return false;
+    uint32_t callee = (uint32_t)op->immediate;
+    const XrXirFunction *to = &c->source->functions[callee];
+    if (c->initializer_owner[callee] != UINT32_MAX || op->type != to->result ||
+        op->args[1] != to->parameter_count || (to->parameter_count && !to->parameters)) return false;
+    for (uint32_t a = 0; a < op->args[1]; ++a) {
+        uint32_t value = f->operands[op->args[0] + a];
+        if ((uint64_t)value >= (uint64_t)f->parameter_count + f->instruction_count ||
+            xr_xir_operand_type(f, value) != to->parameters[a]) return false;
+    }
+    *target = callee;
+    return true;
+}
+
+/* BAD is reachability to a storage or unknown body, not impurity. A complete
+ * recursive component without a BAD successor is storage-free. Reverse edges
+ * visit each call once; the cache becomes readable only after convergence. */
+static bool lower_storage_closures(Lower *c) {
+    uint32_t count = c->source->function_count;
+    size_t *heads = lower_alloc(c, count, sizeof(*heads));
+    uint32_t *queue = lower_alloc(c, count, sizeof(*queue));
+    LowerStorageCall *calls = NULL;
+    size_t edges = 0, queued = 0;
+    c->storage_bad = lower_alloc(c, count, 1);
+    bool good = heads && queue && c->storage_bad;
+    if (!good) goto done;
+    for (uint32_t f = 0; f < count; ++f) {
+        heads[f] = SIZE_MAX;
+        const XrXirFunction *body = &c->source->functions[f];
+        c->storage_bad[f] = !lower_storage_body(body);
+        if (!body->instructions) continue;
+        for (uint32_t i = 0; i < body->instruction_count; ++i) {
+            const XrXirInstruction *op = &body->instructions[i];
+            bool bad = !lower_known(op->op) || !lower_type(op->type);
+            switch (op->op) {
+            case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_LOAD:
+            case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
+            case XR_XIR_LOCAL_NEW: case XR_XIR_LOCAL_READ: case XR_XIR_LOCAL_WRITE:
+                bad = true; break;
+            case XR_XIR_CALL: {
+                uint32_t target;
+                if (!lower_storage_call(c, body, op, &target)) bad = true;
+                else if (edges == SIZE_MAX) {
+                    lower_error(c, XR_LIR_OUT_OF_MEMORY, "module call edge count overflow");
+                    good = false; goto done;
+                } else ++edges;
+                break;
+            }
+            default: break;
+            }
+            c->storage_bad[f] |= bad;
+        }
+    }
+    calls = lower_alloc(c, edges, sizeof(*calls));
+    if (edges && !calls) { good = false; goto done; }
+    size_t at = 0;
+    for (uint32_t f = 0; f < count; ++f) {
+        const XrXirFunction *body = &c->source->functions[f];
+        if (c->storage_bad[f]) queue[queued++] = f;
+        if (!body->instructions) continue;
+        for (uint32_t i = 0; i < body->instruction_count; ++i) {
+            const XrXirInstruction *op = &body->instructions[i];
+            uint32_t target;
+            if (op->op != XR_XIR_CALL || !lower_storage_call(c, body, op, &target)) continue;
+            if (at >= edges) {
+                lower_error(c, XR_LIR_VERIFY_ERROR, "module call graph changed during reception");
+                good = false; goto done;
+            }
+            calls[at] = (LowerStorageCall){f, heads[target]};
+            heads[target] = at++;
+        }
+    }
+    XR_DCHECK(at == edges && queued <= count, "complete graph and unique initial BAD functions");
+    for (size_t cursor = 0; cursor < queued; ++cursor)
+        for (size_t edge = heads[queue[cursor]]; edge != SIZE_MAX; edge = calls[edge].next) {
+            uint32_t caller = calls[edge].caller;
+            if (c->storage_bad[caller]) continue;
+            XR_DCHECK(queued < count, "each function becomes BAD once");
+            c->storage_bad[caller] = 1;
+            queue[queued++] = caller;
+        }
+    c->storage_ready = true;
+done:
+    xr_free(calls); xr_free(queue); xr_free(heads);
+    return good;
+}
+
+static bool lower_storage_free(const Lower *c, uint32_t index) {
+    return c->storage_ready && c->storage_bad && index < c->source->function_count &&
+        !c->storage_bad[index];
+}
+/* Explicit storage parameters keep their original physical signature unless
+ * the complete current direct-call closure proves no storage requirement. */
 static uint32_t lower_hidden_cells(const Lower *c, uint32_t function) {
     return c->mutable_slots && function != c->source->declarations->modules[0].initializer &&
-        !lower_storage_free_leaf(c, function) ? c->source->declarations->slot_count : 0;
+        !lower_storage_free(c, function) ? c->source->declarations->slot_count : 0;
 }
 
 /* Only actual owned module Cells become activation-local physical storage.
@@ -290,6 +381,7 @@ static bool lower_mutable_slots(Lower *c) {
             (xr_xir_cell_element(c->source->types, d->slots[s].type) != XR_XIR_I64 &&
              xr_xir_cell_element(c->source->types, d->slots[s].type) != XR_XIR_STRING))
             return lower_unsupported(c, "module slots other than mutable i64 or String Cells");
+    if (!lower_storage_closures(c)) return false;
     c->module_value_count = c->source->functions[init].instruction_count;
     c->module_slot_for_value = lower_alloc(c, c->module_value_count,
                                            sizeof(*c->module_slot_for_value));
@@ -348,7 +440,7 @@ static bool lower_mutable_slots(Lower *c) {
             c->function=init; c->block=b; c->instruction=i;
             if (!b && op->op == XR_XIR_CALL && i <= last &&
                 (op->immediate < 0 || (uint64_t)op->immediate >= c->source->function_count ||
-                 !lower_storage_free_leaf(c, (uint32_t)op->immediate)))
+                 !lower_storage_free(c, (uint32_t)op->immediate)))
                 return lower_unsupported(c, "module initialization call before complete publication");
             if (!b && op->op == XR_XIR_SLOT_LOAD &&
                 i <= c->module_publications[op->immediate])
@@ -362,6 +454,7 @@ static bool lower_mutable_slots(Lower *c) {
 static void lower_modules_free(Lower *c) {
     xr_free(c->module_order); xr_free(c->active_modules);
     xr_free(c->initializer_owner); xr_free(c->last_publication); xr_free(c->literals);
+    xr_free(c->storage_bad);
 }
 static bool lower_modules(Lower *c) {
     const XrXirDeclarations *d = c->source->declarations;

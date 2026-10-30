@@ -77,6 +77,48 @@ def main():
             diagnostic_path=root / 'invalid.xr')
         run('early-reader', 'print(read())\nconst n=7\nfn read()->i64{return n}\n',
             1, b'before complete publication')
+        closures = {
+            'chain': ('fn leaf(n:i64)->i64{return n+1}\n'
+                'fn middle(n:i64)->i64{return leaf(n)}\nfn top(n:i64)->i64{return middle(n)}\n'
+                'print(top(40))\nvar state=7\nprint(state)\n', b'41\n7\n'),
+            'string': ('fn leaf(s:string)->string{return s+"!"}\n'
+                'fn middle(s:string)->string{return leaf(s)}\nfn top(s:string)->string{return middle(s)}\n'
+                'print(top("value"))\nvar state=7\nprint(state)\n', b'value!\n7\n'),
+            'self': ('fn down(n:i64)->i64{if(n==0){return 9}\nreturn down(n-1)}\n'
+                'print(down(4))\nvar state=7\nprint(state)\n', b'9\n7\n'),
+            'mutual': ('fn even(n:i64)->i64{if(n==0){return 1}\nreturn odd(n-1)}\n'
+                'fn odd(n:i64)->i64{if(n==0){return 0}\nreturn even(n-1)}\n'
+                'print(even(4))\nprint(odd(4))\nvar state=7\nprint(state)\n', b'1\n0\n7\n'),
+            'effects': ('fn leaf(n:i64)->i64{print(n)\nreturn n+1}\n'
+                'fn top(n:i64)->i64{return leaf(n)}\nfn unused()->i64{return state}\n'
+                'print(top(6))\nvar state=7\nfn readstate()->i64{return state}\nprint(readstate())\n', b'6\n7\n7\n'),
+        }
+        for name, (text, expected) in closures.items():
+            path = root / ('closure-' + name + '.xr')
+            path.write_text(text, encoding='utf-8')
+            for options in ([], ['--twice'], ['--optimize'], ['--twice', '--optimize']):
+                result = subprocess.run([args.driver, str(path), *options], capture_output=True, timeout=15)
+                assert result.returncode == 0 and not result.stderr, (name, options, result.stderr)
+                assert result.stdout == expected * (2 if '--twice' in options else 1), (name, options, result.stdout)
+        run('closure-transitive-storage', 'fn leaf()->i64{return state}\n'
+            'fn middle()->i64{return leaf()}\nfn top()->i64{return middle()}\n'
+            'print(top())\nvar state=7\n', 1, b'before complete publication')
+        run('closure-unselected-storage', 'fn leaf(flag:bool)->i64{if(flag){return state}\nreturn 1}\n'
+            'fn top()->i64{return leaf(false)}\nprint(top())\nvar state=7\n', 1, b'before complete publication')
+        run('closure-storage-cycle', 'fn first(n:i64)->i64{if(n==0){return state}\nreturn second(n-1)}\n'
+            'fn second(n:i64)->i64{return first(n)}\nprint(second(0))\nvar state=7\n',
+            1, b'before complete publication')
+        run('closure-local-storage', 'fn leaf()->i64{var local=1\nreturn local}\n'
+            'fn top()->i64{return leaf()}\nprint(top())\nvar state=7\n', 1, b'before complete publication')
+        original = Path(__file__).resolve().parents[2] / 'tests/diff/cases/semantics/string_owning_parameter.xr'
+        original_bytes = original.read_bytes()
+        assert len(original_bytes.replace(b'\r\n', b'\n')) == 1403 and original_bytes.count(b'while (i < 50)') == 1
+        path = root / 'original-string-parameter.xr'
+        path.write_bytes(original_bytes)
+        result = subprocess.run([args.driver, str(path)], capture_output=True, timeout=15)
+        assert result.returncode == 1 and result.stdout == b''
+        assert b':21:1: physical String Cell across blocks is not supported by LIR lowering yet' in result.stderr
+        assert str(path).encode() in result.stderr and path.read_bytes() == original_bytes
 
         run('clock-properties', 'import time\nfn verifyClocks()->i64 {\n const a=time.nanos()\n const ms=time.monotonic()\n const b=time.nanos()\n const cpu1=time.clock()\n const cpu2=time.clock()\n const now=time.now()\n if(a>0 && b>=a && a/1000000<=ms && ms<=b/1000000 && cpu1>=0 && cpu2>=cpu1 && now>0){return 1}\n return 0\n}\nprint(verifyClocks())\n', stdout=b'1\n')
         offset = root / 'offset-values.xr'

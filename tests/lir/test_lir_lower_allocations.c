@@ -231,7 +231,128 @@ static void literal_structure(void) {
     puts("original literal slot roles and one-time entry restrictions passed");
 }
 
+// These graph mutations exercise private fail-closed reception, not valid Checked Source.
+static void storage_graph_controls(void) {
+    SourceFixture fixture = source_fixture("print(1)\n");
+    XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
+    XrXirBlock block = {.count = 2};
+    XrXirInstruction ops[6][2] = {0};
+    XrXirFunction functions[6] = {0};
+    uint32_t owners[6];
+    for (uint32_t f = 0; f < 6; ++f) {
+        ops[f][0] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64};
+        ops[f][1] = (XrXirInstruction){.op = XR_XIR_RETURN};
+        functions[f] = (XrXirFunction){.result = XR_XIR_I64, .blocks = &block,
+            .block_count = 1, .instructions = ops[f], .instruction_count = 2};
+        owners[f] = UINT32_MAX;
+    }
+    owners[5] = 0;
+    ops[0][0] = (XrXirInstruction){.op = XR_XIR_CALL, .type = XR_XIR_I64, .immediate = 1};
+    ops[1][0] = (XrXirInstruction){.op = XR_XIR_CALL, .type = XR_XIR_I64, .immediate = 2};
+    ops[2][0] = (XrXirInstruction){.op = XR_XIR_CALL, .type = XR_XIR_I64, .immediate = 1};
+    ops[3][0].op = XR_XIR_FUNCTION_REF;
+    ops[4][0] = (XrXirInstruction){.op = XR_XIR_CALL, .type = XR_XIR_I64, .immediate = 3};
+    XrXirModule source = {.functions = functions, .function_count = 6};
+    Lower c = {.request = &request, .source = &source, .initializer_owner = owners,
+        .instruction = UINT32_MAX};
+    CHECK(!lower_storage_free(&c, 0));
+    attempts = 0; fail_at = SIZE_MAX;
+    CHECK(lower_storage_closures(&c) && attempts == 4);
+    CHECK(lower_storage_free(&c, 0) && lower_storage_free(&c, 1) && lower_storage_free(&c, 2));
+    CHECK(!lower_storage_free(&c, 3) && !lower_storage_free(&c, 4) && !lower_storage_free(&c, 6));
+    xr_free(c.storage_bad);
+    for (size_t point = 0; point < 4; ++point) {
+        c.storage_bad = NULL; c.storage_ready = false; c.status = XR_LIR_OK;
+        attempts = 0; fail_at = point;
+        CHECK(!lower_storage_closures(&c) && c.status == XR_LIR_OUT_OF_MEMORY);
+        CHECK(!c.storage_ready && !lower_storage_free(&c, 0));
+        xr_free(c.storage_bad);
+        CHECK(!lower_live && !lower_bytes);
+    }
+    fail_at = SIZE_MAX;
+    const XrXirOp storage[] = {XR_XIR_SLOT_LOAD, XR_XIR_SLOT_STORE, XR_XIR_SLOT_PLACE,
+        XR_XIR_SLOT_GROUP_INIT, XR_XIR_CELL_NEW, XR_XIR_CELL_READ, XR_XIR_CELL_WRITE,
+        XR_XIR_LOCAL_NEW, XR_XIR_LOCAL_READ, XR_XIR_LOCAL_WRITE, XR_XIR_FUNCTION_REF};
+    for (size_t i = 0; i < sizeof(storage)/sizeof(storage[0]); ++i) {
+        ops[2][0].op = storage[i];
+        c.storage_bad = NULL; c.storage_ready = false; c.status = XR_LIR_OK;
+        CHECK(lower_storage_closures(&c));
+        CHECK(!lower_storage_free(&c, 0) && !lower_storage_free(&c, 1) && !lower_storage_free(&c, 2));
+        xr_free(c.storage_bad);
+    }
+    ops[2][0] = (XrXirInstruction){.op = XR_XIR_CALL, .type = XR_XIR_I64, .immediate = 1};
+    const int64_t invalid[] = {-1, 6, INT64_MAX, 5};
+    for (size_t i = 0; i < sizeof(invalid)/sizeof(invalid[0]); ++i) {
+        ops[2][0].immediate = invalid[i];
+        c.storage_bad = NULL; c.storage_ready = false;
+        CHECK(lower_storage_closures(&c) && !lower_storage_free(&c, 0));
+        xr_free(c.storage_bad);
+    }
+    ops[2][0] = (XrXirInstruction){.op = XR_XIR_CALL, .type = XR_XIR_I64, .immediate = 1, .args = {1, 0}};
+    c.storage_bad = NULL; c.storage_ready = false;
+    CHECK(lower_storage_closures(&c) && !lower_storage_free(&c, 0));
+    xr_free(c.storage_bad);
+    // An instruction outside the selected block still participates in the proof.
+    XrXirBlock first_only = {.count = 1};
+    functions[0].blocks = &first_only;
+    ops[0][0] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64};
+    ops[0][1].op = XR_XIR_FUNCTION_REF;
+    source.function_count = 1;
+    c.storage_bad = NULL; c.storage_ready = false;
+    CHECK(lower_storage_closures(&c) && !lower_storage_free(&c, 0));
+    xr_free(c.storage_bad);
+    ops[0][1].op = XR_XIR_RETURN;
+    c.storage_bad = NULL; c.storage_ready = false;
+    attempts = 0;
+    CHECK(lower_storage_closures(&c) && attempts == 3 && lower_storage_free(&c, 0));
+    xr_free(c.storage_bad);
+    uint32_t argument = 0, target = UINT32_MAX;
+    XrXirType parameter = XR_XIR_I64;
+    functions[0].parameters = &parameter; functions[0].parameter_count = 1;
+    functions[0].operands = &argument; functions[0].operand_count = 1;
+    XrXirInstruction call = {.op = XR_XIR_CALL, .type = XR_XIR_I64, .args = {0, 1}};
+    CHECK(lower_storage_call(&c, &functions[0], &call, &target) && target == 0);
+    functions[0].parameters = NULL;
+    CHECK(!lower_storage_body(&functions[0]) && !lower_storage_call(&c, &functions[0], &call, &target));
+    functions[0].parameters = &parameter;
+    argument = UINT32_MAX;
+    CHECK(!lower_storage_call(&c, &functions[0], &call, &target));
+    argument = 0; call.args[0] = UINT32_MAX;
+    CHECK(!lower_storage_call(&c, &functions[0], &call, &target));
+    call.args[0] = 0; call.args[1] = UINT32_MAX;
+    CHECK(!lower_storage_call(&c, &functions[0], &call, &target));
+    call.args[1] = 1; call.type = XR_XIR_BOOL;
+    CHECK(!lower_storage_call(&c, &functions[0], &call, &target));
+    call.type = XR_XIR_I64; parameter = XR_XIR_UNIT;
+    CHECK(!lower_storage_body(&functions[0]));
+    c.status = XR_LIR_OK;
+    CHECK(!lower_alloc(&c, SIZE_MAX, sizeof(LowerStorageCall)) && c.status == XR_LIR_OUT_OF_MEMORY);
+    CHECK(!lower_live && !lower_bytes);
+    source_fixture_free(&fixture);
+    puts("complete NONE SCC, BAD propagation, zero edges and every graph allocation failure passed");
+}
+
+static void storage_source_failures(void) {
+    SourceFixture fixture = source_fixture("fn leaf(n:i64)->i64{return n+1}\n"
+        "fn middle(n:i64)->i64{return leaf(n)}\nfn top(n:i64)->i64{return middle(n)}\n"
+        "print(top(40))\nvar state=7\nprint(state)\n");
+    attempts = 0; fail_at = SIZE_MAX;
+    OK(run(&fixture));
+    size_t total = attempts;
+    CHECK(total > 10);
+    for (size_t point = 0; point < total; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(run(&fixture) == XR_LIR_OUT_OF_MEMORY);
+    }
+    fail_at = SIZE_MAX;
+    OK(run(&fixture));
+    source_fixture_free(&fixture);
+}
+
 int main(void) {
+    storage_graph_controls();
+    storage_source_failures();
+    attempts = 0;
     SourceFixture fixture =
         source_fixture("fn add(n:i64)->i64{var i=0\nvar sum=0\nwhile(i<n){"
                        "sum=sum+(i<2 ? i : i+1)\ni=i+1}\nreturn sum}\nprint(add(5))\n");

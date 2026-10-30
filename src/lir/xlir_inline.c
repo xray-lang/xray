@@ -218,8 +218,9 @@ static XrLirStatus inline_plan(InlineBody *b) {
             XrLirInstructionView v = inline_view(b->owner, b->source, block + 1, n);
             if (v.op != XR_LIR_CALL) continue;
             const InlineFunction *callee = &b->owner->info[v.callee];
-            // Continuation blocks cannot introduce an unrepresented String transfer.
-            if (!callee->eligible || b->owner->info[b->source].string_owners) continue;
+            // Continuations cannot relocate physical storage or introduce String transfers.
+            const InlineFunction *caller = &b->owner->info[b->source];
+            if (!callee->eligible || caller->string_owners || caller->cell_storage) continue;
             if (callee->view.value_count < callee->view.parameter_count) return XR_LIR_VERIFY_ERROR;
             uint64_t blocks = (uint64_t)callee->view.block_count + 1;
             uint64_t values = callee->view.value_count - callee->view.parameter_count;
