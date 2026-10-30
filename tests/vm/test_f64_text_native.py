@@ -178,6 +178,8 @@ def main():
         flags = options(cpp)
         if private:
             flags += [('/I' if args.kind == 'msvc' else '-I') + str(args.source_root / 'src')]
+            if args.kind == 'msvc':
+                flags += ['/D_CRT_SECURE_NO_WARNINGS', '/D_CRT_NONSTDC_NO_WARNINGS']
         objects = []
         for i, path in enumerate(sources):
             obj = work / (name + str(i) + ('.obj' if args.kind == 'msvc' else '.o'))
