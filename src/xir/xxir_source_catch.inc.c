@@ -86,7 +86,7 @@ static bool source_catch_body(SourceContext *ctx, XrCatchClause *clause, SourceM
     SourceValue error, SourceMatchFailure **failures, uint32_t *accepted) {
     SourceName *locals = ctx->locals, *scope = ctx->scope;
     XrHirBodyScope typed_scope=ctx->bodies[ctx->function].typed_scope;
-    if(arm->typed_scope.owner)ctx->bodies[ctx->function].typed_scope=arm->typed_scope;
+    if(arm && arm->typed_scope.owner)ctx->bodies[ctx->function].typed_scope=arm->typed_scope;
     else {XrHirBodyScope previous={0};if(!source_hir_scope_enter(ctx,clause->body,&previous))return false;}
     if (clause->var_name) {
         SourceName *binding = source_alloc(ctx,1,sizeof(*binding));

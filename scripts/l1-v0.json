@@ -484,7 +484,9 @@
     "source_public_repl",
     "source_public_repl_array_history",
     "source_public_repl_write_class_history",
-    "test_xir_specialize_control"
+    "test_xir_specialize_control",
+    "source_body_dead_handler_type",
+    "source_body_dead_handler_name"
   ],
   "versionCommand": [
     "{build}/xray.exe",

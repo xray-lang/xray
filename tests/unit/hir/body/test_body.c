@@ -87,6 +87,11 @@ int main(void) {
     write_bytes("places.xr",body_places,sizeof(body_places)-1);write_bytes("places.out",body_places_expected,sizeof(body_places_expected)-1);
     write_bytes("callback.xr",body_callback,sizeof(body_callback)-1);write_bytes("callback.out",body_callback_expected,sizeof(body_callback_expected)-1);
     write_bytes("callback-family.xr",body_callback_family,sizeof(body_callback_family)-1);write_bytes("callback-family.out",body_callback_family_expected,sizeof(body_callback_family_expected)-1);
+    write_bytes("handlers.xr",body_handlers,sizeof(body_handlers)-1);write_bytes("handlers.out",body_handlers_expected,sizeof(body_handlers_expected)-1);
+    write_bytes("handler-bad-type.xr",body_handler_bad_type,sizeof(body_handler_bad_type)-1);
+    write_bytes("handler-bad-name.xr",body_handler_bad_name,sizeof(body_handler_bad_name)-1);
+    write_bytes("handler-bad-type.out",body_handler_bad_type_expected,sizeof(body_handler_bad_type_expected)-1);
+    write_bytes("handler-bad-name.out",body_handler_bad_name_expected,sizeof(body_handler_bad_name_expected)-1);
     for(size_t i=0;i<sizeof(body_refusals)/sizeof(body_refusals[0]);++i) {
         char path[128];CHECK(snprintf(path,sizeof(path),"%s.xr",body_refusals[i].name)>0);
         write_bytes(path,body_refusals[i].source,strlen(body_refusals[i].source));

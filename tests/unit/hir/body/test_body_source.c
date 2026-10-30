@@ -38,7 +38,7 @@ static void one(const char *stdlib,const char *path,const char *golden) {
     CHECK(xray_source_value_scalar(copy,&scalar)==XR_SOURCE_OK && scalar.kind==XR_SOURCE_VALUE_I64 && scalar.value.signed_value==0);
     xray_source_value_free(copy);free(expected.data);free(output.data);
 }
-static void rejection(const char *stdlib,const char *path) {
+static void rejection(const char *stdlib,const char *path,const char *golden) {
     Bytes source=read_file(path);XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=stdlib;
     XrSourceText text={NULL,"hir-body-refusal",source.data,source.count};XrSourceInput input={0};input.kind=XR_SOURCE_INPUT_TEXT;input.value.text=text;
     XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *diagnostic=NULL;XrSourceFailure failure={0};
@@ -47,7 +47,15 @@ static void rejection(const char *stdlib,const char *path) {
     XrSourceDiagnosticReportInfo report={0};XrSourceDiagnosticRoot item={0};
     CHECK(xray_source_diagnostic_report(diagnostic,&report)==XR_SOURCE_OK && report.roots==1);
     CHECK(xray_source_diagnostic_root(diagnostic,0,&item)==XR_SOURCE_OK);
-    printf("%u %d %d %s\n",(unsigned)status,item.primary.line,item.primary.column,item.message);
+    char packet[1024];int length=snprintf(packet,sizeof(packet),"%u %d %d %s\n",
+        (unsigned)status,item.primary.line,item.primary.column,item.message);
+    CHECK(length>=0 && (size_t)length<sizeof(packet));
+    if(golden) {Bytes expected=read_file(golden);CHECK(expected.count==(size_t)length && !memcmp(packet,expected.data,expected.count));free(expected.data);}
+    fputs(packet,stdout);
     xray_source_diagnostic_free(diagnostic);
 }
-int main(int argc,char **argv) {CHECK(argc>=4 && !(argc%2));for(int i=2;i<argc;i+=2){if(!strcmp(argv[i+1],"-"))rejection(argv[1],argv[i]);else one(argv[1],argv[i],argv[i+1]);}puts("Complete body original Source and producer/result retirement PASS");return 0;}
+int main(int argc,char **argv) {
+    if(argc==5 && !strcmp(argv[1],"--expect-rejection"))rejection(argv[2],argv[3],argv[4]);
+    else {CHECK(argc>=4 && !(argc%2));for(int i=2;i<argc;i+=2){if(!strcmp(argv[i+1],"-"))rejection(argv[1],argv[i],NULL);else one(argv[1],argv[i],argv[i+1]);}}
+    puts("Complete body original Source and producer/result retirement PASS");return 0;
+}

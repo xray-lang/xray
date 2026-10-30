@@ -28,9 +28,16 @@ add_test(NAME source_body_sdk COMMAND test_hir_body_source "${CMAKE_CURRENT_BINA
     "${CMAKE_CURRENT_BINARY_DIR}/uses.xr" "${CMAKE_CURRENT_BINARY_DIR}/uses.out"
     "${CMAKE_CURRENT_BINARY_DIR}/places.xr" "${CMAKE_CURRENT_BINARY_DIR}/places.out"
     "${CMAKE_CURRENT_BINARY_DIR}/callback.xr" "${CMAKE_CURRENT_BINARY_DIR}/callback.out"
-    "${CMAKE_CURRENT_BINARY_DIR}/callback-family.xr" "${CMAKE_CURRENT_BINARY_DIR}/callback-family.out")
+    "${CMAKE_CURRENT_BINARY_DIR}/callback-family.xr" "${CMAKE_CURRENT_BINARY_DIR}/callback-family.out"
+    "${CMAKE_CURRENT_BINARY_DIR}/handlers.xr" "${CMAKE_CURRENT_BINARY_DIR}/handlers.out")
 set_tests_properties(source_body_sdk PROPERTIES FIXTURES_REQUIRED hir_body_inputs)
-set_tests_properties(hir_body source_body_sdk PROPERTIES TIMEOUT 120 LABELS "unit;hir;types;ownership;sdk")
+add_test(NAME source_body_dead_handler_type COMMAND test_hir_body_source --expect-rejection "${CMAKE_CURRENT_BINARY_DIR}/empty-stdlib"
+    "${CMAKE_CURRENT_BINARY_DIR}/handler-bad-type.xr" "${CMAKE_CURRENT_BINARY_DIR}/handler-bad-type.out")
+add_test(NAME source_body_dead_handler_name COMMAND test_hir_body_source --expect-rejection "${CMAKE_CURRENT_BINARY_DIR}/empty-stdlib"
+    "${CMAKE_CURRENT_BINARY_DIR}/handler-bad-name.xr" "${CMAKE_CURRENT_BINARY_DIR}/handler-bad-name.out")
+set_tests_properties(source_body_dead_handler_type source_body_dead_handler_name PROPERTIES FIXTURES_REQUIRED hir_body_inputs)
+set_tests_properties(hir_body source_body_sdk source_body_dead_handler_type source_body_dead_handler_name
+    PROPERTIES TIMEOUT 120 LABELS "unit;hir;types;ownership;sdk")
 if(WIN32)
     add_test(NAME hir_body_cli COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_CURRENT_SOURCE_DIR}/test_body_cli.py"
         --root "${PROJECT_SOURCE_DIR}" --binary $<TARGET_FILE:xray>
