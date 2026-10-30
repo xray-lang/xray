@@ -112,10 +112,10 @@ static bool source_call_spread_shape(SourceContext *ctx,AstNode *node,uint32_t d
             ground=(SourceExpectedType){true,result,false,false};
         }
     }
-    if (ground.present && ground.type==XR_XIR_UNIT) { *arity=0;return true; }
-    const XrXirTypeNode *tuple=ground.present ? xr_xir_tuple_signature(&ctx->types,ground.type) : NULL;
-    if (!tuple) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"call spread requires a statically known Tuple");
-    *arity=tuple->parameter_count;return true;
+    if(!ground.present)return source_fail(ctx,node,XR_XIR_BAD_TYPE,"call spread requires a statically known Tuple");
+    XrHirTupleView tuple={0};XrXirStatus status=xr_hir_tuple_view(&ctx->types,ground.type,ctx->request,&tuple,NULL);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"call spread requires a statically known Tuple");
+    *arity=tuple.count;return true;
 }
 static bool source_call_spread_field_hints(SourceContext *ctx,AstNode *node,uint32_t count,
     uint32_t depth,XrXirType *types,bool *known) {
@@ -153,10 +153,14 @@ static bool source_call_spread_field_hints(SourceContext *ctx,AstNode *node,uint
     }
     SourceExpectedType ground;
     if (!source_ground_type(ctx,node,depth,&ground)) return false;
-    const XrXirTypeNode *tuple=ground.present ? xr_xir_tuple_signature(&ctx->types,ground.type) : NULL;
-    if (tuple && tuple->parameter_count==count) for (uint32_t f=0;f<count;++f) {
+    XrHirTupleView tuple={0};bool ordered=ground.present&&xr_hir_tuple_kind(&ctx->types,ground.type)!=XR_HIR_TUPLE_OTHER;
+    if(ordered) {
+        XrXirStatus status=xr_hir_tuple_view(&ctx->types,ground.type,ctx->request,&tuple,NULL);
+        if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"call spread hint shape is invalid");
+    }
+    if (ordered && tuple.count==count) for (uint32_t f=0;f<count;++f) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        types[f]=tuple->parameters[f].type;known[f]=true;
+        types[f]=tuple.fields[f].type;known[f]=true;
     }
     return true;
 }
@@ -211,16 +215,19 @@ static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax
                 if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
                 ground=xr_xir_nullable_element(&ctx->types,ground);
             }
-            const XrXirTypeNode *known=spread->source->type_ready ? xr_xir_tuple_signature(&ctx->types,ground) : NULL;
+            bool known=spread->source->type_ready&&xr_hir_tuple_kind(&ctx->types,ground)!=XR_HIR_TUPLE_OTHER;
+            XrHirTupleView known_shape={0};
             if (known) {
-                arity=known->parameter_count;
+                XrXirStatus status=xr_hir_tuple_view(&ctx->types,ground,ctx->request,&known_shape,NULL);
+                if(status!=XR_XIR_OK){source_fail(ctx,input,status,"call spread hint shape is invalid");goto done;}
+                arity=known_shape.count;
             } else if (!source_call_spread_shape(ctx,input->as.spread_expr.expr,0,&arity)) goto done;
             spread->known_fields=arity ? source_recipe_storage(ctx,arity,sizeof(*spread->known_fields)) : NULL;
             spread->field_known=arity ? source_recipe_storage(ctx,arity,sizeof(*spread->field_known)) : NULL;
             if (arity && (!spread->known_fields || !spread->field_known)) goto done;
             for (uint32_t f=0;f<arity;++f) {
                 if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
-                if (known) {spread->known_fields[f]=known->parameters[f].type;spread->field_known[f]=true;}
+                if (known) {spread->known_fields[f]=known_shape.fields[f].type;spread->field_known[f]=true;}
             }
             if (!known && arity && !source_call_spread_field_hints(ctx,input->as.spread_expr.expr,arity,0,
                     spread->known_fields,spread->field_known)) goto done;
@@ -270,8 +277,9 @@ done:
 }
 static bool source_call_spread_read(SourceContext *ctx,SourceCallSpread *spread,SourceValue *value) {
     if (!source_plan_complete(ctx,spread->source,value)) return false;
-    const XrXirTypeNode *tuple=xr_xir_tuple_signature(&ctx->types,value->type);
-    if ((!tuple && (value->type!=XR_XIR_UNIT || spread->count)) || (tuple && tuple->parameter_count!=spread->count))
+    XrHirTupleShape shape={0};XrHirTupleInfo info={0};
+    if(!source_tuple_shape(ctx,spread->source->syntax,value->type,&shape,&info))return false;
+    if(xr_hir_body_tuple_arity(ctx->typed_body,shape,spread->count,NULL)!=XR_XIR_OK)
         return source_fail(ctx,spread->source->syntax,XR_XIR_BAD_TYPE,"call spread arity differs from its static shape");
     return true;
 }
@@ -333,7 +341,7 @@ static bool source_call_spread_events(SourceContext *ctx,AstNode *node,const Sou
          * siblings keep their contexts, including empty Array literals. */
         SourceTuplePrefix *prefix=source_recipe_storage(ctx,1,sizeof(*prefix));
         if (!prefix) return false;
-        *prefix=(SourceTuplePrefix){NULL,spread->count,false,XR_XIR_UNIT,fields,NULL};literal->tuple_prefix=prefix;
+        if(!source_tuple_prefix(ctx,fields,spread->count,NULL,prefix))return false;literal->tuple_prefix=prefix;
     }
     return true;
 }

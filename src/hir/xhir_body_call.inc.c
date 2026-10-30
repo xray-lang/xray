@@ -181,10 +181,13 @@ XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *body,XrHirBodySignature
         if(callback&&declaration.callback_ready)action.argument_count=xr_xir_callable_signature(body->types,formal.type)->parameter_count;
         *output=action;*use=(XrHirBodyUse){0};return body_poll(control);
     }
+    XrHirTupleShape spread_shape={0};
     if(input->kind==XR_HIR_CALL_SPREAD) {
-        const XrXirTypeNode *tuple=xr_xir_tuple_signature(body->types,input->type);
-        if(!tuple||input->spread_field>=tuple->parameter_count||action.reference)return XR_XIR_BAD_TYPE;
-        action.target=tuple->parameters[input->spread_field].type;action.operation=XR_XIR_TUPLE_FIELD;
+        XrXirStatus status=xr_hir_body_tuple_receive(body,body->types,input->type,control,&spread_shape,input->reason);
+        if(status!=XR_XIR_OK)return status;
+        XrHirTupleInfo tuple={0};if(!xr_hir_body_tuple_info(body,spread_shape,&tuple))return XR_XIR_BAD_STRUCTURE;
+        if(input->spread_field>=tuple.count||action.reference)return XR_XIR_BAD_TYPE;
+        action.target=tuple.fields[input->spread_field].type;action.operation=XR_XIR_TUPLE_FIELD;
         action.field=input->spread_field;
     } else if(input->kind==XR_HIR_CALL_ACCESS) {
         if(input->access!=(action.reference?XR_CALL_ARG_REF:XR_CALL_ARG_PLAIN))return XR_XIR_BAD_TYPE;
@@ -250,6 +253,7 @@ XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *body,XrHirBodySignature
         call->parameters[parameter].type=input->type;call->callback_ready=true;
     }
     if(input->kind==XR_HIR_CALL_SPREAD) {
+        body->uses[use->index].tuple=spread_shape;
         body->uses[use->index].required_instruction=true;
         body->uses[use->index].has_field=true;body->uses[use->index].field=input->spread_field;
         body->uses[use->index].has_operand=true;body->uses[use->index].source_operand=input->value;

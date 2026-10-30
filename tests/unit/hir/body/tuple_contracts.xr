@@ -1,0 +1,22 @@
+fn surround<T>(value:T)->((),T,()){return ((),value,())}
+export fn referenceAnswer()->i64 {
+    const frozen=comptime { ((),"frozen",(3,()),()) }
+    assert(frozen.1=="frozen" && frozen.2.0==3)
+    const allUnit=((),())
+    const ()=allUnit.0
+    var (first,unit,last)=(7,(),11)
+    first=first+1
+    const selected=match((first,unit,last)){(left,_,right)->left+right}
+    assert(selected==19)
+    const indexed=[5,8].entries()
+    assert(indexed[1].0==1 && indexed[1].1==8)
+    const mapped=[1,2].map(...(fn(value:i64)->(i64,()){return (value+2,())},))
+    assert(mapped[0].0==3 && mapped[1].0==4)
+    const state=Atomic(3)
+    const receipt=state.compareExchange(3,7)
+    assert(receipt.0==3 && receipt.1 && state.load()==7)
+    const preserved=surround<i64>(42)
+    const (single,)=(preserved.1,)
+    return single
+}
+print(referenceAnswer())

@@ -107,23 +107,17 @@ static bool source_destructure_project(SourceContext *ctx,AstNode *node,
     }
     bool tuple=pattern->type==PATTERN_TUPLE;
     uint32_t count=(uint32_t)(tuple ? pattern->as.array.element_count : pattern->as.object.field_count);
-    XrXirCallableParameter *fields=NULL;
     if (tuple) {
-        if (!count) return initial.type==XR_XIR_UNIT ||
-            source_fail(ctx,node,XR_XIR_BAD_TYPE,"empty binding requires Unit");
-        const XrXirTypeNode *signature=xr_xir_tuple_signature(&ctx->types,initial.type);
-        if (!signature || signature->parameter_count!=count)
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple binding requires its exact ordered arity");
-        fields=source_alloc(ctx,count,sizeof(*fields));
-        if (!fields || !source_copy_bytes(ctx,node,fields,signature->parameters,count*sizeof(*fields))) return false;
+        XrXirStatus status=xr_hir_tuple_arity(&ctx->types,initial.type,count,ctx->request,NULL);
+        if(status!=XR_XIR_OK)return source_fail(ctx,node,status,count?
+            "Tuple binding requires its exact ordered arity":"empty binding requires Unit");
     } else if (!source_destructure_object_type(ctx,initial.type))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"object binding requires statically known fields");
     for (uint32_t i=0;i<count;++i) {
         SourceValue value;const XrDestructurePattern *child=tuple ?
             pattern->as.array.elements[i] : pattern->as.object.patterns[i];
         if (tuple) {
-            if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TUPLE_FIELD,fields[i].type,
-                {initial.id,0},{0},i,{0}},&value)) return false;
+            if (!source_tuple_projection(ctx,node,initial,i,&value)) return false;
         } else if (!source_destructure_object_field(ctx,node,initial,pattern->as.object.field_names[i],child,&value))
             return false;
         if (!source_destructure_project(ctx,node,child,value,plan,depth+1)) return false;

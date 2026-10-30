@@ -180,6 +180,9 @@ typedef struct XrHirBodyProjection {
     XrXirInstruction call;
     bool has_call;
     const uint32_t *source_arguments;
+    /* Real region value relocation, borrowed only while projecting a use. */
+    const uint32_t *source_value_map;
+    uint32_t source_value_count;
     uint32_t source_argument_count,default_owner,default_parameter;
     uint32_t default_value,default_call;
     XrXirOp default_conversion;

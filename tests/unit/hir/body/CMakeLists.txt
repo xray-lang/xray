@@ -31,7 +31,8 @@ add_test(NAME source_body_sdk COMMAND test_hir_body_source "${CMAKE_CURRENT_BINA
     "${CMAKE_CURRENT_BINARY_DIR}/callback-family.xr" "${CMAKE_CURRENT_BINARY_DIR}/callback-family.out"
     "${CMAKE_CURRENT_BINARY_DIR}/handlers.xr" "${CMAKE_CURRENT_BINARY_DIR}/handlers.out"
     "${CMAKE_CURRENT_BINARY_DIR}/core-calls.xr" "${CMAKE_CURRENT_BINARY_DIR}/core-calls.out"
-    "${CMAKE_CURRENT_BINARY_DIR}/inferred-callables.xr" "${CMAKE_CURRENT_BINARY_DIR}/inferred-callables.out")
+    "${CMAKE_CURRENT_BINARY_DIR}/inferred-callables.xr" "${CMAKE_CURRENT_BINARY_DIR}/inferred-callables.out"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tuple_contracts.xr" "${CMAKE_CURRENT_SOURCE_DIR}/tuple_contracts.out")
 set_tests_properties(source_body_sdk PROPERTIES FIXTURES_REQUIRED hir_body_inputs)
 add_test(NAME source_body_dead_handler_type COMMAND test_hir_body_source --expect-rejection "${CMAKE_CURRENT_BINARY_DIR}/empty-stdlib"
     "${CMAKE_CURRENT_BINARY_DIR}/handler-bad-type.xr" "${CMAKE_CURRENT_BINARY_DIR}/handler-bad-type.out")

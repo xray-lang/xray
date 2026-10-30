@@ -10,6 +10,7 @@
  *   Stable use indices survive growth; closing a construction ends pool access.
  */
 #include "xhir_body.h"
+#include "xhir_tuple.h"
 #include "../xir/xxir_types.h"
 #include "../xir/xxir_map.h"
 #include "../xir/xxir_interface.h"
@@ -29,6 +30,10 @@ typedef struct HirBodyUse {
     XrHirBodyBinding binding;
     XrHirBindingUseKind binding_kind;
     XrHirBodyPlace place;
+    XrHirTupleShape tuple;
+    uint32_t *tuple_arguments;
+    uint32_t tuple_argument_count;
+    bool tuple_construct;
     bool initializes,index_group;
     bool has_second_operand,has_immediate;
     uint32_t second_operand;
@@ -64,6 +69,17 @@ typedef struct HirBodySignature {
     bool finished,callback_ready,callback_received,default_types_ready;
 } HirBodySignature;
 typedef struct HirBodyVector {void *items;uint32_t count,capacity;} HirBodyVector;
+typedef struct HirBodyTuple {
+    XrXirType type;
+    XrHirTupleField *fields;
+    uint32_t *physical_fields;
+    uint32_t count,physical_count;
+} HirBodyTuple;
+typedef struct HirBodyTupleContext {
+    XrHirTupleExpected *fields;
+    uint32_t count;
+    XrHirTupleContextKind kind;
+} HirBodyTupleContext;
 struct XrHirBody {
     XrCompileResources *resources;
     /* owned: The surrounding Source construction owns both this body and this
@@ -75,6 +91,9 @@ struct XrHirBody {
     uint32_t binding_count,binding_capacity;
     uint32_t *binding_map;
     HirBodyVector scopes,places,signatures;
+    HirBodyVector tuples,tuple_contexts;
+    uint32_t *tuple_map;
+    uint32_t tuple_map_capacity;
     XrHirBodyDeclarations declarations;
     bool ended;
 };
@@ -148,6 +167,10 @@ XR_FUNC XrXirStatus xr_hir_body_new(XrCompileResources *resources,const XrXirTyp
 }
 XR_FUNC void xr_hir_body_free(XrHirBody *body) {
     if(!body)return;
+    for(uint32_t i=0;i<body->count;++i)xr_compile_resources_free(body->uses[i].tuple_arguments);
+    for(uint32_t i=0;i<body->tuples.count;++i)xr_compile_resources_free(((HirBodyTuple *)body->tuples.items)[i].fields);
+    for(uint32_t i=0;i<body->tuple_contexts.count;++i)xr_compile_resources_free(((HirBodyTupleContext *)body->tuple_contexts.items)[i].fields);
+    xr_compile_resources_free(body->tuples.items);xr_compile_resources_free(body->tuple_contexts.items);xr_compile_resources_free(body->tuple_map);
     for(uint32_t i=0;i<body->binding_count;++i)if(body->bindings[i].is_declaration)xr_compile_resources_free(body->bindings[i].name);
     for(uint32_t i=0;i<body->signatures.count;++i) {
         xr_compile_resources_free(((HirBodySignature *)body->signatures.items)[i].parameters);
@@ -283,6 +306,7 @@ static XrXirStatus body_narrowing(const XrHirBody *body,XrXirType original,XrXir
 #include "xhir_body_binding.inc.c"
 #include "xhir_body_place.inc.c"
 #include "xhir_body_default.inc.c"
+#include "xhir_body_tuple.inc.c"
 #include "xhir_body_call.inc.c"
 XR_FUNC XrXirStatus xr_hir_body_check(XrHirBody *body,const XrXirTypes *types,
     const XrHirBodyInput *input,XrCompileRequestControl *control,XrHirBodyUse *output,const char **reason) {
@@ -322,6 +346,9 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
         projection->function!=body->uses[use].origin.function||
         projection->type!=body->uses[use].action.target)return XR_XIR_BAD_STRUCTURE;
     HirBodyUse *row=&body->uses[use];
+    if(row->tuple.owner) {
+        XrXirStatus status=body_tuple_project(body,row,projection,control);if(status!=XR_XIR_OK)return status;
+    }
     if(row->projected||row->retired||row->action.formal!=projection->formal||row->action.argument!=projection->argument)
         return XR_XIR_BAD_STRUCTURE;
     if(row->has_source&&projection->source_value!=row->source_value)return XR_XIR_BAD_STRUCTURE;
@@ -385,7 +412,8 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
     }
     if(row->has_selector&&projection->source_operands[1]!=row->selector)return XR_XIR_BAD_STRUCTURE;
     if(row->has_field&&projection->immediate!=(int64_t)row->field)return XR_XIR_BAD_STRUCTURE;
-    row->projection=*projection;row->projection.source_arguments=NULL;row->projection.default_type_arguments=NULL;
+    row->projection=*projection;row->projection.source_arguments=NULL;row->projection.source_value_map=NULL;
+    row->projection.default_type_arguments=NULL;
     row->projected=true;if(reason)*reason=NULL;return XR_XIR_OK;
 }
 XR_FUNC uint32_t xr_hir_body_use_count(const XrHirBody *body){return body?body->count:0;}

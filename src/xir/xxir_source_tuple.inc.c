@@ -7,30 +7,89 @@
  * xxir_source_tuple.inc.c - Ordered evaluation with a non-Unit operand table
  */
 static bool source_tuple_index(SourceContext *ctx,AstNode *node,const char *name,uint32_t *field) {
-    size_t length=0;uint32_t index=0;
+    size_t length=0;
     if (!source_text_length(ctx,node,name,&length)) return false;
-    if (!length) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple field index is empty");
-    for (size_t i=0;i<length;++i) {
-        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        unsigned char digit=(unsigned char)name[i];
-        if (digit<'0' || digit>'9' || index>(UINT32_MAX-(digit-'0'))/10)
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple field requires a bounded decimal index");
-        index=index*10+(digit-'0');
-    }
-    *field=index;return true;
+    const char *reason=NULL;XrXirStatus status=xr_hir_tuple_index(name,length,ctx->request,field,&reason);
+    return status==XR_XIR_OK||source_fail(ctx,node,status,reason?reason:"Tuple index receive failed");
 }
 typedef struct SourceTuplePrefix {
-    const XrXirCallableParameter *fields;
-    uint32_t count;
-    bool inferred;
-    XrXirType array_type;
-    const SourceExpectedType *contexts;
+    XrHirTupleContext context;
+    uint32_t offset,count;
     SourceExpressionPlan *const *plans;
 } SourceTuplePrefix;
-static SourceExpectedType source_tuple_field_context(const SourceTuplePrefix *context,uint32_t index) {
-    if (context && context->contexts) return context->contexts[index];
-    XrXirType type = !context ? XR_XIR_UNIT : context->fields ? context->fields[index].type : context->array_type;
-    return (SourceExpectedType){context!=NULL,type,false,!context || context->inferred};
+static bool source_tuple_prefix(SourceContext *ctx,const SourceExpectedType *fields,uint32_t count,
+    SourceExpressionPlan *const *plans,SourceTuplePrefix *out) {
+    XrHirTupleExpected *received=count?source_alloc(ctx,count,sizeof(*received)):NULL;
+    if(count&&!received)return false;
+    for(uint32_t p=0;p<count;++p) {
+        if(ctx->diagnostic.status!=XR_XIR_OK)return false;
+        received[p]=(XrHirTupleExpected){fields[p].type,fields[p].present,fields[p].infer_result,fields[p].inferred};
+    }
+    XrHirTupleContextInput input={.types=&ctx->types,.fields=received,.count=count,.kind=XR_HIR_TUPLE_PREFIX};
+    XrHirTupleContext context={0};const char *reason=NULL;
+    XrXirStatus status=xr_hir_body_tuple_context(ctx->typed_body,&input,ctx->request,&context,&reason);
+    if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,reason?reason:"Tuple prefix receive failed");
+    *out=(SourceTuplePrefix){context,0,count,plans};return true;
+}
+static bool source_tuple_context(SourceContext *ctx,AstNode *node,SourceExpectedType expected,
+    uint32_t count,SourceTuplePrefix *out) {
+    XrHirTupleContextInput input={.types=&ctx->types,.type=expected.type,.count=count,
+        .kind=XR_HIR_TUPLE_EXACT,.from_type=true,.inferred=expected.inferred};
+    XrHirTupleContext context={0};const char *reason=NULL;
+    XrXirStatus status=xr_hir_body_tuple_context(ctx->typed_body,&input,ctx->request,&context,&reason);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,status==XR_XIR_BAD_TYPE?
+        "Tuple literal requires an exact ordered arity context":reason?reason:"Tuple context receive failed");
+    uint32_t size=0;if(!xr_hir_body_tuple_context_size(ctx->typed_body,context,&size))return false;
+    *out=(SourceTuplePrefix){context,0,size,NULL};return true;
+}
+static SourceExpectedType source_tuple_field_context(SourceContext *ctx,AstNode *node,const SourceTuplePrefix *context,uint32_t index) {
+    if(!context)return (SourceExpectedType){.inferred=true};
+    XrHirTupleExpected expected={0};
+    if(index>=context->count||!xr_hir_body_tuple_expected(ctx->typed_body,context->context,context->offset+index,&expected)) {
+        source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple literal requires an exact ordered arity context");return (SourceExpectedType){0};
+    }
+    return (SourceExpectedType){expected.present,expected.type,expected.infer_result,expected.inferred};
+}
+static bool source_tuple_shape(SourceContext *ctx,AstNode *node,XrXirType type,XrHirTupleShape *shape,XrHirTupleInfo *info) {
+    const char *reason=NULL;XrXirStatus status=xr_hir_body_tuple_receive(ctx->typed_body,&ctx->types,type,ctx->request,shape,&reason);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason?reason:"Tuple requires a statically known ordered shape");
+    return xr_hir_body_tuple_info(ctx->typed_body,*shape,info)||source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple shape has no owner");
+}
+static bool source_tuple_construct(SourceContext *ctx,AstNode *node,XrXirType tuple,
+    const SourceValue *fields,uint32_t count,const SourceTuplePrefix *context,SourceValue *value) {
+    XrHirTupleShape shape={0};XrHirTupleInfo info={0};
+    if(!source_tuple_shape(ctx,node,tuple,&shape,&info))return false;
+    XrHirTupleValue *values=count?source_alloc(ctx,count,sizeof(*values)):NULL;
+    if(count&&!values)return false;
+    for(uint32_t p=0;p<count;++p){if(ctx->diagnostic.status!=XR_XIR_OK)return false;values[p]=(XrHirTupleValue){fields[p].type,fields[p].id};}
+    XrHirBodyScope scope={0};if(!source_hir_current_scope(ctx,&scope))return false;
+    XrHirConversionContext conversion={.compile=&ctx->compile,.types=&ctx->types,.control=ctx->request,
+        .intern_owner=ctx,.intern=source_conversion_intern};
+    XrHirTupleConstructInput input={.types=&ctx->types,.scope=scope,.origin=source_hir_origin(ctx,node,0),.shape=shape,
+        .context=context?context->context:(XrHirTupleContext){0},.values=values,.conversion=&conversion,
+        .count=count,.context_offset=context?context->offset:0};
+    XrHirTupleAction action;const char *reason=NULL;
+    XrXirStatus status=xr_hir_body_tuple_construct(ctx->typed_body,&input,ctx->request,&action,&reason);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason?reason:"Tuple construction receive failed");
+    SourceValue *payloads=action.tuple.physical_count?source_recipe_storage(ctx,action.tuple.physical_count,sizeof(*payloads)):NULL;
+    if(action.tuple.physical_count&&!payloads)return false;
+    for(uint32_t p=0;p<action.tuple.physical_count;++p){if(ctx->diagnostic.status!=XR_XIR_OK)return false;payloads[p]=fields[action.tuple.physical_fields[p]];}
+    uint32_t before=ctx->bodies[ctx->function].count;
+    if(action.operation==XR_XIR_INVALID)*value=(SourceValue){.id=UINT32_MAX,.type=action.type,.place={0}};
+    else if(!source_recipe_group(ctx,(XrXirInstruction){action.operation,action.type,{0},{0},0,{0}},payloads,action.tuple.physical_count,value))return false;
+    return source_hir_binding_emitted(ctx,&(XrHirBindingAction){.use=action.use},value,before);
+}
+static bool source_tuple_projection(SourceContext *ctx,AstNode *node,SourceValue receiver,uint32_t field,SourceValue *value) {
+    XrHirTupleShape shape={0};XrHirTupleInfo info={0};XrHirBodyScope scope={0};
+    if(!source_tuple_shape(ctx,node,receiver.type,&shape,&info)||!source_hir_current_scope(ctx,&scope))return false;
+    XrHirTupleFieldInput input={.types=&ctx->types,.scope=scope,.origin=source_hir_origin(ctx,node,0),
+        .shape=shape,.receiver_type=receiver.type,.receiver=receiver.id,.field=field};
+    XrHirTupleAction action;const char *reason=NULL;
+    XrXirStatus status=xr_hir_body_tuple_field(ctx->typed_body,&input,ctx->request,&action,&reason);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason?reason:"Tuple projection receive failed");
+    uint32_t before=ctx->bodies[ctx->function].count;
+    return source_recipe_record(ctx,(XrXirInstruction){action.operation,action.type,{receiver.id,0},{0},action.field,{0}},value)&&
+        source_hir_binding_emitted(ctx,&(XrHirBindingAction){.use=action.use},value,before);
 }
 static bool source_tuple_expanded_literal(SourceContext *ctx,AstNode *node,
     SourceExpectedType expected,SourceValue *value);
@@ -39,9 +98,13 @@ static bool source_tuple_literal(SourceContext *ctx,AstNode *node,SourceExpected
     if (literal->count<0 || (literal->count && !literal->elements))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple literal ordered fields are missing");
     if (!literal->count) {
-        if (expected.present && expected.type!=XR_XIR_UNIT)
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"empty Tuple syntax denotes Unit");
-        *value=(SourceValue){.id=UINT32_MAX,.type=XR_XIR_UNIT,.place={0}};return true;
+        SourceTuplePrefix context={0};
+        if(expected.present) {
+            XrHirTupleContextInput input={.types=&ctx->types,.type=expected.type,.count=0,.kind=XR_HIR_TUPLE_EXACT,.from_type=true};
+            XrXirStatus status=xr_hir_body_tuple_context(ctx->typed_body,&input,ctx->request,&context.context,NULL);
+            if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"empty Tuple syntax denotes Unit");
+        }
+        return source_tuple_construct(ctx,node,XR_XIR_UNIT,NULL,0,expected.present?&context:NULL,value);
     }
     if (ctx->active_expression->tuple_prefix)
         return source_tuple_expanded_literal(ctx,node,expected,value);
@@ -50,31 +113,22 @@ static bool source_tuple_literal(SourceContext *ctx,AstNode *node,SourceExpected
         if (literal->elements[i] && literal->elements[i]->type==AST_SPREAD_EXPR)
             return source_tuple_expanded_literal(ctx,node,expected,value);
     }
-    const XrXirTypeNode *context=expected.present ? xr_xir_tuple_signature(&ctx->types,expected.type) : NULL;
     uint32_t count=(uint32_t)literal->count;
-    if (expected.present && (!context || context->parameter_count!=count))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple literal requires an exact ordered arity context");
+    SourceTuplePrefix context={0};if(expected.present&&!source_tuple_context(ctx,node,expected,count,&context))return false;
     XrXirCallableParameter *fields=source_alloc(ctx,count,sizeof(*fields));
-    SourceValue *payloads=source_alloc(ctx,count,sizeof(*payloads));
-    if (!fields || !payloads) return false;
-    /* Child evaluation can grow the type pool. Keep its field context owned. */
-    if (context && !source_copy_bytes(ctx,node,fields,context->parameters,count*sizeof(*fields))) return false;
-    uint32_t payload_count=0;
+    SourceValue *values=source_alloc(ctx,count,sizeof(*values));
+    if (!fields || !values) return false;
     for (uint32_t i=0;i<count;++i) {
         AstNode *child=literal->elements[i];SourceValue element={0};
         if (!child) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple literal entry is missing");
-        SourceExpectedType hint={expected.present,fields[i].type,false, expected.inferred};
+        SourceExpectedType hint=source_tuple_field_context(ctx,node,expected.present?&context:NULL,i);
         if (!source_plan_expression(ctx,child,hint,&element)) return false;
-        if (expected.present && element.type!=fields[i].type)
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple field does not satisfy its ordered context");
         fields[i]=(XrXirCallableParameter){element.type,0};
-        if (element.type!=XR_XIR_UNIT) payloads[payload_count++]=element;
+        values[i]=element;
     }
     XrXirType tuple=XR_XIR_UNIT;
-    if (!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_TUPLE,
-        .parameters=fields,.parameter_count=count},&tuple)) return false;
-    return source_recipe_group(ctx,(XrXirInstruction){XR_XIR_TUPLE_NEW,tuple,{0},{0},0,{0}},
-        payloads,payload_count,value);
+    return source_hir_tuple_type(ctx,fields,count,&tuple)&&
+        source_tuple_construct(ctx,node,tuple,values,count,expected.present?&context:NULL,value);
 }
 static bool source_tuple_spread_value(SourceContext *ctx,AstNode *node,
     const SourceTuplePrefix *context,SourceValue *value) {
@@ -97,9 +151,8 @@ static bool source_tuple_spread_value(SourceContext *ctx,AstNode *node,
 static bool source_tuple_append(SourceContext *ctx,AstNode *node,const SourceTuplePrefix *context,
     SourceValue element,SourceValue **fields,uint32_t *count,uint32_t *capacity) {
     if (*count>=65536) return source_fail(ctx,node,XR_XIR_BUDGET,"Tuple expanded arity exhausted");
-    if (context && *count>=context->count)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple literal requires an exact ordered arity context");
-    SourceExpectedType hint=source_tuple_field_context(context,*count);
+    SourceExpectedType hint=source_tuple_field_context(ctx,node,context,*count);
+    if(ctx->diagnostic.status!=XR_XIR_OK)return false;
     XrHirConversion conversion;
     if (!source_conversion_plan(ctx,node,element.type,hint,&conversion) ||
         !source_conversion_emit(ctx,&conversion,&element)) return false;
@@ -115,13 +168,7 @@ static bool source_tuple_expanded_literal(SourceContext *ctx,AstNode *node,
     bool exact=context==NULL && expected.present;
     SourceTuplePrefix owned={0};
     if (exact) {
-        const XrXirTypeNode *signature=xr_xir_tuple_signature(&ctx->types,expected.type);
-        if (!signature && expected.type!=XR_XIR_UNIT)
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple literal requires an exact ordered arity context");
-        owned.count=signature ? signature->parameter_count : 0;owned.inferred=expected.inferred;
-        XrXirCallableParameter *fields=owned.count ? source_alloc(ctx,owned.count,sizeof(*fields)) : NULL;
-        if (owned.count && (!fields || !source_copy_bytes(ctx,node,fields,signature->parameters,owned.count*sizeof(*fields)))) return false;
-        owned.fields=fields;context=&owned;
+        if(!source_tuple_context(ctx,node,expected,UINT32_MAX,&owned))return false;context=&owned;
     }
     SourceValue *fields=NULL;uint32_t count=0,capacity=0;
     for (int i=0;i<literal->count;++i) {
@@ -130,9 +177,8 @@ static bool source_tuple_expanded_literal(SourceContext *ctx,AstNode *node,
             return child ? false : source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple literal entry is missing");
         if (child->type!=AST_SPREAD_EXPR) {
             if (count>=65536) return source_fail(ctx,child,XR_XIR_BUDGET,"Tuple expanded arity exhausted");
-            if (context && count>=context->count)
-                return source_fail(ctx,child,XR_XIR_BAD_TYPE,"Tuple literal requires an exact ordered arity context");
-            SourceExpectedType hint=source_tuple_field_context(context,count);
+            SourceExpectedType hint=source_tuple_field_context(ctx,child,context,count);
+            if(ctx->diagnostic.status!=XR_XIR_OK)return false;
             SourceExpressionPlan *prepared=context && context->plans ? context->plans[count] : NULL;
             if (prepared) {
                 if (prepared->syntax!=child)
@@ -148,49 +194,40 @@ static bool source_tuple_expanded_literal(SourceContext *ctx,AstNode *node,
         }
         child=child->as.spread_expr.expr;
         if (!child) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple spread source is missing");
-        SourceTuplePrefix tail={context && context->fields ? context->fields+count : NULL,
-            context ? context->count-count : 0,context && context->inferred,
-            context ? context->array_type : XR_XIR_UNIT,
-            context && context->contexts ? context->contexts+count : NULL,
-            context && context->plans ? context->plans+count : NULL};
+        SourceTuplePrefix tail={context?context->context:(XrHirTupleContext){0},context?context->offset+count:0,
+            context?context->count-count:0,context&&context->plans?context->plans+count:NULL};
+        if(context) {
+            XrHirTupleContext sliced={0};XrXirStatus status=xr_hir_body_tuple_context_slice(ctx->typed_body,
+                context->context,tail.offset,tail.count,ctx->request,&sliced);
+            if(status!=XR_XIR_OK)return source_fail(ctx,child,status,"Tuple prefix slice receive failed");
+            tail.context=sliced;tail.offset=0;
+        }
         if (!source_tuple_spread_value(ctx,child,context ? &tail : NULL,&element)) return false;
         if (element.type==XR_XIR_UNIT) continue;
-        const XrXirTypeNode *signature=xr_xir_tuple_signature(&ctx->types,element.type);
-        if (!signature) return source_fail(ctx,child,XR_XIR_BAD_TYPE,"Tuple literal spread requires a statically known Tuple");
-        uint32_t arity=signature->parameter_count;
-        XrXirCallableParameter *types=source_recipe_storage(ctx,arity,sizeof(*types));
-        if (!types || !source_copy_bytes(ctx,child,types,signature->parameters,arity*sizeof(*types))) return false;
-        for (uint32_t f=0;f<arity;++f) {
+        XrHirTupleShape shape={0};XrHirTupleInfo info={0};
+        XrXirStatus status=xr_hir_body_tuple_receive(ctx->typed_body,&ctx->types,element.type,ctx->request,&shape,NULL);
+        if(status!=XR_XIR_OK)return source_fail(ctx,child,status,status==XR_XIR_BAD_TYPE?
+            "Tuple literal spread requires a statically known Tuple":"Tuple spread receive failed");
+        if(!xr_hir_body_tuple_info(ctx->typed_body,shape,&info))return false;
+        for (uint32_t f=0;f<info.count;++f) {
             SourceValue field;
             if (!((ctx)->diagnostic.status == XR_XIR_OK) ||
-                !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TUPLE_FIELD,types[f].type,
-                    {element.id,0},{0},f,{0}},&field) ||
+                !source_tuple_projection(ctx,child,element,f,&field) ||
                 !source_tuple_append(ctx,child,context,field,&fields,&count,&capacity)) return false;
         }
     }
-    if (exact && count!=context->count)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple literal requires an exact ordered arity context");
-    if (!count) { *value=(SourceValue){.id=UINT32_MAX,.type=XR_XIR_UNIT,.place={0}};return true; }
+    if (!count)return source_tuple_construct(ctx,node,XR_XIR_UNIT,NULL,0,context,value);
     XrXirCallableParameter *types=source_alloc(ctx,count,sizeof(*types));
-    SourceValue *payloads=source_recipe_storage(ctx,count,sizeof(*payloads));
-    if (!types || !payloads) return false;
-    uint32_t payload_count=0;
+    if (!types) return false;
     for (uint32_t f=0;f<count;++f) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         types[f]=(XrXirCallableParameter){fields[f].type,0};
-        if (fields[f].type!=XR_XIR_UNIT) payloads[payload_count++]=fields[f];
     }
     XrXirType tuple;
-    if (!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_TUPLE,
-            .parameters=types,.parameter_count=count},&tuple)) return false;
-    return source_recipe_group(ctx,(XrXirInstruction){XR_XIR_TUPLE_NEW,tuple,{0},{0},0,{0}},payloads,payload_count,value);
+    return source_hir_tuple_type(ctx,types,count,&tuple)&&source_tuple_construct(ctx,node,tuple,fields,count,context,value);
 }
 static bool source_tuple_field(SourceContext *ctx,AstNode *node,SourceValue receiver,SourceValue *value) {
     uint32_t field=0;
     if (!source_tuple_index(ctx,node,node->as.member_access.name,&field)) return false;
-    const XrXirTypeNode *tuple=xr_xir_tuple_signature(&ctx->types,receiver.type);
-    if (!tuple || field>=tuple->parameter_count)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple field index exceeds its ordered arity");
-    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TUPLE_FIELD,tuple->parameters[field].type,
-        {receiver.id,0},{0},field,{0}},value);
+    return source_tuple_projection(ctx,node,receiver,field,value);
 }

@@ -91,19 +91,20 @@ static bool source_root_reference(SourceContext *ctx, uint32_t f, uint32_t i,
 static bool source_root_tuple(SourceContext *ctx, uint32_t f, uint32_t i, bool *changed) {
     const XrXirFunction *body = &ctx->functions[f];
     const XrXirInstruction *op = &body->instructions[i];
-    XrXirTypeNode tuple = *xr_xir_tuple_signature(&ctx->types,op->type);
-    XrXirCallableParameter *fields = tuple.parameter_count ? source_alloc(ctx,tuple.parameter_count,sizeof(*fields)) : NULL;
-    if (tuple.parameter_count && !fields) return false;
+    XrHirTupleView tuple={0};XrXirStatus status=xr_hir_tuple_view(&ctx->types,op->type,ctx->request,&tuple,NULL);
+    if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,"tuple flow lost its ordered shape");
+    XrXirCallableParameter *fields = tuple.count ? source_alloc(ctx,tuple.count,sizeof(*fields)) : NULL;
+    if (tuple.count && !fields) return false;
     uint32_t a = 0; bool differs = false;
-    for (uint32_t p = 0; p < tuple.parameter_count; ++p) {
+    for (uint32_t p = 0; p < tuple.count; ++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        fields[p] = tuple.parameters[p];
+        fields[p] = tuple.fields[p];
         if (fields[p].type != XR_XIR_UNIT) fields[p].type = source_root_operand(ctx,f,body->operands[op->args[0] + a++]);
-        if (fields[p].type != tuple.parameters[p].type) differs = true;
+        if (fields[p].type != tuple.fields[p].type) differs = true;
     }
     if (!differs) return true;
-    tuple.parameters = fields; XrXirType type;
-    return source_intern_type(ctx,tuple,&type) && source_root_set(ctx,f,i,type,changed);
+    XrXirType type;
+    return source_hir_tuple_type(ctx,fields,tuple.count,&type) && source_root_set(ctx,f,i,type,changed);
 }
 static bool source_root_instruction(SourceContext *ctx, uint32_t f, uint32_t i,
     const XrXirEffects *effects, bool *changed) {
@@ -147,9 +148,10 @@ static bool source_root_instruction(SourceContext *ctx, uint32_t f, uint32_t i,
         type = xr_xir_array_element(&ctx->types,source_root_operand(ctx,f,op->args[0])); break;
     case XR_XIR_TUPLE_NEW: return source_root_tuple(ctx,f,i,changed);
     case XR_XIR_TUPLE_FIELD: {
-        const XrXirTypeNode *tuple = xr_xir_tuple_signature(&ctx->types,source_root_operand(ctx,f,op->args[0]));
-        if (!tuple || (uint64_t)op->immediate >= tuple->parameter_count) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"tuple flow lost its field");
-        type = tuple->parameters[op->immediate].type; break;
+        XrXirStatus status=op->immediate<0||op->immediate>UINT32_MAX?XR_XIR_BAD_STRUCTURE:
+            xr_hir_tuple_field_type(&ctx->types,source_root_operand(ctx,f,op->args[0]),(uint32_t)op->immediate,ctx->request,&type,NULL);
+        if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status==XR_XIR_BAD_TYPE?XR_XIR_BAD_STRUCTURE:status,"tuple flow lost its field");
+        break;
     }
     case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT: {
         const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types,source_root_operand(ctx,f,(uint32_t)op->immediate));

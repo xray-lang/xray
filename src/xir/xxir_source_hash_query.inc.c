@@ -43,14 +43,24 @@ static bool source_hash_query_intern(SourceContext *ctx,SourceHashQueryTypes *qu
     ((XrXirTypeNode *)query->types->nodes)[query->types->count]=node;
     *output=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+query->types->count++);return true;
 }
+typedef struct SourceHashTupleReceiver {SourceContext *ctx;SourceHashQueryTypes *query;} SourceHashTupleReceiver;
+static XrXirStatus source_hash_query_tuple_intern(void *owner,const XrXirTypeNode *node,XrXirType *out) {
+    SourceHashTupleReceiver *receiver=owner;SourceContext *ctx=receiver->ctx;XrXirTypeNode copy=*node;
+    XrXirCallableParameter *fields=source_alloc(ctx,node->parameter_count,sizeof(*fields));
+    if(!fields||!source_copy_bytes(ctx,NULL,fields,node->parameters,(size_t)node->parameter_count*sizeof(*fields)))return ctx->diagnostic.status;
+    copy.parameters=fields;
+    return source_hash_query_intern(ctx,receiver->query,copy,out)?XR_XIR_OK:ctx->diagnostic.status;
+}
 static bool source_hash_query_projection(SourceContext *ctx,SourceHashQueryTypes *query,
     XrXirType key,XrXirType element,bool entries,XrXirType *output) {
     if (entries) {
         XrXirCallableParameter *fields=source_alloc(ctx,2,sizeof(*fields));
         if (!fields) return false;
         fields[0]=(XrXirCallableParameter){key,0};fields[1]=(XrXirCallableParameter){element,0};
-        if (!source_hash_query_intern(ctx,query,(XrXirTypeNode){.kind=XR_XIR_TYPE_TUPLE,
-            .parameters=fields,.parameter_count=2},&element)) return false;
+        SourceHashTupleReceiver receiver={ctx,query};
+        XrHirTuplePool pool={&ctx->compile,query->types,ctx->request,&receiver,source_hash_query_tuple_intern};
+        const char *reason=NULL;XrXirStatus status=xr_hir_tuple_type(&pool,fields,2,&element,&reason);
+        if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,reason?reason:"native query Tuple receiving failed");
     }
     return source_hash_query_intern(ctx,query,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=element},output);
 }

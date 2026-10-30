@@ -12,6 +12,7 @@
 #include "xxir_source.h"
 #include "../hir/xhir_items.h"
 #include "../hir/xhir_body.h"
+#include "../hir/xhir_tuple.h"
 #include "xxir_source_corpus.h"
 #include "xxir_map.h"
 #include "xxir_ctfe.h"
@@ -610,6 +611,18 @@ static bool source_query_parameters(SourceContext *ctx, uint32_t declaration) {
     return true;
 }
 #include "xxir_source_intern.inc.c"
+static XrXirStatus source_hir_tuple_intern(void *owner,const XrXirTypeNode *node,XrXirType *out) {
+    SourceContext *ctx=owner;XrXirTypeNode received=*node;
+    XrXirCallableParameter *fields=source_alloc(ctx,node->parameter_count,sizeof(*fields));
+    if(!fields||!source_copy_bytes(ctx,NULL,fields,node->parameters,(size_t)node->parameter_count*sizeof(*fields)))return ctx->diagnostic.status;
+    received.parameters=fields;
+    return source_intern_type(ctx,received,out)?XR_XIR_OK:ctx->diagnostic.status;
+}
+static bool source_hir_tuple_type(SourceContext *ctx,const XrXirCallableParameter *fields,uint32_t count,XrXirType *out) {
+    XrHirTuplePool pool={&ctx->compile,&ctx->types,ctx->request,ctx,source_hir_tuple_intern};const char *reason=NULL;
+    XrXirStatus status=xr_hir_tuple_type(&pool,fields,count,out,&reason);
+    return status==XR_XIR_OK||source_fail(ctx,NULL,status,reason?reason:"Tuple receiving type is invalid");
+}
 #include "xxir_source_native.inc.c"
 #include "xxir_source_hash_type.inc.c"
 #include "xxir_source_atomic.inc.c"
@@ -654,6 +667,7 @@ static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
         if (!source_substitute(ctx, sub, node.parameters[p].type, depth + 1, &parameters[p].type)) return false;
     }
     node.parameters = parameters;
+    if(node.kind==XR_XIR_TYPE_TUPLE)return source_hir_tuple_type(ctx,parameters,node.parameter_count,output);
     if (node.kind == XR_XIR_TYPE_CALLABLE && !source_substitute(ctx, sub, node.result, depth + 1, &node.result)) return false;
     if (node.kind == XR_XIR_TYPE_CALLABLE && !source_substitute(ctx, sub, node.element, depth + 1, &node.element)) return false;
     return source_intern_type(ctx, node, output);
@@ -698,8 +712,7 @@ static bool source_tuple_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *t
         if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx,ref->children[i],&fields[i].type)) {--ctx->depth;return false;}
     }
     --ctx->depth;
-    return source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_TUPLE,
-        .parameters=fields,.parameter_count=ref->nchildren},type);
+    return source_hir_tuple_type(ctx,fields,(uint32_t)ref->nchildren,type);
 }
 /* A type failure raised without an owning AST node reports the annotation that caused it. */
 static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {

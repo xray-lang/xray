@@ -61,7 +61,9 @@ def main():
                   ('handlers', arrays['body_handlers'], arrays['body_handlers_expected']),
                   ('generic-comptime', arrays['body_generic_comptime'], arrays['body_generic_comptime_expected']),
                   ('core-calls', arrays['body_core_calls'], arrays['body_core_calls_expected']),
-                  ('inferred-callables', arrays['body_inferred_callables'], arrays['body_inferred_callables_expected'])]
+                  ('inferred-callables', arrays['body_inferred_callables'], arrays['body_inferred_callables_expected']),
+                  ('tuple-contracts', (root/'tests/unit/hir/body/tuple_contracts.xr').read_bytes(),
+                   (root/'tests/unit/hir/body/tuple_contracts.out').read_bytes())]
         for name, raw, expected in inputs:
             source = folder/(name+'.xr'); source.write_bytes(raw)
             run(name+'-check', [args.binary, 'check', source], b'')

@@ -451,8 +451,7 @@ static bool source_array_entries_call(SourceContext *ctx, AstNode *node,
     if (!fields) return false;
     fields[0] = (XrXirCallableParameter) {XR_XIR_I64, 0};
     fields[1] = (XrXirCallableParameter) {element, 0};
-    if (!source_intern_type(ctx, (XrXirTypeNode) {.kind = XR_XIR_TYPE_TUPLE,
-            .parameters = fields, .parameter_count = 2}, &tuple) ||
+    if (!source_hir_tuple_type(ctx,fields,2,&tuple) ||
         !source_array_element_type(ctx, tuple, &result_type) ||
         !source_cell_type(ctx, result_type, &cell_type)) return false;
     SourceValue seed, store, candidate, length, zero;
@@ -467,8 +466,7 @@ static bool source_array_entries_call(SourceContext *ctx, AstNode *node,
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_GET, element,
             {array.id, counter.index.id}, {0}, 0, {0}}, &payload)) return false;
     pair[0] = counter.index; pair[1] = payload;
-    if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_TUPLE_NEW, tuple, {0}, {0}, 0, {0}},
-            pair, element == XR_XIR_UNIT ? 1 : 2, &entry) ||
+    if (!source_tuple_construct(ctx,node,tuple,pair,2,NULL,&entry) ||
         !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_PUSH, XR_XIR_UNIT,
             {candidate.id, entry.id}, {0}, 0, {0}}, NULL) ||
         !source_counter_close(ctx, &counter)) return false;

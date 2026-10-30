@@ -230,6 +230,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
         XrHirBodyProjection projection={.function=ctx->function,
             .instruction=use->instruction?recipe-parameters:UINT32_MAX,.block=block,
             .value=value,.source_value=use->value,.formal=use->formal,.argument=use->argument,
+            .source_value_map=map,.source_value_count=value_count,
             .type=use->type,.has_instruction=use->instruction,.has_value=use->has_value};
         if(use->instruction) {
             if(use->recipe<parameters||use->recipe-parameters>=body->count)goto invalid;

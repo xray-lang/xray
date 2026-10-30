@@ -141,7 +141,7 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_CAPACITY, XR_XIR_I64,
             {receiver.id, 0}, {0}, 0, {0}}, value) && source_array_member_reference(ctx, node, member);
     }
-    if (xr_xir_tuple_signature(&ctx->types,receiver.type)) {
+    if (xr_hir_tuple_kind(&ctx->types,receiver.type)==XR_HIR_TUPLE_ORDERED) {
         if (type_arguments->count) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple field has no method type arguments");
         return source_tuple_field(ctx,node,receiver,value);
     }

@@ -86,8 +86,7 @@ static XrXirSourceType source_atomic_schema_type(SourceContext *ctx,XrNativeType
         if (!fields) return (XrXirSourceType){0};
         fields[0]=(XrXirCallableParameter){(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,0};
         fields[1]=(XrXirCallableParameter){XR_XIR_BOOL,0};
-        if (!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_TUPLE,
-            .parameters=fields,.parameter_count=2},&type)) return (XrXirSourceType){0};
+        if (!source_hir_tuple_type(ctx,fields,2,&type)) return (XrXirSourceType){0};
         return (XrXirSourceType){type,ctx->atomic_declaration,true};
     }
     return (XrXirSourceType){XR_XIR_UNIT,0,term==XR_NATIVE_TERM_UNIT};
@@ -159,7 +158,7 @@ static bool source_atomic_call(SourceContext *ctx,AstNode *node,SourceValue rece
     if (operation==XR_XIR_ATOMIC_COMPARE_EXCHANGE) {
         XrXirCallableParameter *fields=source_alloc(ctx,2,sizeof(*fields));if (!fields) return false;
         fields[0]=(XrXirCallableParameter){element,0};fields[1]=(XrXirCallableParameter){XR_XIR_BOOL,0};
-        if (!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_TUPLE,.parameters=fields,.parameter_count=2},&result)) return false;
+        if (!source_hir_tuple_type(ctx,fields,2,&result)) return false;
     }
     return source_recipe_group(ctx,(XrXirInstruction){.op=operation,.type=result},operands,(uint32_t)call->arg_count+1,value) &&
         source_atomic_member_reference(ctx,node,member);

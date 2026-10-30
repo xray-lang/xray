@@ -113,13 +113,13 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
             *output = receiver;
         return true;
     }
-    if (!call && receiver.present && xr_xir_tuple_signature(&ctx->types,receiver.type)) {
+    if (!call && receiver.present && xr_hir_tuple_kind(&ctx->types,receiver.type)==XR_HIR_TUPLE_ORDERED) {
         uint32_t field=0;
         if (!source_tuple_index(ctx,member,member->as.member_access.name,&field)) return false;
-        const XrXirTypeNode *tuple=xr_xir_tuple_signature(&ctx->types,receiver.type);
-        if (field>=tuple->parameter_count)
-            return source_fail(ctx,member,XR_XIR_BAD_TYPE,"Tuple field index exceeds its ordered arity");
-        *output=(SourceExpectedType){true,tuple->parameters[field].type,false, false};return true;
+        XrXirType type=XR_XIR_UNIT;const char *reason=NULL;
+        XrXirStatus status=xr_hir_tuple_field_type(&ctx->types,receiver.type,field,ctx->request,&type,&reason);
+        if(status!=XR_XIR_OK)return source_fail(ctx,member,status,reason?reason:"Tuple field type is invalid");
+        *output=(SourceExpectedType){true,type,false,false};return true;
     }
     if (!receiver.present || !xr_xir_type_is_nominal(&ctx->types,receiver.type)) return true;
     const XrXirTypeNode *found=xr_xir_type_node(&ctx->types,receiver.type);

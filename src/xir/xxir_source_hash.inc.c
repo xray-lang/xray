@@ -17,8 +17,7 @@ static bool source_hash_projection_type(SourceContext *ctx, XrXirType key, XrXir
         XrXirCallableParameter *fields = source_alloc(ctx, 2, sizeof(*fields));
         if (!fields) return false;
         fields[0] = (XrXirCallableParameter){key, 0}; fields[1] = (XrXirCallableParameter){element, 0};
-        if (!source_intern_type(ctx, (XrXirTypeNode){.kind = XR_XIR_TYPE_TUPLE,
-            .parameters = fields, .parameter_count = 2}, &element)) return false;
+        if (!source_hir_tuple_type(ctx,fields,2,&element)) return false;
     }
     return source_intern_type(ctx, (XrXirTypeNode){.kind = XR_XIR_TYPE_ARRAY, .element = element}, output);
 }

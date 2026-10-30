@@ -58,6 +58,6 @@ static bool source_call_spread_context(SourceContext *ctx,SourceCallSpread *spre
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         fields[f]=formal->argument_contexts[spread->first+f+formal->parameter_offset];
     }
-    *prefix=(SourceTuplePrefix){NULL,spread->count,false,XR_XIR_UNIT,fields,spread->field_plans};
+    if(!source_tuple_prefix(ctx,fields,spread->count,spread->field_plans,prefix))return false;
     literal->tuple_prefix=prefix;return true;
 }

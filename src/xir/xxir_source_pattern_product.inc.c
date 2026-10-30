@@ -17,7 +17,7 @@ typedef struct SourcePatternProduct {
     XrXirOp operation;
 } SourcePatternProduct;
 static XrXirOp source_pattern_product_kind(SourceContext *ctx,XrXirType type) {
-    if (type==XR_XIR_UNIT || xr_xir_tuple_signature(&ctx->types,type)) return XR_XIR_TUPLE_FIELD;
+    if (xr_hir_tuple_kind(&ctx->types,type)!=XR_HIR_TUPLE_OTHER) return XR_XIR_TUPLE_FIELD;
     if (xr_xir_type_is_struct(&ctx->types,type)) return XR_XIR_STRUCT_GET;
     if (xr_xir_type_is_class(&ctx->types,type)) return XR_XIR_CLASS_GET;
     return XR_XIR_OP_COUNT;
@@ -31,10 +31,15 @@ static bool source_pattern_product_description(SourceContext *ctx,XrXirType type
     const XrXirTypeNode *node=xr_xir_type_node(&ctx->types,type);
     bool nominal=product->operation==XR_XIR_STRUCT_GET || product->operation==XR_XIR_CLASS_GET;
     XrXirNominalType instance={0};XrXirNominalDeclaration declaration={0};
+    XrHirTupleView tuple={0};
     if (nominal) {
         instance=node->nominal;declaration=ctx->nominals.declarations[instance.declaration];
         product->count=declaration.field_count;
-    } else product->count=type==XR_XIR_UNIT ? 0 : node->parameter_count;
+    } else {
+        XrXirStatus status=xr_hir_tuple_view(&ctx->types,type,ctx->request,&tuple,NULL);
+        if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,"product pattern requires statically known fields");
+        product->count=tuple.count;
+    }
     product->fields=product->count ? source_alloc(ctx,product->count,sizeof(*product->fields)) : NULL;
     if (product->count && !product->fields) return false;
     SourceSubstitution substitution={instance.arguments,instance.argument_count};
@@ -45,7 +50,7 @@ static bool source_pattern_product_description(SourceContext *ctx,XrXirType type
             field->name=declaration.fields[f].name;
             if (!source_substitute(ctx,&substitution,declaration.fields[f].type,0,&field->type)) return false;
         } else {
-            field->type=node->parameters[f].type;
+            field->type=tuple.fields[f].type;
         }
     }
     *output=product;return true;
@@ -85,8 +90,10 @@ static bool source_pattern_product(SourceContext *ctx,AstNode *node,XrXirType ty
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"product pattern differs from its scrutinee");
     if (!source_pattern_product_description(ctx,type,&out->product)) return false;
     SourcePatternProduct *product=out->product;out->count=product->count;
-    if (tuple && (uint32_t)count!=out->count)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple pattern requires its exact ordered arity");
+    if(tuple) {
+        XrXirStatus status=xr_hir_tuple_arity(&ctx->types,type,(uint32_t)count,ctx->request,NULL);
+        if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"Tuple pattern requires its exact ordered arity");
+    }
     out->fields=out->count ? source_alloc(ctx,out->count,sizeof(*out->fields)) : NULL;
     if (out->count && !out->fields) return false;
     for (int i=0;i<count;++i) {
@@ -115,6 +122,8 @@ static bool source_pattern_product(SourceContext *ctx,AstNode *node,XrXirType ty
 static bool source_pattern_product_value(SourceContext *ctx,SourceMatchPattern *pattern,
     uint32_t field,SourceValue receiver,SourceValue *output) {
     SourceProductField selected=pattern->product->fields[field];
+    if(pattern->product->operation==XR_XIR_TUPLE_FIELD)
+        return source_tuple_projection(ctx,pattern->node,receiver,field,output);
     if (selected.selection>INT64_MAX)
         return source_fail(ctx,pattern->node,XR_XIR_BUDGET,"product field selector exhausted");
     return source_recipe_record(ctx,(XrXirInstruction){pattern->product->operation,selected.type,

@@ -37,8 +37,9 @@ static bool source_comptime_result_value(SourceContext *ctx,AstNode *node,
             xr_xir_value_argument(value,NULL,type);
     const XrXirTypeArena *arena=xr_xir_value_arena(value);
     const XrXirTypes *types=xr_xir_compile_type_arena_types(arena);
-    const XrXirTypeNode *tuple=xr_xir_tuple_signature(types,type);
-    bool shape=type==XR_XIR_STRING?!arity:tuple?tuple->parameter_count==arity:
+    XrHirTupleView tuple={0};bool ordered=xr_hir_tuple_kind(types,type)==XR_HIR_TUPLE_ORDERED;
+    if(ordered&&xr_hir_tuple_view(types,type,ctx->request,&tuple,NULL)!=XR_XIR_OK)return false;
+    bool shape=type==XR_XIR_STRING?!arity:ordered?tuple.count==arity:
         arity==1 && (xr_xir_type_is_nullable(types,type) || xr_xir_type_is_array(types,type) ||
             xr_xir_type_is_struct(types,type) || xr_xir_type_is_enum(types,type));
     if (!shape || !xr_xir_value_argument(value,arena,type)) return false;
@@ -84,7 +85,10 @@ typedef struct SourceComptimeTupleFrame {
 #include "xxir_source_materialization.inc.c"
 static bool source_comptime_constant_leaf(SourceContext *ctx,AstNode *node,
     const XrXirValue *input,XrXirType target,SourceValue *output) {
-    if (target==XR_XIR_UNIT) { *output=(SourceValue){.id=0,.type=XR_XIR_UNIT,.place={0}};return !input->type && !input->reserved && !input->payload; }
+    if (target==XR_XIR_UNIT) {
+        if(input->type||input->reserved||input->payload)return false;
+        return source_tuple_construct(ctx,node,XR_XIR_UNIT,NULL,0,NULL,output);
+    }
     if (target==XR_XIR_STRING) {
         const char *bytes=NULL;size_t length=0;
         if (!xr_xir_string_view(input,&bytes,&length)) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime string is invalid");
@@ -151,7 +155,10 @@ static bool source_comptime_constant(SourceContext *ctx,AstNode *node,
             } else if (nominal) {
                 for (uint32_t i=0;i<count;++i) { if (!((ctx)->diagnostic.status == XR_XIR_OK)) { ok=false;goto done; }fields[i]=(XrXirCallableParameter){tuple->nominal.fields[begin+i],0}; }
             } else if (nullable) fields[0]=(XrXirCallableParameter){tuple->element,0};
-            else if (!source_copy_bytes(ctx,node,fields,tuple->parameters,(size_t)count*sizeof(*fields))) { ok=false;break; }
+            else {
+                XrHirTupleView shape={0};XrXirStatus status=xr_hir_tuple_view(&ctx->types,target,ctx->request,&shape,NULL);
+                if(status!=XR_XIR_OK||!source_copy_bytes(ctx,node,fields,shape.fields,(size_t)count*sizeof(*fields))) { ok=false;break; }
+            }
             stack[depth++]=(SourceComptimeTupleFrame){current,target,fields,payloads,count,0,0,current_owned,nullable,array,reserved,{0},{0},nominal,enumeration,variant};
             current=(XrXirValue){0};current_owned=false;
             if (array && !source_comptime_array_begin(ctx,&stack[depth-1])) { ok=false;break; }
@@ -164,10 +171,10 @@ receive_parent:
             if (!depth) { *output=result;goto done; }
             SourceComptimeTupleFrame *frame=&stack[depth-1];
             if (frame->next) {
-                XrXirType previous=frame->fields[frame->next-1].type;
                 if (frame->array) {
                     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_PUSH,XR_XIR_UNIT,{frame->place.id,result.id},{0},0,{0}},NULL)) { ok=false;goto done; }
-                } else if (previous!=XR_XIR_UNIT || frame->nominal) frame->payloads[frame->payload++]=result;
+                } else if (frame->nominal) frame->payloads[frame->payload++]=result;
+                else frame->payloads[frame->next-1]=result;
             }
             if (frame->next<frame->count) {
                 if (!((ctx)->diagnostic.status == XR_XIR_OK)) { ok=false;goto done; }
@@ -194,8 +201,7 @@ receive_parent:
                 if (!source_recipe_group(ctx,(XrXirInstruction){op,frame->target,{0},{0},frame->variant,{0}},frame->payloads,frame->payload,&result)) { ok=false;goto done; }
             } else if (frame->nullable) {
                 if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_NULLABLE_SOME,frame->target,{result.type==XR_XIR_UNIT?0:result.id},{0},0,{0}},&result)) { ok=false;goto done; }
-            } else if (!source_recipe_group(ctx,(XrXirInstruction){XR_XIR_TUPLE_NEW,frame->target,{0},{0},0,{0}},
-                frame->payloads,frame->payload,&result)) { ok=false;goto done; }
+            } else if (!source_tuple_construct(ctx,node,frame->target,frame->payloads,frame->count,NULL,&result)) { ok=false;goto done; }
             if (frame->owned) xr_xir_value_drop(&frame->value);--depth;
         }
     }
