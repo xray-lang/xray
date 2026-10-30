@@ -22,6 +22,8 @@ root = pathlib.Path(__file__).parent
 mode, build = sys.argv[1:]
 if mode == 'l1':
     time.sleep(0.15)
+    if (root / 'oracle.out').exists():
+        assert (root / 'oracle.out').read_bytes() == b'42\\n'
     if (root / 'fail').exists(): raise SystemExit(3)
     if (root / 'race').exists():
         old, new = (root / 'race').read_text().split()
@@ -149,6 +151,52 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(self.git("rev-parse", "main"), self.base)
         good = self.branch("a/next", {"next": "yes"})
         self.finish(self.start(good), 0)
+
+    def test_warm_checkout_materializes_new_lf_attributes(self):
+        self.git("config", "core.autocrlf", "true")
+        name, review, first = self.branch("a/eol", {"oracle.out": "42\n", "中文输出.out": "42\n", "untouched": "stable\n"})
+        self.git("switch", "--detach", first, root=self.integration)
+        oracle = self.integration / "oracle.out"
+        unicode_oracle = self.integration / "中文输出.out"
+        self.assertEqual(oracle.read_bytes(), b"42\r\n")
+        self.assertEqual(unicode_oracle.read_bytes(), b"42\r\n")
+        untouched = self.integration / "untouched"
+        stamp = untouched.stat().st_mtime_ns
+        self.git("switch", name)
+        self.write(".gitattributes", "oracle.out text eol=lf\n中文输出.out text eol=lf\n")
+        self.git("add", "--", ".gitattributes")
+        self.git("commit", "-m", "Pin the output witness checkout bytes")
+        final = self.git("rev-parse", "HEAD")
+        self.git("switch", "--detach")
+        data = json.loads(review.read_text())
+        data["sourceSHA"] = final
+        review.write_text(json.dumps(data))
+        log = self.finish(self.start((name, review, final)), 0)
+        self.assertEqual(log["state"], "MERGED")
+        self.assertEqual(oracle.read_bytes(), b"42\n")
+        self.assertEqual(unicode_oracle.read_bytes(), b"42\n")
+        self.assertEqual(untouched.stat().st_mtime_ns, stamp)
+        self.assertEqual([row["path"] for row in log["checkoutMaterialization"]], ["oracle.out", "中文输出.out"])
+        oracle_stamp = oracle.stat().st_mtime_ns
+        unicode_stamp = unicode_oracle.stat().st_mtime_ns
+        self.assertEqual(merge_slice.materialize_checkout(self.integration, log["changed"]), [])
+        self.assertEqual(oracle.stat().st_mtime_ns, oracle_stamp)
+        self.assertEqual(unicode_oracle.stat().st_mtime_ns, unicode_stamp)
+        self.assertEqual(untouched.stat().st_mtime_ns, stamp)
+
+    def test_checkout_materialization_rejects_dirty_files_before_writing(self):
+        (self.repo / "first.out").write_bytes(b"42\n")
+        self.write("second", "stable\n")
+        self.write(".gitattributes", "first.out text eol=lf\n")
+        self.git("add", "--", "first.out", "second", ".gitattributes")
+        self.git("commit", "-m", "Create checkout inputs")
+        first, second = self.repo / "first.out", self.repo / "second"
+        first.write_bytes(b"42\r\n")
+        second.write_bytes(b"dirty\n")
+        before = [(path.read_bytes(), path.stat().st_mtime_ns) for path in (first, second)]
+        with self.assertRaisesRegex(RuntimeError, "changed content"):
+            merge_slice.materialize_checkout(self.repo, ["first.out", "second"])
+        self.assertEqual([(path.read_bytes(), path.stat().st_mtime_ns) for path in (first, second)], before)
 
     def test_concurrent_requests_are_fifo_and_rebuild_on_new_main(self):
         first = self.branch("a/first", {"first": "yes"})

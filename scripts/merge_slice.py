@@ -32,11 +32,18 @@ def ancestor(root: Path, older: str, newer: str) -> bool:
     return result.returncode == 0
 
 
+def git_paths(root: Path, *arguments: str) -> list[str]:
+    result = subprocess.run(["git", "-C", str(root), *arguments, "-z"], capture_output=True)
+    if result.returncode:
+        raise RuntimeError(f"git {' '.join(arguments)}: {result.stderr.decode('utf-8', errors='strict').strip()}")
+    return [path for path in result.stdout.decode("utf-8", errors="strict").split("\0") if path]
+
+
 def clean(root: Path) -> int:
     """Refresh only blobs proven identical to HEAD, without changing file bytes."""
     if git(root, "diff", "--cached", "--name-only") or git(root, "ls-files", "--others", "--exclude-standard"):
         raise RuntimeError("Integration worktree has staged or untracked changes")
-    paths = git(root, "diff-files", "--name-only").splitlines()
+    paths = git_paths(root, "diff-files", "--name-only")
     for path in paths:
         if git(root, "hash-object", "--path=" + path, "--", path) != git(root, "rev-parse", "HEAD:" + path):
             raise RuntimeError(f"Integration worktree has changed content: {path}")
@@ -45,6 +52,48 @@ def clean(root: Path) -> int:
     if git(root, "status", "--porcelain"):
         raise RuntimeError("Integration worktree is not clean")
     return len(paths)
+
+
+def materialize_checkout(root: Path, changed: list[str]) -> list[dict]:
+    """Apply current Git checkout attributes to reviewed changed regular files."""
+    clean(root)
+    pending = []
+    contents = {}
+    for path in changed:
+        entries = git(root, "--literal-pathspecs", "ls-files", "--stage", "--", path).splitlines()
+        if not entries:
+            if git(root, "--literal-pathspecs", "ls-tree", "-z", "HEAD", "--", path):
+                raise RuntimeError(f"Checkout candidate has no index entry: {path}")
+            continue
+        if len(entries) != 1:
+            raise RuntimeError(f"Checkout requires one stage-zero index entry: {path}")
+        mode, blob, stage = entries[0].split("\t", 1)[0].split()
+        if stage != "0" or blob != git(root, "rev-parse", "HEAD:" + path):
+            raise RuntimeError(f"Checkout index differs from the candidate: {path}")
+        if mode not in {"100644", "100755"}:
+            continue
+        if git(root, "hash-object", "--path=" + path, "--", path) != blob:
+            raise RuntimeError(f"Checkout work file has changed content: {path}")
+        expected = subprocess.check_output(["git", "-C", str(root), "cat-file", "--filters",
+                                            "--path=" + path, "HEAD:" + path])
+        actual = (root / path).read_bytes()
+        if actual != expected:
+            pending.append({"path": path, "beforeSHA256": hashlib.sha256(actual).hexdigest(),
+                            "expectedSHA256": hashlib.sha256(expected).hexdigest(),
+                            "expectedBytes": len(expected)})
+            contents[path] = expected
+    if pending:
+        for row in pending:
+            if hashlib.sha256((root / row["path"]).read_bytes()).hexdigest() != row["beforeSHA256"]:
+                raise RuntimeError(f"Checkout work file moved after preflight: {row['path']}")
+        for row in pending:
+            (root / row["path"]).write_bytes(contents[row["path"]])
+        for row in pending:
+            actual = (root / row["path"]).read_bytes()
+            if len(actual) != row["expectedBytes"] or hashlib.sha256(actual).hexdigest() != row["expectedSHA256"]:
+                raise RuntimeError(f"Git checkout did not materialize the expected bytes: {row['path']}")
+    clean(root)
+    return pending
 
 
 def review_request(args) -> dict:
@@ -133,8 +182,9 @@ def integrate(args, review: dict, log: dict, logs: Path) -> None:
             raise RuntimeError("Rebased candidate has a placeholder author or committer")
         final_committers.append(identities[1])
     log["committers"] = sorted(set(final_committers))
-    changed = git(integration, "diff", "--name-only", main, candidate).splitlines()
+    changed = git_paths(integration, "diff", "--name-only", main, candidate)
     log["changed"] = changed
+    log["checkoutMaterialization"] = materialize_checkout(integration, changed)
     slice_asan_gate(review, changed, log, logs)
     relative = Path(args.manifest)
     if relative.is_absolute() or ".." in relative.parts:
