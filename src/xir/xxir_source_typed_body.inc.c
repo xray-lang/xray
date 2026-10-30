@@ -1,5 +1,14 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License.
  * Actual Source declarations and emissions receive owned typed handles. */
+static bool source_hir_body_begin(SourceContext *ctx) {
+    XrXirStatus status=xr_hir_body_new(ctx->compile.resources,&ctx->types,&ctx->typed_body);
+    if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,"typed body allocation failed");
+    XrHirBodyDeclarations declarations={&ctx->functions,&ctx->identities,&ctx->function_count,
+        &ctx->module_count,&ctx->defaults,&ctx->interfaces,&ctx->slots,&ctx->slot_count};
+    status=xr_hir_body_declarations(ctx->typed_body,&declarations);
+    if(status!=XR_XIR_OK){xr_hir_body_end(ctx->typed_body);return source_fail(ctx,NULL,status,"typed declaration owner is missing");}
+    return true;
+}
 static XrHirBodyOrigin source_hir_origin(SourceContext *ctx,AstNode *node,uint32_t binding) {
     XrXirSourceRange range=source_query_range(ctx,node,NULL);
     return (XrHirBodyOrigin){ctx->function,ctx->module,node?node->node_id:0,binding,

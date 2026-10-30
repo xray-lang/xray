@@ -244,11 +244,8 @@ static bool source_items_prepare(SourceContext *ctx) {
     return !xr_hir_items_errors(ctx->items)||source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"duplicate declaration name");
 }
 static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
-    XrXirStatus body_status=xr_hir_body_new(ctx->compile.resources,&ctx->types,&ctx->typed_body);
-    if(body_status!=XR_XIR_OK){source_fail(ctx,NULL,body_status,"typed body allocation failed");return;}
-    XrHirBodyDeclarations typed_declarations={&ctx->functions,&ctx->identities,&ctx->function_count,&ctx->module_count,&ctx->defaults,&ctx->interfaces,&ctx->slots,&ctx->slot_count};
-    body_status=xr_hir_body_declarations(ctx->typed_body,&typed_declarations);
-    if(body_status!=XR_XIR_OK){source_fail(ctx,NULL,body_status,"typed declaration owner is missing");xr_hir_body_end(ctx->typed_body);return;}
+    if(!source_hir_body_begin(ctx))return;
+    XrXirStatus body_status=XR_XIR_OK;
     ctx->query_ready = true;
     ctx->declarations_building = true;
     bool declarations_ready = source_query_modules(ctx) && source_items_prepare(ctx) && collect_declarations(ctx);

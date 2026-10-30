@@ -93,6 +93,7 @@ static XrXirStatus literal_receive(const XirLiteralRequest *request,const XrXirC
     if (status==XR_XIR_OK) status=xir_receive_poll(request->control);
     if (status==XR_XIR_OK) { *output=result;result=(XirLiteralDefinitions){0}; }
 done:
+    xr_hir_body_end(ctx.typed_body);
     xr_xir_compile_instance_literals_free(&result);source_comptime_context_free(&ctx,source_owner);xr_compile_resources_free(views);
     if (diagnostic) diagnostic->status=status;
     return status;

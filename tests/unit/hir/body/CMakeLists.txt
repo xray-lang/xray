@@ -36,7 +36,10 @@ add_test(NAME source_body_dead_handler_type COMMAND test_hir_body_source --expec
 add_test(NAME source_body_dead_handler_name COMMAND test_hir_body_source --expect-rejection "${CMAKE_CURRENT_BINARY_DIR}/empty-stdlib"
     "${CMAKE_CURRENT_BINARY_DIR}/handler-bad-name.xr" "${CMAKE_CURRENT_BINARY_DIR}/handler-bad-name.out")
 set_tests_properties(source_body_dead_handler_type source_body_dead_handler_name PROPERTIES FIXTURES_REQUIRED hir_body_inputs)
-set_tests_properties(hir_body source_body_sdk source_body_dead_handler_type source_body_dead_handler_name
+add_test(NAME source_body_generic_comptime COMMAND test_hir_body_source "${CMAKE_CURRENT_BINARY_DIR}/empty-stdlib"
+    "${CMAKE_CURRENT_BINARY_DIR}/generic-comptime.xr" "${CMAKE_CURRENT_BINARY_DIR}/generic-comptime.out")
+set_tests_properties(source_body_generic_comptime PROPERTIES FIXTURES_REQUIRED hir_body_inputs)
+set_tests_properties(hir_body source_body_sdk source_body_dead_handler_type source_body_dead_handler_name source_body_generic_comptime
     PROPERTIES TIMEOUT 120 LABELS "unit;hir;types;ownership;sdk")
 if(WIN32)
     add_test(NAME hir_body_cli COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_CURRENT_SOURCE_DIR}/test_body_cli.py"

@@ -64,7 +64,8 @@ static bool literal_seed(SourceContext *ctx,const XrXirArtifact *definition,uint
             ctx->bodies[f].library_effect=&proof->contracts[f];ctx->bodies[f].checked_library=definition;
         }
     }
-    ctx->materialization_begin=ctx->function_capacity;return true;
+    ctx->materialization_begin=ctx->function_capacity;
+    return source_hir_body_begin(ctx);
 }
 static bool literal_binding(SourceContext *ctx,const XirCtfeInstanceView *view,XirLiteralBinding *output) {
     uint32_t progress=0;

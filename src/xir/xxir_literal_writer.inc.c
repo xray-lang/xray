@@ -60,6 +60,9 @@ static XrXirStatus literal_check(SourceContext *ctx,const XrXirArtifact *origina
     const XrXirComptimeSite *site,XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
     if (!source_materialization_finish(ctx) || !source_effect_prepare(ctx) ||
         !literal_construction(ctx,original->construction,binding,site)) return ctx->diagnostic.status;
+    XrXirStatus status=xr_hir_body_finish(ctx->typed_body,ctx->request);
+    xr_hir_body_end(ctx->typed_body);
+    if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"literal body has an unconsumed or unprojected use");return status;}
     XrXirDeclarations declarations=*original->module.declarations;
     declarations.functions=ctx->identities;declarations.literals=ctx->literals;declarations.literal_count=ctx->literal_count;
     XrXirModule built=original->module;built.stage=XR_XIR_BUILT;built.provenance=ctx->effect_evidence;
