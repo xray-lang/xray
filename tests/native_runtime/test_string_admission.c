@@ -32,6 +32,85 @@ static void admitted(XrRbcFunction *functions, size_t count, XrtLocationOwner *l
     CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK);
     xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
 }
+static void frame_cell_backedges(XrtLocationOwner *locations) {
+    uint32_t code[]={word(XR_RBC_STRING_LITERAL,0,0,0,0),word(XR_RBC_STRING_CELL_NEW,1,0,0,0),
+        word(XR_RBC_STRING_DROP,0,0,0,0),word(XR_RBC_LOADI,2,0,0,0),word(XR_RBC_LOADI,3,0,0,3),
+        word(XR_RBC_LOADI,4,0,0,1),word(XR_RBC_LT,2,3,0,0),0,0,
+        word(XR_RBC_STRING_LITERAL,0,0,0,0),word(XR_RBC_CELL_WRITE,1,0,0,0),
+        word(XR_RBC_STRING_DROP,0,0,0,0),word(XR_RBC_ADD,2,2,4,0),0,
+        word(XR_RBC_CELL_READ,5,1,0,0),word(XR_RBC_STRING_DROP,5,0,0,0),
+        word(XR_RBC_STRING_CELL_DROP,1,0,0,0),word(XR_RBC_RET0,0,0,0,0)};
+    CHECK(xr_rbc_jump(&code[7],7,9,18)&&xr_rbc_jump(&code[8],8,14,18)&&xr_rbc_jump(&code[13],13,6,18));
+    XrRbcRegisterKind kinds[]={XR_RBC_STRING,XR_RBC_STRING_CELL,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_STRING};
+    XrRbcRegisterKind cell=XR_RBC_STRING;
+    XrRbcFunction f={.code=code,.code_count=18,.register_count=6,.cell_count=1,.cell_kinds=&cell,.cell_kind_count=1,
+        .register_kinds=kinds,.register_kind_count=6};
+    admitted(&f,1,locations);
+    code[4]=word(XR_RBC_LOADI,3,0,0,0);admitted(&f,1,locations);code[4]=word(XR_RBC_LOADI,3,0,0,3);
+    uint32_t saved=code[16];code[16]=word(XR_RBC_LOADI,4,0,0,1);rejected(&f,1,locations);code[16]=saved;
+    saved=code[11];code[11]=word(XR_RBC_LOADI,4,0,0,1);rejected(&f,1,locations);code[11]=saved;
+    uint32_t read=code[14],drop_string=code[15],drop_cell=code[16];
+    code[14]=drop_cell;code[15]=read;code[16]=drop_string;rejected(&f,1,locations);
+    code[14]=read;code[15]=drop_string;code[16]=drop_cell;
+    f.register_kinds=NULL;f.register_kind_count=0;rejected(&f,1,locations);
+    f.register_kinds=kinds;f.register_kind_count=6;
+    // All register states match the constructor entry; only the initialized
+    // prefix exposes this attempt to construct the same cell a second time.
+    uint32_t recurrent[]={code[0],code[1],code[2],code[16],code[0],0,code[17]};
+    CHECK(xr_rbc_jump(&recurrent[5],5,1,7));f.code=recurrent;f.code_count=7;rejected(&f,1,locations);
+    recurrent[1]=word(XR_RBC_STRING_CELL_NEW,1,0,1,0);f.cell_count=2;
+    XrRbcRegisterKind pair[]={XR_RBC_STRING,XR_RBC_STRING};f.cell_kinds=pair;f.cell_kind_count=2;
+    rejected(&f,1,locations); // Missing ordinal zero never establishes a prefix.
+}
+static void frame_cell_origins(XrtLocationOwner *locations) {
+    uint32_t code[]={word(XR_RBC_STRING_LITERAL,0,0,0,0),word(XR_RBC_STRING_CELL_NEW,1,0,0,0),
+        word(XR_RBC_STRING_CELL_NEW,6,0,1,0),word(XR_RBC_STRING_DROP,0,0,0,0),word(XR_RBC_MOV,7,1,0,0),
+        word(XR_RBC_LOADI,2,0,0,0),word(XR_RBC_LOADI,3,0,0,3),word(XR_RBC_LOADI,4,0,0,1),
+        word(XR_RBC_LT,2,3,0,0),0,0,word(XR_RBC_MOV,7,1,0,0),word(XR_RBC_CELL_READ,5,7,0,0),
+        word(XR_RBC_STRING_DROP,5,0,0,0),word(XR_RBC_ADD,2,2,4,0),0,
+        word(XR_RBC_STRING_CELL_DROP,1,0,0,0),word(XR_RBC_STRING_CELL_DROP,6,0,0,0),word(XR_RBC_RET0,0,0,0,0)};
+    CHECK(xr_rbc_jump(&code[9],9,11,19)&&xr_rbc_jump(&code[10],10,16,19)&&xr_rbc_jump(&code[15],15,8,19));
+    XrRbcRegisterKind kinds[]={XR_RBC_STRING,XR_RBC_STRING_CELL,XR_RBC_BITS,XR_RBC_BITS,XR_RBC_BITS,
+        XR_RBC_STRING,XR_RBC_STRING_CELL,XR_RBC_STRING_CELL};
+    XrRbcRegisterKind cells[]={XR_RBC_STRING,XR_RBC_STRING};
+    XrRbcFunction f={.code=code,.code_count=19,.register_count=8,.cell_count=2,.cell_kinds=cells,.cell_kind_count=2,
+        .register_kinds=kinds,.register_kind_count=8};
+    admitted(&f,1,locations);
+    code[11]=word(XR_RBC_MOV,7,6,0,0);rejected(&f,1,locations);code[11]=word(XR_RBC_MOV,7,1,0,0);
+    code[13]=word(XR_RBC_STRING_CELL_DROP,1,0,0,0);rejected(&f,1,locations);
+    uint32_t join[]={code[0],code[1],code[2],code[3],word(XR_RBC_LOADI,2,0,0,1),word(XR_RBC_LOADI,3,0,0,0),
+        word(XR_RBC_EQ,2,3,0,0),0,word(XR_RBC_MOV,7,1,0,0),0,word(XR_RBC_RET0,0,0,0,0),
+        word(XR_RBC_MOV,7,1,0,0),code[16],code[17],code[18]};
+    CHECK(xr_rbc_jump(&join[7],7,11,15)&&xr_rbc_jump(&join[9],9,12,15));
+    f.code=join;f.code_count=15;admitted(&f,1,locations);
+    join[11]=word(XR_RBC_MOV,7,6,0,0);rejected(&f,1,locations);
+}
+static void frame_cell_parameter_alias(XrtLocationOwner *locations) {
+    uint32_t caller[]={word(XR_RBC_STRING_LITERAL,0,0,0,0),word(XR_RBC_STRING_CELL_NEW,1,0,0,0),
+        word(XR_RBC_STRING_DROP,0,0,0,0),word(XR_RBC_MOV,3,1,0,0),word(XR_RBC_MOV,4,1,0,0),
+        word(XR_RBC_CALL,2,0,0,1),word(XR_RBC_STRING_CELL_DROP,1,0,0,0),word(XR_RBC_RET,2,0,0,0)};
+    uint32_t callee[]={word(XR_RBC_LOADI,3,0,0,123),word(XR_RBC_STRING_I64,2,3,0,0),
+        word(XR_RBC_CELL_WRITE,1,2,0,0),word(XR_RBC_STRING_DROP,2,0,0,0),word(XR_RBC_CELL_READ,4,0,0,0),
+        word(XR_RBC_STRING_LEN,5,4,0,0),word(XR_RBC_STRING_DROP,4,0,0,0),word(XR_RBC_RET,5,0,0,0)};
+    XrRbcRegisterKind caller_kinds[]={XR_RBC_STRING,XR_RBC_STRING_CELL,XR_RBC_CALL_WINDOW,XR_RBC_CALL_WINDOW,XR_RBC_CALL_WINDOW};
+    XrRbcRegisterKind callee_kinds[]={XR_RBC_STRING_CELL,XR_RBC_STRING_CELL,XR_RBC_STRING,XR_RBC_BITS,XR_RBC_STRING,XR_RBC_BITS};
+    XrRbcRegisterKind cell=XR_RBC_STRING;
+    XrRbcFunction functions[]={
+        {.code=caller,.code_count=8,.register_count=5,.register_kinds=caller_kinds,.register_kind_count=5,
+         .cell_count=1,.cell_kinds=&cell,.cell_kind_count=1},
+        {.code=callee,.code_count=8,.register_count=6,.parameter_count=2,.register_kinds=callee_kinds,.register_kind_count=6}};
+    XrRbcLiteral literal={"not printed",11};
+    XrRbcModule module={.functions=functions,.function_count=2,.literals=&literal,.literal_count=1};
+    XrRbcExecution *execution=NULL;CHECK(xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution)==XR_RBC_OK);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);uint64_t bits=99;
+    CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK && xr_rbc_outcome_bits(outcome,&bits) && bits==3);
+    xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
+    uint32_t saved=callee[2];callee[2]=word(XR_RBC_STRING_CELL_DROP,1,0,0,0);rejected(functions,2,locations);callee[2]=saved;
+    uint32_t call=caller[5],drop=caller[6];caller[5]=drop;caller[6]=call;
+    rejected(functions,2,locations); // Both arguments were staged before owner release.
+    caller[5]=call;caller[6]=drop;
+}
+
 static void forward_string_owners(XrtLocationOwner *locations) {
     uint32_t code[] = {word(XR_RBC_LOADI,0,0,0,1),word(XR_RBC_LOADI,1,0,0,0),
         word(XR_RBC_EQ,0,1,0,0),0,word(XR_RBC_STRING_LITERAL,2,0,0,0),
@@ -110,6 +189,9 @@ static void sequential_and_loop_branches(XrtLocationOwner *locations) {
 int main(void) {
     XrtLocationOwner *locations = NULL;
     CHECK(xrt_locations_create(NULL,0,&locations)==XRT_LOCATION_OK);
+    frame_cell_backedges(locations);
+    frame_cell_origins(locations);
+    frame_cell_parameter_alias(locations);
     sequential_and_loop_branches(locations);
     loop_entry_obligations(locations);
     forward_string_owners(locations);

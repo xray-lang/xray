@@ -115,10 +115,13 @@ def main():
         assert len(original_bytes.replace(b'\r\n', b'\n')) == 1403 and original_bytes.count(b'while (i < 50)') == 1
         path = root / 'original-string-parameter.xr'
         path.write_bytes(original_bytes)
-        result = subprocess.run([args.driver, str(path)], capture_output=True, timeout=15)
-        assert result.returncode == 1 and result.stdout == b''
-        assert b':21:1: physical String Cell across blocks is not supported by LIR lowering yet' in result.stderr
-        assert str(path).encode() in result.stderr and path.read_bytes() == original_bytes
+        expected = b'literal!\nnamed!\nnamed\nbuilt!!\nbuilt!\nsecond/\nchain!!\nloop!\n'
+        assert len(expected) == 59
+        for options in ([], ['--twice'], ['--optimize'], ['--twice', '--optimize']):
+            result = subprocess.run([args.driver, str(path), *options], capture_output=True, timeout=15)
+            assert (result.returncode, result.stdout, result.stderr) == (0,
+                expected * (2 if '--twice' in options else 1), b''), (options, result)
+        assert path.read_bytes() == original_bytes
 
         run('clock-properties', 'import time\nfn verifyClocks()->i64 {\n const a=time.nanos()\n const ms=time.monotonic()\n const b=time.nanos()\n const cpu1=time.clock()\n const cpu2=time.clock()\n const now=time.now()\n if(a>0 && b>=a && a/1000000<=ms && ms<=b/1000000 && cpu1>=0 && cpu2>=cpu1 && now>0){return 1}\n return 0\n}\nprint(verifyClocks())\n', stdout=b'1\n')
         offset = root / 'offset-values.xr'

@@ -12,7 +12,7 @@ typedef struct RbcStringAdmission {
     const XrRbcModule *module;
     const XrRbcFunction *function;
     uint8_t state[XR_RBC_REGISTER_COUNT_MAX];
-    uint16_t origin[XR_RBC_REGISTER_COUNT_MAX];
+    uint32_t origin[XR_RBC_REGISTER_COUNT_MAX];
     uint32_t published;
     uint8_t *spills;
 } RbcStringAdmission;
@@ -25,6 +25,12 @@ static bool rbc_string_state(uint8_t state) {
 }
 static bool rbc_cell_state(uint8_t state) {
     return state == RBC_CELL_BORROWED || state == RBC_CELL_OWNED;
+}
+static bool rbc_cell_parameter_origin(uint32_t parameter, uint32_t *origin) {
+    if (parameter >= XR_RBC_REGISTER_COUNT_MAX || parameter > UINT32_MAX-UINT32_C(65537))
+        return false;
+    *origin = UINT32_C(65537) + parameter;
+    return true;
 }
 static bool rbc_string_source(const RbcStringAdmission *s, uint32_t r) {
     return rbc_register_kind(s->function, r) == XR_RBC_STRING && rbc_string_state(s->state[r]);
@@ -51,7 +57,7 @@ static bool rbc_strings_value(RbcStringAdmission *s, XrRbcOperands v) {
             if (rbc_register_kind(s->function, v.a) != XR_RBC_CALL_WINDOW ||
                 !rbc_bits_destination(s, v.a)) return false;
             state[v.a] = RBC_STRING_BORROWED;
-            s->origin[v.a] = (uint16_t)(v.b + 1);
+            s->origin[v.a] = v.b + 1;
         } else if (rbc_cell_state(state[v.b])) {
             XrRbcRegisterKind kind = rbc_register_kind(s->function, v.a);
             if ((kind != XR_RBC_CALL_WINDOW && kind != XR_RBC_STRING_CELL) ||
@@ -108,7 +114,7 @@ static bool rbc_strings_cell(RbcStringAdmission *s, XrRbcOperands v) {
             !f->cell_kinds || f->cell_kinds[v.c] != XR_RBC_STRING) return false;
         ++s->published;
         state[v.a] = RBC_CELL_OWNED;
-        s->origin[v.a] = (uint16_t)(v.c + 1);
+        s->origin[v.a] = v.c + 1;
         return true;
     }
     if (v.op == XR_RBC_CELL_NEW) {
@@ -120,7 +126,7 @@ static bool rbc_strings_cell(RbcStringAdmission *s, XrRbcOperands v) {
     }
     if (v.op == XR_RBC_STRING_CELL_DROP) {
         if (state[v.a] != RBC_CELL_OWNED || !s->origin[v.a]) return false;
-        uint16_t origin = s->origin[v.a];
+        uint32_t origin = s->origin[v.a];
         for (uint32_t r = 0; r < f->register_count; ++r)
             if (rbc_cell_state(state[r]) && s->origin[r] == origin) state[r] = RBC_EMPTY;
         return true;
@@ -246,15 +252,18 @@ static bool rbc_string_jump(const XrRbcFunction *f, size_t pc, size_t *target) {
     }
     return true;
 }
-/* The initial forward visit proves one iteration for every branch. A backedge
- * may repeat it only from the same empty managed entry obligations. Scalar
- * call-window initialization can improve an empty slot, never weaken one. */
+/* A frame Cell may survive a loop only with the same live symbolic identity.
+ * Ordinary Strings and staged borrows retain their empty-entry obligations. */
 static bool rbc_string_backedge(const RbcStringAdmission *from, const RbcStringAdmission *entry) {
     if (from->published != entry->published) return false;
     for (uint32_t r = 0; r < from->function->register_count; ++r) {
         XrRbcRegisterKind kind = rbc_register_kind(from->function, r);
         uint8_t old = entry->state[r], now = from->state[r];
-        if (kind == XR_RBC_STRING || kind == XR_RBC_STRING_CELL) {
+        if (kind == XR_RBC_STRING_CELL) {
+            if (old == RBC_EMPTY && now == RBC_EMPTY) continue;
+            if (!rbc_cell_state(old) || now != old || !entry->origin[r] ||
+                from->origin[r] != entry->origin[r]) return false;
+        } else if (kind == XR_RBC_STRING) {
             if (old != RBC_EMPTY || now != RBC_EMPTY) return false;
         } else if (kind == XR_RBC_CALL_WINDOW) {
             if ((old != RBC_EMPTY && old != RBC_BITS) || (now != RBC_EMPTY && now != RBC_BITS) ||
@@ -342,7 +351,12 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
         XrRbcRegisterKind kind = rbc_register_kind(f,r);
         state.state[r] = kind == XR_RBC_BITS && (!f->spill_count || r<f->parameter_count) ? RBC_BITS : RBC_EMPTY;
         if (r < f->parameter_count && kind == XR_RBC_STRING) state.state[r] = RBC_STRING_BORROWED;
-        if (r < f->parameter_count && kind == XR_RBC_STRING_CELL) state.state[r] = RBC_CELL_BORROWED;
+        if (r < f->parameter_count && kind == XR_RBC_STRING_CELL) {
+            state.state[r] = RBC_CELL_BORROWED;
+            /* Local cells use ordinals 1..65536. Parameters are separate
+             * symbolic identities, never a claim that actual arguments differ. */
+            if (!rbc_cell_parameter_origin(r, &state.origin[r])) { valid = false; break; }
+        }
     }
     bool live = true;
     for (size_t pc = 0; pc < f->code_count && valid; ++pc) {

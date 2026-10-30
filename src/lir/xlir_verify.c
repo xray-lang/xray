@@ -587,6 +587,63 @@ static XrLirStatus lir_literal_consumers(const XrLirFunctionData *f, uint32_t fu
     return XR_LIR_OK;
 }
 
+static bool lir_frame_cell_owner(const XrLirFunctionData *f, uint32_t id) {
+    const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, id);
+    return definition && definition->op == XR_LIR_CELL_NEW && definition->type == XR_LIR_STRING_CELL;
+}
+
+/* A Cell handle never transfers along an edge. An entry constructor owns its
+ * contents through the frame; an incoming parameter borrows an active caller. */
+static XrLirStatus lir_frame_cells(const XrLirFunctionData *f, uint32_t function,
+    uint8_t *released, XrLirDiagnostic *d) {
+    for (uint32_t id = 1; id <= f->value_count; ++id) {
+        const XrLirValueData *value = &f->values[id - 1];
+        if (value->type != XR_LIR_STRING_CELL) continue;
+        if (!lir_frame_cell_owner(f, id) && (!value->parameter || value->block))
+            return xr_lir_internal_error(d, "String Cell requires an entry owner or incoming borrow",
+                function, value->block, 0, NULL);
+    }
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        memset(released, 0, f->value_count);
+        const XrLirBlockData *block = &f->blocks[b];
+        const XrLirInstructionView *term = lir_terminator(f, b);
+        for (uint32_t i = 0; i < block->instruction_count; ++i) {
+            const XrLirInstructionView *v = &block->instructions[i].view;
+            for (uint32_t a = 0; a < v->operand_count; ++a) {
+                uint32_t id = v->operands[a];
+                if (f->values[id - 1].type != XR_LIR_STRING_CELL) continue;
+                if (released[id - 1])
+                    return xr_lir_internal_error(d, "String Cell use follows release", function, b+1, i+1, &v->source);
+                if (v->op != XR_LIR_CELL_READ && v->op != XR_LIR_CELL_WRITE &&
+                    v->op != XR_LIR_CALL && v->op != XR_LIR_STRING_CELL_DROP)
+                    return xr_lir_internal_error(d, "String Cell handle cannot escape its frame",
+                        function, b+1, i+1, &v->source);
+            }
+            if (v->op == XR_LIR_STRING_CELL_DROP) {
+                uint32_t id = v->operands[0];
+                if (!lir_frame_cell_owner(f, id))
+                    return xr_lir_internal_error(d, "incoming String Cell borrow cannot be released",
+                        function, b+1, i+1, &v->source);
+                if (f->block_count != 1 && term->op != XR_LIR_RET)
+                    return xr_lir_internal_error(d, "frame String Cell release requires a normal return",
+                        function, b+1, i+1, &v->source);
+                released[id - 1] = 1;
+            }
+        }
+        for (uint32_t e = 0; e < term->edge_count; ++e)
+            for (uint32_t a = 0; a < term->edges[e].argument_count; ++a)
+                if (f->values[term->edges[e].arguments[a] - 1].type == XR_LIR_STRING_CELL)
+                    return xr_lir_internal_error(d, "String Cell handle cannot transfer on an edge",
+                        function, b+1, 0, &term->source);
+        if (term->op == XR_LIR_RET)
+            for (uint32_t id = 1; id <= f->value_count; ++id)
+                if (lir_frame_cell_owner(f, id) && !released[id - 1])
+                    return xr_lir_internal_error(d, "frame String Cell requires release on every normal return",
+                        function, b+1, 0, &term->source);
+    }
+    return XR_LIR_OK;
+}
+
 /* Each block owns its String parameters and instruction results.
  * Backedges cannot transport managed owners or parameter borrows.
  * Only explicit selected-edge or result transfers may leave that block. */
@@ -598,6 +655,10 @@ static XrLirStatus lir_string_owners(const XrLirFunctionData *f, uint32_t functi
         cells |= f->values[i].type == XR_LIR_STRING_CELL;
     }
     if (!managed) return XR_LIR_OK;
+    if (cells) {
+        XrLirStatus status = lir_frame_cells(f, function, owned, d);
+        if (status != XR_LIR_OK) return status;
+    }
     for (uint32_t b = 0; b < f->block_count; ++b) {
         const XrLirInstructionView *term = lir_terminator(f, b);
         for (uint32_t e = 0; e < term->edge_count; ++e)
@@ -612,8 +673,6 @@ static XrLirStatus lir_string_owners(const XrLirFunctionData *f, uint32_t functi
                 }
             }
     }
-    if (cells && f->block_count != 1)
-        return xr_lir_internal_error(d, "physical String Cell requires one block", function, 0, 0, NULL);
     for (uint32_t b = 0; b < f->block_count; ++b) {
         memset(owned, 0, f->value_count);
         const XrLirBlockData *block = &f->blocks[b];
@@ -625,18 +684,18 @@ static XrLirStatus lir_string_owners(const XrLirFunctionData *f, uint32_t functi
             for (uint32_t a = 0; a < v->operand_count; ++a) {
                 uint32_t id = v->operands[a];
                 const XrLirValueData *value = &f->values[id - 1];
-                if ((value->type == XR_LIR_STRING || value->type == XR_LIR_STRING_CELL) &&
+                if (value->type == XR_LIR_STRING &&
                     (!value->parameter || value->block) && !owned[id - 1])
                     return xr_lir_internal_error(d, "String use follows release or precedes ownership", function, b + 1, i + 1, &v->source);
             }
-            if (v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_STRING_CELL_DROP ||
+            if (v->op == XR_LIR_STRING_DROP ||
                 (v->op == XR_LIR_RET && v->operand_count && f->result == XR_LIR_STRING)) {
                 uint32_t id = v->operands[0];
                 if (!owned[id - 1])
                     return xr_lir_internal_error(d, "String transfer requires an owned reference", function, b + 1, i + 1, &v->source);
                 owned[id - 1] = 0;
             }
-            if (v->result && (v->type == XR_LIR_STRING || v->type == XR_LIR_STRING_CELL))
+            if (v->result && v->type == XR_LIR_STRING)
                 owned[v->result - 1] = 1;
         }
         const XrLirInstructionView *term = lir_terminator(f, b);

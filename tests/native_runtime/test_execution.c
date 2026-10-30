@@ -436,6 +436,71 @@ static void owned_string_root(void *data) {
     xrt_string_drop(&left);
     ++context->after;
 }
+typedef struct NativeFrameCell {
+    XrtLocationOwner *locations;
+    XrtStringRoot strings;
+    XrtExecutionFailure failure;
+    XrtString *cell;
+    unsigned mode,writes,normal_drops,after;
+    bool before_drain;
+} NativeFrameCell;
+static void native_frame_cell_root(void *data) {
+    NativeFrameCell *c=data;
+    XrtString *seed=xrt_string_new("initial",7,1);
+    c->cell=xrt_string_retain(seed,1);xrt_string_drop(&seed);
+#if defined(XR_NATIVE_STRING_ALLOCATIONS)
+    if(c->mode>=5) {
+        native_string_fail_at=native_string_calls+c->mode-5;
+        native_string_injected=false;
+    }
+#endif
+    for(unsigned i=0;i<3;++i) {
+        XrtString *replacement=xrt_string_new("new\0\xc3\xa9",6,1);
+        XrtString *owned=xrt_string_retain(replacement,1);
+        xrt_string_drop(&c->cell);++c->writes;c->cell=owned;
+        xrt_string_drop(&replacement);
+        XrtString *read=xrt_string_retain(c->cell,1);
+        owned_string_equal(read,"new\0\xc3\xa9",6);xrt_string_drop(&read);
+        if(i==0 && c->mode==1)xrt_print_string("not continued",13,1);
+        if(i==0 && (c->mode==2 || c->mode==3))xrt_arithmetic_panic(418+c->mode,1);
+        if(i==0 && c->mode==4)(void)xrt_clock_utc_offset_at(INT64_MAX,1);
+    }
+    xrt_string_drop(&c->cell);++c->normal_drops;
+    CHECK(!c->cell && !c->strings.owners);c->before_drain=true;++c->after;
+}
+static void native_frame_cell_recovery(void) {
+    NativeFrameCell *c=xr_calloc(1,sizeof(*c));CHECK(c);
+    c->locations=locations("native-frame-cell.xr");
+    for(unsigned mode=0;mode<=4;++mode) {
+        c->mode=mode;c->writes=c->normal_drops=c->after=0;c->before_drain=false;
+        SavedOutput saved=mode==1?disable_output():(SavedOutput)0;
+        XrtExecutionStatus status=xrt_run_embedded_owned(c->locations,&c->failure,native_frame_cell_root,c,&c->strings);
+        if(mode==1)restore_output(saved);
+        CHECK(status==(mode?XRT_EXECUTION_FAILURE:XRT_EXECUTION_COMPLETED));
+        CHECK(!c->strings.domain && !c->strings.owners);
+        if(!mode)CHECK(c->writes==3 && c->normal_drops==1 && c->after==1 && c->before_drain && !c->cell);
+        else CHECK(c->writes==1 && !c->normal_drops && !c->after && !c->before_drain);
+        if(mode==1)CHECK(c->failure.kind==XRT_FAILURE_OUTPUT && c->failure.detail.output.source_id==1);
+        if(mode==2 || mode==3)CHECK(c->failure.kind==XRT_FAILURE_ARITHMETIC_PANIC &&
+            c->failure.detail.panic.code==418+mode && c->failure.detail.panic.source_id==1);
+        if(mode==4)CHECK(c->failure.kind==XRT_FAILURE_HOST_CLOCK && c->failure.detail.clock.source_id==1);
+        c->cell=NULL; // Failure retired the root; the old slot is no longer an owner.
+    }
+#if defined(XR_NATIVE_STRING_ALLOCATIONS)
+    for(unsigned mode=5;mode<=7;++mode) {
+        c->mode=mode;c->writes=c->normal_drops=c->after=0;c->before_drain=false;
+        CHECK(xrt_run_embedded_owned(c->locations,&c->failure,native_frame_cell_root,c,&c->strings)==XRT_EXECUTION_FAILURE);
+        native_string_fail_at=SIZE_MAX;
+        CHECK(native_string_injected && c->failure.kind==XRT_FAILURE_VALUE &&
+            c->failure.detail.value.status==XR_XIR_VALUE_OOM && c->failure.detail.value.source_id==1);
+        CHECK(!c->writes && !c->normal_drops && !c->after && !c->before_drain);
+        CHECK(!c->strings.domain && !c->strings.owners && !native_string_live && !native_string_bytes);
+        c->cell=NULL;
+    }
+#endif
+    xrt_locations_release(c->locations);xr_free(c);
+}
+
 static void native_owned_strings(void) {
     OwnedStringContext *context = xr_calloc(1,sizeof(*context)); CHECK(context);
     context->locations = locations("native-owned-string.xr");
@@ -496,6 +561,7 @@ static void native_owned_strings(void) {
 }
 
 int main(void) {
+    native_frame_cell_recovery();
     native_shared_strings();
     native_owned_strings();
     Context *outer = xr_calloc(1, sizeof(*outer));

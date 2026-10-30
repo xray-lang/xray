@@ -122,14 +122,12 @@ def main():
     original_parameter = Path(__file__).resolve().parents[2] / 'tests/diff/cases/semantics/string_owning_parameter.xr'
     original_bytes = original_parameter.read_bytes()
     assert len(original_bytes.replace(b'\r\n', b'\n')) == 1403 and original_bytes.count(b'while (i < 50)') == 1
-    original_copy, original_c = root / 'original-string-parameter.xr', root / 'original-string-parameter.c'
-    original_copy.write_bytes(original_bytes)
-    refused = subprocess.run([str(args.driver), str(original_copy), str(original_c)], capture_output=True, timeout=30)
-    assert refused.returncode == 1 and refused.stdout == b'' and not original_c.exists()
-    assert b'lowering: physical String Cell across blocks is not supported by LIR lowering yet' in refused.stderr
+    original_expected = b'literal!\nnamed!\nnamed\nbuilt!!\nbuilt!\nsecond/\nchain!!\nloop!\n'
+    assert len(original_expected) == 59
+    cases['original-string-parameter'] = (original_parameter, original_expected)
+    cases['original-string-parameter-optimized'] = (original_parameter, original_expected)
     identity['originalStringParameter'] = {'path': str(original_parameter), 'bytes': len(original_bytes),
-        'sha256': hashlib.sha256(original_bytes).hexdigest(), 'copiedRawExactly': original_copy.read_bytes() == original_bytes,
-        'stderrHex': refused.stderr.hex(), 'publishedC': False}
+        'sha256': hashlib.sha256(original_bytes).hexdigest(), 'expectedHex': original_expected.hex()}
     for name, text in {
         'transitive': 'fn leaf()->i64{return state}\nfn middle()->i64{return leaf()}\n'
             'fn top()->i64{return middle()}\nprint(top())\nvar state=7\n',
@@ -176,7 +174,10 @@ def main():
         assert text.count('const XrtSourceMap xrt_standalone_source_map =') == 1
         assert text.count('xrt_run_standalone(') == 1
         assert '#include "xray_native_runtime.h"' in text and '({' not in text
-        assert re.search(r'xrt_print_i64\((?:v|p)[0-9]+, UINT32_C\([0-9]+\)\);', text)
+        if name.startswith('original-string-parameter'):
+            assert re.search(r'xrt_print_string\(bytes, length, UINT32_C\([0-9]+\)\);', text)
+        else:
+            assert re.search(r'xrt_print_i64\((?:v|p)[0-9]+, UINT32_C\([0-9]+\)\);', text)
         if name.startswith('literal-terminator') or name == 'literal-utf8-nul':
             assert re.search(r'xrt_print_string\((?:v|p)[0-9]+, \(size_t\)(?:v|p)[0-9]+, UINT32_C\([0-9]+\)\);', text)
             assert 'static const unsigned char xrl_literal' in text

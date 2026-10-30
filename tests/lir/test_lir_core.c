@@ -835,7 +835,94 @@ static void string_length_types(void) {
     CHECK(xr_lir_verify(m,NULL)==XR_LIR_VERIFY_ERROR);
     xr_lir_module_destroy(m);
 }
+static XrLirValue frame_string_cell(XrLirModule *m, XrLirBlock block) {
+    XrLirLiteral literal = {0}; XrLirValue text, cell;
+    OK(xr_lir_add_literal(m, "frame", 5, &literal));
+    XrLirInstruction create = {.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
+    OK(xr_lir_emit_value(m,block,&create,&text));
+    create=(XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_STRING_CELL,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_value(m,block,&create,&cell));
+    XrLirInstruction drop={.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_effect(m,block,&drop));
+    return cell;
+}
+static void frame_cell_drop(XrLirModule *m, XrLirBlock block, XrLirValue cell) {
+    XrLirInstruction drop={.op=XR_LIR_STRING_CELL_DROP,.type=XR_LIR_UNIT,.operands=&cell,.operand_count=1};
+    OK(xr_lir_emit_effect(m,block,&drop));
+}
+static void frame_cell_read(XrLirModule *m, XrLirBlock block, XrLirValue cell) {
+    XrLirValue text;
+    XrLirInstruction read={.op=XR_LIR_CELL_READ,.type=XR_LIR_STRING,.operands=&cell,.operand_count=1};
+    OK(xr_lir_emit_value(m,block,&read,&text));
+    XrLirInstruction drop={.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_effect(m,block,&drop));
+}
+static void frame_string_cells(void) {
+    for (unsigned attack=0; attack<8; ++attack) {
+        XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+        XrLirType flag=XR_LIR_I1,cell_type=XR_LIR_STRING_CELL;
+        XrLirFunction f=test_function(m,"frame_returns",attack==5?&cell_type:&flag,1,XR_LIR_I64);
+        XrLirBlock entry=test_block(m,f,NULL,0),yes=test_block(m,f,NULL,0),no=test_block(m,f,NULL,0);
+        OK(xr_lir_set_entry(m,f,entry));
+        XrLirValue cell,condition;
+        if (attack==5) {
+            OK(xr_lir_function_parameter(m,f,0,&cell));
+            condition=test_constant(m,entry,XR_LIR_I1,1);
+        } else {
+            cell=frame_string_cell(m,entry);
+            OK(xr_lir_function_parameter(m,f,0,&condition));
+        }
+        if(attack==6) {
+            XrLirValue text,new_cell={0};
+            XrLirInstruction read={.op=XR_LIR_CELL_READ,.type=XR_LIR_STRING,.operands=&cell,.operand_count=1};
+            OK(xr_lir_emit_value(m,yes,&read,&text));
+            XrLirInstruction create={.op=XR_LIR_CELL_NEW,.type=XR_LIR_STRING_CELL,.operands=&text,.operand_count=1};
+            CHECK(xr_lir_emit_value(m,yes,&create,&new_cell)!=XR_LIR_OK && !new_cell.id);
+            xr_lir_module_destroy(m);continue;
+        }
+        if (attack==3) frame_cell_drop(m,entry,cell);
+        XrLirInstruction branch={.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&condition,.operand_count=1,
+            .edges={{yes,NULL,0},{no,NULL,0}},.edge_count=2};
+        OK(xr_lir_set_terminator(m,entry,&branch));
+        for (unsigned arm=0; arm<2; ++arm) {
+            XrLirBlock block=arm?no:yes;
+            if (attack!=6 || !arm) frame_cell_read(m,block,cell);
+            if (!(attack==1 && arm)) frame_cell_drop(m,block,cell);
+            if (attack==2 && !arm) frame_cell_drop(m,block,cell);
+            if (attack==4 && !arm) frame_cell_read(m,block,cell);
+            if (attack==7 && !arm) test_branch(m,block,entry,NULL,0);
+            else test_return(m,block,test_constant(m,block,XR_LIR_I64,arm));
+        }
+        CHECK(xr_lir_verify(m,NULL)==(attack?XR_LIR_VERIFY_ERROR:XR_LIR_OK));
+        if (!attack) {
+            OK(xr_lir_module_finish(m,NULL));
+            XrLirModule *copy=NULL;OK(xr_lir_rebuild(m,&copy));OK(xr_lir_verify(copy,NULL));xr_lir_module_destroy(copy);
+        }
+        xr_lir_module_destroy(m);
+    }
+    // A single block may still release early when the handle is never used again.
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+    XrLirFunction f=test_function(m,"early_release",NULL,0,XR_LIR_I64);
+    XrLirBlock entry=test_block(m,f,NULL,0);OK(xr_lir_set_entry(m,f,entry));
+    frame_cell_drop(m,entry,frame_string_cell(m,entry));
+    test_return(m,entry,test_constant(m,entry,XR_LIR_I64,7));OK(xr_lir_module_finish(m,NULL));
+    xr_lir_module_destroy(m);
+    m=NULL;OK(xr_lir_module_create(NULL,&m));XrLirFunction escaped={0};
+    XrLirFunctionSpec spec={.name="escaped_cell",.name_length=12,.result=XR_LIR_STRING_CELL};
+    CHECK(xr_lir_declare_function(m,&spec,&escaped)==XR_LIR_INVALID_ARGUMENT && !escaped.id);
+    xr_lir_module_destroy(m);
+    m=NULL;OK(xr_lir_module_create(NULL,&m));
+    f=test_function(m,"cell_edge",NULL,0,XR_LIR_I64);
+    entry=test_block(m,f,NULL,0);XrLirType type=XR_LIR_STRING_CELL;
+    XrLirBlock done=test_block(m,f,&type,1);OK(xr_lir_set_entry(m,f,entry));
+    XrLirValue cell=frame_string_cell(m,entry);
+    test_branch(m,entry,done,&cell,1);frame_cell_drop(m,done,cell);
+    test_return(m,done,test_constant(m,done,XR_LIR_I64,7));
+    CHECK(xr_lir_verify(m,NULL)==XR_LIR_VERIFY_ERROR);xr_lir_module_destroy(m);
+}
+
 int main(void) {
+    frame_string_cells();
     string_length_types();
     string_sequential_owners();
     string_loop_owners();

@@ -654,6 +654,53 @@ static void module_call_closures(void) {
     puts("complete direct-call storage closures share physical signatures after Source retirement");
 }
 
+static void frame_cells_source(const char *directory) {
+    char *text=read_file(directory,"../../diff/cases/semantics/string_owning_parameter","xr");
+    SourceFixture fixture=source_fixture(text);xr_free(text);
+    XrLirLowerRequest request={fixture.closed,fixture.source.snapshot,false};
+    XrLirLowered out={0};OK(xr_lir_lower_program_checked(&request,&out,NULL));
+    source_fixture_free(&fixture);OK(xr_lir_verify(out.module,NULL));
+    unsigned total_cells=0,total_drops=0,multiple_blocks=0;
+    for(uint32_t n=0;n<xr_lir_function_count(out.module);++n) {
+        XrLirFunction f;XrLirFunctionView v;
+        OK(xr_lir_function_at(out.module,n,&f));OK(xr_lir_function_view(out.module,f,&v));
+        unsigned owners=0,returns=0,drops=0;
+        for(uint32_t b=0;b<v.block_count;++b) {
+            XrLirBlock block;XrLirBlockView bv;
+            OK(xr_lir_block_at(out.module,f,b,&block));OK(xr_lir_block_view(out.module,block,&bv));
+            XrLirInstructionView term;OK(xr_lir_instruction_view(out.module,block,bv.instruction_count-1,&term));
+            returns+=term.op==XR_LIR_RET;
+            for(uint32_t i=0;i<bv.instruction_count;++i) {
+                XrLirInstructionView op;OK(xr_lir_instruction_view(out.module,block,i,&op));
+                if(op.op==XR_LIR_CELL_NEW && op.type==XR_LIR_STRING_CELL) {
+                    CHECK(block.id==v.entry);++owners;
+                }
+                if(op.op==XR_LIR_STRING_CELL_DROP) {CHECK(term.op==XR_LIR_RET);++drops;}
+            }
+        }
+        CHECK(drops==owners*returns);
+        if(owners) {CHECK(v.block_count>1);++multiple_blocks;}
+        total_cells+=owners;total_drops+=drops;
+    }
+    CHECK(total_cells==3 && total_drops==3 && multiple_blocks==1);
+    xr_lir_lowered_free(&out);
+    static const char *const programs[]={
+        "var text=\"seed\"\nvar i=0\nwhile(i<3){text=\"v${i}\"\ni=i+1}\nprint(text)\n",
+        "var text=\"seed\"\nfn read(n:i64)->string{if(n<0){return text}\n"
+        "if(n>0){text=\"changed\"\nreturn text}\nreturn text}\nprint(read(-1))\nprint(read(1))\nprint(read(0))\n",
+        "var text=\"outer\"\nfn frame(n:i64)->i64{var local=\"frame\"\n"
+        "const answer=recurse(n)\nreturn answer+len(local)}\n"
+        "fn recurse(n:i64)->i64{if(n==0){return len(text)}\nreturn frame(n-1)}\n"
+        "print(recurse(80))\nprint(text)\n"
+    };
+    for(size_t i=0;i<sizeof(programs)/sizeof(programs[0]);++i) {
+        fixture=source_fixture(programs[i]);request=(XrLirLowerRequest){fixture.closed,fixture.source.snapshot,false};
+        OK(xr_lir_lower_program_checked(&request,&out,NULL));source_fixture_free(&fixture);
+        OK(xr_lir_verify(out.module,NULL));xr_lir_lowered_free(&out);
+    }
+    puts("full original String module frame owns three Cells across CFG and drops on normal return");
+}
+
 static void local_boundaries(void) {
     static const char *texts[] = {
         "fn selected(x:i64)->i64{return x+1}\nprint(selected(7))\n",
@@ -764,6 +811,7 @@ int main(int argc, char **argv) {
     literal_sources();
     module_cells_source(argv[1]);
     module_call_closures();
+    frame_cells_source(argv[1]);
     local_boundaries();
     golden(argv[1], argv[2], "source-fib");
     golden(argv[1], argv[2], "source-sum");

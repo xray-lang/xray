@@ -561,6 +561,113 @@ static void owned_string_result(const char *path) {
     xr_lir_c_output_free(&output);
 }
 
+// This explicit LIR fixture qualifies both physical consumers, not a Source producer.
+static void frame_cell_result(const char *path) {
+    static const unsigned char bytes[]={'c','e','l','l',0,0xc3,0xa9};
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+    XrLirFunction root={0};XrLirFunctionSpec spec={.name="frame_result",.name_length=12,.result=XR_LIR_STRING};
+    OK(xr_lir_declare_function(m,&spec,&root));OK(xr_lir_define_function(m,root));
+    XrLirBlock blocks[3];for(unsigned i=0;i<3;++i)OK(xr_lir_add_block(m,root,NULL,0,&blocks[i]));
+    OK(xr_lir_set_entry(m,root,blocks[0]));XrLirLiteral literal={0};
+    OK(xr_lir_add_literal(m,bytes,sizeof(bytes),&literal));
+    XrLirValue text,cell,condition;
+    XrLirInstruction op={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
+    OK(xr_lir_emit_value(m,blocks[0],&op,&text));
+    op=(XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_STRING_CELL,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_value(m,blocks[0],&op,&cell));
+    op=(XrLirInstruction){.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_effect(m,blocks[0],&op));
+    op=(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I1,.bits=1};
+    OK(xr_lir_emit_value(m,blocks[0],&op,&condition));
+    op=(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&condition,.operand_count=1,
+        .edges={{blocks[1],NULL,0},{blocks[2],NULL,0}},.edge_count=2};
+    OK(xr_lir_set_terminator(m,blocks[0],&op));
+    for(unsigned i=1;i<3;++i) {
+        op=(XrLirInstruction){.op=XR_LIR_CELL_READ,.type=XR_LIR_STRING,.operands=&cell,.operand_count=1};
+        OK(xr_lir_emit_value(m,blocks[i],&op,&text));
+        op=(XrLirInstruction){.op=XR_LIR_STRING_CELL_DROP,.type=XR_LIR_UNIT,.operands=&cell,.operand_count=1};
+        OK(xr_lir_emit_effect(m,blocks[i],&op));
+        op=(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&text,.operand_count=1};
+        OK(xr_lir_set_terminator(m,blocks[i],&op));
+    }
+    OK(xr_lir_module_finish(m,NULL));XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(m,root,&program,NULL)==XR_RBC_COMPILE_OK);
+    XrCompileResources *resources=NULL;XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+    XrLirCRequest request={m,root,resources,"frame-cell-result",NULL};XrLirCOutput output={0};
+    CHECK(xr_lir_emit_c(&request,&output,NULL)==XR_LIR_C_OK && output.entry_result==XR_LIR_STRING);
+    xr_lir_module_destroy(m);
+    for(unsigned run=0;run<2;++run) {
+        XrRbcExecution *execution=NULL;CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+        XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+        CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK);xr_rbc_execution_free(&execution);
+        if(run){xr_rbc_program_destroy(program);program=NULL;}
+        XrtString *owned=NULL;CHECK(xr_rbc_outcome_take_string(outcome,&owned));xr_rbc_outcome_free(&outcome);
+        size_t length=0;const char *actual=xrt_string_bytes(owned,&length);
+        CHECK(length==sizeof(bytes) && !memcmp(actual,bytes,sizeof(bytes)));xrt_string_owned_drop(&owned);
+    }
+    FILE *file=fopen(path,"wb");CHECK(file);
+    CHECK(fwrite(output.bytes,1,output.length,file)==output.length && fclose(file)==0);
+    xr_lir_c_output_free(&output);xr_compile_resources_release(resources);
+}
+
+// Two symbolic Cell parameters can denote the same actual frame storage.
+static void frame_cell_alias(const char *path) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));XrLirFunction root,callee;
+    XrLirType types[]={XR_LIR_STRING_CELL,XR_LIR_STRING_CELL,XR_LIR_I64};
+    XrLirFunctionSpec spec={.name="alias_root",.name_length=10,.result=XR_LIR_I64};
+    OK(xr_lir_declare_function(m,&spec,&root));OK(xr_lir_define_function(m,root));
+    spec=(XrLirFunctionSpec){.name="explicit_hidden_alias",.name_length=21,.parameters=types,.parameter_count=3,.result=XR_LIR_I64};
+    OK(xr_lir_declare_function(m,&spec,&callee));OK(xr_lir_define_function(m,callee));
+    XrLirBlock entry,blocks[4];OK(xr_lir_add_block(m,root,NULL,0,&entry));OK(xr_lir_set_entry(m,root,entry));
+    for(unsigned i=0;i<4;++i)OK(xr_lir_add_block(m,callee,i==1?&types[2]:NULL,i==1?1u:0u,&blocks[i]));
+    OK(xr_lir_set_entry(m,callee,blocks[0]));XrLirLiteral seed={0},replacement={0};
+    OK(xr_lir_add_literal(m,"old",3,&seed));OK(xr_lir_add_literal(m,"alias",5,&replacement));
+    XrLirValue text,cell,n,result;
+    XrLirInstruction op={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=seed.id};
+    OK(xr_lir_emit_value(m,entry,&op,&text));op=(XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_STRING_CELL,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_value(m,entry,&op,&cell));op=(XrLirInstruction){.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_effect(m,entry,&op));op=(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64,.bits=3};
+    OK(xr_lir_emit_value(m,entry,&op,&n));XrLirValue arguments[]={cell,cell,n};
+    op=(XrLirInstruction){.op=XR_LIR_CALL,.type=XR_LIR_I64,.callee=callee,.operands=arguments,.operand_count=3};
+    OK(xr_lir_emit_value(m,entry,&op,&result));op=(XrLirInstruction){.op=XR_LIR_STRING_CELL_DROP,.type=XR_LIR_UNIT,.operands=&cell,.operand_count=1};
+    OK(xr_lir_emit_effect(m,entry,&op));op=(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&result,.operand_count=1};
+    OK(xr_lir_set_terminator(m,entry,&op));XrLirValue parameters[3],zero,one,iteration,condition,next,length;
+    for(unsigned i=0;i<3;++i)OK(xr_lir_function_parameter(m,callee,i,&parameters[i]));
+    op=(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64};OK(xr_lir_emit_value(m,blocks[0],&op,&zero));
+    op.bits=1;OK(xr_lir_emit_value(m,blocks[0],&op,&one));
+    op=(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,.edges={{blocks[1],&zero,1}},.edge_count=1};
+    OK(xr_lir_set_terminator(m,blocks[0],&op));OK(xr_lir_block_parameter(m,blocks[1],0,&iteration));
+    XrLirValue operands[]={iteration,parameters[2]};
+    op=(XrLirInstruction){.op=XR_LIR_ICMP,.type=XR_LIR_I1,.predicate=XR_LIR_LT,.operands=operands,.operand_count=2};
+    OK(xr_lir_emit_value(m,blocks[1],&op,&condition));
+    op=(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&condition,.operand_count=1,
+        .edges={{blocks[2],NULL,0},{blocks[3],NULL,0}},.edge_count=2};OK(xr_lir_set_terminator(m,blocks[1],&op));
+    op=(XrLirInstruction){.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=replacement.id};
+    OK(xr_lir_emit_value(m,blocks[2],&op,&text));operands[0]=parameters[1];operands[1]=text;
+    op=(XrLirInstruction){.op=XR_LIR_CELL_WRITE,.type=XR_LIR_UNIT,.operands=operands,.operand_count=2};
+    OK(xr_lir_emit_effect(m,blocks[2],&op));op=(XrLirInstruction){.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_effect(m,blocks[2],&op));operands[0]=iteration;operands[1]=one;
+    op=(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=operands,.operand_count=2};
+    OK(xr_lir_emit_value(m,blocks[2],&op,&next));
+    op=(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,.edges={{blocks[1],&next,1}},.edge_count=1};
+    OK(xr_lir_set_terminator(m,blocks[2],&op));
+    op=(XrLirInstruction){.op=XR_LIR_CELL_READ,.type=XR_LIR_STRING,.operands=&parameters[0],.operand_count=1};
+    OK(xr_lir_emit_value(m,blocks[3],&op,&text));op=(XrLirInstruction){.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_value(m,blocks[3],&op,&length));op=(XrLirInstruction){.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_effect(m,blocks[3],&op));op=(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&length,.operand_count=1};
+    OK(xr_lir_set_terminator(m,blocks[3],&op));OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *program=NULL;CHECK(xr_rbc_compile(m,root,&program,NULL)==XR_RBC_COMPILE_OK);
+    XrCompileResources *resources=NULL;XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+    XrLirCRequest request={m,root,resources,"frame-alias",NULL};XrLirCOutput output={0};
+    CHECK(xr_lir_emit_c(&request,&output,NULL)==XR_LIR_C_OK);xr_lir_module_destroy(m);
+    for(unsigned i=0;i<2;++i){uint64_t bits=99;CHECK(execute(program,NULL,0,&bits)==XR_RBC_OK&&bits==5);}
+    xr_rbc_program_destroy(program);FILE *file=fopen(path,"wb");CHECK(file);
+    CHECK(fwrite(output.bytes,1,output.length,file)==output.length&&fclose(file)==0);
+    xr_lir_c_output_free(&output);xr_compile_resources_release(resources);
+}
+
 static void constant_string_branch(const char *directory) {
     XrLirModule *modules[2]={NULL,NULL}; OK(xr_lir_module_create(NULL,&modules[0]));
     XrLirModule *m=modules[0];XrLirFunction f={0};
@@ -612,6 +719,8 @@ static void constant_string_branch(const char *directory) {
 }
 
 int main(int argc, char **argv) {
+    if(argc==3&&!strcmp(argv[1],"--frame-cell-result")){frame_cell_result(argv[2]);return 0;}
+    if(argc==3&&!strcmp(argv[1],"--frame-cell-alias")){frame_cell_alias(argv[2]);return 0;}
     if(argc==3&&!strcmp(argv[1],"--f64-family-c")){f64_family_c(argv[2]);return 0;}
     if(argc==2&&!strcmp(argv[1],"--f64-family-rbc")){f64_family_whole();return 0;}
     if(argc==3&&!strcmp(argv[1],"--i64-equality-c")){i64_equality_c(argv[2]);return 0;}

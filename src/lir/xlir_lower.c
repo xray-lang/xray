@@ -50,12 +50,12 @@ typedef struct LowerFunction {
     const XrXirFunction *source;
     XrLirFunction function;
     XrLirBlock *blocks;
-    XrLirValue *values, *states, *current, *slots;
+    XrLirValue *values, *states, *current, *slots, *frame_cells;
     XrLirType *cell_types;
     uint32_t *cell_for, *phis, *order, *stack, *next;
     uint8_t *reachable, *use, *define, *live;
     uint8_t *literal_uses;
-    uint32_t value_count, cell_count, ordered;
+    uint32_t value_count, cell_count, ordered, frame_cell_count;
 } LowerFunction;
 
 static XrLirType lower_type(XrXirType type) {
@@ -815,20 +815,9 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     }
     if (!f->block_count || !f->blocks || !f->instructions)
         return lower_unsupported(c, "function without a scalar body");
-    uint8_t *literal_uses = lower_literal_uses(c, f);
-    bool managed = literal_uses && lower_managed(c, f, literal_uses);
-    if (managed && f->block_count != 1)
-        for (uint32_t i = 0; i < f->instruction_count; ++i)
-            if (xr_xir_type_is_cell(c->source->types, f->instructions[i].type) &&
-                xr_xir_cell_element(c->source->types, f->instructions[i].type) == XR_XIR_STRING &&
-                !lower_promoted_string(c, f, &f->instructions[i])) {
-                xr_free(literal_uses);
-                return lower_unsupported(c, "physical String Cell across blocks");
-            }
     uint8_t *seen = lower_alloc(c, f->block_count, 1);
     uint32_t *queue = lower_alloc(c, f->block_count, sizeof(*queue));
-    if (!literal_uses || !seen || !queue) {
-        xr_free(literal_uses);
+    if (!seen || !queue) {
         xr_free(seen);
         xr_free(queue);
         return false;
@@ -872,7 +861,6 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     }
     xr_free(seen);
     xr_free(queue);
-    xr_free(literal_uses);
     return good;
 }
 
@@ -928,6 +916,7 @@ static bool lower_declare(Lower *c, uint32_t index) {
 static void lower_function_free(LowerFunction *f) {
     xr_free(f->literal_uses);
     xr_free(f->slots);
+    xr_free(f->frame_cells);
     xr_free(f->blocks);
     xr_free(f->values);
     xr_free(f->states);
@@ -1503,9 +1492,9 @@ static bool lower_string_kept(const XrLirInstruction *term, uint32_t id) {
 static bool lower_string_release(LowerFunction *f, uint32_t block,
     XrLirValue value, const XrLirInstruction *term) {
     XrLirType type = f->owner->module->functions[f->function.id - 1].values[value.id - 1].type;
-    if ((type != XR_LIR_STRING && type != XR_LIR_STRING_CELL) || lower_string_kept(term, value.id))
+    if (type != XR_LIR_STRING || lower_string_kept(term, value.id))
         return true;
-    XrLirInstruction drop = {.op=type == XR_LIR_STRING ? XR_LIR_STRING_DROP : XR_LIR_STRING_CELL_DROP,
+    XrLirInstruction drop = {.op=XR_LIR_STRING_DROP,
         .type=XR_LIR_UNIT, .operands=&value, .operand_count=1, .source=lower_source(f->owner)};
     return lower_build(f->owner, xr_lir_emit_effect(f->owner->module, f->blocks[block], &drop));
 }
@@ -1525,6 +1514,34 @@ static bool lower_strings_release(LowerFunction *f, uint32_t block, const XrLirI
             if (!lower_string_release(f, block, value, term)) return false;
         }
     }
+    if (term->op == XR_LIR_RET)
+        for (uint32_t i = 0; i < f->frame_cell_count; ++i) {
+            XrLirInstruction drop = {.op=XR_LIR_STRING_CELL_DROP, .type=XR_LIR_UNIT,
+                .operands=&f->frame_cells[i], .operand_count=1, .source=lower_source(f->owner)};
+            if (!lower_build(f->owner, xr_lir_emit_effect(f->owner->module, f->blocks[block], &drop)))
+                return false;
+        }
+    return true;
+}
+
+/* Physical Cell contents survive block edges, unlike temporary String owners.
+ * Inventory actual entry constructors; incoming hidden parameters remain borrows. */
+static bool lower_frame_cells(LowerFunction *f) {
+    XrLirFunctionData *function = &f->owner->module->functions[f->function.id - 1];
+    const XrLirBlockData *entry = &function->blocks[function->entry - 1];
+    for (uint32_t i = 0; i < entry->instruction_count; ++i) {
+        const XrLirInstructionView *v = &entry->instructions[i].view;
+        f->frame_cell_count += v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_STRING_CELL;
+    }
+    f->frame_cells = lower_alloc(f->owner, f->frame_cell_count, sizeof(*f->frame_cells));
+    if (f->frame_cell_count && !f->frame_cells) return false;
+    uint32_t at = 0;
+    for (uint32_t i = 0; i < entry->instruction_count; ++i) {
+        const XrLirInstructionView *v = &entry->instructions[i].view;
+        if (v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_STRING_CELL)
+            f->frame_cells[at++] = (XrLirValue){f->owner->module, f->function.id, v->result};
+    }
+    XR_DCHECK(at == f->frame_cell_count, "each entry Cell has one normal-exit owner");
     return true;
 }
 static bool lower_terminator(LowerFunction *f, uint32_t b) {
@@ -1612,6 +1629,7 @@ static bool lower_function(Lower *c, uint32_t index) {
     }
     for (uint32_t n = 0; n < f.ordered && good; ++n)
         good = lower_body(&f, f.order[n]);
+    if (good) good = lower_frame_cells(&f);
     for (uint32_t b = 0; b < f.source->block_count && good; ++b)
         if (f.reachable[b])
             good = lower_terminator(&f, b);

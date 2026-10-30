@@ -298,6 +298,40 @@ static void compiled_spills(void) {
     CHECK(execute(program,NULL,0,&bits)==XR_RBC_OK&&bits==259);
     xr_rbc_program_destroy(program);xr_lir_module_destroy(m);CHECK(!live_allocations);
 }
+static void frame_cfg_compiler_failures(void) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+    XrLirFunction root=test_function(m,"frame_allocation",NULL,0,XR_LIR_I64);
+    XrLirBlock entry=test_block(m,root,NULL,0),done=test_block(m,root,NULL,0);
+    OK(xr_lir_set_entry(m,root,entry));XrLirLiteral literal={0};
+    OK(xr_lir_add_literal(m,"frame\0x",7,&literal));XrLirValue text,cell,length;
+    XrLirInstruction op={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
+    OK(xr_lir_emit_value(m,entry,&op,&text));
+    op=(XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_STRING_CELL,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_value(m,entry,&op,&cell));
+    op=(XrLirInstruction){.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_effect(m,entry,&op));test_branch(m,entry,done,NULL,0);
+    op=(XrLirInstruction){.op=XR_LIR_CELL_READ,.type=XR_LIR_STRING,.operands=&cell,.operand_count=1};
+    OK(xr_lir_emit_value(m,done,&op,&text));
+    op=(XrLirInstruction){.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_value(m,done,&op,&length));
+    op=(XrLirInstruction){.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&text,.operand_count=1};
+    OK(xr_lir_emit_effect(m,done,&op));
+    op=(XrLirInstruction){.op=XR_LIR_STRING_CELL_DROP,.type=XR_LIR_UNIT,.operands=&cell,.operand_count=1};
+    OK(xr_lir_emit_effect(m,done,&op));test_return(m,done,length);OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *program=NULL;XrRbcCompileDiagnostic diagnostic;
+    attempts=0;fail_at=SIZE_MAX;CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OK);
+    size_t total=attempts;CHECK(total>10);xr_rbc_program_destroy(program);program=NULL;CHECK(!live_allocations);
+    for(size_t point=1;point<=total;++point) {
+        attempts=0;fail_at=point;
+        CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OUT_OF_MEMORY);
+        CHECK(!program && diagnostic.status==XR_RBC_COMPILE_OUT_OF_MEMORY && !live_allocations);
+    }
+    fail_at=SIZE_MAX;CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(m);uint64_t bits=99;
+    CHECK(execute(program,NULL,0,&bits)==XR_RBC_OK && bits==7);
+    xr_rbc_program_destroy(program);CHECK(!live_allocations);
+}
+
 int main(void) {
     compiled_spills();
     literal_allocation_failures();
@@ -335,6 +369,7 @@ int main(void) {
     xr_rbc_program_destroy(program);
     xr_lir_module_destroy(m);
     compiled_source_maps();
+    frame_cfg_compiler_failures();
     CHECK(!live_allocations);
     puts("lir_bytecode_alloc: passed (representative compiler/owner failures, relocating buffers)");
     return 0;

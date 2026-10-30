@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -62,6 +63,56 @@ def main():
         ran = run('native-' + optimization, [executable], folder)
         assert (ran.returncode, ran.stdout, ran.stderr) == (0, expected, b''), folder
 
+    def frame_observer(folder, generated, expected, drops, string_result=False, expected_result=0):
+        lines = generated.read_text(encoding='ascii').splitlines()
+        sites = [i+1 for i, line in enumerate(lines) if re.fullmatch(r'\s*xrt_string_drop\(v[0-9]+\);', line)]
+        assert sites, folder
+        predicate = ' || '.join('line == ' + str(i) + 'u' for i in sites)
+        invoke = ('XrtString *result=NULL;xrl_invoke(&result);size_t length=0;\n'
+            ' const char *bytes=xrt_string_bytes(result,&length);\n'
+            ' if(length!=7 || memcmp(bytes,"cell\\0\\303\\251",7) || o->strings.owners)abort();\n'
+            ' xrt_string_owned_drop(&result);\n' if string_result else
+            f'int64_t result=99;xrl_invoke(&result);\n if(result!={expected_result} || o->strings.owners)abort();\n')
+        observer = folder / 'normal-frame-observer.c'
+        observer.write_text('#include "runtime/native/xnative_execution.h"\n#include <stdlib.h>\n#include <string.h>\n'
+            'static unsigned cell_drops;\n'
+            'static void observed_drop(XrtString **value, unsigned line){\n'
+            f' if({predicate})++cell_drops;\n xrt_string_drop(value);\n}}\n'
+            '#define xrt_string_drop(value) observed_drop((value),__LINE__)\n'
+            f'#include "{generated.name}"\n#undef xrt_string_drop\n'
+            'typedef struct Observation{XrtStringRoot strings;unsigned visits;} Observation;\n'
+            'static void observe(void *data){Observation *o=data;\n' + invoke + ' ++o->visits;}\n'
+            'int main(void){Observation o={0};XrtLocationOwner *locations=NULL;XrtExecutionFailure failure={0};\n'
+            ' if(xrt_locations_create(xrt_standalone_source_map.locations,xrt_standalone_source_map.count,&locations)!=XRT_LOCATION_OK)return 1;\n'
+            ' for(unsigned run=0;run<2;++run){\n'
+            '  if(xrt_run_embedded_owned(locations,&failure,observe,&o,&o.strings)!=XRT_EXECUTION_COMPLETED)return 2;\n'
+            f'  if(cell_drops!=(run+1)*{drops}u || o.visits!=run+1 || o.strings.owners || o.strings.domain)return 3;\n'
+            ' }\n xrt_locations_release(locations);return 0;}\n', encoding='ascii')
+        obj = folder / ('normal-frame-observer.obj' if args.kind == 'msvc' else 'normal-frame-observer.o')
+        exe = folder / ('normal-frame-observer.exe' if args.kind == 'msvc' else 'normal-frame-observer')
+        if args.kind == 'msvc':
+            crt = {'MultiThreaded':'/MT','MultiThreadedDebug':'/MTd',
+                   'MultiThreadedDLL':'/MD','MultiThreadedDebugDLL':'/MDd'}[args.msvc_runtime]
+            flags = ['/nologo','/std:c11','/W4','/WX','/utf-8','/O2',crt,
+                     '/D_CRT_SECURE_NO_WARNINGS','/D_CRT_NONSTDC_NO_WARNINGS',
+                     '/I'+str(args.include),'/I'+str(args.source_root/'src')]
+            if args.asan: flags += ['/fsanitize=address','/clang:-fsanitize=undefined']
+            command = [args.compiler,*flags,'/c',observer,'/Fo:'+str(obj)]
+            link = [args.compiler,'/nologo',crt,obj,*args.library,'/Fe:'+str(exe)]
+            if args.asan: link += ['/fsanitize=address','/clang:-fsanitize=undefined','/link','/INCREMENTAL:NO']
+        else:
+            flags = ['-std=c11','-Wall','-Wextra','-Werror','-pedantic','-O2',
+                     '-I'+str(args.include),'-I'+str(args.source_root/'src')]
+            if args.asan: flags += ['-fsanitize=address,undefined']
+            command = [args.compiler,*flags,'-c',observer,'-o',obj]
+            link = [args.compiler,*flags,obj,*args.library,'-pthread','-o',exe]
+        result = run('normal-frame-compile',command,folder);assert result.returncode==0,folder
+        result = run('normal-frame-link',link,folder);assert result.returncode==0,folder
+        result = run('normal-frame-run',[exe],folder)
+        assert (result.returncode,result.stdout,result.stderr)==(0,expected*2,b''),folder
+        records.append({'case':'normal-frame-observer','folder':str(folder),'explicitCellDropsPerEntry':drops,
+                        'sites':sites,'preDrainOwnerEmpty':True,'stringResultTransferred':string_result,'result':'PASS'})
+
     hello = args.source_root / 'demos/01-basics/hello.xr'
     oracle = (args.source_root / 'tests/smoke/expected/hello.txt').read_bytes().replace(b'\r\n', b'\n')
     assert hashlib.sha256(hello.read_bytes().replace(b'\r\n', b'\n')).hexdigest() == '9615546fa72feb2d46cd0d5131a15aee3e1c6407a954697fe999e4956bce44e4'
@@ -73,7 +124,13 @@ def main():
         'fn show(n:i64){const text="é\\0${n}"\nprint(len(text))\nprint(count(text))\nprint(text)}\n'
         'show(7)\nshow(-2)\nprint(len(""))\nprint(len("😀e\\u{301}"))\n', encoding='utf-8')
     long_source = args.source_root / 'tests/diff/cases/limits/string_parts_over_64.xr'
+    original_parameter = args.source_root / 'tests/diff/cases/semantics/string_owning_parameter.xr'
+    original_bytes = original_parameter.read_bytes()
+    assert len(original_bytes.replace(b'\r\n', b'\n')) == 1403 and original_bytes.count(b'while (i < 50)') == 1
+    original_oracle = b'literal!\nnamed!\nnamed\nbuilt!!\nbuilt!\nsecond/\nchain!!\nloop!\n'
+    assert len(original_oracle) == 59
     cases = [('length-existing', length, b'2\n'),
+             ('original-parameter', original_parameter, original_oracle),
              ('length-over-64', long_source, b'140\n'),
              ('length-spill-branches', args.source_root / 'tests/lir/programs/owned-string-spill-branches.xr', b'140\n0\n'),
              ('length-unicode', unicode_length, b'3\n3\n\xc3\xa9\0' b'7\n4\n4\n\xc3\xa9\0-2\n0\n3\n'),
@@ -84,6 +141,22 @@ def main():
              ('loop-temporary', args.source_root / 'tests/lir/programs/owned-string-loop-temporary.xr', b'n=0\nn=1\nn=2\n'),
              ('loop-branches', args.source_root / 'tests/lir/programs/owned-string-loop-branches.xr', b'left0\nright1\nright2\n'),
              ('sequential', args.source_root / 'tests/lir/programs/owned-string-sequential.xr', b'L-1\nlow-1\nR3\nhigh3\n')]
+    frame_programs = {
+        'frame-branches': ('var left="é\\0"\nvar right=""\nvar i=0\n'
+            'while(i<4){if(i<2){left=left+"!"}else{right=right+"/"}\ni=i+1}\n'
+            'print(left)\nprint(right)\n', b'\xc3\xa9\0!!\n//\n', 2),
+        'frame-returns': ('var text="seed"\nfn read(n:i64)->string{if(n<0){return text}\n'
+            'if(n>0){text="changed"\nreturn text}\nreturn text}\n'
+            'print(read(-1))\nprint(read(1))\nprint(read(0))\n', b'seed\nchanged\nchanged\n', 1),
+        'frame-growth': ('var text="outer"\nfn frame(n:i64)->i64{var local="frame"\n'
+            'const answer=recurse(n)\nreturn answer+len(local)}\n'
+            'fn recurse(n:i64)->i64{if(n==0){return len(text)}\nreturn frame(n-1)}\n'
+            'print(recurse(80))\nprint(text)\n', b'405\nouter\n', 81),
+    }
+    frame_drops = {'original-parameter':3}
+    for name,(text,expected,drops) in frame_programs.items():
+        source=root/(name+'.xr');source.write_text(text,encoding='utf-8')
+        cases.append((name,source,expected));frame_drops[name]=drops
     for name, source, expected in cases:
         before = source.read_bytes()
         for mode in ('raw', 'sccp', 'inline', 'sccp-inline-inline-sccp'):
@@ -99,13 +172,34 @@ def main():
             text = generated.read_text(encoding='utf-8')
             assert '({' not in text and 'XrtString *' in text and 'xrt_string_' in text
             main = folder / 'main.c'
-            main.write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
-                            'int main(void){if(xray_lir_entry()!=0)return 1;return xray_lir_entry()!=0;}\n', encoding='ascii')
+            if name in frame_drops:
+                main.write_text('#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n'
+                    'extern int64_t xray_lir_entry(void);\n'
+                    'static void on_exit(void){fputs("EXIT_CALLBACK",stderr);}\n'
+                    'int main(int argc,char **argv){(void)argv;\n'
+                    ' if(argc>1 && atexit(on_exit)!=0)return 9;\n'
+                    ' if(xray_lir_entry()!=0)return 1;\n'
+                    ' if(xray_lir_entry()!=0)return 2;\n'
+                    ' if(argc>1)fputs("AFTER_ENTRY",stderr);\nreturn 0;}\n',encoding='ascii')
+            else:
+                main.write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
+                                'int main(void){if(xray_lir_entry()!=0)return 1;return xray_lir_entry()!=0;}\n', encoding='ascii')
             for optimization in (('Od', 'O1', 'O2', 'Ox') if mode == 'raw' else ('O2',)):
                 compile_run(folder,generated,main,optimization,expected * 2)
+            if name in frame_drops:
+                frame_observer(folder,generated,expected,frame_drops[name])
+                sink=folder/'standalone-read-only-output';sink.write_bytes(b'')
+                with sink.open('rb') as stream:
+                    executable=folder/('native-O2.exe' if args.kind=='msvc' else 'native-O2')
+                    failed=run('standalone-frame-output-failure',[executable,'failure-marker'],folder,stdout=stream)
+                assert failed.returncode==74 and failed.stdout is None and sink.read_bytes()==b'',folder
+                assert b'xray: output write failed at ' in failed.stderr,folder
+                assert b'AFTER_ENTRY' not in failed.stderr and b'EXIT_CALLBACK' not in failed.stderr,folder
+                records.append({'case':name,'mode':mode,'result':'STANDALONE_OUTPUT_74',
+                                'cellsLiveAtFirstOutput':name!='original-parameter'})
             records.append({'case': name, 'mode': mode, 'sourceSHA256': hashlib.sha256(before).hexdigest(),
                             'oracleHex': expected.hex(), 'result': 'PASS'})
-            if name.startswith('length-'):
+            if name.startswith('length-') or name in frame_drops:
                 for order in ('program-first', 'outcome-first'):
                     failure = folder / (order + '.json')
                     sink = folder / (order + '-read-only-output')
@@ -140,6 +234,31 @@ def main():
         ' xrt_run_standalone(&map,consume,NULL);xrt_run_standalone(&map,consume,NULL);return 0;}\n',encoding='ascii')
     for optimization in ('Od','O1','O2','Ox'):
         compile_run(folder,generated,main,optimization,b'')
+    folder = root / 'frame-cell-result'
+    folder.mkdir();generated = folder / 'generated.c'
+    result = run('frame-cell-result-rbc',[args.result_driver,'--frame-cell-result',generated],folder)
+    assert (result.returncode,result.stdout,result.stderr)==(0,b'',b''),folder
+    main = folder / 'main.c'
+    main.write_text('#include "xray_native_runtime.h"\n#include <stdlib.h>\n#include <string.h>\n'
+        'extern XrtString *xray_lir_entry(void);\n'
+        'int main(void){for(unsigned run=0;run<2;++run){XrtString *value=xray_lir_entry();\n'
+        ' size_t length=0;const char *bytes=xrt_string_bytes(value,&length);\n'
+        ' if(length!=7 || memcmp(bytes,"cell\\0\\303\\251",7))abort();\n'
+        ' xrt_string_owned_drop(&value);}\nreturn 0;}\n',encoding='ascii')
+    for optimization in ('Od','O1','O2','Ox'):
+        compile_run(folder,generated,main,optimization,b'')
+    frame_observer(folder,generated,b'',1,string_result=True)
+    folder = root / 'frame-cell-alias'
+    folder.mkdir();generated=folder/'generated.c'
+    result=run('frame-cell-alias-rbc',[args.result_driver,'--frame-cell-alias',generated],folder)
+    assert (result.returncode,result.stdout,result.stderr)==(0,b'',b''),folder
+    main=folder/'main.c'
+    main.write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
+        'int main(void){if(xray_lir_entry()!=5)return 1;return xray_lir_entry()!=5;}\n',encoding='ascii')
+    for optimization in ('Od','O1','O2','Ox'):
+        compile_run(folder,generated,main,optimization,b'')
+    frame_observer(folder,generated,b'',1,expected_result=5)
+    records.append({'case':'frame-cell-alias','producer':'explicit LIR, not Source ref admission','result':'PASS'})
     folder = root / 'constant-branch'
     folder.mkdir()
     result = run('constant-branch-rbc', [args.result_driver, '--constant-branch', folder], folder)

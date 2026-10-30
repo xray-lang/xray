@@ -1049,7 +1049,54 @@ static void test_scalar_spill_branches(void) {
     uint64_t flag=0;CHECK(run(program,&flag,1)==42);
     flag=1;CHECK(run(program,&flag,1)==259);xr_rbc_program_destroy(program);
 }
+static XrLirValue frame_text(XrLirModule *m,XrLirBlock block,const char *bytes,size_t length) {
+    XrLirLiteral literal={0};XrLirValue value;
+    OK(xr_lir_add_literal(m,bytes,length,&literal));
+    XrLirInstruction op={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
+    OK(xr_lir_emit_value(m,block,&op,&value));return value;
+}
+static void frame_drop(XrLirModule *m,XrLirBlock block,XrLirValue value,bool cell) {
+    XrLirInstruction op={.op=cell?XR_LIR_STRING_CELL_DROP:XR_LIR_STRING_DROP,
+        .type=XR_LIR_UNIT,.operands=&value,.operand_count=1};
+    OK(xr_lir_emit_effect(m,block,&op));
+}
+static void test_frame_cell_aliases(void) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+    XrLirType bit=XR_LIR_I1,cells[]={XR_LIR_STRING_CELL,XR_LIR_STRING_CELL};
+    XrLirFunction root=test_function(m,"frame_alias_caller",&bit,1,XR_LIR_I64);
+    XrLirFunction helper=test_function(m,"explicit_and_hidden_borrows",cells,2,XR_LIR_I64);
+    XrLirBlock entry=test_block(m,root,NULL,0),yes=test_block(m,root,NULL,0),no=test_block(m,root,NULL,0);
+    OK(xr_lir_set_entry(m,root,entry));XrLirValue handles[2];
+    for(unsigned i=0;i<2;++i) {
+        XrLirValue text=frame_text(m,entry,i?"other":"old",i?5u:3u);
+        XrLirInstruction op={.op=XR_LIR_CELL_NEW,.type=XR_LIR_STRING_CELL,.operands=&text,.operand_count=1};
+        OK(xr_lir_emit_value(m,entry,&op,&handles[i]));frame_drop(m,entry,text,false);
+    }
+    XrLirValue condition=parameter(m,root,0);
+    conditional(m,entry,condition,(XrLirEdge){yes,NULL,0},(XrLirEdge){no,NULL,0});
+    for(unsigned same=0;same<2;++same) {
+        XrLirBlock block=same?yes:no;XrLirValue arguments[]={handles[0],handles[same?0:1]},result;
+        XrLirInstruction call={.op=XR_LIR_CALL,.type=XR_LIR_I64,.callee=helper,.operands=arguments,.operand_count=2};
+        OK(xr_lir_emit_value(m,block,&call,&result));
+        frame_drop(m,block,handles[0],true);frame_drop(m,block,handles[1],true);test_return(m,block,result);
+    }
+    XrLirBlock body=test_block(m,helper,NULL,0);OK(xr_lir_set_entry(m,helper,body));
+    XrLirValue replacement=frame_text(m,body,"alias",5),write[]={parameter(m,helper,1),replacement};
+    XrLirInstruction op={.op=XR_LIR_CELL_WRITE,.type=XR_LIR_UNIT,.operands=write,.operand_count=2};
+    OK(xr_lir_emit_effect(m,body,&op));frame_drop(m,body,replacement,false);
+    XrLirValue first=parameter(m,helper,0),read,length;
+    op=(XrLirInstruction){.op=XR_LIR_CELL_READ,.type=XR_LIR_STRING,.operands=&first,.operand_count=1};
+    OK(xr_lir_emit_value(m,body,&op,&read));
+    op=(XrLirInstruction){.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&read,.operand_count=1};
+    OK(xr_lir_emit_value(m,body,&op,&length));frame_drop(m,body,read,false);test_return(m,body,length);
+    OK(xr_lir_module_finish(m,NULL));XrRbcProgram *program=compile(m,root);xr_lir_module_destroy(m);
+    uint64_t flag=0;CHECK(run(program,&flag,1)==3);flag=1;CHECK(run(program,&flag,1)==5);
+    flag=0;CHECK(run(program,&flag,1)==3);xr_rbc_program_destroy(program);
+    puts("frame Cells preserve real same-actual alias effects through distinct formal identities");
+}
+
 int main(void) {
+    test_frame_cell_aliases();
     test_scalar_spill_branches();
     test_scalar_spills();
     test_sequential_string_owners();
