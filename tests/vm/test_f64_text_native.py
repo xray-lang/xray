@@ -182,7 +182,8 @@ def main():
             run('compile-' + name + str(i), compile_command(compiler, flags, path, obj))
             objects.append(obj)
         executable = work / (name + ('.exe' if args.kind == 'msvc' else ''))
-        command = [compiler, *flags, *objects, *args.library]
+        link_flags = [flag for flag in flags if flag != '/EHsc']
+        command = [compiler, *link_flags, *objects, *args.library]
         command += ['/Fe:' + str(executable), '/link', '/INCREMENTAL:NO'] if args.kind == 'msvc' else ['-lm', '-pthread', '-o', executable]
         run('link-' + name, command)
         assert run('run-' + name, [executable]) == expected_stdout
