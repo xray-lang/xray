@@ -203,8 +203,6 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
                 if (i.result && !rbc_lir_pin_value(c,i.result,budget)) return false;
             }
             for (uint32_t e=0; e<i.edge_count; ++e) {
-                if (i.edges[e].target<=block.id)
-                    return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"spilled functions require forward block edges");
                 for (uint32_t a=0; a<i.edges[e].argument_count; ++a)
                     if (!rbc_lir_pin_value(c,i.edges[e].arguments[a],budget)) return false;
             }
@@ -299,7 +297,8 @@ static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
         if (progress) continue;
         XR_DCHECK(first != UINT32_MAX, "a pending parallel copy has an old source");
         uint32_t source = sources[first];
-        uint32_t temporary = c->slot_count + (strings[first] ? 1u : 0u);
+        uint32_t temporary = rbc_lir_copy_temporary(c, strings[first]);
+        if (temporary == UINT32_MAX) return false;
         if (strings[first]) c->string_scratch = true;
         if (emit && !rbc_lir_emit(c, strings[first] ? XR_RBC_STRING_TAKE : XR_RBC_MOV,
                 temporary, source, 0, 0)) return false;

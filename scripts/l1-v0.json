@@ -217,6 +217,7 @@
     "lir_vm_source",
     "lir_vm_output",
     "skeleton_diff",
+    "lir_spill_cfg",
     "test_lir_c",
     "test_lir_c_faults",
     "test_lir_c_native",

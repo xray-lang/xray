@@ -790,7 +790,13 @@ static void test_spills(void) {
     XrRbcFunction branching={.code=edge,.code_count=4,.register_count=1,.spill_count=1};
     XrRbcModule forward={.functions=&branching,.function_count=1};
     CHECK(execute(&forward,0,NULL,0,&result)==XR_RBC_OK && !result);
-    CHECK(xr_rbc_jump(edge+1,1,1,4));reject_prepare(&forward,0,NULL,0);
+    CHECK(xr_rbc_jump(edge+1,1,1,4));
+    // Admission terminates for an infinite guest loop; never execute this case.
+    XrRbcExecution *loop=NULL;
+    XrtLocationOwner *locations=NULL;
+    CHECK(xrt_locations_create(NULL,0,&locations)==XRT_LOCATION_OK);
+    CHECK(xr_rbc_module_prepare(&forward,0,NULL,0,locations,&loop)==XR_RBC_OK && loop);
+    xr_rbc_execution_free(&loop);xrt_locations_release(locations);
     uint32_t upper[6];immediate(upper,0,XR_RBC_STRING_LITERAL,0,0);
     immediate(upper,1,XR_RBC_SPILL,0,65534);immediate(upper,2,XR_RBC_RELOAD,0,65534);
     emit(upper,3,XR_RBC_STRING_DROP,0,0,0);immediate(upper,4,XR_RBC_LOADI,1,42);emit(upper,5,XR_RBC_RET,1,0,0);
@@ -860,7 +866,92 @@ static void test_spill_branches(void) {
     saved=scalar[7];immediate(scalar,7,XR_RBC_LOADI,1,0);
     reject_prepare(&module,0,&flag,1);scalar[7]=saved;
 }
+static void test_spill_layout_and_overwrite(void) {
+    uint32_t code[9];
+    CHECK(xr_rbc_jump(code,0,6,9));emit(code,1,XR_RBC_RET,1,0,0);
+    emit(code,2,XR_RBC_RET0,0,0,0);immediate(code,3,XR_RBC_RELOAD,1,0);
+    CHECK(xr_rbc_jump(code+4,4,1,9));emit(code,5,XR_RBC_RET0,0,0,0);
+    immediate(code,6,XR_RBC_LOADI,0,42);immediate(code,7,XR_RBC_SPILL,0,0);
+    CHECK(xr_rbc_jump(code+8,8,3,9));
+    XrRbcFunction f={.code=code,.code_count=9,.register_count=2,.spill_count=1};
+    XrRbcModule m={.functions=&f,.function_count=1};uint64_t result=0;
+    for(unsigned entry=0;entry<2;++entry)
+        CHECK(execute(&m,0,NULL,0,&result)==XR_RBC_OK && result==42);
+    uint32_t overwrite[7];
+    immediate(overwrite,0,XR_RBC_LOADI,0,1);immediate(overwrite,1,XR_RBC_SPILL,0,0);
+    immediate(overwrite,2,XR_RBC_LOADI,0,42);immediate(overwrite,3,XR_RBC_SPILL,0,0);
+    immediate(overwrite,4,XR_RBC_LOADI,1,99);immediate(overwrite,5,XR_RBC_RELOAD,1,0);
+    emit(overwrite,6,XR_RBC_RET,1,0,0);f.code=overwrite;f.code_count=7;
+    CHECK(execute(&m,0,NULL,0,&result)==XR_RBC_OK && result==42);
+    emit(overwrite,6,XR_RBC_RET,0,0,0);reject_prepare(&m,0,NULL,0);
+}
+
+static void test_spill_loop(void) {
+    uint32_t code[16];
+    immediate(code,0,XR_RBC_LOADI,1,0);immediate(code,1,XR_RBC_SPILL,1,0);
+    immediate(code,2,XR_RBC_LOADI,3,1);immediate(code,3,XR_RBC_LOADI,2,0);
+    emit(code,4,XR_RBC_EQ,0,2,0);CHECK(xr_rbc_jump(code+5,5,14,16));
+    immediate(code,6,XR_RBC_RELOAD,1,0);emit(code,7,XR_RBC_ADD,1,1,0);
+    immediate(code,8,XR_RBC_SPILL,1,0);emit(code,9,XR_RBC_SUB,0,0,3);
+    immediate(code,10,XR_RBC_SPILL,0,1);immediate(code,11,XR_RBC_LOADI,0,99);
+    immediate(code,12,XR_RBC_RELOAD,0,1);CHECK(xr_rbc_jump(code+13,13,3,16));
+    immediate(code,14,XR_RBC_RELOAD,1,0);emit(code,15,XR_RBC_RET,1,0,0);
+    XrRbcFunction f={.code=code,.code_count=16,.register_count=4,.parameter_count=1,.spill_count=2};
+    XrRbcModule m={.functions=&f,.function_count=1};uint64_t result=99;
+    const uint64_t counts[]={0,1,5,0};
+    for(unsigned i=0;i<4;++i)
+        CHECK(execute(&m,0,&counts[i],1,&result)==XR_RBC_OK && result==counts[i]*(counts[i]+1)/2);
+    uint64_t count=5;uint32_t saved=code[12],overwritten=code[11];
+    immediate(code,11,XR_RBC_LOADI,2,0);immediate(code,12,XR_RBC_LOADI,2,0);
+    reject_prepare(&m,0,&count,1);code[12]=saved;code[11]=overwritten;
+    saved=code[8];immediate(code,8,XR_RBC_LOADI,1,0);reject_prepare(&m,0,&count,1);code[8]=saved;
+    // A definition on a later iteration cannot initialize the first entry.
+    uint32_t entry[4];immediate(entry,0,XR_RBC_RELOAD,0,0);
+    immediate(entry,1,XR_RBC_LOADI,0,42);immediate(entry,2,XR_RBC_SPILL,0,0);
+    CHECK(xr_rbc_jump(entry+3,3,0,4));
+    f=(XrRbcFunction){.code=entry,.code_count=4,.register_count=1,.spill_count=1};
+    reject_prepare(&m,0,NULL,0);
+}
+
+static void test_spill_late_predecessor(void) {
+    uint32_t code[17];
+    immediate(code,0,XR_RBC_LOADI,2,0);emit(code,1,XR_RBC_EQ,0,2,0);
+    CHECK(xr_rbc_jump(code+2,2,4,17));CHECK(xr_rbc_jump(code+3,3,8,17));
+    immediate(code,4,XR_RBC_LOADI,1,42);immediate(code,5,XR_RBC_SPILL,1,0);
+    CHECK(xr_rbc_jump(code+6,6,10,17));emit(code,7,XR_RBC_RET0,0,0,0);
+    CHECK(xr_rbc_jump(code+8,8,12,17));emit(code,9,XR_RBC_RET0,0,0,0);
+    immediate(code,10,XR_RBC_RELOAD,1,0);emit(code,11,XR_RBC_RET,1,0,0);
+    CHECK(xr_rbc_jump(code+12,12,14,17));emit(code,13,XR_RBC_RET0,0,0,0);
+    immediate(code,14,XR_RBC_LOADI,1,43);immediate(code,15,XR_RBC_SPILL,1,0);
+    CHECK(xr_rbc_jump(code+16,16,10,17));
+    XrRbcFunction f={.code=code,.code_count=17,.register_count=3,.parameter_count=1,.spill_count=1};
+    XrRbcModule m={.functions=&f,.function_count=1};uint64_t flag=0,result=0;
+    CHECK(execute(&m,0,&flag,1,&result)==XR_RBC_OK && result==42);
+    flag=1;CHECK(execute(&m,0,&flag,1,&result)==XR_RBC_OK && result==43);
+    // The longer arm arrives after the join was already evaluated successfully.
+    immediate(code,14,XR_RBC_LOADI,2,7);immediate(code,15,XR_RBC_LOADI,2,7);
+    reject_prepare(&m,0,&flag,1);flag=0;reject_prepare(&m,0,&flag,1);
+}
+
+static void test_spill_managed_backedge(void) {
+    uint32_t code[4];immediate(code,0,XR_RBC_STRING_LITERAL,1,0);
+    immediate(code,1,XR_RBC_SPILL,1,0);immediate(code,2,XR_RBC_LOADI,0,1);
+    CHECK(xr_rbc_jump(code+3,3,3,4));
+    XrRbcRegisterKind kinds[]={XR_RBC_BITS,XR_RBC_STRING};
+    XrRbcLiteral literal={"owned",5};
+    XrRbcFunction f={.code=code,.code_count=4,.register_count=2,.register_kinds=kinds,
+        .register_kind_count=2,.spill_count=1,.reference_spill_count=1};
+    XrRbcModule m={.functions=&f,.function_count=1,.literals=&literal,.literal_count=1};
+    reject_prepare(&m,0,NULL,0);
+    // A live ordinary String is also forbidden even with an empty spill bank.
+    immediate(code,1,XR_RBC_LOADI,0,1);reject_prepare(&m,0,NULL,0);
+}
+
 int main(int argc, char **argv) {
+    test_spill_layout_and_overwrite();
+    test_spill_loop();
+    test_spill_late_predecessor();
+    test_spill_managed_backedge();
     test_f64_family();
     test_float_kinds_and_spills();
     test_f64_negation();

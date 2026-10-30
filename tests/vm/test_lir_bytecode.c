@@ -1095,7 +1095,63 @@ static void test_frame_cell_aliases(void) {
     puts("frame Cells preserve real same-actual alias effects through distinct formal identities");
 }
 
+static void test_typed_spill_copy_cycle(void) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));XrLirType integer=XR_LIR_I64;
+    XrLirFunction f=test_function(m,"mixed_typed_copy_cycle",&integer,1,integer);
+    XrLirType carried_types[]={integer,integer,integer};
+    XrLirBlock entry=test_block(m,f,NULL,0),loop=test_block(m,f,carried_types,3);
+    XrLirBlock body=test_block(m,f,NULL,0),done=test_block(m,f,NULL,0);
+    OK(xr_lir_set_entry(m,f,entry));
+    for(uint32_t n=0;n<260;++n)(void)test_constant(m,entry,integer,n);
+    // Force both typed scratch banks while keeping String ownership local.
+    XrLirValue text=frame_text(m,entry,"temporary",9);frame_drop(m,entry,text,false);
+    XrLirValue initial[]={test_constant(m,entry,integer,1),test_constant(m,entry,integer,2),parameter(m,f,0)};
+    test_branch(m,entry,loop,initial,3);
+    XrLirValue carried[]={block_parameter(m,loop,0),block_parameter(m,loop,1),block_parameter(m,loop,2)};
+    XrLirValue zero=test_constant(m,loop,integer,0);
+    XrLirValue condition=test_binary(m,loop,XR_LIR_ICMP,carried[2],zero,XR_LIR_GT);
+    conditional(m,loop,condition,(XrLirEdge){body,NULL,0},(XrLirEdge){done,NULL,0});
+    XrLirValue next=test_binary(m,body,XR_LIR_SUB,carried[2],test_constant(m,body,integer,1),XR_LIR_PREDICATE_NONE);
+    XrLirValue swapped[]={carried[1],carried[0],next};test_branch(m,body,loop,swapped,3);
+    test_return(m,done,carried[0]);OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *program=compile(m,f);const XrRbcFunction *physical=&xr_rbc_program_view(program)->functions[0];
+    CHECK(physical->spill_count);
+    bool bits_move=false;uint32_t string_registers=0;
+    for(uint32_t r=0;r<physical->register_count;++r)
+        string_registers+=physical->register_kinds[r]==XR_RBC_STRING;
+    for(size_t pc=0;pc<physical->code_count;++pc) {
+        XrRbcOp op=(XrRbcOp)(physical->code[pc]&255);
+        if(op==XR_RBC_MOV) {
+            uint32_t destination=(physical->code[pc]>>8)&255;
+            CHECK(physical->register_kinds[destination]==XR_RBC_BITS);bits_move=true;
+        }
+    }
+    CHECK(bits_move && string_registers>=2);xr_lir_module_destroy(m);
+    for(uint64_t n=0;n<4;++n)CHECK(run(program,&n,1)==(n%2?2u:1u));
+    xr_rbc_program_destroy(program);
+}
+
+static void test_publication_admission(void) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));XrLirType text_type=XR_LIR_STRING;
+    XrLirFunction f=test_function(m,"backward_owned_dag",NULL,0,XR_LIR_I64);
+    XrLirBlock entry=test_block(m,f,NULL,0),join=test_block(m,f,&text_type,1),producer=test_block(m,f,NULL,0);
+    OK(xr_lir_set_entry(m,f,entry));test_branch(m,entry,producer,NULL,0);
+    for(uint32_t n=0;n<260;++n)(void)test_constant(m,producer,XR_LIR_I64,n);
+    XrLirValue text=frame_text(m,producer,"owned",5);test_branch(m,producer,join,&text,1);
+    XrLirValue value=block_parameter(m,join,0),length;
+    XrLirInstruction op={.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&value,.operand_count=1};
+    OK(xr_lir_emit_value(m,join,&op,&length));frame_drop(m,join,value,false);test_return(m,join,length);
+    OK(xr_lir_module_finish(m,NULL));
+    // Valid LIR can exceed the retained physical managed-backedge boundary.
+    XrRbcProgram *program=NULL;XrRbcCompileDiagnostic diagnostic={0};
+    CHECK(xr_rbc_compile(m,f,&program,&diagnostic)==XR_RBC_COMPILE_UNSUPPORTED);
+    CHECK(!program && diagnostic.status==XR_RBC_COMPILE_UNSUPPORTED);
+    CHECK(strstr(diagnostic.message,"runtime admission"));xr_lir_module_destroy(m);
+}
+
 int main(void) {
+    test_typed_spill_copy_cycle();
+    test_publication_admission();
     test_frame_cell_aliases();
     test_scalar_spill_branches();
     test_scalar_spills();

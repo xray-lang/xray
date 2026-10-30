@@ -414,7 +414,29 @@ static void frame_cell_string_result(void) {
     for(unsigned i=0;i<4;++i)XR_CHECK(!blocks[i].pointer&&!blocks[i].size,"result banks retired");
 }
 
+static void spill_cycle_admission_oom(void) {
+    uint32_t code[3];immediate(code,0,XR_RBC_LOADI,0,42);
+    immediate(code,1,XR_RBC_SPILL,0,0);XR_CHECK(xr_rbc_jump(code+2,2,0,3),"cycle to actual entry");
+    XrRbcFunction function={.code=code,.code_count=3,.register_count=1,.spill_count=1};
+    XrRbcModule module={.functions=&function,.function_count=1};
+    XrtLocationOwner *owner=NULL;
+    XR_CHECK(xrt_locations_create(NULL,0,&owner)==XRT_LOCATION_OK,"cycle location owner");
+    for(unsigned i=0;i<4;++i) {
+        fault=i==0?STRING_INDEX_FAILURE:i==1?STRING_JOIN_FAILURE:i==2?SPILL_STATE_FAILURE:NO_FAILURE;
+        XrRbcExecution *execution=NULL;
+        XrRbcStatus status=xr_rbc_module_prepare(&module,0,NULL,0,owner,&execution);
+        XR_CHECK(fault==NO_FAILURE,"actual graph allocation fault reached");
+        if(i<3) XR_CHECK(status==XR_RBC_OUT_OF_MEMORY && !execution,"no Execution after graph OOM");
+        else XR_CHECK(status==XR_RBC_OK && execution,"fresh cyclic graph admission recovers");
+        // This is an infinite guest loop. Only prepare/free is intentional.
+        xr_rbc_execution_free(&execution);
+    }
+    xrt_locations_release(owner);
+    for(unsigned i=0;i<4;++i)XR_CHECK(!blocks[i].pointer && !blocks[i].size,"cycle banks reclaimed");
+}
+
 int main(void) {
+    spill_cycle_admission_oom();
     frame_cell_growth(NO_FAILURE,false);
     frame_cell_growth(CELL_INITIAL_FAILURE,false);
     frame_cell_growth(CELL_GROWTH_FAILURE,false);

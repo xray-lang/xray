@@ -11,6 +11,7 @@
  *   Callee growth therefore cannot overwrite a caller's live SSA values.
  */
 #include "xrbc_lir.h"
+#include "xrbc_internal.h"
 #include "lir/xlir_verify.h"
 #include "base/xmalloc.h"
 #include "base/xchecks.h"
@@ -349,6 +350,25 @@ rejected:
         return false;
     }
     return true;
+}
+
+/* Parallel copies run with no staged instruction operands. Reuse the first
+ * temporary of the matching bank, never a slot from the other typed pool. */
+static uint32_t rbc_lir_copy_temporary(RbcLirCompiler *c, bool string) {
+    uint32_t offset = string ? 1u : 0u;
+    if (c->typed_spills) {
+        if ((string && !c->temporary_strings) ||
+            (!string && !c->temporary_bits && !c->control_scratch)) {
+            rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "parallel copy has no matching typed scratch");
+            return UINT32_MAX;
+        }
+        offset = string ? 0u : c->temporary_strings;
+        if (offset >= c->scratch_count) {
+            rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "parallel copy exceeds typed scratch budget");
+            return UINT32_MAX;
+        }
+    }
+    return c->slot_count + offset;
 }
 
 #include "xrbc_lir_registers.inc.c"
@@ -902,6 +922,14 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     p->module.function_count = count;
     status = rbc_lir_build(input, ids, mapping, p, d);
     if (status == XR_RBC_COMPILE_OK) {
+        XrRbcStatus admitted = xr_rbc_module_admit(&p->module, p->locations);
+        if (admitted != XR_RBC_OK) {
+            status = admitted == XR_RBC_OUT_OF_MEMORY ? XR_RBC_COMPILE_OUT_OF_MEMORY :
+                XR_RBC_COMPILE_UNSUPPORTED;
+            rbc_lir_error(d, status, "register program does not satisfy runtime admission",
+                (XrLirSource) {0});
+            goto done;
+        }
         *output = p;
         p = NULL;
         *d = (XrRbcCompileDiagnostic) {0};

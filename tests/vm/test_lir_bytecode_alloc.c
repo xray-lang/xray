@@ -27,12 +27,15 @@ static XrRbcStatus execute(XrRbcProgram *program, const uint64_t *arguments,
 }
 
 static size_t attempts, fail_at = SIZE_MAX, live_allocations;
+static bool in_compile_admission;
+static unsigned admission_attempts,admission_failure;
 static size_t fail_home_size;
 static enum {LITERAL_NO_FAULT,LITERAL_MAP_FAULT,LITERAL_PAYLOAD_FAULT,LITERAL_TABLE_FAULT,LITERAL_TABLE_INITIAL_FAULT} literal_fault;
 static size_t literal_payload_count, literal_payload_failure, literal_table_requests;
 static struct { void *pointer; size_t size; } buffers[32];
 
 static void *allocate(size_t size) {
+    if(in_compile_admission && ++admission_attempts==admission_failure) return NULL;
     if (++attempts == fail_at) return NULL;
     if(fail_home_size && size==fail_home_size){fail_home_size=0;return NULL;}
     if (literal_fault == LITERAL_PAYLOAD_FAULT && size == 29 &&
@@ -41,6 +44,7 @@ static void *allocate(size_t size) {
 }
 
 static void *allocate_zero(size_t count, size_t size) {
+    if(in_compile_admission && ++admission_attempts==admission_failure) return NULL;
     if (++attempts == fail_at) return NULL;
     if (literal_fault == LITERAL_MAP_FAULT && count == 20 && size == sizeof(uint32_t)) {
         literal_fault=LITERAL_NO_FAULT;return NULL;
@@ -105,7 +109,16 @@ static void *allocate_location(size_t size) {
 #include "runtime/native/xnative_locations.c"
 #undef xr_malloc
 #define xr_malloc(size) allocate(size)
+#include "vm/register/xrbc.c"
+// Scope fault injection to the actual common admission called before publish.
+static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocationOwner *locations) {
+    in_compile_admission=true;admission_attempts=0;
+    XrRbcStatus status=xr_rbc_module_admit(module,locations);
+    in_compile_admission=false;return status;
+}
+#define xr_rbc_module_admit compile_admission
 #include "vm/register/xrbc_lir.c"
+#undef xr_rbc_module_admit
 
 static void source_map_failures(void) {
     for (unsigned grown = 0; grown < 2; ++grown) {
@@ -291,6 +304,18 @@ static void compiled_spills(void) {
     CHECK(xr_rbc_program_view(program)->functions[0].spill_count);
     uint64_t bits=0;CHECK(execute(program,NULL,0,&bits)==XR_RBC_OK&&bits==259);
     xr_rbc_program_destroy(program);program=NULL;CHECK(!live_allocations);
+    // The index, immutable IN rows and separate spill rows all fail before
+    // publication. Recovery repeats the real admission, without an Execution.
+    CHECK(admission_attempts==3);
+    for(unsigned point=1;point<=3;++point) {
+        admission_failure=point;
+        CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OUT_OF_MEMORY);
+        CHECK(!program && diagnostic.status==XR_RBC_COMPILE_OUT_OF_MEMORY && !live_allocations);
+        CHECK(admission_attempts==point);admission_failure=0;
+        CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OK);
+        CHECK(execute(program,NULL,0,&bits)==XR_RBC_OK && bits==259);
+        xr_rbc_program_destroy(program);program=NULL;CHECK(!live_allocations);
+    }
     fail_home_size=((size_t)input.value_count+1)*sizeof(uint32_t);
     CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OUT_OF_MEMORY);
     CHECK(!program&&!fail_home_size&&!live_allocations);
@@ -332,7 +357,67 @@ static void frame_cfg_compiler_failures(void) {
     xr_rbc_program_destroy(program);CHECK(!live_allocations);
 }
 
+static void physical_string_copy_cycle(void) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+    XrLirFunction f=test_function(m,"forward_owned_copy",NULL,0,XR_LIR_I64);
+    XrLirType texts[]={XR_LIR_STRING,XR_LIR_STRING};
+    XrLirBlock entry=test_block(m,f,NULL,0),join=test_block(m,f,texts,2);
+    OK(xr_lir_set_entry(m,f,entry));XrLirValue values[2]={{0},{0}},parameters[2]={{0},{0}};
+    const char *bytes[]={"FIRST","LONG"};size_t lengths[]={5,4};
+    for(unsigned n=0;n<2;++n) {
+        XrLirLiteral literal={0};OK(xr_lir_add_literal(m,bytes[n],lengths[n],&literal));
+        XrLirInstruction op={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
+        OK(xr_lir_emit_value(m,entry,&op,&values[n]));OK(xr_lir_block_parameter(m,join,n,&parameters[n]));
+    }
+    test_branch(m,entry,join,values,2);XrLirValue length={0};
+    XrLirInstruction op={.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&parameters[0],.operand_count=1};
+    OK(xr_lir_emit_value(m,join,&op,&length));
+    for(unsigned n=0;n<2;++n) {
+        op=(XrLirInstruction){.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&parameters[n],.operand_count=1};
+        OK(xr_lir_emit_effect(m,join,&op));
+    }
+    test_return(m,join,length);OK(xr_lir_module_finish(m,NULL));XrLirFunctionView view;
+    OK(xr_lir_function_view(m,f,&view));XrRbcCompileDiagnostic diagnostic={0};
+    RbcLirCompiler c={.input=m,.function=f,.diagnostic=&diagnostic,.typed_spills=true,
+        .slot_count=2,.temporary_strings=1,.temporary_bits=1,.scratch_count=2};
+    c.slots=xr_calloc((size_t)view.value_count+1,sizeof(*c.slots));CHECK(c.slots);
+    // White-box emitter fixture: force a physical swap for verified forward
+    // LIR. This does not claim a loop-carried String producer is admitted.
+    c.slots[values[0].id]=1;c.slots[values[1].id]=0;
+    c.slots[parameters[0].id]=0;c.slots[parameters[1].id]=1;
+    CHECK(rbc_lir_emit(&c,XR_RBC_STRING_LITERAL,1,0,0,0));
+    CHECK(rbc_lir_emit(&c,XR_RBC_STRING_LITERAL,0,0,0,1));
+    uint32_t actuals[]={values[0].id,values[1].id};bool scratch=false;
+    CHECK(rbc_lir_copies(&c,(XrLirEdgeView){join.id,actuals,2},true,&scratch));
+    CHECK(scratch && c.string_scratch && c.code_count==5);
+    CHECK((c.code[2]&255)==XR_RBC_STRING_TAKE && ((c.code[2]>>8)&255)==2);
+    CHECK(rbc_lir_emit(&c,XR_RBC_STRING_LEN,3,0,0,0));
+    CHECK(rbc_lir_emit(&c,XR_RBC_STRING_DROP,0,0,0,0));
+    CHECK(rbc_lir_emit(&c,XR_RBC_STRING_DROP,1,0,0,0));
+    CHECK(rbc_lir_emit(&c,XR_RBC_RET,3,0,0,0));
+    XrRbcRegisterKind kinds[]={XR_RBC_STRING,XR_RBC_STRING,XR_RBC_STRING,XR_RBC_BITS};
+    XrRbcFunction function={.code=c.code,.code_count=c.code_count,.register_count=4,
+        .register_kinds=kinds,.register_kind_count=4,.spill_count=1};
+    XrRbcLiteral literals[]={{bytes[0],lengths[0]},{bytes[1],lengths[1]}};
+    XrRbcModule module={.functions=&function,.function_count=1,.literals=literals,.literal_count=2};
+    XrtLocationOwner *locations=NULL;CHECK(xrt_locations_create(NULL,0,&locations)==XRT_LOCATION_OK);
+    for(unsigned entry_count=0;entry_count<2;++entry_count) {
+        XrRbcExecution *execution=NULL;
+        CHECK(xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution)==XR_RBC_OK);
+        XrRbcOutcome *outcome=xr_rbc_execution_run(execution);uint64_t result=0;
+        CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK);
+        CHECK(xr_rbc_outcome_bits(outcome,&result) && result==5);
+        xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
+    }
+    xrt_locations_release(locations);
+    c.temporary_strings=0;CHECK(rbc_lir_copy_temporary(&c,true)==UINT32_MAX);
+    CHECK(c.status==XR_RBC_COMPILE_LIMIT);
+    xr_free(c.slots);xr_free(c.code);xr_free(c.source_ids);xr_lir_module_destroy(m);
+    CHECK(!live_allocations);
+}
+
 int main(void) {
+    physical_string_copy_cycle();
     compiled_spills();
     literal_allocation_failures();
     register_workspace_failure();

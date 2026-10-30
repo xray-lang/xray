@@ -91,6 +91,15 @@ add_test(NAME skeleton_diff COMMAND ${XRAY_PYTHON} -X utf8
     --work ${CMAKE_CURRENT_BINARY_DIR}/skeleton-diff ${skeleton_native_options})
 set_tests_properties(skeleton_diff PROPERTIES LABELS "unit;vm;lir;native;fast" TIMEOUT 120)
 
+add_test(NAME lir_spill_cfg COMMAND ${XRAY_PYTHON} -X utf8
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_lir_spill_cfg.py
+    --driver $<TARGET_FILE:lir_pipeline_eval> --compiler "${CMAKE_C_COMPILER}"
+    --kind "${skeleton_provider_kind}" --include ${CMAKE_CURRENT_SOURCE_DIR}/include
+    --source-root ${CMAKE_CURRENT_SOURCE_DIR} --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --work ${CMAKE_CURRENT_BINARY_DIR}/lir-spill-cfg ${skeleton_native_options})
+set_tests_properties(lir_spill_cfg PROPERTIES LABELS "unit;vm;lir;native;ownership" TIMEOUT 180)
+
 add_test(NAME f64_negate_native COMMAND ${XRAY_PYTHON} -X utf8
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/test_f64_negate_native.py
     --driver $<TARGET_FILE:test_lir_bytecode_source> --compiler "${CMAKE_C_COMPILER}"

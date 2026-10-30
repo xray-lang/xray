@@ -118,13 +118,7 @@ def main():
         for suffix, options in [('raw', []), ('optimized', ['--optimize'])]:
             label = name + '-' + suffix
             diagnostic = (f'[Uncaught Panic] E0{panic}: ' + ('division' if panic == 420 else 'modulo') + ' by zero\n').encode() if panic else b''
-            if name == 'signs-extremes' and options:
-                # Keep this complete input: its inlined closure exceeds the
-                # existing forward-only spill boundary. Do not execute a prefix.
-                refusal = invoke(root, label + '-rbc', [args.vm_driver, source, *options], 1, b'')
-                assert b'spilled functions require forward block edges' in refusal.stderr
-            else:
-                invoke(root, label + '-rbc', [args.vm_driver, source, *options], int(bool(panic)), expected, diagnostic)
+            invoke(root, label + '-rbc', [args.vm_driver, source, *options], int(bool(panic)), expected, diagnostic)
             generated = root / (label + '.c')
             invoke(root, label + '-emit', [args.driver, source, generated, *options], output=b'', diagnostic=b'')
             text = generated.read_text(encoding='ascii')
@@ -137,10 +131,9 @@ def main():
             if panic:
                 invoke(root, label + '-embedded', [executable, 'embedded'], output=expected, diagnostic=b'')
             rows.append({'case': label, 'sourceSHA256': hashlib.sha256(program).hexdigest(), 'panic': panic,
-                         'rbc': 'GAP_FORWARD_SPILLS' if name == 'signs-extremes' and options else 'PASS'})
+                         'rbc': 'PASS'})
         assert source.read_bytes() == program
-    # These are additional complete programs, not substitutes for the large
-    # matrix's preserved optimized-RBC refusal above.
+    # Keep the independently expected pairs in addition to the complete matrix.
     for i, (program, expected) in enumerate(small_programs):
         source = root / f'pair-{i}.xr'
         source.write_bytes(program)
@@ -164,9 +157,9 @@ def main():
             rows.append({'case': label, 'panic': panic})
     result = {'state': 'PASS', 'rows': rows, 'nativeImages': len(rows),
               'smallOptimizedRbcPrograms': len(small_programs),
-              'largeOptimizedRbc': 'GAP_FORWARD_SPILLS'}
+              'largeOptimizedRbc': 'PASS'}
     (root / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
-    print('Dynamic division regression checks PASS; large optimized RBC spill refusal retained: ' + str(root), flush=True)
+    print('Dynamic division regression checks PASS, including complete optimized RBC matrix: ' + str(root), flush=True)
 
 
 if __name__ == '__main__':

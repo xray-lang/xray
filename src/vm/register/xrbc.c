@@ -12,7 +12,7 @@
  *   indices; no pointer into either growing array survives a call.
  */
 
-#include "xrbc.h"
+#include "xrbc_internal.h"
 #include "base/xchecks.h"
 #include "base/xmalloc.h"
 #include "xir/xxir_float.h"
@@ -234,6 +234,19 @@ static bool xr_rbc_source_maps_valid(const XrRbcModule *module, const XrtLocatio
     return true;
 }
 
+XR_FUNC XrRbcStatus xr_rbc_module_admit(const XrRbcModule *module, const XrtLocationOwner *locations) {
+    if (!module || !module->functions || !module->function_count || !locations ||
+        (module->native_count && !module->natives) || module->native_count > 65536 ||
+        (module->literal_count && !module->literals) || module->literal_count > 65536)
+        return XR_RBC_INVALID;
+    XrRbcStatus status = xr_rbc_module_valid(module);
+    if (status != XR_RBC_OK) return status;
+    if (!xr_rbc_source_maps_valid(module, locations)) return XR_RBC_INVALID;
+    for (size_t i = 0; i < module->native_count; ++i)
+        if ((unsigned)module->natives[i] >= XR_RBC_NATIVE_COUNT) return XR_RBC_INVALID;
+    return XR_RBC_OK;
+}
+
 static int64_t xr_rbc_signed(uint64_t bits) {
     // Avoid implementation-defined unsigned-to-signed conversion.
     return bits <= INT64_MAX ? (int64_t) bits : -1 - (int64_t) ~bits;
@@ -307,20 +320,14 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t en
     const uint64_t *arguments, size_t argument_count, XrtLocationOwner *locations,
     XrRbcExecution **output) {
     if (!output || *output || !locations || !module || !module->functions ||
-        entry >= module->function_count || (argument_count && !arguments) ||
-        (module->native_count && !module->natives) || module->native_count > 65536 ||
-        (module->literal_count && !module->literals) || module->literal_count > 65536)
+        entry >= module->function_count || (argument_count && !arguments))
         return XR_RBC_INVALID;
     const XrRbcFunction *function = &module->functions[entry];
     if (argument_count != function->parameter_count) return XR_RBC_INVALID;
-    XrRbcStatus validation = xr_rbc_module_valid(module);
+    XrRbcStatus validation = xr_rbc_module_admit(module, locations);
     if (validation != XR_RBC_OK) return validation;
-    if (!xr_rbc_source_maps_valid(module, locations)) return XR_RBC_INVALID;
     for (size_t p = 0; function->register_kinds && p < argument_count; ++p)
         if (function->register_kinds[p] != XR_RBC_BITS) return XR_RBC_INVALID;
-    for (size_t i = 0; i < module->native_count; ++i)
-        if ((unsigned)module->natives[i] >= XR_RBC_NATIVE_COUNT)
-            return XR_RBC_INVALID;
     XrRbcExecution *execution = xr_calloc(1, sizeof(*execution));
     if (!execution) return XR_RBC_OUT_OF_MEMORY;
     execution->module = module;
