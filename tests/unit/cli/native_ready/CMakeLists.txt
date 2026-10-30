@@ -27,3 +27,12 @@ add_test(NAME native_ready_cli COMMAND "${Python3_EXECUTABLE}" -X utf8
 set_tests_properties(native_ready_owner PROPERTIES TIMEOUT 120 LABELS "unit;cli;toolchain;ownership;resources")
 set_tests_properties(native_ready_discovery PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE COST 35 LABELS "unit;cli;toolchain;ownership;resources")
 set_tests_properties(native_ready_cli PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;cli;toolchain;native;environment")
+
+add_test(NAME native_ready_cold_cli COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_SOURCE_DIR}/test_native_ready_cli.py" --binary "$<TARGET_FILE:xray>"
+    --root "${PROJECT_SOURCE_DIR}" --out "${CMAKE_CURRENT_BINARY_DIR}/cold-cli" --cold)
+add_test(NAME native_ready_probe COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_SOURCE_DIR}/../test_cli_toolchain_probe.py" "$<TARGET_FILE:xray>"
+    "${NATIVE_READY_MSVC}" "${CMAKE_CURRENT_BINARY_DIR}/probe")
+set_tests_properties(native_ready_cold_cli PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;cli;toolchain;native;environment")
+set_tests_properties(native_ready_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE COST 15 LABELS "unit;cli;toolchain;native;ownership;runtime-sdk")

@@ -493,7 +493,9 @@
     "source_body_generic_comptime",
     "native_ready_owner",
     "native_ready_discovery",
-    "native_ready_cli"
+    "native_ready_cli",
+    "native_ready_cold_cli",
+    "native_ready_probe"
   ],
   "versionCommand": [
     "{build}/xray.exe",

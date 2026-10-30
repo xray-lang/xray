@@ -4,8 +4,11 @@ import argparse,json,os,subprocess,tempfile,threading,time,sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[4]/"scripts"))
 from xray_process import run_child
 import psutil
-p=argparse.ArgumentParser();p.add_argument('--binary',type=Path,required=True);p.add_argument('--root',type=Path,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--cold',action='store_true');p.add_argument('--binary',type=Path,required=True);p.add_argument('--root',type=Path,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
 a.out.mkdir(parents=True,exist_ok=True);out=Path(tempfile.mkdtemp(prefix='run-',dir=a.out));env=dict(os.environ,XRAY_STDLIB_PATH=str(a.root/'stdlib'),CL='/invalid-cl-marker',_CL_='/invalid-cl-marker',LINK='/invalid-link-marker',_LINK_='/invalid-link-marker',INCLUDE='X:/not-an-include',LIB='X:/not-a-library')
+if a.cold:
+ for key in list(env):
+  if key.upper()=='VCTOOLSINSTALLDIR':env.pop(key)
 exe=out/'program.exe';observed={};stop=threading.Event()
 def canonical(value):return os.path.normcase(os.path.normpath(value))
 def command(label,argv,cwd):
@@ -47,8 +50,8 @@ finally:stop.set();thread.join()
 assert build.returncode==0,(build.returncode,build.stderr)
 compilers=[x for x in observed.values() if x['name'] in ['cl.exe','link.exe']]
 assert compilers and any(x['name']=='cl.exe' for x in compilers) and all(x['onlyExplicitThree'] and x['exactValues'] and x['exactWorkspace'] and x['strictRecipe'] for x in compilers),observed
-assert not any(x['name']=='cmd.exe' for x in observed.values()),observed
+assert any(x['name']=='cmd.exe' for x in observed.values())==a.cold,observed
 run=command('run',[str(exe)],out)
 cases=json.loads((a.root/'tests/smoke/cases.json').read_text())['cases'];case=next(x for x in cases if x['mode']=='build-run' and x['path']=='demos/01-basics/hello.xr')
 assert run.returncode==0 and run.stdout==(a.root/case['stdout']).read_bytes(),(run.returncode,run.stdout,run.stderr)
-print('Original complete hello native; poisoned inherited markers omitted from actual3-key child recipe PASS')
+print(('cold' if a.cold else 'ready')+' original complete hello native; poisoned inherited markers omitted from exact3-key child recipe PASS')

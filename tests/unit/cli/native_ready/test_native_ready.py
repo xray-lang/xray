@@ -24,6 +24,7 @@ arch=dict(ready);arch['VSCMD_ARG_TGT_ARCH']='x86';run('arch-mismatch-cold',arch,
 other=out/'other-installation';other.mkdir();installation=dict(ready);installation['VSINSTALLDIR']=str(other)
 # The real activation reports its inherited installation/toolset mismatch.
 run('installation-mismatch-cold-child-failed',installation,a.compiler,'normal',8,1)
+run('cold-explicit-wrong-compiler',arch,a.compiler.parent/'link.exe','normal',1,1)
 run('explicit-wrong-compiler',ready,a.compiler.parent/'link.exe','normal',1,0)
 run('eligibility-real-io',ready,a.compiler,'io',6,0)
 run('eligibility-partial-copy-oom',ready,a.compiler,'copy',5,0)
