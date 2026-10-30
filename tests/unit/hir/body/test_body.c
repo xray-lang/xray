@@ -79,8 +79,9 @@ static void typed_owners(void) {
 }
 #include "test_body_owned.inc.c"
 #include "test_body_receivers.inc.c"
+#include "test_body_defaults.inc.c"
 int main(void) {
-    typed_owners();declaration_owners();place_receivers();contextual_call_receivers();write_bytes("control.xr",body_control,sizeof(body_control)-1);
+    typed_owners();declaration_owners();place_receivers();contextual_call_receivers();default_receivers();write_bytes("control.xr",body_control,sizeof(body_control)-1);
     write_bytes("control.out",body_expected,sizeof(body_expected)-1);
     write_bytes("original.out",body_original_expected,sizeof(body_original_expected)-1);
     write_bytes("uses.xr",body_uses,sizeof(body_uses)-1);write_bytes("uses.out",body_uses_expected,sizeof(body_uses_expected)-1);
@@ -96,6 +97,8 @@ int main(void) {
     write_bytes("generic-comptime.out",body_generic_comptime_expected,sizeof(body_generic_comptime_expected)-1);
     write_bytes("core-calls.xr",body_core_calls,sizeof(body_core_calls)-1);
     write_bytes("core-calls.out",body_core_calls_expected,sizeof(body_core_calls_expected)-1);
+    write_bytes("inferred-callables.xr",body_inferred_callables,sizeof(body_inferred_callables)-1);
+    write_bytes("inferred-callables.out",body_inferred_callables_expected,sizeof(body_inferred_callables_expected)-1);
     for(size_t i=0;i<sizeof(body_refusals)/sizeof(body_refusals[0]);++i) {
         char path[128];CHECK(snprintf(path,sizeof(path),"%s.xr",body_refusals[i].name)>0);
         write_bytes(path,body_refusals[i].source,strlen(body_refusals[i].source));

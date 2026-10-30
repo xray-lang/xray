@@ -173,8 +173,8 @@ static bool source_destructure_binding(SourceContext *ctx,AstNode *node,bool top
             source_destructure_range(ctx,field->pattern)))return false;
         XrHirBodyBinding binding={0};if(!source_hir_binding_register(ctx,field->symbol,&binding))return false;
         XrHirBindingAction initialization;
+        if(!node->as.destructure_decl.is_const&&!source_root_join_record(ctx,&field->value))return false;
         if(!source_hir_binding_use(ctx,node,field->symbol,XR_HIR_BINDING_INITIALIZE,field->value,&initialization))return false;
-        if(initialization.operation!=XR_XIR_INVALID&&!source_root_join_record(ctx,&field->value))return false;
         uint32_t before=ctx->bodies[ctx->function].count;
         if(initialization.operation!=XR_XIR_INVALID&&
             !source_recipe_record(ctx,(XrXirInstruction){initialization.operation,initialization.physical,

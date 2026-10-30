@@ -113,9 +113,23 @@ static bool source_hir_call_use(SourceContext *ctx,AstNode *node,const SourceCal
     if(output)*output=action;
     if(input.kind==XR_HIR_CALL_PLAN)return true;
     if(value)value->type=action.target;
-    return source_hir_binding_emitted(ctx,&(XrHirBindingAction){.use=use},value,ctx->bodies[ctx->function].count);
+    if(!source_hir_binding_emitted(ctx,&(XrHirBindingAction){.use=use},value,ctx->bodies[ctx->function].count))return false;
+    ctx->bodies[ctx->function].typed_projections->defaulted=input.defaulted;return true;
 }
 static bool source_default_binding_get(SourceContext *,AstNode *,uint32_t,uint32_t,const XrXirDefaultBinding **);
+static bool source_hir_default_input(SourceContext *ctx,AstNode *node,uint32_t function,uint32_t formal,
+    SourceValue value,XrHirCallUseInput *input) {
+    const XrXirDefaultBinding *binding=NULL;
+    if(!source_default_binding_get(ctx,node,function,formal,&binding))return false;
+    XrHirBodyProjection producer={0};
+    if(!binding||!source_hir_default_projection(ctx,value,&producer))
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"default argument has no actual producer");
+    if(producer.default_owner!=function||producer.default_parameter!=formal)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"default argument changed its declaration owner");
+    input->defaulted=true;input->default_function=binding->function;
+    input->default_value=producer.default_value;input->default_call=producer.default_call;
+    input->default_conversion=producer.default_conversion;return true;
+}
 static bool source_hir_call_commit(SourceContext *ctx,AstNode *node,const SourceCallPlan *plan,
     SourceValue *values,uint32_t count,uint32_t supplied) {
     for(uint32_t p=0;p<count;++p) {
@@ -130,9 +144,7 @@ static bool source_hir_call_commit(SourceContext *ctx,AstNode *node,const Source
             else if(!source_substitute(ctx,&plan->substitution,type,0,&input.expected))return false;
         }
         if(p>=supplied&&(plan->family==SOURCE_CALL_FUNCTION||plan->family==SOURCE_CALL_CONSTRUCTOR)) {
-            const XrXirDefaultBinding *binding=NULL;
-            if(!source_default_binding_get(ctx,node,plan->declaration.function,p,&binding)||!binding)return false;
-            input.defaulted=true;input.default_function=binding->function;
+            if(!source_hir_default_input(ctx,node,plan->declaration.function,p,values[p],&input))return false;
         }
         if(!source_hir_call_use(ctx,node,plan,input,&values[p],NULL))return false;
     }

@@ -192,7 +192,7 @@ typedef struct SourceHirProjection {
     XrHirBodyUse use;
     uint32_t value,recipe,block,formal,argument;
     XrXirType type;
-    bool instruction,has_value;
+    bool instruction,has_value,defaulted;
 } SourceHirProjection;
 typedef struct SourceFunction {
     XrHirBodyScope typed_scope;

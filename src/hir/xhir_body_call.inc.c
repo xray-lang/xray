@@ -150,6 +150,7 @@ XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *body,XrHirBodySignature
     if(!body||body->ended||!input||input->types!=body->types||!use||!output||signature.owner!=body||signature.index>=body->signatures.count)
         return XR_XIR_BAD_STRUCTURE;
     if(input->reason)*input->reason=NULL;
+    if(input->defaulted&&input->kind!=XR_HIR_CALL_FINAL)return XR_XIR_BAD_STRUCTURE;
     HirBodySignature declaration=((HirBodySignature *)body->signatures.items)[signature.index];
     if(declaration.finished||input->origin.function!=declaration.declaration.origin.function)return XR_XIR_BAD_STRUCTURE;
     bool receiver=input->kind==XR_HIR_CALL_FINAL&&input->formal==UINT32_MAX&&declaration.declaration.family==XR_HIR_CALL_REQUIREMENT;
@@ -205,6 +206,8 @@ XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *body,XrHirBodySignature
                 XrXirStatus status=body_call_final_type(body,input,formal,control);if(status!=XR_XIR_OK)return status;
             }
             if(input->defaulted) {
+                if(declaration.declaration.family!=XR_HIR_CALL_FUNCTION&&
+                    declaration.declaration.family!=XR_HIR_CALL_CONSTRUCTOR)return XR_XIR_BAD_STRUCTURE;
                 const XrXirDefaultTable *defaults=body->declarations.defaults;bool found=false;
                 if(!defaults)return XR_XIR_BAD_STRUCTURE;
                 for(uint32_t d=0;d<defaults->count;++d) {
@@ -221,13 +224,23 @@ XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *body,XrHirBodySignature
     XrHirBodyInput checked={.origin=input->origin,.definition=declaration.declaration.origin,
         .rule=XR_HIR_BODY_IDENTITY,.source=input->type,.target=action.target,
         .formal=input->formal,.receiver_count=action.receiver_count};
-    XrXirStatus status=xr_hir_body_check(body,body->types,&checked,control,use,NULL);
+    XrXirType *default_types=NULL;
+    XrXirStatus status=input->defaulted?body_default_types_stage(body,&declaration,input,control,&default_types):XR_XIR_OK;
     if(status!=XR_XIR_OK)return status;
+    status=xr_hir_body_check(body,body->types,&checked,control,use,NULL);
+    if(status!=XR_XIR_OK){xr_compile_resources_free(default_types);return status;}
+    if(input->defaulted&&!declaration.default_types_ready) {
+        HirBodySignature *call=&((HirBodySignature *)body->signatures.items)[signature.index];
+        call->default_types=default_types;call->default_type_count=input->substitution_count;call->default_types_ready=true;
+    }
     body->uses[use->index].action=action;
     body->uses[use->index].has_source=input->kind==XR_HIR_CALL_VALUE||input->kind==XR_HIR_CALL_EXACT||input->kind==XR_HIR_CALL_FINAL;
     body->uses[use->index].signature=signature;
     body->uses[use->index].next_argument=UINT32_MAX;
     body->uses[use->index].defaulted=input->defaulted;
+    body->uses[use->index].default_value=input->default_value;
+    body->uses[use->index].default_call=input->default_call;
+    body->uses[use->index].default_conversion=input->default_conversion;
     if(callback&&input->kind==XR_HIR_CALL_VALUE) {
         HirBodySignature *call=&((HirBodySignature *)body->signatures.items)[signature.index];
         call->callback_received=true;call->callback_use=use->index;

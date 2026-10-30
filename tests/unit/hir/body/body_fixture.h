@@ -24,6 +24,13 @@ static const char body_generic_comptime[]=
 static const char body_generic_comptime_expected[]="42\n";
 static const char body_core_calls[]="assert(true)\nassertEqual(6*7,42)\nassertPanics(fn(){assert(false)})\nprint(42)\n";
 static const char body_core_calls_expected[]="42\n";
+static const char body_inferred_callables[]=
+    "fn answerValue()->i64{return 21}\n"
+    "fn savedValue(f:fn()->i64)->i64{var target=f;return target()}\n"
+    "fn destructureValue(f:fn()->i64)->i64{var (left,right)=(f,f);return left()+right()}\n"
+    "fn annotatedValue(f:fn()->i64)->i64{const saved=f;var target:fn()->i64=saved;return target()}\n"
+    "print(savedValue(answerValue))\nprint(destructureValue(answerValue))\nprint(annotatedValue(answerValue))\n";
+static const char body_inferred_callables_expected[]="21\n42\n21\n";
 static const char body_uses[]="fn nothing() {}\r\nfn sample()->i64 {\r\n    var total:i64=2\r\n    const add=fn(amount:i64)->i64 {total=total+amount;return total}\r\n    const alias=add\r\n    print(add(3));print(alias(4))\r\n    const unit=nothing();const retained=unit;var state:()=retained;state=nothing()\r\n    const another=state\r\n    var data=[1,2,3]\r\n    const mapped=data.map(fn(x:i64)->i64{return x*2})\r\n    var sum:i64=0\r\n    for (item in mapped) {sum=sum+item}\r\n    const pair=(sum,4)\r\n    return match (pair) {(first,last)->first+last}\r\n}\r\nprint(sample())\r\n";
 static const char body_uses_expected[]="5\n9\n16\n";
 static const char body_places[]="struct Pair {first:i64;last:i64;init(first,last){this.first=first;this.last=last}}\r\nclass Counter {first:i64;last:i64;init(first:i64,last:i64){this.first=first;this.last=last}}\r\nfn bump(value:ref i64,amount:i64)->i64 {value=value+amount;return value}\r\nfn exercise() {\r\n    var pair=Pair(2,5);pair.last+=3;pair.first=pair.last+1\r\n    const changed=bump(ref pair.last,4)\r\n    var data=[10,20,30];var index:i64=0\r\n    const next=fn()->i64 {const selected=index;index=index+1;return selected}\r\n    bump(ref data[next()],3);data[next()]=7;data.set(2,5)\r\n    const read=data.get(2);const object=Counter(1,4)\r\n    object.last+=2;bump(ref object.last,3)\r\n    print(pair.first);print(changed);print(data[0]);print(data[1]);print(read);print(index);print(object.first);print(object.last)\r\n}\r\nexercise()\r\n";

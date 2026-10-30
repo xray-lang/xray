@@ -44,8 +44,8 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
         source_query_range(ctx,node,symbol->name)))return false;
     XrHirBodyBinding binding={0};if(!source_hir_binding_register(ctx,symbol,&binding))return false;
     XrHirBindingAction initialization;
-    if(!source_hir_binding_use(ctx,node,symbol,XR_HIR_BINDING_INITIALIZE,initial,&initialization))return false;
     if(!decl->type_annotation&&!decl->is_const&&!source_root_join_record(ctx,&initial))return false;
+    if(!source_hir_binding_use(ctx,node,symbol,XR_HIR_BINDING_INITIALIZE,initial,&initialization))return false;
     uint32_t before=ctx->bodies[ctx->function].count;
     if(initialization.operation!=XR_XIR_INVALID&&
         !source_recipe_record(ctx,(XrXirInstruction){initialization.operation,initialization.physical,

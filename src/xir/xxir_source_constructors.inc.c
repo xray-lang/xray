@@ -193,9 +193,7 @@ static bool source_constructor_emit(SourceContext *ctx,AstNode *node,const Sourc
             .substitution=substitution.types,.substitution_count=substitution.count,
             .failure="constructor argument type differs from its declaration"};
         if(p>=request->supplied) {
-            const XrXirDefaultBinding *binding=NULL;
-            if(!source_default_binding_get(ctx,node,request->function,p,&binding)||!binding)return false;
-            input.defaulted=true;input.default_function=binding->function;
+            if(!source_hir_default_input(ctx,node,request->function,p,request->arguments[p],&input))return false;
         }
         if(!source_hir_call_use(ctx,node,&plan,input,&request->arguments[p],NULL))return false;
     }

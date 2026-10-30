@@ -23,6 +23,8 @@ typedef struct HirBodyUse {
     XrHirBodyAction action;
     XrHirBodyProjection projection;
     uint32_t source_value,selector,field,next_argument,source_operand;
+    uint32_t default_value,default_call;
+    XrXirOp default_conversion;
     XrHirBodySignature signature;
     XrHirBodyBinding binding;
     XrHirBindingUseKind binding_kind;
@@ -54,10 +56,12 @@ typedef struct HirBodyPlace {
 typedef struct HirBodySignature {
     XrHirSignatureInput declaration;
     XrXirCallableParameter *parameters;
+    XrXirType *default_types;
+    uint32_t default_type_count;
     unsigned char *accesses;
     XrHirArrayCallbackShape callback;
     uint32_t first_argument,last_argument,argument_count,access_count,callback_use;
-    bool finished,callback_ready,callback_received;
+    bool finished,callback_ready,callback_received,default_types_ready;
 } HirBodySignature;
 typedef struct HirBodyVector {void *items;uint32_t count,capacity;} HirBodyVector;
 struct XrHirBody {
@@ -145,8 +149,10 @@ XR_FUNC XrXirStatus xr_hir_body_new(XrCompileResources *resources,const XrXirTyp
 XR_FUNC void xr_hir_body_free(XrHirBody *body) {
     if(!body)return;
     for(uint32_t i=0;i<body->binding_count;++i)if(body->bindings[i].is_declaration)xr_compile_resources_free(body->bindings[i].name);
-    for(uint32_t i=0;i<body->signatures.count;++i)
+    for(uint32_t i=0;i<body->signatures.count;++i) {
         xr_compile_resources_free(((HirBodySignature *)body->signatures.items)[i].parameters);
+        xr_compile_resources_free(((HirBodySignature *)body->signatures.items)[i].default_types);
+    }
     xr_compile_resources_free(body->signatures.items);
     xr_compile_resources_free(body->places.items);xr_compile_resources_free(body->scopes.items);xr_compile_resources_free(body->binding_map);xr_compile_resources_free(body->bindings);
     xr_compile_resources_free(body->uses);xr_compile_resources_free(body);
@@ -276,6 +282,7 @@ static XrXirStatus body_narrowing(const XrHirBody *body,XrXirType original,XrXir
 }
 #include "xhir_body_binding.inc.c"
 #include "xhir_body_place.inc.c"
+#include "xhir_body_default.inc.c"
 #include "xhir_body_call.inc.c"
 XR_FUNC XrXirStatus xr_hir_body_check(XrHirBody *body,const XrXirTypes *types,
     const XrHirBodyInput *input,XrCompileRequestControl *control,XrHirBodyUse *output,const char **reason) {
@@ -373,12 +380,13 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
     if(row->defaulted) {
         if(row->signature.owner!=body||row->signature.index>=body->signatures.count)return XR_XIR_BAD_STRUCTURE;
         HirBodySignature call=((HirBodySignature *)body->signatures.items)[row->signature.index];
-        if(!projection->has_default||projection->default_owner!=call.declaration.function||
-            projection->default_parameter!=row->action.formal)return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status=body_default_project(&call,row,projection,control);
+        if(status!=XR_XIR_OK)return status;
     }
     if(row->has_selector&&projection->source_operands[1]!=row->selector)return XR_XIR_BAD_STRUCTURE;
     if(row->has_field&&projection->immediate!=(int64_t)row->field)return XR_XIR_BAD_STRUCTURE;
-    row->projection=*projection;row->projection.source_arguments=NULL;row->projected=true;if(reason)*reason=NULL;return XR_XIR_OK;
+    row->projection=*projection;row->projection.source_arguments=NULL;row->projection.default_type_arguments=NULL;
+    row->projected=true;if(reason)*reason=NULL;return XR_XIR_OK;
 }
 XR_FUNC uint32_t xr_hir_body_use_count(const XrHirBody *body){return body?body->count:0;}
 XR_FUNC bool xr_hir_body_origin(const XrHirBody *body,uint32_t use,XrHirBodyOrigin *out) {

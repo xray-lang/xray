@@ -11,6 +11,7 @@
  *   consumer maps their value, control and cleanup references without rechecking AST.
  */
 #include "xxir_operand_roles.h"
+static bool source_hir_default_projection(SourceContext *,SourceValue,XrHirBodyProjection *);
 typedef struct SourceRecipeRole { uint8_t values, edges; } SourceRecipeRole;
 static const SourceRecipeRole source_recipe_roles[XR_XIR_OP_COUNT]={
     {0,0},
@@ -251,17 +252,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
                 projection.source_arguments=raw_recipe.args[1]?body->operands+raw_recipe.args[0]:NULL;projection.source_argument_count=raw_recipe.args[1];
             }
         }
-        if(use->has_value&&use->value>=parameters&&use->value-parameters<body->count) {
-            XrXirInstruction producer=body->recipes[use->value-parameters].instruction;
-            if(producer.op==XR_XIR_CALL_DEFAULT) {
-                projection.has_default=true;projection.default_owner=producer.targets[0];projection.default_parameter=producer.targets[1];
-            } else if(producer.op==XR_XIR_INVOKE_RESULT&&producer.immediate>=0&&(uint64_t)producer.immediate<body->count) {
-                XrXirInstruction invoke=body->recipes[(uint32_t)producer.immediate].instruction;
-                if(invoke.op==XR_XIR_INVOKE_DEFAULT) {
-                    projection.has_default=true;projection.default_owner=invoke.args[0];projection.default_parameter=invoke.args[1];
-                }
-            }
-        }
+        if(use->defaulted&&!source_hir_default_projection(ctx,(SourceValue){.id=use->value,.type=use->type},&projection))goto done;
         const char *reason=NULL;
         XrXirStatus status=xr_hir_body_project(ctx->typed_body,use->use,&projection,ctx->request,&reason);
         if(status!=XR_XIR_OK) {

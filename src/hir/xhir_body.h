@@ -150,6 +150,8 @@ typedef struct XrHirCallUseInput {
     XrHirBodyOrigin origin;
     XrHirCallUseKind kind;
     uint32_t formal,argument,spread_field,default_function;
+    uint32_t default_value,default_call;
+    XrXirOp default_conversion;
     XrXirType type,expected;
     const XrXirType *substitution;
     uint32_t substitution_count;
@@ -179,6 +181,10 @@ typedef struct XrHirBodyProjection {
     bool has_call;
     const uint32_t *source_arguments;
     uint32_t source_argument_count,default_owner,default_parameter;
+    uint32_t default_value,default_call;
+    XrXirOp default_conversion;
+    const XrXirType *default_type_arguments;
+    uint32_t default_type_argument_count;
     bool has_default;
     bool has_instruction,has_value;
 } XrHirBodyProjection;

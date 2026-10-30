@@ -118,7 +118,7 @@ static bool source_hir_binding_emitted(SourceContext *ctx,const XrHirBindingActi
         value?value->id:UINT32_MAX;
     *projection=(SourceHirProjection){function->typed_projections,action->use,id,instruction?id:UINT32_MAX,
         function->block_count?function->current_block.identity:UINT32_MAX,checked.formal,checked.argument,type,
-        instruction,value&&value->type!=XR_XIR_UNIT&&value->id!=UINT32_MAX};
+        instruction,value&&value->type!=XR_XIR_UNIT&&value->id!=UINT32_MAX,false};
     function->typed_projections=projection;return true;
 }
 static bool source_hir_discard_to(SourceContext *ctx,const SourceHirProjection *stop) {
@@ -153,3 +153,4 @@ static bool source_hir_value_declared(SourceContext *ctx,AstNode *node,SourceNam
     if(!source_hir_binding_use(ctx,node,symbol,XR_HIR_BINDING_INITIALIZE,value,&action))return false;
     return source_hir_binding_emitted(ctx,&action,&value,ctx->bodies[ctx->function].count);
 }
+#include "xxir_source_default_projection.inc.c"
