@@ -58,7 +58,14 @@ static bool source_range_value(SourceContext *ctx,AstNode *node,SourceValue *val
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"range endpoints must be i64");
     if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_BOOL,XR_XIR_BOOL,{0},{0},
         node->as.range.inclusive_end?1:0,{0}},&arguments[2])) return false;
-    return source_constructor_emit(ctx,node,&(SourceConstructorEmission){type,constructor,3,arguments,{0}},value);
+    SourceCallPlan call={.family=SOURCE_CALL_CONSTRUCTOR,
+        .function_parameters=ctx->functions[constructor].parameters,.declaration={.function=constructor}};
+    if(!source_hir_call_prepare(ctx,node,&call,3))return false;
+    for(uint32_t p=0;p<3;++p) {
+        XrHirCallUseInput input={.kind=XR_HIR_CALL_ACCESS,.formal=p,.argument=p,.access=XR_CALL_ARG_PLAIN};
+        if(!source_hir_call_use(ctx,node,&call,input,NULL,NULL))return false;
+    }
+    return source_constructor_emit(ctx,node,&(SourceConstructorEmission){type,constructor,3,arguments,call.signature},value);
 }
 /* The authenticated canonical constructor/count bodies establish immutable unit
  * steps. Indexing reads the captured receiver after evaluating its index once. */

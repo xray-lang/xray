@@ -915,8 +915,8 @@ static void emit_io_step(CBuffer *buffer, const XrXirFunction *function,
                 " if (status == XR_XIR_VALUE_BOUNDS) {\n",
                 layout->offsets[args[0]],layout->offsets[args[1]],layout->offsets[args[2]],call->c_symbol);
             emit_fault_return(buffer,function,layout,index,
-                "((XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,XR_XIR_CALL_RUNTIME_PANIC},"
-                "{{XR_XIR_PANIC_STRING_SLICE_RANGE,0,0,0},{0}},0})");
+                "((XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,XR_XIR_CALL_RUNTIME_PANIC},"
+                ".panic={.detail={XR_XIR_PANIC_STRING_SLICE_RANGE,0,0,0}}})");
             EMIT_LITERAL(buffer," }\n");
             EMIT_STATIC(buffer, es_5ea5a5661efcb06b,
                 " if (status != XR_XIR_VALUE_OK) { xr_xir_value_drop(&result); return xr_xir_call_fault(\n"
