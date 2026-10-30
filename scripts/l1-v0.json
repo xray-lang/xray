@@ -168,7 +168,8 @@
     "test_hir_tuple_control",
     "test_hir_body_source",
     "test_source_public_repl",
-    "test_xir_specialize_control"
+    "test_xir_specialize_control",
+    "test_native_ready"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -489,7 +490,10 @@
     "test_xir_specialize_control",
     "source_body_dead_handler_type",
     "source_body_dead_handler_name",
-    "source_body_generic_comptime"
+    "source_body_generic_comptime",
+    "native_ready_owner",
+    "native_ready_discovery",
+    "native_ready_cli"
   ],
   "versionCommand": [
     "{build}/xray.exe",

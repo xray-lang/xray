@@ -49,6 +49,8 @@ add_subdirectory(xir/p09_reference)
 add_subdirectory(xir/bounded_call)
 add_subdirectory(shared/native_admission)
 add_subdirectory(shared/core_intrinsic_owner)
+add_subdirectory(cli/native_ready)
+
 add_subdirectory(module/declaration_owner)
 add_subdirectory(module/stdlib_source_owner)
 if(WIN32)
