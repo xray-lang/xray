@@ -138,7 +138,7 @@ def main():
     assert observation['arithmeticOps'] == 4 and observation['relationPredicates'] == 6
     assert run('rbc-whole', [args.driver, '--f64-family-rbc']) == b'14\n'
     golden = Path(__file__).resolve().parents[1] / 'unit/xir/xir_float_arithmetic_vectors.def'
-    assert hashlib.sha256(golden.read_bytes()).hexdigest() == '162a5523c86a32a4e1fa6434631cea73ea5b58cdbebc336f31637fbf7adeb0f5'
+    assert hashlib.sha256(golden.read_bytes().replace(b'\r\n', b'\n')).hexdigest() == 'f55ebc6c5529d16793607901910a6707d65b2df8a311b1820a30b218ee52805c'
     rows = re.findall(r'^XIR_FLOAT_ARITHMETIC\((32|64), XR_XIR_FLOAT_(\w+), '
         r'UINT64_C\(0x([0-9a-f]{16})\), UINT64_C\(0x([0-9a-f]{16})\), UINT64_C\(0x([0-9a-f]{16})\)\)',
         golden.read_text(), re.M)

@@ -127,7 +127,7 @@ def main():
     spec = importlib.util.spec_from_file_location('native_family_witness', module_path)
     module = importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     golden = args.source/'tests/unit/xir/xir_float_arithmetic_vectors.def'
-    assert hashlib.sha256(golden.read_bytes()).hexdigest() == '162a5523c86a32a4e1fa6434631cea73ea5b58cdbebc336f31637fbf7adeb0f5'
+    assert hashlib.sha256(golden.read_bytes().replace(b'\r\n', b'\n')).hexdigest() == 'f55ebc6c5529d16793607901910a6707d65b2df8a311b1820a30b218ee52805c'
     rows = re.findall(r'^XIR_FLOAT_ARITHMETIC\((32|64), XR_XIR_FLOAT_(\w+), UINT64_C\(0x([0-9a-f]{16})\), UINT64_C\(0x([0-9a-f]{16})\), UINT64_C\(0x([0-9a-f]{16})\)\)', golden.read_text(), re.M)
     assert len(rows) == 6432
     rows = [row for row in rows if row[0] == '64'];assert len(rows) == 3216
