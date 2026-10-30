@@ -8,6 +8,7 @@
  */
 #include "hir/xhir_body.h"
 #include "hir/xhir_tuple.h"
+#include "hir/xhir_nominal_source.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_interface.h"
 #include "xir/xxir_nominal.h"
@@ -82,8 +83,9 @@ static void typed_owners(void) {
 #include "test_body_receivers.inc.c"
 #include "test_body_defaults.inc.c"
 #include "test_body_tuples.inc.c"
+#include "test_body_nominals.inc.c"
 int main(void) {
-    typed_owners();declaration_owners();place_receivers();contextual_call_receivers();default_receivers();tuple_receivers();write_bytes("control.xr",body_control,sizeof(body_control)-1);
+    typed_owners();declaration_owners();place_receivers();contextual_call_receivers();default_receivers();tuple_receivers();nominal_receivers();write_bytes("control.xr",body_control,sizeof(body_control)-1);
     write_bytes("control.out",body_expected,sizeof(body_expected)-1);
     write_bytes("original.out",body_original_expected,sizeof(body_original_expected)-1);
     write_bytes("uses.xr",body_uses,sizeof(body_uses)-1);write_bytes("uses.out",body_uses_expected,sizeof(body_uses_expected)-1);

@@ -11,6 +11,9 @@
  */
 #include "xhir_body.h"
 #include "xhir_tuple.h"
+#include "xhir_nominal.h"
+#include "xhir_nominal_source.h"
+#include "../xir/xxir_construction.h"
 #include "../xir/xxir_types.h"
 #include "../xir/xxir_map.h"
 #include "../xir/xxir_interface.h"
@@ -34,6 +37,12 @@ typedef struct HirBodyUse {
     uint32_t *tuple_arguments;
     uint32_t tuple_argument_count;
     bool tuple_construct;
+    XrHirNominalShape nominal;
+    XrHirNominalValue *nominal_values;
+    uint32_t nominal_count,nominal_variant,nominal_field,nominal_function;
+    uint32_t nominal_result,nominal_call;
+    XrXirOp nominal_call_operation;
+    bool nominal_construct,nominal_helper,nominal_has_result,nominal_has_call,nominal_emitted;
     bool initializes,index_group;
     bool has_second_operand,has_immediate;
     uint32_t second_operand;
@@ -80,6 +89,29 @@ typedef struct HirBodyTupleContext {
     uint32_t count;
     XrHirTupleContextKind kind;
 } HirBodyTupleContext;
+typedef struct HirBodyNominalDeclaration {
+    XrHirNominalField *fields;
+    XrXirNominalVariant *variants;
+    uint32_t *field_origins,*field_functions,*field_producers,*field_sources,*foreign_fields;
+    uint32_t module,source_declaration,count,variant_count,constructor,foreign_constructor,source_capacity;
+    XrXirNominalKind kind;
+    uint32_t flags;
+    bool explicit_initializer,imported,available,received;
+} HirBodyNominalDeclaration;
+typedef struct HirBodyNominal {
+    XrXirType type;
+    XrXirType *arguments;
+    XrHirNominalField *fields;
+    uint32_t declaration,count,argument_count;
+} HirBodyNominal;
+typedef struct HirBodyNominalPlan {
+    XrHirNominalPlanInput input;
+    XrHirNominalValue *values;
+    unsigned char *present;
+    uint32_t count,begin,selected;
+    bool complete,applied;
+} HirBodyNominalPlan;
+typedef struct HirBodyNominalFunctionSource {uint32_t function,declaration,field,origin;} HirBodyNominalFunctionSource;
 struct XrHirBody {
     XrCompileResources *resources;
     /* owned: The surrounding Source construction owns both this body and this
@@ -94,9 +126,16 @@ struct XrHirBody {
     HirBodyVector tuples,tuple_contexts;
     uint32_t *tuple_map;
     uint32_t tuple_map_capacity;
+    XrXirSourceModule *const *nominal_modules;
+    XrXirGeneric *const *nominal_generics;
+    HirBodyVector nominal_declarations,nominals,nominal_plans,nominal_functions;
+    uint32_t *nominal_map;
+    uint32_t nominal_map_capacity;
+    unsigned char *nominal_available;
     XrHirBodyDeclarations declarations;
-    bool ended;
+    bool ended,nominal_sealed,nominal_shape_only;
 };
+static void body_nominal_free(XrHirBody *);
 static XrXirStatus body_poll(XrCompileRequestControl *control) {
     return control?xir_compile_resource_status(xr_compile_request_control_poll(control)):XR_XIR_OK;
 }
@@ -167,6 +206,7 @@ XR_FUNC XrXirStatus xr_hir_body_new(XrCompileResources *resources,const XrXirTyp
 }
 XR_FUNC void xr_hir_body_free(XrHirBody *body) {
     if(!body)return;
+    body_nominal_free(body);
     for(uint32_t i=0;i<body->count;++i)xr_compile_resources_free(body->uses[i].tuple_arguments);
     for(uint32_t i=0;i<body->tuples.count;++i)xr_compile_resources_free(((HirBodyTuple *)body->tuples.items)[i].fields);
     for(uint32_t i=0;i<body->tuple_contexts.count;++i)xr_compile_resources_free(((HirBodyTupleContext *)body->tuple_contexts.items)[i].fields);
@@ -197,6 +237,10 @@ XR_FUNC XrXirStatus xr_hir_body_emit(XrHirBody *body,XrHirBodyUse handle,XrXirTy
     if(!body||body->ended||handle.owner!=body||handle.index>=body->count)return XR_XIR_BAD_STRUCTURE;
     HirBodyUse *use=&body->uses[handle.index];
     if(!use->consumed||use->retired||use->projected||use->action.target!=type)return XR_XIR_BAD_STRUCTURE;
+    if(use->nominal_helper) {
+        if(use->nominal_emitted)return XR_XIR_BAD_STRUCTURE;use->nominal_emitted=true;
+        if(type!=XR_XIR_UNIT){use->nominal_result=value;use->nominal_has_result=true;}
+    }
     if(use->binding.owner&&use->initializes) {
         if(use->binding.owner!=body||use->binding.index>=body->binding_count)return XR_XIR_BAD_STRUCTURE;
         HirBodyBinding *binding=&body->bindings[use->binding.index];
@@ -230,7 +274,11 @@ XR_FUNC XrXirStatus xr_hir_body_finish(XrHirBody *body,XrCompileRequestControl *
         if(!(i%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
         if(!((HirBodySignature *)body->signatures.items)[i].finished)return XR_XIR_BAD_STRUCTURE;
     }
-    return body_poll(control);
+    for(uint32_t i=0;i<body->nominal_plans.count;++i) {
+        if(!(i%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
+        if(!((HirBodyNominalPlan *)body->nominal_plans.items)[i].complete)return XR_XIR_BAD_STRUCTURE;
+    }
+    XrXirStatus status=body_poll(control);if(status==XR_XIR_OK)body->nominal_sealed=true;return status;
 }
 XR_FUNC XrXirStatus xr_hir_body_retire(XrHirBody *body,XrHirBodyUse handle) {
     if(!body||body->ended||handle.owner!=body||handle.index>=body->count)return XR_XIR_BAD_STRUCTURE;
@@ -239,7 +287,7 @@ XR_FUNC XrXirStatus xr_hir_body_retire(XrHirBody *body,XrHirBodyUse handle) {
     use->retired=true;return XR_XIR_OK;
 }
 XR_FUNC void xr_hir_body_end(XrHirBody *body) {
-    if(!body)return;body->types=NULL;body->declarations=(XrHirBodyDeclarations){0};body->ended=true;
+    if(!body)return;body->types=NULL;body->declarations=(XrHirBodyDeclarations){0};body->nominal_modules=NULL;body->nominal_generics=NULL;body->ended=true;
 }
 XR_FUNC bool xr_hir_body_live(const XrHirBody *body){return body&&!body->ended;}
 XR_FUNC XrXirStatus xr_hir_body_scope(XrHirBody *body,XrHirBodyScope parent,
@@ -307,6 +355,7 @@ static XrXirStatus body_narrowing(const XrHirBody *body,XrXirType original,XrXir
 #include "xhir_body_place.inc.c"
 #include "xhir_body_default.inc.c"
 #include "xhir_body_tuple.inc.c"
+#include "xhir_body_nominal.inc.c"
 #include "xhir_body_call.inc.c"
 XR_FUNC XrXirStatus xr_hir_body_check(XrHirBody *body,const XrXirTypes *types,
     const XrHirBodyInput *input,XrCompileRequestControl *control,XrHirBodyUse *output,const char **reason) {
@@ -349,6 +398,9 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
     if(row->tuple.owner) {
         XrXirStatus status=body_tuple_project(body,row,projection,control);if(status!=XR_XIR_OK)return status;
     }
+    if(row->nominal.owner) {
+        XrXirStatus status=body_nominal_project(body,row,projection,control);if(status!=XR_XIR_OK)return status;
+    }
     if(row->projected||row->retired||row->action.formal!=projection->formal||row->action.argument!=projection->argument)
         return XR_XIR_BAD_STRUCTURE;
     if(row->has_source&&projection->source_value!=row->source_value)return XR_XIR_BAD_STRUCTURE;
@@ -356,7 +408,8 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
     if(projection->has_instruction&&row->action.operation!=XR_XIR_INVALID&&projection->operation!=row->action.operation) {
         bool invoke=row->is_call&&((row->action.operation==XR_XIR_CALL&&projection->operation==XR_XIR_INVOKE)||
             (row->action.operation==XR_XIR_CALL_INDIRECT&&projection->operation==XR_XIR_INVOKE_INDIRECT));
-        if(!invoke&&(!row->foreign_slot||(projection->operation!=XR_XIR_CALL&&projection->operation!=XR_XIR_INVOKE_RESULT&&
+        bool helper_invoke=row->nominal_helper&&(projection->operation==XR_XIR_INVOKE||projection->operation==XR_XIR_INVOKE_RESULT);
+        if(!invoke&&!helper_invoke&&(!row->foreign_slot||(projection->operation!=XR_XIR_CALL&&projection->operation!=XR_XIR_INVOKE_RESULT&&
             projection->operation!=XR_XIR_INVOKE)))return XR_XIR_BAD_STRUCTURE;
     }
     if(row->is_call) {

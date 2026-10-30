@@ -14,6 +14,17 @@ struct SourceLibraryUnit {
     uint32_t materialization_count;
     XrXirComptimeTable comptime;
 };
+static bool source_hir_nominal_imports(SourceContext *ctx,XrHirNominalImport *inputs,uint32_t count) {
+    for(SourceLibraryUnit *unit=ctx->library_units;unit;unit=unit->next) {
+        const XrXirNominalTable *table=unit->library->types?unit->library->types->nominals:NULL;
+        for(uint32_t n=0;table&&n<table->count;++n) {
+            if(!source_request_poll(ctx,NULL))return false;uint32_t target=unit->nominals[n];
+            if(target>=count||inputs[target].construction)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library nominal owner mapping changed");
+            inputs[target]=(XrHirNominalImport){unit->library->types,unit->construction,n};
+        }
+    }
+    return true;
+}
 static bool source_library_literal_same(SourceContext *ctx, XrXirLiteral a,
     const char *b, uint32_t count) {
     if (a.length != count) return false;
@@ -110,7 +121,6 @@ static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
         const XrXirConstructionRow *construction=xr_xir_compile_construction_row(unit->construction,n);
         if (!construction || construction->field_count!=in->field_count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library nominal construction row is incomplete");
-        ctx->nominal_defaultable[symbol->index]=construction->default_initializer!=0;
         if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_TYPE,0,(XrXirSourceRange){m,0,0,0,0})) return false;
         ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration-1].exported=in->exported;
         ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration-1].native_identity=in->native.native_id;
@@ -315,8 +325,7 @@ static bool source_library_fields(SourceContext *ctx, SourceLibraryUnit *unit) {
         XrXirNominalField *fields=count ? source_alloc(ctx,count,sizeof(*fields)) : NULL;
         XrXirType *types=count ? source_alloc(ctx,count,sizeof(*types)) : NULL;
         uint32_t *members=count ? source_alloc(ctx,count,sizeof(*members)) : NULL;
-        uint32_t *defaults=count ? source_alloc(ctx,count,sizeof(*defaults)) : NULL;
-        if (count && (!fields || !types || !members || !defaults)) return false;
+        if (count && (!fields || !types || !members)) return false;
         for (uint32_t f=0; f<count; ++f) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             char *name=source_library_name(ctx,in->fields[f].name);
@@ -342,7 +351,7 @@ static bool source_library_fields(SourceContext *ctx, SourceLibraryUnit *unit) {
             source_library_query_type(ctx,member.declaration,types[f],symbol->declaration);
         }
         out->fields=fields;out->field_count=count;
-        ctx->nominal_members[target]=members;ctx->nominal_defaults[target]=defaults;
+        ctx->nominal_members[target]=members;
         XrXirTypeNode type={0};type.kind=XR_XIR_TYPE_NOMINAL;
         XrXirType *arguments=in->parameter_count ? source_alloc(ctx,in->parameter_count,sizeof(*arguments)) : NULL;
         if (in->parameter_count && !arguments) return false;

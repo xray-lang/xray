@@ -65,7 +65,9 @@ static bool literal_seed(SourceContext *ctx,const XrXirArtifact *definition,uint
         }
     }
     ctx->materialization_begin=ctx->function_capacity;
-    return source_hir_body_begin(ctx);
+    if(!source_hir_body_begin(ctx))return false;
+    XrXirStatus status=xr_hir_body_nominal_checked(ctx->typed_body,module,ctx->request);
+    return source_hir_nominal_status(ctx,NULL,status,"literal nominal inventory receiving failed");
 }
 static bool literal_binding(SourceContext *ctx,const XirCtfeInstanceView *view,XirLiteralBinding *output) {
     uint32_t progress=0;

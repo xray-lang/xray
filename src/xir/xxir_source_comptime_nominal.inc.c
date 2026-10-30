@@ -18,8 +18,7 @@ static XrXirNominalIdentity source_comptime_nominal_identity(const XrXirNominalT
     return (XrXirNominalIdentity){d->module,d->name,d->exported,d->parameter_count,NULL,d->field_count,d->kind,d->variants,d->variant_count,d->flags,d->native};
 }
 static bool source_comptime_name_same(SourceContext *ctx,XrXirLiteral a,XrXirLiteral b) {
-    return ((ctx)->diagnostic.status == XR_XIR_OK) && a.length==b.length &&
-        (!a.length || !memcmp(a.bytes,b.bytes,a.length));
+    return a.length==b.length&&source_span_same(ctx,NULL,a.bytes,b.bytes,a.length);
 }
 static bool source_comptime_nominal_identities(SourceContext *ctx,const XrXirTypes *source) {
     const XrXirNominalTable *a=source?source->nominals:NULL,*b=ctx->types.nominals;
@@ -58,22 +57,21 @@ static bool source_comptime_nominal_fields(SourceContext *ctx,AstNode *node,XrXi
     const XrXirTypeNode *found=xr_xir_type_node(&ctx->types,type);
     if (!found || found->kind!=XR_XIR_TYPE_NOMINAL || found->parameter_span || found->nominal.declaration>=ctx->nominals.count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"comptime nominal type is not closed");
-    XrXirNominalType nominal=found->nominal;
-    const XrXirNominalDeclaration *declaration=&ctx->nominals.declarations[nominal.declaration];
-    if (nominal.argument_count!=declaration->parameter_count)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"comptime nominal arguments changed");
-    if (nominal.field_count==declaration->field_count) return true;
+    XrXirNominalType nominal=found->nominal;XrHirNominalView shape={0};
+    XrXirStatus status=xr_hir_nominal_view(&ctx->types,type,ctx->request,&shape,NULL);
+    if(!source_hir_nominal_status(ctx,node,status,"comptime nominal arguments changed"))return false;
+    if (nominal.field_count==shape.field_count) return true;
     if (nominal.field_count || nominal.fields)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime nominal field inventory is incomplete");
-    uint32_t count=declaration->field_count;
+    uint32_t count=shape.field_count;
     XrXirType *fields=source_alloc(ctx,count,sizeof(*fields));
     if (count && !fields) return false;
-    SourceSubstitution substitution={nominal.arguments,nominal.argument_count};
+    XrHirNominalPool pool=source_hir_nominal_pool(ctx);
     /* Only current declaration types and actual closed arguments derive the
      * cache. A value arena supplies neither Source fields nor access rights. */
     for (uint32_t f=0;f<count;++f) {
-        if (!((ctx)->diagnostic.status == XR_XIR_OK) ||
-            !source_substitute(ctx,&substitution,declaration->fields[f].type,0,&fields[f])) return false;
+        status=xr_hir_nominal_field_type(&pool,type,f,&fields[f],NULL);
+        if(!source_hir_nominal_status(ctx,node,status,"comptime nominal field receiving failed"))return false;
         if (xr_xir_type_span(&ctx->types,fields[f]))
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"comptime nominal field remains open");
     }
@@ -85,23 +83,31 @@ static bool source_comptime_nominal_shape(SourceContext *ctx,AstNode *node,const
     XrXirType target,SourceComptimeNominalShape *output) {
     if (!source_comptime_nominal_fields(ctx,node,target) || !source_comptime_nominal_admit(ctx,node,target)) return false;
     const XrXirTypeArena *arena=xr_xir_value_arena(value);const XrXirTypes *source=xr_xir_compile_type_arena_types(arena);
+    XrHirNominalView received={0},expected={0};
+    XrXirStatus status=xr_hir_nominal_view(source,(XrXirType)value->type,ctx->request,&received,NULL);
+    if(!source_hir_nominal_status(ctx,node,status,"comptime nominal source shape receiving failed"))return false;
+    status=xr_hir_nominal_view(&ctx->types,target,ctx->request,&expected,NULL);
+    if(!source_hir_nominal_status(ctx,node,status,"comptime nominal target shape receiving failed"))return false;
     const XrXirTypeNode *from=xr_xir_type_node(source,(XrXirType)value->type),*to=xr_xir_type_node(&ctx->types,target);
     if (!from || !to || from->kind!=XR_XIR_TYPE_NOMINAL || to->kind!=XR_XIR_TYPE_NOMINAL ||
-        from->nominal.declaration!=to->nominal.declaration || from->nominal.field_count!=to->nominal.field_count ||
+        received.declaration!=expected.declaration || received.field_count!=expected.field_count ||
+        from->nominal.field_count!=received.field_count || to->nominal.field_count!=expected.field_count ||
         !source_comptime_nominal_identities(ctx,source))
         return source_fail(ctx,node,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,"comptime nominal declaration identity changed");
     for (uint32_t f=0;f<to->nominal.field_count;++f)
         if (!((ctx)->diagnostic.status == XR_XIR_OK) ||
             !source_comptime_type_matches(ctx,node,source,from->nominal.fields[f],to->nominal.fields[f])) return false;
     *output=(SourceComptimeNominalShape){to->nominal.field_count,0,0};
-    if (xr_xir_type_is_enum(&ctx->types,target)) {
+    if (expected.kind==XR_XIR_NOMINAL_ENUM) {
         XrXirEnumBorrow borrowed={0};
         if (xr_xir_enum_variant(value,&output->variant)!=XR_XIR_VALUE_OK || xr_xir_enum_borrow(value,&borrowed)!=XR_XIR_VALUE_OK)
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime enum is invalid");
-        const XrXirNominalTable *table=ctx->types.nominals;XrXirNominalIdentity identity=source_comptime_nominal_identity(table,to->nominal.declaration);
-        if (output->variant>=identity.variant_count || identity.variants[output->variant].field_count!=borrowed.field_count)
+        if(output->variant>=expected.variant_count)return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime enum variant changed");
+        XrXirNominalVariant variant={0};status=xr_hir_nominal_variant(&ctx->types,target,output->variant,ctx->request,&variant,NULL);
+        if(!source_hir_nominal_status(ctx,node,status,"comptime enum variant receiving failed"))return false;
+        if (variant.field_count!=borrowed.field_count)
             return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime enum variant changed");
-        output->count=borrowed.field_count;output->begin=identity.variants[output->variant].field_begin;
+        output->count=borrowed.field_count;output->begin=variant.field_begin;
     }
     return true;
 }

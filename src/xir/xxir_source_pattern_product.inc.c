@@ -15,6 +15,7 @@ typedef struct SourcePatternProduct {
     SourceProductField *fields;
     uint32_t count;
     XrXirOp operation;
+    XrHirNominalShape shape;
 } SourcePatternProduct;
 static XrXirOp source_pattern_product_kind(SourceContext *ctx,XrXirType type) {
     if (xr_hir_tuple_kind(&ctx->types,type)!=XR_HIR_TUPLE_OTHER) return XR_XIR_TUPLE_FIELD;
@@ -28,13 +29,12 @@ static bool source_pattern_product_description(SourceContext *ctx,XrXirType type
     product->operation=source_pattern_product_kind(ctx,type);
     if (product->operation==XR_XIR_OP_COUNT)
         return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"product pattern requires statically known fields");
-    const XrXirTypeNode *node=xr_xir_type_node(&ctx->types,type);
     bool nominal=product->operation==XR_XIR_STRUCT_GET || product->operation==XR_XIR_CLASS_GET;
-    XrXirNominalType instance={0};XrXirNominalDeclaration declaration={0};
+    XrHirNominalInfo info={0};
     XrHirTupleView tuple={0};
     if (nominal) {
-        instance=node->nominal;declaration=ctx->nominals.declarations[instance.declaration];
-        product->count=declaration.field_count;
+        if(!source_hir_nominal_shape(ctx,NULL,type,&product->shape,&info))return false;
+        product->count=info.count;
     } else {
         XrXirStatus status=xr_hir_tuple_view(&ctx->types,type,ctx->request,&tuple,NULL);
         if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,"product pattern requires statically known fields");
@@ -42,13 +42,12 @@ static bool source_pattern_product_description(SourceContext *ctx,XrXirType type
     }
     product->fields=product->count ? source_alloc(ctx,product->count,sizeof(*product->fields)) : NULL;
     if (product->count && !product->fields) return false;
-    SourceSubstitution substitution={instance.arguments,instance.argument_count};
     for (uint32_t f=0;f<product->count;++f) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceProductField *field=&product->fields[f];field->selection=f;
         if (nominal) {
-            field->name=declaration.fields[f].name;
-            if (!source_substitute(ctx,&substitution,declaration.fields[f].type,0,&field->type)) return false;
+            XrHirNominalField received={0};if(!source_hir_nominal_field(ctx,NULL,product->shape,f,&received))return false;
+            field->name=received.name;field->type=received.type;
         } else {
             field->type=tuple.fields[f].type;
         }
@@ -58,6 +57,11 @@ static bool source_pattern_product_description(SourceContext *ctx,XrXirType type
 static bool source_pattern_product_select(SourceContext *ctx,AstNode *node,
     SourcePatternProduct *product,const char *name,uint32_t *output) {
     size_t length=0;if (!source_text_length(ctx,node,name,&length)) return false;
+    if(product->shape.owner) {
+        if(length>UINT32_MAX)return source_fail(ctx,node,XR_XIR_BUDGET,"product field name exhausted");
+        XrXirStatus status=xr_hir_body_nominal_find(ctx->typed_body,product->shape,(XrXirLiteral){name,(uint32_t)length},ctx->request,output,NULL);
+        return source_hir_nominal_status(ctx,node,status,"unknown product pattern field");
+    }
     for (uint32_t f=0;f<product->count;++f) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirLiteral spelling=product->fields[f].name;
@@ -124,8 +128,5 @@ static bool source_pattern_product_value(SourceContext *ctx,SourceMatchPattern *
     SourceProductField selected=pattern->product->fields[field];
     if(pattern->product->operation==XR_XIR_TUPLE_FIELD)
         return source_tuple_projection(ctx,pattern->node,receiver,field,output);
-    if (selected.selection>INT64_MAX)
-        return source_fail(ctx,pattern->node,XR_XIR_BUDGET,"product field selector exhausted");
-    return source_recipe_record(ctx,(XrXirInstruction){pattern->product->operation,selected.type,
-        {receiver.id,0},{0},(int64_t)selected.selection,{0}},output);
+    return source_hir_nominal_get(ctx,pattern->node,receiver,(uint32_t)selected.selection,0,output);
 }

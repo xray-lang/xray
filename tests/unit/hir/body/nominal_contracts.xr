@@ -1,0 +1,15 @@
+struct Packet<T> { value:T; count:i64=2; }
+enum Choice { Data{value:i64}, Empty }
+fn frozen<T>()->Packet<i64> {
+    return comptime { const items:Array<T>=[]; Packet<i64>{value:40+len(items)} }
+}
+export fn referenceAnswer()->i64 {
+    const stored=frozen<i8>()
+    const {value:left,count:right}=stored
+    const selected=match(stored) { {value:x,count:y}->x+y }
+    const choice=Choice.Data{value:left+right}
+    const answer=match(choice) { Choice.Data{value:n}->n, Choice.Empty->0 }
+    assert(selected==42 && answer==42)
+    return answer
+}
+print(referenceAnswer())

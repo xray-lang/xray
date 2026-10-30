@@ -449,9 +449,9 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
         uint32_t owner=ctx->identities[target].nominal_owner-1;
         ctx->bodies[target].declaration=ctx->nominal_sources[owner]->declaration;
         if (ctx->identities[target].method_kind==XR_XIR_CONSTRUCTOR) {
-            if (ctx->nominal_constructors[owner])
+            if (source_hir_nominal_defaults(ctx,owner).constructor)
                 return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library constructor identity is duplicated");
-            ctx->nominal_constructors[owner]=target;
+            if(!source_hir_nominal_bind(ctx,NULL,owner,target,XR_HIR_NOMINAL_EXPLICIT,UINT32_MAX))return false;
         }
         return true;
     }
@@ -544,24 +544,8 @@ static bool source_library_initializers(SourceContext *ctx, const XrXirModule *l
     for (uint32_t n=0; table && n<table->count; ++n) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t target=map->unit->nominals[n];
-        const XrXirNominalDeclaration *from=&table->declarations[n];
-        const XrXirConstructionRow *row=xr_xir_compile_construction_row(map->unit->construction,n);
-        if (!row || row->field_count!=from->field_count || (row->field_count && !row->field_initializers))
-            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library construction row is incomplete");
-        if (row->default_initializer) {
-            uint32_t f=row->default_initializer-1;
-            if (f>=map->function_count || map->functions[f]==UINT32_MAX ||
-                ctx->nominal_constructors[target]!=map->functions[f])
-                return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library implicit constructor is not mapped");
-        }
-        for (uint32_t field=0; field<row->field_count; ++field) {
-            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-            if (!row->field_initializers[field]) continue;
-            uint32_t f=row->field_initializers[field]-1;
-            if (f>=map->function_count || map->functions[f]==UINT32_MAX)
-                return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library field initializer is not mapped");
-            ctx->nominal_defaults[target][field]=map->functions[f];
-        }
+        XrXirStatus status=xr_hir_body_nominal_import_bind(ctx->typed_body,target,map->functions,map->function_count,ctx->request);
+        if(!source_hir_nominal_status(ctx,NULL,status,"library construction helper mapping is inconsistent"))return false;
     }
     return true;
 }

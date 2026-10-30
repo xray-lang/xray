@@ -128,13 +128,14 @@ static bool source_enum_select(SourceContext *ctx, AstNode *node, SourceEnumSele
     AstNode *path = node->as.member_access.object;
     if (!source_nominal_path(ctx, path, &arguments, &binding, &owner)) return false;
     if (!owner || owner->kind != SOURCE_NOMINAL || ctx->nominals.declarations[owner->index].kind != XR_XIR_NOMINAL_ENUM) return true;
-    const XrXirNominalDeclaration *d = &ctx->nominals.declarations[owner->index];
-    for (uint32_t v = 0; v < d->variant_count; ++v) {
-        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        const XrXirLiteral name = d->variants[v].name;
-        if (source_text_size(ctx, node->as.member_access.name) != name.length || !source_span_same(ctx, NULL, node->as.member_access.name, name.bytes, name.length)) continue;
-        if (!source_nominal_apply(ctx, owner, arguments.refs, arguments.count, &selected->type)) return false;
-        selected->owner = owner; selected->binding = binding; selected->path = path; selected->variant = v; return true;
+    size_t length=source_text_size(ctx,node->as.member_access.name);
+    if(length>UINT32_MAX)return source_fail(ctx,node,XR_XIR_BUDGET,"variant name size exhausted");
+    XrHirNominalSelection variant={0};XrXirStatus status=xr_hir_nominal_variant_find(&ctx->types,owner->type,
+        (XrXirLiteral){node->as.member_access.name,(uint32_t)length},ctx->request,&variant);
+    if(!source_hir_nominal_status(ctx,node,status,"enum variant receiving failed"))return false;
+    if(variant.present) {
+        if(!source_nominal_apply(ctx,owner,arguments.refs,arguments.count,&selected->type))return false;
+        selected->owner=owner;selected->binding=binding;selected->path=path;selected->variant=variant.index;return true;
     }
     SourceName *method = find_name(ctx,ctx->nominal_methods[owner->index],node->as.member_access.name);
     if (method) {
@@ -144,53 +145,42 @@ static bool source_enum_select(SourceContext *ctx, AstNode *node, SourceEnumSele
     }
     return source_fail(ctx,node,XR_XIR_BAD_TYPE,"unknown enum variant or static method");
 }
-static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumSelection *selected,
-    const SourceEnumFields *provided, SourceValue *value) {
-    const XrXirNominalDeclaration *d = &ctx->nominals.declarations[selected->owner->index];
-    const XrXirNominalVariant variant = d->variants[selected->variant];
+static bool source_enum_construct(SourceContext *ctx,AstNode *node,SourceEnumSelection *selected,
+    const SourceEnumFields *provided,SourceValue *value) {
     XrXirTaskResultType outcome={0};
     bool task_result=xr_xir_task_result_type_info(&ctx->types,selected->type,&outcome);
-    if (task_result && selected->variant==XR_XIR_TASK_RESULT_ERROR && outcome.error==XR_XIR_NEVER)
+    if(task_result&&selected->variant==XR_XIR_TASK_RESULT_ERROR&&outcome.error==XR_XIR_NEVER)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"TaskResult Error cannot be constructed with Never");
-    int count = provided ? provided->count : 0;
-    if (count < 0 || (uint32_t)count != variant.field_count || (!variant.field_count && provided))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum variant requires exactly its declared named payload");
-    SourceValue *fields = count ? source_alloc(ctx,(uint32_t)count,sizeof(*fields)) : NULL;
-    bool *seen = count ? source_alloc(ctx,(uint32_t)count,sizeof(*seen)) : NULL;
-    if (count && (!fields || !seen)) return false;
-    const XrXirNominalType *instance = &xr_xir_type_node(&ctx->types,selected->type)->nominal;
-    SourceSubstitution substitution = {instance->arguments,instance->argument_count};
-    for (int i = 0; i < count; ++i) {
-        uint32_t at = 0;
-        for (; at < variant.field_count; ++at) {
-            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-            XrXirLiteral name = d->fields[variant.field_begin + at].name;
-            if (source_text_size(ctx, provided->names[i]) == name.length && source_span_same(ctx, NULL, provided->names[i], name.bytes, name.length)) break;
+    int count=provided?provided->count:0;
+    if(count<0)return source_fail(ctx,node,XR_XIR_BAD_TYPE,"enum variant requires exactly its declared named payload");
+    XrHirNominalShape shape={0};XrHirNominalInfo info={0};XrHirBodyScope scope={0};
+    if(!source_hir_nominal_shape(ctx,node,selected->type,&shape,&info)||!source_hir_current_scope(ctx,&scope))return false;
+    XrHirNominalPlanInput input={.shape=shape,.scope=scope,.origin=source_hir_origin(ctx,node,selected->owner->declaration),
+        .variant=selected->variant,.count=(uint32_t)count,.kind=XR_HIR_NOMINAL_ENUM_LITERAL,.provided=provided!=NULL};
+    XrHirNominalPlan plan={0};const char *reason=NULL;XrXirStatus status=xr_hir_body_nominal_begin(ctx->typed_body,&input,ctx->request,&plan,&reason);
+    if(!source_hir_nominal_status(ctx,node,status,reason))return false;
+    XrHirNominalPool pool=source_hir_nominal_pool(ctx);
+    uint32_t begin=info.variants[selected->variant].field_begin;
+    for(uint32_t i=0;i<(uint32_t)count;++i) {
+        size_t length=source_text_size(ctx,provided->names[i]);if(length>UINT32_MAX)return source_fail(ctx,node,XR_XIR_BUDGET,"field name size exhausted");
+        uint32_t at=0;status=xr_hir_body_nominal_select(ctx->typed_body,plan,(XrXirLiteral){provided->names[i],(uint32_t)length},ctx->request,&at,&reason);
+        if(!source_hir_nominal_status(ctx,node,status,reason))return false;
+        XrHirNominalField field={0};if(!source_hir_nominal_field(ctx,node,shape,begin+at,&field))return false;
+        SourceValue received;
+        if(!source_plan_expression(ctx,provided->values[i],(SourceExpectedType){field.type!=XR_XIR_UNIT,field.type,false,false},&received))return false;
+        status=xr_hir_body_nominal_supply(ctx->typed_body,plan,&pool,at,(XrHirNominalValue){.type=received.type,.value=received.id},&reason);
+        if(!source_hir_nominal_status(ctx,node,status,reason))return false;
+        XrXirSourceRange range=source_query_range(ctx,node,NULL);
+        if(provided->spans) {
+            XrNameSpan span=provided->spans[i];range=(XrXirSourceRange){ctx->module,span.line,span.column,span.line,span.column};
+            if(span.column>0&&length<=(size_t)(INT_MAX-span.column))range.end_column+=(int)length;
         }
-        if (at == variant.field_count || seen[at]) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"unknown or duplicate enum payload field");
-        seen[at] = true; XrXirType type;
-        if (!source_substitute(ctx,&substitution,d->fields[variant.field_begin+at].type,0,&type) ||
-            !source_plan_expression(ctx, provided->values[i], (SourceExpectedType){type != XR_XIR_UNIT,type, false, false}, &fields[at])) return false;
-        if (fields[at].type != type) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"enum payload type mismatch");
-        XrXirSourceRange range = source_query_range(ctx,node,NULL);
-        if (provided->spans) {
-            XrNameSpan span = provided->spans[i];
-            range = (XrXirSourceRange){ctx->module,span.line,span.column,span.line,span.column};
-            if (span.column > 0 && source_text_size(ctx, provided->names[i]) <= (size_t)(INT_MAX-span.column)) range.end_column += (int)source_text_size(ctx, provided->names[i]);
-        }
-        if (!source_query_target_reference(ctx,range,ctx->nominal_members[selected->owner->index][variant.field_begin+at],XR_XIR_SOURCE_READ)) return false;
+        if(!source_query_target_reference(ctx,range,ctx->nominal_members[selected->owner->index][begin+at],XR_XIR_SOURCE_READ))return false;
     }
-    uint32_t operands=(uint32_t)count;
-    if (count==1 && fields[0].type==XR_XIR_UNIT) {
-        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        if (!xr_xir_nominal_native_recv(&ctx->types,selected->type,XR_XIR_UNIT) &&
-            !(task_result && selected->variant==XR_XIR_TASK_RESULT_SUCCESS && outcome.element==XR_XIR_UNIT))
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Unit payload requires an admitted native value variant");
-        operands=0;
-    }
-    return source_query_reference(ctx,selected->path,selected->binding,selected->owner,XR_XIR_SOURCE_TYPE_USE) &&
-        source_query_target_token_reference(ctx,node,ctx->nominal_variants[selected->owner->index][selected->variant],XR_XIR_SOURCE_READ) &&
-        source_recipe_group(ctx,(XrXirInstruction){XR_XIR_ENUM_NEW,selected->type,{0},{0},selected->variant, {0}},operands ? fields : NULL,operands,value);
+    XrHirNominalAction action;status=xr_hir_body_nominal_complete(ctx->typed_body,plan,&pool,&action,&reason);
+    return source_hir_nominal_status(ctx,node,status,reason)&&source_query_reference(ctx,selected->path,selected->binding,selected->owner,XR_XIR_SOURCE_TYPE_USE)&&
+        source_query_target_token_reference(ctx,node,ctx->nominal_variants[selected->owner->index][selected->variant],XR_XIR_SOURCE_READ)&&
+        source_hir_nominal_emit(ctx,node,&action,value);
 }
 static bool source_enum_literal(SourceContext *ctx, AstNode *node, SourceValue *value) {
     EnumConstructNode *literal = &node->as.enum_construct; SourceEnumSelection selected = {0};

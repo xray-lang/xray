@@ -485,6 +485,7 @@
     "hir_body",
     "source_body_sdk",
     "hir_tuple_source_control",
+    "hir_nominal_source_control",
     "hir_body_cli",
     "source_public_repl",
     "source_public_repl_array_history",

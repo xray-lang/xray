@@ -7,6 +7,8 @@ static bool source_hir_body_begin(SourceContext *ctx) {
         &ctx->module_count,&ctx->defaults,&ctx->interfaces,&ctx->slots,&ctx->slot_count};
     status=xr_hir_body_declarations(ctx->typed_body,&declarations);
     if(status!=XR_XIR_OK){xr_hir_body_end(ctx->typed_body);return source_fail(ctx,NULL,status,"typed declaration owner is missing");}
+    status=xr_hir_body_nominal_modules(ctx->typed_body,&ctx->modules,&ctx->generics);
+    if(status!=XR_XIR_OK){xr_hir_body_end(ctx->typed_body);return source_fail(ctx,NULL,status,"nominal declaration owner is missing");}
     return true;
 }
 static XrHirBodyOrigin source_hir_origin(SourceContext *ctx,AstNode *node,uint32_t binding) {

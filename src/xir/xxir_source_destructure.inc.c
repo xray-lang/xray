@@ -88,9 +88,8 @@ static bool source_destructure_object_field(SourceContext *ctx,AstNode *node,
         site=&selection;
     }
     uint32_t index=0;XrXirType type;
-    bool class=xr_xir_type_is_class(&ctx->types,receiver.type);
     return source_struct_field(ctx,site,receiver.type,name,false,&index,&type) &&
-        source_recipe_record(ctx,(XrXirInstruction){class ? XR_XIR_CLASS_GET : XR_XIR_STRUCT_GET,type,{receiver.id,0},{0},index,{0}},value);
+        source_hir_nominal_get(ctx,site,receiver,index,0,value);
 }
 static bool source_destructure_project(SourceContext *ctx,AstNode *node,
     const XrDestructurePattern *pattern,SourceValue initial,SourceDestructurePlan *plan,uint32_t depth) {

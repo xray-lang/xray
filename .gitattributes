@@ -77,3 +77,7 @@ tests/unit/xir/task_result/fixtures/task_result.expected.json text eol=lf
 # Tuple source and output witnesses bind the authored bytes on every host.
 tests/unit/hir/body/tuple_contracts.xr text eol=lf
 tests/unit/hir/body/tuple_contracts.out text eol=lf
+tests/unit/hir/body/nominal_contracts.xr text eol=lf
+tests/unit/hir/body/nominal_contracts.out text eol=lf
+tests/unit/hir/body/nominal_order.xr text eol=lf
+tests/unit/hir/body/nominal_order.out text eol=lf

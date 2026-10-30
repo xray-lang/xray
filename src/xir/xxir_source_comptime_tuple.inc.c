@@ -206,8 +206,8 @@ receive_parent:
             if (frame->array) {
                 if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,frame->target,{frame->store.id},{0},0,{0}},&result)) { ok=false;goto done; }
             } else if (frame->nominal) {
-                XrXirOp op=frame->enumeration?XR_XIR_ENUM_NEW:XR_XIR_STRUCT_NEW;
-                if (!source_recipe_group(ctx,(XrXirInstruction){op,frame->target,{0},{0},frame->variant,{0}},frame->payloads,frame->payload,&result)) { ok=false;goto done; }
+                SourceNominalEmission emission={frame->target,frame->variant,frame->payloads,frame->payload};
+                if (!source_hir_nominal_construct(ctx,node,&emission,&result)) { ok=false;goto done; }
             } else if (frame->nullable) {
                 if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_NULLABLE_SOME,frame->target,{result.type==XR_XIR_UNIT?0:result.id},{0},0,{0}},&result)) { ok=false;goto done; }
             } else if (!source_tuple_construct(ctx,node,frame->target,frame->payloads,frame->count,NULL,&result)) { ok=false;goto done; }

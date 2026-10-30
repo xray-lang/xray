@@ -52,20 +52,21 @@ static bool source_construction_prepare(SourceContext *ctx) {
     if (count && !rows) return false;
     for (uint32_t n=0; n<count; ++n) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        const XrXirNominalDeclaration *nominal=&ctx->nominals.declarations[n];
-        rows[n].field_count=nominal->field_count;
-        uint32_t *fields=nominal->field_count ? source_alloc(ctx,nominal->field_count,sizeof(*fields)) : NULL;
-        if (nominal->field_count && !fields) return false;
+        XrHirNominalDefaults received=source_hir_nominal_defaults(ctx,n);
+        if(ctx->diagnostic.status!=XR_XIR_OK)return false;
+        rows[n].field_count=received.count;
+        uint32_t *fields=received.count ? source_alloc(ctx,received.count,sizeof(*fields)) : NULL;
+        if (received.count && !fields) return false;
         rows[n].field_initializers=fields;
-        if (ctx->nominal_defaultable[n]) {
-            uint32_t function=ctx->nominal_constructors[n];
+        if (received.available) {
+            uint32_t function=received.constructor;
             if (!function || function>=ctx->function_count)
                 return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source implicit construction target is missing");
             rows[n].default_initializer=function+1;
         }
-        for (uint32_t f=0; f<nominal->field_count; ++f) {
+        for (uint32_t f=0; f<received.count; ++f) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-            uint32_t function=ctx->nominal_defaults[n] ? ctx->nominal_defaults[n][f] : 0;
+            uint32_t function=received.fields[f];
             if (function>=ctx->function_count)
                 return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source field construction target is invalid");
             fields[f]=function ? function+1 : 0;

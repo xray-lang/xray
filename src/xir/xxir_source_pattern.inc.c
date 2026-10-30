@@ -48,16 +48,18 @@ static bool source_pattern_binding(AstNode *node) {
 static bool source_pattern_array(SourceContext *,AstNode *,XrXirType,SourceMatchPattern *,uint32_t);
 static bool source_pattern_field_types(SourceContext *ctx, XrXirType type, uint32_t variant,
     XrXirType **output, uint32_t *count) {
-    XrXirNominalType nominal=xr_xir_type_node(&ctx->types,type)->nominal;
-    const XrXirNominalDeclaration *d=&ctx->nominals.declarations[nominal.declaration];
-    XrXirNominalVariant v=d->variants[variant];
+    XrXirNominalVariant v={0};const char *reason=NULL;
+    XrXirStatus status=xr_hir_nominal_variant(&ctx->types,type,variant,ctx->request,&v,&reason);
+    if(!source_hir_nominal_status(ctx,NULL,status,reason))return false;
     *count=v.field_count; *output=NULL;
     if (!*count) return true;
     XrXirType *types=source_alloc(ctx,*count,sizeof(*types));
     if (!types) return false;
-    SourceSubstitution sub={nominal.arguments,nominal.argument_count};
-    for (uint32_t i=0;i<*count;++i)
-        if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_substitute(ctx,&sub,d->fields[v.field_begin+i].type,0,&types[i])) return false;
+    XrHirNominalPool pool=source_hir_nominal_pool(ctx);
+    for(uint32_t i=0;i<*count;++i) {
+        status=xr_hir_nominal_field_type(&pool,type,v.field_begin+i,&types[i],&reason);
+        if(!source_hir_nominal_status(ctx,NULL,status,reason))return false;
+    }
     *output=types; return true;
 }
 static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType type,

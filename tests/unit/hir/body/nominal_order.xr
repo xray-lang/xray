@@ -1,0 +1,17 @@
+var trace:i64=0
+fn tick(n:i64)->i64 { trace=trace*10+n; return n }
+struct Pair { left:i64=tick(1); right:i64=tick(2); }
+struct Outer { inner:Inner; }
+struct Inner { value:i64=41; }
+export fn referenceAnswer()->i64 {
+    trace=0
+    const first=Pair()
+    assert(trace==12)
+    const second=Pair{right:tick(3)}
+    assert(trace==1231)
+    assert(first.left+first.right+second.left+second.right==7)
+    const chained=Outer()
+    assert(chained.inner.value==41)
+    return 42
+}
+print(referenceAnswer())

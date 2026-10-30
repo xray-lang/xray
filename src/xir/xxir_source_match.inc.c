@@ -152,7 +152,7 @@ static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern
         SourceMatchPattern *child=pattern->fields[i];
         if (!child || (child->any && !child->binding)) continue;
         SourceValue value;
-        if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ENUM_GET,child->type,{receiver.id,i},{0},selected->variant, {0}},&value) ||
+        if (!source_hir_nominal_get(ctx,child->node,receiver,i,selected->variant,&value) ||
             !source_match_payload(ctx,child,value,test,failures,depth+1)) return false;
     }
     return true;

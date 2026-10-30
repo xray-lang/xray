@@ -28,11 +28,8 @@ static bool source_declaration_storage(SourceContext *ctx,uint32_t nominals,uint
     ctx->nominals.declarations = source_alloc(ctx, nominals, sizeof(*ctx->nominals.declarations));
     ctx->nominal_members = source_alloc(ctx, nominals, sizeof(*ctx->nominal_members));
     ctx->nominal_variants = source_alloc(ctx, nominals, sizeof(*ctx->nominal_variants));
-    ctx->nominal_defaults = source_alloc(ctx, nominals, sizeof(*ctx->nominal_defaults));
     ctx->nominal_sources = source_alloc(ctx, nominals, sizeof(*ctx->nominal_sources));
     ctx->nominal_methods = source_alloc(ctx, nominals, sizeof(*ctx->nominal_methods));
-    ctx->nominal_defaultable = source_alloc(ctx, nominals, sizeof(*ctx->nominal_defaultable));
-    ctx->nominal_constructors = source_alloc(ctx, nominals, sizeof(*ctx->nominal_constructors));
     if (nominals) ctx->types.nominals = &ctx->nominals;
     ctx->interfaces.declarations = interfaces ? source_alloc(ctx,interfaces,sizeof(*ctx->interfaces.declarations)) : NULL;
     ctx->interface_sources = interfaces ? source_alloc(ctx,interfaces,sizeof(*ctx->interface_sources)) : NULL;

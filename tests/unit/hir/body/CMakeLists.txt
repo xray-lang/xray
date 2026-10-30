@@ -3,6 +3,9 @@ target_link_libraries(test_hir_body PRIVATE xray_xir_source)
 target_include_directories(test_hir_body PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_executable(test_hir_body_source test_body_source.c)
 add_executable(test_hir_tuple_control test_tuple_source_control.c)
+add_executable(test_hir_nominal_control test_nominal_source_control.c)
+target_link_libraries(test_hir_nominal_control PRIVATE xray_xir_source)
+target_include_directories(test_hir_nominal_control PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_link_libraries(test_hir_tuple_control PRIVATE xray_xir_source)
 target_include_directories(test_hir_tuple_control PRIVATE "${PROJECT_SOURCE_DIR}/src")
 if(WIN32)
@@ -14,7 +17,7 @@ target_include_directories(test_hir_body_source PRIVATE "${PROJECT_SOURCE_DIR}/i
 if(MSVC)
     set_target_properties(test_hir_body_source PROPERTIES MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
 endif()
-foreach(target test_hir_body test_hir_body_source test_hir_tuple_control)
+foreach(target test_hir_body test_hir_body_source test_hir_tuple_control test_hir_nominal_control)
     set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
@@ -26,6 +29,8 @@ file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/empty-stdlib")
 add_test(NAME hir_body COMMAND test_hir_body)
 add_test(NAME hir_tuple_source_control COMMAND test_hir_tuple_control "${CMAKE_CURRENT_SOURCE_DIR}/tuple_contracts.xr")
 set_tests_properties(hir_tuple_source_control PROPERTIES TIMEOUT 120 LABELS "unit;hir;types;source;ctfe;ownership;resources")
+add_test(NAME hir_nominal_source_control COMMAND test_hir_nominal_control "${CMAKE_CURRENT_SOURCE_DIR}/nominal_contracts.xr")
+set_tests_properties(hir_nominal_source_control PROPERTIES TIMEOUT 120 LABELS "unit;hir;types;source;ctfe;ownership;resources")
 set_tests_properties(hir_body PROPERTIES FIXTURES_SETUP hir_body_inputs WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 add_test(NAME source_body_sdk COMMAND test_hir_body_source "${CMAKE_CURRENT_BINARY_DIR}/empty-stdlib"
     "${CMAKE_CURRENT_BINARY_DIR}/control.xr" "${CMAKE_CURRENT_BINARY_DIR}/control.out"
@@ -37,7 +42,9 @@ add_test(NAME source_body_sdk COMMAND test_hir_body_source "${CMAKE_CURRENT_BINA
     "${CMAKE_CURRENT_BINARY_DIR}/handlers.xr" "${CMAKE_CURRENT_BINARY_DIR}/handlers.out"
     "${CMAKE_CURRENT_BINARY_DIR}/core-calls.xr" "${CMAKE_CURRENT_BINARY_DIR}/core-calls.out"
     "${CMAKE_CURRENT_BINARY_DIR}/inferred-callables.xr" "${CMAKE_CURRENT_BINARY_DIR}/inferred-callables.out"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tuple_contracts.xr" "${CMAKE_CURRENT_SOURCE_DIR}/tuple_contracts.out")
+    "${CMAKE_CURRENT_SOURCE_DIR}/tuple_contracts.xr" "${CMAKE_CURRENT_SOURCE_DIR}/tuple_contracts.out"
+    "${CMAKE_CURRENT_SOURCE_DIR}/nominal_contracts.xr" "${CMAKE_CURRENT_SOURCE_DIR}/nominal_contracts.out"
+    "${CMAKE_CURRENT_SOURCE_DIR}/nominal_order.xr" "${CMAKE_CURRENT_SOURCE_DIR}/nominal_order.out")
 set_tests_properties(source_body_sdk PROPERTIES FIXTURES_REQUIRED hir_body_inputs)
 add_test(NAME source_body_dead_handler_type COMMAND test_hir_body_source --expect-rejection "${CMAKE_CURRENT_BINARY_DIR}/empty-stdlib"
     "${CMAKE_CURRENT_BINARY_DIR}/handler-bad-type.xr" "${CMAKE_CURRENT_BINARY_DIR}/handler-bad-type.out")

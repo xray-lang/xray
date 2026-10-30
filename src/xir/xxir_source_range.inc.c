@@ -44,7 +44,7 @@ static bool source_range_value(SourceContext *ctx,AstNode *node,SourceValue *val
     XrXirType type;
     if(!source_range_type(ctx,node,&type)) return false;
     const XrXirTypeNode *nominal=xr_xir_type_node(&ctx->types,type);
-    uint32_t constructor=ctx->nominal_constructors[nominal->nominal.declaration];
+    uint32_t constructor=source_hir_nominal_defaults(ctx,nominal->nominal.declaration).constructor;
     if(!constructor || ctx->identities[constructor].nominal_owner!=nominal->nominal.declaration+1 ||
         ctx->identities[constructor].method_kind!=XR_XIR_CONSTRUCTOR ||
         ctx->identities[constructor].member_access!=XR_XIR_MEMBER_PUBLIC ||
@@ -81,6 +81,6 @@ static bool source_range_index(SourceContext *ctx,AstNode *node,SourceValue rece
     if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"canonical Range fields are invalid");
     if (!source_range_length(ctx,node,receiver,&length) ||
         !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_INDEX_CHECK,XR_XIR_UNIT,{key.id,length.id},{0},0,{0}},NULL) ||
-        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CLASS_GET,XR_XIR_I64,{receiver.id,0},{0},0,{0}},&start)) return false;
+        !source_hir_nominal_get(ctx,node,receiver,0,0,&start)) return false;
     return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ADD_INT,XR_XIR_I64,{start.id,key.id},{0},0,{0}},value);
 }

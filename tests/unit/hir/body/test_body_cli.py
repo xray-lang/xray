@@ -63,7 +63,11 @@ def main():
                   ('core-calls', arrays['body_core_calls'], arrays['body_core_calls_expected']),
                   ('inferred-callables', arrays['body_inferred_callables'], arrays['body_inferred_callables_expected']),
                   ('tuple-contracts', (root/'tests/unit/hir/body/tuple_contracts.xr').read_bytes(),
-                   (root/'tests/unit/hir/body/tuple_contracts.out').read_bytes())]
+                   (root/'tests/unit/hir/body/tuple_contracts.out').read_bytes()),
+                  ('nominal-contracts', (root/'tests/unit/hir/body/nominal_contracts.xr').read_bytes(),
+                   (root/'tests/unit/hir/body/nominal_contracts.out').read_bytes()),
+                  ('nominal-order', (root/'tests/unit/hir/body/nominal_order.xr').read_bytes(),
+                   (root/'tests/unit/hir/body/nominal_order.out').read_bytes())]
         for name, raw, expected in inputs:
             source = folder/(name+'.xr'); source.write_bytes(raw)
             run(name+'-check', [args.binary, 'check', source], b'')

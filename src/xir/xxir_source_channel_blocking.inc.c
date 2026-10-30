@@ -15,7 +15,7 @@ static bool source_channel_send_closed(SourceContext *ctx,AstNode *node,SourceVa
     uint32_t owner=ctx->function,branch=ctx->bodies[owner].count,error_block=ctx->bodies[owner].block_count;
     uint32_t frontier=ctx->bodies[owner].frontier;
     if (!source_recipe_record(ctx,(XrXirInstruction){.op=XR_XIR_BRANCH,.type=XR_XIR_UNIT,.args={condition.id,0}},NULL) ||
-        !begin_block(ctx) || !source_recipe_group(ctx,(XrXirInstruction){.op=XR_XIR_ENUM_NEW,.type=error_type,.immediate=3},NULL,0,&error)) return false;
+        !begin_block(ctx) || !source_hir_nominal_construct(ctx,node,&(SourceNominalEmission){.type=error_type,.variant=3},&error)) return false;
     XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);
     XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,owner,0}};
     XrXirStatus status=xr_xir_compile_type_markers_prove(&ctx->compile,&proof,error_type,XR_XIR_CONSTRAINT_ERROR);
