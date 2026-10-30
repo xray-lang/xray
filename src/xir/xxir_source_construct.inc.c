@@ -244,6 +244,11 @@ static bool source_items_prepare(SourceContext *ctx) {
     return !xr_hir_items_errors(ctx->items)||source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"duplicate declaration name");
 }
 static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
+    XrXirStatus body_status=xr_hir_body_new(ctx->compile.resources,&ctx->types,&ctx->typed_body);
+    if(body_status!=XR_XIR_OK){source_fail(ctx,NULL,body_status,"typed body allocation failed");return;}
+    XrHirBodyDeclarations typed_declarations={&ctx->functions,&ctx->identities,&ctx->function_count,&ctx->module_count,&ctx->defaults,&ctx->interfaces,&ctx->slots,&ctx->slot_count};
+    body_status=xr_hir_body_declarations(ctx->typed_body,&typed_declarations);
+    if(body_status!=XR_XIR_OK){source_fail(ctx,NULL,body_status,"typed declaration owner is missing");xr_hir_body_end(ctx->typed_body);return;}
     ctx->query_ready = true;
     ctx->declarations_building = true;
     bool declarations_ready = source_query_modules(ctx) && source_items_prepare(ctx) && collect_declarations(ctx);
@@ -251,8 +256,10 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     if (declarations_ready && (!ctx->core_factory || source_core_contract(ctx)) && source_manifests_bind(ctx) &&
         source_implementations_bind(ctx) && source_generator_methods(ctx) && build_bodies(ctx) && source_exported_const_finish(ctx) && source_binding_readers(ctx) && source_history_graph_commit(ctx) &&
         source_instance_literals_finish(ctx) && source_materialization_finish(ctx) && source_class_carriers(ctx) && source_local_errors_finish(ctx) && source_view_prepare(ctx) && source_effect_prepare(ctx) && source_construction_ready(ctx)) {
+        body_status=xr_hir_body_finish(ctx->typed_body,ctx->request);
+        if(body_status!=XR_XIR_OK){source_fail(ctx,NULL,body_status,"typed body has an unconsumed or unprojected use");xr_hir_body_end(ctx->typed_body);return;}
         source_release_retired_arrays(ctx);
-        if (!source_quiescent_storage(ctx)) return;
+        if (!source_quiescent_storage(ctx)){xr_hir_body_end(ctx->typed_body);return;}
         XrXirDeclarations declarations;
         XrXirModule built = source_module_view(ctx,&declarations);
         XrXirDiagnostic location = {0};
@@ -293,4 +300,5 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
             source_fail(ctx, site, status, cause);
         }
     }
+    xr_hir_body_end(ctx->typed_body);
 }

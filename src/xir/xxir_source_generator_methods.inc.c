@@ -77,7 +77,7 @@ static bool source_generator_method_factory(SourceContext *ctx,SourceName *metho
     if((count && !arguments) || (generic && !types)) return false;
     for(uint32_t p=0;p<count;++p) {
         if(!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        arguments[p]=(SourceValue){p,body->parameters[p]};
+        arguments[p]=(SourceValue){.id=p,.type=body->parameters[p],.place={0}};
     }
     for(uint32_t p=0;p<generic;++p) {
         if(!((ctx)->diagnostic.status == XR_XIR_OK)) return false;

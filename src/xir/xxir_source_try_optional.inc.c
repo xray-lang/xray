@@ -40,7 +40,7 @@ static bool source_try_optional(SourceContext *ctx,SourceExpressionPlan *plan,So
         if (!source_request_poll(ctx,plan->syntax)) return false;
         body->recipes[edge->jump].instruction.targets[0]=target;
         --at;edge->input=at;
-        inputs[at*2]=(SourceValue){edge->block,XR_XIR_UNIT};inputs[at*2+1]=edge->value;
+        inputs[at*2]=(SourceValue){.id=edge->block,.type=XR_XIR_UNIT,.place={0}};inputs[at*2+1]=edge->value;
     }
     SourceValue error,none;
     if (!source_recipe_group(ctx,(XrXirInstruction){XR_XIR_PHI,XR_XIR_ERROR,{0},{0},0,{0}},
@@ -62,6 +62,6 @@ static bool source_try_optional(SourceContext *ctx,SourceExpressionPlan *plan,So
     uint32_t join=body->block_count;
     if (!begin_block(ctx)) return false;
     body->recipes[jump].instruction.targets[0]=join;body->recipes[end].instruction.targets[0]=join;
-    SourceValue values[]={{success,XR_XIR_UNIT},*value,{failure,XR_XIR_UNIT},none};
+    SourceValue values[]={{.id=success,.type=XR_XIR_UNIT,.place={0}}, *value, {.id=failure,.type=XR_XIR_UNIT,.place={0}}, none};
     return source_recipe_group(ctx,(XrXirInstruction){XR_XIR_PHI,result,{0},{0},0,{0}},values,4,value);
 }

@@ -135,7 +135,7 @@ static bool source_tuple_expanded_literal(SourceContext *ctx, AstNode *node,
     }
     if (exact && elements.count != context->count)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Tuple literal requires an exact ordered arity context");
-    if (!elements.count) { *value = (SourceValue){UINT32_MAX, XR_XIR_UNIT}; return true; }
+    if (!elements.count) { *value = (SourceValue){.id=UINT32_MAX, .type=XR_XIR_UNIT,.place={0}}; return true; }
     XrXirCallableParameter *types = source_alloc(ctx, elements.count, sizeof(*types));
     SourceValue *payloads = source_recipe_storage(ctx, elements.count, sizeof(*payloads));
     if (!types || !payloads) return false;

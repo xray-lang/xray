@@ -220,6 +220,54 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     output->instructions=instructions;output->instruction_count=body->count;
     output->blocks=emitted_blocks;output->block_count=body->block_count;
     output->operands=operands;output->operand_count=body->operand_count;
+    if(seal)for(SourceHirProjection *use=body->typed_projections;use;use=use->next) {
+        uint32_t value=UINT32_MAX,block=UINT32_MAX,recipe=UINT32_MAX;
+        if(use->has_value&&!source_region_id(map,value_count,use->value,&value))goto invalid;
+        if(use->instruction&&!source_region_id(map,value_count,use->recipe,&recipe))goto invalid;
+        if(use->block!=UINT32_MAX&&!source_region_id(blocks,body->block_count,use->block,&block))goto invalid;
+        if(use->instruction&&(recipe==UINT32_MAX||recipe<parameters))goto invalid;
+        XrHirBodyProjection projection={.function=ctx->function,
+            .instruction=use->instruction?recipe-parameters:UINT32_MAX,.block=block,
+            .value=value,.source_value=use->value,.formal=use->formal,.argument=use->argument,
+            .type=use->type,.has_instruction=use->instruction,.has_value=use->has_value};
+        if(use->instruction) {
+            if(use->recipe<parameters||use->recipe-parameters>=body->count)goto invalid;
+            XrXirInstruction raw_recipe=body->recipes[use->recipe-parameters].instruction;
+            projection.operation=raw_recipe.op;projection.source_operands[0]=raw_recipe.args[0];
+            projection.source_operands[1]=raw_recipe.args[1];projection.immediate=raw_recipe.immediate;
+            projection.type=raw_recipe.type;
+            if(raw_recipe.args[0]>=parameters&&raw_recipe.args[0]-parameters<body->count) {
+                XrXirInstruction producer=body->recipes[raw_recipe.args[0]-parameters].instruction;
+                projection.operand_operation=producer.op;projection.operand_immediate=producer.immediate;projection.operand_type=producer.type;
+            }
+            XrXirInstruction call=raw_recipe;
+            if(call.op==XR_XIR_INVOKE_RESULT&&call.immediate>=0&&(uint64_t)call.immediate<body->count)
+                call=body->recipes[(uint32_t)call.immediate].instruction;
+            projection.call=call;projection.has_call=call.op==XR_XIR_CALL||call.op==XR_XIR_INVOKE||
+                call.op==XR_XIR_CALL_INDIRECT||call.op==XR_XIR_INVOKE_INDIRECT||call.op==XR_XIR_CALL_REQUIREMENT||
+                call.op==XR_XIR_GO||call.op==XR_XIR_GENERATOR_NEW;
+            if(xr_xir_op_uses_operand_table(raw_recipe.op)) {
+                if(raw_recipe.args[0]>body->operand_count||raw_recipe.args[1]>body->operand_count-raw_recipe.args[0])goto invalid;
+                projection.source_arguments=raw_recipe.args[1]?body->operands+raw_recipe.args[0]:NULL;projection.source_argument_count=raw_recipe.args[1];
+            }
+        }
+        if(use->has_value&&use->value>=parameters&&use->value-parameters<body->count) {
+            XrXirInstruction producer=body->recipes[use->value-parameters].instruction;
+            if(producer.op==XR_XIR_CALL_DEFAULT) {
+                projection.has_default=true;projection.default_owner=producer.targets[0];projection.default_parameter=producer.targets[1];
+            } else if(producer.op==XR_XIR_INVOKE_RESULT&&producer.immediate>=0&&(uint64_t)producer.immediate<body->count) {
+                XrXirInstruction invoke=body->recipes[(uint32_t)producer.immediate].instruction;
+                if(invoke.op==XR_XIR_INVOKE_DEFAULT) {
+                    projection.has_default=true;projection.default_owner=invoke.args[0];projection.default_parameter=invoke.args[1];
+                }
+            }
+        }
+        const char *reason=NULL;
+        XrXirStatus status=xr_hir_body_project(ctx->typed_body,use->use,&projection,ctx->request,&reason);
+        if(status!=XR_XIR_OK) {
+            source_fail(ctx,NULL,status,reason?reason:"typed projection has no current owner");goto done;
+        }
+    }
     if (seal && !source_region_seal(ctx,map,value_count,root_values,views.points)) goto done;
     ok=true;goto done;
 invalid:

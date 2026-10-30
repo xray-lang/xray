@@ -34,9 +34,10 @@ static bool source_match_prepare(SourceContext *ctx, SourceExpressionPlan *plan)
     prepared->values=source_recipe_storage(ctx,prepared->count,sizeof(*prepared->values));
     if (!prepared->guards || !prepared->values) return false;
     SourceName *saved=ctx->locals,*scope=ctx->scope;bool ready=true;XrXirType result=XR_XIR_UNIT;
+    XrHirBodyScope typed_scope=ctx->bodies[ctx->function].typed_scope;
     for (uint32_t i=0;i<prepared->count;++i) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        ctx->locals=saved;ctx->scope=saved;
+        ctx->locals=saved;ctx->scope=saved;ctx->bodies[ctx->function].typed_scope=prepared->arms[i].typed_scope;
         for (SourceName *symbol=prepared->arms[i].bindings;symbol;symbol=symbol->next) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             SourceName *bound=source_recipe_storage(ctx,1,sizeof(*bound));
@@ -54,15 +55,24 @@ static bool source_match_prepare(SourceContext *ctx, SourceExpressionPlan *plan)
             else if (result!=prepared->values[i]->ground_type) ready=false;
         } else ready=false;
     }
-    ctx->locals=saved;ctx->scope=scope;plan->match=prepared;
+    ctx->locals=saved;ctx->scope=scope;source_hir_scope_leave(ctx,typed_scope);plan->match=prepared;
     if (ready) {plan->type_ready=true;plan->ground_type=result;}
     return true;
 }
 static bool source_match_bind(SourceContext *ctx, SourceName *symbol, SourceValue value) {
-    if (!symbol || symbol->type!=value.type) return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"pattern binding type is inconsistent");
-    SourceName *binding=source_alloc(ctx,1,sizeof(*binding));
-    if (!binding) return false;
+    if(!symbol)return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"pattern binding type is inconsistent");
+    XrHirBodyBinding declaration={0};if(!source_hir_binding_receive(ctx,symbol,&declaration))return false;
+    SourceName *binding=source_alloc(ctx,1,sizeof(*binding));if(!binding)return false;
     *binding=*symbol;binding->next=ctx->locals;
+    XrXirStatus status=xr_hir_body_binding_instance(ctx->typed_body,declaration,ctx->bodies[ctx->function].typed_scope,
+        ctx->request,&binding->typed_binding);
+    if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,"pattern binding has no actual declaration instance");
+    XrHirBindingUseInput input={.types=&ctx->types,.scope=ctx->bodies[ctx->function].typed_scope,.origin=source_hir_origin(ctx,symbol->node,symbol->declaration),
+        .kind=XR_HIR_BINDING_INITIALIZE,.value=value.type,.value_id=value.id,.type_failure="pattern binding type is inconsistent"};
+    XrHirBindingAction action;const char *reason=NULL;
+    status=xr_hir_body_binding_use(ctx->typed_body,binding->typed_binding,&input,ctx->request,&action,&reason);
+    if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,reason?reason:"pattern binding type is inconsistent");
+    if(!source_hir_binding_emitted(ctx,&action,&value,ctx->bodies[ctx->function].count))return false;
     binding->kind=value.type==XR_XIR_UNIT ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL;
     binding->index=value.type==XR_XIR_UNIT ? UINT32_MAX : value.id;ctx->locals=binding;
     return true;
@@ -151,7 +161,7 @@ static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern
 static bool source_match_body(SourceContext *ctx, AstNode *node, SourceExpectedType expected,
     SourceExpectedType task_context, SourceValue *value) {
     if (node->type != AST_BLOCK) return source_task_expression(ctx, node, expected, task_context, value);
-    *value=(SourceValue){0,XR_XIR_UNIT};
+    *value=(SourceValue){.id=0,.type=XR_XIR_UNIT,.place={0}};
     for (int i=0;i<node->as.block.count;++i) {
         AstNode *part=node->as.block.statements[i];
         if (i+1==node->as.block.count && part->type==AST_EXPR_STMT)
@@ -176,11 +186,12 @@ static bool source_match(SourceContext *ctx, AstNode *node, SourceExpectedType e
     if (!inputs || !jumps) return false;
     SourceFunction *body=&ctx->bodies[ctx->function];
     SourceName *saved=ctx->locals,*scope=ctx->scope; XrXirType result=XR_XIR_UNIT;
+    XrHirBodyScope typed_scope=body->typed_scope;
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t continuing=0;
     for (uint32_t i=0;i<count;++i) {
         MatchArmNode *arm=&match->arms[i]->as.match_arm; SourceMatchFailure *failures=NULL;
-        ctx->locals=saved; ctx->scope=saved;
+        ctx->locals=saved; ctx->scope=saved;body->typed_scope=patterns[i].typed_scope;
         if (!source_match_alternatives(ctx,&patterns[i],receiver,i+1<count || !exhaustive,&failures)) return false;
         if (arm->guard) {
             SourceValue condition;
@@ -197,7 +208,7 @@ static bool source_match(SourceContext *ctx, AstNode *node, SourceExpectedType e
         if (!ctx->returned) {
             if (!continuing) result=output.type;
             else if (result!=output.type) return source_fail(ctx,arm->body,XR_XIR_BAD_TYPE,"match arms need the same admitted type");
-            inputs[continuing*2]=(SourceValue){body->current_block.identity,XR_XIR_UNIT};
+            inputs[continuing*2]=(SourceValue){.id=body->current_block.identity,.type=XR_XIR_UNIT,.place={0}};
             inputs[continuing*2+1]=output; jumps[continuing++]=body->count;
             if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0, {0}},NULL)) return false;
         }
@@ -205,16 +216,16 @@ static bool source_match(SourceContext *ctx, AstNode *node, SourceExpectedType e
         for (SourceMatchFailure *f=failures;f;f=f->next) body->recipes[f->instruction].instruction.targets[f->target]=next;
         if (i+1<count && !begin_block(ctx)) return false;
     }
-    ctx->locals=saved; ctx->scope=scope;
+    ctx->locals=saved; ctx->scope=scope;source_hir_scope_leave(ctx,typed_scope);
     if (!exhaustive && (!begin_block(ctx) ||
         !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_MATCH_FAIL,XR_XIR_UNIT,{0},{0},0, {0}},NULL))) return false;
     if (!continuing) {
         if (result_required) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"never-valued expression context is not admitted");
-        ctx->returned=true; *value=(SourceValue){0,XR_XIR_UNIT}; return true;
+        ctx->returned=true; *value=(SourceValue){.id=0,.type=XR_XIR_UNIT,.place={0}}; return true;
     }
     uint32_t join=body->block_count;
     if (!begin_block(ctx)) return false;
     for (uint32_t i=0;i<continuing;++i) body->recipes[jumps[i]].instruction.targets[0]=join;
-    if (result==XR_XIR_UNIT) { *value=(SourceValue){0,XR_XIR_UNIT}; return true; }
+    if (result==XR_XIR_UNIT) { *value=(SourceValue){.id=0,.type=XR_XIR_UNIT,.place={0}}; return true; }
     return source_recipe_group(ctx,(XrXirInstruction){XR_XIR_PHI,result,{0},{0},0, {0}},inputs,continuing*2,value);
 }

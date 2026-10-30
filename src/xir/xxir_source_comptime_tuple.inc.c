@@ -84,7 +84,7 @@ typedef struct SourceComptimeTupleFrame {
 #include "xxir_source_materialization.inc.c"
 static bool source_comptime_constant_leaf(SourceContext *ctx,AstNode *node,
     const XrXirValue *input,XrXirType target,SourceValue *output) {
-    if (target==XR_XIR_UNIT) { *output=(SourceValue){0,XR_XIR_UNIT};return !input->type && !input->reserved && !input->payload; }
+    if (target==XR_XIR_UNIT) { *output=(SourceValue){.id=0,.type=XR_XIR_UNIT,.place={0}};return !input->type && !input->reserved && !input->payload; }
     if (target==XR_XIR_STRING) {
         const char *bytes=NULL;size_t length=0;
         if (!xr_xir_string_view(input,&bytes,&length)) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime string is invalid");

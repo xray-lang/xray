@@ -13,6 +13,7 @@ typedef struct SourceMatchArm {
     SourceMatchPattern *patterns;
     uint32_t count;
     SourceName *bindings;
+    XrHirBodyScope typed_scope;
 } SourceMatchArm;
 static bool source_pattern_bindings(SourceContext *ctx, SourceMatchPattern *pattern,
     SourceMatchArm *arm, uint32_t alternative, uint32_t depth) {
@@ -36,6 +37,7 @@ static bool source_pattern_bindings(SourceContext *ctx, SourceMatchPattern *patt
             arm->bindings=symbol;
             if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,ctx->bodies[ctx->function].declaration,
                 source_query_range(ctx,node,name))) return false;
+            XrHirBodyBinding binding={0};if(!source_hir_binding_register(ctx,symbol,&binding))return false;
             source_query_binding_type(ctx,symbol);
         } else {
             if (!symbol || symbol->type!=pattern->type)
@@ -80,6 +82,8 @@ static bool source_match_normalize_arms(SourceContext *ctx, AstNode *node, XrXir
     for (uint32_t i=0;i<count;++i) {
         MatchArmNode *arm=&match->arms[i]->as.match_arm; AstNode *root=arm->pattern;
         if (complete) return source_fail(ctx,root,XR_XIR_BAD_STRUCTURE,"unreachable match arm is not admitted");
+        XrHirBodyScope previous_scope={0};if(!source_hir_scope_enter(ctx,match->arms[i],&previous_scope))return false;
+        arms[i].typed_scope=ctx->bodies[ctx->function].typed_scope;
         for (uint32_t j=0;j<arms[i].count;++j) {
             AstNode *pattern=root->type==AST_PATTERN_MULTI?root->as.pattern_multi.patterns[j]:root;
             if (!source_match_pattern(ctx,pattern,type,&arms[i].patterns[j],0) ||
@@ -91,6 +95,7 @@ static bool source_match_normalize_arms(SourceContext *ctx, AstNode *node, XrXir
             if (!arm->guard) rows[row_count++]=&arms[i].patterns[j];
         }
         if (!arm->guard && !source_pattern_coverage(ctx,(SourcePatternMatrix){&type,rows,1,row_count},0,&complete)) return false;
+        source_hir_scope_leave(ctx,previous_scope);
     }
     if (!complete && xr_xir_type_is_enum(&ctx->types,type))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"enum match is not exhaustive");

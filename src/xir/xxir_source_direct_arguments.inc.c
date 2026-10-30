@@ -23,6 +23,7 @@ typedef struct SourceDirectArguments {
     uint32_t count;
     XrXirType result;
     uint32_t receiver_count;
+    XrHirBodySignature signature;
 } SourceDirectArguments;
 static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     const SourceDirectRequest *request, SourceDirectArguments *output) {
@@ -59,8 +60,9 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     if (offset) values[0]=*request->receiver;
     bool ok = false;
     SourceSubstitution substitution = {types,count};
-    SourceCallPlan plan = {SOURCE_CALL_FUNCTION,request->prefix,substitution,function.parameters,NULL,
-        function.result,request->expected_result,values,offset,offset,ctx->generics[index].parameter_kinds,NULL};
+    SourceCallPlan plan = {.family=SOURCE_CALL_FUNCTION,.prefix=request->prefix,.substitution=substitution,.function_parameters=function.parameters,.requirement_parameters=NULL,
+        .result=function.result,.expected_result=request->expected_result,.values=values,.parameter_offset=offset,.value_offset=offset,.parameter_kinds=ctx->generics[index].parameter_kinds,.argument_contexts=NULL};
+    plan.declaration.function=index;
     const XrXirTypeNode *task=xr_xir_type_node(&ctx->types,function.result);
     if (!plan.expected_result.present && ctx->active_expression &&
         ctx->active_expression->task_element_context.present && task && task->kind==XR_XIR_TYPE_TASK) {
@@ -68,7 +70,7 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
          * about the error parameter of the returned Task handle. */
         plan.result=task->element;plan.expected_result=ctx->active_expression->task_element_context;
     }
-    if (!source_call_expand(ctx,&syntax,&plan,function.parameter_count)) return false;
+    if (!source_call_expand(ctx,node,&syntax,&plan,function.parameter_count)) return false;
     supplied=(uint32_t)syntax.arg_count+offset;
     if (!source_argument_arity(ctx,node,index,supplied) || !source_call_plan_arguments(ctx,node,&plan,&syntax,own_constraints)) return false;
     if (!source_instantiation_prove(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,index,0},substitution)) goto done;
@@ -79,7 +81,8 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     if (!source_call_conversions(ctx,node,&conversions)) goto done;
     XrXirType result;
     if (!source_substitute(ctx,&substitution,function.result,0,&result)) goto done;
-    *output=(SourceDirectArguments){substitution,values,function.parameter_count,result,offset}; ok=true;
+    if(!source_hir_call_commit(ctx,node,&plan,values,function.parameter_count,supplied))goto done;
+    *output=(SourceDirectArguments){substitution,values,function.parameter_count,result,offset,plan.signature}; ok=true;
 done:
     return ok;
 }

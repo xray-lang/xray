@@ -75,11 +75,12 @@ static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
         if (ctx->depth >= 128) return source_fail(ctx, node, XR_XIR_BUDGET, "source block depth exhausted");
         SourceName *saved = ctx->locals, *scope = ctx->scope;
         SourceFunction *body = &ctx->bodies[ctx->function]; uint32_t entry = body->frontier;
+        XrHirBodyScope typed_scope={0};if(!source_hir_scope_enter(ctx,node,&typed_scope))return false;
         ctx->scope = saved; ++ctx->depth; ++body->lexical_depth;
         bool ok = source_block_functions(ctx, node);
         for (int i = 0; ok && i < node->as.block.count; ++i)
             ok = statement(ctx, node->as.block.statements[i], false);
-        --ctx->depth; --body->lexical_depth; ctx->locals = saved; ctx->scope = scope;
+        --ctx->depth; --body->lexical_depth; ctx->locals=saved;ctx->scope=scope;source_hir_scope_leave(ctx,typed_scope);
         if (ok && !ctx->returned && body->frontier != entry) {
             ok = source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CLEANUP_LEAVE, XR_XIR_UNIT, {0}, {body->block_count}, entry, {0}}, NULL);
             body->frontier = entry;

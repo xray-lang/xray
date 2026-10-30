@@ -41,12 +41,13 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
         SourceName *symbol = source_parameter_name(ctx,node,param,scope+1);
         if (!symbol) return false;
         symbol->kind = SOURCE_LOCAL; symbol->index = scan->count + (uint32_t)i;
-        symbol->type = type; symbol->mutable = by_reference;
+        symbol->type=type;symbol->mutable=by_reference;symbol->declared_mode=mode;
         XrXirSourceRange range = {ctx->module, param->line, param->column, param->line, 0};
         if (param->column > 0 && source_text_size(ctx, param->name) <= (size_t)(INT_MAX - param->column))
             range.end_column = param->column + (int)source_text_size(ctx, param->name);
         if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_PARAMETER, body->declaration, range) ||
             !source_query_mode(ctx, symbol->declaration, param->passing_mode, param->mode_span)) return false;
+        if(!source_hir_parameter_declared(ctx,symbol))return false;
         source_query_binding_type(ctx, symbol);
         if (by_reference && !source_cell_type(ctx, type, &type)) return false;
         body->parameters[symbol->index] = type;

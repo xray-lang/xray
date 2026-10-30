@@ -176,6 +176,7 @@ static void source_comptime_context_free(SourceContext *ctx,SourceContext *paren
     xr_frontend_report_free(ctx->report);ctx->report=NULL;
     xr_hir_items_free(ctx->items);ctx->items=NULL;
     source_comptime_values_free(ctx);
+    xr_hir_body_free(ctx->typed_body);ctx->typed_body=NULL;
     source_release_retired_arrays(ctx);
     xr_xir_compile_construction_free(ctx->construction);
     while (ctx->memory) { SourceMemory *next=ctx->memory->next;xr_compile_resources_free(ctx->memory);ctx->memory=next; }

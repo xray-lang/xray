@@ -18,7 +18,11 @@ typedef struct SourceCallSpread {
     bool prepared;
     SourceExpressionPlan **field_plans;
 } SourceCallSpread;
-typedef struct SourceCallProjection { SourceCallSpread *spread;uint32_t field; } SourceCallProjection;
+typedef struct SourceCallProjection {
+    SourceCallSpread *spread;
+    uint32_t field,formal;
+    XrHirBodySignature signature;
+} SourceCallProjection;
 typedef struct SourceCallEntry {
     AstNode *syntax;
     XrCallArgAccess access;
@@ -174,8 +178,9 @@ static bool source_call_expand_reserve(SourceContext *ctx,AstNode *node,
     return true;
 }
 #include "xxir_source_call_spread_context.inc.c"
-static bool source_call_expand(SourceContext *ctx,SourceCallSyntax *call,
-    const SourceCallPlan *formal,uint32_t parameter_count) {
+static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax *call,
+    SourceCallPlan *formal,uint32_t parameter_count) {
+    if(formal->family!=SOURCE_CALL_ARRAY&&!source_hir_call_prepare(ctx,node,formal,parameter_count))return false;
     bool present=formal->argument_contexts!=NULL;
     for (int a=0;a<call->arg_count;++a) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
@@ -238,14 +243,17 @@ static bool source_call_expand(SourceContext *ctx,SourceCallSyntax *call,
         for (uint32_t f=0;f<arity;++f) {
             uint32_t parameter=count+formal->parameter_offset;
             SourceCallEntry *entry=&expanded->entries[count++];entry->syntax=input;entry->access=access;
-            entry->reference=(formal->family==SOURCE_CALL_FUNCTION || formal->family==SOURCE_CALL_INDIRECT) &&
-                xr_xir_type_is_cell(&ctx->types,formal->function_parameters[parameter]);
+            XrHirBodyAction parameter_action={0};
+            /* Array's real native contract classifies expansion as READ. It
+             * grants no use; contextual types and actual ACCESS are checked later. */
+            if(formal->family!=SOURCE_CALL_ARRAY&&!source_hir_call_use(ctx,input,formal,(XrHirCallUseInput){.kind=XR_HIR_CALL_PLAN,
+                .formal=parameter,.spread=spread!=NULL,.failure="call spread cannot satisfy a ref parameter"},NULL,&parameter_action))goto done;
+            entry->reference=parameter_action.reference;
             if (spread) {
-                if (entry->reference) {source_fail(ctx,input,XR_XIR_BAD_TYPE,"call spread cannot satisfy a ref parameter");goto done;}
                 SourceCallProjection *projection=source_recipe_storage(ctx,1,sizeof(*projection));
                 SourceExpressionPlan *plan=source_plan_collect(ctx,input,(SourceExpectedType){0});
                 if (!projection || !plan) goto done;
-                *projection=(SourceCallProjection){spread,f};plan->call_projection=projection;
+                *projection=(SourceCallProjection){spread,f,parameter,formal->signature};plan->call_projection=projection;
                 if (spread->field_known[f]) {plan->type_ready=true;plan->ground_type=spread->known_fields[f];}
                 entry->plan.value=plan;
             } else if (entry->reference) {
@@ -270,12 +278,14 @@ static bool source_call_spread_read(SourceContext *ctx,SourceCallSpread *spread,
 static bool source_call_projection_complete(SourceContext *ctx,SourceExpressionPlan *plan,SourceValue *value) {
     SourceCallProjection projection=*plan->call_projection;SourceValue tuple;
     if (!source_call_spread_read(ctx,projection.spread,&tuple)) return false;
-    const XrXirTypeNode *type=xr_xir_tuple_signature(&ctx->types,tuple.type);
-    if (!type || projection.field>=type->parameter_count)
-        return source_fail(ctx,plan->syntax,XR_XIR_BAD_STRUCTURE,"call spread projection exceeds its checked Tuple");
-    XrXirType field=type->parameters[projection.field].type;
-    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TUPLE_FIELD,field,
-        {tuple.id,0},{0},projection.field,{0}},value);
+    XrHirCallUseInput input={.types=&ctx->types,.scope=ctx->bodies[ctx->function].typed_scope,.origin=source_hir_origin(ctx,plan->syntax,0),.kind=XR_HIR_CALL_SPREAD,
+        .formal=projection.formal,.argument=projection.formal,.type=tuple.type,.value=tuple.id,.spread_field=projection.field};
+    XrHirBodyUse use={0};XrHirBodyAction action;
+    XrXirStatus status=xr_hir_body_call_argument(ctx->typed_body,projection.signature,&input,ctx->request,&use,&action);
+    if(status!=XR_XIR_OK)return source_fail(ctx,plan->syntax,status,"call spread projection exceeds its checked Tuple");
+    uint32_t before=ctx->bodies[ctx->function].count;
+    return source_recipe_record(ctx,(XrXirInstruction){action.operation,action.target,{tuple.id,0},{0},action.field,{0}},value)&&
+        source_hir_binding_emitted(ctx,&(XrHirBindingAction){.use=use},value,before);
 }
 static bool source_call_spread_events(SourceContext *ctx,AstNode *node,const SourceCallSyntax *call,
     const SourceCallPlan *formal,XrXirInferenceState *state,uint32_t position) {

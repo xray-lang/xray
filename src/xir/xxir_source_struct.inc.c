@@ -286,23 +286,27 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
 }
 static bool source_struct_field(SourceContext *ctx, AstNode *node, XrXirType type,
     const char *name, unsigned write, uint32_t *index, XrXirType *field_type) {
-    const XrXirTypeNode *found = xr_xir_type_node(&ctx->types, type);
-    if (xr_xir_type_is_nullable(&ctx->types, type))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "receiver may be null: check it for null, unwrap it with !, or use ?.");
-    if (!found || (!xr_xir_type_is_struct(&ctx->types, type) && !xr_xir_type_is_class(&ctx->types, type)))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "member receiver is not a nominal value");
+    XrHirPlaceAction shape;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_SELECT,.value=type,.type=type,.field=UINT32_MAX},&shape)||
+        !source_hir_place_emitted(ctx,&shape,NULL,ctx->bodies[ctx->function].count))return false;
+    const XrXirTypeNode *found=xr_xir_type_node(&ctx->types,shape.type);
     const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[found->nominal.declaration];
     for (uint32_t f = 0; f < decl->field_count; ++f) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirNominalField *field = &decl->fields[f];
         if (source_text_size(ctx, name) != field->name.length || !source_span_same(ctx, NULL, name, field->name.bytes, field->name.length)) continue;
-        bool owner = ctx->identities[ctx->function].nominal_owner == found->nominal.declaration + 1;
-        if ((!owner && (field->flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED))) || ((write == 1 || write == 3) && !(field->flags & XR_XIR_FIELD_MUTABLE)) || (write == 2 && !owner))
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field access is not permitted");
+        XrHirPlaceAction selected;
+        if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_SELECT,
+            .value=type,.type=field->type,.field=f,.access=write},&selected)||
+            !source_hir_place_emitted(ctx,&selected,NULL,ctx->bodies[ctx->function].count))return false;
         uint32_t declaration = found->nominal.declaration;
         SourceSubstitution substitution = {found->nominal.arguments, found->nominal.argument_count};
-        if (!source_substitute(ctx, &substitution, field->type, 0, field_type)) return false;
-        *index = f;
+        if (!source_substitute(ctx, &substitution, selected.declared, 0, field_type)) return false;
+        XrHirPlaceAction resolved;
+        if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_RESOLVED_FIELD,
+            .value=type,.type=*field_type,.field=selected.field,.access=write},&resolved)||
+            !source_hir_place_emitted(ctx,&resolved,NULL,ctx->bodies[ctx->function].count))return false;
+        *index=resolved.field;*field_type=resolved.type;
         return source_query_target_token_reference(ctx,node,
             ctx->nominal_members[declaration][f], write == 3 ? XR_XIR_SOURCE_READ_WRITE : write ? XR_XIR_SOURCE_WRITE : XR_XIR_SOURCE_READ);
     }

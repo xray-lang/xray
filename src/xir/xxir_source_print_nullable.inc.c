@@ -36,7 +36,7 @@ static bool source_print_nullable(SourceContext *ctx, AstNode *node, SourceValue
     body->recipes[branch].instruction.targets[1] = no_block;
     body->recipes[yes_jump].instruction.targets[0] = join;
     body->recipes[no_jump].instruction.targets[0] = join;
-    SourceValue inputs[] = {{yes_end, XR_XIR_UNIT}, some, {no_end, XR_XIR_UNIT}, none};
+    SourceValue inputs[] = {{.id=yes_end, .type=XR_XIR_UNIT,.place={0}}, some, {.id=no_end, .type=XR_XIR_UNIT,.place={0}}, none};
     return source_recipe_group(ctx, (XrXirInstruction){XR_XIR_PHI, XR_XIR_STRING,
         {0}, {0}, 0, {0}}, inputs, 4, value);
 }

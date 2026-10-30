@@ -98,6 +98,7 @@ static bool source_history_bindings(SourceContext *ctx,bool types_only) {
                         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history slot binding is not relocated");
                     binding->index=ctx->history->map->slots[source->index];
                     if (!source_library_type(ctx,types,source->type,&binding->type)) return false;
+                    XrHirBodyBinding typed={0};if(!source_hir_binding_register(ctx,binding,&typed))return false;
                 } else {
                     binding->module=source_history_target(ctx,source->module);
                     if (binding->module==UINT32_MAX) return false;
@@ -122,9 +123,9 @@ static bool source_history_map_copy(SourceContext *ctx,const SourceLibraryMap *s
     if (!owned->modules || !owned->functions || (source->slot_count && !owned->slots)) return false;
     ctx->history->map=owned;return true;
 }
-static bool source_history_binding_accessor(SourceContext *ctx,const SourceName *symbol,SourceBindingAccessor mode,uint32_t *output) {
+static bool source_history_binding_lookup(SourceContext *ctx,const SourceName *symbol,SourceBindingAccessor mode,uint32_t *output) {
     if (!ctx->history || !ctx->history->map || !symbol || symbol->index>=ctx->slot_count)
-        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"foreign binding has no actual history accessor");
+        return false;
     const SourceLibraryMap *map=ctx->history->map;
     const SourceSemanticEnvironment *environment=ctx->history->unit->semantic;
     bool write=mode==SOURCE_ACCESS_WRITE,push=mode==SOURCE_ACCESS_PUSH;
@@ -146,7 +147,13 @@ static bool source_history_binding_accessor(SourceContext *ctx,const SourceName 
          * module. A normal call preserves the common verifier's module boundary. */
         *output=function;return true;
     }
-    return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"foreign binding accessor is not in its exact received Checked owner");
+    return false;
+}
+static bool source_history_binding_accessor(SourceContext *ctx,const SourceName *symbol,SourceBindingAccessor mode,uint32_t *output) {
+    if(!ctx->history||!ctx->history->map||!symbol||symbol->index>=ctx->slot_count)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"foreign binding has no actual history accessor");
+    return source_history_binding_lookup(ctx,symbol,mode,output)||
+        source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"foreign binding accessor is not in its exact received Checked owner");
 }
 /* Storage stays within the ordinary checked birth body. The caller supplies
  * only the already evaluated element through its exact received signature. */
@@ -157,17 +164,6 @@ static bool source_history_binding_push(SourceContext *ctx,const SourceName *sym
     return source_history_binding_accessor(ctx,symbol,SOURCE_ACCESS_PUSH,&function) &&
         source_recipe_group(ctx,(XrXirInstruction){XR_XIR_CALL,XR_XIR_UNIT,{0},{0},function,{0}},
             &input,input.type==XR_XIR_UNIT ? 0u : 1u,value);
-}
-static bool source_history_binding_read(SourceContext *ctx,const SourceName *symbol,SourceValue *value) {
-    uint32_t function;
-    return source_history_binding_accessor(ctx,symbol,SOURCE_ACCESS_READ,&function) &&
-        source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CALL,symbol->type,{0},{0},function,{0}},value);
-}
-static bool source_history_binding_write(SourceContext *ctx,const SourceName *symbol,SourceValue value) {
-    uint32_t function;
-    return source_history_binding_accessor(ctx,symbol,SOURCE_ACCESS_WRITE,&function) &&
-        source_recipe_group(ctx,(XrXirInstruction){XR_XIR_CALL,XR_XIR_UNIT,{0},{0},function,{0}},
-            &value,value.type==XR_XIR_UNIT ? 0u : 1u,NULL);
 }
 static bool source_history_binding_accessors(SourceContext *ctx) {
     if (!ctx->history) return true;

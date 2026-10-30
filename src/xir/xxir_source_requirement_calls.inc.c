@@ -143,10 +143,13 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     SourceSubstitution substitution = {types,count};
     SourceValue *arguments=storage.values;
     arguments[0] = receiver;
-    SourceCallPlan plan = {SOURCE_CALL_REQUIREMENT,{application.arguments,parent},substitution,NULL,
-        formal.parameters,formal.result,result_context,arguments,0,1,NULL,NULL};
+    SourceCallPlan plan = {.family=SOURCE_CALL_REQUIREMENT,.prefix={application.arguments,parent},.substitution=substitution,.function_parameters=NULL,
+        .requirement_parameters=formal.parameters,.result=formal.result,.expected_result=result_context,.values=arguments,.parameter_offset=0,.value_offset=1,.parameter_kinds=NULL,.argument_contexts=NULL};
+    plan.declaration.callable=method->signature;plan.declaration.interface_declaration=application.declaration;
+    plan.declaration.interface_member=selected.member;
+    plan.declaration.receiver_type=receiver.type;
     SourceCallSyntax syntax;
-    if (!source_call_syntax(ctx,node,&syntax) || !source_call_expand(ctx,&syntax,&plan,formal.parameter_count)) goto done;
+    if (!source_call_syntax(ctx,node,&syntax) || !source_call_expand(ctx,node,&syntax,&plan,formal.parameter_count)) goto done;
     if ((uint32_t)syntax.arg_count!=formal.parameter_count) {
         source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method argument arity mismatch"); goto done;
     }
@@ -156,12 +159,13 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     SourceCallConversions conversions={SOURCE_CALL_REQUIREMENT,substitution,NULL,callable.parameters,
         arguments,callable.parameter_count,1};
     if (!source_call_conversions(ctx,node,&conversions)) goto done;
+    if(!source_hir_call_commit(ctx,node,&plan,arguments,callable.parameter_count+1,callable.parameter_count+1))goto done;
     XrXirInstruction op = {XR_XIR_CALL_REQUIREMENT,callable.result,{0},
         {application.declaration,selected.member},0,{0}};
     ok = source_type_arguments(ctx,node,substitution.types,substitution.count,&op) &&
         source_query_target_token_reference(ctx,call->callee,
             ctx->interface_member_declarations[application.declaration][selected.member],XR_XIR_SOURCE_CALL) &&
-        source_recipe_group(ctx,op,arguments,callable.parameter_count + 1,value);
+        source_hir_call_group(ctx,plan.signature,op,arguments,value);
 done:
     return ok;
 }

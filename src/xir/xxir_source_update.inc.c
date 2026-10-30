@@ -11,41 +11,71 @@
  */
 typedef struct SourceMemberPlace {
     SourceValue place;
+    XrHirBodyPlace typed;
     XrXirType type;
     uint32_t field;
-    bool constructor, identity;
+    bool constructor;
 } SourceMemberPlace;
 static bool source_member_place(SourceContext *ctx, AstNode *node, AstNode *object,
     const char *name, unsigned access, SourceMemberPlace *member) {
     if (source_constructor_receiver(ctx, object)) {
         member->constructor = true;
-        return source_struct_field(ctx, node, visible_name(ctx, "this")->type, name, access, &member->field, &member->type);
+        XrXirType receiver=visible_name(ctx,"this")->type;
+        XrHirPlaceAction field;
+        if(!source_struct_field(ctx,node,receiver,name,access,&member->field,&member->type)||
+            !source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_CONSTRUCTOR,.value=receiver,
+                .type=member->type,.field=member->field,.access=access},&field)||
+            !source_hir_place_emitted(ctx,&field,NULL,ctx->bodies[ctx->function].count))return false;
+        member->typed=field.place;member->type=field.type;return true;
     }
     XrXirType receiver_type;
     if (!source_path_type(ctx,object,&receiver_type)) return false;
-    if (xr_xir_type_is_class(&ctx->types,receiver_type) || receiver_type == XR_XIR_UNIT) {
+    XrHirPlaceAction route;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_ROUTE,.type=receiver_type},&route)||
+        !source_hir_place_emitted(ctx,&route,NULL,ctx->bodies[ctx->function].count))return false;
+    if(route.object_root) {
         if (!expression(ctx,object,&member->place)) return false;
-        if (!xr_xir_type_is_class(&ctx->types,member->place.type))
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"temporary member mutation requires a class identity");
-        member->identity=true;
-        return source_struct_field(ctx,node,member->place.type,name,access,&member->field,&member->type);
+        XrHirPlaceAction identity,field;
+        if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_TEMPORARY,
+            .type=member->place.type,.base=member->place.id},&identity)||
+            !source_hir_place_emitted(ctx,&identity,&member->place,ctx->bodies[ctx->function].count)||
+            !source_struct_field(ctx,node,member->place.type,name,access,&member->field,&member->type)||
+            !source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_MEMBER,.parent=identity.place,
+                .type=member->type,.field=member->field,.access=access},&field)||
+            !source_hir_place_emitted(ctx,&field,NULL,ctx->bodies[ctx->function].count))return false;
+        member->typed=field.place;member->type=field.type;return true;
     }
     SourceName *root = object->type == AST_VARIABLE ? visible_name(ctx, object->as.variable.name) : NULL;
     if (root && root->type == XR_XIR_PANIC_INFO && (root->kind == SOURCE_LOCAL || root->kind == SOURCE_SLOT))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo field writes require class support");
     if (!source_value_place(ctx,object,&member->place) ||
         !source_struct_field(ctx,node,member->place.type,name,access,&member->field,&member->type)) return false;
-    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_FIELD_PLACE,member->type,{member->place.id},{0},member->field,{0}},&member->place);
+    XrHirPlaceAction field;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_FIELD,.parent=member->place.place,
+        .type=member->type,.field=member->field,.access=access},&field))return false;
+    uint32_t before=ctx->bodies[ctx->function].count;
+    if(!source_recipe_record(ctx,(XrXirInstruction){field.operation,field.type,{field.location},{0},field.immediate,{0}},&member->place)||
+        !source_hir_place_emitted(ctx,&field,&member->place,before))return false;
+    member->typed=field.place;member->type=field.type;return true;
 }
-static bool source_member_read(SourceContext *ctx, const SourceMemberPlace *member, SourceValue *value) {
-    if (member->constructor) return source_constructor_read(ctx, member->field, value);
-    if (member->identity) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CLASS_GET,member->type,{member->place.id},{0},member->field,{0}},value);
-    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_PLACE_READ,member->type,{member->place.id},{0},0,{0}},value);
+static bool source_member_read(SourceContext *ctx,const SourceMemberPlace *member,SourceValue *value) {
+    AstNode *node=ctx->active_expression?ctx->active_expression->syntax:NULL;
+    XrHirPlaceAction action;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_READ,.parent=member->typed},&action))return false;
+    uint32_t before=ctx->bodies[ctx->function].count;
+    bool ok=member->constructor?source_constructor_read(ctx,action.field,value):
+        source_recipe_record(ctx,(XrXirInstruction){action.operation,action.type,{action.location},{0},action.immediate,{0}},value);
+    return ok&&source_hir_place_emitted(ctx,&action,value,before);
 }
-static bool source_member_store(SourceContext *ctx, const SourceMemberPlace *member, SourceValue value) {
-    if (member->constructor) return source_constructor_store(ctx, member->field, value);
-    if (member->identity) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CLASS_SET,XR_XIR_UNIT,{member->place.id,value.id},{0},member->field,{0}},NULL);
-    return source_recipe_record(ctx, (XrXirInstruction){XR_XIR_PLACE_WRITE, XR_XIR_UNIT, {member->place.id, value.id}, {0}, 0, {0}}, NULL);
+static bool source_member_store(SourceContext *ctx,const SourceMemberPlace *member,SourceValue value,const char *failure) {
+    AstNode *node=ctx->active_expression?ctx->active_expression->syntax:NULL;
+    XrHirPlaceAction action;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_WRITE,.parent=member->typed,
+        .value=value.type,.failure=failure},&action))return false;
+    uint32_t before=ctx->bodies[ctx->function].count;
+    bool ok=member->constructor?source_constructor_store(ctx,action.field,value):
+        source_recipe_record(ctx,(XrXirInstruction){action.operation,action.type,{action.location,value.id},{0},action.immediate,{0}},NULL);
+    return ok&&source_hir_place_emitted(ctx,&action,NULL,before);
 }
 static bool source_struct_set(SourceContext *ctx, AstNode *node, SourceValue *value) {
     MemberSetNode *set = &node->as.member_set;
@@ -53,8 +83,7 @@ static bool source_struct_set(SourceContext *ctx, AstNode *node, SourceValue *va
     SourceMemberPlace member = {0};
     if (!source_member_place(ctx, node, set->object, set->member, 1, &member) ||
         !source_plan_expression(ctx, set->value, (SourceExpectedType){member.type != XR_XIR_UNIT,member.type, false, false}, value)) return false;
-    if (value->type != member.type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field assignment type mismatch");
-    return source_member_store(ctx, &member, *value);
+    return source_member_store(ctx,&member,*value,"field assignment type mismatch");
 }
 static bool source_member_compound(SourceContext *ctx, AstNode *node, AstNodeType operation, SourceValue *value) {
     CompoundAssignmentNode *assignment = &node->as.compound_assignment;
@@ -64,8 +93,7 @@ static bool source_member_compound(SourceContext *ctx, AstNode *node, AstNodeTyp
         !source_member_read(ctx, &member, &left) ||
         !source_plan_expression(ctx, assignment->value, (SourceExpectedType){shift ? XR_XIR_UNIT : member.type != XR_XIR_UNIT,shift ? XR_XIR_UNIT : member.type, false, false}, &right) ||
         !source_binary_apply(ctx, node, operation, left, right, value)) return false;
-    if (value->type != member.type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "compound assignment cannot narrow its result");
-    return source_member_store(ctx, &member, *value);
+    return source_member_store(ctx,&member,*value,"compound assignment cannot narrow its result");
 }
 static bool source_compound(SourceContext *ctx, AstNode *node, SourceValue *value) {
     CompoundAssignmentNode *assignment = &node->as.compound_assignment;
@@ -86,16 +114,17 @@ static bool source_compound(SourceContext *ctx, AstNode *node, SourceValue *valu
     }
     if (assignment->object) return source_member_compound(ctx, node, operation, value);
     SourceName *symbol = visible_name(ctx, assignment->name);
-    if (!symbol || !symbol->mutable || (symbol->kind != SOURCE_LOCAL && symbol->kind != SOURCE_SLOT))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "compound assignment requires a mutable binding");
+    if(!symbol)return source_fail(ctx,node,XR_XIR_BAD_TYPE,"compound assignment requires a mutable binding");
+    XrHirBindingAction qualification;
+    if(!source_hir_binding_use(ctx,node,symbol,XR_HIR_BINDING_COMPOUND,(SourceValue){0},&qualification)||
+        !source_hir_binding_emitted(ctx,&qualification,NULL,ctx->bodies[ctx->function].count))return false;
     if (!source_query_reference(ctx, node, symbol, symbol, XR_XIR_SOURCE_READ_WRITE)) return false;
     SourceValue left, right;
 
     bool shift = operation == AST_BINARY_LSHIFT || operation == AST_BINARY_RSHIFT;
     if (!source_binding_read(ctx, symbol, &left) || !source_plan_expression(ctx, assignment->value, (SourceExpectedType){shift ? XR_XIR_UNIT : symbol->type != XR_XIR_UNIT,shift ? XR_XIR_UNIT : symbol->type, false, false}, &right) ||
         !source_binary_apply(ctx, node, operation, left, right, value)) return false;
-    if (value->type != symbol->type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "compound assignment cannot narrow its result");
-    return source_binding_write(ctx, symbol, *value);
+    return source_binding_write_reason(ctx,node,symbol,*value,"compound assignment cannot narrow its result");
 }
 /* Only scalar/string reads and literal template parts prove that the RHS
  * cannot rebind the receiver. Calls and member getters keep ordinary ordering. */

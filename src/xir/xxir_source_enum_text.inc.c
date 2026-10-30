@@ -65,7 +65,7 @@ static bool source_enum_text(SourceContext *ctx, AstNode *node, SourceValue rece
         if (!begin_block(ctx)) return false;
         body->recipes[branch].instruction.targets[0] = yes; body->recipes[branch].instruction.targets[1] = no;
         body->recipes[yes_jump].instruction.targets[0] = join; body->recipes[no_jump].instruction.targets[0] = join;
-        SourceValue inputs[] = {{yes_end,XR_XIR_UNIT},selected,{no,XR_XIR_UNIT},*value};
+        SourceValue inputs[] = {{.id=yes_end,.type=XR_XIR_UNIT,.place={0}}, selected, {.id=no,.type=XR_XIR_UNIT,.place={0}}, *value};
         if (!source_recipe_group(ctx, (XrXirInstruction){XR_XIR_PHI, XR_XIR_STRING, {0}, {0}, 0, {0}}, inputs, 4, value)) return false;
     }
     return true;

@@ -20,6 +20,7 @@ static bool source_iteration_binding(SourceContext *ctx, AstNode *node,
     ctx->locals = symbol;
     if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,
         ctx->bodies[ctx->function].declaration,source_query_range(ctx,node,name))) return false;
+    if(!source_hir_value_declared(ctx,node,symbol,value))return false;
     source_query_binding_type(ctx,symbol);
     return true;
 }
@@ -27,11 +28,12 @@ static bool source_for_in_body(SourceContext *ctx, AstNode *node,
     SourceValue index, SourceValue element) {
     ForInStmtNode *loop = &node->as.for_in_stmt;
     SourceName *saved = ctx->locals, *scope = ctx->scope;
+    XrHirBodyScope typed_scope={0};if(!source_hir_scope_enter(ctx,node,&typed_scope))return false;
     ctx->scope = saved;
     bool ok = source_iteration_binding(ctx,node,loop->item_name,loop->is_keyvalue ? index : element) &&
         (!loop->is_keyvalue || source_iteration_binding(ctx,node,loop->value_name,element)) &&
         scoped_statement(ctx,loop->body);
-    ctx->locals = saved; ctx->scope = scope;
+    ctx->locals=saved;ctx->scope=scope;source_hir_scope_leave(ctx,typed_scope);
     return ok;
 }
 #include "xxir_source_iterator_loop.inc.c"

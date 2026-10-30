@@ -163,7 +163,10 @@
     "test_hir_nullable",
     "test_hir_nullable_source",
     "test_type_clone_control",
-    "test_type_clone_source"
+    "test_type_clone_source",
+    "test_hir_body",
+    "test_hir_body_source",
+    "test_source_public_repl"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -473,7 +476,13 @@
     "source_type_clone_methods_oom",
     "source_type_clone_parameters_oom",
     "source_type_clone_sdk",
-    "source_type_clone_cli"
+    "source_type_clone_cli",
+    "hir_body",
+    "source_body_sdk",
+    "hir_body_cli",
+    "source_public_repl",
+    "source_public_repl_array_history",
+    "source_public_repl_write_class_history"
   ],
   "versionCommand": [
     "{build}/xray.exe",

@@ -33,6 +33,20 @@ static bool source_error_edge(SourceContext *ctx, SourceValue value) {
 static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
     if (!source_local_call(ctx,&op) || !source_call_borrows(ctx,&op)) return false;
     SourceFunction *body = &ctx->bodies[ctx->function];
+    if(op.op==XR_XIR_RETURN) {
+        XrHirBodyOrigin origin=source_hir_origin(ctx,NULL,0);
+        if(ctx->debug_function==ctx->function) {
+            XrXirSourceRange range=ctx->debug_point.range;origin.node=ctx->debug_point.statement?ctx->debug_point.statement-1:0;
+            origin.line=range.line;origin.column=range.column;origin.end_line=range.end_line;origin.end_column=range.end_column;
+        }
+        XrHirBodyUse use={0};XrHirBodyAction action;
+        XrXirStatus status=xr_hir_body_return(ctx->typed_body,origin,op.args[0],ctx->request,&use,&action);
+        if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,"return emission has no actual declaration owner");
+        op.op=action.operation;op.type=action.target;if(action.source==XR_XIR_UNIT)op.args[0]=0;
+        uint32_t before=body->count;
+        return source_recipe_append(ctx,op,result)&&
+            source_hir_binding_emitted(ctx,&(XrHirBindingAction){.use=use},NULL,before);
+    }
     if (!body->error_context || (op.op != XR_XIR_CALL && op.op != XR_XIR_CALL_INDIRECT &&
         op.op != XR_XIR_CALL_DEFAULT))
         return source_recipe_append(ctx,op,result);
@@ -49,7 +63,7 @@ static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, Source
     if (!source_recipe_append(ctx,(XrXirInstruction){XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},origin,{0}},&caught) ||
         !source_error_edge(ctx,caught) || !source_handler_site(ctx,origin,caught.id) || !begin_block(ctx)) return false;
     if (op.type == XR_XIR_UNIT) {
-        if (result) *result = (SourceValue){0,XR_XIR_UNIT};
+        if (result) *result = (SourceValue){.id=0,.type=XR_XIR_UNIT,.place={0}};
         return true;
     }
     return source_recipe_append(ctx,(XrXirInstruction){XR_XIR_INVOKE_RESULT,op.type,{0},{0},origin,{0}},result);

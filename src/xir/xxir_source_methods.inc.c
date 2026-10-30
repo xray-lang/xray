@@ -88,7 +88,7 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
         source_query_target_token_reference(ctx,call->callee,
             method->declaration,XR_XIR_SOURCE_CALL) &&
         source_direct_call_signature(ctx,node,method->index,&prepared,reference_before) &&
-        source_recipe_group(ctx,op,prepared.values,prepared.count,value);
+        source_hir_call_group(ctx,prepared.signature,op,prepared.values,value);
 }
 /* A direct ref receiver uses the same actual owner/path capability as ref
  * arguments. Bound borrowed function captures remain independently closed. */
@@ -330,6 +330,8 @@ static bool source_method_body(SourceContext *ctx) {
             const XrParamNode *parameter = method->params[i-offset];
             if (!source_query_mode(ctx, symbol->declaration, parameter->passing_mode, parameter->mode_span)) return false;
         }
+        symbol->declared_mode=i<offset?method->receiver_mode:method->params[i-offset]->passing_mode;
+        if(!source_hir_parameter_declared(ctx,symbol))return false;
         source_query_binding_type(ctx, symbol);
     }
     return statement(ctx, method->body, false);

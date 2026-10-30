@@ -175,6 +175,6 @@ static bool source_type_name(SourceContext *ctx, AstNode *node, SourceValue inpu
     if (!begin_block(ctx)) return false;
     body->recipes[branch].instruction.targets[0] = yes_block; body->recipes[branch].instruction.targets[1] = no_block;
     body->recipes[yes_jump].instruction.targets[0] = join; body->recipes[no_jump].instruction.targets[0] = join;
-    SourceValue inputs[] = {{yes_end, XR_XIR_UNIT}, yes, {no_end, XR_XIR_UNIT}, no};
+    SourceValue inputs[] = {{.id=yes_end, .type=XR_XIR_UNIT,.place={0}}, yes, {.id=no_end, .type=XR_XIR_UNIT,.place={0}}, no};
     return source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_PHI, XR_XIR_STRING, {0}, {0}, 0, {0}}, inputs, 4, value);
 }

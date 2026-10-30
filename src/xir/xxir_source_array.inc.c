@@ -109,17 +109,21 @@ static SourceName *source_array_root(SourceContext *ctx, AstNode *node) {
         xr_xir_type_is_array(&ctx->types, root->type) ? root : NULL;
 }
 static bool source_array_read_place(SourceContext *ctx, AstNode *node, SourceName *root, SourceValue *place) {
-    if (!root || (root->kind == SOURCE_LOCAL && !root->mutable))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array read requires a stored root");
-    if (!source_query_reference(ctx, node, root, root, XR_XIR_SOURCE_READ)) return false;
-    if(root->kind==SOURCE_SLOT && root->module!=ctx->bodies[ctx->function].module && ctx->history)
-        return source_history_binding_read(ctx,root,place);
-    if (!root->mutable) {
-        return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_SLOT_PLACE, root->type, {0}, {0}, root->index, {0}}, place);
+    if(root&&root->kind==SOURCE_SLOT&&root->module!=ctx->bodies[ctx->function].module&&ctx->history)
+        return source_query_reference(ctx,node,root,root,XR_XIR_SOURCE_READ)&&source_binding_read(ctx,root,place);
+    XrHirBodyBinding binding={0};if(root&&!source_hir_binding_receive(ctx,root,&binding))return false;
+    XrHirPlaceAction action;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_BORROW_ROOT,.root=binding},&action))return false;
+    if(!source_query_reference(ctx,node,root,root,XR_XIR_SOURCE_READ))return false;
+    uint32_t before=ctx->bodies[ctx->function].count;bool ok;
+    if(action.operation==XR_XIR_SLOT_PLACE)
+        ok=source_recipe_record(ctx,(XrXirInstruction){action.operation,action.type,{0},{0},action.immediate,{0}},place);
+    else {
+        SourceValue cell={0};ok=source_binding_cell(ctx,root,&cell)&&
+            source_recipe_record(ctx,(XrXirInstruction){action.operation,action.type,{cell.id,0},{0},0,{0}},place);
     }
-    SourceValue cell = {0};
-    return source_binding_cell(ctx, root, &cell) &&
-        source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_PLACE, root->type, {cell.id, 0}, {0}, 0, {0}}, place);
+    if(!ok||!source_hir_place_emitted(ctx,&action,place,before))return false;
+    place->place=action.place;return true;
 }
 static bool source_array_plain_index(SourceContext *ctx, AstNode *index) {
     if (!index) return false;
@@ -216,25 +220,31 @@ static bool source_array_get(SourceContext *ctx, AstNode *node, AstNode *receive
     SourceValue array = {0}, at;
     if (evaluated) array = *evaluated;
     else if (!source_array_receiver(ctx, receiver, index, false, &array)) return false;
-    if (!xr_xir_type_is_array(&ctx->types, array.type))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indexed receiver is not an Array");
-    if (!source_plan_expression(ctx, index, (SourceExpectedType){XR_XIR_I64 != XR_XIR_UNIT,XR_XIR_I64, false, false}, &at)) return false;
+    XrHirPlaceAction shape;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_ARRAY_SHAPE,
+        .parent=array.place,.type=array.type,.base=array.id},&shape)||
+        !source_hir_place_emitted(ctx,&shape,NULL,ctx->bodies[ctx->function].count)||
+        !source_plan_expression(ctx,index,(SourceExpectedType){true,shape.key,false,false},&at))return false;
     if (!member) member = source_array_member(ctx, node, "get");
     if (!member || member->operation != XR_NATIVE_OPERATION_ARRAY_GET) return false;
-    return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_GET, xr_xir_array_element(&ctx->types, array.type),
-        {array.id, at.id}, {0}, 0, {0}}, value) && source_array_member_reference(ctx, node, member) &&
+    XrHirPlaceAction action;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_INDEX_READ,.parent=array.place,
+        .type=array.type,.base=array.id,.key=at.type,.selector=at.id},&action))return false;
+    uint32_t before=ctx->bodies[ctx->function].count;
+    return source_recipe_record(ctx,(XrXirInstruction){action.operation,action.type,{array.id,at.id},{0},0,{0}},value)&&
+        source_hir_place_emitted(ctx,&action,value,before)&&source_array_member_reference(ctx,node,member)&&
         source_array_call_signature(ctx,node,&(SourceNativeCallShape){array.type,&at.type,1},value->type);
 }
-static bool source_array_set_values(SourceContext *ctx, AstNode *node, SourceValue *args,
-    const XrNativeMemberDeclaration *member, bool assignment, SourceValue *value) {
-    if (!member) member = source_array_member(ctx, node, "set");
-    if (!member || member->operation != XR_NATIVE_OPERATION_ARRAY_SET) return false;
-    if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_SET, XR_XIR_UNIT, {0}, {0}, 0, {0}}, args, 3, value) ||
-        !source_array_member_reference(ctx, node, member)||
+static bool source_array_set_values(SourceContext *ctx,AstNode *node,SourceValue *args,
+    const XrHirPlaceAction *action,SourceValue *value) {
+    const XrNativeMemberDeclaration *member=source_array_member(ctx,node,"set");
+    if(!member||member->operation!=XR_NATIVE_OPERATION_ARRAY_SET)return false;
+    uint32_t before=ctx->bodies[ctx->function].count;
+    if(!source_recipe_group(ctx,(XrXirInstruction){action->operation,action->type,{0},{0},0,{0}},args,3,NULL)||
+        !source_hir_place_emitted(ctx,action,NULL,before)||!source_array_member_reference(ctx,node,member)||
         !source_array_call_signature(ctx,node,&(SourceNativeCallShape){args[0].type,
-            (XrXirType[]){args[1].type,args[2].type},2},XR_XIR_UNIT)) return false;
-    if (assignment) *value = args[2];
-    return true;
+            (XrXirType[]){args[1].type,args[2].type},2},XR_XIR_UNIT))return false;
+    *value=args[2];return true;
 }
 static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceValue *evaluated, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
@@ -277,15 +287,22 @@ static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceVal
         else if (call->arg_count==1 && call->arguments[0] && call->arguments[0]->type!=AST_SPREAD_EXPR) {
             if (!source_array_receiver(ctx,access->object,call->arguments[0],false,&args[0])) return false;
         } else if (!expression(ctx,access->object,&args[0])) return false;
-        if (!xr_xir_type_is_array(&ctx->types,args[0].type))
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Array method receiver is not an Array");
-        XrXirType parameters[]={XR_XIR_I64,xr_xir_array_element(&ctx->types,args[0].type)};
+        XrHirPlaceAction shape;
+        if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_ARRAY_SHAPE,.parent=args[0].place,
+            .type=args[0].type,.base=args[0].id,.failure="Array method receiver is not an Array"},&shape)||
+            !source_hir_place_emitted(ctx,&shape,NULL,ctx->bodies[ctx->function].count))return false;
+        XrXirType parameters[]={shape.key,shape.type};
         uint32_t count=setting ? 2u : 1u;
         if (member->parameter_count!=count || !source_native_read_arguments(ctx,node,parameters,count,count,
             &args[1],&supplied,"Array method requires its declared arguments")) return false;
-        return (setting ? source_recipe_group(ctx,(XrXirInstruction){XR_XIR_ARRAY_SET,XR_XIR_UNIT,{0},{0},0,{0}},args,3,value) :
-            source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_GET,parameters[1],{args[0].id,args[1].id},{0},0,{0}},value)) &&
-            source_array_member_reference(ctx,node,member);
+        XrHirPlaceAction action;
+        if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=setting?XR_HIR_PLACE_INDEX_WRITE:XR_HIR_PLACE_INDEX_READ,
+            .parent=args[0].place,.type=args[0].type,.base=args[0].id,.key=args[1].type,.selector=args[1].id,
+            .value=setting?args[2].type:XR_XIR_UNIT,.value_id=setting?args[2].id:0},&action))return false;
+        uint32_t before=ctx->bodies[ctx->function].count;
+        return (setting?source_recipe_group(ctx,(XrXirInstruction){action.operation,action.type,{0},{0},0,{0}},args,3,value):
+            source_recipe_record(ctx,(XrXirInstruction){action.operation,action.type,{args[0].id,args[1].id},{0},0,{0}},value))&&
+            source_hir_place_emitted(ctx,&action,setting?NULL:value,before)&&source_array_member_reference(ctx,node,member);
     }
     case XR_NATIVE_OPERATION_ARRAY_PUSH: {
         SourceValue place, input;uint32_t supplied;

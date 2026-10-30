@@ -74,21 +74,17 @@ static bool source_value_place_mode(SourceContext *ctx, AstNode *node, SourceVal
     /* An unrebindable class binding still lets its fields change: the identity roots the path. */
     XrXirType root_type = root ? source_symbol_type(ctx,root) : XR_XIR_UNIT;
     bool narrowed = root && root_type != root->type;
-    if (reference && (narrowed || !root || root->construction ||
-        (!xr_xir_type_is_struct(&ctx->types,root_type) && !xr_xir_type_is_array(&ctx->types,root_type) &&
-            !xr_xir_type_is_map(&ctx->types,root_type) &&
-            !xr_xir_type_is_class(&ctx->types,root_type))))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"projected ref requires an actual stored root");
-    bool object_root = root && (root->kind == SOURCE_LOCAL || root->kind == SOURCE_SLOT) &&
-        xr_xir_type_is_class(&ctx->types,root_type);
-    if (!root || (!root->mutable && !object_root) || (root->kind != SOURCE_LOCAL && root->kind != SOURCE_SLOT))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"value mutation requires a mutable named root");
-    if (object_root && root->construction)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class constructor field mutation is not implemented in XIR");
+    XrHirBodyBinding binding={0};
+    if(root&&!source_hir_binding_receive(ctx,root,&binding))return false;
+    XrHirPlaceAction root_action;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_ROOT,
+        .root=binding,.type=root_type,.reference=reference},&root_action))return false;
+    bool object_root=root_action.object_root;
     SourceName saved = *root;
     AstNode *base = count ? steps[count - 1] : node;
     if (count) base = base->type == AST_MEMBER_ACCESS ? base->as.member_access.object : base->as.index_get.array;
     if (!source_query_reference(ctx,base,root,root,object_root ? XR_XIR_SOURCE_READ : XR_XIR_SOURCE_READ_WRITE)) return false;
+    uint32_t root_before=ctx->bodies[ctx->function].count;
     if (object_root) {
         SourceValue handle;
         if (!source_binding_read(ctx, &saved, &handle)) return false;
@@ -98,30 +94,35 @@ static bool source_value_place_mode(SourceContext *ctx, AstNode *node, SourceVal
             for (uint32_t layer=0;layer<prefix;++layer)
                 if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_unwrap_value(ctx,node,handle,&handle)) return false;
         }
-        if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_OBJECT_PLACE,root_type,{handle.id,0},{0},0,{0}},place)) return false;
+        if (!source_recipe_record(ctx,(XrXirInstruction){root_action.operation,root_action.type,{handle.id,0},{0},0,{0}},place)) return false;
     } else {
         SourceValue cell = {0};
         if (!source_binding_cell(ctx, &saved, &cell) ||
-            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_PLACE,
-                saved.type,{cell.id,0},{0},0,{0}},place)) return false;
+            !source_recipe_record(ctx,(XrXirInstruction){root_action.operation,
+                root_action.type,{cell.id,0},{0},0,{0}},place)) return false;
     }
-    uint32_t initial_count = count;
+    if(!source_hir_place_emitted(ctx,&root_action,place,root_before))return false;
+    place->place=root_action.place;
     while (count) {
         AstNode *step = steps[--count];
         if (step->type == AST_MEMBER_ACCESS) {
-            if (reference && !xr_xir_type_is_struct(&ctx->types,place->type) &&
-                !(object_root && count + 1 == initial_count))
-                return source_fail(ctx,step,XR_XIR_BAD_TYPE,"projected ref cannot cross a Class identity");
+            XrHirPlaceAction receiver_action;
+            if(!source_hir_place_check(ctx,step,(XrHirPlaceInput){.kind=XR_HIR_PLACE_FIELD_BASE,.parent=place->place},&receiver_action)||
+                !source_hir_place_emitted(ctx,&receiver_action,NULL,ctx->bodies[ctx->function].count))return false;
             uint32_t field; XrXirType type;
-            if (!source_struct_field(ctx,step,place->type,step->as.member_access.name,3,&field,&type) ||
-                !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_FIELD_PLACE,type,{place->id},{0},field,{0}},place)) return false;
+            if(!source_struct_field(ctx,step,receiver_action.type,step->as.member_access.name,3,&field,&type))return false;
+            XrHirPlaceAction action;
+            if(!source_hir_place_check(ctx,step,(XrHirPlaceInput){.kind=XR_HIR_PLACE_FIELD,
+                .parent=place->place,.type=type,.field=field,.access=3},&action))return false;
+            uint32_t before=ctx->bodies[ctx->function].count;
+            if(!source_recipe_record(ctx,(XrXirInstruction){action.operation,action.type,{place->id},{0},action.immediate,{0}},place)||
+                !source_hir_place_emitted(ctx,&action,place,before))return false;
+            place->place=action.place;
         } else {
-            bool map = xr_xir_type_is_map(&ctx->types,place->type);
-            if (!map && !xr_xir_type_is_array(&ctx->types,place->type))
-                return source_fail(ctx,step,XR_XIR_BAD_TYPE,"indexed place requires an Array or Map");
-            XrXirType key = map ? xr_xir_map_key(&ctx->types,place->type) : XR_XIR_I64;
-            XrXirType element = map ? xr_xir_map_element(&ctx->types,place->type) :
-                xr_xir_array_element(&ctx->types,place->type); SourceValue index;
+            XrHirPlaceAction shape;
+            if(!source_hir_place_check(ctx,step,(XrHirPlaceInput){.kind=XR_HIR_PLACE_SHAPE,.parent=place->place},&shape)||
+                !source_hir_place_emitted(ctx,&shape,NULL,ctx->bodies[ctx->function].count))return false;
+            XrXirType key=shape.key;SourceValue index;
             if (plan) {
                 if (selector >= plan->count)
                     return source_fail(ctx,step,XR_XIR_BAD_STRUCTURE,"reference selector plan is incomplete");
@@ -133,7 +134,13 @@ static bool source_value_place_mode(SourceContext *ctx, AstNode *node, SourceVal
                 if (!source_plan_complete(ctx,index_plan,&index)) return false;
             } else if (!source_plan_expression(ctx,step->as.index_get.index,
                 (SourceExpectedType){true,key,false,false},&index)) return false;
-            if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_INDEX_PLACE,element,{place->id,index.id},{0},0,{0}},place)) return false;
+            XrHirPlaceAction action;
+            if(!source_hir_place_check(ctx,step,(XrHirPlaceInput){.kind=XR_HIR_PLACE_INDEX,.parent=place->place,
+                .key=index.type,.selector=index.id},&action))return false;
+            uint32_t before=ctx->bodies[ctx->function].count;
+            if(!source_recipe_record(ctx,(XrXirInstruction){action.operation,action.type,{place->id,index.id},{0},0,{0}},place)||
+                !source_hir_place_emitted(ctx,&action,place,before))return false;
+            place->place=action.place;
         }
         if (!source_query_expression(ctx,step,place->type)) return false;
     }
@@ -149,10 +156,7 @@ static bool source_reference_place_planned(SourceContext *ctx, AstNode *node,
     const SourceReferencePlan *plan, SourceValue *cell) {
     AstNode *root_node=source_ref_root_syntax(ctx,node);
     SourceName *root=source_ref_binding(ctx,node);
-    bool object_field = root && root_node != node && xr_xir_type_is_class(&ctx->types,source_symbol_type(ctx,root));
-    if (!root || (!root->mutable && !object_field) || root->construction ||
-        (root->kind!=SOURCE_LOCAL && root->kind!=SOURCE_SLOT && root->kind!=SOURCE_UNIT_SLOT))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"ref requires a mutable stored binding");
+    if(!source_hir_reference(ctx,node,root,root_node!=node,"ref requires a mutable stored binding"))return false;
     if (root_node==node) {
         if (plan) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"binding ref has a projected selector plan");
         return source_query_reference(ctx,node,root,root,XR_XIR_SOURCE_READ_WRITE) &&
@@ -160,12 +164,15 @@ static bool source_reference_place_planned(SourceContext *ctx, AstNode *node,
     }
     SourceValue place={0}; XrXirType physical;
     if (!source_value_place_mode(ctx,node,&place,true,plan)) return false;
-    if (place.type==XR_XIR_UNIT)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"projected ref requires an admitted stored leaf type");
-    if (xr_xir_type_is_class(&ctx->types,place.type) || xr_xir_type_is_cell(&ctx->types,place.type))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"projected Class ref requires its own object borrow owner");
-    return source_cell_type(ctx,place.type,&physical) &&
-        source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_PROJECT,physical,{place.id,0},{0},0,{0}},cell);
+    XrHirPlaceAction leaf;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_REF_LEAF,.parent=place.place},&leaf)||
+        !source_hir_place_emitted(ctx,&leaf,NULL,ctx->bodies[ctx->function].count)||!source_cell_type(ctx,leaf.type,&physical))return false;
+    XrHirPlaceAction action;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_REFERENCE,
+        .parent=place.place,.type=physical},&action))return false;
+    uint32_t before=ctx->bodies[ctx->function].count;
+    return source_recipe_record(ctx,(XrXirInstruction){action.operation,action.type,{place.id,0},{0},0,{0}},cell)&&
+        source_hir_place_emitted(ctx,&action,cell,before);
 }
 static bool source_reference_place(SourceContext *ctx, AstNode *node, SourceValue *cell) {
     return source_reference_place_planned(ctx,node,NULL,cell);
@@ -192,10 +199,10 @@ static bool source_reference_effects(SourceContext *ctx, AstNode *node, SourceRe
         if (step->type!=AST_INDEX_GET) continue;
         XrXirType container = XR_XIR_UNIT;
         if (!source_path_type(ctx,step->as.index_get.array,&container)) return false;
-        bool map = xr_xir_type_is_map(&ctx->types,container);
-        if (!map && !xr_xir_type_is_array(&ctx->types,container))
-            return source_fail(ctx,step,XR_XIR_BAD_TYPE,"indexed ref requires an Array or Map");
-        XrXirType key = map ? xr_xir_map_key(&ctx->types,container) : XR_XIR_I64;
+        XrHirPlaceAction hint;
+        if(!source_hir_place_check(ctx,step,(XrHirPlaceInput){.kind=XR_HIR_PLACE_HINT_SHAPE,.type=container,
+            .failure="indexed ref requires an Array or Map"},&hint))return false;
+        XrXirType key=hint.key;
         SourceExpressionPlan *index=source_plan_collect(ctx,step->as.index_get.index,
             (SourceExpectedType){true,key,false,false});
         if (!index || !source_planned_effects(ctx,index,0)) return false;

@@ -36,5 +36,5 @@ static bool source_hash_for_each(SourceContext *ctx, AstNode *node, const Source
         {container.id, counter.index.id}, {0}, 0, {0}}, arguments + 1)) return false;
     if (!source_recipe_group(ctx, (XrXirInstruction){XR_XIR_CALL_INDIRECT, XR_XIR_UNIT,
         {0}, {0}, callback.value.id, {0}}, arguments, callback.arity, NULL) || !source_counter_close(ctx, &counter)) return false;
-    *value = (SourceValue){UINT32_MAX, XR_XIR_UNIT}; return true;
+    *value = (SourceValue){.id=UINT32_MAX, .type=XR_XIR_UNIT,.place={0}}; return true;
 }

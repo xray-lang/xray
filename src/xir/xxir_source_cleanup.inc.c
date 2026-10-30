@@ -74,7 +74,7 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
             uint32_t fields = xr_xir_type_node(&ctx->types, p->source->type)->nominal.field_count;
             for (uint32_t f = 0; f < fields; ++f)
                 if (!source_constructor_storage(ctx, f, &captures[p->index + f])) return false;
-        } else captures[p->index] = (SourceValue){p->source->index, type};
+        } else captures[p->index] = (SourceValue){.id=p->source->index, .type=type,.place={0}};
     }
     if (!owner->block_count && !begin_block(ctx)) return false;
     XrXirInstruction op = {XR_XIR_CLEANUP_REGISTER, XR_XIR_UNIT, {0}, {owner->block_count}, index, {0}};

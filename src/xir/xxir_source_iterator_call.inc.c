@@ -31,7 +31,7 @@ static bool source_iterator_consume(SourceContext *ctx,AstNode *node,SourceValue
     } else if (!source_recipe_append(ctx, (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {caught.id, 0}, {0}, 0, {0}}, NULL))
         return false;
     if (!begin_block(ctx)) return false;
-    if (element == XR_XIR_UNIT) { *value = (SourceValue){UINT32_MAX, XR_XIR_UNIT}; return true; }
+    if (element == XR_XIR_UNIT) { *value = (SourceValue){.id=UINT32_MAX, .type=XR_XIR_UNIT,.place={0}}; return true; }
     return source_recipe_append(ctx,
         (XrXirInstruction) {XR_XIR_INVOKE_RESULT, element, {0}, {0}, origin, {0}}, value);
 }

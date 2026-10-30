@@ -165,17 +165,22 @@ static bool source_destructure_binding(SourceContext *ctx,AstNode *node,bool top
         }
         field->symbol=source_alloc(ctx,1,sizeof(*field->symbol));
         if (!field->symbol) return false;
-        if (!node->as.destructure_decl.is_const) {
-            if (!source_root_join_record(ctx,&field->value)) return false;
-            XrXirType cell;
-            if (!source_cell_type(ctx,field->type,&cell) ||
-                !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cell,
-                    {field->type==XR_XIR_UNIT ? 0 : field->value.id,0},{0},0,{0}},&field->value)) return false;
-        }
-        bool unit=field->type==XR_XIR_UNIT && node->as.destructure_decl.is_const;
-        *field->symbol=(SourceName){.next=NULL,.name=field->pattern->as.identifier.name,.imported=NULL,.node=node,.kind=unit ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,
-            .index=unit ? UINT32_MAX : field->value.id,.module=ctx->module,.type=field->type,.mutable=!node->as.destructure_decl.is_const,
-            .construction=false,.declaration=0,.inferred=true,.checked_library=false};
+        bool unit=field->type==XR_XIR_UNIT&&node->as.destructure_decl.is_const;
+        *field->symbol=(SourceName){.name=field->pattern->as.identifier.name,.node=node,
+            .kind=unit?SOURCE_UNIT_LOCAL:SOURCE_LOCAL,.index=field->value.id,.module=ctx->module,
+            .type=field->type,.mutable=!node->as.destructure_decl.is_const,.inferred=true};
+        if(!source_query_declare(ctx,field->symbol,XR_XIR_SOURCE_BINDING,ctx->bodies[ctx->function].declaration,
+            source_destructure_range(ctx,field->pattern)))return false;
+        XrHirBodyBinding binding={0};if(!source_hir_binding_register(ctx,field->symbol,&binding))return false;
+        XrHirBindingAction initialization;
+        if(!source_hir_binding_use(ctx,node,field->symbol,XR_HIR_BINDING_INITIALIZE,field->value,&initialization))return false;
+        if(initialization.operation!=XR_XIR_INVALID&&!source_root_join_record(ctx,&field->value))return false;
+        uint32_t before=ctx->bodies[ctx->function].count;
+        if(initialization.operation!=XR_XIR_INVALID&&
+            !source_recipe_record(ctx,(XrXirInstruction){initialization.operation,initialization.physical,
+                {initialization.logical==XR_XIR_UNIT?0:field->value.id,0},{0},0,{0}},&field->value))return false;
+        if(!source_hir_binding_emitted(ctx,&initialization,&field->value,before))return false;
+        field->symbol->index=initialization.route==XR_HIR_BINDING_UNIT?UINT32_MAX:field->value.id;
     }
     if (top) {
         if (!plan.count) return true;
@@ -186,8 +191,6 @@ static bool source_destructure_binding(SourceContext *ctx,AstNode *node,bool top
     for (uint32_t i=0;i<plan.count;++i) {
         SourceDestructureField *field=&plan.fields[i];
         field->symbol->next=ctx->locals;ctx->locals=field->symbol;
-        if (!source_query_declare(ctx,field->symbol,XR_XIR_SOURCE_BINDING,ctx->bodies[ctx->function].declaration,
-            source_destructure_range(ctx,field->pattern))) return false;
         source_query_binding_type(ctx,field->symbol);
         if (!source_facts_assign(ctx,field->symbol,false)) return false;
     }

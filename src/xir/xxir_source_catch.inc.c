@@ -58,6 +58,8 @@ static bool source_catch_pattern(SourceContext *ctx, AstNode *root, XrXirType *t
         alternatives = root->as.pattern_multi.patterns;
     }
     if (!alternatives[0] || !source_catch_pattern_type(ctx, alternatives[0], type)) return false;
+    XrHirBodyScope typed_scope={0};if(!source_hir_scope_enter(ctx,root,&typed_scope))return false;
+    arm->typed_scope=ctx->bodies[ctx->function].typed_scope;
     arm->count = count; arm->bindings = NULL;
     arm->patterns = source_alloc(ctx, count, sizeof(*arm->patterns));
     if (!arm->patterns) return false;
@@ -70,19 +72,22 @@ static bool source_catch_pattern(SourceContext *ctx, AstNode *root, XrXirType *t
                 return source_fail(ctx, alternatives[i], XR_XIR_BAD_TYPE, "alternative is missing a common binding");
         }
     }
-    return true;
+    source_hir_scope_leave(ctx,typed_scope);return true;
 }
 /* A handler without an error predecessor is checked but never executed: its
  * pattern bindings name a placeholder that no published graph can reference. */
 static bool source_catch_placeholders(SourceContext *ctx, const SourceMatchArm *arm) {
     for (SourceName *symbol = arm->bindings; symbol; symbol = symbol->next)
         if (!((ctx)->diagnostic.status == XR_XIR_OK) ||
-            !source_match_bind(ctx, symbol, (SourceValue){UINT32_MAX, symbol->type})) return false;
+            !source_match_bind(ctx, symbol, (SourceValue){.id=UINT32_MAX, .type=symbol->type,.place={0}})) return false;
     return true;
 }
 static bool source_catch_body(SourceContext *ctx, XrCatchClause *clause, SourceMatchArm *arm,
     SourceValue error, SourceMatchFailure **failures, uint32_t *accepted) {
     SourceName *locals = ctx->locals, *scope = ctx->scope;
+    XrHirBodyScope typed_scope=ctx->bodies[ctx->function].typed_scope;
+    if(arm->typed_scope.owner)ctx->bodies[ctx->function].typed_scope=arm->typed_scope;
+    else {XrHirBodyScope previous={0};if(!source_hir_scope_enter(ctx,clause->body,&previous))return false;}
     if (clause->var_name) {
         SourceName *binding = source_alloc(ctx,1,sizeof(*binding));
         if (!binding) return false;
@@ -93,6 +98,7 @@ static bool source_catch_body(SourceContext *ctx, XrCatchClause *clause, SourceM
         XrXirSourceRange range = {ctx->module,clause->var_line,clause->var_column,
             clause->var_line,clause->var_column+(uint32_t)source_text_size(ctx, clause->var_name)};
         if (!source_query_declare(ctx,binding,XR_XIR_SOURCE_BINDING,ctx->bodies[ctx->function].declaration,range)) return false;
+        if(!source_hir_value_declared(ctx,clause->body,binding,error))return false;
         source_query_binding_type(ctx,binding);
     } else if (clause->pattern) {
         bool bound = error.id == UINT32_MAX ? source_catch_placeholders(ctx,arm) :
@@ -101,7 +107,7 @@ static bool source_catch_body(SourceContext *ctx, XrCatchClause *clause, SourceM
     }
     if (accepted) *accepted=ctx->bodies[ctx->function].count;
     bool ok = scoped_statement(ctx,clause->body);
-    ctx->locals = locals; ctx->scope = scope; return ok;
+    ctx->locals = locals; ctx->scope = scope;source_hir_scope_leave(ctx,typed_scope);return ok;
 }
 static bool source_catch_snapshot(SourceContext *ctx, XrXirInitializationRegion *region) {
     SourceFunction *body=&ctx->bodies[ctx->function];
@@ -131,7 +137,7 @@ static bool source_dead_catch(SourceContext *ctx, XrCatchClause *clause, SourceM
         body->initialization_parent=region;
     }
     body->error_context = NULL;
-    bool ok = begin_block(ctx) && source_catch_body(ctx,clause,arm,(SourceValue){UINT32_MAX,type},NULL,NULL);
+    bool ok = begin_block(ctx) && source_catch_body(ctx,clause,arm,(SourceValue){.id=UINT32_MAX,.type=type,.place={0}},NULL,NULL);
     if (ok && region) ok=source_catch_snapshot(ctx,region);
     i = 0;
     for (SourceLoop *loop = ctx->loop; loop; loop = loop->parent) *loop = loops[i++];
@@ -140,6 +146,7 @@ static bool source_dead_catch(SourceContext *ctx, XrCatchClause *clause, SourceM
     if (ok) ok=source_plan_discard(ctx,saved.expression_count);
     saved.recipe_storage=body->recipe_storage;
     saved.expressions=body->expressions;saved.expression_count=body->expression_count;
+    if(ok)ok=source_hir_discard_to(ctx,saved.typed_projections);
     *body = saved; ctx->generics[ctx->function] = generic; ctx->returned = returned;
     ctx->facts=facts;ctx->epochs=epochs;
     return ok;
@@ -227,7 +234,7 @@ static bool source_panic_handler(SourceContext *ctx, XrCatchClause *clause, uint
     uint32_t *joins, uint32_t *count) {
     SourceFunction *body = &ctx->bodies[ctx->function];
     uint32_t handler = body->block_count;
-    SourceValue caught = {0, XR_XIR_UNIT};
+    SourceValue caught = {.id=0, .type=XR_XIR_UNIT,.place={0}};
     if (!begin_block(ctx) || !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_PANIC_CATCH,
             clause->var_name ? XR_XIR_PANIC_INFO : XR_XIR_UNIT,{0},{0},0,{0}},&caught) ||
         !source_catch_body(ctx,clause,NULL,caught,NULL,NULL) || !source_catch_join(ctx,joins,count)) return false;
@@ -343,7 +350,7 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
         for (SourceErrorEdge *edge = handler.edges; edge; edge = edge->next) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             body->recipes[edge->jump].instruction.targets[0] = target;
-            --at;edge->input=at;inputs[at*2] = (SourceValue){edge->block,XR_XIR_UNIT}; inputs[at*2+1] = edge->value;
+            --at;edge->input=at;inputs[at*2] = (SourceValue){.id=edge->block,.type=XR_XIR_UNIT,.place={0}}; inputs[at*2+1] = edge->value;
         }
         SourceValue error;
         if (!source_recipe_group(ctx,(XrXirInstruction){XR_XIR_PHI,XR_XIR_ERROR,{0},{0},0,{0}},inputs,handler.count*2,&error)) return false;

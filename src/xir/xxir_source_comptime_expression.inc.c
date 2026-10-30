@@ -64,7 +64,7 @@ static bool source_comptime_body(SourceContext *ctx,AstNode *site,SourceExpected
         if (ctx->returned)
             return source_fail(ctx,child,XR_XIR_BAD_TYPE,"comptime block cannot return from its enclosing function");
         if (tail) child=child->as.block.statements[count-1]->as.expr_stmt;
-        else { value=(SourceValue){0,XR_XIR_UNIT};unit_block=true; }
+        else { value=(SourceValue){.id=0,.type=XR_XIR_UNIT,.place={0}};unit_block=true; }
     }
     if (expected.present && !source_comptime_result_type(ctx,child,expected.type)) expected=(SourceExpectedType){0};
     if (ctx->diagnostic.status!=XR_XIR_OK) return false;

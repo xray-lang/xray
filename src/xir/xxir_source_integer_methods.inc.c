@@ -135,7 +135,7 @@ static bool source_integer_pick(SourceContext *ctx,SourceValue condition,
     body->recipes[branch].instruction.targets[1] = no_block;
     body->recipes[yes_jump].instruction.targets[0] = join;
     body->recipes[no_jump].instruction.targets[0] = join;
-    SourceValue inputs[] = {{yes_end,XR_XIR_UNIT},yes,{no_end,XR_XIR_UNIT},no};
+    SourceValue inputs[] = {{.id=yes_end,.type=XR_XIR_UNIT,.place={0}}, yes, {.id=no_end,.type=XR_XIR_UNIT,.place={0}}, no};
     return source_recipe_group(ctx,(XrXirInstruction){XR_XIR_PHI,yes.type,{0},{0},0,{0}},inputs,4,value);
 }
 static bool source_integer_overflow(SourceContext *ctx,XrXirOp operation,
@@ -184,7 +184,7 @@ static bool source_integer_checked_result(SourceContext *ctx,SourceValue overflo
     if (!begin_block(ctx)) return false;
     body->recipes[branch].instruction.targets[0] = yes_block; body->recipes[branch].instruction.targets[1] = no_block;
     body->recipes[yes_jump].instruction.targets[0] = join; body->recipes[no_jump].instruction.targets[0] = join;
-    SourceValue inputs[] = {{yes_end,XR_XIR_UNIT},yes,{no_end,XR_XIR_UNIT},no};
+    SourceValue inputs[] = {{.id=yes_end,.type=XR_XIR_UNIT,.place={0}}, yes, {.id=no_end,.type=XR_XIR_UNIT,.place={0}}, no};
     return source_recipe_group(ctx,(XrXirInstruction){XR_XIR_PHI,nullable,{0},{0},0,{0}},inputs,4,value);
 }
 typedef enum SourceIntegerControl { SOURCE_INTEGER_ORDINARY, SOURCE_INTEGER_CHECKED,

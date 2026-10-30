@@ -32,7 +32,7 @@ static bool source_requirement_helper_body(SourceContext *ctx, AstNode *site,
     if (!arguments) return false;
     for (uint32_t p = 0; p < count; ++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        arguments[p] = (SourceValue){p,function->parameters[p]};
+        arguments[p] = (SourceValue){.id=p,.type=function->parameters[p],.place={0}};
     }
     XrXirInstruction call = {XR_XIR_CALL_REQUIREMENT,function->result,{0},
         {request->selected.application.declaration,request->selected.member},0,{0}};

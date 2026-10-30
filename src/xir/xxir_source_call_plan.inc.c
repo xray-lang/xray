@@ -40,15 +40,14 @@ static bool source_call_syntax(SourceContext *ctx,AstNode *node,SourceCallSyntax
     return true;
 }
 typedef enum SourceCallFamily { SOURCE_CALL_FUNCTION, SOURCE_CALL_REQUIREMENT, SOURCE_CALL_CONSTRUCTOR,
-    SOURCE_CALL_INDIRECT, SOURCE_CALL_NATIVE, SOURCE_CALL_VARIADIC_READ } SourceCallFamily;
+    SOURCE_CALL_INDIRECT, SOURCE_CALL_NATIVE, SOURCE_CALL_VARIADIC_READ, SOURCE_CALL_ARRAY } SourceCallFamily;
 typedef struct SourceCallStorage {
     XrXirType *types;
     SourceValue *values;
 } SourceCallStorage;
 _Static_assert(_Alignof(SourceMemory)>=_Alignof(XrXirType) &&
     _Alignof(SourceMemory)>=_Alignof(SourceValue) &&
-    sizeof(SourceMemory)%_Alignof(SourceValue)==0 &&
-    sizeof(XrXirType)%_Alignof(SourceValue)==0,"call storage view alignment");
+    sizeof(SourceMemory)%_Alignof(SourceValue)==0,"call storage view alignment");
 /* Both views retain the existing source-arena lifetime; expression plans keep
  * their separate region owner and are released when that region is sealed. */
 static bool source_call_storage(SourceContext *ctx,size_t types,uint64_t values,
@@ -57,6 +56,9 @@ static bool source_call_storage(SourceContext *ctx,size_t types,uint64_t values,
     if (types>SIZE_MAX/sizeof(XrXirType))
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"source metadata budget exhausted");
     size_t offset=(size_t)types*sizeof(XrXirType);
+    size_t padding=(_Alignof(SourceValue)-offset%_Alignof(SourceValue))%_Alignof(SourceValue);
+    if(padding>SIZE_MAX-offset)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"call storage alignment overflow");
+    offset+=padding;
     if (values>(SIZE_MAX-offset)/sizeof(SourceValue))
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"source metadata budget exhausted");
     size_t bytes=offset+(size_t)values*sizeof(SourceValue);
@@ -77,6 +79,8 @@ typedef struct SourceCallPlan {
     uint32_t parameter_offset, value_offset;
     const uint32_t *parameter_kinds;
     const SourceExpectedType *argument_contexts;
+    XrHirSignatureInput declaration;
+    XrHirBodySignature signature;
 } SourceCallPlan;
 /* Variadic READ recipes repeat one already instantiated caller-pool type. */
 static XrXirType source_call_parameter_type(const SourceCallPlan *plan,uint32_t index) {
@@ -84,8 +88,74 @@ static XrXirType source_call_parameter_type(const SourceCallPlan *plan,uint32_t 
     return plan->function_parameters[plan->family==SOURCE_CALL_VARIADIC_READ ? 0 : index];
 }
 static bool source_call_caller_parameters(const SourceCallPlan *plan) {
-    return plan->family==SOURCE_CALL_INDIRECT || plan->family==SOURCE_CALL_NATIVE ||
+    return plan->family==SOURCE_CALL_INDIRECT || plan->family==SOURCE_CALL_ARRAY || plan->family==SOURCE_CALL_NATIVE ||
         plan->family==SOURCE_CALL_VARIADIC_READ;
+}
+static bool source_hir_call_prepare(SourceContext *ctx,AstNode *node,SourceCallPlan *plan,uint32_t count) {
+    if(plan->signature.owner)return true;
+    XrHirSignatureInput declaration=plan->declaration;
+    if(!source_hir_current_scope(ctx,&declaration.scope))return false;
+    declaration.types=&ctx->types;declaration.origin=source_hir_origin(ctx,node,0);declaration.family=(XrHirCallFamily)plan->family;
+    declaration.count=plan->family==SOURCE_CALL_VARIADIC_READ?1:count;
+    declaration.receiver_count=plan->value_offset;declaration.parameter_offset=plan->parameter_offset;declaration.native_parameters=plan->function_parameters;
+    const char *reason=NULL;XrXirStatus status=xr_hir_body_signature(ctx->typed_body,&declaration,ctx->request,&plan->signature,&reason);
+    return status==XR_XIR_OK||source_fail(ctx,node,status,reason?reason:"call signature has no declaration owner");
+}
+static bool source_hir_call_use(SourceContext *ctx,AstNode *node,const SourceCallPlan *plan,
+    XrHirCallUseInput input,SourceValue *value,XrHirBodyAction *output) {
+    if(!source_hir_current_scope(ctx,&input.scope))return false;
+    input.types=&ctx->types;input.origin=source_hir_origin(ctx,node,0);
+    if(value){input.type=value->type;input.value=value->id;}
+    const char *reason=NULL;input.reason=&reason;
+    XrHirBodyUse use={0};XrHirBodyAction action;
+    XrXirStatus status=xr_hir_body_call_argument(ctx->typed_body,plan->signature,&input,ctx->request,&use,&action);
+    if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason?reason:input.failure?input.failure:"call argument has no typed owner");
+    if(output)*output=action;
+    if(input.kind==XR_HIR_CALL_PLAN)return true;
+    if(value)value->type=action.target;
+    return source_hir_binding_emitted(ctx,&(XrHirBindingAction){.use=use},value,ctx->bodies[ctx->function].count);
+}
+static bool source_default_binding_get(SourceContext *,AstNode *,uint32_t,uint32_t,const XrXirDefaultBinding **);
+static bool source_hir_call_commit(SourceContext *ctx,AstNode *node,const SourceCallPlan *plan,
+    SourceValue *values,uint32_t count,uint32_t supplied) {
+    for(uint32_t p=0;p<count;++p) {
+        bool requirement=plan->family==SOURCE_CALL_REQUIREMENT;
+        XrHirCallUseInput input={.kind=XR_HIR_CALL_FINAL,.formal=requirement?(p?p-1:UINT32_MAX):p,
+            .argument=requirement?(p?p-1:UINT32_MAX):p<plan->parameter_offset?UINT32_MAX:p-plan->parameter_offset};
+        if(!requirement||p) {
+            uint32_t formal=requirement?p-1:p;
+            input.check_type=true;input.substitution=plan->substitution.types;input.substitution_count=plan->substitution.count;
+            XrXirType type=source_call_parameter_type(plan,formal);
+            if(source_call_caller_parameters(plan))input.expected=type;
+            else if(!source_substitute(ctx,&plan->substitution,type,0,&input.expected))return false;
+        }
+        if(p>=supplied&&(plan->family==SOURCE_CALL_FUNCTION||plan->family==SOURCE_CALL_CONSTRUCTOR)) {
+            const XrXirDefaultBinding *binding=NULL;
+            if(!source_default_binding_get(ctx,node,plan->declaration.function,p,&binding)||!binding)return false;
+            input.defaulted=true;input.default_function=binding->function;
+        }
+        if(!source_hir_call_use(ctx,node,plan,input,&values[p],NULL))return false;
+    }
+    return true;
+}
+static bool source_hir_call_group(SourceContext *ctx,XrHirBodySignature signature,XrXirInstruction instruction,
+    const SourceValue *arguments,SourceValue *value) {
+    XrHirBodyUse use={0};XrHirBodyAction action;
+    XrXirStatus status=xr_hir_body_call_finish(ctx->typed_body,signature,&instruction,ctx->request,&use,&action);
+    if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,"call emission has no complete actual/formal owner");
+    instruction.op=action.operation;instruction.type=action.target;
+    SourceFunction *body=&ctx->bodies[ctx->function];uint32_t before=body->count;
+    uint32_t block=body->block_count?body->current_block.identity:0;
+    if(!source_recipe_group(ctx,instruction,arguments,action.argument_count,value)||
+        !source_hir_binding_emitted(ctx,&(XrHirBindingAction){.use=use},value,before))return false;
+    body->typed_projections->recipe=ctx->functions[ctx->function].parameter_count+before;
+    body->typed_projections->block=block;return true;
+}
+static bool source_hir_call_native_finish(SourceContext *ctx,const SourceCallPlan *plan) {
+    XrHirBodyUse use={0};XrHirBodyAction action;
+    XrXirStatus status=xr_hir_body_call_finish(ctx->typed_body,plan->signature,
+        &(XrXirInstruction){XR_XIR_INVALID,XR_XIR_UNIT,{0},{0},0,{0}},ctx->request,&use,&action);
+    return status==XR_XIR_OK||source_fail(ctx,NULL,status,"native call arguments have no complete typed owner");
 }
 typedef union SourceCallArgumentPlan {
     SourceExpressionPlan *value;
@@ -126,17 +196,12 @@ static bool source_call_observe(SourceContext *ctx,AstNode *node,XrXirInferenceS
 static bool source_reference_argument_syntax(SourceContext *ctx, uint32_t index,
     const bool *references, const SourceReferencePlan *plan,const SourceCallSyntax *call,SourceValue *value) {
     AstNode *argument=source_call_argument_syntax(call,index);
-    if (source_call_argument_access(call,index)!=XR_CALL_ARG_REF)
-        return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"a ref parameter requires a ref argument");
     AstNode *root=source_ref_root_syntax(ctx,argument);
     if (!root || (root->type!=AST_VARIABLE && root->type!=AST_THIS_EXPR))
         return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref argument requires an authentic named place root");
     SourceName *symbol=source_ref_binding(ctx,argument);
     if (!symbol) return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref argument does not name a binding");
-    bool object_field = root != argument && xr_xir_type_is_class(&ctx->types,source_symbol_type(ctx,symbol));
-    if ((symbol->kind!=SOURCE_LOCAL && symbol->kind!=SOURCE_SLOT && symbol->kind!=SOURCE_UNIT_SLOT) ||
-        (!symbol->mutable && !object_field) || symbol->construction)
-        return source_fail(ctx,argument,XR_XIR_BAD_TYPE,"ref argument requires a mutable stored binding");
+    if(!source_hir_reference(ctx,argument,symbol,root!=argument,"ref argument requires a mutable stored binding"))return false;
     for (uint32_t earlier=0;earlier<index;++earlier) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         AstNode *previous=source_call_argument_syntax(call,earlier);
@@ -165,8 +230,9 @@ static bool source_call_collect_arguments(SourceContext *ctx,const SourceCallPla
     for (uint32_t a=0;ok && a<(uint32_t)call->arg_count;++a) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) {ok=false;break;}
         uint32_t parameter=a+plan->parameter_offset;
-        references[a]=(plan->family==SOURCE_CALL_FUNCTION || plan->family==SOURCE_CALL_INDIRECT) &&
-            xr_xir_type_is_cell(&ctx->types,plan->function_parameters[parameter]);
+        XrHirBodyAction parameter_action;
+        if(!source_hir_call_use(ctx,NULL,plan,(XrHirCallUseInput){.kind=XR_HIR_CALL_PLAN,.formal=parameter},NULL,&parameter_action)){ok=false;break;}
+        references[a]=parameter_action.reference;
         arguments[a].value=NULL;
         if (references[a]) {
             /* The place recipe completes these same selector plans once. */
@@ -192,17 +258,19 @@ static bool source_call_complete_argument(SourceContext *ctx,AstNode *node,
     XrXirInferenceState *state=request->state;
     bool inferred=state!=NULL,requirement=plan->family==SOURCE_CALL_REQUIREMENT;
     if (!source_call_spread_events(ctx,node,call,plan,state,a)) return false;
-    if (!references[a] && source_call_argument_access(call,a)!=XR_CALL_ARG_PLAIN) {
-        source_fail(ctx,node,XR_XIR_BAD_TYPE,requirement ? "interface method argument must be read" :
-            "direct call arguments must use the declared READ contract"); return false;
-    }
     uint32_t parameter=a+plan->parameter_offset;
     XrXirType formal=source_call_parameter_type(plan,parameter);
+    AstNode *access_site=references[a]?source_call_argument_syntax(call,a):node;
+    const char *access_failure=references[a]?"a ref parameter requires a ref argument":requirement?
+        "interface method argument must be read":"direct call arguments must use the declared READ contract";
+    if(!source_hir_call_use(ctx,access_site,plan,(XrHirCallUseInput){.kind=XR_HIR_CALL_ACCESS,
+        .formal=parameter,.argument=a,.access=source_call_argument_access(call,a),.failure=access_failure},NULL,NULL))return false;
     if (references[a]) {
         SourceValue *reference=&plan->values[a+plan->value_offset];
         if (!source_reference_argument_syntax(ctx,a,references,arguments[a].reference,call,reference)) return false;
         if (inferred && !source_call_observe(ctx,node,state,formal,reference->type,requirement)) return false;
-        return true;
+        return source_hir_call_use(ctx,source_call_argument_syntax(call,a),plan,(XrHirCallUseInput){.kind=XR_HIR_CALL_VALUE,
+            .formal=parameter,.argument=a,.failure="indirect argument type mismatch"},reference,NULL);
     }
     SourceExpectedType expected={false,XR_XIR_UNIT, false, false};
     if (inferred) {
@@ -235,12 +303,10 @@ static bool source_call_complete_argument(SourceContext *ctx,AstNode *node,
     bool completed = source_plan_complete(ctx,arguments[a].value,value);
     ctx->effect_argument = previous_argument;
     if (!completed) return false;
-    if (!requirement && value->type==XR_XIR_UNIT) {
-        source_fail(ctx,node,XR_XIR_BAD_TYPE,"unit argument is not admitted"); return false;
-    }
     if (inferred && !arguments[a].value->conversion_ready &&
         !source_call_observe(ctx,node,state,formal,value->type,requirement)) return false;
-    return true;
+    return source_hir_call_use(ctx,node,plan,(XrHirCallUseInput){.kind=XR_HIR_CALL_VALUE,
+        .formal=parameter,.argument=a,.failure="indirect argument type mismatch"},value,NULL);
 }
 static XrXirStatus source_inference_union(void *owner,const XrXirType *members,uint32_t count,XrXirType *output) {
     SourceContext *ctx=owner;

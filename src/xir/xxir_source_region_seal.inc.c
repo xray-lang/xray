@@ -56,6 +56,6 @@ static bool source_region_seal(SourceContext *ctx,const uint32_t *map,uint32_t v
         source_release_private(storage);
     }
     body->expressions=NULL;body->expression_count=0;
-    body->recipes=NULL;body->blocks=NULL;body->capacity=0;body->block_capacity=0;
+    body->recipes=NULL;body->blocks=NULL;body->capacity=0;body->block_capacity=0;body->typed_projections=NULL;
     return true;
 }

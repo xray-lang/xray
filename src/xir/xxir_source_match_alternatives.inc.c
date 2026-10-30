@@ -43,9 +43,9 @@ static bool source_match_alternatives(SourceContext *ctx, SourceMatchArm *arm,
             }
             if (bound==saved || bound->type!=symbol->type)
                 return source_fail(ctx,symbol->node,XR_XIR_BAD_TYPE,"alternative binding join is inconsistent");
-            inputs[i*2]=(SourceValue){ends[i],XR_XIR_UNIT}; inputs[i*2+1]=(SourceValue){bound->index,bound->type};
+            inputs[i*2]=(SourceValue){.id=ends[i],.type=XR_XIR_UNIT,.place={0}}; inputs[i*2+1]=(SourceValue){.id=bound->index,.type=bound->type,.place={0}};
         }
-        SourceValue value={0,XR_XIR_UNIT};
+        SourceValue value={.id=0,.type=XR_XIR_UNIT,.place={0}};
         if (symbol->type!=XR_XIR_UNIT && !source_recipe_group(ctx,(XrXirInstruction){XR_XIR_PHI,symbol->type,{0},{0},0, {0}},inputs,used*2,&value)) return false;
         if (!source_match_bind(ctx,symbol,value)) return false;
     }

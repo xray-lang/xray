@@ -7,7 +7,7 @@
  * xxir_source_binding_readers.inc.c - Ordinary checked root binding inspection
  */
 static bool source_binding_reader_body(SourceContext *ctx,const SourceName *symbol) {
-    SourceValue value={UINT32_MAX,XR_XIR_UNIT};
+    SourceValue value={.id=UINT32_MAX,.type=XR_XIR_UNIT,.place={0}};
     if(symbol->kind!=SOURCE_UNIT_SLOT || symbol->mutable) {
         XrXirType physical=ctx->slots[symbol->index].type;
         if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_SLOT_LOAD,physical,{0},{0},symbol->index,{0}},&value))return false;

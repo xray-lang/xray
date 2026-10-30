@@ -71,7 +71,7 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
     return source_task_type(ctx, call, prepared.result, error, &op.type) &&
         source_type_arguments(ctx, call, prepared.substitution.types, prepared.substitution.count, &op) &&
         source_query_reference(ctx, call->as.call_expr.callee, binding, target, XR_XIR_SOURCE_CALL) &&
-        source_recipe_group(ctx, op, prepared.values, prepared.count, value);
+        source_hir_call_group(ctx,prepared.signature,op,prepared.values,value);
 }
 static bool source_task_result_hint(SourceContext *ctx, SourceExpressionPlan *plan,
     SourceExpectedType context, uint32_t depth) {
@@ -129,7 +129,7 @@ static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedT
     } else if (!source_recipe_append(ctx, (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {caught.id, 0}, {0}, 0, {0}}, NULL))
         return false;
     if (!begin_block(ctx)) return false;
-    if (element == XR_XIR_UNIT) { *value = (SourceValue){UINT32_MAX, XR_XIR_UNIT}; return true; }
+    if (element == XR_XIR_UNIT) { *value = (SourceValue){.id=UINT32_MAX, .type=XR_XIR_UNIT,.place={0}}; return true; }
     return source_recipe_append(ctx,
         (XrXirInstruction) {XR_XIR_INVOKE_RESULT, element, {0}, {0}, origin, {0}}, value);
 }

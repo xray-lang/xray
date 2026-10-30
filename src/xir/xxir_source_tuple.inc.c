@@ -41,7 +41,7 @@ static bool source_tuple_literal(SourceContext *ctx,AstNode *node,SourceExpected
     if (!literal->count) {
         if (expected.present && expected.type!=XR_XIR_UNIT)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"empty Tuple syntax denotes Unit");
-        *value=(SourceValue){UINT32_MAX,XR_XIR_UNIT};return true;
+        *value=(SourceValue){.id=UINT32_MAX,.type=XR_XIR_UNIT,.place={0}};return true;
     }
     if (ctx->active_expression->tuple_prefix)
         return source_tuple_expanded_literal(ctx,node,expected,value);
@@ -170,7 +170,7 @@ static bool source_tuple_expanded_literal(SourceContext *ctx,AstNode *node,
     }
     if (exact && count!=context->count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple literal requires an exact ordered arity context");
-    if (!count) { *value=(SourceValue){UINT32_MAX,XR_XIR_UNIT};return true; }
+    if (!count) { *value=(SourceValue){.id=UINT32_MAX,.type=XR_XIR_UNIT,.place={0}};return true; }
     XrXirCallableParameter *types=source_alloc(ctx,count,sizeof(*types));
     SourceValue *payloads=source_recipe_storage(ctx,count,sizeof(*payloads));
     if (!types || !payloads) return false;

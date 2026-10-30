@@ -20,10 +20,10 @@ static bool source_sqrt_loop_open(SourceContext *ctx,SourceValue zero,SourceValu
     loop->head=body->block_count;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{loop->head},0,{0}},NULL) ||
         !begin_block(ctx)) return false;
-    SourceValue *values[]={&loop->root,&loop->remainder,&loop->index};
+    SourceValue *values[]={&loop->root, &loop->remainder, &loop->index};
     for (unsigned i=0;i<3;++i) {
         SourceValue seed=i==2 ? first : zero;
-        SourceValue inputs[]={{origin,XR_XIR_UNIT},seed,{0,XR_XIR_UNIT},seed};
+        SourceValue inputs[]={{.id=origin,.type=XR_XIR_UNIT,.place={0}}, seed, {.id=0,.type=XR_XIR_UNIT,.place={0}}, seed};
         loop->operands[i]=body->operand_count;
         if (!source_recipe_group(ctx,(XrXirInstruction){XR_XIR_PHI,seed.type,{0},{0},0,{0}},inputs,4,values[i])) return false;
     }
@@ -44,7 +44,7 @@ static bool source_sqrt_loop_close(SourceContext *ctx,SourceSqrtLoop *loop,
     uint32_t origin=body->current_block.identity,exit=body->block_count;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{loop->head},0,{0}},NULL) ||
         !begin_block(ctx) || !((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-    SourceValue values[]={root,remainder,next};
+    SourceValue values[]={root, remainder, next};
     for (unsigned i=0;i<3;++i) {
         uint32_t offset=loop->operands[i];
         if (offset>body->operand_count || body->operand_count-offset<4)

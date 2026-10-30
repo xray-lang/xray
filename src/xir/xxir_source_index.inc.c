@@ -26,30 +26,32 @@ static bool source_index_get(SourceContext *ctx, AstNode *node, SourceValue *val
     }
     if (!xr_xir_type_is_map(&ctx->types, container.type))
         return source_array_get(ctx, node, receiver, index, &container, NULL, value);
-    const XrXirTypeNode *map = xr_xir_type_node(&ctx->types, container.type);
-    XrXirType key_type = map->element, element = map->result;
-    if (!source_plan_expression(ctx, index, (SourceExpectedType){true, key_type, false, false}, &key)) return false;
-    if (key.type != key_type)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Map index requires its exact key type");
-    return source_recipe_record(ctx, (XrXirInstruction){XR_XIR_MAP_INDEX, element,
-        {container.id, key.id}, {0}, 0, {0}}, value) && source_index_map_reference(ctx, node, container.type);
+    XrHirPlaceAction shape,action;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_SHAPE,.parent=container.place,
+        .type=container.type,.base=container.id},&shape)||
+        !source_hir_place_emitted(ctx,&shape,NULL,ctx->bodies[ctx->function].count)||
+        !source_plan_expression(ctx,index,(SourceExpectedType){true,shape.key,false,false},&key)||
+        !source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_INDEX_READ,.parent=container.place,
+            .type=container.type,.base=container.id,.key=key.type,.selector=key.id,.failure="Map index requires its exact key type"},&action))return false;
+    uint32_t before=ctx->bodies[ctx->function].count;
+    return source_recipe_record(ctx,(XrXirInstruction){action.operation,action.type,{container.id,key.id},{0},0,{0}},value)&&
+        source_hir_place_emitted(ctx,&action,value,before)&&source_index_map_reference(ctx,node,container.type);
 }
 static bool source_index_set(SourceContext *ctx, AstNode *node, SourceValue *value) {
     SourceValue args[3] = {{0}};
     if (!source_array_receiver(ctx, node->as.index_set.array, NULL, true, args)) return false;
-    bool map = xr_xir_type_is_map(&ctx->types, args[0].type);
-    if (!map && !xr_xir_type_is_array(&ctx->types, args[0].type))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indexed writable receiver is not an Array or Map");
-    const XrXirTypeNode *container = xr_xir_type_node(&ctx->types, args[0].type);
-    XrXirType key = map ? container->element : XR_XIR_I64;
-    XrXirType element = map ? container->result : container->element;
-    if (!source_plan_expression(ctx, node->as.index_set.index, (SourceExpectedType){true, key, false, false}, args + 1) ||
-        !source_plan_expression(ctx, node->as.index_set.value, (SourceExpectedType){true, element, false, false}, args + 2)) return false;
-    if (args[1].type != key || args[2].type != element)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indexed assignment requires exact key and element types");
-    if (!map) return source_array_set_values(ctx, node, args, NULL, true, value);
-    if (!source_recipe_group(ctx, (XrXirInstruction){XR_XIR_MAP_SET, XR_XIR_UNIT, {0}, {0}, 0, {0}}, args, 3, value) ||
-        !source_index_map_reference(ctx, node, args[0].type)) return false;
-    *value = args[2];
-    return true;
+    XrHirPlaceAction shape,action;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_SHAPE,.parent=args[0].place,
+        .type=args[0].type,.failure="indexed writable receiver is not an Array or Map"},&shape)||
+        !source_hir_place_emitted(ctx,&shape,NULL,ctx->bodies[ctx->function].count)||
+        !source_plan_expression(ctx,node->as.index_set.index,(SourceExpectedType){true,shape.key,false,false},args+1)||
+        !source_plan_expression(ctx,node->as.index_set.value,(SourceExpectedType){true,shape.type,false,false},args+2)||
+        !source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_INDEX_WRITE,.parent=args[0].place,
+            .key=args[1].type,.selector=args[1].id,.value=args[2].type,.value_id=args[2].id,
+            .failure="indexed assignment requires exact key and element types"},&action))return false;
+    if(action.operation==XR_XIR_ARRAY_SET)return source_array_set_values(ctx,node,args,&action,value);
+    uint32_t before=ctx->bodies[ctx->function].count;
+    if(!source_recipe_group(ctx,(XrXirInstruction){action.operation,action.type,{0},{0},0,{0}},args,3,NULL)||
+        !source_hir_place_emitted(ctx,&action,NULL,before)||!source_index_map_reference(ctx,node,args[0].type))return false;
+    *value=args[2];return true;
 }

@@ -125,6 +125,7 @@ static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment
             SourceName *owned=&environment->symbols[environment->symbol_count++];
             SourceName copy=*symbol;
             copy.next=NULL;copy.name=NULL;copy.imported=NULL;copy.node=NULL;
+            copy.typed_binding=(XrHirBodyBinding){0};copy.binding_function=UINT32_MAX;
             if (!source_copy_bytes(ctx,NULL,owned,&copy,sizeof(*owned))) goto failed;
             owned->name=source_semantic_text(ctx,symbol->name);
             if (!owned->name) {

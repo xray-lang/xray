@@ -158,7 +158,7 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
             !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_WRITE, XR_XIR_UNIT, {place.id, empty.id}, {0}, 0, {0}}, NULL))
             return false;
         if(!source_native_call_shape(ctx,shape,place.type,NULL,0))return false;
-        *value = (SourceValue) {UINT32_MAX, XR_XIR_UNIT};
+        *value = (SourceValue) {.id=UINT32_MAX, .type=XR_XIR_UNIT,.place={0}};
         return true;
     }
     SourceValue array;
@@ -275,7 +275,7 @@ static bool source_array_reorder_call(SourceContext *ctx, AstNode *node, SourceA
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, root.type, {store.id}, {0}, 0, {0}}, &result) ||
         !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_WRITE, XR_XIR_UNIT, {root.id, result.id}, {0}, 0, {0}}, NULL))
         return false;
-    *value = recipe == SOURCE_ARRAY_REVERSE ? result : (SourceValue) {UINT32_MAX, XR_XIR_UNIT};
+    *value = recipe == SOURCE_ARRAY_REVERSE ? result : (SourceValue) {.id=UINT32_MAX, .type=XR_XIR_UNIT,.place={0}};
     return true;
 }
 

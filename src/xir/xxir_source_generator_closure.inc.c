@@ -41,7 +41,7 @@ static bool source_generator_closure_factory(SourceContext *ctx,AstNode *node,ui
     SourceValue *arguments=count ? source_alloc(ctx,count,sizeof(*arguments)) : NULL;
     XrXirType *types=generic ? source_alloc(ctx,generic,sizeof(*types)) : NULL;
     if((count && !arguments) || (generic && !types)) return false;
-    for(uint32_t p=0;p<count;++p) arguments[p]=(SourceValue){p,body->parameters[p]};
+    for(uint32_t p=0;p<count;++p) arguments[p]=(SourceValue){.id=p,.type=body->parameters[p],.place={0}};
     for(uint32_t p=0;p<generic;++p) types[p]=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+p);
     ctx->function=factory;ctx->returned=false;
     XrXirInstruction op={XR_XIR_GENERATOR_NEW,before->result,{0},{0},producer,{0}};

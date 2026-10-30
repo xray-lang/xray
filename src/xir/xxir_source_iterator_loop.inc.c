@@ -32,7 +32,7 @@ static bool source_iterator_cleanup(SourceContext *ctx,AstNode *node,SourceValue
     ctx->identities[index].method_kind=ctx->identities[index].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
     ++ctx->function_count;
     bool returned=ctx->returned;ctx->function=index;ctx->returned=false;SourceValue ignored;
-    bool ok=source_iterator_consume(ctx,node,(SourceValue){0,iterator.type},(SourceValue){0},XR_XIR_ITERATOR_CLOSE,&ignored) &&
+    bool ok=source_iterator_consume(ctx,node,(SourceValue){.id=0,.type=iterator.type,.place={0}},(SourceValue){0},XR_XIR_ITERATOR_CLOSE,&ignored) &&
         source_recipe_append(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}},NULL);
     if(ok) {ctx->returned=true;ok=finish_body(ctx);}
     if(ok) {

@@ -85,6 +85,7 @@ static bool source_library_public_slot(SourceContext *ctx,const XrXirModule *lib
     symbol->kind=SOURCE_SLOT;symbol->index=target;symbol->module=owner;
     symbol->type=ctx->slots[target].type;symbol->checked_library=true;
     if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,0,(XrXirSourceRange){owner,0,0,0,0})) return false;
+    XrHirBodyBinding binding={0};if(!source_hir_binding_register(ctx,symbol,&binding))return false;
     source_query_binding_type(ctx,symbol);
     ((XrXirSourceDeclaration *)ctx->query.declarations)[symbol->declaration-1].exported=true;
     return true;

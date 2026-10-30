@@ -76,7 +76,7 @@ static bool source_struct_constructors(SourceContext *ctx, uint32_t *next) {
 static bool source_default_value(SourceContext *ctx, AstNode *node, XrXirType type, SourceValue *value) {
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (type == XR_XIR_UNIT) {
-        *value = (SourceValue){UINT32_MAX, XR_XIR_UNIT}; return true;
+        *value = (SourceValue){.id=UINT32_MAX, .type=XR_XIR_UNIT,.place={0}}; return true;
     }
     if (type == XR_XIR_RUNE)
         return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_RUNE,type,{0},{0},0,{0}},value);

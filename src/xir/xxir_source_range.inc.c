@@ -58,7 +58,7 @@ static bool source_range_value(SourceContext *ctx,AstNode *node,SourceValue *val
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"range endpoints must be i64");
     if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_BOOL,XR_XIR_BOOL,{0},{0},
         node->as.range.inclusive_end?1:0,{0}},&arguments[2])) return false;
-    return source_constructor_emit(ctx,node,type,constructor,arguments,value);
+    return source_constructor_emit(ctx,node,&(SourceConstructorEmission){type,constructor,3,arguments,{0}},value);
 }
 /* The authenticated canonical constructor/count bodies establish immutable unit
  * steps. Indexing reads the captured receiver after evaluating its index once. */

@@ -30,7 +30,7 @@ static bool source_channel_send_closed(SourceContext *ctx,AstNode *node,SourceVa
     ctx->bodies[owner].frontier=frontier;if (!begin_block(ctx)) return false;
     ctx->bodies[owner].recipes[branch].instruction.targets[0]=error_block;
     ctx->bodies[owner].recipes[branch].instruction.targets[1]=success;
-    *value=(SourceValue){UINT32_MAX,XR_XIR_UNIT};return true;
+    *value=(SourceValue){.id=UINT32_MAX,.type=XR_XIR_UNIT,.place={0}};return true;
 }
 static bool source_channel_blocking_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
     const XrNativeMemberDeclaration *member,SourceValue *value) {
