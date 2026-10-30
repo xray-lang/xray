@@ -116,7 +116,8 @@ XR_FUNC XrXirStatus xr_hir_nominal_variant_find(const XrXirTypes *types,XrXirTyp
     *out=(XrHirNominalSelection){0};return body_poll(control);
 }
 XR_FUNC XrXirStatus xr_hir_body_nominal_modules(XrHirBody *body,XrXirSourceModule *const *modules,XrXirGeneric *const *generics) {
-    if(!body||body->ended||!modules||!generics||body->nominal_modules)return XR_XIR_BAD_STRUCTURE;
+    if(!body||body->ended||!modules||!generics||body->nominal_modules||!body->declarations.module_count||
+        !body->declarations.function_count||!body->declarations.functions||!body->declarations.identities)return XR_XIR_BAD_STRUCTURE;
     body->nominal_modules=modules;body->nominal_generics=generics;return XR_XIR_OK;
 }
 static XrXirStatus body_nominal_declaration_copy(XrHirBody *body,const XrHirNominalDeclarationInput *input,
@@ -198,10 +199,22 @@ XR_FUNC XrXirStatus xr_hir_body_nominal_declare(XrHirBody *body,const XrHirNomin
     if(status!=XR_XIR_OK){body_nominal_declaration_free(&row);return status;}
     ((HirBodyNominalDeclaration *)body->nominal_declarations.items)[body->nominal_declarations.count++]=row;return XR_XIR_OK;
 }
+static XrXirStatus body_nominal_checked_nodes(const XrXirTypes *target,const XrXirTypes *source,XrCompileRequestControl *control) {
+    uint32_t count=source?source->count:0;
+    if(target->count!=count||(count&&(!target->nodes||!source->nodes)))return XR_XIR_BAD_STRUCTURE;
+    /* The literal producer copies this exact prefix before interning any new
+     * closed application. Equal numeric IDs in an unrelated pool are no proof. */
+    for(uint32_t i=0;i<count;++i) {
+        if(!(i%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
+        if(memcmp(&target->nodes[i],&source->nodes[i],sizeof(XrXirTypeNode)))return XR_XIR_BAD_STRUCTURE;
+    }
+    return body_poll(control);
+}
 XR_FUNC XrXirStatus xr_hir_body_nominal_checked(XrHirBody *body,const XrXirModule *definition,XrCompileRequestControl *control) {
     if(!body||body->ended||body->nominal_declarations.count||!definition||definition->stage!=XR_XIR_CHECKED||
         !definition->declarations||!body->nominal_modules||*body->nominal_modules!=definition->declarations->modules||
         *body->declarations.module_count!=definition->declarations->module_count)return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus matched=body_nominal_checked_nodes(body->types,definition->types,control);if(matched!=XR_XIR_OK)return matched;
     const XrXirNominalTable *table=body->types->nominals,*from=definition->types?definition->types->nominals:NULL;
     if(!table||!from){if(table!=from)return XR_XIR_BAD_STRUCTURE;XrXirStatus status=body_poll(control);if(status==XR_XIR_OK)body->nominal_shape_only=true;return status;}
     if(table->count!=from->count||table->declarations!=from->declarations||(table->count&&!table->declarations))return XR_XIR_BAD_STRUCTURE;
@@ -672,6 +685,10 @@ static XrXirStatus body_nominal_project(const XrHirBody *body,const HirBodyUse *
         uint32_t anchor=projection->source_value_map[row->nominal_call];
         if(anchor<function.parameter_count||anchor-function.parameter_count>=function.instruction_count)return XR_XIR_BAD_STRUCTURE;
         anchor-=function.parameter_count;
+        if(row->action.target==XR_XIR_UNIT) {
+            if(projection->has_value||actual.op==XR_XIR_INVOKE_RESULT)return XR_XIR_BAD_STRUCTURE;
+        } else if((actual.op!=XR_XIR_CALL&&actual.op!=XR_XIR_INVOKE_RESULT)||projection->value<function.parameter_count||
+            projection->value-function.parameter_count!=projection->instruction)return XR_XIR_BAD_STRUCTURE;
         if(row->action.target!=XR_XIR_UNIT&&(!row->nominal_has_result||!projection->has_value||
             projection->source_value!=row->nominal_result||row->nominal_result>=projection->source_value_count||
             projection->value!=projection->source_value_map[row->nominal_result]))return XR_XIR_BAD_STRUCTURE;

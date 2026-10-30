@@ -3,7 +3,7 @@
 static XrXirStatus nominal_resolve(void *owner,const XrXirType *arguments,uint32_t count,XrXirType type,XrXirType *out) {
     (void)owner;(void)arguments;if(count)return XR_XIR_BAD_STRUCTURE;*out=type;return XR_XIR_OK;
 }
-static void nominal_call_receivers(XrXirType result,XrXirOp operation) {
+static void nominal_call_receivers(XrXirType result,XrXirOp operation,unsigned failure) {
     XrCompileResources *resources=NULL;XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext compile={.resources=resources,.limits=xr_xir_compile_default_limits()};
@@ -36,12 +36,21 @@ static void nominal_call_receivers(XrXirType result,XrXirOp operation) {
         XrHirNominalCallEmission emission={instructions[at],at};
         CHECK(xr_hir_body_nominal_call_emitted(body,action.use,&emission)==XR_XIR_OK);
         XrHirBodyAction typed;CHECK(xr_hir_body_consume(body,action.use,&typed)==XR_XIR_OK);
-        CHECK(xr_hir_body_emit(body,action.use,result,result==XR_XIR_UNIT?UINT32_MAX:at)==XR_XIR_OK);
+        uint32_t value=failure==1?1-at:at;
+        CHECK(xr_hir_body_emit(body,action.use,result,result==XR_XIR_UNIT?UINT32_MAX:value)==XR_XIR_OK);
         XrHirBodyProjection projection={.function=0,.instruction=1-at,.type=result,.operation=operation,
             .has_instruction=true,.has_call=true,.call=instructions[at],.source_value_map=map,.source_value_count=2,
-            .has_value=result!=XR_XIR_UNIT,.source_value=at,.value=at};
+            .has_value=result!=XR_XIR_UNIT,.source_value=value,.value=value};
         CHECK(xr_hir_body_project(body,action.use,&projection,NULL,NULL)==XR_XIR_BAD_STRUCTURE);
-        projection.instruction=at;CHECK(xr_hir_body_project(body,action.use,&projection,NULL,NULL)==XR_XIR_OK);
+        projection.instruction=at;
+        if(failure) {
+            CHECK(xr_hir_body_project(body,action.use,&projection,NULL,NULL)==XR_XIR_BAD_STRUCTURE);
+            xr_hir_body_end(body);xr_hir_body_free(body);xr_compile_resources_release(resources);CHECK(!physical_live&&!physical_bytes);return;
+        }
+        if(result==XR_XIR_UNIT) {
+            projection.has_value=true;CHECK(xr_hir_body_project(body,action.use,&projection,NULL,NULL)==XR_XIR_BAD_STRUCTURE);projection.has_value=false;
+        }
+        CHECK(xr_hir_body_project(body,action.use,&projection,NULL,NULL)==XR_XIR_OK);
         if(result==XR_XIR_UNIT) {
             XrHirNominalPlan plan={0};XrHirNominalPlanInput planned={.shape=shape,.scope=scope,.kind=XR_HIR_NOMINAL_STRUCT_LITERAL};
             CHECK(xr_hir_body_nominal_begin(body,&planned,NULL,&plan,NULL)==XR_XIR_OK);
@@ -132,6 +141,7 @@ static void nominal_receivers(void) {
     uint32_t function_count=5,module_count=1;XrHirBodyDeclarations declarations={.functions=&function_view,.identities=&identity_view,
         .function_count=&function_count,.module_count=&module_count};XrHirBody *body=NULL,*other=NULL;
     CHECK(xr_hir_body_new(resources,&types,&body)==XR_XIR_OK&&xr_hir_body_new(resources,&types,&other)==XR_XIR_OK);
+    CHECK(xr_hir_body_nominal_modules(body,&module_view,&generic_view)==XR_XIR_BAD_STRUCTURE);
     CHECK(xr_hir_body_declarations(body,&declarations)==XR_XIR_OK&&xr_hir_body_declarations(other,&declarations)==XR_XIR_OK);
     CHECK(xr_hir_body_nominal_modules(body,&module_view,&generic_view)==XR_XIR_OK&&xr_hir_body_nominal_modules(other,&module_view,&generic_view)==XR_XIR_OK);
     XrHirNominalDeclarationInput declaration={.types=&types,.declaration=0,.source_declaration=10,.field_initializers=origins};
@@ -198,6 +208,8 @@ static void nominal_receivers(void) {
     CHECK(xr_hir_body_project(body,action.use,&projection,NULL,NULL)==XR_XIR_OK&&xr_hir_body_finish(body,NULL)==XR_XIR_OK);
     CHECK(xr_hir_body_nominal_helper(body,&input,NULL,&action,NULL)==XR_XIR_BAD_STRUCTURE);
     XrXirDeclarations checked_declarations={.modules=&module,.module_count=1};XrXirModule definition={.stage=XR_XIR_CHECKED,.types=&types,.declarations=&checked_declarations};
+    XrXirTypeNode wrong=node;wrong.kind=XR_XIR_TYPE_ARRAY;XrXirTypes unrelated=types;unrelated.nodes=&wrong;definition.types=&unrelated;
+    CHECK(xr_hir_body_nominal_checked(other,&definition,NULL)==XR_XIR_BAD_STRUCTURE);definition.types=&types;
     CHECK(xr_hir_body_nominal_checked(other,&definition,NULL)==XR_XIR_OK);
     CHECK(!xr_hir_body_nominal_defaults(other,0,&defaults)&&!xr_hir_body_nominal_defaultable(other,pair));
     CHECK(xr_hir_body_nominal_schedule(other,5,6,NULL,&added,&failed)==XR_XIR_BAD_STRUCTURE&&xr_hir_body_nominal_bind(other,&binding,NULL)==XR_XIR_BAD_STRUCTURE);
@@ -213,5 +225,6 @@ static void nominal_receivers(void) {
     xr_hir_body_end(body);CHECK(!xr_hir_body_nominal_info(body,shape,&info));xr_hir_body_free(body);xr_hir_body_end(other);xr_hir_body_free(other);
     CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==initial.held_bytes);
     xr_compile_resources_release(resources);CHECK(!physical_live&&!physical_bytes);
-    nominal_call_receivers(XR_XIR_UNIT,XR_XIR_INVOKE);nominal_call_receivers(XR_XIR_I64,XR_XIR_CALL);nominal_resource_receivers();
+    nominal_call_receivers(XR_XIR_UNIT,XR_XIR_INVOKE,0);nominal_call_receivers(XR_XIR_I64,XR_XIR_CALL,0);
+    nominal_call_receivers(XR_XIR_I64,XR_XIR_CALL,1);nominal_call_receivers(XR_XIR_I64,XR_XIR_INVOKE,2);nominal_resource_receivers();
 }

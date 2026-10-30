@@ -6,7 +6,7 @@
 typedef struct XrHirNominalFunctionSource {uint32_t function,declaration;} XrHirNominalFunctionSource;
 XR_FUNC XrXirStatus xr_hir_body_nominal_function_source(XrHirBody *,const XrHirNominalFunctionSource *,
     XrCompileRequestControl *,XrHirNominalFunction *);
-/* A literal receiver has actual Checked metadata and no Source declarations.
+/* A literal receiver has an exact Checked node-prefix copy and no Source declarations.
  * This receives shapes only; it grants no default or helper permissions. */
 XR_FUNC XrXirStatus xr_hir_body_nominal_checked(XrHirBody *,const XrXirModule *,XrCompileRequestControl *);
 typedef struct XrHirNominalCallEmission {XrXirInstruction call;uint32_t anchor;} XrHirNominalCallEmission;
