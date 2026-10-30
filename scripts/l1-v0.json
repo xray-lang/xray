@@ -169,7 +169,9 @@
     "test_hir_body_source",
     "test_source_public_repl",
     "test_xir_specialize_control",
-    "test_native_ready"
+    "test_native_ready",
+    "test_native_f64_text",
+    "test_native_execution_allocations"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -495,7 +497,10 @@
     "native_ready_discovery",
     "native_ready_cli",
     "native_ready_cold_cli",
-    "native_ready_probe"
+    "native_ready_probe",
+    "native_f64_text",
+    "f64_text_native",
+    "native_execution_string_allocations"
   ],
   "versionCommand": [
     "{build}/xray.exe",

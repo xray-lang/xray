@@ -724,8 +724,9 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     if (op->op == XR_XIR_CONST_STRING)
         return lower_literal_valid(c, f, (uint32_t)(op - f->instructions));
     if (op->op == XR_XIR_TO_STRING && xr_xir_operand_type(f, op->args[0]) != XR_XIR_I64 &&
+        xr_xir_operand_type(f, op->args[0]) != XR_XIR_F64 &&
         xr_xir_operand_type(f, op->args[0]) != XR_XIR_STRING)
-        return lower_unsupported(c, "String conversion other than i64 or String");
+        return lower_unsupported(c, "String conversion other than i64, f64 or String");
     if (op->op == XR_XIR_CLOCK_NANOS) {
         if (op->immediate < 1 || op->immediate > 3)
             return lower_unsupported(c, "clock kind");
@@ -768,7 +769,7 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
             return lower_unsupported(c, "print other than one supported value");
         uint32_t value = f->operands[op->args[0]];
         XrXirType type = xr_xir_operand_type(f, value);
-        if (type == XR_XIR_STRING) {
+        if (type == XR_XIR_STRING || type == XR_XIR_F64) {
             c->string_prints = true;
         } else if (type == XR_XIR_I64) c->prints = true;
         else return lower_unsupported(c, "print other than one supported value");
@@ -1257,7 +1258,8 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         uint32_t count = op->op == XR_XIR_CONCAT_STRING ? 2u : 1u;
         for (uint32_t a = 0; a < count; ++a) if (!lower_value(f, op->args[a], &args[a])) return false;
         XrLirInstruction owned = {.op = op->op == XR_XIR_CONCAT_STRING ? XR_LIR_STRING_CONCAT :
-            xr_xir_operand_type(f->source, op->args[0]) == XR_XIR_I64 ? XR_LIR_STRING_I64 : XR_LIR_STRING_RETAIN,
+            xr_xir_operand_type(f->source, op->args[0]) == XR_XIR_I64 ? XR_LIR_STRING_I64 :
+            xr_xir_operand_type(f->source, op->args[0]) == XR_XIR_F64 ? XR_LIR_STRING_F64 : XR_LIR_STRING_RETAIN,
             .type=XR_LIR_STRING, .operands=args, .operand_count=count, .source=lower_source(c)};
         return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &owned, &f->values[result]));
     }
@@ -1293,6 +1295,16 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
     }
     if (op->op == XR_XIR_PRINT && op->args[1] == 1) {
         uint32_t value = f->source->operands[op->args[0]];
+        if (xr_xir_operand_type(f->source, value) == XR_XIR_F64) {
+            XrLirValue argument = {0}, text = {0};
+            if (!lower_value(f, value, &argument)) return false;
+            XrLirInstruction format = {.op=XR_LIR_STRING_F64, .type=XR_LIR_STRING,
+                .operands=&argument, .operand_count=1, .source=lower_source(c)};
+            if (!lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &format, &text))) return false;
+            XrLirInstruction print = {.op=XR_LIR_STRING_PRINT, .type=XR_LIR_UNIT,
+                .operands=&text, .operand_count=1, .source=lower_source(c)};
+            return lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &print));
+        }
         if (xr_xir_operand_type(f->source, value) == XR_XIR_STRING) {
             XrLirValue argument;
             if (!lower_value(f, value, &argument)) return false;

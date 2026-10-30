@@ -119,6 +119,10 @@ XR_RBC_CASE(STRING_I64) {
     XR_RBC_STRING(a) = xrt_string_i64(xr_rbc_signed(XR_RBC_REG(b)), XR_RBC_SOURCE());
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(STRING_F64) {
+    XR_RBC_STRING(a) = xrt_string_f64(XR_RBC_REG(b), XR_RBC_SOURCE());
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(STRING_RETAIN) {
     XR_RBC_STRING(a) = xrt_string_retain(XR_RBC_STRING(b), XR_RBC_SOURCE());
     XR_RBC_NEXT();

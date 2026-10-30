@@ -9,6 +9,7 @@
 #include "xnative_string.h"
 #include "xir/xxir_value_internal.h"
 #include "xir/xxir_output.h"
+#include "xir/xxir_float.h"
 #include "base/xchecks.h"
 
 struct XrtStringOwner {
@@ -59,6 +60,13 @@ XRAY_API XrtString *xrt_string_i64(int64_t value, uint32_t source_id) {
     size_t length = 0;
     XR_CHECK(xr_xir_scalar_text(&scalar, bytes, &text, &length), "The canonical I64 formatter fits its fixed buffer");
     return xrt_string_new(text, length, source_id);
+}
+XRAY_API XrtString *xrt_string_f64(uint64_t bits, uint32_t source_id) {
+    char bytes[32];
+    size_t length = 0;
+    XR_CHECK(xr_xir_float_format(64, bits, bytes, sizeof(bytes), &length),
+        "The canonical binary64 formatter accepts every object bit pattern");
+    return xrt_string_new(bytes, length, source_id);
 }
 XRAY_API XrtString *xrt_string_concat(const XrtString *left, const XrtString *right,
     uint32_t source_id) {

@@ -93,7 +93,9 @@ def main():
                ('spill_branches', 'tests/lir/programs/owned-string-spill-branches.xr', 959,
                 'ee150edc9acc304a7f12185f43c41fd326f47f7a18e7d38eceffa0ba9c36e3a9', b'140\n0\n'),
                ('unicode_nul', 'tests/lir/programs/owned-string-storage.xr', 150,
-                '5b53b0ed4708c139c981c76e91d60d9326d612d7bb80ca9b61ba2d09d498a88b', b'\xc3\xa9\0\nv12\n\n')]
+                '5b53b0ed4708c139c981c76e91d60d9326d612d7bb80ca9b61ba2d09d498a88b', b'\xc3\xa9\0\nv12\n\n'),
+               ('text_whole', 'tests/lir/programs/f64-text.xr', 138,
+                '89807d8c49e885d01b35402c03697496dafef7d1f5ef41ba86f4dac8d486e43f', b'v=3.5\n-0.0\ninf -inf nan\n')]
     for name, relative, length, digest, stdout in sources:
         source = source_input(relative, length, digest)
         for mode in ('raw', 'sccp', 'inline', 'sccp-inline-inline-sccp'):
@@ -102,7 +104,7 @@ def main():
             generated = folder/'generated.c'
             result = run(client + '-generate', [args.pipeline_driver, source, mode, generated, folder/'rbc.json', '0', '2', 'normal'])
             assert result.stdout == stdout*2 and not result.stderr
-            if name != 'unicode_nul':
+            if name in ('long_string', 'spill_branches'):
                 receipt = json.loads((folder/'rbc.json').read_text())
                 assert receipt['rbc_registers_max'] <= 255 and receipt['rbc_spills'] > 0 and receipt['rbc_reference_spills'] > 0
             (folder/'main.c').write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
@@ -157,6 +159,33 @@ def main():
                     'int64_t root_run(void){return xray_lir_entry();}\n', encoding='ascii')
                 objects.append(folder/'gateway.c')
             add(name, objects, b'14\n' if mode == 'relations' else b'')
+    text_family=project/'text-family';text_family.mkdir()
+    text_observed=json.loads(run('text-family-generate',[args.result_driver,'--f64-text-c',text_family]).stdout)
+    assert text_observed['sourceBytes']==138 and text_observed['independentVectors']==290 and text_observed['rbcEntries']==580
+    text_path=args.source/'tests/vm/test_f64_text_native.py'
+    text_spec=importlib.util.spec_from_file_location('native_text_witness',text_path)
+    text_module=importlib.util.module_from_spec(text_spec);text_spec.loader.exec_module(text_module)
+    text_vectors=text_module.vectors(args.source)
+    for public in (False,True):
+        for cpp in (False,True):
+            name='f64_text_'+('public' if public else 'source')+('_cpp' if cpp else '_c')
+            folder=project/name;folder.mkdir();(folder/'vectors.h').write_text(text_vectors,encoding='ascii')
+            text=text_module.adapter(public,cpp)
+            if cpp and not public:
+                text=text.replace('extern Text f64_text_get(void);','extern "C" Text f64_text_get(void);')
+                text=text.replace('extern const XrtSourceMap *f64_text_source_map(void);',
+                                  'extern "C" const XrtSourceMap *f64_text_source_map(void);')
+            client=folder/('adapter.cpp' if cpp else 'adapter.c');client.write_text(text,encoding='ascii')
+            objects=[client]
+            if not public:
+                shutil.copyfile(text_family/'whole.c',folder/'generated.c')
+                callee=text_observed['callee']
+                (folder/'gateway.c').write_text('#include "generated.c"\ntypedef XrtString *(*Text)(double);\n'
+                    f'_Static_assert(_Generic(&xrl_f{callee},Text:1,default:0),"Source text ABI");\n'
+                    f'Text f64_text_get(void){{return &xrl_f{callee};}}\n'
+                    'const XrtSourceMap *f64_text_source_map(void){return &xrt_standalone_source_map;}\n',encoding='ascii')
+                objects.append(folder/'gateway.c')
+            add(name,objects)
     panic = project/'panic.c'
     panic.write_text('#include "xray_native_runtime.h"\n#include <stdlib.h>\n#include <stdio.h>\n'
         'const XrtSourceMap xrt_standalone_source_map={NULL,0};\n'
@@ -358,7 +387,8 @@ def main():
         manifestSHA256=hashlib.sha256((runtime/'native_runtime_manifest.json').read_bytes()).hexdigest(),
         clients=cases, clientCount=len(cases), sourceInputs=source_inputs,
         negative=negative, arithmeticRows=3216, comparisonPairs=676,
-        roundingModes=4, ftzDazStates=4, hello='GAP: H3; complete 369B source and 76B oracle unchanged')
+        roundingModes=4, ftzDazStates=4, textRows=290, textSourceBytes=138, textOracleBytes=24,
+        hello='NOT_RUN_IN_THIS_INSTALLED_MATRIX')
     (work/'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     print(work)
 

@@ -501,6 +501,65 @@ static void native_frame_cell_recovery(void) {
     xrt_locations_release(c->locations);xr_free(c);
 }
 
+typedef struct NativeF64Text {
+    XrtLocationOwner *locations;
+    XrtStringRoot strings;
+    XrtExecutionFailure failure;
+    unsigned after;
+    bool output;
+} NativeF64Text;
+static void native_f64_text_root(void *data) {
+    NativeF64Text *context=data;
+    XrtString *value=xrt_string_f64(UINT64_C(0x3ff4000000000000),1);
+    owned_string_equal(value,"1.25",4);
+    if(context->output)xrt_print_string("1.25",4,1);
+    xrt_string_drop(&value);CHECK(!value && !context->strings.owners);
+    ++context->after;
+}
+static void native_f64_text_recovery(void) {
+    NativeF64Text *context=xr_calloc(1,sizeof(*context));CHECK(context);
+    context->locations=locations("native-f64-text.xr");
+    CHECK(xrt_run_embedded_owned(context->locations,&context->failure,native_f64_text_root,
+        context,&context->strings)==XRT_EXECUTION_COMPLETED);
+    CHECK(context->after==1 && !context->strings.domain && !context->strings.owners);
+    context->after=0;context->output=true;SavedOutput saved=disable_output();
+    XrtExecutionStatus status=xrt_run_embedded_owned(context->locations,&context->failure,
+        native_f64_text_root,context,&context->strings);
+    restore_output(saved);
+    CHECK(status==XRT_EXECUTION_FAILURE && !context->after && !context->strings.domain && !context->strings.owners);
+    CHECK(context->failure.kind==XRT_FAILURE_OUTPUT && context->failure.detail.output.source_id==1 &&
+        context->failure.detail.output.operation==XRT_OUTPUT_WRITE && context->failure.detail.output.io.failed);
+    context->output=false;context->strings.byte_limit=1;
+    CHECK(xrt_run_embedded_owned(context->locations,&context->failure,native_f64_text_root,
+        context,&context->strings)==XRT_EXECUTION_FAILURE);
+    CHECK(context->failure.kind==XRT_FAILURE_VALUE && context->failure.detail.value.status==XR_XIR_VALUE_LIMIT &&
+        context->failure.detail.value.source_id==1 && !context->after && !context->strings.domain && !context->strings.owners);
+    context->strings.byte_limit=0;
+#if defined(XR_NATIVE_STRING_ALLOCATIONS)
+    CHECK(!native_string_live && !native_string_bytes);
+    for(unsigned site=0;site<4;++site) {
+        native_string_fail_at=native_string_calls+site;native_string_injected=false;
+        CHECK(xrt_run_embedded_owned(context->locations,&context->failure,native_f64_text_root,
+            context,&context->strings)==XRT_EXECUTION_FAILURE);
+        native_string_fail_at=SIZE_MAX;
+        CHECK(native_string_injected && context->failure.kind==XRT_FAILURE_VALUE &&
+            context->failure.detail.value.status==XR_XIR_VALUE_OOM && context->failure.detail.value.source_id==1);
+        CHECK(!context->after && !context->strings.domain && !context->strings.owners &&
+            !native_string_live && !native_string_bytes);
+        CHECK(xrt_run_embedded_owned(context->locations,&context->failure,native_f64_text_root,
+            context,&context->strings)==XRT_EXECUTION_COMPLETED);
+        CHECK(context->after==1 && !context->strings.domain && !context->strings.owners &&
+            !native_string_live && !native_string_bytes);context->after=0;
+    }
+#endif
+    CHECK(xrt_run_embedded_owned(context->locations,&context->failure,native_f64_text_root,
+        context,&context->strings)==XRT_EXECUTION_COMPLETED);
+    CHECK(context->after==1 && !context->strings.domain && !context->strings.owners);
+    const XrtSourceLocation *location=xrt_locations_get(context->locations,1);
+    CHECK(location && location->line==7 && location->column==9 &&
+        location->path_length==strlen("native-f64-text.xr") && !memcmp(location->path,"native-f64-text.xr",location->path_length));
+    xrt_locations_release(context->locations);xr_free(context);
+}
 static void native_owned_strings(void) {
     OwnedStringContext *context = xr_calloc(1,sizeof(*context)); CHECK(context);
     context->locations = locations("native-owned-string.xr");
@@ -561,6 +620,7 @@ static void native_owned_strings(void) {
 }
 
 int main(void) {
+    native_f64_text_recovery();
     native_frame_cell_recovery();
     native_shared_strings();
     native_owned_strings();

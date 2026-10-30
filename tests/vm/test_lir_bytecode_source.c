@@ -718,7 +718,9 @@ static void constant_string_branch(const char *directory) {
     xr_compile_resources_release(resources);
 }
 
+#include "f64_text_source_cases.h"
 int main(int argc, char **argv) {
+    if(argc==3&&!strcmp(argv[1],"--f64-text-c")){source_f64_text_c(argv[2]);return 0;}
     if(argc==3&&!strcmp(argv[1],"--frame-cell-result")){frame_cell_result(argv[2]);return 0;}
     if(argc==3&&!strcmp(argv[1],"--frame-cell-alias")){frame_cell_alias(argv[2]);return 0;}
     if(argc==3&&!strcmp(argv[1],"--f64-family-c")){f64_family_c(argv[2]);return 0;}

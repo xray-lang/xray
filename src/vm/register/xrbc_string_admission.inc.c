@@ -88,7 +88,7 @@ static bool rbc_strings_value(RbcStringAdmission *s, XrRbcOperands v) {
     case XR_RBC_STRING_LITERAL:
         if (!rbc_string_destination(s, v.a)) return false;
         break;
-    case XR_RBC_STRING_I64:
+    case XR_RBC_STRING_I64: case XR_RBC_STRING_F64:
         if (!rbc_string_destination(s, v.a) || state[v.b] != RBC_BITS) return false;
         break;
     case XR_RBC_STRING_RETAIN:
@@ -193,7 +193,7 @@ static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
 static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
     const XrRbcFunction *f = s->function;
         switch (v.op) {
-        case XR_RBC_MOV: case XR_RBC_STRING_LITERAL: case XR_RBC_STRING_I64:
+        case XR_RBC_MOV: case XR_RBC_STRING_LITERAL: case XR_RBC_STRING_I64: case XR_RBC_STRING_F64:
         case XR_RBC_STRING_RETAIN: case XR_RBC_STRING_CONCAT: case XR_RBC_STRING_TAKE:
         case XR_RBC_STRING_DROP: case XR_RBC_STRING_PRINT: case XR_RBC_STRING_LEN:
             if (!rbc_strings_value(s, v)) return false; break;
@@ -437,7 +437,7 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
     for (size_t pc = 0; pc < f->code_count; ++pc) {
         uint32_t word = f->code[pc], op = word & 255;
         managed |= op >= XR_RBC_STRING_LITERAL && op <= XR_RBC_STRING_CELL_DROP;
-        managed |= op == XR_RBC_STRING_LEN;
+        managed |= op == XR_RBC_STRING_LEN || op == XR_RBC_STRING_F64;
         if (op == XR_RBC_CALL) {
             const XrRbcFunction *callee = &module->functions[word >> 16];
             managed |= callee->result_kind == XR_RBC_STRING;

@@ -7,6 +7,7 @@
  * test_string_admission.c - Reject missing, forged and retired String owners
  */
 #include "vm/register/xrbc.h"
+#include "base/xchecks.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,7 +22,11 @@ static void rejected(XrRbcFunction *functions, size_t count, XrtLocationOwner *l
     const XrRbcLiteral literal = {"not printed",11};
     const XrRbcModule module = {.functions=functions,.function_count=count,.literals=&literal,.literal_count=1};
     XrRbcExecution *execution = NULL;
-    CHECK(xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution)==XR_RBC_INVALID && !execution);
+    XrRbcStatus status=xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution);
+    if(status!=XR_RBC_INVALID || execution)
+        fprintf(stderr,"raw rejection status=%u first-op=%u spills=%u\n",(unsigned)status,
+            (unsigned)(functions[0].code[0]&255u),(unsigned)functions[0].spill_count);
+    CHECK(status==XR_RBC_INVALID && !execution);
 }
 static void admitted(XrRbcFunction *functions, size_t count, XrtLocationOwner *locations) {
     const XrRbcLiteral literal = {"not printed",11};
@@ -40,6 +45,31 @@ static void admitted_without_invocation(XrRbcFunction *functions,size_t count,Xr
         CHECK(xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution)==XR_RBC_OK && execution);
         xr_rbc_execution_free(&execution);CHECK(!execution);
     }
+}
+static void f64_text_admission(XrtLocationOwner *locations) {
+    XR_STATIC_ASSERT(XR_RBC_FGE == 49 && XR_RBC_STRING_F64 == 50,"Existing bytecode opcodes retain their identity");
+    uint32_t bare[] = {word(XR_RBC_STRING_F64,1,0,0,0),word(XR_RBC_RET0,0,0,0,0)};
+    XrRbcFunction f = {.code=bare,.code_count=2,.register_count=2,.parameter_count=1};
+    XrRbcModule module = {.functions=&f,.function_count=1};
+    uint64_t argument = UINT64_C(0x3ff0000000000000);
+    XrRbcExecution *execution = NULL;
+    // A missing kind table must reject before an untyped String can be created.
+    CHECK(xr_rbc_module_prepare(&module,0,&argument,1,locations,&execution)==XR_RBC_INVALID && !execution);
+    uint32_t code[] = {word(XR_RBC_LOADK,0,0,0,0),word(XR_RBC_STRING_F64,1,0,0,0),
+        word(XR_RBC_STRING_DROP,1,0,0,0),word(XR_RBC_RET0,0,0,0,0),word(XR_RBC_RET0,0,0,0,0)};
+    XrRbcRegisterKind kinds[] = {XR_RBC_BITS,XR_RBC_STRING};
+    f = (XrRbcFunction){.code=code,.code_count=4,.register_count=2,.spill_count=1,.constants=&argument,.constant_count=1,
+        .register_kinds=kinds,.register_kind_count=2};
+    admitted(&f,1,locations);admitted(&f,1,locations);
+    kinds[1]=XR_RBC_BITS;rejected(&f,1,locations);kinds[1]=XR_RBC_STRING;
+    f.code=code+1;f.code_count=3;rejected(&f,1,locations);f.code=code;f.code_count=4;
+    code[2]=code[1];code[3]=word(XR_RBC_STRING_DROP,1,0,0,0);f.code_count=5;
+    rejected(&f,1,locations);
+    code[2]=word(XR_RBC_LOADI,0,0,0,0);code[3]=word(XR_RBC_RET0,0,0,0,0);f.code_count=4;
+    rejected(&f,1,locations);
+    code[2]=word(XR_RBC_STRING_DROP,1,0,0,0);
+    kinds[0]=XR_RBC_STRING;code[0]=word(XR_RBC_STRING_LITERAL,0,0,0,0);
+    rejected(&f,1,locations);
 }
 static void frame_cell_backedges(XrtLocationOwner *locations) {
     uint32_t code[]={word(XR_RBC_STRING_LITERAL,0,0,0,0),word(XR_RBC_STRING_CELL_NEW,1,0,0,0),
@@ -202,6 +232,7 @@ static void sequential_and_loop_branches(XrtLocationOwner *locations) {
 int main(void) {
     XrtLocationOwner *locations = NULL;
     CHECK(xrt_locations_create(NULL,0,&locations)==XRT_LOCATION_OK);
+    f64_text_admission(locations);
     frame_cell_backedges(locations);
     frame_cell_origins(locations);
     frame_cell_parameter_alias(locations);

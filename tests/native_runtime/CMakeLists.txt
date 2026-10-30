@@ -1,4 +1,16 @@
 set(native_runtime_clients)
+add_executable(test_native_f64_text test_f64_text.c)
+target_link_libraries(test_native_f64_text PRIVATE xray_lir_bytecode xray_native_runtime)
+target_include_directories(test_native_f64_text PRIVATE "${PROJECT_SOURCE_DIR}/src")
+set_target_properties(test_native_f64_text PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(test_native_f64_text PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_native_f64_text PRIVATE -Wall -Wextra -Werror -pedantic)
+    target_link_libraries(test_native_f64_text PRIVATE m)
+endif()
+add_test(NAME native_f64_text COMMAND test_native_f64_text)
+set_tests_properties(native_f64_text PROPERTIES LABELS "unit;native-runtime;ownership;float" TIMEOUT 30)
 add_test(NAME native_runtime_installed
     COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_CURRENT_SOURCE_DIR}/test_installed_native_runtime.py"
         --source "${PROJECT_SOURCE_DIR}" --build "${CMAKE_BINARY_DIR}"

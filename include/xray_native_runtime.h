@@ -56,6 +56,8 @@ XRAY_API int32_t xrt_f64_compare(uint64_t left, uint64_t right);
 typedef struct XirString XrtString;
 XRAY_API XrtString *xrt_string_new(const char *bytes, size_t length, uint32_t source_id);
 XRAY_API XrtString *xrt_string_i64(int64_t value, uint32_t source_id);
+// Exact binary64 object bits use the canonical shortest decimal formatter.
+XRAY_API XrtString *xrt_string_f64(uint64_t bits, uint32_t source_id);
 XRAY_API XrtString *xrt_string_concat(const XrtString *left, const XrtString *right, uint32_t source_id);
 XRAY_API XrtString *xrt_string_retain(const XrtString *string, uint32_t source_id);
 // Move requires an empty destination and consumes the actual source owner.
