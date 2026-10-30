@@ -15,7 +15,7 @@ from test_lir_carriers_native import _f64_profile, _f64_reject
 def vectors(source):
     path = source / 'tests/unit/xir/xir_float_format_vectors.def'
     data = path.read_bytes()
-    assert hashlib.sha256(data).hexdigest() == '3fc255ba117f67e2589bed0aac88f35d8eb5ec25999f45937d4938f238c156f6'
+    assert hashlib.sha256(data.replace(b'\r\n', b'\n')).hexdigest() == '9840d237849bd7232bdba37beeec7b850c1637fcf2b37573f6109a5b0c32f20e'
     rows = re.findall(r'^XIR_FLOAT_FORMAT\(64, UINT64_C\(0x([0-9a-f]{16})\), "([^"]+)"\)',
                       data.decode('ascii'), re.M)
     assert len(rows) == 290
@@ -173,9 +173,11 @@ def main():
         (work / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
         return
 
-    def native(name, sources, cpp=False, expected_stdout=b''):
+    def native(name, sources, cpp=False, expected_stdout=b'', private=False):
         compiler = args.cxx_compiler if cpp else args.compiler
         flags = options(cpp)
+        if private:
+            flags += [('/I' if args.kind == 'msvc' else '-I') + str(args.source_root / 'src')]
         objects = []
         for i, path in enumerate(sources):
             obj = work / (name + str(i) + ('.obj' if args.kind == 'msvc' else '.o'))
@@ -187,6 +189,32 @@ def main():
         command += ['/Fe:' + str(executable), '/link', '/INCREMENTAL:NO'] if args.kind == 'msvc' else ['-lm', '-pthread', '-o', executable]
         run('link-' + name, command)
         assert run('run-' + name, [executable]) == expected_stdout
+
+    def normal_frame_observer(generated, name):
+        observer = work / ('normal-frame-' + name + '.c')
+        observer.write_text('#include "runtime/native/xnative_execution.h"\n#include <stdlib.h>\n'
+            'static XrtString *watched;static unsigned created,dropped;\n'
+            'static XrtString *observed_f64(uint64_t bits,uint32_t source){\n'
+            ' XrtString *value=xrt_string_f64(bits,source);\n'
+            ' if(bits==UINT64_C(0x8000000000000000)){if(watched)abort();watched=value;++created;}\n'
+            ' return value;}\n'
+            'static void observed_drop(XrtString **value){\n'
+            ' if(*value && *value==watched){watched=NULL;++dropped;}xrt_string_drop(value);}\n'
+            '#define xrt_string_f64(bits,source) observed_f64((bits),(source))\n'
+            '#define xrt_string_drop(value) observed_drop(value)\n'
+            f'#include "{generated.name}"\n'
+            '#undef xrt_string_f64\n#undef xrt_string_drop\n'
+            'typedef struct Observation{XrtStringRoot strings;unsigned visits;} Observation;\n'
+            'static void observe(void *data){Observation *o=data;int64_t result=99;xrl_invoke(&result);\n'
+            ' if(result || watched || o->strings.owners || created!=o->visits+1 || dropped!=created)abort();\n'
+            ' ++o->visits;}\n'
+            'int main(void){Observation o={0};XrtLocationOwner *locations=NULL;XrtExecutionFailure failure={0};\n'
+            ' if(xrt_locations_create(xrt_standalone_source_map.locations,xrt_standalone_source_map.count,&locations)!=XRT_LOCATION_OK)return 1;\n'
+            ' for(unsigned run=0;run<2;++run){\n'
+            '  if(xrt_run_embedded_owned(locations,&failure,observe,&o,&o.strings)!=XRT_EXECUTION_COMPLETED)return 2;\n'
+            '  if(o.visits!=run+1 || o.strings.owners || o.strings.domain)return 3;\n'
+            ' }\n xrt_locations_release(locations);return 0;}\n', encoding='ascii')
+        native('normal-frame-' + name, [observer], expected_stdout=expected * 2, private=True)
 
     native('local', [work / 'gateway.c', work / 'adapter.c'])
     for cpp in (False, True):
@@ -201,6 +229,7 @@ def main():
         assert run('source-' + mode, [args.pipeline_driver, source, mode, output,
             work / (mode + '.json'), '0', '2', 'normal']) == expected * 2
         native(mode, [output, main_c], expected_stdout=expected * 2)
+        normal_frame_observer(output, mode)
     spill_source = args.source_root / 'tests/lir/programs/f64-text-spill.xr'
     spill_before = spill_source.read_bytes()
     spill_modes = []
@@ -223,6 +252,7 @@ def main():
     assert source.read_bytes() == before
     result.update(state='PASS', independentVectors=290, roundingModes=4, controlCases=4,
                   entriesPerImage=2, fullSourceModes=4, publicClients=2, installedClients=0,
+                  normalFrameModes=4, directPrintExplicitDropPerEntry=1, preDrainOwnerEmpty=True,
                   typedSpillModes=spill_modes, typedSpillSourceSHA256=hashlib.sha256(spill_before).hexdigest(),
                   boundary='Public clients use this build closure; official installed/moved component is separate.')
     (work / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
