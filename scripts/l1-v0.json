@@ -166,6 +166,7 @@
     "test_type_clone_source",
     "test_hir_body",
     "test_hir_tuple_control",
+    "test_hir_nominal_control",
     "test_hir_body_source",
     "test_source_public_repl",
     "test_xir_specialize_control",
