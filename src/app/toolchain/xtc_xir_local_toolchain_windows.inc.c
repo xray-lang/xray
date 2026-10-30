@@ -29,16 +29,21 @@ static bool local_workspace(XtcXirLocalToolchain *owner, const char *explicit_pa
     if (okay) okay = local_path(owner, candidate, true, &owner->view.workspace_parent);
     xr_compile_resources_free(candidate); xr_compile_resources_free(wide); return okay;
 }
-static bool local_same_path(XtcXirLocalToolchain *owner, const char *a, const char *b) {
+static bool local_equal_path(XtcXirLocalToolchain *owner, const char *a, const char *b, bool *same) {
     wchar_t *left = NULL, *right = NULL; size_t left_size = 0, right_size = 0;
     bool okay = local_io(owner, xr_win_utf8_owned(&owner->policy, a, &left, &left_size)) &&
         local_io(owner, xr_win_utf8_owned(&owner->policy, b, &right, &right_size));
     if (okay) {
         int compared = CompareStringOrdinal(left, (int)left_size, right, (int)right_size, TRUE);
         if (!compared) { DWORD error = GetLastError(); okay = local_io(owner, io_windows_status(error)); owner->diagnostic.os_error = error; }
-        else if (compared != CSTR_EQUAL) okay = local_fail(owner, XTC_XIR_LOCAL_INVALID, XTC_XIR_LOCAL_SELF, 0);
+        else *same=compared==CSTR_EQUAL;
     } else okay = false;
     xr_compile_resources_free(left); xr_compile_resources_free(right); return okay;
+}
+static bool local_same_path(XtcXirLocalToolchain *owner, const char *a, const char *b) {
+    bool same=false;
+    return local_equal_path(owner,a,b,&same) &&
+        (same || local_fail(owner,XTC_XIR_LOCAL_INVALID,XTC_XIR_LOCAL_SELF,0));
 }
 /* Output is UTF-16LE from cmd /u. Parsing is length-based; embedded NUL,
  * duplicate selected keys, truncated code units and invalid selected UTF-16
@@ -153,6 +158,49 @@ static bool local_paths(XtcXirLocalToolchain *owner, const char *const *values, 
     xr_compile_resources_free(version); xr_compile_resources_free(include);
     xr_compile_resources_free(libraries); xr_compile_resources_free(joined); return okay;
 }
+/* Keys are the same ASCII names selected from activation output. A prepared
+ * process has already validated and copied the complete Windows environment. */
+static bool local_environment_key(const char *actual,const char *expected) {
+    for (;;) {
+        unsigned char a=(unsigned char)*actual++,b=(unsigned char)*expected++;
+        if(a>='A'&&a<='Z')a+=(unsigned char)('a'-'A');
+        if(b>='A'&&b<='Z')b+=(unsigned char)('a'-'A');
+        if(a!=b)return false;if(!a)return true;
+    }
+}
+static bool local_ready_environment(XtcXirLocalToolchain *owner,const XrProcessView *snapshot,
+    const char *installation,const char **values,bool *ready) {
+    static const char *const keys[]={"VCToolsInstallDir","WindowsSdkDir","WindowsSDKVersion",
+        "SystemRoot","VSINSTALLDIR","VSCMD_ARG_HOST_ARCH","VSCMD_ARG_TGT_ARCH","VCToolsVersion"};
+    const char *found[8]={0};*ready=false;
+    for(size_t e=0;e<snapshot->env_count;++e)for(unsigned k=0;k<8;++k) {
+        if(!local_environment_key(snapshot->env_keys[e],keys[k]))continue;
+        if(found[k])return local_fail(owner,XTC_XIR_LOCAL_INVALID,XTC_XIR_LOCAL_SELF,0);
+        found[k]=snapshot->env_values[e];
+    }
+    for(unsigned k=0;k<8;++k)if(!found[k]||!found[k][0])return true;
+    if(!local_environment_key(found[5],"x64")||!local_environment_key(found[6],"x64"))return true;
+    char *selected=NULL,*active=NULL,*vc=NULL,*expected=NULL,*parent=NULL,*joined=NULL,*version=NULL;
+    bool same=false,okay=local_path_receive(owner,installation,true,&selected) &&
+        local_path_receive(owner,found[4],true,&active) && local_equal_path(owner,selected,active,&same);
+    if(okay&&same) {
+        okay=local_version_component(owner,found[7],&version) &&
+            local_io(owner,xr_path_join_owned(&owner->policy,selected,"VC/Tools/MSVC",&parent)) &&
+            local_io(owner,xr_path_join_owned(&owner->policy,parent,version,&joined)) &&
+            local_path_receive(owner,joined,true,&expected) &&
+            local_path_receive(owner,found[0],true,&vc) && local_equal_path(owner,expected,vc,&same);
+    }
+    if(okay&&same) {
+        for(unsigned k=0;okay&&k<4;++k) {
+            size_t length=0;okay=local_length(owner,found[k],&length);
+            if(okay)okay=local_keep(owner,local_copy(owner,found[k],length),&values[k]);
+        }
+        if(okay)*ready=true;
+    }
+    xr_compile_resources_free(selected);xr_compile_resources_free(active);xr_compile_resources_free(vc);
+    xr_compile_resources_free(expected);xr_compile_resources_free(parent);xr_compile_resources_free(joined);
+    xr_compile_resources_free(version);return okay;
+}
 static bool local_installation(XtcXirLocalToolchain *owner, const XrProcessByteBuffer *bytes, char **output) {
     if (!bytes->data || !bytes->length || bytes->truncated)
         return local_fail(owner, XTC_XIR_LOCAL_UNRESOLVED, XTC_XIR_LOCAL_SELF, 0);
@@ -180,7 +228,8 @@ static bool local_installation(XtcXirLocalToolchain *owner, const XrProcessByteB
 static bool local_discover(XtcXirLocalToolchain *owner, const XtcXirLocalToolchainRequest *request) {
     char *program_files = NULL, *system_root = NULL, *installation = NULL;
     const char *vswhere = NULL, *cmd = NULL, *script = NULL, *discovery_cwd = NULL, *values[4] = {0};
-    XrProcessResult result = {0};
+    XrProcessResult result = {0}; XrToolchainProcess *discovery=NULL; XrProcessView snapshot={0};
+    bool ready=false;
     bool okay = local_io(owner, xr_os_io_environment_get(&owner->policy, "ProgramFiles(x86)", &program_files)) &&
         local_join_path(owner, program_files, "Microsoft Visual Studio/Installer/vswhere.exe", false, &vswhere) &&
         local_io(owner, xr_os_io_environment_get(&owner->policy, "SystemRoot", &system_root)) &&
@@ -196,13 +245,21 @@ static bool local_discover(XtcXirLocalToolchain *owner, const XtcXirLocalToolcha
         spec.argv[4] = "Microsoft.VisualStudio.Component.VC.Tools.x86.x64";
         spec.argv[5] = "-property"; spec.argv[6] = "installationPath";
         spec.argv[7] = "-format"; spec.argv[8] = "value"; spec.argv[9] = "-latest"; spec.argv[10] = "-utf8";
-        okay = local_process(owner, &spec, &result) &&
+        okay = local_process_status(owner,xtc_process_prepare(owner->resources,&spec,&discovery)) &&
+            local_process_status(owner,xtc_process_view(discovery,&snapshot)) &&
+            local_process_prepared(owner,discovery,&result) &&
             local_installation(owner, &result.stdout_bytes, &installation) &&
             local_join_path(owner, installation, "Common7/Tools/VsDevCmd.bat", false, &script);
     }
     xtc_process_result_free(&result);
+    if(okay) {
+        owner->diagnostic.stage=XTC_XIR_LOCAL_ENVIRONMENT;
+        okay=local_ready_environment(owner,&snapshot,installation,values,&ready);
+    }
+    /* Selected facts have been copied; no later phase borrows the snapshot. */
+    xtc_process_free(discovery);
 
-    if (okay) {
+    if (okay && !ready) {
         owner->diagnostic.stage = XTC_XIR_LOCAL_ENVIRONMENT;
         xtc_process_spec_init(&spec, cmd, request->timeout_ms);
         spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT; spec.cwd = discovery_cwd;

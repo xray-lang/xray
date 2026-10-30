@@ -94,7 +94,7 @@ static bool local_lease_status(XtcXirLocalToolchain *owner, XrXirTargetStatus st
 }
 /* Directory admission reuses the existing no-reparse ancestor walker. The
  * locator releases this check lease; the later operation owns execution leases. */
-static bool local_path(XtcXirLocalToolchain *owner, const char *path, bool directory, const char **output) {
+static bool local_path_receive(XtcXirLocalToolchain *owner, const char *path, bool directory, char **output) {
     char *absolute = NULL, *parent = NULL; XtcXirFileLease *lease = NULL;
     if (!path || !path[0]) return local_fail(owner, XTC_XIR_LOCAL_INVALID, XTC_XIR_LOCAL_SELF, 0);
     bool okay = true;
@@ -125,8 +125,12 @@ static bool local_path(XtcXirLocalToolchain *owner, const char *path, bool direc
     if (okay) okay = local_lease_status(owner, xtc_xir_file_lease_directory_open(owner->resources,
         directory ? absolute : parent, &lease));
     xtc_xir_file_lease_free(lease); xr_compile_resources_free(parent);
-    if (okay) return local_keep(owner, absolute, output);
+    if (okay) { *output=absolute; return true; }
     xr_compile_resources_free(absolute); return false;
+}
+static bool local_path(XtcXirLocalToolchain *owner, const char *path, bool directory, const char **output) {
+    char *absolute=NULL;
+    return local_path_receive(owner,path,directory,&absolute) && local_keep(owner,absolute,output);
 }
 static bool local_join_path(XtcXirLocalToolchain *owner, const char *root, const char *suffix,
     bool directory, const char **output) {
@@ -134,11 +138,7 @@ static bool local_join_path(XtcXirLocalToolchain *owner, const char *root, const
     if (!local_io(owner, xr_path_join_owned(&owner->policy, root, suffix, &joined))) return false;
     bool okay = local_path(owner, joined, directory, output); xr_compile_resources_free(joined); return okay;
 }
-static bool local_process(XtcXirLocalToolchain *owner, const XrProcessSpec *spec, XrProcessResult *output) {
-    XrToolchainProcess *process = NULL;
-    XrProcessStatus status = xtc_process_prepare(owner->resources, spec, &process);
-    if (status == XTC_PROCESS_OK) status = xtc_process_run(process, NULL, NULL, output);
-    xtc_process_free(process);
+static bool local_process_status(XtcXirLocalToolchain *owner, XrProcessStatus status) {
     if (status != XTC_PROCESS_OK) {
         XtcXirLocalStatus mapped = status == XTC_PROCESS_BUDGET ? XTC_XIR_LOCAL_BUDGET :
             status == XTC_PROCESS_OUT_OF_MEMORY ? XTC_XIR_LOCAL_OUT_OF_MEMORY :
@@ -150,6 +150,11 @@ static bool local_process(XtcXirLocalToolchain *owner, const XrProcessSpec *spec
             status == XTC_PROCESS_INVALID ? XTC_XIR_LOCAL_INVALID : XTC_XIR_LOCAL_IO;
         return local_fail(owner, mapped, XTC_XIR_LOCAL_PROCESS, status);
     }
+    return true;
+}
+static bool local_process_prepared(XtcXirLocalToolchain *owner, const XrToolchainProcess *process,
+    XrProcessResult *output) {
+    if (!local_process_status(owner,xtc_process_run(process,NULL,NULL,output))) return false;
     if (output->stdout_bytes.truncated || output->stderr_bytes.truncated)
         return local_fail(owner, XTC_XIR_LOCAL_BUDGET, XTC_XIR_LOCAL_PROCESS, XTC_PROCESS_BUDGET);
     if (output->exit_code) {
@@ -157,6 +162,12 @@ static bool local_process(XtcXirLocalToolchain *owner, const XrProcessSpec *spec
         return local_fail(owner, XTC_XIR_LOCAL_CHILD_FAILED, XTC_XIR_LOCAL_PROCESS, output->exit_code);
     }
     return true;
+}
+static bool local_process(XtcXirLocalToolchain *owner, const XrProcessSpec *spec, XrProcessResult *output) {
+    XrToolchainProcess *process=NULL;
+    bool okay=local_process_status(owner,xtc_process_prepare(owner->resources,spec,&process));
+    if (okay) okay=local_process_prepared(owner,process,output);
+    xtc_process_free(process); return okay;
 }
 #ifdef XR_OS_WINDOWS
 #include "xtc_xir_local_toolchain_windows.inc.c"
