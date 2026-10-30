@@ -4741,3 +4741,5 @@ add_subdirectory(ir/retired_builder)
 add_subdirectory(api/source_submission/correspondence)
 add_subdirectory(vm/builder_retirement)
 add_subdirectory(xir/task_result)
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/callable_array_transport.cmake")

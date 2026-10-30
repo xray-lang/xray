@@ -1,0 +1,11 @@
+add_executable(test_xir_callable_array_transport ${CMAKE_CURRENT_LIST_DIR}/test_xir_callable_array_transport.c)
+target_include_directories(test_xir_callable_array_transport PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_xir_callable_array_transport PRIVATE xray_xir_source xray_xir_vm)
+if(MSVC)
+    target_compile_options(test_xir_callable_array_transport PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_callable_array_transport PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME xir_callable_array_transport COMMAND test_xir_callable_array_transport "${PROJECT_SOURCE_DIR}/stdlib")
+set_tests_properties(xir_callable_array_transport PROPERTIES TIMEOUT 120 PROCESSORS 1 RUN_SERIAL TRUE
+    LABELS "unit;xir;checked;root-effects;ownership")

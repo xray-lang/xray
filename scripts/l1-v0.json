@@ -174,7 +174,8 @@
     "test_native_f64_text",
     "test_native_execution_allocations",
     "test_native_f64_i64_conversion",
-    "test_value_format_core"
+    "test_value_format_core",
+    "test_xir_callable_array_transport"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -507,7 +508,8 @@
     "native_execution_string_allocations",
     "native_f64_i64_conversion",
     "f64_i64_native",
-    "test_value_format_core"
+    "test_value_format_core",
+    "xir_callable_array_transport"
   ],
   "versionCommand": [
     "{build}/xray.exe",

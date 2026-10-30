@@ -14,7 +14,7 @@ typedef struct EffectScalarFlow {
     EffectTerms *terms;
     XrXirFunction *function;
     const EffectOrdinaryContexts *contexts;
-    const XrXirType *declared;
+    XrXirType *declared;
     XrXirType *values;
     uint8_t *fixed;
     uint32_t value_count;
@@ -24,7 +24,9 @@ typedef struct EffectScalarFlow {
 
 /* A return receiver pins the physical scalar type, not its opaque origin.
  * The temporary bit is removed before physical-vector selection. */
-enum { EFFECT_SCALAR_OPAQUE=1, EFFECT_SCALAR_RETURN_PIN=2 };
+enum { EFFECT_SCALAR_OPAQUE=1, EFFECT_SCALAR_RETURN_PIN=2, EFFECT_SCALAR_STORAGE_PIN=4 };
+
+#include "xxir_effect_context_storage.inc.c"
 
 static XrXirStatus effect_scalar_return_link(EffectScalarFlow *flow,
     uint32_t destination,uint32_t source) {
@@ -108,8 +110,11 @@ static XrXirStatus effect_scalar_assign(EffectScalarFlow *flow, uint32_t destina
     }
     if (flow->values[destination]!=actual) flow->changed=true;
     flow->values[destination]=actual;
+    XrXirType physical=actual;
+    status=effect_scalar_storage_physical(flow,destination,actual,&physical);
+    if (status!=XR_XIR_OK) return status;
     if (destination>=flow->function->parameter_count)
-        ((XrXirInstruction *)flow->function->instructions)[destination-flow->function->parameter_count].type=actual;
+        ((XrXirInstruction *)flow->function->instructions)[destination-flow->function->parameter_count].type=physical;
     return XR_XIR_OK;
 }
 
@@ -117,7 +122,8 @@ static XrXirStatus effect_scalar_transfer(EffectScalarFlow *flow, uint32_t desti
     if (source>=flow->value_count) return XR_XIR_BAD_VALUE;
     if (destination>=flow->value_count) return XR_XIR_BAD_VALUE;
 
-    XrXirStatus status=effect_scalar_return_link(flow,destination,source);
+    XrXirStatus status=effect_scalar_storage_link(flow,destination,source);
+    if (status==XR_XIR_OK) status=effect_scalar_return_link(flow,destination,source);
     if (status!=XR_XIR_OK) return status;
     if ((flow->fixed[source]&EFFECT_SCALAR_OPAQUE) && !(flow->fixed[destination]&EFFECT_SCALAR_OPAQUE)) {
         flow->fixed[destination]|=EFFECT_SCALAR_OPAQUE;flow->changed=true;
@@ -138,7 +144,8 @@ static XrXirStatus effect_scalar_phi(EffectScalarFlow *flow, uint32_t instructio
         uint32_t value=flow->function->operands[op.args[0]+a];
         if (value>=flow->value_count) return XR_XIR_BAD_VALUE;
 
-        XrXirStatus linked=effect_scalar_return_link(flow,destination,value);
+        XrXirStatus linked=effect_scalar_storage_link(flow,destination,value);
+        if (linked==XR_XIR_OK) linked=effect_scalar_return_link(flow,destination,value);
         if (linked!=XR_XIR_OK) return linked;
         if ((flow->fixed[value]&EFFECT_SCALAR_OPAQUE) && !(flow->fixed[destination]&EFFECT_SCALAR_OPAQUE)) {
             flow->fixed[destination]|=EFFECT_SCALAR_OPAQUE;flow->changed=true;
@@ -178,6 +185,11 @@ static XrXirStatus effect_scalar_capture(EffectScalarFlow *flow, uint32_t instru
             &contexts->uses,(uint32_t)(flow->function-contexts->functions),instruction,
             (uint32_t)op.immediate,&mask);
         if (status!=XR_XIR_OK) return status;
+        if (flow->fixed[destination]&EFFECT_SCALAR_STORAGE_PIN) {
+            const XrXirTypeNode *receiver=xr_xir_callable_signature(&flow->terms->types,flow->declared[destination]);
+            if (!receiver || !xr_xir_callable_root_accepts(!!(mask&XR_XIR_CALLABLE_ROOT_REQUIRED),
+                !!(mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED),receiver->flags)) return XR_XIR_BAD_TYPE;
+        }
         bound.flags=(bound.flags&XR_XIR_CALLABLE_NO_SUSPEND)|(mask?mask:XR_XIR_CALLABLE_ROOT_NONE);
         XrXirType actual=effect_term_intern(flow->terms,bound);
         if (flow->terms->status!=XR_XIR_OK) return flow->terms->status;
@@ -310,7 +322,8 @@ static XrXirStatus effect_scalar_flow(EffectScalarFlow *flow) {
             op==XR_XIR_PHI || op==XR_XIR_FUNCTION_REF)
             flow->values[flow->function->parameter_count+i]=XR_XIR_UNIT;
     }
-    status=effect_scalar_returns(flow);
+    status=effect_scalar_storage_prepare(flow);
+    if (status==XR_XIR_OK) status=effect_scalar_returns(flow);
     flow->changed=true;
     while (status==XR_XIR_OK && flow->changed) {
         flow->changed=false;
@@ -324,6 +337,8 @@ static XrXirStatus effect_scalar_flow(EffectScalarFlow *flow) {
         if ((flow->fixed[v]&EFFECT_SCALAR_RETURN_PIN) &&
             (flow->values[v]!=flow->function->result ||
              xr_xir_operand_type(flow->function,v)!=flow->function->result)) status=XR_XIR_BAD_TYPE;
+        if ((flow->fixed[v]&EFFECT_SCALAR_STORAGE_PIN) &&
+            xr_xir_operand_type(flow->function,v)!=flow->declared[v]) status=XR_XIR_BAD_TYPE;
         flow->fixed[v]&=EFFECT_SCALAR_OPAQUE;
     }
     return status;
