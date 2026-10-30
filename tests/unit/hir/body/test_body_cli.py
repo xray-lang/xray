@@ -59,7 +59,8 @@ def main():
                   ('callback', arrays['body_callback'], arrays['body_callback_expected']),
                   ('callback-family', arrays['body_callback_family'], arrays['body_callback_family_expected']),
                   ('handlers', arrays['body_handlers'], arrays['body_handlers_expected']),
-                  ('generic-comptime', arrays['body_generic_comptime'], arrays['body_generic_comptime_expected'])]
+                  ('generic-comptime', arrays['body_generic_comptime'], arrays['body_generic_comptime_expected']),
+                  ('core-calls', arrays['body_core_calls'], arrays['body_core_calls_expected'])]
         for name, raw, expected in inputs:
             source = folder/(name+'.xr'); source.write_bytes(raw)
             run(name+'-check', [args.binary, 'check', source], b'')

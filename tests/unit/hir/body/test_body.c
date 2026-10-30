@@ -94,6 +94,8 @@ int main(void) {
     write_bytes("handler-bad-name.out",body_handler_bad_name_expected,sizeof(body_handler_bad_name_expected)-1);
     write_bytes("generic-comptime.xr",body_generic_comptime,sizeof(body_generic_comptime)-1);
     write_bytes("generic-comptime.out",body_generic_comptime_expected,sizeof(body_generic_comptime_expected)-1);
+    write_bytes("core-calls.xr",body_core_calls,sizeof(body_core_calls)-1);
+    write_bytes("core-calls.out",body_core_calls_expected,sizeof(body_core_calls_expected)-1);
     for(size_t i=0;i<sizeof(body_refusals)/sizeof(body_refusals[0]);++i) {
         char path[128];CHECK(snprintf(path,sizeof(path),"%s.xr",body_refusals[i].name)>0);
         write_bytes(path,body_refusals[i].source,strlen(body_refusals[i].source));

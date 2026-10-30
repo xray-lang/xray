@@ -76,6 +76,8 @@ static void source_core_dispose(SourceContext *ctx,SourceContext *parent) {
     }
     xr_frontend_report_free(ctx->report);ctx->report=NULL;
     xr_hir_items_free(ctx->items);ctx->items=NULL;
+    xr_hir_body_end(ctx->typed_body);
+    xr_hir_body_free(ctx->typed_body);ctx->typed_body=NULL;
     source_release_retired_arrays(ctx);
     xr_xir_compile_construction_free(ctx->construction);
     ctx->construction=NULL;
