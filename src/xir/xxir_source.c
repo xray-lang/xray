@@ -2351,7 +2351,7 @@ static bool collect_declarations(SourceContext *ctx) {
                     if(node->is_exported) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"exported state is not admitted");
                     SourceName *symbol=add_name(ctx,&ctx->names[m],field->as.identifier.name,node);
                     if(!symbol)return false;
-                    symbol->kind=SOURCE_SLOT;symbol->index=slot;symbol->mutable=!node->as.destructure_decl.is_const;
+                    symbol->kind=SOURCE_SLOT;symbol->index=slot;symbol->module=m;symbol->mutable=!node->as.destructure_decl.is_const;
                     if(!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,0,source_destructure_range(ctx,field)))return false;
                     ctx->slots[slot++]=(XrXirSlot){m,XR_XIR_UNIT,symbol->mutable};
                 }
