@@ -50,7 +50,7 @@ static XrXirStatus instance_source_operation(XrXirCompileContext *context,XrXirA
     xr_xir_compile_source_result_free(&source);XrXirArtifact *received=NULL;
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&received,NULL);
     if (packet.bytes) memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(received,output,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(received,output,NULL, NULL);
     xr_xir_compile_artifact_free(received);return status;
 }
 static XrXirArtifact *instance_source(XrXirCompileContext *context,const char *kind) {

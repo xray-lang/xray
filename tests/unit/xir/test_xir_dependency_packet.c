@@ -29,7 +29,7 @@ int main(int argc,char **argv){CHECK(argc==1||argc==2);
  CHECK(xr_compile_resources_alloc(compile.resources,(size_t)size,(void **)&bytes)==XR_COMPILE_RESOURCE_OK);
  CHECK(fread(bytes,1,(size_t)size,file)==(size_t)size&&!fclose(file));XrXirArtifact *checked=NULL,*special=NULL,*lowered=NULL;
  CHECK(xr_xir_compile_checked_read(&compile,bytes,(size_t)size,&checked,NULL)==XR_XIR_OK);memset(bytes,0xcc,(size_t)size);xr_compile_resources_free(bytes);
- CHECK(xr_xir_compile_specialize(checked,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+ CHECK(xr_xir_compile_specialize(checked,&special,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
  CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
  const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
  CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);

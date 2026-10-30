@@ -46,7 +46,7 @@ static XrXirStatus pending_source(XrXirCompileContext *context,const char *kind,
         if (!table.binding_count) table.bindings=NULL;
         XrXirConstructionSpec spec={source.checked->construction->rows,source.checked->construction->count,
             source.checked->construction->materializations,source.checked->construction->materialization_count,&table};
-        status=xr_xir_compile_construction_new_v4(context,source.checked->module.types,&spec,xr_xir_compile_construction_slots(source.checked->construction),&construction);
+        status=xr_xir_compile_construction_new_v4(context,source.checked->module.types,&spec,xr_xir_compile_construction_slots(source.checked->construction),&construction, NULL);
         if (status==XR_XIR_OK) {
             XrXirModule built=source.checked->module;built.stage=XR_XIR_BUILT;
             status=xr_xir_compile_check_v2(context,&built,construction,output,NULL);
@@ -64,13 +64,13 @@ static void pending_normal(const char *kind) {
     if (status!=XR_XIR_OK) fprintf(stderr,"Pending Source %s status%u\n",kind,status);
     CHECK(status==XR_XIR_OK && source && xr_xir_compile_artifact_verify(source,NULL)==XR_XIR_OK);
     XirComptimePending *owner=NULL;XrXirDiagnostic diagnostic={0};
-    status=xr_xir_compile_comptime_pending(source,&owner,&diagnostic);
+    status=xr_xir_compile_comptime_pending(source,&owner,&diagnostic, NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"Pending %s status%u f%u b%u i%u\n",kind,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK);
     bool absent=!strcmp(kind,"unused") || !strcmp(kind,"none") || !strcmp(kind,"nested-open");CHECK((owner==NULL)==absent);
     if (owner) {
-        CHECK(xr_xir_compile_specialize(source,&closed,NULL)==XR_XIR_BAD_TYPE && !closed);
-        XirComptimePendingView view={0};CHECK(xr_xir_compile_comptime_pending_view(owner,&view,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_specialize(source,&closed,NULL, NULL)==XR_XIR_BAD_TYPE && !closed);
+        XirComptimePendingView view={0};CHECK(xr_xir_compile_comptime_pending_view(owner,&view,NULL, NULL)==XR_XIR_OK);
         CHECK(view.definition!=source && view.definition->context.resources==context.resources && view.types==view.definition->module.types);
         CHECK(view.definition->module.provenance && view.definition->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE);
         CHECK(view.argument_count==(!strcmp(kind,"multi")?2u:1u));
@@ -79,7 +79,7 @@ static void pending_normal(const char *kind) {
         CHECK(site && site->helper==view.site.helper && table->binding_count==source->construction->comptime.binding_count);
         XirComptimeSelection selection={&view.definition->module,view.types,view.site.caller,view.site.instruction,view.arguments,view.argument_count};
         const XrXirComptimeBinding *binding=NULL;
-        CHECK(xir_comptime_select(&context,view.definition->construction,&selection,&binding)==XR_XIR_BAD_TYPE && !binding);
+        CHECK(xir_comptime_select(&context,view.definition->construction,&selection,&binding, NULL)==XR_XIR_BAD_TYPE && !binding);
         if (!strcmp(kind,"generated")) {
             CHECK(view.types->count>source->module.types->count);
             CHECK(xr_xir_type_is_array(view.types,xr_xir_array_element(view.types,view.arguments[0])));
@@ -95,7 +95,7 @@ static void pending_normal(const char *kind) {
     }
     xr_xir_compile_artifact_free(source);xr_compile_resources_release(context.resources);
     if (owner) {
-        XirComptimePendingView view={0};CHECK(xr_xir_compile_comptime_pending_view(owner,&view,NULL)==XR_XIR_OK);
+        XirComptimePendingView view={0};CHECK(xr_xir_compile_comptime_pending_view(owner,&view,NULL, NULL)==XR_XIR_OK);
         CHECK(xr_xir_compile_artifact_verify(view.definition,NULL)==XR_XIR_OK);
     }
     size_t attempts=source_fixture_compile_attempts;source_fixture_compile_fail_at=attempts;

@@ -81,7 +81,7 @@ static void reference_dynamic_source_string(const XrXirCompileContext *context,X
         }
     }
     CHECK(literal);XrXirArtifact *closed=NULL;XrXirCheckedPacket wire={0};
-    CHECK(xr_xir_compile_specialize(source->checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source->checked,&closed,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(closed,&wire,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);XrXirValue output={0};
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
@@ -99,7 +99,7 @@ static void reference_dynamic_source_string(const XrXirCompileContext *context,X
 }
 static void reference_dynamic_direct(const XrXirCompileContext *context,XrXirSourceResult *source,bool owning,bool require_projection) {
     XrXirArtifact *closed=NULL;XrXirCheckedPacket wire={0};
-    CHECK(xr_xir_compile_specialize(source->checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source->checked,&closed,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(closed,&wire,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);XrXirValue output={0};
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t projects=0;

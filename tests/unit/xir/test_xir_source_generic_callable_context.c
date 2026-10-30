@@ -44,7 +44,7 @@ static const char source_generic_definition_text[] =
  * result-role/Unit-use, generic-call or body recipe admission. */
 static void source_generic_definition_source_negative(const XrXirCompileContext *context,const char *text) {
     XrCompileResourceStats baseline=library_compile_stats(context);XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-generic-definition-negative",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,strlen(text)};XrXirSourceResult result={0};
@@ -53,7 +53,7 @@ static void source_generic_definition_source_negative(const XrXirCompileContext 
     xr_compile_session_free(session);
     CHECK(status==XR_XIR_BAD_TYPE && !result.checked);
     xr_xir_compile_source_result_free(&result);xr_xir_compile_source_failure_free(&failure);
-    CHECK(library_compile_stats(context).live_bytes==baseline.live_bytes);
+    CHECK(library_compile_stats(context).held_bytes==baseline.held_bytes);
 }
 
 static uint32_t source_generic_definition_function(const XrXirModule *module,const char *name) {
@@ -93,7 +93,6 @@ static void source_generic_definition_negative(const XrXirArtifact *artifact,uin
     uint64_t bytes=(uint64_t)module->function_count*sizeof(*module->generics);
     CHECK(bytes<=SIZE_MAX);XrXirGeneric *generics=NULL;
     CHECK(xr_compile_resources_alloc(context->resources,(size_t)bytes,(void **)&generics)==XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_resources_work(context->resources,bytes)==XR_COMPILE_RESOURCE_OK);
     memcpy(generics,module->generics,(size_t)bytes);
     XrXirModule invalid=*module;invalid.generics=generics;
     XrXirConstraint constraints[2]={module->generics[keep].constraints[0],module->generics[keep].constraints[1]};
@@ -118,17 +117,17 @@ static void source_generic_definition_negative(const XrXirArtifact *artifact,uin
     XrXirType atomic_callback=module->functions[shape].parameters[0];
     request.declared=callback;request.actual=atomic_callback;
     CHECK(xir_effect_callable_bound_matches_definition(context,module,keep,&request)==XR_XIR_BAD_TYPE);
-    CHECK(library_compile_stats(context).live_bytes==sequence_baseline.live_bytes);
+    CHECK(library_compile_stats(context).held_bytes==sequence_baseline.held_bytes);
     request.actual=callback;
     CHECK(xir_effect_callable_bound_matches_definition(context,module,keep,&request)==XR_XIR_OK);
-    CHECK(library_compile_stats(context).live_bytes==sequence_baseline.live_bytes);
+    CHECK(library_compile_stats(context).held_bytes==sequence_baseline.held_bytes);
     request.declared=request.actual=atomic_callback;
     CHECK(xir_effect_callable_bound_matches_definition(context,module,shape,&request)==XR_XIR_OK);
     /* Its Atomic(PARAM0) is invalid under keep's unconstrained PARAM0. Full
      * type-use proof must refuse even though declared and actual IDs agree. */
     CHECK(xir_effect_callable_bound_matches_definition(context,module,keep,&request)==XR_XIR_BAD_TYPE);
     xr_compile_resources_free(generics);
-    CHECK(library_compile_stats(context).live_bytes==baseline.live_bytes);
+    CHECK(library_compile_stats(context).held_bytes==baseline.held_bytes);
     CHECK(module->generics[keep].parameter_count==2 && !module->generics[keep].constraints[0].markers);
     const XrXirTypeNode *signature=xr_xir_callable_signature(module->types,callback);
     CHECK(signature && signature->flags==XR_XIR_CALLABLE_ROOT_UNRESOLVED && signature->parameter_span==2);
@@ -162,10 +161,10 @@ static XrXirStatus source_generic_definition_operation(const XrXirCompileContext
 static XrXirStatus source_generic_definition_operation(const XrXirCompileContext *context,void *opaque) {
     bool inspect=*(bool *)opaque;XrCompilerSession *session=NULL;
     sgm_begin(context);
-    XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&session);
-    sgm_end(context,"session-new","prepare",opened==XR_COMPILER_SESSION_OK?XR_XIR_OK:
-        opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY);
-    if(opened!=XR_COMPILER_SESSION_OK)return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus opened=xr_compile_session_new(context->resources,&session);
+    sgm_end(context,"session-new","prepare",opened==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:
+        opened==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:XR_XIR_OUT_OF_MEMORY);
+    if(opened!=XR_COMPILE_RESOURCE_OK)return opened==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-generic-callable-context",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,source_generic_definition_text,sizeof(source_generic_definition_text)-1};
@@ -196,7 +195,7 @@ static XrXirStatus source_generic_definition_operation(const XrXirCompileContext
         if(status==XR_XIR_OK)sgm_artifact("read-template",read);
     }
     if(status==XR_XIR_OK) {
-        phase=4; sgm_begin(context); status=xr_xir_compile_specialize(read,&instance,&location);
+        phase=4; sgm_begin(context); status=xr_xir_compile_specialize(read,&instance,&location, NULL);
         sgm_end(context,"specialize-borrowed","public",status);
         if(status==XR_XIR_OK)sgm_artifact("specialized",instance);
     }

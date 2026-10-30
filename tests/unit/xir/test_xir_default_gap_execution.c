@@ -105,7 +105,7 @@ static XrXirStatus default_build(const XrXirCompileContext *context,unsigned var
 #else
     status=xr_xir_compile_checked_read(context,DEFAULT_SPEC.packet.bytes,DEFAULT_SPEC.packet.length,&checked,NULL);
 #endif
-    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&special,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&special,NULL, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
     if(status==XR_XIR_OK){CHECK(!xr_xir_compile_artifact_module(special)->defaults);status=xr_xir_compile_lower(special,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);}
     const XrXirModule *module=status==XR_XIR_OK?xr_xir_compile_artifact_module(lowered):NULL;

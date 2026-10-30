@@ -155,7 +155,7 @@ static XrXirStatus visibility_pipeline(const XrXirCompileContext *c, unsigned mo
     memset(&f,0,sizeof(f));
     if (status==XR_XIR_OK) { phase="read-template";status=xr_xir_compile_checked_read(c,first.bytes,first.length,&read,&d); }
     xr_xir_compile_checked_packet_free(&first);
-    if (status==XR_XIR_OK) { phase="specialize";status=xr_xir_compile_specialize(read,&instance,&d); }
+    if (status==XR_XIR_OK) { phase="specialize";status=xr_xir_compile_specialize(read,&instance,&d, NULL); }
     xr_xir_compile_artifact_free(read);read=NULL;
     if (status==XR_XIR_OK) { phase="write-instance";status=xr_xir_compile_checked_write(instance,&second,&d); }
     xr_xir_compile_artifact_free(instance);instance=NULL;

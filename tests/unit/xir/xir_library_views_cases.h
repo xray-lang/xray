@@ -25,7 +25,7 @@ static XrXirCheckedPacket library_views_packet(const char *entry,XrModuleIdentit
         XrXirDeclarations declarations=*d;XrXirSourceModule modules[4];uint32_t self=0;
         memcpy(modules,d->modules,sizeof(modules));modules[0].dependencies=&self;modules[0].dependency_count=1;
         declarations.modules=modules;malformed.declarations=&declarations;XrXirArtifact *rejected=NULL;
-        CHECK(xr_xir_compile_recheck_v2(library_context,&malformed,xr_xir_compile_artifact_construction(result.checked),&rejected,NULL)==XR_XIR_BAD_STRUCTURE&&!rejected);
+        CHECK(xr_xir_compile_recheck_v2(library_context,&malformed,xr_xir_compile_artifact_construction(result.checked),&rejected,NULL, NULL)==XR_XIR_BAD_STRUCTURE&&!rejected);
     }
     for(uint32_t m=0;m<d->module_count;++m){
         bool found=false;

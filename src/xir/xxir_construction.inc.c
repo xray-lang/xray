@@ -9,60 +9,91 @@
  * KEY CONCEPT:
  *   A live immutable input may use another ledger; every receiving copy is charged.
  */
+#include "xxir_receive_control.h"
 #include "xxir_comptime_construction.inc.c"
 #include "../shared/xr_utf8_core.h"
+typedef struct ConstructionUtf8Read {
+    XrCompileRequestControl *control;
+    XrXirStatus status;
+    uint32_t bytes;
+} ConstructionUtf8Read;
+static int construction_utf8_read(void *context,const uint8_t *address,uint8_t *output) {
+    ConstructionUtf8Read *read=context;
+    if (read->bytes==4096) {
+        read->status=xir_receive_poll(read->control);
+        if (read->status!=XR_XIR_OK) return 0;
+        read->bytes=0;
+    }
+    *output=*address;++read->bytes;
+    return 1;
+}
+static XrXirStatus construction_name_utf8(const char *name,size_t bytes,
+    XrCompileRequestControl *control) {
+    ConstructionUtf8Read read={control,xir_receive_poll(control),0};
+    if (read.status!=XR_XIR_OK) return read.status;
+    XrUtf8ScanResult result;
+    if (!xr_utf8_core_scan_strict_read((const uint8_t *)name,bytes,
+            construction_utf8_read,&read,&result)) return read.status;
+    if (result.error!=XR_UTF8_OK) return XR_XIR_BAD_STRUCTURE;
+    return xir_receive_poll(control);
+}
 static XrXirStatus construction_slots_shape(const XrXirCompileContext *context,
-    const XrXirSlotFacts *slots) {
+    const XrXirSlotFacts *slots,XrCompileRequestControl *control) {
     if (!xir_compile_context_valid(context) || !slots || (!!slots->rows!=!!slots->count))
         return XR_XIR_BAD_STRUCTURE;
 
+    uint32_t progress=0;
     for (uint32_t s=0;s<slots->count;++s) {
 
         const XrXirSlotFact *row=&slots->rows[s];
         if (row->slot!=s || !row->name || !row->name_length || row->exported>1)
             return XR_XIR_BAD_STRUCTURE;
 
-        if (memchr(row->name,0,row->name_length) ||
-            xr_utf8_core_scan_strict((const uint8_t *)row->name,row->name_length).error!=XR_UTF8_OK)
-            return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
+        status=xir_receive_nul_free(control,row->name,row->name_length);if (status!=XR_XIR_OK) return status;
+        status=construction_name_utf8(row->name,row->name_length,control);
+        if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }
 static XrXirStatus construction_slots_copy(const XrXirCompileContext *context,
-    const XrXirSlotFacts *input,XrXirSlotFacts *output) {
+    const XrXirSlotFacts *input,XrXirSlotFacts *output,XrCompileRequestControl *control) {
     XrXirStatus status=XR_XIR_OK;
-    XrXirSlotFact *rows=input->count?xir_compile_calloc(context,input->count,sizeof(*rows),&status):NULL;
+    XrXirSlotFact *rows=input->count?xir_type_copy_zero(context,input->count,sizeof(*rows),&status,control):NULL;
     if (status!=XR_XIR_OK) return status;
     output->rows=rows;output->count=input->count;
+    uint32_t progress=0;
     for (uint32_t s=0;s<input->count;++s) {
-
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
         rows[s]=input->rows[s];rows[s].name=NULL;
-        rows[s].name=xir_compile_copy(context,input->rows[s].name,rows[s].name_length,&status);
+        rows[s].name=xir_type_copy_bytes(context,input->rows[s].name,rows[s].name_length,1,&status,control);
         if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }
 /* Dense immutable facts share the same receiving Compile owner as the graph. */
 static XrXirStatus construction_rows_shape(const XrXirCompileContext *context,
-    const XrXirTypes *types, const XrXirConstructionRow *rows, uint32_t count) {
+    const XrXirTypes *types, const XrXirConstructionRow *rows, uint32_t count,XrCompileRequestControl *control) {
     if (!xir_compile_context_valid(context) || (!!rows != !!count)) return XR_XIR_BAD_STRUCTURE;
 
     const XrXirNominalTable *table = types ? types->nominals : NULL;
     uint32_t expected = table && table->declarations ? table->count : 0;
     if (count != expected) return XR_XIR_BAD_STRUCTURE;
+    uint32_t progress=0;
     for (uint32_t n = 0; n < count; ++n) {
-
+        XrXirStatus status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
         if (rows[n].field_count != table->declarations[n].field_count ||
             (!!rows[n].field_initializers != !!rows[n].field_count)) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
 }
 static XrXirStatus construction_materialization_shape(
-    const XrXirTypes *types,const XrXirMaterializationBinding *bindings,uint32_t count) {
+    const XrXirTypes *types,const XrXirMaterializationBinding *bindings,uint32_t count,XrCompileRequestControl *control) {
     if (!!bindings!=!!count) return XR_XIR_BAD_STRUCTURE;
     const XrXirNominalTable *table=types?types->nominals:NULL;
+    uint32_t progress=0;
     for (uint32_t i=0;i<count;++i) {
-
+        XrXirStatus status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
         const XrXirMaterializationBinding *row=&bindings[i];
         /* Ordinals belong to the complete input, not the receiver's remaining
          * quotas. Full checking bounds each coordinate against its actual body. */
@@ -90,25 +121,27 @@ XR_FUNC void xr_xir_compile_construction_free(XrXirConstruction *construction) {
 }
 XR_FUNC XrXirStatus xr_xir_compile_construction_new_v4(const XrXirCompileContext *context,
     const XrXirTypes *types, const XrXirConstructionSpec *input,
-    const XrXirSlotFacts *complete_slots, XrXirConstruction **output) {
+    const XrXirSlotFacts *complete_slots, XrXirConstruction **output, XrCompileRequestControl *control) {
     if (!output || *output || !input) return XR_XIR_BAD_STRUCTURE;
     const XrXirConstructionRow *rows=input->rows;uint32_t count=input->count;
-    XrXirStatus status = construction_rows_shape(context, types, rows, count);
+    XrXirStatus status = construction_rows_shape(context, types, rows, count,control);
     if (status==XR_XIR_OK) status=construction_materialization_shape(types,
-        input->materializations,input->materialization_count);
-    if (status==XR_XIR_OK) status=comptime_storage_shape(context,input->comptime);
-    if (status==XR_XIR_OK) status=construction_slots_shape(context,complete_slots);
+        input->materializations,input->materialization_count,control);
+    if (status==XR_XIR_OK) status=comptime_storage_shape(context,input->comptime,control);
+    if (status==XR_XIR_OK) status=construction_slots_shape(context,complete_slots,control);
     if (status != XR_XIR_OK) return status;
-    XrXirConstruction *owned = xir_compile_calloc(context, 1, sizeof(*owned), &status);
+    status=xir_receive_poll(control);if (status!=XR_XIR_OK) return status;
+    XrXirConstruction *owned = xir_type_copy_zero(context, 1, sizeof(*owned), &status,control);
     if (!owned) return status;
     owned->context = *context;
-    owned->rows = count ? xir_compile_calloc(context, count, sizeof(*owned->rows), &status) : NULL;
+    owned->rows = count ? xir_type_copy_zero(context, count, sizeof(*owned->rows), &status,control) : NULL;
     owned->count = count;
     if (status == XR_XIR_OK && count)
-        owned->kinds = xir_compile_calloc(context, count, sizeof(*owned->kinds), &status);
+        owned->kinds = xir_type_copy_zero(context, count, sizeof(*owned->kinds), &status,control);
     if (status != XR_XIR_OK) goto failed;
+    uint32_t progress=0;
     for (uint32_t n = 0; n < count; ++n) {
-
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) goto failed;
         XrXirConstructionRow *to = &owned->rows[n];
         owned->kinds[n] = types->nominals->declarations[n].kind;
         to->default_initializer = rows[n].default_initializer;
@@ -116,21 +149,22 @@ XR_FUNC XrXirStatus xr_xir_compile_construction_new_v4(const XrXirCompileContext
         uint64_t bytes = (uint64_t)to->field_count * sizeof(uint32_t);
         if (bytes > SIZE_MAX) { status = XR_XIR_BUDGET; goto failed; }
         if (bytes) {
-            to->field_initializers = xir_compile_copy(context, rows[n].field_initializers,
-                (size_t)bytes, &status);
+            to->field_initializers = xir_type_copy_bytes(context, rows[n].field_initializers,
+                (size_t)bytes,1,&status,control);
             if (!to->field_initializers) goto failed;
         }
     }
     if (input->materialization_count) {
         uint64_t bytes=(uint64_t)input->materialization_count*sizeof(*input->materializations);
         if (bytes>SIZE_MAX) { status=XR_XIR_BUDGET;goto failed; }
-        owned->materializations=xir_compile_copy(context,input->materializations,(size_t)bytes,&status);
+        owned->materializations=xir_type_copy_bytes(context,input->materializations,(size_t)bytes,1,&status,control);
         if (!owned->materializations) goto failed;
         owned->materialization_count=input->materialization_count;
     }
-    status=comptime_storage_copy(context,input->comptime,&owned->comptime);
-    if (status==XR_XIR_OK) status=construction_slots_copy(context,complete_slots,&owned->slots);
+    status=comptime_storage_copy(context,input->comptime,&owned->comptime,control);
+    if (status==XR_XIR_OK) status=construction_slots_copy(context,complete_slots,&owned->slots,control);
     if (status!=XR_XIR_OK) goto failed;
+    status=xir_receive_poll(control);if (status!=XR_XIR_OK) goto failed;
     *output = owned;
     return XR_XIR_OK;
 failed:
@@ -171,50 +205,60 @@ XR_FUNC const XrXirSlotFacts *xr_xir_compile_construction_slots(const XrXirConst
     return construction?&construction->slots:NULL;
 }
 XR_FUNC XrXirStatus xir_construction_shape(const XrXirCompileContext *context,
-    const XrXirTypes *types, const XrXirConstruction *construction) {
+    const XrXirTypes *types, const XrXirConstruction *construction, XrCompileRequestControl *control) {
     if (!xir_compile_context_valid(context) || !construction ||
         !xir_compile_context_valid(&construction->context)) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = construction_rows_shape(context, types, construction->rows, construction->count);
+    XrXirStatus status = construction_rows_shape(context, types, construction->rows, construction->count,control);
     if (status != XR_XIR_OK) return status;
     if (!!construction->kinds != !!construction->count) return XR_XIR_BAD_STRUCTURE;
+    uint32_t progress=0;
     for (uint32_t n = 0; n < construction->count; ++n) {
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
 
         if (construction->kinds[n] != types->nominals->declarations[n].kind)
             return XR_XIR_BAD_STRUCTURE;
     }
-    status=construction_materialization_shape(types,construction->materializations,construction->materialization_count);
-    if (status==XR_XIR_OK) status=comptime_storage_shape(context,&construction->comptime);
-    return status==XR_XIR_OK?construction_slots_shape(context,&construction->slots):status;
+    status=construction_materialization_shape(types,construction->materializations,construction->materialization_count,control);
+    if (status==XR_XIR_OK) status=comptime_storage_shape(context,&construction->comptime,control);
+    return status==XR_XIR_OK?construction_slots_shape(context,&construction->slots,control):status;
 }
 static XrXirStatus construction_compare_rows(
-    const XrXirConstruction *left,const XrXirConstruction *right,bool *same) {
+    const XrXirConstruction *left,const XrXirConstruction *right,bool *same,XrCompileRequestControl *control) {
+    uint32_t progress=0;
     for (uint32_t s=0;s<left->slots.count;++s) {
+        XrXirStatus status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
         const XrXirSlotFact *a=&left->slots.rows[s],*b=&right->slots.rows[s];
 
-        if (a->slot!=b->slot || a->name_length!=b->name_length || a->exported!=b->exported ||
-            (a->name_length && memcmp(a->name,b->name,a->name_length))) { *same=false;return XR_XIR_OK; }
+        if (a->slot!=b->slot || a->name_length!=b->name_length || a->exported!=b->exported) { *same=false;return XR_XIR_OK; }
+        int order=0;status=xir_receive_compare(control,a->name,b->name,a->name_length,&order);
+        if (status!=XR_XIR_OK) return status;
+        if (order) {*same=false;return XR_XIR_OK;}
     }
     for (uint32_t n=0;n<left->count;++n) {
+        XrXirStatus status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
         const XrXirConstructionRow *a=&left->rows[n],*b=&right->rows[n];
 
         if (left->kinds[n]!=right->kinds[n] || a->default_initializer!=b->default_initializer ||
             a->field_count!=b->field_count) { *same=false;return XR_XIR_OK; }
         for (uint32_t f=0;f<a->field_count;++f) {
-
+            status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
             if (a->field_initializers[f]!=b->field_initializers[f]) { *same=false;return XR_XIR_OK; }
         }
     }
     return XR_XIR_OK;
 }
 static XrXirStatus construction_compare_bindings(
-    const XrXirConstruction *left,const XrXirConstruction *right,bool *same) {
+    const XrXirConstruction *left,const XrXirConstruction *right,bool *same,XrCompileRequestControl *control) {
+    uint32_t progress=0;
     for (uint32_t m=0;m<left->materialization_count;++m) {
+        XrXirStatus status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
         const XrXirMaterializationBinding *a=&left->materializations[m],*b=&right->materializations[m];
 
         if (a->caller!=b->caller || a->instruction!=b->instruction ||
             a->function!=b->function || a->nominal!=b->nominal) { *same=false;return XR_XIR_OK; }
     }
     for (uint32_t s=0;s<left->comptime.site_count;++s) {
+        XrXirStatus status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
         const XrXirComptimeSite *a=&left->comptime.sites[s],*b=&right->comptime.sites[s];
 
         if (a->caller!=b->caller || a->instruction!=b->instruction || a->helper!=b->helper) {
@@ -222,81 +266,88 @@ static XrXirStatus construction_compare_bindings(
         }
     }
     for (uint32_t b=0;b<left->comptime.binding_count;++b) {
+        XrXirStatus status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
         const XrXirComptimeBinding *a=&left->comptime.bindings[b],*c=&right->comptime.bindings[b];
 
         if (a->site!=c->site || a->argument_count!=c->argument_count || a->provider!=c->provider) {
             *same=false;return XR_XIR_OK;
         }
 
-        if (xir_comptime_key_order(a,c)) { *same=false;return XR_XIR_OK; }
+        int order=0;status=xir_comptime_key_order(a,c,&order,control);
+        if (status!=XR_XIR_OK) return status;
+        if (order) { *same=false;return XR_XIR_OK; }
     }
     return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xir_construction_compare(const XrXirCompileContext *context,
     const XrXirTypes *types,const XrXirConstruction *left,
-    const XrXirConstruction *right,bool *same) {
+    const XrXirConstruction *right,bool *same, XrCompileRequestControl *control) {
     if (!same) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=xir_construction_shape(context,types,right);
-    if (status==XR_XIR_OK) status=xir_construction_shape(context,types,left);
+    XrXirStatus status=xir_construction_shape(context,types,right,control);
+    if (status==XR_XIR_OK) status=xir_construction_shape(context,types,left,control);
     if (status!=XR_XIR_OK) return status;
 
     bool equal=left->count==right->count && left->slots.count==right->slots.count &&
         left->materialization_count==right->materialization_count &&
         left->comptime.site_count==right->comptime.site_count &&
         left->comptime.binding_count==right->comptime.binding_count;
-    if (equal) status=construction_compare_rows(left,right,&equal);
-    if (status==XR_XIR_OK && equal) status=construction_compare_bindings(left,right,&equal);
+    status=xir_receive_poll(control);
+    if (status==XR_XIR_OK && equal) status=construction_compare_rows(left,right,&equal,control);
+    if (status==XR_XIR_OK && equal) status=construction_compare_bindings(left,right,&equal,control);
+    if (status==XR_XIR_OK) status=xir_receive_poll(control);
     if (status==XR_XIR_OK) *same=equal;
     return status;
 }
 XR_FUNC XrXirStatus xir_construction_clone(const XrXirCompileContext *context,
-    const XrXirTypes *types, const XrXirConstruction *source, XrXirConstruction **output) {
-    XrXirStatus status = xir_construction_shape(context, types, source);
+    const XrXirTypes *types, const XrXirConstruction *source, XrXirConstruction **output, XrCompileRequestControl *control) {
+    XrXirStatus status = xir_construction_shape(context, types, source,control);
     XrXirConstructionSpec input={source?source->rows:NULL,source?source->count:0,
         source?source->materializations:NULL,source?source->materialization_count:0,source?&source->comptime:NULL};
-    return status == XR_XIR_OK ? xr_xir_compile_construction_new_v4(context,types,&input,&source->slots,output) : status;
+    return status == XR_XIR_OK ? xr_xir_compile_construction_new_v4(context,types,&input,&source->slots,output,control) : status;
 }
 XR_FUNC XrXirStatus xir_construction_lower(const XrXirCompileContext *context,
-    const XrXirTypes *types,const XrXirConstruction *source,XrXirConstruction **output) {
+    const XrXirTypes *types,const XrXirConstruction *source,XrXirConstruction **output, XrCompileRequestControl *control) {
     if (!source || source->comptime.site_count || source->comptime.binding_count) return XR_XIR_BAD_STRUCTURE;
     XrXirConstructionSpec input={NULL,0,source->materializations,source->materialization_count,NULL};
-    return xr_xir_compile_construction_new_v4(context,types,&input,&source->slots,output);
+    return xr_xir_compile_construction_new_v4(context,types,&input,&source->slots,output,control);
 }
 /* Only nominal helper bindings are cleared. Slot facts remain explicit and
  * complete; a zero-slot owner cannot admit a module containing real slots. */
 XR_FUNC XrXirStatus xir_construction_project(const XrXirCompileContext *context,
-    const XrXirTypes *types,const XrXirSlotFacts *slots,XrXirConstruction **output) {
+    const XrXirTypes *types,const XrXirSlotFacts *slots,XrXirConstruction **output, XrCompileRequestControl *control) {
     if (!xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=construction_slots_shape(context,slots);
+    XrXirStatus status=construction_slots_shape(context,slots,control);
     if (status!=XR_XIR_OK) return status;
     const XrXirNominalTable *table = types ? types->nominals : NULL;
     uint32_t count = table && table->declarations ? table->count : 0;
-    XrXirConstruction *owned = xir_compile_calloc(context, 1, sizeof(*owned), &status);
+    XrXirConstruction *owned = xir_type_copy_zero(context, 1, sizeof(*owned), &status,control);
     if (!owned) return status;
     owned->context = *context;
-    status=construction_slots_copy(context,slots,&owned->slots);
+    status=construction_slots_copy(context,slots,&owned->slots,control);
     if (status!=XR_XIR_OK) goto failed;
     owned->count = count;
-    owned->rows = count ? xir_compile_calloc(context, count, sizeof(*owned->rows), &status) : NULL;
+    owned->rows = count ? xir_type_copy_zero(context, count, sizeof(*owned->rows), &status,control) : NULL;
     if (status == XR_XIR_OK && count)
-        owned->kinds = xir_compile_calloc(context, count, sizeof(*owned->kinds), &status);
+        owned->kinds = xir_type_copy_zero(context, count, sizeof(*owned->kinds), &status,control);
     if (status != XR_XIR_OK) goto failed;
+    uint32_t progress=0;
     for (uint32_t n = 0; n < count; ++n) {
-
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) goto failed;
         XrXirConstructionRow *row = &owned->rows[n];
         owned->kinds[n] = table->declarations[n].kind;
         row->field_count = table->declarations[n].field_count;
         if (row->field_count) {
-            row->field_initializers = xir_compile_calloc(context, row->field_count, sizeof(uint32_t), &status);
+            row->field_initializers = xir_type_copy_zero(context, row->field_count, sizeof(uint32_t), &status,control);
             if (!row->field_initializers) goto failed;
         }
     }
+    status=xir_receive_poll(control);if (status!=XR_XIR_OK) goto failed;
     *output = owned; return XR_XIR_OK;
 failed:
     xr_xir_compile_construction_free(owned); return status;
 }
 XR_FUNC XrXirStatus xir_construction_empty(const XrXirCompileContext *context,
-    const XrXirTypes *types,XrXirConstruction **output) {
+    const XrXirTypes *types,XrXirConstruction **output, XrCompileRequestControl *control) {
     const XrXirSlotFacts slots={NULL,0};
-    return xir_construction_project(context,types,&slots,output);
+    return xir_construction_project(context,types,&slots,output,control);
 }

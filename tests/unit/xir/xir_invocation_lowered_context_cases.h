@@ -97,7 +97,7 @@ static XrXirStatus conditional_invocation_lowered_context(const XrXirCompileCont
     XrXirDiagnostic diagnostic={0};uint32_t phase=0;uint64_t selected_bodies=0;
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,&diagnostic);
     if (status==XR_XIR_OK) { phase=1;status=xr_xir_compile_artifact_verify(checked,&diagnostic); }
-    if (status==XR_XIR_OK) { phase=2;status=xr_xir_compile_specialize(checked,&specialized,&diagnostic); }
+    if (status==XR_XIR_OK) { phase=2;status=xr_xir_compile_specialize(checked,&specialized,&diagnostic, NULL); }
     if (status==XR_XIR_OK) { phase=3;status=xr_xir_compile_artifact_verify(specialized,&diagnostic); }
     if (status==XR_XIR_OK && mode && oracle)
         status=invocation_lowered_return_oracle(xr_xir_compile_artifact_module(specialized));

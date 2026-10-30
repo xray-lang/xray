@@ -41,13 +41,13 @@ extern const uint32_t default_invoke_export_indices[14];
 #include "xir_effect_witness_cases.h"
 static void default_invoke_effect_cuts(const XrXirArtifact *source) {
     XrXirCompileContext context=default_context(default_limits());XrCompileResourceStats baseline=default_stats(&context);XrXirArtifact *copy=NULL;
-    CHECK(xr_xir_compile_recheck_v2(&context, xr_xir_compile_artifact_module(source), xr_xir_compile_artifact_construction(source), &copy, NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(&context, xr_xir_compile_artifact_module(source), xr_xir_compile_artifact_construction(source), &copy, NULL, NULL)==XR_XIR_OK);
     XrCompileResourceStats setup=default_stats(&context);xr_xir_compile_artifact_free(copy);
     CHECK(default_stats(&context).live_bytes==baseline.live_bytes);xr_compile_resources_release(context.resources);
     for(unsigned axis=0;axis<2;++axis){XrCompileResourceLimits limits=default_limits();
         if(axis==0)limits.work=setup.work;else limits.allocated_bytes=setup.allocated_bytes;
         context=default_context(limits);baseline=default_stats(&context);copy=NULL;
-        CHECK(xr_xir_compile_recheck_v2(&context, xr_xir_compile_artifact_module(source), xr_xir_compile_artifact_construction(source), &copy, NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_recheck_v2(&context, xr_xir_compile_artifact_module(source), xr_xir_compile_artifact_construction(source), &copy, NULL, NULL)==XR_XIR_OK);
         XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_analyze(copy,&effects)==XR_XIR_BUDGET && !effects);
         xr_xir_compile_artifact_free(copy);CHECK(default_stats(&context).live_bytes==baseline.live_bytes);xr_compile_resources_release(context.resources);
     }
@@ -131,7 +131,7 @@ static XrXirStatus default_build(const XrXirCompileContext *context,unsigned var
 #else
     status=xr_xir_compile_checked_read(context,DEFAULT_SPEC.packet.bytes,DEFAULT_SPEC.packet.length,&checked,NULL);
 #endif
-    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&special,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&special,NULL, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
     if(status==XR_XIR_OK){CHECK(!xr_xir_compile_artifact_module(special)->defaults);status=xr_xir_compile_lower(special,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);}
     const XrXirModule *module=status==XR_XIR_OK?xr_xir_compile_artifact_module(lowered):NULL;

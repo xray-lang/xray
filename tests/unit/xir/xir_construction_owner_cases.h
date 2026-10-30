@@ -29,7 +29,7 @@ static void construction_dense_owner(void) {
         XrXirNominalTable table={&declaration,1,NULL};XrXirTypes types={0};types.nominals=&table;
         uint32_t helpers[2]={0,0};XrXirConstructionRow row={0,helpers,2};
         XrXirConstruction *source=NULL,*copy=NULL;
-        CHECK(xr_xir_compile_construction_new_v4(&producer,&types,&(XrXirConstructionSpec){&row,1,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&source)==XR_XIR_OK);
+        CHECK(xr_xir_compile_construction_new_v4(&producer,&types,&(XrXirConstructionSpec){&row,1,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&source, NULL)==XR_XIR_OK);
         helpers[0]=UINT32_MAX;
         CHECK(xr_xir_compile_construction_row(source,0)->field_initializers[0]==0);
         uint64_t exact_bytes=sizeof(XrCompileResources)+4*sizeof(CompileAllocation)+92;
@@ -46,7 +46,7 @@ static void construction_dense_owner(void) {
         if (mode>=1 && mode<=4) fail_at=start+mode-1;
         XrXirStatus expected=mode>=1 && mode<=4?XR_XIR_OUT_OF_MEMORY:
             mode>=5 && (mode-5)%2?XR_XIR_BUDGET:XR_XIR_OK;
-        CHECK(xir_construction_clone(&receiver,&types,source,&copy)==expected);
+        CHECK(xir_construction_clone(&receiver,&types,source,&copy, NULL)==expected);
         XrCompileResourceStats used={0};CHECK(xr_compile_resources_stats(receiver.resources,&used)==XR_COMPILE_RESOURCE_OK);
         if (expected==XR_XIR_OK) {
             CHECK(copy && copy!=source && copy->context.resources==receiver.resources && attempts==start+4);
@@ -58,16 +58,16 @@ static void construction_dense_owner(void) {
                 got->field_initializers!=xr_xir_compile_construction_row(source,0)->field_initializers);
             if (!mode) {
                 XrXirConstruction *untouched=copy;size_t before_attempts=attempts;
-                CHECK(xir_construction_clone(&receiver,&types,source,&untouched)==XR_XIR_BAD_STRUCTURE && untouched==copy);
+                CHECK(xir_construction_clone(&receiver,&types,source,&untouched, NULL)==XR_XIR_BAD_STRUCTURE && untouched==copy);
                 CHECK(attempts==before_attempts);
                 XrXirConstruction *bad=NULL;
-                CHECK(xir_construction_clone(&receiver,&types,NULL,&bad)==XR_XIR_BAD_STRUCTURE && !bad);
+                CHECK(xir_construction_clone(&receiver,&types,NULL,&bad, NULL)==XR_XIR_BAD_STRUCTURE && !bad);
                 declaration.field_count=1;
-                CHECK(xir_construction_clone(&receiver,&types,source,&bad)==XR_XIR_BAD_STRUCTURE && !bad);
+                CHECK(xir_construction_clone(&receiver,&types,source,&bad, NULL)==XR_XIR_BAD_STRUCTURE && !bad);
                 declaration.field_count=2;declaration.kind=XR_XIR_NOMINAL_CLASS;
-                CHECK(xir_construction_clone(&receiver,&types,source,&bad)==XR_XIR_BAD_STRUCTURE && !bad);
+                CHECK(xir_construction_clone(&receiver,&types,source,&bad, NULL)==XR_XIR_BAD_STRUCTURE && !bad);
                 declaration.kind=XR_XIR_NOMINAL_STRUCT;table.count=0;
-                CHECK(xir_construction_clone(&receiver,&types,source,&bad)==XR_XIR_BAD_STRUCTURE && !bad);
+                CHECK(xir_construction_clone(&receiver,&types,source,&bad, NULL)==XR_XIR_BAD_STRUCTURE && !bad);
                 table.count=1;CHECK(attempts==before_attempts);
             }
         } else {
@@ -75,7 +75,7 @@ static void construction_dense_owner(void) {
             if (expected==XR_XIR_OUT_OF_MEMORY) CHECK(attempts==start+mode);
             else {
                 /* Original receiving limits and consumed work/storage remain. */
-                CHECK(xir_construction_clone(&receiver,&types,source,&copy)==XR_XIR_BUDGET && !copy);
+                CHECK(xir_construction_clone(&receiver,&types,source,&copy, NULL)==XR_XIR_BUDGET && !copy);
                 CHECK(live==baseline_live && physical==baseline_physical);
             }
         }
@@ -109,7 +109,7 @@ static void construction_cross_owner(void) {
         size_t start=attempts,physical_before=physical,live_before=live;
         if (failure!=SIZE_MAX) fail_at=start+failure;
         XrXirStatus status=xr_xir_compile_recheck_v2(&receiver,
-            xr_xir_compile_artifact_module(checked),facts,&copy,NULL);
+            xr_xir_compile_artifact_module(checked),facts,&copy,NULL, NULL);
         CHECK(xr_compile_resources_stats(receiver.resources,&after)==XR_COMPILE_RESOURCE_OK);
         if (failure==SIZE_MAX) {
             CHECK(status==XR_XIR_OK && copy && copy!=checked);

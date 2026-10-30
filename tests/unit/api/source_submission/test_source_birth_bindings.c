@@ -99,7 +99,7 @@ static void birth_normal(void) {
     SubmissionBindingDraft wrong={.owner=owned.owner,.checked=last.result->checked};
     XrXirSpecializationReceiver rejected={&wrong,submission_receive_bindings};XrXirArtifact *empty=NULL;
     size_t live=runtime_live,bytes=runtime_bytes;
-    CHECK(xr_xir_compile_specialize_receive(first.result->checked,&rejected,&empty,NULL)==XR_XIR_BAD_STRUCTURE && !empty);
+    CHECK(xr_xir_compile_specialize_receive(first.result->checked,&rejected,&empty,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !empty);
     CHECK(runtime_live==live && runtime_bytes==bytes);
     submission_close(&owned);
     puts("Actual Source ordinal remap; old42/new99; old Int11/new Bool1; separate serials; abort/Unit/template shadow and receiver failure preserved");

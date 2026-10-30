@@ -39,7 +39,7 @@ static void path_layout_cases(XrXirArtifact *closed) {
         budget.limits.frame_bytes=40+2*sizeof(XrXirValuePathStep)-minus;
         XrXirArtifact *read=NULL,*special=NULL,*lowered=NULL;
         CHECK(xr_xir_compile_checked_read(&budget,closed->checked_packet.bytes,closed->checked_packet.length,&read,NULL)==XR_XIR_OK);
-        CHECK(xr_xir_compile_specialize(read,&special,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_specialize(read,&special,NULL, NULL)==XR_XIR_OK);
         CHECK(xr_xir_compile_lower(special,&closed->target, NULL,&lowered,NULL)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
         CHECK((lowered!=NULL)==!minus);
         xr_xir_compile_artifact_free(lowered);lowered=NULL;xr_xir_compile_artifact_free(special);special=NULL;xr_xir_compile_artifact_free(read);read=NULL;
@@ -90,7 +90,7 @@ static void path_array_checked_cases(void) {
             CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
             if (!mode) path_array_packet_attacks(&packet);
             CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
-            CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
             CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
             XrXirArtifact *lowered = NULL;
             XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
@@ -175,7 +175,7 @@ static void path_ancestor_checked_cases(void) {
             XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL, *closed = NULL, *lowered = NULL;
             CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
             CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
-            CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
             const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
             CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
             xr_xir_compile_artifact_free(lowered);lowered=NULL; xr_xir_compile_artifact_free(closed);closed=NULL; xr_xir_compile_artifact_free(decoded);decoded=NULL;

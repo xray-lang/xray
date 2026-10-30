@@ -25,7 +25,7 @@ static XrXirStatus literal_job(XrXirCompileContext *context,const char *kind) {
     xr_xir_compile_instance_literals_free(&result);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&received,NULL);
     xr_xir_compile_checked_packet_free(&packet);
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(received,&specialized,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(received,&specialized,NULL, NULL);
     xr_xir_compile_artifact_free(received);uint32_t function=UINT32_MAX;
     if (status==XR_XIR_OK) {
         for (uint32_t f=0;f<specialized->module.function_count;++f)

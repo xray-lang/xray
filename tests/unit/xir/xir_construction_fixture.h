@@ -21,7 +21,7 @@ static inline XrXirStatus xir_fixture_construction(const XrXirCompileContext *co
     const XrXirTypes *types, XrXirConstruction **output) {
     /* Admit raw fixture storage before deriving the dense zero denominator. */
     XrXirStatus status = xr_xir_compile_types_structure_verify(context, types);
-    return status == XR_XIR_OK ? xir_construction_empty(context, types, output) : status;
+    return status == XR_XIR_OK ? xir_construction_empty(context, types, output, NULL) : status;
 }
 static inline bool xir_fixture_invalid_prefix(const XrXirCompileContext *context,
     const XrXirModule *module) {
@@ -47,7 +47,7 @@ static inline XrXirStatus xir_fixture_module_construction(const XrXirCompileCont
     }
     XrXirSlotFacts slots={rows,count};
     XrXirConstructionSpec input={nominal->rows,nominal->count,NULL,0,NULL};
-    if (status==XR_XIR_OK) status=xr_xir_compile_construction_new_v4(context,module->types,&input,&slots,output);
+    if (status==XR_XIR_OK) status=xr_xir_compile_construction_new_v4(context,module->types,&input,&slots,output, NULL);
     xr_compile_resources_free(rows);xr_xir_compile_construction_free(nominal);return status;
 }
 static inline void xir_fixture_preparation_diagnostic(XrXirStatus status,XrXirDiagnostic *diagnostic) {
@@ -81,10 +81,10 @@ static inline XrXirStatus xir_fixture_verify(const XrXirCompileContext *context,
 static inline XrXirStatus xir_fixture_recheck(const XrXirCompileContext *context,
     const XrXirModule *module, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
     if (xir_fixture_invalid_prefix(context,module) || !output || *output || module->stage!=XR_XIR_CHECKED)
-        return xr_xir_compile_recheck_v2(context,module,NULL,output,diagnostic);
+        return xr_xir_compile_recheck_v2(context,module,NULL,output,diagnostic, NULL);
     XrXirConstruction *facts = NULL;
     XrXirStatus status = xir_fixture_module_construction(context, module, &facts);
-    if (status == XR_XIR_OK) status = xr_xir_compile_recheck_v2(context, module, facts, output, diagnostic);
+    if (status == XR_XIR_OK) status = xr_xir_compile_recheck_v2(context, module, facts, output, diagnostic, NULL);
     else xir_fixture_preparation_diagnostic(status,diagnostic);
     xr_xir_compile_construction_free(facts);
     if (diagnostic) diagnostic->status = status;

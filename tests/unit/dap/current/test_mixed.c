@@ -46,7 +46,7 @@ static void mixed_prepare(MixedFixture *fixture) {
     XrXirProgramSpec native=child_callable_native_program;CHECK(native.entry_count==MIX_FUNCTIONS);
     XrXirArtifact *checked=NULL,*closed=NULL;
     CHECK(xr_xir_compile_checked_read(&fixture->context,native.packet.bytes,native.packet.length,&checked,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_lower(closed,&native.target, NULL,&fixture->lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};
     CHECK(xr_xir_domain_new_budgeted(1048576,&budget,&fixture->domain)==XR_XIR_VALUE_OK);

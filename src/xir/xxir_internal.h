@@ -36,11 +36,11 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *
     const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_provenance_free(XrXirProvenance *provenance);
 XR_FUNC XrXirStatus xr_xir_compile_provenance_copy(const XrXirCompileContext *compile_context,
-    const XrXirProvenance *source, XrXirProvenance **output);
+    const XrXirProvenance *source, XrXirProvenance **output, XrCompileRequestControl *control);
 /* Only the same specialization call supplies the fresh owning derivation.
  * Full Source verification and physical correspondence precede every copy. */
 XR_FUNC XrXirStatus xr_xir_compile_provenance_copy_source_effects(const XrXirCompileContext *context,
-    const XrXirProvenance *source, const XrXirEffects *source_effects, XrXirProvenance **output);
+    const XrXirProvenance *source, const XrXirEffects *source_effects, XrXirProvenance **output, XrCompileRequestControl *control);
 XR_FUNC XrXirStatus xir_effects_source_body_match(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirEffects *effects);
 /* Exact Lowered fields are compared without allocating or running callbacks.
@@ -138,21 +138,21 @@ static inline bool xir_artifact_is_evaluation(const XrXirArtifact *artifact) {
 /* The private packet grammar cannot enter ordinary Checked transport or a
  * runtime Program. It owns the same complete current semantic field traversal. */
 XR_FUNC XrXirStatus xir_evaluation_write(const XrXirArtifact *artifact,
-    XrXirCheckedPacket *output,XrXirDiagnostic *diagnostic);
+    XrXirCheckedPacket *output,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
 XR_FUNC XrXirStatus xir_evaluation_read(const XrXirCompileContext *context,
-    const void *bytes,size_t length,XrXirArtifact **output,XrXirDiagnostic *diagnostic);
+    const void *bytes,size_t length,XrXirArtifact **output,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
 
 /* Immutable Source inputs are owned only by a genuine final Checked Template.
  * Acquisition repeats full current field/permission and independent terminal
  * proof on that same live ledger. The returned lifetime lease is no permission;
  * each later Artifact operation still performs its complete fresh admission. */
 XR_FUNC XrXirStatus xir_source_facts_acquire(const XrXirArtifact *artifact,
-    XirSourceFacts **output,XrXirDiagnostic *diagnostic);
+    XirSourceFacts **output,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
 XR_FUNC void xir_source_facts_release(XirSourceFacts *facts);
 XR_FUNC const XrXirEffects *xir_source_facts_effects(const XirSourceFacts *facts);
 /* Only the private decoder calls this on its unpublished complete EOF owner. */
 XR_FUNC XrXirStatus xir_source_facts_prepare_decoded(XrXirArtifact *artifact,
-    XrXirDiagnostic *diagnostic);
+    XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
 XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *context,
     const XrXirModule *source,const XrXirEffects *effects);
 
@@ -213,7 +213,7 @@ XR_FUNC XrXirStatus xr_xir_effects_go_safe(const XrXirEffects *effects, uint32_t
 XR_FUNC XrXirEffect xr_xir_effects_task_creation(const XrXirEffects *effects, uint32_t function);
 
 XR_FUNC XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact, XrCompileRequestControl *control);
-XR_FUNC XrXirStatus xr_xir_compile_recheck_v2(const XrXirCompileContext *compile_context, const XrXirModule *checked, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_recheck_v2(const XrXirCompileContext *compile_context, const XrXirModule *checked, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
 /* Rejection preserves both slots. Acceptance clears the unique provenance
  * slot and every subsequent failure releases that owner. The main body and
  * construction are still cloned; source and final receiving proofs are fresh.
@@ -224,7 +224,7 @@ typedef struct XirProvenanceReceiving {
 } XirProvenanceReceiving;
 XR_FUNC XrXirStatus xr_xir_compile_recheck_provenance_take(const XrXirCompileContext *context,
     const XrXirModule *checked, const XirProvenanceReceiving *receiving,
-    XrXirProvenance **owned_provenance, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+    XrXirProvenance **owned_provenance, XrXirArtifact **output, XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
 XR_FUNC XrXirStatus xr_xir_compile_layout_verify(const XrXirArtifact *artifact);
 /* Only the complete artifact checker in this call supplies the metadata
  * admission. Every physical row and function bound is still recomputed. */
@@ -247,6 +247,12 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower(const XrXirCompileContext 
  * synchronously and never become part of the packet or its input artifact. */
 XR_FUNC XrXirStatus xir_checked_write(const XrXirArtifact *artifact,
     XrXirCheckedPacket *output, XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
+XR_FUNC XrXirStatus xir_checked_read(const XrXirCompileContext *context,const void *bytes,size_t length,
+    XrXirArtifact **output,XrXirDiagnostic *diagnostic,XrCompileRequestControl *control);
+XR_FUNC XrXirStatus xir_artifact_verify(const XrXirArtifact *artifact,
+    XrXirDiagnostic *diagnostic,XrCompileRequestControl *control);
+XR_FUNC XrXirStatus xir_check(const XrXirCompileContext *context,const XrXirModule *built,
+    const XrXirConstruction *construction,XrXirArtifact **output,XrXirDiagnostic *diagnostic,XrCompileRequestControl *control);
 
 
 #endif // XXIR_INTERNAL_H

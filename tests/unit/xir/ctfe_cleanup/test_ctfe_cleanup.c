@@ -139,7 +139,7 @@ static XrXirArtifact *receive(const XrXirCompileContext *receiver,const char *pa
     XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(receiver,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,'!',packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(empty>0 && xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
+    CHECK(empty>0 && xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     xr_sha256(packet.bytes,packet.length,identity);xr_xir_compile_checked_packet_free(&packet);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

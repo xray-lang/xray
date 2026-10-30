@@ -104,7 +104,7 @@ static XrXirStatus operation(const XrXirCompileContext *context,const char *text
     status=xr_xir_compile_checked_read(context,wire.bytes,wire.length,&received,NULL);
     memset(wire.bytes,0xa5,wire.length);xr_xir_compile_checked_packet_free(&wire);
     if (status!=XR_XIR_OK) { CHECK(!received);goto done; }
-    status=xr_xir_compile_specialize(received,&closed,NULL);xr_xir_compile_artifact_free(received);received=NULL;
+    status=xr_xir_compile_specialize(received,&closed,NULL, NULL);xr_xir_compile_artifact_free(received);received=NULL;
     if (status!=XR_XIR_OK) { CHECK(!closed);goto done; }
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);xr_xir_compile_artifact_free(closed);closed=NULL;

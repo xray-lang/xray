@@ -34,7 +34,7 @@ XR_FUNC XrXirStatus xir_checked_write(const XrXirArtifact *artifact, XrXirChecke
     if (xir_artifact_is_evaluation(artifact)) return checked_error(XR_XIR_BAD_STAGE,diagnostic);
     XrXirStatus status=control?xir_compile_resource_status(xr_compile_request_control_poll(control)):XR_XIR_OK;
     if (status!=XR_XIR_OK) return checked_error(status,diagnostic);
-    status = xr_xir_compile_artifact_verify(artifact, diagnostic);
+    status = xir_artifact_verify(artifact,diagnostic,control);
     if (status != XR_XIR_OK) return status;
     return checked_encode(artifact, output, diagnostic, control);
 }
@@ -43,7 +43,7 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_write(const XrXirArtifact *artifact,
     return xir_checked_write(artifact,output,diagnostic,NULL);
 }
 static XrXirStatus checked_read_mode(const XrXirCompileContext *compile_context,const void *bytes,size_t length,
-    XrXirArtifact **output,XrXirDiagnostic *diagnostic,bool evaluation) {
+    XrXirArtifact **output,XrXirDiagnostic *diagnostic,bool evaluation,XrCompileRequestControl *control) {
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
@@ -64,10 +64,14 @@ static XrXirStatus checked_read_mode(const XrXirCompileContext *compile_context,
         c.status=XR_XIR_BAD_STRUCTURE; goto decode_failure;
     }
     if (stage != XR_XIR_CHECKED) { c.status=XR_XIR_BAD_STAGE; goto decode_failure; }
+    c.status=xir_receive_poll(control);
+    if (c.status!=XR_XIR_OK) goto decode_failure;
+    c.control=control;
     /* Hash reads length-32 bytes; comparing the stored digest reads another 32. */
-    uint8_t digest[32]; checked_digest(bytes,length,digest,NULL);
+    uint8_t digest[32];c.status=checked_digest(bytes,length,digest,control);
+    if (c.status!=XR_XIR_OK) goto decode_failure;
     if (memcmp(digest,(const uint8_t *)bytes+32,32)) { c.status=XR_XIR_BAD_STRUCTURE; goto decode_failure; }
-    artifact=xir_compile_calloc(compile_context, 1,sizeof(*artifact), &allocation_status);
+    artifact=xir_type_copy_zero(compile_context,1,sizeof(*artifact),&allocation_status,control);
     if (!artifact) { c.status=allocation_status; goto decode_failure; }
     artifact->module.stage=XR_XIR_CHECKED; artifact->context=limits;artifact->evaluation_only=evaluation?1u:0u;
     c.position=64;
@@ -82,8 +86,9 @@ static XrXirStatus checked_read_mode(const XrXirCompileContext *compile_context,
     if (c.status!=XR_XIR_OK) goto decode_failure;
     /* Decoding and semantic verification share the allocation owner. */
 
-    c.status=xir_source_facts_prepare_decoded(artifact,diagnostic);
-    if (c.status==XR_XIR_OK) c.status=xr_xir_compile_artifact_verify(artifact,diagnostic);
+    c.status=xir_source_facts_prepare_decoded(artifact,diagnostic,control);
+    if (c.status==XR_XIR_OK) c.status=xir_artifact_verify(artifact,diagnostic,control);
+    if (c.status==XR_XIR_OK) c.status=xir_receive_poll(control);
 
     if (c.status!=XR_XIR_OK) { xr_xir_compile_artifact_free(artifact); return c.status; }
     *output=artifact;
@@ -94,15 +99,22 @@ decode_failure:
 }
 XR_FUNC XrXirStatus xr_xir_compile_checked_read(const XrXirCompileContext *context,const void *bytes,size_t length,
     XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
-    return checked_read_mode(context,bytes,length,output,diagnostic,false);
+    return checked_read_mode(context,bytes,length,output,diagnostic,false,NULL);
+}
+XR_FUNC XrXirStatus xir_checked_read(const XrXirCompileContext *context,const void *bytes,size_t length,
+    XrXirArtifact **output,XrXirDiagnostic *diagnostic,XrCompileRequestControl *control) {
+    return checked_read_mode(context,bytes,length,output,diagnostic,false,control);
 }
 XR_FUNC XrXirStatus xir_evaluation_read(const XrXirCompileContext *context,const void *bytes,size_t length,
-    XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
-    return checked_read_mode(context,bytes,length,output,diagnostic,true);
+    XrXirArtifact **output,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
+    return checked_read_mode(context,bytes,length,output,diagnostic,true,control);
 }
 XR_FUNC XrXirStatus xir_evaluation_write(const XrXirArtifact *artifact,XrXirCheckedPacket *output,
-    XrXirDiagnostic *diagnostic) {
+    XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
     if (!artifact || !output || output->bytes || output->length) return checked_error(XR_XIR_BAD_STRUCTURE,diagnostic);
-    XrXirStatus status=xr_xir_compile_artifact_verify(artifact,diagnostic);
-    return status==XR_XIR_OK?checked_evaluation_encode(artifact,output,diagnostic,NULL):status;
+    if (artifact->module.stage!=XR_XIR_CHECKED || !artifact->evaluation_only ||
+        !xir_effect_evidence_is_evaluation(&artifact->module)) return checked_error(XR_XIR_BAD_STAGE,diagnostic);
+    XrXirStatus status=xir_receive_poll(control);
+    if (status==XR_XIR_OK) status=xir_artifact_verify(artifact,diagnostic,control);
+    return status==XR_XIR_OK?checked_evaluation_encode(artifact,output,diagnostic,control):status;
 }

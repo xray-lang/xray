@@ -101,7 +101,7 @@ XR_FUNC size_t *xr_test_stdlib_output_counter(unsigned index) {
 }
 XR_FUNC void xr_test_stdlib_output_execute(XrXirArtifact *checked, const char *generated) {
     XrXirArtifact *closed = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL) == XR_XIR_OK);

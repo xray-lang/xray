@@ -12,6 +12,7 @@
  *   Mutable descriptor heads and appended bodies belong to the receiving arena.
  */
 static bool literal_seed(SourceContext *ctx,const XrXirArtifact *definition,uint32_t count) {
+    uint32_t progress=0;
     const XrXirModule *module=&definition->module;const XrXirDeclarations *d=module->declarations;
     if (module->stage!=XR_XIR_CHECKED || !module->generics || !d || xir_effect_evidence_is_closed(module))
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"literal receiving requires a genuine generic definition inventory");
@@ -19,10 +20,10 @@ static bool literal_seed(SourceContext *ctx,const XrXirArtifact *definition,uint
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"literal receiving function inventory exhausted");
     ctx->literal_definition=module;ctx->linkage_kind=module->linkage_kind;
     ctx->function_count=module->function_count;ctx->function_capacity=module->function_count+count;
-    ctx->functions=source_alloc(ctx,ctx->function_capacity,sizeof(*ctx->functions));
-    ctx->identities=source_alloc(ctx,ctx->function_capacity,sizeof(*ctx->identities));
-    ctx->generics=source_alloc(ctx,ctx->function_capacity,sizeof(*ctx->generics));
-    ctx->bodies=source_alloc(ctx,ctx->function_capacity,sizeof(*ctx->bodies));
+    ctx->functions=source_receive_alloc(ctx,ctx->function_capacity,sizeof(*ctx->functions));
+    ctx->identities=source_receive_alloc(ctx,ctx->function_capacity,sizeof(*ctx->identities));
+    ctx->generics=source_receive_alloc(ctx,ctx->function_capacity,sizeof(*ctx->generics));
+    ctx->bodies=source_receive_alloc(ctx,ctx->function_capacity,sizeof(*ctx->bodies));
     if (!ctx->functions || !ctx->identities || !ctx->generics || !ctx->bodies ||
         !source_copy_bytes(ctx,NULL,ctx->functions,module->functions,(size_t)module->function_count*sizeof(*ctx->functions)) ||
         !source_copy_bytes(ctx,NULL,ctx->identities,d->functions,(size_t)module->function_count*sizeof(*ctx->identities)) ||
@@ -33,7 +34,7 @@ static bool literal_seed(SourceContext *ctx,const XrXirArtifact *definition,uint
     if (d->literal_count) {
         /* Appending a value can retire this array, so its descriptor storage
          * must have the receiving Source arena's allocation header. */
-        ctx->literals=source_alloc(ctx,d->literal_count,sizeof(*ctx->literals));
+        ctx->literals=source_receive_alloc(ctx,d->literal_count,sizeof(*ctx->literals));
         if (!ctx->literals || !source_copy_bytes(ctx,NULL,ctx->literals,d->literals,
                 (size_t)d->literal_count*sizeof(*ctx->literals))) return false;
     }
@@ -41,7 +42,7 @@ static bool literal_seed(SourceContext *ctx,const XrXirArtifact *definition,uint
     if (module->types) {
         ctx->types=*module->types;ctx->type_capacity=ctx->types.count;
         if (ctx->types.count) {
-            XrXirTypeNode *nodes=source_alloc(ctx,ctx->types.count,sizeof(*nodes));
+            XrXirTypeNode *nodes=source_receive_alloc(ctx,ctx->types.count,sizeof(*nodes));
             if (!nodes || !source_copy_bytes(ctx,NULL,nodes,ctx->types.nodes,(size_t)ctx->types.count*sizeof(*nodes))) return false;
             ctx->types.nodes=nodes;
         }
@@ -50,7 +51,7 @@ static bool literal_seed(SourceContext *ctx,const XrXirArtifact *definition,uint
     }
     ctx->remaining_instructions=ctx->compile.limits.instructions;ctx->remaining_blocks=ctx->compile.limits.blocks;
     for (uint32_t f=0;f<module->function_count;++f) {
-        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+        if (!source_receive_step(ctx,&progress)) return false;
         const XrXirFunction *body=&module->functions[f];
         if (body->instruction_count>ctx->remaining_instructions || body->block_count>ctx->remaining_blocks)
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"literal receiving body inventory exhausted");
@@ -66,19 +67,20 @@ static bool literal_seed(SourceContext *ctx,const XrXirArtifact *definition,uint
     ctx->materialization_begin=ctx->function_capacity;return true;
 }
 static bool literal_binding(SourceContext *ctx,const XirCtfeInstanceView *view,XirLiteralBinding *output) {
+    uint32_t progress=0;
     const XrXirModule *closed=&view->checked->module;
     const XrXirOrigin *origin=&closed->provenance->origins[view->instance_function];
-    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+    if (!source_receive_step(ctx,&progress)) return false;
     if (view->definition_function>=ctx->function_count || origin->function!=view->definition_function ||
         !origin->argument_count || origin->argument_count!=ctx->generics[origin->function].parameter_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"literal receiving lost its actual definition or ordered substitution");
     output->definition=origin->function;output->instance=view->instance_function;output->argument_count=origin->argument_count;
     XrXirStatus status=XR_XIR_OK;
-    XrXirType *arguments=xir_compile_calloc(&ctx->compile,origin->argument_count,sizeof(*arguments),&status);
+    XrXirType *arguments=xir_type_copy_zero(&ctx->compile,origin->argument_count,sizeof(*arguments),&status,ctx->request);
     if (!arguments) return source_fail(ctx,NULL,status,"literal substitution receiving failed");
     output->arguments=arguments;
     const XrXirTypes *from=closed->types;
-    SourceInstanceTypes importer={ctx,from,from && from->count?source_alloc(ctx,from->count,sizeof(XrXirType)):NULL};
+    SourceInstanceTypes importer={ctx,from,from && from->count?source_receive_alloc(ctx,from->count,sizeof(XrXirType)):NULL,0};
     if (from && from->count && !importer.mapped) return false;
     for (uint32_t a=0;a<origin->argument_count;++a)
         if (!source_instance_argument(&importer,origin->arguments[a],0,&arguments[a])) return false;

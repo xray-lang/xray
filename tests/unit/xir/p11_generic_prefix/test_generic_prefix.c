@@ -45,7 +45,7 @@ static size_t baseline(void) {
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats before=stats(&context);XrXirGeneric *copy=NULL;
     size_t start=source_fixture_compile_attempts;
-    CHECK(xr_xir_compile_generics_clone(&context,&module,&copy)==XR_XIR_OK);check_copy(copy);
+    CHECK(xr_xir_compile_generics_clone(&context,&module,&copy, NULL)==XR_XIR_OK);check_copy(copy);
     size_t sites=source_fixture_compile_attempts-start;CHECK(sites);
     xr_xir_compile_generics_free(copy,2);CHECK(stats(&context).live_bytes==before.live_bytes);
     xr_compile_resources_release(context.resources);
@@ -57,13 +57,13 @@ static void fault(size_t ordinal,size_t sites) {
     XrCompileResources *same=context.resources;XrCompileResourceStats before=stats(&context);
     XrXirGeneric sentinel={0},*copy=&sentinel;size_t start=source_fixture_compile_attempts;
     source_fixture_compile_fail_at=start+ordinal;source_fixture_compile_injected=false;
-    CHECK(xr_xir_compile_generics_clone(&context,&module,&copy)==XR_XIR_OUT_OF_MEMORY);
+    CHECK(xr_xir_compile_generics_clone(&context,&module,&copy, NULL)==XR_XIR_OUT_OF_MEMORY);
     CHECK(source_fixture_compile_injected && copy==&sentinel);
     CHECK(source_fixture_compile_attempts==start+ordinal+1);
     CHECK(stats(&context).live_bytes==before.live_bytes);
     XrCompileResourceStats failed=stats(&context);source_fixture_compile_fail_at=SIZE_MAX;
     start=source_fixture_compile_attempts;copy=NULL;
-    CHECK(xr_xir_compile_generics_clone(&context,&module,&copy)==XR_XIR_OK);check_copy(copy);
+    CHECK(xr_xir_compile_generics_clone(&context,&module,&copy, NULL)==XR_XIR_OK);check_copy(copy);
     CHECK(source_fixture_compile_attempts==start+sites && context.resources==same);
     xr_xir_compile_generics_free(copy,2);XrCompileResourceStats retried=stats(&context);
     CHECK(retried.live_bytes==before.live_bytes && retried.work>=failed.work && retried.allocated_bytes>=failed.allocated_bytes);

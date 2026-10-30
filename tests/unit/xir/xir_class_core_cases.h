@@ -44,7 +44,7 @@ static void class_core_cases(void){
  XrXirArtifact *checked=NULL,*read=NULL,*special=NULL,*lowered=NULL;CLASS_CHECK(xir_fixture_check(&stage_context, &m, &checked, &d)==XR_XIR_OK);
  XrXirCheckedPacket packet={0};CLASS_CHECK(xr_xir_compile_checked_write(checked, &packet, &d)==XR_XIR_OK);CLASS_CHECK(xr_xir_compile_checked_read(&stage_context, packet.bytes, packet.length, &read, &d)==XR_XIR_OK);
  CLASS_CHECK(xr_xir_compile_artifact_module(read)->types->nominals->declarations[0].flags==XR_XIR_NOMINAL_FINAL);
- CLASS_CHECK(xr_xir_compile_specialize(read, &special, &d)==XR_XIR_OK);XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+ CLASS_CHECK(xr_xir_compile_specialize(read, &special, &d, NULL)==XR_XIR_OK);XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
  CLASS_CHECK(xr_xir_compile_lower(special, &target, NULL, &lowered, &d)==XR_XIR_OK);CLASS_CHECK(xr_xir_compile_artifact_module(lowered)->types->nominals->identities[0].flags==XR_XIR_NOMINAL_FINAL);
  uint32_t offsets[2]={0};XrXirStorageLayout layout={.field_offsets=offsets,.field_count=2};XrXirCompileContext budget=stage_context;CLASS_CHECK(xr_xir_compile_storage_layouts(&budget, xr_xir_compile_artifact_module(lowered)->types, &target, &layout, 1)==XR_XIR_OK);CLASS_CHECK(layout.value.size==8 && layout.value.alignment==8 && layout.body.size==16 && offsets[0]==0 && offsets[1]==8);
  decl.flags=0;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_OK);

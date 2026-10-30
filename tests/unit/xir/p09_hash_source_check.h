@@ -51,7 +51,7 @@ static XrXirArtifact *hash_source_replay(const XrXirCompileContext *context, XrX
     }
     CHECK(read_status==XR_XIR_OK);
     memset(packet.bytes, 0xcc, packet.length); xr_xir_compile_checked_packet_free(&packet);
-    XrXirStatus specialized_status = xr_xir_compile_specialize(read, &specialized, NULL);
+    XrXirStatus specialized_status = xr_xir_compile_specialize(read, &specialized, NULL, NULL);
     if (specialized_status != XR_XIR_OK) {
         XrCompileResourceStats stats = {0};
         CHECK(xr_compile_resources_stats(context->resources, &stats) == XR_COMPILE_RESOURCE_OK);

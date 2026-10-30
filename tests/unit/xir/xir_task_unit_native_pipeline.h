@@ -43,7 +43,7 @@ static XrXirArtifact *unit_native_lower(const UnitNativeOracle *oracle, uint32_t
     xr_xir_compile_source_result_free(&source);
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &read, &diagnostic) == XR_XIR_OK);
     memset(packet.bytes, 0xa5, packet.length); xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(read, &closed, &diagnostic) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(read, &closed, &diagnostic, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(read);
     CHECK(xr_xir_compile_artifact_verify(closed, &diagnostic) == XR_XIR_OK);
     unit_native_shape(xr_xir_compile_artifact_module(closed));

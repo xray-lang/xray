@@ -15,11 +15,11 @@ static XrXirStatus spec_pending_seed(SpecContext *c) {
     XrXirTypeNode *nodes=spec_alloc(c,source->count,sizeof(*nodes));
     c->closed.node_cache=spec_alloc(c,source->count,sizeof(*c->closed.node_cache));
     if (c->diagnostic.status!=XR_XIR_OK) return c->diagnostic.status;
-    if (!((c)->diagnostic.status == XR_XIR_OK)) return c->diagnostic.status;
-    if (source->count) memcpy(nodes,source->nodes,(size_t)source->count*sizeof(*nodes));
+    if (!spec_progress(c)) return c->diagnostic.status;
+    if (source->count && !spec_copy(c,nodes,source->nodes,(size_t)source->count*sizeof(*nodes))) return c->diagnostic.status;
     c->types.nodes=nodes;c->node_capacity=source->count;
     for (uint32_t i=0;i<source->count;++i) {
-        if (!((c)->diagnostic.status == XR_XIR_OK)) return c->diagnostic.status;
+        if (!spec_progress(c)) return c->diagnostic.status;
         if (!source->nodes[i].parameter_span) c->closed.node_cache[i]=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i);
     }
     return XR_XIR_OK;
@@ -34,7 +34,7 @@ static XrXirStatus spec_pending_arguments(SpecContext *c) {
     XrXirModule actual={XR_XIR_CHECKED,c->functions,c->count,NULL,NULL,types,NULL,XR_XIR_PROGRAM,NULL};
     XrXirProofContext proof={&actual,{XR_XIR_CONTEXT_CLOSED,0,0}};
     for (uint32_t a=0;a<point->count;++a) {
-        if (!((c)->diagnostic.status == XR_XIR_OK)) return c->diagnostic.status;
+        if (!spec_progress(c)) return c->diagnostic.status;
         XrXirType type=point->borrowed_arguments[a];
         XrXirStatus status=xr_xir_compile_type_expression_shape(&c->remaining,types,type,0);
         if (status!=XR_XIR_OK) return status;
@@ -49,8 +49,8 @@ static XrXirStatus spec_pending_receive(SpecContext *c) {
     const XrXirTypes *types=c->types.count || c->types.nominals || c->types.interfaces?&c->types:NULL;
     if (status==XR_XIR_OK) status=xr_xir_compile_types_structure_verify(&c->remaining,types);
     if (status==XR_XIR_OK) status=spec_pending_arguments(c);
-    if (status==XR_XIR_OK) status=xr_xir_compile_types_clone(&c->remaining,types, NULL,&c->pending->types);
-    if (status==XR_XIR_OK) c->pending->arguments=xir_compile_copy(&c->remaining,c->pending->borrowed_arguments,
-        (size_t)c->pending->count*sizeof(*c->pending->arguments),&status);
+    if (status==XR_XIR_OK) status=xr_xir_compile_types_clone(&c->remaining,types,c->control,&c->pending->types);
+    if (status==XR_XIR_OK) c->pending->arguments=xir_type_copy_bytes(&c->remaining,c->pending->borrowed_arguments,c->pending->count,
+        sizeof(*c->pending->arguments),&status,c->control);
     return status;
 }

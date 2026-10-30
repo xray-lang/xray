@@ -254,7 +254,7 @@ int main(int argc, char **argv) {
     CHECK(xr_xir_compile_checked_read(&context, packet.bytes, packet.length, &checked, NULL) == XR_XIR_OK);
     memset(packet.bytes, 0xCC, packet.length); xr_xir_compile_checked_packet_free(&packet); source_effects(checked);
     source_promise_retained(checked);
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); source_effects(closed);
     source_promise_retained(closed);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};

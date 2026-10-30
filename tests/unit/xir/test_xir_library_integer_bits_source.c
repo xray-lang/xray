@@ -119,7 +119,7 @@ static void bits_common_rejects(const XrXirCompileContext *context,const XrXirAr
     CHECK(xr_compile_resources_alloc(context->resources,count*sizeof(*ops),(void **)&ops)==XR_COMPILE_RESOURCE_OK);
     memcpy(ops,functions[function].instructions,count*sizeof(*ops));functions[function].instructions=ops;
     XrXirModule invalid=*module;invalid.functions=functions;ops[index].args[0]=UINT32_MAX;XrXirArtifact *rejected=NULL;
-    CHECK(xr_xir_compile_recheck_v2(context,&invalid,xr_xir_compile_artifact_construction(producer),&rejected,NULL)!=XR_XIR_OK && !rejected);
+    CHECK(xr_xir_compile_recheck_v2(context,&invalid,xr_xir_compile_artifact_construction(producer),&rejected,NULL, NULL)!=XR_XIR_OK && !rejected);
     xr_compile_resources_free(ops);xr_compile_resources_free(functions);
     XrXirSourceResult refused={0};
     CHECK(bits_check(context,"export fn bad(a:i64,b:bool)->i64{return a&b}","wrong-type.xr",XR_XIR_LIBRARY,NULL,&refused)!=XR_XIR_OK);
@@ -128,7 +128,7 @@ static void bits_common_rejects(const XrXirCompileContext *context,const XrXirAr
 static XrXirArtifact *bits_receive(const XrXirCompileContext *context,const XrXirCheckedPacket *packet) {
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet->bytes,packet->length,&checked,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);return lowered;
 }

@@ -72,7 +72,7 @@ static void witness_provenance_cases(XrXirSourceRequest *request) {
     XrXirSourceResult result = {0};
     CHECK(xr_xir_compile_source_check(request, &result, NULL, NULL) == XR_XIR_OK && result.checked);
     XrXirArtifact *closed = NULL, *copy = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_specialize(result.checked, &closed, NULL) == XR_XIR_OK && closed);
+    CHECK(xr_xir_compile_specialize(result.checked, &closed, NULL, NULL) == XR_XIR_OK && closed);
     xr_xir_compile_source_result_free(&result);
     witness_mutations(closed);
     XrXirCheckedPacket packet = {0};

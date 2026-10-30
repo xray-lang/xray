@@ -32,7 +32,7 @@ CHECK(bytes&&fread(bytes,1,(size_t)size,file)==(size_t)size&&!fclose(file));
  XrXirArtifact *checked=NULL,*special=NULL,*lowered=NULL;
 CHECK(xr_xir_compile_checked_read(&compiler.context,bytes,(size_t)size,&checked,NULL)==XR_XIR_OK);
 memset(bytes,0xCC,(size_t)size); xr_compile_resources_free(bytes);
-CHECK(xr_xir_compile_specialize(checked,&special,NULL)==XR_XIR_OK);
+CHECK(xr_xir_compile_specialize(checked,&special,NULL, NULL)==XR_XIR_OK);
 xr_xir_compile_artifact_free(checked);
 CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
 

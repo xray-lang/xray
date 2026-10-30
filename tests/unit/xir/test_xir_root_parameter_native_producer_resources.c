@@ -115,7 +115,7 @@ static XrXirStatus h1c_action(H1Compiler *c, unsigned p, const XrCompileResource
         if (status == XR_XIR_OK) { memset(c->packet.bytes, 0xa5, c->packet.length); xr_xir_compile_checked_packet_free(&c->packet); }
         else CHECK(!c->read); break;
     case H1C_SPECIALIZE:
-        status = xr_xir_compile_specialize(c->read, &c->closed, NULL);
+        status = xr_xir_compile_specialize(c->read, &c->closed, NULL, NULL);
         if (status == XR_XIR_OK) { xr_xir_compile_artifact_free(c->read); c->read = NULL; }
         else CHECK(!c->closed); break;
     case H1C_CHECK: {

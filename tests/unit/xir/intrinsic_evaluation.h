@@ -58,16 +58,16 @@ static void evaluation_transport(Fixture *fixture) {
     xr_compile_session_free(session);
     xr_free(views); xr_free(bindings);
     XirComptimePending *pending = NULL;
-    CHECK(xr_xir_compile_comptime_pending(unbound, &pending, NULL) == XR_XIR_OK && pending);
+    CHECK(xr_xir_compile_comptime_pending(unbound, &pending, NULL, NULL) == XR_XIR_OK && pending);
     xr_xir_compile_artifact_free(unbound);
     XrXirArtifact *evaluated = NULL;
-    CHECK(xr_xir_compile_comptime_pending_specialize(pending, &evaluated, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_comptime_pending_specialize(pending, &evaluated, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_comptime_pending_free(pending);
     XrXirCheckedPacket packet = {0};
-    CHECK(evaluated->evaluation_only && xir_evaluation_write(evaluated, &packet, NULL) == XR_XIR_OK);
+    CHECK(evaluated->evaluation_only && xir_evaluation_write(evaluated, &packet, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(evaluated);
     XrXirArtifact *received = NULL;
-    CHECK(xir_evaluation_read(context, packet.bytes, packet.length, &received, NULL) == XR_XIR_OK);
+    CHECK(xir_evaluation_read(context, packet.bytes, packet.length, &received, NULL, NULL) == XR_XIR_OK);
     CHECK(received->evaluation_only && get32(packet.bytes + 12) == get32(fixture->packet.bytes + 12));
     XrXirCtfeCallRequest evaluation = {.evaluation = {.function = received->module.provenance->evaluation.callee,
         .target = target, .limits = limits}, .call_depth = XR_XIR_CTFE_MAX_CALL_DEPTH};

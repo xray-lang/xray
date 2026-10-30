@@ -356,7 +356,7 @@ static XrXirStatus specialization(const XrXirCompileContext *c) {
     blocks[0].count=3;generics[0].arguments=arguments;generics[0].argument_count=2;
     XrXirModule module={.stage=XR_XIR_BUILT,.functions=functions,.function_count=2,.generics=generics,.types=&types};
     XrXirArtifact *checked=NULL,*closed=NULL;XrXirStatus status=xir_fixture_check(c, &module, &checked, NULL);
-    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&closed,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&closed,NULL, NULL);
     if(status==XR_XIR_OK) {
         const XrXirModule *m=xr_xir_compile_artifact_module(closed);
         CHECK(m->stage==XR_XIR_CHECKED && !m->generics && m->function_count==2 && m->types->count==1);

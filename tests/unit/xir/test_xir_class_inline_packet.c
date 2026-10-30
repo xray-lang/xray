@@ -48,7 +48,7 @@ int main(int argc,char **argv){
  uint8_t *bytes=malloc((size_t)size);C(bytes);C(fread(bytes,1,(size_t)size,file)==(size_t)size);C(!fclose(file));
  XrXirArtifact *checked=NULL,*special=NULL,*lowered=NULL;
  C(xr_xir_compile_checked_read(&owner.context,bytes,(size_t)size,&checked,NULL)==XR_XIR_OK);free(bytes);
- C(xr_xir_compile_specialize(checked,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+ C(xr_xir_compile_specialize(checked,&special,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
  C(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
  XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};C(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
  const XrXirModule *module=xr_xir_compile_artifact_module(lowered);/* Thirteen concrete functions plus twelve Box/Container/reader specializations. */

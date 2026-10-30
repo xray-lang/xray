@@ -47,7 +47,7 @@ int main(int argc,char **argv){LibraryCompileOwner compiler={0};CHECK(library_co
  void *bytes=malloc((size_t)n);CHECK(bytes&&fread(bytes,1,(size_t)n,f)==(size_t)n&&!fclose(f));
  CHECK(xr_xir_compile_checked_read(&compiler.context,bytes,(size_t)n,&checked,NULL)==XR_XIR_OK);free(bytes);
  CHECK(xr_xir_compile_artifact_module(checked)->defaults&&xr_xir_compile_artifact_module(checked)->defaults->count==2);
- CHECK(xr_xir_compile_specialize(checked,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
+ CHECK(xr_xir_compile_specialize(checked,&special,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
  CHECK(!xr_xir_compile_artifact_module(special)->defaults&&xr_xir_compile_artifact_module(special)->provenance->source->module.defaults->count==2);
  XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);
  xr_xir_compile_artifact_free(special);special=NULL;

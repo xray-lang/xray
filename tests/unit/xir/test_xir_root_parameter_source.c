@@ -120,7 +120,7 @@ static XrXirStatus rps_operation(const XrXirCompileContext *context, void *opaqu
         status=xr_xir_compile_checked_write(result.checked,&packet,NULL);
     }
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(read,&instance,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(read,&instance,NULL, NULL);
     if (status==XR_XIR_OK) {
         if (operation->qualify) rps_instance(instance,oracle);
         status=xr_xir_compile_lower(instance,&target, NULL,&lowered,NULL);

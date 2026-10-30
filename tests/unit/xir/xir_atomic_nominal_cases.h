@@ -88,7 +88,7 @@ static XrXirStatus ordering_checked_pipeline(const XrXirCompileContext *context,
     if(status==XR_XIR_OK){CHECK(packet.length==sizeof(ordering72_golden) &&
             !memcmp(packet.bytes,ordering72_golden,sizeof(ordering72_golden)));
         status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);if(status!=XR_XIR_OK)CHECK(!read);}
-    if(status==XR_XIR_OK){status=xr_xir_compile_specialize(read,&specialized,NULL);if(status!=XR_XIR_OK)CHECK(!specialized);}
+    if(status==XR_XIR_OK){status=xr_xir_compile_specialize(read,&specialized,NULL, NULL);if(status!=XR_XIR_OK)CHECK(!specialized);}
     xr_xir_compile_artifact_free(read);read=NULL;
     if(status==XR_XIR_OK){status=xr_xir_compile_lower(specialized,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);if(status!=XR_XIR_OK)CHECK(!lowered);}
     xr_xir_compile_artifact_free(specialized);specialized=NULL;

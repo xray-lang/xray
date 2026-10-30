@@ -59,12 +59,12 @@ static XrXirStatus provenance_contract_storage_shape(const XrXirCompileContext *
 
 /* Storage shape is necessary for copying; it proves no formula or origin. */
 static XrXirStatus provenance_storage_shape(const XrXirCompileContext *context,
-    const XrXirProvenance *source) {
+    const XrXirProvenance *source,XrCompileRequestControl *control) {
     if (!source) return XR_XIR_BAD_STRUCTURE;
 
     if (source->kind!=XR_XIR_EVIDENCE_EVALUATION &&
         (source->evaluation.caller || source->evaluation.instruction || source->evaluation.callee)) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status;
+    XrXirStatus status;uint32_t progress=0;
     if (source->kind == XR_XIR_EVIDENCE_TEMPLATE) {
         if (source->source || source->origins || source->count || source->bindings ||
             source->binding_count || !source->contract_count) return XR_XIR_BAD_STRUCTURE;
@@ -72,11 +72,12 @@ static XrXirStatus provenance_storage_shape(const XrXirCompileContext *context,
             sizeof(*source->contracts));
         if (status != XR_XIR_OK) return status;
         for (uint32_t f = 0; f < source->contract_count; ++f) {
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
 
             status = provenance_contract_storage_shape(context, &source->contracts[f]);
             if (status != XR_XIR_OK) return status;
         }
-        return XR_XIR_OK;
+        return xir_receive_poll(control);
     }
     if (!xir_effect_kind_is_closed(source->kind) || !source->source ||
         source->contracts || source->contract_count || !source->count) return XR_XIR_BAD_STRUCTURE;
@@ -90,6 +91,7 @@ static XrXirStatus provenance_storage_shape(const XrXirCompileContext *context,
     if (module->provenance && module->provenance->kind != XR_XIR_EVIDENCE_TEMPLATE)
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f = 0; f < source->count; ++f) {
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
 
         const XrXirOrigin *origin = &source->origins[f];
         if (origin->function >= module->function_count) return XR_XIR_BAD_STRUCTURE;
@@ -99,59 +101,61 @@ static XrXirStatus provenance_storage_shape(const XrXirCompileContext *context,
             origin->effect_argument_count, sizeof(*origin->effect_arguments));
         if (status != XR_XIR_OK) return status;
     }
-    return XR_XIR_OK;
+    return xir_receive_poll(control);
 }
 
 static bool provenance_contract_clone(const XrXirCompileContext *context,
     const XrXirFunctionEffectContract *from, XrXirFunctionEffectContract *to,
-    XrXirStatus *allocation_status) {
+    XrXirStatus *allocation_status, XrCompileRequestControl *control) {
 
     to->parameter_count = from->parameter_count;
     to->formula.constant_mask = from->formula.constant_mask;
     to->formula.term_count = from->formula.term_count;
     to->value_count = from->value_count;
     to->binding_count = from->binding_count;
-    to->parameters = copy_bytes(context, from->parameters,
-        (size_t)from->parameter_count * sizeof(*from->parameters), allocation_status);
+    to->parameters = lower_copy_bytes(context, from->parameters,
+        (size_t)from->parameter_count * sizeof(*from->parameters), allocation_status,control);
     if (from->parameter_count && !to->parameters) return false;
-    to->formula.terms = copy_bytes(context, from->formula.terms,
-        (size_t)from->formula.term_count * sizeof(*from->formula.terms), allocation_status);
+    to->formula.terms = lower_copy_bytes(context, from->formula.terms,
+        (size_t)from->formula.term_count * sizeof(*from->formula.terms), allocation_status,control);
     if (from->formula.term_count && !to->formula.terms) return false;
-    to->values = copy_bytes(context, from->values,
-        (size_t)from->value_count * sizeof(*from->values), allocation_status);
+    to->values = lower_copy_bytes(context, from->values,
+        (size_t)from->value_count * sizeof(*from->values), allocation_status,control);
     if (from->value_count && !to->values) return false;
-    to->bindings = copy_bytes(context, from->bindings,
-        (size_t)from->binding_count * sizeof(*from->bindings), allocation_status);
+    to->bindings = lower_copy_bytes(context, from->bindings,
+        (size_t)from->binding_count * sizeof(*from->bindings), allocation_status,control);
     return !from->binding_count || to->bindings;
 }
 
 static bool provenance_origins_clone(const XrXirCompileContext *context,
-    const XrXirProvenance *from, XrXirProvenance *to, XrXirStatus *allocation_status) {
-    to->origins = xir_compile_calloc(context, from->count, sizeof(*to->origins), allocation_status);
+    const XrXirProvenance *from, XrXirProvenance *to, XrXirStatus *allocation_status, XrCompileRequestControl *control) {
+    to->origins = xir_type_copy_zero(context,from->count,sizeof(*to->origins),allocation_status,control);
     if (!to->origins) return false;
     to->count = from->count;
+    uint32_t progress=0;
     for (uint32_t f = 0; f < from->count; ++f) {
-
+        *allocation_status=xir_receive_step(control,&progress);
+        if (*allocation_status!=XR_XIR_OK) return false;
         const XrXirOrigin *origin = &from->origins[f];
         XrXirOrigin *copy = &to->origins[f];
         copy->function = origin->function;
         copy->argument_count = origin->argument_count;
         copy->effect_argument_count = origin->effect_argument_count;
-        copy->arguments = copy_bytes(context, origin->arguments,
-            (size_t)origin->argument_count * sizeof(*origin->arguments), allocation_status);
+        copy->arguments = lower_copy_bytes(context, origin->arguments,
+            (size_t)origin->argument_count * sizeof(*origin->arguments), allocation_status,control);
         if (origin->argument_count && !copy->arguments) return false;
-        copy->effect_arguments = copy_bytes(context, origin->effect_arguments,
-            (size_t)origin->effect_argument_count * sizeof(*origin->effect_arguments), allocation_status);
+        copy->effect_arguments = lower_copy_bytes(context, origin->effect_arguments,
+            (size_t)origin->effect_argument_count * sizeof(*origin->effect_arguments), allocation_status,control);
         if (origin->effect_argument_count && !copy->effect_arguments) return false;
     }
     return true;
 }
 
 static XrXirProvenance *provenance_clone(const XrXirCompileContext *context,
-    const XrXirProvenance *source, XrXirStatus *allocation_status) {
-    *allocation_status = provenance_storage_shape(context, source);
+    const XrXirProvenance *source, XrXirStatus *allocation_status, XrCompileRequestControl *control) {
+    *allocation_status = provenance_storage_shape(context, source,control);
     if (*allocation_status != XR_XIR_OK) return NULL;
-    XrXirProvenance *copy = xir_compile_calloc(context, 1, sizeof(*copy), allocation_status);
+    XrXirProvenance *copy = xir_type_copy_zero(context,1,sizeof(*copy),allocation_status,control);
     if (!copy) return NULL;
 
     copy->kind = source->kind;
@@ -160,18 +164,21 @@ static XrXirProvenance *provenance_clone(const XrXirCompileContext *context,
         copy->evaluation=source->evaluation;
     }
     if (source->kind == XR_XIR_EVIDENCE_TEMPLATE) {
-        copy->contracts = xir_compile_calloc(context, source->contract_count,
-            sizeof(*copy->contracts), allocation_status);
+        copy->contracts = xir_type_copy_zero(context,source->contract_count,sizeof(*copy->contracts),allocation_status,control);
         if (!copy->contracts) goto failed;
         copy->contract_count = source->contract_count;
-        for (uint32_t f = 0; f < source->contract_count; ++f)
+        uint32_t progress=0;
+        for (uint32_t f = 0; f < source->contract_count; ++f) {
+            *allocation_status=xir_receive_step(control,&progress);
+            if (*allocation_status!=XR_XIR_OK) goto failed;
             if (!provenance_contract_clone(context, &source->contracts[f], &copy->contracts[f],
-                allocation_status)) goto failed;
+                allocation_status, control)) goto failed;
+        }
     } else {
-        copy->source = source_artifact_clone(context,source->source,allocation_status);
-        if (!copy->source || !provenance_origins_clone(context, source, copy, allocation_status)) goto failed;
-        copy->bindings = copy_bytes(context, source->bindings,
-            (size_t)source->binding_count * sizeof(*source->bindings), allocation_status);
+        copy->source = source_artifact_clone(context,source->source,allocation_status, control);
+        if (!copy->source || !provenance_origins_clone(context, source, copy, allocation_status, control)) goto failed;
+        copy->bindings = lower_copy_bytes(context, source->bindings,
+            (size_t)source->binding_count * sizeof(*source->bindings), allocation_status,control);
         if (source->binding_count && !copy->bindings) goto failed;
         copy->binding_count = source->binding_count;
     }
@@ -182,11 +189,12 @@ failed:
 }
 
 static XrXirStatus provenance_copy_source(const XrXirCompileContext *context,
-    const XrXirProvenance *source, const XrXirEffects *source_effects, XrXirProvenance **output) {
+    const XrXirProvenance *source, const XrXirEffects *source_effects, XrXirProvenance **output, XrCompileRequestControl *control) {
     if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     if (!output || *output || !source) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = provenance_storage_shape(context, source);
+    XrXirStatus status = provenance_storage_shape(context, source,control);
     if (status != XR_XIR_OK) return status;
+    status=xir_receive_poll(control);if (status!=XR_XIR_OK) return status;
     if (xir_effect_kind_is_closed(source->kind)) {
         if(source_effects && !source->source->module.provenance)
             status=xir_compile_verify_raw_source_effects(context,&source->source->module,
@@ -195,26 +203,29 @@ static XrXirStatus provenance_copy_source(const XrXirCompileContext *context,
             &source->source->module,source->source->construction,source_effects,NULL) :
             xr_xir_compile_verify_v2(context,&source->source->module,source->source->construction,NULL);
         if (status != XR_XIR_OK) return status;
+        uint32_t progress=0;
         for (uint32_t f = 0; f < source->count; ++f) {
-
+            status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
             uint32_t declaration = source->origins[f].function;
             uint32_t arity = source->source->module.generics ?
                 source->source->module.generics[declaration].parameter_count : 0;
             if (source->origins[f].argument_count != arity) return XR_XIR_BAD_STRUCTURE;
         }
     }
-    XrXirProvenance *copy = provenance_clone(context, source, &status);
+    XrXirProvenance *copy = provenance_clone(context, source, &status, control);
     if (!copy) return status;
+    status=xir_receive_poll(control);
+    if (status!=XR_XIR_OK) {xr_xir_compile_provenance_free(copy);return status;}
     *output = copy;
     return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xr_xir_compile_provenance_copy(const XrXirCompileContext *context,
-    const XrXirProvenance *source, XrXirProvenance **output) {
-    return provenance_copy_source(context,source,NULL,output);
+    const XrXirProvenance *source, XrXirProvenance **output, XrCompileRequestControl *control) {
+    return provenance_copy_source(context,source,NULL,output, control);
 }
 XR_FUNC XrXirStatus xr_xir_compile_provenance_copy_source_effects(const XrXirCompileContext *context,
-    const XrXirProvenance *source, const XrXirEffects *source_effects, XrXirProvenance **output) {
+    const XrXirProvenance *source, const XrXirEffects *source_effects, XrXirProvenance **output, XrCompileRequestControl *control) {
     if (!source_effects || !source || !xir_effect_kind_is_closed(source->kind))
         return XR_XIR_BAD_STRUCTURE;
-    return provenance_copy_source(context,source,source_effects,output);
+    return provenance_copy_source(context,source,source_effects,output, control);
 }

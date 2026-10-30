@@ -126,7 +126,7 @@ int main(int argc,char **argv) {
     XrXirArtifact *read=NULL,*closed=NULL,*lowered=NULL;XrXirDiagnostic diagnostic={0};
     CHECK(xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,&diagnostic)==XR_XIR_OK);
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    XrXirStatus status=xr_xir_compile_specialize(read,&closed,&diagnostic);
+    XrXirStatus status=xr_xir_compile_specialize(read,&closed,&diagnostic, NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"specialize=%u f=%u b=%u i=%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

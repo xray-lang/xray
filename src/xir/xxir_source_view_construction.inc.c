@@ -31,31 +31,32 @@ static bool source_view_construction(SourceContext *ctx,const XirViewNormalizati
     const XrXirComptimeTable *comptime=xr_xir_compile_construction_comptime(old);
     if (!old || !comptime || !output || *output)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"construction lifetime owner is missing");
-    XrXirConstructionRow *rows=count?source_alloc(ctx,count,sizeof(*rows)):NULL;
-    XrXirMaterializationBinding *bindings=materializations?source_alloc(ctx,materializations,sizeof(*bindings)):NULL;
-    XrXirComptimeSite *sites=comptime->site_count?source_alloc(ctx,comptime->site_count,sizeof(*sites)):NULL;
+    XrXirConstructionRow *rows=count?source_receive_alloc(ctx,count,sizeof(*rows)):NULL;
+    XrXirMaterializationBinding *bindings=materializations?source_receive_alloc(ctx,materializations,sizeof(*bindings)):NULL;
+    XrXirComptimeSite *sites=comptime->site_count?source_receive_alloc(ctx,comptime->site_count,sizeof(*sites)):NULL;
     if ((count&&!rows) || (materializations&&!bindings) || (comptime->site_count&&!sites)) return false;
+    uint32_t progress=0;
     for (uint32_t i=0;i<count;++i) {
-        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+        if (!source_receive_step(ctx,&progress)) return false;
         const XrXirConstructionRow *row=xr_xir_compile_construction_row(old,i);
         if (!row) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"construction lifetime row is absent");
         rows[i]=*row;
     }
     for (uint32_t i=0;i<materializations;++i) {
-        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+        if (!source_receive_step(ctx,&progress)) return false;
         const XrXirMaterializationBinding *binding=xr_xir_compile_construction_materialization(old,i);
         if (!binding) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"materializer lifetime binding is absent");
         bindings[i]=*binding;
         if (!source_view_construction_coordinate(ctx,normalization,bindings[i].caller,&bindings[i].instruction)) return false;
     }
     for (uint32_t i=0;i<comptime->site_count;++i) {
-        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+        if (!source_receive_step(ctx,&progress)) return false;
         sites[i]=comptime->sites[i];
         if (!source_view_construction_coordinate(ctx,normalization,sites[i].caller,&sites[i].instruction)) return false;
     }
     XrXirComptimeTable table={sites,comptime->site_count,comptime->bindings,comptime->binding_count};
     XrXirConstructionSpec specification={rows,count,bindings,materializations,&table};
     XrXirStatus status=xr_xir_compile_construction_new_v4(&ctx->compile,&ctx->types,&specification,
-        xr_xir_compile_construction_slots(old),output);
+        xr_xir_compile_construction_slots(old),output,ctx->request);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"relocated construction ownership failed");
 }

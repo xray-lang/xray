@@ -169,7 +169,7 @@ int main(int argc, char **argv) {
         static_methods_source_shape(xr_xir_compile_artifact_module(source_checked));
         packet_exact(source_checked, &original_source_packet);
         xr_xir_compile_checked_packet_free(&original_source_packet);
-        CHECK(xr_xir_compile_specialize(source_checked, &closed, NULL) == XR_XIR_OK);
+        CHECK(xr_xir_compile_specialize(source_checked, &closed, NULL, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(source_checked); source_checked = NULL;
         CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
         construction_owner(closed, context);

@@ -517,7 +517,7 @@ static XrXirArtifact *reference_lower(const XrXirCompileContext *context,
     memset(packet.bytes, 0xa5, packet.length);
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_artifact_verify(received, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(received, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(received, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(received);
     CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
     if (identity) {

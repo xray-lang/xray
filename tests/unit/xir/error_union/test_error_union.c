@@ -431,7 +431,7 @@ static void source_case(const char *text,uint32_t members,const char *tail,XrXir
 static XrXirProgram *generation_program(const XrXirSourceGenerationView *view,uint32_t *entry,uint32_t *escaped) {
     XrXirArtifact *closed=NULL,*lowered=NULL;XrXirProgram *program=NULL;
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_specialize(view->result->checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(view->result->checked,&closed,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     *entry=module->declarations->entry_function;*escaped=function_named(module,"escaped");

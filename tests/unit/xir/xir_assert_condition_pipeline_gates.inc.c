@@ -37,7 +37,7 @@ static void assert_pipeline_oom(const XrXirArtifact *checked) {
     assert_compile_stage_cases(checked,ASSERT_COMPILE_LOWER,"Assertion lower/replay");
     assert_compile_stage_cases(checked,ASSERT_COMPILE_TAKE,"Assertion owned VM take/replay");
     size_t baseline=runtime_live,bytes=runtime_bytes;
-    XrXirArtifact *closed=NULL;CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    XrXirArtifact *closed=NULL;CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     uint32_t owner=assert_find(xr_xir_compile_artifact_module(closed),"assert");

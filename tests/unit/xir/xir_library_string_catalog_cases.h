@@ -177,7 +177,7 @@ static void string_catalog_ownership(void) {
     memset(bytes,0,sizeof(library_string76_alpha));free(bytes);name[0]='X';root[0]='X';memset(&input,0,sizeof(input));
     size_t count=0;const XrModuleResourceBinding *resources=xr_xir_compile_library_catalog_resources_v2(catalog,&count);
     CHECK(count==1&&!strcmp(resources[0].logical_path,"alpha.xr")&&!strcmp(resources[0].authority.physical_root,"E:/fixture"));
-    XrXirArtifact *copy=NULL;CHECK(xr_xir_compile_recheck_v2(library_context,xr_xir_compile_artifact_module(resources[0].checked),xr_xir_compile_artifact_construction(resources[0].checked),&copy,NULL)==XR_XIR_OK);
+    XrXirArtifact *copy=NULL;CHECK(xr_xir_compile_recheck_v2(library_context,xr_xir_compile_artifact_module(resources[0].checked),xr_xir_compile_artifact_construction(resources[0].checked),&copy,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_library_catalog_free(catalog);CHECK(xr_xir_compile_artifact_verify(copy,NULL)==XR_XIR_OK);
     const XrXirDeclarations *d=xr_xir_compile_artifact_module(copy)->declarations;
     CHECK(d->literals[0].length==9&&!memcmp(d->literals[0].bytes,"甲-owned",9));

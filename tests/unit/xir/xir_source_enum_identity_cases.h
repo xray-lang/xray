@@ -75,7 +75,7 @@ static void source_enum_identity_run(XrXirSourceRequest *request, const char *so
         }
     }
     xr_xir_compile_effects_free(effects);
-    CHECK(xr_xir_compile_specialize(checked, &specialized, NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &specialized, NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized, &target, NULL, &lowered, NULL)==XR_XIR_OK);

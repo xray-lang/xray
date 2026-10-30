@@ -42,7 +42,7 @@ XR_FUNC void xr_test_library_source_run(XrXirArtifact *owned) {
  const XrXirModule *original=xr_xir_compile_artifact_module(owned);
  uint32_t defaults=original->defaults?original->defaults->count:0;
  XrXirArtifact *specialized=NULL,*lowered=NULL;
- CHECK(xr_xir_compile_specialize(owned,&specialized,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
+ CHECK(xr_xir_compile_specialize(owned,&specialized,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
  CHECK(xr_xir_compile_artifact_verify(specialized,NULL)==XR_XIR_OK);
  const XrXirModule *projected=xr_xir_compile_artifact_module(specialized);CHECK(!projected->defaults);
  if(defaults){CHECK(projected->provenance&&projected->provenance->source->module.defaults);

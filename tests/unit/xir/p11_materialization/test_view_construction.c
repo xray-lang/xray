@@ -57,7 +57,7 @@ static void shifted_body(SourceContext *ctx,const XrXirModule *module,
 static XrXirArtifact *relocation_admission(const XrXirCompileContext *context,const XrXirModule *module,
     const XrXirConstruction *original,bool comptime) {
     XrXirConstruction *old=NULL;
-    CHECK(xir_construction_clone(context,module->types,original,&old)==XR_XIR_OK && old!=original);
+    CHECK(xir_construction_clone(context,module->types,original,&old, NULL)==XR_XIR_OK && old!=original);
     SourceContext ctx={.compile=*context,.types=module->types?*module->types:(XrXirTypes){0},.function_count=module->function_count,
         .functions=module->functions,.construction=old};
     XirViewNormalization n={.module=*module};
@@ -124,7 +124,7 @@ int main(void) {
     XrXirCompileContext context;context_new(&context);PreparedMaterialization input;prepare(&context,0,&input);
     XrXirConstruction *owner=NULL;const XrXirConstruction *source=input.source.checked->construction;
     XrXirConstructionSpec spec={source->rows,source->count,input.edges,2,NULL};
-    CHECK(xr_xir_compile_construction_new_v4(&context,input.module.types,&spec,xr_xir_compile_construction_slots(source),&owner)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v4(&context,input.module.types,&spec,xr_xir_compile_construction_slots(source),&owner, NULL)==XR_XIR_OK);
     XrXirArtifact *received=relocation_admission(&context,&input.module,owner,false);
     xr_xir_compile_construction_free(owner);prepared_free(&input);
     CHECK(xr_xir_compile_artifact_verify(received,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);generic_sites(&context);

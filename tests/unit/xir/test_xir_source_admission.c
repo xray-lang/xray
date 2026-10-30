@@ -680,7 +680,7 @@ static void enum_admission(const XrXirSourceRequest *request, const char *root) 
         if(status!=XR_XIR_OK) fprintf(stderr,"enum case %u: %s\n",i,diagnostic.message);
         CHECK(status==XR_XIR_OK && result.checked);
         XrXirArtifact *closed=NULL,*lowered=NULL;
-        CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL, NULL)==XR_XIR_OK);
         XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
         CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(lowered); xr_xir_compile_artifact_free(closed);
@@ -837,7 +837,7 @@ static void rejected_source_cases(const XrXirSourceRequest *request,const char *
             if(i==149)admission_array_capacity(artifact);
             if(i==263)admission_atomic_bool(artifact);
             XrXirArtifact *closed=NULL,*lowered=NULL;
-            CHECK(xr_xir_compile_specialize(artifact,&closed,NULL)==XR_XIR_OK);
+            CHECK(xr_xir_compile_specialize(artifact,&closed,NULL, NULL)==XR_XIR_OK);
             XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
             CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
             if(i==149)admission_array_capacity(lowered);
@@ -919,7 +919,7 @@ int main(void) {
     CHECK(query_status_10 == XR_XIR_OK || (!query_result_10.checked && !query_result_10.snapshot));
     xr_xir_compile_source_result_free(&query_result_10);
     CHECK(query_status_10 == XR_XIR_OK && unused);
-    CHECK(xr_xir_compile_specialize(unused,&closed_unused,NULL) == XR_XIR_OK && closed_unused);
+    CHECK(xr_xir_compile_specialize(unused,&closed_unused,NULL, NULL) == XR_XIR_OK && closed_unused);
     CHECK(!xr_xir_compile_artifact_module(closed_unused)->types);
     xr_xir_compile_artifact_free(closed_unused); xr_xir_compile_artifact_free(unused);
     const char *valid = "import { visible } from \"./lib\"\nprint(visible(), true)\n";

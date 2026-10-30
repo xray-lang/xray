@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
                 source_diagnostic.column, source_diagnostic.message);
         goto done;
     }
-    if (xr_xir_compile_specialize(source.checked, &closed, NULL) != XR_XIR_OK) {
+    if (xr_xir_compile_specialize(source.checked, &closed, NULL, NULL) != XR_XIR_OK) {
         fputs("source specialization failed\n", stderr);
         goto done;
     }

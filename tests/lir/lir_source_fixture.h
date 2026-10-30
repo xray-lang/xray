@@ -51,7 +51,7 @@ static SourceFixture source_fixture_stdlib(const char *text, const char *stdlib)
         fprintf(stderr, "source %u:%d:%d: %s\n%s\n", (unsigned) status, diagnostic.line,
                 diagnostic.column, diagnostic.message, text);
     CHECK(status == XR_XIR_OK && fixture.source.checked && fixture.source.snapshot);
-    CHECK(xr_xir_compile_specialize(fixture.source.checked, &fixture.closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(fixture.source.checked, &fixture.closed, NULL, NULL) == XR_XIR_OK);
     xr_compile_session_free(session);
     xr_compile_resources_release(context.resources);
     return fixture;

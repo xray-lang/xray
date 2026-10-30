@@ -112,7 +112,7 @@ static void defaults_invoke_golden_cases(void) {
     CHECK(module->linkage_kind==XR_XIR_PROGRAM && module->function_count==4);
     CHECK(module->declarations->entry_function==3 && module->declarations->modules[0].initializer==1);
     CHECK(module->functions[3].operand_count==0 && module->functions[3].instructions[0].args[0]==2);
-    CHECK(xr_xir_compile_recheck_v2(library_context,module,xr_xir_compile_artifact_construction(producer),&owned,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(library_context,module,xr_xir_compile_artifact_construction(producer),&owned,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(producer); producer=NULL;
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_write(owned,&packet,NULL)==XR_XIR_OK);

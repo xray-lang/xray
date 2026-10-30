@@ -58,7 +58,7 @@ static int worker_wait_producer_main(int argc, char **argv) {
     XrXirCheckedPacket packet = worker_wait_packet(&context, index); XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, packet.bytes, packet.length, &checked, NULL) == XR_XIR_OK);
     memset(packet.bytes, 0xCC, packet.length); xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(checked);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK); xr_xir_compile_artifact_free(closed);
     worker_wait_emit(lowered, index, argv[2]); xr_xir_compile_artifact_free(lowered);

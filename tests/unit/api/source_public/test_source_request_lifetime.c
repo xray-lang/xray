@@ -267,6 +267,10 @@ static XrCompileResourceStatus defaults_observe_span(XrCompileRequestControl *co
     if (observed) {if(status==XR_COMPILE_RESOURCE_OK)CHECK(!memcmp(destination,source,bytes));probe->destination=NULL;}
     return status;
 }
+#include "xir/xxir_type_copy_control.h"
+static void *source_writer_observe_zero(const XrXirCompileContext *context,size_t count,size_t size,
+    XrXirStatus *status,XrCompileRequestControl *control);
+#define xir_type_copy_zero source_writer_observe_zero
 #define xir_compile_alloc(context,bytes,status) defaults_observe_alloc(context,bytes,status,__func__)
 #define xir_lower_copy_span defaults_observe_span
 #define xr_xir_compile_check_refined_v2 defaults_actual_check
@@ -323,6 +327,34 @@ static XrCompileResourceStatus product_facts_observe_copy(XrCompileRequestContro
 #undef xr_sha256_update
 #undef memcmp
 #undef xr_compile_request_control_poll
+#undef xir_type_copy_zero
+static void *source_writer_observe_zero(const XrXirCompileContext *context,size_t count,size_t size,
+    XrXirStatus *status,XrCompileRequestControl *control) {
+    SourceWriterProbe *writer=source_writer_probe;PacketCodecProbe *codec=packet_codec_probe;
+    bool writer_packet=control&&writer&&!writer->disabled&&writer->active==writer->selected&&writer->active&&
+        context->resources==writer->resources&&size==1&&count==writer->length;
+    bool codec_packet=control&&codec&&!codec->disabled&&codec->in_lower&&context->resources==codec->resources&&
+        count&&size<=SIZE_MAX/count&&count*size==codec->lengths[1];
+    CHECK(!(writer_packet&&codec_packet));
+    if(writer_packet&&writer->mode==2){CHECK(!writer->allocations);runtime_fail_at=runtime_attempts;}
+    void *memory=xir_type_copy_zero(context,count,size,status,control);
+    if(writer_packet) {
+        ++writer->allocations;
+        if(writer->mode==2) {
+            CHECK(*status==XR_XIR_OUT_OF_MEMORY&&!memory&&runtime_attempts>runtime_fail_at);
+            runtime_fail_at=SIZE_MAX;writer->oom_seen=true;
+        }else if(memory) {
+            CHECK(!writer->packet);writer->packet=memory;memset(memory,0xa5,writer->length);
+            writer->packet[writer->length-1]=(unsigned char)~writer->expected[writer->length-1];
+        }
+    }
+    if(codec_packet&&memory) {
+        CHECK(!codec->packet);codec->packet=memory;++codec->allocations;
+        memset(memory,0xa5,codec->lengths[1]);
+        codec->packet[codec->lengths[1]-1]=(unsigned char)~codec->expected[1][codec->lengths[1]-1];
+    }
+    return memory;
+}
 static void product_facts_observe_sha(XrSHA256Context *hash,const uint8_t *bytes,
     size_t length,const char *caller) {
     ProductFactsProbe *probe=product_facts_probe;
@@ -1234,13 +1266,11 @@ static bool lower_loop_cancel(const void *opaque) {
         }
     }
     if (!reached) return false;
-    ++probe->witnesses;
     if (probe->oom) {
-        /* The next actual clone allocation fails before another callback can
-         * observe cancellation; no private allocator layout is inspected. */
-        if (probe->witnesses==1) {runtime_fail_at=runtime_attempts;return false;}
-        return true;
+        if (!probe->witnesses) {++probe->witnesses;runtime_fail_at=runtime_attempts;}
+        return false;
     }
+    ++probe->witnesses;
     if (probe->deadline) {
         uint64_t now=xr_time_monotonic_ns();CHECK(now && probe->control->has_deadline);
         while (now<probe->control->deadline_ns) {xr_time_sleep_ns(1000000);now=xr_time_monotonic_ns();CHECK(now);}
@@ -1262,7 +1292,7 @@ static XrXirArtifact *lower_source(XrCompileResources *resources) {
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"lower Source status%u %d:%d %s\n",(unsigned)status,diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==XR_XIR_OK && source.checked && source.snapshot);
-    XrXirArtifact *closed=NULL;CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL)==XR_XIR_OK && closed);
+    XrXirArtifact *closed=NULL;CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL, NULL)==XR_XIR_OK && closed);
     memset(text,'!',sizeof(text));xr_compile_session_free(session);xr_xir_compile_source_result_free(&source);
     return closed;
 }

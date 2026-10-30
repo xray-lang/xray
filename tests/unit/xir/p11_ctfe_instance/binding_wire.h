@@ -19,7 +19,7 @@ static void binding_wire(void) {
     CHECK(status==XR_XIR_OK && checked);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
     CHECK(packet.length==sizeof(comptime_binding77_golden) && !memcmp(packet.bytes,comptime_binding77_golden,packet.length));
-    xr_xir_compile_checked_packet_free(&packet);CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    xr_xir_compile_checked_packet_free(&packet);CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(checked);
     const uint32_t offsets[]={COMPTIME_BINDING77_SITE_COUNT,COMPTIME_BINDING77_FIRST_ARGUMENT,COMPTIME_BINDING77_FIRST_PROVIDER};
     const uint32_t values[]={UINT32_MAX,XR_XIR_TYPE_PARAMETER_BASE,0};

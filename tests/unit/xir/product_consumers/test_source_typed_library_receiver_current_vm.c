@@ -550,7 +550,7 @@ static bool detach_program(ReceiverRun *run) {
     CHECK(completed(run, xr_xir_compile_artifact_verify(run->source_checked, NULL), "detached-SOURCE-full-verify"));
     construction_owner(run, run->source_checked, "detached-SOURCE-full-v2"); (void)receiver_shape(run->source_checked);
     exact_packet(run, run->source_checked, &run->expected_source); free_poisoned_packet(&run->expected_source);
-    if (!completed(run, xr_xir_compile_specialize(run->source_checked, &run->closed, NULL), "owned-Source-specialize")) return false;
+    if (!completed(run, xr_xir_compile_specialize(run->source_checked, &run->closed, NULL, NULL), "owned-Source-specialize")) return false;
     xr_xir_compile_artifact_free(run->source_checked); run->source_checked = NULL;
     CHECK(completed(run, xr_xir_compile_artifact_verify(run->closed, NULL), "detached-CLOSED-full-verify"));
     construction_owner(run, run->closed, "detached-CLOSED-full-v2"); (void)receiver_shape(run->closed);

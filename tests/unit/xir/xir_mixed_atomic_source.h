@@ -71,7 +71,7 @@ static bool atomic_source_prepare(AtomicSourcePrepare *s) {
     status=xr_xir_compile_checked_read(s->context,s->packet.bytes,s->packet.length,&s->checked,NULL);
     memset(s->packet.bytes,0xA5,s->packet.length);xr_xir_compile_checked_packet_free(&s->packet);
     if(!atomic_source_stage(s,5,status)){CHECK(!s->checked);return false;}
-    status=xr_xir_compile_specialize(s->checked,&s->closed,NULL);
+    status=xr_xir_compile_specialize(s->checked,&s->closed,NULL, NULL);
     if(!atomic_source_stage(s,6,status)){CHECK(!s->closed);return false;}
     xr_xir_compile_artifact_free(s->checked);s->checked=NULL;
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

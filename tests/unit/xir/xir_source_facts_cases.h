@@ -17,9 +17,9 @@ static XrXirStatus source_facts_case_fixture(const XrXirCompileContext *context,
         "fn use<T>(callback:fn(T)->T,value:T)->T{return callback(value)}\n"
         "export fn run()->i64{const callback=keep<i64>(plain);return use<i64>(plain,callback(40))}\nprint(run())\n";
     XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&session);
-    if (opened!=XR_COMPILER_SESSION_OK)
-        return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus opened=xr_compile_session_new(context->resources,&session);
+    if (opened!=XR_COMPILE_RESOURCE_OK)
+        return opened==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-facts",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult result={0};XrXirSourceFailure failure={0};
@@ -31,8 +31,8 @@ static XrXirStatus source_facts_case_fixture(const XrXirCompileContext *context,
 
 static void source_facts_case_refuse(XrXirArtifact *source) {
     XirSourceFacts *output=NULL;XrCompileResourceStats before=library_compile_stats(&source->context);
-    CHECK(xir_source_facts_acquire(source,&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
-    CHECK(library_compile_stats(&source->context).live_bytes==before.live_bytes);
+    CHECK(xir_source_facts_acquire(source,&output,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !output);
+    CHECK(library_compile_stats(&source->context).held_bytes==before.held_bytes);
 }
 
 /* These are complete current Template inputs. A shape-valid change cannot
@@ -69,7 +69,7 @@ static void source_facts_case_contracts(XrXirArtifact *source) {
         }
     }
     CHECK(parameters && values && bindings);
-    XirSourceFacts *lease=NULL;CHECK(xir_source_facts_acquire(source,&lease,NULL)==XR_XIR_OK && lease);
+    XirSourceFacts *lease=NULL;CHECK(xir_source_facts_acquire(source,&lease,NULL, NULL)==XR_XIR_OK && lease);
     xir_source_facts_release(lease);
 }
 
@@ -77,19 +77,19 @@ static void source_facts_case_requests(XrXirArtifact *source,const XrXirCompileC
     XirSourceFacts *occupied=(XirSourceFacts *)(uintptr_t)1;
     XrCompileResourceStats entry=library_compile_stats(&source->context),other=library_compile_stats(foreign);
     size_t attempts=source_program_compile_attempts;
-    CHECK(xir_source_facts_acquire(source,&occupied,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_source_facts_acquire(source,&occupied,NULL, NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(occupied==(XirSourceFacts *)(uintptr_t)1);
     XrXirArtifact view=*source;view.context=*foreign;occupied=NULL;
-    CHECK(xir_source_facts_acquire(&view,&occupied,NULL)==XR_XIR_BAD_STRUCTURE && !occupied);
+    CHECK(xir_source_facts_acquire(&view,&occupied,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !occupied);
     view=*source;view.source_facts=NULL;
-    CHECK(xir_source_facts_acquire(&view,&occupied,NULL)==XR_XIR_BAD_STRUCTURE && !occupied);
+    CHECK(xir_source_facts_acquire(&view,&occupied,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !occupied);
     view=*source;view.module.stage=XR_XIR_BUILT;
-    CHECK(xir_source_facts_acquire(&view,&occupied,NULL)==XR_XIR_BAD_STRUCTURE && !occupied);
+    CHECK(xir_source_facts_acquire(&view,&occupied,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !occupied);
     CHECK(source_program_compile_attempts==attempts);
     XrCompileResourceStats after=library_compile_stats(&source->context),foreign_after=library_compile_stats(foreign);
-    CHECK(after.work==entry.work && after.allocated_bytes==entry.allocated_bytes && after.live_bytes==entry.live_bytes);
-    CHECK(foreign_after.work==other.work && foreign_after.allocated_bytes==other.allocated_bytes &&
-        foreign_after.live_bytes==other.live_bytes);
+    CHECK(after.allocated_bytes==entry.allocated_bytes && after.held_bytes==entry.held_bytes);
+    CHECK(foreign_after.allocated_bytes==other.allocated_bytes &&
+        foreign_after.held_bytes==other.held_bytes);
 }
 
 /* Primitive-only source has a genuine empty physical type domain. The
@@ -98,7 +98,7 @@ static void source_facts_case_empty_types(void) {
     LibraryCompileOwner owner={0};
     CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
     XrCompilerSession *session=NULL;
-    CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     static const char text[]="export fn plain(value:i64)->i64{return value+1}\nprint(plain(41))\n";
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-empty-types",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
@@ -108,14 +108,14 @@ static void source_facts_case_empty_types(void) {
     xr_xir_compile_source_result_free(&output);xr_compile_session_free(session);
     CHECK(source && source->source_facts && !source->module.types);
     XirSourceFacts *lease=NULL;
-    CHECK(xir_source_facts_acquire(source,&lease,NULL)==XR_XIR_OK && lease);
+    CHECK(xir_source_facts_acquire(source,&lease,NULL, NULL)==XR_XIR_OK && lease);
     xir_source_facts_release(lease);lease=NULL;
     XrXirTypeNode unused={.kind=XR_XIR_TYPE_TUPLE};
     XrXirTypes changed={.nodes=&unused,.count=1};
     source->module.types=&changed;source_facts_case_refuse(source);
     source->module.types=NULL;
     CHECK(xr_xir_compile_artifact_verify(source,NULL)==XR_XIR_OK);
-    CHECK(xir_source_facts_acquire(source,&lease,NULL)==XR_XIR_OK && lease);
+    CHECK(xir_source_facts_acquire(source,&lease,NULL, NULL)==XR_XIR_OK && lease);
     xir_source_facts_release(lease);xr_xir_compile_artifact_free(source);
     library_compile_owner_drop(&owner);
 }
@@ -132,22 +132,22 @@ static void source_facts_case_lifetime(void) {
     CHECK(source_facts_case_fixture(&producer,&source)==XR_XIR_OK && source->source_facts);
     memset(&producer,0xA5,sizeof(producer));
     source_facts_case_requests(source,&foreign.context);source_facts_case_contracts(source);
-    XirSourceFacts *lease=NULL;CHECK(xir_source_facts_acquire(source,&lease,NULL)==XR_XIR_OK && lease);
+    XirSourceFacts *lease=NULL;CHECK(xir_source_facts_acquire(source,&lease,NULL, NULL)==XR_XIR_OK && lease);
     CHECK(xir_source_facts_effects(lease));
-    CHECK(xr_xir_compile_specialize(source,&instance,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source,&instance,NULL, NULL)==XR_XIR_OK);
     CHECK(instance->module.provenance->source->source_facts==source->source_facts);
-    CHECK(xr_xir_compile_recheck_v2(&owner.context,&instance->module,instance->construction,&peer,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(&owner.context,&instance->module,instance->construction,&peer,NULL, NULL)==XR_XIR_OK);
     CHECK(peer->module.provenance->source->source_facts==source->source_facts);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(instance,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(source);source=NULL;
     xr_xir_compile_artifact_free(instance);instance=NULL;
     xir_source_facts_release(lease);lease=NULL;
     CHECK(xr_xir_compile_artifact_verify(peer,NULL)==XR_XIR_OK);
-    CHECK(xir_source_facts_acquire(peer->module.provenance->source,&lease,NULL)==XR_XIR_OK);
+    CHECK(xir_source_facts_acquire(peer->module.provenance->source,&lease,NULL, NULL)==XR_XIR_OK);
     xir_source_facts_release(lease);lease=NULL;
     CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
     CHECK(decoded->module.provenance->source->source_facts!=peer->module.provenance->source->source_facts);
-    CHECK(xr_xir_compile_recheck_v2(&foreign.context,&peer->module,peer->construction,&receiver,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(&foreign.context,&peer->module,peer->construction,&receiver,NULL, NULL)==XR_XIR_OK);
     CHECK(receiver->module.provenance->source->source_facts!=peer->module.provenance->source->source_facts);
     xr_xir_compile_artifact_free(peer);peer=NULL;
     CHECK(xr_xir_compile_artifact_verify(decoded,NULL)==XR_XIR_OK);

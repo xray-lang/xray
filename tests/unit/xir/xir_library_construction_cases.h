@@ -29,17 +29,17 @@ static void library_construction_old_packet(const void *bytes,size_t length) {
 static void library_construction_reject(const XrXirModule *module,const XrXirConstruction *construction) {
     size_t blocks=source_live,bytes=source_bytes;
     XrXirArtifact *output=NULL;
-    CHECK(xr_xir_compile_recheck_v2(library_context,module,construction,&output,NULL)!=XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(library_context,module,construction,&output,NULL, NULL)!=XR_XIR_OK);
     CHECK(!output && source_live==blocks && source_bytes==bytes);
     output=(XrXirArtifact *)(uintptr_t)1;
-    CHECK(xr_xir_compile_recheck_v2(library_context,module,construction,&output,NULL)!=XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(library_context,module,construction,&output,NULL, NULL)!=XR_XIR_OK);
     CHECK(output==(XrXirArtifact *)(uintptr_t)1 && source_live==blocks && source_bytes==bytes);
 }
 static void library_construction_reject_rows(const XrXirModule *module,
     const XrXirConstructionRow *rows,uint32_t count,const XrXirSlotFacts *slots) {
     size_t blocks=source_live,bytes=source_bytes;
     XrXirConstruction *bad=NULL;
-    CHECK(xr_xir_compile_construction_new_v4(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},slots,&bad)==XR_XIR_OK && bad);
+    CHECK(xr_xir_compile_construction_new_v4(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},slots,&bad, NULL)==XR_XIR_OK && bad);
     library_construction_reject(module,bad);
     xr_xir_compile_construction_free(bad);
     CHECK(source_live==blocks && source_bytes==bytes);
@@ -91,17 +91,17 @@ static void library_construction_attacks(const XrXirArtifact *artifact) {
     library_construction_reject(module,NULL);
     size_t blocks=source_live,bytes=source_bytes;
     XrXirConstruction *bad=NULL;
-    CHECK(xr_xir_compile_construction_new_v4(library_context,module->types,&(XrXirConstructionSpec){rows,count-1,NULL,0,NULL},xr_xir_compile_construction_slots(construction),&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
+    CHECK(xr_xir_compile_construction_new_v4(library_context,module->types,&(XrXirConstructionSpec){rows,count-1,NULL,0,NULL},xr_xir_compile_construction_slots(construction),&bad, NULL)==XR_XIR_BAD_STRUCTURE&&!bad);
     rows[owner].field_count=nominal->field_count-1;
-    CHECK(xr_xir_compile_construction_new_v4(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},xr_xir_compile_construction_slots(construction),&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
+    CHECK(xr_xir_compile_construction_new_v4(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},xr_xir_compile_construction_slots(construction),&bad, NULL)==XR_XIR_BAD_STRUCTURE&&!bad);
     bad=(XrXirConstruction *)(uintptr_t)1;
-    CHECK(xr_xir_compile_construction_new_v4(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},xr_xir_compile_construction_slots(construction),&bad)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_construction_new_v4(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},xr_xir_compile_construction_slots(construction),&bad, NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(bad==(XrXirConstruction *)(uintptr_t)1 && source_live==blocks && source_bytes==bytes);
     free(fields);free(rows);
 }
 static void library_construction_projection(const XrXirArtifact *checked) {
     XrXirArtifact *specialized=NULL;
-    CHECK(xr_xir_compile_specialize(checked,&specialized,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&specialized,NULL, NULL)==XR_XIR_OK);
     const XrXirModule *m=xr_xir_compile_artifact_module(specialized);
     CHECK(xir_effect_evidence_is_instance(m) && m->provenance->source);
     const XrXirConstruction *construction=xr_xir_compile_artifact_construction(specialized);

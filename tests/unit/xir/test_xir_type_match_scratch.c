@@ -345,7 +345,7 @@ static void deep_body(void) {
     CHECK(xir_fixture_check(&c, &built, &checked, NULL)==XR_XIR_OK);
     memset(nodes,0xcc,sizeof(nodes));
     CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     const XrXirModule *module=xr_xir_compile_artifact_module(closed);
     CHECK(module->function_count==3 && module->types->count==DEPTH*2);

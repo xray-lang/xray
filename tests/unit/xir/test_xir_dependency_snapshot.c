@@ -19,7 +19,7 @@ static XrXirSourceSnapshot *empty(XrXirCompileContext *context) {
     CHECK(xr_compile_resources_new(&limits,&context->resources)==XR_COMPILE_RESOURCE_OK);
     context->limits=xr_xir_compile_default_limits();
     XrXirConstruction *construction=NULL;
-    CHECK(xr_xir_compile_construction_new_v4(context,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v4(context,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction, NULL)==XR_XIR_OK);
     XrXirSourceQueryModule modules[2]={{"root-id","root.xr",{{0}}},{"io-id","io",{{0}}}};
     XrXirSourceView view={0}; view.modules=modules; view.module_count=2;
     XrXirSourceSnapshot *snapshot=NULL;

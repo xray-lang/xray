@@ -77,7 +77,7 @@ typedef struct XrXirConstructionSpec {
  * Even a zero-row construction produces a real immutable receiving owner. */
 XR_FUNC XrXirStatus xr_xir_compile_construction_new_v4(const XrXirCompileContext *context,
     const XrXirTypes *types, const XrXirConstructionSpec *input,
-    const XrXirSlotFacts *complete_slots, XrXirConstruction **output);
+    const XrXirSlotFacts *complete_slots, XrXirConstruction **output, XrCompileRequestControl *control);
 XR_FUNC void xr_xir_compile_construction_free(XrXirConstruction *construction);
 XR_FUNC uint32_t xr_xir_compile_construction_count(const XrXirConstruction *construction);
 XR_FUNC const XrXirConstructionRow *xr_xir_compile_construction_row(

@@ -213,7 +213,7 @@ static void predecessor_rejected(Fixture *fixture, const char *path, uint32_t sc
     xr_sha256_final(&hash, digest);
     CHECK(!memcmp(digest, bytes + 32, sizeof(digest)));
     XrXirArtifact *decoded = NULL;
-    XrXirStatus status = evaluation ? xir_evaluation_read(&fixture->context, bytes, length, &decoded, NULL) :
+    XrXirStatus status = evaluation ? xir_evaluation_read(&fixture->context, bytes, length, &decoded, NULL, NULL) :
         xr_xir_compile_checked_read(&fixture->context, bytes, length, &decoded, NULL);
     CHECK(status == XR_XIR_BAD_STRUCTURE);
     CHECK(!decoded);

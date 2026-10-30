@@ -22,12 +22,14 @@ cases = {
         'const XrXirCompileContext *, XrXirArtifact **, XrXirProgram **'),
     'emit_with_mutable_owner': ('xr_xir_compile_emit_c', 'XrXirStatus',
         'XrXirArtifact *, const char *, size_t, XrXirCSource *'),
+    'specialize_without_request_control': ('xr_xir_compile_specialize', 'XrXirStatus',
+        'const XrXirArtifact *, XrXirArtifact **, XrXirDiagnostic *'),
 }
 records = []
 for name, (symbol, result, parameters) in cases.items():
     source = args.output / (name + '.c')
     obj = args.output / (name + '.obj')
-    source.write_text('#include "xir/xxir_vm.h"\n#include "xir/xxir_emit_c.h"\n'
+    source.write_text('#include "xir/xxir_vm.h"\n#include "xir/xxir_emit_c.h"\n#include "xir/xxir_generic.h"\n'
         'typedef struct OldBudget { uint64_t metadata_bytes, work; } OldBudget;\n'
         f'typedef {result} (*Incorrect)({parameters});\n'
         f'_Static_assert(_Generic(&{symbol}, Incorrect: 1, default: 0), "XR_NEGATIVE_SIGNATURE");\n',
@@ -45,4 +47,4 @@ for name, (symbol, result, parameters) in cases.items():
     if not passed:
         raise SystemExit(f'Incorrect signature did not fail its explicit assertion: {name}')
 (args.output / 'record.json').write_text(json.dumps(records, indent=2), encoding='utf-8')
-print('Five independent incorrect prototypes rejected by C11 static assertions')
+print('Six independent incorrect prototypes rejected by C11 static assertions')

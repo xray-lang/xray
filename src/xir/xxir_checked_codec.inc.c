@@ -19,6 +19,7 @@
 #include "xxir_implementation.h"
 #include "xxir_internal.h"
 #include "xxir_lower_control.h"
+#include "xxir_receive_control.h"
 #include "../base/xsha256.h"
 
 typedef struct CheckedCursor {
@@ -93,7 +94,7 @@ static void *checked_array_storage(CheckedCursor *c, const void *source, uint32_
     if (count > SIZE_MAX / size) {
         c->status = XR_XIR_BUDGET; return NULL;
     }
-    void *memory = zero ? xir_compile_calloc(&c->remaining, count, size, &allocation_status) :
+    void *memory = zero ? xir_type_copy_zero(&c->remaining,count,size,&allocation_status,c->control) :
         xir_compile_alloc(&c->remaining, (size_t)count * size, &allocation_status);
     if (!memory) { c->status = allocation_status; return NULL; }
     return memory;
@@ -114,7 +115,8 @@ static const char *checked_blob(CheckedCursor *c, const char *bytes, uint32_t *l
     if (c->reading) {
         char *copy = checked_array(c, NULL, *length, 1, 1);
         if (*length && !copy) return NULL;
-        if (*length) memcpy(copy, c->input + c->position, *length);
+        if (*length) c->status=xir_receive_copy(c->control,copy,c->input+c->position,*length);
+        if (c->status!=XR_XIR_OK) {xr_compile_resources_free(copy);return NULL;}
         bytes = copy;
     } else if (c->output && *length) {
         if (*length<=4096) memcpy(c->output+c->position,bytes,*length);
@@ -335,7 +337,8 @@ static XrXirLiteral checked_nominal_name(CheckedCursor *c, XrXirLiteral name) {
         if (name.length == UINT32_MAX) { c->status = XR_XIR_BUDGET; return (XrXirLiteral) {0}; }
         char *bytes = checked_array(c, NULL, name.length + 1, 1, 1);
         if (!bytes) return (XrXirLiteral) {0};
-        memcpy(bytes, c->input + c->position, name.length);
+        c->status=xir_receive_copy(c->control,bytes,c->input+c->position,name.length);
+        if (c->status!=XR_XIR_OK) {xr_compile_resources_free(bytes);return (XrXirLiteral){0};}
         name.bytes = bytes;
     } else if (c->output && name.length) {
         if (name.length<=4096) memcpy(c->output+c->position,name.bytes,name.length);
@@ -545,7 +548,7 @@ static void checked_construction(CheckedCursor *c, XrXirModule *module,
     if (count != expected) { c->status = XR_XIR_BAD_STRUCTURE; return; }
     if (c->reading) {
         XrXirStatus status = XR_XIR_OK;
-        XrXirConstruction *owner = xir_compile_calloc(&c->remaining, 1, sizeof(*owner), &status);
+        XrXirConstruction *owner = xir_type_copy_zero(&c->remaining,1,sizeof(*owner),&status,c->control);
         if (!owner) { c->status = status; return; }
         owner->context = c->remaining;
         *construction = owner;
@@ -804,7 +807,7 @@ static XrXirStatus checked_encode_mode(const XrXirArtifact *artifact,XrXirChecke
     checked_module(&c,&module,&construction,evaluation?XR_XIR_EVIDENCE_EVALUATION:XR_XIR_EVIDENCE_INSTANCE);
     if (c.status != XR_XIR_OK) return checked_error(c.status, diagnostic);
     size_t size = c.position;
-    uint8_t *bytes = xir_compile_calloc(&artifact->context, size, 1, &allocation_status);
+    uint8_t *bytes = xir_type_copy_zero(&artifact->context,size,1,&allocation_status,control);
     if (!bytes) return checked_error(allocation_status, diagnostic);
 
     memcpy(bytes,evaluation?"XRCEV\0\0\0":"XRCHK\0\0\0",8);

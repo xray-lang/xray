@@ -54,7 +54,7 @@ static void reference_output(const XrXirCompileContext *context,XrXirSourceResul
     bool fibonacci=strstr(selected->name,"fibonacci")!=NULL,direct=strstr(selected->name,"direct")!=NULL;
     XrXirCheckedPacket wire={0};
     if (direct) {
-        XrXirArtifact *closed=NULL;CHECK(xr_xir_compile_specialize(source->checked,&closed,NULL)==XR_XIR_OK);
+        XrXirArtifact *closed=NULL;CHECK(xr_xir_compile_specialize(source->checked,&closed,NULL, NULL)==XR_XIR_OK);
         CHECK(xr_xir_compile_checked_write(closed,&wire,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     }
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);XrXirValue output={0};

@@ -88,7 +88,7 @@ static XrXirStatus atomic_instruction_pipeline(const XrXirCompileContext *contex
     if(status==XR_XIR_OK){status=xr_xir_compile_checked_write(checked,&packet,NULL);if(status!=XR_XIR_OK)CHECK(!packet.bytes&&!packet.length);}
     xr_xir_compile_artifact_free(checked);checked=NULL;
     if(status==XR_XIR_OK){status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);if(status!=XR_XIR_OK)CHECK(!read);}
-    if(status==XR_XIR_OK){status=xr_xir_compile_specialize(read,&specialized,NULL);if(status!=XR_XIR_OK)CHECK(!specialized);}
+    if(status==XR_XIR_OK){status=xr_xir_compile_specialize(read,&specialized,NULL, NULL);if(status!=XR_XIR_OK)CHECK(!specialized);}
     xr_xir_compile_artifact_free(read);read=NULL;
     if(status==XR_XIR_OK){status=xr_xir_compile_lower(specialized,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);if(status!=XR_XIR_OK)CHECK(!lowered);}
     xr_xir_compile_artifact_free(specialized);specialized=NULL;

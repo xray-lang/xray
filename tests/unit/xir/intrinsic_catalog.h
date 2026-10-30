@@ -125,7 +125,7 @@ static Fixture intrinsic_catalog_fixture(void) {
     xr_free(consumer);
     xr_compile_session_free(session);
     xr_xir_compile_library_catalog_free(catalog);
-    CHECK(xr_xir_compile_specialize(received.checked, &fixture.closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(received.checked, &fixture.closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_source_result_free(&received);
     CHECK(xr_xir_compile_checked_write(fixture.closed, &fixture.packet, NULL) == XR_XIR_OK);
     xr_sha256(fixture.packet.bytes, fixture.packet.length, fixture.identity);

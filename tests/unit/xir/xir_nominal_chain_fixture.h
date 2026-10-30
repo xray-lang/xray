@@ -41,7 +41,7 @@ static XrXirArtifact *nominal_chain_fixture(const XrXirCompileContext *context, 
 }
 static inline XrXirArtifact *nominal_chain_lowered(const XrXirCompileContext *context) {
     XrXirArtifact *checked = nominal_chain_fixture(context, 3, 2), *closed = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);

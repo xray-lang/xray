@@ -287,7 +287,7 @@ static XrXirStatus invocation_returned_lowered(const XrXirCompileContext *contex
     if (oracle) CHECK(raw && raw->stage==XR_XIR_CHECKED && !raw->provenance &&
         !raw->generics && !raw->defaults && raw->types && !raw->types->interfaces &&
         raw->declarations && !raw->declarations->implementations);
-    XrXirStatus status=xr_xir_compile_specialize(checked,&specialized,&diagnostic);
+    XrXirStatus status=xr_xir_compile_specialize(checked,&specialized,&diagnostic, NULL);
     if (status==XR_XIR_OK && oracle) {
         const XrXirModule *closed=xr_xir_compile_artifact_module(specialized);
         CHECK(closed && closed->stage==XR_XIR_CHECKED && !closed->provenance &&

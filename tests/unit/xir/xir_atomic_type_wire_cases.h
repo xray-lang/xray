@@ -52,7 +52,7 @@ static XrXirStatus legacy_types_pipeline(const XrXirCompileContext *context,void
         else CHECK(packet.length==sizeof(atomic_types72_golden)&&!memcmp(packet.bytes,atomic_types72_golden,packet.length));}
     xr_xir_compile_artifact_free(checked);
     if(status==XR_XIR_OK){status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);if(status!=XR_XIR_OK)CHECK(!read);}
-    if(status==XR_XIR_OK){status=xr_xir_compile_specialize(read,&specialized,NULL);if(status!=XR_XIR_OK)CHECK(!specialized);}
+    if(status==XR_XIR_OK){status=xr_xir_compile_specialize(read,&specialized,NULL, NULL);if(status!=XR_XIR_OK)CHECK(!specialized);}
     xr_xir_compile_artifact_free(read);
     if(status==XR_XIR_OK){status=xr_xir_compile_lower(specialized,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);if(status!=XR_XIR_OK)CHECK(!lowered);}
     xr_xir_compile_artifact_free(specialized);if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(lowered,NULL);

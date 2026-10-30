@@ -22,10 +22,10 @@ typedef struct SpecEffectVector {
 
 static bool spec_effect_same(SpecContext *c, const SpecInstance *instance,
     const XrXirEffectArgument *arguments, uint32_t count) {
-    if (!((c)->diagnostic.status == XR_XIR_OK)) return false;
+    if (!spec_progress(c)) return false;
     if (instance->effect_count != count) return false;
     for (uint32_t a=0;a<count;++a) {
-        if (!((c)->diagnostic.status == XR_XIR_OK)) return false;
+        if (!spec_progress(c)) return false;
         if (instance->effects[a].parameter != arguments[a].parameter ||
             instance->effects[a].type != arguments[a].type) return false;
     }
@@ -35,7 +35,7 @@ static bool spec_effect_same(SpecContext *c, const SpecInstance *instance,
 static XrXirType spec_effect_child(SpecContext *c, const XrXirType *cache,
     uint32_t before, XrXirType input) {
     uint32_t id=(uint32_t)input;
-    if (!((c)->diagnostic.status == XR_XIR_OK)) return XR_XIR_UNIT;
+    if (!spec_progress(c)) return XR_XIR_UNIT;
     if (id>=XR_XIR_TYPE_PARAMETER_BASE) {
         c->diagnostic.status=XR_XIR_BAD_TYPE;return XR_XIR_UNIT;
     }
@@ -58,14 +58,14 @@ static const XrXirType *spec_effect_import(SpecContext *c, const XrXirTypes *typ
     XrXirType *cache=spec_alloc(c,types->count,sizeof(*cache));
     if (types->count && !cache) return NULL;
     for (uint32_t i=0;i<types->count;++i) {
-        if (!((c)->diagnostic.status == XR_XIR_OK)) return NULL;
+        if (!spec_progress(c)) return NULL;
         XrXirTypeNode node=types->nodes[i];
         if (node.parameter_span) continue;
         if (node.kind==XR_XIR_TYPE_CALLABLE || node.kind==XR_XIR_TYPE_TUPLE || node.kind==XR_XIR_TYPE_UNION) {
             XrXirCallableParameter *parameters=spec_alloc(c,node.parameter_count,sizeof(*parameters));
             if (node.parameter_count && !parameters) return NULL;
             for (uint32_t p=0;p<node.parameter_count;++p) {
-                if (!((c)->diagnostic.status == XR_XIR_OK)) return NULL;
+                if (!spec_progress(c)) return NULL;
                 parameters[p].mode=node.parameters[p].mode;
                 parameters[p].type=spec_effect_child(c,cache,i,node.parameters[p].type);
             }
@@ -97,7 +97,7 @@ static bool spec_effect_owners(SpecContext *c, uint32_t caller,
     *output=NULL;*count=0;
     uint32_t owner=c->instances[caller].owner;
     while (owner!=UINT32_MAX) {
-        if (!((c)->diagnostic.status == XR_XIR_OK)) return false;
+        if (!spec_progress(c)) return false;
         if (owner>=c->count || *count>=c->count) { c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false; }
         ++*count;owner=c->instances[owner].owner;
     }
@@ -105,7 +105,7 @@ static bool spec_effect_owners(SpecContext *c, uint32_t caller,
     if (*count && !origins) return false;
     owner=c->instances[caller].owner;
     for (uint32_t a=0;a<*count;++a) {
-        if (!((c)->diagnostic.status == XR_XIR_OK)) return false;
+        if (!spec_progress(c)) return false;
         const SpecInstance *instance=&c->instances[owner];
         origins[a]=(XrXirOrigin){instance->declaration,instance->arguments,instance->count,
             instance->effects,instance->effect_count};
@@ -129,7 +129,7 @@ static bool spec_effect_vector(SpecContext *c, uint32_t declaration,
         if (type_count && !cache) return false;
         SpecInstance temporary={declaration,ordinary,ordinary_count,cache,NULL,0,UINT32_MAX};
         for (uint32_t p=0;p<count;++p) {
-            if (!((c)->diagnostic.status == XR_XIR_OK)) return false;
+            if (!spec_progress(c)) return false;
             arguments[p]=(XrXirEffectArgument){p,spec_type(c,&temporary,definition->parameters[p])};
         }
     } else {
@@ -157,7 +157,7 @@ static bool spec_effect_vector(SpecContext *c, uint32_t declaration,
         const XrXirType *cache=spec_effect_import(c,selected.types);
         if (selected.types->count && !cache) return false;
         for (uint32_t p=0;p<count;++p) {
-            if (!((c)->diagnostic.status == XR_XIR_OK)) return false;
+            if (!spec_progress(c)) return false;
             arguments[p]=(XrXirEffectArgument){p,spec_effect_child(c,cache,selected.types->count,
                 selected.physical_types[p])};
         }
@@ -177,7 +177,7 @@ static bool spec_effect_flow(SpecContext *c, uint32_t index) {
 static bool spec_effect_default(SpecContext *c, const SpecInstance *instance, bool *result) {
     *result=instance->count==0;
     for (uint32_t a=0;a<instance->effect_count;++a) {
-        if (!((c)->diagnostic.status == XR_XIR_OK)) return false;
+        if (!spec_progress(c)) return false;
         const XrXirEffectArgument *argument=&instance->effects[a];
         XrXirType declared=c->source->functions[instance->declaration].parameters[argument->parameter];
         XrXirTypeMatchScratch scratch={c->remaining.resources,NULL};
@@ -205,7 +205,7 @@ static bool spec_effect_proofs(SpecContext *c, XrXirEffectBindingProof **output,
         const XrXirFunction *function=&c->functions[f];
         const XrXirFunction *original=&c->source->functions[c->instances[f].declaration];
         for (uint32_t i=0;i<function->instruction_count;++i) {
-            if (!((c)->diagnostic.status == XR_XIR_OK)) return false;
+            if (!spec_progress(c)) return false;
             if (!spec_effect_family(original->instructions[i].op)) continue;
             const XrXirInstruction *op=&function->instructions[i];
             if (op->immediate<0 || (uint64_t)op->immediate>=c->count) {
@@ -213,7 +213,7 @@ static bool spec_effect_proofs(SpecContext *c, XrXirEffectBindingProof **output,
             }
             const SpecInstance *target=&c->instances[op->immediate];
             for (uint32_t a=0;a<target->effect_count;++a) {
-                if (!((c)->diagnostic.status == XR_XIR_OK)) return false;
+                if (!spec_progress(c)) return false;
                 if (target->effects[a].parameter>=op->args[1]) continue;
                 if (total==UINT32_MAX) { c->diagnostic.status=XR_XIR_BUDGET;return false; }
                 ++total;
@@ -228,19 +228,19 @@ static bool spec_effect_proofs(SpecContext *c, XrXirEffectBindingProof **output,
         const XrXirFunction *original=&c->source->functions[c->instances[f].declaration];
         for (uint32_t family=1;family<=4;++family) {
             for (uint32_t i=0;i<function->instruction_count;++i) {
-                if (!((c)->diagnostic.status == XR_XIR_OK)) return false;
+                if (!spec_progress(c)) return false;
                 if (spec_effect_family(original->instructions[i].op)!=family) continue;
                 const XrXirInstruction *op=&function->instructions[i];
                 const SpecInstance *target=&c->instances[op->immediate];
                 for (uint32_t a=0;a<target->effect_count;++a) {
-                    if (!((c)->diagnostic.status == XR_XIR_OK)) return false;
+                    if (!spec_progress(c)) return false;
                     uint32_t physical=target->effects[a].parameter;
                     if (physical>=op->args[1]) continue;
                     if (!function->operands || op->args[0]>function->operand_count ||
                         op->args[1]>function->operand_count-op->args[0] || at>=total) {
                         c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false;
                     }
-                    if (!((c)->diagnostic.status == XR_XIR_OK)) return false;
+                    if (!spec_progress(c)) return false;
                     proofs[at++]=(XrXirEffectBindingProof){family,f,i,(uint32_t)op->immediate,
                         physical,function->operands[op->args[0]+physical]};
                 }
@@ -248,6 +248,6 @@ static bool spec_effect_proofs(SpecContext *c, XrXirEffectBindingProof **output,
         }
     }
     if (at!=total) { c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false; }
-    if (!((c)->diagnostic.status == XR_XIR_OK)) return false;
+    if (!spec_progress(c)) return false;
     *output=proofs;*count=total;return true;
 }

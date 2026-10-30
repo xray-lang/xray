@@ -22,7 +22,7 @@ static void source_requirement_value_ownership(const XrXirSourceRequest *request
     XrXirArtifact *checked=witness_promise_check(&local,true,"receiver-owned escaped callable",NULL);
     witness_promise_file(&local,"witness_promises.xr","const overwritten=0\n");
     XrXirArtifact *closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(checked, &closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered,NULL)==XR_XIR_OK);

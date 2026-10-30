@@ -54,7 +54,7 @@ static XrRbcProgram *compile_file(const char *path, bool optimize, const char *s
         goto done;
     }
     XrXirDiagnostic specialization = {0};
-    if (xr_xir_compile_specialize(source.checked, &closed, &specialization) != XR_XIR_OK) {
+    if (xr_xir_compile_specialize(source.checked, &closed, &specialization, NULL) != XR_XIR_OK) {
         fprintf(stderr, "lir_vm_run: specialization failed (%u)\n",
             (unsigned)specialization.status);
         goto done;

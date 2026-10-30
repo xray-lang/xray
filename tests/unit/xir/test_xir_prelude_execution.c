@@ -78,7 +78,7 @@ static XrXirArtifact *prelude_lower(XrXirArtifact *owned,uint32_t *answer) {
     }
     CHECK(xr_xir_compile_artifact_verify(owned,NULL)==XR_XIR_OK);
     XrXirArtifact *special=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(owned,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
+    CHECK(xr_xir_compile_specialize(owned,&special,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
@@ -99,7 +99,7 @@ static XrXirProgramSpec prelude_vm_spec(XrXirArtifact *lowered,XrXirCallEntry *e
 XR_FUNC XrXirStatus xr_test_prelude_compile_pipeline(const XrXirCompileContext *context,const XrXirArtifact *checked) {
     if (!checked || xr_xir_compile_artifact_context(checked)->resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
     XrXirArtifact *special=NULL,*lowered=NULL;XrXirProgram *program=NULL;
-    XrXirStatus status=xr_xir_compile_specialize(checked,&special,NULL);
+    XrXirStatus status=xr_xir_compile_specialize(checked,&special,NULL, NULL);
     if (status!=XR_XIR_OK) {CHECK(!special);goto done;}
     status=xr_xir_compile_artifact_verify(special,NULL);if (status!=XR_XIR_OK) goto done;
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

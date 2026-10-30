@@ -124,7 +124,7 @@ static void library_comptime_normal(const char *kind) {
     XrXirStatus status=library_comptime_operation(&context,kind,&source);
     if (status!=XR_XIR_OK) fprintf(stderr,"Library %s status%u\n",kind,status);
     CHECK(status==XR_XIR_OK && source);
-    XirComptimePending *pending=NULL;CHECK(xr_xir_compile_comptime_pending(source,&pending,NULL)==XR_XIR_OK && !pending);
+    XirComptimePending *pending=NULL;CHECK(xr_xir_compile_comptime_pending(source,&pending,NULL, NULL)==XR_XIR_OK && !pending);
     uint32_t sites=source->construction->comptime.site_count,bindings=source->construction->comptime.binding_count;
     bool doubled=!strcmp(kind,"local") || !strcmp(kind,"dual");
     bool absent=!strcmp(kind,"none") || !strcmp(kind,"closed") || !strcmp(kind,"closed-method");
@@ -133,7 +133,7 @@ static void library_comptime_normal(const char *kind) {
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(source);CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
+    CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     uint32_t run=named(&lowered->module,"run");XrXirProgram *program=NULL;

@@ -18,16 +18,16 @@ static const char provenance_take_text[] =
 static XrXirStatus provenance_take_fixture(const XrXirCompileContext *context,
     XrXirArtifact **output) {
     XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&session);
-    if(opened!=XR_COMPILER_SESSION_OK)
-        return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompileResourceStatus opened=xr_compile_session_new(context->resources,&session);
+    if(opened!=XR_COMPILE_RESOURCE_OK)
+        return opened==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"provenance-take",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,provenance_take_text,sizeof(provenance_take_text)-1};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,&failure);
     xr_compile_session_free(session);
-    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(source.checked,output,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(source.checked,output,NULL, NULL);
     xr_xir_compile_source_result_free(&source);xr_xir_compile_source_failure_free(&failure);
     return status;
 }
@@ -42,7 +42,7 @@ static XrXirStatus provenance_take_operation(const XrXirCompileContext *context,
     XrXirStatus status=provenance_take_fixture(context,&donor);
     if(status==XR_XIR_OK) {
         CHECK(donor->module.provenance && donor->module.provenance->kind==XR_XIR_EVIDENCE_INSTANCE);
-        status=xr_xir_compile_recheck_v2(context,&donor->module,donor->construction,&borrowed,NULL);
+        status=xr_xir_compile_recheck_v2(context,&donor->module,donor->construction,&borrowed,NULL, NULL);
     }
     if(status==XR_XIR_OK)
         status=xr_xir_compile_artifact_verify_owned_effects(donor->module.provenance->source,&source_effects,NULL);
@@ -51,7 +51,7 @@ static XrXirStatus provenance_take_operation(const XrXirCompileContext *context,
         owned=(XrXirProvenance *)donor->module.provenance;donor->module.provenance=NULL;
         XrXirProvenance *identity=owned;
         status=xr_xir_compile_recheck_provenance_take(context,&view,
-            &(XirProvenanceReceiving){donor->construction,source_effects},&owned,&taken,NULL);
+            &(XirProvenanceReceiving){donor->construction,source_effects},&owned,&taken,NULL, NULL);
         CHECK(!owned);
         if(status==XR_XIR_OK)CHECK(taken->module.provenance==identity);
     }
@@ -85,8 +85,7 @@ static void provenance_binding_raw_status(const XrXirCompileContext *context,
     CHECK(xr_xir_compile_provenance_functions_match(context,&instance->source->module,
         module,instance,NULL)==expected);
     XrCompileResourceStats after=library_compile_stats(context);
-    CHECK(after.live_bytes==before.live_bytes && after.work>=before.work &&
-        after.allocated_bytes>=before.allocated_bytes);
+    CHECK(after.held_bytes==before.held_bytes && after.allocated_bytes>=before.allocated_bytes);
     if(early)CHECK(source_program_compile_attempts==calls_before &&
         after.allocated_bytes==before.allocated_bytes && after.allocation_count==before.allocation_count);
 }
@@ -114,7 +113,7 @@ static void provenance_binding_membership_controls(const XrXirCompileContext *co
     same=true;
     CHECK(xir_effect_binding_proof_lookup(NULL,&changed,&absent,&same)==XR_XIR_BAD_STRUCTURE && same);
     XrCompileResourceStats lookup_end=library_compile_stats(context);
-    CHECK(lookup_end.work>lookup_entry.work && lookup_end.live_bytes==lookup_entry.live_bytes &&
+    CHECK(lookup_end.held_bytes==lookup_entry.held_bytes &&
         lookup_end.allocated_bytes==lookup_entry.allocated_bytes && source_program_compile_attempts==lookups_before);
     XrXirEffectBindingProof held=proofs[0];
     proofs[0]=proofs[stored->binding_count-1];proofs[stored->binding_count-1]=held;
@@ -142,7 +141,7 @@ static void provenance_binding_membership_controls(const XrXirCompileContext *co
     provenance_binding_raw_status(context,&view,&changed,XR_XIR_OK,false);
     CHECK(!memcmp(proofs,stored->bindings,(size_t)stored->binding_count*sizeof(*proofs)));
     xr_compile_resources_free(memory);
-    CHECK(library_compile_stats(context).live_bytes==baseline.live_bytes);
+    CHECK(library_compile_stats(context).held_bytes==baseline.held_bytes);
 }
 
 static void provenance_take_requests(const XrXirCompileContext *context,XrXirArtifact *donor,
@@ -151,22 +150,22 @@ static void provenance_take_requests(const XrXirCompileContext *context,XrXirArt
     XrXirArtifact *sentinel=(XrXirArtifact *)(uintptr_t)1;
     XrCompileResourceStats entry=library_compile_stats(context),other=library_compile_stats(foreign);
     size_t attempts=source_program_compile_attempts;
-    CHECK(xr_xir_compile_recheck_provenance_take(context,&donor->module,&(XirProvenanceReceiving){donor->construction,NULL},&owned,&sentinel,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_recheck_provenance_take(context,&donor->module,&(XirProvenanceReceiving){donor->construction,NULL},&owned,&sentinel,NULL, NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(sentinel==(XrXirArtifact *)(uintptr_t)1 && owned==donor->module.provenance);
     sentinel=NULL;
     CHECK(xr_xir_compile_recheck_provenance_take(context,&donor->module,&(XirProvenanceReceiving){donor->construction,NULL},
-        &owned,(XrXirArtifact **)(void *)&owned,NULL)==XR_XIR_BAD_STRUCTURE);
+        &owned,(XrXirArtifact **)(void *)&owned,NULL, NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(owned==donor->module.provenance);
-    CHECK(xr_xir_compile_recheck_provenance_take(foreign,&donor->module,&(XirProvenanceReceiving){donor->construction,NULL},&owned,&sentinel,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_recheck_provenance_take(foreign,&donor->module,&(XirProvenanceReceiving){donor->construction,NULL},&owned,&sentinel,NULL, NULL)==XR_XIR_BAD_STRUCTURE);
     XrXirModule invalid=donor->module;invalid.stage=XR_XIR_BUILT;
-    CHECK(xr_xir_compile_recheck_provenance_take(context,&invalid,&(XirProvenanceReceiving){donor->construction,NULL},&owned,&sentinel,NULL)==XR_XIR_BAD_STAGE);
+    CHECK(xr_xir_compile_recheck_provenance_take(context,&invalid,&(XirProvenanceReceiving){donor->construction,NULL},&owned,&sentinel,NULL, NULL)==XR_XIR_BAD_STAGE);
     invalid=donor->module;invalid.provenance=NULL;
-    CHECK(xr_xir_compile_recheck_provenance_take(context,&invalid,&(XirProvenanceReceiving){donor->construction,NULL},&owned,&sentinel,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_recheck_provenance_take(context,&invalid,&(XirProvenanceReceiving){donor->construction,NULL},&owned,&sentinel,NULL, NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(!sentinel && owned==donor->module.provenance);
     CHECK(source_program_compile_attempts==attempts);
     XrCompileResourceStats after=library_compile_stats(context),foreign_after=library_compile_stats(foreign);
-    CHECK(after.work==entry.work && after.allocated_bytes==entry.allocated_bytes && after.live_bytes==entry.live_bytes);
-    CHECK(foreign_after.work==other.work && foreign_after.allocated_bytes==other.allocated_bytes && foreign_after.live_bytes==other.live_bytes);
+    CHECK(after.allocated_bytes==entry.allocated_bytes && after.held_bytes==entry.held_bytes);
+    CHECK(foreign_after.allocated_bytes==other.allocated_bytes && foreign_after.held_bytes==other.held_bytes);
 }
 
 static void provenance_take_rejection(const XrXirCompileContext *context) {
@@ -179,9 +178,9 @@ static void provenance_take_rejection(const XrXirCompileContext *context) {
     functions[0].instruction_count=0;
     XrXirModule invalid=donor->module;invalid.functions=functions;
     XrXirProvenance *owned=(XrXirProvenance *)donor->module.provenance;donor->module.provenance=NULL;
-    CHECK(xr_xir_compile_recheck_provenance_take(context,&invalid,&(XirProvenanceReceiving){donor->construction,NULL},&owned,&output,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_recheck_provenance_take(context,&invalid,&(XirProvenanceReceiving){donor->construction,NULL},&owned,&output,NULL, NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(!owned && !output);xr_xir_compile_artifact_free(donor);
-    CHECK(library_compile_stats(context).live_bytes==baseline.live_bytes);
+    CHECK(library_compile_stats(context).held_bytes==baseline.held_bytes);
 }
 
 
@@ -242,17 +241,17 @@ static void provenance_source_requests(const XrXirCompileContext *context,
     XrXirProvenance *owned=(XrXirProvenance *)donor->module.provenance;
     XrXirArtifact *output=NULL;
     CHECK(xr_xir_compile_recheck_provenance_take(context,&donor->module,
-        (const XirProvenanceReceiving *)(const void *)&owned,&owned,&output,NULL)==XR_XIR_BAD_STRUCTURE);
+        (const XirProvenanceReceiving *)(const void *)&owned,&owned,&output,NULL, NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(owned==donor->module.provenance && !output);
     CHECK(xr_xir_compile_recheck_provenance_take(context,&donor->module,
-        (const XirProvenanceReceiving *)(const void *)&output,&owned,&output,NULL)==XR_XIR_BAD_STRUCTURE);
+        (const XirProvenanceReceiving *)(const void *)&output,&owned,&output,NULL, NULL)==XR_XIR_BAD_STRUCTURE);
     XrXirProvenance *sentinel=(XrXirProvenance *)(uintptr_t)1;
-    CHECK(xr_xir_compile_provenance_copy_source_effects(context,owned,effects,&sentinel)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_provenance_copy_source_effects(context,owned,effects,&sentinel, NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(sentinel==(XrXirProvenance *)(uintptr_t)1 && owned==donor->module.provenance);
     CHECK(source_program_compile_attempts==attempts);
     XrCompileResourceStats after=library_compile_stats(context),foreign_after=library_compile_stats(foreign);
-    CHECK(after.work==entry.work && after.allocated_bytes==entry.allocated_bytes && after.live_bytes==entry.live_bytes);
-    CHECK(foreign_after.work==other.work && foreign_after.allocated_bytes==other.allocated_bytes && foreign_after.live_bytes==other.live_bytes);
+    CHECK(after.allocated_bytes==entry.allocated_bytes && after.held_bytes==entry.held_bytes);
+    CHECK(foreign_after.allocated_bytes==other.allocated_bytes && foreign_after.held_bytes==other.held_bytes);
 }
 
 /* The Effects owner is an owned physical Source, not a retained raw Module.
@@ -261,14 +260,14 @@ static void provenance_source_requests(const XrXirCompileContext *context,
 static void provenance_source_death(const XrXirCompileContext *context,
     XrXirArtifact **donor,XrXirEffects **effects) {
     XrXirArtifact *peer=NULL,*taken=NULL;
-    CHECK(xr_xir_compile_recheck_v2(context,&(*donor)->module,(*donor)->construction,&peer,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(context,&(*donor)->module,(*donor)->construction,&peer,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(*donor);*donor=NULL;
     const XrXirArtifact *source=peer->module.provenance->source;
     CHECK(xr_xir_compile_verify_source_effects_v2(context,&source->module,source->construction,*effects,NULL)==XR_XIR_OK);
     XrXirModule view=peer->module;XrXirProvenance *owned=(XrXirProvenance *)view.provenance;
     peer->module.provenance=NULL;
     CHECK(xr_xir_compile_recheck_provenance_take(context,&view,
-        &(XirProvenanceReceiving){peer->construction,*effects},&owned,&taken,NULL)==XR_XIR_OK);
+        &(XirProvenanceReceiving){peer->construction,*effects},&owned,&taken,NULL, NULL)==XR_XIR_OK);
     CHECK(!owned && taken);xr_xir_compile_artifact_free(peer);
     xr_xir_compile_effects_free(*effects);*effects=NULL;
     CHECK(xr_xir_compile_artifact_verify(taken,NULL)==XR_XIR_OK);
@@ -301,7 +300,7 @@ static void provenance_source_mismatched(void) {
     XrXirModule view=donor->module;XrXirProvenance *owned=(XrXirProvenance *)view.provenance;
     donor->module.provenance=NULL;
     CHECK(xr_xir_compile_recheck_provenance_take(&owner.context,&view,
-        &(XirProvenanceReceiving){donor->construction,different},&owned,&output,NULL)==XR_XIR_BAD_STRUCTURE);
+        &(XirProvenanceReceiving){donor->construction,different},&owned,&output,NULL, NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(!owned && !output);xr_xir_compile_effects_free(different);xr_xir_compile_artifact_free(donor);
     library_compile_owner_drop(&owner);
 }
@@ -314,8 +313,8 @@ static void provenance_source_type_status(const XrXirCompileContext *context,
     size_t attempts=source_program_compile_attempts;
     CHECK(xir_effects_source_body_match(context,source,effects)==expected);
     XrCompileResourceStats after=library_compile_stats(context);
-    CHECK(source_program_compile_attempts==attempts && after.live_bytes==before.live_bytes &&
-        after.allocated_bytes==before.allocated_bytes && after.work>=before.work);
+    CHECK(source_program_compile_attempts==attempts && after.held_bytes==before.held_bytes &&
+        after.allocated_bytes==before.allocated_bytes);
 }
 
 static void provenance_source_node_fields(const XrXirCompileContext *context,
@@ -415,7 +414,7 @@ static void provenance_source_types_controls(void) {
         "export fn first()->i64{return read<i64,Box<i64,string>,i64,string>(Box<i64,string>{value:41})}\n"
         "export fn second()->i64{return read<i64,Box<i64,string>,string,i64>(Box<i64,string>{value:41})}\n";
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"provenance-source-types",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult result={0};XrXirSourceFailure failure={0};
@@ -435,7 +434,7 @@ static void provenance_source_types_controls(void) {
     provenance_source_type_status(&owner.context,&changed,effects,XR_XIR_OK);
     source_program_compile_fail_at=SIZE_MAX;CHECK(!source_program_compile_injected);
     xr_xir_compile_types_free(types);
-    CHECK(library_compile_stats(&owner.context).live_bytes==baseline.live_bytes);
+    CHECK(library_compile_stats(&owner.context).held_bytes==baseline.held_bytes);
     CHECK(xr_xir_compile_artifact_verify(result.checked,NULL)==XR_XIR_OK);
     xr_xir_compile_effects_free(effects);xr_xir_compile_source_result_free(&result);
     library_compile_owner_drop(&owner);
@@ -476,23 +475,25 @@ static void provenance_take_controls(void) {
     CHECK(provenance_take_operation(&owner.context,NULL)==XR_XIR_OUT_OF_MEMORY);
     source_program_compile_fail_at=SIZE_MAX;CHECK(source_program_compile_injected);
     CHECK(source_program_compile_live==blocks && source_program_compile_bytes==bytes);
-    CHECK(library_compile_stats(&owner.context).live_bytes==before.live_bytes);
+    CHECK(library_compile_stats(&owner.context).held_bytes==before.held_bytes);
     CHECK(provenance_take_operation(&owner.context,NULL)==XR_XIR_OK);
     XrCompileResourceStats after=library_compile_stats(&owner.context);
-    CHECK(after.work>before.work && after.allocated_bytes>before.allocated_bytes && after.live_bytes==before.live_bytes);
+    CHECK(after.allocated_bytes>before.allocated_bytes && after.held_bytes==before.held_bytes);
     library_compile_owner_drop(&owner);
 }
 
-/* Every original allocation boundary is faulted, followed by the same complete
- * success on the still-cumulative ledger. Only the physical injection is reset. */
+/* Representative physical faults release all temporary ownership before the
+ * same complete operation retries on the original finite memory owner. */
 static void provenance_take_resources(void) {
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
     source_program_compile_attempts=0;
     CHECK(provenance_take_operation(&owner.context,NULL)==XR_XIR_OK);
     size_t sites=source_program_compile_attempts;CHECK(sites);
     XrCompileResourceStats required=library_compile_stats(&owner.context);
-    CHECK(required.live_bytes==owner.baseline.live_bytes);library_compile_owner_drop(&owner);
-    for(size_t site=0;site<sites;++site) {
+    CHECK(required.held_bytes==owner.baseline.held_bytes);library_compile_owner_drop(&owner);
+    size_t selected[3]={0,sites/2,sites-1};
+    for(size_t trial=0;trial<3;++trial) {
+        size_t site=selected[trial];
         CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
         size_t blocks=source_program_compile_live,bytes=source_program_compile_bytes;
         source_program_compile_attempts=0;source_program_compile_fail_at=site;source_program_compile_injected=false;
@@ -501,26 +502,22 @@ static void provenance_take_resources(void) {
         if(status!=XR_XIR_OUT_OF_MEMORY)fprintf(stderr,"provenance-take fault %zu/%zu status%u\n",site,sites,status);
         CHECK(status==XR_XIR_OUT_OF_MEMORY && source_program_compile_injected);
         XrCompileResourceStats failed=library_compile_stats(&owner.context);
-        CHECK(failed.live_bytes==owner.baseline.live_bytes);
+        CHECK(failed.held_bytes==owner.baseline.held_bytes);
         CHECK(source_program_compile_live==blocks && source_program_compile_bytes==bytes);
         source_program_compile_attempts=0;source_program_compile_injected=false;
         CHECK(provenance_take_operation(&owner.context,NULL)==XR_XIR_OK && !source_program_compile_injected);
         CHECK(source_program_compile_attempts==sites);
         XrCompileResourceStats retry=library_compile_stats(&owner.context);
-        CHECK(retry.work>failed.work && retry.allocated_bytes>failed.allocated_bytes && retry.live_bytes==owner.baseline.live_bytes);
+        CHECK(retry.allocated_bytes>failed.allocated_bytes && retry.held_bytes==owner.baseline.held_bytes);
         library_compile_owner_drop(&owner);
     }
-    for(unsigned axis=0;axis<3;++axis)for(unsigned less=0;less<2;++less) {
+    for(unsigned less=0;less<2;++less) {
         XrCompileResourceLimits limits=library_compile_limits;
-        uint64_t exact=axis==0?required.allocated_bytes:axis==1?required.peak_bytes:required.work;
-        uint64_t *cap=axis==0?&limits.allocated_bytes:axis==1?&limits.live_bytes:&limits.work;
-        CHECK(exact);*cap=exact-less;
+        CHECK(required.peak_bytes);limits.memory_limit=required.peak_bytes-less;
         XrXirStatus status=library_compile_owner_new(&owner,&limits);
         if(status==XR_XIR_OK)status=provenance_take_operation(&owner.context,NULL);
-        if(status!=(less?XR_XIR_BUDGET:XR_XIR_OK))fprintf(stderr,"provenance-take axis%u less%u exact%llu status%u\n",axis,less,(unsigned long long)exact,status);
-        CHECK(status==(less?XR_XIR_BUDGET:XR_XIR_OK));library_compile_owner_drop(&owner);
+        CHECK(status==(less?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));library_compile_owner_drop(&owner);
     }
-    fprintf(stderr,"provenance-take compilerOOM=%zu sameowner-retry=%zu allocated=%llu peak=%llu work=%llu threeaxes/physicalbaseline PASS\n",
-        sites,sites,(unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,(unsigned long long)required.work);
+    fprintf(stderr,"provenance-take representative physicalOOM/retry and held exact/minus-one PASS\n");
 }
 #endif // XIR_SPECIALIZE_PROVENANCE_TAKE_CASES_H

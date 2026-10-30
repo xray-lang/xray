@@ -88,7 +88,7 @@ static inline XrXirArtifact *nominal_forwarding_checked(const XrXirCompileContex
     built.functions = functions; built.function_count = 5; built.generics = generics; built.declarations = &declarations;
     CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(base);base=NULL;
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     CHECK(closed->module.function_count == 9 && closed->module.types->count == 8);
     CHECK(closed->module.provenance && closed->module.provenance->count == 9);
     xr_xir_compile_artifact_free(checked);checked=NULL;

@@ -17,7 +17,7 @@ static XrXirStatus binding_job(XrXirCompileContext *context) {
     xr_xir_compile_artifact_free(source);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&received,NULL);
     xr_xir_compile_checked_packet_free(&packet);
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(received,&closed,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(received,&closed,NULL, NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(received);
@@ -58,7 +58,7 @@ static void binding_resources(bool complete) {
 }
 static void binding_tamper(void) {
     XrXirCompileContext context;context_new(&context);XrXirArtifact *checked=NULL,*closed=NULL;
-    CHECK(binding_source(&context,&checked,0)==XR_XIR_OK && xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(binding_source(&context,&checked,0)==XR_XIR_OK && xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);
     XrXirComptimeTable *table=&checked->construction->comptime;
     XrXirComptimeSite *site=(XrXirComptimeSite *)table->sites;uint32_t caller=site->caller;site->caller=UINT32_MAX;
     CHECK(xr_xir_compile_artifact_verify(checked,NULL)!=XR_XIR_OK);site->caller=caller;

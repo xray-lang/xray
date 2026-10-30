@@ -86,7 +86,7 @@ static void source_closure_cases(const XrXirSourceRequest *request) {
         xr_xir_compile_artifact_free(checked);
         CHECK(xr_xir_compile_checked_read(generic_source_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
         xr_xir_compile_checked_packet_free(&packet);
-        CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+        CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(decoded);
         CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(closed);

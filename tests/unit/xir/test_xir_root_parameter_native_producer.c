@@ -108,7 +108,7 @@ static void h1n_emit(const RootParameterSourceOracle *oracle, unsigned index, co
     memset(packet.bytes, 0xa5, packet.length); xr_xir_compile_checked_packet_free(&packet);
     h1n_compiler_report(oracle, "packet_dead", &context, begin);
     XrXirArtifact *closed = NULL; begin = instance_compile_attempts;
-    h1n_ok(xr_xir_compile_specialize(read, &closed, NULL), oracle, "specialize");
+    h1n_ok(xr_xir_compile_specialize(read, &closed, NULL, NULL), oracle, "specialize");
     xr_xir_compile_artifact_free(read); read = NULL;
     h1n_ok(xr_xir_compile_artifact_verify(closed, NULL), oracle, "closed_reverify");
     const XrXirModule *cm = xr_xir_compile_artifact_module(closed);

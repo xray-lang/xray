@@ -18,7 +18,7 @@ static void resolution_controls(void) {
     CHECK(xr_xir_compile_comptime_resolve(&request,&out,&failure,NULL)==XR_XIR_OK && out && resolution_failure_empty(&failure));
     XrXirArtifact *occupied=out;
     CHECK(xr_xir_compile_comptime_resolve(&request,&occupied,&failure,NULL)==XR_XIR_BAD_STRUCTURE && occupied==out);
-    CHECK(xr_xir_compile_specialize(out,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(out,&closed,NULL, NULL)==XR_XIR_OK);
     request=resolution_request(closed);XrXirArtifact *none=NULL;
     CHECK(xr_xir_compile_comptime_resolve(&request,&none,&failure,NULL)==XR_XIR_BAD_STAGE && !none);
     xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(out);xr_xir_compile_artifact_free(source);

@@ -38,7 +38,7 @@ static XrXirArtifact *suspension_program(const XrXirCompileContext *context,unsi
     const XrXirConstructionSpec spec={0};
     const XrXirSlotFacts slots={NULL,0};
     XrXirConstruction *construction=NULL;
-    CHECK(xr_xir_compile_construction_new_v4(context,NULL,&spec,&slots,&construction)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v4(context,NULL,&spec,&slots,&construction, NULL)==XR_XIR_OK);
     XrXirDiagnostic diagnostic={0};
     XrXirStatus checked_status=xr_xir_compile_check_v2(context,&module,construction,&checked,&diagnostic);
     xr_xir_compile_construction_free(construction);
@@ -46,7 +46,7 @@ static XrXirArtifact *suspension_program(const XrXirCompileContext *context,unsi
         fprintf(stderr,"Suspension fixture check status%u f%u b%u i%u reason%u\n",
             checked_status,diagnostic.function,diagnostic.block,diagnostic.instruction,diagnostic.reason);
     CHECK(checked_status==XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);xr_xir_compile_artifact_free(closed);
     return lowered;

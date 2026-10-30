@@ -48,7 +48,7 @@ static void program_normal(const char *kind) {
     CHECK(!memcmp(debug_before,debug_after,sizeof(debug_before)));xr_xir_compile_source_snapshot_free(snapshot);
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);
     CHECK(!xr_xir_compile_construction_comptime(closed->construction)->site_count);
     uint32_t edges=0;
     for (uint32_t f=0;f<closed->module.function_count;++f) {

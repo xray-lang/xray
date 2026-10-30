@@ -15,6 +15,7 @@
 #include "xxir_internal.h"
 #include "xxir_checked.h"
 #include "xxir_compile_memory.h"
+#include "xxir_receive_control.h"
 #include <string.h>
 
 struct XirCtfeInstanceResult {
@@ -40,14 +41,15 @@ static bool instance_limits_valid(const XirCtfeInstanceRequest *request) {
         request->limits.output_bytes<=XR_XIR_CTFE_MAX_OUTPUT_BYTES &&
         request->call_depth<=XR_XIR_CTFE_MAX_CALL_DEPTH;
 }
-static XrXirStatus instance_packet_write(const XrXirArtifact *artifact,XrXirCheckedPacket *packet) {
-    return artifact->evaluation_only?xir_evaluation_write(artifact,packet,NULL):
-        xr_xir_compile_checked_write(artifact,packet,NULL);
+static XrXirStatus instance_packet_write(const XrXirArtifact *artifact,XrXirCheckedPacket *packet,
+    XrCompileRequestControl *control) {
+    return artifact->evaluation_only?xir_evaluation_write(artifact,packet,NULL,control):
+        xir_checked_write(artifact,packet,NULL,control);
 }
 static XrXirStatus instance_packet_read(const XrXirCompileContext *context,const XrXirArtifact *input,
-    const XrXirCheckedPacket *packet,XrXirArtifact **output) {
-    return input->evaluation_only?xir_evaluation_read(context,packet->bytes,packet->length,output,NULL):
-        xr_xir_compile_checked_read(context,packet->bytes,packet->length,output,NULL);
+    const XrXirCheckedPacket *packet,XrXirArtifact **output,XrCompileRequestControl *control) {
+    return input->evaluation_only?xir_evaluation_read(context,packet->bytes,packet->length,output,NULL,control):
+        xir_checked_read(context,packet->bytes,packet->length,output,NULL,control);
 }
 /* Full artifact admission precedes this physical correspondence observation.
  * Concrete equality never repairs missing symbolic constraints or witnesses. */
@@ -68,15 +70,18 @@ static XrXirCtfeStatus instance_definition(const XrXirArtifact *artifact,uint32_
     *definition=proof->source;*declaration=origin->function;return XR_XIR_CTFE_OK;
 }
 static XrXirStatus instance_inputs_match(const XrXirCompileContext *context,
-    const XrXirArtifact *checked,const XrXirArtifact *lowered) {
+    const XrXirArtifact *checked,const XrXirArtifact *lowered,XrCompileRequestControl *control) {
     if (checked->context.resources!=context->resources ||
         lowered->context.resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
-    XrXirCheckedPacket current={0};XrXirStatus status=instance_packet_write(checked,&current);
-    if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(lowered,NULL);
+    XrXirCheckedPacket current={0};XrXirStatus status=instance_packet_write(checked,&current,control);
+    if (status==XR_XIR_OK) status=xir_artifact_verify(lowered,NULL,control);
     if (status==XR_XIR_OK) {
         const XrXirCheckedPacket *original=&lowered->checked_packet;
-        if (current.length!=original->length || !original->bytes ||
-            memcmp(current.bytes,original->bytes,current.length)) status=XR_XIR_BAD_STRUCTURE;
+        if (current.length!=original->length || !original->bytes) status=XR_XIR_BAD_STRUCTURE;
+        else {
+            int order=0;status=xir_receive_compare(control,current.bytes,original->bytes,current.length,&order);
+            if (status==XR_XIR_OK && order) status=XR_XIR_BAD_STRUCTURE;
+        }
     }
     xr_xir_compile_checked_packet_free(&current);return status;
 }
@@ -95,18 +100,18 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance(const XirCtfeInstanceReques
     if (controlled!=XR_XIR_CTFE_OK) return controlled;
     const XrXirArtifact *input=request->checked;
     if (!xir_compile_context_valid(&input->context)) return XR_XIR_CTFE_BAD_ARTIFACT;
-    XrXirStatus status=xr_xir_compile_artifact_verify(input,NULL);
+    XrXirStatus status=xir_artifact_verify(input,NULL,control);
     if (status!=XR_XIR_OK) return instance_compile_status(status);
     const XrXirArtifact *definition=NULL;uint32_t declaration=0;
     XrXirCtfeStatus admitted=instance_definition(input,request->function,&definition,&declaration);
     if (admitted!=XR_XIR_CTFE_OK) return admitted;
     (void)definition;(void)declaration;
-    XirCtfeInstanceResult *owner=xir_compile_calloc(&input->context,1,sizeof(*owner),&status);
+    XirCtfeInstanceResult *owner=xir_type_copy_zero(&input->context,1,sizeof(*owner),&status,control);
     if (!owner) return instance_compile_status(status);
 
     owner->context=input->context;owner->function=request->function;
-    XrXirCheckedPacket packet={0};status=instance_packet_write(input,&packet);
-    if (status==XR_XIR_OK) status=instance_packet_read(&owner->context,input,&packet,&owner->checked);
+    XrXirCheckedPacket packet={0};status=instance_packet_write(input,&packet,control);
+    if (status==XR_XIR_OK) status=instance_packet_read(&owner->context,input,&packet,&owner->checked,control);
     xr_xir_compile_checked_packet_free(&packet);
     if (status==XR_XIR_OK) {
         controlled=instance_control_poll(control);
@@ -121,6 +126,8 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance(const XirCtfeInstanceReques
     admitted=xr_xir_compile_ctfe_calls(&call,&owner->value);
     if (admitted!=XR_XIR_CTFE_OK) { xr_xir_compile_ctfe_instance_free(owner);return admitted; }
 
+    controlled=instance_control_poll(control);
+    if (controlled!=XR_XIR_CTFE_OK) {xr_xir_compile_ctfe_instance_free(owner);return controlled;}
     *output=owner;return XR_XIR_CTFE_OK;
 }
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_view(const XirCtfeInstanceResult *owner,
@@ -128,7 +135,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_view(const XirCtfeInstanceR
     if (!owner || !output || output->checked || output->lowered || output->definition || output->value ||
         output->instance_function || output->definition_function) return XR_XIR_CTFE_BAD_ARGUMENT;
 
-    XrXirStatus status=instance_inputs_match(&owner->context,owner->checked,owner->lowered);
+    XrXirStatus status=instance_inputs_match(&owner->context,owner->checked,owner->lowered,NULL);
     if (status!=XR_XIR_OK) return instance_compile_status(status);
     const XrXirArtifact *definition=NULL;uint32_t declaration=0;
     XrXirCtfeStatus admitted=instance_definition(owner->checked,owner->function,&definition,&declaration);

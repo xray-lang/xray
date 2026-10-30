@@ -166,7 +166,8 @@
     "test_type_clone_source",
     "test_hir_body",
     "test_hir_body_source",
-    "test_source_public_repl"
+    "test_source_public_repl",
+    "test_xir_specialize_control"
   ],
   "tests": [
     "test_lir_pipeline_eval",
@@ -482,7 +483,8 @@
     "hir_body_cli",
     "source_public_repl",
     "source_public_repl_array_history",
-    "source_public_repl_write_class_history"
+    "source_public_repl_write_class_history",
+    "test_xir_specialize_control"
   ],
   "versionCommand": [
     "{build}/xray.exe",

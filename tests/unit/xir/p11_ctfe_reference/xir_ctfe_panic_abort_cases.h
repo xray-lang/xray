@@ -13,7 +13,7 @@ static void reference_panic_uncaught_fault(const XrXirCheckedPacket *wire,const 
     XrXirCompileContext context={0};CHECK(xr_compile_resources_new(&reference_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_read(&context,wire->bytes,wire->length,&received,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
+    CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);uint8_t digest[32]={0};
     CHECK(xr_compile_resources_work(context.resources,packet.length)==XR_COMPILE_RESOURCE_OK);xr_sha256(packet.bytes,packet.length,digest);
     CHECK(!memcmp(digest,identity,sizeof(digest)));xr_xir_compile_checked_packet_free(&packet);

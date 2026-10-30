@@ -38,7 +38,7 @@ static void panics_authority(const char *directory,const char *path) {
     XrXirGeneric *generic=(XrXirGeneric *)&module->generics[function];uint32_t kind=XR_XIR_BINDER_RESULT_VARIABLE;
     generic->parameter_kinds=&kind;XrXirCheckedPacket packet={0};XrXirArtifact *closed=NULL;
     CHECK(xr_xir_compile_checked_write(result.checked,&packet,NULL)==XR_XIR_BAD_TYPE && !packet.bytes);
-    CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL)==XR_XIR_BAD_TYPE && !closed);generic->parameter_kinds=NULL;
+    CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL, NULL)==XR_XIR_BAD_TYPE && !closed);generic->parameter_kinds=NULL;
     XrXirSourceView *view=(XrXirSourceView *)xr_xir_compile_source_snapshot_view(result.snapshot);
     XrXirSourceDeclaration *records=(XrXirSourceDeclaration *)view->declarations;
     for (uint32_t d=0;d<view->declaration_count;++d) if (records[d].kind==XR_XIR_SOURCE_FUNCTION) {

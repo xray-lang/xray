@@ -103,7 +103,7 @@ static XrXirStatus state_class_build(const XrXirCompileContext *context,uint32_t
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);
     CHECK(status==XR_XIR_OK || !read);
     xr_xir_compile_checked_packet_free(&packet);
-    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(read,&closed,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(read,&closed,NULL, NULL);
     CHECK(status==XR_XIR_OK || !closed);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);

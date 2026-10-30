@@ -148,9 +148,9 @@ static void built_after_retirement(void) {
         {"nullable",8,NULL,0,XR_XIR_I64,&body,1,ops,4,NULL,0,XR_XIR_NEVER},{"entry",5,NULL,0,XR_XIR_I64,&main_body,1,entry,2,NULL,0,XR_XIR_NEVER}};
     XrXirFunctionIdentity identities[3]={{0}};XrXirSourceModule module={.name="nullable",.name_length=8,.storage=XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={&module,1,identities,NULL,0,NULL,0,0,1,NULL};XrXirModule built={.stage=XR_XIR_BUILT,.types=&types,.functions=functions,.function_count=3,.declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};
-    XrXirConstruction *construction=NULL;CHECK(xr_xir_compile_construction_new_v4(&receiver,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction)==XR_XIR_OK);
+    XrXirConstruction *construction=NULL;CHECK(xr_xir_compile_construction_new_v4(&receiver,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction, NULL)==XR_XIR_OK);
     XrXirArtifact *artifact=NULL,*closed=NULL,*lowered=NULL;CHECK(xr_xir_compile_check_v2(&receiver,&built,construction,&artifact,NULL)==XR_XIR_OK);xr_xir_compile_construction_free(construction);
-    CHECK(xr_xir_compile_specialize(artifact,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(artifact);const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_compile_specialize(artifact,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(artifact);const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);

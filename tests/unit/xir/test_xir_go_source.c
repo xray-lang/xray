@@ -109,7 +109,7 @@ static XrXirStatus source_task_graph(const XrXirCompileContext *context, void *o
     source_task_shape(xr_xir_compile_artifact_module(read), fixture);
     status = xr_xir_compile_verify_v2(context, xr_xir_compile_artifact_module(read), xr_xir_compile_artifact_construction(read), NULL);
     if (status != XR_XIR_OK) goto done;
-    status = xr_xir_compile_specialize(read, &specialized, NULL);
+    status = xr_xir_compile_specialize(read, &specialized, NULL, NULL);
     if (status != XR_XIR_OK) { CHECK(!specialized); goto done; }
     xr_xir_compile_artifact_free(read); read = NULL;
     xr_xir_compile_source_result_free(&result);

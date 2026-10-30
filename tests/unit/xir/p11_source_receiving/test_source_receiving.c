@@ -30,7 +30,7 @@ static void fixture(const XrXirCompileContext *context,XrXirCheckedPacket *wire)
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult source={0};XrXirArtifact *closed=NULL;
     CHECK(xr_xir_compile_source_check_text(&request,&input,&source,NULL,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL, NULL)==XR_XIR_OK);
     CHECK(closed->module.provenance && closed->module.provenance->kind==XR_XIR_EVIDENCE_INSTANCE);
     CHECK(xr_xir_compile_checked_write(closed,wire,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);xr_xir_compile_source_result_free(&source);xr_compile_session_free(session);

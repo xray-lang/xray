@@ -38,7 +38,7 @@ static void invoke_generic_cases(void) {
         CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
         CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
         if (!mode) {
-            CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
             const XrXirModule *specialized = xr_xir_compile_artifact_module(closed);
             const XrXirInstruction *call = specialized->functions[0].instructions;
             CHECK(!specialized->generics && specialized->function_count == 2);

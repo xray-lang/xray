@@ -40,7 +40,7 @@ static void rp_lifetime(bool instance) {
     RootParameterFixture fixture;
     rp_fixture(&fixture,&context);
     XrXirProvenance *copy = NULL;
-    CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy) == XR_XIR_OK);
+    CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy, NULL) == XR_XIR_OK);
     CHECK(copy != rp_input(&fixture,instance));
     const XrXirProvenance *definition = instance ? copy->source->module.provenance : copy;
     CHECK(definition->contracts != &fixture.contract && definition->contracts[0].parameters != &fixture.effect_parameter &&
@@ -60,7 +60,7 @@ static void rp_faults(bool instance) {
     rp_fixture(&fixture,&normal);
     XrXirProvenance *copy = NULL;
     rp_attempts = 0;
-    CHECK(xr_xir_compile_provenance_copy(&normal,rp_input(&fixture,instance),&copy) == XR_XIR_OK);
+    CHECK(xr_xir_compile_provenance_copy(&normal,rp_input(&fixture,instance),&copy, NULL) == XR_XIR_OK);
     size_t sites = rp_attempts;
     CHECK(sites != 0);
     xr_xir_compile_provenance_free(copy);
@@ -71,12 +71,12 @@ static void rp_faults(bool instance) {
         rp_fixture(&fixture,&context);
         RootParameterMark mark = rp_mark();
         rp_attempts = 0; rp_fail_at = fault; rp_injected = false; copy = NULL;
-        CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(rp_injected && !copy);
         rp_balanced(mark);
         XrCompileResourceStats failed = rp_stats(&context);
         rp_fail_at = SIZE_MAX;
-        CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy) == XR_XIR_OK);
+        CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy, NULL) == XR_XIR_OK);
         CHECK(rp_stats(&context).work >= failed.work && rp_stats(&context).allocated_bytes >= failed.allocated_bytes);
         rp_literals(copy,instance);
         xr_xir_compile_provenance_free(copy);
@@ -91,7 +91,7 @@ static void rp_owner_death(bool instance) {
     RootParameterFixture fixture;
     rp_fixture(&fixture,&context);
     XrXirProvenance *copy = NULL;
-    CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy) == XR_XIR_OK);
+    CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy, NULL) == XR_XIR_OK);
     memset(&fixture,0xa5,sizeof(fixture));
     xr_compile_resources_release(context.resources);
     memset(&context,0xa5,sizeof(context));
@@ -106,7 +106,7 @@ static void rp_axes(bool instance) {
     RootParameterFixture fixture;
     rp_fixture(&fixture,&normal);
     XrXirProvenance *copy = NULL;
-    CHECK(xr_xir_compile_provenance_copy(&normal,rp_input(&fixture,instance),&copy) == XR_XIR_OK);
+    CHECK(xr_xir_compile_provenance_copy(&normal,rp_input(&fixture,instance),&copy, NULL) == XR_XIR_OK);
     XrCompileResourceStats required = rp_stats(&normal);
     xr_xir_compile_provenance_free(copy);
     rp_owner_free(&normal,baseline);
@@ -119,7 +119,7 @@ static void rp_axes(bool instance) {
         baseline = rp_stats(&context).live_bytes;
         RootParameterMark mark = rp_mark();
         rp_fixture(&fixture,&context); copy = NULL;
-        CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy) ==
+        CHECK(xr_xir_compile_provenance_copy(&context,rp_input(&fixture,instance),&copy, NULL) ==
             (shortfall ? XR_XIR_BUDGET : XR_XIR_OK));
         if (shortfall) CHECK(!copy);
         else rp_literals(copy,instance);
@@ -136,11 +136,11 @@ static void rp_early_failures(void) {
     rp_fixture(&fixture,&context);
     XrXirProvenance *sentinel = (XrXirProvenance *)(uintptr_t)1;
     XrCompileResourceStats before = rp_stats(&context);
-    CHECK(xr_xir_compile_provenance_copy(&context,&fixture.evidence,&sentinel) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_provenance_copy(&context,&fixture.evidence,&sentinel, NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(sentinel == (XrXirProvenance *)(uintptr_t)1 && rp_stats(&context).work == before.work &&
         rp_stats(&context).allocation_count == before.allocation_count);
     XrXirCompileContext invalid = {0};
-    CHECK(xr_xir_compile_provenance_copy(&invalid,&fixture.evidence,&sentinel) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_provenance_copy(&invalid,&fixture.evidence,&sentinel, NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(sentinel == (XrXirProvenance *)(uintptr_t)1);
     for (unsigned bad = 0; bad < 4; ++bad) {
         rp_fixture(&fixture,&context);
@@ -150,17 +150,17 @@ static void rp_early_failures(void) {
         if (bad == 3) fixture.evidence.source = &fixture.source;
         XrXirProvenance *copy = NULL;
         RootParameterMark mark = rp_mark();
-        CHECK(xr_xir_compile_provenance_copy(&context,&fixture.evidence,&copy) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_compile_provenance_copy(&context,&fixture.evidence,&copy, NULL) == XR_XIR_BAD_STRUCTURE);
         CHECK(!copy); rp_balanced(mark);
     }
     rp_fixture(&fixture,&context);
     fixture.source.module.provenance = &fixture.instance;
     XrXirProvenance *copy = NULL;
-    CHECK(xr_xir_compile_provenance_copy(&context,&fixture.instance,&copy) == XR_XIR_BAD_STRUCTURE && !copy);
+    CHECK(xr_xir_compile_provenance_copy(&context,&fixture.instance,&copy, NULL) == XR_XIR_BAD_STRUCTURE && !copy);
     rp_fixture(&fixture,&context);
     fixture.evidence.contract_count = UINT32_MAX;
     RootParameterMark mark = rp_mark();
-    CHECK(xr_xir_compile_provenance_copy(&context,&fixture.evidence,&copy) == XR_XIR_BUDGET && !copy);
+    CHECK(xr_xir_compile_provenance_copy(&context,&fixture.evidence,&copy, NULL) == XR_XIR_BUDGET && !copy);
     rp_balanced(mark);
     rp_owner_free(&context,baseline);
     rp_balanced((RootParameterMark){0,0});

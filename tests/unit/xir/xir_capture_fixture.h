@@ -83,7 +83,7 @@ static XrXirArtifact *capture_fixture(const XrXirCompileContext *context, bool t
     xr_xir_compile_artifact_free(checked);checked=NULL;
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     memset(packet.bytes,0xcc,packet.length); xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
     const XrXirModule *m = xr_xir_compile_artifact_module(closed);
     CHECK(m->function_count == 6 && m->functions[2].instructions[1].immediate == 5);

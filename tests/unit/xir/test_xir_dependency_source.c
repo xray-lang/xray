@@ -99,7 +99,7 @@ int main(int argc,char **argv){
  XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK&&packet.length<=262144);
  if(argc==2){FILE *file=fopen(argv[1],"wb");CHECK(file&&fwrite(packet.bytes,1,packet.length,file)==packet.length&&!fclose(file));}
  xr_xir_compile_checked_packet_free(&packet);XrXirArtifact *special=NULL,*lowered=NULL;
- CHECK(xr_xir_compile_specialize(checked,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+ CHECK(xr_xir_compile_specialize(checked,&special,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
  CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
  const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
  CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);

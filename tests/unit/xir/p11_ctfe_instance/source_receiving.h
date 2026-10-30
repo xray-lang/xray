@@ -40,22 +40,22 @@ static void instance_source_receiving(const char *kind,unsigned ordinal) {
         bool same=false;
         const XrXirConstruction *snapshot=xr_xir_compile_source_snapshot_construction(constants.source.snapshot);
         CHECK(xir_construction_compare(&context,constants.source.checked->module.types,
-            constants.source.checked->construction,snapshot,&same)==XR_XIR_OK && same);
+            constants.source.checked->construction,snapshot,&same, NULL)==XR_XIR_OK && same);
         XrXirMaterializationBinding *binding=&constants.source.checked->construction->materializations[0];
         uint32_t function=binding->function,replacement=0;
         while (replacement<constants.source.checked->module.function_count &&
             (replacement==function || replacement==binding->caller)) ++replacement;
         CHECK(replacement<constants.source.checked->module.function_count);binding->function=replacement;
         CHECK(xir_construction_shape(&context,constants.source.checked->module.types,
-            constants.source.checked->construction)==XR_XIR_OK);
+            constants.source.checked->construction,NULL)==XR_XIR_OK);
         same=true;
         CHECK(xir_construction_compare(&context,constants.source.checked->module.types,
-            constants.source.checked->construction,snapshot,&same)==XR_XIR_OK && !same);
+            constants.source.checked->construction,snapshot,&same, NULL)==XR_XIR_OK && !same);
         CHECK(xr_xir_compile_artifact_verify(constants.source.checked,NULL)==XR_XIR_BAD_STRUCTURE);
         binding->function=function;CHECK(xr_xir_compile_artifact_verify(constants.source.checked,NULL)==XR_XIR_OK);
     }
     if (!strcmp(kind,"foreign")) {
-        XrXirArtifact *actual=NULL;CHECK(xr_xir_compile_specialize(constants.source.checked,&actual,NULL)==XR_XIR_OK);
+        XrXirArtifact *actual=NULL;CHECK(xr_xir_compile_specialize(constants.source.checked,&actual,NULL, NULL)==XR_XIR_OK);
         instance_foreign_edges(actual);xr_xir_compile_artifact_free(actual);
     }
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(constants.source.checked,&packet,NULL)==XR_XIR_OK);
@@ -63,7 +63,7 @@ static void instance_source_receiving(const char *kind,unsigned ordinal) {
     XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
+    CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     uint32_t function=UINT32_MAX,other_function=UINT32_MAX;
     for (uint32_t f=0;f<closed->module.function_count;++f)
         if (closed->module.provenance->origins[f].function==provider) { CHECK(function==UINT32_MAX);function=f; }

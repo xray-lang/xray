@@ -62,7 +62,7 @@ static bool forin_source_prepare(ForinSourcePrepare *state) {
     status = xr_xir_compile_checked_read(state->context, state->packet.bytes, state->packet.length, &state->checked, NULL);
     memset(state->packet.bytes, 0xA5, state->packet.length); xr_xir_compile_checked_packet_free(&state->packet);
     if (!forin_source_stage(state, 5, status)) { CHECK(!state->checked); return false; }
-    status = xr_xir_compile_specialize(state->checked, &state->closed, NULL);
+    status = xr_xir_compile_specialize(state->checked, &state->closed, NULL, NULL);
     if (!forin_source_stage(state, 6, status)) { CHECK(!state->closed); return false; }
     xr_xir_compile_artifact_free(state->checked); state->checked = NULL;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};

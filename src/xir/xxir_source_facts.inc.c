@@ -30,13 +30,15 @@ XR_FUNC void xir_source_facts_release(XirSourceFacts *facts) {
 }
 
 static XrXirStatus source_facts_retain(const XrXirCompileContext *context,
-    XirSourceFacts *facts,XirSourceFacts **output) {
+    XirSourceFacts *facts,XirSourceFacts **output, XrCompileRequestControl *control) {
     if (!facts || !output || *output || facts->context.resources!=context->resources)
         return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=xir_receive_poll(control);if (status!=XR_XIR_OK) return status;
+    uint32_t progress=0;
     uint_fast64_t count=atomic_load_explicit(&facts->references,memory_order_relaxed);
     for (;;) {
         if (!count || count==UINT_FAST64_MAX) return XR_XIR_BUDGET;
-
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
         if (atomic_compare_exchange_strong_explicit(&facts->references,&count,count+1,
             memory_order_relaxed,memory_order_relaxed)) break;
     }
@@ -45,7 +47,7 @@ static XrXirStatus source_facts_retain(const XrXirCompileContext *context,
 }
 
 static XrXirStatus source_facts_contract_match(
-    const XrXirFunctionEffectContract *stored,const XrXirFunctionEffectContract *actual) {
+    const XrXirFunctionEffectContract *stored,const XrXirFunctionEffectContract *actual, XrCompileRequestControl *control) {
 
     if (stored->parameter_count!=actual->parameter_count ||
         stored->formula.constant_mask!=actual->formula.constant_mask ||
@@ -57,41 +59,42 @@ static XrXirStatus source_facts_contract_match(
         !!stored->values!=!!stored->value_count || !!actual->values!=!!actual->value_count ||
         !!stored->bindings!=!!stored->binding_count || !!actual->bindings!=!!actual->binding_count)
         return XR_XIR_BAD_STRUCTURE;
+    uint32_t progress=0;XrXirStatus status=XR_XIR_OK;
     for (uint32_t p=0;p<stored->parameter_count;++p) {
-
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
         if (stored->parameters[p].kind!=actual->parameters[p].kind ||
             stored->parameters[p].uses!=actual->parameters[p].uses) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t t=0;t<stored->formula.term_count;++t) {
-
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
         if (stored->formula.terms[t].kind!=actual->formula.terms[t].kind ||
             stored->formula.terms[t].index!=actual->formula.terms[t].index) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t v=0;v<stored->value_count;++v) {
-
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
         if (stored->values[v].instruction!=actual->values[v].instruction ||
             stored->values[v].mode!=actual->values[v].mode ||
             stored->values[v].declared_type!=actual->values[v].declared_type) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t b=0;b<stored->binding_count;++b) {
-
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
         if (stored->bindings[b].family!=actual->bindings[b].family ||
             stored->bindings[b].instruction!=actual->bindings[b].instruction ||
             stored->bindings[b].parameter!=actual->bindings[b].parameter ||
             stored->bindings[b].value!=actual->bindings[b].value) return XR_XIR_BAD_STRUCTURE;
     }
-    return XR_XIR_OK;
+    return xir_receive_poll(control);
 }
 
 static XrXirStatus source_facts_construction_match(const XrXirCompileContext *context,
-    const XrXirModule *source,const XrXirConstruction *stored,const XrXirConstruction *actual) {
+    const XrXirModule *source,const XrXirConstruction *stored,const XrXirConstruction *actual, XrCompileRequestControl *control) {
     bool same=false;
-    XrXirStatus status=xir_construction_compare(context,source->types,stored,actual,&same);
+    XrXirStatus status=xir_construction_compare(context,source->types,stored,actual,&same,control);
     return status==XR_XIR_OK && !same ? XR_XIR_BAD_STRUCTURE : status;
 }
 
 static XrXirStatus source_facts_input_match(const XrXirCompileContext *context,
-    const XrXirArtifact *artifact,const XirSourceFacts *facts) {
+    const XrXirArtifact *artifact,const XirSourceFacts *facts, XrCompileRequestControl *control) {
     if (!xir_compile_context_valid(context) || !artifact || !facts ||
         artifact->module.stage!=XR_XIR_CHECKED || facts->context.resources!=context->resources ||
         !facts->effects || !facts->input || !facts->construction ||
@@ -107,11 +110,13 @@ static XrXirStatus source_facts_input_match(const XrXirCompileContext *context,
         return XR_XIR_BAD_STRUCTURE;
     /* This request reads the matched inventory. Copy-only prospective
      * allocation admission belongs to the actual clone, never to this read. */
-    XrXirStatus status=XR_XIR_OK;
-    for (uint32_t f=0;f<stored->contract_count && status==XR_XIR_OK;++f)
-        status=source_facts_contract_match(&stored->contracts[f],&actual->contracts[f]);
+    XrXirStatus status=XR_XIR_OK;uint32_t progress=0;
+    for (uint32_t f=0;f<stored->contract_count && status==XR_XIR_OK;++f) {
+        status=xir_receive_step(control,&progress);
+        if (status==XR_XIR_OK) status=source_facts_contract_match(&stored->contracts[f],&actual->contracts[f],control);
+    }
     if (status==XR_XIR_OK) status=source_facts_construction_match(context,&artifact->module,
-        facts->construction,artifact->construction);
+        facts->construction,artifact->construction, control);
     return status;
 }
 
@@ -120,20 +125,21 @@ static XrXirStatus source_facts_input_match(const XrXirCompileContext *context,
  * reused while immutable facts remain live. A pointer comparison is only a
  * rejection boundary; input fields and the complete proof still decide use. */
 static XrXirStatus source_facts_match(const XrXirCompileContext *context,
-    const XrXirArtifact *artifact,XrXirDiagnostic *diagnostic) {
+    const XrXirArtifact *artifact,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
     if (!artifact) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=source_facts_input_match(context,artifact,artifact->source_facts);
+    XrXirStatus status=source_facts_input_match(context,artifact,artifact->source_facts, control);
     if (status==XR_XIR_OK) status=xr_xir_compile_verify_source_effects_v2(context,
         &artifact->module,artifact->construction,artifact->source_facts->effects,diagnostic);
     if (status==XR_XIR_OK) status=xir_effects_source_terminal(context,
         &artifact->module,artifact->source_facts->effects);
     if (status==XR_XIR_OK) status=xr_xir_compile_layout_match_verified(artifact);
+    if (status==XR_XIR_OK) status=xir_receive_poll(control);
     return status;
 }
 
 /* This entry is called only while the receiving Artifact is unpublished.
  * The fresh collector sees the actual final Checked body, not Built facts. */
-static XrXirStatus source_facts_build(XrXirArtifact *artifact,XrXirDiagnostic *diagnostic) {
+static XrXirStatus source_facts_build(XrXirArtifact *artifact,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
     if (!artifact || artifact->source_facts || artifact->module.stage!=XR_XIR_CHECKED ||
         !artifact->module.provenance || artifact->module.provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE)
         return XR_XIR_BAD_STRUCTURE;
@@ -141,50 +147,52 @@ static XrXirStatus source_facts_build(XrXirArtifact *artifact,XrXirDiagnostic *d
     XrXirEffects *effects=NULL;
     XrXirStatus status=xr_xir_compile_verify_owned_effects_v2(context,&artifact->module,
         artifact->construction,&effects,diagnostic);
-    XirSourceFacts *facts=status==XR_XIR_OK?xir_compile_calloc(context,1,sizeof(*facts),&status):NULL;
+    XirSourceFacts *facts=status==XR_XIR_OK?xir_type_copy_zero(context,1,sizeof(*facts),&status,control):NULL;
     if (status==XR_XIR_OK && !facts) status=XR_XIR_OUT_OF_MEMORY;
 
     if (facts) {
         atomic_init(&facts->references,1);
         facts->context=*context;facts->effects=effects;effects=NULL;
-        if (status==XR_XIR_OK) facts->input=provenance_clone(context,artifact->module.provenance,&status);
+        if (status==XR_XIR_OK) facts->input=provenance_clone(context,artifact->module.provenance,&status, control);
         if (status==XR_XIR_OK) status=xir_construction_clone(context,artifact->module.types,
-            artifact->construction,&facts->construction);
-        if (status==XR_XIR_OK) status=source_facts_input_match(context,artifact,facts);
+            artifact->construction,&facts->construction,control);
+        if (status==XR_XIR_OK) status=source_facts_input_match(context,artifact,facts, control);
         if (status==XR_XIR_OK) status=xir_effects_source_terminal(context,&artifact->module,facts->effects);
     }
     xr_xir_compile_effects_free(effects);
     if (status!=XR_XIR_OK) { xir_source_facts_release(facts);return status; }
 
+    status=xir_receive_poll(control);
+    if (status!=XR_XIR_OK) {xir_source_facts_release(facts);return status;}
     artifact->source_facts=facts;return XR_XIR_OK;
 }
 
 /* Complete EOF and structure admission precede decoded facts. A partial
  * packet never publishes either its outer Artifact or its nested Source. */
-static XrXirStatus source_facts_prepare(XrXirArtifact *artifact,XrXirDiagnostic *diagnostic) {
+static XrXirStatus source_facts_prepare(XrXirArtifact *artifact,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
     if (!artifact || !xir_compile_context_valid(&artifact->context)) return XR_XIR_BAD_STRUCTURE;
     const XrXirProvenance *provenance=artifact->module.provenance;
     if (!provenance) return artifact->source_facts?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
-    if (provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) return source_facts_build(artifact,diagnostic);
+    if (provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) return source_facts_build(artifact,diagnostic, control);
     if (!xir_effect_kind_is_closed(provenance->kind) || !provenance->source || artifact->source_facts)
         return XR_XIR_BAD_STRUCTURE;
     XrXirArtifact *source=provenance->source;
     if (!source->module.provenance) return source->source_facts?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
     if (source->module.provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STRUCTURE;
-    return source->source_facts?source_facts_match(&artifact->context,source,diagnostic):
-        source_facts_build(source,diagnostic);
+    return source->source_facts?source_facts_match(&artifact->context,source,diagnostic, control):
+        source_facts_build(source,diagnostic, control);
 }
 
 XR_FUNC XrXirStatus xir_source_facts_prepare_decoded(XrXirArtifact *artifact,
-    XrXirDiagnostic *diagnostic) {
-    return source_facts_prepare(artifact,diagnostic);
+    XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
+    return source_facts_prepare(artifact,diagnostic, control);
 }
 
 XR_FUNC XrXirStatus xir_source_facts_acquire(const XrXirArtifact *artifact,
-    XirSourceFacts **output,XrXirDiagnostic *diagnostic) {
+    XirSourceFacts **output,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
     if (!artifact || !output || *output) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=source_facts_match(&artifact->context,artifact,diagnostic);
-    if (status==XR_XIR_OK) status=source_facts_retain(&artifact->context,artifact->source_facts,output);
+    XrXirStatus status=source_facts_match(&artifact->context,artifact,diagnostic, control);
+    if (status==XR_XIR_OK) status=source_facts_retain(&artifact->context,artifact->source_facts,output, control);
     return status;
 }
 
@@ -193,19 +201,19 @@ XR_FUNC const XrXirEffects *xir_source_facts_effects(const XirSourceFacts *facts
 }
 
 static XrXirArtifact *source_artifact_clone(const XrXirCompileContext *context,
-    const XrXirArtifact *source,XrXirStatus *status) {
+    const XrXirArtifact *source,XrXirStatus *status, XrCompileRequestControl *control) {
     if (!source || source->module.stage!=XR_XIR_CHECKED) { *status=XR_XIR_BAD_STAGE;return NULL; }
-    XrXirArtifact *copy=clone_module(context,&source->module,source->construction,status);
+    XrXirArtifact *copy=clone_module_receiving(context,&source->module,source->construction,status,NULL,control);
     if (!copy) return NULL;
     if (source->module.provenance && source->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
         if (!source->source_facts) { *status=XR_XIR_BAD_STRUCTURE;goto failed; }
         if (source->context.resources==context->resources) {
-            *status=source_facts_match(context,source,NULL);
-            if (*status==XR_XIR_OK) *status=source_facts_input_match(context,copy,source->source_facts);
-            if (*status==XR_XIR_OK) *status=source_facts_retain(context,source->source_facts,&copy->source_facts);
-            if (*status==XR_XIR_OK) *status=source_facts_match(context,copy,NULL);
+            *status=source_facts_match(context,source,NULL, control);
+            if (*status==XR_XIR_OK) *status=source_facts_input_match(context,copy,source->source_facts, control);
+            if (*status==XR_XIR_OK) *status=source_facts_retain(context,source->source_facts,&copy->source_facts, control);
+            if (*status==XR_XIR_OK) *status=source_facts_match(context,copy,NULL, control);
         } else {
-            *status=source_facts_build(copy,NULL);
+            *status=source_facts_build(copy,NULL, control);
         }
     } else if (source->source_facts) *status=XR_XIR_BAD_STRUCTURE;
 failed:

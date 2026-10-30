@@ -45,7 +45,7 @@ static void literal_receiving_resources(void) {
             fprintf(stderr,"Literal receiving FI actual=%zu/%zu same-owner/retry/live\n",fault+1,sites);
     }
     XirCtfeInstanceView views[2]={0};
-    CHECK(xr_xir_compile_ctfe_instance_batch_views(batch,views,2)==XR_XIR_CTFE_OK);
+    CHECK(xr_xir_compile_ctfe_instance_batch_views(batch,views,2, NULL)==XR_XIR_CTFE_OK);
     literal_value("text",views[0].value);literal_value("text",views[1].value);
     xr_xir_compile_ctfe_instance_batch_free(batch);xr_compile_resources_release(context.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);

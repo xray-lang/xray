@@ -173,7 +173,7 @@ static void task_definition(void) {
     XrXirModule module = {.stage = XR_XIR_BUILT, .functions = functions, .function_count = 2, .types = &types, .generics = generics};
     XrXirArtifact *checked = NULL, *closed = NULL;
     CHECK(xir_fixture_check(&c, &module, &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     const XrXirModule *m = xr_xir_compile_artifact_module(closed);
     CHECK(!m->generics && m->stage == XR_XIR_CHECKED && m->types->count == 1 &&
         xr_xir_task_element(m->types, m->functions[1].result) == XR_XIR_I64);

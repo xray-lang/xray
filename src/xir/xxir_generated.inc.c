@@ -123,7 +123,7 @@ XR_FUNC XrXirStatus xr_xir_compile_generated_receive(const XrXirCompileContext *
         for (uint32_t i=0; status==XR_XIR_OK && i<to->instruction_count; ++i)
             status=generated_origin_copy(context,&from->instructions[i],&rows[i]);
     }
-    if (status==XR_XIR_OK) owner->storage=clone_module(context,request->built,request->construction,&status);
+    if (status==XR_XIR_OK) owner->storage=clone_module_receiving(context,request->built,request->construction,&status,NULL,NULL);
     if (status!=XR_XIR_OK) { xr_xir_compile_generated_free(owner); return status; }
     *output=owner;
     return XR_XIR_OK;

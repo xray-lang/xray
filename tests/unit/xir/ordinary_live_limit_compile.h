@@ -69,7 +69,7 @@ static XrXirArtifact *oll_lower(const XrXirCompileContext *context, XrXirArtifac
     checked = oll_roundtrip(context, checked);
     checked = oll_roundtrip(context, checked);
     XrXirArtifact *closed = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
     *fixture = oll_fixture(closed);

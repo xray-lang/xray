@@ -33,7 +33,7 @@ static XrXirArtifact *float_mixed_lower(const XrXirCompileContext *context) {
     XrXirStatus status=xr_xir_compile_checked_read(context,bytes,(size_t)length,&checked,NULL);
     memset(bytes,0xa5,(size_t)length);xr_compile_resources_free(bytes);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(checked,NULL);
-    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&closed,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&closed,NULL, NULL);
     xr_xir_compile_artifact_free(checked);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);

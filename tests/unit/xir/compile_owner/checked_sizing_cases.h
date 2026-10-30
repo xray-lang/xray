@@ -191,7 +191,7 @@ static XrXirStatus sizing_packet(XrCompileResources *owner, unsigned variant) {
     artifact.module.functions = &f;
     artifact.context = (XrXirCompileContext){owner,xr_xir_compile_default_limits()};
     uint8_t sentinel = 0x5a; XrXirCheckedPacket packet = {&sentinel,17};
-    XrXirStatus status = xir_construction_empty(&artifact.context,artifact.module.types,&artifact.construction);
+    XrXirStatus status = xir_construction_empty(&artifact.context,artifact.module.types,&artifact.construction, NULL);
     if (status==XR_XIR_OK) status=checked_encode(&artifact,&packet,NULL,NULL);
     if (status != XR_XIR_OK) CHECK(packet.bytes == &sentinel && packet.length == 17 && sentinel == 0x5a);
     else {

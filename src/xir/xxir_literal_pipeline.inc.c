@@ -26,12 +26,15 @@ XR_FUNC void xr_xir_compile_instance_literals_free(XirLiteralDefinitions *result
     *result=(XirLiteralDefinitions){0};
 }
 static XrXirStatus literal_verify_bindings(const XrXirCompileContext *context,const XirCtfeInstanceView *views,
-    const XirLiteralDefinitions *result) {
+    const XirLiteralDefinitions *result,XrCompileRequestControl *control) {
     const XrXirModule *module=&result->definition->module;
+    uint32_t progress=0;
     for (uint32_t i=0;i<result->count;++i) {
+        XrXirStatus controlled=xir_receive_step(control,&progress);if (controlled!=XR_XIR_OK) return controlled;
         const XirLiteralBinding *binding=&result->bindings[i];const XirCtfeInstanceView *view=&views[i];
         const XrXirOrigin *origin=&view->checked->module.provenance->origins[view->instance_function];
         for (uint32_t a=0;a<binding->argument_count;++a) {
+            controlled=xir_receive_step(control,&progress);if (controlled!=XR_XIR_OK) return controlled;
             XrXirStatus status=xr_xir_compile_type_substitution_matches_between(context,view->checked->module.types,module->types,
                 NULL,0,origin->arguments[a],binding->arguments[a]);
             if (status!=XR_XIR_OK) return status;
@@ -40,7 +43,7 @@ static XrXirStatus literal_verify_bindings(const XrXirCompileContext *context,co
             NULL,0,(XrXirType)view->value->type,module->functions[binding->provider].result);
         if (status!=XR_XIR_OK) return status;
     }
-    return XR_XIR_OK;
+    return xir_receive_poll(control);
 }
 static XrXirStatus literal_receive(const XirLiteralRequest *request,const XrXirComptimeSite *site,
     XirLiteralDefinitions *output,XrXirDiagnostic *diagnostic,SourceContext *source_owner) {
@@ -48,10 +51,10 @@ static XrXirStatus literal_receive(const XirLiteralRequest *request,const XrXirC
         request->count>request->context->limits.functions || (site && request->count!=1) ||
         !output || output->definition || output->bindings || output->count)
         return literal_status(diagnostic,XR_XIR_BAD_STRUCTURE);
-    const XrXirCompileContext *context=request->context;XrXirStatus status=XR_XIR_OK;
-    XirCtfeInstanceView *views=xir_compile_calloc(context,request->count,sizeof(*views),&status);
+    const XrXirCompileContext *context=request->context;XrXirStatus status=xir_receive_poll(request->control);
+    XirCtfeInstanceView *views=xir_type_copy_zero(context,request->count,sizeof(*views),&status,request->control);
     if (!views) return literal_status(diagnostic,status);
-    XrXirCtfeStatus queried=xr_xir_compile_ctfe_instance_batch_views(request->instances,views,request->count);
+    XrXirCtfeStatus queried=xr_xir_compile_ctfe_instance_batch_views(request->instances,views,request->count,request->control);
     if (queried!=XR_XIR_CTFE_OK) {
         xr_compile_resources_free(views);
         return literal_status(diagnostic,queried==XR_XIR_CTFE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
@@ -64,27 +67,30 @@ static XrXirStatus literal_receive(const XirLiteralRequest *request,const XrXirC
     }
     SourceContext ctx={0};ctx.request=request->control;ctx.compile=*context;XirLiteralDefinitions result={0};
     const XrXirArtifact *original=views[0].definition;
+    uint32_t progress=0;
     status=literal_site_verify(&views[0],site);
     if (status!=XR_XIR_OK) goto done;
     for (uint32_t i=0;i<request->count;++i) {
-
+        status=xir_receive_step(request->control,&progress);if (status!=XR_XIR_OK) goto done;
         if (views[i].definition!=original || views[i].definition->context.resources!=context->resources) {
             status=XR_XIR_BAD_STRUCTURE;goto done;
         }
     }
-    result.bindings=xir_compile_calloc(context,request->count,sizeof(*result.bindings),&status);
+    result.bindings=xir_type_copy_zero(context,request->count,sizeof(*result.bindings),&status,request->control);
     if (!result.bindings) goto done;
     result.count=request->count;
     if (!literal_seed(&ctx,original,request->count)) { status=ctx.diagnostic.status;goto done; }
     for (uint32_t i=0;i<request->count;++i) {
+        status=xir_receive_step(request->control,&progress);if (status!=XR_XIR_OK) goto done;
         if (!literal_binding(&ctx,&views[i],&result.bindings[i]) || !literal_provider(&ctx,&views[i],&result.bindings[i])) {
             status=ctx.diagnostic.status;goto done;
         }
     }
     status=literal_check(&ctx,original,result.bindings,site,&result.definition,diagnostic);
-    if (status==XR_XIR_OK) status=literal_verify_bindings(context,views,&result);
+    if (status==XR_XIR_OK) status=literal_verify_bindings(context,views,&result,request->control);
     if (status==XR_XIR_OK && !source_generated_debug_receive(source_owner,&ctx,original->module.function_count))
         status=source_owner->diagnostic.status;
+    if (status==XR_XIR_OK) status=xir_receive_poll(request->control);
     if (status==XR_XIR_OK) { *output=result;result=(XirLiteralDefinitions){0}; }
 done:
     xr_xir_compile_instance_literals_free(&result);source_comptime_context_free(&ctx,source_owner);xr_compile_resources_free(views);

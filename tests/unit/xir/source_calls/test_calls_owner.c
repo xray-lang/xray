@@ -49,7 +49,7 @@ static void fixture(CallsFixture *f) {
 static XrXirSourceSnapshot *snapshot(const XrXirCompileContext *context,CallsFixture *f) {
     XrXirConstruction *construction=NULL;
     const XrXirConstructionSpec input={0};
-    CHECK(xr_xir_compile_construction_new_v4(context,NULL,&input,&(XrXirSlotFacts){NULL,0},&construction)==XR_XIR_OK&&construction);
+    CHECK(xr_xir_compile_construction_new_v4(context,NULL,&input,&(XrXirSlotFacts){NULL,0},&construction, NULL)==XR_XIR_OK&&construction);
     XrXirSourceSnapshot *s=NULL;CHECK(xr_xir_compile_source_snapshot_copy_v2(context,&f->view,construction,&s)==XR_XIR_OK&&s);
     xr_xir_compile_construction_free(construction);
     CHECK(!xr_xir_compile_source_snapshot_calls(s));

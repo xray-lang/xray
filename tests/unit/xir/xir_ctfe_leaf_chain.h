@@ -105,7 +105,7 @@ static XrXirStatus ctfe_fixture_build(const XrXirCompileContext *context,
         checked = copy; copy = NULL;
     }
     ctfe_chain_mark(trace, CTFE_CHAIN_SPECIALIZE);
-    status = xr_xir_compile_specialize(checked, &closed, NULL);
+    status = xr_xir_compile_specialize(checked, &closed, NULL, NULL);
     xr_xir_compile_artifact_free(checked); checked = NULL;
     if (status != XR_XIR_OK) { CHECK(!closed); goto done; }
     CHECK(closed && xr_xir_compile_artifact_context(closed)->resources == context->resources);

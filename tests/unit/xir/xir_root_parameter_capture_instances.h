@@ -176,7 +176,7 @@ static XrXirStatus rci_pipeline(const XrXirCompileContext *c,
     XrXirStatus status=xir_fixture_check(c, &f.module, &checked, &d);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(checked,&first,&d);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(c,first.bytes,first.length,&read,&d);
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(read,&instance,&d);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(read,&instance,&d, NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(instance,&second,&d);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(c,second.bytes,second.length,&reloaded,&d);
     if (status==XR_XIR_OK && qualify) rci_shape(reloaded,probe);
@@ -273,7 +273,7 @@ static void rci_forged(void) {
         rp_balanced(mark);
     }
     XrXirProvenance *proof=NULL;
-    CHECK(xr_xir_compile_provenance_copy(&c,m->provenance,&proof)==XR_XIR_OK && proof);
+    CHECK(xr_xir_compile_provenance_copy(&c,m->provenance,&proof, NULL)==XR_XIR_OK && proof);
     bool forged=false;
     for (uint32_t b=0;b<proof->binding_count;++b) {
         XrXirEffectBindingProof *binding=&proof->bindings[b];

@@ -45,8 +45,8 @@ static XrXirStatus unit_destructure_cell_observe_read(const XrXirCompileContext 
     ++unit_destructure_cell_reads;return xr_xir_compile_checked_read(context,bytes,length,output,diagnostic);
 }
 static XrXirStatus unit_destructure_cell_observe_specialize(const XrXirArtifact *artifact,
-    XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
-    ++unit_destructure_cell_specializations;return xr_xir_compile_specialize(artifact,output,diagnostic);
+    XrXirArtifact **output,XrXirDiagnostic *diagnostic,XrCompileRequestControl *control) {
+    ++unit_destructure_cell_specializations;return xr_xir_compile_specialize(artifact,output,diagnostic, control);
 }
 static XrXirStatus unit_destructure_cell_observe_verify(const XrXirArtifact *artifact,XrXirDiagnostic *diagnostic) {
     ++unit_destructure_cell_verifications;return xr_xir_compile_artifact_verify(artifact,diagnostic);
@@ -115,7 +115,7 @@ static XrXirStatus unit_destructure_cell_pipeline_operation(const XrXirCompileCo
     XrXirCallEntry *entries=NULL;XrXirVmBinding *bindings=NULL;
     XrXirStatus status=xr_xir_compile_checked_read(context,packet->bytes,packet->length,&checked,NULL);
     if (status!=XR_XIR_OK) {CHECK(!checked);goto done;}
-    status=xr_xir_compile_specialize(checked,&special,NULL);
+    status=xr_xir_compile_specialize(checked,&special,NULL, NULL);
     if (status!=XR_XIR_OK) {CHECK(!special);goto done;}
     status=xr_xir_compile_artifact_verify(special,NULL);if (status!=XR_XIR_OK) goto done;
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
@@ -138,7 +138,7 @@ done:
 }
 static XrXirArtifact *unit_destructure_cell_lower_verified(XrXirArtifact *owned,uint32_t ids[UNIT_DESTRUCTURE_CELL_EXPORTS]) {
     XrXirArtifact *special=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(owned,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
+    CHECK(xr_xir_compile_specialize(owned,&special,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);

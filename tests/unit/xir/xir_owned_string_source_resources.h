@@ -130,7 +130,7 @@ static void cs_packet_roundtrip(CsFixture *f, CsMetrics *m, XrXirArtifact **chec
 static void cs_lower(CsFixture *f, CsMetrics *m, XrXirArtifact *checked) {
     XrXirArtifact *closed = NULL;
     size_t begin = instance_compile_attempts;
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_artifact_context(closed)->resources == f->compiler.resources);
     const XrXirModule *module = xr_xir_compile_artifact_module(closed);

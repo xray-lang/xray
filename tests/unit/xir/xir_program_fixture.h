@@ -115,7 +115,7 @@ static XrXirArtifact *program_fixture_checked(const XrXirCompileContext *context
 static XrXirArtifact *program_fixture(const XrXirCompileContext *context,uint32_t mode) {
     XrXirArtifact *checked=program_fixture_checked(context,mode),*closed=NULL,*lowered=NULL;
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);closed=NULL;xr_xir_compile_artifact_free(checked);checked=NULL;return lowered;
 }

@@ -13,7 +13,7 @@ static XrXirArtifact *panics_lower(XrXirSourceResult *source,bool default_contro
     XrXirArtifact *read=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_specialize(read,&closed,&diagnostic);
+    XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_specialize(read,&closed,&diagnostic, NULL);
     if (status!=XR_XIR_OK) {
         const XrXirModule *module=xr_xir_compile_artifact_module(read);
         fprintf(stderr,"panics specialize=%u f=%u b=%u i=%u source-name=%.*s\n",status,

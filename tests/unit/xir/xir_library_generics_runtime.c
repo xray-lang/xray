@@ -23,7 +23,7 @@
 #include "xir_library_generics_oracle.h"
 static void library_generics_run_artifact(XrXirArtifact *read,const char *prefix,const char *c_path) {
     CHECK(xr_xir_compile_artifact_verify(read,NULL)==XR_XIR_OK);
-    XrXirArtifact *special=NULL,*lowered=NULL;CHECK(xr_xir_compile_specialize(read,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
+    XrXirArtifact *special=NULL,*lowered=NULL;CHECK(xr_xir_compile_specialize(read,&special,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);const char *names[]={"main_i64","main_string","main_bool","main_box"};uint32_t entries[4]={UINT32_MAX,UINT32_MAX,UINT32_MAX,UINT32_MAX};

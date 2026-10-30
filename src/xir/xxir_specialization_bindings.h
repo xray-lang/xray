@@ -29,5 +29,5 @@ typedef struct XrXirSpecializationReceiver {
  * Correspondence grants no execution permission. Receiver failure preserves
  * the caller's empty output and releases the unpublished artifact. */
 XR_FUNC XrXirStatus xr_xir_compile_specialize_receive(const XrXirArtifact *checked,
-    const XrXirSpecializationReceiver *receiver, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+    const XrXirSpecializationReceiver *receiver, XrXirArtifact **output, XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
 #endif // XXIR_SPECIALIZATION_BINDINGS_H

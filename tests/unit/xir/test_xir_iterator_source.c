@@ -80,7 +80,7 @@ static XrXirStatus iterator_source_pipeline(const XrXirCompileContext *c,const c
         if (s==XR_XIR_OK) {
             const XrXirModule *m=xr_xir_compile_artifact_module(decoded);uint32_t count=0;
             for (uint32_t t=0;t<m->types->count;++t) if (m->types->nodes[t].kind==XR_XIR_TYPE_ITERATOR) ++count;
-            CHECK(count==4);s=xr_xir_compile_specialize(decoded,&closed,NULL);
+            CHECK(count==4);s=xr_xir_compile_specialize(decoded,&closed,NULL, NULL);
         }
         if (s==XR_XIR_OK) s=xr_xir_compile_lower(closed,
             &(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);

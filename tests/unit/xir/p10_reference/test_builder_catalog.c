@@ -60,7 +60,7 @@ static XrXirArtifact *owned_consumer(SourceFixtureOwner *owner,const XrXirLibrar
     if(status!=XR_XIR_OK) fprintf(stderr,"Catalog consumer=%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==XR_XIR_OK);
     XrXirArtifact *closed=NULL,*decoded=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
-    CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(&owner->context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

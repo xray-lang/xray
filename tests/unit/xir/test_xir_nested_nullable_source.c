@@ -32,7 +32,7 @@ static void nested_source_case(const char *name,bool accept,bool hidden) {
         XrXirSourceResult result={0};XrXirArtifact *closed=NULL;
         CHECK(xr_xir_compile_source_check(&request.source,&result,NULL,NULL)==XR_XIR_OK);
         CHECK(result.checked && result.snapshot && xr_xir_compile_source_snapshot_view(result.snapshot)->complete);
-        CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL, NULL)==XR_XIR_OK);
         const XrXirTypes *types=xr_xir_compile_artifact_module(closed)->types;bool nested=false;
         for(uint32_t i=0;types && i<types->count;++i)
             if(types->nodes[i].kind==XR_XIR_TYPE_NULLABLE && xr_xir_type_is_nullable(types,types->nodes[i].element))nested=true;

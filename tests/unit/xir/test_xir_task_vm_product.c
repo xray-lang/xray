@@ -59,7 +59,7 @@ static XrXirProgram *task_product_program(uint32_t mode) {
     memset(&fixture, 0xa5, sizeof(fixture));
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, &diagnostic) == XR_XIR_OK);
     memset(packet.bytes, 0xa5, packet.length); xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(decoded, &closed, &diagnostic) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, &diagnostic, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirStatus status = xr_xir_compile_lower(closed, &target, NULL, &lowered, &diagnostic);

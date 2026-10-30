@@ -70,7 +70,7 @@ static void scalar_input_facts(void) {
     XrXirSourceResult result = compile_text(text);
     XrXirArtifact *closed = NULL;
     XrXirDiagnostic diagnostic = {0};
-    XIR_OK(xr_xir_compile_specialize(result.checked, &closed, &diagnostic));
+    XIR_OK(xr_xir_compile_specialize(result.checked, &closed, &diagnostic, NULL));
     const XrXirModule *module = xr_xir_compile_artifact_module(closed);
     const XrXirDeclarations *declarations = module->declarations;
     CHECK(declarations && declarations->root_module < declarations->module_count);
@@ -107,7 +107,7 @@ static void specialization_origins(void) {
     const XrXirSourceDebugView *debug = xr_xir_compile_source_snapshot_debug(result.snapshot);
     CHECK(debug && debug->function_count && debug->functions);
     XrXirArtifact *closed = NULL;
-    XIR_OK(xr_xir_compile_specialize(result.checked, &closed, NULL));
+    XIR_OK(xr_xir_compile_specialize(result.checked, &closed, NULL, NULL));
     const XrXirModule *module = xr_xir_compile_artifact_module(closed);
     uint32_t *origins = xr_malloc((size_t) module->function_count * sizeof(*origins));
     CHECK(origins != NULL);
@@ -156,7 +156,7 @@ static void lowered_origin_rejected(void) {
     XrXirSourceResult result = compile_text("fn scalar()->i64{return 42}\nprint(scalar())\n");
     XrXirArtifact *closed = NULL, *lowered = NULL;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    XIR_OK(xr_xir_compile_specialize(result.checked, &closed, NULL));
+    XIR_OK(xr_xir_compile_specialize(result.checked, &closed, NULL, NULL));
     XIR_OK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL));
     xr_xir_compile_artifact_free(closed);
     xr_xir_compile_source_result_free(&result);
@@ -216,11 +216,11 @@ static void evaluation_origin_rejected(void) {
     XIR_OK(xr_xir_compile_check_v2(&checked->context, &built, construction, &source, NULL));
     xr_xir_compile_construction_free(construction);
     XirComptimePending *pending = NULL;
-    XIR_OK(xr_xir_compile_comptime_pending(source, &pending, NULL));
+    XIR_OK(xr_xir_compile_comptime_pending(source, &pending, NULL, NULL));
     CHECK(pending != NULL);
     xr_xir_compile_artifact_free(source);
     xr_xir_compile_source_comptime_instances_free(&instances);
-    XIR_OK(xr_xir_compile_comptime_pending_specialize(pending, &evaluation, NULL));
+    XIR_OK(xr_xir_compile_comptime_pending_specialize(pending, &evaluation, NULL, NULL));
     xr_xir_compile_comptime_pending_free(pending);
     XIR_OK(xr_xir_compile_artifact_verify(evaluation, NULL));
     CHECK(evaluation->module.stage == XR_XIR_CHECKED && evaluation->evaluation_only == 1 &&
@@ -233,7 +233,7 @@ static void evaluation_origin_rejected(void) {
 static void literal_output_source_facts(void) {
     XrXirSourceResult source = compile_text("print(\"A\\0\\u{e9}\")\nvar i=0\nwhile(i<3){print(i);i=i+1}\nprint(\"\")\n");
     XrXirArtifact *closed = NULL;
-    XIR_OK(xr_xir_compile_specialize(source.checked, &closed, NULL));
+    XIR_OK(xr_xir_compile_specialize(source.checked, &closed, NULL, NULL));
     const XrXirModule *module = xr_xir_compile_artifact_module(closed);
     const XrXirDeclarations *d = module->declarations;
     CHECK(d->slot_count == 1 && d->slots[0].mutable &&

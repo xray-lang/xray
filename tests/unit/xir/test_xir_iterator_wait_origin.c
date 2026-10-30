@@ -154,7 +154,7 @@ int main(int argc,char **argv) {
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);const XrXirProgramSpec *original=&generator_consumption_program;
     CHECK(original->entry_count<=64);XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(&owner.context,original->proof.bytes,original->proof.length,&checked,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_lower(closed,&original->target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     wait_module=xr_xir_compile_artifact_module(lowered);CHECK(wait_module);
     XrXirVmBinding *bindings=NULL;XrXirCallEntry *vm=NULL;

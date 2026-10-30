@@ -115,7 +115,7 @@ typedef struct InvocationRotationStages {
 
 static XrXirStatus invocation_rotation_pipeline(InvocationRotationStages *run) {
     run->phase=5;
-    XrXirStatus status=xr_xir_compile_specialize(run->checked,&run->specialized,&run->diagnostic);
+    XrXirStatus status=xr_xir_compile_specialize(run->checked,&run->specialized,&run->diagnostic, NULL);
     if (status==XR_XIR_OK) {
         run->specialized_count=xr_xir_compile_artifact_module(run->specialized)->function_count;
         run->phase=6;status=xr_xir_compile_artifact_verify(run->specialized,&run->diagnostic);

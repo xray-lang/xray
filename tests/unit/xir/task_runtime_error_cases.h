@@ -68,7 +68,7 @@ static void task_error_fixture_new(TaskErrorFixture *f) {
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked = NULL, *closed = NULL;
     CHECK(xir_fixture_check(&f->base.compiler.context,&module,&checked,NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(closed,&spec.target, NULL,&proof,NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(checked);
     const XrXirModule *lowered = xr_xir_compile_artifact_module(proof);

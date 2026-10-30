@@ -149,7 +149,7 @@ static bool effect_balanced(void) {
  * Lowered instances are reconstructed from their sealed Checked packet. */
 static XrXirStatus effect_reproduce(const XrXirArtifact *source, const XrXirCompileContext *c, XrXirArtifact **out) {
     const XrXirModule *m = xr_xir_compile_artifact_module(source);
-    if (m->stage == XR_XIR_CHECKED) return xr_xir_compile_recheck_v2(c,m,xr_xir_compile_artifact_construction(source), out, NULL);
+    if (m->stage == XR_XIR_CHECKED) return xr_xir_compile_recheck_v2(c,m,xr_xir_compile_artifact_construction(source), out, NULL, NULL);
     CHECK(m->stage == XR_XIR_LOWERED);
     XrXirArtifact *checked = NULL;
     XrXirStatus status = xr_xir_compile_checked_read(c, source->checked_packet.bytes, source->checked_packet.length, &checked, NULL);

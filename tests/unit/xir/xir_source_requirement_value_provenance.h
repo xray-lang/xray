@@ -116,7 +116,7 @@ static void source_requirement_value_alternates(const XrXirSourceRequest *reques
         if (mode) CHECK(!result.checked && !result.snapshot && diagnostic.status==XR_XIR_BAD_TYPE);
         else {
             CHECK(result.checked && result.snapshot && xr_xir_compile_artifact_verify(result.checked,NULL)==XR_XIR_OK);
-            XrXirArtifact *closed=NULL;CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL)==XR_XIR_OK);
+            XrXirArtifact *closed=NULL;CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL, NULL)==XR_XIR_OK);
             CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
         }
         xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
@@ -128,7 +128,7 @@ static void source_requirement_value_provenance(XrXirSourceRequest *request) {
     XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
     CHECK(xr_xir_compile_source_check(request, &result, &diagnostic, NULL)==XR_XIR_OK && result.checked);
     XrXirArtifact *closed=NULL,*copy=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(result.checked, &closed, NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(result.checked, &closed, NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&result); requirement_value_poison(closed);
     XrXirCheckedPacket packet={0};
     const XrXirCompileContext packet_context = *xr_xir_compile_artifact_context(closed);

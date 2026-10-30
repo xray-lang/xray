@@ -14,7 +14,7 @@ static void source_method_promise_execute(XrXirArtifact *checked, const char *ou
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(&context, packet.bytes, packet.length, &copy, NULL) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(copy, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(copy, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(copy);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);

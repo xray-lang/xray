@@ -35,7 +35,7 @@ static void panic_mixed(bool root_native) {
     XrXirArtifact *checked = NULL, *closed = NULL;
     CHECK(xr_xir_compile_checked_read(&context, panic_source_program.packet.bytes, panic_source_program.packet.length,
         &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     PanicMixed *owner = NULL;
     CHECK(xr_compile_resources_calloc(context.resources, 1, sizeof(*owner), (void **)&owner) == XR_COMPILE_RESOURCE_OK && owner);

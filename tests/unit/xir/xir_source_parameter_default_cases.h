@@ -46,7 +46,7 @@ static void source_parameter_defaults_execute(XrXirArtifact *owned) {
     CHECK(xr_xir_compile_checked_read(&packet_context, packet.bytes, packet.length, &owned, NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
     XrXirArtifact *specialized=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(owned, &specialized, NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(owned, &specialized, NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(owned);
     CHECK(!xr_xir_compile_artifact_module(specialized)->defaults);
     CHECK(xr_xir_compile_artifact_verify(specialized, NULL)==XR_XIR_OK);

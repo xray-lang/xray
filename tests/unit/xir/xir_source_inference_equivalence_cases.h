@@ -84,7 +84,7 @@ static void source_inference_equivalence_cases(XrXirSourceRequest *request) {
     xr_compile_session_free(session);
     inference_equivalence_original(xr_xir_compile_artifact_module(result.checked));
     XrXirArtifact *closed=NULL,*copy=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(result.checked, &closed, NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(result.checked, &closed, NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&result); inference_equivalence_closed(closed);
     XrXirCheckedPacket packet={0};
     const XrXirCompileContext packet_context = *xr_xir_compile_artifact_context(closed);

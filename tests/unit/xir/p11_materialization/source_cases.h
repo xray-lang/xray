@@ -69,7 +69,7 @@ static void source_library_case(bool fresh) {
     xr_compile_session_free(session);xr_xir_compile_library_catalog_free(catalog);memset(text,0xa5,sizeof(text));
     CHECK(xr_xir_compile_construction_materialization_count(source.checked->construction)==(fresh?4u:2u));
     XrXirArtifact *closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&source);
+    CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&source);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     xr_compile_resources_release(context.resources);execute(&lowered,"answer",fresh?4:2);

@@ -173,7 +173,7 @@ static XrXirStatus checked(const XrXirCompileContext *context,const PreparedMate
     const XrXirMaterializationBinding *edges,uint32_t count,XrXirArtifact **output) {
     const XrXirConstruction *source=input->source.checked->construction;
     XrXirConstructionSpec spec={source->rows,source->count,edges,count,NULL};XrXirConstruction *owner=NULL;
-    XrXirStatus status=xr_xir_compile_construction_new_v4(context,input->module.types,&spec,xr_xir_compile_construction_slots(source),&owner);
+    XrXirStatus status=xr_xir_compile_construction_new_v4(context,input->module.types,&spec,xr_xir_compile_construction_slots(source),&owner, NULL);
     XrXirDiagnostic diagnostic={0};
     if (status==XR_XIR_OK) status=xr_xir_compile_check_v2(context,&input->module,owner,output,&diagnostic);
     if (status!=XR_XIR_OK && status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_BUDGET)
@@ -187,7 +187,7 @@ static XrXirStatus pipeline(const XrXirCompileContext *context,const PreparedMat
     xr_xir_compile_artifact_free(first);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,wire.bytes,wire.length,&read,NULL);
     xr_xir_compile_checked_packet_free(&wire);
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(read,&closed,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(read,&closed,NULL, NULL);
     xr_xir_compile_artifact_free(read);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(closed,&wire,NULL);
     xr_xir_compile_artifact_free(closed);closed=NULL;
@@ -318,7 +318,7 @@ static void source_materializers(unsigned mode) {
     XrXirArtifact *read=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&read,NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(read,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
+    CHECK(xr_xir_compile_specialize(read,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     xr_compile_resources_release(context.resources);execute(&lowered,"run",expected);
@@ -338,7 +338,7 @@ static void independent_wire(void) {
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
     CHECK(packet.length==sizeof(materialization76_golden) && !memcmp(packet.bytes,materialization76_golden,packet.length));
     xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     xr_compile_resources_release(context.resources);execute(&lowered,"entry",1);

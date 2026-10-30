@@ -137,7 +137,7 @@ static XrXirStatus capture_index_pipeline(const XrXirCompileContext *c, XrXirArt
     if (status==XR_XIR_OK) { phase="effects";status=xr_xir_compile_effects_analyze(read,&effects); }
     if (status==XR_XIR_OK && qualify) capture_index_facts(effects,true);
     xr_xir_compile_effects_free(effects);effects=NULL;
-    if (status==XR_XIR_OK) { phase="specialize";status=xr_xir_compile_specialize(read,&instance,&d); }
+    if (status==XR_XIR_OK) { phase="specialize";status=xr_xir_compile_specialize(read,&instance,&d, NULL); }
     xr_xir_compile_artifact_free(read);
     if (status==XR_XIR_OK) { phase="lower";status=xr_xir_compile_lower(instance,&target, NULL,&lowered,&d); }
     xr_xir_compile_artifact_free(instance);

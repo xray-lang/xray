@@ -108,13 +108,13 @@ static void run_node(XrHirUnary node,uint64_t input,uint64_t expected) {
     XrXirDeclarations declarations={&module,1,identities,NULL,0,NULL,0,0,2,NULL};
     XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,.declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};
     XrXirConstruction *construction=NULL;
-    CHECK(xr_xir_compile_construction_new_v4(&receiver,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v4(&receiver,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction, NULL)==XR_XIR_OK);
     XrXirArtifact *checked_artifact=NULL,*closed=NULL,*lowered=NULL;
     XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_check_v2(&receiver,&built,construction,&checked_artifact,&diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"unary type%u: status%d at%u/%u/%u reason%d\n",(unsigned)node.type,(int)status,
         diagnostic.function,diagnostic.block,diagnostic.instruction,(int)diagnostic.reason);
     CHECK(status==XR_XIR_OK);xr_xir_compile_construction_free(construction);
-    CHECK(xr_xir_compile_specialize(checked_artifact,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked_artifact);
+    CHECK(xr_xir_compile_specialize(checked_artifact,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked_artifact);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirRunContext run={1024,1024,0,0,0,0};XrXirValue value={0};

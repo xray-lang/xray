@@ -6,15 +6,17 @@
  *
  * xxir_source_instance_writer.inc.c - Definition-born ordinary literal providers
  */
+#include "xxir_source_receive_control.inc.c"
 typedef struct SourceInstanceTypes {
     SourceContext *ctx;
     const XrXirTypes *source;
     XrXirType *mapped;
+    uint32_t control_rows;
 } SourceInstanceTypes;
 static bool source_instance_argument(SourceInstanceTypes *input,XrXirType argument,
     uint32_t depth,XrXirType *output) {
     SourceContext *ctx=input->ctx;
-    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+    if (!source_receive_step(ctx,&input->control_rows)) return false;
     if (depth==128) return source_fail(ctx,NULL,XR_XIR_BUDGET,"constructed type substitution depth exhausted");
     if ((uint32_t)argument<XR_XIR_CONSTRUCTED_TYPE_BASE) { *output=argument;return true; }
     const XrXirTypeNode *found=xr_xir_type_node(input->source,argument);
@@ -28,16 +30,16 @@ static bool source_instance_argument(SourceInstanceTypes *input,XrXirType argume
         if (!source_comptime_nominal_identities(ctx,input->source))
             return source_fail(ctx,NULL,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,
                 "instance argument changed its actual nominal declaration");
-        XrXirType *arguments=node.nominal.argument_count?source_alloc(ctx,node.nominal.argument_count,sizeof(*arguments)):NULL;
+        XrXirType *arguments=node.nominal.argument_count?source_receive_alloc(ctx,node.nominal.argument_count,sizeof(*arguments)):NULL;
         if (node.nominal.argument_count && !arguments) return false;
         for (uint32_t a=0;a<node.nominal.argument_count;++a)
             if (!source_instance_argument(input,node.nominal.arguments[a],depth+1,&arguments[a])) return false;
         node.nominal.arguments=arguments;node.nominal.fields=NULL;node.nominal.field_count=0;
     } else if (node.kind==XR_XIR_TYPE_CALLABLE || node.kind==XR_XIR_TYPE_TUPLE || node.kind==XR_XIR_TYPE_UNION) {
-        XrXirCallableParameter *parameters=node.parameter_count?source_alloc(ctx,node.parameter_count,sizeof(*parameters)):NULL;
+        XrXirCallableParameter *parameters=node.parameter_count?source_receive_alloc(ctx,node.parameter_count,sizeof(*parameters)):NULL;
         if (node.parameter_count && !parameters) return false;
         for (uint32_t p=0;p<node.parameter_count;++p) {
-            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+            if (!source_receive_step(ctx,&input->control_rows)) return false;
             parameters[p].mode=node.parameters[p].mode;
             if (!source_instance_argument(input,node.parameters[p].type,depth+1,&parameters[p].type)) return false;
         }
@@ -54,10 +56,10 @@ static bool source_instance_argument(SourceInstanceTypes *input,XrXirType argume
         uint32_t count=found->nominal.field_count;
         if (count!=ctx->nominals.declarations[node.nominal.declaration].field_count)
             return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"instance nominal field closure is incomplete");
-        XrXirType *fields=count?source_alloc(ctx,count,sizeof(*fields)):NULL;
+        XrXirType *fields=count?source_receive_alloc(ctx,count,sizeof(*fields)):NULL;
         if (count && !fields) return false;
         for (uint32_t f=0;f<count;++f) {
-            if (!((ctx)->diagnostic.status == XR_XIR_OK) ||
+            if (!source_receive_step(ctx,&input->control_rows) ||
                 !source_instance_argument(input,found->nominal.fields[f],depth+1,&fields[f])) return false;
         }
         /* Receiving field types can move the mutable pool. */
@@ -67,6 +69,7 @@ static bool source_instance_argument(SourceInstanceTypes *input,XrXirType argume
     return true;
 }
 static bool source_instance_literal(SourceContext *ctx,uint32_t index) {
+    uint32_t progress=0;
     const XirCtfeInstanceView *view=&ctx->instance_constants->views[index];
     uint32_t definition=view->definition_function;
     if (definition>=ctx->function_count || !ctx->bodies[definition].node ||
@@ -76,10 +79,10 @@ static bool source_instance_literal(SourceContext *ctx,uint32_t index) {
     if (origin->argument_count!=ctx->generics[definition].parameter_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"instance Source binder changed");
     AstNode *node=ctx->bodies[definition].node;
-    XrXirType *arguments=source_alloc(ctx,origin->argument_count,sizeof(*arguments));
+    XrXirType *arguments=source_receive_alloc(ctx,origin->argument_count,sizeof(*arguments));
     if (origin->argument_count && !arguments) return false;
     const XrXirTypes *from=view->checked->module.types;
-    SourceInstanceTypes importer={ctx,from,from && from->count?source_alloc(ctx,from->count,sizeof(XrXirType)):NULL};
+    SourceInstanceTypes importer={ctx,from,from && from->count?source_receive_alloc(ctx,from->count,sizeof(XrXirType)):NULL,0};
     if (from && from->count && !importer.mapped) return false;
     for (uint32_t a=0;a<origin->argument_count;++a)
         if (!source_instance_argument(&importer,origin->arguments[a],0,&arguments[a])) return false;
@@ -93,8 +96,8 @@ static bool source_instance_literal(SourceContext *ctx,uint32_t index) {
     if (f>=ctx->compile.limits.functions)
         return source_fail(ctx,node,XR_XIR_BUDGET,"instance literal function inventory exhausted");
     if (!source_materialization_storage(ctx,f+1)) return false;
-    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-    char *name=source_alloc(ctx,40,1);
+    if (!source_receive_step(ctx,&progress)) return false;
+    char *name=source_receive_alloc(ctx,40,1);
     if (!name || source_format(ctx,name,40,"$instanceconstant%u",f)!=XR_DIAG_OK)
         return source_fail(ctx,node,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BUDGET:ctx->diagnostic.status,"instance literal name failed");
     uint32_t module=ctx->bodies[definition].module,nominal=ctx->identities[definition].nominal_owner;
@@ -121,13 +124,14 @@ static bool source_instance_literal(SourceContext *ctx,uint32_t index) {
     ctx->instance_constants->providers[index]=f;return true;
 }
 static bool source_instance_literals_finish(SourceContext *ctx) {
+    uint32_t progress=0;
     if (!ctx->instance_constants) return true;
     if (ctx->comptime_count || ctx->materializations)
         return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"instance literals require a complete ordinary Source definition graph");
     if (ctx->function_count>ctx->compile.limits.functions ||
         ctx->instance_constants->count>ctx->compile.limits.functions-ctx->function_count)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"instance literal function inventory exhausted");
-    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+    if (!source_receive_step(ctx,&progress)) return false;
     ctx->materialization_begin=ctx->function_count+ctx->instance_constants->count;
     SourceComptimeScope saved=source_comptime_scope(ctx);bool ok=true;
     for (uint32_t i=0;i<ctx->instance_constants->count;++i)

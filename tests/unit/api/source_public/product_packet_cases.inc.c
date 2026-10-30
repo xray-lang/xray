@@ -79,7 +79,7 @@ static void product_packet_equal(char *text,size_t length,const char *name) {
     CHECK(xr_xir_compile_source_check_text(&request.source,&source,&checked,&immediate,NULL)==XR_XIR_OK);
     XrXirCheckedPacket expected[2]={{0}};XrXirArtifact *closed=NULL;
     CHECK(xr_xir_compile_checked_write(checked.checked,&expected[0],NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(checked.checked,&closed,NULL)==XR_XIR_OK&&closed);
+    CHECK(xr_xir_compile_specialize(checked.checked,&closed,NULL, NULL)==XR_XIR_OK&&closed);
     CHECK(xr_xir_compile_checked_write(closed,&expected[1],NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);xr_xir_compile_source_result_free(&checked);
     xr_compile_session_free(session);session=NULL;

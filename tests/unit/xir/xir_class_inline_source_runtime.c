@@ -39,7 +39,7 @@ static void class_runtime_faults(XrXirProgram *program) {
 XR_FUNC void xr_test_class_inline_source_run(const XrXirCompileContext *context,XrXirArtifact **checked){
  C(context && context->resources && checked&&*checked);C(xr_xir_compile_artifact_verify(*checked,NULL)==XR_XIR_OK);
  XrXirArtifact *special=NULL,*lowered=NULL;
- C(xr_xir_compile_specialize(*checked,&special,NULL)==XR_XIR_OK);
+ C(xr_xir_compile_specialize(*checked,&special,NULL, NULL)==XR_XIR_OK);
  xr_xir_compile_artifact_free(*checked);*checked=NULL;
  C(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
  XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

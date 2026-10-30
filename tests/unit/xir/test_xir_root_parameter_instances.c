@@ -52,7 +52,7 @@ static XrXirStatus ri_pipeline(const XrXirCompileContext *context, XrXirArtifact
     XrXirStatus status=xir_fixture_check(context, &f.module, &checked, &d);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(checked,&packet,&d);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,&d);
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(read,&instance,&d);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(read,&instance,&d, NULL);
     if (status==XR_XIR_OK) { ri_shape(instance); *output=instance;instance=NULL; }
     xr_xir_compile_artifact_free(instance);xr_xir_compile_artifact_free(read);
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(checked);
@@ -97,7 +97,7 @@ static void ri_forged(void) {
         XR_XIR_BAD_STRUCTURE,XR_XIR_BAD_STRUCTURE,XR_XIR_BAD_STRUCTURE};
     for (unsigned bad=0;bad<5;++bad) {
         XrXirProvenance *copy=NULL;
-        CHECK(xr_xir_compile_provenance_copy(&context,original->provenance,&copy)==XR_XIR_OK && copy);
+        CHECK(xr_xir_compile_provenance_copy(&context,original->provenance,&copy, NULL)==XR_XIR_OK && copy);
         XrXirOrigin *origins=(XrXirOrigin *)copy->origins;
         XrXirEffectArgument *argument=(XrXirEffectArgument *)origins[4].effect_arguments;
         XrXirEffectBindingProof *proof=(XrXirEffectBindingProof *)copy->bindings;

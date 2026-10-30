@@ -65,7 +65,7 @@ static XrXirStatus preparation_pipeline(const XrXirCompileContext *context,
     preparation_stage_offsets[6] = effects_compile_attempts-first_attempt;
     preparation_stage_ticks[6] = clock();
     *stage = 6;
-    status = xr_xir_compile_specialize(decoded,&closed,NULL);
+    status = xr_xir_compile_specialize(decoded,&closed,NULL, NULL);
     if (status != XR_XIR_OK) goto finish;
     preparation_stage_offsets[7] = effects_compile_attempts-first_attempt;
     preparation_stage_ticks[7] = clock();

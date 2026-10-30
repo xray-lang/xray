@@ -117,7 +117,7 @@ static XrXirStatus lower_name_pipeline(const XrXirCompileContext *c, bool ordina
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     XrXirStatus status=xir_fixture_check(c, &f.base.module, &checked, &d);
     memset(&f,0x95,sizeof(f));
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(checked,&instance,&d);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(checked,&instance,&d, NULL);
     xr_xir_compile_artifact_free(checked);
     if (status==XR_XIR_OK && qualify) lower_name_shape(instance,ordinary,false);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(instance,&packet,&d);

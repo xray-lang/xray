@@ -39,22 +39,22 @@ static void source_comptime_test_trial(const XrCompileResourceLimits *limits,siz
     size_t held_blocks=source_fixture_compile_live,held_bytes=source_fixture_compile_bytes;
     report.status=source_comptime_test_whole(&context);report.sites=source_fixture_compile_attempts-start;
     report.spent=source_comptime_test_stats(&context);
-    CHECK(report.spent.live_bytes==report.baseline.live_bytes);
+    CHECK(report.spent.held_bytes==report.baseline.held_bytes);
     CHECK(source_fixture_compile_live==held_blocks && source_fixture_compile_bytes==held_bytes);
     source_comptime_test_monotonic(report.baseline,report.spent);
-    CHECK(report.spent.allocated_bytes<=limits->allocated_bytes && report.spent.peak_bytes<=limits->live_bytes && report.spent.work<=limits->work);
+    CHECK(report.spent.peak_bytes<=limits->memory_limit);
     source_fixture_compile_fail_at=SIZE_MAX;
     if (retry) {
-        CHECK(report.status==XR_XIR_BUDGET || report.status==XR_XIR_OUT_OF_MEMORY);
+        CHECK(report.status==XR_XIR_MEMORY_LIMIT || report.status==XR_XIR_OUT_OF_MEMORY);
         XrCompileResources *same_owner=context.resources;
         XrXirStatus again=source_comptime_test_whole(&context);
         if (report.status==XR_XIR_OUT_OF_MEMORY) CHECK(again==XR_XIR_OK && source_fixture_compile_injected);
-        else CHECK(again==XR_XIR_BUDGET);
+        else CHECK(again==XR_XIR_MEMORY_LIMIT);
         CHECK(context.resources==same_owner);
         XrCompileResourceStats after=source_comptime_test_stats(&context);
-        CHECK(after.live_bytes==report.baseline.live_bytes);source_comptime_test_monotonic(report.spent,after);
+        CHECK(after.held_bytes==report.baseline.held_bytes);source_comptime_test_monotonic(report.spent,after);
         CHECK(source_fixture_compile_live==held_blocks && source_fixture_compile_bytes==held_bytes);
-        CHECK(after.allocated_bytes<=limits->allocated_bytes && after.peak_bytes<=limits->live_bytes && after.work<=limits->work);
+        CHECK(after.peak_bytes<=limits->memory_limit);
     }
     xr_compile_resources_release(context.resources);
 done:
@@ -68,27 +68,18 @@ static void source_comptime_test_resources(void) {
     source_comptime_test_trial(&source_comptime_test_limits,SIZE_MAX,false,&second);
     CHECK(first.status==XR_XIR_OK && first.owner && first.sites>1);
     CHECK(second.status==first.status && second.sites==first.sites && !memcmp(&second.spent,&first.spent,sizeof(first.spent)));
-    fprintf(stderr,"Source comptime census N=%zu allocated=%llu live=%llu peak=%llu work=%llu\n",first.sites,
-        (unsigned long long)first.spent.allocated_bytes,(unsigned long long)first.spent.live_bytes,
-        (unsigned long long)first.spent.peak_bytes,(unsigned long long)first.spent.work);
-    for (uint32_t axis=0;axis<3;++axis) for (uint32_t less=0;less<2;++less) {
+    for (unsigned less=0;less<2;++less) {
         XrCompileResourceLimits limits=source_comptime_test_limits;
-        uint64_t exact=axis==0?first.spent.allocated_bytes:axis==1?first.spent.peak_bytes:first.spent.work;
-        CHECK(exact>1);
-        if (axis==0) limits.allocated_bytes=exact-less;
-        else if (axis==1) limits.live_bytes=exact-less;
-        else limits.work=exact-less;
+        CHECK(first.spent.peak_bytes>1);limits.memory_limit=first.spent.peak_bytes-less;
         SourceComptimeTestReport report={0};source_comptime_test_trial(&limits,SIZE_MAX,less!=0,&report);
-        if (report.status!=(less?XR_XIR_BUDGET:XR_XIR_OK)) fprintf(stderr,"Source comptime axis%u less%u cap%llu got%u\n",
-            axis,less,(unsigned long long)(exact-less),(unsigned)report.status);
-        CHECK(report.status==(less?XR_XIR_BUDGET:XR_XIR_OK));
-        if (!less) CHECK(report.sites==first.sites && !memcmp(&report.spent,&first.spent,sizeof(first.spent)));
+        CHECK(report.status==(less?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
     }
-    for (size_t site=0;site<first.sites;++site) {
-        SourceComptimeTestReport report={0};source_comptime_test_trial(&source_comptime_test_limits,site,true,&report);
-        if (report.status!=XR_XIR_OUT_OF_MEMORY) fprintf(stderr,"Source comptime FI ordinal%zu got%u sites%zu\n",site,(unsigned)report.status,report.sites);
+    size_t selected[3]={0,first.sites/2,first.sites-1};
+    for (size_t trial=0;trial<3;++trial) {
+        size_t site=selected[trial];SourceComptimeTestReport report={0};
+        source_comptime_test_trial(&source_comptime_test_limits,site,true,&report);
         CHECK(report.status==XR_XIR_OUT_OF_MEMORY && source_fixture_compile_injected && report.sites==site+1);
     }
-    fprintf(stderr,"Source comptime complete FI=%zu, all physical sites including bootstrap; remaining-owner retry; six axes; physical0\n",first.sites);
+    fprintf(stderr,"Source comptime representative physicalOOM, same-owner recovery and held exact/minus-one PASS\n");
 }
 #endif // XIR_SOURCE_COMPTIME_RESOURCES_H

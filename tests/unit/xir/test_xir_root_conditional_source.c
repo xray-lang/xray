@@ -173,7 +173,7 @@ static XrXirStatus conditional_operation(const XrXirCompileContext *context, voi
     if (status==XR_XIR_OK) { phase=2;status=xr_xir_compile_checked_write(result.checked,&first,&xir_diagnostic);if(status==XR_XIR_OK)conditional_parallel_packet(0,&first);conditional_stage_observe(context,operation,2,status,&observation); }
     xr_xir_compile_source_result_free(&result);
     if (status==XR_XIR_OK) { phase=3;status=xr_xir_compile_checked_read(context,first.bytes,first.length,&read,&xir_diagnostic);conditional_stage_observe(context,operation,3,status,&observation); }
-    if (status==XR_XIR_OK) { phase=4;status=xr_xir_compile_specialize(read,&instance,&xir_diagnostic);conditional_stage_observe(context,operation,4,status,&observation); }
+    if (status==XR_XIR_OK) { phase=4;status=xr_xir_compile_specialize(read,&instance,&xir_diagnostic, NULL);conditional_stage_observe(context,operation,4,status,&observation); }
     xr_xir_compile_artifact_free(read);read=NULL;
     if (status==XR_XIR_OK) { phase=5;status=xr_xir_compile_checked_write(instance,&second,&xir_diagnostic);if(status==XR_XIR_OK)conditional_parallel_packet(1,&second);conditional_stage_observe(context,operation,5,status,&observation); }
     xr_xir_compile_artifact_free(instance);instance=NULL;

@@ -82,7 +82,7 @@ static XrXirStatus pipeline(XrCompileResources *owner, bool release_caller, unsi
         if (status == XR_XIR_OK) CHECK(xr_xir_effects_error(effects,1,(XrXirType)257,1));
         xr_xir_compile_effects_free(effects); effects = NULL;
     }
-    if (status == XR_XIR_OK) status = xr_xir_compile_specialize(checked,&specialized,NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_specialize(checked,&specialized,NULL, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_write(specialized,&packet,NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&decoded,NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_lower(decoded,&target, NULL,&lowered,NULL);

@@ -43,7 +43,7 @@ static XrXirStatus class_source_build(const XrXirCompileContext *context,unsigne
     if(status==XR_XIR_OK){C(packet.length<=262144);if(class_packet_path){FILE *file=fopen(class_packet_path,"wb");C(file);C(fwrite(packet.bytes,1,packet.length,file)==packet.length);C(!fclose(file));}}
     if(status==XR_XIR_OK){xr_xir_compile_artifact_free(checked);checked=NULL;
         status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL);}
-    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&special,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&special,NULL, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(special,&target, NULL,&lowered,NULL);

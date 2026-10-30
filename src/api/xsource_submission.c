@@ -11,6 +11,7 @@
 #include "../program/xr_xir_source_product.h"
 #include "../xir/xxir_generic.h"
 #include "../xir/xxir_specialization_bindings.h"
+#include "../xir/xxir_receive_control.h"
 #include "../xir/xxir_vm.h"
 #include "../xir/xxir_types.h"
 #include "../xir/xxir_instance_activation.h"
@@ -95,6 +96,7 @@ typedef struct SubmissionBindingDraft {
     const char *failure;
     uint8_t *accessor_keys;
     uint32_t accessors, repl_reader, repl_entry;
+    XrCompileRequestControl *control;
 } SubmissionBindingDraft;
 #include "xsource_submission_bindings.inc.c"
 static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram **output,uint32_t *entry,
@@ -122,7 +124,8 @@ static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram 
     }
     XrXirSpecializationReceiver receiver={bindings,submission_receive_bindings};
     if(status==XR_XIR_OK) {
-        stage="Source specialization";status=xr_xir_compile_specialize_receive(view.result->checked,&receiver,&closed,NULL);
+        bindings->control=control;
+        stage="Source specialization";status=xr_xir_compile_specialize_receive(view.result->checked,&receiver,&closed,NULL,control);
         if(status!=XR_XIR_OK && bindings->received)stage=bindings->failure ? bindings->failure : "Source ordinary declaration mapping";
     }
     if(status==XR_XIR_OK) {stage="Source physical lowering";status=xr_xir_compile_lower(closed,&owner->target, control,&lowered,NULL);}

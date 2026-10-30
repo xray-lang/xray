@@ -156,7 +156,7 @@ int main(int argc,char **argv) {
     /* This independent setup ledger stays outside every injected operation. */
     XrXirCompileContext setup=rp_owner(rp_caps());XrXirConstruction *construction=NULL;
     const XrXirConstructionSpec spec={0};const XrXirSlotFacts slots={NULL,0};
-    CHECK(xr_xir_compile_construction_new_v4(&setup,NULL,&spec,&slots,&construction)==XR_XIR_OK && construction);
+    CHECK(xr_xir_compile_construction_new_v4(&setup,NULL,&spec,&slots,&construction, NULL)==XR_XIR_OK && construction);
     if (argc==2) copy_resources(construction);
     else {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());

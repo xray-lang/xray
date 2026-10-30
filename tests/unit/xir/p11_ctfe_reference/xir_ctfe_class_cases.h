@@ -63,7 +63,7 @@ static void reference_class_fault(const XrXirCheckedPacket *wire,const uint8_t *
 }
 static void reference_class_direct(const XrXirCompileContext *context,XrXirSourceResult *source) {
     XrXirCheckedPacket wire={0};XrXirArtifact *closed=NULL;
-    CHECK(xr_xir_compile_specialize(source->checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source->checked,&closed,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(closed,&wire,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);XrXirValue output={0};
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t run=reference_run_function(module),projects=0;

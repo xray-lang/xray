@@ -66,7 +66,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_source_comptime_instances_view(const XirS
         allocation==XR_XIR_OVERFLOW?XR_XIR_CTFE_OVERFLOW:
         allocation==XR_XIR_OUT_OF_MEMORY?XR_XIR_CTFE_OUT_OF_MEMORY:
         allocation==XR_XIR_BUDGET?XR_XIR_CTFE_COMPLEXITY_LIMIT:XR_XIR_CTFE_BAD_ARGUMENT;
-    XrXirCtfeStatus status=xr_xir_compile_ctfe_instance_batch_views(owner->batch,received,count);
+    XrXirCtfeStatus status=xr_xir_compile_ctfe_instance_batch_views(owner->batch,received,count,NULL);
     for (uint32_t i=0;status==XR_XIR_CTFE_OK && i<count;++i)
         status=source_comptime_binding_verify(&received[i],&owner->bindings[i]);
     if (status==XR_XIR_CTFE_OK) {
@@ -76,17 +76,18 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_source_comptime_instances_view(const XirS
 }
 static bool source_comptime_instances_collect(SourceContext *ctx,const XrXirArtifact *closed,
     XirSourceComptimeBinding *bindings,uint32_t *functions,uint32_t *count) {
+    uint32_t progress=0;
     const XrXirModule *module=&closed->module;const XrXirProvenance *proof=module->provenance;
     if (!proof || proof->kind!=XR_XIR_EVIDENCE_INSTANCE || !proof->source || !proof->origins || proof->count!=module->function_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"comptime instances lost ordinary specialization provenance");
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *body=&module->functions[f];
         for (const SourceComptimeSite *site=ctx->comptime_sites;site;site=site->next) {
-            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+            if (!source_receive_step(ctx,&progress)) return false;
             if (!ctx->generics[site->helper].parameter_count || proof->origins[f].function!=site->owner) continue;
             const XrXirFunction *original=&proof->source->module.functions[site->owner];uint32_t source_at=UINT32_MAX;
             for (uint32_t i=0;i<original->instruction_count;++i) {
-                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+                if (!source_receive_step(ctx,&progress)) return false;
                 const XrXirInstruction *op=&original->instructions[i];
                 if ((op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE) && op->immediate==site->helper) {
                     if (source_at!=UINT32_MAX) return source_fail(ctx,site->syntax,XR_XIR_BAD_STRUCTURE,"comptime source call is ambiguous");
@@ -96,7 +97,7 @@ static bool source_comptime_instances_collect(SourceContext *ctx,const XrXirArti
             if (source_at==UINT32_MAX) return source_fail(ctx,site->syntax,XR_XIR_BAD_STRUCTURE,"comptime source call is absent");
             uint32_t found=UINT32_MAX;
             for (uint32_t i=0;i<body->instruction_count;++i) {
-                if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+                if (!source_receive_step(ctx,&progress)) return false;
                 const XrXirInstruction *op=&body->instructions[i];
                 if ((op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE) || op->immediate<0 || (uint64_t)op->immediate>=module->function_count ||
                     proof->origins[op->immediate].function!=site->helper) continue;
@@ -121,18 +122,18 @@ static void source_comptime_instances_prepare(SourceContext *ctx,const XrXirArti
     if (ctx->linkage_kind!=XR_XIR_PROGRAM || !ctx->comptime_count) {
         source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"generic comptime staging requires actual Program occurrences");return;
     }
-    XrXirArtifact *closed=NULL;XrXirStatus status=xr_xir_compile_specialize(checked,&closed,NULL);
+    XrXirArtifact *closed=NULL;XrXirStatus status=xr_xir_compile_specialize(checked,&closed,NULL,ctx->request);
     uint32_t count=0;
     if (status!=XR_XIR_OK) source_fail(ctx,NULL,status,"generic comptime specialization failed");
     if (ctx->diagnostic.status==XR_XIR_OK && source_comptime_instances_collect(ctx,closed,NULL,NULL,&count) && !count)
         source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"no generic comptime call was actually collected");
     XirSourceComptimeInstances result={0};uint32_t *functions=NULL;
     if (ctx->diagnostic.status==XR_XIR_OK) {
-        result.owner=xir_compile_calloc(&ctx->compile,1,sizeof(*result.owner),&status);
+        result.owner=xir_type_copy_zero(&ctx->compile,1,sizeof(*result.owner),&status,ctx->request);
         if (result.owner && ((ctx)->diagnostic.status == XR_XIR_OK)) {
             result.owner->context=ctx->compile;result.owner->count=count;result.count=count;
-            result.owner->bindings=xir_compile_calloc(&ctx->compile,count,sizeof(*result.owner->bindings),&status);
-            if (status==XR_XIR_OK) functions=xir_compile_calloc(&ctx->compile,count,sizeof(*functions),&status);
+            result.owner->bindings=xir_type_copy_zero(&ctx->compile,count,sizeof(*result.owner->bindings),&status,ctx->request);
+            if (status==XR_XIR_OK) functions=xir_type_copy_zero(&ctx->compile,count,sizeof(*functions),&status,ctx->request);
         }
         if (status!=XR_XIR_OK) source_fail(ctx,NULL,status,"generic comptime result storage failed");
     }

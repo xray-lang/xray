@@ -136,7 +136,7 @@ static void task_fixture(NativeTaskFixture *f,unsigned count,bool observed,unsig
     if(backend!=NT_NATIVE) {
         XrXirArtifact *read=NULL,*closed=NULL;
         CHECK(xr_xir_compile_checked_read(f->context,spec.packet.bytes,spec.packet.length,&read,NULL)==XR_XIR_OK);
-        CHECK(xr_xir_compile_specialize(read,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
+        CHECK(xr_xir_compile_specialize(read,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
         CHECK(xr_xir_compile_lower(closed,&spec.target, NULL,&f->lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
         const XrXirModule *module=xr_xir_compile_artifact_module(f->lowered);CHECK(module->function_count==NT_FUNCTIONS);
         XrXirCallEntry *vm_entries=NULL;

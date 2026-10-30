@@ -47,7 +47,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&replay,NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_source_result_free(&result);
     xr_compile_session_free(session);xr_xir_compile_source_failure_free(&path);
-    CHECK(xr_xir_compile_specialize(replay,&specialized,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(replay,&specialized,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(replay);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);

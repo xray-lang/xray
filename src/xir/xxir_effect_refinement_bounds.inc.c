@@ -92,7 +92,7 @@ XR_FUNC XrXirStatus xir_effects_refinement_capture(const XrXirCompileContext *co
     bounds->count=source->function_count;bounds->source_type_count=source->types->count;
     status=effect_terms_seed(&bounds->terms,source->types);
     if (status==XR_XIR_OK && source->generics)
-        status=xr_xir_compile_generics_clone(context,source,&bounds->generics);
+        status=xr_xir_compile_generics_clone(context,source,&bounds->generics, NULL);
     if (status==XR_XIR_OK) {
         bounds->functions=effect_terms_alloc(&bounds->terms,bounds->count,sizeof(*bounds->functions));
         if (!bounds->functions) status=bounds->terms.status;

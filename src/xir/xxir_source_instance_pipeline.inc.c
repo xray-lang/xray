@@ -27,18 +27,20 @@ static void source_instance_receive(SourceContext *ctx,XrXirSourceResult *output
         source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"instance constant receiving requires an ordinary Program Source graph");return;
     }
     XrXirStatus status=XR_XIR_OK;uint32_t count=request->count;
-    uint32_t *functions=xir_compile_calloc(&ctx->compile,count,sizeof(*functions),&status);
-    XirCtfeInstanceView *views=status==XR_XIR_OK?xir_compile_calloc(&ctx->compile,count,sizeof(*views),&status):NULL;
+    uint32_t *functions=xir_type_copy_zero(&ctx->compile,count,sizeof(*functions),&status,ctx->request);
+    XirCtfeInstanceView *views=status==XR_XIR_OK?xir_type_copy_zero(&ctx->compile,count,sizeof(*views),&status,ctx->request):NULL;
     XrXirArtifact *closed=NULL;XirCtfeInstanceBatch *owner=NULL;
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(output->checked,&closed,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(output->checked,&closed,NULL,ctx->request);
     if (status!=XR_XIR_OK) source_fail(ctx,NULL,status,"instance constant preparation failed");
+    uint32_t progress=0;
     for (uint32_t i=0;ctx->diagnostic.status==XR_XIR_OK && i<count;++i) {
+        if (!source_receive_step(ctx,&progress)) break;
         if (!source_instance_selected(ctx,closed,&request->selections[i],&functions[i])) break;
     }
     if (ctx->diagnostic.status==XR_XIR_OK && ((ctx)->diagnostic.status == XR_XIR_OK)) {
         XirCtfeInstanceBatchRequest evaluation={closed,functions,count,request->target,request->limits,request->call_depth};
         XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_instance_batch(&evaluation,ctx->request,&owner);
-        if (evaluated==XR_XIR_CTFE_OK) evaluated=xr_xir_compile_ctfe_instance_batch_views(owner,views,count);
+        if (evaluated==XR_XIR_CTFE_OK) evaluated=xr_xir_compile_ctfe_instance_batch_views(owner,views,count,ctx->request);
         if (evaluated!=XR_XIR_CTFE_OK) source_comptime_failure(ctx,NULL,evaluated);
     }
     if (ctx->diagnostic.status==XR_XIR_OK && ((ctx)->diagnostic.status == XR_XIR_OK)) {

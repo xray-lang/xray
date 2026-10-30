@@ -78,7 +78,7 @@ static bool source_construction_prepare(SourceContext *ctx) {
     XrXirSlotFacts slots={0};
     if (!source_slot_facts_prepare(ctx,&slots)) return false;
     XrXirConstructionSpec input={rows,count,bindings,binding_count,&comptime};
-    XrXirStatus status=xr_xir_compile_construction_new_v4(&ctx->compile,&ctx->types,&input,&slots,&ctx->construction);
+    XrXirStatus status=xr_xir_compile_construction_new_v4(&ctx->compile,&ctx->types,&input,&slots,&ctx->construction,ctx->request);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"source construction ownership failed");
 }
 #include "xxir_source_quiescent_storage.inc.c"

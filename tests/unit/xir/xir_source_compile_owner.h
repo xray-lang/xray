@@ -137,7 +137,7 @@ static XrXirArtifact *source_fixture_lower(const XrXirCompileContext *context,co
     XrXirArtifact *specialized=NULL,*lowered=NULL;
     source_fixture_compile_phase="Checked specialize";
     XrXirDiagnostic specialize_diagnostic={0};
-    status=xr_xir_compile_specialize(checked,&specialized,&specialize_diagnostic);
+    status=xr_xir_compile_specialize(checked,&specialized,&specialize_diagnostic, NULL);
     if(status!=XR_XIR_OK){XrCompileResourceStats stats={0};
         CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
         fprintf(stderr,"Source specialize status=%u function=%u block=%u instruction=%u allocated=%llu peak=%llu allocations=%llu held=%llu\n",

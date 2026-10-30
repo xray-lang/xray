@@ -12,7 +12,7 @@ static InstanceCost instance_batch_cost(const char *kind,bool query) {
     XirCtfeInstanceBatchRequest request=instance_batch_request(closed,functions,2);XirCtfeInstanceBatch *owner=NULL;
     if (query) CHECK(xr_xir_compile_ctfe_instance_batch(&request,NULL,&owner)==XR_XIR_CTFE_OK);
     XirCtfeInstanceView views[2]={0};XrCompileResourceStats before=stats(&context);size_t first=source_fixture_compile_attempts;
-    XrXirCtfeStatus status=query?xr_xir_compile_ctfe_instance_batch_views(owner,views,2):xr_xir_compile_ctfe_instance_batch(&request,NULL,&owner);
+    XrXirCtfeStatus status=query?xr_xir_compile_ctfe_instance_batch_views(owner,views,2, NULL):xr_xir_compile_ctfe_instance_batch(&request,NULL,&owner);
     CHECK(status==XR_XIR_CTFE_OK);XrCompileResourceStats after=stats(&context);
     InstanceCost cost={after.allocated_bytes-before.allocated_bytes,source_fixture_compile_attempts-first};CHECK(cost.sites);
     xr_xir_compile_ctfe_instance_batch_free(owner);xr_xir_compile_artifact_free(closed);xr_compile_resources_release(context.resources);
@@ -29,16 +29,16 @@ static void instance_batch_faults(const char *kind,bool prefix) {
             if (query) CHECK(xr_xir_compile_ctfe_instance_batch(&request,NULL,&owner)==XR_XIR_CTFE_OK);
             XirCtfeInstanceView views[2]={0};XrCompileResourceStats before=stats(&context);size_t first=source_fixture_compile_attempts;
             source_fixture_compile_injected=false;source_fixture_compile_fail_at=first+fault;
-            XrXirCtfeStatus status=query?xr_xir_compile_ctfe_instance_batch_views(owner,views,2):xr_xir_compile_ctfe_instance_batch(&request,NULL,&owner);
+            XrXirCtfeStatus status=query?xr_xir_compile_ctfe_instance_batch_views(owner,views,2, NULL):xr_xir_compile_ctfe_instance_batch(&request,NULL,&owner);
             if (status!=XR_XIR_CTFE_OUT_OF_MEMORY) fprintf(stderr,"Batch FI %s query=%u point=%zu/%zu status=%u\n",kind,query,fault,cost.sites,status);
             CHECK(status==XR_XIR_CTFE_OUT_OF_MEMORY && source_fixture_compile_injected);
             CHECK(source_fixture_compile_attempts==first+fault+1 && stats(&context).held_bytes==before.held_bytes);
             CHECK(query?(!views[0].checked && !views[1].checked && !views[0].value && !views[1].value):!owner);
             source_fixture_compile_fail_at=SIZE_MAX;
-            status=query?xr_xir_compile_ctfe_instance_batch_views(owner,views,2):xr_xir_compile_ctfe_instance_batch(&request,NULL,&owner);
+            status=query?xr_xir_compile_ctfe_instance_batch_views(owner,views,2, NULL):xr_xir_compile_ctfe_instance_batch(&request,NULL,&owner);
             CHECK(status==XR_XIR_CTFE_OK);
             {
-                if (!query) CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2)==XR_XIR_CTFE_OK);
+                if (!query) CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2, NULL)==XR_XIR_CTFE_OK);
                 CHECK(views[0].checked && views[1].checked && xr_xir_value_valid(views[0].value) && xr_xir_value_valid(views[1].value));
             }
             xr_xir_compile_ctfe_instance_batch_free(owner);CHECK(context.resources==same);
@@ -55,7 +55,7 @@ static XrXirCtfeStatus instance_batch_job(XrXirCompileContext *context,const cha
     uint32_t functions[2]={instance_named(closed,kind,0),instance_named(closed,kind,1)};
     XirCtfeInstanceBatchRequest request=instance_batch_request(closed,functions,2);XirCtfeInstanceBatch *owner=NULL;
     XrXirCtfeStatus status=xr_xir_compile_ctfe_instance_batch(&request,NULL,&owner);XirCtfeInstanceView views[2]={0};
-    if (status==XR_XIR_CTFE_OK) status=xr_xir_compile_ctfe_instance_batch_views(owner,views,2);
+    if (status==XR_XIR_CTFE_OK) status=xr_xir_compile_ctfe_instance_batch_views(owner,views,2, NULL);
     xr_xir_compile_ctfe_instance_batch_free(owner);xr_xir_compile_artifact_free(closed);return status;
 }
 static void instance_batch_bounds(const char *kind) {

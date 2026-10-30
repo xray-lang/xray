@@ -1058,7 +1058,7 @@ static XrXirStatus slot_publication_attempt(const XrXirCompileContext *context,u
     const char *gate="types";
     XrXirStatus status=xr_xir_compile_types_structure_verify(context,&f.types);
     XrXirSlotFact fact={0,"fixture",7,0};const XrXirSlotFacts slots={&fact,1};
-    if (status==XR_XIR_OK) {gate="construction";status=xir_construction_project(context,&f.types,&slots,&construction);}
+    if (status==XR_XIR_OK) {gate="construction";status=xir_construction_project(context,&f.types,&slots,&construction, NULL);}
     if (status==XR_XIR_OK) {gate="ordinary";status=xir_compile_view_prepare_ordinary(context,&f.module,construction,&diagnostic);}
     if (status==XR_XIR_OK) {gate="affine";status=xir_compile_view_affine_verified(context,&f.module,&diagnostic);}
     if (status==XR_XIR_OK) {gate="access";status=kind==2?xir_compile_view_access_verified(context,&f.module,&diagnostic):
@@ -1211,7 +1211,7 @@ static XrXirStatus module_view_metadata(const XrXirCompileContext *context,
     functions[2].instruction_count=4;functions[2].operands=&argument;functions[2].operand_count=1;
     XrXirArtifact *checked=NULL,*closed=NULL;
     status=xir_fixture_check(context,&module,&checked,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(checked,&closed,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(checked,&closed,NULL, NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&spec->target, NULL,output,NULL);
     xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(checked);xr_xir_compile_artifact_free(base);
     return status;

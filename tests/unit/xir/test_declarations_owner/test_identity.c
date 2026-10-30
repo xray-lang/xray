@@ -83,7 +83,7 @@ static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint
         }
     }
     xr_xir_compile_artifact_free(roundtrip);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_module(closed)->provenance &&
         xr_xir_compile_artifact_module(closed)->function_count==3);
     XrXirFunctionIdentity *owned=(XrXirFunctionIdentity *)xr_xir_compile_artifact_module(closed)->declarations->functions;

@@ -11,14 +11,14 @@ static void program_binding_controls(void) {
     CHECK(program_source(&context,program_text("array"),&source,&diagnostic)==XR_XIR_OK);
     XrXirComptimeTable *table=&source.checked->construction->comptime;CHECK(table->binding_count==2);
     XrXirArtifact *closed=NULL;table->binding_count=1;
-    XrXirStatus partial_status=xr_xir_compile_specialize(source.checked,&closed,NULL);
+    XrXirStatus partial_status=xr_xir_compile_specialize(source.checked,&closed,NULL, NULL);
     if(partial_status!=XR_XIR_BAD_STRUCTURE || closed)fprintf(stderr,"Binding truncation actual status=%u published=%u\n",partial_status,closed!=NULL);
     CHECK(partial_status==XR_XIR_BAD_STRUCTURE && !closed);table->binding_count=2;
     CHECK(xr_xir_compile_construction_comptime(xr_xir_compile_source_snapshot_construction(source.snapshot))->binding_count==2);
     XrXirInstruction *op=(XrXirInstruction *)source.checked->module.functions[table->bindings[0].provider].instructions;
     XrXirOp saved=op->op;op->op=XR_XIR_OP_COUNT;
     CHECK(xr_xir_compile_artifact_verify(source.checked,NULL)!=XR_XIR_OK);op->op=saved;
-    CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);xr_xir_compile_source_result_free(&source);xr_compile_resources_release(context.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
 }

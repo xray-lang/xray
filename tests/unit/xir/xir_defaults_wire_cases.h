@@ -84,7 +84,7 @@ static void defaults_wire_ownership(void) {
     const XrXirModule *original = xr_xir_compile_artifact_module(producer);
     CHECK(original->defaults && original->defaults->count == 1);
     CHECK(original->defaults->records[0].function == 0 && original->defaults->records[0].owner == 2);
-    CHECK(xr_xir_compile_recheck_v2(library_context,original,xr_xir_compile_artifact_construction(producer),&copy,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(library_context,original,xr_xir_compile_artifact_construction(producer),&copy,NULL, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_module(copy)->defaults != original->defaults);
     CHECK(xr_xir_compile_artifact_module(copy)->defaults->records != original->defaults->records);
     xr_xir_compile_artifact_free(producer);
@@ -103,7 +103,7 @@ static void defaults_clone_failures(void) {
     LibraryPacketFixture fixture={NULL,0,producer};library_compile_operation_cases("defaults owned clone",library_packet_operation,&fixture);
     XrXirModule bad = *original;
     XrXirDefaultTable empty = {0}; bad.defaults = &empty;
-    CHECK(xr_xir_compile_recheck_v2(library_context,&bad,xr_xir_compile_artifact_construction(producer),&copy,NULL) == XR_XIR_BAD_STRUCTURE && !copy);
+    CHECK(xr_xir_compile_recheck_v2(library_context,&bad,xr_xir_compile_artifact_construction(producer),&copy,NULL, NULL) == XR_XIR_BAD_STRUCTURE && !copy);
     xr_xir_compile_artifact_free(producer);
     CHECK(runtime_live == live && runtime_bytes == physical);
     puts("defaults clone all compiler OOM/three axes physical baseline");

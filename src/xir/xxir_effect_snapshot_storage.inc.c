@@ -103,7 +103,7 @@ static XrXirStatus effect_body_metadata_copy(EffectBodyMaterial *body,const XrXi
     XrXirStatus status=effect_invocation_declarations_clone(terms->remaining,source->declarations,
         count,&body->declarations);
     if (status==XR_XIR_OK && source->generics)
-        status=xr_xir_compile_generics_clone(terms->remaining,source,&body->generics);
+        status=xr_xir_compile_generics_clone(terms->remaining,source,&body->generics, NULL);
     if (status==XR_XIR_OK && source->defaults) {
         body->defaults.records=effect_body_copy(terms,source->defaults->records,
             source->defaults->count,sizeof(*source->defaults->records));

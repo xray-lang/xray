@@ -80,7 +80,7 @@ static bool array_query_prepare_checked(ArrayQueryCompileState *state) {
     return array_query_stage(state, 7, xr_xir_compile_artifact_verify(state->checked, NULL));
 }
 static bool array_query_prepare_c(ArrayQueryCompileState *state) {
-    XrXirStatus status = xr_xir_compile_specialize(state->checked, &state->closed, NULL);
+    XrXirStatus status = xr_xir_compile_specialize(state->checked, &state->closed, NULL, NULL);
     if (!array_query_stage(state, 8, status)) { CHECK(!state->closed); return false; }
     xr_xir_compile_artifact_free(state->checked); state->checked = NULL;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};

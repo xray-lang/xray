@@ -6,6 +6,7 @@
  *
  * xxir_source_generation_functions.inc.c - Actual specialized entry receiving
  */
+#include "xxir_receive_control.h"
 typedef struct GenerationOrdinaryFunctions {
     const XrXirCompileContext *context;
     const XrXirArtifact *source;
@@ -21,42 +22,46 @@ static XrXirStatus generation_ordinary_receive(void *opaque,const XrXirSpecializ
     if (view->source!=receive->source || !source || !closed || receive->functions ||
         view->function_count!=source->function_count || (!view->identity && !view->functions))
         return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=generation_allocate(receive->context,view->function_count,
-        sizeof(*receive->functions),(void **)&receive->functions);
+    XrXirStatus status=XR_XIR_OK;
+    receive->functions=xir_type_copy_zero(receive->context,view->function_count,
+        sizeof(*receive->functions),&status,receive->control);
     if (status!=XR_XIR_OK) return status;
     receive->count=view->function_count;
+    uint32_t progress=0;
     for (uint32_t f=0;f<view->function_count;++f) {
-
+        status=xir_receive_step(receive->control,&progress);if (status!=XR_XIR_OK) return status;
         uint32_t target=view->identity ? f : view->functions[f];
         if (target!=UINT32_MAX && target>=closed->function_count) return XR_XIR_BAD_STRUCTURE;
         receive->functions[f]=target;
     }
-    return XR_XIR_OK;
+    return xir_receive_poll(receive->control);
 }
 static XrXirStatus generation_actual_program(GenerationOrdinaryFunctions *receive,
     const XrXirProgram *program) {
     XrXirArtifact *closed=NULL,*lowered=NULL;
     const XrXirSpecializationReceiver receiver={receive,generation_ordinary_receive};
-    XrXirStatus status=xr_xir_compile_specialize_receive(receive->source,&receiver,&closed,NULL);
+    XrXirStatus status=xr_xir_compile_specialize_receive(receive->source,&receiver,&closed,NULL,receive->control);
     if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&program->permissions->target, receive->control,&lowered,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_program_body_match(receive->context,program->permissions,lowered);
+    if (status==XR_XIR_OK) status=xir_receive_poll(receive->control);
     if (status==XR_XIR_OK) {receive->closed=closed;closed=NULL;}
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(closed);
     return status;
 }
 static XrXirStatus generation_scalar_origin(
-    const XrXirOrigin *from,const XrXirOrigin *to,bool *equal) {
+    const XrXirOrigin *from,const XrXirOrigin *to,bool *equal,
+    XrCompileRequestControl *control,uint32_t *progress) {
     *equal=false;
     if (from->argument_count!=to->argument_count || from->effect_argument_count!=to->effect_argument_count)
         return XR_XIR_OK;
     for (uint32_t a=0;a<from->argument_count;++a) {
-
+        XrXirStatus status=xir_receive_step(control,progress);if (status!=XR_XIR_OK) return status;
         XrXirType left=from->arguments[a],right=to->arguments[a];
         if (left!=right || left==XR_XIR_ERROR || (uint32_t)left>=XR_XIR_CONSTRUCTED_TYPE_BASE)
             return XR_XIR_OK;
     }
     for (uint32_t a=0;a<from->effect_argument_count;++a) {
-
+        XrXirStatus status=xir_receive_step(control,progress);if (status!=XR_XIR_OK) return status;
         const XrXirEffectArgument *left=&from->effect_arguments[a],*right=&to->effect_arguments[a];
         if (left->parameter!=right->parameter || left->type!=right->type || left->type==XR_XIR_ERROR ||
             (uint32_t)left->type>=XR_XIR_CONSTRUCTED_TYPE_BASE) return XR_XIR_OK;
@@ -69,6 +74,7 @@ typedef struct GenerationFunctionReceiving {
     const XrXirProgram *program;
     const GenerationOrdinaryFunctions *before,*after;
     uint32_t *functions;
+    XrCompileRequestControl *control;
 } GenerationFunctionReceiving;
 /* Template ordinals come from the actual Source receiving table. Complete
  * origins come from both authenticated specialization operations. Constructed
@@ -80,8 +86,9 @@ static XrXirStatus generation_scalar_instances(const GenerationFunctionReceiving
     const XrXirModule *after=xr_xir_compile_artifact_module(receive->after->closed);
     if (!before || !after || before->function_count!=prior->entry_count ||
         after->function_count!=receive->program->entry_count) return XR_XIR_BAD_STRUCTURE;
+    uint32_t progress=0;
     for (uint32_t f=0;f<prior->entry_count;++f) {
-
+        XrXirStatus status=xir_receive_step(receive->control,&progress);if (status!=XR_XIR_OK) return status;
         if (receive->functions[f]!=UINT32_MAX || prior->entries[f].cleanup_owner) continue;
         const XrXirProvenance *a=before->provenance,*b=after->provenance;
         if (!a || !b || a->kind!=XR_XIR_EVIDENCE_INSTANCE || b->kind!=XR_XIR_EVIDENCE_INSTANCE ||
@@ -91,10 +98,10 @@ static XrXirStatus generation_scalar_instances(const GenerationFunctionReceiving
         if (origin->function>=map->function_count) return XR_XIR_BAD_STRUCTURE;
         uint32_t declaration=map->functions[origin->function],found=UINT32_MAX;
         for (uint32_t g=0;g<after->function_count;++g) {
-
+            status=xir_receive_step(receive->control,&progress);if (status!=XR_XIR_OK) return status;
             if (receive->program->entries[g].cleanup_owner || b->origins[g].function!=declaration) continue;
             bool equal=false;
-            XrXirStatus status=generation_scalar_origin(origin,&b->origins[g],&equal);
+            status=generation_scalar_origin(origin,&b->origins[g],&equal,receive->control,&progress);
             if (status!=XR_XIR_OK) return status;
             if (!equal) continue;
             if (found!=UINT32_MAX || prior->entries[f].parameter_count!=receive->program->entries[g].parameter_count)
@@ -103,7 +110,7 @@ static XrXirStatus generation_scalar_instances(const GenerationFunctionReceiving
         }
         if (found==UINT32_MAX) continue;
         for (uint32_t other=0;other<prior->entry_count;++other) {
-
+            status=xir_receive_step(receive->control,&progress);if (status!=XR_XIR_OK) return status;
             if (receive->functions[other]==found) return XR_XIR_BAD_STRUCTURE;
         }
         receive->functions[f]=found;
@@ -127,12 +134,16 @@ static XrXirStatus generation_function_correspondence(const XrXirCompileContext 
     if (before.count!=map->function_count || !map->functions) {status=XR_XIR_BAD_STRUCTURE;goto done;}
     uint32_t count=map->unit->program->entry_count;
     uint32_t *functions=NULL;
-    status=generation_allocate(context,count,sizeof(*functions),(void **)&functions);
+    functions=xir_type_copy_zero(context,count,sizeof(*functions),&status,control);
     if (status!=XR_XIR_OK) goto done;
 
-    for (uint32_t f=0;f<count;++f) functions[f]=UINT32_MAX;
-    for (uint32_t f=0;f<before.count;++f) {
-
+    uint32_t progress=0;
+    for (uint32_t f=0;f<count;++f) {
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) break;
+        functions[f]=UINT32_MAX;
+    }
+    for (uint32_t f=0;status==XR_XIR_OK && f<before.count;++f) {
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) break;
         uint32_t source=before.functions[f],received=map->functions[f];
         if (received>=after.count) {status=XR_XIR_BAD_STRUCTURE;break;}
         uint32_t target=after.functions[received];
@@ -146,9 +157,10 @@ static XrXirStatus generation_function_correspondence(const XrXirCompileContext 
         functions[source]=target;
     }
     if (status==XR_XIR_OK) {
-        const GenerationFunctionReceiving receive={context,record,program,&before,&after,functions};
+        const GenerationFunctionReceiving receive={context,record,program,&before,&after,functions,control};
         status=generation_scalar_instances(&receive);
     }
+    if (status==XR_XIR_OK) status=xir_receive_poll(control);
     if (status==XR_XIR_OK) {
         xr_compile_resources_free(record->received_functions);
         record->received_functions=functions;record->received_function_count=count;

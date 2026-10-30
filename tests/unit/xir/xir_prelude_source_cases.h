@@ -88,7 +88,7 @@ static void prelude_catalog_negatives(const XrXirCompileContext *context,
         XrXirTypes types=*original->types;types.nominals=&table;
         XrXirModule altered=*original;altered.types=&types;
         XrXirArtifact *owned=NULL;XrXirStatus status=xr_xir_compile_recheck_v2(context,&altered,
-            xr_xir_compile_artifact_construction(producer),&owned,NULL);
+            xr_xir_compile_artifact_construction(producer),&owned,NULL, NULL);
         if (mode==2) {CHECK(status==XR_XIR_BAD_STRUCTURE && !owned);continue;}
         CHECK(status==XR_XIR_OK && owned); /* Ordinary malformed inventory is common-valid. */
         XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(owned,&packet,NULL)==XR_XIR_OK);

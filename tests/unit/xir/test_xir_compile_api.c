@@ -18,7 +18,7 @@
 
 typedef XrXirStatus (*Check)(const XrXirCompileContext *,const XrXirModule *,const XrXirConstruction *,XrXirArtifact **,XrXirDiagnostic *);
 typedef XrXirStatus (*Lower)(const XrXirArtifact *,const XrXirTarget *,XrCompileRequestControl *,XrXirArtifact **,XrXirDiagnostic *);
-typedef XrXirStatus (*Specialize)(const XrXirArtifact *,XrXirArtifact **,XrXirDiagnostic *);
+typedef XrXirStatus (*Specialize)(const XrXirArtifact *,XrXirArtifact **,XrXirDiagnostic *,XrCompileRequestControl *);
 typedef XrXirStatus (*Seal)(const XrXirCompileContext *,const XrXirProgramSpec *,XrXirProgram **);
 typedef XrXirValueStatus (*ArenaNew)(const XrXirCompileContext *,const XrXirTypes *,XrXirTypeArena **);
 typedef XrXirStatus (*Read)(const XrXirCompileContext *,const void *,size_t,XrXirArtifact **,XrXirDiagnostic *);
@@ -39,9 +39,10 @@ SIGNATURE(xr_xir_compile_vm_program_take,Take);
 SIGNATURE(xr_xir_compile_emit_c,Emit);
 SIGNATURE(xr_xir_compile_source_product_tests,Tests);
 SIGNATURE(xr_xir_instance_start_test,StartTest);
-_Static_assert(XR_XIR_CHECKED_SCHEMA==31 && XR_XIR_CHECKED_CONTRACT==76,"test declaration wire semantics");
-_Static_assert(sizeof(XrXirFunctionIdentity)==36 && offsetof(XrXirFunctionIdentity,test_role)==28 &&
-    offsetof(XrXirFunctionIdentity,test_timeout_seconds)==32,"test identity field layout");
+_Static_assert(XR_XIR_CHECKED_SCHEMA==39 && XR_XIR_CHECKED_CONTRACT==107,"test declaration wire semantics");
+_Static_assert(sizeof(XrXirFunctionIdentity)==40 && offsetof(XrXirFunctionIdentity,test_role)==28 &&
+    offsetof(XrXirFunctionIdentity,test_timeout_seconds)==32 &&
+    offsetof(XrXirFunctionIdentity,native_callable)==36,"test identity field layout");
 _Static_assert(XR_XIR_TEST_ROLE_NONE==0 && XR_XIR_TEST_ROLE_TEST==1 && XR_XIR_TEST_ROLE_SKIP==2 &&
     XR_XIR_TEST_ROLE_BEFORE_ALL==3 && XR_XIR_TEST_ROLE_AFTER_ALL==4 &&
     XR_XIR_TEST_ROLE_BEFORE_EACH==5 && XR_XIR_TEST_ROLE_AFTER_EACH==6,"test roles are fixed wire values");
@@ -51,6 +52,6 @@ _Static_assert(offsetof(XrXirCompileLimits,functions)==0 && offsetof(XrXirCompil
     offsetof(XrXirCompileLimits,frame_bytes)==16,"compile limits offsets");
 _Static_assert(sizeof(XrXirCompileContext)==32 && _Alignof(XrXirCompileContext)==8 &&
     offsetof(XrXirCompileContext,resources)==0 && offsetof(XrXirCompileContext,limits)==8,"compile context layout");
-_Static_assert(XR_XIR_PROGRAM_ABI_VERSION==33 && XR_XIR_CALL_ABI_VERSION==29 &&
-    XR_XIR_VALUE_ABI_VERSION==24,"compile owner admission ABI");
+_Static_assert(XR_XIR_PROGRAM_ABI_VERSION==37 && XR_XIR_CALL_ABI_VERSION==37 &&
+    XR_XIR_VALUE_ABI_VERSION==30,"compile owner admission ABI");
 int main(void) { return 0; }

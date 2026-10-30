@@ -74,7 +74,7 @@ static XrXirStatus h1nc_action(H1NativeCompiler *c, unsigned p, const XrCompileR
         status = xr_xir_compile_checked_read(&c->context,h1nr_native->packet.bytes,h1nr_native->packet.length,&c->checked,NULL);
         if (status != XR_XIR_OK) CHECK(!c->checked); break;
     case H1C_SPECIALIZE:
-        status = xr_xir_compile_specialize(c->checked,&c->closed,NULL);
+        status = xr_xir_compile_specialize(c->checked,&c->closed,NULL, NULL);
         if (status == XR_XIR_OK) { xr_xir_compile_artifact_free(c->checked); c->checked = NULL; }
         else CHECK(!c->closed); break;
     case H1C_CHECK: status = xr_xir_compile_artifact_verify(c->closed,NULL); break;

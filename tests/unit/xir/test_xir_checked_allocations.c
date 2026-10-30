@@ -98,7 +98,7 @@ static void packet_failures(unsigned kind) {
         kind == 6 ? constructed_fixture(suite_context) : kind == 5 ? generic_callable_fixture(suite_context) : kind == 4 ? function_ir_fixture(suite_context) : kind == 3 ? callable_fixture(suite_context) : kind == 2 ? local_fixture(suite_context) : kind == 1 ? generic_fixture(suite_context) : checked_fixture(suite_context);
     if (kind == 13 || kind == 18 || kind == 21) {
         XrXirArtifact *closed = NULL;
-        CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+        CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(checked);checked=NULL; checked = closed;
     }
     size_t baseline = live;
@@ -154,7 +154,7 @@ static void specialization_failures(unsigned callable) {
             if(mode)CHECK(xir_fixture_check(&probe, &built, &producer, NULL)==XR_XIR_OK);
             size_t stage_baseline=live,stage_bytes=live_bytes;
             packet_allocation_calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
-            XrXirStatus status=mode?xr_xir_compile_specialize(producer,&output,NULL):xir_fixture_check(&probe, &built, &output, NULL);
+            XrXirStatus status=mode?xr_xir_compile_specialize(producer,&output,NULL, NULL):xir_fixture_check(&probe, &built, &output, NULL);
             if(!attempt){CHECK(status==XR_XIR_OK && output);sites[mode]=packet_allocation_calls;}
             else CHECK(status==XR_XIR_OUT_OF_MEMORY && !output);
             xr_xir_compile_artifact_free(output);output=NULL;
@@ -182,7 +182,7 @@ static void nominal_field_closure_failures(void) {
             size_t baseline=live,baseline_bytes=live_bytes;
             packet_allocation_calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
             XrXirStatus expected=attempt?XR_XIR_OUT_OF_MEMORY:mode==0?XR_XIR_OK:mode==1?XR_XIR_BAD_TYPE:XR_XIR_BUDGET;
-            CHECK(xr_xir_compile_specialize(checked,&output,NULL)==expected);
+            CHECK(xr_xir_compile_specialize(checked,&output,NULL, NULL)==expected);
             if(!attempt)sites=packet_allocation_calls;
             if(attempt || mode)CHECK(!output);
             xr_xir_compile_artifact_free(output);CHECK(live==baseline && live_bytes==baseline_bytes);
@@ -195,7 +195,7 @@ static void nominal_field_closure_failures(void) {
 static void nominal_lowering_failures(void) {
     XrXirArtifact *checked = nominal_checked_fixture(suite_context, 3), *closed = NULL, *lowered = NULL;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     size_t baseline = live; packet_allocation_calls = 0; fail_at = SIZE_MAX;
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
@@ -211,7 +211,7 @@ static void nominal_lowering_failures(void) {
 
 static void nominal_layout_failures(void) {
     XrXirArtifact *checked = nominal_chain_fixture(suite_context, 3, 2), *closed = NULL;
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     const XrXirTypes *types = xr_xir_compile_artifact_module(closed)->types;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
@@ -240,7 +240,7 @@ static void nominal_layout_failures(void) {
 static void provenance_ownership(void) {
     XrXirArtifact *source = generic_fixture(suite_context);
     XrXirArtifact *closed = NULL;
-    CHECK(xr_xir_compile_specialize(source, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source, &closed, NULL, NULL) == XR_XIR_OK);
     XrXirType integer = XR_XIR_I64, string = XR_XIR_STRING;
     XrXirOrigin origins[] = {{.function=0},
         {.function=1,.arguments=&integer,.argument_count=1},
@@ -251,7 +251,7 @@ static void provenance_ownership(void) {
     XrXirCompileContext initial = consumer_context_default(), remaining = initial;
     XrXirProvenance *copy = NULL;
     size_t baseline = live; packet_allocation_calls = 0;
-    CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &copy) == XR_XIR_OK);
+    CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &copy, NULL) == XR_XIR_OK);
     size_t sites = packet_allocation_calls;
     XrCompileResourceStats required=consumer_context_stats(&remaining);
     CHECK(copy && copy->kind == XR_XIR_EVIDENCE_INSTANCE && copy->count == 3 && copy->source != source);
@@ -262,7 +262,7 @@ static void provenance_ownership(void) {
     xr_xir_compile_provenance_free(copy);copy=NULL; CHECK(live == baseline);
     for (size_t i = 0; i < sites; ++i) {
         packet_allocation_calls = 0; fail_at = i; remaining = initial; copy = NULL;
-        CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &copy) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &copy, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!copy && live == baseline);
     }
     fail_at = SIZE_MAX;
@@ -271,7 +271,7 @@ static void provenance_ownership(void) {
         if(mode==2)--limits.allocated_bytes;if(mode==3)--limits.work;
         remaining=consumer_context_ephemeral(limits);remaining.limits.functions=mode==1?1:2;
         XrCompileResourceStats before=consumer_context_stats(&remaining);copy=NULL;
-        CHECK(xr_xir_compile_provenance_copy(&remaining,&instance,&copy)==(mode?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK(xr_xir_compile_provenance_copy(&remaining,&instance,&copy, NULL)==(mode?XR_XIR_BUDGET:XR_XIR_OK));
         if(mode)CHECK(!copy);
         xr_xir_compile_provenance_free(copy);copy=NULL;
         consumer_context_ephemeral_free(&remaining,before);CHECK(live==baseline);
@@ -281,11 +281,11 @@ static void provenance_ownership(void) {
         if (mode == 0) origins[1].function = 2;
         if (mode == 1) origins[1].argument_count = 0;
         if (mode == 2) origins[1].arguments = NULL;
-        CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &copy) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &copy, NULL) == XR_XIR_BAD_STRUCTURE);
         CHECK(!copy && live == baseline); origins[1] = saved;
     }
     remaining = initial;
-    CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &copy) == XR_XIR_OK);
+    CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &copy, NULL) == XR_XIR_OK);
     integer = XR_XIR_BOOL; string = XR_XIR_I64;
     memset(origins, 0xa5, sizeof(origins)); xr_xir_compile_artifact_free(source);source=NULL;
     CHECK(copy->origins[1].arguments[0] == XR_XIR_I64 && copy->origins[2].arguments[0] == XR_XIR_STRING);
@@ -501,7 +501,7 @@ static void provenance_lowering(XrXirArtifact *closed) {
 
 static void provenance_artifact_ownership(void) {
     XrXirArtifact *source = generic_fixture(suite_context), *closed = NULL, *copy = NULL;
-    CHECK(xr_xir_compile_specialize(source, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source, &closed, NULL, NULL) == XR_XIR_OK);
     XrXirType integer = XR_XIR_I64, string = XR_XIR_STRING;
     XrXirOrigin origins[] = {{.function=0},
         {.function=1,.arguments=&integer,.argument_count=1},
@@ -511,19 +511,19 @@ static void provenance_artifact_ownership(void) {
         .source=source,.origins=origins,.count=3};
     XrXirCompileContext remaining = consumer_context_default();
     XrXirProvenance *proof = NULL;
-    CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &proof) == XR_XIR_OK);
+    CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &proof, NULL) == XR_XIR_OK);
     xr_xir_compile_provenance_free((XrXirProvenance *)closed->module.provenance);
     closed->module.provenance = proof;
     xr_xir_compile_artifact_free(source);source=NULL;
     CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
     size_t baseline = live; packet_allocation_calls = 0;
-    CHECK(xr_xir_compile_recheck_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), &copy, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), &copy, NULL, NULL) == XR_XIR_OK);
     size_t sites = packet_allocation_calls;
     CHECK(copy->module.provenance != proof && copy->module.provenance->source != proof->source);
     xr_xir_compile_artifact_free(copy);copy=NULL; CHECK(live == baseline);
     for (size_t i = 0; i < sites; ++i) {
         packet_allocation_calls = 0; fail_at = i; copy = NULL;
-        CHECK(xr_xir_compile_recheck_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), &copy, NULL) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_recheck_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), &copy, NULL, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!copy && live == baseline);
     }
     fail_at = SIZE_MAX;
@@ -539,7 +539,7 @@ static void provenance_artifact_ownership(void) {
     ++proof->count;
     provenance_packet_roundtrip(closed);
     provenance_lowering(closed);
-    CHECK(xr_xir_compile_specialize(closed, &copy, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(closed, &copy, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);closed=NULL;
     CHECK(xr_xir_compile_artifact_verify(copy, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(copy);copy=NULL; CHECK(live==consumer_context_owner_count && live_bytes==consumer_context_ledger_bytes());
@@ -548,7 +548,7 @@ static void provenance_artifact_ownership(void) {
 
 static void provenance_nominal_attacks(void) {
     XrXirArtifact *source = nominal_expression_fixture(suite_context), *closed = NULL;
-    CHECK(xr_xir_compile_specialize(source, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source, &closed, NULL, NULL) == XR_XIR_OK);
     CHECK(closed->module.function_count == 6);
     XrXirType arguments[] = {XR_XIR_I64, XR_XIR_U8, XR_XIR_STRING};
     XrXirOrigin origins[] = {{.function=0}, {.function=2}, {.function=3},
@@ -590,7 +590,7 @@ static void provenance_nominal_attacks(void) {
     }
     XrXirCompileContext remaining = consumer_context_default();
     XrXirProvenance *proof = NULL;
-    CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &proof) == XR_XIR_OK);
+    CHECK(xr_xir_compile_provenance_copy(&remaining, &instance, &proof, NULL) == XR_XIR_OK);
     xr_xir_compile_provenance_free((XrXirProvenance *)closed->module.provenance);
     closed->module.provenance = proof;
     provenance_lowering(closed);
@@ -599,7 +599,7 @@ static void provenance_nominal_attacks(void) {
 
 static void provenance_declaration_attacks(void) {
     XrXirArtifact *source = checked_fixture(suite_context), *closed = NULL;
-    CHECK(xr_xir_compile_specialize(source, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source, &closed, NULL, NULL) == XR_XIR_OK);
     CHECK(closed->module.function_count == 9);
     XrXirOrigin origins[9];
     for (uint32_t i = 0; i < 9; ++i) origins[i] = (XrXirOrigin) {.function=i};
@@ -645,7 +645,7 @@ static void provenance_declaration_attacks(void) {
 
 static void provenance_closure_attacks(void) {
     XrXirArtifact *source = generic_fixture(suite_context), *closed = NULL;
-    CHECK(xr_xir_compile_specialize(source, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source, &closed, NULL, NULL) == XR_XIR_OK);
     XrXirType integer = XR_XIR_I64, string = XR_XIR_STRING, boolean = XR_XIR_BOOL;
     XrXirFunction functions[4];
     memcpy(functions, closed->module.functions, 3 * sizeof(*functions));
@@ -684,7 +684,7 @@ static void provenance_closure_attacks(void) {
 
 static void specialization_correspondence_attacks(void) {
     XrXirArtifact *source = generic_fixture(suite_context), *closed = NULL;
-    CHECK(xr_xir_compile_specialize(source, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source, &closed, NULL, NULL) == XR_XIR_OK);
     const XrXirModule *module = xr_xir_compile_artifact_module(closed);
     CHECK(module->function_count == 3);
     XrXirType integer = XR_XIR_I64, string = XR_XIR_STRING;

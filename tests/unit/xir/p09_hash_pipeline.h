@@ -113,7 +113,7 @@ static XrXirArtifact *hash_pipeline_lower(const XrXirCompileContext *context) {
     CHECK(types->count == 3 && types->nodes[1].kind == XR_XIR_TYPE_MAP &&
         types->nodes[1].element == XR_XIR_STRING && types->nodes[1].result == (XrXirType)256 &&
         types->nodes[2].kind == XR_XIR_TYPE_SET && types->nodes[2].element == XR_XIR_F64);
-    CHECK(xr_xir_compile_specialize(read, &specialized, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(read, &specialized, NULL, NULL) == XR_XIR_OK);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(specialized); xr_xir_compile_artifact_free(read);

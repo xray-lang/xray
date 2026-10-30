@@ -119,7 +119,7 @@ static XrXirArtifact *call_fixture(const XrXirCompileContext *context, uint32_t 
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
     XrXirArtifact *closed=NULL;
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     xr_xir_compile_artifact_free(checked);

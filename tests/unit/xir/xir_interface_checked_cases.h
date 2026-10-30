@@ -108,7 +108,7 @@ static void interface_checked_cases(void) {
     CHECK(table->declarations[1].parents[0].arguments[0] == XR_XIR_TYPE_PARAMETER_BASE);
     CHECK(table->declarations[2].parents[0].arguments[0] == XR_XIR_I64);
     XrXirArtifact *closed = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     const XrXirModule *projected = xr_xir_compile_artifact_module(closed);
     CHECK(!projected->types || !projected->types->interfaces);
     CHECK(projected->provenance && projected->functions[0].instructions[0].immediate == 41);

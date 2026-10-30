@@ -32,7 +32,7 @@ XrXirVmBinding *bindings=NULL;
  CHECK(xr_xir_compile_checked_read(&owner.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
 UnitEntries selected=unit_entries(xr_xir_compile_artifact_module(checked));
  if(XR_UNIT_LOCALS_MIXED){
-CHECK(xr_xir_compile_specialize(checked,&special,NULL)==XR_XIR_OK);
+CHECK(xr_xir_compile_specialize(checked,&special,NULL, NULL)==XR_XIR_OK);
 CHECK(xr_xir_compile_lower(special,&spec.target, NULL,&lowered,NULL)==XR_XIR_OK);
 xr_xir_compile_artifact_free(special);special=NULL;
 xr_xir_compile_artifact_free(checked);checked=NULL;

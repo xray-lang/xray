@@ -166,7 +166,7 @@ static ResizeCompile resize_build(size_t failure, XrCompileResourceLimits limits
     resize_profile_stage(&run, "checked-read");
     xr_xir_compile_checked_packet_free(&bytes); xr_xir_compile_source_result_free(&result); xr_compile_session_free(session); session = NULL;
     resize_profile_stage(&run, "source-session-drop");
-    run.stage = 4; run.status = xr_xir_compile_specialize(read, &specialized, NULL);
+    run.stage = 4; run.status = xr_xir_compile_specialize(read, &specialized, NULL, NULL);
     if (run.status != XR_XIR_OK) { CHECK(!specialized); goto done; }
     resize_profile_stage(&run, "specialize");
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};

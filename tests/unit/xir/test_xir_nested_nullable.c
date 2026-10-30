@@ -37,7 +37,7 @@ static XrXirStatus nested_compile_pipeline(const XrXirCompileContext *context) {
     if(status==XR_XIR_OK){CHECK(packet.length==sizeof(nested_nullable86_golden) &&
         !memcmp(packet.bytes,nested_nullable86_golden,packet.length));
         status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);}
-    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(read,&special,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(read,&special,NULL, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(special,&target, NULL,&lowered,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_emit_c(lowered,"nested_nullable",1048576,&source);
@@ -108,7 +108,7 @@ int main(int argc,char **argv) {
     CHECK(packet.length==sizeof(nested_nullable86_golden) && !memcmp(packet.bytes,nested_nullable86_golden,packet.length));
     CHECK(xr_xir_compile_checked_read(&owner.context,nested_nullable86_golden,sizeof(nested_nullable86_golden),&read,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(read,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
+    CHECK(xr_xir_compile_specialize(read,&special,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);

@@ -25,7 +25,7 @@ static void literal_controls(void) {
     XrCompileResourceStats before=stats(&foreign);
     CHECK(xr_xir_compile_instance_literals(&bad,&output,NULL)==XR_XIR_BAD_STRUCTURE && literal_empty(&output));
     CHECK(stats(&foreign).held_bytes==before.held_bytes);xr_compile_resources_release(foreign.resources);
-    XirCtfeInstanceView views[2]={0};CHECK(xr_xir_compile_ctfe_instance_batch_views(batch,views,2)==XR_XIR_CTFE_OK);
+    XirCtfeInstanceView views[2]={0};CHECK(xr_xir_compile_ctfe_instance_batch_views(batch,views,2, NULL)==XR_XIR_CTFE_OK);
     XrXirOrigin *origin=(XrXirOrigin *)&views[0].checked->module.provenance->origins[views[0].instance_function];
     XrXirType *argument=(XrXirType *)origin->arguments;XrXirType saved=*argument;*argument=XR_XIR_BOOL;
     before=stats(&context);

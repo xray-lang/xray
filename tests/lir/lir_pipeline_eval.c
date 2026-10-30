@@ -307,7 +307,7 @@ static XrLirLowered source_lower(Eval *e, const char *path, XrCompileResources *
     if (status != XR_XIR_OK) fprintf(stderr, "source: %s\n", diagnostic.message);
     CHECK(status == XR_XIR_OK); stage(e, "source_check", start);
     start = clock_ticks();
-    CHECK(xr_xir_compile_specialize(source.checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source.checked, &closed, NULL, NULL) == XR_XIR_OK);
     stage(e, "specialize", start);
     XrLirLowered lowered = {0}; XrLirLowerFailure lower_failure = {0};
     XrLirLowerRequest lower = {closed, source.snapshot, false};

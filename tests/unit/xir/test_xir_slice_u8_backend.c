@@ -157,7 +157,7 @@ static XrXirArtifact *replay_source(const XrXirCompileContext *context,
     xr_xir_compile_source_result_free(source);
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(read,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(read,&closed,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(read);
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     xr_sha256(packet.bytes,packet.length,identity);xr_xir_compile_artifact_free(closed);closed=NULL;
@@ -311,7 +311,7 @@ static void observed_view(const XrXirCompileContext *context,const char *text,co
     xr_xir_compile_artifact_free(source.checked);source.checked=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
+    CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     XrXirArtifact *code=lower(closed);xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_artifact_layout(code,throwing)->offsets[view]!=UINT32_MAX &&
         xr_xir_compile_artifact_layout(code,throwing)->offsets[root]!=UINT32_MAX);
@@ -438,7 +438,7 @@ static XrXirArtifact *local_storage_positive(const XrXirCompileContext *context)
     xr_xir_compile_source_result_free(&source);
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     return closed;
 }
 static void local_storage_emit(const XrXirArtifact *closed,const char *path) {
@@ -520,7 +520,7 @@ static XrXirArtifact *scalar_slot_source(const XrXirCompileContext *context,uint
     CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&source);
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);return closed;
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);return closed;
 }
 static void scalar_slot_owned_publications(const XrXirCompileContext *context) {
     const char *const sources[]={
@@ -537,7 +537,7 @@ static void scalar_slot_owned_publications(const XrXirCompileContext *context) {
         xr_xir_compile_source_result_free(&source);
         CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
         memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
-        CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+        CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
         XrXirArtifact *code=lower(closed);xr_xir_compile_artifact_free(closed);
         uint32_t target=named(xr_xir_compile_artifact_module(code),"storage_receiver");
         XrXirProgram *program=take_vm(&code);slice_program_case(program,target);
@@ -662,7 +662,7 @@ static XrXirArtifact *default_class_source(const XrXirCompileContext *context) {
     CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&source);
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    XrXirDiagnostic specialized={0};status=xr_xir_compile_specialize(checked,&closed,&specialized);
+    XrXirDiagnostic specialized={0};status=xr_xir_compile_specialize(checked,&closed,&specialized, NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"default Class specialize status=%u at %u/%u/%u\n",status,specialized.function,specialized.block,specialized.instruction);
     CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(checked);class_scope_guards(context,closed);return closed;
 }
@@ -721,7 +721,7 @@ static XrXirArtifact *imported_default_source(const XrXirCompileContext *context
     xr_xir_compile_source_result_free(&source);
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    XrXirDiagnostic checked_diagnostic={0};status=xr_xir_compile_specialize(checked,&closed,&checked_diagnostic);
+    XrXirDiagnostic checked_diagnostic={0};status=xr_xir_compile_specialize(checked,&closed,&checked_diagnostic, NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"imported default%u Specialize status=%u at %u/%u/%u\n",kind,status,
         checked_diagnostic.function,checked_diagnostic.block,checked_diagnostic.instruction);
     CHECK(status==XR_XIR_OK && closed);xr_xir_compile_artifact_free(checked);
@@ -840,7 +840,7 @@ static void local_storage_owned_capture(const XrXirCompileContext *context) {
     xr_xir_compile_source_result_free(&source);
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     XrXirArtifact *code=lower(closed);xr_xir_compile_artifact_free(closed);
     uint32_t target=named(xr_xir_compile_artifact_module(code),"capture_probe");
     XrXirProgram *program=take_vm(&code);slice_program_case(program,target);

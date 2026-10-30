@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Every ordinal retains its original fresh finite owner and whole Source
- *   operation. A parent owns the single census, all partitions and six caps.
+ *   operation. A parent owns the single census, all partitions and the held-memory boundary.
  */
 #ifndef XIR_GENERIC_COMPILER_FAULT_SHARDS_H
 #define XIR_GENERIC_COMPILER_FAULT_SHARDS_H
@@ -42,16 +42,14 @@ static void generic_fault_preamble(FILE *report,const char *mode,uint64_t index,
         mode,(unsigned long long)index,(unsigned long long)sites,GENERIC_COMPILER_FAULT_WORKERS,nonce,input,binary,config,
         sizeof(source_generic_definition_text)-1)>0);
     for(size_t i=0;i<sizeof(digest);++i)CHECK(fprintf(report,"%02x",(unsigned)digest[i])==2);
-    CHECK(fprintf(report,"\",\"allocated_cap\":%llu,\"live_cap\":%llu,\"work_cap\":%llu}\n",
-        (unsigned long long)library_compile_limits.allocated_bytes,(unsigned long long)library_compile_limits.live_bytes,
-        (unsigned long long)library_compile_limits.work)>0);
+    CHECK(fprintf(report,"\",\"memory_limit\":%llu}\n",
+        (unsigned long long)library_compile_limits.memory_limit)>0);
 }
 
 static void generic_fault_stats(FILE *report,const XrCompileResourceStats *stats) {
-    CHECK(fprintf(report,"\"allocated\":%llu,\"live\":%llu,\"peak\":%llu,\"work\":%llu,\"allocations\":%llu",
-        (unsigned long long)stats->allocated_bytes,(unsigned long long)stats->live_bytes,
-        (unsigned long long)stats->peak_bytes,(unsigned long long)stats->work,
-        (unsigned long long)stats->allocation_count)>0);
+    CHECK(fprintf(report,"\"allocated\":%llu,\"live\":%llu,\"peak\":%llu,\"allocations\":%llu",
+        (unsigned long long)stats->allocated_bytes,(unsigned long long)stats->held_bytes,
+        (unsigned long long)stats->peak_bytes,(unsigned long long)stats->allocation_count)>0);
 }
 
 static void generic_fault_complete(FILE *report,size_t points) {
@@ -70,8 +68,8 @@ static void generic_fault_census(FILE *report) {
     sgm_enabled=false;CHECK(sgm_calls==8);
     size_t sites=source_program_compile_attempts;CHECK(sites && sites<=UINT64_C(67108864));
     XrCompileResourceStats required=library_compile_stats(&owner.context);
-    CHECK(required.live_bytes==owner.baseline.live_bytes);
-    uint64_t baseline=owner.baseline.live_bytes;library_compile_owner_drop(&owner);
+    CHECK(required.held_bytes==owner.baseline.held_bytes);
+    uint64_t baseline=owner.baseline.held_bytes;library_compile_owner_drop(&owner);
     CHECK(fprintf(report,"{\"event\":\"census\",\"sites\":%zu,\"public_calls\":%u,\"owner_live\":%llu,",
         sites,sgm_calls,(unsigned long long)baseline)>0);generic_fault_stats(report,&required);
     CHECK(fprintf(report,",\"compiler_blocks\":%zu,\"compiler_bytes\":%zu}\n",
@@ -87,8 +85,8 @@ static void generic_fault_partition(FILE *report,size_t index,size_t sites) {
         source_program_compile_fail_at=SIZE_MAX;
         CHECK(status==XR_XIR_OUT_OF_MEMORY && source_program_compile_injected);
         size_t attempts=source_program_compile_attempts;CHECK(attempts>ordinal);
-        XrCompileResourceStats stats=library_compile_stats(&owner.context);uint64_t baseline=owner.baseline.live_bytes;
-        CHECK(stats.live_bytes==baseline);library_compile_owner_drop(&owner);
+        XrCompileResourceStats stats=library_compile_stats(&owner.context);uint64_t baseline=owner.baseline.held_bytes;
+        CHECK(stats.held_bytes==baseline);library_compile_owner_drop(&owner);
         CHECK(fprintf(report,"{\"event\":\"point\",\"ordinal\":%zu,\"status\":%u,\"injected\":true,"
             "\"attempts\":%zu,\"owner_live\":%llu,",ordinal,(unsigned)status,attempts,(unsigned long long)baseline)>0);
         generic_fault_stats(report,&stats);
@@ -98,38 +96,36 @@ static void generic_fault_partition(FILE *report,size_t index,size_t sites) {
     generic_fault_complete(report,points);
 }
 
-static void generic_fault_bounds(FILE *report,const uint64_t required[3]) {
+static void generic_fault_bounds(FILE *report,uint64_t required) {
     bool inspect=false;
-    for(unsigned axis=0;axis<3;++axis)for(unsigned less=0;less<2;++less) {
+    for(unsigned less=0;less<2;++less) {
         XrCompileResourceLimits limits=library_compile_limits;
-        uint64_t *cap=axis==0?&limits.allocated_bytes:axis==1?&limits.live_bytes:&limits.work;
-        CHECK(required[axis] && required[axis]<=*cap);*cap=required[axis]-less;
+        CHECK(required && required<=limits.memory_limit);limits.memory_limit=required-less;
         LibraryCompileOwner owner={0};source_program_compile_attempts=0;
         XrXirStatus status=library_compile_owner_new(&owner,&limits);
         if(status==XR_XIR_OK)status=source_generic_definition_operation(&owner.context,&inspect);
-        CHECK(status==(less?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK(status==(less?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
         XrCompileResourceStats stats={0};uint64_t baseline=0;
-        if(owner.context.resources){stats=library_compile_stats(&owner.context);baseline=owner.baseline.live_bytes;CHECK(stats.live_bytes==baseline);}
+        if(owner.context.resources){stats=library_compile_stats(&owner.context);baseline=owner.baseline.held_bytes;CHECK(stats.held_bytes==baseline);}
         library_compile_owner_drop(&owner);
-        CHECK(fprintf(report,"{\"event\":\"axis\",\"axis\":%u,\"less\":%u,\"exact\":%llu,\"status\":%u,"
-            "\"owner_live\":%llu,\"allocated_cap\":%llu,\"live_cap\":%llu,\"work_cap\":%llu,",
-            axis,less,(unsigned long long)required[axis],(unsigned)status,(unsigned long long)baseline,
-            (unsigned long long)limits.allocated_bytes,(unsigned long long)limits.live_bytes,(unsigned long long)limits.work)>0);
+        CHECK(fprintf(report,"{\"event\":\"held_boundary\",\"less\":%u,\"exact\":%llu,\"status\":%u,"
+            "\"owner_live\":%llu,\"memory_limit\":%llu,",less,(unsigned long long)required,
+            (unsigned)status,(unsigned long long)baseline,(unsigned long long)limits.memory_limit)>0);
         generic_fault_stats(report,&stats);
         CHECK(fprintf(report,",\"compiler_blocks\":%zu,\"compiler_bytes\":%zu}\n",
             source_program_compile_live,source_program_compile_bytes)>0);
     }
-    generic_fault_complete(report,6);
+    generic_fault_complete(report,2);
 }
 
 static bool generic_fault_dispatch(int argc,char **argv) {
     if(argc<2)return false;
     bool census=!strcmp(argv[1],"--compiler-census"),shard=!strcmp(argv[1],"--compiler-shard");
     bool bounds=!strcmp(argv[1],"--compiler-bounds");if(!census && !shard && !bounds)return false;
-    CHECK(argc==(census?4:shard?6:8));size_t index=0,sites=0;uint64_t required[3]={0};
+    CHECK(argc==(census?4:6));size_t index=0,sites=0;uint64_t required=0;
     if(!census){uint64_t n=generic_fault_number(argv[shard?3:2]);CHECK(n && n<=UINT64_C(67108864));sites=(size_t)n;}
     if(shard){uint64_t n=generic_fault_number(argv[2]);CHECK(n<GENERIC_COMPILER_FAULT_WORKERS);index=(size_t)n;}
-    if(bounds)for(unsigned axis=0;axis<3;++axis)required[axis]=generic_fault_number(argv[3+axis]);
+    if(bounds)required=generic_fault_number(argv[3]);
     const char *nonce=argv[argc-2];generic_fault_hex(nonce,32);
     FILE *report=fopen(argv[argc-1],"wb");CHECK(report);
     generic_fault_preamble(report,census?"census":shard?"shard":"bounds",index,sites,nonce);

@@ -101,7 +101,7 @@ static void nominal_specialization_authority(XrXirSourceRequest *request, const 
         CHECK(xr_xir_compile_checked_read(generic_source_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
         xr_xir_compile_checked_packet_free(&packet);
         XrXirDiagnostic diagnostic = {0};
-        XrXirStatus status = xr_xir_compile_specialize(decoded, &closed, &diagnostic);
+        XrXirStatus status = xr_xir_compile_specialize(decoded, &closed, &diagnostic, NULL);
         {
             CHECK(status == XR_XIR_OK && closed);
             if (mode) {
@@ -203,7 +203,7 @@ static void member_call_authority(XrXirSourceRequest *request, bool is_static) {
     xr_xir_compile_source_result_free(&result);
     CHECK(xr_xir_compile_checked_read(generic_source_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     bool specialized = false;
     for (uint32_t f = 0; f < closed->module.function_count; ++f) {
         identity = (XrXirFunctionIdentity *)&closed->module.declarations->functions[f];
@@ -375,7 +375,7 @@ int main(void) {
     xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_checked_read(generic_source_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);
     CHECK(!xr_xir_compile_artifact_module(closed)->generics);
     CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);

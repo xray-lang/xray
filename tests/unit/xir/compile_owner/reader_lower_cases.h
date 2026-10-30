@@ -14,7 +14,7 @@ static XrXirStatus reader_lower_packet(const XrXirCompileContext *context, unsig
     XrXirCheckedPacket *packet) {
     XrXirArtifact *checked = NULL, *closed = NULL;
     XrXirStatus status = kind ? generic_built(context,&checked) : xir_fixture_check(context, &module, &checked, NULL);
-    if (status == XR_XIR_OK && kind) status = xr_xir_compile_specialize(checked,&closed,NULL);
+    if (status == XR_XIR_OK && kind) status = xr_xir_compile_specialize(checked,&closed,NULL, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_write(kind ? closed : checked,packet,NULL);
     xr_xir_compile_artifact_free(closed); xr_xir_compile_artifact_free(checked);
     return status;
@@ -108,7 +108,7 @@ static void reader_lower_occupied(const XrXirCompileContext *context,
         size_t calls=attempts,blocks=live_count,bytes=live;
         XrXirDiagnostic diagnostic={0};XrXirStatus status;
         if (!operation) status=xr_xir_compile_check_v2(context,&module,facts,&output,&diagnostic);
-        else if (operation==1) status=xr_xir_compile_recheck_v2(context,view,facts,&output,&diagnostic);
+        else if (operation==1) status=xr_xir_compile_recheck_v2(context,view,facts,&output,&diagnostic, NULL);
         else if (operation==2) status=xr_xir_compile_lower(checked,&target, NULL,&output,&diagnostic);
         else if (operation==3) status=xr_xir_compile_checked_read_lower(context,packet->bytes,packet->length,&target,&output,&diagnostic);
         else if (operation==4) {
@@ -116,7 +116,7 @@ static void reader_lower_occupied(const XrXirCompileContext *context,
             CHECK(status==XR_XIR_BAD_STRUCTURE && output==checked);
             status=xr_xir_compile_checked_read(context,(const void *)(uintptr_t)1,SIZE_MAX,&output,&diagnostic);
         }
-        else if (operation==5) status=xr_xir_compile_specialize(checked,&output,&diagnostic);
+        else if (operation==5) status=xr_xir_compile_specialize(checked,&output,&diagnostic, NULL);
         else {
             status=XR_XIR_BAD_STRUCTURE;
             for (unsigned fields=0;fields<3;++fields) {
@@ -245,7 +245,7 @@ static XrXirStatus reader_lower_take_closed(const XrXirCompileContext *context,
     if (!kind) return xir_fixture_check(context,&module,output,NULL);
     XrXirArtifact *template = NULL;
     XrXirStatus status = kind == 1 ? generic_built(context,&template) : nominal_built(context,&template);
-    if (status == XR_XIR_OK) status = xr_xir_compile_specialize(template,output,NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_specialize(template,output,NULL, NULL);
     xr_xir_compile_artifact_free(template); return status;
 }
 /* Both independent public admissions reject metadata mutations. The

@@ -61,7 +61,7 @@ static void literal_value(const char *kind,const XrXirValue *value) {
 }
 static void literal_normal(const char *kind) {
     XrXirCompileContext context;context_new(&context);XirCtfeInstanceBatch *batch=literal_batch(&context,kind);
-    XirCtfeInstanceView views[2]={0};CHECK(xr_xir_compile_ctfe_instance_batch_views(batch,views,2)==XR_XIR_CTFE_OK);
+    XirCtfeInstanceView views[2]={0};CHECK(xr_xir_compile_ctfe_instance_batch_views(batch,views,2, NULL)==XR_XIR_CTFE_OK);
     uint32_t original_count=views[0].definition->module.function_count,definition=views[0].definition_function;
     if (!strcmp(kind,"nested")) {
         CHECK(instance_argument_absent(views[0].checked,views[0].checked->module.provenance->origins[views[0].instance_function].arguments[0]));
@@ -99,7 +99,7 @@ static void literal_normal(const char *kind) {
     XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
+    CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     if (!strcmp(kind,"foreign")) instance_foreign_edges(closed);
     uint32_t functions[2]={UINT32_MAX,UINT32_MAX};
     for (uint32_t f=0;f<closed->module.function_count;++f) for (unsigned i=0;i<2;++i)

@@ -52,7 +52,7 @@ static XrXirProgram *root_fault_program(bool panic, bool initializer_fault) {
     xr_xir_compile_artifact_free(checked); memset(&fixture, 0xa5, sizeof(fixture));
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, &diagnostic) == XR_XIR_OK);
     memset(packet.bytes, 0xa5, packet.length); xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(decoded, &closed, &diagnostic) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, &diagnostic, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, &diagnostic) == XR_XIR_OK);
@@ -99,7 +99,7 @@ static XrXirProgram *root_cleanup_program(bool registered, const char *emit_path
     memset(&f, 0xa5, sizeof(f)); memset(worker, 0xa5, sizeof(worker)); memset(cleanup, 0xa5, sizeof(cleanup));
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, &diagnostic) == XR_XIR_OK);
     memset(packet.bytes, 0xa5, packet.length); xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(decoded, &closed, &diagnostic) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, &diagnostic, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, &diagnostic) == XR_XIR_OK);

@@ -36,7 +36,7 @@ static XrXirArtifact *enum_checked(const XrXirCompileContext *context) {
 }
 static XrXirArtifact *enum_lower(XrXirArtifact *checked) {
     XrXirArtifact *specialized=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(checked,&specialized,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked,&specialized,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(specialized);return lowered;
 }

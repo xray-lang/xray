@@ -53,7 +53,7 @@ static XrXirProgram *class_lifetime_program(unsigned backend) {
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, class_lifetime_fixture_program.packet.bytes,
         class_lifetime_fixture_program.packet.length, &checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_lower(closed, &class_lifetime_fixture_program.target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);

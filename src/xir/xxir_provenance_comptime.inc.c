@@ -15,7 +15,7 @@ static XrXirStatus provenance_comptime_match(ProvenanceMatch *c,const XrXirOrigi
     *matched=false;
     XirComptimeSelection selection={c->source,c->destination->types,origin->function,instruction,origin->arguments,origin->argument_count};
     const XrXirComptimeBinding *binding=NULL;
-    XrXirStatus status=xir_comptime_select(c->remaining,c->instance->source->construction,&selection,&binding);
+    XrXirStatus status=xir_comptime_select(c->remaining,c->instance->source->construction,&selection,&binding, NULL);
     if (status==XR_XIR_BAD_TYPE && c->instance->kind==XR_XIR_EVIDENCE_EVALUATION) return XR_XIR_OK;
     if (status!=XR_XIR_OK || !binding) return status;
     if (actual->immediate<0 || (uint64_t)actual->immediate>=c->count || actual->type_arguments[0] || actual->type_arguments[1] || actual->args[1])
@@ -43,6 +43,6 @@ static XrXirStatus provenance_evaluation_root(ProvenanceMatch *c) {
     const XrXirComptimeBinding *binding=NULL;
     XirComptimeSelection selection={c->source,c->destination->types,caller->function,root->instruction,
         caller->arguments,caller->argument_count};
-    XrXirStatus status=xir_comptime_select(c->remaining,c->instance->source->construction,&selection,&binding);
+    XrXirStatus status=xir_comptime_select(c->remaining,c->instance->source->construction,&selection,&binding, NULL);
     return status==XR_XIR_BAD_TYPE?XR_XIR_OK:status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:status;
 }

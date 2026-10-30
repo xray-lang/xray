@@ -15,7 +15,7 @@ static XrXirArtifact *source_float_lower(XrXirArtifact *checked) {
     XrCompileResources *resources = context->resources;
     XrXirArtifact *specialized = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_compile_specialize(checked, &specialized, &diagnostic);
+    XrXirStatus status = xr_xir_compile_specialize(checked, &specialized, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "float specialization %u f%u i%u\n", status, diagnostic.function, diagnostic.instruction);
     CHECK(status == XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_context(specialized)->resources == resources);

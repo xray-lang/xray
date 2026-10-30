@@ -12,6 +12,7 @@
 #include "xxir_generic.h"
 #include "xxir_metadata_domain_internal.h"
 #include "xxir_compile_memory.h"
+#include "xxir_receive_control.h"
 #include "xxir_types.h"
 #include "xxir_view_types_internal.h"
 #include "xxir_constraints.h"
@@ -121,20 +122,25 @@ void xr_xir_compile_generics_free(XrXirGeneric *generics, uint32_t functions) {
     }
     xr_compile_resources_free(generics);
 }
-XrXirStatus xr_xir_compile_generics_clone(const XrXirCompileContext *compile_context, const XrXirModule *module, XrXirGeneric **output) {
+XrXirStatus xr_xir_compile_generics_clone(const XrXirCompileContext *compile_context, const XrXirModule *module, XrXirGeneric **output, XrCompileRequestControl *control) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus allocation_status = XR_XIR_OK;
 
-    if (!module || !output) return XR_XIR_BAD_STRUCTURE;
+    if (!module || !output || *output) return XR_XIR_BAD_STRUCTURE;
+    allocation_status=xir_receive_poll(control);
+    if (allocation_status!=XR_XIR_OK) return allocation_status;
     if (!module->generics) { *output = NULL; return XR_XIR_OK; }
 
-    XrXirGeneric *copy = xir_compile_calloc(compile_context, module->function_count, sizeof(*copy), &allocation_status);
+    XrXirGeneric *copy = xir_type_copy_zero(compile_context, module->function_count, sizeof(*copy), &allocation_status,control);
     if (!copy) return allocation_status;
+    uint32_t progress=0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
+        allocation_status=xir_receive_step(control,&progress);
+        if (allocation_status!=XR_XIR_OK) break;
         const XrXirGeneric *from = &module->generics[f];
         copy[f].parameter_count = from->parameter_count; copy[f].argument_count = from->argument_count;
         XrXirConstraint *constraints = NULL;
-        XrXirStatus status = xr_xir_compile_constraint_array_copy_verified(compile_context, from->constraints, from->parameter_count, NULL, &constraints);
+        XrXirStatus status = xr_xir_compile_constraint_array_copy_verified(compile_context, from->constraints, from->parameter_count, control, &constraints);
         copy[f].constraints = constraints;
         /* Constraint copying has its own failure status. Propagate it before
          * sibling copies can allocate through the still-successful status. */
@@ -142,9 +148,9 @@ XrXirStatus xr_xir_compile_generics_clone(const XrXirCompileContext *compile_con
             xr_xir_compile_generics_free(copy, module->function_count);
             return status;
         }
-        XrXirType *arguments = xir_compile_copy(compile_context, from->arguments, (size_t) from->argument_count * sizeof(*arguments), &allocation_status);
+        XrXirType *arguments = xir_type_copy_bytes(compile_context, from->arguments, from->argument_count, sizeof(*arguments), &allocation_status,control);
         copy[f].arguments = arguments;
-        uint32_t *kinds = from->parameter_kinds ? xir_compile_copy(compile_context, from->parameter_kinds, (size_t)from->parameter_count * sizeof(*kinds), &allocation_status) : NULL;
+        uint32_t *kinds = from->parameter_kinds ? xir_type_copy_bytes(compile_context, from->parameter_kinds, from->parameter_count, sizeof(*kinds), &allocation_status,control) : NULL;
         copy[f].parameter_kinds = kinds;
         if (status != XR_XIR_OK || allocation_status != XR_XIR_OK || (from->argument_count && !arguments) || (from->parameter_kinds && !kinds)) {
             xr_xir_compile_generics_free(copy, module->function_count);
@@ -153,6 +159,8 @@ XrXirStatus xr_xir_compile_generics_clone(const XrXirCompileContext *compile_con
 
 
     }
+    if (allocation_status==XR_XIR_OK) allocation_status=xir_receive_poll(control);
+    if (allocation_status!=XR_XIR_OK) {xr_xir_compile_generics_free(copy,module->function_count);return allocation_status;}
     *output = copy; return XR_XIR_OK;
 }
 XrXirStatus xr_xir_compile_generic_call(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t caller, const XrXirInstruction *call) {

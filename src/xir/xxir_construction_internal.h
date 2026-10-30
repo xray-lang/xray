@@ -27,22 +27,22 @@ struct XrXirConstruction {
  * A live foreign input owner may be borrowed. Checks and copies charge the
  * receiver; published copies own all facts on that receiver's ledger. */
 XR_FUNC XrXirStatus xir_construction_shape(const XrXirCompileContext *context,
-    const XrXirTypes *types, const XrXirConstruction *construction);
+    const XrXirTypes *types, const XrXirConstruction *construction, XrCompileRequestControl *control);
 /* Both live owners use the same current type/ordinal coordinate space.
  * Complete physical fact correspondence grants no guest equality, module or
  * execution permission. Errors preserve same and never become differences. */
 XR_FUNC XrXirStatus xir_construction_compare(const XrXirCompileContext *context,
     const XrXirTypes *types,const XrXirConstruction *left,
-    const XrXirConstruction *right,bool *same);
+    const XrXirConstruction *right,bool *same, XrCompileRequestControl *control);
 XR_FUNC XrXirStatus xir_construction_clone(const XrXirCompileContext *context,
     const XrXirTypes *types, const XrXirConstruction *source,
-    XrXirConstruction **output);
+    XrXirConstruction **output, XrCompileRequestControl *control);
 XR_FUNC XrXirStatus xir_construction_empty(const XrXirCompileContext *context,
-    const XrXirTypes *types, XrXirConstruction **output);
+    const XrXirTypes *types, XrXirConstruction **output, XrCompileRequestControl *control);
 /* Clear nominal helper bindings while preserving the actual full slot view.
  * The receiving owner still requires complete module admission. */
 XR_FUNC XrXirStatus xir_construction_project(const XrXirCompileContext *context,
-    const XrXirTypes *types, const XrXirSlotFacts *slots, XrXirConstruction **output);
+    const XrXirTypes *types, const XrXirSlotFacts *slots, XrXirConstruction **output, XrCompileRequestControl *control);
 XR_FUNC XrXirStatus xir_construction_verify(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction);
 XR_FUNC XrXirStatus xir_materialization_verify(const XrXirCompileContext *context,
@@ -56,7 +56,7 @@ XR_FUNC XrXirStatus xir_literal_type_names(const XrXirCompileContext *context,
 XR_FUNC const XrXirMaterializationBinding *xir_materialization_binding(
     const XrXirConstruction *construction, uint32_t caller, uint32_t instruction);
 XR_FUNC XrXirStatus xir_construction_lower(const XrXirCompileContext *context,
-    const XrXirTypes *types, const XrXirConstruction *source, XrXirConstruction **output);
+    const XrXirTypes *types, const XrXirConstruction *source, XrXirConstruction **output, XrCompileRequestControl *control);
 typedef struct XirComptimeSelection {
     const XrXirModule *source;
     const XrXirTypes *actual_types;
@@ -66,14 +66,15 @@ typedef struct XirComptimeSelection {
 } XirComptimeSelection;
 /* Current verified key storage and prepaid vector reads are prerequisites.
  * This order compares metadata only and grants no substitution authority. */
-XR_FUNC int xir_comptime_key_order(const XrXirComptimeBinding *a,const XrXirComptimeBinding *b);
+XR_FUNC XrXirStatus xir_comptime_key_order(const XrXirComptimeBinding *a,const XrXirComptimeBinding *b,
+    int *output,XrCompileRequestControl *control);
 XR_FUNC const XrXirComptimeSite *xir_comptime_site(const XrXirConstruction *construction,
     uint32_t caller,uint32_t instruction);
 /* Full current module/construction checking precedes selection. No site means
  * no transformation; a site without its actual closed key fails compilation. */
 XR_FUNC XrXirStatus xir_comptime_select(const XrXirCompileContext *context,
     const XrXirConstruction *construction,const XirComptimeSelection *input,
-    const XrXirComptimeBinding **output);
+    const XrXirComptimeBinding **output, XrCompileRequestControl *control);
 XR_FUNC XrXirStatus xir_comptime_verify(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction);
 #endif // XXIR_CONSTRUCTION_INTERNAL_H

@@ -145,7 +145,7 @@ static XrXirStatus rune_resource_build(const XrXirCompileContext *ctx,XrXirArtif
     XrXirStatus status=xir_fixture_check(ctx, &built, &checked, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(checked,&packet,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_read(ctx,packet.bytes,packet.length,&decoded,NULL);
-    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(decoded,&closed,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(decoded,&closed,NULL, NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_emit_leaf_c(lowered,"rune_resource",1048576,&source);

@@ -43,7 +43,7 @@ static XrXirStatus members_compile(const XrXirCompileContext *context, const Mem
     status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);
     if (status!=XR_XIR_OK) { CHECK(!read); goto done; }
     memset(packet.bytes,0xa5,packet.length); xr_xir_compile_checked_packet_free(&packet);
-    status=xr_xir_compile_specialize(read,&specialized,NULL);
+    status=xr_xir_compile_specialize(read,&specialized,NULL, NULL);
     if (status!=XR_XIR_OK) { CHECK(!specialized); goto done; }
     xr_xir_compile_artifact_free(read); read=NULL;
     status=xr_xir_compile_lower(specialized,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);

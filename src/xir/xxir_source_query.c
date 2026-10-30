@@ -282,7 +282,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_copy_v2(const XrXirCompileCon
         (view->reference_count && !view->references) || (view->expression_count && !view->expressions) ||
         (view->types && view->types->count && !view->types->nodes)) return XR_XIR_BAD_STRUCTURE;
     if (view->types && view->types->nominals && view->types->nominals->identities) return XR_XIR_BAD_STAGE;
-    XrXirStatus status = xir_construction_shape(context, view->types, construction);
+    XrXirStatus status = xir_construction_shape(context, view->types, construction,NULL);
     if (status != XR_XIR_OK) return status;
     XrXirSourceSnapshot *snapshot = xir_compile_calloc(context, 1, sizeof(*snapshot), &status);
     if (!snapshot) return status;
@@ -294,7 +294,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_copy_v2(const XrXirCompileCon
     snapshot->view.references = query_copy(&copy, view->references, view->reference_count, sizeof(*view->references));
     snapshot->view.expressions = query_copy(&copy, view->expressions, view->expression_count, sizeof(*view->expressions));
     if (copy.status == XR_XIR_OK) copy.status = xir_construction_clone(context,
-        snapshot->view.types, construction, &snapshot->construction);
+        snapshot->view.types, construction, &snapshot->construction, NULL);
     if (copy.status != XR_XIR_OK) { xr_xir_compile_source_snapshot_free(snapshot); return copy.status; }
     *output = snapshot; return XR_XIR_OK;
 }

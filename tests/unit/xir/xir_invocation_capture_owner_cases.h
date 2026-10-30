@@ -203,7 +203,7 @@ static XrXirStatus capture_runtime_seal(CaptureRuntimeWitness *w,XrXirProgram **
     XrXirStatus status=native_fixture_owner_new(&owner);
     if (status==XR_XIR_OK) status=xir_fixture_check(&owner.context,&fixture.module,&checked,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(checked,&closed,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(checked,&closed,NULL, NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(closed,NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);

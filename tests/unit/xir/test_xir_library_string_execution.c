@@ -41,7 +41,7 @@ extern const uint32_t library_string_export_indices[LIBRARY_STRING_EXPORTS];
 static XrXirArtifact *library_string_lower(XrXirArtifact *owned,uint32_t ids[LIBRARY_STRING_EXPORTS]) {
     CHECK(xr_xir_compile_artifact_verify(owned,NULL)==XR_XIR_OK);
     XrXirArtifact *special=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(owned,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
+    CHECK(xr_xir_compile_specialize(owned,&special,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
     const XrXirModule *m=xr_xir_compile_artifact_module(special);CHECK(!m->defaults&&m->provenance&&m->provenance->source->module.defaults);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

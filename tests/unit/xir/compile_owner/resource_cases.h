@@ -191,9 +191,9 @@ static void exhausted_owner(void) {
     CHECK(xr_xir_compile_default_helper(&context,&with_defaults,0,&helper) == XR_XIR_BUDGET && helper);
     XrXirArtifact *out = NULL;
     CHECK(xr_xir_compile_lower(checked,&target, NULL,&out,NULL) == XR_XIR_BUDGET && !out);
-    CHECK(xr_xir_compile_specialize(checked,&out,NULL) == XR_XIR_BUDGET && !out);
+    CHECK(xr_xir_compile_specialize(checked,&out,NULL, NULL) == XR_XIR_BUDGET && !out);
     CHECK(xir_fixture_check(&context, &module, &out, NULL) == XR_XIR_BUDGET && !out);
-    CHECK(xr_xir_compile_recheck_v2(&context, xr_xir_compile_artifact_module(checked), xr_xir_compile_artifact_construction(checked), &out, NULL) == XR_XIR_BUDGET && !out);
+    CHECK(xr_xir_compile_recheck_v2(&context, xr_xir_compile_artifact_module(checked), xr_xir_compile_artifact_construction(checked), &out, NULL, NULL) == XR_XIR_BUDGET && !out);
     CHECK(xr_xir_compile_artifact_verify(checked,NULL) == XR_XIR_BUDGET);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL) == XR_XIR_BUDGET);

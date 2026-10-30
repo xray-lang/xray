@@ -118,9 +118,9 @@ static void default_binding_case(unsigned mode,bool generic) {
  CHECK(w && w->callee==3 && w->instruction==0);xr_xir_compile_effects_free(effects);}
 
  XrXirArtifact *special=NULL,*again=NULL,*lowered=NULL,*read=NULL;
- CHECK(xr_xir_compile_specialize(checked, &special, &diagnostic)==XR_XIR_OK);
+ CHECK(xr_xir_compile_specialize(checked, &special, &diagnostic, NULL)==XR_XIR_OK);
  CHECK(!special->module.defaults && special->module.provenance && special->module.provenance->source->module.defaults);
- CHECK(xr_xir_compile_specialize(special, &again, NULL)==XR_XIR_OK);
+ CHECK(xr_xir_compile_specialize(special, &again, NULL, NULL)==XR_XIR_OK);
  CHECK(again->module.provenance && !again->module.provenance->source->module.provenance);
  XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
  CHECK(xr_xir_compile_lower(checked, &target, NULL, &lowered, NULL)==XR_XIR_BAD_STAGE && !lowered);

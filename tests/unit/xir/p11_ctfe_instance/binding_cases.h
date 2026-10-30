@@ -51,7 +51,7 @@ static XrXirStatus binding_source(XrXirCompileContext *context,XrXirArtifact **o
     XrXirConstructionSpec input={original->construction->rows,original->construction->count,
         original->construction->materializations,original->construction->materialization_count,&table};
     XrXirConstruction *construction=NULL;
-    status=xr_xir_compile_construction_new_v4(context,original->module.types,&input,xr_xir_compile_construction_slots(original->construction),&construction);
+    status=xr_xir_compile_construction_new_v4(context,original->module.types,&input,xr_xir_compile_construction_slots(original->construction),&construction, NULL);
     if (status==XR_XIR_OK) {
         /* The receiving owner has copied every vector before producer poison. */
         memset(types,0xa5,sizeof(types));memset(rows,0xa5,sizeof(rows));memset(&site,0xa5,sizeof(site));
@@ -75,7 +75,7 @@ static void binding_normal(void) {
     xr_xir_compile_artifact_free(checked);checked=NULL;
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_specialize(checked,&closed,&diagnostic);
+    XrXirDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_specialize(checked,&closed,&diagnostic, NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"Binding specialization=%u f=%u b=%u i=%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK && closed);
     table=xr_xir_compile_construction_comptime(checked->construction);uint32_t edges=0;
@@ -111,7 +111,7 @@ static void binding_controls(void) {
         XrXirCompileContext context;context_new(&context);XrXirArtifact *checked=NULL,*closed=NULL;
         XrCompileResourceStats before=stats(&context);XrXirStatus status=binding_source(&context,&checked,mode);
         if (mode==1) {
-            CHECK(status==XR_XIR_OK && checked);status=xr_xir_compile_specialize(checked,&closed,NULL);
+            CHECK(status==XR_XIR_OK && checked);status=xr_xir_compile_specialize(checked,&closed,NULL, NULL);
             CHECK(status==XR_XIR_BAD_TYPE && !closed);
         } else CHECK(status!=XR_XIR_OK && !checked);
         xr_xir_compile_artifact_free(checked);CHECK(stats(&context).held_bytes==before.held_bytes);

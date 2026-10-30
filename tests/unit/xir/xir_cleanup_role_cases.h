@@ -96,7 +96,7 @@ static void cleanup_role_cases(void) {
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL; xr_xir_compile_checked_packet_free(&packet);
     CHECK(decoded->module.declarations->functions[4].cleanup_owner == 4);
-    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
     CHECK(closed->module.function_count == 8 && closed->module.declarations->functions[4].cleanup_owner == 3 &&
         closed->module.declarations->functions[5].cleanup_owner == 4 &&

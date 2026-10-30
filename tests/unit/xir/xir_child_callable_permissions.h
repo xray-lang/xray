@@ -219,7 +219,7 @@ static void cp_build(CpFixture *f) {
     CHECK(xr_xir_compile_checked_read(f->context, packet.bytes, packet.length, &decoded, &d) == XR_XIR_OK);
     memset(packet.bytes, 0xa5, packet.length);
     xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(decoded, &closed, &d) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, &d, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);
     CHECK(xr_xir_compile_artifact_verify(closed, &d) == XR_XIR_OK);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};

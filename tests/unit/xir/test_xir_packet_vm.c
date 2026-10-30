@@ -42,7 +42,7 @@ static XrXirArtifact *source_packet_lower(const XrXirCompileContext *context,con
     memset(bytes, 0xCC, (size_t) size); xr_compile_resources_free(bytes);
     XrXirArtifact *specialized = NULL;
     source_fixture_compile_phase="Checked specialize";
-    CHECK(xr_xir_compile_specialize(checked, &specialized, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &specialized, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); checked = specialized;
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     source_fixture_compile_phase="Lower";

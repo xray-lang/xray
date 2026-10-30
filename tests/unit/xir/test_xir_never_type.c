@@ -188,7 +188,7 @@ static void check_generic_error_argument(const XrXirCompileContext *work) {
     bound.markers=XR_XIR_CONSTRAINT_ERROR;
     CHECK(xir_fixture_check(work,&module,&checked,NULL)==XR_XIR_OK);
     XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_specialize(checked,&closed,&diagnostic);
+    XrXirStatus status=xr_xir_compile_specialize(checked,&closed,&diagnostic, NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"specialize E status%u f%u b%u i%u reason%u\n",
         (unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction,(unsigned)diagnostic.reason);
     CHECK(status==XR_XIR_OK);
@@ -232,7 +232,7 @@ static void check_generic_declaration(const XrXirCompileContext *work) {
     XrXirArtifact *checked=NULL,*closed=NULL;
     CHECK(xir_fixture_check(work,&module,&checked,NULL)==XR_XIR_OK);
     XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_specialize(checked,&closed,&diagnostic);
+    XrXirStatus status=xr_xir_compile_specialize(checked,&closed,&diagnostic, NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"specialize E status%u f%u b%u i%u reason%u\n",
         (unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction,(unsigned)diagnostic.reason);
     CHECK(status==XR_XIR_OK);
@@ -295,7 +295,7 @@ static void check_lowered_error_remap(const XrXirCompileContext *work) {
     functions[1].error_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);
     CHECK(xir_fixture_check(work,&module,&checked,NULL)==XR_XIR_OK);
     memset(nodes,0xa5,sizeof(nodes));
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     const XrXirModule *before=xr_xir_compile_artifact_module(closed);
     bool before_remap=false;

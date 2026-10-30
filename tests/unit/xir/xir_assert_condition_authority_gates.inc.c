@@ -38,11 +38,11 @@ static void assert_permissions(XrXirSourceResult *result) {
     modules[0].dependency_count=0;
     XrXirCheckedPacket packet={0};XrXirArtifact *closed=NULL;
     CHECK(xr_xir_compile_checked_write(artifact,&packet,NULL)==XR_XIR_BAD_STRUCTURE && !packet.bytes);
-    CHECK(xr_xir_compile_specialize(artifact,&closed,NULL)==XR_XIR_BAD_STRUCTURE && !closed);
+    CHECK(xr_xir_compile_specialize(artifact,&closed,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !closed);
     modules[0].dependency_count=dependency;
     identities[binding.function].exported=1;
     CHECK(xr_xir_compile_checked_write(artifact,&packet,NULL)==XR_XIR_BAD_STRUCTURE && !packet.bytes);
-    CHECK(xr_xir_compile_specialize(artifact,&closed,NULL)==XR_XIR_BAD_STRUCTURE && !closed);
+    CHECK(xr_xir_compile_specialize(artifact,&closed,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !closed);
     identities[binding.function].exported=0;
     uint32_t function=assert_find(module,"success");
     XrXirInstruction *instructions=(XrXirInstruction *)module->functions[function].instructions;
@@ -54,7 +54,7 @@ static void assert_permissions(XrXirSourceResult *result) {
     instructions[index].immediate=binding.function;instructions[index].type=XR_XIR_STRING;
     instructions[index].args[1]=0;
     CHECK(xr_xir_compile_checked_write(artifact,&packet,NULL)==XR_XIR_BAD_STRUCTURE && !packet.bytes);
-    CHECK(xr_xir_compile_specialize(artifact,&closed,NULL)==XR_XIR_BAD_STRUCTURE && !closed);
+    CHECK(xr_xir_compile_specialize(artifact,&closed,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !closed);
     instructions[index]=saved;
     CHECK(runtime_live==baseline && runtime_bytes==bytes);
     puts("Default private helper, missing real dependency and exported-helper attacks refused by writer/specializer PASS");

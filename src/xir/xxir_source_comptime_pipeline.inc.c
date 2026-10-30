@@ -151,7 +151,7 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
     if (ctx->comptime_sites) ctx->module=ctx->comptime_sites->module;
     XrXirArtifact *closed=NULL,*lowered=NULL;
     /* The public specializer completely admits its current input. */
-    XrXirStatus status=xr_xir_compile_specialize(checked,&closed,NULL);
+    XrXirStatus status=xr_xir_compile_specialize(checked,&closed,NULL,ctx->request);
     /* The supported target profile is explicit. Family admission and canonical
      * receiving use authentic type owners, never host sizeof or pointers. */
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

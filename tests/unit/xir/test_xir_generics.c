@@ -42,17 +42,17 @@ static void generic_specialization_work_boundary(const XrXirArtifact *source) {
     const XrXirModule *module=xr_xir_compile_artifact_module(source);
     XrXirCompileContext measured=consumer_context_default();
     XrXirArtifact *probe=NULL,*closed=NULL;
-    CHECK(xr_xir_compile_recheck_v2(&measured,module,xr_xir_compile_artifact_construction(source),&probe,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(&measured,module,xr_xir_compile_artifact_construction(source),&probe,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(probe,NULL)==XR_XIR_OK);
     uint64_t prefix=consumer_context_stats(&measured).work;
-    CHECK(xr_xir_compile_specialize(probe,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(probe,&closed,NULL, NULL)==XR_XIR_OK);
     uint64_t total=consumer_context_stats(&measured).work;
     CHECK(total>prefix+1);xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(probe);
     XrXirCompileContext bounded=generic_work_context(total-1),original=bounded;
     probe=NULL;closed=NULL;
-    CHECK(xr_xir_compile_recheck_v2(&bounded,module,xr_xir_compile_artifact_construction(source),&probe,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(&bounded,module,xr_xir_compile_artifact_construction(source),&probe,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(probe,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(probe,&closed,NULL)==XR_XIR_BUDGET && !closed);
+    CHECK(xr_xir_compile_specialize(probe,&closed,NULL, NULL)==XR_XIR_BUDGET && !closed);
     CHECK(!memcmp(&bounded,&original,sizeof(bounded)));
     xr_xir_compile_artifact_free(probe);
 }
@@ -121,7 +121,7 @@ static void nominal_field_closure(void) {
                 (unsigned long long)consumer_context_stats(&bounded).work);
         CHECK(rechecked == XR_XIR_OK);
         XrXirStatus expected = !mode ? XR_XIR_OK : mode == 1 ? XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
-        CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == expected);
+        CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == expected);
         xr_xir_compile_artifact_free(checked); checked=NULL;
         if (mode) { CHECK(!closed); continue; }
         const XrXirModule *module = xr_xir_compile_artifact_module(closed);
@@ -168,7 +168,7 @@ static void nominal_definition_constraints(void) {
     ((XrXirConstraint *) module->generics[1].constraints)[0].markers = XR_XIR_CONSTRAINT_SENDABLE;
     CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
     XrXirArtifact *closed = NULL;
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed); closed=NULL; xr_xir_compile_artifact_free(checked); checked=NULL;
 }
 static void cross_pool_substitution(void) {
@@ -215,7 +215,7 @@ static void nominal_expression_closure(void) {
     xr_xir_compile_artifact_free(checked); checked=NULL;
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded=NULL;
     const XrXirModule *module = xr_xir_compile_artifact_module(closed);
     CHECK(module->types->count == 8 && module->function_count == 6);
@@ -238,7 +238,7 @@ static void nominal_expression_closure(void) {
 static void nominal_function_closure(void) {
     for (unsigned mode = 0; mode < 2; ++mode) {
         XrXirArtifact *checked = nominal_generic_fixture(suite_context, mode != 0), *closed = NULL, *again = NULL, *lowered = NULL;
-        CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+        CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(checked); checked=NULL;
         const XrXirModule *m = xr_xir_compile_artifact_module(closed);
         CHECK(!m->generics && m->function_count == 4 && m->types->nominals->declarations);
@@ -252,7 +252,7 @@ static void nominal_function_closure(void) {
             CHECK(m->types->nodes[1].nominal.fields[0] == first);
             CHECK(m->types->nodes[2].nominal.fields[0] == second);
         }
-        CHECK(xr_xir_compile_specialize(closed, &again, NULL) == XR_XIR_OK);
+        CHECK(xr_xir_compile_specialize(closed, &again, NULL, NULL) == XR_XIR_OK);
         XrXirCheckedPacket a = {0}, b = {0};
         CHECK(xr_xir_compile_checked_write(closed, &a, NULL) == XR_XIR_OK);
         CHECK(xr_xir_compile_checked_write(again, &b, NULL) == XR_XIR_OK);
@@ -379,7 +379,7 @@ static void rejected_templates(void) {
         if (mode == 11) ((XrXirType *) generics[0].arguments)[0] = (XrXirType) 0x40000003u;
         CHECK(xr_xir_compile_artifact_verify(checked, NULL) != XR_XIR_OK);
         XrXirArtifact *closed = NULL; XrXirCheckedPacket packet = {0};
-        CHECK(xr_xir_compile_specialize(checked, &closed, NULL) != XR_XIR_OK && !closed);
+        CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) != XR_XIR_OK && !closed);
         CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) != XR_XIR_OK && !packet.bytes);
         xr_xir_compile_artifact_free(checked); checked=NULL;
     }
@@ -462,7 +462,7 @@ static XrXirProgram *generic_result_program(XrXirArtifact *original) {
     CHECK(status == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded = NULL;
     CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); checked = NULL;
     const XrXirTarget target = *xr_xir_compile_artifact_target(original);
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
@@ -544,7 +544,7 @@ static void recursive_closure(void) {
     built.functions = functions; built.generics = generics;
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(fixture); fixture=NULL;
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); checked=NULL;
     const XrXirModule *module = xr_xir_compile_artifact_module(closed);
     CHECK(module->function_count == 3 && module->functions[1].instructions[0].immediate == 1 &&
@@ -569,7 +569,7 @@ static void array_definition_constraints(void) {
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
     const XrXirTypeNode *callable = xr_xir_callable_signature(xr_xir_compile_artifact_module(checked)->types, (XrXirType)258);
     CHECK(callable && callable->flags == 8u);
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     const XrXirModule *specialized = xr_xir_compile_artifact_module(closed);
     callable = xr_xir_callable_signature(specialized->types, (XrXirType)258);
     CHECK(callable && callable->flags == 8u);
@@ -612,7 +612,7 @@ static void deep_body_substitution(void) {
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(fixture); fixture=NULL; memset(nodes, 0xCC, sizeof(nodes));
     generic_specialization_work_boundary(checked);
-    CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); checked=NULL;
     const XrXirModule *module = xr_xir_compile_artifact_module(closed);
     CHECK(module->function_count == 3 && module->types->count == DEPTH * 2);
@@ -722,9 +722,9 @@ int main(int argc,char **argv) {
     XrXirCompileContext bounded=consumer_context_default();bounded.limits.functions=2;
     XrXirArtifact *limited=NULL;
     CHECK(xr_xir_compile_checked_read(&bounded,packet.bytes,packet.length,&limited,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(limited,&closed,NULL)==XR_XIR_BUDGET && !closed);
+    CHECK(xr_xir_compile_specialize(limited,&closed,NULL, NULL)==XR_XIR_BUDGET && !closed);
     xr_xir_compile_artifact_free(limited);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded=NULL;
     const XrXirModule *module = xr_xir_compile_artifact_module(closed);
     CHECK(module->stage == XR_XIR_CHECKED && !module->generics && module->function_count == 3);

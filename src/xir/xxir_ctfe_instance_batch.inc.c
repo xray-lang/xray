@@ -34,25 +34,26 @@ static XrXirCtfeStatus instance_batch_receive(const XirCtfeInstanceBatchRequest 
     if (request->count>input->context.limits.functions ||
         (uint64_t)request->count*sizeof(XrXirValue)>SIZE_MAX ||
         (uint64_t)request->count*sizeof(uint32_t)>SIZE_MAX) return XR_XIR_CTFE_BAD_ARGUMENT;
-    XrXirStatus status=xr_xir_compile_artifact_verify(input,NULL);
+    XrXirStatus status=xir_artifact_verify(input,NULL,control);
     if (status!=XR_XIR_OK) return instance_compile_status(status);
 
+    uint32_t progress=0;
     for (uint32_t i=0;i<request->count;++i) {
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return instance_compile_status(status);
         const XrXirArtifact *definition=NULL;uint32_t declaration=0;
         XrXirCtfeStatus admitted=instance_definition(input,request->functions[i],&definition,&declaration);
         if (admitted!=XR_XIR_CTFE_OK) { if (failed_index) *failed_index=i;return admitted; }
     }
-    XirCtfeInstanceBatch *owner=xir_compile_calloc(&input->context,1,sizeof(*owner),&status);
+    XirCtfeInstanceBatch *owner=xir_type_copy_zero(&input->context,1,sizeof(*owner),&status,control);
     if (!owner) return instance_compile_status(status);
 
     owner->context=input->context;owner->count=request->count;
-    owner->values=xir_compile_calloc(&input->context,request->count,sizeof(*owner->values),&status);
-    if (status==XR_XIR_OK) owner->functions=xir_compile_calloc(&input->context,request->count,sizeof(*owner->functions),&status);
+    owner->values=xir_type_copy_zero(&input->context,request->count,sizeof(*owner->values),&status,control);
+    if (status==XR_XIR_OK) owner->functions=xir_type_copy_bytes(&input->context,request->functions,request->count,sizeof(*owner->functions),&status,control);
 
-    if (status==XR_XIR_OK) memcpy(owner->functions,request->functions,(size_t)request->count*sizeof(uint32_t));
     XrXirCheckedPacket packet={0};
-    if (status==XR_XIR_OK) status=instance_packet_write(input,&packet);
-    if (status==XR_XIR_OK) status=instance_packet_read(&owner->context,input,&packet,&owner->checked);
+    if (status==XR_XIR_OK) status=instance_packet_write(input,&packet,control);
+    if (status==XR_XIR_OK) status=instance_packet_read(&owner->context,input,&packet,&owner->checked,control);
     xr_xir_compile_checked_packet_free(&packet);
     if (status==XR_XIR_OK) {
         controlled=instance_control_poll(control);
@@ -67,6 +68,8 @@ static XrXirCtfeStatus instance_batch_receive(const XirCtfeInstanceBatchRequest 
         xr_xir_compile_ctfe_batch(&call,control,owner->values);
     if (evaluated!=XR_XIR_CTFE_OK) { xr_xir_compile_ctfe_instance_batch_free(owner);return evaluated; }
 
+    controlled=instance_control_poll(control);
+    if (controlled!=XR_XIR_CTFE_OK) {xr_xir_compile_ctfe_instance_batch_free(owner);return controlled;}
     *output=owner;return XR_XIR_CTFE_OK;
 }
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch(const XirCtfeInstanceBatchRequest *request,XrCompileRequestControl *control,
@@ -78,15 +81,19 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch_at(const XirCtfeInsta
     return failed_index?instance_batch_receive(request,control,output,failed_index):XR_XIR_CTFE_BAD_ARGUMENT;
 }
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch_views(const XirCtfeInstanceBatch *owner,
-    XirCtfeInstanceView *output,uint32_t count) {
+    XirCtfeInstanceView *output,uint32_t count, XrCompileRequestControl *control) {
     if (!owner || !output || count!=owner->count) return XR_XIR_CTFE_BAD_ARGUMENT;
 
-    for (uint32_t i=0;i<count;++i)
+    XrXirStatus status=XR_XIR_OK;uint32_t progress=0;
+    for (uint32_t i=0;i<count;++i) {
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return instance_compile_status(status);
         if (output[i].checked || output[i].lowered || output[i].definition || output[i].value ||
             output[i].instance_function || output[i].definition_function) return XR_XIR_CTFE_BAD_ARGUMENT;
-    XrXirStatus status=instance_inputs_match(&owner->context,owner->checked,owner->lowered);
+    }
+    status=instance_inputs_match(&owner->context,owner->checked,owner->lowered,control);
     if (status!=XR_XIR_OK) return instance_compile_status(status);
     for (uint32_t i=0;i<count;++i) {
+        status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return instance_compile_status(status);
         const XrXirArtifact *definition=NULL;uint32_t declaration=0;
         XrXirCtfeStatus admitted=instance_definition(owner->checked,owner->functions[i],&definition,&declaration);
         if (admitted!=XR_XIR_CTFE_OK) return admitted;
@@ -95,9 +102,15 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch_views(const XirCtfeIn
     }
     /* The admitted immutable graph cannot change between these two passes. */
     for (uint32_t i=0;i<count;++i) {
+        status=xir_receive_step(control,&progress);
+        if (status!=XR_XIR_OK) {
+            memset(output,0,(size_t)i*sizeof(*output));return instance_compile_status(status);
+        }
         const XrXirProvenance *proof=owner->checked->module.provenance;
         output[i]=(XirCtfeInstanceView){owner->checked,owner->lowered,proof->source,&owner->values[i],
             owner->functions[i],proof->origins[owner->functions[i]].function};
     }
+    status=xir_receive_poll(control);
+    if (status!=XR_XIR_OK) {memset(output,0,(size_t)count*sizeof(*output));return instance_compile_status(status);}
     return XR_XIR_CTFE_OK;
 }

@@ -68,6 +68,6 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch_at(
  * borrow, followed by every real definition and result. All count views must
  * initially be zero; a failure publishes none. No validation hint survives. */
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch_views(
-    const XirCtfeInstanceBatch *owner,XirCtfeInstanceView *output,uint32_t count);
+    const XirCtfeInstanceBatch *owner,XirCtfeInstanceView *output,uint32_t count, XrCompileRequestControl *control);
 XR_FUNC void xr_xir_compile_ctfe_instance_batch_free(XirCtfeInstanceBatch *owner);
 #endif // XXIR_CTFE_INSTANCE_INTERNAL_H

@@ -39,11 +39,11 @@ static void scale_fixture(ScaleFixture *f,uint32_t n) {
         f->calls[i]=(XrXirInstruction){.op=XR_XIR_CALL,.type=XR_XIR_I64,.immediate=1+i%n,.type_arguments={i,1}};
     f->calls[n*2]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=42};
     f->calls[n*2+1]=(XrXirInstruction){.op=XR_XIR_RETURN,.type=XR_XIR_UNIT,.args={n*2}};
-    f->functions[0]=(XrXirFunction){.name="run",.name_length=3,.result=XR_XIR_I64,.blocks=&f->entry_block,
+    f->functions[0]=(XrXirFunction){.name="run",.name_length=3,.result=XR_XIR_I64,.error_type=XR_XIR_NEVER,.blocks=&f->entry_block,
         .block_count=1,.instructions=f->calls,.instruction_count=n*2+2};
     f->generics[0]=(XrXirGeneric){.arguments=f->arguments,.argument_count=n*2};
     for (uint32_t i=1;i<=n;++i) {
-        f->functions[i]=(XrXirFunction){.name="stamp",.name_length=5,.result=XR_XIR_I64,.blocks=&f->body_block,
+        f->functions[i]=(XrXirFunction){.name="stamp",.name_length=5,.result=XR_XIR_I64,.error_type=XR_XIR_NEVER,.blocks=&f->body_block,
             .block_count=1,.instructions=f->body,.instruction_count=2};
         f->generics[i]=(XrXirGeneric){.constraints=&f->constraint,.parameter_count=1};
     }
@@ -62,7 +62,7 @@ static void scale_operation(uint32_t n) {
     CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&read,&diagnostic)==XR_XIR_OK);
     memset(packet.bytes,0,packet.length);xr_xir_compile_checked_packet_free(&packet);
     XrCompileResourceStats before=library_compile_stats(&owner.context);
-    status=xr_xir_compile_specialize(read,&closed,&diagnostic);
+    status=xr_xir_compile_specialize(read,&closed,&diagnostic, NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"scale specialize status%u f%u b%u i%u\n",(unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK);
     XrCompileResourceStats after=library_compile_stats(&owner.context);
@@ -77,12 +77,12 @@ static void scale_operation(uint32_t n) {
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower_take(&closed,&target, NULL,&lowered,&diagnostic)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(lowered,&diagnostic)==XR_XIR_OK);xr_xir_compile_artifact_free(lowered);
-    XrCompileResourceStats final=library_compile_stats(&owner.context);CHECK(final.live_bytes==start.live_bytes);
-    printf("SPEC_CLOSURE_SCALE N%u keyElements%u functions%u rows%u calls%u specializeWork%llu specializeAllocated%llu specializeSites%llu wholeWork%llu wholeAllocated%llu wholeSites%llu live%llu peak%llu\n",
-        n,n*5+4,n+1,n*4+2,n*2,(unsigned long long)(after.work-before.work),
+    XrCompileResourceStats final=library_compile_stats(&owner.context);CHECK(final.held_bytes==start.held_bytes);
+    printf("SPEC_CLOSURE_SCALE N%u keyElements%u functions%u rows%u calls%u specializeAllocated%llu specializeSites%llu wholeAllocated%llu wholeSites%llu live%llu peak%llu\n",
+        n,n*5+4,n+1,n*4+2,n*2,
         (unsigned long long)(after.allocated_bytes-before.allocated_bytes),(unsigned long long)(after.allocation_count-before.allocation_count),
-        (unsigned long long)(final.work-start.work),(unsigned long long)(final.allocated_bytes-start.allocated_bytes),
-        (unsigned long long)(final.allocation_count-start.allocation_count),(unsigned long long)final.live_bytes,(unsigned long long)final.peak_bytes);
+        (unsigned long long)(final.allocated_bytes-start.allocated_bytes),
+        (unsigned long long)(final.allocation_count-start.allocation_count),(unsigned long long)final.held_bytes,(unsigned long long)final.peak_bytes);
     library_compile_owner_drop(&owner);
 }
 int main(void) {

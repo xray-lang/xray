@@ -9,9 +9,9 @@
 static XrXirStatus pending_job(XrXirCompileContext *context,const char *kind) {
     XrXirArtifact *source=NULL;XirComptimePending *owner=NULL;XirComptimePendingView view={0};
     XrXirStatus status=pending_source(context,kind,0,&source);
-    if (status==XR_XIR_OK) status=xr_xir_compile_comptime_pending(source,&owner,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_comptime_pending(source,&owner,NULL, NULL);
     xr_xir_compile_artifact_free(source);
-    if (status==XR_XIR_OK) { CHECK(owner);status=xr_xir_compile_comptime_pending_view(owner,&view,NULL); }
+    if (status==XR_XIR_OK) { CHECK(owner);status=xr_xir_compile_comptime_pending_view(owner,&view,NULL, NULL); }
     if (status==XR_XIR_OK) CHECK(view.definition && view.arguments && view.argument_count);
     else CHECK(pending_empty(&view));
     xr_xir_compile_comptime_pending_free(owner);return status;

@@ -41,7 +41,7 @@ static XrXirStatus resource_prepare(const XrXirCompileContext *context,
     if (status != XR_XIR_OK) goto finish;
     status = xr_xir_compile_checked_read(context,packet.bytes,packet.length,&decoded,NULL);
     if (status != XR_XIR_OK) goto finish;
-    status = xr_xir_compile_specialize(decoded,&closed,NULL);
+    status = xr_xir_compile_specialize(decoded,&closed,NULL, NULL);
     if (status != XR_XIR_OK) goto finish;
     status = xr_xir_compile_artifact_verify(closed,NULL);
     if (status != XR_XIR_OK) goto finish;

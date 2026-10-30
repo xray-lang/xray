@@ -69,7 +69,7 @@ static void method_owner_cases(void) {
         generic[0]=(XrXirGeneric){NULL,0,call_args,2, NULL};types.nodes=pair;types.count=2;
         XrXirArtifact *original=NULL,*special=NULL;
         CHECK(xir_fixture_check(&stage_context, &module, &original, NULL)==XR_XIR_OK);
-        CHECK(xr_xir_compile_specialize(original, &special, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(original);
+        CHECK(xr_xir_compile_specialize(original, &special, NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(original);
         XrXirModule *closed=&special->module;uint32_t method=UINT32_MAX;
         for(uint32_t i=0;i<closed->function_count;++i)
             if(closed->declarations->functions[i].method_kind==XR_XIR_READ_METHOD)method=i;
@@ -122,7 +122,7 @@ static void method_owner_cases(void) {
         XrXirSlotFacts slots = {NULL, 0};
         XrXirConstruction *construction = NULL;
         CHECK(xr_xir_compile_types_structure_verify(&stage_context, &types) == XR_XIR_OK);
-        CHECK(xr_xir_compile_construction_new_v4(&stage_context, &types, &spec, &slots, &construction) == XR_XIR_OK);
+        CHECK(xr_xir_compile_construction_new_v4(&stage_context, &types, &spec, &slots, &construction, NULL) == XR_XIR_OK);
         XrXirDiagnostic diagnostic = {0};
         XrXirStatus status = xr_xir_compile_check_v2(&stage_context, &module, construction, &checked, &diagnostic);
         xr_xir_compile_construction_free(construction);

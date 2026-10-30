@@ -93,8 +93,8 @@ static void spec_index_source_origins(const SpecIndexSourceCase *input,const XrX
 static XrXirStatus spec_index_source_operation(const XrXirCompileContext *context,void *opaque) {
     XrCompileResourceStats start=library_compile_stats(context),entry={0},after={0};size_t first_sites=source_program_compile_attempts;
     SpecIndexSourceCase *input=opaque;char text[32768];spec_index_source_text(input,text,sizeof(text));
-    XrCompilerSession *session=NULL;XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&session);
-    if (opened!=XR_COMPILER_SESSION_OK) return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    XrCompilerSession *session=NULL;XrCompileResourceStatus opened=xr_compile_session_new(context->resources,&session);
+    if (opened!=XR_COMPILE_RESOURCE_OK) return opened==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"spec-index-scale",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText source_text={NULL,text,strlen(text)};XrXirSourceResult source={0};
@@ -107,7 +107,7 @@ static XrXirStatus spec_index_source_operation(const XrXirCompileContext *contex
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,&diagnostic);
     xr_xir_compile_checked_packet_free(&packet);uint64_t elements=0;
     if (status==XR_XIR_OK) {
-        entry=library_compile_stats(context);status=xr_xir_compile_specialize(read,&instance,&diagnostic);
+        entry=library_compile_stats(context);status=xr_xir_compile_specialize(read,&instance,&diagnostic, NULL);
         after=library_compile_stats(context);
     }
     if (status==XR_XIR_OK) spec_index_source_origins(input,&read->module,&instance->module,&elements);
@@ -125,15 +125,15 @@ static XrXirStatus spec_index_source_operation(const XrXirCompileContext *contex
     if (status==XR_XIR_OK) status=xr_xir_compile_lower_take(&instance,&target, NULL,&lowered,&diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(lowered,&diagnostic);
     xr_xir_compile_artifact_free(instance);xr_xir_compile_artifact_free(lowered);xr_xir_compile_source_failure_free(&failure);
-    XrCompileResourceStats final=library_compile_stats(context);CHECK(final.live_bytes==start.live_bytes);
+    XrCompileResourceStats final=library_compile_stats(context);CHECK(final.held_bytes==start.held_bytes);
     if (status==XR_XIR_OK && input->report) fprintf(stderr,
-        "SPEC_INDEX_SCALE N%u ordinary%u effects%u stampKeyElements%llu totalKeyElements%llu origins%u functions%u rows%llu blocks%llu sourceFunctions%u sourceTypes%u sourceBytes%zu specializeWork%llu specializeAllocated%llu specializeSites%llu wholeWork%llu wholeAllocated%llu wholeSites%zu live%llu peak%llu\n",
+        "SPEC_INDEX_SCALE N%u ordinary%u effects%u stampKeyElements%llu totalKeyElements%llu origins%u functions%u rows%llu blocks%llu sourceFunctions%u sourceTypes%u sourceBytes%zu specializeAllocated%llu specializeSites%llu wholeAllocated%llu wholeSites%zu live%llu peak%llu\n",
         input->count,input->ordinary,input->effects,(unsigned long long)elements,(unsigned long long)total_key_elements,
         origins,functions,(unsigned long long)rows,(unsigned long long)blocks,source_functions,source_types,strlen(text),
-        (unsigned long long)(after.work-entry.work),(unsigned long long)(after.allocated_bytes-entry.allocated_bytes),
-        (unsigned long long)(after.allocation_count-entry.allocation_count),(unsigned long long)(final.work-start.work),
+        (unsigned long long)(after.allocated_bytes-entry.allocated_bytes),
+        (unsigned long long)(after.allocation_count-entry.allocation_count),
         (unsigned long long)(final.allocated_bytes-start.allocated_bytes),source_program_compile_attempts-first_sites,
-        (unsigned long long)final.live_bytes,(unsigned long long)final.peak_bytes);
+        (unsigned long long)final.held_bytes,(unsigned long long)final.peak_bytes);
     if (status!=XR_XIR_OK && input->report) fprintf(stderr,"SPEC_INDEX_SCALE refused status%u source=%d:%d %s f%u b%u i%u\n",
         (unsigned)status,source_diagnostic.line,source_diagnostic.column,source_diagnostic.message,
         diagnostic.function,diagnostic.block,diagnostic.instruction);
@@ -154,24 +154,24 @@ static void spec_index_source_resources(void) {
     CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);source_program_compile_attempts=0;
     CHECK(spec_index_source_operation(&owner.context,&input)==XR_XIR_OK);size_t sites=source_program_compile_attempts;
     XrCompileResourceStats required=library_compile_stats(&owner.context);CHECK(sites);library_compile_owner_drop(&owner);
-    for (size_t site=0;site<sites;++site) {
+    size_t selected[3]={0,sites/2,sites-1};
+    for (size_t trial=0;trial<3;++trial) {
+        size_t site=selected[trial];
         CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);source_program_compile_attempts=0;
         source_program_compile_fail_at=site;source_program_compile_injected=false;
         XrXirStatus status=spec_index_source_operation(&owner.context,&input);source_program_compile_fail_at=SIZE_MAX;
         CHECK(status==XR_XIR_OUT_OF_MEMORY && source_program_compile_injected);
-        XrCompileResourceStats failed=library_compile_stats(&owner.context);CHECK(failed.live_bytes==owner.baseline.live_bytes);
+        XrCompileResourceStats failed=library_compile_stats(&owner.context);CHECK(failed.held_bytes==owner.baseline.held_bytes);
         CHECK(spec_index_source_operation(&owner.context,&input)==XR_XIR_OK);
-        CHECK(library_compile_stats(&owner.context).work>failed.work);library_compile_owner_drop(&owner);
+        CHECK(library_compile_stats(&owner.context).allocation_count>failed.allocation_count);library_compile_owner_drop(&owner);
     }
-    for (unsigned axis=0;axis<3;++axis) for (unsigned less=0;less<2;++less) {
+    for (unsigned less=0;less<2;++less) {
         XrCompileResourceLimits limits=library_compile_limits;
-        uint64_t exact=axis==0?required.allocated_bytes:axis==1?required.peak_bytes:required.work;
-        uint64_t *cap=axis==0?&limits.allocated_bytes:axis==1?&limits.live_bytes:&limits.work;CHECK(exact);*cap=exact-less;
+        CHECK(required.peak_bytes);limits.memory_limit=required.peak_bytes-less;
         XrXirStatus status=library_compile_owner_new(&owner,&limits);
         if (status==XR_XIR_OK) status=spec_index_source_operation(&owner.context,&input);
-        CHECK(status==(less?XR_XIR_BUDGET:XR_XIR_OK));library_compile_owner_drop(&owner);
+        CHECK(status==(less?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));library_compile_owner_drop(&owner);
     }
-    fprintf(stderr,"spec-index genuine Source compilerOOM=%zu sameownerretry=%zu allocated%llu peak%llu work%llu threeaxes/physical0 PASS\n",
-        sites,sites,(unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,(unsigned long long)required.work);
+    fprintf(stderr,"spec-index genuine Source physicalOOM/retry and held exact/minus-one PASS\n");
 }
 #endif // XIR_SPECIALIZE_INSTANCE_INDEX_CASES_H

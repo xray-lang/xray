@@ -97,7 +97,7 @@ static XrXirStatus cell_source_lower(const XrXirCompileContext *context, const c
     xr_xir_compile_checked_packet_free(&packet);
     if (status == XR_XIR_OK) {
         stage_diagnostic = cell_source_diagnostic();
-        status = xr_xir_compile_specialize(decoded, &closed, &stage_diagnostic);
+        status = xr_xir_compile_specialize(decoded, &closed, &stage_diagnostic, NULL);
         cell_source_stage(name, "specialize", status, &stage_diagnostic);
     }
     xr_xir_compile_artifact_free(decoded);

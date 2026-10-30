@@ -73,7 +73,7 @@ static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
     uint32_t helpers[] = {4,5};
     XrXirConstructionRow row = {3,helpers,2};
     XrXirConstruction *facts = NULL;
-    XrXirStatus status = xr_xir_compile_construction_new_v4(context,&types,&(XrXirConstructionSpec){&row,1,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&facts);
+    XrXirStatus status = xr_xir_compile_construction_new_v4(context,&types,&(XrXirConstructionSpec){&row,1,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&facts, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_check_v2(context,&built,facts,output,NULL);
     xr_xir_compile_construction_free(facts);
     memset(helpers,0xCC,sizeof(helpers)); memset(fields,0xCC,sizeof(fields));
@@ -104,7 +104,7 @@ static XrXirStatus root_construction72_pipeline(XrCompileResources *resources) {
     if (status == XR_XIR_OK) {
         CHECK(packet.length == sizeof(root_construction77_checked));
         CHECK(!memcmp(packet.bytes,root_construction77_checked,packet.length));
-        status = xr_xir_compile_specialize(checked,&instance,NULL);
+        status = xr_xir_compile_specialize(checked,&instance,NULL, NULL);
     }
     xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_artifact_free(checked); checked = NULL;

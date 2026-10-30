@@ -84,7 +84,7 @@ int main(void) {
     ops[6].args[0] = 3;
     CHECK(xr_xir_compile_artifact_verify(read, NULL) == XR_XIR_BAD_VALUE);
     ops[6].args[0] = 5;
-    CHECK(xr_xir_compile_specialize(read, &specialized, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(read, &specialized, NULL, NULL) == XR_XIR_OK);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);

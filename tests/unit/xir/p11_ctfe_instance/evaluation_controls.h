@@ -25,7 +25,7 @@ static void evaluation_wire_controls(XrXirCompileContext *context,const XrXirArt
     CHECK(!memcmp(root,packet->bytes+64,12));
     uint8_t digest[32];memcpy(digest,packet->bytes+32,32);evaluation_digest(packet);CHECK(!memcmp(digest,packet->bytes+32,32));
     XrXirArtifact *out=NULL;evaluation_u32(packet->bytes+64,selection->callee);evaluation_digest(packet);
-    CHECK(xir_evaluation_read(context,packet->bytes,packet->length,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out);
+    CHECK(xir_evaluation_read(context,packet->bytes,packet->length,&out,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !out);
     memcpy(packet->bytes+64,root,12);evaluation_digest(packet);
     XrXirStatus status=XR_XIR_OK;XrXirCheckedPacket ordinary={0};ordinary.length=packet->length-12;
     ordinary.bytes=xir_compile_calloc(context,ordinary.length,1,&status);CHECK(ordinary.bytes && status==XR_XIR_OK);
@@ -40,8 +40,8 @@ static void evaluation_controls(void) {
     XrXirCompileContext context;context_new(&context);XrXirArtifact *checked=NULL,*lowered=NULL,*out=NULL;
     CHECK(evaluation_source(&context,"scalar",&checked)==XR_XIR_OK);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_specialize(checked,&out,NULL)==XR_XIR_BAD_STAGE && !out);
-    XirComptimePending *pending=NULL;CHECK(xr_xir_compile_comptime_pending(checked,&pending,NULL)==XR_XIR_BAD_STAGE && !pending);
+    CHECK(xr_xir_compile_specialize(checked,&out,NULL, NULL)==XR_XIR_BAD_STAGE && !out);
+    XirComptimePending *pending=NULL;CHECK(xr_xir_compile_comptime_pending(checked,&pending,NULL, NULL)==XR_XIR_BAD_STAGE && !pending);
     CHECK(xr_xir_compile_lower(checked,&target, NULL,&lowered,NULL)==XR_XIR_OK && lowered->evaluation_only);
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_BAD_STAGE && lowered && !program);
     XrXirVmBinding binding={0};XrXirCallEntry entry={0};
@@ -61,9 +61,9 @@ static void evaluation_controls(void) {
     original->kind=XR_XIR_EVIDENCE_EVALUATION;original->evaluation=original_root;checked->evaluation_only=1;
     ++original->evaluation.instruction;CHECK(xr_xir_compile_artifact_verify(checked,NULL)!=XR_XIR_OK);original->evaluation=original_root;
     original->source->evaluation_only=1;CHECK(xr_xir_compile_artifact_verify(checked,NULL)!=XR_XIR_OK);original->source->evaluation_only=0;
-    XrXirCheckedPacket packet={0};CHECK(xir_evaluation_write(checked,&packet,NULL)==XR_XIR_OK);
+    XrXirCheckedPacket packet={0};CHECK(xir_evaluation_write(checked,&packet,NULL, NULL)==XR_XIR_OK);
     evaluation_wire_controls(&context,checked,&packet);
-    packet.bytes[64]^=1;CHECK(xir_evaluation_read(&context,packet.bytes,packet.length,&out,NULL)!=XR_XIR_OK && !out);packet.bytes[64]^=1;
+    packet.bytes[64]^=1;CHECK(xir_evaluation_read(&context,packet.bytes,packet.length,&out,NULL, NULL)!=XR_XIR_OK && !out);packet.bytes[64]^=1;
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK && xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);xr_xir_compile_artifact_free(lowered);xr_compile_resources_release(context.resources);

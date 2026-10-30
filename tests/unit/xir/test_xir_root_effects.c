@@ -101,7 +101,7 @@ static void root_source_cases(bool resources) {
     }
     root_detached_owner(checked);
     XrXirArtifact *specialized=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(checked,&specialized,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&specialized,NULL, NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     effect_artifact_free(specialized);root_source_oracles(lowered,true);effect_artifact_free(lowered);
@@ -148,7 +148,7 @@ static void root_var_atomic_case(void) {
     XrXirArtifact *checked=root_replay(root_source("rejected/mutable_atomic_binding.xr",XR_XIR_OK));
     CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
     XrXirArtifact *specialized=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(checked,&specialized,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&specialized,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(specialized,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);

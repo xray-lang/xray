@@ -123,7 +123,7 @@ static void range_index_structure(const XrXirCompileContext *context,const XrXir
         else if(mode==8)op->args[0]=UINT32_MAX;
         else op->args[mode-9]=0;
         XrXirArtifact *rejected=NULL;XrXirDiagnostic diagnostic={0};
-        CHECK(xr_xir_compile_recheck_v2(context,&altered,xr_xir_compile_artifact_construction(artifact),&rejected,&diagnostic)!=XR_XIR_OK);
+        CHECK(xr_xir_compile_recheck_v2(context,&altered,xr_xir_compile_artifact_construction(artifact),&rejected,&diagnostic, NULL)!=XR_XIR_OK);
         CHECK(!rejected && diagnostic.function==selected && diagnostic.instruction==index);
     }
     xr_compile_resources_free(instructions);xr_compile_resources_free(functions);
@@ -182,13 +182,13 @@ static void range_scalar_guard(const char *c_path) {
         CHECK(guard!=UINT32_MAX && returned);
     }
     XrXirModule altered=*original;altered.functions=functions;XrXirArtifact *raw=NULL;
-    CHECK(xr_xir_compile_recheck_v2(&context,&altered,xr_xir_compile_artifact_construction(source.checked),&raw,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(&context,&altered,xr_xir_compile_artifact_construction(source.checked),&raw,NULL, NULL)==XR_XIR_OK);
     xr_compile_resources_free(owned[0]);xr_compile_resources_free(owned[1]);xr_compile_resources_free(functions);xr_xir_compile_source_result_free(&source);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(raw,&packet,NULL)==XR_XIR_OK);range_previous_contract(&context,&packet);
     XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(raw);
-    CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
+    CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     XrXirCtfeCallRequest request={.evaluation={.target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
@@ -236,7 +236,7 @@ static void range_definition_negatives(const XrXirCompileContext *context,const 
         } else record->native.native_id=UINT32_MAX;
         CHECK(xr_xir_compile_nominal_structure_verify(context,&table,&types)==XR_XIR_BAD_STRUCTURE);
         XrXirModule altered=*original;altered.types=&types;XrXirArtifact *owned=NULL;
-        CHECK(xr_xir_compile_recheck_v2(context,&altered,xr_xir_compile_artifact_construction(producer),&owned,NULL)==XR_XIR_BAD_STRUCTURE && !owned);
+        CHECK(xr_xir_compile_recheck_v2(context,&altered,xr_xir_compile_artifact_construction(producer),&owned,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !owned);
     }
     xr_compile_resources_free(records);
     fprintf(stderr,"Range Cancelled authentication: origin/fingerprint/payload/unknown ID rejected\n");
@@ -263,7 +263,7 @@ static void range_definition_negatives(const XrXirCompileContext *context,const 
             CHECK(changed);
         }
         XrXirModule altered=*original;altered.functions=functions;XrXirArtifact *owned=NULL;
-        CHECK(xr_xir_compile_recheck_v2(context,&altered,xr_xir_compile_artifact_construction(producer),&owned,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_recheck_v2(context,&altered,xr_xir_compile_artifact_construction(producer),&owned,NULL, NULL)==XR_XIR_OK);
         CHECK(!range_catalog(context,owned,false));xr_xir_compile_artifact_free(owned);
         xr_compile_resources_free(instructions);xr_compile_resources_free(functions);
     }
@@ -274,7 +274,7 @@ static void range_authority(void) {
     XrXirSourceResult result=range_source(&context,positive,"typed.xr",XR_XIR_PROGRAM,NULL);xr_xir_compile_source_result_free(&result);
     result=range_source(&context,range_constructor_source,"generic.xr",XR_XIR_PROGRAM,NULL);
     XrXirArtifact *closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&result);
+    CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&result);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     uint32_t entry=range_entry(xr_xir_compile_artifact_module(lowered),"generic");
@@ -309,7 +309,7 @@ static void range_flow(unsigned mode,const char *packet_path) {
     if(packet_path){FILE *file=fopen(packet_path,"wb");CHECK(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));}
     XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
+    CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     range_index_ctfe(closed,lowered);
     xr_xir_compile_artifact_free(closed);const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t selection[RANGE_SELECTION_COUNT];
@@ -329,7 +329,7 @@ static void task_result_catalog(void) {
     XrXirSourceResult source=range_source(&context,task_catalog_consumer_source,"task-catalog.xr",XR_XIR_PROGRAM,catalog);
     xr_xir_compile_library_catalog_free(catalog);
     XrXirArtifact *closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);

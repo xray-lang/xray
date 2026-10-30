@@ -28,7 +28,7 @@ from xraytest.proc import _terminate_tree
 
 WORKERS = 8
 TIMEOUT = 600
-CAPS = (67108864, 8388608, 128000000)
+MEMORY_LIMIT = 8388608
 SCHEMA = "generic-compiler-faults.v1"
 
 
@@ -114,7 +114,7 @@ def process_report(path, identity, mode, index, sites, points, deadline):
     rows = records(path, deadline)
     expected = {"event": "identity", "schema": SCHEMA, "mode": mode, "index": index,
                 "sites": sites, "workers": WORKERS, **identity,
-                "allocated_cap": CAPS[0], "live_cap": CAPS[1], "work_cap": CAPS[2]}
+                "memory_limit": MEMORY_LIMIT}
     checked(rows and rows[0] == expected, "Child executable, Source, configuration or partition identity differs")
     completion = {"event": "complete", "points": points, "compiler_blocks": 0, "compiler_bytes": 0}
     checked(len(rows) >= 2 and rows[-1] == completion, "Missing exact child completion")
@@ -139,11 +139,11 @@ def job_processes(job):
 def verify_census(row):
     checked(row.get("event") == "census" and row.get("public_calls") == 8, "Original eight public operations incomplete")
     sites = integer(row, "sites", 1)
-    checked(sites <= CAPS[0], "Invalid actual allocation denominator")
+    checked(sites <= 67108864, "Invalid actual allocation denominator")
     physical_zero(row)
     checked(integer(row, "live") == integer(row, "owner_live", 1), "Census ledger live baseline differs")
-    required = [integer(row, key, 1) for key in ("allocated", "peak", "work")]
-    checked(all(value <= cap for value, cap in zip(required, CAPS)), "Census exceeded original caps")
+    required = integer(row, "peak", 1)
+    checked(required <= MEMORY_LIMIT, "Observed held peak exceeded finite memory")
     integer(row, "allocations", 1)
     return sites, required
 
@@ -158,10 +158,24 @@ def verify_partition(rows, index, sites, union, deadline):
         checked(row.get("status") == 7 and row.get("injected") is True and integer(row, "attempts", 1) > ordinal,
                 "Original physical failure was not reached or did not return OOM")
         checked(integer(row, "live") == integer(row, "owner_live", 1), "Fault owner leaked ledger storage")
-        for key in ("allocated", "peak", "work", "allocations"):
+        for key in ("allocated", "peak", "allocations"):
             integer(row, key)
         physical_zero(row)
         union.add(ordinal)
+
+
+def verify_held_bounds(rows, required):
+    checked(len(rows) == 2, "Held exact/minus-one observations incomplete")
+    for less, row in enumerate(rows):
+        checked(row.get("event") == "held_boundary" and row.get("less") == less,
+                "Held boundaries reordered or duplicated")
+        checked(row.get("exact") == required and row.get("status") == (12 if less else 0),
+                "Held boundary result differs")
+        checked(row.get("memory_limit") == required - less, "Finite memory policy differs")
+        checked(integer(row, "live") == integer(row, "owner_live"), "Boundary leaked held memory")
+        for key in ("allocated", "peak", "allocations"):
+            integer(row, key)
+        physical_zero(row)
 
 
 def verify_bounds(rows, required):
@@ -170,7 +184,7 @@ def verify_bounds(rows, required):
         checked(row.get("event") == "axis" and row.get("axis") == axis and row.get("less") == less,
                 "Resource axes reordered or duplicated")
         checked(row.get("exact") == required[axis] and row.get("status") == (6 if less else 0), "Original cap boundary differs")
-        caps = list(CAPS)
+        caps = [67108864, 8388608, 128000000]
         caps[axis] = required[axis] - less
         checked([row.get(key) for key in ("allocated_cap", "live_cap", "work_cap")] == caps, "Resource cap changed")
         checked(integer(row, "live") == integer(row, "owner_live"), "Boundary owner leaked ledger storage")
@@ -390,10 +404,10 @@ def main():
         checked(union == set(range(sites)), "Original full ordinal union has a gap")
         manifest.update(completed_ordinals=sorted(union), complete_fault_count=len(union))
         publish()
-        launch("bounds", ["--compiler-bounds", str(sites), *(str(value) for value in required)])
+        launch("bounds", ["--compiler-bounds", str(sites), str(required)])
         drain()
-        rows = process_report(out / "bounds.jsonl", identity, "bounds", 0, sites, 6, deadline)
-        verify_bounds(rows, required)
+        rows = process_report(out / "bounds.jsonl", identity, "bounds", 0, sites, 2, deadline)
+        verify_held_bounds(rows, required)
         manifest["boundaries"] = rows
         checked(snapshot(source, deadline) == inputs and config_snapshot(build, deadline) == config and
                 sha(executable, deadline) == binary_sha, "Actual Source, configuration or binary changed")
@@ -406,7 +420,7 @@ def main():
         manifest.update(qualified=True, seconds=time.monotonic() - started)
         publish()
         remaining(deadline)  # Final receipt and fingerprint collection are inside the same deadline.
-        print(f"Generic compiler: {sites} exact fresh-owner faults, six axes, physical0; {out}")
+        print(f"Generic compiler: {sites} exact fresh-owner faults, held boundaries, physical0; {out}")
         return 0
     except Exception as error:
         manifest.update(qualified=False, failure=str(error), seconds=time.monotonic() - started)

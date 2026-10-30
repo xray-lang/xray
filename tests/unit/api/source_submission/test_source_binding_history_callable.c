@@ -41,7 +41,7 @@ static void callable_birth_case(unsigned capture_kind) {
     XrXirSourceGenerationView source={0};
     CHECK(xr_xir_compile_source_generation_view(owned.owner->source,selected.generation,&source)==XR_XIR_OK);
     XrXirArtifact *closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(source.result->checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source.result->checked,&closed,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_lower(closed,&owned.owner->target, NULL,&lowered,NULL)==XR_XIR_OK);
     XrXirSourceDiagnostic diagnostic={0};
     CHECK(xr_xir_compile_source_lowered_public_admit(lowered,&diagnostic)==XR_XIR_BAD_STRUCTURE &&

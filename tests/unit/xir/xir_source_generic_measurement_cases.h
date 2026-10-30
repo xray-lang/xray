@@ -34,18 +34,18 @@ static void sgm_begin(const XrXirCompileContext *context) {
 static void sgm_interval(const char *name,const char *kind,const SgmPoint *before,
     const SgmPoint *after,XrXirStatus status) {
     printf("{\"schema\":\"task324.generic.original.v1\",\"event\":\"interval\",\"phase\":\"%s\","
-        "\"kind\":\"%s\",\"parent\":\"operation\",\"status\":%u,\"work_before\":%llu,\"work_after\":%llu,"
-        "\"work_delta\":%llu,\"allocated_before\":%llu,\"allocated_after\":%llu,\"allocated_delta\":%llu,"
+        "\"kind\":\"%s\",\"parent\":\"operation\",\"status\":%u,"
+        "\"allocated_before\":%llu,\"allocated_after\":%llu,\"allocated_delta\":%llu,"
         "\"allocation_count_delta\":%llu,\"attempts_before\":%zu,\"attempts_after\":%zu,\"attempts_delta\":%zu,"
         "\"live_before\":%llu,\"live_after\":%llu,\"peak_before\":%llu,\"peak_after\":%llu,"
         "\"physical_blocks_before\":%zu,\"physical_blocks_after\":%zu,\"physical_bytes_before\":%zu,\"physical_bytes_after\":%zu}\n",
-        name,kind,(unsigned)status,(unsigned long long)before->stats.work,(unsigned long long)after->stats.work,
-        (unsigned long long)(after->stats.work-before->stats.work),
+        name,kind,(unsigned)status,
+
         (unsigned long long)before->stats.allocated_bytes,(unsigned long long)after->stats.allocated_bytes,
         (unsigned long long)(after->stats.allocated_bytes-before->stats.allocated_bytes),
         (unsigned long long)(after->stats.allocation_count-before->stats.allocation_count),
         before->attempts,after->attempts,after->attempts-before->attempts,
-        (unsigned long long)before->stats.live_bytes,(unsigned long long)after->stats.live_bytes,
+        (unsigned long long)before->stats.held_bytes,(unsigned long long)after->stats.held_bytes,
         (unsigned long long)before->stats.peak_bytes,(unsigned long long)after->stats.peak_bytes,
         before->physical_blocks,after->physical_blocks,before->physical_bytes,after->physical_bytes);
 }
@@ -138,18 +138,16 @@ static void sgm_original(void) {
     printf("{\"schema\":\"task324.generic.original.v1\",\"event\":\"input\",\"source_bytes\":%zu,"
         "\"original\":true,\"factor\":1,\"scale_family\":\"original_only\",\"declared_user_functions\":9,"
         "\"declared_user_generic_functions\":7,\"expected_public_calls\":8,\"inspect\":false,\"FI\":false,"
-        "\"allocated_cap\":%llu,\"live_cap\":%llu,\"work_cap\":%llu,\"prepare_work\":%llu,"
+        "\"memory_limit\":%llu,"
         "\"prepare_allocated\":%llu,\"prepare_sites\":%zu}\n",
-        sizeof(source_generic_definition_text)-1,(unsigned long long)library_compile_limits.allocated_bytes,
-        (unsigned long long)library_compile_limits.live_bytes,(unsigned long long)library_compile_limits.work,
-        (unsigned long long)prepared.stats.work,(unsigned long long)prepared.stats.allocated_bytes,prepared.attempts);
+        sizeof(source_generic_definition_text)-1,(unsigned long long)library_compile_limits.memory_limit,(unsigned long long)prepared.stats.allocated_bytes,prepared.attempts);
     source_program_compile_attempts=0; sgm_calls=0; sgm_enabled=true;
     SgmPoint before=sgm_point(&owner.context); bool inspect=false;
     XrXirStatus status=source_generic_definition_operation(&owner.context,&inspect);
     SgmPoint after=sgm_point(&owner.context); sgm_interval("operation","inclusive",&before,&after,status);
     printf("{\"schema\":\"task324.generic.original.v1\",\"event\":\"call_count\",\"actual_public_calls\":%u}\n",sgm_calls);
     fflush(stdout);
-    sgm_enabled=false; CHECK(status==XR_XIR_OK && sgm_calls==8 && after.stats.live_bytes==owner.baseline.live_bytes);
+    sgm_enabled=false; CHECK(status==XR_XIR_OK && sgm_calls==8 && after.stats.held_bytes==owner.baseline.held_bytes);
     library_compile_owner_drop(&owner); library_compile_observer_free();
     CHECK(!source_program_compile_live && !source_program_compile_bytes);
     printf("{\"schema\":\"task324.generic.original.v1\",\"event\":\"owner_drop\","

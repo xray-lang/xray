@@ -42,7 +42,7 @@ static const XrCompileResourceLimits limits = {
 static XrXirStatus bind_program(XrXirSourceGenerations *owner,uint64_t serial) {
     XrXirSourceGenerationView view={0};XrXirArtifact *closed=NULL,*lowered=NULL;XrXirProgram *program=NULL;
     XrXirStatus status=xr_xir_compile_source_generation_view(owner,serial,&view);
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(view.result->checked,&closed,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(view.result->checked,&closed,NULL, NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_vm_program_take(&lowered,&program);

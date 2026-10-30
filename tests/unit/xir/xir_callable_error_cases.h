@@ -363,7 +363,7 @@ static void callable_error_program(const XrXirCompileContext *work,XrXirType err
     callable_error_bad_packet(work,&packet,error);
     CHECK(xr_xir_compile_checked_read(work,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(received);
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     uint8_t identity[32];xr_sha256(packet.bytes,packet.length,identity);

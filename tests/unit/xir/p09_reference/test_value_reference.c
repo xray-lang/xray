@@ -25,7 +25,7 @@
 static XrXirArtifact *reference_lower(XrXirArtifact *checked) {
     XrXirArtifact *specialized = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};
-    XrXirStatus status = xr_xir_compile_specialize(checked, &specialized, &diagnostic);
+    XrXirStatus status = xr_xir_compile_specialize(checked, &specialized, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "specialize %u f%u i%u\n",
         (unsigned)status, diagnostic.function, diagnostic.instruction);
     CHECK(status == XR_XIR_OK && specialized);

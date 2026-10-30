@@ -14,12 +14,13 @@ static XrXirStatus spec_materialization_construction(SpecContext *c,
     const XrXirModule *module,XrXirConstruction **output) {
     const XrXirSlotFacts *slots=xr_xir_compile_construction_slots(c->source_artifact->construction);
     if (!c->source_artifact->construction->materialization_count)
-        return xir_construction_project(&c->remaining,module->types,slots,output);
+        return xir_construction_project(&c->remaining,module->types,slots,output, c->control);
     uint32_t count=0;
     for (uint32_t f=0;f<module->function_count;++f) {
+        if (!spec_progress(c)) return c->diagnostic.status;
         const XrXirFunction *body=&module->functions[f];
         for (uint32_t i=0;i<body->instruction_count;++i) {
-            if (!((c)->diagnostic.status == XR_XIR_OK)) return c->diagnostic.status;
+            if (!spec_progress(c)) return c->diagnostic.status;
             const XrXirInstruction *op=&body->instructions[i];
             if (op->op==XR_XIR_CALL && c->identities[op->immediate].method_kind==XR_XIR_MATERIALIZER) {
                 if (count==UINT32_MAX) return XR_XIR_BUDGET;
@@ -27,14 +28,15 @@ static XrXirStatus spec_materialization_construction(SpecContext *c,
             }
         }
     }
-    if (!count) return xir_construction_project(&c->remaining,module->types,slots,output);
+    if (!count) return xir_construction_project(&c->remaining,module->types,slots,output, c->control);
     XrXirMaterializationBinding *edges=spec_alloc(c,count,sizeof(*edges));
     if (!edges) return c->diagnostic.status;
     uint32_t next=0;
     for (uint32_t f=0;f<module->function_count;++f) {
+        if (!spec_progress(c)) return c->diagnostic.status;
         const XrXirFunction *body=&module->functions[f];
         for (uint32_t i=0;i<body->instruction_count;++i) {
-            if (!((c)->diagnostic.status == XR_XIR_OK)) return c->diagnostic.status;
+            if (!spec_progress(c)) return c->diagnostic.status;
             const XrXirInstruction *op=&body->instructions[i];
             if (op->op!=XR_XIR_CALL || c->identities[op->immediate].method_kind!=XR_XIR_MATERIALIZER) continue;
             uint32_t caller=c->instances[f].declaration,callee=c->instances[op->immediate].declaration;
@@ -46,9 +48,9 @@ static XrXirStatus spec_materialization_construction(SpecContext *c,
     }
     if (next!=count) return XR_XIR_BAD_STRUCTURE;
     XrXirConstruction *empty=NULL;
-    XrXirStatus status=xir_construction_project(&c->remaining,module->types,slots,&empty);
+    XrXirStatus status=xir_construction_project(&c->remaining,module->types,slots,&empty, c->control);
     if (status!=XR_XIR_OK) return status;
     XrXirConstructionSpec input={empty->rows,empty->count,edges,count,NULL};
-    status=xr_xir_compile_construction_new_v4(&c->remaining,module->types,&input,slots,output);
+    status=xr_xir_compile_construction_new_v4(&c->remaining,module->types,&input,slots,output, c->control);
     xr_xir_compile_construction_free(empty);return status;
 }

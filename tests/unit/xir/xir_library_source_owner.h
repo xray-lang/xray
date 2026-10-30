@@ -41,7 +41,7 @@ static XrXirStatus library_catalog_operation(const XrXirCompileContext *context,
 typedef struct LibraryPacketFixture {const void *bytes;size_t length;const XrXirArtifact *source;} LibraryPacketFixture;
 static inline XrXirStatus library_packet_operation(const XrXirCompileContext *context,void *opaque) {
     const LibraryPacketFixture *fixture=opaque;XrXirArtifact *artifact=NULL;XrXirCheckedPacket packet={0};
-    XrXirStatus status=fixture->source?xr_xir_compile_recheck_v2(context,xr_xir_compile_artifact_module(fixture->source),xr_xir_compile_artifact_construction(fixture->source),&artifact,NULL):xr_xir_compile_checked_read(context,fixture->bytes,fixture->length,&artifact,NULL);
+    XrXirStatus status=fixture->source?xr_xir_compile_recheck_v2(context,xr_xir_compile_artifact_module(fixture->source),xr_xir_compile_artifact_construction(fixture->source),&artifact,NULL, NULL):xr_xir_compile_checked_read(context,fixture->bytes,fixture->length,&artifact,NULL);
     if(status!=XR_XIR_OK){CHECK(!artifact);return status;}
     if(fixture->bytes){status=xr_xir_compile_checked_write(artifact,&packet,NULL);if(status==XR_XIR_OK)CHECK(packet.length==fixture->length&&!memcmp(packet.bytes,fixture->bytes,packet.length));else CHECK(!packet.bytes&&!packet.length);}
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(artifact);return status;

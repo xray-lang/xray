@@ -79,7 +79,7 @@ static XrXirStatus receiver_compile_operation(const XrXirCompileContext *context
     ++receiver_compile_calls;status=xr_xir_compile_checked_read(context,first.bytes,first.length,&read,NULL);
     memset(first.bytes,0xa5,first.length);xr_xir_compile_checked_packet_free(&first);
     if(status!=XR_XIR_OK) {CHECK(!read);goto done;}
-    ++receiver_compile_calls;status=xr_xir_compile_specialize(read,&closed,NULL);
+    ++receiver_compile_calls;status=xr_xir_compile_specialize(read,&closed,NULL, NULL);
     xr_xir_compile_artifact_free(read);read=NULL;
     if(status!=XR_XIR_OK) {CHECK(!closed);goto done;}
     ++receiver_compile_calls;status=xr_xir_compile_checked_write(closed,&second,NULL);

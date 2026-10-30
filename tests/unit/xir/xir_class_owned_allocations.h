@@ -39,7 +39,7 @@ static XrXirStatus class_owned_stages_init(const XrXirCompileContext *context,Cl
     memset(s,0,sizeof(*s));class_owned_fixture(&s->fixture);
     XrXirStatus status=xir_fixture_check(context, &s->fixture.module, &s->checked, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(s->checked,&s->packet,NULL);
-    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(s->checked,&s->specialized,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(s->checked,&s->specialized,NULL, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(s->specialized,&fixture_target, NULL,&s->lowered,NULL);
     if(status==XR_XIR_OK) {
         XrXirValueStatus ds=xr_xir_domain_new(1048576,&s->domain);
@@ -62,7 +62,7 @@ static XrXirStatus class_owned_phase(const XrXirCompileContext *context,ClassOwn
     case 3:return xir_fixture_check(context, &s->fixture.module, &o->artifact, NULL);
     case 4:return xr_xir_compile_checked_write(s->checked,&o->packet,NULL);
     case 5:return xr_xir_compile_checked_read(context,s->packet.bytes,s->packet.length,&o->artifact,NULL);
-    case 6:return xr_xir_compile_specialize(s->checked,&o->artifact,NULL);
+    case 6:return xr_xir_compile_specialize(s->checked,&o->artifact,NULL, NULL);
     case 7:return xr_xir_compile_lower(s->specialized,&fixture_target, NULL,&o->artifact,NULL);
     case 8:
         o->storage.field_offsets=o->offsets;o->storage.field_count=2;

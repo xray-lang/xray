@@ -69,7 +69,7 @@ static XrXirStatus library_state_unit_bool_pipeline_operation(const XrXirCompile
     XrXirArtifact *checked=NULL,*special=NULL,*lowered=NULL;XrXirProgram *program=NULL;
     XrXirStatus status=xr_xir_compile_checked_read(context,packet->bytes,packet->length,&checked,NULL);
     if (status!=XR_XIR_OK) {CHECK(!checked);goto done;}
-    status=xr_xir_compile_specialize(checked,&special,NULL);
+    status=xr_xir_compile_specialize(checked,&special,NULL, NULL);
     if (status!=XR_XIR_OK) {CHECK(!special);goto done;}
     status=xr_xir_compile_artifact_verify(special,NULL);if (status!=XR_XIR_OK) goto done;
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
@@ -95,7 +95,7 @@ static XrXirArtifact *library_state_unit_bool_lower(XrXirArtifact *owned,uint32_
     library_compile_operation_cases("State reader specialization recheck lower bind seal",library_state_unit_bool_pipeline_operation,&packet);
     xr_xir_compile_checked_packet_free(&packet);
     XrXirArtifact *special=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(owned,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
+    CHECK(xr_xir_compile_specialize(owned,&special,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);

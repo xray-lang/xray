@@ -16,7 +16,7 @@ static void instance_batch_normal(const char *kind) {
     uint32_t functions[2]={instance_named(closed,kind,0),instance_named(closed,kind,1)};
     XirCtfeInstanceBatchRequest request=instance_batch_request(closed,functions,2);XirCtfeInstanceBatch *owner=NULL;
     CHECK(xr_xir_compile_ctfe_instance_batch(&request,NULL,&owner)==XR_XIR_CTFE_OK);
-    XirCtfeInstanceView views[2]={0};CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2)==XR_XIR_CTFE_OK);
+    XirCtfeInstanceView views[2]={0};CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2, NULL)==XR_XIR_CTFE_OK);
     CHECK(views[0].checked==views[1].checked && views[0].lowered==views[1].lowered && views[0].checked!=closed);
     CHECK(views[0].definition==views[1].definition && views[0].definition_function==views[1].definition_function);
     CHECK(views[0].checked->module.provenance->origins[functions[0]].arguments[0]!=
@@ -28,7 +28,7 @@ static void instance_batch_normal(const char *kind) {
     if (!strcmp(kind,"text")) CHECK(views[0].value->payload!=views[1].value->payload);
     XrXirValue values[2]={0};for (unsigned i=0;i<2;++i) CHECK(xr_xir_value_copy(views[i].value,&values[i])==XR_XIR_VALUE_OK);
     xr_xir_compile_artifact_free(closed);xr_compile_resources_release(context.resources);
-    memset(views,0,sizeof(views));CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2)==XR_XIR_CTFE_OK);
+    memset(views,0,sizeof(views));CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2, NULL)==XR_XIR_CTFE_OK);
     xr_xir_compile_ctfe_instance_batch_free(owner);
     for (unsigned i=0;i<2;++i) CHECK(xr_xir_value_valid(&values[i]));
     size_t attempts=source_fixture_compile_attempts;source_fixture_compile_fail_at=attempts;
@@ -53,10 +53,10 @@ static void instance_batch_limits(void) {
     CHECK(xr_xir_compile_ctfe_instance_batch(&malformed,NULL,&owner)==XR_XIR_CTFE_NOT_SUPPORTED && !owner);
     CHECK(xr_xir_compile_ctfe_instance_batch(&request,NULL,&owner)==XR_XIR_CTFE_OK);
     XirCtfeInstanceView views[2]={0};
-    CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,1)==XR_XIR_CTFE_BAD_ARGUMENT && !views[0].checked);
+    CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,1, NULL)==XR_XIR_CTFE_BAD_ARGUMENT && !views[0].checked);
     views[1].instance_function=1;
-    CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2)==XR_XIR_CTFE_BAD_ARGUMENT && !views[0].checked && views[1].instance_function==1);
-    memset(views,0,sizeof(views));CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2)==XR_XIR_CTFE_OK);
+    CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2, NULL)==XR_XIR_CTFE_BAD_ARGUMENT && !views[0].checked && views[1].instance_function==1);
+    memset(views,0,sizeof(views));CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2, NULL)==XR_XIR_CTFE_OK);
     CHECK(views[0].value->payload!=views[1].value->payload);
     CHECK(xr_xir_compile_lower(closed,&request.target, NULL,&lowered,NULL)==XR_XIR_OK);
     XirCtfeBatchRequest call={lowered,functions,2,request.target,{0},request.limits,request.call_depth};
@@ -93,8 +93,8 @@ static void instance_batch_limits(void) {
     XrXirType *argument=(XrXirType *)views[0].checked->module.provenance->origins[functions[0]].arguments;
     XrXirType original=*argument;*argument=original==XR_XIR_I8?XR_XIR_STRING:XR_XIR_I8;
     memset(views,0,sizeof(views));
-    CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2)==XR_XIR_CTFE_BAD_ARTIFACT && !views[0].checked && !views[1].checked);
-    *argument=original;CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2)==XR_XIR_CTFE_OK);
+    CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2, NULL)==XR_XIR_CTFE_BAD_ARTIFACT && !views[0].checked && !views[1].checked);
+    *argument=original;CHECK(xr_xir_compile_ctfe_instance_batch_views(owner,views,2, NULL)==XR_XIR_CTFE_OK);
     size_t attempts=source_fixture_compile_attempts;xr_xir_compile_ctfe_instance_batch_free(owner);
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(closed);xr_compile_resources_release(context.resources);
     CHECK(source_fixture_compile_attempts==attempts && !source_fixture_compile_live && !source_fixture_compile_bytes);

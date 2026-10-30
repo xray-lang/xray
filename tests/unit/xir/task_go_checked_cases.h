@@ -100,7 +100,7 @@ static XrXirStatus task_go_pipeline(const XrXirCompileContext *c) {
         }
     }
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_go69_golden, sizeof(task_go69_golden), &decoded, NULL);
-    if (status == XR_XIR_OK) status = xr_xir_compile_specialize(decoded, &specialized, NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_specialize(decoded, &specialized, NULL, NULL);
     if (status == XR_XIR_OK) {
         memset(f.worker, 0xcc, sizeof(f.worker)); memset(f.root, 0xcc, sizeof(f.root));
         status = xr_xir_compile_artifact_verify(specialized, NULL);
@@ -182,7 +182,7 @@ static void task_go_definition(void) {
         CHECK(xir_fixture_check(&c, &f.module, &checked, NULL) == (missing ? XR_XIR_BAD_TYPE : XR_XIR_OK));
         if (!missing) {
             XrXirDiagnostic d = {0};
-            XrXirStatus status = xr_xir_compile_specialize(checked, &specialized, &d);
+            XrXirStatus status = xr_xir_compile_specialize(checked, &specialized, &d, NULL);
             if (status != XR_XIR_OK) fprintf(stderr, "GO specialize=%u fn=%u op=%u\n", status, d.function, d.instruction);
             CHECK(status == XR_XIR_OK && xr_xir_compile_artifact_verify(specialized, NULL) == XR_XIR_OK);
             const XrXirModule *closed = xr_xir_compile_artifact_module(specialized);
@@ -463,7 +463,7 @@ static XrXirStatus task_go_cleanup_pipeline(const XrXirCompileContext *c) {
         status = xr_xir_compile_checked_write(checked, &packet, NULL);
     }
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, packet.bytes, packet.length, &decoded, NULL);
-    if (status == XR_XIR_OK) status = xr_xir_compile_specialize(decoded, &closed, NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_specialize(decoded, &closed, NULL, NULL);
     if (status == XR_XIR_OK) {
         memset(f.worker, 0xcc, sizeof(f.worker)); memset(f.helper, 0xcc, sizeof(f.helper));
         status = xr_xir_compile_artifact_verify(closed, NULL);

@@ -74,7 +74,7 @@ static XrXirArtifact *compile_case(const char *root,unsigned index,uint8_t ident
     CHECK(xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
-    CHECK(xr_xir_compile_specialize(read,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
+    CHECK(xr_xir_compile_specialize(read,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     xr_sha256(packet.bytes,packet.length,identity);xr_xir_compile_checked_packet_free(&packet);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

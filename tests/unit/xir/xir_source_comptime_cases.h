@@ -38,7 +38,7 @@ static void source_comptime_test_answer(const char *text,XrXirType type,int64_t 
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_artifact_verify(received,NULL)==XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
+    CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_OK);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
@@ -49,9 +49,8 @@ static void source_comptime_test_answer(const char *text,XrXirType type,int64_t 
     CHECK(value.type==(uint32_t)type && !value.reserved && value.payload==expected);
     CHECK(!run.live_bytes && run.allocations==run.frees);
     xr_xir_compile_artifact_free(lowered);XrCompileResourceStats spent=source_comptime_test_stats(&context);
-    CHECK(spent.live_bytes==baseline.live_bytes);source_comptime_test_monotonic(baseline,spent);
-    CHECK(spent.allocated_bytes<=source_comptime_test_limits.allocated_bytes && spent.peak_bytes<=source_comptime_test_limits.live_bytes &&
-        spent.work<=source_comptime_test_limits.work);
+    CHECK(spent.held_bytes==baseline.held_bytes);source_comptime_test_monotonic(baseline,spent);
+    CHECK(spent.peak_bytes<=source_comptime_test_limits.memory_limit);
     xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
 }
 static void source_comptime_test_semantics(void) {
@@ -84,7 +83,7 @@ static void source_comptime_test_refuse(const char *text,XrXirStatus expected) {
         diagnostic.line,diagnostic.column,diagnostic.message,text);
     CHECK(actual==expected && diagnostic.status==expected && !source.checked && !source.snapshot);
     XrCompileResourceStats after=source_comptime_test_stats(&context);
-    CHECK(after.live_bytes==baseline.live_bytes);source_comptime_test_monotonic(baseline,after);
+    CHECK(after.held_bytes==baseline.held_bytes);source_comptime_test_monotonic(baseline,after);
     xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
 }
 static void source_comptime_test_occupied(void) {
@@ -93,7 +92,7 @@ static void source_comptime_test_occupied(void) {
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats baseline=source_comptime_test_stats(&context);
     XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
     CHECK(source_comptime_test_build(&context,source_comptime_test_text,&output,&diagnostic)==XR_XIR_OK);
-    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-comptime",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText text={NULL,source_comptime_test_text,sizeof(source_comptime_test_text)-1};
@@ -104,7 +103,7 @@ static void source_comptime_test_occupied(void) {
     XrCompileResourceStats after=source_comptime_test_stats(&context);
     CHECK(!memcmp(&before,&after,sizeof(before)) && attempts==source_fixture_compile_attempts);
     xr_compile_session_free(session);xr_xir_compile_source_result_free(&output);
-    CHECK(source_comptime_test_stats(&context).live_bytes==baseline.live_bytes);
+    CHECK(source_comptime_test_stats(&context).held_bytes==baseline.held_bytes);
     xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
 }
 static void source_comptime_test_string_result(const char *text) {
@@ -118,9 +117,9 @@ static void source_comptime_test_string_result(const char *text) {
     CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&source);
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
+    CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
-    uint8_t identity[32]={0};CHECK(xr_compile_resources_work(context.resources,packet.length)==XR_COMPILE_RESOURCE_OK);
+    uint8_t identity[32]={0};
     xr_sha256(packet.bytes,packet.length,identity);xr_xir_compile_checked_packet_free(&packet);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
@@ -131,7 +130,7 @@ static void source_comptime_test_string_result(const char *text) {
     CHECK(xr_xir_compile_ctfe_calls(&request,&result)==XR_XIR_CTFE_OK);xr_xir_compile_artifact_free(lowered);
     const char *bytes=NULL;size_t length=0;
     CHECK(xr_xir_string_view(&result,&bytes,&length) && length==7 && !memcmp(bytes,"managed",7));
-    xr_xir_value_drop(&result);CHECK(source_comptime_test_stats(&context).live_bytes==baseline.live_bytes);
+    xr_xir_value_drop(&result);CHECK(source_comptime_test_stats(&context).held_bytes==baseline.held_bytes);
     xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
 }
 static void source_comptime_test_rejections(void) {

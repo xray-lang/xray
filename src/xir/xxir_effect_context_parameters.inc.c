@@ -248,7 +248,7 @@ static XrXirStatus effect_ordinary_snapshot(EffectOrdinaryContexts *contexts,
     XrXirStatus status=xr_xir_compile_declarations_clone(context,source->declarations,
         source->function_count,NULL,&contexts->source_declarations);
     if (status==XR_XIR_OK && source->generics)
-        status=xr_xir_compile_generics_clone(context,source,&contexts->source_generics);
+        status=xr_xir_compile_generics_clone(context,source,&contexts->source_generics, NULL);
     if (status==XR_XIR_OK && source->defaults) {
         uint32_t count=source->defaults->count;
         XrXirDefaultBinding *records=count ? effect_terms_alloc(&contexts->terms,count,sizeof(*records)) : NULL;

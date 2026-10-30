@@ -26,26 +26,29 @@ static XrXirStatus literal_site_verify(
 }
 static bool literal_site_bind(SourceContext *ctx,const XrXirConstruction *original,
     const XirLiteralBinding *binding,const XrXirComptimeSite *wanted,XrXirComptimeTable *table) {
+    uint32_t progress=0;
     *table=original->comptime;
     if (!wanted) return true;
-    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+    if (!source_receive_step(ctx,&progress)) return false;
     const XrXirComptimeSite *site=xir_comptime_site(original,wanted->caller,wanted->instruction);
     if (!site || site->helper!=wanted->helper || binding->definition!=wanted->helper)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"literal lost its current canonical origin");
     if (table->binding_count>=ctx->compile.limits.instructions)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"literal canonical inventory exhausted");
-    XrXirComptimeBinding *rows=source_alloc(ctx,(uint64_t)table->binding_count+1,sizeof(*rows));
+    XrXirComptimeBinding *rows=source_receive_alloc(ctx,(uint64_t)table->binding_count+1,sizeof(*rows));
     if (!rows || !source_copy_bytes(ctx,NULL,rows,table->bindings,(size_t)table->binding_count*sizeof(*rows))) return false;
     XrXirComptimeBinding row={(uint32_t)(site-table->sites),binding->arguments,binding->argument_count,binding->provider};
     uint32_t at=table->binding_count;
     while (at) {
-        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        int order=xir_comptime_key_order(&rows[at-1],&row);
+        if (!source_receive_step(ctx,&progress)) return false;
+        int order=0;XrXirStatus status=xir_comptime_key_order(&rows[at-1],&row,&order,ctx->request);
+        if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"literal key ordering interrupted");
         if (!order) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"literal cannot replace an existing canonical key");
         if (order<0) break;
-        if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+        if (!source_receive_step(ctx,&progress)) return false;
         rows[at]=rows[at-1];--at;
     }
-    if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+    if (!source_receive_step(ctx,&progress)) return false;
+    if (!source_request_poll(ctx,NULL)) return false;
     rows[at]=row;table->bindings=rows;++table->binding_count;return true;
 }

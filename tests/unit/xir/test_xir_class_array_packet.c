@@ -44,7 +44,7 @@ static const uint8_t *class_input_bytes;static size_t class_input_length;static 
 static XrXirStatus class_packet_build(const XrXirCompileContext *context,unsigned variant,XrXirProgram **output) {
     (void)variant;XrXirArtifact *checked=NULL,*special=NULL,*lowered=NULL;XrXirCSource source={0};
     XrXirStatus status=xr_xir_compile_checked_read(context,class_input_bytes,class_input_length,&checked,NULL);
-    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&special,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&special,NULL, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(special,&target, NULL,&lowered,NULL);

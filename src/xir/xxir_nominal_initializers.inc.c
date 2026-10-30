@@ -101,7 +101,7 @@ static XrXirStatus construction_module_slots(
 XR_FUNC XrXirStatus xir_construction_verify(
     const XrXirCompileContext *context, const XrXirModule *m, const XrXirConstruction *construction) {
     if (!xir_compile_context_valid(context) || !m) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus shape = xir_construction_shape(context, m->types, construction);
+    XrXirStatus shape = xir_construction_shape(context, m->types, construction,NULL);
     if (shape != XR_XIR_OK) return shape;
     shape=construction_module_slots(m,&construction->slots);
     if (shape!=XR_XIR_OK) return shape;

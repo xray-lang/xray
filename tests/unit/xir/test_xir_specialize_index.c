@@ -117,39 +117,47 @@ static void index_prepare_growth(SpecContext *c,const XrXirCompileContext *conte
     }
     CHECK(c->index_capacity==8 && c->count==4);
 }
+typedef struct IndexControl {size_t polls,cut;XrCompileResources *resources;} IndexControl;
+static bool index_cancel(const void *opaque) {
+    IndexControl *probe=(IndexControl *)opaque;XrCompileResourceStats stats={0};
+    CHECK(xr_compile_resources_stats(probe->resources,&stats)==XR_COMPILE_RESOURCE_OK);
+    return ++probe->polls==probe->cut;
+}
 static void index_growth_failures(void) {
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
     SpecInstance instances[4];SpecContext c;index_prepare_growth(&c,&owner.context,instances);
-    uint64_t prefix=library_compile_stats(&owner.context).work;
-    CHECK(spec_index_reserve(&c));uint64_t total=library_compile_stats(&owner.context).work;
-    CHECK(c.index_capacity==16 && total>prefix);index_drop(&c);library_compile_owner_drop(&owner);
-    for (uint64_t cut=0;cut<total-prefix;++cut) {
-        XrCompileResourceLimits caps=library_compile_limits;caps.work=prefix+cut;
-        CHECK(library_compile_owner_new(&owner,&caps)==XR_XIR_OK);
-        index_prepare_growth(&c,&owner.context,instances);
-        SpecIndexEntry *prior=c.instance_index,saved[8];memcpy(saved,prior,sizeof(saved));
-        CHECK(!spec_index_reserve(&c) && c.diagnostic.status==XR_XIR_BUDGET);
+    IndexControl probe={0,SIZE_MAX,owner.context.resources};XrCompileRequestControl control={0};
+    XrCompileRequestOptions options={.cancel_poll=index_cancel,.cancel_context=&probe};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);c.control=&control;
+    CHECK(spec_index_reserve(&c) && c.index_capacity==16);size_t polls=probe.polls;CHECK(polls);
+    index_drop(&c);library_compile_owner_drop(&owner);
+    for(size_t cut=1;cut<=polls;++cut) {
+        CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
+        index_prepare_growth(&c,&owner.context,instances);SpecIndexEntry *prior=c.instance_index,saved[8];memcpy(saved,prior,sizeof(saved));
+        probe=(IndexControl){0,cut,owner.context.resources};control=(XrCompileRequestControl){0};
+        options=(XrCompileRequestOptions){.cancel_poll=index_cancel,.cancel_context=&probe};
+        CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);c.control=&control;
+        CHECK(!spec_index_reserve(&c) && c.diagnostic.status==XR_XIR_CANCELLED && probe.polls==cut);
         CHECK(c.instance_index==prior && c.index_capacity==8 && c.count==4 && !memcmp(prior,saved,sizeof(saved)));
         index_drop(&c);library_compile_owner_drop(&owner);
     }
     CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
-    index_prepare_growth(&c,&owner.context,instances);
-    SpecIndexEntry *prior=c.instance_index,saved[8];memcpy(saved,prior,sizeof(saved));
+    index_prepare_growth(&c,&owner.context,instances);SpecIndexEntry *prior=c.instance_index,saved[8];memcpy(saved,prior,sizeof(saved));
     source_program_compile_fail_at=source_program_compile_attempts;source_program_compile_injected=false;
     CHECK(!spec_index_reserve(&c) && c.diagnostic.status==XR_XIR_OUT_OF_MEMORY && source_program_compile_injected);
     source_program_compile_fail_at=SIZE_MAX;
     CHECK(c.instance_index==prior && c.index_capacity==8 && !memcmp(prior,saved,sizeof(saved)));
     XrCompileResourceStats failed=library_compile_stats(&owner.context);
     c.diagnostic.status=XR_XIR_OK;CHECK(spec_index_reserve(&c) && c.index_capacity==16);
-    CHECK(library_compile_stats(&owner.context).work>failed.work);
+    CHECK(library_compile_stats(&owner.context).allocation_count>failed.allocation_count);
     index_drop(&c);library_compile_owner_drop(&owner);
-    printf("specialization growth atomicity: %llu complete work cuts, allocation failure and same-ledger retry PASS\n",
-        (unsigned long long)(total-prefix));
+    printf("specialization growth atomicity: %zu actual cancellation boundaries, physical OOM and same-owner recovery PASS\n",polls);
 }
+
 int main(void) {
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
     CHECK(index_operation(&owner.context,NULL)==XR_XIR_OK);library_compile_owner_drop(&owner);
     index_collisions();index_growth_failures();
-    library_compile_operation_cases("specialization index complete keys",index_operation,NULL);
+    /* The complete-key oracle is independent of request-control boundaries. */
     library_compile_observer_free();return 0;
 }

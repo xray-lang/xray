@@ -84,7 +84,7 @@ static void default_tuple_case(bool constructor,unsigned mode) {
     if(status!=expected)fprintf(stderr,"tuple ctor%u mode%u status%u expected%u f%u i%u\n",constructor,mode,status,expected,d.function,d.instruction);
     CHECK(status==expected);CHECK((checked!=NULL)==(expected==XR_XIR_OK));
     if(!checked)return;
-    XrXirArtifact *derived=NULL;CHECK(xr_xir_compile_specialize(checked, &derived, NULL)==XR_XIR_OK);
+    XrXirArtifact *derived=NULL;CHECK(xr_xir_compile_specialize(checked, &derived, NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     uint32_t target=UINT32_MAX;
     const XrXirProvenance *p=derived->module.provenance;

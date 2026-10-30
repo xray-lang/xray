@@ -135,7 +135,7 @@ static XrXirArtifact *rn_lower_source(const XrXirCompileContext *context, unsign
     xr_compile_session_free(session);
     xr_xir_compile_source_failure_free(&failure_path);
     XrXirDiagnostic checked = {0};
-    status = xr_xir_compile_specialize(replay, &closed, &checked);
+    status = xr_xir_compile_specialize(replay, &closed, &checked, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "ROOT_NATIVE_SPECIALIZE fixture=%s status=%u function=%u block=%u instruction=%u reason=%u\n",
         rn_fixture_names[fixture], (unsigned)status, checked.function, checked.block, checked.instruction, (unsigned)checked.reason);
     CHECK(status == XR_XIR_OK);

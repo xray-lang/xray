@@ -25,7 +25,7 @@ static XrXirStatus resolution_changed_source(XrXirCompileContext *context,XrXirA
                 if (ops[i].op==XR_XIR_ADD_INT) { if (trap) ops[i].op=XR_XIR_DIV_INT;add=true; }
             }
             CHECK(constant && add);XrXirModule changed=source->module;changed.functions=functions;
-            status=xr_xir_compile_recheck_v2(context,&changed,source->construction,output,NULL);
+            status=xr_xir_compile_recheck_v2(context,&changed,source->construction,output,NULL, NULL);
         }
     }
     xr_compile_resources_free(ops);xr_compile_resources_free(functions);xr_xir_compile_artifact_free(source);return status;
@@ -50,11 +50,11 @@ static void resolution_normal(const char *kind) {
     XrXirStatus status=resolution_operation(&context,kind,&source);
     if (status!=XR_XIR_OK) fprintf(stderr,"Resolution %s final status%u\n",kind,status);
     CHECK(status==XR_XIR_OK && source && !source->evaluation_only);
-    XirComptimePending *pending=NULL;CHECK(xr_xir_compile_comptime_pending(source,&pending,NULL)==XR_XIR_OK && !pending);
+    XirComptimePending *pending=NULL;CHECK(xr_xir_compile_comptime_pending(source,&pending,NULL, NULL)==XR_XIR_OK && !pending);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(source);CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
+    CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK && !lowered->evaluation_only);
     xr_xir_compile_artifact_free(closed);uint32_t run=named(&lowered->module,"run");XrXirProgram *program=NULL;

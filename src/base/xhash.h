@@ -56,14 +56,17 @@
 
 // 32-bit FNV-1a hash for byte arrays
 XR_NO_SANITIZE_UNSIGNED
-static inline uint32_t xr_hash_bytes(const void *data, size_t length) {
+static inline uint32_t xr_hash_bytes_update(uint32_t hash, const void *data, size_t length) {
     const uint8_t *bytes = (const uint8_t *) data;
-    uint32_t hash = XR_FNV_OFFSET_BASIS;
     for (size_t i = 0; i < length; i++) {
         hash ^= bytes[i];
         hash *= XR_FNV_PRIME;
     }
     return hash;
+}
+XR_NO_SANITIZE_UNSIGNED
+static inline uint32_t xr_hash_bytes(const void *data, size_t length) {
+    return xr_hash_bytes_update(XR_FNV_OFFSET_BASIS, data, length);
 }
 
 // 64-bit FNV-1a hash for byte arrays (use for content hashing)

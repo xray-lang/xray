@@ -38,7 +38,7 @@ static XrXirStatus timed_source_pipeline(const XrXirCompileContext *context,void
     xr_compile_session_free(session);xr_xir_compile_source_result_free(&source);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);
     xr_xir_compile_checked_packet_free(&packet);
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(read,&specialized,NULL);xr_xir_compile_artifact_free(read);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(read,&specialized,NULL, NULL);xr_xir_compile_artifact_free(read);
     if (status==XR_XIR_OK) status=xr_xir_compile_lower(specialized,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);
     xr_xir_compile_artifact_free(specialized);uint32_t entry=UINT32_MAX,endpoints[4]={UINT32_MAX,UINT32_MAX,UINT32_MAX,UINT32_MAX};
     if (status==XR_XIR_OK) {

@@ -49,7 +49,7 @@ static XrXirArtifact *default_gap_checked(const char *root,const char *path) {
 }
 static void default_gap_execute(XrXirArtifact *checked) {
     XrXirArtifact *specialized=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_specialize(checked,&specialized,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
+    CHECK(xr_xir_compile_specialize(checked,&specialized,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_artifact_verify(specialized,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(specialized);

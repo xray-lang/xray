@@ -27,16 +27,16 @@ typedef struct XirComptimePendingView {
  * Existing bindings retain their meaning. No table or TEMPLATE is removed.
  * An unresolved observation is neither Checked instance nor Lowered input. */
 XR_FUNC XrXirStatus xr_xir_compile_comptime_pending(const XrXirArtifact *definition,
-    XirComptimePending **output,XrXirDiagnostic *diagnostic);
+    XirComptimePending **output,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
 /* Current complete Source bytes, descriptor validity and ordinary discovery
  * are checked again before an atomic borrow. Keep owner live and immutable;
  * no cached PASS, caller type vector, AST or supplied Value enters. */
 XR_FUNC XrXirStatus xr_xir_compile_comptime_pending_view(const XirComptimePending *owner,
-    XirComptimePendingView *output,XrXirDiagnostic *diagnostic);
+    XirComptimePendingView *output,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
 XR_FUNC void xr_xir_compile_comptime_pending_free(XirComptimePending *owner);
 /* Full ordinary closure and independent correspondence produce a compiler-only
  * evaluation artifact. Its fixed missing helper is the sole evaluation root;
  * ordinary transport and runtime consumers cannot accept this purpose. */
 XR_FUNC XrXirStatus xr_xir_compile_comptime_pending_specialize(const XirComptimePending *owner,
-    XrXirArtifact **output,XrXirDiagnostic *diagnostic);
+    XrXirArtifact **output,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
 #endif // XXIR_COMPTIME_PENDING_INTERNAL_H

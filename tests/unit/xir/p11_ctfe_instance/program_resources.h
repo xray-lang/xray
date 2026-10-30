@@ -14,7 +14,7 @@ static XrXirStatus program_job(XrXirCompileContext *context,const char *kind) {
     xr_xir_compile_source_result_free(&source);XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&received,NULL);
     xr_xir_compile_checked_packet_free(&packet);
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(received,&closed,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(received,&closed,NULL, NULL);
     xr_xir_compile_artifact_free(received);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);

@@ -38,7 +38,7 @@ static void source_conditional_definitions(const XrXirSourceRequest *request,con
             }
         }
         CHECK(found);
-        XrXirArtifact *closed=NULL;CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL)==XR_XIR_OK && closed);
+        XrXirArtifact *closed=NULL;CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL, NULL)==XR_XIR_OK && closed);
         xr_xir_compile_artifact_free(closed);xr_xir_compile_source_result_free(&result);
     }
     admission_case_end(&case_owner);
@@ -86,7 +86,7 @@ static void source_conditional_cases(XrXirSourceRequest *request, const char *pa
         CHECK((result.checked != NULL) == cases[i].valid);
         if (result.checked) {
             XrXirArtifact *closed = NULL;
-            CHECK(xr_xir_compile_specialize(result.checked, &closed, NULL) == XR_XIR_OK);
+            CHECK(xr_xir_compile_specialize(result.checked, &closed, NULL, NULL) == XR_XIR_OK);
             xr_xir_compile_artifact_free(closed); xr_xir_compile_artifact_free(result.checked); result.checked = NULL;
             const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
             if (cases[i].box) {

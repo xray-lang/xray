@@ -44,7 +44,7 @@ static void recursive_wire_new(RecursiveWire *wire,const RecursiveInput *input) 
 }
 static XrXirStatus recursive_pipeline(const XrXirCompileContext *context,const XrXirCheckedPacket *packet,XrXirArtifact **output) {
     XrXirArtifact *checked=NULL,*closed=NULL;XrXirStatus status=xr_xir_compile_checked_read(context,packet->bytes,packet->length,&checked,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(checked,&closed,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(checked,&closed,NULL, NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&target, NULL,output,NULL);
     xr_xir_compile_artifact_free(checked);xr_xir_compile_artifact_free(closed);return status;

@@ -127,7 +127,7 @@ static ReorderCompile source_compile(size_t failure, uint64_t work) {
         }
     }
     CHECK(reverse==1 && unshift==1);
-    run.status=xr_xir_compile_specialize(result.checked,&specialized,NULL);
+    run.status=xr_xir_compile_specialize(result.checked,&specialized,NULL, NULL);
     if (run.status!=XR_XIR_OK) { CHECK(!specialized); goto done; }
     CHECK(xr_xir_compile_artifact_context(specialized)->resources==run.context.resources);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

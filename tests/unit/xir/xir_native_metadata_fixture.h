@@ -35,7 +35,7 @@ static XrXirStatus native_metadata_fixture(const XrXirCompileContext *context,
     XrXirArtifact *checked = NULL;
     XrXirStatus status = xir_fixture_check(context, &module, &checked, NULL);
     XrXirArtifact *closed=NULL;
-    if (status == XR_XIR_OK) status=xr_xir_compile_specialize(checked,&closed,NULL);
+    if (status == XR_XIR_OK) status=xr_xir_compile_specialize(checked,&closed,NULL, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_artifact_verify(closed, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_lower(closed, &spec->target, NULL, output, NULL);
     xr_xir_compile_artifact_free(closed);

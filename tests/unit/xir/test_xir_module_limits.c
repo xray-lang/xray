@@ -75,7 +75,7 @@ static XrXirArtifact *source_closed(const XrXirCompileContext *context,const cha
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,&failure);
     if(status!=XR_XIR_OK)fprintf(stderr,"Source status%u %s\n",(unsigned)status,diagnostic.message);
     CHECK(status==XR_XIR_OK&&result.checked);xr_compile_session_free(session);XrXirArtifact *closed=NULL;
-    CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL)==XR_XIR_OK&&closed);
+    CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL, NULL)==XR_XIR_OK&&closed);
     xr_xir_compile_source_result_free(&result);xr_xir_compile_source_failure_free(&failure);return closed;
 }
 static void reject_packet(const XrXirCompileContext *context,const XrXirCheckedPacket *packet,XrXirStatus expected) {

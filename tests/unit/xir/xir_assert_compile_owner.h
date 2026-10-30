@@ -35,7 +35,7 @@ static inline XrXirStatus assert_compile_stage_operation(const XrXirCompileConte
         if(status==XR_XIR_OK)CHECK(packet.length==fixture->length&&!memcmp(packet.bytes,fixture->bytes,packet.length));else CHECK(!packet.bytes&&!packet.length);
         goto done;
     }
-    status=xr_xir_compile_specialize(read,&closed,NULL);
+    status=xr_xir_compile_specialize(read,&closed,NULL, NULL);
     if(status!=XR_XIR_OK){CHECK(!closed);goto done;}
     if(fixture->stage==ASSERT_COMPILE_SPECIALIZE)goto done;
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

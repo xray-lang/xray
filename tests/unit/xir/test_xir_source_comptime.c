@@ -20,7 +20,7 @@
 #include "xir/xxir_vm.h"
 #include "xir/xxir_ctfe.h"
 static const XrCompileResourceLimits source_comptime_test_limits={
-    UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    XR_COMPILE_MEMORY_FINITE,UINT64_C(8)*1024*1024,true};
 static const char source_comptime_cleanup_text[]=
     "fn inc(x:ref i64) { x=x+1 }\n"
     "fn twice(x:ref i64) { inc(ref x); inc(ref x) }\n"
@@ -153,7 +153,7 @@ static const char source_comptime_function_text[]=
     "export fn run()->i64{return comptime answer()}\n";
 static const char *source_comptime_resource_text=source_comptime_test_text;
 static XrXirStatus source_comptime_test_resource_status(XrCompileResourceStatus status) {
-    return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
+    return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:
         status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
 }
 static XrCompileResourceStats source_comptime_test_stats(const XrXirCompileContext *context) {
@@ -162,7 +162,7 @@ static XrCompileResourceStats source_comptime_test_stats(const XrXirCompileConte
 }
 static void source_comptime_test_monotonic(XrCompileResourceStats before,XrCompileResourceStats after) {
     CHECK(after.allocation_count>=before.allocation_count && after.allocated_bytes>=before.allocated_bytes);
-    CHECK(after.work>=before.work && after.peak_bytes>=before.peak_bytes);
+    CHECK(after.peak_bytes>=before.peak_bytes);
 }
 /* This is a real public producer call. Caller text, authority and session die
  * before the returned Checked artifact or owned query is consumed. */
@@ -172,10 +172,10 @@ static XrXirStatus source_comptime_test_build(const XrXirCompileContext *context
     char bytes[4096];memcpy(bytes,text,length+1);char name[]="source-comptime";
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,name,NULL};
     XrCompilerSession *session=NULL;
-    XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&session);
-    if (opened!=XR_COMPILER_SESSION_OK) {
-        CHECK(!session);return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:
-            opened==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
+    XrCompileResourceStatus opened=xr_compile_session_new(context->resources,&session);
+    if (opened!=XR_COMPILE_RESOURCE_OK) {
+        CHECK(!session);return opened==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:
+            opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
     }
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,bytes,length};

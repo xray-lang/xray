@@ -252,7 +252,7 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
     if (status==XR_XIR_OK) {
         stage=XR_XIR_SOURCE_PRODUCT_SPECIALIZE;
         status=xr_xir_compile_specialize(source.checked,&closed,
-            diagnostic ? &diagnostic->xir : NULL);
+            diagnostic ? &diagnostic->xir : NULL,control);
     }
     if (status==XR_XIR_OK) {
         stage=XR_XIR_SOURCE_PRODUCT_LOWER;

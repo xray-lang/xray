@@ -516,7 +516,7 @@ static size_t program_allocation_failures(void) {
 static size_t declaration_allocation_failures(void) {
     AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits);
     XrXirArtifact *checked=program_fixture_checked(&owner.context,0),*closed=NULL,*fixture=NULL;
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_lower(closed,&fixture_target, NULL,&fixture,NULL)==XR_XIR_OK);
     size_t baseline=live,total=0;
     for(uint32_t phase=0;phase<3;++phase) {

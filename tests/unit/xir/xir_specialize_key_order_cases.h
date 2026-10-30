@@ -105,13 +105,13 @@ static void spec_key_source_controls(void) {
     LibraryCompileOwner owner = {0};
     CHECK(library_compile_owner_new(&owner,&library_compile_limits) == XR_XIR_OK);
     XrCompilerSession *session = NULL;
-    CHECK(xr_compile_session_new(owner.context.resources,&session) == XR_COMPILER_SESSION_OK);
+    CHECK(xr_compile_session_new(owner.context.resources,&session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY,"specialize-key-order",NULL};
     XrXirSourceRequest request = {session,NULL,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     char text[8192]; spec_key_source_text(text,sizeof(text));
     XrXirSourceText input = {NULL,text,strlen(text)};
     XrXirSourceResult source = {0}; XrXirSourceDiagnostic source_diagnostic = {0};
-    XrXirDiagnostic diagnostic = {0}; char *failure = NULL;
+    XrXirDiagnostic diagnostic = {0}; XrXirSourceFailure failure = {0};
     XrXirStatus status = xr_xir_compile_source_check_text(&request,&input,&source,&source_diagnostic,&failure);
     if (status != XR_XIR_OK) fprintf(stderr,"long-key Source status%u at %d:%d: %s\n",
         (unsigned)status,source_diagnostic.line,source_diagnostic.column,source_diagnostic.message);
@@ -122,12 +122,12 @@ static void spec_key_source_controls(void) {
     xr_xir_compile_source_result_free(&source);
     CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&read,&diagnostic) == XR_XIR_OK);
     memset(packet.bytes,0,packet.length); xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(read,&instance,&diagnostic) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(read,&instance,&diagnostic, NULL) == XR_XIR_OK);
     spec_key_origins(&read->module,&instance->module);
     xr_xir_compile_artifact_free(read);
     CHECK(xr_xir_compile_artifact_verify(instance,&diagnostic) == XR_XIR_OK);
-    xr_xir_compile_artifact_free(instance); xr_compile_resources_free(failure);
-    CHECK(library_compile_stats(&owner.context).live_bytes == owner.baseline.live_bytes);
+    xr_xir_compile_artifact_free(instance); xr_xir_compile_source_failure_free(&failure);
+    CHECK(library_compile_stats(&owner.context).held_bytes == owner.baseline.held_bytes);
     library_compile_owner_drop(&owner);
     puts("specialization 16-element keys, endpoint/order distinctions, declaration separation, first-discovery reuse and producer death PASS");
 }

@@ -42,7 +42,7 @@ static uint64_t prepare(XrXirSourceGenerations *owner,const char *source) {
 }
 static XrXirProgram *program(const XrXirSourceGenerationView *view,const char *name,uint32_t *entry) {
     XrXirArtifact *closed=NULL,*lowered=NULL;XrXirProgram *output=NULL;
-    CHECK(xr_xir_compile_specialize(view->result->checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(view->result->checked,&closed,NULL, NULL)==XR_XIR_OK);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);

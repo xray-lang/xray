@@ -110,7 +110,7 @@ static H1ExecFixture h1n_program(const XrXirProgramSpec *native, uint32_t run,
 #ifdef H1_MIXED
     XrXirArtifact *checked = NULL, *closed = NULL;
     CHECK(xr_xir_compile_checked_read(&context,native->packet.bytes,native->packet.length,&checked,NULL) == XR_XIR_OK);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_artifact_verify(closed,NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};

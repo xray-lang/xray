@@ -41,7 +41,7 @@ static void array_generic_cases(void) {
     CHECK(xr_xir_compile_checked_read(&bounded,packet.bytes,packet.length,&limited,NULL)==XR_XIR_BUDGET && !limited);
     generic_specialization_work_boundary(decoded);
     memset(packet.bytes, 0xCC, packet.length); xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded=NULL;
     module = xr_xir_compile_artifact_module(closed);
     CHECK(!module->generics && module->function_count == 3 && module->types->count == 2);

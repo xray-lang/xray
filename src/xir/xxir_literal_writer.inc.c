@@ -21,7 +21,7 @@ static bool literal_provider(SourceContext *ctx,const XirCtfeInstanceView *view,
     if (f>=ctx->materialization_begin || !source_materialization_storage(ctx,f+1))
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"literal provider inventory exhausted");
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-    char *name=source_alloc(ctx,40,1);
+    char *name=source_receive_alloc(ctx,40,1);
     if (!name || source_format(ctx,name,40,"$literal%u",f)!=XR_DIAG_OK)
         return source_fail(ctx,NULL,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BUDGET:ctx->diagnostic.status,"literal provider name failed");
     XrXirFunctionIdentity identity=ctx->identities[original];
@@ -46,14 +46,14 @@ static bool literal_construction(SourceContext *ctx,const XrXirConstruction *ori
     uint32_t before=original->materialization_count;
     if (added>ctx->compile.limits.instructions || before>ctx->compile.limits.instructions-added)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"literal binding inventory exhausted");
-    XrXirMaterializationBinding *all=before+added?source_alloc(ctx,before+added,sizeof(*all)):NULL;
+    XrXirMaterializationBinding *all=before+added?source_receive_alloc(ctx,before+added,sizeof(*all)):NULL;
     if ((before+added && !all) || !source_copy_bytes(ctx,NULL,all,original->materializations,(size_t)before*sizeof(*all)) ||
         !source_copy_bytes(ctx,NULL,all?all+before:NULL,appended,(size_t)added*sizeof(*all))) return false;
     XrXirComptimeTable table={0};
     if (!literal_site_bind(ctx,original,binding,site,&table)) return false;
     XrXirConstructionSpec input={original->rows,original->count,all,before+added,&table};
     XrXirStatus status=xr_xir_compile_construction_new_v4(&ctx->compile,&ctx->types,&input,
-        xr_xir_compile_construction_slots(original),&ctx->construction);
+        xr_xir_compile_construction_slots(original),&ctx->construction,ctx->request);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"literal construction receiving failed");
 }
 static XrXirStatus literal_check(SourceContext *ctx,const XrXirArtifact *original,const XirLiteralBinding *binding,
@@ -66,5 +66,5 @@ static XrXirStatus literal_check(SourceContext *ctx,const XrXirArtifact *origina
     built.functions=ctx->functions;built.function_count=ctx->function_count;built.declarations=&declarations;
     built.generics=ctx->generics;
     built.types=ctx->types.count || ctx->types.nominals || ctx->types.interfaces?&ctx->types:NULL;
-    return xr_xir_compile_check_v2(&ctx->compile,&built,ctx->construction,output,diagnostic);
+    return xir_check(&ctx->compile,&built,ctx->construction,output,diagnostic,ctx->request);
 }

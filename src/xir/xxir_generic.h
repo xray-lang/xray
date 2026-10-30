@@ -12,7 +12,7 @@
 #ifndef XXIR_GENERIC_H
 #define XXIR_GENERIC_H
 #include "xxir.h"
-XR_FUNC XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifact **output, XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
 /* Observe the original Checked function ordinal without exposing provenance.
  * The artifact must be live and Checked. Failure preserves output. This is
  * metadata correspondence, not permission to execute or specialize a body. */
@@ -22,7 +22,7 @@ XR_FUNC XrXirStatus xr_xir_compile_generics_structure_verify(const XrXirCompileC
 XR_FUNC XrXirStatus xr_xir_compile_result_binders_verify(const XrXirCompileContext *compile_context, const XrXirModule *module);
 XR_FUNC XrXirStatus xr_xir_compile_result_argument(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t caller, XrXirType type);
 XR_FUNC XrXirStatus xr_xir_compile_result_unit_use(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t caller, uint32_t argument);
-XR_FUNC XrXirStatus xr_xir_compile_generics_clone(const XrXirCompileContext *compile_context, const XrXirModule *module, XrXirGeneric **output);
+XR_FUNC XrXirStatus xr_xir_compile_generics_clone(const XrXirCompileContext *compile_context, const XrXirModule *module, XrXirGeneric **output, XrCompileRequestControl *control);
 XR_FUNC void xr_xir_compile_generics_free(XrXirGeneric *generics, uint32_t functions);
 XR_FUNC bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirType type);
 /* Constraint proof is independent of naming authority at a substitution site. */

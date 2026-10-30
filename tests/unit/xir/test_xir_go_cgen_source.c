@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     XrXirStatus status = xir_fixture_check(&context, &fixture.module, &checked, &diagnostic);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_write(checked, &packet, &diagnostic);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(&context, packet.bytes, packet.length, &decoded, &diagnostic);
-    if (status == XR_XIR_OK) status = xr_xir_compile_specialize(decoded, &closed, &diagnostic);
+    if (status == XR_XIR_OK) status = xr_xir_compile_specialize(decoded, &closed, &diagnostic, NULL);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     if (status == XR_XIR_OK) status = xr_xir_compile_lower(closed, &target, NULL, &lowered, &diagnostic);
     if (status == XR_XIR_OK) status = xr_xir_compile_emit_c(lowered, "go_cgen", 4194304, &output);
