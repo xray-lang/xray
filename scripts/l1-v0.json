@@ -165,6 +165,7 @@
     "test_type_clone_control",
     "test_type_clone_source",
     "test_hir_body",
+    "test_hir_tuple_control",
     "test_hir_body_source",
     "test_source_public_repl",
     "test_xir_specialize_control"
@@ -480,6 +481,7 @@
     "source_type_clone_cli",
     "hir_body",
     "source_body_sdk",
+    "hir_tuple_source_control",
     "hir_body_cli",
     "source_public_repl",
     "source_public_repl_array_history",

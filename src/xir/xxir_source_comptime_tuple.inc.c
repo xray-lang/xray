@@ -38,7 +38,15 @@ static bool source_comptime_result_value(SourceContext *ctx,AstNode *node,
     const XrXirTypeArena *arena=xr_xir_value_arena(value);
     const XrXirTypes *types=xr_xir_compile_type_arena_types(arena);
     XrHirTupleView tuple={0};bool ordered=xr_hir_tuple_kind(types,type)==XR_HIR_TUPLE_ORDERED;
-    if(ordered&&xr_hir_tuple_view(types,type,ctx->request,&tuple,NULL)!=XR_XIR_OK)return false;
+    if(ordered) {
+        XrXirStatus status=xr_hir_tuple_view(types,type,ctx->request,&tuple,NULL);
+        if(status!=XR_XIR_OK) {
+            /* Structural refusal keeps the caller's existing first diagnostic;
+             * an interrupted request must survive the boolean bridge. */
+            if(status==XR_XIR_BAD_TYPE||status==XR_XIR_BAD_STRUCTURE)return false;
+            return source_fail(ctx,node,status,"source request interrupted");
+        }
+    }
     bool shape=type==XR_XIR_STRING?!arity:ordered?tuple.count==arity:
         arity==1 && (xr_xir_type_is_nullable(types,type) || xr_xir_type_is_array(types,type) ||
             xr_xir_type_is_struct(types,type) || xr_xir_type_is_enum(types,type));
@@ -157,7 +165,8 @@ static bool source_comptime_constant(SourceContext *ctx,AstNode *node,
             } else if (nullable) fields[0]=(XrXirCallableParameter){tuple->element,0};
             else {
                 XrHirTupleView shape={0};XrXirStatus status=xr_hir_tuple_view(&ctx->types,target,ctx->request,&shape,NULL);
-                if(status!=XR_XIR_OK||!source_copy_bytes(ctx,node,fields,shape.fields,(size_t)count*sizeof(*fields))) { ok=false;break; }
+                if(status!=XR_XIR_OK) {ok=source_fail(ctx,node,status,"comptime Tuple shape receiving failed");break;}
+                if(!source_copy_bytes(ctx,node,fields,shape.fields,(size_t)count*sizeof(*fields))) {ok=false;break;}
             }
             stack[depth++]=(SourceComptimeTupleFrame){current,target,fields,payloads,count,0,0,current_owned,nullable,array,reserved,{0},{0},nominal,enumeration,variant};
             current=(XrXirValue){0};current_owned=false;
