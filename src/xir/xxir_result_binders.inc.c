@@ -53,6 +53,36 @@ static bool result_panic_recipe(const XrXirModule *m, uint32_t f) {
         if (!result_instruction(&function->instructions[i],instructions[i])) return false;
     return true;
 }
+static bool result_throw_recipe(const XrXirModule *m, uint32_t f) {
+    const XrXirFunction *function = &m->functions[f];
+    if (function->parameter_count != 2 || !function->parameters || function->result != XR_XIR_UNIT ||
+        function->error_type != XR_XIR_NEVER || function->parameters[1] != XR_XIR_STRING ||
+        function->operand_count || function->operands || function->block_count != 4 || !function->blocks ||
+        function->instruction_count != 8 || !function->instructions) return false;
+    const XrXirTypeNode *action = xr_xir_callable_signature(m->types,function->parameters[0]);
+    if (!action || action->parameter_count || action->parameters || action->element != XR_XIR_ERROR ||
+        action->flags != XR_XIR_CALLABLE_ROOT_UNRESOLVED || action->parameter_span != 1 ||
+        action->result != XR_XIR_TYPE_PARAMETER_BASE) return false;
+    const XrXirBlock blocks[] = {{0,1,0,0},{1,1,0,0},{2,4,0,0},{6,2,0,0}};
+    for (uint32_t b = 0; b < 4; ++b) {
+        const XrXirBlock *a = &function->blocks[b];
+        if (a->first != blocks[b].first || a->count != blocks[b].count ||
+            a->panic != blocks[b].panic || a->frontier != blocks[b].frontier) return false;
+    }
+    const XrXirInstruction instructions[] = {
+        {XR_XIR_JUMP,XR_XIR_UNIT,{0},{1,0},0,{0}},
+        {XR_XIR_INVOKE_INDIRECT,XR_XIR_TYPE_PARAMETER_BASE,{0},{2,3},0,{0}},
+        {XR_XIR_INVOKE_DISCARD,XR_XIR_UNIT,{0},{0},1,{0}},
+        {XR_XIR_CONST_BOOL,XR_XIR_BOOL,{0},{0},0,{0}},
+        {XR_XIR_ASSERT_CONDITION,XR_XIR_UNIT,{5,1},{0},0,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}},
+        {XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},1,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}
+    };
+    for (uint32_t i = 0; i < 8; ++i)
+        if (!result_instruction(&function->instructions[i],instructions[i])) return false;
+    return true;
+}
 static bool result_default_recipe(const XrXirModule *m, uint32_t f) {
     const XrXirFunction *function = &m->functions[f];
     if (!m->defaults || !m->defaults->records || !m->declarations ||
@@ -68,7 +98,8 @@ static bool result_default_recipe(const XrXirModule *m, uint32_t f) {
     for (uint32_t d = 0; d < m->defaults->count; ++d) {
         const XrXirDefaultBinding *binding = &m->defaults->records[d];
         if (binding->function == f) return binding->owner_kind == XR_XIR_DEFAULT_PARAMETER && binding->ordinal == 1 &&
-            binding->owner < m->function_count && result_panic_recipe(m,binding->owner) &&
+            binding->owner < m->function_count &&
+            (result_panic_recipe(m,binding->owner) || result_throw_recipe(m,binding->owner)) &&
             xr_xir_binder_kind(&m->generics[binding->owner],0) == XR_XIR_BINDER_RESULT_VARIABLE;
     }
     return false;
@@ -86,7 +117,7 @@ XR_FUNCDEF XrXirStatus xr_xir_compile_result_binders_verify(const XrXirCompileCo
         if (g->parameter_count != 1 || !g->constraints || g->argument_count || g->arguments ||
             g->parameter_kinds[0] != XR_XIR_BINDER_RESULT_VARIABLE || g->constraints[0].markers ||
             g->constraints[0].interface_count || g->constraints[0].interfaces ||
-            (!result_panic_recipe(m,f) && !result_default_recipe(m,f))) return XR_XIR_BAD_TYPE;
+            (!result_panic_recipe(m,f) && !result_throw_recipe(m,f) && !result_default_recipe(m,f))) return XR_XIR_BAD_TYPE;
     }
     return XR_XIR_OK;
 }

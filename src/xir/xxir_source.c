@@ -1290,7 +1290,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             size_t name_length = source_text_size(ctx, name);
             if (ctx->diagnostic.status != XR_XIR_OK) return false;
             intrinsic = xr_core_intrinsic_by_source_name(name, name_length);
-            if (intrinsic && (intrinsic->id == XR_CORE_BUILTIN_ASSERT || intrinsic->id == XR_CORE_BUILTIN_ASSERT_PANICS || intrinsic->id == XR_CORE_BUILTIN_ASSERT_EQUAL)) {
+            if (intrinsic && (intrinsic->id == XR_CORE_BUILTIN_ASSERT || intrinsic->id == XR_CORE_BUILTIN_ASSERT_PANICS || intrinsic->id == XR_CORE_BUILTIN_ASSERT_EQUAL || intrinsic->id == XR_CORE_BUILTIN_ASSERT_THROWS)) {
                 target = binding = source_core_assertion(ctx, node, intrinsic->id);
                 if (!target) return false;
             }
@@ -2172,7 +2172,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate type parameter");
         }
     }
-    if (ctx->core_factory && index == 2 && !source_core_result_scope(ctx,node,index)) return false;
+    if (ctx->core_factory && (index == 2 || index == 4) && !source_core_result_scope(ctx,node,index)) return false;
     body->parameters = decl->param_count ? source_alloc(ctx, (size_t) decl->param_count, sizeof(*body->parameters)) : NULL;
     if (decl->param_count && !body->parameters) return false;
     XrXirFunction *function = &ctx->functions[index];
@@ -2331,7 +2331,7 @@ static bool collect_declarations(SourceContext *ctx) {
         if (natives>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"native callable capacity overflow");
         capacity+=natives;
     }
-    if (!ctx->core_factory && capacity <= UINT32_MAX - 7) capacity += 7;
+    if (!ctx->core_factory && capacity <= UINT32_MAX - 9) capacity += 9;
     if (readers>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_BUDGET,"binding reader capacity exhausted");
     capacity+=readers;
     if (capacity > ctx->compile.limits.functions) capacity = ctx->compile.limits.functions;
@@ -2886,6 +2886,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
 #include "xxir_source_string_runes.inc.c"
 #include "xxir_source_hash_foreach.inc.c"
 #include "xxir_source_core_panics.inc.c"
+#include "xxir_source_core_throws.inc.c"
 #include "xxir_source_comptime_expression.inc.c"
 #include "xxir_source_materialization_finish.inc.c"
 #include "xxir_source_instance_writer.inc.c"
@@ -2981,6 +2982,8 @@ static bool build_bodies(SourceContext *ctx) {
             if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_EQUAL,XR_XIR_BOOL,{0,1},{0},0,{0}},&condition) ||
                 !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ASSERT_CONDITION,XR_XIR_UNIT,{condition.id,2},{0},0,{0}},NULL) ||
                 !finish_body(ctx)) return false;
+        } else if (ctx->core_factory && f == 4) {
+            if (!source_core_throws_body(ctx) || !finish_body(ctx)) return false;
         } else if (!statement(ctx, decl->body, false) || !finish_body(ctx)) return false;
     }
     if (ctx->next_closure != ctx->closure_limit)

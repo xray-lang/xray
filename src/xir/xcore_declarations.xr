@@ -4,3 +4,4 @@ export fn assert(cond: bool, msg: string = "") {}
 export fn assertPanics(action: fn() -> R, msg: string = "") {}
 
 export fn assertEqual<T: Equal>(a: T, b: T, msg: string = "") {}
+export fn assertThrows(action: fn() throws(Error) -> R, msg: string = "") {}

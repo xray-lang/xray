@@ -116,7 +116,7 @@ typedef struct SourceContext {
     SourceName *repl_result;
     SourceFunctionValue *function_values;
     uint32_t *binding_reads, *binding_writes, *binding_pushes;
-    SourceName *assertion, *assert_panics, *assert_equal;
+    SourceName *assertion, *assert_panics, *assert_equal, *assert_throws;
     uint32_t *string_rune_producers;
     uint32_t first_closure, next_closure, closure_limit, function_capacity;
     uint32_t function, module, depth;

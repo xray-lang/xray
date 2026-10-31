@@ -36,7 +36,7 @@ static XrXirStatus query_call_core(SourceQueryCopy *copy,uint32_t target) {
     const XrXirSourceDeclaration *callee=&view->declarations[target-1];
     uint32_t id=callee->native_identity;
     if(callee->kind!=XR_XIR_SOURCE_INTRINSIC||callee->parent||callee->target||
-        (id!=XR_CORE_BUILTIN_ASSERT&&id!=XR_CORE_BUILTIN_ASSERT_EQUAL&&id!=XR_CORE_BUILTIN_ASSERT_PANICS)||
+        (id!=XR_CORE_BUILTIN_ASSERT&&id!=XR_CORE_BUILTIN_ASSERT_EQUAL&&id!=XR_CORE_BUILTIN_ASSERT_PANICS&&id!=XR_CORE_BUILTIN_ASSERT_THROWS)||
         callee->range.module>=view->module_count)return XR_XIR_BAD_STRUCTURE;
     if(!((copy)->status == XR_XIR_OK))return copy->status;
     const XrCoreIntrinsicDesc *descriptor=xr_core_intrinsic_by_id((XrCoreBuiltinId)id);

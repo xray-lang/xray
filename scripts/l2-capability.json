@@ -195,7 +195,11 @@
         "src/hir/*",
         "src/xir/xxir_source*",
         "src/xir/xxir_initialization*",
-        "tests/unit/xir/*method_surface*"
+        "tests/unit/xir/*method_surface*",
+        "src/xir/xcore_declarations.xr",
+        "src/xir/xxir_core_source*",
+        "src/xir/xxir_result_binders.inc.c",
+        "tests/unit/xir/*assert_throws*"
       ],
       "reason": "HIR and complete Source language-family consumers.",
       "tests": [
@@ -232,7 +236,10 @@
         "test_xir_source_local_recursive_binding_native",
         "test_xir_source_method_surface",
         "test_xir_source_method_surface_native",
-        "test_xir_source_refinement"
+        "test_xir_source_refinement",
+        "xir_assert_throws_source",
+        "xir_assert_throws_native",
+        "xir_assert_throws_controls"
       ],
       "targets": [
         "test_source_nullable_print",
@@ -251,7 +258,10 @@
         "lir_pipeline_eval",
         "test_hir_body_source",
         "test_source_public_repl",
-        "test_xir_source_refinement"
+        "test_xir_source_refinement",
+        "test_xir_assert_throws_source",
+        "test_xir_assert_throws_native",
+        "test_xir_assert_throws_controls"
       ]
     },
     "errors-cleanup": {

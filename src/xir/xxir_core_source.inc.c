@@ -14,9 +14,9 @@
 #include "xxir_core_source_identity.h"
 
 static bool source_core_contract(SourceContext *ctx) {
-    if (!ctx->core_factory || ctx->graph->spec_count != 1 || ctx->function_count != 7 ||
-        !ctx->has_generics || ctx->types.count != 1 || ctx->types.nominals || ctx->types.interfaces ||
-        ctx->slot_count || ctx->defaults.count != 3 || ctx->graph->specs[0].dep_count)
+    if (!ctx->core_factory || ctx->graph->spec_count != 1 || ctx->function_count != 9 ||
+        !ctx->has_generics || ctx->types.count != 2 || ctx->types.nominals || ctx->types.interfaces ||
+        ctx->slot_count || ctx->defaults.count != 4 || ctx->graph->specs[0].dep_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"core declaration inventory is invalid");
     const XrXirFunction *owner = &ctx->functions[1];
     const XrXirDefaultBinding *binding = &ctx->defaults.records[0];
@@ -25,8 +25,8 @@ static bool source_core_contract(SourceContext *ctx) {
         owner->parameter_count != 2 || owner->parameters[0] != XR_XIR_BOOL ||
         owner->parameters[1] != XR_XIR_STRING || owner->result != XR_XIR_UNIT ||
         strcmp(owner->name,"assert") || binding->owner_kind != XR_XIR_DEFAULT_PARAMETER ||
-        binding->owner != 1 || binding->ordinal != 1 || binding->function != 4 ||
-        ctx->functions[4].parameter_count || ctx->functions[4].result != XR_XIR_STRING ||
+        binding->owner != 1 || binding->ordinal != 1 || binding->function != 5 ||
+        ctx->functions[5].parameter_count || ctx->functions[5].result != XR_XIR_STRING ||
         node->as.function_decl.body->type != AST_BLOCK || node->as.function_decl.body->as.block.count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"core assertion declaration is invalid");
     XrXirSourceDeclaration *declarations = (XrXirSourceDeclaration *)ctx->query.declarations;
@@ -41,15 +41,15 @@ static bool source_core_contract(SourceContext *ctx) {
         action->flags != XR_XIR_CALLABLE_ROOT_UNRESOLVED ||
         action->result != XR_XIR_TYPE_PARAMETER_BASE ||
         ctx->generics[2].parameter_count != 1 || xr_xir_binder_kind(&ctx->generics[2],0) != XR_XIR_BINDER_RESULT_VARIABLE ||
-        binding->owner_kind != XR_XIR_DEFAULT_PARAMETER || binding->owner != 2 || binding->ordinal != 1 || binding->function != 5 ||
-        ctx->functions[5].parameter_count || ctx->functions[5].result != XR_XIR_STRING ||
+        binding->owner_kind != XR_XIR_DEFAULT_PARAMETER || binding->owner != 2 || binding->ordinal != 1 || binding->function != 6 ||
+        ctx->functions[6].parameter_count || ctx->functions[6].result != XR_XIR_STRING ||
         node->as.function_decl.body->type != AST_BLOCK || node->as.function_decl.body->as.block.count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"core panic declaration is invalid");
     declaration = &declarations[ctx->bodies[2].declaration-1];
     declaration->kind = XR_XIR_SOURCE_INTRINSIC; declaration->native_identity = XR_CORE_BUILTIN_ASSERT_PANICS;
     owner = &ctx->functions[3]; node = ctx->bodies[3].node; binding = &ctx->defaults.records[2];
     const XrXirGeneric *generic = &ctx->generics[3];
-    const XrXirFunction *helper = &ctx->functions[6];
+    const XrXirFunction *helper = &ctx->functions[7];
     if (!node || node->type != AST_FUNCTION_DECL || !node->is_exported ||
         owner->parameter_count != 3 || owner->parameters[0] != XR_XIR_TYPE_PARAMETER_BASE ||
         owner->parameters[1] != XR_XIR_TYPE_PARAMETER_BASE || owner->parameters[2] != XR_XIR_STRING ||
@@ -57,13 +57,27 @@ static bool source_core_contract(SourceContext *ctx) {
         xr_xir_binder_kind(generic,0) != XR_XIR_BINDER_TYPE ||
         generic->constraints[0].markers != XR_XIR_CONSTRAINT_EQUAL || generic->constraints[0].interface_count ||
         binding->owner_kind != XR_XIR_DEFAULT_PARAMETER || binding->owner != 3 || binding->ordinal != 2 ||
-        binding->function != 6 || helper->parameter_count || helper->parameters || helper->result != XR_XIR_STRING ||
-        ctx->generics[6].parameter_count != 1 ||
-        ctx->generics[6].constraints[0].markers != XR_XIR_CONSTRAINT_EQUAL ||
+        binding->function != 7 || helper->parameter_count || helper->parameters || helper->result != XR_XIR_STRING ||
+        ctx->generics[7].parameter_count != 1 ||
+        ctx->generics[7].constraints[0].markers != XR_XIR_CONSTRAINT_EQUAL ||
         node->as.function_decl.body->type != AST_BLOCK || node->as.function_decl.body->as.block.count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"core equality declaration is invalid");
     declaration = &declarations[ctx->bodies[3].declaration-1];
     declaration->kind = XR_XIR_SOURCE_INTRINSIC; declaration->native_identity = XR_CORE_BUILTIN_ASSERT_EQUAL;
+    owner = &ctx->functions[4]; node = ctx->bodies[4].node; binding = &ctx->defaults.records[3];
+    action = xr_xir_callable_signature(&ctx->types,owner->parameters[0]);
+    if (!node || node->type != AST_FUNCTION_DECL || !node->is_exported ||
+        owner->parameter_count != 2 || owner->parameters[1] != XR_XIR_STRING || owner->result != XR_XIR_UNIT ||
+        strcmp(owner->name,"assertThrows") || !action || action->parameter_count ||
+        action->flags != XR_XIR_CALLABLE_ROOT_UNRESOLVED || action->element != XR_XIR_ERROR ||
+        action->result != XR_XIR_TYPE_PARAMETER_BASE || owner->error_type != XR_XIR_NEVER ||
+        ctx->generics[4].parameter_count != 1 || xr_xir_binder_kind(&ctx->generics[4],0) != XR_XIR_BINDER_RESULT_VARIABLE ||
+        binding->owner_kind != XR_XIR_DEFAULT_PARAMETER || binding->owner != 4 || binding->ordinal != 1 || binding->function != 8 ||
+        ctx->functions[8].parameter_count || ctx->functions[8].result != XR_XIR_STRING ||
+        node->as.function_decl.body->type != AST_BLOCK || node->as.function_decl.body->as.block.count)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"core typed-error declaration is invalid");
+    declaration = &declarations[ctx->bodies[4].declaration-1];
+    declaration->kind = XR_XIR_SOURCE_INTRINSIC; declaration->native_identity = XR_CORE_BUILTIN_ASSERT_THROWS;
     return true;
 }
 
@@ -104,8 +118,9 @@ static char *source_core_string(SourceContext *ctx, const char *input) {
     return input && source_text_length(ctx,NULL,input,&length) ? source_core_text(ctx,input,length) : NULL;
 }
 
-static XrXirSourceType source_core_query_type(XrXirSourceType type, uint32_t declaration, XrXirType action) {
-    if (type.type == XR_XIR_CONSTRUCTED_TYPE_BASE) type.type = action;
+static XrXirSourceType source_core_query_type(XrXirSourceType type, uint32_t declaration, const XrXirType actions[2]) {
+    if ((uint32_t)type.type >= XR_XIR_CONSTRUCTED_TYPE_BASE && (uint32_t)type.type < XR_XIR_CONSTRUCTED_TYPE_BASE+2)
+        type.type = actions[type.type-XR_XIR_CONSTRUCTED_TYPE_BASE];
     if (type.generic_owner) type.generic_owner += declaration;
     return type;
 }
@@ -137,7 +152,7 @@ static bool source_core_query_references(SourceContext *ctx, const SourceContext
     }
     return true;
 }
-static bool source_core_query(SourceContext *ctx, const SourceContext *core, uint32_t owners[3], XrXirType action) {
+static bool source_core_query(SourceContext *ctx, const SourceContext *core, uint32_t owners[4], const XrXirType actions[2]) {
     uint32_t module=ctx->query.module_count, first=ctx->query.declaration_count;
     if (core->query.declaration_count!=core->syntax.declaration_count ||
         core->query.reference_count!=core->syntax.reference_count ||
@@ -163,7 +178,7 @@ static bool source_core_query(SourceContext *ctx, const SourceContext *core, uin
         if (original.target) original.target+=first;
         if (original.generic_parent) original.generic_parent+=first;
         original.range.module=module;
-        original.type=source_core_query_type(original.type,first,action);
+        original.type=source_core_query_type(original.type,first,actions);
         original.name=source_core_string(ctx,original.name);
         original.signature=source_core_string(ctx,original.signature);
         original.parameters=source_library_bytes(ctx,original.parameters,
@@ -179,7 +194,7 @@ static bool source_core_query(SourceContext *ctx, const SourceContext *core, uin
         for (uint32_t p=0;p<original.parameter_count;++p) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             XrXirSourceType *parameters=(XrXirSourceType *)original.parameters;
-            parameters[p]=source_core_query_type(parameters[p],first,action);
+            parameters[p]=source_core_query_type(parameters[p],first,actions);
         }
         records[ctx->query.declaration_count-1]=original;
         XrXirSourceDeclarationSyntax fact=core->syntax.declarations[d];
@@ -196,14 +211,15 @@ static bool source_core_query(SourceContext *ctx, const SourceContext *core, uin
         ctx->query.expressions=records;
         records[ctx->query.expression_count-1]=core->query.expressions[e];
         records[ctx->query.expression_count-1].range.module=module;
-        records[ctx->query.expression_count-1].type=source_core_query_type(records[ctx->query.expression_count-1].type,first,action);
+        records[ctx->query.expression_count-1].type=source_core_query_type(records[ctx->query.expression_count-1].type,first,actions);
     }
     if (!source_core_query_references(ctx,core,module,first)) return false;
     owners[0]=core->bodies[1].declaration+first; owners[1]=core->bodies[2].declaration+first; owners[2]=core->bodies[3].declaration+first;
+    owners[3]=core->bodies[4].declaration+first;
     return true;
 }
 
-typedef struct SourceCoreMap { uint32_t literal; XrXirType action; } SourceCoreMap;
+typedef struct SourceCoreMap { uint32_t literal; XrXirType actions[2]; } SourceCoreMap;
 static bool source_core_function_copy(SourceContext *ctx, const XrXirModule *module,
     uint32_t source, uint32_t target, SourceCoreMap map) {
     const XrXirFunction *original=&module->functions[source];
@@ -225,12 +241,14 @@ static bool source_core_function_copy(SourceContext *ctx, const XrXirModule *mod
     for (uint32_t p=0;p<function->parameter_count;++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirType *parameters=(XrXirType *)function->parameters;
-        if (parameters[p]==XR_XIR_CONSTRUCTED_TYPE_BASE) parameters[p]=map.action;
+        if ((uint32_t)parameters[p]>=XR_XIR_CONSTRUCTED_TYPE_BASE && (uint32_t)parameters[p]<XR_XIR_CONSTRUCTED_TYPE_BASE+2)
+            parameters[p]=map.actions[parameters[p]-XR_XIR_CONSTRUCTED_TYPE_BASE];
     }
     for (uint32_t i=0;i<original->instruction_count;++i) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (instructions[i].op==XR_XIR_CONST_STRING) instructions[i].immediate+=map.literal;
-        if (instructions[i].type==XR_XIR_CONSTRUCTED_TYPE_BASE) instructions[i].type=map.action;
+        if ((uint32_t)instructions[i].type>=XR_XIR_CONSTRUCTED_TYPE_BASE && (uint32_t)instructions[i].type<XR_XIR_CONSTRUCTED_TYPE_BASE+2)
+            instructions[i].type=map.actions[instructions[i].type-XR_XIR_CONSTRUCTED_TYPE_BASE];
     }
     if (module->generics) {
         XrXirGeneric generic=module->generics[source];
@@ -305,9 +323,10 @@ static bool source_core_install(SourceContext *ctx, const SourceContext *core,
         ctx->module_count==UINT32_MAX)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"core declaration capacity exhausted");
     uint32_t literal=ctx->literal_count;
-    XrXirType action;
-    if (!module->types || module->types->count != 1 ||
-        !source_intern_type(ctx,module->types->nodes[0],&action)) return false;
+    XrXirType actions[2];
+    if (!module->types || module->types->count != 2) return false;
+    for (uint32_t t=0;t<2;++t)
+        if (!source_intern_type(ctx,module->types->nodes[t],&actions[t])) return false;
     for (uint32_t l=0;l<module->declarations->literal_count;++l) {
         const XrXirLiteral *original=&module->declarations->literals[l];
         char *bytes=source_library_bytes(ctx,original->bytes,original->length,1);
@@ -316,9 +335,9 @@ static bool source_core_install(SourceContext *ctx, const SourceContext *core,
             !source_literal_append(ctx,NULL,bytes,original->length,&id)) return false;
     }
     for (uint32_t f=0;f<count;++f)
-        if (!source_core_function_copy(ctx,module,f,first+f,(SourceCoreMap){literal,action})) return false;
-    uint32_t declarations[3];
-    if (!source_core_query(ctx,core,declarations,action)) return false;
+        if (!source_core_function_copy(ctx,module,f,first+f,(SourceCoreMap){literal,{actions[0],actions[1]}})) return false;
+    uint32_t declarations[4];
+    if (!source_core_query(ctx,core,declarations,actions)) return false;
     XrXirSourceModule *modules=source_alloc(ctx,(size_t)ctx->module_count+1,sizeof(*modules));
     if (!modules) return false;
     if (!source_copy_bytes(ctx, NULL, modules, ctx->modules, ctx->module_count*sizeof(*modules))) return false;
@@ -332,14 +351,14 @@ static bool source_core_install(SourceContext *ctx, const SourceContext *core,
         if (!source_default_binding_add(ctx,NULL,first+binding->owner,
             binding->ordinal,first+binding->function)) return false;
     }
-    for (uint32_t i=0;i<3;++i) {
+    for (uint32_t i=0;i<4;++i) {
         SourceName *symbol=source_alloc(ctx,1,sizeof(*symbol));
         if (!symbol) return false;
         symbol->name=ctx->functions[first+1+i].name;
         symbol->kind=SOURCE_FUNCTION; symbol->index=first+1+i;
         symbol->module=ctx->module_count; symbol->declaration=declarations[i];
         ctx->bodies[first+1+i].declaration=declarations[i];
-        if (i==2) ctx->assert_equal=symbol; else if (i) ctx->assert_panics=symbol; else ctx->assertion=symbol;
+        if (i==3) ctx->assert_throws=symbol; else if (i==2) ctx->assert_equal=symbol; else if (i) ctx->assert_panics=symbol; else ctx->assertion=symbol;
     }
     ctx->function_count+=count; ++ctx->module_count;
     return true;
@@ -394,7 +413,9 @@ static bool source_core_load(SourceContext *ctx, AstNode *site) {
 static SourceName *source_core_assertion(SourceContext *ctx, AstNode *site, uint32_t intrinsic) {
     if (!ctx->assertion && !source_core_load(ctx,site)) return NULL;
     SourceName *symbol=intrinsic==XR_CORE_BUILTIN_ASSERT ? ctx->assertion :
-        intrinsic==XR_CORE_BUILTIN_ASSERT_PANICS ? ctx->assert_panics : ctx->assert_equal;
+        intrinsic==XR_CORE_BUILTIN_ASSERT_PANICS ? ctx->assert_panics :
+        intrinsic==XR_CORE_BUILTIN_ASSERT_EQUAL ? ctx->assert_equal :
+        intrinsic==XR_CORE_BUILTIN_ASSERT_THROWS ? ctx->assert_throws : NULL;
     if (!symbol) return NULL;
     XrXirSourceModule *module=&ctx->modules[ctx->module];
     for (uint32_t d=0;d<module->dependency_count;++d) {

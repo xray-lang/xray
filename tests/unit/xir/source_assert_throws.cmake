@@ -1,0 +1,33 @@
+add_executable(test_xir_assert_throws_source "${CMAKE_CURRENT_LIST_DIR}/test_source_assert_throws.c")
+target_link_libraries(test_xir_assert_throws_source PRIVATE xray_xir_source_product)
+set(assert_throws_dir "${CMAKE_CURRENT_BINARY_DIR}/assert-throws")
+file(MAKE_DIRECTORY "${assert_throws_dir}")
+set(assert_throws_c "${assert_throws_dir}/testing_demo.c")
+add_custom_command(OUTPUT "${assert_throws_c}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${assert_throws_dir}"
+    COMMAND test_xir_assert_throws_source "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/stdlib" "${assert_throws_c}"
+    DEPENDS test_xir_assert_throws_source "${PROJECT_SOURCE_DIR}/demos/07-advanced/testing.xr"
+    VERBATIM)
+add_executable(test_xir_assert_throws_native "${CMAKE_CURRENT_LIST_DIR}/test_source_assert_throws_native.c" "${assert_throws_c}")
+target_link_libraries(test_xir_assert_throws_native PRIVATE xray_xir_vm)
+foreach(target test_xir_assert_throws_source test_xir_assert_throws_native)
+    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
+    endif()
+endforeach()
+add_test(NAME xir_assert_throws_source COMMAND test_xir_assert_throws_source "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/stdlib" "${assert_throws_c}")
+add_test(NAME xir_assert_throws_native COMMAND test_xir_assert_throws_native)
+set_tests_properties(xir_assert_throws_source xir_assert_throws_native PROPERTIES LABELS "unit;xir;source;ownership;generated-c" TIMEOUT 120)
+
+add_executable(test_xir_assert_throws_controls "${CMAKE_CURRENT_LIST_DIR}/test_assert_throws_controls.c")
+target_link_libraries(test_xir_assert_throws_controls PRIVATE xray_xir_source_product)
+if(MSVC)
+    target_compile_options(test_xir_assert_throws_controls PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_assert_throws_controls PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME xir_assert_throws_controls COMMAND test_xir_assert_throws_controls)
+set_tests_properties(xir_assert_throws_controls PROPERTIES LABELS "unit;xir;source;ownership" TIMEOUT 120)
