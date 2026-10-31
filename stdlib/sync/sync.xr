@@ -32,16 +32,16 @@ export class Semaphore {
         this._closed = Atomic<bool>(false)
     }
 
-    available: i64 { fn() { return this._available.load(Ordering.Acquire) } }
-    isClosed: bool { fn() { return this._closed.load(Ordering.Acquire) } }
+    available() -> i64 { return this._available.load(Ordering.Acquire) }
+    isClosed() -> bool { return this._closed.load(Ordering.Acquire) }
 
     release(count: i64 = 1) -> i64 {
-        if (count <= 0 || this.isClosed) { return this.available }
+        if (count <= 0 || this.isClosed()) { return this.available() }
         return this._available.fetchAdd(count, Ordering.AcquireRelease) + count
     }
 
     tryAcquire() -> bool {
-        while (!this.isClosed) {
+        while (!this.isClosed()) {
             var current = this._available.load(Ordering.Acquire)
             if (current <= 0) { return false }
             var (_, acquired) = this._available.compareExchange(
@@ -52,7 +52,7 @@ export class Semaphore {
     }
 
     acquire() -> bool {
-        while (!this.isClosed) {
+        while (!this.isClosed()) {
             if (this.tryAcquire()) { return true }
             time.sleep(1)
         }
@@ -71,19 +71,19 @@ export class CountdownLatch {
         this._closed = Atomic<bool>(false)
     }
 
-    remaining: i64 { fn() { return this._remaining.load(Ordering.Acquire) } }
-    isClosed: bool { fn() { return this._closed.load(Ordering.Acquire) } }
+    remaining() -> i64 { return this._remaining.load(Ordering.Acquire) }
+    isClosed() -> bool { return this._closed.load(Ordering.Acquire) }
 
     reset(count: i64) -> bool {
-        if (count < 0 || this.isClosed || this.remaining != 0) { return false }
+        if (count < 0 || this.isClosed() || this.remaining() != 0) { return false }
         this._remaining.store(count, Ordering.Release)
         return true
     }
 
     done(count: i64 = 1) -> i64 {
-        if (count <= 0 || this.isClosed) { return this.remaining }
+        if (count <= 0 || this.isClosed()) { return this.remaining() }
         while (true) {
-            var current = this.remaining
+            var current = this.remaining()
             if (current == 0) { return 0 }
             var next = current - count
             if (next < 0) { next = 0 }
@@ -94,11 +94,11 @@ export class CountdownLatch {
         return 0
     }
 
-    tryWait() -> bool { return this.remaining == 0 && !this.isClosed }
+    tryWait() -> bool { return this.remaining() == 0 && !this.isClosed() }
 
     wait() -> bool {
-        while (!this.isClosed) {
-            if (this.remaining == 0) { return true }
+        while (!this.isClosed()) {
+            if (this.remaining() == 0) { return true }
             time.sleep(1)
         }
         return false
@@ -116,17 +116,17 @@ export class EventCount {
         this._closed = Atomic<bool>(false)
     }
 
-    epoch: i64 { fn() { return this._epoch.load(Ordering.Acquire) } }
-    isClosed: bool { fn() { return this._closed.load(Ordering.Acquire) } }
+    epoch() -> i64 { return this._epoch.load(Ordering.Acquire) }
+    isClosed() -> bool { return this._closed.load(Ordering.Acquire) }
 
     advance(step: i64 = 1) -> i64 {
-        if (step <= 0 || this.isClosed) { return this.epoch }
+        if (step <= 0 || this.isClosed()) { return this.epoch() }
         return this._epoch.fetchAdd(step, Ordering.AcquireRelease) + step
     }
 
     wait(lastEpoch: i64, workerHint: i64 = -1) -> i64 {
-        while (!this.isClosed && this.epoch == lastEpoch) { time.sleep(1) }
-        return this.epoch
+        while (!this.isClosed() && this.epoch() == lastEpoch) { time.sleep(1) }
+        return this.epoch()
     }
 
     close() { this._closed.store(true, Ordering.Release) }
@@ -145,15 +145,15 @@ export class WorkQueue<T> {
         this._closed = Atomic<bool>(false)
     }
 
-    length: i64 { fn() { return len(this._items) } }
-    shardCount: i64 { fn() { return this._shards } }
-    isClosed: bool { fn() { return this._closed.load(Ordering.Acquire) } }
+    length() -> i64 { return len(this._items) }
+    shardCount() -> i64 { return this._shards }
+    isClosed() -> bool { return this._closed.load(Ordering.Acquire) }
 
     push(value: T, shard: i64 = -1) -> bool {
-        if (this.isClosed) { return false }
+        if (this.isClosed()) { return false }
         this._lock.lock()
         defer { this._lock.unlock() }
-        if (this.isClosed) { return false }
+        if (this.isClosed()) { return false }
         this._items.push(value)
         return true
     }
@@ -178,7 +178,7 @@ export class WorkQueue<T> {
         while (true) {
             var (value, found) = this.tryPop(workerId)
             if (found) { return value }
-            if (this.isClosed) { return null }
+            if (this.isClosed()) { return null }
             time.sleep(1)
         }
         return null
@@ -206,16 +206,16 @@ export class ResultGroup {
         this._closed = Atomic<bool>(false)
     }
 
-    readyCount: i64 { fn() { return len(this._ready) } }
-    pendingCount: i64 { fn() { return this._pending.load(Ordering.Acquire) } }
-    batchSize: i64 { fn() { return this._batchSize } }
-    isClosed: bool { fn() { return this._closed.load(Ordering.Acquire) } }
+    readyCount() -> i64 { return len(this._ready) }
+    pendingCount() -> i64 { return this._pending.load(Ordering.Acquire) }
+    batchSize() -> i64 { return this._batchSize }
+    isClosed() -> bool { return this._closed.load(Ordering.Acquire) }
 
     add(value: i64) -> bool {
-        if (this.isClosed) { return false }
+        if (this.isClosed()) { return false }
         this._lock.lock()
         defer { this._lock.unlock() }
-        if (this.isClosed) { return false }
+        if (this.isClosed()) { return false }
         this._sum = this._sum + value
         this._count = this._count + 1
         this._pending.fetchAdd(1, Ordering.AcquireRelease)
@@ -237,7 +237,7 @@ export class ResultGroup {
     }
 
     reset(count: i64) -> bool {
-        if (count <= 0 || this.pendingCount != 0 || this.isClosed) { return false }
+        if (count <= 0 || this.pendingCount() != 0 || this.isClosed()) { return false }
         this._lock.lock()
         defer { this._lock.unlock() }
         this._batchSize = count
@@ -257,7 +257,7 @@ export class ResultGroup {
         while (true) {
             var (value, found) = this.tryRecv()
             if (found) { return value }
-            if (this.isClosed) { return null }
+            if (this.isClosed()) { return null }
             time.sleep(1)
         }
         return null

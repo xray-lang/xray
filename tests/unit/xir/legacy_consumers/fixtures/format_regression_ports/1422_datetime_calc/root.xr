@@ -11,28 +11,28 @@ import datetime
 fn test_add_days() {
     var dt = datetime.create(2024, 6, 15, 12, 0, 0)
     var result = dt.add(10, "days")
-    assertEqual(result.day, 25)
+    assertEqual(result.day(), 25)
 }
 
 @test
 fn test_add_hours() {
     var dt = datetime.create(2024, 6, 15, 12, 0, 0)
     var result = dt.add(5, "hours")
-    assertEqual(result.hour, 17)
+    assertEqual(result.hour(), 17)
 }
 
 @test
 fn test_add_minutes() {
     var dt = datetime.create(2024, 6, 15, 12, 0, 0)
     var result = dt.add(30, "minutes")
-    assertEqual(result.minute, 30)
+    assertEqual(result.minute(), 30)
 }
 
 @test
 fn test_add_seconds() {
     var dt = datetime.create(2024, 6, 15, 12, 0, 0)
     var result = dt.add(45, "seconds")
-    assertEqual(result.second, 45)
+    assertEqual(result.second(), 45)
 }
 
 // ============================================================
@@ -43,14 +43,14 @@ fn test_add_seconds() {
 fn test_subtract_days() {
     var dt = datetime.create(2024, 6, 15, 12, 0, 0)
     var result = dt.add(-5, "days")
-    assertEqual(result.day, 10)
+    assertEqual(result.day(), 10)
 }
 
 @test
 fn test_subtract_hours() {
     var dt = datetime.create(2024, 6, 15, 12, 0, 0)
     var result = dt.add(-2, "hours")
-    assertEqual(result.hour, 10)
+    assertEqual(result.hour(), 10)
 }
 
 // ============================================================
@@ -96,14 +96,14 @@ fn test_diff_reverse() {
 @test
 fn test_weekday_range() {
     var dt = datetime.create(2024, 6, 15)
-    var wd = dt.weekday
+    var wd = dt.weekday()
     assert(wd >= 0 && wd <= 6)
 }
 
 @test
 fn test_weekday_now() {
     var dt = datetime.now()
-    var wd = dt.weekday
+    var wd = dt.weekday()
     assert(wd >= 0 && wd <= 6)
 }
 
@@ -121,18 +121,18 @@ fn test_offset_reasonable() {
 fn test_to_utc() {
     var local = datetime.now()
     var utc = local.toUTC()
-    assert(utc.year >= 2024)
-    assertEqual(utc.timestamp, local.timestamp)
-    assertEqual(utc.millisecond, local.millisecond)
+    assert(utc.year() >= 2024)
+    assertEqual(utc.timestamp(), local.timestamp())
+    assertEqual(utc.millisecond(), local.millisecond())
 }
 
 @test
 fn test_to_local() {
     var utc = datetime.utc()
     var local = utc.toLocal()
-    assert(local.year >= 2024)
-    assertEqual(local.timestamp, utc.timestamp)
-    assertEqual(local.millisecond, utc.millisecond)
+    assert(local.year() >= 2024)
+    assertEqual(local.timestamp(), utc.timestamp())
+    assertEqual(local.millisecond(), utc.millisecond())
 }
 
 // ============================================================
@@ -193,9 +193,9 @@ fn test_add_months_clamp() {
     // Jan 31 + 1 month should be Feb 28/29, not March
     var dt = datetime.create(2024, 1, 31)
     var result = dt.add(1, "months")
-    assertEqual(result.month, 2)
-    assertEqual(result.day, 29)  // 2024 is leap year
-    assertEqual(result.year, 2024)
-    assertEqual(dt.month, 1)
-    assertEqual(dt.day, 31)
+    assertEqual(result.month(), 2)
+    assertEqual(result.day(), 29)  // 2024 is leap year
+    assertEqual(result.year(), 2024)
+    assertEqual(dt.month(), 1)
+    assertEqual(dt.day(), 31)
 }

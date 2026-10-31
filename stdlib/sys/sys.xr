@@ -265,7 +265,7 @@ export class Process {
         this._open = id > 0 && !detached
     }
 
-    id: i64 { fn() { return this._id } }
+    id() -> i64 { return this._id }
 
     wait() -> i64 {
         if (!this._open) { return -1 }

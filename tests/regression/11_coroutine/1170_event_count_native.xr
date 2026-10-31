@@ -3,11 +3,11 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 fn test_event_count_epoch_wait_and_close() {
     const event = EventCount(0)
 
-    assertEqual(event.epoch, 0)
-    assert(!(event.isClosed))
+    assertEqual(event.epoch(), 0)
+    assert(!(event.isClosed()))
 
     assertEqual(event.advance(), 1)
-    assertEqual(event.epoch, 1)
+    assertEqual(event.epoch(), 1)
     assertEqual(event.wait(0), 1)
 
     const ready = CountdownLatch(1)
@@ -29,7 +29,7 @@ fn test_event_count_epoch_wait_and_close() {
 
     assert(closeReady.wait())
     closed.close()
-    assert(closed.isClosed)
+    assert(closed.isClosed())
     assertEqual(await closeTask, -1)
     assertEqual(closed.advance(), -1)
     assertEqual(closed.wait(7), -1)

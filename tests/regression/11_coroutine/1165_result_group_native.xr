@@ -3,27 +3,27 @@ const rg: ResultGroup = ResultGroup(2)
 
 @test
 fn test_result_group_native() {
-    assertEqual(rg.batchSize, 2)
-    assertEqual(rg.readyCount, 0)
-    assert(!(rg.isClosed))
+    assertEqual(rg.batchSize(), 2)
+    assertEqual(rg.readyCount(), 0)
+    assert(!(rg.isClosed()))
 
     assert(rg.add(4))
-    assertEqual(rg.readyCount, 0)
-    assertEqual(rg.pendingCount, 1)
+    assertEqual(rg.readyCount(), 0)
+    assertEqual(rg.pendingCount(), 1)
 
     assert(rg.add(5))
-    assertEqual(rg.readyCount, 1)
-    assertEqual(rg.pendingCount, 2)
+    assertEqual(rg.readyCount(), 1)
+    assertEqual(rg.pendingCount(), 2)
     assertEqual(rg.recv(), 9)
-    assertEqual(rg.readyCount, 0)
-    assertEqual(rg.pendingCount, 0)
+    assertEqual(rg.readyCount(), 0)
+    assertEqual(rg.pendingCount(), 0)
 
     var (_, empty_ok) = rg.tryRecv()
     assert(!(empty_ok))
 
     assert(rg.add(3))
     rg.close()
-    assert(rg.isClosed)
+    assert(rg.isClosed())
     assertEqual(rg.recv(), 3)
     assertEqual(rg.recv(), null)
     assert(!(rg.add(1)))

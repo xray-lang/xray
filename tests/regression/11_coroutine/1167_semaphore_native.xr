@@ -24,13 +24,13 @@ fn test_semaphore_permits_and_close() {
     var r2: i64 = await t2
     assertEqual(r1 + r2, 18)
     assertEqual(counter.load(), 18)
-    assertEqual(sem.available, 0)
-    assert(!(sem.isClosed))
+    assertEqual(sem.available(), 0)
+    assert(!(sem.isClosed()))
 
     sem.release()
-    assertEqual(sem.available, 1)
+    assertEqual(sem.available(), 1)
     assert(sem.tryAcquire())
-    assertEqual(sem.available, 0)
+    assertEqual(sem.available(), 0)
 
     const closedSem = Semaphore(0)
     const closeReady = CountdownLatch(1)
@@ -41,7 +41,7 @@ fn test_semaphore_permits_and_close() {
 
     assert(closeReady.wait())
     closedSem.close()
-    assert(closedSem.isClosed)
+    assert(closedSem.isClosed())
     assertEqual(await closedTask, -1)
     assert(!(closedSem.acquire()))
 }

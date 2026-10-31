@@ -1,9 +1,9 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 const q: WorkQueue<i64> = WorkQueue<i64>(4, 2)
 
-assertEqual(q.shardCount, 4)
+assertEqual(q.shardCount(), 4)
 assertEqual(len(q), 0)
-assert(!(q.isClosed))
+assert(!(q.isClosed()))
 
 assert(q.push(1, 0))
 assert(q.push(2, 0))
@@ -27,7 +27,7 @@ assert(!(empty_ok))
 assertEqual(len(q), 0)
 
 q.close()
-assert(q.isClosed)
+assert(q.isClosed())
 assert(!(q.push(9, 0)))
 
 print("workqueue native ok")

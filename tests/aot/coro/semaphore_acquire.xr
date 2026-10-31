@@ -21,12 +21,12 @@ var r1: i64 = await t1
 var r2: i64 = await t2
 print(r1 + r2)
 print(counter.load())
-print(sem.available)
+print(sem.available())
 
 sem.release()
-print(sem.available)
+print(sem.available())
 print(sem.tryAcquire())
-print(sem.available)
+print(sem.available())
 
 const closedSem = Semaphore(0)
 const closeReady = CountdownLatch(1)
@@ -37,6 +37,6 @@ var closedTask = go fn() -> i64 {
 
 print(closeReady.wait())
 closedSem.close()
-print(closedSem.isClosed)
+print(closedSem.isClosed())
 print(await closedTask)
 print(closedSem.acquire())

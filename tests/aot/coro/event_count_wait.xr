@@ -1,7 +1,7 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 const event = EventCount(0)
 
-print(event.epoch)
+print(event.epoch())
 print(event.advance())
 print(event.wait(0))
 
@@ -24,6 +24,6 @@ var closeTask = go fn() -> i64 {
 
 print(closeReady.wait())
 closed.close()
-print(closed.isClosed)
+print(closed.isClosed())
 print(await closeTask)
 print(closed.advance())

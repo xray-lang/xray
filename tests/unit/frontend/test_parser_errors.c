@@ -85,12 +85,15 @@ static void expression_modes(XrCompilerSession *session) {
     xr_program_destroy(program);
 }
 
-typedef struct RegexDiagnostic { unsigned count; int line, column; } RegexDiagnostic;
+typedef struct RegexDiagnostic { unsigned count; int line, column; const char *expected; } RegexDiagnostic;
 static void regex_diagnostic(void *context, int line, int column, int end_line,
                               int end_column, const char *message) {
     RegexDiagnostic *diagnostic = context;
     CHECK(message && *message && end_line >= line && end_column > 0);
-    if (!diagnostic->count) { diagnostic->line = line; diagnostic->column = column; }
+    if (!diagnostic->count) {
+        diagnostic->line = line; diagnostic->column = column;
+        if (diagnostic->expected) CHECK(!strcmp(message,diagnostic->expected));
+    }
     diagnostic->count++;
 }
 
@@ -117,6 +120,34 @@ static void regex_syntax(XrCompilerSession *session) {
     }
 }
 
+static void explicit_methods(XrCompilerSession *session) {
+    AstNode *program=parse(session,"class Data { value:i64; read()->i64{return this.value} }\ninterface I { read()->i64 }\n");
+    CHECK(program->as.program.count==2);
+    ClassDeclNode *data=&program->as.program.statements[0]->as.class_decl;
+    CHECK(data->field_count==1 && data->method_count==1);
+    CHECK(!data->methods[0]->as.method_decl.is_getter && !data->methods[0]->as.method_decl.is_setter);
+    InterfaceDeclNode *interface=&program->as.program.statements[1]->as.interface_decl;
+    CHECK(interface->method_count==1 && interface->property_count==0 && !interface->properties);
+    xr_program_destroy(program);
+    const char *bad[]={
+        "class C {\n value: i64 { fn() { return 1 } }\n}",
+        "class C {\n value: i64 { fn(v) {} }\n}",
+        "struct C {\n value: i64 { fn() { return 1 } }\n}",
+        "interface I {\n value: i64\n}",
+        "interface I {\n const value: i64\n}"
+    };
+    const int columns[]={13,13,13,7,13};
+    for(size_t i=0;i<sizeof(bad)/sizeof(bad[0]);++i) {
+        RegexDiagnostic diagnostic={.expected=i<3?
+            "computed accessors were removed; use an explicit method":
+            "interface properties were removed; declare an explicit method"};
+        XrParseDiagnostics options={regex_diagnostic,&diagnostic,4};program=NULL;
+        CHECK(xr_compile_parse_with_diagnostics(session,bad[i],"<removed-accessor>",&options,&program)==XR_PARSE_SYNTAX);
+        CHECK(!program && diagnostic.count && diagnostic.line==2 && diagnostic.column==columns[i]);
+        CHECK(xr_compile_session_resource_status(session)==XR_COMPILE_RESOURCE_OK);
+    }
+}
+
 int main(void) {
     const XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, 8 * 1024 * 1024, true};
     XrCompileResources *resources = NULL;
@@ -128,6 +159,7 @@ int main(void) {
     clause_states(session);
     expression_modes(session);
     regex_syntax(session);
+    explicit_methods(session);
     const char *sources[] = {
         "fn throws() {}\nvar throws = 1\nvar value: Never\n",
         "fn f<T,E:Error>(value:T) throws(E | IoErr) -> T { return value }\n",

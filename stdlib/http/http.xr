@@ -277,7 +277,7 @@ export class CookieJar {
         this.maxCookies = maxCookies
     }
 
-    count: i64 { fn() { return len(this.cookies) } }
+    count() -> i64 { return len(this.cookies) }
 
     add(cookie: Cookie, nowSeconds: i64 = 0) {
         var now = _cookieNow(nowSeconds)

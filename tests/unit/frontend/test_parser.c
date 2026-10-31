@@ -562,13 +562,11 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
     ASSERT_EQ_INT(op->as.method_decl.params[1]->passing_mode, XR_PARAM_MOVE);
 
     AstNode *setter_class = parse_first("class Meter {\n"
-                                        "  value: i64 {\n"
-                                        "    fn(v: ref i64) {}\n"
-                                        "  }\n"
+                                        "  setValue(v: ref i64) {}\n"
                                         "}");
     AstNode *setter = setter_class->as.class_decl.methods[0];
     ASSERT_EQ_INT(setter->type, AST_METHOD_DECL);
-    ASSERT(setter->as.method_decl.is_setter);
+    ASSERT(!setter->as.method_decl.is_setter && !setter->as.method_decl.is_getter);
     ASSERT_EQ_INT(setter->as.method_decl.param_count, 1);
     ASSERT_EQ_INT(setter->as.method_decl.params[0]->passing_mode, XR_PARAM_REF);
 

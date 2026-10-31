@@ -168,7 +168,8 @@
         "src/frontend/*",
         "src/hir/*",
         "src/xir/xxir_source*",
-        "src/xir/xxir_initialization*"
+        "src/xir/xxir_initialization*",
+        "tests/unit/xir/*method_surface*"
       ],
       "reason": "HIR and complete Source language-family consumers.",
       "tests": [
@@ -202,7 +203,9 @@
         "source_body_dead_handler_name",
         "source_body_generic_comptime",
         "test_xir_source_local_recursive_binding",
-        "test_xir_source_local_recursive_binding_native"
+        "test_xir_source_local_recursive_binding_native",
+        "test_xir_source_method_surface",
+        "test_xir_source_method_surface_native"
       ],
       "targets": [
         "test_source_nullable_print",

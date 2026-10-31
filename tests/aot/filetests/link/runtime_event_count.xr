@@ -2,6 +2,6 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 const event = EventCount(0)
 
 print(event.advance())
-print(event.epoch)
+print(event.epoch())
 event.close()
-print(event.isClosed)
+print(event.isClosed())

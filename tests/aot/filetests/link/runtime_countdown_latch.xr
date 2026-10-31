@@ -9,4 +9,4 @@ go fn() {
 
 print(latch.wait())
 print(counter.load())
-print(latch.remaining)
+print(latch.remaining())

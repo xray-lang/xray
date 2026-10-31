@@ -42,12 +42,12 @@ let elapsed = time.now() - start
 // DateTime module
 import datetime
 let dt = datetime.now()
-let year = dt.year
-let month = dt.month
-let day = dt.day
-let hour = dt.hour
-let minute = dt.minute
-let second = dt.second
+let year = dt.year()
+let month = dt.month()
+let day = dt.day()
+let hour = dt.hour()
+let minute = dt.minute()
+let second = dt.second()
 let formatted = dt.format("YYYY-MM-DD HH:mm:ss")
 let parsed = datetime.parse("2024-01-15 10:30:00", "YYYY-MM-DD HH:mm:ss")
 // Regex module

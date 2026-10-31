@@ -1,4 +1,4 @@
 fn main() {
     var sem = Semaphore(1)
-    print(sem.available)
+    print(sem.available())
 }

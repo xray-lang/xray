@@ -22,10 +22,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-// Forward declarations
-static AstNode *xr_parse_property_accessors(Parser *parser, const char *name, XrTypeRef *field_type,
-                                            bool is_private, bool is_static, int line);
-
 static void attach_leading_trivia_to_member(AstNode *member, XrTrivia *leading_trivia) {
     if (!leading_trivia)
         return;
@@ -358,19 +354,6 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
 
-            // Check for paired setter (property accessor block case)
-            if (member->type == AST_METHOD_DECL && member->as.method_decl.base_arg_count == -2) {
-                // Has paired setter, extract from temporary storage and add
-                AstNode *setter = (AstNode *) member->as.method_decl.base_args;
-                member->as.method_decl.base_arg_count = 0;  // restore normal value
-                member->as.method_decl.base_args = NULL;
-                setter->as.method_decl.base_arg_count = 0;  // restore normal value
-
-                do {
-                    XR_PARSE_PUSH(parser, methods, method_count, method_capacity, setter);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-            }
         } else {
             do {
                 XR_PARSE_PUSH(parser, fields, field_count, field_capacity, member);
@@ -599,18 +582,6 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
 
-            // Check for paired setter (property accessor block case)
-            if (member->type == AST_METHOD_DECL && member->as.method_decl.base_arg_count == -2) {
-                AstNode *setter = (AstNode *) member->as.method_decl.base_args;
-                member->as.method_decl.base_arg_count = 0;
-                member->as.method_decl.base_args = NULL;
-                setter->as.method_decl.base_arg_count = 0;
-
-                do {
-                    XR_PARSE_PUSH(parser, methods, method_count, method_capacity, setter);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-            }
         } else {
             do {
                 XR_PARSE_PUSH(parser, fields, field_count, field_capacity, member);
@@ -838,7 +809,6 @@ AstNode *xr_parse_union_declaration(Parser *parser) {
 AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_field_declaration: NULL parser");
-    int line = parser->current.line;
 
     XrAttribute **attributes = NULL;
     int attr_count = 0;
@@ -862,10 +832,6 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     bool is_private = false;
     bool is_protected = false;
     bool is_static = false;
-    bool is_getter = false;
-    (void) is_getter;
-    bool is_setter = false;
-    (void) is_setter;
     bool is_const = false;
     bool is_flexible = false;
     bool is_weak = false;
@@ -1120,20 +1086,9 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
             } while (0);
         }
 
-        // Check for property block { fn() {} fn(v) {} }
         if (xr_parser_check(parser, TK_LBRACE)) {
-            // This is a property definition with getter/setter
-            *is_method_out = true;
-            if (attr_count > 0) {
-                do {
-                    xr_parser_error(parser,
-                                "method attributes cannot annotate a property accessor block");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                return NULL;
-            }
-            return xr_parse_property_accessors(parser, name, field_type, is_private, is_static,
-                                               line);
+            xr_parser_error(parser, "computed accessors were removed; use an explicit method");
+            return NULL;
         }
 
         // Parse initializer expression (optional)
@@ -2133,197 +2088,13 @@ fail:
     return NULL;
 }
 
-/* ========== Property Accessor Parsing (New Syntax) ========== */
-
-// Parse property accessor block
-// New syntax:
-//   x: int {
-//       fn() { return this._x }         // getter (no params)
-//       fn(v) { this._x = v }           // setter (has params)
-//   }
-// @param name property name
-// @param field_type property type (optional)
-// @param is_private whether private
-// @param is_static whether static
-// @param line line number
-// @return returns list node of multiple method declaration nodes
-static AstNode *xr_parse_property_accessors(Parser *parser, const char *name, XrTypeRef *field_type,
-                                            bool is_private, bool is_static, int line) {
-    if (!xr_parser_healthy(parser)) return NULL;
-    do {
-        xr_parser_consume(parser, TK_LBRACE, "expected '{' to start property accessor block");
-        if (!xr_parser_healthy(parser)) return NULL;
-    } while (0);
-
-    AstNode *getter_node = NULL;
-    AstNode *setter_node = NULL;
-
-    // Parse fn definitions in property block
-    while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
-        if (!xr_parser_match(parser, TK_FN)) {
-            do {
-                xr_parser_error(parser, "property accessor block can only contain fn() definitions");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            break;
-        }
-
-        // Parse parameter list
-        do {
-            xr_parser_consume(parser, TK_LPAREN, "expected '(' to start parameter list");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-
-        XrParamNode **params = NULL;
-        int param_count = 0;
-
-        if (!xr_parser_check(parser, TK_RPAREN)) {
-            // Has parameters = setter
-            do {
-                params = (XrParamNode **) ast_alloc(parser->compiler_session, sizeof(XrParamNode *));
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-
-            XrParamNode *param = xr_parse_parameter(parser, XR_PARSE_PARAMETER_ALLOW_MODE);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (!param->type)
-                param->type = field_type;
-            params[0] = param;
-
-            param_count = 1;
-
-            if (xr_parser_match(parser, TK_COMMA)) {
-                do {
-                    xr_parser_error(parser, "setter can only have one parameter");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-            }
-        }
-
-        do {
-            xr_parser_consume(parser, TK_RPAREN, "expected ')' to end parameter list");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-
-        // Parse return type (optional) — unified arrow `->`.
-        XrTypeRef *return_type = NULL;
-        if (xr_parser_match(parser, TK_ARROW)) {
-            do {
-                return_type = xr_parse_type_annotation(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } else if (xr_parser_check(parser, TK_COLON)) {
-            do {
-                xr_parser_advance(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            do {
-                xr_parser_error(parser, "use '->' instead of ':' for accessor return type");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            parser->panic_mode = 0;
-            do {
-                return_type = xr_parse_type_annotation(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } else if (param_count == 0) {
-            // getter defaults to property type
-            return_type = field_type;
-        }
-
-        // Parse method body
-        do {
-            xr_parser_consume(parser, TK_LBRACE, "expected '{' to start method body");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        AstNode *body = xr_parse_block(parser);
-        if (!xr_parser_healthy(parser)) return NULL;
-
-        // Construct method name: get:xxx or set:xxx
-        bool is_getter = (param_count == 0);
-        size_t name_len = xr_parser_string_length(parser, name) + 5;
-        if (!xr_parser_healthy(parser)) return NULL;
-        char *method_name = (char *) ast_alloc(parser->compiler_session, name_len);
-        if (!xr_parser_healthy(parser)) return NULL;
-        xr_parser_format(parser, method_name, name_len, "%s:%s", is_getter ? "get" : "set", name);
-
-        // Create method declaration node
-        AstNode *method_node = xr_ast_method_decl(parser->compiler_session, method_name, params,
-                                                  param_count, return_type, body, false, is_static,
-                                                  is_private, is_getter, !is_getter, line);
-        if (!xr_parser_healthy(parser)) return NULL;
-        method_node->as.method_decl.receiver_mode =
-            is_getter || is_static ? XR_PARAM_READ : XR_PARAM_REF;
-
-        method_node->column = 1;  // property accessors are synthetic — column
-                                  //   mirrors the declaration line (safe 1)
-        if (body && body->end_line > 0) {
-            method_node->end_line = body->end_line;
-            method_node->end_column = body->end_column;
-        } else {
-            method_node->end_line = line;
-            do {
-                method_node->end_column = 1 + (int) xr_parser_string_length(parser, method_name);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        }
-
-        if (is_getter) {
-            if (getter_node != NULL) {
-                do {
-                    xr_parser_error(parser, "property can only have one getter (fn with no params)");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-            }
-            getter_node = method_node;
-        } else {
-            if (setter_node != NULL) {
-                do {
-                    xr_parser_error(parser, "property can only have one setter (fn with params)");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-            }
-            setter_node = method_node;
-        }
-    }
-
-    do {
-        xr_parser_consume(parser, TK_RBRACE, "expected '}' to end property accessor block");
-        if (!xr_parser_healthy(parser)) return NULL;
-    } while (0);
-
-    if (getter_node == NULL && setter_node == NULL) {
-        do {
-            xr_parser_error(parser, "property accessor block cannot be empty");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        return NULL;
-    }
-
-    // If only one, return directly
-    if (getter_node == NULL)
-        return setter_node;
-    if (setter_node == NULL)
-        return getter_node;
-
-    // Both present, link setter to getter's next pointer
-    // Note: this needs special handling in class parsing
-    getter_node->as.method_decl.base_arg_count = -2;  // special mark: has paired setter
-    setter_node->as.method_decl.base_arg_count = -1;  // special mark: this is paired setter
-
-    // Store setter in getter's base_args (temporarily borrowed)
-    getter_node->as.method_decl.base_args = (AstNode **) setter_node;
-
-    return getter_node;
-}
-
 /* ========== Interface Declaration Parsing ========== */
 
 // Parse interface declaration
 // Syntax:
 //   interface Iterable<T> [extends Shape, Colorful] {
-//       iterator(): Iterator<T>
-//       length: int          // property signature
+//       iterator() -> Iterator<T>
+//       length() -> i64
 //   }
 AstNode *xr_parse_interface_declaration(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
@@ -2381,15 +2152,10 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
 
-    // Collect method and property signatures into separate arrays so consumers
-    // can iterate them with a static guarantee about node kind (mirrors
-    // ClassDeclNode's fields[] / methods[] split).
+    // Interface members are explicit method signatures.
     AstNode **methods = NULL;
     int method_count = 0;
     int method_capacity = 0;
-    AstNode **properties = NULL;
-    int property_count = 0;
-    int property_capacity = 0;
 
     while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         // Error recovery to avoid infinite loop
@@ -2430,17 +2196,10 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
         attach_leading_trivia_to_member(member, leading_trivia);
         attach_trailing_trivia_to_member(parser, member);
 
-        if (member->type == AST_INTERFACE_PROPERTY) {
-            do {
-                XR_PARSE_PUSH(parser, properties, property_count, property_capacity, member);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } else {
-            do {
-                XR_PARSE_PUSH(parser, methods, method_count, method_capacity, member);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        }
+        do {
+            XR_PARSE_PUSH(parser, methods, method_count, method_capacity, member);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
     }
 
     do {
@@ -2461,8 +2220,8 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
 
     // Create interface declaration AST node
     AstNode *node = xr_ast_interface_decl(parser->compiler_session, interface_name, extends,
-                                          extends_count, methods, method_count, properties,
-                                          property_count, type_params, type_param_count, line);
+                                          extends_count, methods, method_count, NULL,
+                                          0, type_params, type_param_count, line);
     if (!xr_parser_healthy(parser)) return NULL;
     node->column = name_column;
     node->end_line = if_end_line;
@@ -2470,13 +2229,7 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
     return node;
 }
 
-// Parse one interface member: either a method signature or a property signature.
-// Method:    name(params): retType
-// Property:  [const] name: type
-//
-// The optional `const` prefix marks a read-only property, mirroring the way
-// object-type fields tolerate `const` in xparse_type.c.  All forms allow an
-// optional trailing semicolon.
+// Parse one explicit interface method signature with an optional trailing semicolon.
 AstNode *xr_parse_interface_member(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     XrAttribute **attributes = NULL;
@@ -2571,13 +2324,13 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         return method;
     }
 
-    // Optional `const` modifier — only valid for property signatures.
+    // Consume the retired modifier so the following diagnostic names the removed form.
     bool is_readonly = xr_parser_match(parser, TK_CONST);
     if (!xr_parser_healthy(parser)) return NULL;
 
     // Parse member name
     do {
-        xr_parser_consume(parser, TK_NAME, "expected method or property name");
+        xr_parser_consume(parser, TK_NAME, "expected interface method name");
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
     char *member_name = xr_parser_token_string(parser, &parser->previous);
@@ -2585,39 +2338,14 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     int member_line = parser->previous.line;
     int member_column = parser->previous.column;
 
-    // Property signature: `name: type`
     if (xr_parser_check(parser, TK_COLON)) {
-        if (receiver_mode != XR_PARAM_READ) {
-            do {
-                xr_parser_error(parser, "receiver mode applies only to interface methods");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return NULL;
-        }
-        if (attr_count > 0) {
-            do {
-                xr_parser_error(parser, "assertion attributes cannot annotate an interface property");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return NULL;
-        }
-        do {
-            xr_parser_advance(parser);
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);  // consume ':'
-        XrTypeRef *prop_type = xr_parse_type_annotation(parser);
-        if (!xr_parser_healthy(parser)) return NULL;
-        do {
-            xr_parser_match(parser, TK_SEMICOLON);
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);  // optional terminator
-        return xr_ast_interface_property(parser->compiler_session, member_name, prop_type,
-                                         is_readonly, member_line);
+        xr_parser_error(parser, "interface properties were removed; declare an explicit method");
+        return NULL;
     }
 
     if (is_readonly) {
         do {
-            xr_parser_error_at_current(parser, "'const' modifier only applies to property signatures");
+            xr_parser_error_at_current(parser, "interface methods do not take a const modifier");
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
     }

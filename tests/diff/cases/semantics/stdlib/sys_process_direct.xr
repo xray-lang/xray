@@ -13,7 +13,7 @@ if (noArgs != null) {
 var p = sys.Process.spawn("sh", ["-c", "exit 7"])
 print(p != null)
 if (p != null) {
-    print(p!.id > 0)
+    print(p!.id() > 0)
     print(p!.wait())
     print(p!.wait())
 }
@@ -49,7 +49,7 @@ var detached = sys.Process.spawn("sh", ["-c", "exit 0"],
     ProcessOptions(null, null, null, null, null, true))
 print(detached != null)
 if (detached != null) {
-    print(detached!.id > 0)
+    print(detached!.id() > 0)
     print(detached!.wait())
     print(detached!.tryWait())
     print(detached!.kill())

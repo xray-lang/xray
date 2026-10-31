@@ -397,8 +397,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F07",
-        "first_diagnostic": "stdlib/datetime/datetime.xr:74:1: error: method declaration contract is not admitted"
+        "feature": "F04",
+        "first_diagnostic": "stdlib/datetime/datetime.xr:306:19: error: string member has no admitted value-operation contract"
       }
     },
     {
@@ -581,8 +581,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F07",
-        "first_diagnostic": "stdlib/sys/sys.xr:268:1: error: method declaration contract is not admitted"
+        "feature": "F02",
+        "first_diagnostic": "stdlib/sys/sys.xr:426:29: error: name does not resolve to an admitted nominal type"
       }
     },
     {

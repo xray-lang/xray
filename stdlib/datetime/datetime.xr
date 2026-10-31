@@ -71,18 +71,18 @@ export class DateTime {
         this._yearday = p.yearday
     }
 
-    timestamp: i64 { fn() { return this._timestamp } }
-    millisecond: i64 { fn() { return this._millisecond } }
-    tzOffset: i64 { fn() { return this._tzOffset } }
-    isUtc: bool { fn() { return this._isUtc } }
-    year: i64 { fn() { return this._year } }
-    month: i64 { fn() { return this._month } }
-    day: i64 { fn() { return this._day } }
-    hour: i64 { fn() { return this._hour } }
-    minute: i64 { fn() { return this._minute } }
-    second: i64 { fn() { return this._second } }
-    weekday: i64 { fn() { return this._weekday } }
-    yearday: i64 { fn() { return this._yearday } }
+    timestamp() -> i64 { return this._timestamp }
+    millisecond() -> i64 { return this._millisecond }
+    tzOffset() -> i64 { return this._tzOffset }
+    isUtc() -> bool { return this._isUtc }
+    year() -> i64 { return this._year }
+    month() -> i64 { return this._month }
+    day() -> i64 { return this._day }
+    hour() -> i64 { return this._hour }
+    minute() -> i64 { return this._minute }
+    second() -> i64 { return this._second }
+    weekday() -> i64 { return this._weekday }
+    yearday() -> i64 { return this._yearday }
 
     toString() -> string {
         return this.format("YYYY-MM-DD HH:mm:ss")

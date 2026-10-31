@@ -35,7 +35,7 @@ print(dated.expires == 784111777)
 var jar = http.cookieJar()
 jar.add(c, 1000)
 jar.add(token, 1000)
-print(jar.count)
+print(jar.count())
 print(jar.getHeader("example.com", "/account/profile", false, 1000))
 print(jar.getHeader("www.example.com", "/api/v1", true, 1000))
 
@@ -57,19 +57,19 @@ var replacement = http.parseSetCookie(
     1000
 )!
 jar.add(replacement, 1000)
-print(jar.count)
+print(jar.count())
 print(jar.getHeader("example.com", "/account/profile", false, 1000))
 
 var expired = http.parseSetCookie("gone=1; Max-Age=-1", "example.com", "/", 1000)!
 jar.add(expired, 1000)
-print(jar.count)
+print(jar.count())
 
 var removable = http.parseSetCookie("remove=before; Path=/", "example.com", "/", 1000)!
 jar.add(removable, 1000)
-print(jar.count)
+print(jar.count())
 var deleteCookie = http.parseSetCookie("remove=after; Path=/; Max-Age=0", "example.com", "/", 1000)!
 jar.add(deleteCookie, 1000)
-print(jar.count)
+print(jar.count())
 
 jar.clearDomain("example.com")
-print(jar.count)
+print(jar.count())

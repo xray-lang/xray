@@ -10,7 +10,7 @@ assert(latch.wait())
 
 const event = EventCount(0)
 assert(event.advance() == 1)
-assert(event.epoch == 1)
+assert(event.epoch() == 1)
 
 var queue: WorkQueue<i64> = WorkQueue<i64>(2, 2)
 assert(queue.push(7))

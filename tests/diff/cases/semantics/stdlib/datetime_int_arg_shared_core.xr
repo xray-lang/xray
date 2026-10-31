@@ -7,16 +7,16 @@ var created = datetime.createUTC(
     JSON.require(dyn, ["boolMonth"]),
     JSON.require(dyn, ["nullDay"])
 )
-print(created.year)
-print(created.month)
-print(created.day)
-print(created.hour)
+print(created.year())
+print(created.month())
+print(created.day())
+print(created.hour())
 
 var base = datetime.createUTC(2024, 1, 2)
 var shifted = base.add(JSON.require(dyn, ["amount"]), "days")
-print(shifted.year)
-print(shifted.month)
-print(shifted.day)
+print(shifted.year())
+print(shifted.month())
+print(shifted.day())
 
 print(datetime.fromTimestamp(JSON.require(dyn, ["floatYear"])))
 print(datetime.fromTimestamp(JSON.require(dyn, ["boolMonth"])))
