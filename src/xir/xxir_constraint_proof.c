@@ -203,7 +203,7 @@ static bool constraint_argument_shape(const XrXirTypes *types, XrXirType type, u
         return id - XR_XIR_TYPE_PARAMETER_BASE < count;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node ? node->parameter_span <= count : type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) ||
-        type == XR_XIR_STRING || type == XR_XIR_NEVER || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO;
+        type == XR_XIR_STRING || type == XR_XIR_NEVER || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO || type == XR_XIR_BUFFER_STORAGE;
 }
 XrXirStatus xr_xir_compile_constraint_structure(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirConstraint constraint, uint32_t count) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;

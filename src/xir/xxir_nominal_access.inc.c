@@ -55,10 +55,12 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *com
     return XR_XIR_OK;
 }
 
+#include "xxir_buffer_storage_auth.h"
 static XrXirStatus type_access_edge(const XrXirTypes *types, XrXirType type,
-    uint32_t earlier, unsigned char *pending) {
+    uint32_t earlier, unsigned char *pending,bool storage_scope) {
 
 
+    if (type==XR_XIR_BUFFER_STORAGE && !storage_scope) return XR_XIR_BAD_TYPE;
     if (!xr_xir_type_node(types, type)) return XR_XIR_OK;
     uint32_t index = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE;
     if (index >= earlier) return XR_XIR_BAD_TYPE;
@@ -72,7 +74,9 @@ XR_FUNC XrXirStatus xr_xir_compile_type_access_scratch(const XrXirCompileContext
     XrXirCompileContext *remaining = &compile_state;
     if (!module || !remaining || function >= module->function_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirTypes *types = module->types;
-    if (!types || !types->nominals || !xr_xir_type_node(types, type)) return XR_XIR_OK;
+    bool storage_scope=xir_buffer_storage_scope(module->declarations,function);
+    if (type==XR_XIR_BUFFER_STORAGE && !storage_scope) return XR_XIR_BAD_TYPE;
+    if (!types || !xr_xir_type_node(types, type)) return XR_XIR_OK;
     uint32_t count = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE + 1;
     unsigned char *pending = xir_type_scratch_pending(compile_context, scratch, count, &allocation_status);
     if (!pending) {  return allocation_status; }
@@ -86,21 +90,21 @@ XR_FUNC XrXirStatus xr_xir_compile_type_access_scratch(const XrXirCompileContext
         if (node->kind == XR_XIR_TYPE_NOMINAL) {
             status = xr_xir_compile_nominal_access(remaining, module, function, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i), 0, XR_XIR_NOMINAL_TYPE);
             for (uint32_t a = 0; a < node->nominal.argument_count && status == XR_XIR_OK; ++a)
-                status = type_access_edge(types, node->nominal.arguments[a], i, pending);
+                status = type_access_edge(types, node->nominal.arguments[a], i, pending,storage_scope);
         } else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) {
             if (node->kind == XR_XIR_TYPE_CALLABLE) {
-                status = type_access_edge(types, node->result, i, pending);
-                if (status == XR_XIR_OK) status = type_access_edge(types, node->element, i, pending);
+                status = type_access_edge(types, node->result, i, pending,storage_scope);
+                if (status == XR_XIR_OK) status = type_access_edge(types, node->element, i, pending,storage_scope);
             }
             for (uint32_t p = 0; p < node->parameter_count && status == XR_XIR_OK; ++p)
-                status = type_access_edge(types, node->parameters[p].type, i, pending);
+                status = type_access_edge(types, node->parameters[p].type, i, pending,storage_scope);
         } else if (node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_ITERATOR) {
-            status = type_access_edge(types, node->element, i, pending);
-            if (status == XR_XIR_OK) status = type_access_edge(types, node->result, i, pending);
+            status = type_access_edge(types, node->element, i, pending,storage_scope);
+            if (status == XR_XIR_OK) status = type_access_edge(types, node->result, i, pending,storage_scope);
         } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_SET || node->kind == XR_XIR_TYPE_CELL ||
                    node->kind == XR_XIR_TYPE_SLICE || (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL) ||
                    node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK)
-            status = type_access_edge(types, node->element, i, pending);
+            status = type_access_edge(types, node->element, i, pending,storage_scope);
         else status = XR_XIR_BAD_TYPE;
     }
     return status;

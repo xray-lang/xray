@@ -126,7 +126,11 @@
         "test_xir_exported_f64_const_catalog_native_vm",
         "xir_record_owner",
         "xir_record_source",
-        "xir_record_native"
+        "xir_record_native",
+        "xir_buffer_storage",
+        "xir_buffer_storage_native",
+        "xir_buffer_storage_fault",
+        "xir_buffer_storage_previous"
       ],
       "targets": [
         "test_xir_json_float",
@@ -159,7 +163,10 @@
         "test_xir_exported_f64_const_catalog_native",
         "test_xir_exported_f64_const_catalog_vm_native",
         "test_xir_exported_f64_const_catalog_native_vm",
-        "test_xir_records"
+        "test_xir_records",
+        "test_xir_buffer_storage",
+        "test_xir_buffer_storage_native",
+        "test_xir_buffer_storage_fault"
       ]
     },
     "frontend": {

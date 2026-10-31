@@ -394,7 +394,9 @@ static XrXirStatus type_use_context(VerifyContext *context, uint32_t function, X
     XrXirStatus status = xr_xir_compile_type_use_verify_scratch(&context->remaining, &proof, type, &context->scratch);
     /* Naming checks for substituted types are discharged by original-definition
      * verification and complete correspondence before this module can publish. */
-    if (status != XR_XIR_OK || xir_effect_evidence_is_closed(context->module) || context->literal_type_names) return status;
+    if (status!=XR_XIR_OK) return status;
+    if (type==XR_XIR_BUFFER_STORAGE && !xir_buffer_storage_scope(context->module->declarations,function)) return XR_XIR_BAD_TYPE;
+    if (xir_effect_evidence_is_closed(context->module) || context->literal_type_names) return status;
     return xr_xir_compile_type_access_scratch(&context->remaining, context->module, function, type, &context->pending);
 }
 
@@ -404,6 +406,7 @@ static XrXirStatus signature_type_use_context(VerifyContext *context, uint32_t f
     XrXirType type, bool constraints_proved) {
 
     if (!constraints_proved) return type_use_context(context, function, type);
+    if (type==XR_XIR_BUFFER_STORAGE && !xir_buffer_storage_scope(context->module->declarations,function)) return XR_XIR_BAD_TYPE;
     if (xir_effect_evidence_is_closed(context->module) || context->literal_type_names) return XR_XIR_OK;
     return xr_xir_compile_type_access_scratch(&context->remaining, context->module,
         function, type, &context->pending);

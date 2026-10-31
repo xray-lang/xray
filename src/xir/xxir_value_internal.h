@@ -19,7 +19,8 @@
 #include <stdatomic.h>
 
 /* Storage generations are distinct from logical descriptor kinds. */
-enum { XIR_OBJECT_CLASS = 260u,
+enum { XIR_OBJECT_BUFFER_STORAGE = 261u,
+       XIR_OBJECT_CLASS = 260u,
        XIR_OBJECT_CELL = 258u,
        XIR_OBJECT_FUNCTION = 259u };
 _Static_assert((uint32_t)XIR_OBJECT_CLASS > (uint32_t)XR_XIR_TYPE_CHANNEL &&

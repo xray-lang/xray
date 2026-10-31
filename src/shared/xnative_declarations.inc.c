@@ -626,6 +626,39 @@ static const XrNativeIntrinsicDeclaration xr_native_intrinsics[] = {
     {UINT32_C(4), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[7], true, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_SLICE, "xr_xir_string_slice"},
 };
 
+static const XrNativeParameter xr_native_buffer_0_parameters[] = {
+    {"n", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_buffer_0 = {
+    1, "__alloc", "(n: i64): __BufferStorage", "__BufferStorage", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_MAY_HEAP,
+    "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_buffer_0_parameters, 1, XR_NATIVE_TERM_BUFFER_STORAGE
+};
+static const XrNativeParameter xr_native_buffer_1_parameters[] = {
+    {"n", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_buffer_1 = {
+    2, "__allocZeroed", "(n: i64): __BufferStorage", "__BufferStorage", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_MAY_HEAP,
+    "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_buffer_1_parameters, 1, XR_NATIVE_TERM_BUFFER_STORAGE
+};
+static const XrNativeParameter xr_native_buffer_2_parameters[] = {
+    {"n", "i64", XR_NATIVE_TERM_I64, false, false},
+    {"align", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_buffer_2 = {
+    3, "__allocAligned", "(n: i64, align: i64): __BufferStorage", "__BufferStorage", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_MAY_HEAP,
+    "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_buffer_2_parameters, 2, XR_NATIVE_TERM_BUFFER_STORAGE
+};
+static const XrNativeParameter xr_native_buffer_3_parameters[] = {
+    {"storage", "__BufferStorage", XR_NATIVE_TERM_BUFFER_STORAGE, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_buffer_3 = {
+    4, "__bufferLength", "(storage: __BufferStorage): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,
+    "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_buffer_3_parameters, 1, XR_NATIVE_TERM_I64
+};
 static const XrNativeParameter xr_native_unicode_property_parameters[] = {
     {"name", "string", XR_NATIVE_TERM_STRING, false, false},
 };
@@ -646,5 +679,9 @@ static const XrNativeMemberDeclaration xr_native_unicode_has_property = {
 static const XrNativeCallableDeclaration xr_native_callables[] = {
     {XR_NATIVE_CALLABLE_STRING_FROM_UTF8, &xr_native_string, &xr_native_string_members[0], &xr_native_utf8_error, false, NULL, NULL, {{0}}},
     {XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID, NULL, &xr_native_unicode_property, NULL, true, "regex", "stdlib/defs/core.def", {{14,147,117,66,181,241,175,132,190,251,203,202,251,222,170,175,7,75,178,221,252,135,123,52,27,204,247,212,93,148,171,112}}},
-    {XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY, NULL, &xr_native_unicode_has_property, NULL, true, "regex", "stdlib/defs/core.def", {{14,147,117,66,181,241,175,132,190,251,203,202,251,222,170,175,7,75,178,221,252,135,123,52,27,204,247,212,93,148,171,112}}}
+    {XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY, NULL, &xr_native_unicode_has_property, NULL, true, "regex", "stdlib/defs/core.def", {{14,147,117,66,181,241,175,132,190,251,203,202,251,222,170,175,7,75,178,221,252,135,123,52,27,204,247,212,93,148,171,112}}},
+    {4, NULL, &xr_native_buffer_0, NULL, false, "mem", "stdlib/defs/core.def", {{14,147,117,66,181,241,175,132,190,251,203,202,251,222,170,175,7,75,178,221,252,135,123,52,27,204,247,212,93,148,171,112}}},
+    {5, NULL, &xr_native_buffer_1, NULL, false, "mem", "stdlib/defs/core.def", {{14,147,117,66,181,241,175,132,190,251,203,202,251,222,170,175,7,75,178,221,252,135,123,52,27,204,247,212,93,148,171,112}}},
+    {6, NULL, &xr_native_buffer_2, NULL, false, "mem", "stdlib/defs/core.def", {{14,147,117,66,181,241,175,132,190,251,203,202,251,222,170,175,7,75,178,221,252,135,123,52,27,204,247,212,93,148,171,112}}},
+    {7, NULL, &xr_native_buffer_3, NULL, false, "mem", "stdlib/defs/core.def", {{14,147,117,66,181,241,175,132,190,251,203,202,251,222,170,175,7,75,178,221,252,135,123,52,27,204,247,212,93,148,171,112}}}
 };

@@ -11,6 +11,7 @@
 #include "xxir_types.h"
 #include <string.h>
 #include "xxir_nominal.h"
+#include "xxir_buffer_storage_auth.h"
 #include "../shared/xnative_declaration.h"
 
 static inline bool xir_native_error_type(const XrXirTypes *types,XrXirType type,uint32_t id) {
@@ -28,6 +29,26 @@ static inline bool xir_native_error_type(const XrXirTypes *types,XrXirType type,
 static inline bool xir_native_callable_types(uint32_t id,const XrXirTypes *types,
     const XrXirType *parameters,uint32_t count,XrXirType result,XrXirType error) {
     const XrNativeCallableDeclaration *canonical=xr_native_callable_by_id(id);
+    if (id>=XR_NATIVE_CALLABLE_BUFFER_ALLOCATE && id<=XR_NATIVE_CALLABLE_BUFFER_LENGTH) {
+        bool length=id==XR_NATIVE_CALLABLE_BUFFER_LENGTH;
+        uint32_t required=id==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ALIGNED ? 2u : 1u;
+        const char *names[]={"__alloc","__allocZeroed","__allocAligned","__bufferLength"};
+        return canonical && !canonical->owner && !canonical->error_e_type && !canonical->ctfe &&
+            canonical->namespace_id && !strcmp(canonical->namespace_id,"mem") &&
+            canonical->source_path && !strcmp(canonical->source_path,"stdlib/defs/core.def") &&
+            canonical->member && !strcmp(canonical->member->name,names[id-XR_NATIVE_CALLABLE_BUFFER_ALLOCATE]) &&
+            !canonical->member->is_method && !canonical->member->is_static &&
+            canonical->member->parameter_count==required && canonical->member->parameters &&
+            canonical->member->parameters[0].type==(length ? XR_NATIVE_TERM_BUFFER_STORAGE : XR_NATIVE_TERM_I64) &&
+            (required==1 || canonical->member->parameters[1].type==XR_NATIVE_TERM_I64) &&
+            canonical->member->result==(length ? XR_NATIVE_TERM_I64 : XR_NATIVE_TERM_BUFFER_STORAGE) &&
+            canonical->member->allocation==(length ? XR_NATIVE_ALLOCATION_NO_HEAP : XR_NATIVE_ALLOCATION_MAY_HEAP) &&
+            canonical->member->ownership==XR_NATIVE_RESULT_OWNERSHIP_OWNED &&
+            !strcmp(canonical->member->failures,length ? "none" : "allocation,retain,limit") &&
+            count==required && parameters && parameters[0]==(length ? XR_XIR_BUFFER_STORAGE : XR_XIR_I64) &&
+            (required==1 || parameters[1]==XR_XIR_I64) && result==(length ? XR_XIR_I64 : XR_XIR_BUFFER_STORAGE) &&
+            error==XR_XIR_NEVER;
+    }
     if (id==XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY) {
         return canonical && !canonical->owner && !canonical->error_e_type && canonical->ctfe &&
             canonical->namespace_id && !strcmp(canonical->namespace_id,"regex") &&
@@ -80,6 +101,9 @@ static inline XrXirStatus xir_native_callable_verify(const XrXirModule *module,u
     const XrXirFunctionIdentity *id=&module->declarations->functions[index];
     if (!id->native_callable) return XR_XIR_OK;
     const XrXirFunction *function=&module->functions[index];
+    if (id->native_callable>=XR_NATIVE_CALLABLE_BUFFER_ALLOCATE &&
+        id->native_callable<=XR_NATIVE_CALLABLE_BUFFER_LENGTH && !xir_buffer_storage_scope(module->declarations,index))
+        return XR_XIR_BAD_TYPE;
     if (!xir_native_callable_identity(id) ||
         (module->generics && (module->generics[index].parameter_count || module->generics[index].argument_count)) || function->blocks ||
         function->block_count || function->instructions || function->instruction_count ||

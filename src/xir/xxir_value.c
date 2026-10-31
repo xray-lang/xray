@@ -42,6 +42,7 @@
 #include "xxir_tuple.h"
 #include "xxir_float.h"
 #include "xxir_atomic.h"
+#include "xxir_buffer_storage.h"
 #include "xxir_channel.h"
 #include "xxir_channel_watch_internal.h"
 #include "xxir_channel_rendezvous_internal.h"
@@ -182,6 +183,12 @@ typedef struct XirString {
     char *bytes;
     size_t length, runes, capacity;
 } XirString;
+typedef struct XirBufferStorage {
+    XirObject object;
+    void *data;
+    size_t length, alignment;
+} XirBufferStorage;
+
 typedef struct XirPanicInfo {
     XirObject object;
     XrXirPanicPayload panic;
@@ -245,7 +252,7 @@ static XrXirValue string_value(XirString *string) {
 }
 /* Built-in carriers own no type arena. PanicInfo retains its STRING message. */
 static bool arena_free_carrier(XrXirType type) {
-    return type == XR_XIR_STRING || type == XR_XIR_PANIC_INFO;
+    return type == XR_XIR_STRING || type == XR_XIR_PANIC_INFO || type == XR_XIR_BUFFER_STORAGE;
 }
 static bool owned_carrier_type(XrXirType type) {
     return arena_free_carrier(type) || type == XR_XIR_ERROR ||
@@ -290,7 +297,7 @@ static uint32_t object_storage_kind(uint32_t node_kind) {
         node_kind == XR_XIR_TYPE_CALLABLE ? XIR_OBJECT_FUNCTION : node_kind;
 }
 static bool value_object_kind_known(uint32_t kind) {
-    return !kind || kind == XIR_OBJECT_CLASS || kind == XIR_OBJECT_CELL ||
+    return !kind || kind == XIR_OBJECT_BUFFER_STORAGE || kind == XIR_OBJECT_CLASS || kind == XIR_OBJECT_CELL ||
         kind == XIR_OBJECT_FUNCTION || kind == XR_XIR_TYPE_ARRAY ||
         kind == XR_XIR_TYPE_NOMINAL || kind == XR_XIR_TYPE_NULLABLE ||
         kind == XR_XIR_TYPE_TUPLE || kind == XR_XIR_TYPE_ATOMIC || kind == XR_XIR_TYPE_TASK || kind == XR_XIR_TYPE_ITERATOR || kind == XR_XIR_TYPE_CHANNEL ||
@@ -323,6 +330,8 @@ static bool value_header_valid(const XrXirValue *value) {
     if (type == XR_XIR_PANIC_INFO)
         return !object->arena && !object->kind && xr_xir_panic_valid(&((XirPanicInfo *) object)->panic) &&
             !xr_xir_panic_empty(&((XirPanicInfo *) object)->panic);
+    if (type == XR_XIR_BUFFER_STORAGE)
+        return !object->arena && object->kind == XIR_OBJECT_BUFFER_STORAGE;
     if (arena_free_carrier(type))
         return !object->arena && !object->kind;
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(object->arena), type);
@@ -384,6 +393,13 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
     if (!value_header_valid(value)) return false;
     if (!owned_carrier_type((XrXirType) value->type)) return true;
     XirObject *object = object_pointer(value);
+    if (object->kind == XIR_OBJECT_BUFFER_STORAGE) {
+        const XirBufferStorage *storage=(const XirBufferStorage *)object;
+        return (storage->length != 0) == (storage->data != NULL) &&
+            (!storage->alignment || (storage->alignment >= sizeof(void *) &&
+             !(storage->alignment & (storage->alignment-1)) &&
+             (!storage->data || !((uintptr_t)storage->data % storage->alignment))));
+    }
     if (object->kind==XR_XIR_TYPE_SLICE || object->kind==XR_XIR_TYPE_MUT_SLICE)
         return view_value_valid((const XirView *)object);
     if (object->kind == XIR_OBJECT_CLASS) {
@@ -719,7 +735,7 @@ XR_FUNC XrXirDomainBudgetStats xr_xir_domain_budget_stats(XrXirDomain *domain) {
     domain_unlock(domain);
     return budget;
 }
-XR_FUNC void *xr_xir_domain_allocate(XrXirDomain *domain, size_t bytes, XrXirValueStatus *status) {
+static void *domain_payload_allocate(XrXirDomain *domain, size_t bytes, size_t alignment, bool zero, XrXirValueStatus *status) {
     if (!xr_xir_domain_current(domain) || !status) {
         if (status) *status = XR_XIR_VALUE_BAD_ARGUMENT;
         return NULL;
@@ -733,7 +749,8 @@ XR_FUNC void *xr_xir_domain_allocate(XrXirDomain *domain, size_t bytes, XrXirVal
         return NULL;
     }
     if (domain->budget.bound) { domain->budget.requested_bytes += bytes; ++domain->budget.work; }
-    void *memory = domain_memory_allocate(domain, bytes, false, status);
+    void *memory = alignment ? xr_malloc_aligned(bytes, alignment) : domain_memory_allocate(domain, bytes, zero, status);
+    if (alignment && !memory) *status=XR_XIR_VALUE_OOM;
     if (memory) {
         domain->stats.live_bytes += bytes;
         if (domain->stats.live_bytes > domain->stats.peak_bytes)
@@ -743,15 +760,22 @@ XR_FUNC void *xr_xir_domain_allocate(XrXirDomain *domain, size_t bytes, XrXirVal
     domain_unlock(domain);
     return memory;
 }
-XR_FUNC void xr_xir_domain_deallocate(XrXirDomain *domain, void *memory, size_t bytes) {
+XR_FUNC void *xr_xir_domain_allocate(XrXirDomain *domain,size_t bytes,XrXirValueStatus *status) {
+    return domain_payload_allocate(domain,bytes,0,false,status);
+}
+static void domain_payload_deallocate(XrXirDomain *domain,void *memory,size_t bytes,size_t alignment) {
     domain_lock(domain);
     XR_CHECK(memory && domain->stats.live_bytes >= bytes &&
              domain->stats.allocations > domain->stats.frees, "invalid string storage release");
-    domain_memory_free(domain, memory);
+    if (alignment) xr_free_aligned(memory,alignment); else domain_memory_free(domain, memory);
     domain->stats.live_bytes -= bytes;
     ++domain->stats.frees;
     domain_unlock(domain);
 }
+XR_FUNC void xr_xir_domain_deallocate(XrXirDomain *domain,void *memory,size_t bytes) {
+    domain_payload_deallocate(domain,memory,bytes,0);
+}
+#include "xxir_buffer_storage_value.inc.c"
 static XrXirValueStatus string_resize(XirString *string, size_t capacity) {
     XrXirDomain *domain = string->object.domain;
     domain_lock(domain);
@@ -976,7 +1000,11 @@ static void release_pending(XirObject *pending) {
         XirObject *object = pending; pending = object->release_next;
         XrXirDomain *domain = object->domain;
         XrXirTypeArena *arena = object->arena;
-        if (object->type == XR_XIR_STRING) {
+        if (object->kind == XIR_OBJECT_BUFFER_STORAGE) {
+            XirBufferStorage *storage=(XirBufferStorage *)object;
+            if (storage->data) domain_payload_deallocate(domain,storage->data,storage->length,storage->alignment);
+            xr_xir_domain_deallocate(domain,storage,sizeof(*storage));
+        } else if (object->type == XR_XIR_STRING) {
             XirString *string = (XirString *) object;
             xr_xir_domain_deallocate(domain, string->bytes, string->capacity);
             xr_xir_domain_deallocate(domain, string, sizeof(*string));

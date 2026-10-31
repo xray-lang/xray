@@ -49,7 +49,7 @@ typedef enum XrNativeTypeTerm {
     XR_NATIVE_TERM_ARRAY_U8,
     /* The two retired type-term slots remain unassigned. */
     XR_NATIVE_TERM_NULLABLE_F64 = 35, XR_NATIVE_TERM_SLICE_U8 = 36,
-    XR_NATIVE_TERM_TASK_RESULT, XR_NATIVE_TERM_NULLABLE_TASK_RESULT
+    XR_NATIVE_TERM_TASK_RESULT, XR_NATIVE_TERM_NULLABLE_TASK_RESULT, XR_NATIVE_TERM_BUFFER_STORAGE
 } XrNativeTypeTerm;
 /* RESULT_VARIABLE and the callback terms require an admitted recipe's exact
  * signature. They never grant authority to an arbitrary unparsed signature. */
@@ -195,7 +195,11 @@ typedef struct XrNativeTypeDeclaration {
 typedef enum XrNativeCallableId {
     XR_NATIVE_CALLABLE_STRING_FROM_UTF8 = 1,
     XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID = 2,
-    XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY = 3
+    XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY = 3,
+    XR_NATIVE_CALLABLE_BUFFER_ALLOCATE = 4,
+    XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ZEROED = 5,
+    XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ALIGNED = 6,
+    XR_NATIVE_CALLABLE_BUFFER_LENGTH = 7
 } XrNativeCallableId;
 
 /* Callable IDs authenticate ordinary function bodies, independently of inline intrinsics. */

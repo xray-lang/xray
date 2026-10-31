@@ -1999,6 +1999,7 @@ XrXirAction xr_xir_instance_panic_land(XrXirCallView *view, void *frame, XrXirAc
 }
 
 #include "xxir_instance_binding.inc.c"
+#include "xxir_buffer_storage.h"
 
 #include "xxir_instance_hash.inc.c"
 
@@ -2022,10 +2023,21 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     if (state->type || state->reserved || state->payload) goto failed;
     value=state;
     status=xr_xir_call_execution_status(view);if (status!=XR_XIR_CALL_READY) goto failed;
-    XrXirViewAccess access={0};XrXirValueStatus converted=xr_xir_call_view_access(view,&access);
-    if (converted==XR_XIR_VALUE_OK) converted=id==XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID ?
+    XrXirViewAccess access={0};XrXirValueStatus converted=XR_XIR_VALUE_OK;
+    if (id>=XR_NATIVE_CALLABLE_BUFFER_ALLOCATE && id<=XR_NATIVE_CALLABLE_BUFFER_LENGTH) {
+        if (!xir_buffer_storage_scope(program->declarations,index)) goto failed;
+        if (id==XR_NATIVE_CALLABLE_BUFFER_LENGTH) {
+            int64_t length=0;converted=xr_xir_buffer_storage_length(&view->arguments[0],&length);
+            if (converted==XR_XIR_VALUE_OK) *value=(XrXirValue){XR_XIR_I64,0,length};
+        } else converted=xr_xir_buffer_storage_new(instance->domain,view->arguments[0].payload,
+            id==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ALIGNED ? view->arguments[1].payload : 0,
+            id==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ZEROED,value);
+    } else {
+        converted=xr_xir_call_view_access(view,&access);
+        if (converted==XR_XIR_VALUE_OK) converted=id==XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID ?
         xir_unicode_property_id(&view->arguments[0],value) : id==XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY ?
         xir_unicode_has_property(&view->arguments[0],&view->arguments[1],value) : xir_from_utf8(&view->arguments[0],&access,value);
+    }
     if (converted==XR_XIR_VALUE_BAD_UTF8) {
         converted=xr_xir_enum_new(error,0,NULL,0,xr_xir_call_admission(view),value);thrown=true;
     }

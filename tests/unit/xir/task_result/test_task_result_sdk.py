@@ -25,7 +25,7 @@ def main():
     environment.pop('XRAY_STDLIB_PATH', None)
     original, prefix = out/'original', out/'moved'
     manifest = json.loads((args.bundle/'sdk_manifest.json').read_text(encoding='utf-8'))
-    assert tuple(manifest[key] for key in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')) == (39, 108, 30, 37, 37)
+    assert tuple(manifest[key] for key in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')) == (39, 109, 30, 37, 37)
     assert manifest['crt'] == 2 and manifest['sanitizers'] == 0
     for row in manifest['files']:
         source, destination = args.bundle/row['path'], original/row['path']
@@ -77,7 +77,7 @@ def main():
         b'TaskResult generated C: four owned variants, exact full output and retired producers PASS\r\n')
     run('run-cpp17', [customer/'cpp17.exe', *entries],
         b'C++17 TaskResult: new header, type_info and detached four-state ownership PASS\r\n')
-    result = dict(state='PASS', semantic=108, callABI=37, source='real generated C11 Program',
+    result = dict(state='PASS', semantic=109, callABI=37, source='real generated C11 Program',
                   programSHA256=hashlib.sha256((customer/'program.c').read_bytes()).hexdigest(),
                   commandCount=len(records), originalPrefixAbsent=True,
                   producerRetiredBeforeRead=True, cppBoundary='TaskResult/value headers through a C11 Program bridge')

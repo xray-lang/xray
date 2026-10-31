@@ -21,6 +21,9 @@ static XrXirCtfeStatus ctfe_native_callable_step(CtfeCallExecution *execution,
         !module->declarations->functions[frame->function].native_callable ||
         frame->cleanup || frame->state.leaving || frame->returned.type ||
         frame->returned.reserved || frame->returned.payload) return XR_XIR_CTFE_BAD_ARTIFACT;
+    uint32_t native_id=module->declarations->functions[frame->function].native_callable;
+    if (native_id>=XR_NATIVE_CALLABLE_BUFFER_ALLOCATE && native_id<=XR_NATIVE_CALLABLE_BUFFER_LENGTH)
+        return XR_XIR_CTFE_NOT_SUPPORTED;
     CtfeOwnedState *state=&execution->owned;
     XrXirCtfeStatus status=ctfe_control_poll(state->control);
     if (status!=XR_XIR_CTFE_OK) return status;

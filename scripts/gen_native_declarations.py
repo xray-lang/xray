@@ -997,9 +997,34 @@ def render_unicode_callable(root, decoder):
         if (row.signature, row.argc, row.arg_spec, row.layer, row.allocation) != (
                 signature, count, arguments, 'pure', 'no_heap'):
             raise ValueError('Unicode callable disagrees with its typed contract: ' + name)
+    buffer_contracts = (
+        ('__alloc', '(n: i64): __BufferStorage', '1', 'v'),
+        ('__allocZeroed', '(n: i64): __BufferStorage', '1', 'v'),
+        ('__allocAligned', '(n: i64, align: i64): __BufferStorage', '2', 'vv'),
+        ('__bufferLength', '(storage: __BufferStorage): i64', '1', 'v'),
+    )
+    for name, signature, count, arguments in buffer_contracts:
+        rows = [row for row in declarations if row.module == 'mem' and row.name == name]
+        if len(rows) != 1 or (rows[0].signature, rows[0].argc, rows[0].arg_spec) != (signature, count, arguments):
+            raise ValueError('Byte storage callable disagrees with its governed declaration: ' + name)
+    buffer_lines = []
+    buffer_rows = []
+    for ordinal, (name, signature, count, _) in enumerate(buffer_contracts):
+        params = [('storage', '__BufferStorage', 'BUFFER_STORAGE')] if ordinal == 3 else [('n', 'i64', 'I64')]
+        if ordinal == 2:
+            params.append(('align', 'i64', 'I64'))
+        result = 'I64' if ordinal == 3 else 'BUFFER_STORAGE'
+        symbol = 'xr_native_buffer_' + str(ordinal)
+        buffer_lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
+        buffer_lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_' + k + ', false, false},' for n, t, k in params]
+        buffer_lines += ['};', 'static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(ordinal + 1) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string('i64' if ordinal == 3 else '__BufferStorage') + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_' + ('NO_HEAP' if ordinal == 3 else 'MAY_HEAP') + ',',
+            '    ' + c_string('none' if ordinal == 3 else 'allocation,retain,limit') + ', XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + symbol + '_parameters, ' + count + ', XR_NATIVE_TERM_' + result, '};']
+        buffer_rows.append('    {' + str(ordinal + 4) + ', NULL, &' + symbol + ', NULL, false, "mem", "stdlib/defs/core.def", FINGERPRINT}')
     digest = hashlib.sha256((root / 'stdlib/defs/core.def').read_bytes()).digest()
     fingerprint = '{{' + ','.join(str(byte) for byte in digest) + '}}'
-    return [
+    return buffer_lines + [
         'static const XrNativeParameter xr_native_unicode_property_parameters[] = {',
         '    {"name", "string", XR_NATIVE_TERM_STRING, false, false},', '};',
         'static const XrNativeParameter xr_native_unicode_has_property_parameters[] = {',
@@ -1016,7 +1041,7 @@ def render_unicode_callable(root, decoder):
         'static const XrNativeCallableDeclaration xr_native_callables[] = {',
         '    {XR_NATIVE_CALLABLE_STRING_FROM_UTF8, &xr_native_string, &xr_native_string_members[' + str(decoder) + '], &xr_native_utf8_error, false, NULL, NULL, {{0}}},',
         '    {XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID, NULL, &xr_native_unicode_property, NULL, true, "regex", "stdlib/defs/core.def", ' + fingerprint + '},',
-        '    {XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY, NULL, &xr_native_unicode_has_property, NULL, true, "regex", "stdlib/defs/core.def", ' + fingerprint + '}', '};']
+        '    {XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY, NULL, &xr_native_unicode_has_property, NULL, true, "regex", "stdlib/defs/core.def", ' + fingerprint + '},'] + [row.replace('FINGERPRINT', fingerprint) + (',' if i + 1 < len(buffer_rows) else '') for i, row in enumerate(buffer_rows)] + ['};']
 
 
 def render(root):
