@@ -173,7 +173,8 @@ int main(int argc,char **argv) {
     memset(text,0xa5,sizeof(text));XrXirLibraryCatalog *numbers=json_float_catalog(&context,&result,1);
     json_float_read(XR_JSON_FLOAT_SOURCE,text);
     static const char floating_proof[]=
-        "\nexport const stored32:f32=1.5\nconst storedFinite:f64=1.5\nconst storedZero:f64=-0.0\n"
+        "\nexport const stored32:f32=1.5\nexport fn float32Value(x:f32)->f32{return stored32+x}\n"
+        "const storedFinite:f64=1.5\nconst storedZero:f64=-0.0\n"
         "const storedInfinity:f64=1.0/0.0\nconst storedNan:f64=0.0/0.0\n"
         "export fn floatState()->bool {return storedFinite==1.5 && 1.0/storedZero<0.0 && "
         "storedInfinity>1.7976931348623157e308 && storedNan!=storedNan}\n"
@@ -188,10 +189,10 @@ int main(int argc,char **argv) {
     request=(JsonFloatSource){text,"float-decoding.xr",XR_XIR_LIBRARY,numbers};result=json_float_source(&context,&request);
     memset(text,0xa5,sizeof(text));xr_xir_compile_library_catalog_free(numbers);XrXirLibraryCatalog *library=json_float_catalog(&context,&result,2);
     static const char consumer[]=
-        "import {jsonFloat,floatArithmetic,floatState,stored32} from \"./float-decoding\"\n"
+        "import {jsonFloat,floatArithmetic,floatState,stored32,float32Value} from \"./float-decoding\"\n"
         "export fn inspect(text:string)->f64? {return jsonFloat(text)}\n"
         "export fn main()->i64 {const value=comptime jsonFloat(\"1.7976931348623157e308\");const arithmetic=comptime floatArithmetic(2.0);"
-        "return (arithmetic && floatArithmetic(2.0) && floatState() && stored32==1.5 && value!=null && value! == 1.7976931348623157e308)?42:0}\n"
+        "return (arithmetic && floatArithmetic(2.0) && floatState() && stored32==1.5 && float32Value(0.5)==2.0 && value!=null && value! == 1.7976931348623157e308)?42:0}\n"
         "export fn observed()->f64? {return jsonFloat(\"1.7976931348623157e308\")}\n";
     request=(JsonFloatSource){consumer,"receiver.xr",XR_XIR_PROGRAM,library};result=json_float_source(&context,&request);xr_xir_compile_library_catalog_free(library);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(result.checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&result);
