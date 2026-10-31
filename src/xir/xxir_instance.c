@@ -2029,9 +2029,13 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
         if (id==XR_NATIVE_CALLABLE_BUFFER_LENGTH) {
             int64_t length=0;converted=xr_xir_buffer_storage_length(&view->arguments[0],&length);
             if (converted==XR_XIR_VALUE_OK) *value=(XrXirValue){XR_XIR_I64,0,length};
-        } else converted=xr_xir_buffer_storage_new(instance->domain,view->arguments[0].payload,
-            id==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ALIGNED ? view->arguments[1].payload : 0,
-            id==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ZEROED,value);
+        } else {
+            int64_t alignment=id==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ALIGNED ? view->arguments[1].payload : 0;
+            if (id==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ALIGNED &&
+                (alignment<(int64_t)sizeof(void *) || (alignment&(alignment-1)))) converted=XR_XIR_VALUE_BAD_ARGUMENT;
+            else converted=xr_xir_buffer_storage_new(instance->domain,view->arguments[0].payload,alignment,
+                id==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ZEROED,value);
+        }
     } else {
         converted=xr_xir_call_view_access(view,&access);
         if (converted==XR_XIR_VALUE_OK) converted=id==XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID ?

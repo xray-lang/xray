@@ -34,17 +34,40 @@ static void observed_free_aligned(void *p,size_t alignment){(void)alignment;if(p
 #define xr_free(p) observed_free(p)
 #define xr_malloc_aligned(size,alignment) observed_aligned(size,alignment)
 #define xr_free_aligned(p,alignment) observed_free_aligned(p,alignment)
+#define xr_xir_buffer_storage_new buffer_probe_new
 #include "xir/xxir_value.c"
+#undef xr_xir_buffer_storage_new
+static size_t buffer_probe_constructors;
+XR_FUNC XrXirValueStatus xr_xir_buffer_storage_new(XrXirDomain *domain,int64_t bytes,int64_t alignment,bool zeroed,XrXirValue *output) {
+    ++buffer_probe_constructors;return buffer_probe_new(domain,bytes,alignment,zeroed,output);
+}
+#include "xir/xxir_program.h"
+extern const XrXirProgramSpec buffer_storage_program;
 int main(void) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK && buffer_probe_physical==1);
-    uint64_t frame=xr_xir_domain_stats(domain).live_bytes;
+    uint64_t held_frame=xr_xir_domain_stats(domain).live_bytes;
     for(unsigned mode=0;mode<3;++mode)for(size_t ordinal=0;ordinal<2;++ordinal) {
         buffer_probe_attempts=0;buffer_probe_fail_at=ordinal;buffer_probe_active=true;XrXirValue output={0};
         XrXirValueStatus status=xr_xir_buffer_storage_new(domain,65,mode==2?64:0,mode==1,&output);buffer_probe_active=false;
         CHECK(status==XR_XIR_VALUE_OOM && !output.type && !output.reserved && !output.payload);
-        CHECK(buffer_probe_attempts==ordinal+1 && buffer_probe_physical==1 && xr_xir_domain_stats(domain).live_bytes==frame);
+        CHECK(buffer_probe_attempts==ordinal+1 && buffer_probe_physical==1 && xr_xir_domain_stats(domain).live_bytes==held_frame);
         CHECK(xr_xir_buffer_storage_new(domain,65,mode==2?64:0,mode==1,&output)==XR_XIR_VALUE_OK);
-        xr_xir_value_drop(&output);CHECK(buffer_probe_physical==1 && xr_xir_domain_stats(domain).live_bytes==frame);
+        xr_xir_value_drop(&output);CHECK(buffer_probe_physical==1 && xr_xir_domain_stats(domain).live_bytes==held_frame);
     }
-    xr_xir_domain_drop(domain);CHECK(!buffer_probe_physical);puts("Actual byte storage OOM: six buffer_probe_attempts, same-owner recovery and buffer_probe_physical zero PASS");return 0;
+    xr_xir_domain_drop(domain);CHECK(!buffer_probe_physical);
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
+    XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(&context,&buffer_storage_program,&program)==XR_XIR_OK);
+    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    size_t frame=buffer_probe_physical,constructors=buffer_probe_constructors;
+    for(uint32_t f=7;f<9;++f) {
+        XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_start(instance,f,NULL,0)==XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_BAD_STATE);
+        XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_BAD_STATE && !result.type && !result.reserved && !result.payload);
+        CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_BAD_STATE);
+        CHECK(buffer_probe_constructors==constructors && buffer_probe_physical==frame);
+    }
+    xr_xir_compile_program_drop(program);xr_compile_resources_release(context.resources);CHECK(!buffer_probe_physical);
+    puts("Actual byte storage OOM/recovery and aligned0 native rejection before allocation PASS");return 0;
 }

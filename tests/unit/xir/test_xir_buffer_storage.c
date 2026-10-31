@@ -70,6 +70,13 @@ static XrXirArtifact *fixture(const XrXirCompileContext *context,bool attacks) {
         {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=13},
         {.op=XR_XIR_CALL,.type=XR_XIR_BUFFER_STORAGE,.args={0,1},.immediate=3},
         {.op=XR_XIR_RETURN,.args={1,0}}};const uint32_t one_operand=0;const XrXirBlock maker={0,3,0,0};
+    XrXirInstruction bad_zero[]={
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=0},
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=0},
+        {.op=XR_XIR_CALL,.type=XR_XIR_BUFFER_STORAGE,.args={0,2},.immediate=4},
+        {.op=XR_XIR_RETURN,.args={2,0}}};
+    XrXirInstruction bad_nonzero[4];memcpy(bad_nonzero,bad_zero,sizeof(bad_zero));bad_nonzero[0].immediate=8;
+    const uint32_t invalid_operands[]={0,1};const XrXirBlock invalid_block={0,4,0,0};
     const XrXirType integer=XR_XIR_I64,aligned[]={XR_XIR_I64,XR_XIR_I64},storage=XR_XIR_BUFFER_STORAGE;
     XrXirFunction functions[]={
         {"init",4,NULL,0,XR_XIR_UNIT,&init,1,&done,1,NULL,0,XR_XIR_NEVER},
@@ -78,14 +85,16 @@ static XrXirArtifact *fixture(const XrXirCompileContext *context,bool attacks) {
         {"zeroed",6,&integer,1,XR_XIR_BUFFER_STORAGE,NULL,0,NULL,0,NULL,0,XR_XIR_NEVER},
         {"aligned",7,aligned,2,XR_XIR_BUFFER_STORAGE,NULL,0,NULL,0,NULL,0,XR_XIR_NEVER},
         {"length",6,&storage,1,XR_XIR_I64,NULL,0,NULL,0,NULL,0,XR_XIR_NEVER},
-        {"make",4,NULL,0,XR_XIR_BUFFER_STORAGE,&maker,1,make,3,&one_operand,1,XR_XIR_NEVER}};
-    XrXirFunctionIdentity identities[7]={{0}};
+        {"make",4,NULL,0,XR_XIR_BUFFER_STORAGE,&maker,1,make,3,&one_operand,1,XR_XIR_NEVER},
+        {"bad0",4,NULL,0,XR_XIR_BUFFER_STORAGE,&invalid_block,1,bad_zero,4,invalid_operands,2,XR_XIR_NEVER},
+        {"bad8",4,NULL,0,XR_XIR_BUFFER_STORAGE,&invalid_block,1,bad_nonzero,4,invalid_operands,2,XR_XIR_NEVER}};
+    XrXirFunctionIdentity identities[9]={{0}};
     for(uint32_t f=2;f<6;++f){identities[f].native_callable=f+2;identities[f].promises=XR_XIR_FUNCTION_NO_SUSPEND;}
-    identities[6].exported=1;
+    identities[6].exported=1;identities[7].exported=1;identities[8].exported=1;
     const char identity[]="stdlib-module-v1:module=3:mem:path=10:mem/mem.xr";
     XrXirSourceModule source={.name=identity,.name_length=sizeof(identity)-1,.initializer=0};
     XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
-    XrXirModule module={XR_XIR_BUILT,functions,7,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirModule module={XR_XIR_BUILT,functions,9,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};XrXirStatus status=xir_fixture_check(context,&module,&checked,&diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"actual check status=%u f=%u b=%u i=%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK && checked);
@@ -128,7 +137,7 @@ int main(int argc,char **argv) {
     } else {
         CHECK(argc==1);XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
         XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
-        XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);xr_xir_compile_program_drop(program);
+        XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance,1,NULL,0)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
         XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED && result.payload==8);xr_xir_value_drop(&result);
@@ -136,6 +145,16 @@ int main(int argc,char **argv) {
         CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
         CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED && result.type==XR_XIR_BUFFER_STORAGE);
         CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+        for(uint32_t f=7;f<9;++f) {
+            instance=NULL;
+            CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+            CHECK(xr_xir_instance_start(instance,f,NULL,0)==XR_XIR_CALL_READY);
+            CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_BAD_STATE);
+            XrXirValue rejected={0};
+            CHECK(xr_xir_instance_take_result(instance,&rejected)==XR_XIR_CALL_BAD_STATE && !rejected.type && !rejected.reserved && !rejected.payload);
+            CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_BAD_STATE);
+        }
+        xr_xir_compile_program_drop(program);
         int64_t size=0;CHECK(xr_xir_buffer_storage_length(&result,&size)==XR_XIR_VALUE_OK && size==13);xr_xir_value_drop(&result);
     }
     xr_compile_resources_release(context.resources);puts("Private buffer storage: real owned bytes and checked transport PASS");return 0;

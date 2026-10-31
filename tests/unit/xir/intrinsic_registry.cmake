@@ -137,7 +137,7 @@ add_custom_command(OUTPUT "${buffer_storage_generated}"
     DEPENDS test_xir_buffer_storage VERBATIM)
 add_executable(test_xir_buffer_storage_native xir/test_xir_buffer_storage_native.c "${buffer_storage_generated}")
 target_link_libraries(test_xir_buffer_storage_native PRIVATE xray_xir_scalar xray_compile_resources)
-add_executable(test_xir_buffer_storage_fault xir/test_xir_buffer_storage_fault.c)
+add_executable(test_xir_buffer_storage_fault xir/test_xir_buffer_storage_fault.c "${buffer_storage_generated}")
 target_link_libraries(test_xir_buffer_storage_fault PRIVATE xray_xir_scalar)
 foreach(target test_xir_buffer_storage_native test_xir_buffer_storage_fault)
     set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
