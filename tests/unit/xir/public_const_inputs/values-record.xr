@@ -1,0 +1,12 @@
+export struct Pair { first:i64; second:i64 }
+fn seed()->i64 { return 41 }
+export const NUMBER=seed()
+export const FRACTION:f32=1.5
+export const TEXT="v\0é"
+export const READY=true
+export const NUMBERS:Array<i64>=[2,3]
+export const PAIR:{first:i64,second:i64}={first:5,second:7}
+export const OPTIONAL:i64?=11
+fn nothing(){}
+export const NOTHING=nothing()
+const PRIVATE:i64=99

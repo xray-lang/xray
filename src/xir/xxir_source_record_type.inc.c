@@ -129,7 +129,7 @@ static bool source_record_type(SourceContext *ctx,AstNode *site,const XrXirLiter
     }
     uint32_t declaration=0;if(!source_record_schema(ctx,site,keys,count,&declaration))return false;
     XrXirTypeNode node={.kind=XR_XIR_TYPE_NOMINAL};
-    node.nominal=(XrXirNominalType){declaration,arguments,count,NULL,0};
+    node.nominal=(XrXirNominalType){declaration,arguments,count,arguments,count};
     return source_intern_type(ctx,node,out);
 }
 static bool source_record_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *out) {

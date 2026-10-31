@@ -102,7 +102,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F10",
-        "first_diagnostic": "error: type declaration is not admitted by XIR (kind 13)"
+        "first_diagnostic": "demos/02-collections/json_processing.xr:27:0: error: record spread is not admitted"
       }
     },
     {
@@ -386,7 +386,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F10",
-        "first_diagnostic": "stdlib/csv/csv.xr:76:11: error: type declaration is not admitted by XIR (kind 13)"
+        "first_diagnostic": "stdlib/csv/csv.xr:171:9: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
       }
     },
     {
@@ -525,8 +525,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F01",
-        "first_diagnostic": "stdlib/path/path.xr:18:14: error: exported state is not admitted"
+        "feature": "F06",
+        "first_diagnostic": "stdlib/path/path.xr:94:4: error: parameter contract is not implemented in XIR"
       }
     },
     {
@@ -657,8 +657,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F01",
-        "first_diagnostic": "stdlib/xml/xml.xr:192:14: error: exported state is not admitted"
+        "feature": "F02",
+        "first_diagnostic": "stdlib/xml/xml.xr:987:27: error: name does not resolve to an admitted nominal type"
       }
     },
     {

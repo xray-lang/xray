@@ -23,7 +23,7 @@ def main() -> int:
     args.output.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="run-", dir=args.output))
     report = work / "result.json"
-    files = [args.fixtures / name for name in ("main-supported.xr", "values-supported.xr", "expected.out", "main.xr", "values.xr", "callables-main.xr", "callables.xr", "callables.out")]
+    files = [args.fixtures / name for name in ("main-supported.xr", "values-supported.xr", "expected.out", "main.xr", "values.xr", "callables-main.xr", "callables.xr", "callables.out", "main-record.xr", "values-record.xr")]
     before = [fact(path) for path in files]
     expected = files[2].read_bytes()
     commands = []
@@ -47,6 +47,10 @@ def main() -> int:
     executable = work / "public-const.exe"
     built = invoke("native-build", [args.binary, "build", files[0], "-o", executable], None)
     native = invoke("native", [executable], expected) if built and executable.is_file() else False
+    record_vm = invoke("record-vm", [args.binary, "run", files[8]], expected)
+    record_executable = work / "public-record.exe"
+    record_built = invoke("record-native-build", [args.binary, "build", files[8], "-o", record_executable], None)
+    record_native = invoke("record-native", [record_executable], expected) if record_built and record_executable.is_file() else False
     rejected_stderr = (b"error: constructed XIR failed checking at function 4294967295 block 4294967295 instruction 4294967295\n"
                        b"source build failed (stage=4 status=source-rejected)\n")
     callable_rejections = []
@@ -66,7 +70,7 @@ def main() -> int:
                          "stderr": fact(work / ("callable-" + mode + ".stderr"))})
         save()
     state["protected"] = before == [fact(path) for path in files]
-    state["state"] = "PASS" if vm and built and native and all(callable_rejections) and state["protected"] else "FAIL"
+    state["state"] = "PASS" if vm and built and native and record_vm and record_built and record_native and all(callable_rejections) and state["protected"] else "FAIL"
     save()
     print(json.dumps({"state": state["state"], "result": str(report)}))
     return 0 if state["state"] == "PASS" else 1
