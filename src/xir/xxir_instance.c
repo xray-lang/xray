@@ -1484,11 +1484,14 @@ static XrXirCallStatus instance_slot_copy(XrXirCallView *view,XrXirInstance *ins
     const XrXirDeclarations *d = instance->program->declarations;
     uint32_t module = d->slots[slot].module;
     if (view_is_child(instance, view) && !worker_slot_read(instance, slot)) return XR_XIR_CALL_BAD_STATE;
-    XrXirCallStatus scoped=instance_slot_scope(view,instance,function,module);
+    XrXirCallStatus scoped=instance_slot_read_scope(view,instance,function,slot);
     if (scoped!=XR_XIR_CALL_READY) return scoped;
     if (instance->slot_origins && instance->slot_origins[slot].owner) {
         InstanceStorageRoute route=instance->slot_origins[slot];
         XrXirInstance *birth=route.owner;
+        if(!xr_xir_module_same_scope(d,d->functions[function].module,module) &&
+            !xir_slot_public(birth->program->declarations,instance_slot_facts(birth),route.index))
+            return XR_XIR_CALL_BAD_STATE;
         if (!instance->ready[module] ||
             route.index>=birth->program->declarations->slot_count || !birth->published[route.index] ||
             !birth->ready[birth->program->declarations->slots[route.index].module]) return XR_XIR_CALL_BAD_STATE;

@@ -52,6 +52,12 @@ static XrXirStatus nominal_identities_verify(const XrXirNominalTable *table, XrX
         if (status == XR_XIR_OK) status = nominal_name(d->name,NULL);
         if (status != XR_XIR_OK) return status;
         if (!nominal_flags_valid(d->kind,d->flags)) return XR_XIR_BAD_STRUCTURE;
+        if (d->flags & XR_XIR_NOMINAL_RECORD) {
+            if (d->kind!=XR_XIR_NOMINAL_STRUCT || d->exported!=1 || d->arity!=d->field_count ||
+                d->native.native_id || d->variant_count) return XR_XIR_BAD_STRUCTURE;
+            for (uint32_t f=0;f<d->field_count;++f)
+                if (d->fields[f].flags!=XR_XIR_FIELD_MUTABLE) return XR_XIR_BAD_TYPE;
+        }
         status = nominal_native_verify( d);
         if (status != XR_XIR_OK) return status;
         status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count,NULL);
@@ -65,6 +71,7 @@ static XrXirStatus nominal_identities_verify(const XrXirNominalTable *table, XrX
             if ((flags & ~7u) || (flags & 3u) == 3u) return XR_XIR_BAD_STRUCTURE;
             status = nominal_name(d->fields[f].name,NULL);
             if (status != XR_XIR_OK) return status;
+            if((d->flags&XR_XIR_NOMINAL_RECORD)&&f&&nominal_record_order(d->fields[f-1].name,d->fields[f].name)>=0)return XR_XIR_BAD_STRUCTURE;
             uint32_t begin = 0;
             status = nominal_field_begin(d->kind, d->variants, d->variant_count, f, &begin);
             if (status != XR_XIR_OK) return status;
@@ -77,6 +84,12 @@ static XrXirStatus nominal_identities_verify(const XrXirNominalTable *table, XrX
         }
         for (uint32_t j = 0; j < i; ++j) {
             bool same = false;
+            const XrXirNominalIdentity *previous=&table->identities[j];
+            if((d->flags&XR_XIR_NOMINAL_RECORD)&&(previous->flags&XR_XIR_NOMINAL_RECORD)&&d->field_count==previous->field_count) {
+                bool equal=true;
+                for(uint32_t f=0;f<d->field_count&&equal;++f)equal=nominal_record_order(d->fields[f].name,previous->fields[f].name)==0;
+                if(equal)return XR_XIR_BAD_STRUCTURE;
+            }
             status = nominal_same_name(d->module, table->identities[j].module, &same);
             if (status != XR_XIR_OK) return status;
             if (!same) continue;

@@ -52,12 +52,17 @@ static const char ci_consumer_source[]=
     "export fn callable()->fn()->f64{return bits}\n";
 static const char *const ci_entry_names[]={"bits","shadow","initializations","all","otherValue","callable"};
 static const char *const ci_logical_names[]={"other.xr","flags.xr","facade.xr","hop.xr"};
-static const char *const ci_rejections[]={
-    "export var VALUE:f64=1.0",
+static const char *const ci_new_admissions[]={
     "export const VALUE=1.0",
     "export const VALUE:f32=1.0",
     "export const VALUE:string=\"text\"",
+    "fn init()->f64{return 1.0}; export const VALUE:f64=init()",
+};
+
+static const char *const ci_rejections[]={
+    "import {PI} from \"./flags\";fn alter(x:ref f64){x=2.0};export fn f(){alter(ref PI)}" ,
     "fn init()->f64{return 1.0} export const VALUE:f64=init()",
+    "export var VALUE:f64=1.0",
     "export const VALUE:f64=\"wrong\"",
     "import {initialized} from \"./flags\";export fn f()->i64{return initialized}",
     "import {PI} from \"./flags\";export fn f(){PI=2.0}",

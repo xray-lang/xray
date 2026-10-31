@@ -1,0 +1,3 @@
+var state:i64=6
+export const NEXT:fn()->i64=fn()->i64{return state+1}
+export const TEXT:string="kept\0é"

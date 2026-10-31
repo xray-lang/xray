@@ -285,13 +285,9 @@
       "id": "README.md#xray-2",
       "path": "README.md#xray-2",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F10",
-        "first_diagnostic": "README.md#xray-2:9:0: error: expression syntax is not implemented in XIR (node 65)"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/readme_record.txt"
     },
     {
       "id": "README.md#xray-3",
@@ -321,13 +317,9 @@
       "id": "README_CN.md#xray-2",
       "path": "README_CN.md#xray-2",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F10",
-        "first_diagnostic": "README_CN.md#xray-2:9:0: error: expression syntax is not implemented in XIR (node 65)"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/readme_record.txt"
     },
     {
       "id": "README_CN.md#xray-3",
@@ -677,8 +669,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F10",
-        "first_diagnostic": "stdlib/yaml/yaml.xr:159:4: error: type declaration is not admitted by XIR (kind 13)"
+        "feature": "F02",
+        "first_diagnostic": "stdlib/yaml/yaml.xr:1307:27: error: name does not resolve to an admitted nominal type"
       }
     },
     {
@@ -728,6 +720,22 @@
       "expect": "pass",
       "exit_code": 0,
       "stdout": "tests/smoke/expected/functional.txt"
+    },
+    {
+      "id": "native:README.md#xray-2",
+      "path": "README.md#xray-2",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/readme_record.txt"
+    },
+    {
+      "id": "native:README_CN.md#xray-2",
+      "path": "README_CN.md#xray-2",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/readme_record.txt"
     }
   ]
 }

@@ -89,6 +89,12 @@ static bool source_binding_prepare(SourceContext *ctx,SourceName *symbol,SourceV
         !source_recipe_record(ctx,(XrXirInstruction){action.operation,action.physical,
             {action.logical==XR_XIR_UNIT?0:initial->id,0},{0},0,{0}},initial))return false;
     ctx->slots[symbol->index].type=initial->type;
+    if(!symbol->hidden && symbol->node && symbol->node->is_exported &&
+        !ctx->slot_fact_present[symbol->index]) {
+        size_t length=source_text_size(ctx,symbol->name);
+        if(ctx->diagnostic.status!=XR_XIR_OK || length>UINT32_MAX ||
+            !source_slot_fact(ctx,symbol->index,symbol->name,(uint32_t)length,1))return false;
+    }
     if(action.logical==XR_XIR_UNIT)symbol->kind=SOURCE_UNIT_SLOT;
     source_query_binding_type(ctx,symbol);
     return source_hir_binding_emitted(ctx,&action,initial,before);

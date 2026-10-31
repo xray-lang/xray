@@ -39,12 +39,14 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     if (identity->method_kind > XR_XIR_MATERIALIZER ||
         (!!identity->nominal_owner != (identity->method_kind != XR_XIR_NON_MEMBER)))
         return XR_XIR_BAD_STRUCTURE;
-    if (identity->native_callable) return xir_native_callable_verify(module,index);
-    if (!identity->nominal_owner) return XR_XIR_OK;
+    if (!identity->nominal_owner) return identity->native_callable?xir_native_callable_verify(module,index):XR_XIR_OK;
     const XrXirNominalTable *table = module->types ? module->types->nominals : NULL;
     uint32_t owner = identity->nominal_owner-1;
     if (!table || owner >= table->count || (!table->declarations && !table->identities))
         return XR_XIR_BAD_STRUCTURE;
+    uint32_t flags=table->declarations?table->declarations[owner].flags:table->identities[owner].flags;
+    if (flags & XR_XIR_NOMINAL_RECORD) return XR_XIR_BAD_TYPE;
+    if (identity->native_callable) return xir_native_callable_verify(module,index);
     if (identity->method_kind == XR_XIR_MEMBER_HELPER || identity->method_kind==XR_XIR_MATERIALIZER) return XR_XIR_OK;
     uint32_t count = table->declarations ? table->declarations[owner].parameter_count : table->identities[owner].arity;
     if (!xir_effect_evidence_is_closed(module) && count > (module->generics ? module->generics[index].parameter_count : 0))

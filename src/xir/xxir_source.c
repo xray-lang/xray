@@ -703,6 +703,7 @@ static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *
     return source_intern_type(ctx, qualified, type);
 }
 static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);
+#include "xxir_source_record_type.inc.c"
 static bool source_tuple_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *type) {
     if (ref->nchildren <= 0) return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"empty type syntax must use Unit");
     if (!ref->children || ctx->depth>=128)
@@ -745,6 +746,7 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
     }
     case XR_TREF_FUNCTION: return source_callable_type(ctx, ref, type);
     case XR_TREF_TUPLE: return source_tuple_type_ref(ctx,ref,type);
+    case XR_TREF_OBJECT: return source_record_type_ref(ctx,ref,type);
     case XR_TREF_UNIT: *type = XR_XIR_UNIT; return true;
     case XR_TREF_BOOL: *type = XR_XIR_BOOL; return true;
     case XR_TREF_STRING: *type = XR_XIR_STRING; return true;
@@ -878,6 +880,7 @@ static bool source_recipe_append(SourceContext *ctx, XrXirInstruction op, Source
 #include "xxir_source_typed_body.inc.c"
 #include "xxir_source_borrow_call.inc.c"
 #include "xxir_source_invoke.inc.c"
+static bool source_slot_fact(SourceContext *,uint32_t,const char *,uint32_t,uint32_t);
 #include "xxir_source_binding_cell.inc.c"
 static bool source_root_type(SourceContext *ctx, XrXirType type) {
     if(ctx->diagnostic.status!=XR_XIR_OK)return false;
@@ -966,7 +969,7 @@ static bool source_imported_value(SourceContext *ctx,AstNode *node,SourceName *b
 static bool source_declaration_exported(SourceContext *ctx, const SourceName *name) {
     if (!name) return false;
     switch (name->kind) {
-    case SOURCE_SLOT: return source_exported_const(ctx,name);
+    case SOURCE_SLOT:case SOURCE_UNIT_SLOT:return source_exported_const(ctx,name);
     case SOURCE_FUNCTION:
         return name->index < ctx->function_count && ctx->identities &&
             ctx->identities[name->index].exported != 0 &&
@@ -1172,6 +1175,7 @@ static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
 #include "xxir_source_nominal_contract.inc.c"
 #include "xxir_source_struct.inc.c"
+#include "xxir_source_record.inc.c"
 #include "xxir_source_path.inc.c"
 static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,
     size_t length, uint32_t *literal) {
@@ -1757,6 +1761,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         if (context.present && xr_xir_type_is_nullable(&ctx->types, context.type))
             context.type = xr_xir_nullable_element(&ctx->types, context.type);
         return source_hash_literal(ctx, node, context, value);
+    case AST_OBJECT_LITERAL: return source_record_literal(ctx,node,context,value);
     case AST_ARRAY_LITERAL:
         if (context.present && xr_xir_type_is_nullable(&ctx->types,context.type))
             context.type = xr_xir_nullable_element(&ctx->types,context.type);
@@ -2201,14 +2206,14 @@ static bool collect_declarations(SourceContext *ctx) {
         if(ctx->graph->specs[m].representation==XR_MODULE_CHECKED_LIBRARY) {
             bool first=source_library_group_first(ctx,m);
             if(ctx->diagnostic.status!=XR_XIR_OK ||
-                (first && !source_library_group_inventory(ctx,&functions,&slots,&nominals,&interfaces,&readers))) return false;
+                (first && !source_library_group_inventory(ctx,&functions,&slots,&nominals,&interfaces))) return false;
             continue;
         }
         if (source_owned_checked(&ctx->graph->specs[m])) {
             const XrXirModule *library=source_owned_module_view(ctx,m);
             if(!library)return false;
             uint32_t imported = 0;
-            if(!source_library_inventory(ctx,m,library,&imported,&slots,&readers))return false;
+            if(!source_library_inventory(ctx,m,library,&imported,&slots))return false;
             if(imported > ctx->compile.limits.functions ||
                 functions > ctx->compile.limits.functions-imported)
                 return source_fail(ctx,NULL,XR_XIR_BUDGET,"library function inventory exhausted");
@@ -2252,10 +2257,6 @@ static bool collect_declarations(SourceContext *ctx) {
             if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) {
                 if (slots==UINT32_MAX) return source_fail(ctx,node,XR_XIR_BUDGET,"module binding inventory exhausted");
                 ++slots;
-                if (source_exported_const_syntax(ctx,node)) {
-                    if (readers==UINT32_MAX) return source_fail(ctx,node,XR_XIR_BUDGET,"constant reader inventory exhausted");
-                    ++readers;
-                }
                 if (ctx->diagnostic.status!=XR_XIR_OK) return false;
                 if (ctx->binding_readers && m==(uint32_t)ctx->graph->entry_index) {
                     uint32_t added=node->type==AST_VAR_DECL ? 3u : 1u;
@@ -2385,7 +2386,7 @@ static bool collect_declarations(SourceContext *ctx) {
         for (SourceName *p = ctx->names[m]; p; p = p->next)
             if (p->kind == SOURCE_IMPORT && !source_import_selectors(ctx,p)) return false;
     }
-    return source_unicode_declare(ctx) && source_exported_const_reserve(ctx);
+    return source_unicode_declare(ctx);
 }
 static bool source_parameter_promise(SourceContext *ctx, uint32_t function, uint32_t parameter) {
     SourceFunction *body = &ctx->bodies[function];

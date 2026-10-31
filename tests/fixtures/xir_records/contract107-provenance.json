@@ -1,0 +1,31 @@
+{
+  "source": "37610e04343ced0abf8d08b04ce7c5a2caa12e19",
+  "role": "Complete real semantic107 Source/Catalog packets; immutable rejection inputs",
+  "authority": "D:\\xray-build\\coordinator\\20261029-resume\\r3-f01-public-const\\previous-contract107-v1\\inputs.json",
+  "files": [
+    {
+      "path": "tests/fixtures/xir_records/exported-i64-const-source.chk",
+      "sha256": "e5d120d52e916cf8db17a89cf4d0e0e506a17bbefc5027cfb20ed6c4d187e7a4",
+      "bytes": 7127,
+      "original": "D:\\xray-build\\r3-f01-owned-input-rel\\tests\\unit\\generated\\exported-i64-const-source.chk"
+    },
+    {
+      "path": "tests/fixtures/xir_records/exported-i64-const-catalog.chk",
+      "sha256": "13f80c9d1ba109e3598d3654ccca8d14ae11de36949a6eff4c16ef3a17f639a5",
+      "bytes": 10244,
+      "original": "D:\\xray-build\\r3-f01-owned-input-rel\\tests\\unit\\generated\\exported-i64-const-catalog.chk"
+    },
+    {
+      "path": "tests/fixtures/xir_records/exported-f64-const-source.chk",
+      "sha256": "fe851f02d0df14fe479a7d71c0f6e3a5758c6bcaeeb53ea68e32c39ecfdbbd11",
+      "bytes": 14619,
+      "original": "D:\\xray-build\\r3-f01-owned-input-rel\\tests\\unit\\generated\\exported-f64-const-source.chk"
+    },
+    {
+      "path": "tests/fixtures/xir_records/exported-f64-const-catalog.chk",
+      "sha256": "dd318d7503575b7b8ade91b608f21f80248cca5fed1b272a26ea89931b3d3f84",
+      "bytes": 24169,
+      "original": "D:\\xray-build\\r3-f01-owned-input-rel\\tests\\unit\\generated\\exported-f64-const-catalog.chk"
+    }
+  ]
+}

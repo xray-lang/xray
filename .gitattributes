@@ -81,3 +81,11 @@ tests/unit/hir/body/nominal_contracts.xr text eol=lf
 tests/unit/hir/body/nominal_contracts.out text eol=lf
 tests/unit/hir/body/nominal_order.xr text eol=lf
 tests/unit/hir/body/nominal_order.out text eol=lf
+
+/tests/fixtures/xir_records/* text eol=lf
+/tests/smoke/expected/readme_record.txt text eol=lf
+
+/tests/fixtures/xir_records/*.chk -text
+
+# Public constant product fixtures keep exact Source and stdout bytes.
+tests/unit/xir/public_const_inputs/* text eol=lf

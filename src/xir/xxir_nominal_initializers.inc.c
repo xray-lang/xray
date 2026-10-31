@@ -117,6 +117,11 @@ XR_FUNC XrXirStatus xir_construction_verify(
 
         const XrXirNominalDeclaration *owner = &table->declarations[n];
         const XrXirConstructionRow *row = xr_xir_compile_construction_row(construction, n);
+        if (owner->flags & XR_XIR_NOMINAL_RECORD) {
+            if (row->default_initializer) return XR_XIR_BAD_TYPE;
+            for (uint32_t f=0;f<owner->field_count;++f)
+                if (row->field_initializers[f]) return XR_XIR_BAD_TYPE;
+        }
         XrXirStatus status = nominal_initializer_target(context,m,n,row->default_initializer,NULL);
         if (status != XR_XIR_OK) return status;
         /* An ordinary definition has one constructor identity at most. An

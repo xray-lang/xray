@@ -33,7 +33,7 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *com
             !memcmp(candidate->name, identity.module.bytes, identity.module.length)) { declaring_module = m; break; }
     }
     if (declaring_module == UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-    if (declaring_module != caller->module) {
+    if (!(identity.flags & XR_XIR_NOMINAL_RECORD) && declaring_module != caller->module) {
         if (!identity.exported && !xr_xir_module_same_scope(scope, caller->module, declaring_module)) return XR_XIR_BAD_TYPE;
 
         if (!xr_xir_module_imports(scope, caller->module, declaring_module)) return XR_XIR_BAD_TYPE;

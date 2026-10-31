@@ -141,31 +141,19 @@ static void ci_flow(bool cold,const char *packet_path) {
     XrXirValue kept=ci_runtime_cases(program,selection);xr_compile_resources_release(context.resources);ci_retained(&kept);
     fprintf(stderr,"public f64 flow %s canonical slots, cold hops and retirement PASS\n",cold?"catalog":"source");
 }
-static void ci_direct_slot_negative(const XrXirCompileContext *context,const XrXirArtifact *producer) {
-    const XrXirModule *module=xr_xir_compile_artifact_module(producer);uint32_t f=ci_entry(module,"all");
-    XrXirFunction *functions=NULL;XrXirInstruction *ops=NULL;
-    CHECK(xr_compile_resources_alloc(context->resources,module->function_count*sizeof(*functions),(void **)&functions)==XR_COMPILE_RESOURCE_OK);
-    memcpy(functions,module->functions,module->function_count*sizeof(*functions));
-    CHECK(xr_compile_resources_alloc(context->resources,functions[f].instruction_count*sizeof(*ops),(void **)&ops)==XR_COMPILE_RESOURCE_OK);
-    memcpy(ops,functions[f].instructions,functions[f].instruction_count*sizeof(*ops));functions[f].instructions=ops;bool changed=false;
-    for(uint32_t i=0;i<functions[f].instruction_count;++i)if(ops[i].op==XR_XIR_CALL) {
-        const XrXirFunction *callee=&module->functions[ops[i].immediate];
-        if(callee->instruction_count && callee->instructions[0].op==XR_XIR_SLOT_LOAD) {
-            ops[i]=(XrXirInstruction){XR_XIR_SLOT_LOAD,XR_XIR_F64,{0},{0},callee->instructions[0].immediate,{0}};changed=true;break;
-        }
-    }
-    CHECK(changed);XrXirModule invalid=*module;invalid.functions=functions;XrXirArtifact *rejected=NULL;
-    CHECK(xr_xir_compile_recheck_v2(context,&invalid,xr_xir_compile_artifact_construction(producer),&rejected,NULL, NULL)!=XR_XIR_OK && !rejected);
-    xr_compile_resources_free(ops);xr_compile_resources_free(functions);
-}
+#include "xir_public_slot_authority.h"
 static void ci_authority(void) {
     ci_work(true);XrXirCompileContext context=ci_context();XrXirLibraryCatalog *catalog=ci_cold(&context);
+    for(size_t i=0;i<sizeof(ci_new_admissions)/sizeof(*ci_new_admissions);++i) {
+        XrXirSourceResult admitted={0};CHECK(ci_check(&context,ci_new_admissions[i],"admitted.xr",XR_XIR_PROGRAM,catalog,&admitted)==XR_XIR_OK);
+        xr_xir_compile_source_result_free(&admitted);
+    }
     for(size_t i=0;i<sizeof(ci_rejections)/sizeof(*ci_rejections);++i) {
         XrXirSourceResult refused={0};CHECK(ci_check(&context,ci_rejections[i],"refused.xr",XR_XIR_PROGRAM,catalog,&refused)!=XR_XIR_OK);
         xr_xir_compile_source_result_free(&refused);
     }
     XrXirSourceResult result=ci_source(&context,ci_consumer_source,"entry.xr",XR_XIR_PROGRAM,catalog);
-    ci_direct_slot_negative(&context,result.checked);xr_xir_compile_source_result_free(&result);
+    ci_direct_slot_authority(&context,result.checked);xr_xir_compile_source_result_free(&result);
     xr_xir_compile_library_catalog_free(catalog);xr_compile_resources_release(context.resources);
     fprintf(stderr,"public f64 readonly permissions and actual owner checks PASS\n");
 }

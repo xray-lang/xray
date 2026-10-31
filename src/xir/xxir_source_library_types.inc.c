@@ -19,6 +19,7 @@ static bool source_hir_nominal_imports(SourceContext *ctx,XrHirNominalImport *in
         const XrXirNominalTable *table=unit->library->types?unit->library->types->nominals:NULL;
         for(uint32_t n=0;table&&n<table->count;++n) {
             if(!source_request_poll(ctx,NULL))return false;uint32_t target=unit->nominals[n];
+            if(table->declarations[n].flags&XR_XIR_NOMINAL_RECORD)continue;
             if(target>=count||inputs[target].construction)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library nominal owner mapping changed");
             inputs[target]=(XrHirNominalImport){unit->library->types,unit->construction,n};
         }
@@ -107,6 +108,13 @@ static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
          * actually reached module views. It adds no initialization edges. */
         if (m==UINT32_MAX) return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"library nominal declaration is outside selected module closure");
         ctx->module=m;
+        if(in->flags&XR_XIR_NOMINAL_RECORD) {
+            XrXirLiteral *keys=in->field_count?source_alloc(ctx,in->field_count,sizeof(*keys)):NULL;
+            if(in->field_count&&!keys)return false;
+            for(uint32_t f=0;f<in->field_count;++f)keys[f]=in->fields[f].name;
+            if(!source_record_schema(ctx,NULL,keys,in->field_count,&unit->nominals[n]))return false;
+            continue;
+        }
         char *name=source_library_name(ctx,in->name);
         if (!name) return false;
         SourceName *symbol=add_name(ctx,&ctx->names[m],name,NULL);
@@ -316,6 +324,7 @@ static bool source_library_fields(SourceContext *ctx, SourceLibraryUnit *unit) {
     const XrXirNominalTable *table=unit->library->types->nominals;
     for (uint32_t n=0; table && n<table->count; ++n) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+        if(table->declarations[n].flags&XR_XIR_NOMINAL_RECORD)continue;
         uint32_t target=unit->nominals[n];SourceName *symbol=ctx->nominal_sources[target];
         ctx->module=symbol->module;ctx->function=symbol->module;
         const XrXirNominalDeclaration *in=&table->declarations[n];

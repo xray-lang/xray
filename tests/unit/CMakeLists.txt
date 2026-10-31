@@ -4744,3 +4744,5 @@ add_subdirectory(xir/task_result)
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/callable_array_transport.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/source_local_recursive_binding.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/source_records.cmake")

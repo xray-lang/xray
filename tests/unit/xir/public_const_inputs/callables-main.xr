@@ -1,0 +1,6 @@
+import "./callables" as original
+import {NEXT} from "./callables"
+const alias=NEXT
+print(alias())
+print(original.NEXT())
+print(original.TEXT)

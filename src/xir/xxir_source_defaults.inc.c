@@ -10,7 +10,7 @@ static bool source_hir_nominal_declarations(SourceContext *ctx) {
         if(symbol->checked_library) {
             if(!imports[d].construction)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library nominal construction owner is missing");
             input.imported=&imports[d];
-        } else if(symbol->node->type==AST_STRUCT_DECL||symbol->node->type==AST_CLASS_DECL) {
+        } else if(symbol->node&&(symbol->node->type==AST_STRUCT_DECL||symbol->node->type==AST_CLASS_DECL)) {
             ClassDeclNode *source=symbol->node->type==AST_CLASS_DECL?&symbol->node->as.class_decl:&symbol->node->as.struct_decl;
             uint32_t count=ctx->nominals.declarations[d].field_count;
             uint32_t *initializers=count?source_alloc(ctx,count,sizeof(*initializers)):NULL;if(count&&!initializers)return false;
@@ -27,7 +27,7 @@ static bool source_hir_nominal_declarations(SourceContext *ctx) {
         const char *reason=NULL;XrXirStatus status=xr_hir_body_nominal_declare(ctx->typed_body,&input,ctx->request,&reason);
         if(!source_hir_nominal_status(ctx,symbol->node,status,reason))return false;
     }
-    return true;
+    ctx->record_declarations_ready=true;return true;
 }
 static bool source_struct_defaultability(SourceContext *ctx) {
     if(!source_hir_nominal_declarations(ctx))return false;uint32_t added=0,failed=UINT32_MAX;

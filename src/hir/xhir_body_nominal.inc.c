@@ -244,7 +244,7 @@ static bool body_nominal_type_defaultable(const XrHirBody *body,XrXirType type,c
     if(!node||node->kind!=XR_XIR_TYPE_NOMINAL||node->nominal.declaration>=body->nominal_declarations.count)return false;
     HirBodyNominalDeclaration row=((HirBodyNominalDeclaration *)body->nominal_declarations.items)[node->nominal.declaration];
     const unsigned char *facts=available?available:body->nominal_available;
-    return row.kind!=XR_XIR_NOMINAL_CLASS&&(facts?facts[node->nominal.declaration]!=0:row.available);
+    return !(row.flags&XR_XIR_NOMINAL_RECORD)&&row.kind!=XR_XIR_NOMINAL_CLASS&&(facts?facts[node->nominal.declaration]!=0:row.available);
 }
 XR_FUNC bool xr_hir_body_nominal_defaultable(const XrHirBody *body,XrXirType type) {
     return body&&!body->ended&&body_nominal_type_defaultable(body,type,NULL);
@@ -268,7 +268,7 @@ XR_FUNC XrXirStatus xr_hir_body_nominal_schedule(XrHirBody *body,uint32_t functi
         for(uint32_t d=0;status==XR_XIR_OK&&d<count;++d) {
             if(!(d%64))status=body_poll(control);if(status!=XR_XIR_OK)break;
             HirBodyNominalDeclaration row=((HirBodyNominalDeclaration *)body->nominal_declarations.items)[d];
-            if(row.imported||row.explicit_initializer||available[d]||(row.kind!=XR_XIR_NOMINAL_STRUCT&&row.kind!=XR_XIR_NOMINAL_CLASS))continue;
+            if((row.flags&XR_XIR_NOMINAL_RECORD)||row.imported||row.explicit_initializer||available[d]||(row.kind!=XR_XIR_NOMINAL_STRUCT&&row.kind!=XR_XIR_NOMINAL_CLASS))continue;
             bool ready=true;
             for(uint32_t f=0;f<row.count;++f) {
                 if(!(f%64))status=body_poll(control);if(status!=XR_XIR_OK){ready=false;break;}
@@ -289,7 +289,7 @@ XR_FUNC XrXirStatus xr_hir_body_nominal_schedule(XrHirBody *body,uint32_t functi
 XR_FUNC bool xr_hir_body_nominal_defaults(const XrHirBody *body,uint32_t declaration,XrHirNominalDefaults *out) {
     if(!body||body->ended||body->nominal_shape_only||!out||declaration>=body->nominal_declarations.count)return false;
     HirBodyNominalDeclaration row=((HirBodyNominalDeclaration *)body->nominal_declarations.items)[declaration];
-    bool available=body->nominal_available?body->nominal_available[declaration]!=0:row.available;
+    bool available=!(row.flags&XR_XIR_NOMINAL_RECORD)&&(body->nominal_available?body->nominal_available[declaration]!=0:row.available);
     *out=(XrHirNominalDefaults){row.constructor,available?row.constructor:0,row.count,row.field_functions,available,row.imported};return true;
 }
 static XrXirStatus body_nominal_function(const XrHirBody *body,uint32_t declaration,uint32_t function,

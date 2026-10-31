@@ -112,7 +112,7 @@ static bool source_library_group_first(SourceContext *ctx,uint32_t module) {
     return true;
 }
 static bool source_library_inventory(SourceContext *ctx, uint32_t module,
-    const XrXirModule *library, uint32_t *count, uint32_t *slots,uint32_t *readers) {
+    const XrXirModule *library, uint32_t *count, uint32_t *slots) {
     const XrXirDeclarations *d = library->declarations;
     uint32_t source_module=source_owned_module(&ctx->graph->specs[module]);
     if (!d || source_module >= d->module_count)
@@ -136,11 +136,6 @@ static bool source_library_inventory(SourceContext *ctx, uint32_t module,
         if (*slots==UINT32_MAX)
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"library slot inventory exhausted");
         ++*slots;
-        if (facts && (d->slots[s].type==XR_XIR_I64 || d->slots[s].type==XR_XIR_F64) &&
-            !d->slots[s].mutable && facts->rows[s].exported==1) {
-            if (*readers==UINT32_MAX) return source_fail(ctx,NULL,XR_XIR_BUDGET,"library constant reader inventory exhausted");
-            ++*readers;
-        }
     }
     *count = total; return true;
 }
@@ -150,7 +145,7 @@ static bool source_library_inventory(SourceContext *ctx, uint32_t module,
  * Every view still proves its identity and dependency edges. Only counts leave
  * this scope; subsequent copying and final construction retain their checks. */
 static bool source_library_group_inventory(SourceContext *ctx,uint32_t *functions,
-    uint32_t *slots,uint32_t *nominals,uint32_t *interfaces,uint32_t *readers) {
+    uint32_t *slots,uint32_t *nominals,uint32_t *interfaces) {
     uint32_t first=ctx->module;
     const XrXirArtifact *artifact=source_owned_artifact(&ctx->graph->specs[first]);
     const XrXirModule *library=source_library_module(ctx,first);
@@ -162,7 +157,7 @@ static bool source_library_group_inventory(SourceContext *ctx,uint32_t *function
         ctx->module=m;
         if(m!=first && !source_library_view(ctx,m,artifact,library)) return false;
         uint32_t imported=0;
-        if(!source_library_inventory(ctx,m,library,&imported,slots,readers)) return false;
+        if(!source_library_inventory(ctx,m,library,&imported,slots)) return false;
         if(imported>ctx->compile.limits.functions || *functions>ctx->compile.limits.functions-imported)
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"library function inventory exhausted");
         *functions+=imported;
@@ -543,6 +538,7 @@ static bool source_library_initializers(SourceContext *ctx, const XrXirModule *l
     const XrXirNominalTable *table=library->types ? library->types->nominals : NULL;
     for (uint32_t n=0; table && n<table->count; ++n) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+        if(table->declarations[n].flags&XR_XIR_NOMINAL_RECORD)continue;
         uint32_t target=map->unit->nominals[n];
         XrXirStatus status=xr_hir_body_nominal_import_bind(ctx->typed_body,target,map->functions,map->function_count,ctx->request);
         if(!source_hir_nominal_status(ctx,NULL,status,"library construction helper mapping is inconsistent"))return false;

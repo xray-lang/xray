@@ -1,0 +1,26 @@
+add_executable(test_xir_records "${CMAKE_CURRENT_LIST_DIR}/test_xir_records.c")
+target_link_libraries(test_xir_records PRIVATE xray_xir_source xray_xir_vm)
+target_include_directories(test_xir_records PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_definitions(test_xir_records PRIVATE XR_RECORD_PREVIOUS_PACKETS="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_records")
+set_target_properties(test_xir_records PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_records PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_records PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/record-cold")
+add_test(NAME xir_record_owner COMMAND test_xir_records "${CMAKE_CURRENT_BINARY_DIR}/record-cold")
+set_tests_properties(xir_record_owner PROPERTIES TIMEOUT 120 LABELS "unit;xir;source;records;ownership")
+add_test(NAME xir_record_source COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_CURRENT_LIST_DIR}/test_source_records.py"
+    --root "${PROJECT_SOURCE_DIR}" --binary $<TARGET_FILE:xray>)
+set_tests_properties(xir_record_source PROPERTIES TIMEOUT 120 LABELS "unit;xir;source;records;ownership")
+if(WIN32)
+    add_test(NAME xir_record_native COMMAND ${XRAY_PYTHON} -X utf8 "${CMAKE_CURRENT_LIST_DIR}/test_source_records.py"
+        --root "${PROJECT_SOURCE_DIR}" --binary $<TARGET_FILE:xray> --native)
+    set_tests_properties(xir_record_native PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "unit;xir;source;records;native;ownership")
+endif()
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/record-empty-stdlib")
+add_test(NAME xir_record_sdk COMMAND test_hir_body_source "${CMAKE_CURRENT_BINARY_DIR}/record-empty-stdlib"
+    "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_records/readme.xr" "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_records/readme.out")
+set_tests_properties(xir_record_sdk PROPERTIES TIMEOUT 120 LABELS "unit;xir;source;records;sdk;ownership")

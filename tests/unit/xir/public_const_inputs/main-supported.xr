@@ -1,0 +1,16 @@
+import "./values-supported" as values
+import {NUMBER as N} from "./values-supported"
+fn mutateCopy()->i64 { var xs=values.NUMBERS; xs.push(9); return len(xs) }
+fn unitRead() { const unused=values.NOTHING }
+export fn answer()->i64 { return N }
+unitRead()
+print(answer())
+print(values.TEXT)
+print(values.READY)
+print(values.FRACTION)
+print(len(values.NUMBERS))
+print(values.NUMBERS[0])
+print(values.PAIR.first)
+print(values.OPTIONAL ?? -1)
+print(mutateCopy())
+print(len(values.NUMBERS))

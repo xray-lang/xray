@@ -64,8 +64,7 @@ static bool source_library_public_slot(SourceContext *ctx,const XrXirModule *lib
     const SourceLibraryMap *map,const XrXirSlotFacts *facts,uint32_t slot,uint32_t target) {
     const XrXirSlot *original=&library->declarations->slots[slot];
     const XrXirSlotFact *fact=&facts->rows[slot];
-    if (library->linkage_kind!=XR_XIR_LIBRARY || original->mutable ||
-        (original->type!=XR_XIR_I64 && original->type!=XR_XIR_F64) || fact->exported!=1) return true;
+    if (library->linkage_kind!=XR_XIR_LIBRARY || original->mutable || fact->exported!=1) return true;
     for (uint32_t s=0;s<map->slot_count;++s) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (s==slot || map->slots[s]==UINT32_MAX ||
@@ -82,7 +81,7 @@ static bool source_library_public_slot(SourceContext *ctx,const XrXirModule *lib
     uint32_t owner=ctx->slots[target].module;ctx->module=owner;
     SourceName *symbol=add_name(ctx,&ctx->names[owner],name,NULL);
     if (!symbol) return false;
-    symbol->kind=SOURCE_SLOT;symbol->index=target;symbol->module=owner;
+    symbol->kind=ctx->slots[target].type==XR_XIR_UNIT?SOURCE_UNIT_SLOT:SOURCE_SLOT;symbol->index=target;symbol->module=owner;
     symbol->type=ctx->slots[target].type;symbol->checked_library=true;
     if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,0,(XrXirSourceRange){owner,0,0,0,0})) return false;
     XrHirBodyBinding binding={0};if(!source_hir_binding_register(ctx,symbol,&binding))return false;

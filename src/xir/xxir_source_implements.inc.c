@@ -16,7 +16,7 @@ static bool source_implementation_applications(SourceContext *ctx) {
     }
     for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
-        if (owner->checked_library) continue;
+        if (owner->checked_library || (ctx->nominals.declarations[d].flags & XR_XIR_NOMINAL_RECORD)) continue;
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         SourceNominalDeclaration declaration;
         if (!source_nominal_declaration(ctx,owner->node,&declaration)) return false;
@@ -45,7 +45,7 @@ static bool source_implementation_applications(SourceContext *ctx) {
     bool ok = true;
     for (uint32_t d = 0; d < ctx->nominals.count && ok; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
-        if (owner->checked_library) continue;
+        if (owner->checked_library || (ctx->nominals.declarations[d].flags & XR_XIR_NOMINAL_RECORD)) continue;
         SourceNominalDeclaration declaration;
         if (!source_nominal_declaration(ctx,owner->node,&declaration)) { ok = false; break; }
         ctx->module = owner->module;

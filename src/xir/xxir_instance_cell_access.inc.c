@@ -9,6 +9,8 @@
  * KEY CONCEPT:
  *   A frame loan does not grant worker access to module storage.
  */
+#include "xxir_slot_access_internal.h"
+
 static bool instance_cell_work(XrXirCallView *view, uint64_t work) {
     XrXirValueAdmission *admission = xr_xir_call_admission(view);
     if (!admission || work > admission->work) return false;
@@ -43,6 +45,22 @@ static XrXirCallStatus instance_slot_scope(XrXirCallView *view,const XrXirInstan
     if (!xr_xir_module_same_scope(d,from,module)) return XR_XIR_CALL_BAD_STATE;
     if (!instance_cell_work(view,(uint64_t)d->modules[from].dependency_count+1)) return XR_XIR_CALL_LIMIT;
     return xr_xir_module_imports(d,from,module) ? XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
+}
+/* The live Program Input owns these facts for every synchronous read. */
+static const XrXirSlotFacts *instance_slot_facts(const XrXirInstance *instance) {
+    const XrXirProgramPermissions *permissions=instance->program->permissions;
+    const XrXirProgramInput *input=permissions?permissions->input:NULL;
+    return input && input->artifact ? xr_xir_compile_construction_slots(input->artifact->construction) : NULL;
+}
+static XrXirCallStatus instance_slot_read_scope(XrXirCallView *view,const XrXirInstance *instance,
+    uint32_t function,uint32_t slot) {
+    const XrXirDeclarations *d=instance->program->declarations;
+    if(function>=instance->program->entry_count || slot>=d->slot_count)return XR_XIR_CALL_BAD_STATE;
+    uint32_t from=d->functions[function].module,to=d->slots[slot].module;
+    if(from==to || xr_xir_module_same_scope(d,from,to))return instance_slot_scope(view,instance,function,to);
+    if(from>=d->module_count || !instance_cell_work(view,(uint64_t)d->modules[from].dependency_count+1))
+        return from>=d->module_count?XR_XIR_CALL_BAD_STATE:XR_XIR_CALL_LIMIT;
+    return xir_slot_public_read(d,instance_slot_facts(instance),from,slot)?XR_XIR_CALL_READY:XR_XIR_CALL_BAD_STATE;
 }
 static bool instance_cell_published(const XrXirInstance *instance, uint32_t slot,
     const XrXirValue *cell) {

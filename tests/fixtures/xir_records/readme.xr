@@ -1,0 +1,13 @@
+fn greet(name: string?) -> string {
+    if (name == null) {
+        return "hello, guest"
+    }
+    return "hello, ${name!}"
+}
+
+var scores = #{ "alice": 95, "bob": 88 }
+var user = { "name": "alice", "score": scores["alice"] }
+for (i in 1..=3) {
+    print(i)
+}
+print(greet(user.name))

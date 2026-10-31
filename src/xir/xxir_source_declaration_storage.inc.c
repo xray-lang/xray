@@ -25,6 +25,7 @@ static bool source_declaration_storage(SourceContext *ctx,uint32_t nominals,uint
     ctx->slots = source_alloc(ctx, slots, sizeof(*ctx->slots));
     ctx->slot_facts=source_alloc(ctx,slots,sizeof(*ctx->slot_facts));
     ctx->slot_fact_present=source_alloc(ctx,slots,sizeof(*ctx->slot_fact_present));
+    ctx->nominal_capacity=nominals;
     ctx->nominals.declarations = source_alloc(ctx, nominals, sizeof(*ctx->nominals.declarations));
     ctx->nominal_members = source_alloc(ctx, nominals, sizeof(*ctx->nominal_members));
     ctx->nominal_variants = source_alloc(ctx, nominals, sizeof(*ctx->nominal_variants));

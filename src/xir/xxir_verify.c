@@ -32,6 +32,7 @@
 #include "xxir_task_shapes.h"
 #include "xxir_operand_roles.h"
 #include "xxir_initialization.h"
+#include "xxir_slot_access_internal.h"
 #include "xxir_constraint_proof.h"
 #include "xxir_constraint_proof_internal.h"
 #include "xxir_type_scratch_internal.h"
@@ -68,6 +69,8 @@ typedef struct VerifyContext {
     void *graph_storage;
     size_t graph_capacity;
     bool literal_type_names;
+    /* The caller retains complete facts for this verification only. */
+    const XrXirConstruction *construction;
 } VerifyContext;
 
 typedef struct Graph {
@@ -123,7 +126,8 @@ static uint32_t operand_count(const XrXirFunction *function,const XrXirInstructi
 #include "xxir_cell_provenance.inc.c"
 
 static XrXirStatus declaration_instruction(const XrXirFunction *function,
-                                           const XrXirInstruction *op, const XrXirModule *module) {
+                                           const XrXirInstruction *op, const XrXirModule *module,
+                                           const XrXirConstruction *construction) {
     const XrXirDeclarations *d = module->declarations;
     if (op->op==XR_XIR_GENERATOR_YIELD &&
         !xr_xir_function_is_generator(module,(uint32_t)(function-module->functions))) return XR_XIR_BAD_TYPE;
@@ -136,7 +140,10 @@ static XrXirStatus declaration_instruction(const XrXirFunction *function,
     if (!d || op->immediate < 0 || (uint64_t) op->immediate >= d->slot_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirSlot *slot = &d->slots[op->immediate];
     uint32_t caller = (uint32_t) (function - module->functions);
-    if (d->functions[caller].module != slot->module) return XR_XIR_BAD_STRUCTURE;
+    uint32_t from=d->functions[caller].module;
+    if (from!=slot->module && (op->op!=XR_XIR_SLOT_LOAD ||
+        !xir_slot_public_read(d,xr_xir_compile_construction_slots(construction),from,(uint32_t)op->immediate)))
+        return XR_XIR_BAD_STRUCTURE;
     if ((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_SLOT_PLACE) && op->type != slot->type) return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_SLOT_INIT && d->modules[slot->module].initializer != caller)
         return XR_XIR_BAD_STRUCTURE;
@@ -241,7 +248,8 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
 
 static XrXirStatus instruction_shape(const XrXirFunction *function,
                                     const XrXirInstruction *op, XrXirStage stage,
-                                    const XrXirModule *module, XrXirCompileContext *remaining) {
+                                    const XrXirModule *module, XrXirCompileContext *remaining,
+                                    const XrXirConstruction *construction) {
     if (op->op <= XR_XIR_INVALID || op->op >= XR_XIR_OP_COUNT)
         return XR_XIR_BAD_STRUCTURE;
 
@@ -250,7 +258,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     const OpRule *rule = &op_rules[op->op];
     if (!(rule->stages & stage))
         return XR_XIR_BAD_STAGE;
-    XrXirStatus declared = declaration_instruction(function, op, module);
+    XrXirStatus declared = declaration_instruction(function, op, module,construction);
     if (declared != XR_XIR_OK) return declared;
     if(op->op==XR_XIR_SLOT_GROUP_INIT) {
         XrXirStatus grouped=slot_group_shape(function,op,module);
@@ -465,7 +473,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             visibility = type_use_context(context, function_id, op->type);
             if (visibility != XR_XIR_OK) return visibility;
 
-            XrXirStatus status = instruction_shape(function, op, stage, context->module, &context->remaining);
+            XrXirStatus status = instruction_shape(function, op, stage, context->module, &context->remaining,context->construction);
             if (status != XR_XIR_OK)
                 return status;
 
@@ -1389,7 +1397,7 @@ XR_FUNC XrXirStatus xir_compile_view_prepare_ordinary(const XrXirCompileContext 
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     VerifyContext context={*compile_context,
         {XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE},module,
-        {compile_context->resources,NULL},{compile_context->resources,NULL,0},NULL,0,false};
+        {compile_context->resources,NULL},{compile_context->resources,NULL,0},NULL,0,false,construction};
     XrXirStatus status=structure_verify_ordinary(&context,construction);
     xr_compile_resources_free(context.graph_storage);
     xir_type_scratch_free(&context.pending);xr_xir_constraint_scratch_free(&context.scratch);
@@ -1455,7 +1463,7 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
         return XR_XIR_BAD_STRUCTURE;
     }
     VerifyContext context = {*remaining,
-                             {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE}, module, {remaining->resources,NULL}, {remaining->resources,NULL,0}, NULL, 0, false};
+                             {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE}, module, {remaining->resources,NULL}, {remaining->resources,NULL,0}, NULL, 0, false,construction};
     XrXirStatus status=structure_verify_ordinary(&context,construction);
     xr_compile_resources_free(context.graph_storage);
     context.graph_storage = NULL; context.graph_capacity = 0;

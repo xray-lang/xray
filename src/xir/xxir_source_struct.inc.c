@@ -145,7 +145,7 @@ static bool source_nominal_constraints(SourceContext *ctx) {
     bool ok = true;
     for (uint32_t d = 0; d < ctx->nominals.count && ok; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
-        if (owner->checked_library) continue;
+        if (owner->checked_library || (ctx->nominals.declarations[d].flags & XR_XIR_NOMINAL_RECORD)) continue;
         SourceNominalDeclaration syntax;
         if (!source_nominal_declaration(ctx,owner->node,&syntax)) { ok=false; break; }
         XrGenericParam **parameters = syntax.parameters;

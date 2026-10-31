@@ -118,6 +118,7 @@ static XrXirStatus implementation_record_shape(const XrXirModule *module,
     const XrXirNominalTable *nominals = module->types ? module->types->nominals : NULL;
     if (!nominals || !nominals->declarations || record->nominal_declaration >= nominals->count ||
         (!!record->bindings != !!record->binding_count)) return XR_XIR_BAD_STRUCTURE;
+    if (nominals->declarations[record->nominal_declaration].flags & XR_XIR_NOMINAL_RECORD) return XR_XIR_BAD_TYPE;
     uint32_t count = nominals->declarations[record->nominal_declaration].parameter_count;
     XrXirConstraint constraint = {0,&record->interface,1};
     XrXirStatus status = xr_xir_compile_constraint_structure(budget, module->types, constraint, count);

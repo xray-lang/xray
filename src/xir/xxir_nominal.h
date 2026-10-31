@@ -27,6 +27,9 @@ typedef struct XrXirNominalField {
 /* An explicit struct initializer limits field literals to its declaring module.
  * Calls retain their own constructor permissions; this flag grants none. */
 #define XR_XIR_NOMINAL_MODULE_LITERAL 2u
+/* Exact structural records share a key schema; ordered arguments are fields.
+ * This fact grants no nominal method, constructor or default authority. */
+#define XR_XIR_NOMINAL_RECORD 4u
 
 /* An explicit class promise: every field is immutable after construction and
  * proves Sendable in its declaration environment. Ordinary classes infer none. */

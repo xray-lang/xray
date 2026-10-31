@@ -336,8 +336,8 @@ static void wire_digest(uint8_t *bytes,size_t length) {
 }
 static void checked_wire_boundary(const XrXirCompileContext *context,uint8_t *packet,size_t length,
     const XrXirModule *module,uint32_t members) {
-    uint64_t baseline=held(context);CHECK(length>=64 && XR_XIR_CHECKED_SCHEMA==39 && XR_XIR_CHECKED_CONTRACT==107);
-    CHECK(packet[12]==107 && !packet[13] && !packet[14] && !packet[15]);
+    uint64_t baseline=held(context);CHECK(length>=64 && XR_XIR_CHECKED_SCHEMA==39 && XR_XIR_CHECKED_CONTRACT==108);
+    CHECK(packet[12]==108 && !packet[13] && !packet[14] && !packet[15]);
     uint8_t digest[32];memcpy(digest,packet+32,sizeof(digest));
     XrXirArtifact *output=NULL;wire_word(packet+12,103);wire_digest(packet,length);
     CHECK(xr_xir_compile_checked_read(context,packet,length,&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
@@ -347,7 +347,9 @@ static void checked_wire_boundary(const XrXirCompileContext *context,uint8_t *pa
     CHECK(xr_xir_compile_checked_read(context,packet,length,&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
     CHECK(held(context)==baseline);wire_word(packet+12,106);wire_digest(packet,length);
     CHECK(xr_xir_compile_checked_read(context,packet,length,&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
-    CHECK(held(context)==baseline);wire_word(packet+12,107);memcpy(packet+32,digest,sizeof(digest));
+    CHECK(held(context)==baseline);wire_word(packet+12,107);wire_digest(packet,length);
+    CHECK(xr_xir_compile_checked_read(context,packet,length,&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
+    CHECK(held(context)==baseline);wire_word(packet+12,108);memcpy(packet+32,digest,sizeof(digest));
     if (!members) return;
     uint32_t value=function_named(module,"value");CHECK(value!=UINT32_MAX);
     const XrXirTypeNode *node=xr_xir_type_node(module->types,module->functions[value].error_type);

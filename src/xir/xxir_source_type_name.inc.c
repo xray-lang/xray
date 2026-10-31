@@ -130,6 +130,7 @@ static bool source_type_name_collect(SourceContext *ctx, AstNode *node, XrXirTyp
         return true;
     case XR_XIR_TYPE_NOMINAL: {
         const XrXirNominalDeclaration *declaration = &ctx->nominals.declarations[shape->nominal.declaration];
+        if(declaration->flags&XR_XIR_NOMINAL_RECORD) {source_type_name_append(name,"object",6);return true;}
         source_type_name_append(name, (const char *) declaration->name.bytes, declaration->name.length);
         if (shape->nominal.argument_count) {
             source_type_name_append(name, "<", 1);

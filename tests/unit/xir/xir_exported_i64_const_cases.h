@@ -39,11 +39,16 @@ static const char ci_consumer_source[]=
     "export fn callable()->fn()->i64{return bits}\n";
 static const char *const ci_entry_names[]={"bits","shadow","initializations","all","otherValue","callable"};
 static const char *const ci_logical_names[]={"other.xr","flags.xr","facade.xr","hop.xr"};
-static const char *const ci_rejections[]={
-    "export var VALUE:i64=1",
+static const char *const ci_new_admissions[]={
     "export const VALUE=1",
     "export const VALUE:f32=1.0",
+    "fn initializeValue()->i64{return 3}; export const VALUE:i64=initializeValue()",
+};
+
+static const char *const ci_rejections[]={
+    "import {PROT_READ} from \"./flags\";fn alter(x:ref i64){x=2};export fn f(){alter(ref PROT_READ)}" ,
     "fn initializeValue()->i64{return 3} export const VALUE:i64=initializeValue()",
+    "export var VALUE:i64=1",
     "export const {value}={value:1}",
     "import {initialized} from \"./flags\";export fn f()->i64{return initialized}",
     "import {PROT_READ} from \"./flags\";export fn f(){PROT_READ=2}",

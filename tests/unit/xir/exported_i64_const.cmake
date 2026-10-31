@@ -65,3 +65,24 @@ foreach(const_target IN LISTS XR_EXPORTED_I64_CONST_TARGETS)
 endforeach()
 set_tests_properties(test_xir_exported_i64_const_authority PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
     LABELS "unit;xir;source;const;library;ownership;authority")
+
+add_test(NAME xir_public_const_cli
+    COMMAND ${XRAY_PYTHON} -X utf8 ${CMAKE_CURRENT_LIST_DIR}/test_public_const_cli.py
+        --binary $<TARGET_FILE:xray>
+        --fixtures ${CMAKE_CURRENT_LIST_DIR}/public_const_inputs
+        --output ${CMAKE_CURRENT_BINARY_DIR}/public-const-cli)
+set_tests_properties(xir_public_const_cli PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE
+    LABELS "unit;xir;source;const;library;ownership;native;cli")
+
+add_executable(test_xir_public_slot_runtime "${CMAKE_CURRENT_LIST_DIR}/test_xir_public_slot_runtime.c")
+target_link_libraries(test_xir_public_slot_runtime PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+target_compile_definitions(test_xir_public_slot_runtime PRIVATE XR_EXPORTED_I64_CONST_WORK="${XR_EXPORTED_I64_CONST_WORK}")
+set_target_properties(test_xir_public_slot_runtime PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_public_slot_runtime PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_public_slot_runtime PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME xir_public_slot_runtime COMMAND test_xir_public_slot_runtime)
+set_tests_properties(xir_public_slot_runtime PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+    LABELS "unit;xir;source;const;ownership;authority;runtime")

@@ -63,7 +63,7 @@ static XrXirStatus nominal_variants(uint32_t kind, const XrXirNominalVariant *va
 static bool nominal_flags_valid(uint32_t kind, uint32_t flags) {
     if (kind == XR_XIR_NOMINAL_CLASS)
         return !(flags & ~(XR_XIR_NOMINAL_FINAL | XR_XIR_NOMINAL_SENDABLE));
-    if (kind == XR_XIR_NOMINAL_STRUCT) return flags == XR_XIR_NOMINAL_MODULE_LITERAL || flags == 0;
+    if (kind == XR_XIR_NOMINAL_STRUCT) return flags == XR_XIR_NOMINAL_MODULE_LITERAL || flags == XR_XIR_NOMINAL_RECORD || flags == 0;
     return flags == 0;
 }
 static XrXirStatus nominal_field_begin(uint32_t kind, const XrXirNominalVariant *variants,
@@ -95,6 +95,11 @@ static bool nominal_field_type(const XrXirTypes *types, XrXirType type, uint32_t
         node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET || node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL) &&
         node->parameter_span <= parameters;
 }
+static int nominal_record_order(XrXirLiteral a,XrXirLiteral b) {
+    uint32_t n=a.length<b.length?a.length:b.length;
+    int order=memcmp(a.bytes,b.bytes,n);
+    return order?order:a.length<b.length?-1:a.length>b.length?1:0;
+}
 static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
     const XrXirTypes *types, XrXirCompileContext *b) {
     if (d->exported > 1 || (d->parameter_count != 0) != (d->constraints != NULL) ||
@@ -108,6 +113,16 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
     if (status == XR_XIR_OK) status = nominal_name(d->name,NULL);
     if (status != XR_XIR_OK) return status;
     if (!nominal_flags_valid(d->kind,d->flags)) return XR_XIR_BAD_STRUCTURE;
+    if (d->flags & XR_XIR_NOMINAL_RECORD) {
+        if (d->kind!=XR_XIR_NOMINAL_STRUCT || d->exported!=1 || d->parameter_count!=d->field_count ||
+            d->native.native_id || d->variant_count) return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t f=0;f<d->field_count;++f) {
+            const XrXirConstraint *constraint=&d->constraints[f];
+            if (constraint->markers || constraint->interfaces || constraint->interface_count ||
+                d->fields[f].type!=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+f) ||
+                d->fields[f].flags!=XR_XIR_FIELD_MUTABLE) return XR_XIR_BAD_TYPE;
+        }
+    }
     XrXirNominalIdentity native_identity = {d->module,d->name,d->exported,d->parameter_count,
         NULL,d->field_count,d->kind,d->variants,d->variant_count,d->flags,d->native};
     status = nominal_native_verify( &native_identity);
@@ -151,6 +166,7 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
             visibility == (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED)) return XR_XIR_BAD_STRUCTURE;
         status = nominal_name(field->name,NULL);
         if (status != XR_XIR_OK) return status;
+        if ((d->flags&XR_XIR_NOMINAL_RECORD) && f && nominal_record_order(d->fields[f-1].name,field->name)>=0) return XR_XIR_BAD_STRUCTURE;
         if (!nominal_field_type(types, field->type, d->parameter_count,d->native.native_id==XR_NATIVE_DECLARATION_RECV && !f)) return XR_XIR_BAD_TYPE;
         status = xr_xir_compile_type_expression_shape(b, types, field->type, d->parameter_count);
         if (status != XR_XIR_OK) return status;
@@ -182,6 +198,12 @@ static XrXirStatus nominal_table_verify(const XrXirNominalTable *table,
         if (status != XR_XIR_OK) return status;
         for (uint32_t j = 0; j < i; ++j) {
             bool same = false;
+            const XrXirNominalDeclaration *previous=&table->declarations[j];
+            if((d->flags&XR_XIR_NOMINAL_RECORD)&&(previous->flags&XR_XIR_NOMINAL_RECORD)&&d->field_count==previous->field_count) {
+                bool equal=true;
+                for(uint32_t f=0;f<d->field_count&&equal;++f)equal=nominal_record_order(d->fields[f].name,previous->fields[f].name)==0;
+                if(equal)return XR_XIR_BAD_STRUCTURE;
+            }
             status = nominal_same_name(d->module, table->declarations[j].module, &same);
             if (status != XR_XIR_OK) return status;
             if (!same) continue;
@@ -328,6 +350,8 @@ static XrXirStatus nominal_nodes_verify(const XrXirTypes *types, XrXirCompileCon
             }
             for (uint32_t f = 0; f < node->nominal.field_count; ++f) {
 
+                if ((identity->flags&XR_XIR_NOMINAL_RECORD) && node->nominal.fields[f]!=node->nominal.arguments[f])
+                    return XR_XIR_BAD_TYPE;
                 if (!nominal_field_type(types, node->nominal.fields[f], 0,!f &&
                     (identity->native.native_id==XR_NATIVE_DECLARATION_RECV ||
                      identity->native.native_id==XR_NATIVE_DECLARATION_TASK_RESULT))) return XR_XIR_BAD_TYPE;

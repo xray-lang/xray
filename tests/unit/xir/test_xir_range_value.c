@@ -130,12 +130,15 @@ static void range_index_structure(const XrXirCompileContext *context,const XrXir
     fprintf(stderr,"Range INDEX_CHECK: eleven payload/shape/type/SSA attacks rejected at exact guard\n");
 }
 static void range_previous_contract(const XrXirCompileContext *context,XrXirCheckedPacket *packet) {
-    CHECK(packet->length>64 && packet->bytes[12]==107 && !packet->bytes[13] && !packet->bytes[14] && !packet->bytes[15]);
+    CHECK(packet->length>64 && packet->bytes[12]==108 && !packet->bytes[13] && !packet->bytes[14] && !packet->bytes[15]);
     XrCompileResourceStats before={0},after={0};
     CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
-    packet->bytes[12]=106;XrXirArtifact *rejected=NULL;
+    uint8_t digest[32];memcpy(digest,packet->bytes+32,sizeof(digest));
+    packet->bytes[12]=107;XrSHA256Context hash;xr_sha256_init(&hash);
+    xr_sha256_update(&hash,packet->bytes,32);xr_sha256_update(&hash,packet->bytes+64,packet->length-64);xr_sha256_final(&hash,packet->bytes+32);
+    XrXirArtifact *rejected=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet->bytes,packet->length,&rejected,NULL)==XR_XIR_BAD_STRUCTURE && !rejected);
-    packet->bytes[12]=107;
+    packet->bytes[12]=108;memcpy(packet->bytes+32,digest,sizeof(digest));
     CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK && before.held_bytes==after.held_bytes);
 }
 static void range_index_ctfe(const XrXirArtifact *closed,const XrXirArtifact *lowered) {

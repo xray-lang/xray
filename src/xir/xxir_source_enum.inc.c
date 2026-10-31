@@ -18,8 +18,9 @@ static bool source_enum_declare(SourceContext *ctx, AstNode *node) {
 static bool source_enum_fields(SourceContext *ctx) {
     for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
-        if (owner->checked_library) continue;
-        if (owner->node->type != AST_ENUM_DECL) continue;
+        if (owner->checked_library || ctx->nominals.declarations[d].kind!=XR_XIR_NOMINAL_ENUM) continue;
+        if (!owner->node || owner->node->type!=AST_ENUM_DECL)
+            return source_fail(ctx,owner->node,XR_XIR_BAD_STRUCTURE,"enum fields require their actual declaration owner");
         EnumDeclNode *source = &owner->node->as.enum_decl;
         ctx->module = owner->module; ctx->function = owner->module;
         ctx->type_scope = (SourceTypeScope){true,owner->node,source->type_params,

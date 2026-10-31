@@ -228,38 +228,45 @@ static void ci_fact_cases(const XrXirCompileContext *context,const XrXirArtifact
     CHECK(xr_xir_compile_check_v2(context,module,NULL,&owned,NULL)!=XR_XIR_OK && !owned);
     xr_compile_resources_free(rows);
 }
-static void ci_direct_slot_negative(const XrXirCompileContext *context,const XrXirArtifact *producer) {
-    const XrXirModule *module=xr_xir_compile_artifact_module(producer);uint32_t f=ci_entry(module,"all");
-    XrXirFunction *functions=NULL;XrXirInstruction *ops=NULL;
-    CHECK(xr_compile_resources_alloc(context->resources,module->function_count*sizeof(*functions),(void **)&functions)==XR_COMPILE_RESOURCE_OK);
-    memcpy(functions,module->functions,module->function_count*sizeof(*functions));
-    CHECK(xr_compile_resources_alloc(context->resources,functions[f].instruction_count*sizeof(*ops),(void **)&ops)==XR_COMPILE_RESOURCE_OK);
-    memcpy(ops,functions[f].instructions,functions[f].instruction_count*sizeof(*ops));functions[f].instructions=ops;bool changed=false;
-    for(uint32_t i=0;i<functions[f].instruction_count;++i)if(ops[i].op==XR_XIR_CALL) {
-        const XrXirFunction *callee=&module->functions[ops[i].immediate];
-        if(callee->instruction_count && callee->instructions[0].op==XR_XIR_SLOT_LOAD) {
-            ops[i]=(XrXirInstruction){XR_XIR_SLOT_LOAD,XR_XIR_I64,{0},{0},callee->instructions[0].immediate,{0}};changed=true;break;
-        }
-    }
-    CHECK(changed);XrXirModule invalid=*module;invalid.functions=functions;XrXirArtifact *rejected=NULL;
-    CHECK(xr_xir_compile_recheck_v2(context,&invalid,xr_xir_compile_artifact_construction(producer),&rejected,NULL, NULL)!=XR_XIR_OK && !rejected);
-    xr_compile_resources_free(ops);xr_compile_resources_free(functions);
-}
+#include "xir_public_slot_authority.h"
 static void ci_authority(void) {
     ci_work(true);XrXirCompileContext context=ci_context();XrXirLibraryCatalog *catalog=ci_cold(&context);
+    for(size_t i=0;i<sizeof(ci_new_admissions)/sizeof(*ci_new_admissions);++i) {
+        XrXirSourceResult admitted={0};CHECK(ci_check(&context,ci_new_admissions[i],"admitted.xr",XR_XIR_PROGRAM,catalog,&admitted)==XR_XIR_OK);
+        xr_xir_compile_source_result_free(&admitted);
+    }
     for(size_t i=0;i<sizeof(ci_rejections)/sizeof(*ci_rejections);++i) {
         XrXirSourceResult refused={0};CHECK(ci_check(&context,ci_rejections[i],"refused.xr",XR_XIR_PROGRAM,catalog,&refused)!=XR_XIR_OK);
         xr_xir_compile_source_result_free(&refused);
     }
     XrXirSourceResult result=ci_source(&context,ci_consumer_source,"entry.xr",XR_XIR_PROGRAM,catalog);
-    ci_direct_slot_negative(&context,result.checked);xr_xir_compile_source_result_free(&result);xr_xir_compile_library_catalog_free(catalog);
+    ci_direct_slot_authority(&context,result.checked);xr_xir_compile_source_result_free(&result);xr_xir_compile_library_catalog_free(catalog);
     XrXirSourceResult other=ci_source(&context,ci_other_source,"other.xr",XR_XIR_LIBRARY,NULL);
     catalog=ci_catalog(&context,other.checked);xr_xir_compile_source_result_free(&other);
     result=ci_source(&context,ci_flags_source,"flags.xr",XR_XIR_LIBRARY,catalog);xr_xir_compile_library_catalog_free(catalog);
     ci_name_cases(&context,result.checked);ci_fact_cases(&context,result.checked);xr_xir_compile_source_result_free(&result);
     xr_compile_resources_release(context.resources);fprintf(stderr,"public i64 complete facts, namespace and permissions PASS\n");
 }
+static void ci_previous_packet(const char *path) {
+    XrXirCompileContext context=ci_context();FILE *file=fopen(path,"rb");CHECK(file);
+    CHECK(!fseek(file,0,SEEK_END));long length=ftell(file);CHECK(length>64 && !fseek(file,0,SEEK_SET));
+    uint8_t *bytes=NULL;CHECK(xr_compile_resources_alloc(context.resources,(size_t)length,(void **)&bytes)==XR_COMPILE_RESOURCE_OK);
+    CHECK(fread(bytes,1,(size_t)length,file)==(size_t)length && !fclose(file));
+    CHECK(bytes[8]==39 && !bytes[9] && !bytes[10] && !bytes[11]);
+    CHECK(bytes[12]==107 && !bytes[13] && !bytes[14] && !bytes[15]);
+    XrSHA256Context hash;uint8_t digest[32];xr_sha256_init(&hash);
+    xr_sha256_update(&hash,bytes,32);xr_sha256_update(&hash,bytes+64,(size_t)length-64);xr_sha256_final(&hash,digest);
+    CHECK(!memcmp(digest,bytes+32,sizeof(digest)));
+    XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+    XrXirArtifact *rejected=NULL;
+    CHECK(xr_xir_compile_checked_read(&context,bytes,(size_t)length,&rejected,NULL)==XR_XIR_BAD_STRUCTURE && !rejected);
+    CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && before.held_bytes==after.held_bytes);
+    xr_compile_resources_free(bytes);xr_compile_resources_release(context.resources);
+    fprintf(stderr,"authentic schema39/common107 packet rejected before publication, held frame preserved\n");
+}
 int main(int argc,char **argv) {
+    if(argc==3 && !strcmp(argv[1],"--reject-contract107")){ci_previous_packet(argv[2]);return 0;}
     if(argc==2 && !strcmp(argv[1],"--authority")){ci_authority();return 0;}
     CHECK(argc==1 || argc==3);ci_flow(false,argc==3?argv[1]:NULL);ci_flow(true,argc==3?argv[2]:NULL);return 0;
 }
