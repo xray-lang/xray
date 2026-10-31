@@ -84,7 +84,9 @@ static void installed_rune_iteration(const char *stdlib) {
         "assert(iter.next().toUInt32()==65)\nassert(iter.next().toUInt32()==0)\n"
         "assert(iter.next().toUInt32()==20013)\nassert(iter.next().toUInt32()==128512)\n"
         "assert(!iter.hasNext())\nassert(rune(32)!.isWhitespace())\n"
-        "assert(rune(12288)!.isWhitespace())\nassert(!rune(133)!.isWhitespace())\nprint(42)\n";
+        "assert(rune(12288)!.isWhitespace())\nassert(!rune(133)!.isWhitespace())\n"
+        "enum SdkError { Expected { message:string } }\n"
+        "assertThrows(() -> {throw SdkError.Expected{message:\"owned\"}})\nprint(42)\n";
     XrSourceArtifact *artifact=compile(&compiler,source,__func__);
     Output output={0};XrSourceCallOptions options;
     CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
