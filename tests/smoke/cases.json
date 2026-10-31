@@ -393,13 +393,17 @@
       "id": "stdlib/datetime/datetime.xr",
       "path": "stdlib/datetime/datetime.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F04",
-        "first_diagnostic": "stdlib/datetime/datetime.xr:306:19: error: string member has no admitted value-operation contract"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
+    },
+    {
+      "id": "native:stdlib/datetime/datetime.xr",
+      "path": "stdlib/datetime/datetime.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/encoding/encoding.xr",
@@ -594,7 +598,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F04",
-        "first_diagnostic": "stdlib/text/text.xr:5:22: error: string member has no admitted value-operation contract"
+        "first_diagnostic": "stdlib/text/text.xr:84:9: error: for-in requires an iterator method returning Iterator"
       }
     },
     {
