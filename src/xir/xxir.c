@@ -594,7 +594,7 @@ static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
          * A separately supplied derivation cannot stand in for stored facts. */
         XrXirStatus status=source_effects && facts && source_effects!=facts->effects?
             source_facts_match(&limits,source,diagnostic, control):source_facts_input_match(&limits,source,facts, control);
-        if (status==XR_XIR_OK) status=xir_effects_source_terminal_input(&limits,(XirEffectInput){&source->module,source->construction,NULL},facts->effects);
+        if (status==XR_XIR_OK) status=xir_effects_source_terminal_input(&limits,(XirEffectInput){&source->module,source->construction,control},facts->effects);
         if (status==XR_XIR_OK) status=xr_xir_compile_layout_match_verified(source);
         if (status!=XR_XIR_OK) return transition_error(status,diagnostic);
         if (!source_effects) source_effects=facts->effects;

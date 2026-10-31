@@ -43,6 +43,7 @@ static uint64_t observed_effect_clock(void) {
 #include "../../../src/base/xcompile_request.c"
 #undef xr_time_monotonic_ns
 static uint64_t effect_input_clone_calls;
+static bool effect_input_compare_cancelled;
 static XrXirStatus observed_effect_input_clone(const XrXirCompileContext *context,
     const XrXirTypes *types,const XrXirConstruction *source,
     XrXirConstruction **output,XrCompileRequestControl *control) {
@@ -53,15 +54,27 @@ static XrXirStatus observed_effect_input_clone(const XrXirCompileContext *contex
     if(effect_input_fault==4)effect_input_oom=true;
     return xir_construction_clone(context,types,source,output,control);
 }
+static XrXirStatus observed_effect_input_compare(const XrXirCompileContext *context,
+    const XrXirTypes *types,const XrXirConstruction *left,const XrXirConstruction *right,
+    bool *output,XrCompileRequestControl *control) {
+    if(effect_input_fault==5)effect_input_cancelled=true;
+    XrXirStatus status=xir_construction_compare(context,types,left,right,output,control);
+    if(effect_input_fault==5 && control && status==XR_XIR_CANCELLED)effect_input_compare_cancelled=true;
+    return status;
+}
+#define xir_construction_compare observed_effect_input_compare
 #define xir_construction_clone observed_effect_input_clone
 #include "../../../src/xir/xxir_effects.c"
 #undef xir_construction_clone
+#undef xir_construction_compare
 XR_FUNC uint64_t xir_test_effect_input_clone_calls(void) { return effect_input_clone_calls; }
 
 XR_FUNC void xir_test_effect_input_arm(uint32_t fault) {
-    effect_input_fault=fault;effect_input_cancelled=false;
+    effect_input_fault=fault;effect_input_cancelled=false;effect_input_compare_cancelled=false;
     effect_input_clock_failure=false;effect_input_clock_value=0;effect_input_oom=false;
 }
 XR_FUNC bool xir_test_effect_input_cancel(const void *data) { (void)data;return effect_input_cancelled; }
 XR_FUNC uint64_t xir_test_effect_input_live(void) { return effect_input_live; }
 XR_FUNC uint64_t xir_test_effect_input_oom_attempts(void) { return effect_input_oom_attempts; }
+
+XR_FUNC bool xir_test_effect_input_compare_cancelled(void) { return effect_input_compare_cancelled; }

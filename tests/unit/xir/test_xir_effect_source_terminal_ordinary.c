@@ -15,6 +15,8 @@
 #include "xir_effect_input_fixture.h"
 #include "xir/xxir_effects.h"
 #include "xir/xxir_source.h"
+#include "xir/xxir_generic.h"
+#include "xir/xxir_view_access_internal.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +24,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"FAIL %d %s\n",__LINE__,#c);exit(1); } } while (0)
 
 XR_FUNC uint64_t xir_test_effect_input_clone_calls(void);
+XR_FUNC bool xir_test_effect_input_compare_cancelled(void);
 XR_FUNC void xir_test_effect_input_arm(uint32_t fault);
 XR_FUNC bool xir_test_effect_input_cancel(const void *data);
 XR_FUNC uint64_t xir_test_effect_input_live(void);
@@ -113,6 +116,16 @@ static void ordinary_current(const XrXirCompileContext *context,XirFixtureEffect
     CHECK(input.module && input.construction);
     CHECK(xir_fixture_effects_refresh(context,input,effects)==XR_XIR_BAD_STRUCTURE);
     CHECK(xir_fixture_effects_terminal(context,input,effects)==XR_XIR_OK);
+    if(!xr_xir_effects_read(effects,0).root.requires_root) {
+        XrXirOrigin caller={.function=0},target={.function=2};
+        XirEffectCaptureRequest request={.source=input.module,.types=input.module->types,
+            .effects=effects,.caller=&caller,.target=&target,.actual=&input.module->functions[0],
+            .instruction=0,.construction=input.construction};
+        XirEffectCaptureBound result={UINT32_MAX,true};
+        CHECK(xir_effect_capture_bound_input(context,&request,&result)==XR_XIR_OK && result.refined && result.flags==XR_XIR_CALLABLE_ROOT_NONE);
+        request.construction=NULL;result=(XirEffectCaptureBound){UINT32_MAX,true};
+        CHECK(xir_effect_capture_bound_input(context,&request,&result)==XR_XIR_BAD_STRUCTURE && result.flags==UINT32_MAX && result.refined);
+    }
     XrXirModule current=*input.module;XrXirFunction functions[5];XrXirInstruction rows[2];
     CHECK(current.function_count==5 && current.functions[2].instruction_count==2);
     memcpy(functions,current.functions,sizeof(functions));memcpy(rows,functions[2].instructions,sizeof(rows));
@@ -248,6 +261,63 @@ static void ordinary_case(bool root) {
     ordinary_trace(trace,root);xr_xir_compile_root_cause_trace_free(trace);
 }
 
+static void ordinary_control_relays(const XrXirCompileContext *context,const XrXirArtifact *checked) {
+    XrXirArtifact *closed=NULL;
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL,NULL)==XR_XIR_OK && closed);
+    CHECK(closed->module.provenance && closed->module.provenance->source &&
+        closed->module.provenance->source->source_facts);
+    XrCompileResourceStats frame={0},after={0};
+    CHECK(xr_compile_resources_stats(context->resources,&frame)==XR_COMPILE_RESOURCE_OK);
+    XrCompileRequestOptions options={xir_test_effect_input_cancel,NULL,XR_COMPILE_DEADLINE_NONE,0};
+    XrCompileRequestControl control={0};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    xir_test_effect_input_arm(5);
+    CHECK(xir_artifact_verify(closed,NULL,&control)==XR_XIR_CANCELLED);
+    CHECK(xir_test_effect_input_compare_cancelled());
+    xir_test_effect_input_arm(0);
+    CHECK(xr_compile_request_control_poll(&control)==XR_COMPILE_RESOURCE_CANCELLED);
+    XrCompileRequestControl fresh={0};
+    CHECK(xr_compile_request_control_init(&options,&fresh)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xir_artifact_verify(closed,NULL,&fresh)==XR_XIR_OK);
+    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==frame.held_bytes);
+    xr_xir_compile_artifact_free(closed);
+}
+
+static void ordinary_view_control(void) {
+    XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};
+    XrXirCompileContext context={0};
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits();
+    XrCompilerSession *session=NULL;
+    CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_EFFECT_INPUT_WORK};
+    XrXirSourceRequest request={session,XR_EFFECT_INPUT_WORK "/relay.xr",&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    static const char text[]="class Options{value:i64;init(){this.value=7}}\n"
+        "fn use(v:Slice<u8>,options:Options=Options())->i64{return len(v)+options.value}\n"
+        "export fn storage_receiver()->i64{var text=\"abc\";var view:Slice<u8>=text.bytes();return use(view)-9}";
+    XrXirSourceText source={"relay.xr",text,sizeof(text)-1};
+    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+    CHECK(xr_xir_compile_source_check_text(&request,&source,&result,&diagnostic,NULL)==XR_XIR_OK && result.checked);
+    xr_compile_session_free(session);
+    XrCompileResourceStats frame={0},after={0};
+    CHECK(xr_compile_resources_stats(context.resources,&frame)==XR_COMPILE_RESOURCE_OK);
+    XrCompileRequestOptions options={xir_test_effect_input_cancel,NULL,XR_COMPILE_DEADLINE_NONE,0};
+    XrCompileRequestControl control={0};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    uint64_t clones=xir_test_effect_input_clone_calls();
+    xir_test_effect_input_arm(1);
+    XirEffectInput input={xr_xir_compile_artifact_module(result.checked),xr_xir_compile_artifact_construction(result.checked),&control};
+    CHECK(xir_compile_view_cell_access_verified_input(&context,input,NULL)==XR_XIR_CANCELLED);
+    CHECK(xir_test_effect_input_clone_calls()==clones+1);
+    xir_test_effect_input_arm(0);
+    CHECK(xr_compile_request_control_poll(&control)==XR_COMPILE_RESOURCE_CANCELLED);
+    XrCompileRequestControl fresh={0};
+    CHECK(xr_compile_request_control_init(&options,&fresh)==XR_COMPILE_RESOURCE_OK);input.control=&fresh;
+    CHECK(xir_compile_view_cell_access_verified_input(&context,input,NULL)==XR_XIR_OK);
+    CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && after.held_bytes==frame.held_bytes);
+    xr_xir_compile_source_result_free(&result);xr_compile_resources_release(context.resources);
+}
+
 static void ordinary_zero_slots(void) {
     XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};
     XrXirCompileContext context={0};
@@ -270,12 +340,12 @@ static void ordinary_zero_slots(void) {
     CHECK(xir_test_effect_input_clone_calls()==clones+1);
     CHECK(xir_fixture_effects_body_match(&context,(XirFixtureEffectInput){input.module,NULL},effects)==XR_XIR_BAD_STRUCTURE);
     CHECK(xir_fixture_effects_body_match(&context,input,effects)==XR_XIR_OK);
-    xr_xir_compile_effects_free(effects);xr_xir_compile_source_result_free(&result);
+    xr_xir_compile_effects_free(effects);ordinary_control_relays(&context,result.checked);xr_xir_compile_source_result_free(&result);
     xr_compile_resources_release(context.resources);
 }
 
 int main(void) {
-    ordinary_case(false);ordinary_case(true);ordinary_zero_slots();
+    ordinary_case(false);ordinary_case(true);ordinary_zero_slots();ordinary_view_control();
     CHECK(xir_test_effect_input_live()==0);
     puts("ordinary Source current input and detached causes PASS");return 0;
 }

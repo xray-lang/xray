@@ -77,8 +77,10 @@ XR_FUNC XrXirStatus xir_effect_capture_bound_input(const XrXirCompileContext *co
     XirEffectCaptureBound result={signature->flags,false};
     if (status!=XR_XIR_OK) return status;
     if (!authentic) {
-
-        *output=result;return XR_XIR_OK;
+        status=xir_effects_source_body_match_input(context,
+            (XirEffectInput){q->source,q->construction,q->control},q->effects);
+        if(status==XR_XIR_OK)*output=result;
+        return status;
     }
     XirEffectContextInput input={q->source,q->types,q->caller,q->instruction,q->owners,q->owner_count,q->construction,q->control};
     XirEffectContextView selected={0};
@@ -103,6 +105,8 @@ XR_FUNC XrXirStatus xir_effect_capture_bound_input(const XrXirCompileContext *co
     if (!xr_xir_callable_flags_compatible(result.flags,signature->flags)) return XR_XIR_BAD_TYPE;
     result.refined=result.flags!=signature->flags;
 
-    *output=result;
-    return XR_XIR_OK;
+    status=xir_effects_source_body_match_input(context,
+        (XirEffectInput){q->source,q->construction,q->control},q->effects);
+    if(status==XR_XIR_OK)*output=result;
+    return status;
 }

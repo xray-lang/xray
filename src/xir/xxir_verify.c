@@ -1437,7 +1437,7 @@ XR_FUNC XrXirStatus xir_compile_view_cell_access_verified_input(const XrXirCompi
         held.remaining=*context;held.remaining.limits.frame_bytes-=fixed+held.bytes;
         held.cells=(XirViewAccessCells){.owner=held.owner,.role=xr_xir_cell_provenance_role};
         status=view_cell_access_scope_needed(module) ?
-            xir_effects_default_access_operation_input(&held.remaining,(XirEffectInput){module,construction,NULL},view_cell_access_operation,&held):
+            xir_effects_default_access_operation_input(&held.remaining,(XirEffectInput){module,construction,input.control},view_cell_access_operation,&held):
             xir_compile_view_access_cells_verified(&held.remaining,module,&held.cells,diagnostic);
     }
     xr_xir_compile_cell_provenance_free(held.owner);return status;
