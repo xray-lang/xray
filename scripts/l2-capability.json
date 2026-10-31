@@ -90,7 +90,8 @@
         "src/xir/xxir_source_context.inc.c",
         "src/shared/xnative_declaration*",
         "stdlib/types/string.xr",
-        "tests/unit/xir/test_xir_string_runes_source.c"
+        "tests/unit/xir/test_xir_string_runes_source.c",
+        "tests/unit/xir/test_xir_map_iteration_source.c"
       ],
       "reason": "Public slots, records, JSON float and Range complete Source/Catalog/VM/native receivers.",
       "tests": [
@@ -141,7 +142,8 @@
         "xir_rune_whitespace_native",
         "xir_rune_whitespace_source",
         "xir_rune_whitespace_previous110",
-        "xir_string_runes_source"
+        "xir_string_runes_source",
+        "xir_map_iteration_source"
       ],
       "targets": [
         "test_xir_json_float",
@@ -180,7 +182,8 @@
         "test_xir_buffer_storage_fault",
         "test_xir_rune_whitespace",
         "test_xir_rune_whitespace_native",
-        "test_xir_string_runes_source"
+        "test_xir_string_runes_source",
+        "test_xir_map_iteration_source"
       ]
     },
     "frontend": {

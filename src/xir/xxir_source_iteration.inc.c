@@ -4,10 +4,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_source_iteration.inc.c - Owned Array snapshots and per-iteration bindings
+ * xxir_source_iteration.inc.c - Owned container snapshots and per-iteration bindings
  *
  * KEY CONCEPT:
- *   One evaluated logical Array feeds the existing loop and cleanup machinery.
+ *   One evaluated logical container feeds the existing loop and cleanup machinery.
  */
 static bool source_iteration_binding(SourceContext *ctx, AstNode *node,
     const char *name, SourceValue value) {
@@ -101,6 +101,34 @@ static bool source_counter_break(SourceContext *ctx) {
     ctx->returned = true;
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_JUMP, XR_XIR_UNIT, {0}, {0}, 0, {0}}, NULL);
 }
+static bool source_map_iteration_types(SourceContext *ctx, AstNode *node,
+    SourceValue receiver, XrXirType *key, XrXirType *element) {
+    const XrXirTypeNode *map=xr_xir_type_node(&ctx->types,receiver.type);
+    if(!map || map->kind!=XR_XIR_TYPE_MAP || !node->as.for_in_stmt.is_keyvalue)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Map for-in requires a direct key/value binding");
+    XrXirType first=map->element,second=map->result;
+    const XrNativeTypeDeclaration *native=source_hash_native(ctx,receiver.type);
+    uint32_t declaration=0;
+    if(!native || native->id!=XR_NATIVE_DECLARATION_MAP)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Map iteration requires its governed declaration");
+    if(!source_native_hash_declaration(ctx,native,&declaration)) return false;
+    *key=first;*element=second;return true;
+}
+static bool source_map_iteration(SourceContext *ctx, AstNode *node, SourceValue receiver) {
+    XrXirType key_type,element_type;
+    SourceValue length,zero,key,element;
+    if(!source_map_iteration_types(ctx,node,receiver,&key_type,&element_type) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_HASH_LEN,XR_XIR_I64,{receiver.id},{0},0,{0}},&length) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},&zero)) return false;
+    SourceCounter counter;
+    if(!source_counter_open(ctx,zero,length,false,&counter)) return false;
+    bool ok=source_recipe_record(ctx,(XrXirInstruction){XR_XIR_HASH_KEY_AT,key_type,
+        {receiver.id,counter.index.id},{0},0,{0}},&key) &&
+        source_recipe_record(ctx,(XrXirInstruction){XR_XIR_MAP_VALUE_AT,element_type,
+        {receiver.id,counter.index.id},{0},0,{0}},&element) && source_for_in_body(ctx,node,key,element);
+    ctx->loop=counter.loop.parent;
+    return ok && source_counter_close(ctx,&counter);
+}
 /* `a..b` and `a..=b` count an i64 cursor; both endpoints are evaluated once, start first. */
 static bool source_range_bounds(SourceContext *ctx, AstNode *node, SourceValue *start, SourceValue *end) {
     RangeNode *range = &node->as.for_in_stmt.collection->as.range;
@@ -132,6 +160,8 @@ static bool source_for_in(SourceContext *ctx, AstNode *node) {
         if (!source_iteration_receiver(ctx,node,&array)) return false;
         const XrXirTypeNode *iter=xr_xir_type_node(&ctx->types,array.type);
         if(iter && iter->kind==XR_XIR_TYPE_ITERATOR) return source_iterator_loop(ctx,node,array);
+        if(iter && iter->kind==XR_XIR_TYPE_MAP && syntax->is_keyvalue)
+            return source_map_iteration(ctx,node,array);
         if (!xr_xir_type_is_array(&ctx->types,array.type)) {
             SourceValue iterator;
             return source_iteration_factory(ctx,node,array,&iterator) && source_iterator_loop(ctx,node,iterator);
