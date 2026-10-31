@@ -165,9 +165,9 @@ static const XlspSymbolInfo g_xlsp_stdlib_crypto_symbols[] = {
 static const XlspSymbolInfo g_xlsp_stdlib_csv_symbols[] = {
     {"defaultParseOptions", XLSP_SYM_FUNCTION, "fn(): CsvParseOptions", "", NULL, 0},
     {"defaultWriteOptions", XLSP_SYM_FUNCTION, "fn(): CsvWriteOptions", "", NULL, 0},
-    {"parseReport", XLSP_SYM_FUNCTION, "fn(data: string, options?: CsvParseOptions?): CsvParseReport", "", NULL, 0},
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: CsvParseOptions?): CsvDocument", "", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(document: CsvDocument, options?: CsvWriteOptions?): string", "", NULL, 0},
+    {"parseReport", XLSP_SYM_FUNCTION, "fn(data: string, options?: CsvParseOptions?) throws(CsvError): CsvParseReport", "", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: CsvParseOptions?) throws(CsvError): CsvDocument", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(document: CsvDocument, options?: CsvWriteOptions?) throws(CsvError): string", "", NULL, 0},
     {"CsvDelimiter", XLSP_SYM_CLASS, "type CsvDelimiter", "Enum type", NULL, 0},
     {"CsvHeader", XLSP_SYM_CLASS, "type CsvHeader", "Enum type", NULL, 0},
     {"CsvErrorKind", XLSP_SYM_CLASS, "type CsvErrorKind", "Enum type", NULL, 0},
