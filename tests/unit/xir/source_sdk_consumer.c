@@ -97,7 +97,7 @@ static void installed_rune_iteration(const char *stdlib) {
         "assert(\"${shown_record}\"==\"{a: \\\"ok\\\", z: 2}\")\n"
         "const absent:i64?=null\nassert(\"${absent}\"==\"null\")\n"
         "const present:i64?=9\nassert(\"${present}\"==\"9\")\n"
-        "class SdkViewOptions { value:i64; constructor(){this.value=7} }\n"
+        "class SdkViewOptions { value:i64; init(){this.value=7} }\n"
         "enum SdkViewError { Empty }\n"
         "fn viewValue(bytes:Slice<u8>,opts:SdkViewOptions=SdkViewOptions()) throws(SdkViewError)->i64 {"
         "if(len(bytes)==0){throw SdkViewError.Empty};return opts.value+(bytes[0] as i64)}\n"
