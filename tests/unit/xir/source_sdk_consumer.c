@@ -77,6 +77,31 @@ static void checked_program(const char *stdlib) {
     int64_t value = -1; CHECK(xray_source_result_i64(result, &value) == XR_SOURCE_OK && value == 0);
     CHECK(out.length == 8 && !memcmp(out.bytes, "A\0Btrue\n", 8)); xray_source_result_free(result);
 }
+static void installed_rune_iteration(const char *stdlib) {
+    XrSourceCompileOptions compiler=compile_options(stdlib);
+    char source[]="var iter=\"A\\0\xe4\xb8\xad\xf0\x9f\x98\x80\".runes()\n"
+        "assert(iter.hasNext())\nassert(iter.hasNext())\n"
+        "assert(iter.next().toUInt32()==65)\nassert(iter.next().toUInt32()==0)\n"
+        "assert(iter.next().toUInt32()==20013)\nassert(iter.next().toUInt32()==128512)\n"
+        "assert(!iter.hasNext())\nassert(rune(32)!.isWhitespace())\n"
+        "assert(rune(12288)!.isWhitespace())\nassert(!rune(133)!.isWhitespace())\nprint(42)\n";
+    XrSourceArtifact *artifact=compile(&compiler,source,__func__);
+    Output output={0};XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.write=capture;options.context=&output;
+    XrSourceCall *call=NULL;CHECK(begin_owned(artifact,&options,&call)==XR_SOURCE_OK && call);
+    xray_source_artifact_free(artifact);XrSourceEvent event={0};
+    for(size_t ticks=0;;++ticks) {
+        CHECK(ticks<10000 && xray_source_call_poll(call,1024,&event)==XR_SOURCE_OK);
+        if(event.state!=XR_SOURCE_RUN_READY)break;
+    }
+    CHECK(event.state==XR_SOURCE_RUN_RETURNED && output.length==3 && !memcmp(output.bytes,"42\n",3));
+    XrSourceResult *result=NULL;
+    CHECK(xray_source_call_take(call,&result)==XR_SOURCE_OK && result);
+    CHECK(xray_source_call_drop(&call,NULL)==XR_SOURCE_OK && !call);
+    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
+    xray_source_result_free(result);
+}
 static void detached_cancellation(const char *stdlib) {
     XrSourceCompileOptions compiler = compile_options(stdlib);
     char source[] = "var n:i64=0\nwhile(true){ n+=1 }\n";
@@ -1081,6 +1106,7 @@ int main(int argc, char **argv) {
         puts("Installed Source SDK: generated cycle request retirement, named result42 and drop PASS");return 0;
     }
     CHECK(argc == 2); installed_error_union(argv[1]); installed_error_union_300(argv[1]); installed_report(argv[1]); installed_parameter_report(argv[1]); installed_method_parameter_report(argv[1]); installed_interface_parameter_report(argv[1]); installed_interface_member_report(argv[1]); installed_nominal_method_report(argv[1]); installed_closure_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
+    installed_rune_iteration(argv[1]);
     installed_nominal_projection(argv[1]);
     const char *source_path=__FILE__,*separator=strrchr(source_path,'/'),*windows_separator=strrchr(source_path,'\\');
     if(windows_separator && (!separator || windows_separator>separator))separator=windows_separator;
