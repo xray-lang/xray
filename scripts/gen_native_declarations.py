@@ -140,6 +140,8 @@ class Member:
 
 
 def simple_term(term, binder):
+    if term == ('name', 'Iterator', (('name', 'rune', ()),)):
+        return 'ITERATOR_RUNE'
     if isinstance(binder, tuple):
         if len(binder) == 2:
             key, value = [('name', name, ()) for name in binder]
@@ -466,6 +468,7 @@ def parse_source(source, prelude):
             'STRING_TO_STRING': ('toString', 'READ', (), 'STRING', 'no_heap', 'retain', 'owned'),
             'STRING_REPEAT': ('repeat', 'READ', ('I64',), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
             'STRING_COPY_BYTES': ('copyBytes', 'READ', (), 'ARRAY_U8', 'may_heap', 'allocation,retain,limit', 'owned'),
+            'STRING_RUNES': ('runes', 'READ', (), 'ITERATOR_RUNE', 'may_heap', 'allocation,retain,limit', 'owned'),
             'STRING_REPLACE': ('replace', 'READ', ('STRING', 'STRING'), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
             'STRING_REPLACE_ALL': ('replaceAll', 'READ', ('STRING', 'STRING'), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
         }.get(member.operation)
@@ -479,7 +482,7 @@ def parse_source(source, prelude):
             raise ValueError('operation declaration disagrees with its semantic contract: ' + member.operation)
     required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(recipes) if header[0] == 1 else {
         'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH', 'STRING_INDEX_OF', 'STRING_LAST_INDEX_OF',
-        'STRING_TO_STRING', 'STRING_REPEAT', 'STRING_COPY_BYTES', 'STRING_REPLACE', 'STRING_REPLACE_ALL', 'STRING_SLICE', 'STRING_FROM_UTF8'}
+        'STRING_TO_STRING', 'STRING_REPEAT', 'STRING_COPY_BYTES', 'STRING_REPLACE', 'STRING_REPLACE_ALL', 'STRING_SLICE', 'STRING_FROM_UTF8', 'STRING_RUNES'}
     if used != required:
         raise ValueError('incorrect admitted native operation set')
     return header, members

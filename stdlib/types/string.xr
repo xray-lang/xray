@@ -40,5 +40,6 @@ struct string {
     // Borrowed UTF-8 bytes; readonly because strings are immutable.
     // @lowered
     bytes() -> Slice<u8>
+    // @native-operation STRING_RUNES allocation=may_heap failures=allocation,retain,limit ownership=owned
     runes() -> Iterator<rune>
 }

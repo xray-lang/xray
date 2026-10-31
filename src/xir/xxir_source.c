@@ -1182,6 +1182,8 @@ static bool source_hash_for_each(SourceContext *ctx, AstNode *node, const Source
 #include "xxir_source_index.inc.c"
 static bool source_string_owned_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
     const XrNativeMemberDeclaration *member,SourceValue *value);
+static bool source_string_runes_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
+    const XrNativeMemberDeclaration *member,SourceValue *value);
 #include "xxir_source_string.inc.c"
 #include "xxir_source_decimal.inc.c"
 static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,
@@ -2322,6 +2324,8 @@ static bool collect_declarations(SourceContext *ctx) {
     /* Each source module can own one canonical decoder body. */
     if (count>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"native callable capacity overflow");
     capacity+=count;
+    if (count>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"string producer capacity overflow");
+    capacity+=count;
     for (uint32_t m=0;m<count;++m) if (source_unicode_module(ctx,m) && !source_owned_checked(&ctx->graph->specs[m])) {
         uint32_t natives=(uint32_t)(sizeof(source_unicode_callables)/sizeof(*source_unicode_callables));
         if (natives>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"native callable capacity overflow");
@@ -2879,6 +2883,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
 #include "xxir_source_array_recipes.inc.c"
 #include "xxir_source_pattern_array_tail.inc.c"
 #include "xxir_source_string_owned.inc.c"
+#include "xxir_source_string_runes.inc.c"
 #include "xxir_source_hash_foreach.inc.c"
 #include "xxir_source_core_panics.inc.c"
 #include "xxir_source_comptime_expression.inc.c"

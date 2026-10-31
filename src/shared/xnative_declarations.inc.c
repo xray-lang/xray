@@ -178,11 +178,11 @@ static const XrNativeMemberDeclaration xr_native_string_members[] = {
     {16, "endsWith", "(search: string) -> bool", "bool", 36, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_ENDS_WITH, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_15, 1, XR_NATIVE_TERM_BOOL},
     {17, "copyBytes", "() -> Array<u8>", "Array < u8 >", 39, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_COPY_BYTES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_U8},
     {18, "bytes", "() -> Slice<u8>", "Slice < u8 >", 42, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_SLICE_U8},
-    {19, "runes", "() -> Iterator<rune>", "Iterator < rune >", 43, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {19, "runes", "() -> Iterator<rune>", "Iterator < rune >", 44, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_RUNES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ITERATOR_RUNE},
 };
 static const XrNativeTypeDeclaration xr_native_string = {
     2, XR_NATIVE_DECLARATION_VALUE, "string", NULL, 0,
-    "stdlib/types/string.xr", "xray-native:prelude/string", {{76, 84, 58, 250, 170, 77, 114, 124, 234, 80, 162, 141, 86, 159, 186, 11, 10, 38, 85, 23, 25, 128, 79, 54, 190, 120, 127, 71, 13, 80, 199, 32}},
+    "stdlib/types/string.xr", "xray-native:prelude/string", {{91, 116, 122, 58, 233, 247, 45, 108, 160, 248, 234, 11, 116, 95, 194, 101, 141, 137, 3, 31, 9, 204, 218, 47, 224, 246, 26, 129, 78, 165, 5, 124}},
     9, 8, xr_native_string_members, 19
 };
 

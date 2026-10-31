@@ -128,6 +128,8 @@ static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue re
     const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
     const XrNativeMemberDeclaration *member = source_native_member(ctx,native,call->callee->as.member_access.name);
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+    if (member && member->operation==XR_NATIVE_OPERATION_STRING_RUNES)
+        return source_string_runes_call(ctx,node,receiver,member,value);
     if (member && member==xr_native_declaration_member(native,"bytes"))
         return source_string_bytes_call(ctx,node,receiver,member,value);
     if (member && (member->operation==XR_NATIVE_OPERATION_STRING_COPY_BYTES ||
