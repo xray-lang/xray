@@ -8,15 +8,15 @@
 #include "xir/xxir_generic.h"
 #include "base/xsha256.h"
 #include "rune_whitespace_cases.h"
-static void previous110_case(const char *path) {
+static void previous_packet_case(const char *path,uint8_t previous,const char *expected_digest) {
     unsigned char bytes[31995],digest[32];char hexadecimal[65];
     FILE *file=fopen(path,"rb");CHECK(file && fread(bytes,1,sizeof(bytes),file)==sizeof(bytes));
     CHECK(fgetc(file)==EOF && !ferror(file) && !fclose(file));
-    CHECK(bytes[8]==39 && !bytes[9] && !bytes[10] && !bytes[11] && bytes[12]==110 &&
+    CHECK(bytes[8]==39 && !bytes[9] && !bytes[10] && !bytes[11] && bytes[12]==previous &&
         !bytes[13] && !bytes[14] && !bytes[15]);
     xr_sha256(bytes,sizeof(bytes),digest);
     for(unsigned i=0;i<32;++i)CHECK(snprintf(hexadecimal+2*i,3,"%02x",digest[i])==2);
-    CHECK(!strcmp(hexadecimal,"f1f13d7a158c6823ddd282a201bda699064da196bc5dda12b6a6c22b67ff6367"));
+    CHECK(!strcmp(hexadecimal,expected_digest));
     XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};XrCompileResources *resources=NULL;
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
@@ -67,7 +67,8 @@ int main(int argc,char **argv) {
     _Static_assert(XR_XIR_CONST_RUNE==134 && XR_XIR_INDEX_CHECK==207 &&
         XR_XIR_RUNE_IS_WHITESPACE==XR_XIR_INDEX_CHECK+1,
         "the predicate appends without changing existing operation identities");
-    if(argc==3 && !strcmp(argv[1],"--previous110")){previous110_case(argv[2]);return 0;}
+    if(argc==3 && !strcmp(argv[1],"--previous110")){previous_packet_case(argv[2],110,"f1f13d7a158c6823ddd282a201bda699064da196bc5dda12b6a6c22b67ff6367");return 0;}
+    if(argc==3 && !strcmp(argv[1],"--previous111")){previous_packet_case(argv[2],111,"aecc406fba0576f4d383d59e503bdceb5aad8066b20030f017b3b58aa9d57657");return 0;}
     CHECK(argc==1 || argc==2);
     uint32_t count=0;
     for(uint32_t code=0;code<=0x10ffff;++code) if(code<0xd800 || code>0xdfff) {

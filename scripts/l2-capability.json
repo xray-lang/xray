@@ -52,12 +52,14 @@
       "reason": "Installed Checked-to-C runtime SDK and previous-contract/cleanup ABI rejection.",
       "tests": [
         "test_xir_cleanup_replaced_sdk_manifest",
-        "sdk_installed_native_msvc"
+        "sdk_installed_native_msvc",
+        "xir_checked_previous111"
       ],
       "targets": [
         "test_xir_cleanup_replaced_sdk_reader",
         "sdk-installed-native-consumers",
-        "test_xir_runtime_sdk"
+        "test_xir_runtime_sdk",
+        "test_xir_rune_whitespace"
       ]
     },
     "native-runtime": {

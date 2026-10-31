@@ -73,6 +73,9 @@ add_test(NAME xir_rune_whitespace_native COMMAND test_xir_rune_whitespace_native
 add_test(NAME xir_rune_whitespace_previous110 COMMAND test_xir_rune_whitespace --previous110
     ${PROJECT_SOURCE_DIR}/tests/fixtures/xir_rune_whitespace/previous110-json-float.chk)
 set_tests_properties(xir_rune_whitespace_previous110 PROPERTIES TIMEOUT 60 LABELS "unit;xir;rune;checked;identity")
+add_test(NAME xir_checked_previous111 COMMAND test_xir_rune_whitespace --previous111
+    ${PROJECT_SOURCE_DIR}/tests/fixtures/xir_rune_whitespace/previous111-json-float.chk)
+set_tests_properties(xir_checked_previous111 PROPERTIES TIMEOUT 60 LABELS "unit;xir;checked;identity;sdk")
 set_tests_properties(xir_rune_whitespace xir_rune_whitespace_native PROPERTIES TIMEOUT 60 LABELS "unit;xir;rune;scalar;ownership;generated-c")
 if(WIN32 AND TARGET xray)
     add_test(NAME xir_rune_whitespace_source COMMAND ${XRAY_PYTHON} -X utf8

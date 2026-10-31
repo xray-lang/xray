@@ -47,7 +47,7 @@ def main():
     runtime, source = prefix/'lib/xray/xir-runtime-sdk', prefix/'lib/xray/source-sdk'
     runtime_manifest = json.loads((runtime/'sdk_manifest.json').read_text(encoding='utf-8'))
     source_manifest = json.loads((source/'source_sdk_manifest.json').read_text(encoding='utf-8'))
-    assert (runtime_manifest['call_abi'], runtime_manifest['semantic'], runtime_manifest['value_abi'], runtime_manifest['program_abi']) == (37, 111, 30, 37)
+    assert (runtime_manifest['call_abi'], runtime_manifest['semantic'], runtime_manifest['value_abi'], runtime_manifest['program_abi']) == (37, 112, 30, 37)
     assert runtime_manifest['crt'] == 2 and runtime_manifest['sanitizers'] == 0
     assert source_manifest['crt'] == 'MD' and source_manifest['sanitizers'] == 0
     for directory, manifest in ((runtime, runtime_manifest), (source, source_manifest)):
