@@ -145,7 +145,7 @@ Quoted literals use one quote for single-line inline text, two quotes for an emp
 
 ### Concurrency and data transfer
 
-Heap-backed execution-local values do not cross a coroutine or channel boundary implicitly. Use `copy(value)` for an independent graph or `move value` to transfer an inferred-unique root. Inline values, published `const` data, and audited synchronization handles such as channels, tasks, and atomics can cross directly.
+Coroutine arguments and channel payloads must satisfy their ownership and Sendable contracts. Copyable, Sendable values cross as owned logical copies; arrays preserve value semantics through COW, while admitted identity references remain shared. `copy value` makes a logical copy explicit and leaves the source usable; `move value` follows the separately admitted consumption rules. Neither copying nor `const` grants Sendable.
 
 ```xray
 const ch = Channel<i64>(2)

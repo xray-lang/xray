@@ -132,7 +132,7 @@ print(greet(user.name))
 
 ### 并发与数据传递
 
-由堆对象组成的 execution-local 值不会隐式跨越协程或 Channel 边界。需要独立引用图时使用 `copy(value)`，需要转移推断为唯一的根时使用 `move value`。内联值、已发布的 `const` 数据，以及 Channel、Task、Atomic 等受审计同步句柄可以直接跨越边界。
+协程实参与 Channel 载荷必须满足各自的所有权和 Sendable 合同。可复制且 Sendable 的值按拥有式逻辑副本传递；Array 通过 COW 保持值语义，合格的身份引用保持共享。`copy value` 显式形成逻辑副本并保留源值；`move value` 遵守各自已准入的消费规则。复制或 `const` 本身均不授予 Sendable。
 
 ```xray
 const ch = Channel<i64>(2)
