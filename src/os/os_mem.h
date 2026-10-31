@@ -51,6 +51,7 @@ typedef enum {
 // given initial protection. Returns NULL on failure. The pointer
 // must later be released with xr_mem_unmap.
 XR_FUNC void *xr_mem_map(size_t size, int prot);
+XR_FUNC size_t xr_mem_page_size(void);
 
 // Release a region previously returned by xr_mem_map. `size` must
 // match the original allocation on POSIX; Windows ignores it.

@@ -31,6 +31,7 @@
 #include "../../xir/xxir_output.h"
 #include <stdio.h>
 #include <stdatomic.h>
+#include <stdlib.h>
 #include <string.h>
 #if XR_OS_WINDOWS
 #include <fcntl.h>
@@ -510,8 +511,17 @@ static void run_test_file(const char *filepath, const XrTestConfig *config,
     }
     run_selected(instance, tests, config, result, get_time_ms() + TEST_FILE_TIMEOUT_SEC * 1000.0);
 release:
-    if (instance && xr_xir_instance_free(instance) != XR_XIR_CALL_READY)
-        fail_file(result, "execution instance did not retire");
+    if (instance) {
+        XrXirCallStatus closed=xr_xir_instance_free(instance);
+        if (closed==XR_XIR_CALL_CLOSE_FAILED) closed=xr_xir_instance_free(instance);
+        if (closed==XR_XIR_CALL_CLOSE_FAILED || closed==XR_XIR_CALL_BUSY) {
+            /* The sink and compiler resources remain live until process exit.
+             * No worker may report success or start another file afterwards. */
+            fprintf(stderr,"test: stopped page owner could not close; aborting process (%s)\n",filepath);
+            fflush(stderr);exit(XR_CLI_EXIT_FAIL);
+        }
+        if (closed!=XR_XIR_CALL_READY) fail_file(result,"execution instance did not retire");
+    }
     xr_xir_compile_program_drop(program);
     xr_xir_compile_source_product_free(product);
     xr_source_compile_diagnostic_free(&diagnostic);

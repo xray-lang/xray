@@ -51,6 +51,7 @@ XR_FUNC XrSourceStatus xr_source_submission_write(XrSourceSubmission *owner,cons
     const XrXirValue *value,XrXirCallStatus *cleanup) {
     if(!owner || !name || !value || !cleanup)return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy || owner->source_serial)return XR_SOURCE_BUSY;
+    if(owner->close_started)return XR_SOURCE_BAD_STATE;
     XrSourceStatus status=XR_SOURCE_OK;
     owner->busy=true;*cleanup=XR_XIR_CALL_READY;
     status=submission_write_binding(owner,name,value,cleanup);

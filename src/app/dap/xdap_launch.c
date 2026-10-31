@@ -55,7 +55,7 @@ static XrXirStatus launch_allocation(XrCompileResourceStatus status) {
 XR_FUNC XrXirCallStatus xdap_launch_free(XdapLaunch *launch) {
     if (!launch) return XR_XIR_CALL_READY;
     XrXirCallStatus status=xdap_current_free(launch->control);
-    if (status==XR_XIR_CALL_BUSY) return status;
+    if (status==XR_XIR_CALL_BUSY || status==XR_XIR_CALL_CLOSE_FAILED) return status;
     xr_xir_compile_source_product_free(launch->source);
     if (launch->functions) for (uint32_t i=0;i<launch->function_count;++i) {
         xr_compile_resources_free(launch->functions[i].name);

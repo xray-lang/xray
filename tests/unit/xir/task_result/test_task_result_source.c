@@ -13,6 +13,17 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"TaskResult Source %d: %s\n",__LINE__,#c);exit(1); } } while (0)
 typedef struct Output { char bytes[4096];size_t length; } Output;
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_artifact_execute_c6d4ad5d(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_artifact_execute(execution,program,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrSourceWriteStatus collect(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
     Output *output=(Output *)context;
     CHECK(stream==XR_SOURCE_STDOUT || stream==XR_SOURCE_STDERR);
@@ -205,7 +216,7 @@ static void sendable_cycle_controls(const char *stdlib) {
                 CHECK(xray_source_execution_new(&policy,&execution)==XR_SOURCE_OK);
                 XrSourceCallOptions call;CHECK(xray_source_call_options_init(&call,sizeof(call))==XR_SOURCE_OK);
                 Output output={0};call.write=collect;call.context=&output;XrSourceResult *result=NULL;
-                CHECK(xray_source_artifact_execute(execution,artifact,&call,&result,NULL)==XR_SOURCE_OK && result);
+                CHECK(fixture_xray_source_artifact_execute_c6d4ad5d(execution,artifact,&call,&result,NULL)==XR_SOURCE_OK && result);
                 XrSourceEvent event={0};CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK &&
                     event.state==XR_SOURCE_RUN_RETURNED && output.length==3 && !memcmp(output.bytes,"42\n",3));
                 xray_source_result_free(result);xray_source_execution_free(execution);

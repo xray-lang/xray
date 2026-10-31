@@ -17,6 +17,9 @@
 XR_FUNC XrXirValueStatus xr_xir_buffer_storage_new(XrXirDomain *domain,
     int64_t bytes,int64_t alignment,bool zeroed,XrXirValue *output);
 XR_FUNC XrXirValueStatus xr_xir_buffer_storage_length(const XrXirValue *storage,int64_t *output);
+XR_FUNC XrXirValueStatus xr_xir_buffer_storage_resize(const XrXirValue *storage,int64_t bytes,bool *output);
+XR_FUNC XrXirValueStatus xr_xir_buffer_storage_pointer(const XrXirValue *storage,
+    const XrXirTypeArena *arena,XrXirType type,XrXirValue *output);
 /* Synchronous internal observation borrows immutable metadata and raw bytes.
  * The caller keeps this actual value alive; it creates no executable view. */
 XR_FUNC bool xr_xir_buffer_storage_observe(const XrXirValue *storage,

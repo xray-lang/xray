@@ -50,6 +50,9 @@ static DWORD prot_to_win(int prot) {
 void *xr_mem_map(size_t size, int prot) {
     return VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, prot_to_win(prot));
 }
+XR_FUNC size_t xr_mem_page_size(void) {
+    SYSTEM_INFO info;GetSystemInfo(&info);return (size_t)info.dwPageSize;
+}
 
 bool xr_mem_unmap(void *ptr, size_t size) {
     (void) size;

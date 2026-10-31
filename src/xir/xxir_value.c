@@ -43,10 +43,12 @@
 #include "xxir_float.h"
 #include "xxir_atomic.h"
 #include "xxir_buffer_storage.h"
+#include "xxir_pointer.h"
 #include "xxir_channel.h"
 #include "xxir_channel_watch_internal.h"
 #include "xxir_channel_rendezvous_internal.h"
 #include "../shared/xr_channel_buffer.h"
+#include "../os/os_mem.h"
 #include "xxir_task_internal.h"
 #include "xxir_generator_internal.h"
 #include "../base/xmalloc.h"
@@ -58,6 +60,7 @@
 #include <stdio.h>
 #include <string.h>
 
+typedef struct XirPageRecord XirPageRecord;
 struct XrXirDomain {
     unsigned char identity[8];
     _Atomic(uint32_t) references;
@@ -70,6 +73,7 @@ struct XrXirDomain {
     bool closed, close_started, close_pending, close_processing, graph_invalid;
     XrXirClassObservation *observation;
     XrCompileResources *compile_resources;
+    XirPageRecord *pages;
 };
 typedef struct XirAtomic {
     XirObject object;
@@ -183,11 +187,34 @@ typedef struct XirString {
     char *bytes;
     size_t length, runes, capacity;
 } XirString;
+typedef struct XirPointerOrigin {
+    _Atomic(uint32_t) references;
+    XrXirDomain *domain;
+    uint64_t generation;
+    bool active;
+    XirPageRecord *page;
+} XirPointerOrigin;
 typedef struct XirBufferStorage {
     XirObject object;
     void *data;
     size_t length, alignment;
+    XirPointerOrigin *origin;
 } XirBufferStorage;
+typedef struct XirPointer {
+    XirObject object;
+    XirPointerOrigin *origin;
+    uint64_t generation;
+    uintptr_t address;
+} XirPointer;
+struct XirPageRecord {
+    XirPageRecord *next;
+    XirPointerOrigin *origin;
+    void *address;
+    size_t length,charged_bytes;
+};
+static void pointer_origin_drop(XirPointerOrigin *origin);
+static void pointer_origin_close(XirPointerOrigin **origin);
+static XrXirValueStatus domain_pages_close(XrXirDomain *domain);
 
 typedef struct XirPanicInfo {
     XirObject object;
@@ -202,8 +229,8 @@ _Static_assert(sizeof(XrXirFaultDetail) == 24 && _Alignof(XrXirFaultDetail) == 8
 static void class_observation_dispose(XrXirDomain *domain);
 /* The immutable prefix is readable before any generation-specific field.
  * Its fifth byte excludes both supported old atomic-bool representations. */
-static const unsigned char domain_identity[8] = {0x58,0x52,0x44,0x4d,0x1e,0x00,0x00,0x01};
-_Static_assert(XR_XIR_VALUE_ABI_VERSION==30,"domain identity matches its physical value generation");
+static const unsigned char domain_identity[8] = {0x58,0x52,0x44,0x4d,0x1f,0x00,0x00,0x01};
+_Static_assert(XR_XIR_VALUE_ABI_VERSION==31,"domain identity matches its physical value generation");
 _Static_assert(offsetof(XrXirDomain, identity) == 0 && sizeof(atomic_bool) == 1 &&
     sizeof(_Atomic(uint32_t)) == 4, "domain identity rejects the complete retired prefix");
 XR_FUNC bool xr_xir_domain_current(const XrXirDomain *domain) {
@@ -299,6 +326,7 @@ static uint32_t object_storage_kind(uint32_t node_kind) {
 static bool value_object_kind_known(uint32_t kind) {
     return !kind || kind == XIR_OBJECT_BUFFER_STORAGE || kind == XIR_OBJECT_CLASS || kind == XIR_OBJECT_CELL ||
         kind == XIR_OBJECT_FUNCTION || kind == XR_XIR_TYPE_ARRAY ||
+        kind == XR_XIR_TYPE_PTR || kind == XR_XIR_TYPE_MUT_PTR ||
         kind == XR_XIR_TYPE_NOMINAL || kind == XR_XIR_TYPE_NULLABLE ||
         kind == XR_XIR_TYPE_TUPLE || kind == XR_XIR_TYPE_ATOMIC || kind == XR_XIR_TYPE_TASK || kind == XR_XIR_TYPE_ITERATOR || kind == XR_XIR_TYPE_CHANNEL ||
         kind == XR_XIR_TYPE_MAP || kind == XR_XIR_TYPE_SET || kind==XR_XIR_TYPE_SLICE || kind==XR_XIR_TYPE_MUT_SLICE;
@@ -340,6 +368,7 @@ static bool value_header_valid(const XrXirValue *value) {
     return node && !node->parameter_span && object_storage_kind(node->kind) == object->kind &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_ARRAY ||
          node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
+         node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR ||
          node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
          node->kind == XR_XIR_TYPE_SLICE || node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR ||
          (node->kind == XR_XIR_TYPE_CHANNEL && ((XirChannel *)object)->element ==
@@ -402,6 +431,11 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
     }
     if (object->kind==XR_XIR_TYPE_SLICE || object->kind==XR_XIR_TYPE_MUT_SLICE)
         return view_value_valid((const XirView *)object);
+    if (object->kind==XR_XIR_TYPE_PTR || object->kind==XR_XIR_TYPE_MUT_PTR) {
+        const XirPointer *pointer=(const XirPointer *)object;
+        return pointer->origin ? pointer->origin->domain==object->domain &&
+            pointer->generation==pointer->origin->generation : !pointer->address && !pointer->generation;
+    }
     if (object->kind == XIR_OBJECT_CLASS) {
         const XrXirStorageLayout *layout=class_body_layout(object);
         const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(object->arena),object->type);
@@ -776,6 +810,8 @@ XR_FUNC void xr_xir_domain_deallocate(XrXirDomain *domain,void *memory,size_t by
     domain_payload_deallocate(domain,memory,bytes,0);
 }
 #include "xxir_buffer_storage_value.inc.c"
+#include "xxir_pointer_value.inc.c"
+#include "xxir_page_value.inc.c"
 static XrXirValueStatus string_resize(XirString *string, size_t capacity) {
     XrXirDomain *domain = string->object.domain;
     domain_lock(domain);
@@ -1002,8 +1038,13 @@ static void release_pending(XirObject *pending) {
         XrXirTypeArena *arena = object->arena;
         if (object->kind == XIR_OBJECT_BUFFER_STORAGE) {
             XirBufferStorage *storage=(XirBufferStorage *)object;
+            pointer_origin_close(&storage->origin);
             if (storage->data) domain_payload_deallocate(domain,storage->data,storage->length,storage->alignment);
             xr_xir_domain_deallocate(domain,storage,sizeof(*storage));
+        } else if (object->kind==XR_XIR_TYPE_PTR || object->kind==XR_XIR_TYPE_MUT_PTR) {
+            XirPointer *pointer=(XirPointer *)object;
+            pointer_origin_drop(pointer->origin);
+            xr_xir_domain_deallocate(domain,pointer,sizeof(*pointer));
         } else if (object->type == XR_XIR_STRING) {
             XirString *string = (XirString *) object;
             xr_xir_domain_deallocate(domain, string->bytes, string->capacity);

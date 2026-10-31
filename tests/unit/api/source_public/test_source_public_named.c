@@ -12,6 +12,17 @@
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 typedef struct NamedOutput {char bytes[256];size_t length;} NamedOutput;
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_763d5432(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrSourceWriteStatus named_write(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
     NamedOutput *output=context;
     CHECK(stream==XR_SOURCE_STDOUT || stream==XR_SOURCE_STDERR);
@@ -73,7 +84,7 @@ static XrSourceInvocation named_request(const char *name,size_t length) {
 }
 static XrSourceResult *named_execute(XrSourceProgram *program,const char *name,const XrSourceCallOptions *options) {
     XrSourceResult *result=NULL;XrSourceInvocation request=named_request(name,strlen(name));
-    XrSourceStatus status=xray_source_invoke(program,&request,options,&result,NULL);
+    XrSourceStatus status=fixture_xray_source_invoke_763d5432(program,&request,options,&result,NULL);
     if(status!=XR_SOURCE_OK)fprintf(stderr,"named %s status=%u\n",name,(unsigned)status);
     CHECK(status==XR_SOURCE_OK && result);return result;
 }
@@ -87,12 +98,12 @@ static void named_refusals(XrSourceProgram *program,const XrSourceCallOptions *o
     CHECK(xray_source_call_drop(&call,NULL)==XR_SOURCE_OK && !call);
     CHECK(xray_source_invoke_begin(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),NULL,6,NULL,0},options,&call)==XR_SOURCE_BAD_ARGUMENT && !call);
     CHECK(xray_source_invoke_begin(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"answer",0,NULL,0},options,&call)==XR_SOURCE_BAD_ARGUMENT && !call);
-    CHECK(xray_source_invoke(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"answer\0x",8,NULL,0},options,&result,&failure)==XR_SOURCE_BAD_ARGUMENT && !result);
-    CHECK(xray_source_invoke(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"hidden",6,NULL,0},options,&result,&failure)==XR_SOURCE_NOT_FOUND && !result);
+    CHECK(fixture_xray_source_invoke_763d5432(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"answer\0x",8,NULL,0},options,&result,&failure)==XR_SOURCE_BAD_ARGUMENT && !result);
+    CHECK(fixture_xray_source_invoke_763d5432(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"hidden",6,NULL,0},options,&result,&failure)==XR_SOURCE_NOT_FOUND && !result);
     CHECK(!memcmp(&failure,&saved,sizeof(saved)) && !output->length);
     result=named_execute(program,"answer",options);
     XrSourceResult *occupied=result;
-    CHECK(xray_source_invoke(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"answer",6,NULL,0},options,&occupied,&failure)==XR_SOURCE_BAD_ARGUMENT && occupied==result);
+    CHECK(fixture_xray_source_invoke_763d5432(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"answer",6,NULL,0},options,&occupied,&failure)==XR_SOURCE_BAD_ARGUMENT && occupied==result);
     CHECK(xray_source_result_copy(result,&occupied)==XR_SOURCE_BAD_ARGUMENT && occupied==result);
     int64_t integer=-1;int boolean=37;double floating=9.0;
     CHECK(xray_source_result_i64(result,&integer)==XR_SOURCE_OK && integer==42);

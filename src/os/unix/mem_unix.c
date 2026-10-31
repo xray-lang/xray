@@ -17,6 +17,7 @@
 #include "../os_mem.h"
 
 #include <sys/mman.h>
+#include <unistd.h>
 
 // Some BSDs spell it MAP_ANON; Linux/macOS expose both via
 // glibc/SDK headers. Prefer MAP_ANONYMOUS where available, fall
@@ -45,6 +46,9 @@ void *xr_mem_map(size_t size, int prot) {
     if (p == MAP_FAILED)
         return NULL;
     return p;
+}
+XR_FUNC size_t xr_mem_page_size(void) {
+    long size=sysconf(_SC_PAGESIZE);return size>0?(size_t)size:0;
 }
 
 bool xr_mem_unmap(void *ptr, size_t size) {

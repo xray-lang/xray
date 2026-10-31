@@ -8,6 +8,7 @@
  */
 #include "xhir_conversion.h"
 #include "../xir/xxir_types.h"
+#include "../xir/xxir_pointer.h"
 #include "../xir/xxir_compile_memory.h"
 #include "../base/xchecks.h"
 
@@ -96,6 +97,9 @@ XR_FUNC XrXirStatus xr_hir_conversion_check(const XrHirConversionContext *contex
                 status=xr_xir_compile_callable_weakening(context->compile,context->types,input->actual,expected);
                 if(status!=XR_XIR_OK)return conversion_failure(reason,status,"callable conversion may only weaken its outer execution contract");
                 node.kind=XR_HIR_CONVERSION_CALLABLE;node.root=input->inferred?XR_HIR_CONVERSION_ROOT_INFERRED:XR_HIR_CONVERSION_ROOT_FIXED;
+            } else if(xr_xir_pointer_writable(context->types,input->actual) &&
+                xr_xir_type_is_pointer(context->types,expected) && !xr_xir_pointer_writable(context->types,expected)) {
+                node.kind=XR_HIR_CONVERSION_POINTER;
             } else if(expected==XR_XIR_ERROR) {
                 if(!context->proof)return conversion_failure(reason,XR_XIR_BAD_STRUCTURE,"Error conversion declaration proof is missing");
                 status=xr_xir_compile_type_markers_prove(context->compile,context->proof,input->actual,XR_XIR_CONSTRAINT_ERROR);
@@ -115,10 +119,10 @@ XR_FUNC XrXirStatus xr_hir_conversion_check(const XrHirConversionContext *contex
     *output=node;return XR_XIR_OK;
 }
 XR_FUNC XrXirInstruction xr_hir_conversion_instruction(const XrHirConversion *node,uint32_t operand) {
-    XR_CHECK(node && node->kind>XR_HIR_CONVERSION_IDENTITY && node->kind<=XR_HIR_CONVERSION_NUMBER,
+    XR_CHECK(node && node->kind>XR_HIR_CONVERSION_IDENTITY && node->kind<=XR_HIR_CONVERSION_POINTER,
         "conversion HIR must be fully typed before lowering");
     static const XrXirOp operations[]={XR_XIR_INVALID,XR_XIR_COPY,XR_XIR_NULLABLE_SOME,
-        XR_XIR_FUNCTION_WEAKEN,XR_XIR_ERROR_ERASE,XR_XIR_CONVERT_NUMBER};
+        XR_XIR_FUNCTION_WEAKEN,XR_XIR_ERROR_ERASE,XR_XIR_CONVERT_NUMBER,XR_XIR_PTR_READONLY};
     uint32_t payload=node->kind==XR_HIR_CONVERSION_NULLABLE && node->source==XR_XIR_UNIT?0:operand;
     return (XrXirInstruction){operations[node->kind],node->target,{payload,0},{0},0,{0}};
 }

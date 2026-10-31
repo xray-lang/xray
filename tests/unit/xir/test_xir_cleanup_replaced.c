@@ -9,6 +9,28 @@
 #include "xir/xxir_instance_activation.h"
 #if defined(XR_CLEANUP_VALUE_OBSERVER)
 #include "base/xmalloc.h"
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_artifact_execute_45615f51(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_artifact_execute(execution,program,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_45615f51(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 static size_t resource_index=SIZE_MAX,resource_calls,resource_live;
 static bool resource_active;
 static bool resource_refuse(void) {return resource_active && resource_calls++==resource_index;}
@@ -110,14 +132,14 @@ static XrSourceResult *invoke(XrSourceExecution *owner,XrSourceArtifact *program
     XrSourceInvocation invocation;CHECK(xray_source_invocation_init(&invocation,sizeof(invocation))==XR_SOURCE_OK);
     invocation.name=name;invocation.name_length=strlen(name);XrSourceCallOptions config=options(out);
     XrSourceResult *result=NULL;XrSourceEvent failure={0};
-    CHECK(xray_source_invoke(owner,program,&invocation,&config,&result,&failure)==XR_SOURCE_OK && result);return result;
+    CHECK(fixture_xray_source_invoke_45615f51(owner,program,&invocation,&config,&result,&failure)==XR_SOURCE_OK && result);return result;
 }
 static void public_sources(void) {
     const char *names[]={"plain","optional","owned"};
     for (size_t n=0;n<3;++n) {
         XrSourceArtifact *program=public_build(names[n]);XrSourceExecution *owner=execution();Output out={0};
         XrSourceCallOptions config=options(&out);XrSourceResult *result=NULL;XrSourceEvent failure={0};
-        CHECK(xray_source_artifact_execute(owner,program,&config,&result,&failure)==XR_SOURCE_OK && result);
+        CHECK(fixture_xray_source_artifact_execute_45615f51(owner,program,&config,&result,&failure)==XR_SOURCE_OK && result);
         xray_source_artifact_free(program);xray_source_execution_free(owner);
         XrSourceEvent event;CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
         const char *expected=n==2?owned_stdout:"420\n";
@@ -189,7 +211,7 @@ static void host_wait_failure(void) {
     XrSourceInvocation request;CHECK(xray_source_invocation_init(&request,sizeof(request))==XR_SOURCE_OK);
     request.name="hostWaitFailure";request.name_length=strlen(request.name);
     XrSourceCallOptions config=options(&out);XrSourceResult *result=NULL;XrSourceEvent failure={0};
-    XrSourceStatus status=xray_source_invoke(owner,program,&request,&config,&result,&failure);
+    XrSourceStatus status=fixture_xray_source_invoke_45615f51(owner,program,&request,&config,&result,&failure);
     CHECK(!host_wait_inject && host_wait_failures==1);
     CHECK(status==XR_SOURCE_IO && !result && failure.engine_status==XR_XIR_CALL_HOST_ERROR);
     CHECK(out.size==sizeof(owned_stdout)-1 && !memcmp(out.bytes,owned_stdout,out.size));
@@ -366,7 +388,7 @@ static void task_sendable(void) {
     out=(Output){0};result=NULL;XrSourceEvent failure={0};XrSourceInvocation request;
     CHECK(xray_source_invocation_init(&request,sizeof(request))==XR_SOURCE_OK);
     request.name="unsafeTask";request.name_length=strlen(request.name);XrSourceCallOptions config=options(&out);
-    CHECK(xray_source_invoke(owner,program,&request,&config,&result,&failure)==XR_SOURCE_BAD_STATE && !result &&
+    CHECK(fixture_xray_source_invoke_45615f51(owner,program,&request,&config,&result,&failure)==XR_SOURCE_BAD_STATE && !result &&
         failure.engine_status==XR_XIR_CALL_BAD_STATE);
     CHECK(out.size==sizeof(owned_stdout)-1 && !memcmp(out.bytes,owned_stdout,out.size));
     out=(Output){0};result=invoke(owner,program,"ordinaryTask",&out);
@@ -593,7 +615,7 @@ static void module_public_resource(const char *text,size_t length) {
     XrSourceInvocation request;CHECK(xray_source_invocation_init(&request,sizeof(request))==XR_SOURCE_OK);
     request.name="answer";request.name_length=6;XrSourceResult *result=NULL;XrSourceEvent failure={0},event={0};
     module_probe_active=true;module_fault_done=false;module_saved_view=(XrXirCallView){0};module_inner=0;module_freed=0;
-    XrSourceStatus status=xray_source_invoke(owner,artifact,&request,&config,&result,&failure);
+    XrSourceStatus status=fixture_xray_source_invoke_45615f51(owner,artifact,&request,&config,&result,&failure);
     if(result)CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK);
     fprintf(stderr,"actual Source cleanup resource status%u result%u event%u failure%u inner%u closed%u\n",
         (unsigned)status,result!=NULL,(unsigned)event.engine_status,(unsigned)failure.engine_status,module_inner,module_freed);
@@ -602,7 +624,7 @@ static void module_public_resource(const char *text,size_t length) {
     module_probe_active=false;static const char good[]="export fn answer()->i64{return 42}\n";
     XrSourceInput next={.kind=XR_SOURCE_INPUT_TEXT,.value.text={NULL,"cleanup-next",good,sizeof(good)-1}};
     XrSourceArtifact *ready=NULL;CHECK(xray_source_build(&next,&compile,&ready,NULL,&diagnostic)==XR_SOURCE_OK && ready && !diagnostic);
-    CHECK(xray_source_invoke(owner,ready,&request,&config,&result,NULL)==XR_SOURCE_OK && result);int64_t number=0;
+    CHECK(fixture_xray_source_invoke_45615f51(owner,ready,&request,&config,&result,NULL)==XR_SOURCE_OK && result);int64_t number=0;
     CHECK(xray_source_result_i64(result,&number)==XR_SOURCE_OK && number==42);xray_source_result_free(result);
     xray_source_artifact_free(ready);xray_source_artifact_free(artifact);xray_source_execution_free(owner);
 }

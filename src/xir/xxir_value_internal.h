@@ -47,8 +47,10 @@ typedef struct XirObject {
 XR_FUNC void xr_xir_value_graph_begin(void);
 XR_FUNC void xr_xir_value_graph_end(void);
 XR_FUNC void xr_xir_value_object_publish(XirObject *object);
-/* The caller retains its ordinary domain lease for the duration of close. */
-XR_FUNC void xr_xir_domain_close(XrXirDomain *domain);
+/* The caller retains its ordinary domain lease for the duration of close.
+ * A provider failure preserves the remaining page ledger and permits retry.
+ * Only success closes execution ownership; reference drops do not close pages. */
+XR_FUNC XrXirValueStatus xr_xir_domain_close(XrXirDomain *domain);
 /* Empty enum descriptors belong to the arena; their backpointers are weak.
  * Each external value holds an arena lease instead of a descriptor reference. */
 typedef struct XirNominalValue {

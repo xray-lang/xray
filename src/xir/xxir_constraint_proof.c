@@ -461,7 +461,8 @@ static XrXirStatus proof_type_task(ConstraintProof *proof, XrXirType type) {
         if (status == XR_XIR_OK && node->kind == XR_XIR_TYPE_MAP)
             status = proof_type_edge(proof, index, node->result);
     } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NULLABLE ||
-               node->kind == XR_XIR_TYPE_SLICE || (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL))
+               node->kind == XR_XIR_TYPE_SLICE || node->kind==XR_XIR_TYPE_PTR || node->kind==XR_XIR_TYPE_MUT_PTR ||
+               (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL))
         status = proof_type_edge(proof,index,node->element);
     else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_UNION) {
         if (node->parameter_count && !node->parameters) return XR_XIR_BAD_STRUCTURE;

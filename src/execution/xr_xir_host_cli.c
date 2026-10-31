@@ -139,8 +139,10 @@ static int host_terminal(XrXirCallStatus status, const XrXirCallResult *result) 
     return host_failure("XR_RUN_6002: canonical execution returned an invalid or unavailable outcome\n", 4);
 }
 
-XR_FUNC int xr_xir_host_program_main(XrXirProgram *owned_program, uint32_t entry, bool sandbox) {
+XR_FUNC int xr_xir_host_program_main(XrXirProgram *owned_program,uint32_t entry,bool sandbox,
+    XrXirHostCall **pending_close) {
     if (!owned_program) return 4;
+    if (!pending_close || *pending_close) {xr_xir_compile_program_drop(owned_program);return 4;}
     if (!host_binary_streams()) {
         xr_xir_compile_program_drop(owned_program);
         return 4;
@@ -150,18 +152,23 @@ XR_FUNC int xr_xir_host_program_main(XrXirProgram *owned_program, uint32_t entry
         xr_xir_compile_program_drop(owned_program);
         return host_failure("XR_RUN_6002: cannot initialize execution configuration\n", 4);
     }
-    XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, host_output_bytes, NULL, config.value_limit};
-    config.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sink};
+    static XrXirOutputSink sinks[]={
+        {XR_XIR_CALL_ABI_VERSION,0,host_output_bytes,NULL,XR_RESOURCE_DEFAULT_LIMIT},
+        {XR_XIR_CALL_ABI_VERSION,0,host_output_bytes,NULL,XR_RESOURCE_SANDBOX_RUNTIME_LIVE}};
+    config.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,xr_xir_output_render,&sinks[sandbox?1:0]};
     XrXirCallResult result = {0};
     XrXirHostExecutionRequest request = {owned_program, &config, entry, NULL, 0};
-    XrXirCallStatus status = xr_xir_host_execute(&request, &result);
+    XrXirCallStatus cleanup=XR_XIR_CALL_READY;
+    XrXirCallStatus status=xr_xir_host_execute(&request,&result,pending_close,&cleanup);
     xr_xir_compile_program_drop(owned_program);
-    int exit_code = host_terminal(status, &result);
+    int exit_code = *pending_close ? host_failure("XR_RUN_6007: page owner close failed; stopped owner retained\n",1) :
+        host_terminal(status,&result);
     xr_xir_call_result_drop(&result);
     return exit_code;
 }
 
-XR_FUNC int xr_xir_host_main(const XrXirProgramSpec *spec, bool sandbox) {
+XR_FUNC int xr_xir_host_main(const XrXirProgramSpec *spec,bool sandbox,XrXirHostCall **pending_close) {
+    if (!pending_close || *pending_close) return 4;
     const XrCompileResourceLimits limits = sandbox ?
         (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS :
         (XrCompileResourceLimits)XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
@@ -176,5 +183,5 @@ XR_FUNC int xr_xir_host_main(const XrXirProgramSpec *spec, bool sandbox) {
     if (sealed != XR_XIR_OK)
         return host_binary_streams() ? host_failure("XR_RUN_6002: cannot admit generated program\n",
             sealed == XR_XIR_BUDGET ? 1 : 4) : 4;
-    return xr_xir_host_program_main(program, spec->declarations->entry_function, sandbox);
+    return xr_xir_host_program_main(program,spec->declarations->entry_function,sandbox,pending_close);
 }

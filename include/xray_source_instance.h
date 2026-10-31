@@ -33,8 +33,9 @@ XRAY_API XrSourceStatus xray_source_instance_execute(XrSourceInstance *,
  * Arguments borrow until begin returns, then may be freed. */
 XRAY_API XrSourceStatus xray_source_instance_begin_function(XrSourceInstance *,
     const XrSourceValue *, const XrSourceValue *const *, size_t, XrSourceCall **);
-/* Consumes and clears *owner except on BUSY. Reports actual cleanup in event,
- * including failure. A NULL *owner is a successful no-op. */
+/* BUSY and IO/CLOSE_FAILED preserve *owner. A stopped owner permits drop retry
+ * only. A consumed owner is set to NULL and returns OK; its language cleanup
+ * outcome is reported separately in cleanup. NULL is a successful no-op. */
 XRAY_API XrSourceStatus xray_source_instance_drop(XrSourceInstance **, XrSourceEvent *cleanup);
 #ifdef __cplusplus
 }

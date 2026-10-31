@@ -25,6 +25,16 @@ typedef struct SourceTransfer {
     XrXirProgram *code;
     uint32_t entry;
 } SourceTransfer;
+#include "execution/xr_xir_host_execution.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrXirCallStatus fixture_host_execute_b1f200e8(const XrXirHostExecutionRequest *request,XrXirCallResult *output) {
+    XrXirHostCall *pending=NULL;XrXirCallStatus cleanup=XR_XIR_CALL_READY;
+    XrXirCallStatus status=xr_xir_host_execute(request,output,&pending,&cleanup);
+    if (pending) {fputs("unexpected retained page-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrSourceStatus transfer(SourceTransfer *owned,const XrCompileResourceLimits *limits,
     XrCompileResourceStats *stats) {
     XrSourceCompilerOptions options;CHECK(xray_source_compiler_options_init(&options,sizeof(options))==XR_SOURCE_OK);
@@ -121,7 +131,7 @@ int main(int argc,char **argv) {
         if(owned.code) {
             XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
             XrXirHostExecutionRequest request={owned.code,&config,owned.entry,NULL,0};XrXirCallResult result={0};
-            CHECK(xr_xir_host_execute(&request,&result)==XR_XIR_CALL_RETURNED);
+            CHECK(fixture_host_execute_b1f200e8(&request,&result)==XR_XIR_CALL_RETURNED);
             CHECK(result.value.type==XR_XIR_I64 && !result.value.payload);xr_xir_call_result_drop(&result);
         }
         transfer_close(&owned);

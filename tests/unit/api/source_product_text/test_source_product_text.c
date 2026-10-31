@@ -33,6 +33,16 @@ typedef struct TextWorld {
     XrModuleIdentityAuthority authority;
     XrXirSourceProductRequest request;
 } TextWorld;
+#include "execution/xr_xir_host_execution.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrXirCallStatus fixture_host_execute_44b4c6f3(const XrXirHostExecutionRequest *request,XrXirCallResult *output) {
+    XrXirHostCall *pending=NULL;XrXirCallStatus cleanup=XR_XIR_CALL_READY;
+    XrXirCallStatus status=xr_xir_host_execute(request,output,&pending,&cleanup);
+    if (pending) {fputs("unexpected retained page-close owner\n",stderr);abort();}
+    return status;
+}
+
 static void world_open_limits(TextWorld *w, XrCompileResourceLimits limits) {
     memset(w, 0, sizeof(*w));
     CHECK(xr_compile_resources_new(&limits, &w->resources) == XR_COMPILE_RESOURCE_OK);
@@ -84,7 +94,7 @@ static void text_owned_execution(void) {
     config.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sink};
     XrXirHostExecutionRequest run = {program, &config, entry, NULL, 0};
     XrXirCallResult result = {0};
-    CHECK(xr_xir_host_execute(&run, &result) == XR_XIR_CALL_RETURNED);
+    CHECK(fixture_host_execute_44b4c6f3(&run, &result) == XR_XIR_CALL_RETURNED);
     CHECK(result.value.type == XR_XIR_I64 && result.value.payload == 0);
     CHECK(out.length == 4 && !memcmp(out.data, "A\0B\n", 4));
     xr_xir_compile_program_drop(program); xr_xir_call_result_drop(&result);
@@ -329,7 +339,7 @@ static void ast_owned_execution_and_guards(void) {
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,xr_xir_output_render,&sink};
     XrXirHostExecutionRequest run={program,&config,entry,NULL,0};XrXirCallResult result={0};
-    CHECK(xr_xir_host_execute(&run,&result)==XR_XIR_CALL_RETURNED);
+    CHECK(fixture_host_execute_44b4c6f3(&run,&result)==XR_XIR_CALL_RETURNED);
     CHECK(output.length==3 && !memcmp(output.data,"42\n",3));
     puts("caller-AST actual edited tree42, exact parser state, rooted imports and producer-death execution PASS");
     xr_xir_compile_program_drop(program);xr_xir_call_result_drop(&result);

@@ -375,9 +375,10 @@ XR_FUNC XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
     return s;
 }
 
-XR_FUNC void xmcp_server_free(XmcpServer *s) {
+XR_FUNC bool xmcp_server_free(XmcpServer *s) {
     if (!s)
-        return;
+        return true;
+    if (!xmcp_run_close_pending(s)) return false;
     if (g_mcp_server == s)
         g_mcp_server = NULL;
     if (s->knowledge)
@@ -386,6 +387,7 @@ XR_FUNC void xmcp_server_free(XmcpServer *s) {
         fclose(s->log_file);
     xmcp_stdio_destroy(&s->transport);
     xr_free(s);
+    return true;
 }
 
 XR_FUNC int xmcp_server_run(XmcpServer *s) {

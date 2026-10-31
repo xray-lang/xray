@@ -76,6 +76,7 @@ XRAY_API XrSourceStatus xray_source_repl_new(const XrSourceCompileOptions *optio
     else if(owner) {
         XrXirCallStatus cleanup=XR_XIR_CALL_READY;
         (void)xr_source_submission_drop(&owner->submission,&cleanup);
+        XR_CHECK(!owner->submission,"a fresh unpublished REPL has no executing page owner");
         xr_xir_compile_library_catalog_free(owner->libraries);
         xr_compile_resources_free(owner->stdlib_path);xr_compile_resources_free(owner->namespace_id);
         xr_compile_resources_free(owner);
@@ -350,6 +351,7 @@ XRAY_API XrSourceStatus xray_source_repl_drop(XrSourceRepl **output,XrSourceEven
     XrSourceStatus status=xr_source_submission_drop(&owner->submission,&retired);
     if(status==XR_SOURCE_BUSY){owner->busy=false;return status;}
     if(cleanup){*cleanup=api_event(retired,0,0);if(retired!=XR_XIR_CALL_READY)cleanup->state=XR_SOURCE_RUN_CLEANUP_FAILED;}
+    if(owner->submission){owner->busy=false;owner->stopped=true;return status;}
     xray_source_result_free(owner->result);
     xr_compile_resources_free(owner->names);xr_compile_resources_free(owner->prepared_names);
     xr_compile_resources_free(owner->namespace_id);

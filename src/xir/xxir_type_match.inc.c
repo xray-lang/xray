@@ -175,7 +175,8 @@ static XrXirStatus type_match_pair(TypeMatchContext *c,XrXirType expected,
         from->kind!=XR_XIR_TYPE_CALLABLE && from->kind!=XR_XIR_TYPE_NULLABLE && from->kind!=XR_XIR_TYPE_TUPLE &&
         from->kind!=XR_XIR_TYPE_ATOMIC && from->kind!=XR_XIR_TYPE_TASK && from->kind!=XR_XIR_TYPE_MAP &&
         from->kind!=XR_XIR_TYPE_SET && from->kind!=XR_XIR_TYPE_SLICE && from->kind!=XR_XIR_TYPE_MUT_SLICE &&
-        from->kind!=XR_XIR_TYPE_ITERATOR && from->kind!=XR_XIR_TYPE_CHANNEL) return XR_XIR_BAD_TYPE;
+        from->kind!=XR_XIR_TYPE_ITERATOR && from->kind!=XR_XIR_TYPE_CHANNEL &&
+        from->kind!=XR_XIR_TYPE_PTR && from->kind!=XR_XIR_TYPE_MUT_PTR) return XR_XIR_BAD_TYPE;
     *frame=(TypeMatchFrame){.from=from,.to=to,.source_types=c->source_types,
         .arguments=c->arguments,.argument_count=c->count};
     return XR_XIR_OK;

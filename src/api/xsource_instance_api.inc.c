@@ -103,6 +103,9 @@ XRAY_API XrSourceStatus xray_source_instance_drop(XrSourceInstance **output,XrSo
     owner->busy=true;
     XrXirCallStatus dropped=xr_xir_host_instance_drop(owner->host);
     if(dropped==XR_XIR_CALL_BUSY){owner->busy=false;return XR_SOURCE_BUSY;}
+    if(dropped==XR_XIR_CALL_CLOSE_FAILED){
+        owner->busy=false;if(cleanup)*cleanup=api_event(dropped,0,0);return XR_SOURCE_IO;
+    }
     if(cleanup){*cleanup=api_event(dropped,0,0);if(dropped!=XR_XIR_CALL_READY)cleanup->state=XR_SOURCE_RUN_CLEANUP_FAILED;}
     xray_source_artifact_free(owner->program);xr_compile_resources_free(owner);*output=NULL;return XR_SOURCE_OK;
 }

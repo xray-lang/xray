@@ -78,11 +78,11 @@ XRAY_API XrSourceStatus xray_source_invoke_begin(XrSourceExecution *execution,Xr
     xr_compile_resources_free(arguments);return status;
 }
 XRAY_API XrSourceStatus xray_source_invoke(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,
-    const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
-    if(!execution || !program || !output || *output)return XR_SOURCE_BAD_ARGUMENT;
-    XrSourceStatus status=api_options_admit(options);ApiEntry entry={0};XrXirValue *arguments=NULL;
-    if(status==XR_SOURCE_OK)status=api_invocation_entry(&(ApiInvocation){program,execution->resources,invocation},&entry,&arguments);
-    if(status==XR_SOURCE_OK)status=api_execute_entry(&entry,options,output,failure);
+    const XrSourceCallOptions *options,XrSourceCompletion *completion) {
+    if (!execution || !program) return XR_SOURCE_BAD_ARGUMENT;
+    XrSourceStatus status=api_completion_admit(options,completion);ApiEntry entry={0};XrXirValue *arguments=NULL;
+    if (status==XR_SOURCE_OK) status=api_invocation_entry(&(ApiInvocation){program,execution->resources,invocation},&entry,&arguments);
+    if (status==XR_SOURCE_OK) status=api_execute_entry(&entry,options,completion);
     xr_compile_resources_free(arguments);return status;
 }
 XRAY_API XrSourceStatus xray_source_result_copy(const XrSourceResult *source,XrSourceResult **output) {

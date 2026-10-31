@@ -98,8 +98,10 @@ XRAY_API XrSourceStatus xray_source_repl_read(XrSourceRepl *, const char *name, 
  * callback reentry return BUSY. Uses the same cumulative limits, publishes no
  * input and preserves it. Failed cleanup stops the owner. */
 XRAY_API XrSourceStatus xray_source_repl_write(XrSourceRepl *, const char *name, const XrSourceValue *);
-/* Drains the real transaction before freeing its semantic Catalog. Consumes
- * and clears the owner except on BUSY; NULL drop is a successful no-op. */
+/* Drains the real transaction before freeing its semantic Catalog. BUSY or
+ * IO/CLOSE_FAILED retains *owner and its callbacks. A stopped owner permits
+ * drop retry only. Success clears the owner; cleanup reports its separate
+ * language outcome. NULL drop is a successful no-op. */
 XRAY_API XrSourceStatus xray_source_repl_drop(XrSourceRepl **, XrSourceEvent *cleanup);
 #ifdef __cplusplus
 }

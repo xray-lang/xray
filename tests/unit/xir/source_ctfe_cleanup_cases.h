@@ -13,6 +13,17 @@
 #include <stdlib.h>
 #include <string.h>
 typedef struct CtfeCleanupOutput {char bytes[256];size_t length;} CtfeCleanupOutput;
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_e012a23c(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrSourceWriteStatus ctfe_cleanup_capture(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
     CtfeCleanupOutput *output=context;CHECK(stream==XR_SOURCE_STDOUT && length<=sizeof(output->bytes)-output->length);
     memcpy(output->bytes+output->length,bytes,length);output->length+=length;return XR_SOURCE_WRITE_OK;
@@ -48,7 +59,7 @@ static void source_ctfe_cleanup_cases(const char *stdlib,const char *path) {
         CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
         runtime.write=ctfe_cleanup_capture;runtime.context=&output;
         XrSourceResult *result=NULL;XrSourceEvent event={0};
-        CHECK(xray_source_invoke(execution,artifact,&invocation,&runtime,&result,&event)==XR_SOURCE_OK && result);
+        CHECK(fixture_xray_source_invoke_e012a23c(execution,artifact,&invocation,&runtime,&result,&event)==XR_SOURCE_OK && result);
         xray_source_execution_free(execution);xray_source_artifact_free(artifact);
         const char expected_output[]="true\ntrue\n420\ntrue\n420\n42\ntrue\n446\n42\ntry! failed: Failure.Bad(\"new \303\251\000\347\225\214\", 31)\n42\n42\n42\n42\n42\n";
         CHECK(output.length==sizeof(expected_output)-1 && !memcmp(output.bytes,expected_output,output.length));

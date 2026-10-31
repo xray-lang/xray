@@ -42,7 +42,8 @@ XR_FUNC XrXirCallStatus xr_xir_host_instance_begin_function(XrXirHostInstance *o
     const XrXirValue *function, const XrXirValue *arguments, uint32_t count, XrXirHostCall **output);
 XR_FUNC XrXirCallStatus xr_xir_host_instance_execute(XrXirHostInstance *owner, uint32_t entry,
     const XrXirValue *arguments, uint32_t count, XrXirCallResult *output);
-/* BUSY preserves the owner while a Call is active. NULL is a no-op. */
+/* BUSY and CLOSE_FAILED preserve the owner. CLOSE_FAILED permits only another
+ * drop, without repeating execution or language cleanup. NULL is a no-op. */
 XR_FUNC XrXirCallStatus xr_xir_host_instance_drop(XrXirHostInstance *owner);
 /* Calls are serialized by the host. Reentry from execution/cleanup returns BUSY.
  * Begin owns a new instance and retains arguments/code; provider contexts remain
@@ -64,11 +65,13 @@ XR_FUNC XrXirCallStatus xr_xir_host_call_request_cancel(XrXirHostCall *call);
 XR_FUNC XrXirCallStatus xr_xir_host_call_take(XrXirHostCall *call, XrXirCallResult *output);
 /* Consumes the Call except on BUSY, reporting cleanup failure. A persistent
  * owner reclaims the whole activation group and keeps ready module state.
- * A one-shot Call also destroys its private Instance. NULL is a no-op. */
+ * A one-shot Call also destroys its private Instance. CLOSE_FAILED preserves
+ * that stopped Call for retry; all other terminal statuses consume it. */
 XR_FUNC XrXirCallStatus xr_xir_host_call_drop(XrXirHostCall *call);
-/* Admission or cleanup failure preserves output. A published result owns values. A timer
- * suspension waits on the monotonic clock until its full duration has elapsed; a failed
- * host clock cancels and drains the call and reports a host error without a result. */
+/* Output and pending_close must be empty; cleanup is mandatory. An owned terminal
+ * result is independent of the cleanup status. CLOSE_FAILED publishes a stopped
+ * pending_close owner, whose provider contexts must survive until successful drop.
+ * A timer waits for its real duration. No completion pointer is retained. */
 XR_FUNC XrXirCallStatus xr_xir_host_execute(const XrXirHostExecutionRequest *request,
-    XrXirCallResult *output);
+    XrXirCallResult *output,XrXirHostCall **pending_close,XrXirCallStatus *cleanup);
 #endif // XR_XIR_HOST_EXECUTION_H

@@ -16,6 +16,16 @@
 #include "execution/xr_xir_host_execution.c"
 XR_DATA const XrXirProgramSpec panics_checked_program,panics_matrix_program;
 XR_DATA const uint32_t panics_checked_functions[4],panics_matrix_functions[14];
+#include "execution/xr_xir_host_execution.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrXirCallStatus fixture_host_execute_31b78013(const XrXirHostExecutionRequest *request,XrXirCallResult *output) {
+    XrXirHostCall *pending=NULL;XrXirCallStatus cleanup=XR_XIR_CALL_READY;
+    XrXirCallStatus status=xr_xir_host_execute(request,output,&pending,&cleanup);
+    if (pending) {fputs("unexpected retained page-close owner\n",stderr);abort();}
+    return status;
+}
+
 static const XrCompileResourceLimits host_compile_limits={16777216,8388608,64000000};
 
 static XrXirStatus host_seal(const XrXirProgramSpec *spec,const XrCompileResourceLimits *limits,
@@ -54,7 +64,7 @@ static void host_faults(XrXirProgram *program,uint32_t entry) {
     size_t live=runtime_live,bytes=runtime_bytes,sites=0;
     for (size_t point=0;point<=sites;++point) {
         XrXirCallResult result={0};runtime_attempts=0;runtime_fail_at=point ? point-1 : SIZE_MAX;
-        XrXirCallStatus status=xr_xir_host_execute(&request,&result);
+        XrXirCallStatus status=fixture_host_execute_31b78013(&request,&result);
         if (!point) {CHECK(status==XR_XIR_CALL_RETURNED && result.status==status);sites=runtime_attempts;}
         else CHECK(status==XR_XIR_CALL_OOM && runtime_attempts>runtime_fail_at);
         runtime_fail_at=SIZE_MAX;xr_xir_call_result_drop(&result);
@@ -63,14 +73,14 @@ static void host_faults(XrXirProgram *program,uint32_t entry) {
     CHECK(sites);
     XrXirCallResult held={XR_XIR_CALL_RETURNED,{XR_XIR_I64,0,7},0,{0}},before=held;
     runtime_attempts=0;
-    CHECK(xr_xir_host_execute(&request,&held)==XR_XIR_CALL_BAD_ARGUMENT && !runtime_attempts &&
+    CHECK(fixture_host_execute_31b78013(&request,&held)==XR_XIR_CALL_BAD_ARGUMENT && !runtime_attempts &&
         !memcmp(&held,&before,sizeof(held)));xr_xir_call_result_drop(&held);
     printf("Host entry=%u actual allocation sites=%zu; outcome and physical refunds PASS\n",entry,sites);
 }
 static XrXirCallResult host_outcome(XrXirProgram *program,uint32_t entry) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     XrXirHostExecutionRequest request={program,&config,entry,NULL,0};XrXirCallResult result={0};
-    CHECK(xr_xir_host_execute(&request,&result)==XR_XIR_CALL_RETURNED && result.status==XR_XIR_CALL_RETURNED);
+    CHECK(fixture_host_execute_31b78013(&request,&result)==XR_XIR_CALL_RETURNED && result.status==XR_XIR_CALL_RETURNED);
     return result;
 }
 int main(void) {

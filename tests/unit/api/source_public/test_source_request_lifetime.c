@@ -30,6 +30,28 @@ typedef struct ProductPacketProbe {
     unsigned mode;
     bool armed,oom_seen,disabled;
 } ProductPacketProbe;
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_artifact_execute_5b13769b(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_artifact_execute(execution,program,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_5b13769b(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 static ProductPacketProbe *product_packet_probe;
 typedef struct PacketCodecProbe {
     const unsigned char *expected[2];
@@ -559,7 +581,7 @@ static void detached_ast_and_result(void) {
     CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
     XrSourceInvocation invocation;CHECK(xray_source_invocation_init(&invocation,sizeof(invocation))==XR_SOURCE_OK);
     invocation.name="bytes";invocation.name_length=5;XrSourceResult *result=NULL;
-    CHECK(xray_source_invoke(execution,artifact,&invocation,&runtime,&result,NULL)==XR_SOURCE_OK && result);
+    CHECK(fixture_xray_source_invoke_5b13769b(execution,artifact,&invocation,&runtime,&result,NULL)==XR_SOURCE_OK && result);
     xray_source_artifact_free(artifact);xray_source_execution_free(execution);
     const char *bytes=NULL;size_t length=0;
     CHECK(xray_source_result_bytes(result,&bytes,&length)==XR_SOURCE_OK && length==3 && !memcmp(bytes,"A\0B",3));
@@ -581,7 +603,7 @@ static void ready_c_artifact(void) {
     XrSourceExecution *execution=execution_new();XrSourceCallOptions runtime;
     CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
     XrSourceResult *result=NULL;
-    CHECK(xray_source_artifact_execute(execution,artifact,&runtime,&result,NULL)==XR_SOURCE_BAD_STATE && !result);
+    CHECK(fixture_xray_source_artifact_execute_5b13769b(execution,artifact,&runtime,&result,NULL)==XR_SOURCE_BAD_STATE && !result);
     xray_source_artifact_free(artifact);xray_source_execution_free(execution);
 }
 static void execution_policy(void) {
@@ -701,7 +723,7 @@ static void module_report_lifetime(bool syntax_first) {
     XrSourceExecution *execution=execution_new();XrSourceCallOptions runtime;
     CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
     ArrayOutput output={0};runtime.write=array_write;runtime.context=&output;XrSourceResult *result=NULL;
-    CHECK(xray_source_artifact_execute(execution,artifact,&runtime,&result,NULL)==XR_SOURCE_OK&&result);
+    CHECK(fixture_xray_source_artifact_execute_5b13769b(execution,artifact,&runtime,&result,NULL)==XR_SOURCE_OK&&result);
     xray_source_artifact_free(artifact);xray_source_execution_free(execution);
     CHECK(output.size==2&&!memcmp(output.bytes,"9\n",2));xray_source_result_free(result);
 }
@@ -873,7 +895,7 @@ static void module_binding_classes(void) {
     memset(source,'!',sizeof(source));XrSourceExecution *execution=execution_new();XrSourceCallOptions runtime;
     CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);ArrayOutput output={0};
     runtime.write=array_write;runtime.context=&output;XrSourceResult *result=NULL;
-    CHECK(xray_source_artifact_execute(execution,artifact,&runtime,&result,NULL)==XR_SOURCE_OK&&result);
+    CHECK(fixture_xray_source_artifact_execute_5b13769b(execution,artifact,&runtime,&result,NULL)==XR_SOURCE_OK&&result);
     xray_source_artifact_free(artifact);xray_source_execution_free(execution);
     CHECK(output.size==2&&!memcmp(output.bytes,"9\n",2));xray_source_result_free(result);CHECK(!runtime_live&&!runtime_bytes);
 }
@@ -1852,7 +1874,7 @@ static void nominal_execute(XrSourceArtifact *artifact,char *source,size_t lengt
     XrSourceExecution *execution=execution_new();XrSourceCallOptions options;
     CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
     options.context=&output;options.write=array_write;XrSourceResult *result=NULL;
-    CHECK(xray_source_artifact_execute(execution,artifact,&options,&result,NULL)==XR_SOURCE_OK && result);
+    CHECK(fixture_xray_source_artifact_execute_5b13769b(execution,artifact,&options,&result,NULL)==XR_SOURCE_OK && result);
     xray_source_artifact_free(artifact);xray_source_execution_free(execution);
     XrSourceEvent event={0};CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
     int64_t value=-1;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK && value==0);

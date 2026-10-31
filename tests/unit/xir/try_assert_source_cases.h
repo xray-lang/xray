@@ -6,6 +6,17 @@
  *
  * try_assert_source_cases.h - Owned panic graphs at actual public call boundaries
  */
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_72ff8c74(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 static void try_assert_source_graph(void) {
     static const char pure[]=
         "enum Failure { Bad { text:string } }\n"
@@ -32,7 +43,7 @@ static void try_assert_source_graph(void) {
         invocation.name="make";invocation.name_length=4;
         XrSourceCallOptions call_options;CHECK(xray_source_call_options_init(&call_options,sizeof(call_options))==XR_SOURCE_OK);
         XrSourceResult *result=NULL;XrSourceEvent event={0};
-        CHECK(xray_source_invoke(execution,artifact,&invocation,&call_options,&result,&event)==XR_SOURCE_OK && result);
+        CHECK(fixture_xray_source_invoke_72ff8c74(execution,artifact,&invocation,&call_options,&result,&event)==XR_SOURCE_OK && result);
         CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
         XrSourceValue *value=NULL,*copy=NULL;CHECK(xray_source_result_value(result,&value)==XR_SOURCE_OK);
         xray_source_result_free(result);result=NULL;

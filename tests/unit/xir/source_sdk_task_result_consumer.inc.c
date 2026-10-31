@@ -7,6 +7,17 @@
  * source_sdk_task_result_consumer.inc.c - Detached terminal Task data in public hosts
  */
 typedef struct SdkTaskOutput { char bytes[64]; size_t length; } SdkTaskOutput;
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_34ef263a(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrSourceWriteStatus sdk_task_output(void *context,XrSourceOutputStream stream,
     const char *bytes,size_t length) {
     SdkTaskOutput *output=(SdkTaskOutput *)context;
@@ -158,7 +169,7 @@ static void sdk_task_language_cases(const char *stdlib_path) {
     XrSourceValue *survivors[4]={NULL,NULL,NULL,NULL};
     for(size_t i=0;i<4;++i) {
         output.length=0;XrSourceInvocation invoke=request(names[i],NULL,0);XrSourceResult *result=NULL;
-        CHECK(xray_source_invoke(execution,program,&invoke,&runtime,&result,NULL)==XR_SOURCE_OK && result);
+        CHECK(fixture_xray_source_invoke_34ef263a(execution,program,&invoke,&runtime,&result,NULL)==XR_SOURCE_OK && result);
         XrSourceEvent event;CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
         static const char root[]="child-cleanup\n0\n1\n2\n3\n42\n0\n0\n1\n";
         CHECK(output.length==sizeof(root)-1+(i==3?14:0) && !memcmp(output.bytes,root,sizeof(root)-1));
@@ -205,10 +216,10 @@ static void sdk_terminal_task_cases(const char *stdlib_path) {
     CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
     XrSourceValue *tasks[7]={NULL};XrSourceResult *survivors[7]={NULL};
     XrSourceInvocation missing_options=request(names[0],NULL,0);XrSourceResult *unpublished=NULL;
-    CHECK(xray_source_invoke(execution,program,&missing_options,NULL,&unpublished,NULL)==XR_SOURCE_BAD_ARGUMENT && !unpublished);
+    CHECK(fixture_xray_source_invoke_34ef263a(execution,program,&missing_options,NULL,&unpublished,NULL)==XR_SOURCE_BAD_ARGUMENT && !unpublished);
     for(size_t i=0;i<7;++i) {
         XrSourceInvocation invocation=request(names[i],NULL,0);XrSourceResult *result=NULL;
-        CHECK(xray_source_invoke(execution,program,&invocation,&runtime,&result,NULL)==XR_SOURCE_OK && result);
+        CHECK(fixture_xray_source_invoke_34ef263a(execution,program,&invocation,&runtime,&result,NULL)==XR_SOURCE_OK && result);
         XrSourceEvent event;
         CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
         tasks[i]=sdk_task_value(result,XR_SOURCE_VALUE_TASK);xray_source_result_free(result);

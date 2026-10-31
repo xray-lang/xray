@@ -21,6 +21,16 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"Task SDK FAIL %d: %s\n",__LINE__,#c); exit(1); } } while (0)
 #include "task_constructed_generated.h"
+#include "execution/xr_xir_host_execution.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrXirCallStatus fixture_host_execute_b4b33119(const XrXirHostExecutionRequest *request,XrXirCallResult *output) {
+    XrXirHostCall *pending=NULL;XrXirCallStatus cleanup=XR_XIR_CALL_READY;
+    XrXirCallStatus status=xr_xir_host_execute(request,output,&pending,&cleanup);
+    if (pending) {fputs("unexpected retained page-close owner\n",stderr);abort();}
+    return status;
+}
+
 static void sdk_code_release(void *owner) { unsigned *count = owner; CHECK(!(*count)++); }
 static bool constructed_i64_array(const XrXirValue *value, XrXirValueAdmission *admission) {
     int64_t length = 0; XrXirValueStatus status = xr_xir_array_len(value, admission, &length);
@@ -111,7 +121,7 @@ int main(void) {
         XrXirInstanceConfig host_config; CHECK(xr_xir_instance_config_init(&host_config,sizeof(host_config)) == XR_XIR_CALL_READY);
         for (unsigned mode = 0; mode < 2; ++mode) {
             XrXirHostExecutionRequest request = {program,&host_config,constructed_entries[family][mode],NULL,0};
-            CHECK(xr_xir_host_execute(&request,&hosted[mode]) == XR_XIR_CALL_RETURNED);
+            CHECK(fixture_host_execute_b4b33119(&request,&hosted[mode]) == XR_XIR_CALL_RETURNED);
             host_domains[mode] = ((const XirObject *)(uintptr_t)hosted[mode].value.payload)->domain;
             CHECK(xr_xir_domain_retain(host_domains[mode]));
         }

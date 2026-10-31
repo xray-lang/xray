@@ -88,6 +88,7 @@ static XrXirValueStatus type_needs_admission(const XrXirTypes *types, XrXirType 
         if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_NOMINAL ||
             node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
             node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK ||
+            node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR ||
             (node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL)) {
             *needed = true; return XR_XIR_VALUE_OK;
         }
@@ -218,6 +219,7 @@ static XrXirValueStatus value_admit_summary_mode(const XrXirValue *value, XrXirT
                 XirObject *object = object_pointer(&current);
                 arena=object->arena;type=object->type;
                 if (domain_sensitive && (object->kind == XIR_OBJECT_BUFFER_STORAGE ||
+                    object->kind==XR_XIR_TYPE_PTR || object->kind==XR_XIR_TYPE_MUT_PTR ||
                     object->kind == XIR_OBJECT_CLASS || object->kind == XIR_OBJECT_CELL ||
                     object->kind == XIR_OBJECT_FUNCTION || object->kind == XR_XIR_TYPE_TASK ||
                     object->kind == XR_XIR_TYPE_ITERATOR))
@@ -291,6 +293,8 @@ static XrXirValueStatus value_admit_summary_mode(const XrXirValue *value, XrXirT
                         if (status != XR_XIR_VALUE_OK) break;
                     } else if (object->kind == XR_XIR_TYPE_ATOMIC) {
                         /* Atomic cells have scalar payloads and no graph children. */
+                    } else if (object->kind==XR_XIR_TYPE_PTR || object->kind==XR_XIR_TYPE_MUT_PTR) {
+                        /* Pointer origins own metadata only and grant no cross-domain route. */
                     } else if (object->kind == XIR_OBJECT_BUFFER_STORAGE && object->type == XR_XIR_BUFFER_STORAGE) {
                         /* The exact payload header was admitted above. This same-domain
                          * managed leaf owns its bytes and has no traversable children. */

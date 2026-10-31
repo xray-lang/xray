@@ -18,6 +18,7 @@
 #include "../../xir/xxir_value_internal.h"
 #include "../../os/os_time.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 typedef struct DapHost {
     void *context;
@@ -118,15 +119,35 @@ static int dap_run(bool tcp,uint32_t port,XrCompileResources *resources,DapHost 
     if (xdap_adapter_new(&compiler,&config,&adapter)!=XR_XIR_OK) goto done;
     result=dap_loop(adapter,&io) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
     if (detached) {
-        if (xdap_adapter_free(adapter)!=XR_XIR_CALL_READY) result=XR_CLI_EXIT_FAIL;
+        XrXirCallStatus closed=xdap_adapter_free(adapter);
+        if (closed==XR_XIR_CALL_CLOSE_FAILED) closed=xdap_adapter_free(adapter);
+        if (closed==XR_XIR_CALL_CLOSE_FAILED || closed==XR_XIR_CALL_BUSY) {
+            fputs("DAP: stopped page owner could not close at process exit\n",stderr);
+            fflush(stderr);exit(XR_CLI_EXIT_FAIL);
+        }
+        if (closed!=XR_XIR_CALL_READY) result=XR_CLI_EXIT_FAIL;
         adapter=NULL;xdap_stdio_free(io.stdio);io.stdio=NULL;xdap_tcp_free(io.tcp);io.tcp=NULL;
         if (host && host->retire_control(host->context)!=XR_XIR_OK) result=XR_CLI_EXIT_FAIL;
         if (dap_detached_loop(detached)!=XR_CLI_EXIT_OK) result=XR_CLI_EXIT_FAIL;
     }
 
 done:
-    if (xdap_adapter_free(adapter)!=XR_XIR_CALL_READY) result=XR_CLI_EXIT_FAIL;
-    if (xdap_detached_free(detached)!=XR_XIR_CALL_READY) result=XR_CLI_EXIT_FAIL;
+    {
+        XrXirCallStatus closed=xdap_adapter_free(adapter);
+        if (closed==XR_XIR_CALL_CLOSE_FAILED) closed=xdap_adapter_free(adapter);
+        if (closed==XR_XIR_CALL_CLOSE_FAILED || closed==XR_XIR_CALL_BUSY) {
+            fputs("DAP: stopped page owner could not close at process exit\n",stderr);
+            fflush(stderr);exit(XR_CLI_EXIT_FAIL);
+        }
+        if (closed!=XR_XIR_CALL_READY) result=XR_CLI_EXIT_FAIL;
+        closed=xdap_detached_free(detached);
+        if (closed==XR_XIR_CALL_CLOSE_FAILED) closed=xdap_detached_free(detached);
+        if (closed==XR_XIR_CALL_CLOSE_FAILED || closed==XR_XIR_CALL_BUSY) {
+            fputs("DAP: detached page owner could not close at process exit\n",stderr);
+            fflush(stderr);exit(XR_CLI_EXIT_FAIL);
+        }
+        if (closed!=XR_XIR_CALL_READY) result=XR_CLI_EXIT_FAIL;
+    }
     xr_source_compiler_free(compiler);xr_source_compile_diagnostic_free(&diagnostic);
     xdap_stdio_free(io.stdio);xdap_tcp_free(io.tcp);xr_xir_domain_drop(domain);xr_source_stdlib_path_free(&stdlib);
     xr_source_paths_diagnostic_free(&path_diagnostic);

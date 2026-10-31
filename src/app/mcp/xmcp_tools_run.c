@@ -30,8 +30,22 @@ typedef struct RunCapture { RunBytes out, error; } RunCapture;
 typedef struct RunExecution {
     XrXirCallResult owned;
     XrXirCallStatus status;
-    bool timed_out;
+    XrXirCallStatus cleanup;
+    bool timed_out,pending_close;
 } RunExecution;
+struct XmcpPendingRun {
+    XrXirInstance *instance;
+    RunCapture capture;
+    XrXirOutputSink sink;
+};
+XR_FUNC bool xmcp_run_close_pending(XmcpServer *server) {
+    if (!server || !server->pending_run) return true;
+    XmcpPendingRun *owner=server->pending_run;
+    XrXirCallStatus status=xr_xir_instance_free(owner->instance);
+    if (status==XR_XIR_CALL_CLOSE_FAILED || status==XR_XIR_CALL_BUSY) return false;
+    server->pending_run=NULL;
+    xr_free(owner->capture.out.bytes);xr_free(owner->capture.error.bytes);xr_free(owner);return true;
+}
 static bool bytes_open(RunBytes *buffer, size_t limit) {
     buffer->bytes = xr_malloc(limit + 1);
     if (!buffer->bytes) return false;
@@ -100,21 +114,27 @@ static XrXirCallStatus run_copy_status(XrXirValueStatus status) {
     }
 }
 static RunExecution execute_program(XrXirProgram *program, uint32_t entry, RunCapture *capture,
-    const XmcpServer *server, uint64_t start, uint64_t duration) {
+    XmcpServer *server, uint64_t start, uint64_t duration) {
     RunExecution execution = {0};
     XrXirInstanceConfig config;
     execution.status = xr_xir_instance_config_init_sandbox(&config, sizeof(config));
     if (execution.status != XR_XIR_CALL_READY) return execution;
-    XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, capture_write, capture, (size_t)config.value_limit};
-    config.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sink};
+    XmcpPendingRun *owner=xr_calloc(1,sizeof(*owner));
+    if (!owner) {execution.status=XR_XIR_CALL_OOM;return execution;}
+    owner->capture=*capture;
+    owner->sink=(XrXirOutputSink){XR_XIR_CALL_ABI_VERSION,0,capture_write,&owner->capture,(size_t)config.value_limit};
+    config.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,xr_xir_output_render,&owner->sink};
     xr_xir_host_time_provider(&config.time);
     XrXirInstance *instance = NULL;
     execution.status = xr_xir_instance_new(program, &config, &instance);
+    owner->instance=instance;
     if (execution.status == XR_XIR_CALL_READY)
         execution.status = xr_xir_instance_start(instance, entry, NULL, 0);
     if (execution.status != XR_XIR_CALL_READY) {
         XrXirCallStatus cleanup = xr_xir_instance_free(instance);
-        if (cleanup != XR_XIR_CALL_READY) execution.status = cleanup;
+        execution.cleanup=cleanup;*capture=owner->capture;
+        if (cleanup==XR_XIR_CALL_CLOSE_FAILED || cleanup==XR_XIR_CALL_BUSY) {server->pending_run=owner;execution.pending_close=true;}
+        else xr_free(owner);
         return execution;
     }
     /* A started owner can publish a real terminal cancellation even when
@@ -149,15 +169,17 @@ static RunExecution execute_program(XrXirProgram *program, uint32_t entry, RunCa
     }
     if (execution.status == XR_XIR_CALL_READY) execution.status = taken;
     XrXirCallStatus cleanup = xr_xir_instance_free(instance);
-    if (cleanup != XR_XIR_CALL_READY) {
-        xr_xir_call_result_drop(&execution.owned); execution.status = cleanup;
-    }
+    execution.cleanup=cleanup;*capture=owner->capture;
+    if (cleanup==XR_XIR_CALL_CLOSE_FAILED || cleanup==XR_XIR_CALL_BUSY) {server->pending_run=owner;execution.pending_close=true;}
+    else xr_free(owner);
     return execution;
 }
 static XrJsonValue *run_result(bool ok, int exit_code, const RunCapture *capture,
     const RunExecution *execution, XrXirStatus source_status, const char *summary) {
     XrJsonValue *structured = xjson_new_object();
     XMCP_JSON_BOOL(structured, "ok", ok); XMCP_JSON_INT(structured, "exitCode", exit_code);
+    XMCP_JSON_INT(structured,"cleanupStatus",execution->cleanup);
+    XMCP_JSON_BOOL(structured,"pendingClose",execution->pending_close);
     const RunBytes *out = &capture->out, *error = &capture->error;
     xmcp_json_set(structured, "stdout", xjson_new_string_n(out->bytes ? out->bytes : "", out->used));
     xmcp_json_set(structured, "stderr", xjson_new_string_n(error->bytes ? error->bytes : "", error->used));
@@ -181,6 +203,10 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
     XrXirStatus status = XR_XIR_BAD_STRUCTURE;
     char *source_report=NULL;
     char summary[384] = "Error: 'code' must not be empty";
+    if (!xmcp_run_close_pending(server)) {
+        execution.status=execution.cleanup=XR_XIR_CALL_CLOSE_FAILED;execution.pending_close=true;
+        snprintf(summary,sizeof(summary),"Previous page owner close failed; stopped Run retained");goto publish;
+    }
     XrJsonValue *code = xjson_get(arguments, "code"), *identity = xjson_get(arguments, "moduleId");
     if (!xjson_is_string(code) || !code->string_len) goto publish;
     snprintf(summary, sizeof(summary), "Error: 'moduleId' must be an explicit valid memory-module identity");
@@ -246,9 +272,10 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
     }
     xr_xir_call_result_drop(&execution.owned);
 publish:;
-    bool ok = status == XR_XIR_OK && execution.status == XR_XIR_CALL_RETURNED && !execution.timed_out;
+    bool ok = status == XR_XIR_OK && execution.status == XR_XIR_CALL_RETURNED &&
+        execution.cleanup==XR_XIR_CALL_READY && !execution.timed_out;
     XrJsonValue *result = run_result(ok, ok ? 0 : -1, &capture, &execution, status,source_report&&status!=XR_XIR_DEADLINE?source_report:summary);
     xr_compile_resources_free(source_report);
-    xr_free(capture.out.bytes); xr_free(capture.error.bytes);
+    if (!execution.pending_close) {xr_free(capture.out.bytes);xr_free(capture.error.bytes);}
     return xmcp_json_finish(result);
 }

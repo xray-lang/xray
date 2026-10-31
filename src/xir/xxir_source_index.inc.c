@@ -16,6 +16,12 @@ static bool source_index_get(SourceContext *ctx, AstNode *node, SourceValue *val
     AstNode *receiver = node->as.index_get.array, *index = node->as.index_get.index;
     SourceValue container = {0}, key = {0};
     if (!source_array_receiver(ctx, receiver, index, false, &container)) return false;
+    if (xr_xir_type_is_pointer(&ctx->types,container.type)) {
+        return source_pointer_access(ctx,node,container.type,false) &&
+            source_plan_expression(ctx,index,(SourceExpectedType){true,XR_XIR_I64,false,false},&key) &&
+            source_recipe_record(ctx,(XrXirInstruction){.op=XR_XIR_PTR_LOAD,.type=XR_XIR_U8,
+                .args={container.id,key.id}},value);
+    }
     if (source_range_is(ctx,container.type)) return source_range_index(ctx,node,container,index,value);
     uint32_t view_kind=0;XrXirType view_element=XR_XIR_UNIT;
     if (source_view_shape(ctx,container.type,&view_kind,&view_element)) {
@@ -39,6 +45,15 @@ static bool source_index_get(SourceContext *ctx, AstNode *node, SourceValue *val
 }
 static bool source_index_set(SourceContext *ctx, AstNode *node, SourceValue *value) {
     SourceValue args[3] = {{0}};
+    SourceExpectedType receiver={0};
+    if (!source_ground_type(ctx,node->as.index_set.array,0,&receiver)) return false;
+    if (receiver.present && xr_xir_type_is_pointer(&ctx->types,receiver.type)) {
+        if (!source_pointer_access(ctx,node,receiver.type,true) || !expression(ctx,node->as.index_set.array,args) ||
+            !source_plan_expression(ctx,node->as.index_set.index,(SourceExpectedType){true,XR_XIR_I64,false,false},args+1) ||
+            !source_plan_expression(ctx,node->as.index_set.value,(SourceExpectedType){true,XR_XIR_U8,false,false},args+2) ||
+            !source_recipe_group(ctx,(XrXirInstruction){.op=XR_XIR_PTR_STORE},args,3,NULL)) return false;
+        *value=args[2];return true;
+    }
     if (!source_array_receiver(ctx, node->as.index_set.array, NULL, true, args)) return false;
     XrHirPlaceAction shape,action;
     if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_SHAPE,.parent=args[0].place,

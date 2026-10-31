@@ -20,5 +20,13 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Usage: %s [--sandbox]\n", argv[0]);
         return 3;
     }
-    return xr_xir_host_main(&XIR_SDK_PROGRAM_SYMBOL, sandbox);
+    XrXirHostCall *pending=NULL;
+    int result=xr_xir_host_main(&XIR_SDK_PROGRAM_SYMBOL,sandbox,&pending);
+    if (pending) {
+        XrXirCallStatus closed=xr_xir_host_call_drop(pending);
+        if (closed==XR_XIR_CALL_CLOSE_FAILED)
+            fprintf(stderr,"XR_RUN_6007: page close retry failed at process exit\n");
+        return 1;
+    }
+    return result;
 }

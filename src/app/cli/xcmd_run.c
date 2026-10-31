@@ -125,6 +125,16 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     xr_xir_compile_source_product_free(product);
     xr_source_compile_diagnostic_free(&diagnostic);
     xr_compile_resources_release(resources);
-    return program ? xr_xir_host_program_main(program, entry, sandbox) : result;
+    if (program) {
+        XrXirHostCall *pending=NULL;
+        result=xr_xir_host_program_main(program,entry,sandbox,&pending);
+        if (pending) {
+            XrXirCallStatus closed=xr_xir_host_call_drop(pending);
+            if (closed==XR_XIR_CALL_CLOSE_FAILED)
+                fprintf(stderr,"XR_RUN_6007: page close retry failed at command exit\n");
+            return XR_CLI_EXIT_FAIL;
+        }
+    }
+    return result;
 #endif
 }

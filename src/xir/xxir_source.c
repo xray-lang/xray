@@ -37,6 +37,7 @@
 #include "xxir_source_query_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_pointer.h"
 #include "xxir_task_result.h"
 #include "xxir_nominal.h"
 #include "xxir_float.h"
@@ -243,6 +244,7 @@ typedef struct SourceFunction {
     SourceErrorContext *error_context;
     SourceLocalHandler *local_handler;
     bool infer_errors, infer_initializer;
+    uint32_t unsafe_depth;
     SourceInitializerState initializer_state;
     XrXirType initializer_seed, initializer_bound;
     SourcePendingError *pending_errors;
@@ -649,6 +651,7 @@ static bool source_hir_tuple_type(SourceContext *ctx,const XrXirCallableParamete
 #include "xxir_source_channel_type.inc.c"
 #include "xxir_source_iterator_type.inc.c"
 #include "xxir_source_view_type.inc.c"
+#include "xxir_source_pointer_type.inc.c"
 #include "xxir_source_ordering.inc.c"
 typedef struct SourceSubstitution { const XrXirType *types; uint32_t count; } SourceSubstitution;
 static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
@@ -809,6 +812,8 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
     case XR_TREF_GENERIC:
         if (source_nominal_name(ctx, ref->name))
             return source_nominal_arguments(ctx, ref->name, ref->children, ref->nchildren, type);
+        if (ref->name && (source_text_same(ctx,NULL,ref->name,"Ptr") || source_text_same(ctx,NULL,ref->name,"MutPtr")))
+            return source_pointer_type_ref(ctx,ref,type);
         if (ref->name && source_text_same(ctx,NULL,ref->name,"Atomic"))
             return source_native_atomic_type(ctx,ref,type);
         if (ref->name && source_text_same(ctx,NULL,ref->name,"Task"))
@@ -929,6 +934,7 @@ static bool source_plan_discard(SourceContext *ctx,uint32_t first);
 static bool source_plan_binary_prepare(SourceContext *ctx,SourceExpressionPlan *plan,SourceExpectedType hint,bool default_literals);
 static bool source_plan_numeric_prepare(SourceContext *ctx,SourceExpressionPlan *plan,SourceExpectedType hint,bool defaults);
 static bool source_plan_soft_numeric(SourceContext *ctx,SourceExpressionPlan *plan,bool *soft);
+static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,SourceExpectedType *output);
 #include "xxir_source_conversion.inc.c"
 #include "xxir_source_try_assert.inc.c"
 
@@ -1190,6 +1196,7 @@ static bool source_range_is(SourceContext *ctx,XrXirType type);
 static bool source_range_length(SourceContext *ctx,AstNode *node,SourceValue receiver,SourceValue *value);
 static bool source_range_index(SourceContext *ctx,AstNode *node,SourceValue receiver,AstNode *index,SourceValue *value);
 #include "xxir_source_array.inc.c"
+#include "xxir_source_pointer.inc.c"
 static bool source_hash_for_each(SourceContext *ctx, AstNode *node, const SourceValue *evaluated,
     XrXirType receiver_type, SourceValue *value);
 #include "xxir_source_hash.inc.c"
@@ -1344,6 +1351,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         if (target && target->kind == SOURCE_IMPORT) target = imported_declaration(ctx, target, target->imported);
     } else if (callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &callee->as.member_access;
+        if (source_pointer_namespace(ctx,member->object)) return source_pointer_null_call(ctx,node,value);
         if (source_from_utf8_receiver(ctx,callee))
             return source_from_utf8_call(ctx,node,value);
         if (source_decimal_static_receiver(ctx, member->object))
@@ -1413,6 +1421,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             if (xr_xir_type_is_integer(receiver.type)) return source_integer_call(ctx,node,receiver,value);
             if (source_scalar_identity(receiver.type)) return source_scalar_call(ctx,node,receiver,value);
             if (receiver.type == XR_XIR_STRING) return source_string_call(ctx, node, receiver, value);
+            if (xr_xir_type_is_pointer(&ctx->types,receiver.type)) return source_pointer_call(ctx,node,receiver,value);
             if (xr_xir_type_is_enum(&ctx->types, receiver.type) && source_text_same(ctx, NULL, member->name, "toString")) {
                 if (call->arg_count || call->type_arg_count)
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum toString accepts no value or type arguments");
@@ -1794,10 +1803,13 @@ static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceE
 static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceExpectedType expected,SourceValue *value);
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value);
 static bool source_defer(SourceContext *ctx, AstNode *node);
+static bool source_block_functions(SourceContext *ctx,AstNode *block);
 #include "xxir_source_view.inc.c"
 #include "xxir_source_copy.inc.c"
+#include "xxir_source_unsafe.inc.c"
 static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
     switch (node->type) {
+    case AST_UNSAFE_EXPR: return source_unsafe_expression(ctx,node,context,value);
     case AST_LITERAL_NULL:
         return source_nullable_value(ctx,node,(XrHirNullableInput){.role=XR_HIR_NULLABLE_NULL,
             .has_expected=context.present,.expected=context.type},0,value);

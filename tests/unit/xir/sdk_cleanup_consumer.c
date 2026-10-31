@@ -11,6 +11,17 @@
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"SDK cleanup %d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #if defined(XR_CLEANUP_READER) || defined(XR_CLEANUP_SOURCE_SDK)
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_7c1e8b97(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 static FILE *input_file(const char *path) {
     FILE *file=NULL;
 #if defined(_MSC_VER)
@@ -52,7 +63,7 @@ static XrSourceResult *invoke(XrSourceExecution *owner,XrSourceArtifact *artifac
     request.name=name;request.name_length=strlen(name);XrSourceCallOptions options;
     CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);options.write=write_bytes;options.context=trace;
     XrSourceResult *result=NULL;XrSourceEvent failure;
-    CHECK(xray_source_invoke(owner,artifact,&request,&options,&result,&failure)==XR_SOURCE_OK && result);return result;
+    CHECK(fixture_xray_source_invoke_7c1e8b97(owner,artifact,&request,&options,&result,&failure)==XR_SOURCE_OK && result);return result;
 }
 int main(int argc,char **argv) {
     CHECK(argc==3);FILE *file=input_file(argv[1]);CHECK(file && !fseek(file,0,SEEK_END));long length=ftell(file);

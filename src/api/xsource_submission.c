@@ -29,7 +29,8 @@ struct XrSourceSubmission {
     XrXirTarget target;
     uint64_t source_serial, runtime_serial;
     XrXirInstanceResult observed;
-    bool busy, has_observed, taken, repl_result;
+    bool busy, has_observed, taken, repl_result, close_started;
+    XrXirCallStatus close_status;
     SubmissionBirth *pending_birth, *published_births;
 };
 static XrSourceStatus submission_resource(XrCompileResourceStatus status) {
@@ -50,6 +51,7 @@ static XrSourceStatus submission_call(XrXirCallStatus status) {
     case XR_XIR_CALL_OOM:return XR_SOURCE_OUT_OF_MEMORY;
     case XR_XIR_CALL_LIMIT:return XR_SOURCE_LIMIT;
     case XR_XIR_CALL_BUSY:return XR_SOURCE_BUSY;
+    case XR_XIR_CALL_CLOSE_FAILED:return XR_SOURCE_IO;
     case XR_XIR_CALL_BAD_ARGUMENT:case XR_XIR_CALL_BAD_ABI:return XR_SOURCE_BAD_ARGUMENT;
     case XR_XIR_CALL_BAD_STATE:case XR_XIR_CALL_CONSUMED:return XR_SOURCE_BAD_STATE;
     default:return XR_SOURCE_EXECUTION_FAILED;
@@ -168,6 +170,7 @@ static XrSourceStatus submission_prepare(XrSourceSubmission *owner,const Submiss
     XrXirSourceDiagnostic *diagnostic) {
     if(!owner || !input || ((input->text==NULL)==(input->ast==NULL)))return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy)return XR_SOURCE_BUSY;
+    if(owner->close_started)return XR_SOURCE_BAD_STATE;
     if(owner->source_serial)return XR_SOURCE_BAD_STATE;
     XrSourceStatus status=XR_SOURCE_OK;
     owner->busy=true;
@@ -224,6 +227,7 @@ XR_FUNC bool xr_source_submission_repl_result(const XrSourceSubmission *owner) {
 XR_FUNC XrSourceStatus xr_source_submission_poll(XrSourceSubmission *owner,uint64_t quantum,XrXirInstanceResult *output) {
     if(!owner || !output || !quantum)return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy)return XR_SOURCE_BUSY;
+    if(owner->close_started)return XR_SOURCE_BAD_STATE;
     if(!owner->runtime_serial || owner->taken)return XR_SOURCE_BAD_STATE;
     owner->busy=true;XrXirInstanceResult result=xr_xir_instance_poll_bounded(owner->runtime,quantum);owner->busy=false;
     if(result.outcome.status==XR_XIR_CALL_BUSY)return XR_SOURCE_BUSY;
@@ -232,12 +236,14 @@ XR_FUNC XrSourceStatus xr_source_submission_poll(XrSourceSubmission *owner,uint6
 XR_FUNC XrSourceStatus xr_source_submission_wait(const XrSourceSubmission *owner,uint64_t epoch,uint64_t wake,XrXirWaitRequest *output) {
     if(!owner || !output)return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy)return XR_SOURCE_BUSY;
+    if(owner->close_started)return XR_SOURCE_BAD_STATE;
     if(!owner->runtime_serial)return XR_SOURCE_BAD_STATE;
     return submission_call(xr_xir_instance_wait_request(owner->runtime,epoch,wake,output));
 }
 XR_FUNC XrSourceStatus xr_source_submission_resume(XrSourceSubmission *owner,uint64_t epoch,uint64_t wake) {
     if(!owner)return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy)return XR_SOURCE_BUSY;
+    if(owner->close_started)return XR_SOURCE_BAD_STATE;
     if(!owner->runtime_serial)return XR_SOURCE_BAD_STATE;
     owner->busy=true;XrSourceStatus status=submission_call(xr_xir_instance_resume(owner->runtime,epoch,wake));owner->busy=false;
     if (status == XR_SOURCE_OK)
@@ -247,6 +253,7 @@ XR_FUNC XrSourceStatus xr_source_submission_resume(XrSourceSubmission *owner,uin
 XR_FUNC XrSourceStatus xr_source_submission_cancel(XrSourceSubmission *owner) {
     if(!owner)return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy)return XR_SOURCE_BUSY;
+    if(owner->close_started)return XR_SOURCE_BAD_STATE;
     if(!owner->runtime_serial)return XR_SOURCE_BAD_STATE;
     owner->busy=true;XrSourceStatus status=submission_call(xr_xir_instance_cancel_current(owner->runtime));owner->busy=false;
     if (status == XR_SOURCE_OK)
@@ -256,6 +263,7 @@ XR_FUNC XrSourceStatus xr_source_submission_cancel(XrSourceSubmission *owner) {
 XR_FUNC XrSourceStatus xr_source_submission_take(XrSourceSubmission *owner,XrXirCallResult *output) {
     if(!owner || !output)return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy)return XR_SOURCE_BUSY;
+    if(owner->close_started)return XR_SOURCE_BAD_STATE;
     if(!owner->runtime_serial || !owner->has_observed || owner->taken ||
         owner->observed.outcome.status==XR_XIR_CALL_READY || owner->observed.outcome.status==XR_XIR_CALL_SUSPENDED)return XR_SOURCE_BAD_STATE;
     owner->busy=true;XrXirValueStatus copied=xr_xir_call_result_copy(&owner->observed.outcome,output);owner->busy=false;
@@ -265,6 +273,7 @@ XR_FUNC XrSourceStatus xr_source_submission_take(XrSourceSubmission *owner,XrXir
 XR_FUNC XrSourceStatus xr_source_submission_publish(XrSourceSubmission *owner) {
     if(!owner)return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy)return XR_SOURCE_BUSY;
+    if(owner->close_started)return XR_SOURCE_BAD_STATE;
     if(!owner->source_serial || !owner->has_observed || owner->observed.outcome.status!=XR_XIR_CALL_RETURNED)return XR_SOURCE_BAD_STATE;
     XrXirSourceGenerationView view={0};
     XrXirStatus source=xr_xir_compile_source_generation_view(owner->source,owner->source_serial,&view);
@@ -283,6 +292,7 @@ XR_FUNC XrSourceStatus xr_source_submission_publish(XrSourceSubmission *owner) {
 XR_FUNC XrSourceStatus xr_source_submission_abort(XrSourceSubmission *owner,XrXirCallStatus *cleanup) {
     if(!owner)return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy)return XR_SOURCE_BUSY;
+    if(owner->close_started)return XR_SOURCE_BAD_STATE;
     if(!owner->source_serial)return XR_SOURCE_BAD_STATE;
     owner->busy=true;XrXirCallStatus status=submission_abort(owner);owner->busy=false;
     if (status != XR_XIR_CALL_BUSY && cleanup)
@@ -292,12 +302,14 @@ XR_FUNC XrSourceStatus xr_source_submission_abort(XrSourceSubmission *owner,XrXi
 XR_FUNC XrSourceStatus xr_source_submission_lookup(const XrSourceSubmission *owner,const char *name,XrXirSourceGenerationBinding *output) {
     if(!owner || !name || !output)return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy)return XR_SOURCE_BUSY;
+    if(owner->close_started)return XR_SOURCE_BAD_STATE;
     return submission_xir(xr_xir_compile_source_generation_lookup(owner->source,name,output));
 }
 XR_FUNC XrSourceStatus xr_source_submission_lookup_runtime(const XrSourceSubmission *owner,const char *name,
     const XrXirInstanceBinding **output) {
     if(!owner || !name || !output || *output)return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy)return XR_SOURCE_BUSY;
+    if(owner->close_started)return XR_SOURCE_BAD_STATE;
     XrSourceStatus status=XR_SOURCE_OK;
     XrXirSourceGenerationBinding source={0};
     status=submission_xir(xr_xir_compile_source_generation_lookup(owner->source,name,&source));
@@ -365,6 +377,7 @@ XR_FUNC XrSourceStatus xr_source_submission_names(const XrSourceSubmission *owne
     const XrXirSourceGenerationName **output,size_t *count) {
     if(!owner || !output || *output || !count || *count)return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy)return XR_SOURCE_BUSY;
+    if(owner->close_started)return XR_SOURCE_BAD_STATE;
     if(pending && !owner->source_serial)return XR_SOURCE_BAD_STATE;
     return submission_xir(xr_xir_compile_source_generation_names(owner->source,
         pending?owner->source_serial:0,output,count));
@@ -373,10 +386,15 @@ XR_FUNC XrSourceStatus xr_source_submission_drop(XrSourceSubmission **output,XrX
     if(!output)return XR_SOURCE_BAD_ARGUMENT;
     if(!*output){if(cleanup)*cleanup=XR_XIR_CALL_READY;return XR_SOURCE_OK;}
     XrSourceSubmission *owner=*output;if(owner->busy)return XR_SOURCE_BUSY;
-    owner->busy=true;XrXirCallStatus status=owner->source_serial?submission_abort(owner):XR_XIR_CALL_READY;
+    owner->busy=true;XrXirCallStatus status=owner->close_status;
+    if (!owner->close_started) {
+        status=owner->source_serial?submission_abort(owner):XR_XIR_CALL_READY;
+        if (status!=XR_XIR_CALL_BUSY) {owner->close_status=status;owner->close_started=true;}
+    }
     if(status==XR_XIR_CALL_BUSY){owner->busy=false;return XR_SOURCE_BUSY;}
     XrXirCallStatus retired=xr_xir_instance_free(owner->runtime);
     if(retired==XR_XIR_CALL_BUSY){owner->busy=false;return XR_SOURCE_BUSY;}
+    if(retired==XR_XIR_CALL_CLOSE_FAILED){owner->busy=false;if(cleanup)*cleanup=retired;return XR_SOURCE_IO;}
     if(status==XR_XIR_CALL_READY)status=retired;
     xr_xir_compile_source_generations_free(owner->source);
     while(owner->published_births) {

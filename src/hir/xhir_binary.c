@@ -8,6 +8,7 @@
  */
 #include "xhir_binary.h"
 #include "../xir/xxir_types.h"
+#include "../xir/xxir_pointer.h"
 #include "../base/xchecks.h"
 
 static XrXirStatus binary_failure(const char **reason,XrXirStatus status,const char *message) {
@@ -21,6 +22,11 @@ static XrXirStatus binary_operation(const XrHirConversionContext *context,
     XrHirBinaryOperator operation=input->operation;
     *target=left;
     if(operation==XR_HIR_BINARY_EQ || operation==XR_HIR_BINARY_NE) {
+        if (xr_xir_type_is_pointer(context->types,left) && xr_xir_type_is_pointer(context->types,right)) {
+            if (!xr_xir_pointer_writable(context->types,right)) *target=right;
+            node->operation=XR_XIR_PTR_EQ;node->result=XR_XIR_BOOL;node->immediate=operation==XR_HIR_BINARY_NE;
+            return XR_XIR_OK;
+        }
         if(left!=right) {
             if(xr_xir_type_is_nullable(context->types,left) && xr_xir_nullable_element(context->types,left)==right)*target=left;
             else if(xr_xir_type_is_nullable(context->types,right) && xr_xir_nullable_element(context->types,right)==left)*target=right;

@@ -24,6 +24,7 @@
 #include "xxir_defaults_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_pointer.h"
 #include "xxir_task_result.h"
 #include "xxir_native_callable.h"
 #include "xxir_display.h"
@@ -256,6 +257,11 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                                     const XrXirModule *module, XrXirCompileContext *remaining,
                                     const XrXirConstruction *construction) {
     if (op->op <= XR_XIR_INVALID || op->op >= XR_XIR_OP_COUNT)
+        return XR_XIR_BAD_STRUCTURE;
+    if (op->op>=XR_XIR_PTR_NULL && op->op<=XR_XIR_PTR_EQ &&
+        (op->targets[0] || op->targets[1] || op->type_arguments[0] || op->type_arguments[1] ||
+         (op->op==XR_XIR_PTR_EQ?(op->immediate<0 || op->immediate>1):op->immediate!=0) ||
+         ((op->op==XR_XIR_PTR_STORE || op->op==XR_XIR_PTR_COPY) && op->args[1]!=3)))
         return XR_XIR_BAD_STRUCTURE;
 
     if (op->op == XR_XIR_INDEX_CHECK && (op->immediate || op->targets[0] || op->targets[1] ||
@@ -937,6 +943,33 @@ static bool callable_binding_operation(XrXirOp op) {
 
 static XrXirStatus graph_specialized_uses(const Graph *graph,const XrXirFunction *function,
     VerifyContext *context,uint32_t i,bool *handled) {
+    if (function->instructions[i].op>=XR_XIR_PTR_NULL && function->instructions[i].op<=XR_XIR_PTR_EQ) {
+        const XrXirInstruction *op=&function->instructions[i];const XrXirTypes *types=context->module->types;
+        *handled=true;
+        if (op->op==XR_XIR_PTR_NULL) return xr_xir_type_is_pointer(types,op->type)?XR_XIR_OK:XR_XIR_BAD_TYPE;
+        uint32_t count=op->op==XR_XIR_PTR_READONLY?1u:
+            (op->op==XR_XIR_PTR_STORE || op->op==XR_XIR_PTR_COPY)?3u:2u;
+        const uint32_t *ids=xr_xir_op_uses_operand_table(op->op)?function->operands+op->args[0]:op->args;
+        XrXirType pointer=xr_xir_operand_type(function,ids[0]);
+        if (!xr_xir_type_is_pointer(types,pointer)) return XR_XIR_BAD_TYPE;
+        if ((op->op==XR_XIR_PTR_STORE || op->op==XR_XIR_PTR_COPY) && !xr_xir_pointer_writable(types,pointer))
+            return XR_XIR_BAD_TYPE;
+        if (op->op==XR_XIR_PTR_READONLY && (!xr_xir_type_is_pointer(types,op->type) ||
+            xr_xir_pointer_writable(types,op->type))) return XR_XIR_BAD_TYPE;
+        if (op->op==XR_XIR_PTR_OFFSET && op->type!=pointer) return XR_XIR_BAD_TYPE;
+        if (op->op==XR_XIR_PTR_LOAD && op->type!=XR_XIR_U8) return XR_XIR_BAD_TYPE;
+        for (uint32_t p=0;p<count;++p) {
+            XrXirType expected=p?XR_XIR_I64:pointer;
+            if ((op->op==XR_XIR_PTR_EQ || op->op==XR_XIR_PTR_COPY) && p==1) {
+                expected=xr_xir_operand_type(function,ids[p]);
+                if (!xr_xir_type_is_pointer(types,expected)) return XR_XIR_BAD_TYPE;
+            }
+            if (op->op==XR_XIR_PTR_STORE && p==2) expected=XR_XIR_U8;
+            XrXirStatus status=role_operand(function,graph,context,i,p,expected);
+            if (status!=XR_XIR_OK) return status;
+        }
+        return XR_XIR_OK;
+    }
     if (xr_xir_op_is_channel(function->instructions[i].op)) {
         *handled=true;return channel_uses(graph,function,context,i);
     }

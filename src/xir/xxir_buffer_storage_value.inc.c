@@ -50,6 +50,24 @@ XR_FUNC XrXirValueStatus xr_xir_buffer_storage_length(const XrXirValue *storage,
     if (body->length>INT64_MAX) return XR_XIR_VALUE_BAD_ARGUMENT;
     *output=(int64_t)body->length;return XR_XIR_VALUE_OK;
 }
+XR_FUNC XrXirValueStatus xr_xir_buffer_storage_resize(const XrXirValue *value,int64_t bytes,bool *output) {
+    if (!output || bytes<0 || (uint64_t)bytes>SIZE_MAX ||
+        !xr_xir_value_argument(value,NULL,XR_XIR_BUFFER_STORAGE)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();XirBufferStorage *storage=(XirBufferStorage *)object_pointer(value);
+    XrXirValueStatus status=XR_XIR_VALUE_OK;void *replacement=NULL;
+    if ((size_t)bytes!=storage->length) {
+        if (bytes) replacement=domain_payload_allocate(storage->object.domain,(size_t)bytes,storage->alignment,false,&status);
+        if (status==XR_XIR_VALUE_OK) {
+            size_t copied=(size_t)bytes<storage->length?(size_t)bytes:storage->length;
+            if (copied) memcpy(replacement,storage->data,copied);
+            pointer_origin_close(&storage->origin);
+            if (storage->data) domain_payload_deallocate(storage->object.domain,storage->data,storage->length,storage->alignment);
+            storage->data=replacement;storage->length=(size_t)bytes;
+        }
+    }
+    if (status==XR_XIR_VALUE_OK) *output=true;
+    xr_xir_value_graph_end();return status;
+}
 XR_FUNC bool xr_xir_buffer_storage_observe(const XrXirValue *storage,
     const void **bytes,size_t *length,size_t *alignment) {
     if (!bytes || !length || !alignment || !xr_xir_value_argument(storage,NULL,XR_XIR_BUFFER_STORAGE)) return false;

@@ -87,11 +87,11 @@ XrXirType xr_xir_callable_error(const XrXirTypes *types, XrXirType type) {
 }
 XR_FUNC bool xr_xir_type_is_channel(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    return node && node->kind == XR_XIR_TYPE_CHANNEL;
+    return node && node->kind == XR_XIR_TYPE_CHANNEL || node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR;
 }
 XR_FUNC XrXirType xr_xir_channel_element(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    return node && node->kind == XR_XIR_TYPE_CHANNEL ? node->element : XR_XIR_UNIT;
+    return node && node->kind == XR_XIR_TYPE_CHANNEL || node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR ? node->element : XR_XIR_UNIT;
 }
 XR_FUNC bool xr_xir_type_is_atomic(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -213,7 +213,7 @@ bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type) {
                   node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL ||
                   node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
                   node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
-                  node->kind == XR_XIR_TYPE_SLICE || (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL)));
+                  node->kind == XR_XIR_TYPE_SLICE || (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL || node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR)));
 }
 XR_FUNC const XrXirTypeNode *xr_xir_tuple_signature(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -256,7 +256,7 @@ static bool type_component(const XrXirTypes *types, XrXirType type, uint32_t ear
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
          node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
          node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
-         node->kind == XR_XIR_TYPE_SLICE || (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL));
+         node->kind == XR_XIR_TYPE_SLICE || (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL || node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR));
 }
 static bool callable_component(const XrXirTypes *types, XrXirType type, uint32_t earlier) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -337,7 +337,9 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
         }
     } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL ||
                node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK ||
-               node->kind == XR_XIR_TYPE_SLICE || (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL)) {
+               node->kind == XR_XIR_TYPE_SLICE || (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL || node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR)) {
+        if ((node->kind==XR_XIR_TYPE_PTR || node->kind==XR_XIR_TYPE_MUT_PTR) &&
+            node->element!=XR_XIR_U8) return XR_XIR_BAD_TYPE;
         bool latent=node->kind==XR_XIR_TYPE_TASK || node->kind==XR_XIR_TYPE_ITERATOR;
         if (node->parameters || node->parameter_count || (!latent && node->result != XR_XIR_UNIT) || node->flags)
             return XR_XIR_BAD_STRUCTURE;

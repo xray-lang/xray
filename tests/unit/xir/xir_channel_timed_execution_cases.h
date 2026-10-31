@@ -12,6 +12,16 @@
 #include "os/os_time.h"
 #include "execution/xr_xir_host_execution.h"
 typedef struct TimedSourceOutput { unsigned groups,reads; } TimedSourceOutput;
+#include "execution/xr_xir_host_execution.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrXirCallStatus fixture_host_execute_aa1c2cc9(const XrXirHostExecutionRequest *request,XrXirCallResult *output) {
+    XrXirHostCall *pending=NULL;XrXirCallStatus cleanup=XR_XIR_CALL_READY;
+    XrXirCallStatus status=xr_xir_host_execute(request,output,&pending,&cleanup);
+    if (pending) {fputs("unexpected retained page-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrXirTimeStatus timed_source_clock(void *context,XrXirClockKind clock,int64_t *nanoseconds) {
     TimedSourceOutput *w=context;CHECK(clock==XR_XIR_CLOCK_MONOTONIC);++w->reads;
     uint64_t reading=xr_time_monotonic_ns();if (!reading || reading>INT64_MAX) return XR_XIR_TIME_FAILED;
@@ -62,7 +72,7 @@ static void timed_source_host_execute(XrXirProgram *program,uint32_t entry) {
     config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,timed_source_output,&witness};
     XrXirHostExecutionRequest request={program,&config,entry,NULL,0};XrXirCallResult result={0};
     uint64_t started=xr_time_monotonic_ns();CHECK(started);
-    CHECK(xr_xir_host_execute(&request,&result)==XR_XIR_CALL_RETURNED && result.status==XR_XIR_CALL_RETURNED);
+    CHECK(fixture_host_execute_aa1c2cc9(&request,&result)==XR_XIR_CALL_RETURNED && result.status==XR_XIR_CALL_RETURNED);
     CHECK(result.value.type==XR_XIR_I64 && result.value.payload==99 && witness.groups==9 && witness.reads);
     CHECK(xr_time_monotonic_ns()-started>=UINT64_C(30000000));
     xr_xir_call_result_drop(&result);xr_xir_compile_program_drop(program);CHECK(!runtime_live && !runtime_bytes);

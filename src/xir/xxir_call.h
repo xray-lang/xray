@@ -16,7 +16,7 @@
 #include "xxir_panic.h"
 #include "xxir_output_status.h"
 
-#define XR_XIR_CALL_ABI_VERSION 37u
+#define XR_XIR_CALL_ABI_VERSION 38u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef struct XrXirCallView XrXirCallView;
@@ -35,7 +35,9 @@ typedef enum XrXirCallStatus {
     /* A pull-produced owner; its activation remains live and has no wake. */
     XR_XIR_CALL_YIELDED,
     /* Internal owned terminal; a guest Action cannot construct this status. */
-    XR_XIR_CALL_CLEANUP_FAILED
+    XR_XIR_CALL_CLEANUP_FAILED,
+    /* Host-only close refusal. The caller still owns the stopped instance. */
+    XR_XIR_CALL_CLOSE_FAILED
 } XrXirCallStatus;
 typedef struct XrXirCallResult {
     XrXirCallStatus status;
