@@ -261,13 +261,9 @@
       "id": "demos/07-advanced/testing.xr",
       "path": "demos/07-advanced/testing.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
+      "expect": "pass",
+      "exit_code": 0,
       "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F17",
-        "first_diagnostic": "demos/07-advanced/testing.xr:49:5: error: name is not an initialized value"
-      },
       "suite": {
         "schema": 1,
         "catalog": "tests/smoke/expected/testing-catalog.json"
@@ -748,6 +744,18 @@
       "expect": "pass",
       "exit_code": 0,
       "stdout": "tests/smoke/expected/readme_record.txt"
+    },
+    {
+      "id": "native:demos/07-advanced/testing.xr",
+      "path": "demos/07-advanced/testing.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/empty.txt",
+      "suite": {
+        "schema": 1,
+        "catalog": "tests/smoke/expected/testing-catalog.json"
+      }
     }
   ]
 }
