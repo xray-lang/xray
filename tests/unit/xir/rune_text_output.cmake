@@ -87,3 +87,7 @@ if(WIN32 AND TARGET xray)
         --output ${CMAKE_BINARY_DIR}/rune-whitespace-source)
     set_tests_properties(xir_rune_whitespace_source PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "unit;xir;rune;source;cli;native")
 endif()
+
+add_test(NAME xir_checked_previous113 COMMAND test_xir_rune_whitespace --previous113
+    ${PROJECT_SOURCE_DIR}/tests/fixtures/xir_rune_whitespace/previous113-json-float.chk)
+set_tests_properties(xir_checked_previous113 PROPERTIES TIMEOUT 60 LABELS "unit;xir;checked;identity;sdk")
