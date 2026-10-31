@@ -139,9 +139,31 @@ static bool source_range_bounds(SourceContext *ctx, AstNode *node, SourceValue *
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"range endpoints must be i64");
     return true;
 }
+static bool source_iteration_tuple_head(SourceContext *ctx,AstNode *node) {
+    const ForInStmtNode *loop=&node->as.for_in_stmt;
+    if (!loop->is_tuple_head) return true;
+    const AstNode *block=loop->body;
+    if (!block || block->type!=AST_BLOCK || block->as.block.count<1 || !block->as.block.statements)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple loop body is missing its declaration");
+    const AstNode *binding=block->as.block.statements[0];
+    if (!binding || binding->type!=AST_DESTRUCTURE_DECL || !binding->as.destructure_decl.is_const)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple loop needs its readonly declaration");
+    const XrDestructurePattern *pattern=binding->as.destructure_decl.pattern;
+    if (!pattern || pattern->type!=PATTERN_TUPLE || pattern->as.array.element_count<0 ||
+        (pattern->as.array.element_count && !pattern->as.array.elements))
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple loop needs a flat Tuple pattern");
+    for (int i=0;i<pattern->as.array.element_count;++i) {
+        const XrDestructurePattern *field=pattern->as.array.elements[i];
+        if (!source_request_poll(ctx,node)) return false;
+        if (!field || (field->type!=PATTERN_IDENTIFIER && field->type!=PATTERN_SKIP))
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple loop requires names or discards");
+    }
+    return true;
+}
 static bool source_for_in(SourceContext *ctx, AstNode *node) {
     ForInStmtNode *syntax = &node->as.for_in_stmt;
-    if (syntax->label || syntax->is_tuple_head || syntax->item_type)
+    if (!source_iteration_tuple_head(ctx,node)) return false;
+    if (syntax->label || syntax->item_type || (syntax->is_tuple_head && syntax->is_keyvalue))
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,
             "for-in requires an unlabelled single or direct pair binding without annotation");
     if (!syntax->item_name || (syntax->is_keyvalue && !syntax->value_name) || !syntax->body)

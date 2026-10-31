@@ -1091,8 +1091,11 @@ AstNode *xr_parse_grouping(Parser *parser) {
     // otherwise. Each element may be a spread (`...expr`) which is
     // statically expanded by the analyzer into the host tuple.
     AstNode *first = NULL;
+    bool has_discard = false;
     int first_line = parser->current.line;
-    if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
+    if (xr_parser_match(parser, TK_UNDERSCORE)) {
+        first = xr_parse_variable(parser);has_discard = true;
+    } else if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
         AstNode *inner = xr_parse_expression(parser);
         if (!xr_parser_healthy(parser)) return NULL;
         if (!inner)
@@ -1107,7 +1110,11 @@ AstNode *xr_parse_grouping(Parser *parser) {
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
     }
+    if (!first) return NULL;
     if (!xr_parser_check(parser, TK_COMMA)) {
+        if (has_discard) {
+            xr_parser_error(parser,"discard requires a Tuple assignment pattern");return NULL;
+        }
         if (first && first->type == AST_SPREAD_EXPR) {
             do {
                 xr_parser_error(parser,
@@ -1144,7 +1151,9 @@ AstNode *xr_parse_grouping(Parser *parser) {
             cap = new_cap;
         }
         int elem_line = parser->current.line;
-        if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
+        if (xr_parser_match(parser, TK_UNDERSCORE)) {
+            elems[count++] = xr_parse_variable(parser);has_discard = true;
+        } else if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
             AstNode *inner = xr_parse_expression(parser);
             if (!xr_parser_healthy(parser)) return NULL;
             if (!inner)
@@ -1159,11 +1168,15 @@ AstNode *xr_parse_grouping(Parser *parser) {
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
         }
+        if (!elems[count-1]) return NULL;
     }
     do {
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to close tuple literal");
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
+    if (has_discard && !xr_parser_check(parser,TK_ASSIGN)) {
+        xr_parser_error(parser,"discard is only valid in a Tuple assignment target");return NULL;
+    }
     return xr_ast_tuple_literal(parser->compiler_session, elems, count, line);
 }
 

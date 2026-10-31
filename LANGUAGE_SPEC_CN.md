@@ -1947,6 +1947,8 @@ var v = nullable_expr ?? default_value
 AssignExpr   ::= AssignLValue '=' Expression
                | CompoundLValue CompoundOp Expression
 AssignLValue ::= Identifier | MemberAccess | IndexAccess
+TupleAssignStmt ::= '(' TupleAssignTarget ',' (TupleAssignTarget (',' TupleAssignTarget)* ','?)? ')' '=' Expression
+TupleAssignTarget ::= Identifier | '_'
 CompoundLValue ::= Identifier | MemberAccess
 CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
                | '&=' | '|=' | '^=' | '<<=' | '>>='
@@ -1957,6 +1959,9 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 - `x op= y` 等价于 `x = x op y`，但 `x` 的每个子表达式只求值一次（重要：`obj.f += 1` 不会调用 `f` 的 getter 两次；`mk().f += 1` 只调用 `mk()` 一次）。完整时序见 §3.0 E6。
 - **复合赋值的目标不含索引**：`a[i] += v` 是编译错误，写作 `a[i] = a[i] + v`。简单赋值 `a[i] = v` 不受此限。
 - 不能赋值给 `const`（编译错误 `E0303`）。
+- 平坦 Tuple 解构赋值是语句，例如 `(a, b) = (b, a)`。每个非 `_` 目标必须是已初始化、可写且彼此不同的标识符；不声明新名字。右值只求值一次，必须是精确相同元数的 Tuple，每个被保存字段的类型须与目标绑定完全相同。全部字段投影先于任何目标写入，随后按目标源码顺序沿普通赋值路径保存。`_` 取得并丢弃对应字段而不建立绑定。持有和释放遵循普通值语义；不额外承诺多次存储的运行期事务回滚。
+- 本解构赋值子集不接受 Array、对象、rest、嵌套或成员/索引目标；普通单目标成员/索引赋值不受影响。singleton 左侧保留逗号，例如 `(a,) = (1,)`。
+
 
 **特殊**：
 - 普通 read 参数允许读取或保存可复制值的逻辑副本，不允许通过该参数修改值语义部分；class 引用仍可调用修改对象身份的方法。`ref` 参数授予 place 的独占可写访问；声明为 `move` 的参数转移不可复制资源的持有权。
@@ -2545,11 +2550,11 @@ for (_ in 0..n) { count++ }                   // 占位符忽略
 
 #### `for-in` 双变量解构
 
-xray 支持两种等价的双变量形式：
+直接双变量接收来源的 pair 产出；内层 Tuple 模式解构每次迭代的元素本身。两者不是对任意集合都等价的索引写法：
 
 ```ebnf
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
-              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+ForInTupleStmt ::= LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ```
 
 ```xray
@@ -2562,6 +2567,8 @@ for (i, c in "hello") { print("${i}:${c}") }     // string → (index, rune)
 for ((i, e) in someArray.entries()) { print("${i}=${e}") }
 for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 ```
+
+形式 A 的迭代来源与产出对应关系如下。形式 B 对下表的单变量产出应用已有 Tuple 声明解构规则：例如 `Array<(string,i64)>` 的 `for ((k,v) in pairs)` 绑定每个元素的两个字段；不将 `k` 改成数组下标。每轮绑定的作用域、快照和拥有责任与普通迭代及声明解构一致。当前接收平坦的标识符或 `_`，不由此开放 rest 或嵌套循环模式。
 
 迭代来源与产出对应关系：
 

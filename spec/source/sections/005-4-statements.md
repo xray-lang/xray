@@ -123,11 +123,11 @@ for (_ in 0..n) { count++ }                   // 占位符忽略
 
 #### `for-in` 双变量解构
 
-xray 支持两种等价的双变量形式：
+直接双变量接收来源的 pair 产出；内层 Tuple 模式解构每次迭代的元素本身。两者不是对任意集合都等价的索引写法：
 
 ```ebnf
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
-              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+ForInTupleStmt ::= LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ```
 
 ```xray @id=stmt-for-pairs
@@ -140,6 +140,8 @@ for (i, c in "hello") { print("${i}:${c}") }     // string → (index, rune)
 for ((i, e) in someArray.entries()) { print("${i}=${e}") }
 for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 ```
+
+形式 A 的迭代来源与产出对应关系如下。形式 B 对下表的单变量产出应用已有 Tuple 声明解构规则：例如 `Array<(string,i64)>` 的 `for ((k,v) in pairs)` 绑定每个元素的两个字段；不将 `k` 改成数组下标。每轮绑定的作用域、快照和拥有责任与普通迭代及声明解构一致。当前接收平坦的标识符或 `_`，不由此开放 rest 或嵌套循环模式。
 
 迭代来源与产出对应关系：
 
@@ -497,11 +499,11 @@ for (_ in 0..n) { count++ }                   // discard with placeholder
 
 #### Two-variable `for-in` destructuring
 
-Xray supports two equivalent two-variable forms:
+A direct pair binding receives the collection pair yield; an inner Tuple pattern destructures each yielded element itself. They are not interchangeable index syntax for arbitrary collections:
 
 ```ebnf
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
-              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+ForInTupleStmt ::= LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ```
 
 ```xray @id=stmt-for-pairs
@@ -514,6 +516,8 @@ for (i, c in "hello") { print("${i}:${c}") }     // string → (index, rune)
 for ((i, e) in someArray.entries()) { print("${i}=${e}") }
 for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 ```
+
+The following mapping describes form A. Form B applies existing Tuple declaration destructuring to the single-variable yield: for example, `for ((k,v) in pairs)` over `Array<(string,i64)>` binds both fields of each element; it does not replace `k` with the Array index. Per-iteration scope, snapshot and ownership follow ordinary iteration and declaration destructuring. The admitted head has flat identifiers or `_`; this does not admit rest or nested loop patterns.
 
 Iteration source / yield mapping:
 

@@ -46,6 +46,21 @@ typedef struct SourceWriteScan {
     bool closure_only, inside_closure, found;
     bool local_storage; /* Conservative whole-region scan, including every dead branch. */
 } SourceWriteScan;
+/* Pattern targets are not expression children in the AST walker. Unknown
+ * assignment shapes conservatively prevent narrowing and direct storage. */
+static bool source_tuple_assignment_writes(SourceWriteScan *scan,AstNode *node,bool *writes) {
+    const XrDestructurePattern *pattern=node->as.destructure_assign.pattern;*writes=true;
+    if (!pattern || pattern->type!=PATTERN_TUPLE || pattern->as.array.element_count<0 ||
+        (pattern->as.array.element_count && !pattern->as.array.elements)) return true;
+    for (int i=0;i<pattern->as.array.element_count;++i) {
+        if (!source_request_poll(scan->ctx,node)) return false;
+        const XrDestructurePattern *field=pattern->as.array.elements[i];
+        if (!field || (field->type!=PATTERN_SKIP && field->type!=PATTERN_IDENTIFIER)) return true;
+        if (field->type==PATTERN_IDENTIFIER && (!field->as.identifier.name ||
+            source_text_same(scan->ctx,node,field->as.identifier.name,scan->name))) return true;
+    }
+    *writes=false;return true;
+}
 static bool source_write_scan(AstNode *node, void *pointer) {
     SourceWriteScan *scan = pointer;
     if (!node || scan->found) return true;
@@ -65,6 +80,12 @@ static bool source_write_scan(AstNode *node, void *pointer) {
     const char *written = NULL;
     switch (node->type) {
     case AST_ASSIGNMENT: written = node->as.assignment.name; break;
+    case AST_DESTRUCTURE_ASSIGN: {
+        bool writes=false;
+        if (counted && !source_tuple_assignment_writes(scan,node,&writes)) return false;
+        if (writes) {scan->found=true;return true;}
+        break;
+    }
     case AST_COMPOUND_ASSIGNMENT: if (!node->as.compound_assignment.object) written = node->as.compound_assignment.name; break;
     case AST_INC: written = node->as.inc.name; break;
     case AST_DEC: written = node->as.dec.name; break;

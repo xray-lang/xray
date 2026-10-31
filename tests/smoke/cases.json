@@ -61,13 +61,17 @@
       "id": "demos/01-basics/tuples.xr",
       "path": "demos/01-basics/tuples.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F15",
-        "first_diagnostic": "demos/01-basics/tuples.xr:43:1: error: destructuring assignment syntax is not yet supported by the compiler"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/tuples.txt"
+    },
+    {
+      "id": "native:demos/01-basics/tuples.xr",
+      "path": "demos/01-basics/tuples.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/tuples.txt"
     },
     {
       "id": "demos/01-basics/variables.xr",

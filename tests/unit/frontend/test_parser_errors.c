@@ -160,6 +160,17 @@ int main(void) {
     expression_modes(session);
     regex_syntax(session);
     explicit_methods(session);
+    AstNode *tuple_loop=parse(session,"for((key,value) in [(1,2)]){print(value)}");
+    AstNode *loop=tuple_loop->as.program.statements[0];
+    CHECK(loop->type==AST_FOR_IN_STMT && loop->as.for_in_stmt.is_tuple_head);
+    AstNode *binding=loop->as.for_in_stmt.body->as.block.statements[0];
+    CHECK(binding->type==AST_DESTRUCTURE_DECL && binding->as.destructure_decl.is_const);
+    xr_program_destroy(tuple_loop);
+    roundtrip(session,"var a=1;var b=2;(a,b)=(b,a);(a,_)=(2,3)\n");
+    roundtrip(session,"for((key,value) in [(1,2)]){print(value)}\n");
+    AstNode *discard_value=NULL;
+    CHECK(xr_compile_parse(session,"var bad=(1,_)",&discard_value)==XR_PARSE_SYNTAX && !discard_value);
+    CHECK(xr_compile_session_resource_status(session)==XR_COMPILE_RESOURCE_OK);
     const char *sources[] = {
         "fn throws() {}\nvar throws = 1\nvar value: Never\n",
         "fn f<T,E:Error>(value:T) throws(E | IoErr) -> T { return value }\n",

@@ -1936,6 +1936,74 @@ static bool expression(SourceContext *ctx, AstNode *node, SourceValue *value) {
 }
 #include "xxir_source_expression_plan.inc.c"
 #include "xxir_source_destructure.inc.c"
+/* Assignment holds the whole RHS and every projected value before the first
+ * existing binding is replaced. Discards never become writable names. */
+static bool source_tuple_assignment_targets(SourceContext *ctx,AstNode *node,SourceDestructurePlan *plan) {
+    const XrDestructurePattern *pattern=node->as.destructure_assign.pattern;
+    if (!pattern || pattern->type!=PATTERN_TUPLE || pattern->as.array.element_count<=0 ||
+        (pattern->as.array.element_count && !pattern->as.array.elements))
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"assignment requires a flat Tuple pattern");
+    plan->count=(uint32_t)pattern->as.array.element_count;
+    plan->fields=plan->count?source_alloc(ctx,plan->count,sizeof(*plan->fields)):NULL;
+    if (plan->count && !plan->fields) return false;
+    for (uint32_t i=0;i<plan->count;++i) {
+        if (!source_request_poll(ctx,node)) return false;
+        const XrDestructurePattern *field=pattern->as.array.elements[i];
+        if (!field || (field->type!=PATTERN_IDENTIFIER && field->type!=PATTERN_SKIP) ||
+            (field->type==PATTERN_IDENTIFIER && (!field->as.identifier.name || field->as.identifier.type)))
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple assignment requires names or discards");
+        plan->fields[i].pattern=field;
+        if (field->type==PATTERN_SKIP || source_text_same(ctx,node,field->as.identifier.name,"_")) continue;
+        for (uint32_t j=0;j<i;++j) {
+            if (!(j%64u) && !source_request_poll(ctx,node)) return false;
+            const SourceName *prior=plan->fields[j].symbol;
+            if (!prior) continue;
+            if (source_text_same(ctx,node,prior->name,field->as.identifier.name))
+                return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"duplicate Tuple assignment target");
+        }
+        SourceName *symbol=visible_name(ctx,field->as.identifier.name);
+        if (!symbol || !symbol->mutable || symbol->construction ||
+            (symbol->kind!=SOURCE_LOCAL && symbol->kind!=SOURCE_SLOT))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple assignment requires existing mutable bindings");
+        plan->fields[i].symbol=symbol;
+        XrHirBindingAction preparation;
+        if (!source_hir_binding_use(ctx,node,symbol,XR_HIR_BINDING_ASSIGN,(SourceValue){0},&preparation) ||
+            !source_hir_binding_emitted(ctx,&preparation,NULL,ctx->bodies[ctx->function].count) ||
+            !source_query_reference(ctx,node,symbol,symbol,XR_XIR_SOURCE_WRITE)) return false;
+    }
+    return true;
+}
+static bool source_tuple_assignment_types(SourceContext *ctx,AstNode *node,
+    XrXirType tuple,const SourceDestructurePlan *plan) {
+    XrXirStatus status=xr_hir_tuple_arity(&ctx->types,tuple,plan->count,ctx->request,NULL);
+    if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"Tuple assignment requires exact ordered arity");
+    for (uint32_t i=0;i<plan->count;++i) {
+        if (!source_request_poll(ctx,node)) return false;
+        XrXirType field;const char *reason=NULL;
+        status=xr_hir_tuple_field_type(&ctx->types,tuple,i,ctx->request,&field,&reason);
+        if (status!=XR_XIR_OK) return source_fail(ctx,node,status,reason?reason:"Tuple assignment field type failed");
+        if (plan->fields[i].symbol && field!=plan->fields[i].symbol->type)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple assignment field differs from its binding type");
+    }
+    return true;
+}
+static bool source_tuple_assignment(SourceContext *ctx,AstNode *node) {
+    SourceDestructurePlan plan={0};SourceValue initial;
+    if (!source_tuple_assignment_targets(ctx,node,&plan) ||
+        !expression(ctx,node->as.destructure_assign.value,&initial) ||
+        !source_tuple_assignment_types(ctx,node,initial.type,&plan)) return false;
+    for (uint32_t i=0;i<plan.count;++i)
+        if (!source_tuple_projection(ctx,node,initial,i,&plan.fields[i].value)) return false;
+    for (uint32_t i=0;i<plan.count;++i) {
+        if (!(i%64u) && !source_request_poll(ctx,node)) return false;
+        SourceDestructureField *field=&plan.fields[i];
+        if (!field->symbol) continue;
+        if ((field->symbol->kind==SOURCE_LOCAL && !source_facts_assign(ctx,field->symbol,0)) ||
+            !source_binding_assign(ctx,node,field->symbol,field->value)) return false;
+    }
+    return true;
+}
+
 #include "xxir_source_bindings.inc.c"
 static bool scoped_statement(SourceContext *ctx, AstNode *node) {
     if (ctx->depth >= 128) return source_fail(ctx, node, XR_XIR_BUDGET, "source control depth exhausted");
@@ -2613,6 +2681,22 @@ static bool capture_children(SourceCaptureScan *scan, AstNode *node) {
     case AST_ASSIGNMENT:
         if (!capture_name(scan, node->as.assignment.name, node)) return false;
         break;
+    case AST_DESTRUCTURE_ASSIGN: {
+        const XrDestructurePattern *pattern=node->as.destructure_assign.pattern;
+        if (!pattern || pattern->type!=PATTERN_TUPLE || pattern->as.array.element_count<0 ||
+            (pattern->as.array.element_count && !pattern->as.array.elements))
+            return source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"capture needs a flat Tuple assignment");
+        for (int i=0;i<pattern->as.array.element_count;++i) {
+            const XrDestructurePattern *field=pattern->as.array.elements[i];
+            if (!source_request_poll(scan->ctx,node)) return false;
+            if (!field || (field->type!=PATTERN_IDENTIFIER && field->type!=PATTERN_SKIP) ||
+                (field->type==PATTERN_IDENTIFIER && (!field->as.identifier.name || field->as.identifier.type)))
+                return source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"capture needs assignment names or discards");
+            if (field->type==PATTERN_IDENTIFIER && !source_text_same(scan->ctx,node,field->as.identifier.name,"_") &&
+                !capture_name(scan,field->as.identifier.name,node)) return false;
+        }
+        break;
+    }
     case AST_COMPOUND_ASSIGNMENT:
         if (!node->as.compound_assignment.object && node->as.compound_assignment.name &&
             !capture_name(scan, node->as.compound_assignment.name, node)) return false;

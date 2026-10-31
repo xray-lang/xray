@@ -1,0 +1,26 @@
+(1, "hello")
+true
+3.14
+go
+3, 4
+score=100
+10
+20
+label
+17/5 = 3 rem 2
+first slot only: 3
+after swap: a=2, b=1
+a=1
+b=2
+c=3
+origin
+y-axis
+x-axis
+diagonal
+general
+42
+-1
+dist^2 = 25
+concat.0 = 1, concat.4 = 5
+7
+true

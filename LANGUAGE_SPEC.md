@@ -1971,6 +1971,8 @@ var v = nullable_expr ?? default_value
 AssignExpr   ::= AssignLValue '=' Expression
                | CompoundLValue CompoundOp Expression
 AssignLValue ::= Identifier | MemberAccess | IndexAccess
+TupleAssignStmt ::= '(' TupleAssignTarget ',' (TupleAssignTarget (',' TupleAssignTarget)* ','?)? ')' '=' Expression
+TupleAssignTarget ::= Identifier | '_'
 CompoundLValue ::= Identifier | MemberAccess
 CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
                | '&=' | '|=' | '^=' | '<<=' | '>>='
@@ -1981,6 +1983,9 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 - `x op= y` is equivalent to `x = x op y`, but each subexpression of `x` is evaluated exactly once (important: `obj.f += 1` does not call `f`'s getter twice, and `mk().f += 1` calls `mk()` once). For the full ordering see §3.0 E6.
 - **Compound assignment does not accept an index target**: `a[i] += v` is a compile error; write `a[i] = a[i] + v`. Plain assignment `a[i] = v` is unaffected.
 - Cannot assign to a `const` (compile error `E0303`).
+- Flat Tuple destructuring assignment is a statement, for example `(a, b) = (b, a)`. Every non-`_` target must be an initialized, writable, distinct identifier; no new name is declared. Evaluate the RHS once; it must have the exact Tuple arity and each stored field must have exactly its target binding type. Project all fields before any target write, then store through ordinary assignment in source target order. `_` receives and discards its field without creating a binding. Ordinary value ownership and release rules apply; no additional runtime transaction rollback is promised across the stores.
+- This assignment subset rejects Array, object, rest, nested and member/index targets. Ordinary single-target member/index assignment is unchanged. Keep the trailing comma for a singleton target, for example `(a,) = (1,)`.
+
 
 **Special cases**:
 - An ordinary read parameter permits reading or saving a logical copy of a copyable value. It does not permit modifying that value through the parameter. A class reference may still invoke methods that change the referenced identity. `ref` grants exclusive writable access to a place; a declared `move` parameter transfers ownership of a noncopyable resource.
@@ -2569,11 +2574,11 @@ for (_ in 0..n) { count++ }                   // discard with placeholder
 
 #### Two-variable `for-in` destructuring
 
-Xray supports two equivalent two-variable forms:
+A direct pair binding receives the collection pair yield; an inner Tuple pattern destructures each yielded element itself. They are not interchangeable index syntax for arbitrary collections:
 
 ```ebnf
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
-              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+ForInTupleStmt ::= LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ```
 
 ```xray
@@ -2586,6 +2591,8 @@ for (i, c in "hello") { print("${i}:${c}") }     // string → (index, rune)
 for ((i, e) in someArray.entries()) { print("${i}=${e}") }
 for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 ```
+
+The following mapping describes form A. Form B applies existing Tuple declaration destructuring to the single-variable yield: for example, `for ((k,v) in pairs)` over `Array<(string,i64)>` binds both fields of each element; it does not replace `k` with the Array index. Per-iteration scope, snapshot and ownership follow ordinary iteration and declaration destructuring. The admitted head has flat identifiers or `_`; this does not admit rest or nested loop patterns.
 
 Iteration source / yield mapping:
 

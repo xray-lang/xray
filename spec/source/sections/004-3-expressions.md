@@ -235,6 +235,8 @@ var v = nullable_expr ?? default_value
 AssignExpr   ::= AssignLValue '=' Expression
                | CompoundLValue CompoundOp Expression
 AssignLValue ::= Identifier | MemberAccess | IndexAccess
+TupleAssignStmt ::= '(' TupleAssignTarget ',' (TupleAssignTarget (',' TupleAssignTarget)* ','?)? ')' '=' Expression
+TupleAssignTarget ::= Identifier | '_'
 CompoundLValue ::= Identifier | MemberAccess
 CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
                | '&=' | '|=' | '^=' | '<<=' | '>>='
@@ -245,6 +247,9 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 - `x op= y` 等价于 `x = x op y`，但 `x` 的每个子表达式只求值一次（重要：`obj.f += 1` 不会调用 `f` 的 getter 两次；`mk().f += 1` 只调用 `mk()` 一次）。完整时序见 §3.0 E6。
 - **复合赋值的目标不含索引**：`a[i] += v` 是编译错误，写作 `a[i] = a[i] + v`。简单赋值 `a[i] = v` 不受此限。
 - 不能赋值给 `const`（编译错误 `E0303`）。
+- 平坦 Tuple 解构赋值是语句，例如 `(a, b) = (b, a)`。每个非 `_` 目标必须是已初始化、可写且彼此不同的标识符；不声明新名字。右值只求值一次，必须是精确相同元数的 Tuple，每个被保存字段的类型须与目标绑定完全相同。全部字段投影先于任何目标写入，随后按目标源码顺序沿普通赋值路径保存。`_` 取得并丢弃对应字段而不建立绑定。持有和释放遵循普通值语义；不额外承诺多次存储的运行期事务回滚。
+- 本解构赋值子集不接受 Array、对象、rest、嵌套或成员/索引目标；普通单目标成员/索引赋值不受影响。singleton 左侧保留逗号，例如 `(a,) = (1,)`。
+
 
 **特殊**：
 - 普通 read 参数允许读取或保存可复制值的逻辑副本，不允许通过该参数修改值语义部分；class 引用仍可调用修改对象身份的方法。`ref` 参数授予 place 的独占可写访问；声明为 `move` 的参数转移不可复制资源的持有权。
@@ -947,6 +952,8 @@ var v = nullable_expr ?? default_value
 AssignExpr   ::= AssignLValue '=' Expression
                | CompoundLValue CompoundOp Expression
 AssignLValue ::= Identifier | MemberAccess | IndexAccess
+TupleAssignStmt ::= '(' TupleAssignTarget ',' (TupleAssignTarget (',' TupleAssignTarget)* ','?)? ')' '=' Expression
+TupleAssignTarget ::= Identifier | '_'
 CompoundLValue ::= Identifier | MemberAccess
 CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
                | '&=' | '|=' | '^=' | '<<=' | '>>='
@@ -957,6 +964,9 @@ CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
 - `x op= y` is equivalent to `x = x op y`, but each subexpression of `x` is evaluated exactly once (important: `obj.f += 1` does not call `f`'s getter twice, and `mk().f += 1` calls `mk()` once). For the full ordering see §3.0 E6.
 - **Compound assignment does not accept an index target**: `a[i] += v` is a compile error; write `a[i] = a[i] + v`. Plain assignment `a[i] = v` is unaffected.
 - Cannot assign to a `const` (compile error `E0303`).
+- Flat Tuple destructuring assignment is a statement, for example `(a, b) = (b, a)`. Every non-`_` target must be an initialized, writable, distinct identifier; no new name is declared. Evaluate the RHS once; it must have the exact Tuple arity and each stored field must have exactly its target binding type. Project all fields before any target write, then store through ordinary assignment in source target order. `_` receives and discards its field without creating a binding. Ordinary value ownership and release rules apply; no additional runtime transaction rollback is promised across the stores.
+- This assignment subset rejects Array, object, rest, nested and member/index targets. Ordinary single-target member/index assignment is unchanged. Keep the trailing comma for a singleton target, for example `(a,) = (1,)`.
+
 
 **Special cases**:
 - An ordinary read parameter permits reading or saving a logical copy of a copyable value. It does not permit modifying that value through the parameter. A class reference may still invoke methods that change the referenced identity. `ref` grants exclusive writable access to a place; a declared `move` parameter transfers ownership of a noncopyable resource.

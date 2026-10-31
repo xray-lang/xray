@@ -315,6 +315,7 @@ XR_FUNC void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_pattern(ctx, node->as.destructure_assign.pattern);
             xfmt_write_str(ctx, " = ");
             xfmt_emit_expression(ctx, node->as.destructure_assign.value);
+            xfmt_write_char(ctx, ';');
             xfmt_write_newline(ctx);
             break;
 

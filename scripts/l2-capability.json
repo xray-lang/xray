@@ -258,7 +258,9 @@
         "xir_source_copy_native",
         "xir_source_copy_readmes",
         "xir_array_binding",
-        "xir_array_binding_native"
+        "xir_array_binding_native",
+        "xir_tuple_assignment",
+        "xir_tuple_assignment_native"
       ],
       "targets": [
         "test_source_nullable_print",
@@ -284,7 +286,9 @@
         "test_xir_source_copy",
         "test_xir_source_copy_native",
         "test_xir_array_binding",
-        "test_xir_array_binding_native"
+        "test_xir_array_binding_native",
+        "test_xir_tuple_assignment",
+        "test_xir_tuple_assignment_native"
       ]
     },
     "errors-cleanup": {

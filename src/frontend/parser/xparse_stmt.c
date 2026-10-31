@@ -517,7 +517,7 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
         AstNode *iter_var = xr_ast_variable(parser->compiler_session, tuple_tmp_name, line);
         if (!xr_parser_healthy(parser)) return NULL;
         AstNode *destructure_decl =
-            xr_ast_destructure_decl(parser->compiler_session, tuple_pattern, iter_var, false, line);
+            xr_ast_destructure_decl(parser->compiler_session, tuple_pattern, iter_var, true, line);
         if (!xr_parser_healthy(parser)) return NULL;
 
         int old_count = body->as.block.count;

@@ -384,7 +384,8 @@ XrDestructurePattern *convert_array_literal_to_pattern(Parser *parser,
 XrDestructurePattern *convert_tuple_literal_to_pattern(Parser *parser,
                                                        AstNode *tuple_literal) {
     if (!xr_parser_healthy(parser)) return NULL;
-    if (tuple_literal->type != AST_TUPLE_LITERAL) {
+    if (!tuple_literal || tuple_literal->type != AST_TUPLE_LITERAL ||
+        (tuple_literal->as.tuple_literal.count && !tuple_literal->as.tuple_literal.elements)) {
         return NULL;
     }
 
@@ -395,6 +396,7 @@ XrDestructurePattern *convert_tuple_literal_to_pattern(Parser *parser,
 
     for (int i = 0; xr_parser_healthy(parser) && (i < count); i++) {
         AstNode *element = tuple_literal->as.tuple_literal.elements[i];
+        if (!element) return NULL;
         if (element->type == AST_VARIABLE) {
             do {
                 elements[i] = xr_pattern_identifier(parser->compiler_session, element->as.variable.name, NULL);

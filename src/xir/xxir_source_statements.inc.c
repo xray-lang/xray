@@ -38,6 +38,7 @@ static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
         return top || source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "nested declarations are not admitted");
     case AST_VAR_DECL: case AST_CONST_DECL: return source_binding(ctx, node, top);
     case AST_DESTRUCTURE_DECL: return source_destructure_binding(ctx,node,top);
+    case AST_DESTRUCTURE_ASSIGN: return source_tuple_assignment(ctx,node);
     case AST_EXPR_STMT: {
         if(top && node==ctx->repl_tail)return source_repl_result(ctx,node);
         SourceValue value; AstNode *expr=node->as.expr_stmt;
