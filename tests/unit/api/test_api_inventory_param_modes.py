@@ -16,6 +16,27 @@ import gen_api_inventory as api_inventory  # noqa: E402
 
 
 class ApiInventoryParamModeTest(unittest.TestCase):
+    def test_source_inventory_preserves_typed_error_contracts(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="xray-api-inventory-errors.") as tmp:
+            root = Path(tmp)
+            module = root / "stdlib" / "csv"
+            module.mkdir(parents=True)
+            (module / "csv.xr").write_text(
+                "export fn parse(data: string,\n options: Options? = null)\n"
+                " throws(CsvError) -> Document { return Document() }\n"
+                "export class Reader {\n"
+                " read(data: string) throws(CsvError | IOError) -> Document {}\n"
+                " ready() -> bool { return true }\n}\n",
+                encoding="utf-8",
+            )
+            signatures = {(entry["namespace"], entry["name"]): entry["signature"]
+                          for entry in api_inventory.collect_pure_stdlib(root)}
+        self.assertEqual("(data: string, options: Options? = null) throws(CsvError): Document",
+                         signatures[("csv", "parse")])
+        self.assertEqual("(data: string) throws(CsvError | IOError): Document",
+                         signatures[("Reader", "read")])
+        self.assertEqual("(): bool", signatures[("Reader", "ready")])
+
     def test_normalized_signatures_keep_param_modes(self) -> None:
         self.assertEqual(
             "(a: i64, b: ref string, c: move Buffer): ()",

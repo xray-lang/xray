@@ -284,10 +284,30 @@ def brace_delta(text: str) -> int:
     return delta
 
 
-def normalize_signature(params: str, ret: str | None) -> str:
+def normalize_signature(params: str, ret: str | None, throws: str = "") -> str:
     params = " ".join(params.strip().split())
     ret = " ".join((ret or "()").strip().split())
-    return f"({params}): {ret}"
+    return f"({params}){' ' + throws if throws else ''}: {ret}"
+
+
+def source_throws_clause(text: str, open_index: int) -> str:
+    close = matching_paren_index(text, open_index)
+    if close < 0:
+        return ""
+    tail = close + 1
+    while tail < len(text) and text[tail].isspace():
+        tail += 1
+    if not text.startswith("throws", tail):
+        return ""
+    tail += len("throws")
+    if tail < len(text) and not (text[tail].isspace() or text[tail] == "("):
+        return ""
+    while tail < len(text) and text[tail].isspace():
+        tail += 1
+    if tail >= len(text) or text[tail] != "(":
+        return "throws"
+    end = matching_paren_index(text, tail)
+    return "throws(" + " ".join(text[tail + 1:end].strip().split()) + ")" if end >= 0 else ""
 
 
 def infer_const_type(value: str, annotation: str | None) -> str:
@@ -473,7 +493,7 @@ def parse_class_body(
                 namespace=class_name,
                 name=name,
                 kind=kind,
-                signature=normalize_signature(params, ret),
+                signature=normalize_signature(params, ret, source_throws_clause(line, line.find("("))),
                 source=rel(root, path),
                 line=line_for_offset(text, body_offset) + local_lineno - 1,
                 doc_surface=surface,
@@ -973,7 +993,7 @@ def collect_pure_stdlib(root: Path) -> list[dict[str, Any]]:
                     namespace=module,
                     name=name,
                     kind="function",
-                    signature=normalize_signature(params, ret),
+                    signature=normalize_signature(params, ret, source_throws_clause(text, text.find("(", match.start(), match.end()))),
                     source=rel(root, path),
                     line=line_for_offset(text, match.start()),
                     doc_surface=surface,

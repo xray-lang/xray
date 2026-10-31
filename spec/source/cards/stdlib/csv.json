@@ -1,5 +1,5 @@
 {
   "module": "csv",
   "summary": "CSV parsing and generation",
-  "lead": "CSV parsing and generation."
+  "lead": "CSV parsing and generation. `parseReport`, `parse`, and `stringify` declare `throws(CsvError)`; call them with `try` or inside a try body. `parseReport` returns recoverable syntax diagnostics with partial data, while `parse` converts the first diagnostic into a typed error. Invalid options and input, field, or column limits can throw directly; `stringify` rejects invalid delimiter or linebreak options."
 }
