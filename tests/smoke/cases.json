@@ -273,13 +273,9 @@
       "id": "README.md#xray-1",
       "path": "README.md#xray-1",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F20",
-        "first_diagnostic": "README.md#xray-1:11:21: error: name is not an initialized value"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/readme-count.txt"
     },
     {
       "id": "README.md#xray-2",
@@ -305,13 +301,9 @@
       "id": "README_CN.md#xray-1",
       "path": "README_CN.md#xray-1",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F20",
-        "first_diagnostic": "README_CN.md#xray-1:11:21: error: name is not an initialized value"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/readme-count.txt"
     },
     {
       "id": "README_CN.md#xray-2",
@@ -756,6 +748,22 @@
         "schema": 1,
         "catalog": "tests/smoke/expected/testing-catalog.json"
       }
+    },
+    {
+      "id": "native:README.md#xray-1",
+      "path": "README.md#xray-1",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/readme-count.txt"
+    },
+    {
+      "id": "native:README_CN.md#xray-1",
+      "path": "README_CN.md#xray-1",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/readme-count.txt"
     }
   ]
 }
