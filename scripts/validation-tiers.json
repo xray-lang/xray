@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "baselineCommit": "6d8e663ac084ba57ccaa39d89673a80216295843",
+  "baselineManifest": "scripts/l1-v0.json",
+  "levels": {
+    "L0": "scripts/l0-related.json",
+    "L1": "scripts/l1-v0.json",
+    "L2": "scripts/l2-capability.json",
+    "L3": "scripts/l3-nightly.json"
+  },
+  "policy": "All baseline tests and build targets remain covered. Explicit capability or affected-path selection; no skipped or missing tests count as success."
+}

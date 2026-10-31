@@ -29,6 +29,7 @@ if mode == 'l1':
         old, new = (root / 'race').read_text().split()
         subprocess.run(['git','-C',str(root),'update-ref','refs/heads/main',new,old],check=True)
 if mode == 'metadata' and (root / 'metadata-fail').exists(): raise SystemExit(4)
+if mode == 'l2' and (root / 'capability-fail').exists(): raise SystemExit(7)
 if mode == 'asan':
     assert os.environ['XR_ASAN_PROFILE'] == 'full'
     assert os.environ['XR_ASAN_JOBS'] == '4'
@@ -250,6 +251,38 @@ class QueueTests(unittest.TestCase):
         self.assertIn("alternate manifest cannot bypass", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
         self.assertFalse((self.root / "build").exists())
+
+    def test_requested_l2_failure_never_advances_main(self):
+        plan = json.loads((self.repo / "scripts/l1-v0.json").read_text())
+        plan["validationTiers"] = "scripts/validation-tiers.json"
+        baseline_commit, baseline_path = merge_slice.xray_l1.TIER_BASELINE
+        common = Path(subprocess.check_output(["git", "-C", str(QUEUE.parent.parent),
+                                               "rev-parse", "--path-format=absolute", "--git-common-dir"], text=True).strip())
+        # Share immutable objects for the pinned catalog, never the fixture's refs or index.
+        (self.repo / ".git/objects/info/alternates").write_bytes((common / "objects").as_posix().encode("utf-8") + b"\n")
+        baseline = json.loads(self.git("show", baseline_commit + ":" + baseline_path))
+        registry = {"schema": 1, "baselineCommit": baseline_commit, "baselineManifest": baseline_path,
+                    "levels": {"L0": "scripts/l0-related.json", "L1": "scripts/l1-v0.json",
+                               "L2": "scripts/l2-capability.json", "L3": "scripts/l3-nightly.json"}}
+        def tier(level, name, test):
+            return {"schema": 1, "tier": level, "groups": {
+                name: {"tests": [test], "targets": ["xray"], "match": ["*"]}}}
+        l2 = tier("L2", "checked-sdk", "capability_actual")
+        l2.update(requiredOn={"owner": {"tests": ["capability_actual"], "targets": ["xray"]}}, interfaceMatches={})
+        night = tier("L3", "nightly", "nightly_actual")
+        night["groups"]["nightly"].update(tests=baseline["tests"] + ["nightly_actual"], targets=baseline["targets"])
+        branch = self.branch("a/capability-fails", {
+            "scripts/l1-v0.json": json.dumps(plan), "scripts/validation-tiers.json": json.dumps(registry),
+            "scripts/l0-related.json": json.dumps(tier("L0", "tooling", "tooling_actual")),
+            "scripts/l2-capability.json": json.dumps(l2),
+            "scripts/l3-nightly.json": json.dumps(night),
+            "CMakeLists.txt": CMAKE + '\nadd_test(NAME capability_actual COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/gate.py" l2 "${CMAKE_BINARY_DIR}")\n',
+            "capability-fail": "yes"})
+        log = self.finish(self.start(branch, ["--l2-capability", "checked-sdk", "--l2-sensitive", "owner"]), 1)
+        self.assertEqual(log["gates"]["L1"], "PASS")
+        self.assertEqual(log["gates"]["L2"], "FAIL")
+        self.assertEqual(self.git("rev-parse", "main"), self.base)
+        self.assertEqual(log["L2Plan"]["tests"], ["capability_actual"])
 
     def test_metadata_failure_never_advances_main(self):
         branch = self.branch("a/meta-fail", {"src/vm/register/change.c": "/* fixture */",

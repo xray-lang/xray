@@ -1,7 +1,504 @@
 {
   "schema": 1,
-  "tests": [
-    "native_runtime_installed"
-  ],
-  "when": "Completed capability batch or affected SDK interface change; retain scoped L0 consumers."
+  "tier": "L2",
+  "groups": {
+    "source-sdk": {
+      "tier": "L2",
+      "match": [
+        "src/api/*",
+        "src/module/*",
+        "src/hir/*",
+        "src/xir/xxir_source*",
+        "include/xray_source*",
+        "tests/unit/hir/*"
+      ],
+      "reason": "Official installed/moved Source SDK and complete public Source body consumers.",
+      "tests": [
+        "test_xir_range_value_sdk",
+        "source_nosuspend_sdk",
+        "source_conversion_sdk",
+        "source_global_callable_sdk",
+        "source_binary_sdk",
+        "source_unary_sdk",
+        "source_boolean_sdk",
+        "source_cast_sdk",
+        "source_nullable_sdk",
+        "source_type_clone_sdk",
+        "source_body_sdk",
+        "xir_record_sdk",
+        "source_sdk_installed"
+      ],
+      "targets": [
+        "test_xir_range_value_sdk",
+        "test_source_sdk_consumer",
+        "test_hir_unary_source",
+        "test_hir_boolean_source",
+        "test_hir_cast_source",
+        "test_hir_nullable_source",
+        "test_type_clone_source",
+        "test_hir_body_source",
+        "source-sdk-public-consumers",
+        "source-sdk-bundle"
+      ]
+    },
+    "checked-sdk": {
+      "tier": "L2",
+      "match": [
+        "src/xir/*",
+        "include/xray_xir*",
+        "src/runtime/*",
+        "tests/unit/xir/*sdk*"
+      ],
+      "reason": "Installed Checked-to-C runtime SDK and previous-contract/cleanup ABI rejection.",
+      "tests": [
+        "test_xir_cleanup_replaced_sdk_manifest",
+        "sdk_installed_native_msvc"
+      ],
+      "targets": [
+        "test_xir_cleanup_replaced_sdk_reader",
+        "sdk-installed-native-consumers",
+        "test_xir_runtime_sdk"
+      ]
+    },
+    "native-runtime": {
+      "tier": "L2",
+      "match": [
+        "src/lir/*",
+        "src/runtime/native/*",
+        "include/xray_native_runtime.h",
+        "cmake/*NativeRuntime*",
+        "scripts/*native_runtime*"
+      ],
+      "reason": "Independent LIR NativeRuntime installation batch only when that runtime/package interface changes.",
+      "tests": [
+        "native_runtime_installed"
+      ],
+      "targets": [
+        "native-runtime-bundle"
+      ]
+    },
+    "public-values": {
+      "tier": "L2",
+      "match": [
+        "src/xir/xxir_source*",
+        "src/xir/xxir_instance*",
+        "src/xir/xxir_checked*",
+        "src/xir/xxir_library*",
+        "src/xir/xxir_nominal*",
+        "tests/fixtures/xir_records/*"
+      ],
+      "reason": "Public slots, records, JSON float and Range complete Source/Catalog/VM/native receivers.",
+      "tests": [
+        "test_xir_json_float_catalog_state",
+        "test_xir_json_float",
+        "test_xir_json_float_native",
+        "test_xir_json_float_mixed",
+        "test_xir_json_float_vm",
+        "test_xir_range_value_authority",
+        "test_xir_range_value_source_vm",
+        "test_xir_range_value_source_native",
+        "test_xir_range_value_source_vm_native",
+        "test_xir_range_value_source_native_vm",
+        "test_xir_range_value_catalog_vm",
+        "test_xir_range_value_catalog_native",
+        "test_xir_range_value_catalog_vm_native",
+        "test_xir_range_value_catalog_native_vm",
+        "xir_public_slot_runtime",
+        "xir_public_const_cli",
+        "test_xir_exported_i64_const_authority",
+        "test_xir_exported_i64_const_source_vm",
+        "test_xir_exported_i64_const_source_native",
+        "test_xir_exported_i64_const_source_vm_native",
+        "test_xir_exported_i64_const_source_native_vm",
+        "test_xir_exported_i64_const_catalog_vm",
+        "test_xir_exported_i64_const_catalog_native",
+        "test_xir_exported_i64_const_catalog_vm_native",
+        "test_xir_exported_i64_const_catalog_native_vm",
+        "test_xir_exported_f64_const",
+        "test_xir_exported_f64_const_authority",
+        "test_xir_exported_f64_const_source_vm",
+        "test_xir_exported_f64_const_source_native",
+        "test_xir_exported_f64_const_source_vm_native",
+        "test_xir_exported_f64_const_source_native_vm",
+        "test_xir_exported_f64_const_catalog_vm",
+        "test_xir_exported_f64_const_catalog_native",
+        "test_xir_exported_f64_const_catalog_vm_native",
+        "test_xir_exported_f64_const_catalog_native_vm",
+        "xir_record_owner",
+        "xir_record_source",
+        "xir_record_native"
+      ],
+      "targets": [
+        "test_xir_json_float",
+        "test_xir_json_float_native",
+        "test_xir_json_float_mixed",
+        "test_xir_json_float_vm",
+        "test_xir_range_value",
+        "test_xir_range_value_packet",
+        "test_xir_range_value_source_native",
+        "test_xir_range_value_source_vm_native",
+        "test_xir_range_value_source_native_vm",
+        "test_xir_range_value_catalog_native",
+        "test_xir_range_value_catalog_vm_native",
+        "test_xir_range_value_catalog_native_vm",
+        "test_xir_public_slot_runtime",
+        "xray",
+        "test_xir_exported_i64_const",
+        "test_xir_exported_i64_const_packet",
+        "test_xir_exported_i64_const_source_native",
+        "test_xir_exported_i64_const_source_vm_native",
+        "test_xir_exported_i64_const_source_native_vm",
+        "test_xir_exported_i64_const_catalog_native",
+        "test_xir_exported_i64_const_catalog_vm_native",
+        "test_xir_exported_i64_const_catalog_native_vm",
+        "test_xir_exported_f64_const",
+        "test_xir_exported_f64_const_packet",
+        "test_xir_exported_f64_const_source_native",
+        "test_xir_exported_f64_const_source_vm_native",
+        "test_xir_exported_f64_const_source_native_vm",
+        "test_xir_exported_f64_const_catalog_native",
+        "test_xir_exported_f64_const_catalog_vm_native",
+        "test_xir_exported_f64_const_catalog_native_vm",
+        "test_xir_records"
+      ]
+    },
+    "frontend": {
+      "tier": "L2",
+      "match": [
+        "src/frontend/*",
+        "src/hir/*",
+        "src/xir/xxir_source*",
+        "src/xir/xxir_initialization*"
+      ],
+      "reason": "HIR and complete Source language-family consumers.",
+      "tests": [
+        "source_nullable_string_print",
+        "source_nullable_string_print_native",
+        "hir_numeric_literal",
+        "hir_numeric_literal_cli",
+        "nosuspend_type_syntax",
+        "test_xir_initialization_cycles_cli",
+        "hir_contextual_conversion",
+        "hir_contextual_conversion_cli",
+        "source_global_callable",
+        "source_global_callable_cli",
+        "hir_binary",
+        "hir_binary_cli",
+        "hir_unary",
+        "hir_unary_cli",
+        "hir_boolean",
+        "hir_boolean_cli",
+        "hir_cast",
+        "hir_cast_cli",
+        "hir_nullable",
+        "hir_nullable_cli",
+        "source_type_clone_cli",
+        "hir_body",
+        "hir_body_cli",
+        "source_public_repl",
+        "source_public_repl_array_history",
+        "source_public_repl_write_class_history",
+        "source_body_dead_handler_type",
+        "source_body_dead_handler_name",
+        "source_body_generic_comptime",
+        "test_xir_source_local_recursive_binding",
+        "test_xir_source_local_recursive_binding_native"
+      ],
+      "targets": [
+        "test_source_nullable_print",
+        "test_source_nullable_print_native",
+        "test_hir_numeric_literal",
+        "xray",
+        "test_nosuspend_type_syntax",
+        "test_hir_contextual_conversion",
+        "test_source_global_callable",
+        "test_hir_binary",
+        "test_hir_unary",
+        "test_hir_boolean",
+        "test_hir_cast",
+        "test_hir_nullable",
+        "test_hir_body",
+        "lir_pipeline_eval",
+        "test_hir_body_source",
+        "test_source_public_repl"
+      ]
+    },
+    "errors-cleanup": {
+      "tier": "L2",
+      "match": [
+        "src/xir/*error*",
+        "src/xir/*cleanup*",
+        "src/xir/*await*",
+        "src/xir/*task*",
+        "src/xir/xxir_source*"
+      ],
+      "reason": "Typed errors, cleanup, optional and task-family receivers.",
+      "tests": [
+        "test_xir_try_assert_source",
+        "test_xir_try_assert_native",
+        "test_xir_try_assert_owner",
+        "test_xir_try_assert_vm",
+        "test_xir_try_assert_rejections",
+        "test_xir_try_assert_task_unsafe_source",
+        "test_xir_try_assert_task_unsafe_native",
+        "test_xir_try_assert_task_safe_source",
+        "test_xir_try_assert_task_safe_native",
+        "test_xir_try_assert_ordinary_unsafe_source",
+        "test_xir_try_assert_ordinary_unsafe_native",
+        "test_xir_try_assert_order_source",
+        "test_xir_try_assert_order_native",
+        "test_xir_try_assert_graph_source",
+        "test_xir_try_assert_lexical_source",
+        "test_xir_try_assert_never_source",
+        "test_xir_try_assert_cli",
+        "test_xir_try_optional_cli",
+        "test_xir_try_optional_generated_native",
+        "test_xir_nullable_unit_source",
+        "test_xir_nullable_unit_values",
+        "test_xir_nullable_unit_cli",
+        "test_xir_nullable_unit_native",
+        "test_xir_cleanup_replaced_source",
+        "test_xir_cleanup_replaced_host",
+        "test_xir_cleanup_replaced_graph",
+        "test_xir_cleanup_replaced_task-sendable",
+        "test_xir_cleanup_replaced_generated_native",
+        "test_xir_cleanup_replaced_cli",
+        "test_xir_cleanup_replaced_task_pair",
+        "test_xir_cleanup_replaced_task_positive",
+        "test_xir_error_union_types",
+        "test_xir_error_union_packet",
+        "test_xir_error_union_vm",
+        "test_xir_error_union_history",
+        "test_xir_error_union_native_7",
+        "test_xir_error_union_native_300",
+        "test_xir_error_union_inference",
+        "test_xir_error_union_legacy",
+        "test_xir_error_union_cli",
+        "test_xir_typed_await_ordinary",
+        "test_xir_typed_await_host-close",
+        "test_xir_typed_await_native",
+        "test_xir_typed_await_cli",
+        "test_xir_task_result_source",
+        "test_xir_task_result_runtime",
+        "test_xir_task_result_native",
+        "test_xir_task_result_cpp",
+        "test_xir_task_result_cli"
+      ],
+      "targets": [
+        "test_xir_from_utf8",
+        "test_xir_try_assert_native",
+        "test_xir_ctfe_slice_u8",
+        "test_xir_try_assert_task_unsafe_native",
+        "test_xir_try_assert_task_safe_native",
+        "test_xir_try_assert_ordinary_unsafe_native",
+        "test_xir_try_assert_order_native",
+        "xray",
+        "test_xir_try_optional_native",
+        "test_xir_local_errors",
+        "test_xir_values",
+        "test_xir_nullable_unit_native",
+        "test_xir_cleanup_replaced",
+        "test_xir_cleanup_replaced_native",
+        "test_xir_cleanup_replaced_wait_fault",
+        "test_xir_error_union_types",
+        "test_xir_error_union",
+        "test_xir_error_union_native_7",
+        "test_xir_error_union_native_300",
+        "test_xir_error_union_legacy",
+        "test_xir_typed_await",
+        "test_xir_typed_await_native",
+        "test_xir_task_result_source",
+        "test_xir_task_result_runtime",
+        "test_xir_task_result_native",
+        "test_xir_task_result_cpp"
+      ]
+    },
+    "text-ctfe": {
+      "tier": "L2",
+      "match": [
+        "src/xir/*ctfe*",
+        "src/xir/*utf8*",
+        "src/xir/*unicode*",
+        "src/xir/*literal*",
+        "src/xir/xxir_source*"
+      ],
+      "reason": "Text, CTFE and literal complete consumers.",
+      "tests": [
+        "test_xir_p11_typed_literal_text",
+        "test_xir_library_literal_owner",
+        "test_xir_prelude_endian_source",
+        "test_xir_library_integer_bits_source",
+        "test_xir_library_integer_bits_packet",
+        "test_xir_library_integer_bits_native",
+        "test_xir_library_integer_bits_vm_native",
+        "test_xir_library_integer_bits_native_vm",
+        "xir_slice_u8_backend",
+        "xir_slice_u8_backend_native",
+        "xir_slice_u8_backend_vm_to_native",
+        "xir_slice_u8_backend_native_to_vm",
+        "test_xir_ctfe_slice_u8_local",
+        "test_xir_ctfe_slice_u8_string",
+        "test_xir_ctfe_slice_u8_authority",
+        "test_xir_ctfe_slice_u8_boundaries",
+        "test_xir_ctfe_slice_u8_runtime-work",
+        "test_xir_ctfe_slice_u8_arguments",
+        "test_xir_ctfe_slice_u8_argument-authority",
+        "xir_from_utf8",
+        "xir_unicode_property_core",
+        "xir_from_utf8_native",
+        "xir_from_utf8_physical_header",
+        "xir_from_utf8_physical_bytes",
+        "test_xir_ctfe_from_utf8",
+        "test_xir_ctfe_from_utf8_native",
+        "test_xir_ctfe_from_utf8_types",
+        "test_xir_ctfe_from_utf8_packet"
+      ],
+      "targets": [
+        "test_xir_p11_ctfe_instance",
+        "test_xir_library_string_source",
+        "test_xir_prelude_source",
+        "test_xir_library_integer_bits_source",
+        "test_xir_library_integer_bits_packet",
+        "test_xir_library_integer_bits_native",
+        "test_xir_library_integer_bits_vm_native",
+        "test_xir_library_integer_bits_native_vm",
+        "test_xir_slice_u8_backend",
+        "test_xir_slice_u8_backend_native",
+        "test_xir_ctfe_slice_u8",
+        "test_xir_from_utf8",
+        "test_xir_from_utf8_native",
+        "test_xir_from_utf8_fault",
+        "test_xir_ctfe_from_utf8_native"
+      ]
+    },
+    "runtime": {
+      "tier": "L2",
+      "match": [
+        "src/runtime/*",
+        "src/program/*",
+        "src/xir/xxir_vm*",
+        "src/xir/xxir_instance*",
+        "src/xir/xxir_native*",
+        "src/app/cli/*toolchain*"
+      ],
+      "reason": "Execution, native provider and instance consumers.",
+      "tests": [
+        "native_runtime_failures",
+        "test_xir_instance_limit_result",
+        "xir_intrinsic_contains",
+        "xir_intrinsic_contains_native",
+        "test_xir_never_type",
+        "test_hashmap",
+        "test_xir_compile_decimal_work",
+        "test_lexer_keywords",
+        "test_xir_local_cfg_errors",
+        "test_xir_program_owned_callbacks",
+        "native_clock_scope",
+        "native_clock_standalone",
+        "native_offset_scope",
+        "test_xir_cleanup_original_optional",
+        "test_xir_cleanup_failed_module",
+        "test_xi_retired_builder",
+        "test_instruction",
+        "test_opcode",
+        "test_xr_execution",
+        "test_xr_boundary_materialization",
+        "test_xir_range_index_native",
+        "native_ready_discovery",
+        "native_ready_cli",
+        "native_ready_cold_cli",
+        "native_ready_probe",
+        "native_f64_text",
+        "native_f64_i64_conversion",
+        "xir_callable_array_transport"
+      ],
+      "targets": [
+        "test_native_runtime_clients",
+        "test_xir_task_executor",
+        "test_xir_intrinsic_registry",
+        "test_xir_intrinsic_registry_native",
+        "test_xir_never_type",
+        "test_hashmap",
+        "test_xir_compile_decimal_work",
+        "test_lexer_keywords",
+        "test_xir_local_cfg_errors",
+        "test_xir_program_owned_callbacks",
+        "test_native_clock",
+        "test_xir_local_errors",
+        "test_xir_cleanup_replaced_wait_fault",
+        "test_xi_retired_builder",
+        "test_instruction",
+        "test_opcode",
+        "test_xr_execution",
+        "test_xr_boundary_materialization",
+        "test_xir_range_index_native",
+        "test_native_ready",
+        "xray",
+        "test_native_f64_text",
+        "test_native_f64_i64_conversion",
+        "test_xir_callable_array_transport"
+      ]
+    },
+    "source-tools": {
+      "tier": "L2",
+      "match": [
+        "src/app/lsp/*",
+        "src/app/dap/*",
+        "src/module/*"
+      ],
+      "reason": "LSP/DAP user-facing consumers.",
+      "tests": [
+        "test_lsp_stdlib",
+        "dap_original_stdio_line-breakpoint"
+      ],
+      "targets": [
+        "test_lsp_stdlib",
+        "xray"
+      ]
+    }
+  },
+  "requiredOn": {
+    "api": {
+      "tests": [
+        "source_product_packet_lifetime",
+        "source_packet_request_control",
+        "source_packet_writer_control"
+      ],
+      "targets": [
+        "test_source_request_lifetime"
+      ],
+      "groups": [
+        "source-sdk",
+        "checked-sdk"
+      ]
+    },
+    "owner": {
+      "tests": [
+        "source_product_packet_lifetime",
+        "source_product_facts_control",
+        "source_request_lifetime",
+        "test_xir_program_owned_callbacks"
+      ],
+      "targets": [
+        "test_source_request_lifetime",
+        "test_xir_program_owned_callbacks"
+      ],
+      "groups": [
+        "source-sdk",
+        "checked-sdk"
+      ]
+    }
+  },
+  "interfaceMatches": {
+    "api": [
+      "include/*",
+      "src/api/*",
+      "src/xir/*.h"
+    ],
+    "owner": [
+      "src/xir/*owner*",
+      "src/xir/*memory*",
+      "src/base/*resource*"
+    ]
+  }
 }

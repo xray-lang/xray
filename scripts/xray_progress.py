@@ -137,14 +137,21 @@ def fixed_metrics(baseline: dict, cases: list[dict], results: list[dict]) -> dic
 
 def weekly_progress(previous: dict, current: dict) -> None:
     """Check completed weekly snapshots without treating new cases as repairs."""
+    old_stage, stage = previous.get("stage"), current.get("stage")
+    if old_stage not in {"R3", "R4"} or stage not in {"R3", "R4"}:
+        raise ValueError("weekly snapshots require explicit R3 or R4 stage")
+    if old_stage == "R4" and stage == "R3":
+        raise ValueError("weekly stage cannot return from R4 to R3")
     old, new = previous["metrics"], current["metrics"]
     if (date.fromisoformat(current["week_ending"]) - date.fromisoformat(previous["week_ending"])).days < 7:
         raise ValueError("weekly comparison requires snapshots at least seven days apart")
     if new["original_failed_demo_repaired"] <= old["original_failed_demo_repaired"] < 20:
         raise ValueError("weekly original failed demo repairs did not increase")
     old_lines, new_lines = previous["legacy"]["c_h_lines"], current["legacy"]["c_h_lines"]
-    if new_lines > old_lines or (new_lines == old_lines and old_lines != 0):
-        raise ValueError("weekly legacy C/H lines did not decrease")
+    if new_lines > old_lines:
+        raise ValueError("weekly legacy C/H lines grew during " + stage)
+    if stage == "R4" and new_lines == old_lines and old_lines != 0:
+        raise ValueError("R4 weekly legacy C/H lines did not decrease")
     if not set(old["repaired_demo_ids"]) <= set(new["repaired_demo_ids"]):
         raise ValueError("a previously repaired original demo regressed")
 
@@ -158,8 +165,10 @@ def main() -> int:
     parser.add_argument("--snapshot", type=Path)
     parser.add_argument("--previous-week", type=Path)
     parser.add_argument("--week-ending", default=date.today().isoformat())
+    parser.add_argument("--stage", choices=("R3", "R4"), required=True,
+                        help="Explicit execution stage; R3 freezes legacy growth, R4 requires weekly retirement")
     args = parser.parse_args()
-    value = {"week_ending": date.fromisoformat(args.week_ending).isoformat(),
+    value = {"stage": args.stage, "week_ending": date.fromisoformat(args.week_ending).isoformat(),
              "source_commit": git(args.root, "rev-parse", "HEAD").decode("ascii").strip(),
              "legacy": legacy_deletions(args.root, args.base),
              "checklist": document_state(args.root, args.docs)}

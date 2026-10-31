@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "tier": "L0",
+  "groups": {
+    "governance": {
+      "tier": "L0",
+      "match": [
+        "scripts/*",
+        "tests/tools/*",
+        "tests/smoke/*",
+        "CMakeLists.txt"
+      ],
+      "reason": "Runner and policy self-tests after related tooling changes, not every integration.",
+      "tests": [
+        "local_build_slots",
+        "local_merge_queue",
+        "meta_ownership_scope",
+        "smoke_runner",
+        "usability_progress_runner",
+        "validation_tier_scope"
+      ],
+      "targets": []
+    },
+    "test-infrastructure": {
+      "tier": "L0",
+      "match": [
+        "tests/unit_framework/*",
+        "tests/unit/framework/*",
+        "tests/lib/*"
+      ],
+      "reason": "Test-host success/failure reporting.",
+      "tests": [
+        "unit_framework_reports_success",
+        "unit_framework_reports_direct_failure",
+        "unit_framework_reports_helper_failure"
+      ],
+      "targets": [
+        "test_unit_framework_probe"
+      ]
+    },
+    "developer-tools": {
+      "tier": "L0",
+      "match": [
+        "scripts/*",
+        "tests/unit/lsp/*",
+        "tests/native_bench/*",
+        "tests/cmake/*",
+        "stdlib/types/*",
+        "stdlib/prelude/*",
+        "src/app/lsp/*",
+        "src/program/*",
+        "bench/*"
+      ],
+      "reason": "Generators, recipe and benchmark-runner self-tests on related changes.",
+      "tests": [
+        "test_lir_ownership_inventory_scope",
+        "native_bench_runner",
+        "test_lsp_stdlib_generator",
+        "test_program_identity_vectors",
+        "test_api_inventory_native_declarations",
+        "runtime_sdk_recipe_incremental"
+      ],
+      "targets": [
+        "native_bench_reference"
+      ]
+    }
+  }
+}

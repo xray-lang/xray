@@ -68,10 +68,10 @@ class MetricsTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     progress.fixed_metrics(self.baseline, cases, self.results)
 
-    def test_weekly_requires_both_product_gain_and_legacy_reduction(self):
-        old = {"week_ending": "2026-10-31", "legacy": {"c_h_lines": 100},
+    def test_r4_weekly_requires_both_product_gain_and_legacy_reduction(self):
+        old = {"stage": "R4", "week_ending": "2026-10-31", "legacy": {"c_h_lines": 100},
                "metrics": {"original_failed_demo_repaired": 0, "repaired_demo_ids": []}}
-        new = {"week_ending": "2026-11-07", "legacy": {"c_h_lines": 99},
+        new = {"stage": "R4", "week_ending": "2026-11-07", "legacy": {"c_h_lines": 99},
                "metrics": {"original_failed_demo_repaired": 1, "repaired_demo_ids": ["original"]}}
         progress.weekly_progress(old, new)
         for field in ("legacy", "metrics", "week_ending"):
@@ -89,6 +89,39 @@ class MetricsTests(unittest.TestCase):
         later["legacy"]["c_h_lines"] = 1
         with self.assertRaises(ValueError):
             progress.weekly_progress(done, later)
+
+    def test_r3_freezes_growth_but_keeps_weekly_original_demo_gain(self):
+        old = {"stage": "R3", "week_ending": "2026-10-31", "legacy": {"c_h_lines": 100},
+               "metrics": {"original_failed_demo_repaired": 0, "repaired_demo_ids": []}}
+        new = {"stage": "R3", "week_ending": "2026-11-07", "legacy": {"c_h_lines": 100},
+               "metrics": {"original_failed_demo_repaired": 1, "repaired_demo_ids": ["original"]}}
+        progress.weekly_progress(old, new)
+        new["legacy"]["c_h_lines"] = 99
+        progress.weekly_progress(old, new)
+        for lines in (100, 99):
+            bad = deepcopy(new)
+            bad["legacy"]["c_h_lines"] = lines
+            bad["metrics"] = deepcopy(old["metrics"])
+            with self.assertRaises(ValueError):
+                progress.weekly_progress(old, bad)
+        new["legacy"]["c_h_lines"] = 101
+        with self.assertRaises(ValueError):
+            progress.weekly_progress(old, new)
+
+    def test_weekly_stage_is_explicit_and_cannot_go_backwards(self):
+        old = {"stage": "R3", "week_ending": "2026-10-31", "legacy": {"c_h_lines": 100},
+               "metrics": {"original_failed_demo_repaired": 0, "repaired_demo_ids": []}}
+        new = {"stage": "R4", "week_ending": "2026-11-07", "legacy": {"c_h_lines": 99},
+               "metrics": {"original_failed_demo_repaired": 1, "repaired_demo_ids": ["original"]}}
+        progress.weekly_progress(old, new)
+        for previous_stage, stage in ((None, "R3"), ("R3", None), ("R3", "R2"), ("R4", "R3")):
+            previous, current = deepcopy(old), deepcopy(new)
+            previous["stage"], current["stage"] = previous_stage, stage
+            with self.assertRaises(ValueError):
+                progress.weekly_progress(previous, current)
+        new["legacy"]["c_h_lines"] = 100
+        with self.assertRaises(ValueError):
+            progress.weekly_progress(old, new)
 
     def test_manifest_cannot_drop_smoke_from_usability_policy(self):
         plan = json.loads((ROOT / "scripts/l1-v0.json").read_text(encoding="utf-8"))

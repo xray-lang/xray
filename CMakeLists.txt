@@ -2559,9 +2559,12 @@ if(BUILD_TESTS)
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/test_merge_slice.py)
     add_test(NAME meta_ownership_scope
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/test_meta_ownership_scope.py)
+    add_test(NAME validation_tier_scope
+        COMMAND ${XRAY_PYTHON} -B ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/test_validation_tiers.py)
     set_tests_properties(local_build_slots local_merge_queue PROPERTIES
         LABELS "tooling;fast" TIMEOUT 180 RUN_SERIAL TRUE)
     set_tests_properties(meta_ownership_scope PROPERTIES LABELS "metadata;memory;fast" TIMEOUT 10)
+    set_tests_properties(validation_tier_scope PROPERTIES LABELS "tooling;fast" TIMEOUT 30)
 
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/register_vm.cmake")
     include("${CMAKE_CURRENT_SOURCE_DIR}/bench/native/native_bench.cmake")

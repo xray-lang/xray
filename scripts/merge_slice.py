@@ -129,7 +129,9 @@ def review_scope(root: Path, base: str, candidate: str, review: dict) -> dict:
                 reasons.append(path)
         if path.startswith("cmake/XraySourceSdk") or path in {
                 "scripts/merge_slice.py", "scripts/xray_progress.py", "scripts/l1-v0.json",
-                "scripts/l2-capability.json", "tests/smoke/original-baseline.json"}:
+                "scripts/xray_l1.py", "scripts/l0-related.json", "scripts/l2-capability.json",
+                "scripts/l3-nightly.json", "scripts/validation-tiers.json",
+                "tests/smoke/original-baseline.json"}:
             reasons.append(path)
     if len(owners) > 1:
         reasons.append("multiple production owners")
@@ -230,6 +232,11 @@ def integrate(args, review: dict, log: dict, logs: Path) -> None:
     policy = old_plan.get("progressPolicy") or current_plan.get("progressPolicy")
     if policy and plan.get("progressPolicy") != policy:
         raise ValueError("An alternate manifest cannot bypass the current L1 usability policy")
+    if current_plan.get("validationTiers"):
+        xray_l1.tier_catalog(integration)
+        if (not set(current_plan["tests"]) <= set(plan["tests"]) or
+                not set(current_plan["targets"]) <= set(plan["targets"])):
+            raise ValueError("An alternate manifest cannot drop the canonical L1 core or its build targets")
     if plan.get("progressPolicy"):
         xray_progress.smoke_ratchet(integration, main, candidate)
         log["gates"]["usability_document_state"] = "FAIL"
@@ -240,25 +247,41 @@ def integrate(args, review: dict, log: dict, logs: Path) -> None:
     log["manifestBlob"] = plan_blob
     log["manifestSHA256"] = hashlib.sha256(content).hexdigest()
     log["smoke"] = plan.get("smokeStatus", "NOT_RUN: no smoke status supplied")
+    l2 = None
+    if getattr(args, "l2_capability", []):
+        sensitive = list(getattr(args, "l2_sensitive", []))
+        if "multiple production owners" in log["reviewScope"]["required_by"]:
+            sensitive.append("owner")
+        l2 = xray_l1.tier_plan(integration, "L2", args.l2_capability, changed, sensitive)
+        log["L2Plan"] = l2
+    else:
+        if getattr(args, "l2_sensitive", []):
+            raise ValueError("L2 sensitivity requires an explicit completed capability batch")
+        log["gates"]["L2"] = "NOT_RUN: no completed capability batch requested"
+    targets = list(dict.fromkeys(plan["targets"] + (l2["targets"] if l2 else [])))
     environment = xray_l1.msvc_environment(args.temporary.resolve())
     with Lease(args.slots, "build", priority=0, payload={"candidate": candidate}):
         xray_l1.configure(integration, args.build, logs, environment)
         clean(integration)
-        xray_l1.build_targets(args.build, plan["targets"], logs, environment)
+        xray_l1.build_targets(args.build, targets, logs, environment)
         if clean(integration):
-            xray_l1.build_targets(args.build, plan["targets"], logs, environment)
+            xray_l1.build_targets(args.build, targets, logs, environment)
             clean(integration)
         log["identity"] = xray_l1.identity(plan, integration, args.build, candidate, logs, environment)
         groups = {"l1": plan["tests"]}
+        if l2:
+            groups["l2"] = l2["tests"]
         if any(re.match(r"src/(ir|aot|analysis|lir|hir|xir|plan|program|module|vm/register)/", p) for p in changed):
             log["gates"]["meta_ownership_inventory"] = "FAIL"
             groups["metadata"] = ["meta_ownership_inventory"]
         results = xray_l1.test_groups(groups, args.build, logs, environment)
         log["gates"]["L1"] = "PASS" if results["l1"] else "FAIL"
+        if l2:
+            log["gates"]["L2"] = "PASS" if results["l2"] else "FAIL"
         if "metadata" in results:
             log["gates"]["meta_ownership_inventory"] = "PASS" if results["metadata"] else "FAIL"
         if not all(results.values()):
-            raise RuntimeError("L1 or metadata: failed, skipped or unexecuted test")
+            raise RuntimeError("L1, requested L2 or metadata: failed, skipped or unexecuted test")
     if git(integration, "rev-parse", "HEAD") != candidate or git(root, "rev-parse", args.branch) != source:
         raise RuntimeError("Candidate or reviewed branch moved while gates were running")
     clean(integration)
@@ -283,6 +306,10 @@ def main() -> int:
     parser.add_argument("--slots", type=Path, default=Path(r"D:\xray-build\slots"))
     parser.add_argument("--manifest", default="scripts/l1-v0.json")
     parser.add_argument("--docs", type=Path, help="Current task-document checkout for L1 source/checklist alignment")
+    parser.add_argument("--l2-capability", action="append", default=[],
+                        help="Completed capability batch group; build and execute its affected L2 before merge")
+    parser.add_argument("--l2-sensitive", choices=("api", "owner"), action="append", default=[],
+                        help="Require the API/owner consumers for a completed capability batch")
     args = parser.parse_args()
     for name in ("repo", "integration", "build", "temporary", "queue", "slots", "review"):
         setattr(args, name, getattr(args, name).resolve())
