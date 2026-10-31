@@ -132,7 +132,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     }
 }
 static bool library_catalog_builtin(XrXirType type) {
-    return type == XR_XIR_I64 || type == XR_XIR_BOOL || type == XR_XIR_STRING || type == XR_XIR_F64;
+    return type == XR_XIR_I64 || type == XR_XIR_BOOL || type == XR_XIR_STRING || type == XR_XIR_F32 || type == XR_XIR_F64;
 }
 /* Common verification validates access, ownership and every recursive type first.
  * Import admits only the ordinary value families whose full type and body
@@ -141,7 +141,7 @@ static bool library_catalog_builtin(XrXirType type) {
 static bool library_catalog_state_type(const XrXirTypes *types,XrXirType type) {
     if (xr_xir_type_is_cell(types,type)) type=xr_xir_cell_element(types,type);
     /* Floating bodies do not extend the admitted module-state surface. */
-    if (type==XR_XIR_F64) return false;
+    if (type==XR_XIR_F32 || type==XR_XIR_F64) return false;
     if (type==XR_XIR_UNIT || library_catalog_builtin(type)) return true;
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     if (!node) return false;
@@ -159,13 +159,13 @@ static bool library_catalog_state_type(const XrXirTypes *types,XrXirType type) {
     default:return false;
     }
 }
-/* Only an actual immutable binary64 slot with complete ownership facts is
+/* Only an actual immutable floating slot with complete ownership facts is
  * admitted; a logical Cell element cannot grant the same permission. */
 static bool library_catalog_state_slot(const XrXirTypes *types,const XrXirDeclarations *declarations,
     const XrXirSlotFacts *facts,uint32_t ordinal) {
     if (!declarations || ordinal>=declarations->slot_count || !declarations->slots) return false;
     const XrXirSlot *slot=&declarations->slots[ordinal];
-    if (slot->type!=XR_XIR_F64) return library_catalog_state_type(types,slot->type);
+    if (slot->type!=XR_XIR_F32 && slot->type!=XR_XIR_F64) return library_catalog_state_type(types,slot->type);
     if (slot->mutable || !facts || facts->count!=declarations->slot_count || !facts->rows) return false;
     const XrXirSlotFact *fact=&facts->rows[ordinal];
     return fact->slot==ordinal && fact->name && fact->name_length && fact->exported<=1;
