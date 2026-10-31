@@ -470,6 +470,16 @@
       ]
     }
   },
+  "prerequisites": {
+    "source_body_sdk": {
+      "tests": [
+        "hir_body"
+      ],
+      "targets": [
+        "test_hir_body"
+      ]
+    }
+  },
   "requiredOn": {
     "api": {
       "tests": [

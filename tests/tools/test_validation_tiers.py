@@ -1,12 +1,14 @@
 """Keep moved gates executable and preserve their build prerequisites."""
 from copy import deepcopy
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
 from unittest import mock
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -56,6 +58,68 @@ class TierTests(unittest.TestCase):
         self.assertTrue({"source-sdk-bundle", "test_xir_runtime_sdk", "test_source_request_lifetime"} <= set(plan["targets"]))
         self.assertNotIn("native_runtime_installed", plan["tests"])
         self.assertEqual(len(plan["tests"]), len(set(plan["tests"])))
+
+    def test_source_sdk_fixture_adds_only_its_registered_test_and_target(self):
+        plan = xray_l1.tier_plan(ROOT, "L2", ["public-values", "source-sdk", "checked-sdk"],
+                                sensitive=["owner"])
+        self.assertEqual(len(plan["tests"]), 63)
+        self.assertEqual(plan["tests"].count("hir_body"), 1)
+        self.assertEqual(plan["targets"].count("test_hir_body"), 1)
+        self.assertNotIn("frontend", plan["groups"])
+        self.assertNotIn("hir_body_cli", plan["tests"])
+        catalog = xray_l1.tier_catalog(ROOT)
+        self.assertIn("hir_body", catalog["groups"]["frontend"]["tests"])
+        self.assertNotIn("hir_body", catalog["groups"]["source-sdk"]["tests"])
+        self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)
+
+    def test_recursive_fixture_selection_matches_actual_ctest_report(self):
+        catalog = {"groups": {"family": {"tier": "L2", "tests": ["leaf"], "targets": []}},
+                   "l2": {"interfaceMatches": {}, "requiredOn": {}, "prerequisites": {
+                       "leaf": {"tests": ["middle_setup"], "targets": ["middle_target"]},
+                       "middle_setup": {"tests": ["root_setup"], "targets": ["root_target"]}}}}
+        with mock.patch.object(xray_l1, "tier_catalog", return_value=catalog):
+            plan = xray_l1.tier_plan(ROOT, "L2", ["family"])
+        self.assertEqual(plan["tests"], ["leaf", "middle_setup", "root_setup"])
+        self.assertEqual(plan["targets"], ["xray", "middle_target", "root_target"])
+        with tempfile.TemporaryDirectory(prefix="xray-tier-fixture-") as directory:
+            source = Path(directory)
+            build, logs = source / "build", source / "logs"
+            logs.mkdir()
+            (source / "CMakeLists.txt").write_text('''cmake_minimum_required(VERSION 3.25)
+project(TierFixture NONE)
+enable_testing()
+add_test(NAME root_setup COMMAND "${CMAKE_COMMAND}" -E touch "${CMAKE_BINARY_DIR}/root")
+set_tests_properties(root_setup PROPERTIES FIXTURES_SETUP root)
+add_test(NAME middle_setup COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_BINARY_DIR}/root" "${CMAKE_BINARY_DIR}/middle")
+set_tests_properties(middle_setup PROPERTIES FIXTURES_REQUIRED root FIXTURES_SETUP middle)
+add_test(NAME leaf COMMAND "${CMAKE_COMMAND}" -E compare_files "${CMAKE_BINARY_DIR}/root" "${CMAKE_BINARY_DIR}/middle")
+set_tests_properties(leaf PROPERTIES FIXTURES_REQUIRED middle)
+add_test(NAME unrelated COMMAND "${CMAKE_COMMAND}" -E false)
+''', encoding="utf-8")
+            xray_l1.command(["cmake", "-S", source, "-B", build, "-G", "Ninja"],
+                            source, os.environ.copy(), logs / "configure.log")
+            xray_l1.tests(plan["tests"], build, logs, "fixtures", os.environ.copy())
+            cases = list(ET.parse(logs / "fixtures.xml").getroot().iter("testcase"))
+            self.assertEqual(sorted(case.get("name") for case in cases),
+                             ["leaf", "middle_setup", "root_setup"])
+
+    def test_unknown_fixture_test_or_target_rejects_before_execution(self):
+        config = json.loads((ROOT / "scripts/validation-tiers.json").read_text())
+        baseline = subprocess.check_output(["git", "-C", str(ROOT), "show",
+                                            config["baselineCommit"] + ":scripts/l1-v0.json"])
+        for key in ("tests", "targets"):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "scripts").mkdir()
+                for path in ["scripts/validation-tiers.json", *config["levels"].values()]:
+                    (root / path).write_bytes((ROOT / path).read_bytes())
+                path = root / "scripts/l2-capability.json"
+                value = json.loads(path.read_text())
+                value["prerequisites"]["source_body_sdk"][key].append("unknown-fixture")
+                path.write_text(json.dumps(value))
+                with mock.patch.object(xray_l1.subprocess, "check_output", return_value=baseline):
+                    with self.assertRaisesRegex(ValueError, "validation prerequisite"):
+                        xray_l1.tier_catalog(root)
 
     def test_unknown_or_empty_selection_is_a_failure(self):
         for args in (("L2", ["not-a-capability"]), ("L0", []), ("L2", ["governance"]),

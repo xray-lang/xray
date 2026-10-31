@@ -211,6 +211,17 @@ def tier_catalog(source: Path) -> dict:
         if (not set(row["tests"]) <= homes.keys() or not set(row["targets"]) <= targets or
                 not set(row.get("groups", [])) <= catalog.keys()):
             raise ValueError("Unknown API/owner-sensitive consumer")
+    prerequisites = l2.get("prerequisites", {})
+    if not isinstance(prerequisites, dict):
+        raise ValueError("Invalid validation prerequisites")
+    for name, row in prerequisites.items():
+        if name not in homes or not isinstance(row, dict) or set(row) != {"tests", "targets"}:
+            raise ValueError("Unknown validation prerequisite consumer")
+        for key, registered in (("tests", homes.keys()), ("targets", targets)):
+            values = row[key]
+            if (not isinstance(values, list) or any(not isinstance(x, str) for x in values) or
+                    len(values) != len(set(values)) or not set(values) <= registered):
+                raise ValueError("Unknown or duplicate validation prerequisite " + key)
     return {"groups": catalog, "homes": homes, "targets": targets, "l2": l2}
 
 
@@ -257,6 +268,15 @@ def tier_plan(source: Path, level: str, capabilities=(), changed=(), sensitive=(
                     selected_targets = list(dict.fromkeys(selected_targets + groups[name]["targets"]))
             selected_tests = list(dict.fromkeys(selected_tests + row["tests"]))
             selected_targets = list(dict.fromkeys(selected_targets + row["targets"]))
+    if level != "L1":
+        pending = list(selected_tests)
+        for name in pending:
+            row = catalog["l2"].get("prerequisites", {}).get(name, {})
+            for test in row.get("tests", []):
+                if test not in selected_tests:
+                    selected_tests.append(test)
+                    pending.append(test)
+            selected_targets = list(dict.fromkeys(selected_targets + row.get("targets", [])))
     if level != "L0" or selected_targets:
         selected_targets = list(dict.fromkeys(["xray"] + selected_targets))
     return dict(schema=1, tier=level, groups=names, sensitivity=sorted(sensitivity),
