@@ -130,7 +130,22 @@ static bool source_record_type(SourceContext *ctx,AstNode *site,const XrXirLiter
     uint32_t declaration=0;if(!source_record_schema(ctx,site,keys,count,&declaration))return false;
     XrXirTypeNode node={.kind=XR_XIR_TYPE_NOMINAL};
     node.nominal=(XrXirNominalType){declaration,arguments,count,arguments,count};
-    return source_intern_type(ctx,node,out);
+    if(!source_intern_type(ctx,node,out))return false;
+    /* Interning can reuse the open key shape and move the owning pool. */
+    XrXirTypeNode *owned=(XrXirTypeNode *)&ctx->types.nodes[(uint32_t)*out-XR_XIR_CONSTRUCTED_TYPE_BASE];
+    if(owned->nominal.field_count) {
+        if(owned->nominal.field_count!=count||!owned->nominal.fields)
+            return source_fail(ctx,site,XR_XIR_BAD_STRUCTURE,"record field projection is incomplete");
+        for(uint32_t f=0;f<count;++f) {
+            if(!source_request_poll(ctx,site))return false;
+            if(owned->nominal.fields[f]!=owned->nominal.arguments[f])
+                return source_fail(ctx,site,XR_XIR_BAD_TYPE,"record field projection differs from its arguments");
+        }
+    } else {
+        if(owned->nominal.fields)return source_fail(ctx,site,XR_XIR_BAD_STRUCTURE,"empty record field projection has storage");
+        owned->nominal.fields=owned->nominal.arguments;owned->nominal.field_count=count;
+    }
+    return true;
 }
 static bool source_record_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *out) {
     uint32_t count=(uint32_t)ref->nchildren;
