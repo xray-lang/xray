@@ -72,6 +72,13 @@ static bool source_scalar_call(SourceContext *ctx,AstNode *node,SourceValue rece
         "scalar method requires its exact admitted ordinary declaration")) return false;
     if (text) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TO_STRING,XR_XIR_STRING,{receiver.id,0},{0},0,{0}},value);
     switch (member->operation) {
+    case XR_NATIVE_OPERATION_RUNE_IS_WHITESPACE:
+        if (receiver.type!=XR_XIR_RUNE || native->id!=XR_NATIVE_DECLARATION_RUNE || member->id!=6 ||
+            member->result!=XR_NATIVE_TERM_BOOL || member->allocation!=XR_NATIVE_ALLOCATION_NO_HEAP ||
+            member->ownership!=XR_NATIVE_RESULT_OWNERSHIP_OWNED || strcmp(member->failures,"none"))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Rune predicate requires its exact ordinary declaration");
+        return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RUNE_IS_WHITESPACE,XR_XIR_BOOL,
+            {receiver.id,0},{0},0,{0}},value);
     case XR_NATIVE_OPERATION_RUNE_TO_U32:
         return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RUNE_TO_INTEGER,XR_XIR_U32,{receiver.id,0},{0},0,{0}},value);
     case XR_NATIVE_OPERATION_FLOAT_ABS: return source_float_abs(ctx,receiver,value);

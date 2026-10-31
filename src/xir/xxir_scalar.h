@@ -68,6 +68,8 @@ static inline XrXirIntegerFormat xr_xir_integer_format(XrXirType type) {
 /* Failed construction preserves the caller output. Rune never becomes numeric. */
 XR_FUNC XrXirRunStatus xr_xir_rune_convert(XrXirType source, XrXirType target,
     int64_t payload, int64_t *output);
+/* Invalid scalars preserve the output; a valid Rune produces canonical Bool bits. */
+XR_FUNC XrXirRunStatus xr_xir_rune_is_whitespace(int64_t payload, int64_t *output);
 XR_FUNC XrXirRunStatus xr_xir_integer_arithmetic(XrXirIntegerFormat format,
     XrXirArithmetic operation, int64_t left, int64_t right, int64_t *result);
 XR_FUNC XrXirRunStatus xr_xir_integer_compare(XrXirIntegerFormat format,

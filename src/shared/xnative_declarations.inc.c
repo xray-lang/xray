@@ -327,11 +327,11 @@ static const XrNativeMemberDeclaration xr_native_rune_members[] = {
     {3, "isLetter", "() -> bool", "bool", 8, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_BOOL},
     {4, "isNumber", "() -> bool", "bool", 9, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_BOOL},
     {5, "isAlphanumeric", "() -> bool", "bool", 10, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_BOOL},
-    {6, "isWhitespace", "() -> bool", "bool", 11, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_BOOL},
+    {6, "isWhitespace", "() -> bool", "bool", 12, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_RUNE_IS_WHITESPACE, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_BOOL},
 };
 static const XrNativeTypeDeclaration xr_native_rune = {
     15, XR_NATIVE_DECLARATION_VALUE, "rune", NULL, 0,
-    "stdlib/types/rune.xr", "xray-native:prelude/rune", {{222, 50, 144, 175, 18, 54, 103, 219, 54, 203, 70, 72, 198, 211, 68, 218, 97, 36, 219, 126, 136, 139, 42, 20, 45, 145, 61, 185, 163, 31, 194, 187}},
+    "stdlib/types/rune.xr", "xray-native:prelude/rune", {{158, 226, 33, 168, 40, 170, 183, 4, 241, 177, 43, 201, 248, 240, 55, 113, 235, 88, 219, 158, 0, 79, 208, 91, 47, 134, 95, 145, 104, 165, 7, 155}},
     3, 7, xr_native_rune_members, 6
 };
 

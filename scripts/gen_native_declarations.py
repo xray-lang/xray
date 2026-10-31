@@ -378,7 +378,8 @@ def parse_source(source, prelude):
                 'FLOAT_IS_NAN': ('isNaN', '() -> bool', 'no_heap', 'none')},
             14: {'BOOL_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit')},
             15: {'RUNE_TO_U32': ('toUInt32', '() -> u32', 'no_heap', 'none'),
-                'RUNE_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit')},
+                'RUNE_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit'),
+                'RUNE_IS_WHITESPACE': ('isWhitespace', '() -> bool', 'no_heap', 'none')},
         }[header[0]]
         used = set()
         for member in members:

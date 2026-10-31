@@ -51,3 +51,33 @@ set_tests_properties(test_xir_rune_native PROPERTIES LABELS "unit;xir;rune;nativ
 add_test(NAME test_xir_rune_checked_golden
     COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_rune_checked_golden.py)
 set_tests_properties(test_xir_rune_checked_golden PROPERTIES LABELS "unit;xir;rune;checked;independent-golden" TIMEOUT 30)
+
+add_executable(test_xir_rune_whitespace xir/test_xir_rune_whitespace.c)
+target_link_libraries(test_xir_rune_whitespace PRIVATE xray_xir_vm xray_xir_cgen)
+set(XIR_RUNE_WHITESPACE_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_rune_whitespace.c)
+add_custom_command(OUTPUT ${XIR_RUNE_WHITESPACE_GENERATED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xir_rune_whitespace> ${XIR_RUNE_WHITESPACE_GENERATED}
+    DEPENDS test_xir_rune_whitespace VERBATIM)
+add_executable(test_xir_rune_whitespace_native xir/test_xir_rune_whitespace_native.c ${XIR_RUNE_WHITESPACE_GENERATED})
+target_link_libraries(test_xir_rune_whitespace_native PRIVATE xray_xir_scalar)
+foreach(target test_xir_rune_whitespace test_xir_rune_whitespace_native)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${target} PRIVATE -std=c11 -pedantic-errors -Wall -Wextra -Werror)
+    endif()
+endforeach()
+add_test(NAME xir_rune_whitespace COMMAND test_xir_rune_whitespace)
+add_test(NAME xir_rune_whitespace_native COMMAND test_xir_rune_whitespace_native)
+add_test(NAME xir_rune_whitespace_previous110 COMMAND test_xir_rune_whitespace --previous110
+    ${PROJECT_SOURCE_DIR}/tests/fixtures/xir_rune_whitespace/previous110-json-float.chk)
+set_tests_properties(xir_rune_whitespace_previous110 PROPERTIES TIMEOUT 60 LABELS "unit;xir;rune;checked;identity")
+set_tests_properties(xir_rune_whitespace xir_rune_whitespace_native PROPERTIES TIMEOUT 60 LABELS "unit;xir;rune;scalar;ownership;generated-c")
+if(WIN32 AND TARGET xray)
+    add_test(NAME xir_rune_whitespace_source COMMAND ${XRAY_PYTHON} -X utf8
+        ${PROJECT_SOURCE_DIR}/tests/cli/run_xir_rune_whitespace.py
+        --root ${PROJECT_SOURCE_DIR} --binary $<TARGET_FILE:xray>
+        --output ${CMAKE_BINARY_DIR}/rune-whitespace-source)
+    set_tests_properties(xir_rune_whitespace_source PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "unit;xir;rune;source;cli;native")
+endif()

@@ -129,6 +129,12 @@ static XrXirRunStatus core_integer_step(XirScalarCoreRun *run, uint32_t *cursor)
         }
         break;
     }
+    case XR_XIR_RUNE_IS_WHITESPACE: {
+        XrXirRunStatus status=xr_xir_rune_is_whitespace(
+            xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]]),&value);
+        if (status!=XR_XIR_RUN_OK) return status;
+        break;
+    }
     case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE: {
         XrXirType from=xr_xir_operand_type(run->function,op->args[0]);
         XrXirRunStatus status=xr_xir_rune_convert(from,op->type,
@@ -159,7 +165,8 @@ XR_FUNC XrXirRunStatus xir_scalar_core_step(XirScalarCoreRun *run,uint32_t *curs
     action->kind=XIR_SCALAR_CONTINUE;
     if (arithmetic_operation(op->op)>=0 || (op->op==XR_XIR_EQ_INT || op->op==XR_XIR_NE_INT || op->op==XR_XIR_LT_INT ||
         op->op==XR_XIR_LE_INT || op->op==XR_XIR_GT_INT || op->op==XR_XIR_GE_INT) ||
-        op->op==XR_XIR_CONVERT_NUMBER || op->op==XR_XIR_RUNE_TO_INTEGER || op->op==XR_XIR_INTEGER_TO_RUNE)
+        op->op==XR_XIR_CONVERT_NUMBER || op->op==XR_XIR_RUNE_TO_INTEGER || op->op==XR_XIR_INTEGER_TO_RUNE ||
+        op->op==XR_XIR_RUNE_IS_WHITESPACE)
         return core_integer_step(run,cursor);
     if (op->op==XR_XIR_JUMP || op->op==XR_XIR_BRANCH) {
         uint32_t edge=op->op==XR_XIR_BRANCH && !xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]]) ? 1u:0u;

@@ -256,6 +256,7 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #include "sdk_current_identity_golden.h"
 #include "sdk_previous39_100_identity_golden.h"
 #include "sdk_previous39_108_identity_golden.h"
+#include "sdk_previous39_110_identity_golden.h"
 #define current_sdk_kat_preimage previous36_96_sdk_kat_preimage
 #define current_sdk_kat_file_digest previous36_96_sdk_kat_file_digest
 #define current_sdk_kat_digest previous36_96_sdk_kat_digest
@@ -404,7 +405,7 @@ static void sdk_fixed_parent_prefixes(XrCompileResources *resources,const XrXirS
     }
 }
 static void sdk_legacy_known_bytes(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==39 && XR_XIR_CHECKED_CONTRACT==110 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==39 && XR_XIR_CHECKED_CONTRACT==111 &&
         XR_XIR_VALUE_ABI_VERSION==30 && XR_XIR_CALL_ABI_VERSION==37 && XR_XIR_PROGRAM_ABI_VERSION==37,
         "SDK known bytes require the independently framed public contract");
     _Static_assert(sizeof(previous_call29_sdk_kat_preimage)==3186,"complete retired Call29 SDK preimage");
@@ -705,7 +706,7 @@ static int sdk_legacy_main(int argc,char **argv) {
 }
 /* Ordinary identity and ownership checks do not enter the pressure census. */
 static void sdk_known_bytes(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==39 && XR_XIR_CHECKED_CONTRACT==110 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==39 && XR_XIR_CHECKED_CONTRACT==111 &&
         XR_XIR_VALUE_ABI_VERSION==30 && XR_XIR_CALL_ABI_VERSION==37 && XR_XIR_PROGRAM_ABI_VERSION==37,
         "current known bytes require their independently framed identity");
     _Static_assert(sizeof(current_sdk_kat_preimage)==3362 && sizeof(historical32_91_sdk_kat_preimage)==3330,
@@ -733,14 +734,14 @@ static void sdk_known_bytes(void) {
     CHECK(sdk_json_prefix(&json,&manifest) && json.status==XR_JSON_CURSOR_OK);
     const uint8_t *prior_images[]={previous39_100_sdk_kat_preimage,
         previous39_106_sdk_kat_preimage,previous39_107_sdk_kat_preimage,
-        previous39_108_sdk_kat_preimage,previous39_109_sdk_kat_preimage};
+        previous39_108_sdk_kat_preimage,previous39_109_sdk_kat_preimage,previous39_110_sdk_kat_preimage};
     const uint8_t *prior_digests[]={previous39_100_sdk_kat_digest,
         previous39_106_sdk_kat_digest,previous39_107_sdk_kat_digest,
-        previous39_108_sdk_kat_digest,previous39_109_sdk_kat_digest};
+        previous39_108_sdk_kat_digest,previous39_109_sdk_kat_digest,previous39_110_sdk_kat_digest};
     const size_t prior_lengths[]={sizeof(previous39_100_sdk_kat_preimage),
         sizeof(previous39_106_sdk_kat_preimage),sizeof(previous39_107_sdk_kat_preimage),
-        sizeof(previous39_108_sdk_kat_preimage),sizeof(previous39_109_sdk_kat_preimage)};
-    const uint32_t prior_semantics[]={100,106,107,108,109};
+        sizeof(previous39_108_sdk_kat_preimage),sizeof(previous39_109_sdk_kat_preimage),sizeof(previous39_110_sdk_kat_preimage)};
+    const uint32_t prior_semantics[]={100,106,107,108,109,110};
     for(unsigned i=0;i<sizeof(prior_semantics)/sizeof(prior_semantics[0]);++i) {
         xr_sha256(prior_images[i],prior_lengths[i],digest);
         CHECK(!memcmp(digest,prior_digests[i],32) && memcmp(digest,current_sdk_kat_digest,32));

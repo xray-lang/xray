@@ -8,5 +8,6 @@ class rune {
     isLetter() -> bool
     isNumber() -> bool
     isAlphanumeric() -> bool
+    // @native-operation RUNE_IS_WHITESPACE allocation=no_heap failures=none ownership=owned
     isWhitespace() -> bool
 }

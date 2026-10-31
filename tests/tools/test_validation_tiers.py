@@ -62,12 +62,16 @@ class TierTests(unittest.TestCase):
     def test_source_sdk_fixture_adds_only_its_registered_test_and_target(self):
         plan = xray_l1.tier_plan(ROOT, "L2", ["public-values", "source-sdk", "checked-sdk"],
                                 sensitive=["owner"])
-        self.assertEqual(len(plan["tests"]), 63)
+        catalog = xray_l1.tier_catalog(ROOT)
+        expected = {test for name in ("public-values", "source-sdk", "checked-sdk")
+                    for test in catalog["groups"][name]["tests"]}
+        expected.update(catalog["l2"]["requiredOn"]["owner"]["tests"])
+        self.assertEqual(set(plan["tests"]), expected | {"hir_body"})
+        self.assertEqual(len(plan["tests"]), len(expected) + 1)
         self.assertEqual(plan["tests"].count("hir_body"), 1)
         self.assertEqual(plan["targets"].count("test_hir_body"), 1)
         self.assertNotIn("frontend", plan["groups"])
         self.assertNotIn("hir_body_cli", plan["tests"])
-        catalog = xray_l1.tier_catalog(ROOT)
         self.assertIn("hir_body", catalog["groups"]["frontend"]["tests"])
         self.assertNotIn("hir_body", catalog["groups"]["source-sdk"]["tests"])
         self.assertEqual(len(xray_l1.tier_plan(ROOT, "L1")["tests"]), 30)

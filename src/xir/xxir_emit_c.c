@@ -139,6 +139,9 @@ static void emit_numeric_step(CBuffer *buffer, const XrXirFunction *function,
             "xr_xir_integer_compare(xr_xir_integer_format((XrXirType) %uu), "
             "xr_xir_scalar_load(%s, %uu), xr_xir_scalar_load(%s, %uu), &ordering);\n",
             (uint32_t) input, frame, left, frame, layout->offsets[op->args[1]]);
+    } else if (op->op == XR_XIR_RUNE_IS_WHITESPACE) {
+        EMIT_FORMAT(buffer, et_a70894c79679bed3, "    XrXirRunStatus numeric_status = xr_xir_rune_is_whitespace("
+            "xr_xir_scalar_load(%s, %uu), &temporary);\n", frame, left);
     } else if (op->op == XR_XIR_RUNE_TO_INTEGER || op->op == XR_XIR_INTEGER_TO_RUNE) {
         EMIT_FORMAT(buffer, et_b1cf11f217840bd8, "    XrXirRunStatus numeric_status = xr_xir_rune_convert("
             "(XrXirType) %uu, (XrXirType) %uu, "
@@ -299,7 +302,7 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
     case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
     case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
-    case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
+    case XR_XIR_RUNE_IS_WHITESPACE: case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_CONVERT_NUMBER:
         emit_numeric_step(buffer, function, layout, index, false);
         break;
@@ -1278,7 +1281,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
     case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
     case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
-    case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
+    case XR_XIR_RUNE_IS_WHITESPACE: case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_CONVERT_NUMBER:
         emit_numeric_step(buffer, function, layout, index, true);
         break;

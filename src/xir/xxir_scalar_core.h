@@ -34,6 +34,7 @@ static inline bool xir_scalar_core_opcode(XrXirOp op) {
     case XR_XIR_AND_INT:case XR_XIR_OR_INT:case XR_XIR_XOR_INT:case XR_XIR_SHL_INT:case XR_XIR_SHR_INT:
     case XR_XIR_EQ_INT:case XR_XIR_NE_INT:case XR_XIR_LT_INT:case XR_XIR_LE_INT:case XR_XIR_GT_INT:case XR_XIR_GE_INT:
     case XR_XIR_RUNE_TO_INTEGER:case XR_XIR_INTEGER_TO_RUNE:case XR_XIR_CONVERT_NUMBER:
+    case XR_XIR_RUNE_IS_WHITESPACE:
     case XR_XIR_JUMP:case XR_XIR_BRANCH:case XR_XIR_PHI:case XR_XIR_RETURN:return true;
     default:return false;
     }

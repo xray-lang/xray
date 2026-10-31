@@ -1088,6 +1088,7 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
         if (op->type != XR_XIR_I64 && op->type != XR_XIR_U32) return XR_XIR_BAD_TYPE;
         expected = XR_XIR_RUNE;
     }
+    if (op->op == XR_XIR_RUNE_IS_WHITESPACE) expected = XR_XIR_RUNE;
     if (op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_STRING_REPLACE) expected=XR_XIR_STRING;
     if (op->op == XR_XIR_INTEGER_TO_RUNE) expected = XR_XIR_I64;
     if (op->op == XR_XIR_TO_STRING) {
