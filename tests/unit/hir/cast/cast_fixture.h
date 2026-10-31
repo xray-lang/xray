@@ -38,7 +38,7 @@ static const char cast_source[] =
     "fn textOnce()->string{calls=calls+1;return text}\n"
     "print(textOnce() as string,string(textOnce()),\"${textOnce()}\",calls)\n"
     "fn interpolatedText(x:i64?)->string{return \"${x}\"}\n"
-    "print(interpolatedText(null),interpolatedText(9),\"${[1]}\")\n"
+    "print(interpolatedText(null),interpolatedText(9),\"${[1]}\",string([1]))\n"
     ;
 static const char cast_expected[] =
     "i8 -1 -1 -1 -1 255 65535 4294967295 18446744073709551615 -1.0 -1.0\n"
@@ -59,7 +59,7 @@ static const char cast_expected[] =
     "-42 5.75 -42 5.75\n"
     "7 7 7 7 4\n"
     "a\000\344\270\255 a\000\344\270\255 a\000\344\270\255 7\n"
-    "null 9 [1]\n"
+    "null 9 [1] [1]\n"
     ;
 typedef struct CastRefusal {const char *name,*source,*message;XrSourceStatus status;int line;} CastRefusal;
 static const CastRefusal cast_refusals[] = {
@@ -74,8 +74,7 @@ static const CastRefusal cast_refusals[] = {
     {"safe_string","var answer=unknown as string?\n","numeric cast requires a concrete nonnullable numeric target",XR_SOURCE_REJECTED,1},
     {"unknown_target","var answer=unknown as MissingType\n","name does not resolve to an admitted nominal type",XR_SOURCE_REJECTED,1},
     {"text_nullable","fn f(x:i64?)->string{return x as string}\n","value has no admitted string conversion",XR_SOURCE_REJECTED,1},
-    {"text_array","var answer=string([1])\n","value has no admitted string conversion",XR_SOURCE_REJECTED,1},
-    {"text_generic","fn f<T>(x:T)->string{return string(x)}\n","value has no admitted string conversion",XR_SOURCE_REJECTED,1},
+    {"text_generic","fn f<T>(x:T)->string{return string(x)}\n","value has no admitted builtin display",XR_SOURCE_REJECTED,1},
     {"string_empty","var answer=string()\n","expected expression",XR_SOURCE_INVALID,2},
     {"string_two","var answer=string(unknown,unknown)\n","expected ')' after type cast argument",XR_SOURCE_INVALID,1},
     {"string_type_argument","var answer=string<i64>(unknown)\n","expected '(' after type cast",XR_SOURCE_INVALID,1},

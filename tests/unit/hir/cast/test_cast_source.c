@@ -73,10 +73,15 @@ static void refusals(const char *stdlib) {
         XrSourceText text={NULL,"hir-cast-refusal",cast_refusals[i].source,strlen(cast_refusals[i].source)};
         XrSourceInput input={0};input.kind=XR_SOURCE_INPUT_TEXT;input.value.text=text;XrSourceArtifact *artifact=NULL;
         XrSourceDiagnostic *diagnostic=NULL;XrSourceFailure failure={0};
-        CHECK(xray_source_build(&input,&options,&artifact,&failure,&diagnostic)==cast_refusals[i].status && !artifact && diagnostic);
+        XrSourceStatus status=xray_source_build(&input,&options,&artifact,&failure,&diagnostic);
+        if(status!=cast_refusals[i].status || artifact || !diagnostic)
+            fprintf(stderr,"cast refusal %s: status=%d\n",cast_refusals[i].name,(int)status);
+        CHECK(status==cast_refusals[i].status && !artifact && diagnostic);
         memset(&options,0xa5,sizeof(options));XrSourceDiagnosticReportInfo report={0};XrSourceDiagnosticRoot root={0};
         CHECK(xray_source_diagnostic_report(diagnostic,&report)==XR_SOURCE_OK && report.roots==1);
         CHECK(xray_source_diagnostic_root(diagnostic,0,&root)==XR_SOURCE_OK && root.primary.line==cast_refusals[i].line);
+        if(!root.message || strcmp(root.message,cast_refusals[i].message))
+            fprintf(stderr,"cast refusal %s: message=%s\n",cast_refusals[i].name,root.message?root.message:"<missing>");
         CHECK(root.message && !strcmp(root.message,cast_refusals[i].message));
         xray_source_diagnostic_free(diagnostic);
     }
