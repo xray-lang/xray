@@ -184,6 +184,47 @@ static void installed_array_materialization(const char *stdlib) {
     CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
     xray_source_result_free(result);
 }
+static void installed_crypto_primitives(const char *stdlib) {
+    XrSourceCompileOptions compiler=compile_options(stdlib);
+    char source[]=
+        "import crypto\n"
+        "const random=try! crypto.randomBytes(16)\n"
+        "assert(len(random)==32)\n"
+        "assert(len(crypto.uuid())==36)\n"
+        "assert(crypto.timingSafeEqual(\"a\\0b\",\"a\\0b\"))\n"
+        "assert(!crypto.timingSafeEqual(\"a\\0b\",\"a\\0c\"))\n"
+        "assert(!crypto.timingSafeEqual(\"same\",\"short\"))\n"
+        "const a:Array<u8>=[0,1,255]\n"
+        "const b:Array<u8>=[0,1,255]\n"
+        "const c:Array<u8>=[0,2,255]\n"
+        "assert(crypto.timingSafeEqualBytes(a,b))\n"
+        "assert(!crypto.timingSafeEqualBytes(a,c))\n"
+        "var rejected=false\n"
+        "try {\n"
+        "    const invalid=try crypto.randomBytes(0)\n"
+        "    assert(false,invalid)\n"
+        "} catch(e:CryptoError) {\n"
+        "    rejected=true\n"
+        "}\n"
+        "assert(rejected)\n"
+        "print(42)\n";
+    XrSourceArtifact *artifact=compile(&compiler,source,__func__);
+    Output output={0};XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.write=capture;options.context=&output;
+    XrSourceCall *call=NULL;CHECK(begin_owned(artifact,&options,&call)==XR_SOURCE_OK && call);
+    xray_source_artifact_free(artifact);XrSourceEvent event={0};
+    for(size_t ticks=0;;++ticks) {
+        CHECK(ticks<10000 && xray_source_call_poll(call,1024,&event)==XR_SOURCE_OK);
+        if(event.state!=XR_SOURCE_RUN_READY)break;
+    }
+    CHECK(event.state==XR_SOURCE_RUN_RETURNED && output.length==3 && !memcmp(output.bytes,"42\n",3));
+    XrSourceResult *result=NULL;
+    CHECK(xray_source_call_take(call,&result)==XR_SOURCE_OK && result);
+    CHECK(xray_source_call_drop(&call,NULL)==XR_SOURCE_OK && !call);
+    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
+    xray_source_result_free(result);
+}
 static void detached_cancellation(const char *stdlib) {
     XrSourceCompileOptions compiler = compile_options(stdlib);
     char source[] = "var n:i64=0\nwhile(true){ n+=1 }\n";
@@ -1191,6 +1232,7 @@ int main(int argc, char **argv) {
     installed_rune_iteration(argv[1]);
     installed_view_class_defaults(argv[1]);
     installed_array_materialization(argv[1]);
+    installed_crypto_primitives(argv[1]);
     installed_nominal_projection(argv[1]);
     const char *source_path=__FILE__,*separator=strrchr(source_path,'/'),*windows_separator=strrchr(source_path,'\\');
     if(windows_separator && (!separator || windows_separator>separator))separator=windows_separator;
