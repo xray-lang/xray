@@ -1,4 +1,4 @@
-/* Complete explicit numeric and scalar text conversions with independent byte oracles. */
+/* Complete explicit numeric and admitted text conversions with independent byte oracles. */
 #ifndef HIR_CAST_FIXTURE_H
 #define HIR_CAST_FIXTURE_H
 #include "xray_source.h"
@@ -37,6 +37,9 @@ static const char cast_source[] =
     "print(once() as i8,once() as string,string(once()),\"${once()}\",calls)\n"
     "fn textOnce()->string{calls=calls+1;return text}\n"
     "print(textOnce() as string,string(textOnce()),\"${textOnce()}\",calls)\n"
+    "fn nullableText(x:i64?)->string{return x as string}\n"
+    "fn interpolatedText(x:i64?)->string{return \"${x}\"}\n"
+    "print(nullableText(null),nullableText(7),string([1]),interpolatedText(null),interpolatedText(9),\"${[1]}\")\n"
     ;
 static const char cast_expected[] =
     "i8 -1 -1 -1 -1 255 65535 4294967295 18446744073709551615 -1.0 -1.0\n"
@@ -57,6 +60,7 @@ static const char cast_expected[] =
     "-42 5.75 -42 5.75\n"
     "7 7 7 7 4\n"
     "a\000\344\270\255 a\000\344\270\255 a\000\344\270\255 7\n"
+    "null 7 [1] null 9 [1]\n"
     ;
 typedef struct CastRefusal {const char *name,*source,*message;XrSourceStatus status;int line;} CastRefusal;
 static const CastRefusal cast_refusals[] = {
@@ -70,11 +74,7 @@ static const CastRefusal cast_refusals[] = {
     {"safe_target","var answer=unknown as i64?\n","numeric cast requires a concrete nonnullable numeric target",XR_SOURCE_REJECTED,1},
     {"safe_string","var answer=unknown as string?\n","numeric cast requires a concrete nonnullable numeric target",XR_SOURCE_REJECTED,1},
     {"unknown_target","var answer=unknown as MissingType\n","name does not resolve to an admitted nominal type",XR_SOURCE_REJECTED,1},
-    {"text_nullable","fn f(x:i64?)->string{return x as string}\n","value has no admitted string conversion",XR_SOURCE_REJECTED,1},
-    {"text_array","var answer=string([1])\n","value has no admitted string conversion",XR_SOURCE_REJECTED,1},
     {"text_generic","fn f<T>(x:T)->string{return string(x)}\n","value has no admitted string conversion",XR_SOURCE_REJECTED,1},
-    {"interpolated_nullable","fn f(x:i64?)->string{return \"${x}\"}\n","interpolated value has no admitted string conversion",XR_SOURCE_REJECTED,1},
-    {"interpolated_array","var answer=\"${[1]}\"\n","interpolated value has no admitted string conversion",XR_SOURCE_REJECTED,1},
     {"string_empty","var answer=string()\n","expected expression",XR_SOURCE_INVALID,2},
     {"string_two","var answer=string(unknown,unknown)\n","expected ')' after type cast argument",XR_SOURCE_INVALID,1},
     {"string_type_argument","var answer=string<i64>(unknown)\n","expected '(' after type cast",XR_SOURCE_INVALID,1},
