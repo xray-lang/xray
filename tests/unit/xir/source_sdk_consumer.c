@@ -87,6 +87,8 @@ static void installed_rune_iteration(const char *stdlib) {
         "assert(rune(12288)!.isWhitespace())\nassert(!rune(133)!.isWhitespace())\n"
         "var original=[1,2]\nvar saved=copy original\n"
         "original[0]=9\nassert(saved[0]==1)\n"
+        "var [bound_first,bound_second]=saved\n"
+        "assert(bound_first==1 && bound_second==2)\n"
         "assert(\"${saved}\"==\"[1, 2]\")\n"
         "const shown_tuple=(2,\"ok\")\nassert(\"${shown_tuple}\"==\"(2, \\\"ok\\\")\")\n"
         "const shown_map=#{\"key\":7}\nassert(\"${shown_map}\"==\"#{\\\"key\\\": 7}\")\n"
