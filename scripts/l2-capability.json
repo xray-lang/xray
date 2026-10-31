@@ -55,7 +55,8 @@
         "sdk_installed_native_msvc",
         "xir_checked_previous111",
         "xir_checked_previous112",
-        "xir_checked_previous113"
+        "xir_checked_previous113",
+        "xir_checked_previous114"
       ],
       "targets": [
         "test_xir_cleanup_replaced_sdk_reader",

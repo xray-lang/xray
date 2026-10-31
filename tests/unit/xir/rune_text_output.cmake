@@ -91,3 +91,7 @@ endif()
 add_test(NAME xir_checked_previous113 COMMAND test_xir_rune_whitespace --previous113
     ${PROJECT_SOURCE_DIR}/tests/fixtures/xir_rune_whitespace/previous113-json-float.chk)
 set_tests_properties(xir_checked_previous113 PROPERTIES TIMEOUT 60 LABELS "unit;xir;checked;identity;sdk")
+
+add_test(NAME xir_checked_previous114 COMMAND test_xir_rune_whitespace --previous114
+    ${PROJECT_SOURCE_DIR}/tests/fixtures/xir_rune_whitespace/previous114-json-float.chk)
+set_tests_properties(xir_checked_previous114 PROPERTIES TIMEOUT 60 LABELS "unit;xir;checked;identity;sdk")
