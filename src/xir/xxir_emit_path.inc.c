@@ -67,7 +67,7 @@ static void emit_path_step(CBuffer *buffer, const XrXirFunction *function,
         "            status = xr_xir_instance_path_%s_at(view, %uu, &receiver, &path, &value, &fault);\n"
         "        if (status != XR_XIR_CALL_READY) ", operation, index);
     emit_fault_return(buffer, function, layout, index,
-        "(XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {fault, {0}}, 0}");
+        "(XrXirAction) {.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status},.panic={.detail=fault}}");
     append(buffer, "\n");
     if (xr_xir_type_is_owned(buffer->types, op->type))
         append(buffer, "        xr_xir_owned_slot_move(state->frame, %uu, &value);\n", destination);
