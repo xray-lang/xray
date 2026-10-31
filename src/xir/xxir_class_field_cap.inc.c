@@ -12,7 +12,8 @@
 typedef struct ClassFieldFrame { uint32_t index, next, count; bool declaration; } ClassFieldFrame;
 static XrXirStatus class_field_leaf(const XrXirTypes *types, XrXirType type, bool *leaf) {
     *leaf=true;
-    if (type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_number(type) || type==XR_XIR_STRING) return XR_XIR_OK;
+    if (type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_number(type) || type==XR_XIR_STRING ||
+        type==XR_XIR_BUFFER_STORAGE) return XR_XIR_OK;
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     if (!node || node->parameter_span) return XR_XIR_BAD_TYPE;
     /* The canonical Atomic carrier is an owned identity leaf; field storage

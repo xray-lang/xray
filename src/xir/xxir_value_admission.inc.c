@@ -275,6 +275,9 @@ static XrXirValueStatus value_admit_summary_mode(const XrXirValue *value, XrXirT
                         if (status != XR_XIR_VALUE_OK) break;
                     } else if (object->kind == XR_XIR_TYPE_ATOMIC) {
                         /* Atomic cells have scalar payloads and no graph children. */
+                    } else if (object->kind == XIR_OBJECT_BUFFER_STORAGE && object->type == XR_XIR_BUFFER_STORAGE) {
+                        /* The exact payload header was admitted above. This same-domain
+                         * managed leaf owns its bytes and has no traversable children. */
                     } else if (object->kind == XIR_OBJECT_CELL) {
                         const XirCell *cell = (const XirCell *)object;
                         type = cell->projection_count ? (XrXirType)cell->value.type :

@@ -157,3 +157,6 @@ set_tests_properties(xir_buffer_storage_native xir_buffer_storage_fault PROPERTI
 add_test(NAME xir_buffer_storage_previous COMMAND test_xir_buffer_storage --previous
     "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_buffer_storage/source-schema39-contract108.xrc")
 set_tests_properties(xir_buffer_storage_previous PROPERTIES LABELS "unit;xir;identity" TIMEOUT 60)
+add_test(NAME xir_buffer_storage_previous109 COMMAND test_xir_buffer_storage --previous109
+    "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_buffer_storage/source-schema39-contract109.xrc")
+set_tests_properties(xir_buffer_storage_previous109 PROPERTIES LABELS "unit;xir;identity" TIMEOUT 60)

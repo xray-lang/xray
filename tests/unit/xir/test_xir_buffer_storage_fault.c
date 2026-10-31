@@ -42,7 +42,54 @@ XR_FUNC XrXirValueStatus xr_xir_buffer_storage_new(XrXirDomain *domain,int64_t b
     ++buffer_probe_constructors;return buffer_probe_new(domain,bytes,alignment,zeroed,output);
 }
 #include "xir/xxir_program.h"
+#include "xir/xxir_program_internal.h"
 extern const XrXirProgramSpec buffer_storage_program;
+static void class_storage_failures(XrXirProgram *program) {
+    size_t initial=buffer_probe_physical;
+    XrXirDomain *home=NULL,*foreign=NULL;
+    CHECK(xr_xir_domain_new(1048576,&home)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_domain_new(1048576,&foreign)==XR_XIR_VALUE_OK);
+    XrXirValue fields[2]={{0}},replacement={0},outsider={0},text={0},box={0};
+    CHECK(xr_xir_buffer_storage_new(home,13,0,true,&fields[0])==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_buffer_storage_new(home,17,0,true,&fields[1])==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_buffer_storage_new(home,27,0,true,&replacement)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_buffer_storage_new(foreign,31,0,true,&outsider)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(home,"wrong",5,&text)==XR_XIR_VALUE_OK);
+    XrXirValueAdmission admission={.arena=program->arena,.domain=home,.work=UINT64_MAX,.scratch_bytes=1048576};
+    size_t physical_frame=buffer_probe_physical;uint64_t ledger_frame=xr_xir_domain_stats(home).live_bytes;
+    buffer_probe_active=true;buffer_probe_attempts=0;buffer_probe_fail_at=0;
+    CHECK(xr_xir_class_new((XrXirType)256,fields,2,&admission,&box)==XR_XIR_VALUE_OOM);
+    buffer_probe_active=false;
+    CHECK(buffer_probe_attempts==1 && !box.type && !box.payload && buffer_probe_physical==physical_frame);
+    CHECK(xr_xir_domain_stats(home).live_bytes==ledger_frame);
+    XirObject *first=object_pointer(&fields[0]),*second=object_pointer(&fields[1]);
+    /* The real second retain fails after the first initialized field owns a copy. */
+    atomic_store(&second->references,UINT32_MAX);
+    CHECK(xr_xir_class_new((XrXirType)256,fields,2,&admission,&box)==XR_XIR_VALUE_REFCOUNT_LIMIT);
+    atomic_store(&second->references,1);
+    CHECK(!box.type && !box.payload && atomic_load(&first->references)==1);
+    CHECK(buffer_probe_physical==physical_frame && xr_xir_domain_stats(home).live_bytes==ledger_frame);
+    XrXirValue cross[]={fields[0],outsider};
+    CHECK(xr_xir_class_new((XrXirType)256,cross,2,&admission,&box)==XR_XIR_VALUE_BAD_ARGUMENT && !box.type);
+    CHECK(buffer_probe_physical==physical_frame && xr_xir_domain_stats(home).live_bytes==ledger_frame);
+    CHECK(xr_xir_class_new((XrXirType)256,fields,2,&admission,&box)==XR_XIR_VALUE_OK);
+    CHECK(atomic_load(&first->references)==2 && atomic_load(&second->references)==2);
+    CHECK(xr_xir_class_set(&box,0,&replacement,&admission)==XR_XIR_VALUE_OK);
+    CHECK(atomic_load(&first->references)==1 && atomic_load(&object_pointer(&replacement)->references)==2);
+    physical_frame=buffer_probe_physical;ledger_frame=xr_xir_domain_stats(home).live_bytes;
+    CHECK(xr_xir_class_set(&box,0,&outsider,&admission)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xr_xir_class_set(&box,0,&text,&admission)==XR_XIR_VALUE_BAD_ARGUMENT);
+    XrXirValue forged=text;forged.type=XR_XIR_BUFFER_STORAGE;
+    CHECK(xr_xir_class_set(&box,0,&forged,&admission)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(buffer_probe_physical==physical_frame && xr_xir_domain_stats(home).live_bytes==ledger_frame);
+    XrXirValue received={0};CHECK(xr_xir_class_get(&box,0,&admission,&received)==XR_XIR_VALUE_OK);
+    int64_t length=0;CHECK(xr_xir_buffer_storage_length(&received,&length)==XR_XIR_VALUE_OK && length==27);
+    xr_xir_value_drop(&fields[0]);xr_xir_value_drop(&fields[1]);xr_xir_value_drop(&replacement);
+    xr_xir_value_drop(&outsider);xr_xir_value_drop(&text);xr_xir_domain_drop(foreign);
+    xr_xir_domain_drop(home);xr_xir_value_drop(&box);
+    CHECK(xr_xir_buffer_storage_length(&received,&length)==XR_XIR_VALUE_OK && length==27);
+    xr_xir_value_drop(&received);CHECK(buffer_probe_physical==initial);
+}
 int main(void) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK && buffer_probe_physical==1);
     uint64_t held_frame=xr_xir_domain_stats(domain).live_bytes;
@@ -68,6 +115,7 @@ int main(void) {
         CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_BAD_STATE);
         CHECK(buffer_probe_constructors==constructors && buffer_probe_physical==frame);
     }
+    class_storage_failures(program);
     xr_xir_compile_program_drop(program);xr_compile_resources_release(context.resources);CHECK(!buffer_probe_physical);
     puts("Actual byte storage OOM/recovery and aligned0 native rejection before allocation PASS");return 0;
 }
