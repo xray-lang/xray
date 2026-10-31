@@ -10,6 +10,7 @@
 #include "xir/xxir_array.h"
 #include "xir/xxir_buffer_storage.h"
 #include "xir/xxir_type_arena.h"
+#include "xir/xxir_types.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
