@@ -41,7 +41,7 @@ def main():
             run([args.binary, 'build', source, '-c', '-o', generated])
             assert b'({' not in generated.read_bytes()
             native = directory/(name+'.exe')
-            run([args.binary, 'build', source, '--toolchain', 'msvc', '-o', native])
+            run([args.binary, 'build', source, '-o', native])
             run([native], golden)
     print('Whole original metadata programs: CLI check/VM/C/MSVC and exact goldens PASS')
 
