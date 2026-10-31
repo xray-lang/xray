@@ -1429,7 +1429,8 @@ static bool view_cell_access_scope_needed(const XrXirModule *module) {
         const XrXirFunction *body=module->functions+f;
         for (uint32_t i=0;i<body->instruction_count;++i) {
             const XrXirInstruction *op=body->instructions+i;
-            if (op->op==XR_XIR_CALL && xr_xir_type_is_class(module->types,op->type)) return true;
+            if ((op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE) &&
+                xr_xir_type_is_class(module->types,op->type)) return true;
         }
     }
     return false;

@@ -280,5 +280,5 @@ export fn utf16Decode(data: Slice<u8>, options: Utf16DecodeOptions = Utf16Decode
     var out = Array<u8>(outLen)
     var oi = 0
     for (var k = 0; k < len(cps); k++) { oi = putUtf8(ref out, oi, cps[k]) }
-    return string.fromUtf8(out[:])!
+    return try! string.fromUtf8(out[:])
 }

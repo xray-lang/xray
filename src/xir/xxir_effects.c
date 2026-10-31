@@ -1043,7 +1043,7 @@ XR_FUNC XrXirStatus xir_effects_class_call_access_site(XirEffectDefaultAccessSco
     query.body=effect_body_owned_request(&query.work,scope->graph.material);
     if (status==XR_XIR_OK) status=effect_body_request_instruction(&query.body,caller,instruction,&query.storage,&query.operation);
     const XrXirInstruction *op=query.operation;
-    if (status==XR_XIR_OK && op->op!=XR_XIR_CALL) status=XR_XIR_UNRESOLVED;
+    if (status==XR_XIR_OK && op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE) status=XR_XIR_UNRESOLVED;
     if (status==XR_XIR_OK && (op->type!=result || !xr_xir_type_is_class(query.body.domain.types,result))) status=XR_XIR_BAD_TYPE;
     if (status==XR_XIR_OK) {
         if (op->immediate<0 || (uint64_t)op->immediate>=effect_body_count(scope->graph.material)) status=XR_XIR_BAD_STRUCTURE;
@@ -1062,7 +1062,9 @@ XR_FUNC XrXirStatus xir_effects_class_call_access_site(XirEffectDefaultAccessSco
         const XrXirDeclarations *d=module->declarations;
         if (!d || !d->functions || !d->modules || d->functions[caller].module>=d->module_count ||
             d->functions[query.callee].module>=d->module_count) status=XR_XIR_BAD_STRUCTURE;
-        else if (d->functions[caller].module!=d->functions[query.callee].module) {
+        /* A throwing selector admits only the exact projected Source default,
+         * including when its helper belongs to the caller's own module. */
+        else if (op->op==XR_XIR_INVOKE || d->functions[caller].module!=d->functions[query.callee].module) {
             bool declared_default=false;
             if (xir_effect_evidence_is_instance(module))
                 status=xir_compile_default_call_origin(&query.work,module,caller,instruction,

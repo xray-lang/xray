@@ -192,11 +192,11 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
                 if (view_access_scalar_storage(scalar)) return XR_XIR_OK;
                 const XrXirTypeNode *array=xr_xir_type_node(types,scalar);
                 /* Publishing an owned Cell handle does not read its referent.
-                 * String and scalar Array storage have no borrowed descendants. */
-                bool storage=scalar==XR_XIR_STRING || (array && array->kind==XR_XIR_TYPE_ARRAY &&
+                 * String, Class and scalar Array storage retain the same borrowed-descendant check. */
+                bool storage=scalar==XR_XIR_STRING || xr_xir_type_is_class(types,scalar) || (array && array->kind==XR_XIR_TYPE_ARRAY &&
                     view_access_scalar_storage(array->element));
                 if (storage && !view_flags_at(types,flags,payload) &&
-                    !view_flags_at(types,flags,scalar==XR_XIR_STRING?XR_XIR_STRING:array->element) &&
+                    !view_flags_at(types,flags,array && array->kind==XR_XIR_TYPE_ARRAY?array->element:scalar) &&
                     a->cells && a->cells->owner &&
                     xr_xir_cell_provenance_origin(a->cells->owner,a->function,op->args[0])==
                         (XR_XIR_CELL_ORIGIN_OWNED|XR_XIR_CELL_ORIGIN_MODULE)) return XR_XIR_OK;
