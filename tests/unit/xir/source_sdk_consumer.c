@@ -148,6 +148,42 @@ static void installed_view_class_defaults(const char *stdlib) {
     CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
     xray_source_result_free(result);
 }
+static void installed_array_materialization(const char *stdlib) {
+    XrSourceCompileOptions compiler=compile_options(stdlib);
+    char source[]=
+        "var original:Array<i64>=[5,1,4,2]\n"
+        "var saved=original\n"
+        "var middle=copy original[1:3]\n"
+        "assert(len(middle)==2 && middle[0]==1 && middle[1]==4)\n"
+        "original[1]=9\n"
+        "middle[0]=7\n"
+        "assert(saved[1]==1 && original[1]==9 && middle[0]==7)\n"
+        "var sorted=original.sort()\n"
+        "assert(len(sorted)==4 && sorted[0]==2 && sorted[1]==4 && sorted[2]==5 && sorted[3]==9)\n"
+        "assert(original[0]==2 && original[3]==9 && saved[0]==5 && saved[1]==1)\n"
+        "var last=original.pop()\n"
+        "assert(last!=null)\n"
+        "assert(\"${last}\"==\"9\")\n"
+        "var strings:Array<string>=[\"x\",\"y\"]\n"
+        "assert(len(strings)==2)\n"
+        "print(42)\n";
+    XrSourceArtifact *artifact=compile(&compiler,source,__func__);
+    Output output={0};XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.write=capture;options.context=&output;
+    XrSourceCall *call=NULL;CHECK(begin_owned(artifact,&options,&call)==XR_SOURCE_OK && call);
+    xray_source_artifact_free(artifact);XrSourceEvent event={0};
+    for(size_t ticks=0;;++ticks) {
+        CHECK(ticks<10000 && xray_source_call_poll(call,1024,&event)==XR_SOURCE_OK);
+        if(event.state!=XR_SOURCE_RUN_READY)break;
+    }
+    CHECK(event.state==XR_SOURCE_RUN_RETURNED && output.length==3 && !memcmp(output.bytes,"42\n",3));
+    XrSourceResult *result=NULL;
+    CHECK(xray_source_call_take(call,&result)==XR_SOURCE_OK && result);
+    CHECK(xray_source_call_drop(&call,NULL)==XR_SOURCE_OK && !call);
+    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
+    xray_source_result_free(result);
+}
 static void detached_cancellation(const char *stdlib) {
     XrSourceCompileOptions compiler = compile_options(stdlib);
     char source[] = "var n:i64=0\nwhile(true){ n+=1 }\n";
@@ -1154,6 +1190,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 2); installed_error_union(argv[1]); installed_error_union_300(argv[1]); installed_report(argv[1]); installed_parameter_report(argv[1]); installed_method_parameter_report(argv[1]); installed_interface_parameter_report(argv[1]); installed_interface_member_report(argv[1]); installed_nominal_method_report(argv[1]); installed_closure_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
     installed_rune_iteration(argv[1]);
     installed_view_class_defaults(argv[1]);
+    installed_array_materialization(argv[1]);
     installed_nominal_projection(argv[1]);
     const char *source_path=__FILE__,*separator=strrchr(source_path,'/'),*windows_separator=strrchr(source_path,'\\');
     if(windows_separator && (!separator || windows_separator>separator))separator=windows_separator;
