@@ -1,0 +1,9 @@
+count = 1
+PI = 3.14159
+Alice, age 25, height 1.75, active: true
+maybe = null
+maybe = 42
+value = 42
+17 / 5 = 3 remainder 2
+a=10, b=20, c=30
+Bob, score 99

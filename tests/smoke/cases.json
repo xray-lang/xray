@@ -73,13 +73,9 @@
       "id": "demos/01-basics/variables.xr",
       "path": "demos/01-basics/variables.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F15",
-        "first_diagnostic": "demos/01-basics/variables.xr:46:1: error: product binding and initializer required"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/variables.txt"
     },
     {
       "id": "demos/02-collections/arrays.xr",
@@ -772,6 +768,14 @@
       "expect": "pass",
       "exit_code": 0,
       "stdout": "tests/smoke/expected/maps_and_sets.txt"
+    },
+    {
+      "id": "native:demos/01-basics/variables.xr",
+      "path": "demos/01-basics/variables.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/variables.txt"
     }
   ]
 }
