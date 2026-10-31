@@ -529,7 +529,9 @@ static void scalar_slot_owned_publications(const XrXirCompileContext *context) {
         "var scalar:string=\"abc\"\n" SCALAR_SLOT_VIEW_LOOP "export fn storage_receiver()->i64{return 1}",
         "var scalar:Array<u8>=[1]\n" SCALAR_SLOT_VIEW_LOOP "export fn storage_receiver()->i64{return 1}",
         DEFAULT_CLASS_OPTIONS "var scalar:Options=Options()\n" SCALAR_SLOT_VIEW_LOOP
-            "export fn storage_receiver()->i64{return scalar.value-6}"
+            "export fn storage_receiver()->i64{return scalar.value-6}",
+        DEFAULT_CLASS_OPTIONS "var scalar:Options=Options()\n" SCALAR_SLOT_VIEW_LOOP
+            "assert(scalar.value==7)\nexport fn storage_receiver()->i64{return scalar.value-6}"
     };
     for(uint32_t k=0;k<sizeof(sources)/sizeof(sources[0]);++k) {
         XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};

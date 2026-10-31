@@ -244,7 +244,15 @@ static XrXirStatus source_view_checked_copy(void *owner,const XrXirModule *modul
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return ctx->diagnostic.status;
     const SourceFunction *body=ctx->bodies+function;
     if (!body->checked_library) return XR_XIR_OK;
-    if (body->module>=(uint32_t)ctx->graph->spec_count) return XR_XIR_BAD_STRUCTURE;
+    const XrXirDeclarations *declarations=module->declarations;
+    if (!ctx->graph || !declarations || declarations->functions!=ctx->identities ||
+        declarations->modules!=ctx->modules || declarations->module_count!=ctx->module_count ||
+        body->module>=declarations->module_count || declarations->functions[function].module!=body->module ||
+        body->node || body->recipes || body->parameters!=module->functions[function].parameters)
+        return XR_XIR_BAD_STRUCTURE;
+    /* Installed core bodies are current owned copies outside the module graph.
+     * They undergo ordinary normalization and claim no preserved artifact. */
+    if (body->module>=(uint32_t)ctx->graph->spec_count) return XR_XIR_OK;
     const XrModuleSpec *spec=ctx->graph->specs+body->module;
     if (spec->representation!=XR_MODULE_CHECKED_LIBRARY) return XR_XIR_OK;
     const XrXirArtifact *artifact=source_owned_artifact(spec);
