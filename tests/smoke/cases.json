@@ -65,8 +65,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F14",
-        "first_diagnostic": "demos/01-basics/tuples.xr:12:1: error: print requires an admitted display type"
+        "feature": "F15",
+        "first_diagnostic": "demos/01-basics/tuples.xr:43:1: error: destructuring assignment syntax is not yet supported by the compiler"
       }
     },
     {
@@ -89,8 +89,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F14",
-        "first_diagnostic": "demos/02-collections/arrays.xr:9:1: error: interpolated value has no admitted string conversion"
+        "feature": "F20",
+        "first_diagnostic": "demos/02-collections/arrays.xr:25:13: error: name is not an initialized value"
       }
     },
     {
@@ -109,13 +109,9 @@
       "id": "demos/02-collections/maps_and_sets.xr",
       "path": "demos/02-collections/maps_and_sets.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F14",
-        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:8:1: error: interpolated value has no admitted string conversion"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/maps_and_sets.txt"
     },
     {
       "id": "demos/03-oop/classes.xr",
@@ -768,6 +764,14 @@
       "expect": "pass",
       "exit_code": 0,
       "stdout": "tests/smoke/expected/one.txt"
+    },
+    {
+      "id": "native:demos/02-collections/maps_and_sets.xr",
+      "path": "demos/02-collections/maps_and_sets.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/maps_and_sets.txt"
     }
   ]
 }
