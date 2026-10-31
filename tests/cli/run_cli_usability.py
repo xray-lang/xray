@@ -105,6 +105,8 @@ def main() -> int:
         ('fixed-array', 'var value:[i64;2]=[1,2]\n', 11, 'fixed array type syntax'),
         ('variadic', 'fn sum(...values:i64)->i64{return 0}\n', 4, 'variadic parameter syntax'),
         ('unit-parameter', 'fn consume(value:())->i64{return 41}\n', 4, 'this parameter declaration syntax'),
+        ('target-scalar', 'var value:usize=0\n', 5, 'usize type'),
+        ('target-array', 'var value=Array<usize>()\n', 5, 'usize type'),
     )
     for name, text, column, feature in unsupported:
         source = work / (name + '.xr')

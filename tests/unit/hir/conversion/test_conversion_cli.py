@@ -68,7 +68,7 @@ def main():
                 for path in (source, generated, native):
                     (evidence/path.name).write_bytes(path.read_bytes())
         run('original-conversion-refused', [binary, 'check', root/'tests/compile_errors/type/133_implicit_numeric_conversion_rejected.xr'],
-            refusal='this scalar type is not yet supported by the compiler')
+            refusal='usize type is not yet supported by the compiler')
         for name, text, reason in (
                 ('Error-proof', 'const value:Error=42\n', 'Error conversion requires an enum proof'),
                 ('narrowing-refused', 'fn narrow(value:i64)->i8{return value}\n', 'expression cannot satisfy its declared type'),

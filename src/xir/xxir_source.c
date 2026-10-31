@@ -738,8 +738,10 @@ static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     if (!valid && ctx->diagnostic.status != XR_XIR_OK && !ctx->diagnostic.line) {
         /* Shared primitive references carry no position; the owning declaration is the nearest one. */
         const AstNode *owner = ctx->type_scope.active ? ctx->type_scope.node : ctx->bodies[ctx->function].node;
-        int line = ref && ref->line ? ref->line : owner ? owner->line : 0;
-        int column = ref && ref->line ? ref->column : owner ? owner->column : 0;
+        const XrXirSourceRange *site = &ctx->debug_point.range;
+        bool current_site = ctx->debug_function == ctx->function && site->module == ctx->module;
+        int line = ref && ref->line ? ref->line : owner ? owner->line : current_site ? site->line : 0;
+        int column = ref && ref->line ? ref->column : owner ? owner->column : current_site ? site->column : 0;
         if (line) {
             ctx->diagnostic.module = ctx->module;
             ctx->diagnostic.line = line;
@@ -820,6 +822,8 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
     default: break;
     }
     const char *feature = ref->kind == XR_TREF_FIXED_ARRAY ? "fixed array type syntax" :
+        ref->kind == XR_TREF_SCALAR && ref->scalar_rep == XR_NATIVE_ISIZE ? "isize type" :
+        ref->kind == XR_TREF_SCALAR && ref->scalar_rep == XR_NATIVE_USIZE ? "usize type" :
         ref->kind == XR_TREF_SCALAR ? "this scalar type" : "this type syntax";
     return source_fail_feature(ctx, NULL, XR_XIR_BAD_TYPE, feature);
 }
