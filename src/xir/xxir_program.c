@@ -49,7 +49,7 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
 
         if (spec->types->nodes[t].parameter_span) return XR_XIR_BAD_TYPE;
         const XrXirTypeNode *node=spec->types->nodes+t;
-        if (node->kind==XR_XIR_TYPE_MUT_SLICE || (node->kind==XR_XIR_TYPE_SLICE && node->element!=XR_XIR_U8))
+        if (node->kind==XR_XIR_TYPE_MUT_SLICE || (node->kind==XR_XIR_TYPE_SLICE && node->element!=XR_XIR_U8 && node->element!=XR_XIR_I64))
             return XR_XIR_BAD_TYPE;
     }
     status = xr_xir_compile_declarations_verify(context, spec->declarations, spec->types,

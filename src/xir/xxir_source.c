@@ -1168,8 +1168,12 @@ typedef enum SourceArrayRecipe {
     SOURCE_ARRAY_FIND, SOURCE_ARRAY_FIND_INDEX, SOURCE_ARRAY_EVERY, SOURCE_ARRAY_SOME,
     SOURCE_ARRAY_CONTAINS, SOURCE_ARRAY_INDEX_OF, SOURCE_ARRAY_JOIN, SOURCE_ARRAY_CLEAR,
     SOURCE_ARRAY_REVERSE, SOURCE_ARRAY_UNSHIFT, SOURCE_ARRAY_POP, SOURCE_ARRAY_SHIFT, SOURCE_ARRAY_RESIZE,
-    SOURCE_ARRAY_ENTRIES, SOURCE_ARRAY_FILL, SOURCE_ARRAY_CONCAT
+    SOURCE_ARRAY_ENTRIES, SOURCE_ARRAY_FILL, SOURCE_ARRAY_CONCAT, SOURCE_ARRAY_SORT
 } SourceArrayRecipe;
+/* A guarded recipe region rejoins the actual current CFG. */
+typedef struct SourceGuard { uint32_t branch, jump; bool jumped, when_false; } SourceGuard;
+static bool source_guard_open(SourceContext *ctx,SourceValue condition,bool when_false,SourceGuard *guard);
+static bool source_guard_close(SourceContext *ctx,SourceGuard *guard);
 static SourceArrayRecipe source_array_recipe(XrNativeOperation operation);
 static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
     const SourceValue *evaluated, SourceValue *value);

@@ -227,6 +227,7 @@ def array_recipe_contracts(binder):
         'ARRAY_JOIN': ('join', 'READ', '(separator?: string) -> string', ordinary, 'owned'),
         'ARRAY_CLEAR': ('clear', 'REF', '()', ordinary, 'unit'),
         'ARRAY_REVERSE': ('reverse', 'REF', f'() -> Array<{binder}>', ordinary, 'owned'),
+        'ARRAY_SORT': ('sort', 'REF', f'(compareFn?: fn(a: {binder}, b: {binder}) -> i64) -> Array<{binder}>', ordinary, 'owned'),
         'ARRAY_UNSHIFT': ('unshift', 'REF', f'(value: {binder})', ordinary, 'unit'),
         'ARRAY_POP': ('pop', 'REF', f'() -> {binder}?', ordinary, 'owned'),
         'ARRAY_SHIFT': ('shift', 'REF', f'() -> {binder}?', ordinary, 'owned'),

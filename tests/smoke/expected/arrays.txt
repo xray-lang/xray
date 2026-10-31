@@ -1,0 +1,21 @@
+nums: [1, 2, 3, 4, 5]
+empty: []
+first: 1, last: 5
+after push(6) + pop(): [1, 2, 3, 4, 5], popped: 6
+after unshift(0) + shift(): [1, 2, 3, 4, 5], shifted: 0
+nums[1:4] = [2, 3, 4]
+nums[:3]  = [1, 2, 3]
+nums[3:]  = [4, 5]
+indexOf(3) = 2
+includes(5) = true
+hello, world
+sorted: [1, 2, 3, 5, 8, 9]
+reversed: [9, 8, 5, 3, 2, 1]
+evens: [2, 4, 6, 8, 10]
+doubled: [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+sum: 55
+even squares: [4, 16, 36, 64, 100]
+first > 5: 6
+all positive: true
+has > 8: true
+filled: [7, 7, 7, 7, 7]

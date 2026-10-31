@@ -375,7 +375,7 @@ fn main() {
     var writable: MutSlice<i64> = arr[1:3]
     writable[1] = 31                       // writable 的最后一次使用
     print(arr[2])                          // 31
-    var owned: Array<i64> = copy(arr[1:3]) // 物化拥有式副本
+    var owned: Array<i64> = copy arr[1:3] // 物化拥有式副本
     arr.push(50)                           // 没有存活借用
     print(len(owned))                      // 2
 }
@@ -421,7 +421,7 @@ fn rejected(a: Slice<u8>, b: Slice<u8>) -> Slice<u8> {
 
 ##### 物化拥有式副本
 
-`copy(view)` 将借用数据物化为 `Array<T>`，其元素遵循 §2.14 的逻辑复制与身份边界；class 元素仍引用同一个对象。结果不再借用原 owner。此用途不裁决 `copy(array)` 的公开拼写，也不使其成为普通 Array 赋值的前置条件。
+`copy view` 将借用数据物化为 `Array<T>`，其元素遵循 §2.14 的逻辑复制与身份边界；class 元素仍引用同一个对象。结果不再借用原 owner。`copy` 是前缀表达式，不是函数调用；对稳定 Array 位置的范围投影可直接物化。物化先取得独立数据，再结束临时借用，不使显式复制成为普通 Array 赋值的前置条件。
 
 `ref` 参数和 `Ptr<T>` / `MutPtr<T>` 同样必须满足来源、权限、存活与不逃逸要求。相关诊断为 `E0382`（存活借用冲突）、`E0383`（借用逃逸）、`E0384`（来源不稳定或不唯一）；`unsafe` 不放宽这些要求。
 
@@ -1057,7 +1057,7 @@ print(len(a))               // 4
 
 不可复制资源的消费转移持有权和最终析构责任，调用是否消费由声明的参数或 receiver 模式决定。对这类转移，`move x` 是可选的显式标记；源绑定成功消费后不可再用，未被所有路径重新初始化的循环再次消费也必须拒绝。只读与 `ref` 借用不消费持有权。被拒绝的操作不能把有效源状态错误地标为已消费。
 
-可复制类型（包括 Array）不能声明 `move` 参数或 receiver。通用 type-position `const T` 已删除，不产生类型身份或转换。可复制值是否另行允许独立的 `move x` 表达式、普通值 `copy(array)` 是否保留公开拼写，仍须在准入前单独确定。这些待定表面不阻塞普通 Array 复制；不得继承旧唯一根、堆逃逸终态或整个图深冻结规则作为默认答案。
+可复制类型（包括 Array）不能声明 `move` 参数或 receiver。通用 type-position `const T` 已删除，不产生类型身份或转换。独立的 `copy array` 使用前缀表达式拼写；可复制值是否另行允许独立的 `move x` 表达式，仍须在准入前单独确定。这些待定表面不阻塞普通 Array 复制；不得继承旧唯一根、堆逃逸终态或整个图深冻结规则作为默认答案。
 
 #### 2.14.6 struct 字段的复制与初始化
 
@@ -1502,7 +1502,7 @@ fn main() {
     var writable: MutSlice<i64> = arr[1:3]
     writable[1] = 31                       // last use of writable
     print(arr[2])                          // 31
-    var owned: Array<i64> = copy(arr[1:3]) // materialize an owned copy
+    var owned: Array<i64> = copy arr[1:3] // materialize an owned copy
     arr.push(50)                           // no live borrow
     print(len(owned))                      // 2
 }
@@ -1548,7 +1548,7 @@ fn rejected(a: Slice<u8>, b: Slice<u8>) -> Slice<u8> {
 
 ##### Materializing an owned copy
 
-`copy(view)` materializes borrowed data as an `Array<T>` whose elements follow the logical-copy and identity-boundary rules in §2.14. Class elements still reference the same objects. The result no longer borrows the original owner. This use does not decide the public `copy(array)` spelling and does not make it a prerequisite for ordinary Array assignment.
+`copy view` materializes borrowed data as an `Array<T>` whose elements follow the logical-copy and identity-boundary rules in §2.14. Class elements still reference the same objects. The result no longer borrows the original owner. `copy` is a prefix expression, not a function call. A range projection of a stable Array position can materialize directly. Materialization owns the result before ending its temporary loan and is not a prerequisite for ordinary Array assignment.
 
 `ref` parameters and `Ptr<T>` / `MutPtr<T>` must also satisfy source, permission, lifetime, and non-escape requirements. The relevant diagnostics are `E0382` (live-borrow conflict), `E0383` (borrow escape), and `E0384` (unstable or non-unique source). `unsafe` relaxes none of them.
 
@@ -2200,7 +2200,7 @@ Ordinary closures capture outer `var` bindings through shared cells; `const` and
 
 Consumption of a noncopyable resource transfers ownership and final destruction responsibility. Whether a call consumes is determined by the declared parameter or receiver mode; `move x` optionally marks such a transfer explicitly. Successful consumption makes the source binding unusable. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` borrows do not consume ownership. A rejected operation must not incorrectly mark a valid source as consumed.
 
-Copyable types, including Array, cannot declare `move` parameters or receivers. The general type-position `const T` form is removed and creates no type identity or conversion. Whether a standalone `move x` expression is allowed for copyable values and whether ordinary `copy(array)` retains a public spelling still require separate decisions before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
+Copyable types, including Array, cannot declare `move` parameters or receivers. The general type-position `const T` form is removed and creates no type identity or conversion. Ordinary `copy array` uses prefix-expression syntax. Whether a standalone `move x` expression is allowed for copyable values still requires a separate decision before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
 
 #### 2.14.6 Struct-field copying and initialization
 

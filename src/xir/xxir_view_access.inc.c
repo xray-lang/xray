@@ -169,6 +169,47 @@ static XrXirStatus view_access_binding(ViewAccess *a,const XrXirInstruction *op,
     }
     return XR_XIR_OK;
 }
+/* Only complete data edges are transparent here. Behavior and foreign handles
+ * may hide captures; zero view flags never classify those payloads as plain. */
+static bool view_access_plain_at(const uint8_t *plain,uint32_t before,XrXirType type) {
+    if (type==XR_XIR_UNIT || type==XR_XIR_BOOL || type==XR_XIR_RUNE || type==XR_XIR_STRING ||
+        xr_xir_type_is_number(type)) return true;
+    uint32_t index=(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE;
+    return plain && index<before && plain[index];
+}
+static XrXirStatus view_access_plain_poll(const ViewAccess *a,uint32_t index) {
+    return index%64u || !a->cells || !a->cells->control ? XR_XIR_OK :
+        xir_compile_resource_status(xr_compile_request_control_poll(a->cells->control));
+}
+static XrXirStatus view_access_plain_storage(ViewAccess *a,XrXirType type,bool *output) {
+    *output=false;
+    if (view_access_plain_at(NULL,0,type)) {*output=true;return XR_XIR_OK;}
+    const XrXirTypes *types=a->resolver->check.module->types;
+    if (!types || !types->count || !types->nodes) return XR_XIR_OK;
+    XrXirStatus status=XR_XIR_OK;uint8_t *plain=view_access_allocate(a,types->count,&status);
+    if (!plain) return status;
+    /* Descriptor verification already proved the earlier-edge DAG and every
+     * payload. Each physical edge is visited once, including shared subgraphs. */
+    for (uint32_t i=0;i<types->count && status==XR_XIR_OK;++i) {
+        status=view_access_plain_poll(a,i);if (status!=XR_XIR_OK) break;
+        const XrXirTypeNode *node=types->nodes+i;bool valid=false;
+        if (node->parameter_span) continue;
+        if (node->kind==XR_XIR_TYPE_NULLABLE || node->kind==XR_XIR_TYPE_ARRAY || node->kind==XR_XIR_TYPE_SET)
+            valid=view_access_plain_at(plain,i,node->element);
+        else if (node->kind==XR_XIR_TYPE_MAP)
+            valid=view_access_plain_at(plain,i,node->element) && view_access_plain_at(plain,i,node->result);
+        else if (node->kind==XR_XIR_TYPE_TUPLE) {
+            valid=true;
+            for (uint32_t p=0;p<node->parameter_count && valid;++p) {
+                status=view_access_plain_poll(a,p);if (status!=XR_XIR_OK) break;
+                valid=view_access_plain_at(plain,i,node->parameters[p].type);
+            }
+        }
+        plain[i]=(uint8_t)valid;
+    }
+    if (status==XR_XIR_OK) *output=view_access_plain_at(plain,types->count,type);
+    view_access_release(a,plain,types->count);return status;
+}
 static bool view_access_scalar_storage(XrXirType type) {
     return type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_number(type);
 }
@@ -195,6 +236,10 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
                  * String, Class and scalar Array storage retain the same borrowed-descendant check. */
                 bool storage=scalar==XR_XIR_STRING || xr_xir_type_is_class(types,scalar) || (array && array->kind==XR_XIR_TYPE_ARRAY &&
                     view_access_scalar_storage(array->element));
+                if (!storage) {
+                    XrXirStatus classified=view_access_plain_storage(a,scalar,&storage);
+                    if (classified!=XR_XIR_OK) return classified;
+                }
                 if (storage && !view_flags_at(types,flags,payload) &&
                     !view_flags_at(types,flags,array && array->kind==XR_XIR_TYPE_ARRAY?array->element:scalar) &&
                     a->cells && a->cells->owner &&
@@ -280,7 +325,8 @@ static XrXirStatus view_access_check(const XrXirCompileContext *context,
         uint32_t kind=module->types->nodes[i].kind;needed|=kind==XR_XIR_TYPE_SLICE || kind==XR_XIR_TYPE_MUT_SLICE;
     }
     if (!needed) return XR_XIR_OK;
-    XrXirStatus status=xir_compile_view_roots_verified(context,module,NULL,NULL,diagnostic);
+    XrXirStatus status=view_types_verify(context,module->types);
+    if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(context,module,NULL,NULL,diagnostic);
     XirViewRootResolver *resolver=NULL;
     if (status==XR_XIR_OK) status=xir_compile_view_root_resolver_new(context,module,&resolver,diagnostic);
     if (status!=XR_XIR_OK) return status;

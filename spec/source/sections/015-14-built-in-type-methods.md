@@ -141,7 +141,7 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-同源 Array 清单保留完整32成员：30个实例方法、1个静态方法和1个属性。当前结构化声明准入26个成员（24个实例方法、withCapacity和capacity）；未准入的六个实例方法为sort、iterator、entriesIterator、ptr、mutPtr和toString。操作身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于查找。准入是编译/执行边界，完整安全、资源与性能资格仍须各批实际证据。
+同源 Array 清单保留完整32成员：30个实例方法、1个静态方法和1个属性。当前结构化声明准入27个成员（25个实例方法、withCapacity和capacity）；sort当前仅接Array<i64>的零实参升序调用，比较器与其它元素类型仍拒绝。未准入的五个实例方法为iterator、entriesIterator、ptr、mutPtr和toString。操作身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于查找。准入是编译/执行边界，完整安全、资源与性能资格仍须各批实际证据。
 
 这些 READ 回调/查询先取得 receiver 的拥有式快照，再按源码顺序各求实参一次；reduce 的顺序为 receiver、callback、initial。map/filter/forEach 按递增索引执行，可接受声明允许的省略尾 index 回调；find/findIndex/every/some 按单元素 bool 回调短路。空 reduce 返回 initial，空 every 为 true，空 some/contains 为 false，无匹配 find 为 none、findIndex/indexOf 为 -1。contains/indexOf 在定义处要求 T:Equal；join 本片只支持 string/bool/rune/已准入数值，separator 默认为空字符串并保留 UTF-8/NUL 字节。ref clear 使用既有可写 place 与写回合同，复制值保持独立。回调继续使用普通间接调用的 throw/panic/suspend/取消与所有权管线，不能从未来实例补足约束。本段冻结操作合同，完整回归、安全、OOM 与物理释放资格以实际批次证据为准。
 
@@ -549,7 +549,7 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-The source-derived Array inventory retains all32 members:30 instance methods, one static method and one field. Structured declarations currently admit26 members:24 instance methods, withCapacity and capacity. The six unadmitted instance methods are sort, iterator, entriesIterator, ptr, mutPtr and toString. Operation identities come from the same structured declarations in `stdlib/types/array.xr`; names serve lookup only. Admission defines a compiler/execution boundary, while full safety, resource and performance qualification still requires actual batch evidence.
+The source-derived Array inventory retains all32 members:30 instance methods, one static method and one field. Structured declarations currently admit27 members:25 instance methods, withCapacity and capacity. The executable sort subset accepts only zero-argument ascending Array<i64> calls; comparators and other element types remain rejected. The five unadmitted instance methods are iterator, entriesIterator, ptr, mutPtr and toString. Operation identities come from the same structured declarations in `stdlib/types/array.xr`; names serve lookup only. Admission defines a compiler/execution boundary, while full safety, resource and performance qualification still requires actual batch evidence.
 
 These READ callbacks/queries first own the receiver snapshot, then evaluate each explicit argument once in source order; reduce orders receiver, callback, initial. map/filter/forEach visit increasing indices and allow the trailing index argument to be omitted where the declaration permits it. find/findIndex/every/some short-circuit using a single-element bool callback. Empty reduce returns initial, empty every is true, empty some/contains is false, and no match produces none for find or -1 for findIndex/indexOf. contains/indexOf require T:Equal at the definition. This join subset admits string/bool/rune/admitted numeric elements, defaults its separator to the empty string and preserves UTF-8/NUL bytes. ref clear uses existing writable-place and writeback contracts; copied values remain independent. Callbacks keep ordinary indirect-call throw/panic/suspend/cancellation and ownership semantics; future instances cannot supply missing constraints. This paragraph freezes operation contracts; full regression, safety, OOM and physical-release qualification requires actual batch evidence.
 

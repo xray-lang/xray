@@ -61,6 +61,57 @@ static bool source_slice_root(SourceContext *ctx,AstNode *node,SourceValue *root
     return expression(ctx,node,&value) && source_cell_type(ctx,value.type,&cell) &&
         source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cell,{value.id},{0},0,{0}},root);
 }
+/* Array source ranges normalize only after both explicit bounds were
+ * evaluated. The owner length is already selected and never reread here. */
+static bool source_slice_bound(SourceContext *ctx,SourceValue raw,SourceValue length,
+    SourceValue zero,SourceValue *result) {
+    XrXirType cell;SourceValue storage,negative,adjusted,below,above;SourceGuard guard;
+    if (!source_cell_type(ctx,XR_XIR_I64,&cell) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cell,{raw.id},{0},0,{0}},&storage) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_LT_INT,XR_XIR_BOOL,{raw.id,zero.id},{0},0,{0}},&negative) ||
+        !source_guard_open(ctx,negative,false,&guard) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ADD_INT,XR_XIR_I64,{length.id,raw.id},{0},0,{0}},&adjusted) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_WRITE,XR_XIR_UNIT,{storage.id,adjusted.id},{0},0,{0}},NULL) ||
+        !source_guard_close(ctx,&guard) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,XR_XIR_I64,{storage.id},{0},0,{0}},&adjusted) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_LT_INT,XR_XIR_BOOL,{adjusted.id,zero.id},{0},0,{0}},&below) ||
+        !source_guard_open(ctx,below,false,&guard) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_WRITE,XR_XIR_UNIT,{storage.id,zero.id},{0},0,{0}},NULL) ||
+        !source_guard_close(ctx,&guard) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,XR_XIR_I64,{storage.id},{0},0,{0}},&adjusted) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_LT_INT,XR_XIR_BOOL,{length.id,adjusted.id},{0},0,{0}},&above) ||
+        !source_guard_open(ctx,above,false,&guard) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_WRITE,XR_XIR_UNIT,{storage.id,length.id},{0},0,{0}},NULL) ||
+        !source_guard_close(ctx,&guard)) return false;
+    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,XR_XIR_I64,{storage.id},{0},0,{0}},result);
+}
+static bool source_slice_raw_bounds(SourceContext *ctx,AstNode *node,SourceValue raw[2]) {
+    AstNode *bounds[]={node->as.slice_expr.start,node->as.slice_expr.end};
+    for (uint32_t i=0;i<2;++i) {
+        if (bounds[i]) {
+            if (!source_plan_expression(ctx,bounds[i],(SourceExpectedType){true,XR_XIR_I64,false,false},raw+i)) return false;
+            if (raw[i].type!=XR_XIR_I64) return source_fail(ctx,bounds[i],XR_XIR_BAD_TYPE,"view bounds require exact i64 values");
+        } else if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},raw+i)) return false;
+    }
+    return true;
+}
+static bool source_slice_bounds(SourceContext *ctx,AstNode *node,SourceValue length,
+    const SourceValue raw[2],SourceValue output[2]) {
+    AstNode *bounds[]={node->as.slice_expr.start,node->as.slice_expr.end};SourceValue zero;
+    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},&zero)) return false;
+    for (uint32_t i=0;i<2;++i) {
+        if (bounds[i]) {if (!source_slice_bound(ctx,raw[i],length,zero,output+i)) return false;}
+        else output[i]=i?length:zero;
+    }
+    XrXirType cell;SourceValue start,backwards;SourceGuard guard;
+    if (!source_cell_type(ctx,XR_XIR_I64,&cell) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cell,{output[0].id},{0},0,{0}},&start) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_LT_INT,XR_XIR_BOOL,{output[1].id,output[0].id},{0},0,{0}},&backwards) ||
+        !source_guard_open(ctx,backwards,false,&guard) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_WRITE,XR_XIR_UNIT,{start.id,output[1].id},{0},0,{0}},NULL) ||
+        !source_guard_close(ctx,&guard)) return false;
+    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,XR_XIR_I64,{start.id},{0},0,{0}},output);
+}
 static bool source_slice(SourceContext *ctx,AstNode *node,SourceExpectedType expected,SourceValue *value) {
     XrXirType target=expected.type;
     if (expected.present && xr_xir_type_is_nullable(&ctx->types,target)) target=xr_xir_nullable_element(&ctx->types,target);
@@ -87,13 +138,19 @@ static bool source_slice(SourceContext *ctx,AstNode *node,SourceExpectedType exp
     }
     if (source_element!=element)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"view element differs from its exact root element");
-    AstNode *bounds[2]={node->as.slice_expr.start,node->as.slice_expr.end};
-    for (uint32_t i=0;i<2;++i) {
-        if (bounds[i]) {
-            if (!source_plan_expression(ctx,bounds[i],(SourceExpectedType){true,XR_XIR_I64,false,false},args+i+1)) return false;
-            if (args[i+1].type!=XR_XIR_I64) return source_fail(ctx,bounds[i],XR_XIR_BAD_TYPE,"view bounds require exact i64 values");
-        } else if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},args+i+1)) return false;
+    /* Borrowing selects the real Cell position once. Explicit bounds finish
+     * before reading that same Cell's current payload and establishing a loan. */
+    SourceValue raw[2],length,current;
+    if (!source_slice_raw_bounds(ctx,node,raw)) return false;
+    if (reborrow) {
+        args[1]=raw[0];args[2]=raw[1];
+        return source_recipe_group(ctx,(XrXirInstruction){XR_XIR_VIEW_REBORROW,target,{0},{0},
+            node->as.slice_expr.end?0:1,{0}},args,3,value);
     }
-    return source_recipe_group(ctx,(XrXirInstruction){reborrow ? XR_XIR_VIEW_REBORROW : XR_XIR_VIEW_NEW,
-        target,{0},{0},bounds[1] ? 0 : 1,{0}},args,3,value);
+    if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,
+        xr_xir_cell_element(&ctx->types,args[0].type),{args[0].id},{0},0,{0}},&current) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_LEN,XR_XIR_I64,{current.id},{0},0,{0}},&length)) return false;
+    return source_slice_bounds(ctx,node,length,raw,args+1) &&
+        source_recipe_group(ctx,(XrXirInstruction){reborrow?XR_XIR_VIEW_REBORROW:XR_XIR_VIEW_NEW,
+            target,{0},{0},0,{0}},args,3,value);
 }

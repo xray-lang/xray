@@ -261,7 +261,9 @@
         "xir_array_binding",
         "xir_array_binding_native",
         "xir_tuple_assignment",
-        "xir_tuple_assignment_native"
+        "xir_tuple_assignment_native",
+        "xir_array_materialization",
+        "xir_array_materialization_native"
       ],
       "targets": [
         "test_source_nullable_print",
@@ -289,7 +291,9 @@
         "test_xir_array_binding",
         "test_xir_array_binding_native",
         "test_xir_tuple_assignment",
-        "test_xir_tuple_assignment_native"
+        "test_xir_tuple_assignment_native",
+        "test_xir_array_materialization",
+        "test_xir_array_materialization_native"
       ]
     },
     "errors-cleanup": {

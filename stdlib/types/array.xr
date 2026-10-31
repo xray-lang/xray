@@ -39,6 +39,7 @@ struct Array<T> {
     join(separator?: string) -> string
     // @native-operation ARRAY_REVERSE allocation=may_heap failures=allocation,retain,limit ownership=owned
     ref reverse() -> Array<T>
+    // @native-operation ARRAY_SORT allocation=may_heap failures=allocation,retain,limit ownership=owned
     ref sort(compareFn?: fn(a: T, b: T) -> i64) -> Array<T>
     // U is inferred only from the checked callback signature, not a receiver type parameter.
     // @native-operation ARRAY_MAP allocation=may_heap failures=allocation,retain,limit,callback ownership=owned

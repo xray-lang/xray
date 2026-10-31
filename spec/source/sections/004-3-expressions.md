@@ -574,9 +574,9 @@ var view: Slice<i64> = arr[1:4]
 ```
 
 - 半开区间 `[start, end)`。
-- Array 切片支持负索引：负数先按 `len(array) + index` 从末尾计数，再夹到合法范围。
+- Array 切片支持负索引：负数先按 `len(array) + index` 从末尾计数，再夹到合法范围。省略的 start 为 0，省略的 end 为来源长度；两端均夹到 `[0, len]`，若 start 大于 end 则结果为空。普通借用先选定来源位置，再按 start、end 的顺序各求值一次，边界成功后借用该位置的当前值。`copy` 范围先读取来源的逻辑快照，再按同序求边界；边界副作用改绑原位置不会改变这个快照。此数值归一化规则针对 Array，不推广到既有借用视图的子切片。
 - string 不支持 slice operator；使用严格 rune ordinal 的 `s.slice(start, end)`。
-- 目标类型为 `Slice<T>` 的切片是**共享只读借用视图**，不复制元素；不能通过它写入，其存活期间 owner 也不能修改。可写视图必须使用 §2.4.2 明确准入的 `MutSlice<T>` 独占借用，不能由 `Slice<T>` 默默获得写权限。包括 `arr[:]` 在内的形式都不是逻辑副本；需要独立数据时写 `copy(arr[1:4])`。
+- 目标类型为 `Slice<T>` 的切片是**共享只读借用视图**，不复制元素；不能通过它写入，其存活期间 owner 也不能修改。可写视图必须使用 §2.4.2 明确准入的 `MutSlice<T>` 独占借用，不能由 `Slice<T>` 默默获得写权限。包括 `arr[:]` 在内的形式都不是逻辑副本；需要独立数据时写 `copy arr[1:4]`。
 - 切片是一次借用：owner 在视图存活期间受 §2.4.2 的借用规则约束，视图本身不得逃逸出 owner 的作用域。完整规则见 §2.4.2。
 
 ### 3.12 匿名函数与 Lambda
@@ -625,7 +625,7 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 - `-> expr` 隐式返回表达式值。`-> { ... }` 支持多条语句，值返回必须写 `return value`；正常落到块尾返回 `()`，块尾表达式没有特殊的隐式返回语义。
 - `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref i64) -> x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref i64) -> { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
 - 工具可对“源码显式写了 `ref`、函数体确定未修改该参数”的匿名函数给出非强制 hint。期望函数契约要求 `ref`、mode 来自推断或效果分析不完整时不提示；该提示不改变类型检查或运行时语义。
-- 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、已发布 const 值与受审计同步句柄可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy(...)` / `move`。
+- 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、已发布 const 值与受审计同步句柄可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy x` / `move`。
 
 ### 3.13 `match` 表达式
 
@@ -1291,9 +1291,9 @@ var view: Slice<i64> = arr[1:4]
 ```
 
 - Half-open interval `[start, end)`.
-- Array slicing supports negative indices: a negative index is converted using `len(array) + index` and then clamped to the valid range.
+- Array slicing supports negative indices: a negative index is converted using `len(array) + index` and then clamped to the valid range. Omitted start is 0 and omitted end is the source length; both endpoints clamp to `[0, len]`, and start greater than end produces an empty result. An ordinary borrow selects the source position, evaluates start and end once in order, then borrows that position's current value. A `copy` range first reads a logical snapshot and then evaluates the bounds in the same order; rebinding the original position does not change that snapshot. This normalization is specific to Array and does not extend the existing subrange behavior of borrowed views.
 - Strings do not support the slice operator; use strict rune-ordinal `s.slice(start, end)`.
-- A slice targeting `Slice<T>` is a **shared read-only borrowed view**; no elements are copied. Neither writing through it nor mutating its owner is allowed while it is live. A writable view requires the explicitly admitted exclusive `MutSlice<T>` borrow in §2.4.2; a `Slice<T>` never silently gains write permission. Every form, including `arr[:]`, is a view rather than a logical copy. Use `copy(arr[1:4])` when you need independent data.
+- A slice targeting `Slice<T>` is a **shared read-only borrowed view**; no elements are copied. Neither writing through it nor mutating its owner is allowed while it is live. A writable view requires the explicitly admitted exclusive `MutSlice<T>` borrow in §2.4.2; a `Slice<T>` never silently gains write permission. Every form, including `arr[:]`, is a view rather than a logical copy. Use `copy arr[1:4]` when you need independent data.
 - A slice expression is a borrow: while the view is live the owner is constrained by the borrow rules in §2.4.2, and the view itself must not escape the owner's scope. See §2.4.2 for the full rules.
 
 ### 3.12 Anonymous Functions and Lambdas
@@ -1342,7 +1342,7 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 - `-> expr` implicitly returns the expression value. `-> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
 - `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref i64) -> x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref i64) -> { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
 - Tooling may emit a non-mandatory hint when an anonymous-function parameter is explicitly written as `ref` and complete effect analysis proves it is never mutated. The hint is suppressed when an expected callable contract requires `ref`, the mode was inferred, or effect analysis is incomplete; it never changes type checking or runtime semantics.
-- Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline values, published const values, and audited synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy(...)` / `move` arguments.
+- Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline values, published const values, and audited synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy x` / `move` arguments.
 
 ### 3.13 `match` Expression
 

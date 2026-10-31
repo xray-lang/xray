@@ -2510,6 +2510,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/rune_text_output.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/source_copy.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/array_binding.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/tuple_assignment.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/array_materialization.cmake)
 include(${PROJECT_SOURCE_DIR}/tests/cli/csv_errors.cmake)
 
 add_executable(xr_typed_provider_native_writer aot/xr_typed_provider_native_writer.c

@@ -972,7 +972,7 @@ fn main() {
     var writable: MutSlice<i64> = arr[1:3]
     writable[1] = 31                       // writable 的最后一次使用
     print(arr[2])                          // 31
-    var owned: Array<i64> = copy(arr[1:3]) // 物化拥有式副本
+    var owned: Array<i64> = copy arr[1:3] // 物化拥有式副本
     arr.push(50)                           // 没有存活借用
     print(len(owned))                      // 2
 }
@@ -1018,7 +1018,7 @@ fn rejected(a: Slice<u8>, b: Slice<u8>) -> Slice<u8> {
 
 ##### 物化拥有式副本
 
-`copy(view)` 将借用数据物化为 `Array<T>`，其元素遵循 §2.14 的逻辑复制与身份边界；class 元素仍引用同一个对象。结果不再借用原 owner。此用途不裁决 `copy(array)` 的公开拼写，也不使其成为普通 Array 赋值的前置条件。
+`copy view` 将借用数据物化为 `Array<T>`，其元素遵循 §2.14 的逻辑复制与身份边界；class 元素仍引用同一个对象。结果不再借用原 owner。`copy` 是前缀表达式，不是函数调用；对稳定 Array 位置的范围投影可直接物化。物化先取得独立数据，再结束临时借用，不使显式复制成为普通 Array 赋值的前置条件。
 
 `ref` 参数和 `Ptr<T>` / `MutPtr<T>` 同样必须满足来源、权限、存活与不逃逸要求。相关诊断为 `E0382`（存活借用冲突）、`E0383`（借用逃逸）、`E0384`（来源不稳定或不唯一）；`unsafe` 不放宽这些要求。
 
@@ -1654,7 +1654,7 @@ print(len(a))               // 4
 
 不可复制资源的消费转移持有权和最终析构责任，调用是否消费由声明的参数或 receiver 模式决定。对这类转移，`move x` 是可选的显式标记；源绑定成功消费后不可再用，未被所有路径重新初始化的循环再次消费也必须拒绝。只读与 `ref` 借用不消费持有权。被拒绝的操作不能把有效源状态错误地标为已消费。
 
-可复制类型（包括 Array）不能声明 `move` 参数或 receiver。通用 type-position `const T` 已删除，不产生类型身份或转换。可复制值是否另行允许独立的 `move x` 表达式、普通值 `copy(array)` 是否保留公开拼写，仍须在准入前单独确定。这些待定表面不阻塞普通 Array 复制；不得继承旧唯一根、堆逃逸终态或整个图深冻结规则作为默认答案。
+可复制类型（包括 Array）不能声明 `move` 参数或 receiver。通用 type-position `const T` 已删除，不产生类型身份或转换。独立的 `copy array` 使用前缀表达式拼写；可复制值是否另行允许独立的 `move x` 表达式，仍须在准入前单独确定。这些待定表面不阻塞普通 Array 复制；不得继承旧唯一根、堆逃逸终态或整个图深冻结规则作为默认答案。
 
 #### 2.14.6 struct 字段的复制与初始化
 
@@ -2286,9 +2286,9 @@ var view: Slice<i64> = arr[1:4]
 ```
 
 - 半开区间 `[start, end)`。
-- Array 切片支持负索引：负数先按 `len(array) + index` 从末尾计数，再夹到合法范围。
+- Array 切片支持负索引：负数先按 `len(array) + index` 从末尾计数，再夹到合法范围。省略的 start 为 0，省略的 end 为来源长度；两端均夹到 `[0, len]`，若 start 大于 end 则结果为空。普通借用先选定来源位置，再按 start、end 的顺序各求值一次，边界成功后借用该位置的当前值。`copy` 范围先读取来源的逻辑快照，再按同序求边界；边界副作用改绑原位置不会改变这个快照。此数值归一化规则针对 Array，不推广到既有借用视图的子切片。
 - string 不支持 slice operator；使用严格 rune ordinal 的 `s.slice(start, end)`。
-- 目标类型为 `Slice<T>` 的切片是**共享只读借用视图**，不复制元素；不能通过它写入，其存活期间 owner 也不能修改。可写视图必须使用 §2.4.2 明确准入的 `MutSlice<T>` 独占借用，不能由 `Slice<T>` 默默获得写权限。包括 `arr[:]` 在内的形式都不是逻辑副本；需要独立数据时写 `copy(arr[1:4])`。
+- 目标类型为 `Slice<T>` 的切片是**共享只读借用视图**，不复制元素；不能通过它写入，其存活期间 owner 也不能修改。可写视图必须使用 §2.4.2 明确准入的 `MutSlice<T>` 独占借用，不能由 `Slice<T>` 默默获得写权限。包括 `arr[:]` 在内的形式都不是逻辑副本；需要独立数据时写 `copy arr[1:4]`。
 - 切片是一次借用：owner 在视图存活期间受 §2.4.2 的借用规则约束，视图本身不得逃逸出 owner 的作用域。完整规则见 §2.4.2。
 
 ### 3.12 匿名函数与 Lambda
@@ -2337,7 +2337,7 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 - `-> expr` 隐式返回表达式值。`-> { ... }` 支持多条语句，值返回必须写 `return value`；正常落到块尾返回 `()`，块尾表达式没有特殊的隐式返回语义。
 - `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref i64) -> x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref i64) -> { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
 - 工具可对“源码显式写了 `ref`、函数体确定未修改该参数”的匿名函数给出非强制 hint。期望函数契约要求 `ref`、mode 来自推断或效果分析不完整时不提示；该提示不改变类型检查或运行时语义。
-- 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、已发布 const 值与受审计同步句柄可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy(...)` / `move`。
+- 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、已发布 const 值与受审计同步句柄可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy x` / `move`。
 
 ### 3.13 `match` 表达式
 
@@ -6540,7 +6540,7 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-同源 Array 清单保留完整32成员：30个实例方法、1个静态方法和1个属性。当前结构化声明准入26个成员（24个实例方法、withCapacity和capacity）；未准入的六个实例方法为sort、iterator、entriesIterator、ptr、mutPtr和toString。操作身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于查找。准入是编译/执行边界，完整安全、资源与性能资格仍须各批实际证据。
+同源 Array 清单保留完整32成员：30个实例方法、1个静态方法和1个属性。当前结构化声明准入27个成员（25个实例方法、withCapacity和capacity）；sort当前仅接Array<i64>的零实参升序调用，比较器与其它元素类型仍拒绝。未准入的五个实例方法为iterator、entriesIterator、ptr、mutPtr和toString。操作身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于查找。准入是编译/执行边界，完整安全、资源与性能资格仍须各批实际证据。
 
 这些 READ 回调/查询先取得 receiver 的拥有式快照，再按源码顺序各求实参一次；reduce 的顺序为 receiver、callback、initial。map/filter/forEach 按递增索引执行，可接受声明允许的省略尾 index 回调；find/findIndex/every/some 按单元素 bool 回调短路。空 reduce 返回 initial，空 every 为 true，空 some/contains 为 false，无匹配 find 为 none、findIndex/indexOf 为 -1。contains/indexOf 在定义处要求 T:Equal；join 本片只支持 string/bool/rune/已准入数值，separator 默认为空字符串并保留 UTF-8/NUL 字节。ref clear 使用既有可写 place 与写回合同，复制值保持独立。回调继续使用普通间接调用的 throw/panic/suspend/取消与所有权管线，不能从未来实例补足约束。本段冻结操作合同，完整回归、安全、OOM 与物理释放资格以实际批次证据为准。
 

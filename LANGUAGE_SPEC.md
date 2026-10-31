@@ -980,7 +980,7 @@ fn main() {
     var writable: MutSlice<i64> = arr[1:3]
     writable[1] = 31                       // last use of writable
     print(arr[2])                          // 31
-    var owned: Array<i64> = copy(arr[1:3]) // materialize an owned copy
+    var owned: Array<i64> = copy arr[1:3] // materialize an owned copy
     arr.push(50)                           // no live borrow
     print(len(owned))                      // 2
 }
@@ -1026,7 +1026,7 @@ fn rejected(a: Slice<u8>, b: Slice<u8>) -> Slice<u8> {
 
 ##### Materializing an owned copy
 
-`copy(view)` materializes borrowed data as an `Array<T>` whose elements follow the logical-copy and identity-boundary rules in §2.14. Class elements still reference the same objects. The result no longer borrows the original owner. This use does not decide the public `copy(array)` spelling and does not make it a prerequisite for ordinary Array assignment.
+`copy view` materializes borrowed data as an `Array<T>` whose elements follow the logical-copy and identity-boundary rules in §2.14. Class elements still reference the same objects. The result no longer borrows the original owner. `copy` is a prefix expression, not a function call. A range projection of a stable Array position can materialize directly. Materialization owns the result before ending its temporary loan and is not a prerequisite for ordinary Array assignment.
 
 `ref` parameters and `Ptr<T>` / `MutPtr<T>` must also satisfy source, permission, lifetime, and non-escape requirements. The relevant diagnostics are `E0382` (live-borrow conflict), `E0383` (borrow escape), and `E0384` (unstable or non-unique source). `unsafe` relaxes none of them.
 
@@ -1678,7 +1678,7 @@ Ordinary closures capture outer `var` bindings through shared cells; `const` and
 
 Consumption of a noncopyable resource transfers ownership and final destruction responsibility. Whether a call consumes is determined by the declared parameter or receiver mode; `move x` optionally marks such a transfer explicitly. Successful consumption makes the source binding unusable. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` borrows do not consume ownership. A rejected operation must not incorrectly mark a valid source as consumed.
 
-Copyable types, including Array, cannot declare `move` parameters or receivers. The general type-position `const T` form is removed and creates no type identity or conversion. Whether a standalone `move x` expression is allowed for copyable values and whether ordinary `copy(array)` retains a public spelling still require separate decisions before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
+Copyable types, including Array, cannot declare `move` parameters or receivers. The general type-position `const T` form is removed and creates no type identity or conversion. Ordinary `copy array` uses prefix-expression syntax. Whether a standalone `move x` expression is allowed for copyable values still requires a separate decision before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
 
 #### 2.14.6 Struct-field copying and initialization
 
@@ -2310,9 +2310,9 @@ var view: Slice<i64> = arr[1:4]
 ```
 
 - Half-open interval `[start, end)`.
-- Array slicing supports negative indices: a negative index is converted using `len(array) + index` and then clamped to the valid range.
+- Array slicing supports negative indices: a negative index is converted using `len(array) + index` and then clamped to the valid range. Omitted start is 0 and omitted end is the source length; both endpoints clamp to `[0, len]`, and start greater than end produces an empty result. An ordinary borrow selects the source position, evaluates start and end once in order, then borrows that position's current value. A `copy` range first reads a logical snapshot and then evaluates the bounds in the same order; rebinding the original position does not change that snapshot. This normalization is specific to Array and does not extend the existing subrange behavior of borrowed views.
 - Strings do not support the slice operator; use strict rune-ordinal `s.slice(start, end)`.
-- A slice targeting `Slice<T>` is a **shared read-only borrowed view**; no elements are copied. Neither writing through it nor mutating its owner is allowed while it is live. A writable view requires the explicitly admitted exclusive `MutSlice<T>` borrow in §2.4.2; a `Slice<T>` never silently gains write permission. Every form, including `arr[:]`, is a view rather than a logical copy. Use `copy(arr[1:4])` when you need independent data.
+- A slice targeting `Slice<T>` is a **shared read-only borrowed view**; no elements are copied. Neither writing through it nor mutating its owner is allowed while it is live. A writable view requires the explicitly admitted exclusive `MutSlice<T>` borrow in §2.4.2; a `Slice<T>` never silently gains write permission. Every form, including `arr[:]`, is a view rather than a logical copy. Use `copy arr[1:4]` when you need independent data.
 - A slice expression is a borrow: while the view is live the owner is constrained by the borrow rules in §2.4.2, and the view itself must not escape the owner's scope. See §2.4.2 for the full rules.
 
 ### 3.12 Anonymous Functions and Lambdas
@@ -2361,7 +2361,7 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 - `-> expr` implicitly returns the expression value. `-> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
 - `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref i64) -> x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref i64) -> { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
 - Tooling may emit a non-mandatory hint when an anonymous-function parameter is explicitly written as `ref` and complete effect analysis proves it is never mutated. The hint is suppressed when an expected callable contract requires `ref`, the mode was inferred, or effect analysis is incomplete; it never changes type checking or runtime semantics.
-- Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline values, published const values, and audited synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy(...)` / `move` arguments.
+- Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline values, published const values, and audited synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy x` / `move` arguments.
 
 ### 3.13 `match` Expression
 
@@ -6598,7 +6598,7 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-The source-derived Array inventory retains all32 members:30 instance methods, one static method and one field. Structured declarations currently admit26 members:24 instance methods, withCapacity and capacity. The six unadmitted instance methods are sort, iterator, entriesIterator, ptr, mutPtr and toString. Operation identities come from the same structured declarations in `stdlib/types/array.xr`; names serve lookup only. Admission defines a compiler/execution boundary, while full safety, resource and performance qualification still requires actual batch evidence.
+The source-derived Array inventory retains all32 members:30 instance methods, one static method and one field. Structured declarations currently admit27 members:25 instance methods, withCapacity and capacity. The executable sort subset accepts only zero-argument ascending Array<i64> calls; comparators and other element types remain rejected. The five unadmitted instance methods are iterator, entriesIterator, ptr, mutPtr and toString. Operation identities come from the same structured declarations in `stdlib/types/array.xr`; names serve lookup only. Admission defines a compiler/execution boundary, while full safety, resource and performance qualification still requires actual batch evidence.
 
 These READ callbacks/queries first own the receiver snapshot, then evaluate each explicit argument once in source order; reduce orders receiver, callback, initial. map/filter/forEach visit increasing indices and allow the trailing index argument to be omitted where the declaration permits it. find/findIndex/every/some short-circuit using a single-element bool callback. Empty reduce returns initial, empty every is true, empty some/contains is false, and no match produces none for find or -1 for findIndex/indexOf. contains/indexOf require T:Equal at the definition. This join subset admits string/bool/rune/admitted numeric elements, defaults its separator to the empty string and preserves UTF-8/NUL bytes. ref clear uses existing writable-place and writeback contracts; copied values remain independent. Callbacks keep ordinary indirect-call throw/panic/suspend/cancellation and ownership semantics; future instances cannot supply missing constraints. This paragraph freezes operation contracts; full regression, safety, OOM and physical-release qualification requires actual batch evidence.
 

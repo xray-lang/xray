@@ -1,7 +1,7 @@
 {
   "id": "collections",
   "title": "Collections",
-  "spec_anchor": "#24-复合类型",
+  "spec_anchor": "#24-\u590d\u5408\u7c7b\u578b",
   "aliases": [
     "array",
     "map",
@@ -21,7 +21,7 @@
       "fences": [
         "types-array"
       ],
-      "markdown": "The new-XIR Array subset admits typed and homogeneous literals, contextual empty literals, ordinary logical copies, parameters/returns, index reads/writes and the26 structured member operations listed in spec §14.7. Its complete32-member inventory consists of30 instance methods, withCapacity and capacity. The six unadmitted instance methods are sort, iterator, entriesIterator, ptr, mutPtr and toString. Array is a value struct; COW preserves independent copies. Borrowed slices and pointer/iterator protocols require their own admission and lifetime validation. Member admission does not replace full safety, resource or performance qualification."
+      "markdown": "The new-XIR Array subset admits typed and homogeneous literals, contextual empty literals, ordinary logical copies, parameters/returns, index reads/writes and the27 structured member operations listed in spec \u00a714.7. Its complete32-member inventory consists of30 instance methods, withCapacity and capacity. sort() currently accepts only zero-argument ascending Array<i64> calls; comparator arguments and other element types remain rejected. The five unadmitted instance methods are iterator, entriesIterator, ptr, mutPtr and toString. Array is a value struct; COW preserves independent copies. Borrowed slices and pointer/iterator protocols require their own admission and lifetime validation. Member admission does not replace full safety, resource or performance qualification."
     },
     {
       "heading": "Map",
@@ -57,7 +57,7 @@
       "fences": [
         "expr-index-access"
       ],
-      "markdown": "For the new-XIR Array subset, get/index reads return independently owned elements and bounds are strict: 0 <= index < len. E0430 preserves the signed index and observed length. Index reads preserve the receiver selected before index evaluation; writes resolve the current root after argument/RHS evaluation. Set/push return unit, while index assignment returns the converted RHS. Len reads length without allocation or element traversal. See spec §17.26 for ownership and qualification limits."
+      "markdown": "For the new-XIR Array subset, get/index reads return independently owned elements and bounds are strict: 0 <= index < len. E0430 preserves the signed index and observed length. Index reads preserve the receiver selected before index evaluation; writes resolve the current root after argument/RHS evaluation. Set/push return unit, while index assignment returns the converted RHS. Len reads length without allocation or element traversal. See spec \u00a717.26 for ownership and qualification limits."
     },
     {
       "heading": "Other collection-like types",

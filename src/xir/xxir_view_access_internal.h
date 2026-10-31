@@ -24,6 +24,9 @@ typedef struct XirViewAccessCells {
     /* Only the composite verifier installs this live lexical owner. An absent
      * scope leaves default access unresolved; it is never a caller promise. */
     XirEffectDefaultAccessScope *default_access;
+    /* Synchronous request observation borrows the current input only. It is
+     * never retained by the resolver or any published proof owner. */
+    XrCompileRequestControl *control;
 } XirViewAccessCells;
 /* Requires ordinary type/structure/SSA, return-origin and affine admission of
  * the immutable generation. Recomputes actual may-owned state, scope ancestry,
