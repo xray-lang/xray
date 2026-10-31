@@ -1621,6 +1621,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     const XrXirFunction *function = &module->functions[index];
     if (module->declarations && module->declarations->functions[index].native_callable) {
+        if (!function->parameter_count) return;
         append(buffer, "static const XrXirType %s_parameters_%u[] = {", prefix, index);
         for (uint32_t p = 0; p < function->parameter_count && ((buffer)->status == XR_XIR_OK); ++p)
             append(buffer, "%s(XrXirType) %u", p ? ", " : "", (uint32_t) function->parameters[p]);
