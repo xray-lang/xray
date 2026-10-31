@@ -97,16 +97,37 @@ static void installed_rune_iteration(const char *stdlib) {
         "assert(\"${shown_record}\"==\"{a: \\\"ok\\\", z: 2}\")\n"
         "const absent:i64?=null\nassert(\"${absent}\"==\"null\")\n"
         "const present:i64?=9\nassert(\"${present}\"==\"9\")\n"
-        "class SdkViewOptions { value:i64; init(){this.value=7} }\n"
-        "enum SdkViewError { Empty }\n"
-        "fn viewValue(bytes:Slice<u8>,opts:SdkViewOptions=SdkViewOptions()) throws(SdkViewError)->i64 {"
-        "if(len(bytes)==0){throw SdkViewError.Empty};return opts.value+(bytes[0] as i64)}\n"
-        "var viewBytes:Array<u8>=[1]\nvar viewOptions=SdkViewOptions()\nviewOptions.value=9\n"
-        "assert(try viewValue(viewBytes[:])==8)\nassert(try viewValue(viewBytes[:],viewOptions)==10)\n"
-        "var viewEmpty:Array<u8>=[]\nvar viewCaught=false\n"
-        "try{viewValue(viewEmpty[:])}catch(error:SdkViewError){viewCaught=true}\nassert(viewCaught)\n"
         "enum SdkError { Expected { message:string } }\n"
         "assertThrows(() -> {throw SdkError.Expected{message:\"owned\"}})\nprint(42)\n";
+    XrSourceArtifact *artifact=compile(&compiler,source,__func__);
+    Output output={0};XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.write=capture;options.context=&output;
+    XrSourceCall *call=NULL;CHECK(begin_owned(artifact,&options,&call)==XR_SOURCE_OK && call);
+    xray_source_artifact_free(artifact);XrSourceEvent event={0};
+    for(size_t ticks=0;;++ticks) {
+        CHECK(ticks<10000 && xray_source_call_poll(call,1024,&event)==XR_SOURCE_OK);
+        if(event.state!=XR_SOURCE_RUN_READY)break;
+    }
+    CHECK(event.state==XR_SOURCE_RUN_RETURNED && output.length==3 && !memcmp(output.bytes,"42\n",3));
+    XrSourceResult *result=NULL;
+    CHECK(xray_source_call_take(call,&result)==XR_SOURCE_OK && result);
+    CHECK(xray_source_call_drop(&call,NULL)==XR_SOURCE_OK && !call);
+    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
+    xray_source_result_free(result);
+}
+static void installed_view_class_defaults(const char *stdlib) {
+    XrSourceCompileOptions compiler=compile_options(stdlib);
+    char source[]=
+        "class SdkViewOptions { value:i64; init(){this.value=7} }\r\n"
+        "enum SdkViewError { Empty }\r\n"
+        "fn viewValue(bytes:Slice<u8>,opts:SdkViewOptions=SdkViewOptions()) throws(SdkViewError)->i64 {"
+        "if(len(bytes)==0){throw SdkViewError.Empty};return opts.value+(bytes[0] as i64)}\r\n"
+        "var viewBytes:Array<u8>=[1]\r\nvar viewOptions=SdkViewOptions()\r\nviewOptions.value=9\r\n"
+        "assert(try viewValue(viewBytes[:])==8)\r\nassert(try viewValue(viewBytes[:],viewOptions)==10)\r\n"
+        "var viewEmpty:Array<u8>=[]\r\nvar viewCaught=false\r\n"
+        "try{viewValue(viewEmpty[:])}catch(error:SdkViewError){viewCaught=true}\r\nassert(viewCaught)\r\n"
+        "print(42)\r\n";
     XrSourceArtifact *artifact=compile(&compiler,source,__func__);
     Output output={0};XrSourceCallOptions options;
     CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
@@ -1129,6 +1150,7 @@ int main(int argc, char **argv) {
     }
     CHECK(argc == 2); installed_error_union(argv[1]); installed_error_union_300(argv[1]); installed_report(argv[1]); installed_parameter_report(argv[1]); installed_method_parameter_report(argv[1]); installed_interface_parameter_report(argv[1]); installed_interface_member_report(argv[1]); installed_nominal_method_report(argv[1]); installed_closure_parameter_report(argv[1]); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
     installed_rune_iteration(argv[1]);
+    installed_view_class_defaults(argv[1]);
     installed_nominal_projection(argv[1]);
     const char *source_path=__FILE__,*separator=strrchr(source_path,'/'),*windows_separator=strrchr(source_path,'\\');
     if(windows_separator && (!separator || windows_separator>separator))separator=windows_separator;
