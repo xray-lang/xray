@@ -32,8 +32,28 @@ def main():
     with tempfile.TemporaryDirectory(prefix='xir-current-sdk-kat-') as temporary:
         facts=Path(temporary)/'facts';prepare(facts)
         rows=json.loads((facts/'EXPECTED.json').read_text())['rows']
-    current_rows=rows
-    assert len(current_rows)==380 and len({row['id'] for row in current_rows})==380
+    active_rows=rows
+    assert len(active_rows)==384 and len({row['id'] for row in active_rows})==384
+    # Historical derivations use their immutable complete frame, not today's layout.
+    import re
+    historical100=Path(__file__).with_name('sdk_previous39_100_identity_golden.h').read_text()
+    fixed=re.search(r'static const uint8_t previous39_100_sdk_kat_preimage\[\] = \{(.*?)\};',historical100,re.S)
+    fixed=bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',fixed[1]))
+    offset=len(b'xray:xir-runtime-sdk:v1')+17*4
+    for _ in range(3):
+        length=struct.unpack_from('<I',fixed,offset)[0];offset+=4+length
+    count=struct.unpack_from('<I',fixed,offset)[0];offset+=4
+    by_id={row['id']:row for row in active_rows}
+    current_rows=[]
+    for i in range(count):
+        identifier,value=struct.unpack_from('<II',fixed,offset+8*i)
+        current_rows.append(dict(by_id[identifier],value=value))
+    assert len(current_rows)==380
+    old100,old100_file,old100_digest=current_preimage(current_rows,100,30,35,39,37)
+    assert old100==fixed
+    for suffix,data in [('file_digest',old100_file),('digest',old100_digest)]:
+        saved=re.search(r'static const uint8_t previous39_100_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',historical100,re.S)
+        assert bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',saved[1]))==data
     # Retired wire images retain their independently declared resource layout.
     # These fixed historical facts never enter the current ABI derivation.
     historical_resources={}
@@ -173,7 +193,7 @@ def main():
     for symbol,data in [('previous38_99_sdk_kat_preimage',prior_native_image),('previous38_99_sdk_kat_file_digest',prior_native_file),('previous38_99_sdk_kat_digest',prior_native_digest)]:
         match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',prior_native_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete predecessor38/99 bytes changed'
-    image,file_digest,digest=current_preimage(current_rows,100,30,35,39,37)
+    image,file_digest,digest=current_preimage(active_rows,108,30,37,39,37)
     prior_resources_image,prior_resources_file,prior_resources_digest=current_preimage(frozen_rows,98,30,35,37,36)
     assert len(prior_resources_image)==3338
     assert prior_resources_digest.hex()=='8fd650c91daccdcad55f6bf8c40b5f4e2f9ed9611d721eff0c26321e84adeca1'
@@ -181,9 +201,9 @@ def main():
     assert image[:identity_offset]==previous_image[:identity_offset]
     old_current_image,_,_=current_preimage(old_rows,75,25)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(39,100,30,35,37)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(39,108,30,37,37)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
-    assert len(image)==3330 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
+    assert len(image)==3362 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest
     output='/* Independent current SDK framing and natural Windows C layout facts. */\n'
     for name,data in (('current_sdk_kat_preimage',image),('current_sdk_kat_file_digest',file_digest),('current_sdk_kat_digest',digest),
@@ -195,9 +215,16 @@ def main():
         output+='static const uint8_t '+name+'[] = {\n'
         for at in range(0,len(data),16):output+='    '+','.join('0x'+format(x,'02x') for x in data[at:at+16])+',\n'
         output+='};\n'
+    # These predecessors share the same declared ABI layout; only semantic identity differs.
+    for semantic in (106,107):
+        prior_image,prior_file,prior_digest=current_preimage(active_rows,semantic,30,37,39,37)
+        for suffix,data in [('preimage',prior_image),('file_digest',prior_file),('digest',prior_digest)]:
+            output+='static const uint8_t previous39_'+str(semantic)+'_sdk_kat_'+suffix+'[] = {\n'
+            for at in range(0,len(data),16):output+='    '+','.join('0x'+format(x,'02x') for x in data[at:at+16])+',\n'
+            output+='};\n'
     target=Path(__file__).with_name('sdk_current_identity_golden.h')
     if args.write:target.write_text(output,encoding='utf-8',newline='\n')
     else:assert target.read_text(encoding='utf-8')==output,'current SDK known bytes differ from independent facts'
-    print('Current SDK '+str(len(current_rows))+' fields / '+str(len(image))+' byte independent preimage PASS: '+digest.hex())
+    print('Current SDK '+str(len(active_rows))+' fields / '+str(len(image))+' byte independent preimage PASS: '+digest.hex())
 
 if __name__=='__main__':main()
