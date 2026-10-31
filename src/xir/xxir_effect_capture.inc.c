@@ -32,7 +32,7 @@ static XrXirStatus effect_capture_identity(
     return XR_XIR_OK;
 }
 
-XR_FUNC XrXirStatus xir_effect_capture_bound(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xir_effect_capture_bound_input(const XrXirCompileContext *context,
     const XirEffectCaptureRequest *q, XirEffectCaptureBound *output) {
     if (!xir_compile_context_valid(context) || !q || !output || !q->source || !q->source->functions ||
         !q->source->types || !q->types || !q->actual || !q->effects || !q->caller || !q->target ||
@@ -41,6 +41,9 @@ XR_FUNC XrXirStatus xir_effect_capture_bound(const XrXirCompileContext *context,
     if (q->caller->function>=q->source->function_count || q->target->function>=q->source->function_count)
         return XR_XIR_BAD_STRUCTURE;
 
+    XrXirStatus current=xir_effects_source_body_match_input(context,
+        (XirEffectInput){q->source,q->construction,q->control},q->effects);
+    if(current!=XR_XIR_OK)return current;
     const XrXirFunction *original=&q->source->functions[q->caller->function];
     if (!original->instructions || !q->actual->instructions || q->instruction>=original->instruction_count ||
         q->instruction>=q->actual->instruction_count ||
@@ -77,9 +80,9 @@ XR_FUNC XrXirStatus xir_effect_capture_bound(const XrXirCompileContext *context,
 
         *output=result;return XR_XIR_OK;
     }
-    XirEffectContextInput input={q->source,q->types,q->caller,q->instruction,q->owners,q->owner_count};
+    XirEffectContextInput input={q->source,q->types,q->caller,q->instruction,q->owners,q->owner_count,q->construction,q->control};
     XirEffectContextView selected={0};
-    status=xir_effects_context_select(context,q->effects,&input,&selected);
+    status=xir_effects_context_select_input(context,q->effects,&input,&selected);
     if (status!=XR_XIR_OK) return status;
     if (selected.declaration!=q->target->function || selected.parameter_count!=q->target->effect_argument_count ||
         selected.argument_count!=q->target->argument_count) return XR_XIR_BAD_STRUCTURE;

@@ -138,8 +138,10 @@ static bool view_boundary_supported(const XrXirTypes *types,const uint8_t *flags
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     return node && node->kind==XR_XIR_TYPE_SLICE && node->element==XR_XIR_U8;
 }
-XR_FUNC XrXirStatus xir_compile_view_module_boundary(const XrXirCompileContext *context,
-    const XrXirModule *module,XrXirDiagnostic *diagnostic) {
+XR_FUNC XrXirStatus xir_compile_view_module_boundary_input(const XrXirCompileContext *context,
+    XirEffectInput input,XrXirDiagnostic *diagnostic) {
+    const XrXirModule *module=input.module;
+    if(!input.construction)return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_context_valid(context) || !module) return XR_XIR_BAD_STRUCTURE;
     uint8_t *flags=NULL;
     XrXirStatus status=view_flags_build(context,module->types,&flags);
@@ -164,6 +166,6 @@ XR_FUNC XrXirStatus xir_compile_view_module_boundary(const XrXirCompileContext *
         }
     }
     xr_compile_resources_free(flags);
-    if (status==XR_XIR_OK) status=xir_compile_view_cell_access_verified(context,module,diagnostic);
+    if (status==XR_XIR_OK) status=xir_compile_view_cell_access_verified_input(context,input,diagnostic);
     return status;
 }

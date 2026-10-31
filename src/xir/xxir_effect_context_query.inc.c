@@ -28,7 +28,7 @@ static XrXirStatus effect_context_owner_refresh(const XrXirCompileContext *conte
     if (!source->provenance || source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE ||
         !source->declarations || !source->declarations->functions) return XR_XIR_OK;
     EffectContextOwner *fresh=NULL;
-    XrXirStatus status=effect_context_owner_build(context,source,effects->refinement,initial,&fresh);
+    XrXirStatus status=effect_context_owner_build(context,source,effects->refinement,initial,effects->input_facts,&fresh);
     if (status!=XR_XIR_OK) return status;
     status=effect_context_owner_project(context,source,effects,fresh);
     if (status!=XR_XIR_OK) { effect_context_owner_free(fresh);return status; }
@@ -42,7 +42,7 @@ XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
         effect_contexts_read(effects)!=NULL;
 }
 
-XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *context,
+static XrXirStatus effect_context_refresh_current(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirEffects *effects) {
     if (!xir_effects_context_matches(context,effects,source ? source->function_count : 0) ||
         !source || !effects->outcomes_owner || effects->root_input) return XR_XIR_BAD_STRUCTURE;
@@ -142,6 +142,8 @@ struct XirEffectContextScope {
     const XrXirEffects *effects;
     const XrXirModule *source;
     const XrXirTypes *types;
+    const XrXirConstruction *construction;
+    XrCompileRequestControl *control;
     XrXirStatus status;
     EffectContextAdmissionState state;
 };
@@ -211,7 +213,7 @@ static XrXirStatus effect_context_select_actual(const XrXirCompileContext *conte
 }
 
 
-XR_FUNC XrXirStatus xir_effects_context_select(const XrXirCompileContext *context,
+static XrXirStatus effect_context_read_select(const XrXirCompileContext *context,
     const XrXirEffects *effects,const XirEffectContextInput *input,XirEffectContextView *output) {
     if (!xir_compile_context_valid(context) || !effects || effects->resources!=context->resources ||
         !effect_contexts_read(effects) || !input || !input->source || !input->origin || !output ||
@@ -237,26 +239,28 @@ static XrXirStatus effect_context_scope_failure(XirEffectContextScope *scope,XrX
 /* This operation never borrows a dynamic-array element or memoizes a query.
  * Source and actual pools stay immutable for this lexical call; only private
  * derived storage may grow. A new call must repeat the complete admission. */
-XR_FUNC XrXirStatus xir_effects_context_operation(const XrXirCompileContext *context,
-    const XrXirEffects *effects,const XrXirModule *source,const XrXirTypes *types,
+static XrXirStatus effect_context_read_operation(const XrXirCompileContext *context,
+    const XrXirEffects *effects,XirEffectInput input,const XrXirTypes *types,
     XirEffectContextOperation operation,void *data) {
+    const XrXirModule *source=input.module;
     if (!xir_compile_context_valid(context) || !effects || effects->resources!=context->resources ||
         !effect_contexts_read(effects) || !source || !source->functions || !source->function_count ||
         !operation || effects->count!=source->function_count) return XR_XIR_BAD_STRUCTURE;
-    XirEffectContextScope selection_scope={context,effects,source,types,XR_XIR_OK,
+    XirEffectContextScope selection_scope={context,effects,source,types,input.construction,input.control,XR_XIR_OK,
         EFFECT_CONTEXT_ADMISSION_PENDING};
 
     XrXirStatus status=operation(data,&selection_scope);
     return selection_scope.status!=XR_XIR_OK ? selection_scope.status : status;
 }
 
-XR_FUNC XrXirStatus xir_effects_context_select_scoped(XirEffectContextScope *scope,
+static XrXirStatus effect_context_read_scoped(XirEffectContextScope *scope,
     const XirEffectContextInput *input,XirEffectContextView *output) {
     if (!scope) return XR_XIR_BAD_STRUCTURE;
     if (scope->status!=XR_XIR_OK) return scope->status;
     if (!xir_compile_context_valid(scope->context) || !scope->effects ||
         scope->effects->resources!=scope->context->resources || !effect_contexts_read(scope->effects) ||
-        !input || input->source!=scope->source || input->types!=scope->types || !input->origin || !output ||
+        !input || input->source!=scope->source || input->types!=scope->types ||
+        !input->construction || input->construction!=scope->construction || !input->origin || !output ||
         input->origin->function>=scope->source->function_count ||
         !!input->origin->arguments!=!!input->origin->argument_count ||
         !!input->owners!=!!input->owner_count || input->owner_count>scope->effects->count)
@@ -346,10 +350,11 @@ static XrXirStatus effect_context_reference_root(const XrXirCompileContext *cont
         XrXirOrigin origin={.function=function};
         XrXirOrigin *owners=NULL;uint32_t owner_count=0;
         XrXirStatus status=effect_context_base_owner_origins(context,module,function,&owners,&owner_count);
-        XirEffectContextInput input={module,module->types,&origin,instruction,owners,owner_count};
+        XirEffectContextInput input={module,module->types,&origin,instruction,owners,owner_count,
+            scope?scope->construction:effects->input_facts->construction,scope?scope->control:NULL};
         XirEffectContextView selected={0};
-        if (status==XR_XIR_OK) status=scope ? xir_effects_context_select_scoped(scope,&input,&selected) :
-            xir_effects_context_select(context,effects,&input,&selected);
+        if (status==XR_XIR_OK) status=scope ? effect_context_read_scoped(scope,&input,&selected) :
+            effect_context_read_select(context,effects,&input,&selected);
         xr_compile_resources_free(owners);
         if (status!=XR_XIR_OK) return status;
         mask=(selected.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
@@ -367,7 +372,7 @@ static XrXirStatus effect_context_reference_root(const XrXirCompileContext *cont
     *output=mask;return XR_XIR_OK;
 }
 
-XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *context,
+static XrXirStatus effect_context_reference_current(const XrXirCompileContext *context,
     const XrXirEffects *effects,const XrXirModule *module,
     uint32_t function,uint32_t instruction,uint32_t *output) {
     return effect_context_reference_root(context,effects,module,

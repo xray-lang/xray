@@ -87,6 +87,7 @@ typedef struct EffectBodyMaterial {
     XrCompileResources *resources;
     /* Only private compiler owners acquire/release these prepaid references. */
     uint32_t references;
+    EffectInputFacts *input_facts;
     /* A thin generation owns its mutable advertisement overlay and retains
      * the complete immutable backbone. It never frees borrowed child owners. */
     struct EffectBodyMaterial *backbone;

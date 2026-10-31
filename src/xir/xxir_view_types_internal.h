@@ -12,6 +12,7 @@
 #ifndef XXIR_VIEW_TYPES_INTERNAL_H
 #define XXIR_VIEW_TYPES_INTERNAL_H
 #include "xxir.h"
+#include "xxir_effect_input_internal.h"
 
 #define XR_XIR_VIEW_SHARED 1u
 #define XR_XIR_VIEW_MUTABLE 2u
@@ -44,6 +45,5 @@ XR_FUNC XrXirStatus xir_compile_view_affine_verified(const XrXirCompileContext *
     const XrXirModule *module, XrXirDiagnostic *diagnostic);
 /* Requires a structurally and semantically admitted module. No executable
  * borrowed value is admitted without independent CFG proof. */
-XR_FUNC XrXirStatus xir_compile_view_module_boundary(const XrXirCompileContext *context,
-    const XrXirModule *module, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_compile_view_module_boundary_input(const XrXirCompileContext *context, XirEffectInput input, XrXirDiagnostic *diagnostic);
 #endif // XXIR_VIEW_TYPES_INTERNAL_H

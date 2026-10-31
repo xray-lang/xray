@@ -20,51 +20,42 @@ typedef struct XirFixtureEffectInput {
     const XrXirConstruction *construction;
 } XirFixtureEffectInput;
 
-/* Current raw entries consume only Module. The explicit Construction borrow
- * is carried here but is neither consumed nor verified by those entries. */
+/* Each call borrows the actual complete pair. The production receiver checks
+ * and owns facts; these test forwards allocate and invent no declarations. */
 static inline XrXirStatus xir_fixture_effects_infer(const XrXirCompileContext *context,
     XirFixtureEffectInput input,XrXirEffects **output) {
-    (void)input.construction;
-    return xr_xir_compile_effects_infer_verified(context,input.module,output);
+    return xr_xir_compile_effects_infer_verified_input(context,(XirEffectInput){input.module,input.construction,NULL},output);
 }
 static inline XrXirStatus xir_fixture_effects_body_match(const XrXirCompileContext *context,
     XirFixtureEffectInput input,const XrXirEffects *effects) {
-    (void)input.construction;
-    return xir_effects_source_body_match(context,input.module,effects);
+    return xir_effects_source_body_match_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);
 }
 static inline XrXirStatus xir_fixture_effects_program_body(const XrXirCompileContext *context,
     XirFixtureEffectInput input,const XrXirEffects *effects) {
-    (void)input.construction;
-    return xir_effects_program_body_match(context,input.module,effects);
+    return xir_effects_program_body_match_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);
 }
 static inline XrXirStatus xir_fixture_effects_program_final(const XrXirCompileContext *context,
     XirFixtureEffectInput input,const XrXirEffects *effects) {
-    (void)input.construction;
-    return xir_effects_program_final_verify(context,input.module,effects);
+    return xir_effects_program_final_verify_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);
 }
 static inline XrXirStatus xir_fixture_effects_program_root(const XrXirCompileContext *context,
     XirFixtureEffectInput input,const XrXirEffects *effects) {
-    (void)input.construction;
-    return xir_effects_program_root_current(context,input.module,effects);
+    return xir_effects_program_root_current_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);
 }
 static inline XrXirStatus xir_fixture_effects_refine(const XrXirCompileContext *context,
     XirFixtureEffectInput input,const XrXirRootRefiner *refiner,XrXirEffects **output) {
-    (void)input.construction;
-    return xr_xir_compile_effects_refine_verified(context,input.module,refiner,output);
+    return xr_xir_compile_effects_refine_verified_input(context,(XirEffectInput){input.module,input.construction,NULL},refiner,output);
 }
 static inline XrXirStatus xir_fixture_effects_refresh(const XrXirCompileContext *context,
     XirFixtureEffectInput input,const XrXirEffects *effects) {
-    (void)input.construction;
-    return xir_effects_context_refresh(context,input.module,effects);
+    return xir_effects_context_refresh_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);
 }
 static inline XrXirStatus xir_fixture_effects_capture(const XrXirCompileContext *context,
     XirFixtureEffectInput input,const XrXirEffects *effects) {
-    (void)input.construction;
-    return xir_effects_refinement_capture(context,input.module,effects);
+    return xir_effects_refinement_capture_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);
 }
 static inline XrXirStatus xir_fixture_effects_terminal(const XrXirCompileContext *context,
     XirFixtureEffectInput input,const XrXirEffects *effects) {
-    (void)input.construction;
-    return xir_effects_source_terminal(context,input.module,effects);
+    return xir_effects_source_terminal_input(context,(XirEffectInput){input.module,input.construction,NULL},effects);
 }
 #endif // XIR_EFFECT_INPUT_FIXTURE_H

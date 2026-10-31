@@ -11,9 +11,10 @@
  */
 #include "xxir_constraints.h"
 #include "xxir_callable_root_obligations.inc.c"
-static XrXirStatus declaration_effects_verify(const XrXirModule *module,
+static XrXirStatus declaration_effects_verify(XirEffectInput input,
     XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic, const XrXirEffects *prepared, XrXirEffects **output, bool require_owned) {
-    XrXirStatus local=prepared?xir_effects_local_errors_verify(remaining,module,prepared,diagnostic):
+    const XrXirModule *module=input.module;
+    XrXirStatus local=prepared?xir_effects_local_errors_verify_input(remaining,input,prepared,diagnostic):
         xir_compile_local_errors_verify(remaining,module,diagnostic);
     if (local!=XR_XIR_OK) return local;
     bool templated = module->provenance && module->provenance->kind == XR_XIR_EVIDENCE_TEMPLATE;
@@ -22,9 +23,9 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
         if (!templated && (!output || !require_owned)) return XR_XIR_OK;
         XrXirEffects *owned = NULL;
         XrXirStatus status = prepared ? XR_XIR_OK :
-            xr_xir_compile_effects_infer_verified(remaining, module, &owned);
-        if (status == XR_XIR_OK && templated) status = xir_effects_parameters_match(remaining,
-            module, prepared ? prepared : owned);
+            xr_xir_compile_effects_infer_verified_input(remaining,(XirEffectInput){module,input.construction,input.control}, &owned);
+        if (status == XR_XIR_OK && templated) status = xir_effects_parameters_match_input(remaining,
+            input, prepared ? prepared : owned);
         if (status==XR_XIR_OK && output) { *output=owned;owned=NULL; }
         xr_xir_compile_effects_free(owned);
         return status;
@@ -54,12 +55,12 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
             }
         }
     }
-    if (!present) return output && require_owned ? xr_xir_compile_effects_infer_verified(remaining, module, output) : XR_XIR_OK;
+    if (!present) return output && require_owned ? xr_xir_compile_effects_infer_verified_input(remaining,(XirEffectInput){module,input.construction,input.control}, output) : XR_XIR_OK;
     XrXirEffects *effects = NULL;
-    XrXirStatus status = prepared ? XR_XIR_OK : xr_xir_compile_effects_infer_verified(remaining, module, &effects);
+    XrXirStatus status = prepared ? XR_XIR_OK : xr_xir_compile_effects_infer_verified_input(remaining,(XirEffectInput){module,input.construction,input.control}, &effects);
     const XrXirEffects *facts = prepared ? prepared : effects;
-    if (status == XR_XIR_OK) status = xir_effects_parameters_match(remaining, module, facts);
-    if (status == XR_XIR_OK) status = declaration_callable_root_verify(module, facts, remaining, diagnostic);
+    if (status == XR_XIR_OK) status = xir_effects_parameters_match_input(remaining, input, facts);
+    if (status == XR_XIR_OK) status = declaration_callable_root_verify(input, facts, remaining, diagnostic);
     for (uint32_t f = 0; status == XR_XIR_OK && f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         for (uint32_t i = 0; status == XR_XIR_OK && i < function->instruction_count; ++i) {

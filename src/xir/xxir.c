@@ -468,7 +468,7 @@ XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *c
     if (status==XR_XIR_OK) status=transition_shape(built,XR_XIR_BUILT,context,NULL,diagnostic);
     if (status == XR_XIR_OK) status = xr_xir_compile_structure_verify_v2(context,built,construction,diagnostic);
     XrXirEffects *effects = NULL;
-    if (status == XR_XIR_OK) status = xr_xir_compile_effects_refine_verified(context,built,refiner,&effects);
+    if (status == XR_XIR_OK) status = xr_xir_compile_effects_refine_verified_input(context,(XirEffectInput){built,construction,control},refiner,&effects);
     if (status == XR_XIR_OK) status = xr_xir_compile_verify_effects_v2(context,built,construction,effects,diagnostic);
     XrXirArtifact *copy = NULL;
     if (status == XR_XIR_OK) {
@@ -594,7 +594,7 @@ static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
          * A separately supplied derivation cannot stand in for stored facts. */
         XrXirStatus status=source_effects && facts && source_effects!=facts->effects?
             source_facts_match(&limits,source,diagnostic, control):source_facts_input_match(&limits,source,facts, control);
-        if (status==XR_XIR_OK) status=xir_effects_source_terminal(&limits,&source->module,facts->effects);
+        if (status==XR_XIR_OK) status=xir_effects_source_terminal_input(&limits,(XirEffectInput){&source->module,source->construction,NULL},facts->effects);
         if (status==XR_XIR_OK) status=xr_xir_compile_layout_match_verified(source);
         if (status!=XR_XIR_OK) return transition_error(status,diagnostic);
         if (!source_effects) source_effects=facts->effects;

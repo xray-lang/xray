@@ -1420,8 +1420,11 @@ static bool view_cell_access_scope_needed(const XrXirModule *module) {
     }
     return false;
 }
-XR_FUNC XrXirStatus xir_compile_view_cell_access_verified(const XrXirCompileContext *context,
-    const XrXirModule *module,XrXirDiagnostic *diagnostic) {
+XR_FUNC XrXirStatus xir_compile_view_cell_access_verified_input(const XrXirCompileContext *context,
+    XirEffectInput input,XrXirDiagnostic *diagnostic) {
+    const XrXirModule *module=input.module;
+    const XrXirConstruction *construction=input.construction;
+    if(!construction)return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_context_valid(context) || !module) return XR_XIR_BAD_STRUCTURE;
     ViewCellAccessOperation held={.module=module,.diagnostic=diagnostic};
     uint64_t fixed=sizeof(held)+12u*sizeof(uint64_t);
@@ -1434,7 +1437,7 @@ XR_FUNC XrXirStatus xir_compile_view_cell_access_verified(const XrXirCompileCont
         held.remaining=*context;held.remaining.limits.frame_bytes-=fixed+held.bytes;
         held.cells=(XirViewAccessCells){.owner=held.owner,.role=xr_xir_cell_provenance_role};
         status=view_cell_access_scope_needed(module) ?
-            xir_effects_default_access_operation(&held.remaining,module,view_cell_access_operation,&held):
+            xir_effects_default_access_operation_input(&held.remaining,(XirEffectInput){module,construction,NULL},view_cell_access_operation,&held):
             xir_compile_view_access_cells_verified(&held.remaining,module,&held.cells,diagnostic);
     }
     xr_xir_compile_cell_provenance_free(held.owner);return status;
@@ -1456,7 +1459,7 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
     XrXirStatus status=structure_verify_ordinary(&context,construction);
     xr_compile_resources_free(context.graph_storage);
     context.graph_storage = NULL; context.graph_capacity = 0;
-    if (status == XR_XIR_OK) status = xir_compile_view_module_boundary(&context.remaining,module,&context.location);
+    if (status == XR_XIR_OK) status = xir_compile_view_module_boundary_input(&context.remaining,(XirEffectInput){module,construction,NULL},&context.location);
     if (status == XR_XIR_OK) {
         XrXirCellProvenance *cell_proof = NULL;
         if (program_effects)
@@ -1492,10 +1495,10 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_source_effects_v2(const XrXirCompileCo
         source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirStatus status=structure_verify_source(context,source,construction,NULL,NULL,&location);
-    if (status==XR_XIR_OK) status=xir_effects_source_body_match(context,source,effects);
+    if (status==XR_XIR_OK) status=xir_effects_source_body_match_input(context,(XirEffectInput){source,construction,NULL},effects);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(source,&remaining,&location,effects,NULL,true);
+        status=declaration_effects_verify((XirEffectInput){source,construction,NULL},&remaining,&location,effects,NULL,true);
     }
     location.status=status;if (diagnostic) *diagnostic=location;
     return status;
@@ -1509,12 +1512,12 @@ XR_FUNC XrXirStatus xir_compile_verify_raw_source_effects(const XrXirCompileCont
     if(!xir_compile_context_valid(context) || !source || source->provenance || !effects) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirStatus status=structure_verify_source(context,source,construction,NULL,NULL,&location);
-    if(status==XR_XIR_OK) status=xir_effects_source_body_match(context,source,effects);
+    if(status==XR_XIR_OK) status=xir_effects_source_body_match_input(context,(XirEffectInput){source,construction,NULL},effects);
     if(status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(source,&remaining,&location,effects,NULL,true);
+        status=declaration_effects_verify((XirEffectInput){source,construction,NULL},&remaining,&location,effects,NULL,true);
     }
-    if(status==XR_XIR_OK) status=xir_effects_raw_source_terminal(context,source,effects);
+    if(status==XR_XIR_OK) status=xir_effects_raw_source_terminal_input(context,(XirEffectInput){source,construction,NULL},effects);
     location.status=status;if(diagnostic) *diagnostic=location;
     return status;
 }
@@ -1531,7 +1534,7 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompi
     XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(module,&remaining,&location,NULL,NULL,true);
+        status=declaration_effects_verify((XirEffectInput){module,construction,NULL},&remaining,&location,NULL,NULL,true);
     }
     location.status=status;if (diagnostic) *diagnostic=location;
     return status;
@@ -1546,10 +1549,10 @@ static XrXirStatus verify_effects_body(const XrXirCompileContext *context,
     XrXirDiagnostic location = {XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirStatus status = structure_verify_source(context,module,construction,NULL,program_effects,&location);
     if (status==XR_XIR_OK && program_effects)
-        status=xir_effects_program_body_match(context,module,program_effects);
+        status=xir_effects_program_body_match_input(context,(XirEffectInput){module,construction,NULL},program_effects);
     if (status == XR_XIR_OK) {
         XrXirCompileContext remaining = *context;
-        status = declaration_effects_verify(module,&remaining,&location,effects,NULL,true);
+        status = declaration_effects_verify((XirEffectInput){module,construction,NULL},&remaining,&location,effects,NULL,true);
     }
     location.status = status;
     if (diagnostic) *diagnostic = location;
@@ -1578,7 +1581,7 @@ static XrXirStatus verify_collected_effects(const XrXirCompileContext *context,
     XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(module,&remaining,&location,NULL,&owned,true);
+        status=declaration_effects_verify((XirEffectInput){module,construction,NULL},&remaining,&location,NULL,&owned,true);
     }
     if (status==XR_XIR_OK && !owned) status=XR_XIR_BAD_STRUCTURE;
     location.status=status;if (diagnostic) *diagnostic=location;
@@ -1622,7 +1625,7 @@ static XrXirStatus verify_optional_effects(const XrXirCompileContext *context,
     XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
     if(status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(module,&remaining,&location,NULL,&owned,false);
+        status=declaration_effects_verify((XirEffectInput){module,construction,NULL},&remaining,&location,NULL,&owned,false);
     }
     location.status=status;if(diagnostic) *diagnostic=location;
     if(status!=XR_XIR_OK) { xr_xir_compile_effects_free(owned);return status; }
@@ -1653,12 +1656,12 @@ XR_FUNC XrXirStatus xir_compile_verify_receiving_replay(const XrXirCompileContex
         return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
-    if(status==XR_XIR_OK) status=xir_effects_source_body_match(context,module,effects);
+    if(status==XR_XIR_OK) status=xir_effects_source_body_match_input(context,(XirEffectInput){module,construction,NULL},effects);
     if(status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(module,&remaining,&location,effects,NULL,true);
+        status=declaration_effects_verify((XirEffectInput){module,construction,NULL},&remaining,&location,effects,NULL,true);
     }
-    if(status==XR_XIR_OK) status=xir_effects_receiving_terminal(context,module,effects);
+    if(status==XR_XIR_OK) status=xir_effects_receiving_terminal_input(context,(XirEffectInput){module,construction,NULL},effects);
     location.status=status;if(diagnostic) *diagnostic=location;
     return status;
 }
@@ -1670,12 +1673,12 @@ XR_FUNC XrXirStatus xir_compile_verify_built_replay(const XrXirCompileContext *c
         module->provenance || !effects) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirStatus status=structure_verify_source(context,module,construction,NULL,NULL,&location);
-    if(status==XR_XIR_OK) status=xir_effects_built_copy_match(context,module,effects);
+    if(status==XR_XIR_OK) status=xir_effects_built_copy_match_input(context,(XirEffectInput){module,construction,NULL},effects);
     if(status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(module,&remaining,&location,effects,NULL,true);
+        status=declaration_effects_verify((XirEffectInput){module,construction,NULL},&remaining,&location,effects,NULL,true);
     }
-    if(status==XR_XIR_OK) status=xir_effects_built_copy_terminal(context,module,effects);
+    if(status==XR_XIR_OK) status=xir_effects_built_copy_terminal_input(context,(XirEffectInput){module,construction,NULL},effects);
     location.status=status;if(diagnostic) *diagnostic=location;
     return status;
 }

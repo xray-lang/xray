@@ -298,7 +298,7 @@ static XrXirStatus source_view_normalize(SourceContext *ctx,const XrXirModule *m
     if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(&ctx->compile,&replacement,NULL,NULL,diagnostic);
     /* Access sees the actual cleanup and relocated SSA before publication. */
     if (status==XR_XIR_OK) {
-        status=xir_compile_view_cell_access_verified(&ctx->compile,&replacement,diagnostic);
+        status=xir_compile_view_cell_access_verified_input(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},diagnostic);
         if (status!=XR_XIR_OK) status=source_view_access_failure(ctx,&replacement,diagnostic,status);
     }
     if (status==XR_XIR_OK) {

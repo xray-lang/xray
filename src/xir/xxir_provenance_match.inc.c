@@ -48,10 +48,10 @@ static XrXirStatus provenance_effect_context(ProvenanceMatch *c, uint32_t caller
         owners[a]=c->origins[current-1];
         current=c->destination->declarations->functions[current-1].cleanup_owner;
     }
-    XirEffectContextInput input={c->source,c->destination->types,&c->origins[caller],instruction,owners,count};
+    XirEffectContextInput input={c->source,c->destination->types,&c->origins[caller],instruction,owners,count,c->instance->source->construction,NULL};
     if (status==XR_XIR_OK) status=c->selection_scope ?
-        xir_effects_context_select_scoped(c->selection_scope,&input,output) :
-        xir_effects_context_select(c->remaining,c->effects,&input,output);
+        xir_effects_context_select_scoped_input(c->selection_scope,&input,output) :
+        xir_effects_context_select_input(c->remaining,c->effects,&input,output);
     xr_compile_resources_free(owners);return status;
 }
 
@@ -859,11 +859,11 @@ static XrXirStatus provenance_functions_match_owned(const XrXirCompileContext *c
                 {remaining->resources, NULL},instance,effects,NULL};
             XrXirEffects *inferred=NULL;
             if (!effects && source->provenance && source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
-                status=xr_xir_compile_effects_infer_verified(remaining,source,&inferred);
+                status=xr_xir_compile_effects_infer_verified_input(remaining,(XirEffectInput){source,instance->source->construction,NULL},&inferred);
                 context.effects=inferred;
             }
             if (status==XR_XIR_OK) status=xir_effects_context_available(remaining,context.effects) ?
-                xir_effects_context_operation(remaining,context.effects,source,destination->types,
+                xir_effects_context_operation_input(remaining,context.effects,(XirEffectInput){source,instance->source->construction,NULL},destination->types,
                     provenance_match_scoped,&context) : provenance_match_scoped(&context,NULL);
             xr_xir_type_match_scratch_free(&context.scratch);
             xr_xir_compile_effects_free(inferred);

@@ -64,13 +64,13 @@ static bool source_root_reference(SourceContext *ctx, uint32_t f, uint32_t i,
     XrXirRootEffects copied={0};const XrXirRootEffects *facts=&copied;
     XrXirRootEffects contextual={0};
     XrXirDeclarations declarations;XrXirModule view=source_module_view(ctx,&declarations);
-    XrXirStatus status=xir_effects_context_refresh(&ctx->compile,&view,effects);
+    XrXirStatus status=xir_effects_context_refresh_input(&ctx->compile,(XirEffectInput){&view,ctx->construction,ctx->request},effects);
     if (status==XR_XIR_OK) status=xir_effects_construction_root(&ctx->compile,effects,target,&copied);
     if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"context generation rebuild failed");
     if (xir_effects_context_available(&ctx->compile,effects) &&
         (!ctx->has_generics || !ctx->generics[f].parameter_count)) {
         uint32_t mask=0;
-        status=xir_effects_reference_root(&ctx->compile,effects,&view,f,i,&mask);
+        status=xir_effects_reference_root_input(&ctx->compile,effects,(XirEffectInput){&view,ctx->construction,ctx->request},f,i,&mask);
         if (status==XR_XIR_OK) {
             contextual=(XrXirRootEffects){!!(mask&XR_XIR_CALLABLE_ROOT_REQUIRED),
                 !!(mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED)};facts=&contextual;
@@ -296,7 +296,7 @@ static XrXirStatus source_root_refine(void *opaque, const XrXirEffects *effects,
     *changed = false;
     if (!ctx->root_flow) {
         XrXirDeclarations declarations;XrXirModule view=source_module_view(ctx,&declarations);
-        XrXirStatus status=xir_effects_refinement_capture(&ctx->compile,&view,effects);
+        XrXirStatus status=xir_effects_refinement_capture_input(&ctx->compile,(XirEffectInput){&view,ctx->construction,ctx->request},effects);
         if (status!=XR_XIR_OK) {
             source_fail(ctx,NULL,status,"pre-bottom advertisements could not be owned");goto failure;
         }

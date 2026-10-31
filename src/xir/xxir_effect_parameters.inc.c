@@ -74,6 +74,7 @@ static inline XrXirStatus effect_parameters_variable_domain(const XrXirModule *m
 static XrXirStatus effect_parameters_allocate(const XrXirModule *module,
     XrXirEffects *effects, EffectGraph *graph,const XrXirCompileContext *work) {
     if (!graph || !module || effects->count!=module->function_count) return XR_XIR_BAD_STRUCTURE;
+    graph->input_facts=effects->input_facts;
     XrXirStatus status=XR_XIR_OK;
     if (!graph->material || !graph->physical_owned)
         status=effect_graph_physical_refresh(work,module,graph,effects->refinement);
@@ -517,7 +518,7 @@ static inline XrXirStatus effect_formula_needs_value_flow(EffectParameterFlow *f
     *needed=false;return XR_XIR_OK;
 }
 
-XR_FUNC XrXirStatus xir_effects_parameters_match(const XrXirCompileContext *work,
+static XrXirStatus effect_parameters_current(const XrXirCompileContext *work,
     const XrXirModule *module, const XrXirEffects *effects) {
     if (!xir_compile_context_valid(work) || !module || !effects ||
         effects->resources != work->resources || effects->count != module->function_count)

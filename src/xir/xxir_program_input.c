@@ -41,7 +41,7 @@ static XrXirStatus input_artifact_storage(const XrXirCompileContext *context,
 static XrXirStatus input_artifact_shape(const XrXirCompileContext *context,
     const XrXirArtifact *artifact) {
     XrXirStatus status=input_artifact_storage(context,artifact);
-    if (status==XR_XIR_OK) status=xir_effects_program_body_match(context,&artifact->module,artifact->program_final);
+    if (status==XR_XIR_OK) status=xir_effects_program_body_match_input(context,(XirEffectInput){&artifact->module,artifact->construction,NULL},artifact->program_final);
     if (status==XR_XIR_OK) status=xir_effects_program_layout_match(context,artifact->program_final,
         &artifact->target,artifact->layouts);
     return status==XR_XIR_BAD_LAYOUT?XR_XIR_BAD_STRUCTURE:status;
@@ -49,14 +49,14 @@ static XrXirStatus input_artifact_shape(const XrXirCompileContext *context,
 static XrXirStatus input_artifact_verify(const XrXirCompileContext *context,
     const XrXirArtifact *artifact) {
     XrXirStatus status=input_artifact_storage(context,artifact);
-    if (status==XR_XIR_OK) status=xir_effects_program_final_verify(context,&artifact->module,artifact->program_final);
+    if (status==XR_XIR_OK) status=xir_effects_program_final_verify_input(context,(XirEffectInput){&artifact->module,artifact->construction,NULL},artifact->program_final);
     if (status==XR_XIR_OK) status=xir_compile_verify_program_effects(context,&artifact->module,
         artifact->construction,artifact->program_final,NULL);
     if (status==XR_XIR_OK) status=xir_effects_program_layout_match(context,artifact->program_final,
         &artifact->target,artifact->layouts);
     if (status==XR_XIR_BAD_LAYOUT) status=XR_XIR_BAD_STRUCTURE;
-    if (status==XR_XIR_OK) status=xir_effects_program_body_match(context,&artifact->module,artifact->program_final);
-    if (status==XR_XIR_OK) status=xir_effects_program_root_current(context,&artifact->module,artifact->program_final);
+    if (status==XR_XIR_OK) status=xir_effects_program_body_match_input(context,(XirEffectInput){&artifact->module,artifact->construction,NULL},artifact->program_final);
+    if (status==XR_XIR_OK) status=xir_effects_program_root_current_input(context,(XirEffectInput){&artifact->module,artifact->construction,NULL},artifact->program_final);
     return status;
 }
 XR_FUNC XrXirStatus xir_program_input_verify(const XrXirCompileContext *context,

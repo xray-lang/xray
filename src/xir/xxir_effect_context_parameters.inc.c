@@ -20,6 +20,7 @@ typedef struct EffectOrdinaryNode {
 
 typedef struct EffectOrdinaryContexts {
     XrCompileResources *resources;
+    EffectInputFacts *input_facts;
     EffectTerms terms;
     EffectOrdinaryNode *nodes;
     XrXirFunction *functions;
@@ -58,6 +59,7 @@ static void effect_ordinary_free(EffectOrdinaryContexts *contexts) {
     xr_compile_resources_free(contexts->nodes);
     xr_compile_resources_free(contexts->functions);
     effect_terms_free(&contexts->terms);
+    effect_input_facts_free(contexts->input_facts);
     xr_compile_resources_free(contexts);
 }
 
@@ -480,7 +482,7 @@ static XrXirStatus effect_ordinary_seed_rebuild(const XrXirCompileContext *conte
  * declared bounds until physical use is independently rederived. */
 static XrXirStatus effect_ordinary_classify(const XrXirCompileContext *context,
     const XrXirModule *source, const EffectContextResolved *seed,
-    EffectOrdinaryContexts **output, uint32_t *selected) {
+    EffectInputFacts *input_facts, EffectOrdinaryContexts **output, uint32_t *selected) {
     if (!xir_compile_context_valid(context) || !source || !source->types ||
         !source->functions || !source->function_count || !seed || !seed->known ||
         seed->resources!=context->resources || !output || *output || !selected)
@@ -492,6 +494,9 @@ static XrXirStatus effect_ordinary_classify(const XrXirCompileContext *context,
     EffectOrdinaryContexts *contexts=xir_compile_calloc(context,1,sizeof(*contexts),&status);
     if (!contexts) { effect_context_free(fresh);return status; }
     contexts->resources=context->resources;
+    status=effect_input_facts_retain(context,input_facts);
+    if(status!=XR_XIR_OK){effect_context_free(fresh);effect_ordinary_free(contexts);return status;}
+    contexts->input_facts=input_facts;
     contexts->terms.remaining=context;contexts->base_count=source->function_count;
     contexts->source_type_count=source->types->count;
     status=effect_terms_seed(&contexts->terms,source->types);
@@ -507,7 +512,7 @@ static XrXirStatus effect_ordinary_classify(const XrXirCompileContext *context,
     for (uint32_t f=0;f<contexts->count && status==XR_XIR_OK;++f)
         status=effect_ordinary_expand(contexts,source,f);
     EffectGraph graph={0};EffectOrdinaryView view={0};
-    contexts->uses.resources=context->resources;contexts->uses.count=contexts->count;
+    contexts->uses.resources=context->resources;contexts->uses.count=contexts->count;contexts->uses.input_facts=contexts->input_facts;
     if (status==XR_XIR_OK) status=effect_ordinary_view(contexts,source,&view);
     if (status==XR_XIR_OK) {
         graph.ordinary=view.input;
@@ -523,7 +528,7 @@ static XrXirStatus effect_ordinary_classify(const XrXirCompileContext *context,
 
 static XrXirStatus effect_ordinary_build(const XrXirCompileContext *context,
     const XrXirModule *source,EffectBodyMaterial *initial,EffectRefinementBounds *refinement,
-    EffectOrdinaryContexts **output) {
+    EffectInputFacts *input_facts,EffectOrdinaryContexts **output) {
     if (!xir_compile_context_valid(context) || !source || !source->types ||
         !source->functions || !source->function_count || !output || *output ||
         (initial && (!effect_body_material_shape(initial) || initial->resources!=context->resources)))
@@ -533,6 +538,9 @@ static XrXirStatus effect_ordinary_build(const XrXirCompileContext *context,
     EffectOrdinaryContexts *contexts=xir_compile_calloc(context,1,sizeof(*contexts),&status);
     if (!contexts) return status;
     contexts->resources=context->resources;
+    status=effect_input_facts_retain(context,input_facts);
+    if(status!=XR_XIR_OK){effect_ordinary_free(contexts);return status;}
+    contexts->input_facts=input_facts;
     contexts->terms.remaining=context;contexts->base_count=source->function_count;
     contexts->source_type_count=source->types->count;
     status=effect_terms_seed(&contexts->terms,source->types);
@@ -548,7 +556,7 @@ static XrXirStatus effect_ordinary_build(const XrXirCompileContext *context,
     for (uint32_t f=0;f<contexts->count && status==XR_XIR_OK;++f)
         status=effect_ordinary_expand(contexts,source,f);
     EffectGraph graph={0};EffectOrdinaryView view={0};
-    contexts->uses.resources=context->resources;contexts->uses.count=contexts->count;
+    contexts->uses.resources=context->resources;contexts->uses.count=contexts->count;contexts->uses.input_facts=contexts->input_facts;
     if (status==XR_XIR_OK) status=effect_ordinary_view(contexts,source,&view);
 
     if (status==XR_XIR_OK) {

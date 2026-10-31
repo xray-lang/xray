@@ -16,6 +16,7 @@
 #define XXIR_EFFECT_CONTRACT_INTERNAL_H
 
 #include "xxir.h"
+#include "xxir_effect_input_internal.h"
 
 typedef enum XrXirEvidenceKind {
     XR_XIR_EVIDENCE_ABSENT = 0,
@@ -158,6 +159,8 @@ typedef struct XirEffectContextInput {
     uint32_t instruction;
     const XrXirOrigin *owners;
     uint32_t owner_count;
+    const XrXirConstruction *construction;
+    XrCompileRequestControl *control;
 } XirEffectContextInput;
 typedef struct XirEffectContextView {
     const XrXirTypes *types;
@@ -166,15 +169,13 @@ typedef struct XirEffectContextView {
     uint32_t declaration, parameter_count, argument_count;
     bool requires_root, unresolved;
 } XirEffectContextView;
-XR_FUNC XrXirStatus xir_effects_refinement_capture(const XrXirCompileContext *context,
-    const XrXirModule *source, const struct XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_refinement_capture_input(const XrXirCompileContext *context, XirEffectInput input, const struct XrXirEffects *effects);
 XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
     const struct XrXirEffects *effects);
 /* Only a genuine unpublished Source constructor can refresh contexts.
  * A completed Final rejects the call without work or output changes. */
-XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *context,
-    const XrXirModule *source, const struct XrXirEffects *effects);
-XR_FUNC XrXirStatus xir_effects_context_select(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xir_effects_context_refresh_input(const XrXirCompileContext *context, XirEffectInput input, const struct XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_context_select_input(const XrXirCompileContext *context,
     const struct XrXirEffects *effects, const XirEffectContextInput *input, XirEffectContextView *output);
 /* This private lexical scope belongs to one read-only correspondence call.
  * Only its constructor creates a scope; no stored fact or caller flag can
@@ -185,21 +186,14 @@ XR_FUNC XrXirStatus xir_effects_context_select(const XrXirCompileContext *contex
  * error also overrides a callback that ignores it; later requests do no work. */
 typedef struct XirEffectContextScope XirEffectContextScope;
 typedef XrXirStatus (*XirEffectContextOperation)(void *data,XirEffectContextScope *scope);
-XR_FUNC XrXirStatus xir_effects_context_operation(const XrXirCompileContext *context,
-    const struct XrXirEffects *effects,const XrXirModule *source,const XrXirTypes *types,
-    XirEffectContextOperation operation,void *data);
-XR_FUNC XrXirStatus xir_effects_context_select_scoped(XirEffectContextScope *scope,
+XR_FUNC XrXirStatus xir_effects_context_operation_input(const XrXirCompileContext *context, const struct XrXirEffects *effects, XirEffectInput input, const XrXirTypes *types, XirEffectContextOperation operation, void *data);
+XR_FUNC XrXirStatus xir_effects_context_select_scoped_input(XirEffectContextScope *scope,
     const XirEffectContextInput *input,XirEffectContextView *output);
 /* The Source producer may advance before this call. Complete current matching
  * and any required rebuild precede one immutable, fully admitted edge read. */
-XR_FUNC XrXirStatus xir_effects_source_reference_root(const XrXirCompileContext *context,
-    const struct XrXirEffects *effects,const XrXirModule *source,
-    uint32_t function,uint32_t instruction,uint32_t *output);
 /* The common verifier calls this with its freshly derived owner and the same
  * verified module. It consumes the real reference edge, never a target hint. */
-XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *context,
-    const struct XrXirEffects *effects, const XrXirModule *module,
-    uint32_t function, uint32_t instruction, uint32_t *output);
+XR_FUNC XrXirStatus xir_effects_reference_root_input(const XrXirCompileContext *context, const struct XrXirEffects *effects, XirEffectInput input, uint32_t function, uint32_t instruction, uint32_t *output);
 
 /* Sealed entry facts borrow only Effects, never the source module or formula.
  * Intrinsic ROOT flags retain every non-Cell unknown; sorted physical Cell
@@ -317,8 +311,7 @@ static inline bool xir_effect_evidence_is_evaluation(const XrXirModule *module) 
 typedef struct XirEffectDefaultAccessScope XirEffectDefaultAccessScope;
 typedef XrXirStatus (*XirEffectDefaultAccessOperation)(void *data,
     const XrXirCompileContext *remaining,XirEffectDefaultAccessScope *scope);
-XR_FUNC XrXirStatus xir_effects_default_access_operation(const XrXirCompileContext *context,
-    const XrXirModule *module,XirEffectDefaultAccessOperation operation,void *data);
+XR_FUNC XrXirStatus xir_effects_default_access_operation_input(const XrXirCompileContext *context, XirEffectInput input, XirEffectDefaultAccessOperation operation, void *data);
 XR_FUNC XrXirStatus xir_effects_default_access_site(XirEffectDefaultAccessScope *scope,
     const XrXirCompileContext *remaining,uint32_t caller,uint32_t instruction);
 /* A current direct Class-result call uses the same owned Control closure.

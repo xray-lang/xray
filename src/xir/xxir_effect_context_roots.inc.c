@@ -250,7 +250,7 @@ static XrXirStatus effect_ordinary_roots_publish(const XrXirCompileContext *cont
 
     XrXirStatus status=effect_ordinary_root_storage(contexts,context);
     if (status==XR_XIR_OK && !graph->material) {
-        graph->ordinary=view->input;
+        graph->ordinary=view->input;graph->input_facts=contexts->input_facts;
         status=effect_graph_physical_refresh(context,&view->module,graph,contexts->uses.refinement);
     }
     XrXirCompileContext remaining=*context;

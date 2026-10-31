@@ -39,6 +39,7 @@ static void effect_body_material_free(EffectBodyMaterial *body) {
     xr_xir_compile_generics_free(body->generics,effect_body_count(body));
     effect_terms_free(&body->terms);
     xr_xir_compile_types_free(body->owned_types);
+    effect_input_facts_free(body->input_facts);
     xr_compile_resources_free(body);
 }
 
@@ -198,8 +199,9 @@ static XrXirStatus effect_body_writer_span(void *owner,uint32_t first,uint32_t c
  * role product. No provenance alias or verified flag survives as admission. */
 static XrXirStatus effect_body_material_generation_input(const XrXirCompileContext *work,
     const XrXirModule *source,EffectRefinementBounds *refinement,
-    const EffectBodyOrdinaryInput *ordinary,EffectBodyMaterial **output) {
+    const EffectBodyOrdinaryInput *ordinary,EffectInputFacts *input_facts,EffectBodyMaterial **output) {
     if (!xir_compile_context_valid(work) || !source || !output || *output ||
+        !input_facts || input_facts->resources!=work->resources ||
         (!!source->function_count!=!!source->functions)) return XR_XIR_BAD_STRUCTURE;
     if (!ordinary && source->function_count>work->limits.functions) return XR_XIR_BUDGET;
     XrXirStatus status=ordinary ? effect_body_ordinary_input_verify(work,source,ordinary) :
@@ -223,6 +225,9 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
     EffectBodyMaterial *body=xir_compile_calloc(work,1,sizeof(*body),&status);
     if (!body) return status;
     body->resources=work->resources;body->references=1;body->terms.remaining=work;
+    status=effect_input_facts_retain(work,input_facts);
+    if (status!=XR_XIR_OK) { effect_body_material_free(body);return status; }
+    body->input_facts=input_facts;
     body->domain.function_count=source->function_count;
     body->stage=source->stage;body->linkage_kind=source->linkage_kind;
 
@@ -318,14 +323,14 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
 
 /* Public raw construction preserves the complete original evidence admission. */
 static XrXirStatus effect_body_material_generation(const XrXirCompileContext *work,
-    const XrXirModule *source,EffectRefinementBounds *refinement,EffectBodyMaterial **output) {
-    return effect_body_material_generation_input(work,source,refinement,NULL,output);
+    const XrXirModule *source,EffectRefinementBounds *refinement,EffectInputFacts *input_facts,EffectBodyMaterial **output) {
+    return effect_body_material_generation_input(work,source,refinement,NULL,input_facts,output);
 }
 
 /* Literal construction uses the same writer without a Source refiner. */
 static inline XrXirStatus effect_body_material_create(const XrXirCompileContext *work,
-    const XrXirModule *source,EffectBodyMaterial **output) {
-    return effect_body_material_generation(work,source,NULL,output);
+    const XrXirModule *source,EffectInputFacts *input_facts,EffectBodyMaterial **output) {
+    return effect_body_material_generation(work,source,NULL,input_facts,output);
 }
 
 /* Original metadata and physical body producers have no lifetime claim on

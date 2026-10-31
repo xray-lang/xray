@@ -41,7 +41,7 @@ static void effect_context_owner_free(EffectContextOwner *owner) {
 
 static void effect_context_summary_clear(EffectOrdinaryContexts *contexts) {
     effect_ordinary_results_free(contexts);
-    contexts->uses=(XrXirEffects){.resources=contexts->terms.remaining->resources,.count=contexts->count};
+    contexts->uses=(XrXirEffects){.resources=contexts->terms.remaining->resources,.input_facts=contexts->input_facts,.count=contexts->count};
 }
 
 
@@ -565,7 +565,7 @@ static XrXirStatus effect_context_dense_stable(const XrXirCompileContext *contex
     EffectContextOwner *owner,const XrXirModule *source);
 
 static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context,
-    const XrXirModule *source,EffectRefinementBounds *bounds,EffectBodyMaterial *initial,EffectContextOwner **output) {
+    const XrXirModule *source,EffectRefinementBounds *bounds,EffectBodyMaterial *initial,EffectInputFacts *input_facts,EffectContextOwner **output) {
     if (!xir_compile_context_valid(context) || !source || !source->declarations ||
         !source->declarations->functions || !output || *output ||
         (initial && (!effect_body_material_shape(initial) || initial->resources!=context->resources)))
@@ -578,7 +578,7 @@ static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context
     if (!owner) return status;
     owner->refinement=bounds;
     status=effect_invocation_bounds_new(context,&owner->declared);
-    if (status==XR_XIR_OK) status=effect_ordinary_build(context,source,initial,bounds,&owner->ordinary);
+    if (status==XR_XIR_OK) status=effect_ordinary_build(context,source,initial,bounds,input_facts,&owner->ordinary);
     if (status==XR_XIR_OK && bounds) {
         owner->ordinary->terms.remaining=context;
         status=effect_refinement_apply(owner->ordinary,source,bounds);
@@ -588,6 +588,9 @@ static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context
         owner->dense=xir_compile_calloc(context,1,sizeof(*owner->dense),&status);
         if (!owner->dense) { effect_context_owner_free(owner);return status; }
         owner->dense->resources=context->resources;
+        status=effect_input_facts_retain(context,input_facts);
+        if(status!=XR_XIR_OK){effect_context_owner_free(owner);return status;}
+        owner->dense->input_facts=input_facts;
         owner->dense->terms.remaining=context;owner->dense->dense=true;
         owner->dense->source_type_count=source->types->count;owner->dense->base_count=source->function_count;
         status=effect_terms_seed(&owner->dense->terms,&owner->ordinary->terms.types);

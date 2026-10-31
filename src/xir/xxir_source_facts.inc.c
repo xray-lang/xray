@@ -130,8 +130,7 @@ static XrXirStatus source_facts_match(const XrXirCompileContext *context,
     XrXirStatus status=source_facts_input_match(context,artifact,artifact->source_facts, control);
     if (status==XR_XIR_OK) status=xr_xir_compile_verify_source_effects_v2(context,
         &artifact->module,artifact->construction,artifact->source_facts->effects,diagnostic);
-    if (status==XR_XIR_OK) status=xir_effects_source_terminal(context,
-        &artifact->module,artifact->source_facts->effects);
+    if (status==XR_XIR_OK) status=xir_effects_source_terminal_input(context,(XirEffectInput){&artifact->module,artifact->construction,control},artifact->source_facts->effects);
     if (status==XR_XIR_OK) status=xr_xir_compile_layout_match_verified(artifact);
     if (status==XR_XIR_OK) status=xir_receive_poll(control);
     return status;
@@ -157,7 +156,7 @@ static XrXirStatus source_facts_build(XrXirArtifact *artifact,XrXirDiagnostic *d
         if (status==XR_XIR_OK) status=xir_construction_clone(context,artifact->module.types,
             artifact->construction,&facts->construction,control);
         if (status==XR_XIR_OK) status=source_facts_input_match(context,artifact,facts, control);
-        if (status==XR_XIR_OK) status=xir_effects_source_terminal(context,&artifact->module,facts->effects);
+        if (status==XR_XIR_OK) status=xir_effects_source_terminal_input(context,(XirEffectInput){&artifact->module,artifact->construction,control},facts->effects);
     }
     xr_xir_compile_effects_free(effects);
     if (status!=XR_XIR_OK) { xir_source_facts_release(facts);return status; }

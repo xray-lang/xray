@@ -77,7 +77,7 @@ static XrXirStatus effect_refinement_copies(EffectRefinementBounds *bounds,
     output->copies=copies;output->copy_count=count;return XR_XIR_OK;
 }
 
-XR_FUNC XrXirStatus xir_effects_refinement_capture(const XrXirCompileContext *context,
+static XrXirStatus effect_refinement_capture_current(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirEffects *effects) {
     if (!xir_effects_context_matches(context,effects,source ? source->function_count : 0) ||
         !source || !source->declarations || !source->declarations->functions ||

@@ -73,9 +73,9 @@ static XrXirStatus effect_program_semantics_current(const XrXirCompileContext *w
     return status;
 }
 
-XR_FUNC XrXirStatus xir_effects_program_final_verify(const XrXirCompileContext *work,
+static XrXirStatus effect_program_input_final(const XrXirCompileContext *work,
     const XrXirModule *source,const XrXirEffects *effects) {
-    XrXirStatus status=xir_effects_program_body_match(work,source,effects);
+    XrXirStatus status=effect_program_body_current(work,source,effects);
     if (status==XR_XIR_OK) status=effect_program_final_storage(work,effects);
     if (status!=XR_XIR_OK) return status;
     const EffectInvocationCertificate *certificate=effects->invocations;
@@ -93,7 +93,7 @@ XR_FUNC XrXirStatus xir_effects_program_final_verify(const XrXirCompileContext *
     if (status==XR_XIR_OK) status=effect_program_final_storage(work,effects);
     if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
     if (status==XR_XIR_OK) status=effect_program_semantics_current(work,effects);
-    if (status==XR_XIR_OK) status=xir_effects_program_body_match(work,source,effects);
+    if (status==XR_XIR_OK) status=effect_program_body_current(work,source,effects);
     if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,source,certificate->body);
     return status;
 }
@@ -101,9 +101,9 @@ XR_FUNC XrXirStatus xir_effects_program_final_verify(const XrXirCompileContext *
 /* No allocation or release occurs in this current ROOT replay. The complete
  * receiving proof still precedes it; this closes later preparation callbacks
  * over the actual equations, causes, formulas and published ROOT records. */
-XR_FUNC XrXirStatus xir_effects_program_root_current(const XrXirCompileContext *work,
+static XrXirStatus effect_program_input_root(const XrXirCompileContext *work,
     const XrXirModule *source,const XrXirEffects *effects) {
-    XrXirStatus status=xir_effects_program_body_match(work,source,effects);
+    XrXirStatus status=effect_program_body_current(work,source,effects);
     if (status==XR_XIR_OK) status=effect_program_final_storage(work,effects);
     if (status!=XR_XIR_OK) return status;
     const EffectInvocationCertificate *certificate=effects->invocations;

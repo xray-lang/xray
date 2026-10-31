@@ -19,12 +19,13 @@
 #include "xxir_effects.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_construction_internal.h"
+#include "xxir_effect_input_internal.h"
 
 /* Structural admission precedes this synchronous declaration-local body check. */
 XR_FUNC XrXirStatus xir_compile_local_errors_verify(const XrXirCompileContext *context,
     const XrXirModule *module,XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xir_effects_local_errors_verify(const XrXirCompileContext *context,
-    const XrXirModule *module,const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_effects_local_errors_verify_input(const XrXirCompileContext *context,
+    XirEffectInput input,const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
 
 /* Requires verified source and type pools; proves function correspondence and instance closure. */
 XR_FUNC XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext *compile_context, const XrXirModule *source, const XrXirModule *destination, const XrXirProvenance *instance, XrXirDiagnostic *diagnostic);
@@ -41,12 +42,10 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_copy(const XrXirCompileContext *co
  * Full Source verification and physical correspondence precede every copy. */
 XR_FUNC XrXirStatus xr_xir_compile_provenance_copy_source_effects(const XrXirCompileContext *context,
     const XrXirProvenance *source, const XrXirEffects *source_effects, XrXirProvenance **output, XrCompileRequestControl *control);
-XR_FUNC XrXirStatus xir_effects_source_body_match(const XrXirCompileContext *context,
-    const XrXirModule *source, const XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_source_body_match_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects);
 /* Exact Lowered fields are compared without allocating or running callbacks.
  * This supplies correspondence only; independent semantic proof remains required. */
-XR_FUNC XrXirStatus xir_effects_program_body_match(const XrXirCompileContext *context,
-    const XrXirModule *source, const XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_program_body_match_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects);
 /* These borrows are compare-only metadata of the same owned semantic input;
  * current same-ledger payload bounds precede canonical metadata traversal.
  * Bounds grant no effect proof. Callers must compare every current field
@@ -56,8 +55,7 @@ XR_FUNC XrXirStatus xir_effects_program_metadata(const XrXirCompileContext *cont
 XR_FUNC XrXirStatus xir_effects_program_signature_match(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t function, const XrXirType *parameters,
     uint32_t parameter_count, XrXirType result);
-XR_FUNC XrXirStatus xir_effects_program_final_verify(const XrXirCompileContext *context,
-    const XrXirModule *source,const XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_program_final_verify_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects);
 XR_FUNC XrXirStatus xir_effects_program_layout_match(const XrXirCompileContext *context,
     const XrXirEffects *effects,const XrXirTarget *target,XrXirFunctionLayout *layouts);
 
@@ -96,8 +94,8 @@ XR_FUNC XrXirStatus xir_effects_construction_root(const XrXirCompileContext *con
 /* A ledger identity guard grants no source, type or execution proof. */
 XR_FUNC bool xir_effects_context_matches(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t functions);
-XR_FUNC XrXirStatus xir_effects_parameters_match(const XrXirCompileContext *context,
-    const XrXirModule *module, const XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_parameters_match_input(const XrXirCompileContext *context,
+    XirEffectInput input, const XrXirEffects *effects);
 
 /* Requires verified source and pools plus that source's freshly derived owner.
  * The actual origins and capture operands are correspondence, never authority. */
@@ -110,9 +108,11 @@ typedef struct XirEffectCaptureRequest {
     uint32_t instruction;
     const XrXirOrigin *owners;
     uint32_t owner_count;
+    const XrXirConstruction *construction;
+    XrCompileRequestControl *control;
 } XirEffectCaptureRequest;
 typedef struct XirEffectCaptureBound { uint32_t flags; bool refined; } XirEffectCaptureBound;
-XR_FUNC XrXirStatus xir_effect_capture_bound(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xir_effect_capture_bound_input(const XrXirCompileContext *context,
     const XirEffectCaptureRequest *request, XirEffectCaptureBound *output);
 
 typedef struct XirSourceFacts XirSourceFacts;
@@ -153,11 +153,10 @@ XR_FUNC const XrXirEffects *xir_source_facts_effects(const XirSourceFacts *facts
 /* Only the private decoder calls this on its unpublished complete EOF owner. */
 XR_FUNC XrXirStatus xir_source_facts_prepare_decoded(XrXirArtifact *artifact,
     XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
-XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *context,
-    const XrXirModule *source,const XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_source_terminal_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects);
 
 /* Requires completed structural and type verification; never re-enters verification. */
-XR_FUNC XrXirStatus xr_xir_compile_effects_infer_verified(const XrXirCompileContext *compile_context, const XrXirModule *module, XrXirEffects **output);
+XR_FUNC XrXirStatus xr_xir_compile_effects_infer_verified_input(const XrXirCompileContext *compile_context, XirEffectInput input, XrXirEffects **output);
 /* Private construction preparation grants no artifact or execution authority. */
 typedef struct XrXirRootRefiner {
     void *context;
@@ -166,8 +165,7 @@ typedef struct XrXirRootRefiner {
 XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);
 /* These current readers consume genuine canonical Input and Final storage. */
-XR_FUNC XrXirStatus xir_effects_program_root_current(const XrXirCompileContext *context,
-    const XrXirModule *module,const XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_program_root_current_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects);
 XR_FUNC XrXirStatus xir_effects_program_cells_match(const XrXirCompileContext *context,
     const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xir_compile_verify_program_effects(const XrXirCompileContext *context,
@@ -199,8 +197,7 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_receiving_effects_v2(const XrXirCompil
 XR_FUNC XrXirStatus xr_xir_compile_verify_analyzed_effects_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction,
     XrXirEffects **output, XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xr_xir_compile_effects_refine_verified(const XrXirCompileContext *context,
-    const XrXirModule *module, const XrXirRootRefiner *refiner, XrXirEffects **output);
+XR_FUNC XrXirStatus xr_xir_compile_effects_refine_verified_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output);
 XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *context,
     const XrXirModule *built, const XrXirConstruction *construction, const XrXirRootRefiner *refiner,
     XrCompileRequestControl *control, XrXirArtifact **output, XrXirDiagnostic *diagnostic);

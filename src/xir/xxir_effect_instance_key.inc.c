@@ -139,9 +139,9 @@ static bool spec_effect_vector(SpecContext *c, uint32_t declaration,
             instance->effects,instance->effect_count};
         XrXirOrigin *owners=NULL;uint32_t owner_count=0;
         if (!spec_effect_owners(c,input->caller,&owners,&owner_count)) return false;
-        XirEffectContextInput request={c->source,&c->types,&origin,input->ordinal,owners,owner_count};
+        XirEffectContextInput request={c->source,&c->types,&origin,input->ordinal,owners,owner_count,c->source_artifact->construction,c->control};
         XirEffectContextView selected={0};
-        c->diagnostic.status=xir_effects_context_select(&c->remaining,c->effects,&request,&selected);
+        c->diagnostic.status=xir_effects_context_select_input(&c->remaining,c->effects,&request,&selected);
 
         if (c->diagnostic.status!=XR_XIR_OK || selected.declaration!=declaration ||
             selected.parameter_count!=count || selected.argument_count!=ordinary_count) {

@@ -19,24 +19,21 @@ XR_FUNC XrXirStatus xir_compile_verify_raw_source_effects(const XrXirCompileCont
     const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xir_artifact_verify_raw_source_effects(const XrXirArtifact *artifact,
     XrXirEffects **output,XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xir_effects_raw_source_terminal(const XrXirCompileContext *context,
-    const XrXirModule *source,const XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_raw_source_terminal_input(const XrXirCompileContext *context,
+    XirEffectInput input,const XrXirEffects *effects);
 XR_FUNC XrXirStatus xir_compile_verify_receiving_collect(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,
     const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xir_compile_verify_receiving_replay(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,
     const XrXirEffects *source_effects,const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xir_effects_receiving_terminal(const XrXirCompileContext *context,
-    const XrXirModule *module,const XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_receiving_terminal_input(const XrXirCompileContext *context, XirEffectInput input,const XrXirEffects *effects);
 XR_FUNC XrXirStatus xir_compile_verify_built_collect(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,
     XrXirEffects **output,XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xir_compile_verify_built_replay(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirConstruction *construction,
     const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
-XR_FUNC XrXirStatus xir_effects_built_copy_match(const XrXirCompileContext *context,
-    const XrXirModule *module,const XrXirEffects *effects);
-XR_FUNC XrXirStatus xir_effects_built_copy_terminal(const XrXirCompileContext *context,
-    const XrXirModule *module,const XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_built_copy_match_input(const XrXirCompileContext *context, XirEffectInput input,const XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_built_copy_terminal_input(const XrXirCompileContext *context, XirEffectInput input,const XrXirEffects *effects);
 #endif // XXIR_SOURCE_REPLAY_INTERNAL_H
