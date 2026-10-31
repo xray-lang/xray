@@ -23,6 +23,7 @@
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"buffer %d: %s\n",__LINE__,#c);exit(1);}} while(0)
 #include "xir_construction_fixture.h"
 #include "xir_buffer_class_cases.h"
+#include "xir_buffer_domain_cases.h"
 static void payload_cases(void) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
     XrXirDomainStats frame=xr_xir_domain_stats(domain);
@@ -181,7 +182,8 @@ int main(int argc,char **argv) {
         FILE *file=fopen(argv[2],"wb");CHECK(file && fwrite(source.text,1,source.length,file)==source.length && !fclose(file));
         xr_xir_compile_c_source_free(&source);xr_xir_compile_artifact_free(lowered);
     } else {
-        CHECK(argc==1);XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
+        CHECK(argc==1);buffer_domain_cases(&context);
+        XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
         XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
         XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance,1,NULL,0)==XR_XIR_CALL_READY);

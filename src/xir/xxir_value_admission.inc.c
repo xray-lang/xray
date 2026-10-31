@@ -83,7 +83,8 @@ static XrXirValueStatus type_needs_admission(const XrXirTypes *types, XrXirType 
         if (!admission_is_compile(admission) && (!admission->work)) return XR_XIR_VALUE_LIMIT;
         if (!admission_is_compile(admission)) --admission->work;
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
-        if (!node) { *needed = type == XR_XIR_ERROR || type==XR_XIR_PANIC_INFO; return XR_XIR_VALUE_OK; }
+        if (!node) { *needed = type == XR_XIR_ERROR || type==XR_XIR_PANIC_INFO ||
+            type==XR_XIR_BUFFER_STORAGE; return XR_XIR_VALUE_OK; }
         if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_NOMINAL ||
             node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
             node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK ||
@@ -202,7 +203,8 @@ static XrXirValueStatus value_admit_summary_mode(const XrXirValue *value, XrXirT
             if (owned_carrier_type(type)) {
                 XirObject *object = object_pointer(&current);
                 arena=object->arena;type=object->type;
-                if (domain_sensitive && (object->kind == XIR_OBJECT_CLASS || object->kind == XIR_OBJECT_CELL ||
+                if (domain_sensitive && (object->kind == XIR_OBJECT_BUFFER_STORAGE ||
+                    object->kind == XIR_OBJECT_CLASS || object->kind == XIR_OBJECT_CELL ||
                     object->kind == XIR_OBJECT_FUNCTION || object->kind == XR_XIR_TYPE_TASK ||
                     object->kind == XR_XIR_TYPE_ITERATOR))
                     *domain_sensitive = true;

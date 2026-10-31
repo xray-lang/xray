@@ -43,6 +43,7 @@ XR_FUNC XrXirValueStatus xr_xir_buffer_storage_new(XrXirDomain *domain,int64_t b
 }
 #include "xir/xxir_program.h"
 #include "xir/xxir_program_internal.h"
+#include "xir_buffer_domain_cases.h"
 extern const XrXirProgramSpec buffer_storage_program;
 static void class_storage_failures(XrXirProgram *program) {
     size_t initial=buffer_probe_physical;
@@ -116,6 +117,7 @@ int main(void) {
         CHECK(buffer_probe_constructors==constructors && buffer_probe_physical==frame);
     }
     class_storage_failures(program);
+    size_t domain_frame=buffer_probe_physical;buffer_domain_cases(&context);CHECK(buffer_probe_physical==domain_frame);
     xr_xir_compile_program_drop(program);xr_compile_resources_release(context.resources);CHECK(!buffer_probe_physical);
     puts("Actual byte storage OOM/recovery and aligned0 native rejection before allocation PASS");return 0;
 }
