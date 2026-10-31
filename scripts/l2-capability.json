@@ -255,7 +255,9 @@
         "xir_assert_throws_controls",
         "xir_source_copy",
         "xir_source_copy_native",
-        "xir_source_copy_readmes"
+        "xir_source_copy_readmes",
+        "xir_array_binding",
+        "xir_array_binding_native"
       ],
       "targets": [
         "test_source_nullable_print",
@@ -279,7 +281,9 @@
         "test_xir_assert_throws_native",
         "test_xir_assert_throws_controls",
         "test_xir_source_copy",
-        "test_xir_source_copy_native"
+        "test_xir_source_copy_native",
+        "test_xir_array_binding",
+        "test_xir_array_binding_native"
       ]
     },
     "errors-cleanup": {
