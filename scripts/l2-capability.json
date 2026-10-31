@@ -205,7 +205,8 @@
         "test_xir_source_local_recursive_binding",
         "test_xir_source_local_recursive_binding_native",
         "test_xir_source_method_surface",
-        "test_xir_source_method_surface_native"
+        "test_xir_source_method_surface_native",
+        "test_xir_source_refinement"
       ],
       "targets": [
         "test_source_nullable_print",
@@ -223,7 +224,8 @@
         "test_hir_body",
         "lir_pipeline_eval",
         "test_hir_body_source",
-        "test_source_public_repl"
+        "test_source_public_repl",
+        "test_xir_source_refinement"
       ]
     },
     "errors-cleanup": {

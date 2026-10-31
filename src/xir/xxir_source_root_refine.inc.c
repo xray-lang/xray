@@ -289,12 +289,47 @@ static bool source_root_query_sync(SourceContext *ctx) {
     }
     return true;
 }
+static bool source_root_ground_type(SourceContext *ctx, XrXirType type) {
+    if (type==XR_XIR_UNIT || type==XR_XIR_BOOL || type==XR_XIR_STRING ||
+        type==XR_XIR_ERROR || type==XR_XIR_PANIC_INFO || type==XR_XIR_RUNE ||
+        type==XR_XIR_NEVER || xr_xir_type_is_number(type)) return true;
+    const XrXirTypeNode *node=xr_xir_type_node(&ctx->types,type);
+    return node && node->kind>=XR_XIR_TYPE_ARRAY && node->kind<=XR_XIR_TYPE_UNION &&
+        !xr_xir_type_span(&ctx->types,type);
+}
+/* The descriptor pool has already passed structural verification. With no
+ * callable nodes, ground live types cannot change their advertised bounds.
+ * Unused generic schemas may remain in the pool without entering this flow. */
+static bool source_root_snapshot_needed(SourceContext *ctx) {
+    for (uint32_t n=0;n<ctx->types.count;++n)
+        if (ctx->types.nodes[n].kind==XR_XIR_TYPE_CALLABLE) return true;
+    for (uint32_t s=0;s<ctx->slot_count;++s)
+        if (!source_root_ground_type(ctx,ctx->slots[s].type)) return true;
+    for (uint32_t f=0;f<ctx->function_count;++f) {
+        const SourceFunction *source=&ctx->bodies[f];
+        const XrXirFunction *body=&ctx->functions[f];
+        if (source->type_parameter_count || source->infer_result ||
+            (ctx->has_generics && ctx->generics[f].parameter_count) ||
+            !source_root_ground_type(ctx,body->result) ||
+            !source_root_ground_type(ctx,body->error_type)) return true;
+        for (uint32_t p=0;p<body->parameter_count;++p)
+            if (!source_root_ground_type(ctx,body->parameters[p])) return true;
+        for (uint32_t p=0;p<source->root_capture_count;++p)
+            if (source->root_captures[p]) return true;
+        for (uint32_t i=0;i<body->instruction_count;++i) {
+            if (!source_root_ground_type(ctx,body->instructions[i].type) ||
+                (source->root_values && !source_root_ground_type(ctx,source->root_values[i].declared)))
+                return true;
+        }
+    }
+    return false;
+}
 static XrXirStatus source_root_refine(void *opaque, const XrXirEffects *effects, bool *changed) {
     SourceContext *ctx = opaque;
     uint32_t function = ctx->function, module = ctx->module;
     bool again = true;
     *changed = false;
-    if (!ctx->root_flow) {
+    if (!ctx->root_flow && source_root_snapshot_needed(ctx)) {
         XrXirDeclarations declarations;XrXirModule view=source_module_view(ctx,&declarations);
         XrXirStatus status=xir_effects_refinement_capture_input(&ctx->compile,(XirEffectInput){&view,ctx->construction,ctx->request},effects);
         if (status!=XR_XIR_OK) {
