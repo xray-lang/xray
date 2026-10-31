@@ -1,0 +1,63 @@
+import csv
+import { CsvDelimiter, CsvError, CsvErrorKind, CsvHeader, defaultParseOptions, defaultWriteOptions } from csv
+
+var report = try csv.parseReport("a,b\n1,2\n3")
+var diagnostic = report.diagnostics[0]
+print(diagnostic.kind == CsvErrorKind.FieldCountMismatch && diagnostic.byteOffset == 9 &&
+      diagnostic.line == 3 && diagnostic.record == 2 && diagnostic.column == 1)
+var multiline = try csv.parse("\"a\nb\",c\r\nx,y")
+print(len(multiline.rows) == 2 && multiline.rows[0][0] == "a\nb" && multiline.rows[1][1] == "y")
+var names: Array<string> = ["left", "right"]
+var explicit = defaultParseOptions()
+explicit.header = CsvHeader.Explicit { names: names }
+var document = try csv.parse("1,2", explicit)
+names[0] = "changed"
+print(document.headers[0] == "left" && document.rows[0][1] == "2")
+
+var invalid = defaultParseOptions()
+invalid.maxRecords = -1
+try {
+    csv.parseReport("x", invalid)
+    print(false)
+} catch (error: CsvError) {
+    print(match (error) { CsvError.InvalidOption { message } -> message == "CSV limits and record counts must be non-negative", _ -> false })
+}
+var inputLimit = defaultParseOptions()
+inputLimit.maxInputBytes = 1
+try {
+    csv.parse("a,b", inputLimit)
+    print(false)
+} catch (error: CsvError) {
+    print(match (error) { CsvError.InputLimitExceeded { limit } -> limit == 1, _ -> false })
+}
+var fieldLimit = defaultParseOptions()
+fieldLimit.maxFieldBytes = 2
+try {
+    csv.parse("é😀", fieldLimit)
+    print(false)
+} catch (error: CsvError) {
+    print(match (error) { CsvError.FieldLimitExceeded { limit } -> limit == 2, _ -> false })
+}
+var delimiter = defaultParseOptions()
+delimiter.delimiter = CsvDelimiter.Exact { delimiter: '"' }
+try {
+    csv.parse("x", delimiter)
+    print(false)
+} catch (error: CsvError) {
+    print(match (error) { CsvError.InvalidOption { message } -> message == "delimiter and quoteChar must differ", _ -> false })
+}
+try {
+    csv.parse("\"unterminated")
+    print(false)
+} catch (error: CsvError) {
+    print(match (error) { CsvError.UnterminatedQuote { byteOffset, line, record, column, message } ->
+        byteOffset == 13 && line == 1 && record == 0 && column == 0, _ -> false })
+}
+var writing = defaultWriteOptions()
+writing.linebreak = ""
+try {
+    csv.stringify(document, writing)
+    print(false)
+} catch (error: CsvError) {
+    print(match (error) { CsvError.InvalidOption { message } -> message == "linebreak must not be empty", _ -> false })
+}

@@ -165,14 +165,14 @@ class _CsvState {
     }
 }
 
-fn _validateParseOptions(options: CsvParseOptions) {
+fn _validateParseOptions(options: CsvParseOptions) throws(CsvError) {
     if (options.skipRecords < 0 || options.maxRecords < 0 || options.maxInputBytes < 0 ||
         options.maxFieldBytes < 0 || options.maxColumns < 0) {
         throw CsvError.InvalidOption { message: "CSV limits and record counts must be non-negative" }
     }
 }
 
-fn _validateWriteOptions(options: CsvWriteOptions) {
+fn _validateWriteOptions(options: CsvWriteOptions) throws(CsvError) {
     if (options.delimiter == options.quoteChar) {
         throw CsvError.InvalidOption { message: "delimiter and quoteChar must differ" }
     }
@@ -229,7 +229,7 @@ fn _detectDelimiter(data: string, quoteChar: rune, escapeChar: rune) -> rune {
     return best
 }
 
-fn _resolveDelimiter(data: string, options: CsvParseOptions) -> rune {
+fn _resolveDelimiter(data: string, options: CsvParseOptions) throws(CsvError) -> rune {
     var delimiter = match (options.delimiter) {
         CsvDelimiter.Exact { delimiter: value } -> value,
         CsvDelimiter.Auto         -> _detectDelimiter(data, options.quoteChar, options.escapeChar)
@@ -243,7 +243,7 @@ fn _resolveDelimiter(data: string, options: CsvParseOptions) -> rune {
 fn _explicitHeaders(header: CsvHeader) -> Array<string> {
     var empty: Array<string> = []
     return match (header) {
-        CsvHeader.Explicit { names: values } -> copy(values),
+        CsvHeader.Explicit { names: values } -> copy values,
         _                          -> empty
     }
 }
@@ -270,7 +270,7 @@ fn _addRecordDiagnostic(state: ref _CsvState, kind: CsvErrorKind, record: i64, m
     ))
 }
 
-fn _checkFieldLimit(state: _CsvState, options: CsvParseOptions) {
+fn _checkFieldLimit(state: _CsvState, options: CsvParseOptions) throws(CsvError) {
     if (options.maxFieldBytes > 0 && state.currentFieldBytes > options.maxFieldBytes) {
         throw CsvError.FieldLimitExceeded { limit: options.maxFieldBytes }
     }
@@ -285,20 +285,20 @@ fn _utf8Width(value: rune) -> i64 {
 }
 
 fn _appendRune(state: ref _CsvState, field: ref string, value: rune,
-               options: CsvParseOptions) {
+               options: CsvParseOptions) throws(CsvError) {
     field += "${value}"
     state.currentFieldBytes = state.currentFieldBytes + _utf8Width(value)
-    _checkFieldLimit(state, options)
+    try _checkFieldLimit(state, options)
 }
 
 fn _appendText(state: ref _CsvState, field: ref string, value: string,
-               options: CsvParseOptions) {
+               options: CsvParseOptions) throws(CsvError) {
     field += value
     state.currentFieldBytes = state.currentFieldBytes + len(value.bytes())
-    _checkFieldLimit(state, options)
+    try _checkFieldLimit(state, options)
 }
 
-fn _finishField(state: ref _CsvState, options: CsvParseOptions, field: ref string) {
+fn _finishField(state: ref _CsvState, options: CsvParseOptions, field: ref string) throws(CsvError) {
     if (options.maxColumns > 0 && state.currentColumn + 1 > options.maxColumns) {
         throw CsvError.ColumnLimitExceeded { limit: options.maxColumns }
     }
@@ -365,7 +365,7 @@ fn _consumeRow(state: ref _CsvState, options: CsvParseOptions) -> bool {
         _                  -> false
     }
     if (headerConsumed) {
-        state.document.headers = copy(row)
+        state.document.headers = copy row
         state.expectedColumns = len(row)
         _clearRow(ref state)
         return false
@@ -382,7 +382,7 @@ fn _consumeRow(state: ref _CsvState, options: CsvParseOptions) -> bool {
         )
     }
 
-    state.document.rows.push(copy(row))
+    state.document.rows.push(copy row)
     _clearRow(ref state)
     if (options.maxRecords > 0 && len(state.document.rows) >= options.maxRecords) {
         state.truncated = true
@@ -391,13 +391,13 @@ fn _consumeRow(state: ref _CsvState, options: CsvParseOptions) -> bool {
     return false
 }
 
-fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
-    _validateParseOptions(options)
+fn _parseImpl(data: string, options: CsvParseOptions) throws(CsvError) -> CsvParseReport {
+    try _validateParseOptions(options)
     if (options.maxInputBytes > 0 && len(data.bytes()) > options.maxInputBytes) {
         throw CsvError.InputLimitExceeded { limit: options.maxInputBytes }
     }
 
-    var delimiter = _resolveDelimiter(data, options)
+    var delimiter = try _resolveDelimiter(data, options)
     var state = _CsvState(delimiter)
     var explicitHeaders = _explicitHeaders(options.header)
     for (name in explicitHeaders) { state.document.headers.push(name) }
@@ -442,32 +442,32 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
                 if (state.currentColumn == 0) { state.firstFieldQuoted = true }
                 parserState = STATE_QUOTED
             } else if (c == delimiter) {
-                _finishField(ref state, options, ref field)
+                try _finishField(ref state, options, ref field)
             } else if (_isNewline(c)) {
-                _finishField(ref state, options, ref field)
+                try _finishField(ref state, options, ref field)
                 _observeLinebreak(ref state, _newlineText(c, newlineWidth))
                 if (_consumeRow(ref state, options)) { break }
             } else {
-                _appendRune(ref state, ref field, c, options)
+                try _appendRune(ref state, ref field, c, options)
                 parserState = STATE_UNQUOTED
             }
         } else if (parserState == STATE_UNQUOTED) {
             if (c == delimiter) {
-                _finishField(ref state, options, ref field)
+                try _finishField(ref state, options, ref field)
                 parserState = STATE_FIELD_START
             } else if (_isNewline(c)) {
-                _finishField(ref state, options, ref field)
+                try _finishField(ref state, options, ref field)
                 _observeLinebreak(ref state, _newlineText(c, newlineWidth))
                 if (_consumeRow(ref state, options)) { break }
                 parserState = STATE_FIELD_START
             } else {
-                _appendRune(ref state, ref field, c, options)
+                try _appendRune(ref state, ref field, c, options)
             }
         } else if (parserState == STATE_QUOTED) {
             if (c == options.escapeChar && iter.hasNext()) {
                 var next = iter.next()
                 if (next == options.quoteChar) {
-                    _appendRune(ref state, ref field, options.quoteChar, options)
+                    try _appendRune(ref state, ref field, options.quoteChar, options)
                     consumedWidth = _utf8Width(next)
                 } else {
                     pending = next
@@ -478,24 +478,24 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
                 parserState = STATE_QUOTE_END
             } else if (_isNewline(c)) {
                 var newline = _newlineText(c, newlineWidth)
-                _appendText(ref state, ref field, newline, options)
+                try _appendText(ref state, ref field, newline, options)
                 _observeLinebreak(ref state, newline)
             } else {
-                _appendRune(ref state, ref field, c, options)
+                try _appendRune(ref state, ref field, c, options)
             }
         } else {
             if (c == delimiter) {
-                _finishField(ref state, options, ref field)
+                try _finishField(ref state, options, ref field)
                 parserState = STATE_FIELD_START
             } else if (_isNewline(c)) {
-                _finishField(ref state, options, ref field)
+                try _finishField(ref state, options, ref field)
                 _observeLinebreak(ref state, _newlineText(c, newlineWidth))
                 if (_consumeRow(ref state, options)) { break }
                 parserState = STATE_FIELD_START
             } else {
                 _addDiagnostic(ref state, CsvErrorKind.InvalidEscape,
                                "Unexpected character after closing quote")
-                _appendRune(ref state, ref field, c, options)
+                try _appendRune(ref state, ref field, c, options)
                 parserState = STATE_UNQUOTED
             }
         }
@@ -508,7 +508,7 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
     }
     if (len(field) > 0 || state.currentColumn > 0 || len(state.currentRow) > 0 ||
         parserState == STATE_QUOTED || parserState == STATE_QUOTE_END) {
-        _finishField(ref state, options, ref field)
+        try _finishField(ref state, options, ref field)
     }
     if (len(state.currentRow) > 0 && !state.truncated) {
         _consumeRow(ref state, options)
@@ -521,12 +521,12 @@ fn _parseImpl(data: string, options: CsvParseOptions) -> CsvParseReport {
 
 // parseReport explicitly opts into recovery and returns any partial document
 // together with typed diagnostics.
-export fn parseReport(data: string, options: CsvParseOptions? = null) -> CsvParseReport {
+export fn parseReport(data: string, options: CsvParseOptions? = null) throws(CsvError) -> CsvParseReport {
     var resolved = options == null ? defaultParseOptions() : options!
-    return _parseImpl(data, resolved)
+    return try _parseImpl(data, resolved)
 }
 
-fn _throwDiagnostic(diagnostic: CsvDiagnostic) {
+fn _throwDiagnostic(diagnostic: CsvDiagnostic) throws(CsvError) {
     if (diagnostic.kind == CsvErrorKind.UnterminatedQuote) {
         throw CsvError.UnterminatedQuote { byteOffset: diagnostic.byteOffset, line: diagnostic.line, record: diagnostic.record, column: diagnostic.column, message: diagnostic.message }
     }
@@ -538,11 +538,11 @@ fn _throwDiagnostic(diagnostic: CsvDiagnostic) {
 
 // parse is strict: the first recoverable syntax diagnostic enters the enum
 // value error channel.
-export fn parse(data: string, options: CsvParseOptions? = null) -> CsvDocument {
+export fn parse(data: string, options: CsvParseOptions? = null) throws(CsvError) -> CsvDocument {
     var resolved = options == null ? defaultParseOptions() : options!
-    var report = _parseImpl(data, resolved)
+    var report = try _parseImpl(data, resolved)
     if (len(report.diagnostics) > 0) {
-        _throwDiagnostic(report.diagnostics[0])
+        try _throwDiagnostic(report.diagnostics[0])
     }
     return report.document
 }
@@ -595,9 +595,9 @@ fn _writeRow(out: ref string, row: Array<string>, options: CsvWriteOptions) {
 
 // stringify accepts only CsvDocument and never guesses how arbitrary values
 // should be coerced.
-export fn stringify(document: CsvDocument, options: CsvWriteOptions? = null) -> string {
+export fn stringify(document: CsvDocument, options: CsvWriteOptions? = null) throws(CsvError) -> string {
     var resolved = options == null ? defaultWriteOptions() : options!
-    _validateWriteOptions(resolved)
+    try _validateWriteOptions(resolved)
     var out = ""
     if (len(document.headers) > 0) {
         _writeRow(ref out, document.headers, resolved)

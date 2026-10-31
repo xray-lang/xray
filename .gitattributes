@@ -89,3 +89,6 @@ tests/unit/hir/body/nominal_order.out text eol=lf
 
 # Public constant product fixtures keep exact Source and stdout bytes.
 tests/unit/xir/public_const_inputs/* text eol=lf
+
+# CSV document and typed-error consumers compare exact LF source and output.
+tests/cli/fixtures/csv/* text eol=lf
