@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest import proc
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 from xray_progress import fixed_metrics
+from suite_catalog import SuiteCommands, expected_catalog
 
 
 @dataclass(frozen=True)
@@ -103,6 +104,7 @@ def load_cases(manifest: Path, root: Path, sources: dict[str, Source]) -> list[d
             raise ValueError(f"duplicate source/mode: {source.path}")
         target[source.path] = case
         rooted_file(root, case["stdout"])
+        expected_catalog(case, root)
         if case["expect"] == "pass":
             if case["exit_code"] != 0 or "gap" in case:
                 raise ValueError(f"{name}: pass must exit zero without a gap allowance")
@@ -132,6 +134,8 @@ def load_cases(manifest: Path, root: Path, sources: dict[str, Source]) -> list[d
     for path, case in native.items():
         if case["stdout"] != primary[path]["stdout"]:
             raise ValueError(f"{case['id']}: native and VM must share the same stdout oracle")
+        if case.get("suite") != primary[path].get("suite"):
+            raise ValueError(f"{case['id']}: native and VM must share the same suite catalog")
     return sorted(cases, key=lambda case: case["id"])
 
 
@@ -172,7 +176,7 @@ def classify(case: dict, result: proc.ProcResult, diagnostic: str, expected: byt
 
 
 def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
-            logs: Path, timeout: float) -> dict:
+            logs: Path, timeout: float, suites: SuiteCommands | None = None) -> dict:
     if case.get("gap", {}).get("deferred"):
         return {"id": case["id"], "group": "native", "status": "gap", "executed": False,
                 "reason": "NOT_RUN: " + case["gap"]["deferred"], "commands": []}
@@ -208,10 +212,20 @@ def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
     diagnostic = first_diagnostic(result.stderr, root, source, spec.path)
     expected = rooted_file(root, case["stdout"]).read_bytes()
     status, reason = classify(case, result, diagnostic, expected, stage)
-    return {"id": case["id"], "group": "native" if case["mode"] == "build-run" else spec.group,
+    suite = None
+    if case.get("suite") is not None and result.ok and stage in ("run",):
+        try:
+            suite = (suites or SuiteCommands()).execute(case, root, logs, invoke)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            status, reason = "fail", str(error)
+            suite = {"status": "fail", "reason": reason, "executed": False}
+    row = {"id": case["id"], "group": "native" if case["mode"] == "build-run" else spec.group,
             "status": status, "reason": reason, "executed": True, "exit_code": result.returncode,
             "first_diagnostic": diagnostic, "commands": commands,
             "seconds": round(time.monotonic() - started, 3)}
+    if suite is not None:
+        row["suite"] = suite
+    return row
 
 
 def summary(results: list[dict]) -> str:
@@ -229,6 +243,9 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--timeout", type=float, default=30)
+    parser.add_argument("--suite-vm", type=Path)
+    parser.add_argument("--suite-native", type=Path)
+    parser.add_argument("--suite-generated-c", type=Path)
     args = parser.parse_args()
     root, binary, output = args.root.resolve(), args.binary.resolve(), args.output.resolve()
     if args.timeout <= 0:
@@ -253,11 +270,12 @@ def main() -> int:
         return 1
     log_root = Path(tempfile.mkdtemp(prefix="run-", dir=output))
     results = []
+    suites = SuiteCommands(args.suite_vm, args.suite_native, args.suite_generated_c)
     for index, case in enumerate(cases):
         logs = log_root / f"{index:03d}"
         logs.mkdir()
         with tempfile.TemporaryDirectory(prefix="case-", dir=output) as directory:
-            row = execute(case, sources[case["path"]], binary, root, Path(directory), logs, args.timeout)
+            row = execute(case, sources[case["path"]], binary, root, Path(directory), logs, args.timeout, suites)
         results.append(row)
         row["log_directory"] = str(logs)
         print(f"{row['status'].upper()} {row['id']}: {row['reason']}", flush=True)

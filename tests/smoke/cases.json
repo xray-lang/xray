@@ -267,6 +267,10 @@
       "gap": {
         "feature": "F17",
         "first_diagnostic": "demos/07-advanced/testing.xr:49:5: error: name is not an initialized value"
+      },
+      "suite": {
+        "schema": 1,
+        "catalog": "tests/smoke/expected/testing-catalog.json"
       }
     },
     {

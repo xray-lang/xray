@@ -65,6 +65,8 @@ def smoke_ratchet(root: Path, base: str, candidate: str = "HEAD") -> None:
     for name, row in before.items():
         if name not in after or (row["expect"] == "pass" and after[name]["expect"] != "pass"):
             raise ValueError(f"smoke case removed or passing case demoted: {name}")
+        if row["expect"] == "pass" and row.get("suite") is not None and row["suite"] != after[name].get("suite"):
+            raise ValueError(f"passing smoke suite removed or replaced: {name}")
     baseline = "tests/smoke/original-baseline.json"
     if git(root, "ls-tree", "--name-only", base, "--", baseline):
         if git(root, "show", f"{base}:{baseline}") != git(root, "show", f"{candidate}:{baseline}"):
@@ -119,18 +121,61 @@ def fixed_metrics(baseline: dict, cases: list[dict], results: list[dict]) -> dic
         if row["expect"] == "pass" and now["expect"] != "pass":
             raise ValueError(f"original passing case demoted: {row['id']}")
 
+    def suite_passed(name: str) -> bool:
+        case, row = current.get(name, {}), actual.get(name, {})
+        if case.get("path") != "demos/07-advanced/testing.xr" and case.get("suite") is None:
+            return True
+        suite = row.get("suite", {})
+        engine = "native" if case.get("mode") == "build-run" else "vm"
+        executions = [item for item in row.get("commands", []) if item.get("stage") == "suite-" + engine]
+        if (row.get("executed") is not True or len(executions) != 1 or
+                executions[0].get("exit_code") != 0 or executions[0].get("timed_out") is not False):
+            return False
+        catalog = suite.get("catalog", {})
+        entries = catalog.get("entries", [])
+        if (not isinstance(entries, list) or len(entries) != 7 or any(not isinstance(item, dict) or
+                set(item) != {"name", "function", "role", "timeout"} for item in entries)):
+            return False
+        if (any(not isinstance(item["name"], str) or not item["name"] or
+                any(type(item[key]) is not int for key in ("function", "role", "timeout")) or
+                not 0 <= item["function"] <= 0xffffffff or item["timeout"] < 0 for item in entries) or
+                len({item["name"] for item in entries}) != 7 or len({item["function"] for item in entries}) != 7 or
+                sum(item["role"] == 1 for item in entries) != 6 or sum(item["role"] == 2 for item in entries) != 1):
+            return False
+        return (case.get("suite") is not None and suite.get("status") == "pass"
+                and suite.get("executed") is True and suite.get("engine") == engine
+                and (engine != "native" or suite.get("matches_vm") is True)
+                and type(catalog.get("schema")) is int and catalog["schema"] == 1 and catalog.get("source") == case.get("path")
+                and isinstance(catalog.get("sourceSha256"), str) and re.fullmatch(r"[0-9a-f]{64}", catalog["sourceSha256"]) is not None
+                and all(type(catalog.get(key)) is int for key in ("passed", "skipped", "failed"))
+                and (catalog.get("passed"), catalog.get("skipped"), catalog.get("failed")) == (6, 1, 0)
+                and isinstance(catalog.get("entries"), list) and len(catalog["entries"]) == 7
+                and isinstance(suite.get("generated_c_sha256"), str) and re.fullmatch(r"[0-9a-f]{64}", suite["generated_c_sha256"]) is not None)
+
+    def paired_suite(name: str) -> bool:
+        if current[name].get("suite") is None:
+            return True
+        vm = actual.get(name, {}).get("suite", {})
+        native = actual.get("native:" + name, {}).get("suite", {})
+        return (vm.get("catalog") == native.get("catalog") and
+                vm.get("generated_c_sha256") == native.get("generated_c_sha256"))
+
     def passed(name: str, stages: list[str]) -> bool:
         row = actual.get(name, {})
         commands = row.get("commands", [])
+        if current.get(name, {}).get("suite") is not None:
+            stages = stages + ["suite-native" if current[name]["mode"] == "build-run" else "suite-vm"]
         return (current.get(name, {}).get("expect") == "pass" and row.get("status") == "pass"
+                and suite_passed(name)
                 and row.get("executed") is True and [item.get("stage") for item in commands] == stages
                 and all(item.get("exit_code") == 0 and item.get("timed_out") is False for item in commands))
 
     repaired = sorted(name for name in failed if passed(name, ["run"])
                       and passed("native:" + name, ["build", "run"])
+                      and paired_suite(name)
                       and current["native:" + name].get("path") == current[name]["path"]
                       and current["native:" + name].get("mode") == "build-run")
-    return {"original_pass": sum(actual[row["id"]]["status"] == "pass" for row in original),
+    return {"original_pass": sum(actual[row["id"]]["status"] == "pass" and suite_passed(row["id"]) for row in original),
             "original_total": 60, "original_failed_demo_repaired": len(repaired),
             "original_failed_demo_total": 20, "repaired_demo_ids": repaired}
 

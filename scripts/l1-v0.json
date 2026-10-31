@@ -25,7 +25,8 @@
     "test_native_ready",
     "xir_stdlib_checkedgen",
     "test_xir_range_value",
-    "test_xir_exported_i64_const"
+    "test_xir_exported_i64_const",
+    "test_xir_assert_throws_native"
   ],
   "tests": [
     "smoke",

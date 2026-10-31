@@ -1,6 +1,9 @@
 add_test(NAME smoke
     COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/smoke/run_smoke.py
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+        --suite-vm $<TARGET_FILE:test_xir_assert_throws_source>
+        --suite-native $<TARGET_FILE:test_xir_assert_throws_native>
+        --suite-generated-c ${CMAKE_BINARY_DIR}/tests/unit/assert-throws/testing_demo.c
         --output ${CMAKE_CURRENT_BINARY_DIR}/smoke)
 set_tests_properties(smoke PROPERTIES
     TIMEOUT 300 PROCESSORS 1 LABELS "smoke;fast;cli;usability")

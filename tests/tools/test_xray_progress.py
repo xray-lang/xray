@@ -68,6 +68,38 @@ class MetricsTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     progress.fixed_metrics(self.baseline, cases, self.results)
 
+    def test_testing_initializer_only_or_unexecuted_suite_cannot_repair_original_demo(self):
+        name = "demos/07-advanced/testing.xr"
+        case = next(row for row in self.cases if row["id"] == name)
+        case["expect"] = "pass"
+        result = next(row for row in self.results if row["id"] == name)
+        result["status"] = "pass"
+        native = dict(case, id="native:" + name, mode="build-run")
+        self.cases.append(native)
+        native_result = {"id": native["id"], "status": "pass", "executed": True,
+                         "commands": [{"stage": stage, "exit_code": 0, "timed_out": False} for stage in ("build", "run")]}
+        self.results.append(native_result)
+        self.assertEqual(self.metrics()["original_failed_demo_repaired"], 0)
+        self.assertEqual(self.metrics()["original_pass"], 3)
+        case["suite"] = native["suite"] = {"schema": 1, "catalog": "testing-catalog.json"}
+        catalog = json.loads((ROOT / "tests/smoke/expected/testing-catalog.json").read_text())
+        catalog["sourceSha256"] = catalog.pop("sourceCanonicalSha256")
+        for index, entry in enumerate(catalog["entries"]):
+            entry["function"] = index + 100
+        for row, engine in ((result, "vm"), (native_result, "native")):
+            row["suite"] = {"status": "pass", "executed": True, "engine": engine, "catalog": deepcopy(catalog),
+                            "generated_c_sha256": "1" * 64, "matches_vm": engine == "native"}
+            row["commands"].append({"stage": "suite-" + engine, "exit_code": 0, "timed_out": False})
+        self.assertEqual(self.metrics()["repaired_demo_ids"], [name])
+        native_result["suite"]["executed"] = False
+        self.assertEqual(self.metrics()["original_failed_demo_repaired"], 0)
+        native_result["suite"]["executed"] = True
+        native_result["suite"]["catalog"]["entries"][0]["function"] = 99
+        self.assertEqual(self.metrics()["original_failed_demo_repaired"], 0)
+        native_result["suite"]["catalog"] = deepcopy(catalog)
+        native_result["suite"]["catalog"]["entries"][0]["role"] = 2
+        self.assertEqual(self.metrics()["original_failed_demo_repaired"], 0)
+
     def test_r4_weekly_requires_both_product_gain_and_legacy_reduction(self):
         old = {"stage": "R4", "week_ending": "2026-10-31", "legacy": {"c_h_lines": 100},
                "metrics": {"original_failed_demo_repaired": 0, "repaired_demo_ids": []}}
@@ -211,6 +243,20 @@ class GitTests(unittest.TestCase):
         self.commit()
         with self.assertRaises(ValueError):
             merge_slice.review_scope(self.root, base, "HEAD", {"authorRole": "a", "reviewerRole": "a"})
+
+    def test_published_passing_suite_cannot_be_removed_from_the_ratchet(self):
+        path = self.root / "tests/smoke/cases.json"
+        path.parent.mkdir(parents=True)
+        case = {"id": "testing", "path": "demos/07-advanced/testing.xr", "mode": "run", "expect": "pass",
+                "suite": {"schema": 1, "catalog": "testing.json"}}
+        path.write_text(json.dumps({"schema": 1, "cases": [case]}))
+        self.commit()
+        base = self.git("rev-parse", "HEAD")
+        del case["suite"]
+        path.write_text(json.dumps({"schema": 1, "cases": [case]}))
+        self.commit()
+        with self.assertRaisesRegex(ValueError, "suite removed"):
+            progress.smoke_ratchet(self.root, base)
 
     def test_leaf_review_allowed_but_header_and_owner_crossing_require_independence(self):
         (self.root / "src/frontend").mkdir()

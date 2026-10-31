@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "source": "demos/07-advanced/testing.xr",
+  "entries": [
+    {
+      "name": "test_arithmetic",
+      "role": 1,
+      "timeout": 0
+    },
+    {
+      "name": "test_strings",
+      "role": 1,
+      "timeout": 0
+    },
+    {
+      "name": "test_arrays",
+      "role": 1,
+      "timeout": 0
+    },
+    {
+      "name": "test_nullable",
+      "role": 1,
+      "timeout": 0
+    },
+    {
+      "name": "test_exceptions",
+      "role": 1,
+      "timeout": 0
+    },
+    {
+      "name": "test_todo",
+      "role": 2,
+      "timeout": 0
+    },
+    {
+      "name": "test_with_timeout",
+      "role": 1,
+      "timeout": 5000
+    }
+  ],
+  "passed": 6,
+  "skipped": 1,
+  "failed": 0,
+  "sourceCanonicalSha256": "5365d48992efa54339af1df439f37adfbea3d4f7dfa812eb80de9c2e60be5a8c"
+}
