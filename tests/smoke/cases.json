@@ -145,13 +145,9 @@
       "id": "demos/04-functional/functional.xr",
       "path": "demos/04-functional/functional.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F17",
-        "first_diagnostic": "demos/04-functional/functional.xr:61:19: error: name is not an initialized value"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/functional.txt"
     },
     {
       "id": "demos/05-concurrency/atomic.xr",
@@ -724,6 +720,14 @@
       "expect": "pass",
       "exit_code": 0,
       "stdout": "tests/smoke/expected/one.txt"
+    },
+    {
+      "id": "native:demos/04-functional/functional.xr",
+      "path": "demos/04-functional/functional.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/functional.txt"
     }
   ]
 }

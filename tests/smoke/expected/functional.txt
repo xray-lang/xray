@@ -1,0 +1,16 @@
+counter: 1, 2, 3
+twice(addOne, 5) = 7
+doubleThenAdd(5) = 20
+triple(7) = 21
+quadruple(7) = 28
+sum of even squares: 220
+fib(0) = 0
+fib(1) = 1
+fib(2) = 1
+fib(3) = 2
+fib(4) = 3
+fib(5) = 5
+fib(6) = 8
+fib(7) = 13
+fib(8) = 21
+fib(9) = 34
