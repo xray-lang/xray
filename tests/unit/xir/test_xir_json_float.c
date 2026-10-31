@@ -118,6 +118,7 @@ static void json_float_catalog_state_boundaries(void) {
         {"const stored:i64=1\nexport fn observe()->i64{return stored}\n",XR_XIR_I64,false,false,XR_XIR_OK},
         {"const stored:f64=1.0\nexport fn observe()->f64{return stored}\n",XR_XIR_F64,false,false,XR_XIR_OK},
         {"export const stored:f64=1.0\nexport fn observe()->f64{return stored}\n",XR_XIR_F64,false,true,XR_XIR_OK},
+        {"export const stored:f32=1.0\n",XR_XIR_F32,false,true,XR_XIR_OK},
         {"var stored:f64=1.0\nexport fn observe()->f64{return stored}\n",XR_XIR_F64,true,false,XR_XIR_BAD_STAGE}
     };
     XrXirCompileContext context=json_float_context();
@@ -143,7 +144,10 @@ static void json_float_catalog_state_boundaries(void) {
             json_float_source_refusal(&context,&private_read,"export");
         }
         if(catalog && cases[i].exported) {
-            JsonFloatSource public_read={"import {stored} from \"./number-decoding\"\nexport fn read()->f64{return stored}\n",
+            const char *text=cases[i].type==XR_XIR_F32 ?
+                "import {stored} from \"./number-decoding\"\nexport fn read()->f32{return stored}\n" :
+                "import {stored} from \"./number-decoding\"\nexport fn read()->f64{return stored}\n";
+            JsonFloatSource public_read={text,
                 "public-reader.xr",XR_XIR_PROGRAM,catalog};
             XrXirSourceResult received=json_float_source(&context,&public_read);
             xr_xir_compile_source_result_free(&received);
@@ -156,8 +160,6 @@ static void json_float_catalog_state_boundaries(void) {
             i,(unsigned)logical,(unsigned)cases[i].mutable,status,cases[i].expected,(unsigned long long)after.allocation_count);
         CHECK(status==cases[i].expected);
     }
-    JsonFloatSource exported={"export const stored:f32=1.0\n","exported-state.xr",XR_XIR_LIBRARY,NULL};
-    json_float_source_refusal(&context,&exported,"exported state is not admitted");
     xr_compile_resources_release(context.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);
 }
