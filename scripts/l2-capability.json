@@ -130,7 +130,8 @@
         "xir_buffer_storage",
         "xir_buffer_storage_native",
         "xir_buffer_storage_fault",
-        "xir_buffer_storage_previous"
+        "xir_buffer_storage_previous",
+        "xir_buffer_storage_previous109"
       ],
       "targets": [
         "test_xir_json_float",
