@@ -85,6 +85,8 @@ static void installed_rune_iteration(const char *stdlib) {
         "assert(iter.next().toUInt32()==20013)\nassert(iter.next().toUInt32()==128512)\n"
         "assert(!iter.hasNext())\nassert(rune(32)!.isWhitespace())\n"
         "assert(rune(12288)!.isWhitespace())\nassert(!rune(133)!.isWhitespace())\n"
+        "var original=[1,2]\nvar saved=copy original\n"
+        "original[0]=9\nassert(saved[0]==1)\n"
         "enum SdkError { Expected { message:string } }\n"
         "assertThrows(() -> {throw SdkError.Expected{message:\"owned\"}})\nprint(42)\n";
     XrSourceArtifact *artifact=compile(&compiler,source,__func__);
