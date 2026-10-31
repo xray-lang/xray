@@ -62,6 +62,7 @@ static bool expr_stmt_is_effectless(const AstNode *expr) {
         case AST_UNARY_NEG:
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
+        case AST_COPY_EXPR:
         case AST_BINARY_ADD:
         case AST_BINARY_SUB:
         case AST_BINARY_MUL:

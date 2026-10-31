@@ -239,7 +239,10 @@
         "test_xir_source_refinement",
         "xir_assert_throws_source",
         "xir_assert_throws_native",
-        "xir_assert_throws_controls"
+        "xir_assert_throws_controls",
+        "xir_source_copy",
+        "xir_source_copy_native",
+        "xir_source_copy_readmes"
       ],
       "targets": [
         "test_source_nullable_print",
@@ -261,7 +264,9 @@
         "test_xir_source_refinement",
         "test_xir_assert_throws_source",
         "test_xir_assert_throws_native",
-        "test_xir_assert_throws_controls"
+        "test_xir_assert_throws_controls",
+        "test_xir_source_copy",
+        "test_xir_source_copy_native"
       ]
     },
     "errors-cleanup": {

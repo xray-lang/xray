@@ -6315,7 +6315,7 @@ fn measuredKernel(value: u64) -> u64 {
 | `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
 | `rune(n)` | `(i64) -> rune` | 从 i64 构造 Unicode scalar；负数、surrogate 或越界值触发范围 panic E0422 |
 | `chr(n)` | `(i64) -> string` | Unicode 码点转单 scalar 字符串 |
-| `copy(x)` | `(value) -> fresh value` | 显式深拷贝；普通值保留类型形状，借用的 `Slice<T>` / view 则返回独立 owner `Array<T>` |
+| `copy x` | `(position) -> logical copy` | 显式逻辑复制，源位置不变；普通值默认使用 COW，身份值复制引用，不可复制值拒绝。借用视图须按 §2.4 物化独立 owner `Array<T>`，不能复制借用权限 |
 
 `i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` 都解析整个字符串：允许首尾空白与前导符号，其余必须符合十进制文法；`f64` 额外接受小数部分和指数，整数与小数部分合计有一位数字即可（`.5` 与 `1.` 都能解析）。尾部残留、十六进制、`inf` / `nan` 以及越界整数都解析失败。`parse` 用 typed error channel 报错，`tryParse` 返回 `null`。数值之间的转换只能写成显式 `as`，文本解析不经过数值 cast。
 

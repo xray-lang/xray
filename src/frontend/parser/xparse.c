@@ -1496,6 +1496,17 @@ AstNode *xr_parse_variable(Parser *parser) {
         xr_parser_check(parser, TK_LPAREN)) {
         return xr_parse_channel_new(parser);
     }
+    /* A following named position selects the contextual operator. A call
+     * named copy remains an ordinary lexical call and grants no builtin. */
+    if (prev.length == 4 && xr_parser_compare_bytes(parser, prev.start, "copy", 4) == 0 &&
+        (xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_THIS))) {
+        AstNode *operand = xr_parse_precedence(parser, PREC_UNARY);
+        if (!xr_parser_healthy(parser) || !operand) return NULL;
+        AstNode *node = xr_ast_unary(parser->compiler_session, AST_COPY_EXPR, operand, prev.line);
+        if (!xr_parser_healthy(parser) || !node) return NULL;
+        node->column = prev.column;
+        return node;
+    }
     // Contextual keyword intercept: "move var" expression
     // Only trigger when followed by an identifier (the variable to move)
     if (prev.length == 4 && xr_parser_compare_bytes(parser, prev.start, "move", 4) == 0 &&

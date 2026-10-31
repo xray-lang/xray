@@ -2507,6 +2507,7 @@ set_tests_properties(test_xr_program_aot_provider_output PROPERTIES
     LABELS "unit;aot;canonical-program;generated-c;native;provider;pure-aot;task-300")
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/rune_text_output.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/source_copy.cmake)
 
 add_executable(xr_typed_provider_native_writer aot/xr_typed_provider_native_writer.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})

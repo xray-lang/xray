@@ -1232,6 +1232,11 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             break;
         }
 
+        case AST_COPY_EXPR:
+            xfmt_write_str(ctx, "copy ");
+            xfmt_emit_expression(ctx, node->as.unary.operand);
+            break;
+
         // Move expression: move var
         case AST_MOVE_EXPR:
             xfmt_write_str(ctx, "move ");

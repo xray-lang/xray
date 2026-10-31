@@ -146,6 +146,7 @@ static bool walk_children(const AstNode *n, ChildWalk *w) {
         case AST_UNARY_NEG:
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
+        case AST_COPY_EXPR:
         case AST_FORCE_UNWRAP:
             emit(w, n->as.unary.operand);
             return true;
@@ -724,6 +725,7 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
         case AST_UNARY_NEG:
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
+        case AST_COPY_EXPR:
         case AST_FORCE_UNWRAP:
         case AST_GROUPING:
         case AST_EXPR_STMT:

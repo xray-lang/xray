@@ -15,10 +15,10 @@ fn count(xs: Array<i64>) -> i64 {
 
 var first = [1, 2, 3]
 var second = [4, 5, 6]
-var left = go count(copy(first))
-var right = go count(copy(second))
-var leftTotal = await left
-var rightTotal = await right
+var left = go count(copy first)
+var right = go count(copy second)
+var leftTotal = try await left
+var rightTotal = try await right
 print(leftTotal + rightTotal)  // 21
 ```
 

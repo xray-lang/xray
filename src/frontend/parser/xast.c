@@ -1992,6 +1992,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "Range";
         case AST_IS_EXPR:
             return "IsExpr";
+        case AST_COPY_EXPR:
+            return "CopyExpr";
         case AST_UNARY_NEG:
             return "UnaryNeg";
         case AST_UNARY_NOT:

@@ -1771,6 +1771,7 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value);
 static bool source_defer(SourceContext *ctx, AstNode *node);
 #include "xxir_source_view.inc.c"
+#include "xxir_source_copy.inc.c"
 static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
     switch (node->type) {
     case AST_LITERAL_NULL:
@@ -1837,6 +1838,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         return true;
     }
     case AST_COMPTIME_EXPR: return source_comptime_expression(ctx,node,context,value);
+    case AST_COPY_EXPR: return source_copy(ctx,node,context,value);
     case AST_CALL_EXPR: return source_call(ctx, node, context, value);
     case AST_GO_EXPR: return source_go_call(ctx, node, context, value);
     case AST_AWAIT_EXPR: return source_task_await(ctx, node, context, value);
@@ -2573,6 +2575,7 @@ static bool capture_pattern(SourceCaptureScan *scan, AstNode *node, uint32_t dep
 }
 static bool capture_children(SourceCaptureScan *scan, AstNode *node) {
     switch (node->type) {
+    case AST_COPY_EXPR: return capture_scan(node->as.unary.operand,scan);
     case AST_MATCH_EXPR: {
         if (!capture_scan(node->as.match_expr.expr,scan)) return false;
         SourceName *saved=scan->bound;

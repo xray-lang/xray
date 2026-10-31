@@ -6359,7 +6359,7 @@ These global functions and built-in constructor/static functions are usable with
 | `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
 | `rune(n)` | `(i64) -> rune` | construct a Unicode scalar from i64; negative, surrogate and out-of-range values trigger range panic E0422 |
 | `chr(n)` | `(i64) -> string` | Unicode code point → one-scalar string |
-| `copy(x)` | `(value) -> fresh value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
+| `copy x` | `(position) -> logical copy` | Explicit logical copy leaving the source position unchanged; ordinary values use COW by default, identity values copy references, and noncopyable values reject. Borrowed views require an independent owner `Array<T>` under §2.4, without copying borrow authority |
 
 `i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` consume the whole string. Surrounding whitespace and a leading sign are accepted; `f64` additionally accepts a fractional part and exponent, with at least one digit across the integer and fractional parts (`.5` and `1.` are valid). Trailing residue, hexadecimal input, `inf` / `nan`, and out-of-range integers fail. `parse` reports failure through the typed error channel; `tryParse` returns `null`. Numeric conversions use explicit `as`; text parsing is not a numeric cast.
 
