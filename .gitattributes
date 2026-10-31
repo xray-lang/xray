@@ -92,3 +92,6 @@ tests/unit/xir/public_const_inputs/* text eol=lf
 
 # CSV document and typed-error consumers compare exact LF source and output.
 tests/cli/fixtures/csv/* text eol=lf
+
+# Checked historical packets retain their authentic producer bytes.
+tests/fixtures/xir_rune_whitespace/*.chk -text

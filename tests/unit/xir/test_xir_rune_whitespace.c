@@ -69,6 +69,7 @@ int main(int argc,char **argv) {
         "the predicate appends without changing existing operation identities");
     if(argc==3 && !strcmp(argv[1],"--previous110")){previous_packet_case(argv[2],110,"f1f13d7a158c6823ddd282a201bda699064da196bc5dda12b6a6c22b67ff6367");return 0;}
     if(argc==3 && !strcmp(argv[1],"--previous111")){previous_packet_case(argv[2],111,"aecc406fba0576f4d383d59e503bdceb5aad8066b20030f017b3b58aa9d57657");return 0;}
+    if(argc==3 && !strcmp(argv[1],"--previous112")){previous_packet_case(argv[2],112,"f89f4839f348aabf1bc40ac64cea1e41aeb6a6533ddfebc1b55a5cead3f80786");return 0;}
     CHECK(argc==1 || argc==2);
     uint32_t count=0;
     for(uint32_t code=0;code<=0x10ffff;++code) if(code<0xd800 || code>0xdfff) {

@@ -53,7 +53,8 @@
       "tests": [
         "test_xir_cleanup_replaced_sdk_manifest",
         "sdk_installed_native_msvc",
-        "xir_checked_previous111"
+        "xir_checked_previous111",
+        "xir_checked_previous112"
       ],
       "targets": [
         "test_xir_cleanup_replaced_sdk_reader",
