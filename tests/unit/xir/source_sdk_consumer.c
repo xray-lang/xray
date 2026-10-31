@@ -87,6 +87,14 @@ static void installed_rune_iteration(const char *stdlib) {
         "assert(rune(12288)!.isWhitespace())\nassert(!rune(133)!.isWhitespace())\n"
         "var original=[1,2]\nvar saved=copy original\n"
         "original[0]=9\nassert(saved[0]==1)\n"
+        "assert(\"${saved}\"==\"[1, 2]\")\n"
+        "const shown_tuple=(2,\"ok\")\nassert(\"${shown_tuple}\"==\"(2, \\\"ok\\\")\")\n"
+        "const shown_map=#{\"key\":7}\nassert(\"${shown_map}\"==\"#{\\\"key\\\": 7}\")\n"
+        "const shown_set=#[3,1]\nassert(\"${shown_set}\"==\"#[3, 1]\")\n"
+        "const shown_record={z:2,a:\"ok\"}\n"
+        "assert(\"${shown_record}\"==\"{a: \\\"ok\\\", z: 2}\")\n"
+        "const absent:i64?=null\nassert(\"${absent}\"==\"null\")\n"
+        "const present:i64?=9\nassert(\"${present}\"==\"9\")\n"
         "enum SdkError { Expected { message:string } }\n"
         "assertThrows(() -> {throw SdkError.Expected{message:\"owned\"}})\nprint(42)\n";
     XrSourceArtifact *artifact=compile(&compiler,source,__func__);
