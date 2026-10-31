@@ -97,7 +97,27 @@ def main() -> int:
     rejected = run('bom-interior', [binary, 'run', interior], bom, stdlib_env, None)
     assert rejected.returncode == 1 and rejected.stdout == b'' and b':2:1: error:' in rejected.stderr, rejected
 
-    print(f'CLI usability: {passed} commands, stdlib discovery and BOM sources PASS')
+    # Shared Source refusals name the feature and its actual source position.
+    # None of the three public commands may publish output before admission.
+    unsupported = (
+        ('bytes', 'var value = b"x"\n', 13, 'fixed byte literal syntax'),
+        ('scope', '    scope {}\n', 5, 'scope statement syntax'),
+        ('fixed-array', 'var value:[i64;2]=[1,2]\n', 11, 'fixed array type syntax'),
+        ('variadic', 'fn sum(...values:i64)->i64{return 0}\n', 4, 'variadic parameter syntax'),
+    )
+    for name, text, column, feature in unsupported:
+        source = work / (name + '.xr')
+        source.write_bytes(('print(1)\n' + text).encode())
+        expected_error = (f'{source}:2:{column}: error: {feature} is not yet supported by the compiler\n').encode()
+        for mode in ('check', 'run', 'build'):
+            published = work / (name + '-' + mode + '.c')
+            command = [binary, mode, source]
+            if mode == 'build':
+                command += ['-c', '-o', published]
+            run('unsupported-' + name + '-' + mode, command, work, stdlib_env, (1, b'', expected_error))
+            assert not published.exists()
+
+    print(f'CLI usability: {passed} commands, stdlib discovery, BOM and located feature refusals PASS')
     return 0
 
 

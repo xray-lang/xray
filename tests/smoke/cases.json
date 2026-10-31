@@ -26,7 +26,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F06",
-        "first_diagnostic": "demos/01-basics/functions.xr:47:4: error: parameter contract is not implemented in XIR"
+        "first_diagnostic": "demos/01-basics/functions.xr:47:4: error: variadic parameter syntax is not yet supported by the compiler"
       }
     },
     {
@@ -54,7 +54,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F16",
-        "first_diagnostic": "demos/01-basics/quoted_literals.xr:11:13: error: expression syntax is not implemented in XIR (node 9)"
+        "first_diagnostic": "demos/01-basics/quoted_literals.xr:11:13: error: fixed byte literal syntax is not yet supported by the compiler"
       }
     },
     {
@@ -158,7 +158,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F19",
-        "first_diagnostic": "demos/05-concurrency/atomic.xr:44:0: error: statement syntax is not implemented in XIR (node 115)"
+        "first_diagnostic": "demos/05-concurrency/atomic.xr:44:1: error: scope statement syntax is not yet supported by the compiler"
       }
     },
     {
@@ -170,7 +170,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F19",
-        "first_diagnostic": "demos/05-concurrency/channels.xr:67:0: error: statement syntax is not implemented in XIR (node 115)"
+        "first_diagnostic": "demos/05-concurrency/channels.xr:67:5: error: scope statement syntax is not yet supported by the compiler"
       }
     },
     {
@@ -194,7 +194,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F19",
-        "first_diagnostic": "demos/05-concurrency/select_and_scope.xr:21:0: error: statement syntax is not implemented in XIR (node 112)"
+        "first_diagnostic": "demos/05-concurrency/select_and_scope.xr:21:1: error: select statement syntax is not yet supported by the compiler"
       }
     },
     {
@@ -206,7 +206,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F05",
-        "first_diagnostic": "demos/05-concurrency/shared_data.xr:46:4: error: parameter contract is not implemented in XIR"
+        "first_diagnostic": "demos/05-concurrency/shared_data.xr:46:4: error: move parameter syntax is not yet supported by the compiler"
       }
     },
     {
@@ -446,7 +446,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F05",
-        "first_diagnostic": "stdlib/os/os.xr:39:4: error: parameter contract is not implemented in XIR"
+        "first_diagnostic": "stdlib/os/os.xr:39:4: error: move parameter syntax is not yet supported by the compiler"
       }
     },
     {
@@ -470,7 +470,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F06",
-        "first_diagnostic": "stdlib/math/math.xr:165:11: error: parameter contract is not implemented in XIR"
+        "first_diagnostic": "stdlib/math/math.xr:165:11: error: variadic parameter syntax is not yet supported by the compiler"
       }
     },
     {
@@ -506,7 +506,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F05",
-        "first_diagnostic": "stdlib/os/os.xr:39:4: error: parameter contract is not implemented in XIR"
+        "first_diagnostic": "stdlib/os/os.xr:39:4: error: move parameter syntax is not yet supported by the compiler"
       }
     },
     {
@@ -526,7 +526,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F06",
-        "first_diagnostic": "stdlib/path/path.xr:94:4: error: parameter contract is not implemented in XIR"
+        "first_diagnostic": "stdlib/path/path.xr:94:4: error: variadic parameter syntax is not yet supported by the compiler"
       }
     },
     {
@@ -634,7 +634,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F06",
-        "first_diagnostic": "stdlib/url/url.xr:549:11: error: parameter contract is not implemented in XIR"
+        "first_diagnostic": "stdlib/url/url.xr:549:11: error: variadic parameter syntax is not yet supported by the compiler"
       }
     },
     {

@@ -330,13 +330,28 @@ static bool source_request_poll(SourceContext *ctx, AstNode *site) {
     XrXirStatus status = xir_compile_resource_status(xr_compile_request_control_poll(ctx->request));
     return status == XR_XIR_OK || source_fail(ctx, site, status, "source request interrupted");
 }
-/* Names the syntax family and the parser node kind so an unadmitted construct is traceable. */
-static bool source_fail_syntax(SourceContext *ctx, AstNode *node, const char *family) {
+/* Unsupported surface syntax names the feature without exposing parser identifiers. */
+static bool source_fail_feature(SourceContext *ctx, AstNode *node, XrXirStatus status,
+    const char *feature) {
     char message[128];
-    if (source_format(ctx, message, sizeof(message), "%s syntax is not implemented in XIR (node %d)",
-            family, node ? (int) node->type : -1) != XR_DIAG_OK)
-        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "syntax is not implemented in XIR");
-    return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, message);
+    if (source_format(ctx, message, sizeof(message), "%s is not yet supported by the compiler",
+            feature) != XR_DIAG_OK)
+        return source_fail(ctx, node, status, "this language feature is not yet supported by the compiler");
+    return source_fail(ctx, node, status, message);
+}
+static bool source_fail_syntax(SourceContext *ctx, AstNode *node, const char *family) {
+    const char *feature = !strcmp(family,"statement") ? "this statement syntax" : "this expression syntax";
+    if (node) switch (node->type) {
+    case AST_FIXED_BYTES_LITERAL: feature = "fixed byte literal syntax"; break;
+    case AST_LITERAL_BIGINT: feature = "big integer literal syntax"; break;
+    case AST_SET_LITERAL: feature = "set literal syntax"; break;
+    case AST_SCOPE_BLOCK: feature = "scope statement syntax"; break;
+    case AST_SELECT_STMT: feature = "select statement syntax"; break;
+    case AST_DESTRUCTURE_ASSIGN: feature = "destructuring assignment syntax"; break;
+    case AST_UNSAFE_EXPR: feature = "unsafe expression syntax"; break;
+    default: break;
+    }
+    return source_fail_feature(ctx, node, XR_XIR_BAD_STRUCTURE, feature);
 }
 static XrXirSourceRange source_query_range(SourceContext *,AstNode *,const char *);
 static XrXirType source_symbol_type(SourceContext *,const SourceName *);
@@ -804,11 +819,9 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
         return source_nominal_arguments(ctx, ref->name, ref->children, ref->nchildren, type);
     default: break;
     }
-    char message[96];
-    if (source_format(ctx, message, sizeof(message), "type declaration is not admitted by XIR (kind %d)",
-            (int) ref->kind) != XR_DIAG_OK)
-        return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "type declaration is not admitted by XIR");
-    return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, message);
+    const char *feature = ref->kind == XR_TREF_FIXED_ARRAY ? "fixed array type syntax" :
+        ref->kind == XR_TREF_SCALAR ? "this scalar type" : "this type syntax";
+    return source_fail_feature(ctx, NULL, XR_XIR_BAD_TYPE, feature);
 }
 #include "xxir_source_local_errors.inc.c"
 #include "xxir_source_region_emit.inc.c"
@@ -2104,7 +2117,7 @@ static bool source_test_role(SourceContext *ctx, AstNode *node, XrXirFunctionIde
         case ATTR_AFTER_ALL: identity->test_role = XR_XIR_TEST_ROLE_AFTER_ALL; break;
         case ATTR_BEFORE_EACH: identity->test_role = XR_XIR_TEST_ROLE_BEFORE_EACH; break;
         case ATTR_AFTER_EACH: identity->test_role = XR_XIR_TEST_ROLE_AFTER_EACH; break;
-        default: return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "function attribute is not implemented in XIR");
+        default: return source_fail_feature(ctx, node, XR_XIR_BAD_STRUCTURE, "this function attribute");
         }
         if (attribute->timeout < 0 || (attribute->kind != ATTR_TEST_TIMEOUT && attribute->timeout))
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "invalid test timeout");
@@ -2119,7 +2132,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     FunctionDeclNode *decl = &node->as.function_decl;
     if (decl->is_extern || decl->type_param_count < 0 || decl->type_param_count > 65536 ||
         decl->borrow_origin_count || !decl->body || decl->param_count > 65536 || decl->param_count < 0)
-        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "function contract is not implemented in XIR");
+        return source_fail_feature(ctx, node, XR_XIR_BAD_STRUCTURE, "this function declaration syntax");
     XrXirFunctionIdentity identity = {.module = ctx->module, .exported = node->is_exported};
     if (!source_test_role(ctx, node, &identity)) return false;
     SourceName *symbol = add_name(ctx, &ctx->names[ctx->module], decl->name, node);
@@ -2169,7 +2182,12 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
         if (!param->type || (param->passing_mode != XR_PARAM_READ && !by_reference) || param->pattern || param->is_rest ||
             (by_reference && param->default_value) ||
             !source_type(ctx, param->type, &body->parameters[i]) || (body->parameters[i] == XR_XIR_UNIT && !by_reference))
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "parameter contract is not implemented in XIR");
+            return source_fail_feature(ctx, node, XR_XIR_BAD_TYPE,
+                param->is_rest ? "variadic parameter syntax" :
+                param->passing_mode == XR_PARAM_MOVE ? "move parameter syntax" :
+                param->pattern ? "destructured parameter syntax" :
+                by_reference && param->default_value ? "default-value syntax for ref parameters" :
+                !param->type ? "untyped parameter syntax" : "this parameter declaration syntax");
         /* A ref parameter is the caller's mutable cell: reads and writes in the body reach the
          * caller's binding through it, exactly as a captured mutable variable does. */
         if (by_reference && !source_cell_type(ctx, body->parameters[i], &body->parameters[i])) return false;
@@ -2724,7 +2742,8 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     FunctionDeclNode *decl = &node->as.function_expr;
     if (decl->is_extern || decl->attr_count || decl->type_param_count ||
         decl->borrow_origin_count || !decl->body || decl->param_count < 0 || decl->param_count > 65536)
-        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "closure contract is not implemented in XIR");
+        return source_fail_feature(ctx, node, XR_XIR_BAD_STRUCTURE,
+            decl->type_param_count ? "generic anonymous function syntax" : "this anonymous function syntax");
     if (context) {
         if (context->parameter_count != (uint32_t) decl->param_count)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure arity differs from its callable context");

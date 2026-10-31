@@ -185,7 +185,7 @@ static bool source_array_construct(SourceContext *ctx, AstNode *node, SourceValu
     NewExprNode *call = &node->as.new_expr;
     if (call->is_type_namespace || call->module_name || !call->class_name ||
         !source_text_same(ctx, NULL, call->class_name, "Array") || source_native_type_shadowed(ctx, "Array"))
-        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "built-in construction is not implemented in XIR");
+        return source_fail_feature(ctx, node, XR_XIR_BAD_STRUCTURE, "this built-in construction syntax");
     if (call->type_arg_count != 1 || !call->type_args || call->arg_count < 0 || call->arg_count > 2 ||
         (call->arg_count && !call->arguments))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array construction takes one element type and at most a length and a fill");

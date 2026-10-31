@@ -443,6 +443,7 @@ AstNode *xr_parse_select_statement(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_select_statement: NULL parser");
     int line = parser->previous.line;  // select keyword already consumed
+    int column = parser->previous.column;
 
     // Expect '{'
     if (!xr_parser_match(parser, TK_LBRACE)) {
@@ -724,6 +725,7 @@ AstNode *xr_parse_select_statement(Parser *parser) {
 
     AstNode *result = xr_ast_select_stmt(parser->compiler_session, cases, case_count, line);
     if (!xr_parser_healthy(parser)) return NULL;
+    result->column = column;
     return result;
 }
 
@@ -736,6 +738,7 @@ static AstNode *parse_scope_body(Parser *parser, uint8_t scope_mode) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_scope_body: NULL parser");
     int line = parser->previous.line;  // scope keyword already consumed
+    int column = parser->previous.column;
 
     // Expect '{'
     if (!xr_parser_match(parser, TK_LBRACE)) {
@@ -752,6 +755,7 @@ static AstNode *parse_scope_body(Parser *parser, uint8_t scope_mode) {
 
     AstNode *node = xr_ast_scope_block(parser->compiler_session, body, scope_mode, line);
     if (!xr_parser_healthy(parser)) return NULL;
+    node->column = column;
     if (body) {
         node->end_line = body->end_line;
         node->end_column = body->end_column;

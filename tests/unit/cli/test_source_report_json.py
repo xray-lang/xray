@@ -430,7 +430,7 @@ def closure_parameter_cases(args, output, environment):
         child = invoke('positive-'+name, ['run', path])
         assert child.returncode == 0 and child.stdout == b'9\n' and not child.stderr
     guards = {
-        'own-generic': ('const f=fn<T>(value:T)->T{return value}\n', 'closure contract is not implemented in XIR'),
+        'own-generic': ('const f=fn<T>(value:T)->T{return value}\n', 'generic anonymous function syntax is not yet supported by the compiler'),
         'const-capture': ('fn outer(){const value=1;const f=fn(){value=2}}\n', 'assignment requires a mutable binding'),
         'local-name': ('fn outer(){fn local(){};fn local(){}}\n', 'duplicate local name'),
         'declared-error': ('enum Fault{Bad}\nfn fail() throws(Fault)->i64{throw Fault.Bad}\nconst f:fn() throws(Fault)->i64=fn() throws(Never)->i64{return try fail()}\n', 'E0331: escaping error exceeds the declared throws type; catch it or declare throws'),
