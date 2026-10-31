@@ -16,12 +16,14 @@
 #include "xir/xxir_vm.h"
 #include "xir/xxir_program.h"
 #include "xir/xxir_output.h"
+#include "xir/xxir_emit_c.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"display %d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "typed_display_cases.h"
+#include "typed_display_receiving_cases.h"
 static uint64_t held(XrCompileResources *resources) {
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(resources,&stats)==XR_COMPILE_RESOURCE_OK);return stats.held_bytes;
 }
@@ -46,7 +48,7 @@ static void rejected(XrXirCompileContext *context) {
         xr_xir_compile_source_result_free(&out);CHECK(held(context->resources)==frame);
     }
 }
-static XrXirProgram *program(XrXirCompileContext *context,const char *text,uint32_t ids[2],bool named) {
+static XrXirProgram *program(XrXirCompileContext *context,const char *text,uint32_t ids[3],bool named,const char *c_path) {
     XrXirSourceResult out={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=source_check(context,text,&out,&diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"display Source %u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
@@ -59,11 +61,14 @@ static XrXirProgram *program(XrXirCompileContext *context,const char *text,uint3
     CHECK(xr_xir_compile_specialize(decoded,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(decoded);
     CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
-    const char *names[]={"render","cow"};
+    const char *names[]={"render","cow","received"};
     if(!named)ids[0]=module->declarations->entry_function;
-    else for(unsigned n=0;n<2;++n){ids[n]=UINT32_MAX;for(uint32_t f=0;f<module->function_count;++f)
+    else for(unsigned n=0;n<3;++n){ids[n]=UINT32_MAX;for(uint32_t f=0;f<module->function_count;++f)
         if(module->functions[f].name_length==strlen(names[n])&&!memcmp(module->functions[f].name,names[n],strlen(names[n])))ids[n]=f;
         CHECK(ids[n]!=UINT32_MAX);}
+    if(c_path){XrXirCSource source={0};CHECK(xr_xir_compile_emit_c(lowered,"typed_display",8388608,&source)==XR_XIR_OK);
+        FILE *file=fopen(c_path,"wb");CHECK(file && fwrite(source.text,1,source.length,file)==source.length);
+        CHECK(fprintf(file,"\nconst uint32_t typed_display_received_function=%uu;\n",ids[2])>0 && fclose(file)==0);xr_xir_compile_c_source_free(&source);}
     XrXirProgram *output=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&output)==XR_XIR_OK && !lowered);return output;
 }
 static XrXirValue invoke(XrXirInstance *instance,uint32_t function) {
@@ -84,7 +89,7 @@ static size_t input(const char *root,const char *relative,char *bytes,size_t cap
 static void original_map(XrXirCompileContext *context,const char *root) {
     char text[8192],expected[2048];(void)input(root,"demos/02-collections/maps_and_sets.xr",text,sizeof(text));
     size_t length=input(root,"tests/smoke/expected/maps_and_sets.txt",expected,sizeof(expected));
-    uint64_t frame=held(context->resources);uint32_t ids[2]={0};XrXirProgram *owner=program(context,text,ids,false);
+    uint64_t frame=held(context->resources);uint32_t ids[3]={0};XrXirProgram *owner=program(context,text,ids,false,NULL);
     DisplayOutput output={0};XrXirOutputSink sink={XR_XIR_CALL_ABI_VERSION,0,output_bytes,&output,sizeof(output.bytes)};
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,xr_xir_output_render,&sink};
@@ -94,10 +99,11 @@ static void original_map(XrXirCompileContext *context,const char *root) {
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_compile_program_drop(owner);CHECK(held(context->resources)==frame);
 }
 int main(int argc,char **argv) {
-    CHECK(argc==2);
+    CHECK(argc==2 || argc==3);
     XrXirCompileContext context={0};context.limits=xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_new(&(XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true},&context.resources)==XR_COMPILE_RESOURCE_OK);
-    uint64_t frame=held(context.resources);rejected(&context);uint32_t ids[2]={0};XrXirProgram *owner=program(&context,display_source,ids,true);
+    uint64_t frame=held(context.resources);rejected(&context);uint32_t ids[3]={0};XrXirProgram *owner=program(&context,display_source,ids,true,argc==3?argv[2]:NULL);
+    received_program(&context,owner,ids[2]);
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
     CHECK(xr_xir_instance_new(owner,&config,&instance)==XR_XIR_CALL_READY);
     XrXirValue text=invoke(instance,ids[0]),answer=invoke(instance,ids[1]);CHECK(answer.type==XR_XIR_I64 && answer.payload==42);

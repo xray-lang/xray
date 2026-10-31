@@ -107,10 +107,43 @@ static void finite_values(XrXirDomain *domain,XrXirTypeArena *arena) {
     receive=admission(domain,arena);CHECK(xr_xir_value_display_text(&deep,&receive,&output)==XR_XIR_VALUE_OK);
     exact_text(&output,"[[[[...]]]]",11);xr_xir_value_drop(&output);xr_xir_value_drop(&deep);
 }
+static void received_nullable(XrXirCompileContext *context) {
+    uint64_t frame=held(context->resources);
+    XrXirTypeNode original_nodes[]={
+        {.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_I64},
+        {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64}};
+    XrXirTypeNode received_nodes[]={
+        {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64},
+        {.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)256},
+        {.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_I64},
+        {.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)258},
+        {.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)259},
+        {.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)260}};
+    XrXirTypes original={original_nodes,2,NULL,NULL},received={received_nodes,6,NULL,NULL};
+    XrXirTypeArena *a=NULL,*b=NULL;
+    CHECK(xr_xir_compile_type_arena_new(context,&original,&a)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_compile_type_arena_new(context,&received,&b)==XR_XIR_VALUE_OK);
+    const XirTypeReceivingRoot roots[]={{(XrXirType)257,(XrXirType)256},{(XrXirType)256,(XrXirType)258}};
+    CHECK(xir_compile_type_arena_receive(context,b,a,roots,2)==XR_XIR_VALUE_OK);
+    XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
+    uint64_t bytes=xr_xir_domain_stats(domain).live_bytes;XrXirValue values[]={{XR_XIR_I64,0,7},{XR_XIR_I64,0,8}},array={0},some={0},output={0};
+    XrXirValueAdmission receive=admission(domain,a);
+    CHECK(xr_xir_array_new((XrXirType)257,values,2,&receive,&array)==XR_XIR_VALUE_OK);
+    receive=admission(domain,b);CHECK(xr_xir_nullable_new((XrXirType)257,&array,&receive,&some)==XR_XIR_VALUE_OK);
+    xr_xir_value_drop(&array);receive=admission(domain,b);
+    CHECK(xr_xir_value_display_text(&some,&receive,&output)==XR_XIR_VALUE_OK);exact_text(&output,"[7, 8]",6);
+    xr_xir_value_drop(&output);xr_xir_value_drop(&some);
+    receive=admission(domain,a);CHECK(xr_xir_nullable_new((XrXirType)256,&values[0],&receive,&some)==XR_XIR_VALUE_OK);
+    for(unsigned i=0;i<3;++i){XrXirValue next={0};receive=admission(domain,b);
+        CHECK(xr_xir_nullable_new((XrXirType)(259+i),&some,&receive,&next)==XR_XIR_VALUE_OK);xr_xir_value_drop(&some);some=next;}
+    receive=admission(domain,b);CHECK(xr_xir_value_display_text(&some,&receive,&output)==XR_XIR_VALUE_OK);exact_text(&output,"7",1);
+    xr_xir_value_drop(&output);xr_xir_value_drop(&some);CHECK(xr_xir_domain_stats(domain).live_bytes==bytes);
+    xr_xir_domain_drop(domain);xr_xir_compile_type_arena_drop(b);xr_xir_compile_type_arena_drop(a);CHECK(held(context->resources)==frame);
+}
 int main(void) {
     XrXirCompileContext context={0};context.limits=xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_new(&(XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,true},&context.resources)==XR_COMPILE_RESOURCE_OK);
-    uint64_t frame=held(context.resources);type_controls(&context);
+    uint64_t frame=held(context.resources);type_controls(&context);received_nullable(&context);
     XrXirTypeNode nodes[6]={0};nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64};nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_STRING};
     for(unsigned i=2;i<6;++i)nodes[i]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=(XrXirType)(i==2?256:255+i)};
     XrXirTypes types={nodes,6,NULL,NULL};XrXirTypeArena *arena=NULL;CHECK(xr_xir_compile_type_arena_new(&context,&types,&arena)==XR_XIR_VALUE_OK);

@@ -30,10 +30,8 @@ static int display_write(void *context,const void *bytes,size_t length) {
     }
     sink->used+=length;return 1;
 }
-static XrXirValueStatus display_text_graph(const XrXirValue *value,XrXirValueAdmission *admission,XrXirValue *output) {
-    if (!value || !admission_domain_current(admission) || !unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValueStatus status=value->type==XR_XIR_UNIT?XR_XIR_VALUE_OK:
-        xr_xir_value_admit(value,(XrXirType)value->type,admission);
+static XrXirValueStatus display_text_received(const XrXirValue *value,XrXirValueAdmission *admission,XrXirValue *output) {
+    XrXirValueStatus status=xr_xir_value_admit(value,(XrXirType)value->type,admission);
     if (status!=XR_XIR_VALUE_OK) return status;
     XrXirFormatContext context={.values=admission};XrValueFormatReader reader=xr_xir_value_format_reader(&context);
     XirDisplaySink sink={.admission=admission};XrValueFormatSink destination={&sink,display_write};
@@ -50,6 +48,14 @@ static XrXirValueStatus display_text_graph(const XrXirValue *value,XrXirValueAdm
     if (status==XR_XIR_VALUE_OK) status=xr_xir_string_new(admission->domain,bytes,length,output);
     if (bytes) xr_xir_domain_deallocate(admission->domain,bytes,length);
     return status;
+}
+static XrXirValueStatus display_text_graph(const XrXirValue *value,XrXirValueAdmission *admission,XrXirValue *output) {
+    if (!value || value->type==XR_XIR_UNIT || !admission_domain_current(admission) || !unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueAdmission received={0};
+    XrXirValueStatus status=storage_admission_begin(value,admission,&received);
+    if(status!=XR_XIR_VALUE_OK)return status;
+    status=display_text_received(value,&received,output);
+    return storage_admission_end(admission,&received,status);
 }
 XR_FUNC XrXirValueStatus xr_xir_value_display_text(const XrXirValue *value,XrXirValueAdmission *admission,XrXirValue *output) {
     xr_xir_value_graph_begin();

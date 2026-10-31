@@ -22,6 +22,25 @@ foreach(target test_xir_intrinsic_registry test_xir_intrinsic_registry_native)
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
     endif()
 endforeach()
+
+set(XIR_TYPED_DISPLAY_C ${CMAKE_CURRENT_BINARY_DIR}/typed-display/received.c)
+add_custom_command(OUTPUT ${XIR_TYPED_DISPLAY_C}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/typed-display
+    COMMAND $<TARGET_FILE:test_xir_typed_display_source> ${PROJECT_SOURCE_DIR} ${XIR_TYPED_DISPLAY_C}
+    DEPENDS test_xir_typed_display_source xir/typed_display_cases.h xir/typed_display_receiving_cases.h
+        ${PROJECT_SOURCE_DIR}/demos/02-collections/maps_and_sets.xr
+        ${PROJECT_SOURCE_DIR}/tests/smoke/expected/maps_and_sets.txt
+    VERBATIM)
+add_executable(test_xir_typed_display_native xir/test_xir_typed_display_native.c ${XIR_TYPED_DISPLAY_C})
+target_link_libraries(test_xir_typed_display_native PRIVATE xray_xir_vm)
+set_target_properties(test_xir_typed_display_native PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(test_xir_typed_display_native PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_typed_display_native PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME xir_typed_display_native COMMAND test_xir_typed_display_native)
+set_tests_properties(xir_typed_display_native PROPERTIES LABELS "unit;xir;ownership" TIMEOUT 60)
 add_test(NAME xir_intrinsic_contains COMMAND test_xir_intrinsic_registry
     "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/contains-schema33.xrc"
     "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_intrinsics/scalar-schema33.xrc"
@@ -185,7 +204,7 @@ set_tests_properties(xir_map_iteration_source PROPERTIES LABELS "unit;xir;owners
 
 foreach(display_part source values)
     add_executable(test_xir_typed_display_${display_part} xir/test_xir_typed_display_${display_part}.c)
-    target_link_libraries(test_xir_typed_display_${display_part} PRIVATE xray_xir_source xray_xir_vm)
+    target_link_libraries(test_xir_typed_display_${display_part} PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
     set_target_properties(test_xir_typed_display_${display_part} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     if(MSVC)
         target_compile_options(test_xir_typed_display_${display_part} PRIVATE /W4 /WX /utf-8)

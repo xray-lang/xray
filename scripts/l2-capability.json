@@ -99,7 +99,8 @@
         "src/xir/xxir_format*",
         "src/xir/xxir_value_display.inc.c",
         "tests/unit/xir/test_xir_typed_display_*.c",
-        "tests/unit/xir/typed_display_cases.h"
+        "tests/unit/xir/typed_display_cases.h",
+        "tests/unit/xir/typed_display_receiving_cases.h"
       ],
       "reason": "Public slots, records, JSON float and Range complete Source/Catalog/VM/native receivers.",
       "tests": [
@@ -153,7 +154,8 @@
         "xir_string_runes_source",
         "xir_map_iteration_source",
         "xir_typed_display_source",
-        "xir_typed_display_values"
+        "xir_typed_display_values",
+        "xir_typed_display_native"
       ],
       "targets": [
         "test_xir_json_float",
@@ -195,7 +197,8 @@
         "test_xir_string_runes_source",
         "test_xir_map_iteration_source",
         "test_xir_typed_display_source",
-        "test_xir_typed_display_values"
+        "test_xir_typed_display_values",
+        "test_xir_typed_display_native"
       ]
     },
     "frontend": {

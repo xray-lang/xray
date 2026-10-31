@@ -37,7 +37,8 @@ static const char display_source[]=
     "const order=\"${next()}|${next()}\"\n"
     "if(calls!=2 || order!=\"[1]|[2]\"){return -3}\n"
     "return 42\n"
-    "}\n";
+    "}\n"
+    "export fn received(values:Array<Array<i64>>)->string{return \"${values[0]}\"}\n";
 static const char display_expected[]=
     "(1, \"hi\", true)|(7,)|[(1, \"x\"), (2, \"y\")]|#{\"k\": [1, 2]}|#[3, 2]|null|[1, 2]|{a: 3, z: \"hi\"}|#{}|#[]";
 #endif // TYPED_DISPLAY_CASES_H

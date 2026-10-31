@@ -136,6 +136,20 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
     const XrXirTypes *types=xr_xir_compile_type_arena_types(arena);
     const XrXirTypeNode *parent=xr_xir_type_node(types,frame->boxed.inline_storage?
         frame->packed.type:frame->boxed.object->type);
+    if (!*inlined) {
+        span->type=(XrXirType)value->type;
+        /* A boxed child may retain a received arena and different TypeId.
+         * Keep its parent's declared coordinate for the identity check that
+         * precedes entering the child's actual storage owner. */
+        if (parent && parent->kind==XR_XIR_TYPE_NULLABLE) span->type=parent->element;
+        else if (parent && parent->kind==XR_XIR_TYPE_TUPLE) span->type=parent->parameters[index].type;
+        else if (parent && parent->kind==XR_XIR_TYPE_NOMINAL) {
+            const XrXirNominalIdentity *identity=&types->nominals->identities[parent->nominal.declaration];
+            uint32_t begin=identity->kind==XR_XIR_NOMINAL_ENUM?
+                identity->variants[((const XirNominalValue *)frame->boxed.object)->variant].field_begin:0;
+            span->type=parent->nominal.fields[begin+index];
+        }
+    }
     bool unit_nullable=parent && parent->kind==XR_XIR_TYPE_NULLABLE && parent->element==XR_XIR_UNIT;
     XrXirTaskResultType outcome={0};
     bool unit_outcome=parent && xr_xir_task_result_type_info(types,
@@ -302,7 +316,7 @@ static XrXirValueStatus value_admit_summary_mode(const XrXirValue *value, XrXirT
         if (!stack.depth) break;
         arena=admission_frame_arena(&stack.frames[stack.depth-1]);
         admission_child(&stack.frames[stack.depth - 1], arena, &current, &span, &inlined, &tuple_field);
-        type = inlined ? span.type : (XrXirType)current.type;
+        type = span.type;
         ValueAdmissionFrame *parent=&stack.frames[stack.depth-1];
         XrXirType parent_type=parent->boxed.inline_storage?parent->packed.type:parent->boxed.object->type;
         XrXirTaskResultType outcome={0};

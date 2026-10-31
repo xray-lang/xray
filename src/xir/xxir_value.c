@@ -1800,16 +1800,19 @@ XR_FUNC bool xr_xir_value_format_leaf(const XrXirFormatCursor *cursor,XrXirValue
 XR_FUNC bool xr_xir_value_format_unwrap(const XrXirFormatCursor *input,XrXirFormatCursor *output,bool *is_null,
     XrXirValueAdmission *admission,XrXirValueStatus *status) {
     if (!input || !output || !is_null || !status || *status!=XR_XIR_VALUE_OK) return false;
-    XrXirFormatCursor cursor=*input;const XrXirTypes *types=xr_xir_compile_type_arena_types(cursor.arena);
-    uint32_t steps=0;
+    XrXirFormatCursor cursor=*input;const XrXirTypeArena *segment=NULL;uint32_t steps=0;
     for (;;) {
         if (admission && !admission_is_compile(admission)) {
             if (!admission_domain_current(admission)) {*status=XR_XIR_VALUE_BAD_ARGUMENT;return false;}
             if (!admission->work || !xr_xir_domain_work(admission->domain,1)) {*status=XR_XIR_VALUE_LIMIT;return false;}
             --admission->work;
         }
+        const XrXirTypes *types=xr_xir_compile_type_arena_types(cursor.arena);
+        if(segment!=cursor.arena){segment=cursor.arena;steps=0;}
         const XrXirTypeNode *node=xr_xir_type_node(types,cursor.type);
         if (!node || node->kind!=XR_XIR_TYPE_NULLABLE) {*output=cursor;*is_null=false;return true;}
+        /* A received payload can change owner and numbering. Only a run in
+         * this actual pool is bounded by this pool's acyclic type graph. */
         if (++steps>types->count) return false;
         if (cursor.compact) {
             const XrXirStorageLayout *layout=xr_xir_compile_type_arena_storage(cursor.arena,cursor.type);

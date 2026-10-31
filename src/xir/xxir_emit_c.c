@@ -493,7 +493,7 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
         break;
     }
     case XR_XIR_TO_STRING:
-        EMIT_FORMAT(buffer, et_00b9a688ca9d6f61, " XrXirValue scalar = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
+        EMIT_FORMAT(buffer, et_da8a8b83d87dc6df, " XrXirValue scalar = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame,%uu));\n"
             " status = xr_xir_instance_scalar_text(view, &scalar, &value);\n",
             (uint32_t) xr_xir_operand_type(function, op->args[0]), layout->offsets[op->args[0]]);
         break;
