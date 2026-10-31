@@ -51,7 +51,7 @@ def cleanup_abi_cases(original):
             elif attack=='offset':value['abi_measurements'][index]['value']=offset+1
             else:value['abi_measurements'][index]['id']=999999
             cases.append((f'cleanup-{field}-{attack}',value,1))
-    for attack in ('old-call36','old-common102','old-common103','old-common104','old-common105','old-common106','old-common107','extra','duplicate','order'):
+    for attack in ('old-call36','old-common102','old-common103','old-common104','old-common105','old-common106','old-common107','old-common108','old-common109','extra','duplicate','order'):
         value=json.loads(json.dumps(original))
         if attack=='old-call36':value['call_abi']=36
         elif attack=='old-common102':value['semantic']=102
@@ -60,6 +60,8 @@ def cleanup_abi_cases(original):
         elif attack=='old-common105':value['semantic']=105
         elif attack=='old-common106':value['semantic']=106
         elif attack=='old-common107':value['semantic']=107
+        elif attack=='old-common108':value['semantic']=108
+        elif attack=='old-common109':value['semantic']=109
         elif attack=='extra':value['abi_measurements'].append({'id':999999,'value':0})
         elif attack=='duplicate':value['abi_measurements'].append(value['abi_measurements'][-1])
         else:value['abi_measurements'][-1],value['abi_measurements'][-2]=value['abi_measurements'][-2],value['abi_measurements'][-1]
