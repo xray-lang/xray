@@ -94,7 +94,12 @@
         "src/shared/xnative_declaration*",
         "stdlib/types/string.xr",
         "tests/unit/xir/test_xir_string_runes_source.c",
-        "tests/unit/xir/test_xir_map_iteration_source.c"
+        "tests/unit/xir/test_xir_map_iteration_source.c",
+        "src/xir/xxir_display.h",
+        "src/xir/xxir_format*",
+        "src/xir/xxir_value_display.inc.c",
+        "tests/unit/xir/test_xir_typed_display_*.c",
+        "tests/unit/xir/typed_display_cases.h"
       ],
       "reason": "Public slots, records, JSON float and Range complete Source/Catalog/VM/native receivers.",
       "tests": [
@@ -146,7 +151,9 @@
         "xir_rune_whitespace_source",
         "xir_rune_whitespace_previous110",
         "xir_string_runes_source",
-        "xir_map_iteration_source"
+        "xir_map_iteration_source",
+        "xir_typed_display_source",
+        "xir_typed_display_values"
       ],
       "targets": [
         "test_xir_json_float",
@@ -186,7 +193,9 @@
         "test_xir_rune_whitespace",
         "test_xir_rune_whitespace_native",
         "test_xir_string_runes_source",
-        "test_xir_map_iteration_source"
+        "test_xir_map_iteration_source",
+        "test_xir_typed_display_source",
+        "test_xir_typed_display_values"
       ]
     },
     "frontend": {

@@ -25,14 +25,21 @@ typedef struct XrXirFormatCursor {
     const XrXirTypeArena *arena;
     XrXirType type;
     bool compact;
+    const XrXirLiteral *field_name;
 } XrXirFormatCursor;
 typedef struct XrXirFormatAggregate {
     XrXirLiteral name, member;
     uint64_t count;
     bool array;
+    uint32_t kind;
 } XrXirFormatAggregate;
+enum {XIR_FORMAT_ENUM, XIR_FORMAT_ARRAY, XIR_FORMAT_TUPLE, XIR_FORMAT_MAP, XIR_FORMAT_SET, XIR_FORMAT_RECORD};
 typedef struct XrXirFormatContext {
     XrXirFormatCursor cursors[XR_VALUE_FORMAT_MAX_DEPTH + 1];
+    /* Only an executing text conversion borrows this meter. Data observation
+     * after retirement uses no execution authority or execution budget. */
+    XrXirValueAdmission *values;
+    XrXirValueStatus status;
 } XrXirFormatContext;
 /* The shared walker starts at depth zero. Context belongs to this one
  * synchronous traversal. A nested display uses a
@@ -43,4 +50,7 @@ XR_FUNC bool xr_xir_value_format_cursor(const XrXirValue *, XrXirFormatCursor *)
 XR_FUNC bool xr_xir_value_format_leaf(const XrXirFormatCursor *, XrXirValue *borrowed);
 XR_FUNC bool xr_xir_value_format_aggregate(const XrXirFormatCursor *, XrXirFormatAggregate *);
 XR_FUNC bool xr_xir_value_format_child(const XrXirFormatCursor *, uint32_t index, XrXirFormatCursor *);
+XR_FUNC bool xr_xir_value_format_unwrap(const XrXirFormatCursor *,XrXirFormatCursor *,bool *is_null,
+    XrXirValueAdmission *,XrXirValueStatus *);
+XR_FUNC XrXirValueStatus xr_xir_value_display_text(const XrXirValue *,XrXirValueAdmission *,XrXirValue *);
 #endif // XXIR_FORMAT_H

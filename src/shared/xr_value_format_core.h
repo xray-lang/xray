@@ -13,6 +13,7 @@
 
 #include <inttypes.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -67,6 +68,10 @@ typedef enum XrValueFormatKind {
     XR_VALUE_FORMAT_ENUM,
     XR_VALUE_FORMAT_LITERAL,
     XR_VALUE_FORMAT_ARRAY,
+    XR_VALUE_FORMAT_TUPLE,
+    XR_VALUE_FORMAT_MAP,
+    XR_VALUE_FORMAT_SET,
+    XR_VALUE_FORMAT_RECORD,
 } XrValueFormatKind;
 
 typedef struct XrValueFormatView {
@@ -161,10 +166,13 @@ XR_VALUE_FORMAT_FUNCTION int xr_value_format_value(XrValueFormatReader reader, X
         }
         case XR_VALUE_FORMAT_LITERAL:
             return xr_value_format_write(sink, view.name, view.name_size);
-        case XR_VALUE_FORMAT_ARRAY: {
+        case XR_VALUE_FORMAT_ARRAY:case XR_VALUE_FORMAT_TUPLE:case XR_VALUE_FORMAT_MAP:case XR_VALUE_FORMAT_SET:case XR_VALUE_FORMAT_RECORD: {
             if (xr_value_format_depth_exceeded(depth))
                 return xr_value_format_text(sink, "...");
-            if (view.unsigned_value > INT64_MAX || !xr_value_format_text(sink, "["))
+            bool pairs=view.kind==XR_VALUE_FORMAT_MAP || view.kind==XR_VALUE_FORMAT_RECORD;
+            const char *open=view.kind==XR_VALUE_FORMAT_TUPLE?"(":view.kind==XR_VALUE_FORMAT_MAP?"#{":view.kind==XR_VALUE_FORMAT_RECORD?"{":view.kind==XR_VALUE_FORMAT_SET?"#[":"[";
+            const char *close=view.kind==XR_VALUE_FORMAT_TUPLE?")":pairs?"}":"]";
+            if (view.unsigned_value > INT64_MAX || !xr_value_format_text(sink, open))
                 return 0;
             int64_t shown = xr_value_format_limit_count((int64_t)view.unsigned_value);
             if (shown && !reader.child)
@@ -172,9 +180,12 @@ XR_VALUE_FORMAT_FUNCTION int xr_value_format_value(XrValueFormatReader reader, X
             for (uint32_t index = 0; index < (uint32_t)shown; ++index) {
                 XrValueFormatNode child = {0};
                 if ((index && !xr_value_format_text(sink, ", ")) ||
-                    !reader.child(reader.context, node, index, &child) ||
+                    !reader.child(reader.context, node,pairs?index*2:index, &child) ||
                     !xr_value_format_value(reader, child, sink, depth + 1))
                     return 0;
+                if (pairs &&
+                    (!xr_value_format_text(sink,": ") || !reader.child(reader.context,node,index*2+1,&child) ||
+                     !xr_value_format_value(reader,child,sink,depth+1))) return 0;
             }
             if (view.unsigned_value > (uint64_t)shown) {
                 length = xr_value_format_more_suffix(number, sizeof(number), (int64_t)view.unsigned_value, shown);
@@ -182,7 +193,8 @@ XR_VALUE_FORMAT_FUNCTION int xr_value_format_value(XrValueFormatReader reader, X
                     !xr_value_format_write(sink, number, (size_t)length))
                     return 0;
             }
-            return xr_value_format_text(sink, "]");
+            if (view.kind==XR_VALUE_FORMAT_TUPLE && view.unsigned_value==1 && !xr_value_format_text(sink,",")) return 0;
+            return xr_value_format_text(sink, close);
         }
         case XR_VALUE_FORMAT_ENUM:
             if (xr_value_format_depth_exceeded(depth))

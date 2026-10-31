@@ -26,6 +26,7 @@
 #include "xxir_types.h"
 #include "xxir_task_result.h"
 #include "xxir_native_callable.h"
+#include "xxir_display.h"
 #include "xxir_view_types_internal.h"
 #include "xxir_view_access_internal.h"
 #include "xxir_view_prepare_internal.h"
@@ -1093,7 +1094,8 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
     if (op->op == XR_XIR_INTEGER_TO_RUNE) expected = XR_XIR_I64;
     if (op->op == XR_XIR_TO_STRING) {
         expected = xr_xir_operand_type(function, op->args[0]);
-        if (expected != XR_XIR_BOOL && expected != XR_XIR_RUNE && !xr_xir_type_is_number(expected)) return XR_XIR_BAD_TYPE;
+        XrXirStatus display=xir_display_type(&context->remaining,context->module->types,expected,NULL);
+        if (display!=XR_XIR_OK) return display;
     }
     if (op->op == XR_XIR_CELL_NEW) expected = xr_xir_cell_element(context->module->types, op->type);
     if (op->op == XR_XIR_CELL_READ) {

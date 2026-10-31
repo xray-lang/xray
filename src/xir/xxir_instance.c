@@ -18,6 +18,7 @@
 #include "xxir_instance_debug_internal.h"
 #include "xxir_instance_activation.h"
 #include "xxir_instance_value.h"
+#include "xxir_format.h"
 #include "xxir_native_callable.h"
 #include "xxir_from_utf8_internal.h"
 #include "xxir_unicode_internal.h"
@@ -1443,8 +1444,10 @@ XrXirCallStatus xr_xir_instance_scalar_text(XrXirCallView *view, const XrXirValu
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirInstance *instance = view_instance(view);
     char buffer[XR_XIR_SCALAR_TEXT_BYTES]; const char *bytes = NULL; size_t length = 0;
-    if (!instance || !scalar || !output || !xr_xir_scalar_text(scalar, buffer, &bytes, &length))
+    if (!instance || !scalar || !output)
         return XR_XIR_CALL_BAD_STATE;
+    if (!xr_xir_scalar_text(scalar,buffer,&bytes,&length))
+        return value_call_status(xr_xir_value_display_text(scalar,xr_xir_call_admission(view),output));
     return value_call_status(xr_xir_string_new(instance->domain, bytes, length, output));
 }
 static XrXirCallStatus time_call_status(XrXirTimeStatus status) {

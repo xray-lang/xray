@@ -10,6 +10,7 @@
  *   Source names are resolved before lowering and never rediscovered at runtime.
  */
 #include "xxir_source.h"
+#include "xxir_display.h"
 #include "../hir/xhir_items.h"
 #include "../hir/xhir_body.h"
 #include "../hir/xhir_tuple.h"
@@ -1476,8 +1477,10 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
     } else if (print) {
         for (int i = 0; i < call->arg_count; ++i) {
             if (!source_print_nullable(ctx, call->arguments[i], &args[i])) return false;
+            if (args[i].type==XR_XIR_UNIT)
+                return source_fail(ctx,node,XR_XIR_BAD_TYPE,"print requires an admitted display type");
             if (args[i].type != XR_XIR_BOOL && args[i].type != XR_XIR_RUNE && !xr_xir_type_is_number(args[i].type) && args[i].type != XR_XIR_STRING)
-                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "print requires an admitted display type");
+                if (!source_scalar_text(ctx,node,args[i],XR_HIR_CAST_TEXT,&args[i])) return false;
         }
         op = (XrXirInstruction) {XR_XIR_PRINT, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}};
     }
@@ -1583,6 +1586,12 @@ static bool source_cast_emit(SourceContext *ctx,AstNode *node,const XrHirCastTar
     return source_recipe_record(ctx,xr_hir_cast_instruction(&typed,input.id),value);
 }
 static bool source_scalar_text(SourceContext *ctx,AstNode *node,SourceValue input,XrHirCastRole role,SourceValue *value) {
+    if (input.type!=XR_XIR_UNIT && input.type!=XR_XIR_STRING && input.type!=XR_XIR_BOOL && input.type!=XR_XIR_RUNE &&
+        !xr_xir_type_is_number(input.type)) {
+        XrXirStatus status=xir_display_type(&ctx->compile,&ctx->types,input.type,ctx->request);
+        if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"value has no admitted builtin display");
+        return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TO_STRING,XR_XIR_STRING,{input.id,0},{0},0,{0}},value);
+    }
     XrHirCastTarget target;
     return source_cast_target(ctx,node,(XrHirCastTargetInput){.role=role,.target=XR_XIR_STRING},&target) &&
         source_cast_emit(ctx,node,&target,input,value);
