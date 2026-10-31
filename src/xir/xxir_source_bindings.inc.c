@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License.
  * Binding producers retain declaration order while consuming typed actions. */
+#include "xxir_source_recursive_binding.inc.c"
 static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     VarDeclNode *decl = &node->as.var_decl;
     if (decl->attr_count || (!decl->initializer && (decl->is_const || !decl->type_annotation)))
@@ -8,7 +9,15 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     XrXirType annotation = XR_XIR_UNIT;
     if (decl->type_annotation && !source_type(ctx, decl->type_annotation, &annotation)) return false;
     if (decl->initializer) {
-        if (!source_plan_expression(ctx, decl->initializer, (SourceExpectedType){decl->type_annotation != NULL,annotation, false, false}, &initial)) return false;
+        AstNode *saved_initializer=ctx->recursive_initializer;
+        const char *saved_name=ctx->recursive_name;
+        bool recursive=!top && source_recursive_binding_readonly(ctx,node);
+        ctx->recursive_initializer=recursive?decl->initializer:NULL;
+        ctx->recursive_name=recursive?decl->name:NULL;
+        bool built=source_plan_expression(ctx,decl->initializer,
+            (SourceExpectedType){decl->type_annotation!=NULL,annotation,false,false},&initial);
+        ctx->recursive_initializer=saved_initializer;ctx->recursive_name=saved_name;
+        if(!built)return false;
     } else if (!source_default_value(ctx, node, annotation, &initial)) return false;
 
     SourceName *symbol;

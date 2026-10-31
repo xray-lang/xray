@@ -509,13 +509,15 @@
     "f64_i64_native",
     "test_value_format_core",
     "xir_callable_array_transport",
-    "usability_progress_runner"
+    "usability_progress_runner",
+    "test_xir_source_local_recursive_binding",
+    "test_xir_source_local_recursive_binding_native"
   ],
   "versionCommand": [
     "{build}/xray.exe",
     "--version",
     "--json"
   ],
-  "smokeStatus": "smoke: demos 3/23 stdlib 4/29 readme 0/6 native 7/7; PASS 14 GAP 51 FAIL 0 NOT_RUN 0",
+  "smokeStatus": "EXPECTED (candidate; Root full smoke pending): smoke: demos 4/23 stdlib 4/29 readme 0/6 native 8/8; PASS 16 GAP 50 FAIL 0 NOT_RUN 0; original-smoke 10/60 original-failed-demos-repaired 1/20",
   "progressPolicy": "original-smoke-and-deletion-only-legacy"
 }

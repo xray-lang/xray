@@ -99,6 +99,8 @@ typedef struct SourceContext {
     bool *slot_fact_present;
     XrXirLiteral *literals;
     SourceName **names, *locals, *scope;
+    AstNode *recursive_initializer;
+    const char *recursive_name;
     SourceFact *facts;
     SourceEpoch *epochs;
     uint64_t next_epoch;

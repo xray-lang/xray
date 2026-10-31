@@ -1990,6 +1990,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n",
            XR_XIR_CALL_ABI_VERSION, XR_XIR_VALUE_ABI_VERSION);
     append(buffer,"#include \"xir/xxir_channel_call_internal.h\"\n");
+    append(buffer,"#include \"xir/xxir_instance_hash.h\"\n");
     append(buffer,
         "_Static_assert(sizeof(XrXirFaultDetail)==24"
         "&&_Alignof(XrXirFaultDetail)==8"

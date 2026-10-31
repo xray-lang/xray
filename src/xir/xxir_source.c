@@ -2704,7 +2704,7 @@ static bool source_closure_self(SourceContext *ctx, AstNode *node, const SourceC
     SourceValue self;
     if (!source_type_arguments(ctx, node, types, count, &op) || !source_recipe_group(ctx, op, captures, scan->count, &self))
         return false;
-    *symbol = (SourceName){.next=ctx->locals,.name=node->as.function_decl.name,.imported=NULL,.node=node,.kind=SOURCE_LOCAL,
+    *symbol = (SourceName){.next=ctx->locals,.name=scan->self->name,.imported=NULL,.node=node,.kind=SOURCE_LOCAL,
             .index=self.id,.module=ctx->module,.type=type,.mutable=false,
             .construction=false,.declaration=body->declaration,.inferred=false,.checked_library=false};
     ctx->locals = symbol;
@@ -2734,6 +2734,10 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
         }
     }
     SourceCaptureScan scan = {ctx, NULL, NULL, 0, 0, node, NULL, false};
+    if(node==ctx->recursive_initializer) {
+        if(!capture_bind(&scan,ctx->recursive_name,node))return false;
+        scan.self=scan.bound;
+    }
     if (!capture_scan(node, &scan)) return false;
     if (scan.count > 65536 - (uint32_t) decl->param_count || ctx->next_closure >= ctx->closure_limit)
         return source_fail(ctx, node, XR_XIR_BUDGET, "closure parameter or declaration budget exhausted");
@@ -2796,7 +2800,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
             source_generator_closure_factory(ctx,node,index,no_suspend,&factory);
     }
     bool nested_function = node->type == AST_FUNCTION_DECL;
-    if (ok && nested_function) {
+    if (ok && (nested_function || scan.self_used)) {
         ok = source_signature(ctx, parameters, (uint32_t) decl->param_count, ctx->functions[factory].result,
             ctx->functions[factory].error_type, &type);
         if (ok && scan.self_used) ok = source_closure_self(ctx, node, &scan, index, factory, type);

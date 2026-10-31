@@ -1,0 +1,3 @@
+fn replace(f:ref fn(i64)->i64){f=fn(n:i64)->i64{return 99}}
+fn make()->fn(i64)->i64 {var f=fn(n:i64)->i64 {if(n==0){return 0};return f(n-1)+1};replace(ref f);return f}
+print(make()(2))

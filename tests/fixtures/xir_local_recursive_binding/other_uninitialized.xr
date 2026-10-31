@@ -1,0 +1,2 @@
+fn make()->fn(i64)->i64 {var f=fn(n:i64)->i64 {return absent(n)};return f}
+print(make()(2))
