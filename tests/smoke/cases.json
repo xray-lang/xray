@@ -389,13 +389,9 @@
       "id": "stdlib/encoding/encoding.xr",
       "path": "stdlib/encoding/encoding.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F12",
-        "first_diagnostic": "stdlib/encoding/encoding.xr:283:19: error: E0330: throwing call requires try or a try body"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/http/http.xr",
@@ -776,6 +772,14 @@
       "expect": "pass",
       "exit_code": 0,
       "stdout": "tests/smoke/expected/variables.txt"
+    },
+    {
+      "id": "native:stdlib/encoding/encoding.xr",
+      "path": "stdlib/encoding/encoding.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     }
   ]
 }
