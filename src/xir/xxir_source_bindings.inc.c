@@ -12,8 +12,10 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
         AstNode *saved_initializer=ctx->recursive_initializer;
         const char *saved_name=ctx->recursive_name;
         bool recursive=!top && source_recursive_binding_readonly(ctx,node);
+        const char *recursive_name=recursive?source_owned_text(ctx,decl->name):NULL;
+        if(recursive&&!recursive_name)return false;
         ctx->recursive_initializer=recursive?decl->initializer:NULL;
-        ctx->recursive_name=recursive?decl->name:NULL;
+        ctx->recursive_name=recursive_name;
         bool built=source_plan_expression(ctx,decl->initializer,
             (SourceExpectedType){decl->type_annotation!=NULL,annotation,false,false},&initial);
         ctx->recursive_initializer=saved_initializer;ctx->recursive_name=saved_name;
