@@ -30,6 +30,7 @@
   "tests": [
     "smoke",
     "test_cli_usability",
+    "test_cli_build_options",
     "test_cli_spec",
     "cli_toolchain_config_normal",
     "cli_toolchain_command_normal",

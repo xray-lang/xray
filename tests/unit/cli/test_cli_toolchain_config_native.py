@@ -33,6 +33,8 @@ with tempfile.TemporaryDirectory(prefix="selection-中-", dir=parent) as directo
         assert result.returncode == expected, records[-1]
         if diagnostic:
             assert diagnostic.encode() in result.stderr, records[-1]
+        if expected == 0 and "--verbose" in options:
+            assert b"XR_BUILD: C projection " in result.stderr and b"XR_BUILD: native compiler " in result.stderr, records[-1]
         if expected:
             assert output.read_bytes() == b"preserved original output"
         else:
@@ -49,8 +51,10 @@ with tempfile.TemporaryDirectory(prefix="selection-中-", dir=parent) as directo
     missing = root / "does-not-exist" / "cl.exe"
     broken = 'schema = 1\n[native]\nprovider = "msvc"\ncompiler = ' + json.dumps(str(missing)) + '\n'
     run("explicit-stored-path-no-fallback", broken, 1, "XR_BUILD_6006")
-    run("caller-path-overrides-stored-path", broken, 0, options=("--cc", str(compiler)))
-    run("caller-provider-overrides-stored-provider", 'schema = 1\n[native]\nprovider = "zig"\n',
-        0, options=("--toolchain", "msvc", "--cc", str(compiler)))
+    run("caller-path-overrides-stored-path", broken, 0, options=("--native", "--cc", str(compiler), "--verbose"))
+    run("retired-caller-provider-rejected", 'schema = 1\n[native]\nprovider = "zig"\n',
+        2, "unknown option '--toolchain'", options=("--toolchain", "msvc", "--cc", str(compiler)))
+    run("caller-path-does-not-bypass-stored-provider", 'schema = 1\n[native]\nprovider = "zig"\n',
+        1, "XR_BUILD_6011", options=("--cc", str(compiler)))
 output = parent / "records.json"
 output.write_text(json.dumps(records, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

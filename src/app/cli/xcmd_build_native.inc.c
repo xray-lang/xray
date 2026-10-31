@@ -44,8 +44,7 @@ static int build_native_prepare(XrCompileState *state, const XrCliInvocation *in
     }
     const XrCliToolchainConfigView *preferences = xr_cli_toolchain_config_view(config);
     const char *compiler = xr_cli_opt_string(&inv->options, "cc", NULL);
-    const char *provider = xr_cli_opt_string(&inv->options, "toolchain", NULL);
-    for (size_t i = 0; !provider && i < preferences->count; ++i) {
+    for (size_t i = 0; i < preferences->count; ++i) {
         const XrCliToolchainPreference *preference = &preferences->preferences[i];
         if (strcmp(preference->target, "native")) continue;
         if (preference->selector != XR_TOOLCHAIN_SELECTOR_AUTO &&
@@ -71,6 +70,7 @@ static int build_native_prepare(XrCompileState *state, const XrCliInvocation *in
         return found == XTC_XIR_LOCAL_OUT_OF_MEMORY ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
     }
     const XtcXirLocalToolchainView *view = xtc_xir_local_toolchain_view(local);
+    if (build_verbose(inv)) fprintf(stderr,"XR_BUILD: native compiler %s\n",view->compiler);
     XtcXirWorkspaceRequest workspace = {view->workspace_parent, {XR_PATH_LIMIT_MAX_PATH, 32, 65536}};
     XtcXirNativeOperationLimits limits = {{{4 * 1024 * 1024, XR_PATH_LIMIT_MAX_PATH, 4096},
         BUILD_C_LIMIT, 4096}, 30000, 4 * 1024 * 1024};

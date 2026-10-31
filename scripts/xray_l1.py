@@ -75,7 +75,7 @@ def manifest(content: bytes) -> dict:
         if key != "versionCommand" and len(items) != len(set(items)):
             raise ValueError(f"Duplicate L1 {key}")
     if "progressPolicy" in value:
-        required = {"smoke", "test_cli_usability", "test_cli_resource_profiles_vm",
+        required = {"smoke", "test_cli_usability", "test_cli_build_options", "test_cli_resource_profiles_vm",
                     "test_compile_request_memory", "test_compile_request_deadline",
                     "meta_ownership_inventory", "skeleton_diff"}
         if value["progressPolicy"] != "original-smoke-and-deletion-only-legacy" or not required <= set(value["tests"]):

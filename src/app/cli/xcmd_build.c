@@ -33,6 +33,9 @@ static int build_publication_exit(XtcXirPublicationStatus status) {
     return status == XTC_XIR_PUBLICATION_OUT_OF_MEMORY || status == XTC_XIR_PUBLICATION_INVALID ?
         XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
 }
+static bool build_verbose(const XrCliInvocation *inv) {
+    return xr_cli_opt_bool(&inv->options,"verbose") || (inv->ctx && inv->ctx->verbose);
+}
 static bool build_options_supported(const XrCliInvocation *inv) {
     bool c_only = xr_cli_opt_bool(&inv->options,"c-only");
     for (int i = 0; i < inv->options.count; ++i) {
@@ -40,13 +43,6 @@ static bool build_options_supported(const XrCliInvocation *inv) {
         const char *name = inv->options.spec[i].long_name;
         if (!strcmp(name,"output") || !strcmp(name,"c-only") || !strcmp(name,"native") || !strcmp(name,"verbose")) continue;
         if (!c_only && !strcmp(name,"cc")) continue;
-        if (!c_only && !strcmp(name,"toolchain")) {
-            const char *provider = xr_cli_opt_string(&inv->options,name,"");
-            if (!strcmp(provider,"auto") || !strcmp(provider,"msvc")) continue;
-        }
-        const char *expected = !strcmp(name,"profile") ? "hosted" : !strcmp(name,"artifact") ? "executable" :
-            !strcmp(name,"c-dialect") ? "c11" : !strcmp(name,"target") ? "native" : NULL;
-        if (expected && !strcmp(xr_cli_opt_string(&inv->options,name,""),expected)) continue;
         fprintf(stderr,"XR_BUILD_6001: unsupported Source build option --%s\n",name); return false;
     }
     return true;
@@ -130,6 +126,10 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr,"XR_BUILD_6004: C projection failed (status=%u)\n",(unsigned)projected);
         result=projected==XR_XIR_OUT_OF_MEMORY || projected==XR_XIR_BAD_STRUCTURE ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
         goto cleanup;
+    }
+    if (build_verbose(inv)) {
+        const XrXirNativeProjectionSource *c=xr_compile_native_projection_source(projection);
+        fprintf(stderr,"XR_BUILD: Source %s\nXR_BUILD: C projection %zu bytes\n",paths.entry,c->length);
     }
     if (!c_only) {
         result=build_native_prepare(state,inv,projection,&artifact);

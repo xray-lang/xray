@@ -403,173 +403,78 @@ TEST(parse_execution_sandbox) {
     }
 }
 
-TEST(parse_build_native_debug_strip) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+TEST(spec_build_surface_exact) {
+    const XrCliCommandSpec *spec=xr_cli_find_command("build");
     ASSERT_NOT_NULL(spec);
-
-    XrCliContext ctx = {.program = "xray"};
-    XrCliInvocation inv;
-    char *argv[] = {"--native", "-g", "--strip", "file.xr"};
-
-    XrCliExitCode rc = xr_cli_parse_command(spec, 4, argv, &ctx, &inv);
-    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "debug"));
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "strip"));
-    ASSERT_EQ_INT(inv.positional_count, 1);
-
-    xr_cli_invocation_free(&inv);
+    const char *names[]={"output","c-only","cc","native","verbose"};
+    const int short_names[]={'o','c','C','N','v'};
+    ASSERT_EQ_INT(xr_cli_option_count(spec->options),5);
+    for(int i=0;i<5;++i) {
+        ASSERT_STR_EQ(spec->options[i].long_name,names[i]);
+        ASSERT_EQ_INT(spec->options[i].short_name,short_names[i]);
+    }
 }
-
-TEST(parse_build_native_freestanding_profile) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("build");
-    ASSERT_NOT_NULL(spec);
-
-    XrCliContext ctx = {.program = "xray"};
-    XrCliInvocation inv;
-    char *argv[] = {"--native", "--profile", "freestanding", "file.xr"};
-
-    XrCliExitCode rc = xr_cli_parse_command(spec, 4, argv, &ctx, &inv);
-    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "profile", NULL), "freestanding");
-    ASSERT_EQ_INT(inv.positional_count, 1);
-
-    xr_cli_invocation_free(&inv);
+TEST(parse_build_retired_options_rejected) {
+    const XrCliCommandSpec *spec=xr_cli_find_command("build");
+    XrCliContext ctx={.program="xray"};
+    char *retired[]={
+        "--c-dialect=c11",
+        "--opt=2",
+        "--debug",
+        "--cpu=native",
+        "--simd=scalar",
+        "--sysroot=ignored",
+        "--strip",
+        "--profile=hosted",
+        "--type-names=none",
+        "--artifact=executable",
+        "--target=native",
+        "--toolchain=auto",
+        "--zig=ignored",
+        "--dump-xaot-plan",
+        "--dump-global-evidence",
+        "--dump-xi-evidence",
+        "--dump-link-manifest",
+        "--dump-residue",
+        "--dump-link-command",
+        "--dump-toolchain-plan",
+        "--dry-run-link",
+        "--linker-script=ignored",
+        "--c-header=ignored",
+        "--c-export-prefix=ignored",
+        "--c-export-exclude=ignored",
+        "--keep-c",
+        "--cache-dir=ignored",
+        "--rebuild",
+        "--lto",
+        "--rc-guard",
+        "--toolchain=msvc",
+        "--toolchain=clang",
+        "--toolchain=gcc",
+        "--toolchain=zig",
+        "--c-dialect=c90",
+        "-O2",
+        "-g",
+        "-rignored",
+        "-S",
+    };
+    for(size_t i=0;i<sizeof(retired)/sizeof(*retired);++i) {
+        XrCliInvocation inv={0};char *argv[]={retired[i],"file.xr"};
+        ASSERT_EQ_INT(xr_cli_parse_command(spec,2,argv,&ctx,&inv),XR_CLI_EXIT_USAGE);
+    }
 }
-
-TEST(parse_build_native_linker_script) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("build");
-    ASSERT_NOT_NULL(spec);
-
-    XrCliContext ctx = {.program = "xray"};
-    XrCliInvocation inv;
-    char *argv[] = {"--native",        "--profile",      "freestanding",
-                    "--linker-script", "/tmp/kernel.ld", "file.xr"};
-
-    XrCliExitCode rc = xr_cli_parse_command(spec, 6, argv, &ctx, &inv);
-    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "profile", NULL), "freestanding");
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "linker-script", NULL), "/tmp/kernel.ld");
-    ASSERT_EQ_INT(inv.positional_count, 1);
-
+TEST(parse_build_compiler_and_c_projection) {
+    const XrCliCommandSpec *spec=xr_cli_find_command("build");
+    XrCliContext ctx={.program="xray"};XrCliInvocation inv={0};
+    char *native[]={"-N","-C","selected-cl.exe","-o","program.exe","file.xr"};
+    ASSERT_EQ_INT(xr_cli_parse_command(spec,6,native,&ctx,&inv),XR_CLI_EXIT_OK);
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options,"cc",NULL),"selected-cl.exe");
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options,"native"));
     xr_cli_invocation_free(&inv);
-}
-
-TEST(parse_build_native_simd_mode) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("build");
-    ASSERT_NOT_NULL(spec);
-
-    XrCliContext ctx = {.program = "xray"};
-    XrCliInvocation inv;
-    char *argv[] = {"--native", "--simd", "dispatch", "file.xr"};
-
-    XrCliExitCode rc = xr_cli_parse_command(spec, 4, argv, &ctx, &inv);
-    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "simd", NULL), "dispatch");
-    ASSERT_EQ_INT(inv.positional_count, 1);
-
-    xr_cli_invocation_free(&inv);
-}
-
-TEST(parse_build_restricted_c90_dialect) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("build");
-    ASSERT_NOT_NULL(spec);
-
-    XrCliContext ctx = {.program = "xray"};
-    XrCliInvocation inv;
-    char *argv[] = {"--native",       "--target",  "x86_64-linux-gnu", "--artifact",
-                    "shared-library", "--profile", "freestanding",     "--simd",
-                    "scalar",         "--c-only",  "--c-dialect",      "c90",
-                    "file.xr"};
-
-    XrCliExitCode rc = xr_cli_parse_command(spec, 13, argv, &ctx, &inv);
-    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "artifact", NULL), "shared-library");
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "c-only"));
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "c-dialect", NULL), "c90");
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "target", NULL), "x86_64-linux-gnu");
-    ASSERT_EQ_INT(inv.positional_count, 1);
-
-    xr_cli_invocation_free(&inv);
-}
-
-TEST(parse_build_hosted_fragment_artifact) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("build");
-    ASSERT_NOT_NULL(spec);
-
-    XrCliContext ctx = {.program = "xray"};
-    XrCliInvocation inv;
-    char *argv[] = {"--native", "--artifact", "hosted-fragment", "file.xr"};
-
-    XrCliExitCode rc = xr_cli_parse_command(spec, 4, argv, &ctx, &inv);
-    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "artifact", NULL), "hosted-fragment");
-    ASSERT_EQ_INT(inv.positional_count, 1);
-
-    xr_cli_invocation_free(&inv);
-}
-
-TEST(parse_build_cross_toolchain_options) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("build");
-    ASSERT_NOT_NULL(spec);
-
-    XrCliContext ctx = {.program = "xray"};
-    XrCliInvocation inv;
-    char *argv[] = {"--native", "--target", "x86_64-linux-musl",   "--toolchain",    "zig",
-                    "--zig",    "/opt/zig", "--dump-link-command", "--dry-run-link", "--keep-c",
-                    "file.xr"};
-
-    XrCliExitCode rc = xr_cli_parse_command(spec, 11, argv, &ctx, &inv);
-    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "target", NULL), "x86_64-linux-musl");
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "toolchain", NULL), "zig");
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "zig", NULL), "/opt/zig");
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "dump-link-command"));
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "dry-run-link"));
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "keep-c"));
-    ASSERT_EQ_INT(inv.positional_count, 1);
-
-    xr_cli_invocation_free(&inv);
-}
-
-TEST(parse_build_global_evidence_dump_option) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("build");
-    ASSERT_NOT_NULL(spec);
-
-    XrCliContext ctx = {.program = "xray"};
-    XrCliInvocation inv;
-    char *argv[] = {"--native", "--dump-global-evidence", "file.xr"};
-
-    XrCliExitCode rc = xr_cli_parse_command(spec, 3, argv, &ctx, &inv);
-    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "dump-global-evidence"));
-    ASSERT_FALSE(xr_cli_opt_present(&inv.options, "dump-global-summary"));
-    ASSERT_EQ_INT(inv.positional_count, 1);
-
-    xr_cli_invocation_free(&inv);
-}
-
-TEST(parse_build_xi_evidence_dump_option) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("build");
-    ASSERT_NOT_NULL(spec);
-
-    XrCliContext ctx = {.program = "xray"};
-    XrCliInvocation inv;
-    char *argv[] = {"--native", "--dump-xi-evidence", "file.xr"};
-
-    XrCliExitCode rc = xr_cli_parse_command(spec, 3, argv, &ctx, &inv);
-    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
-    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "dump-xi-evidence"));
-    ASSERT_EQ_INT(inv.positional_count, 1);
-
+    char *source[]={"--native","--c-only","--verbose","file.xr"};
+    ASSERT_EQ_INT(xr_cli_parse_command(spec,4,source,&ctx,&inv),XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options,"c-only"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options,"verbose"));
     xr_cli_invocation_free(&inv);
 }
 
@@ -620,12 +525,12 @@ TEST(parse_cmd_long_option_with_value) {
 
     XrCliContext ctx = {.program = "xray"};
     XrCliInvocation inv;
-    char *argv[] = {"--output", "out.c", "--c-dialect", "c11", "input.xr"};
+    char *argv[] = {"--output", "out.exe", "--cc", "selected-cl.exe", "input.xr"};
 
     XrCliExitCode rc = xr_cli_parse_command(spec, 5, argv, &ctx, &inv);
     ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "output", NULL), "out.c");
-    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "c-dialect", NULL), "c11");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "output", NULL), "out.exe");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "cc", NULL), "selected-cl.exe");
     ASSERT_EQ_INT(inv.positional_count, 1);
     ASSERT_STR_EQ(inv.positionals[0], "input.xr");
 
@@ -853,15 +758,9 @@ RUN_TEST(parse_cmd_simple_flag);
 RUN_TEST(parse_cmd_short_flag);
 RUN_TEST(parse_build_native_verbose);
 RUN_TEST(parse_execution_sandbox);
-RUN_TEST(parse_build_native_debug_strip);
-RUN_TEST(parse_build_native_freestanding_profile);
-RUN_TEST(parse_build_native_linker_script);
-RUN_TEST(parse_build_native_simd_mode);
-RUN_TEST(parse_build_restricted_c90_dialect);
-RUN_TEST(parse_build_hosted_fragment_artifact);
-RUN_TEST(parse_build_cross_toolchain_options);
-RUN_TEST(parse_build_global_evidence_dump_option);
-RUN_TEST(parse_build_xi_evidence_dump_option);
+RUN_TEST(spec_build_surface_exact);
+RUN_TEST(parse_build_retired_options_rejected);
+RUN_TEST(parse_build_compiler_and_c_projection);
 RUN_TEST(parse_build_global_summary_dump_rejected);
 RUN_TEST(parse_fmt_branch_arrow_options);
 RUN_TEST(parse_fmt_legacy_align_match_rejected);

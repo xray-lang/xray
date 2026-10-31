@@ -135,11 +135,11 @@ class MetricsTests(unittest.TestCase):
             docs = Path(directory)
             task = docs / progress.TASK
             task.parent.mkdir(parents=True)
-            text = "- [x] R1.2 stdlib\n- [x] R1.3 BOM\n- [ ] R1.6 CLI\n"
+            text = "- [x] R1.2 stdlib\n- [x] R1.3 BOM\n- [x] R1.6 CLI\n"
             task.write_text(text, encoding="utf-8")
             self.assertTrue(progress.document_state(ROOT, docs)["R1.3"])
             for old, new in (("[x] R1.2", "[ ] R1.2"), ("[x] R1.3", "[ ] R1.3"),
-                             ("[ ] R1.6", "[x] R1.6")):
+                             ("[x] R1.6", "[ ] R1.6")):
                 task.write_text(text.replace(old, new), encoding="utf-8")
                 with self.assertRaises(ValueError):
                     progress.document_state(ROOT, docs)

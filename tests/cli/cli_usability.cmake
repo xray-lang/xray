@@ -13,6 +13,12 @@ set_tests_properties(test_cli_usability PROPERTIES
     TIMEOUT 120 PROCESSORS 1 LABELS "cli;usability;stdlib")
 
 if(WIN32 AND XR_TARGET_ARCH MATCHES "^(x86_64|AMD64|amd64)$")
+add_test(NAME test_cli_build_options
+    COMMAND ${XRAY_PYTHON} -B -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_build_options.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+        --output ${CMAKE_CURRENT_BINARY_DIR}/cli-build-options)
+set_tests_properties(test_cli_build_options PROPERTIES
+    TIMEOUT 120 PROCESSORS 1 LABELS "cli;usability;build")
 add_test(NAME test_cli_resource_profiles_vm
     COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_resource_profiles.py
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
