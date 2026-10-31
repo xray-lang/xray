@@ -373,14 +373,16 @@ static XrTypeRef *parse_type_annotation_inner(Parser *parser) {
     Token annotation_start = parser->current;
     XrTypeRef *base = parse_type_annotation_base(parser);
     if (!xr_parser_healthy(parser)) return NULL;
-    /* Named and generic references are fresh allocations, unlike the shared
-     * primitive singletons, so they can carry the position of their spelling. */
-    if (base && !base->line && (base->kind == XR_TREF_NAMED || base->kind == XR_TREF_GENERIC))
+    /* Composite and named references are fresh allocations. Primitive
+     * singletons must never inherit one particular use site's position. */
+    if (base && !base->line && base->kind >= XR_TREF_NAMED)
         xr_tref_set_source_position(base, annotation_start.line, annotation_start.column);
 
     /* Only the type parser interprets ?? as two Optional suffixes. */
     base=parse_nullable_suffixes(parser,base);
     if (!xr_parser_healthy(parser)) return NULL;
+    if (base && !base->line && base->kind >= XR_TREF_NAMED)
+        xr_tref_set_source_position(base, annotation_start.line, annotation_start.column);
 
     /* Union type: T | U | ... */
     if (xr_parser_check(parser, TK_PIPE)) {
