@@ -222,7 +222,7 @@ static void library_unit_boundary_cases(void) {
   XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
   printf("Unit probe=%u status=%u diagnostic=%s\n",i,status,diagnostic.message);
   CHECK(status==XR_XIR_BAD_TYPE && !result.checked);
-  CHECK(!strcmp(diagnostic.message,"this parameter declaration syntax is not yet supported by the compiler"));
+  CHECK(!strcmp(diagnostic.message,"parameter contract is not implemented in XIR"));
   xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
   CHECK(!runtime_live&&!runtime_bytes);
  }

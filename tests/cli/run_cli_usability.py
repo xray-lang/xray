@@ -104,6 +104,7 @@ def main() -> int:
         ('scope', '    scope {}\n', 5, 'scope statement syntax'),
         ('fixed-array', 'var value:[i64;2]=[1,2]\n', 11, 'fixed array type syntax'),
         ('variadic', 'fn sum(...values:i64)->i64{return 0}\n', 4, 'variadic parameter syntax'),
+        ('unit-parameter', 'fn consume(value:())->i64{return 41}\n', 4, 'this parameter declaration syntax'),
     )
     for name, text, column, feature in unsupported:
         source = work / (name + '.xr')
