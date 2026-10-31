@@ -185,7 +185,6 @@
     "native_execution_scope",
     "native_runtime_failures",
     "native_runtime_link_contract",
-    "native_runtime_installed",
     "unit_framework_reports_success",
     "unit_framework_reports_direct_failure",
     "unit_framework_reports_helper_failure",
@@ -509,12 +508,14 @@
     "native_f64_i64_conversion",
     "f64_i64_native",
     "test_value_format_core",
-    "xir_callable_array_transport"
+    "xir_callable_array_transport",
+    "usability_progress_runner"
   ],
   "versionCommand": [
     "{build}/xray.exe",
     "--version",
     "--json"
   ],
-  "smokeStatus": "smoke: demos 3/23 stdlib 4/29 readme 0/6 native 7/7; PASS 14 GAP 51 FAIL 0 NOT_RUN 0"
+  "smokeStatus": "smoke: demos 3/23 stdlib 4/29 readme 0/6 native 7/7; PASS 14 GAP 51 FAIL 0 NOT_RUN 0",
+  "progressPolicy": "original-smoke-and-deletion-only-legacy"
 }

@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "tests": [
+    "native_runtime_installed"
+  ],
+  "when": "Completed capability batch or affected SDK interface change; retain scoped L0 consumers."
+}

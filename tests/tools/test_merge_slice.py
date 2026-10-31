@@ -216,7 +216,7 @@ class QueueTests(unittest.TestCase):
         self.assertNotEqual(two["candidate"], second[2])
 
     def test_compiler_change_uses_reviewed_slice_asan_while_full_lane_is_red(self):
-        branch = self.branch("a/aot", {"src/aot/change.c": "/* fixture */"})
+        branch = self.branch("a/xir", {"src/xir/change.c": "/* fixture */"})
         log = self.finish(self.start(branch), 0)
         self.assertEqual(log["gates"]["meta_ownership_inventory"], "PASS")
         self.assertEqual(log["gates"]["slice_asan"], "PASS")
@@ -231,6 +231,25 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(len(list(ET.parse(folder / "metadata.xml").getroot().iter("testcase"))), 1)
         self.assertEqual(len(list(ET.parse(folder / "l1-combined.xml").getroot().iter("testcase"))), 2)
         self.assertEqual((folder / "l1.log").read_text().count('$ ["ctest"'), 1)
+
+    def test_legacy_addition_is_rejected_before_build(self):
+        branch = self.branch("a/legacy", {"src/aot/change.c": "/* fixture */"})
+        log = self.finish(self.start(branch), 1)
+        self.assertEqual(log["gates"]["legacy_deletions"], "FAIL")
+        self.assertIn("deletions only", log["error"])
+        self.assertEqual(self.git("rev-parse", "main"), self.base)
+        self.assertFalse((self.root / "build").exists())
+
+    def test_alternate_manifest_cannot_bypass_candidate_usability_policy(self):
+        original = json.loads((self.repo / "scripts/l1-v0.json").read_text())
+        policy = dict(original, progressPolicy="original-smoke-and-deletion-only-legacy",
+                      tests=["smoke", "smoke_runner", "test_cli_usability", "usability_progress_runner"])
+        branch = self.branch("a/policy", {"scripts/l1-v0.json": json.dumps(policy),
+                                           "scripts/alternate.json": json.dumps(original)})
+        log = self.finish(self.start(branch, ["--manifest", "scripts/alternate.json"]), 1)
+        self.assertIn("alternate manifest cannot bypass", log["error"])
+        self.assertEqual(self.git("rev-parse", "main"), self.base)
+        self.assertFalse((self.root / "build").exists())
 
     def test_metadata_failure_never_advances_main(self):
         branch = self.branch("a/meta-fail", {"src/vm/register/change.c": "/* fixture */",

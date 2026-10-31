@@ -13,6 +13,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest import proc
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+from xray_progress import fixed_metrics
 
 
 @dataclass(frozen=True)
@@ -239,6 +241,11 @@ def main() -> int:
     try:
         sources = discover(root)
         cases = load_cases(manifest, root, sources)
+        baseline = json.loads((root / "tests/smoke/original-baseline.json").read_text(encoding="utf-8"))
+        version = proc.run([binary, "--version", "--json"], cwd=root, timeout=args.timeout)
+        if not version.ok:
+            raise ValueError("could not identify the smoke executable")
+        identity = json.loads(version.stdout)
     except (OSError, ValueError, KeyError, TypeError) as error:
         report.write_text(json.dumps({"schema": 1, "gate": "fail", "error": str(error)}) + "\n",
                           encoding="utf-8")
@@ -254,11 +261,14 @@ def main() -> int:
         results.append(row)
         row["log_directory"] = str(logs)
         print(f"{row['status'].upper()} {row['id']}: {row['reason']}", flush=True)
-    line = summary(results)
+    metrics = fixed_metrics(baseline, cases, results)
+    line = summary(results) + (f" original {metrics['original_pass']}/60"
+                              f" original-failed-demos-repaired {metrics['original_failed_demo_repaired']}/20")
     counts = {status: sum(row["status"] == status for row in results) for status in ("pass", "gap", "fail")}
     counts["not_run"] = sum(row.get("executed") is False for row in results)
     report.write_text(json.dumps({"schema": 1, "gate": "fail" if counts["fail"] else "pass", "binary": str(binary),
-        "summary": line, "counts": counts, "cases": results}, indent=2) + "\n", encoding="utf-8")
+        "identity": identity, "summary": line, "counts": counts, "metrics": metrics,
+        "cases": results}, indent=2) + "\n", encoding="utf-8")
     print(line)
     print(f"smoke gate: pass={counts['pass']} gap={counts['gap']} fail={counts['fail']} "
           f"not_run={counts['not_run']}")

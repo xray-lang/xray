@@ -12,6 +12,7 @@ import sys
 import time
 
 import xray_l1
+import xray_progress
 from xray_slot import Lease, save_json
 from xray_process import RecoveryRequired
 
@@ -106,13 +107,36 @@ def review_request(args) -> dict:
     roles = {"lead", "a", "b", "c", "d"}
     if review.get("authorRole") not in roles or review.get("reviewerRole") not in roles:
         raise ValueError("Review requires the author and reviewer roles")
-    if review["authorRole"] == review["reviewerRole"]:
-        raise ValueError("An independent reviewer is required")
     for key in ("reviewEvidence", "l0Log", "sliceAsanLog"):
         path = Path(review.get(key, ""))
         if not path.is_absolute() or not path.is_file() or path.stat().st_size == 0:
             raise ValueError(f"Review requires an existing, nonempty {key}")
     return review
+
+
+def review_scope(root: Path, base: str, candidate: str, review: dict) -> dict:
+    """Require independent review for interfaces, owner crossings and deletions."""
+    changes = git(root, "diff", "--no-renames", "--name-status", base, candidate).splitlines()
+    reasons, owners = [], set()
+    for line in changes:
+        status, path = line.split("\t", 1)
+        if status == "D" and (path.startswith(("src/", "include/", "tests/", "scripts/", "tools/", "cmake/"))
+                              or Path(path).suffix.lower() in {".c", ".h", ".py", ".sh", ".cmake"}):
+            reasons.append(path)
+        if path.startswith(("src/", "include/")):
+            owners.add("/".join(path.split("/")[:2]))
+            if Path(path).suffix.lower() in {".h", ".hpp"}:
+                reasons.append(path)
+        if path.startswith("cmake/XraySourceSdk") or path in {
+                "scripts/merge_slice.py", "scripts/xray_progress.py", "scripts/l1-v0.json",
+                "scripts/l2-capability.json", "tests/smoke/original-baseline.json"}:
+            reasons.append(path)
+    if len(owners) > 1:
+        reasons.append("multiple production owners")
+    independent = review["authorRole"] != review["reviewerRole"]
+    if reasons and not independent:
+        raise ValueError("Independent review required: " + ", ".join(reasons))
+    return {"independent": independent, "required_by": reasons}
 
 
 def slice_asan_gate(review: dict, changed: list[str], log: dict, logs: Path) -> None:
@@ -146,6 +170,9 @@ def integrate(args, review: dict, log: dict, logs: Path) -> None:
     base = review["reviewedBase"]
     if not ancestor(root, base, main) or not ancestor(root, base, source):
         raise RuntimeError("Reviewed base must be an ancestor of main and the reviewed commit")
+    log["reviewScope"] = review_scope(root, base, source, review)
+    log["gates"]["legacy_deletions"] = "FAIL"
+    xray_progress.legacy_deletions(root, base, source)
     commits = git(root, "rev-list", "--reverse", base + ".." + source).splitlines()
     if not commits or git(root, "rev-list", "--merges", base + ".." + source):
         raise RuntimeError("The initial queue requires a nonempty, linear slice")
@@ -184,6 +211,9 @@ def integrate(args, review: dict, log: dict, logs: Path) -> None:
     log["committers"] = sorted(set(final_committers))
     changed = git_paths(integration, "diff", "--name-only", main, candidate)
     log["changed"] = changed
+    log["reviewScope"] = review_scope(integration, main, candidate, review)
+    log["legacy"] = xray_progress.legacy_deletions(integration, main, candidate)
+    log["gates"]["legacy_deletions"] = "PASS"
     log["checkoutMaterialization"] = materialize_checkout(integration, changed)
     slice_asan_gate(review, changed, log, logs)
     relative = Path(args.manifest)
@@ -192,6 +222,21 @@ def integrate(args, review: dict, log: dict, logs: Path) -> None:
     plan_blob = git(integration, "rev-parse", candidate + ":" + relative.as_posix())
     content = subprocess.check_output(["git", "-C", str(integration), "cat-file", "blob", plan_blob])
     plan = xray_l1.manifest(content)
+    canonical = "scripts/l1-v0.json"
+    old_plan = json.loads(git(integration, "show", main + ":" + canonical))
+    current_plan = json.loads(git(integration, "show", candidate + ":" + canonical))
+    if old_plan.get("progressPolicy") and current_plan.get("progressPolicy") != old_plan["progressPolicy"]:
+        raise ValueError("The L1 progress policy cannot be removed or changed by a slice")
+    policy = old_plan.get("progressPolicy") or current_plan.get("progressPolicy")
+    if policy and plan.get("progressPolicy") != policy:
+        raise ValueError("An alternate manifest cannot bypass the current L1 usability policy")
+    if plan.get("progressPolicy"):
+        xray_progress.smoke_ratchet(integration, main, candidate)
+        log["gates"]["usability_document_state"] = "FAIL"
+        if args.docs is None:
+            raise ValueError("L1 usability state requires --docs pointing to the current task repository")
+        log["documentState"] = xray_progress.document_state(integration, args.docs.resolve())
+        log["gates"]["usability_document_state"] = "PASS"
     log["manifestBlob"] = plan_blob
     log["manifestSHA256"] = hashlib.sha256(content).hexdigest()
     log["smoke"] = plan.get("smokeStatus", "NOT_RUN: no smoke status supplied")
@@ -237,6 +282,7 @@ def main() -> int:
     parser.add_argument("--queue", type=Path, default=Path(r"D:\xray-build\queue"))
     parser.add_argument("--slots", type=Path, default=Path(r"D:\xray-build\slots"))
     parser.add_argument("--manifest", default="scripts/l1-v0.json")
+    parser.add_argument("--docs", type=Path, help="Current task-document checkout for L1 source/checklist alignment")
     args = parser.parse_args()
     for name in ("repo", "integration", "build", "temporary", "queue", "slots", "review"):
         setattr(args, name, getattr(args, name).resolve())
