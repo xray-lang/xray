@@ -32,6 +32,7 @@
 #include "xxir_call_take_internal.h"
 #include "xxir_type_arena_internal.h"
 #include "xxir_call_internal.h"
+#include "xxir_call_move_internal.h"
 #include "xxir_cell_owner_internal.h"
 #include "xxir_class_origin_internal.h"
 #include "xxir_class.h"
