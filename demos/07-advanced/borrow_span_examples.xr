@@ -1,7 +1,7 @@
 // Demo: Parameter Modes, Borrowing, Slice, and Ownership Actions
 // Short examples for READ/ref/move, copy/move, Slice views, and managed Buffer.
 //
-// Run: xray demos/07-advanced/borrow_span_examples.xr
+// Run: xray run demos/07-advanced/borrow_span_examples.xr
 
 import mem
 
@@ -10,7 +10,7 @@ fn plusOne(value: i64) -> i64 {
     return value + 1
 }
 
-// === 2. in: readonly borrowed parameter ===
+// === 2. READ: an ordinary Array parameter ===
 fn sumBorrowed(data: Array<i64>) -> i64 {
     var total = 0
     for (x in data) {
@@ -26,16 +26,16 @@ fn fillZero(buf: ref Array<u8>) {
     }
 }
 
-// === 4. out: caller-visible initialization ===
+// === 4. ref: caller-visible initialization ===
 fn initializeAnswer(slot: ref i64) {
     slot = 42
 }
 
-// === 5. borrowed values cannot escape ===
+// === 5. explicit value snapshots ===
 fn copyForStorage(data: Array<i64>) -> Array<i64> {
-    // Returning `data` directly would be a compile error because `data` is
-    // borrowed for this call only. Return an owned snapshot instead.
-    return copy(data)
+    // READ permits returning a logical copy. The explicit expression makes
+    // that snapshot visible without changing the original Array.
+    return copy data
 }
 
 class Holder {
@@ -47,9 +47,9 @@ class Holder {
 }
 
 fn storeCopy(data: Array<i64>, holder: ref Holder) {
-    // Storing `data` directly would let a borrowed value escape. Store an
-    // owned snapshot instead.
-    holder.items = copy(data)
+    // Saving a copyable READ value is legal. This expression explicitly
+    // preserves the Array's value semantics in the holder.
+    holder.items = copy data
 }
 
 // === 6. move: transfer ownership ===
@@ -71,7 +71,7 @@ fn moveExample() {
 // === 7. Slice and Buffer stay local to their owner ===
 fn sliceExample() {
     var values = [2, 3, 4, 5]
-    var view: Slice<i64> = values[1:4]
+    var view: MutSlice<i64> = values[1:4]
 
     for (i in 0..len(view)) {
         view[i] = view[i] * 10
@@ -85,7 +85,7 @@ fn bufferExample() {
     var buffer = mem.allocZeroed(4)
     unsafe {
         mem.withSliceMut<u8>(buffer.borrowPtr(), len(buffer), ref buffer,
-            fn(view: ref Slice<u8>) {
+            fn(view: MutSlice<u8>) {
                 view[0] = 7
                 view[1] = 9
                 print("buffer view: ${view[0]}, ${view[1]}, len ${len(view)}")
