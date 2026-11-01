@@ -1153,6 +1153,13 @@ static bool emit_resume_exit(CBuffer *buffer,const XrXirModule *module,
     const XrXirFunction *function,const XrXirFunctionLayout *layout,uint32_t index) {
     const XrXirInstruction *op=&function->instructions[index];
     if (op->op!=XR_XIR_THROW && op->op!=XR_XIR_RETURN) return false;
+    if(op->op==XR_XIR_RETURN&&function->result!=XR_XIR_UNIT&&op->args[0]>=function->parameter_count) {
+        XrXirOp producer=function->instructions[op->args[0]-function->parameter_count].op;
+        if(producer==XR_XIR_CELL_TAKE||producer==XR_XIR_VALUE_TAKE) {
+            append(buffer," { XrXirAction result={0}; XrXirCallStatus status=xr_xir_instance_return_take_at(view,%uu,state->frame,&result);\n"
+                " if(status!=XR_XIR_CALL_READY)return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};return result; }\n",index);return true;
+        }
+    }
         uint32_t type = op->op == XR_XIR_THROW ? (uint32_t) xr_xir_operand_type(function, op->args[0])
             : (uint32_t) xr_xir_function_completion(module,(uint32_t)(function-module->functions));
         uint32_t view_flags=0;
@@ -1188,6 +1195,10 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
             " if (stopped) return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE}; }\n",index,layout->frame_bytes);
     }
     append(buffer," state->pc = %uu;\n",index+1);
+    if(op->op==XR_XIR_CELL_WRITE_TAKE) {
+        append(buffer," { XrXirCallStatus status=xr_xir_instance_cell_write_take_at(view,%uu,state->frame);\n"
+            " if(status!=XR_XIR_CALL_READY)return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}}; }\n",index);return;
+    }
     if(op->op==XR_XIR_CELL_NEW_TAKE) {
         append(buffer," { XrXirValue created={0};\n"
             " XrXirCallStatus status=xr_xir_instance_cell_new_take_at(view,%uu,state->frame,&created);\n"
@@ -1563,7 +1574,7 @@ static void emit_resume_chunks(CBuffer *buffer, const XrXirArtifact *artifact,
 }
 
 static void emit_resume_inbox_helper(CBuffer *buffer, const char *prefix) {
-    EMIT_FORMAT(buffer, et_bd14f382927d41d5,
+    EMIT_FORMAT(buffer, et_f1ad55e34d159a94,
         "static XR_NOINLINE bool %s_accept_inbox(XrXirCallView *view, unsigned char *frame, XrXirValue *scratch,\n"
         "    uint32_t *pc, uint32_t *destination, uint32_t *expected, uint32_t normal_pc,\n"
         "    uint32_t error_pc, uint32_t error_destination, bool *invoking, bool discard,\n"
@@ -1602,7 +1613,10 @@ static void emit_resume_inbox_helper(CBuffer *buffer, const char *prefix) {
         " if (status!=XR_XIR_VALUE_OK) { *terminal=xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0}); return true; }\n"
         " xr_xir_owned_slot_move(frame,*destination,scratch);\n"
         " } else if (xr_xir_type_is_owned(xr_xir_compile_type_arena_types(view->arena), (XrXirType)*expected)) {\n"
-        " if (xr_xir_owned_slot_copy(frame, *destination, view->arena,\n"
+        " if(view->inbox.status==XR_XIR_CALL_RETURNED) {\n"
+        " XrXirValueStatus status=xir_call_compact_inbox_take(view,frame+*destination,(XrXirType)*expected);\n"
+        " if(status!=XR_XIR_VALUE_OK){*terminal=xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0});return true;}\n"
+        " } else if (xr_xir_owned_slot_copy(frame, *destination, view->arena,\n"
         " (XrXirType)*expected, inbox.payload) != XR_XIR_VALUE_OK) goto limit;\n"
         " } else if (*destination != UINT32_MAX) {\n"
         " xr_xir_scalar_store(frame, *destination, inbox.payload);\n"
@@ -1710,11 +1724,14 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
                 " if (status!=XR_XIR_VALUE_OK) return xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0}); }\n"
                 " xr_xir_owned_slot_move(state->frame,%uu,state->arguments);\n",p,layout->offsets[p]);
         else if (xr_xir_declared_parameter_mode(module->types,function->parameters[p],
-            function->consume_parameters,function->consume_parameter_count,p)==XR_PARAM_MOVE)
+            function->consume_parameters,function->consume_parameter_count,p)==XR_PARAM_MOVE) {
             append(buffer," state->arguments[0]=(XrXirValue){0};\n"
                 " { XrXirValueStatus status=xir_call_owned_argument_take(view,%uu,state->arguments);\n"
-                " if(status!=XR_XIR_VALUE_OK)return xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0}); }\n"
-                " xr_xir_owned_slot_move(state->frame,%uu,state->arguments);\n",p,layout->offsets[p]);
+                " if(status!=XR_XIR_VALUE_OK)return xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0}); }\n",p);
+            if(xr_xir_type_is_owned(module->types,function->parameters[p]))
+                append(buffer," xr_xir_owned_slot_move(state->frame,%uu,state->arguments);\n",layout->offsets[p]);
+            else append(buffer," xr_xir_scalar_store(state->frame,%uu,state->arguments[0].payload);state->arguments[0]=(XrXirValue){0};\n",layout->offsets[p]);
+        }
         else if (xr_xir_type_is_owned(module->types, function->parameters[p]))
             EMIT_FORMAT(buffer, et_6743ad1a0cb6e9cf, " if (xr_xir_owned_slot_copy(state->frame, %uu, view->arena, (XrXirType) %u, view->arguments[%u].payload) "
                    "!= XR_XIR_VALUE_OK) goto limit;\n", layout->offsets[p], (uint32_t) function->parameters[p], p);

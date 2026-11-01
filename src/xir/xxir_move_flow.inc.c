@@ -26,7 +26,8 @@ static bool move_call_parameter(const XrXirModule *module,const XrXirFunction *f
 }
 static bool move_consumes(const XrXirModule *module,const XrXirFunction *function,
     const XrXirInstruction *op,uint32_t argument) {
-    return (!argument&&(op->op==XR_XIR_CELL_TAKE||op->op==XR_XIR_VALUE_TAKE||op->op==XR_XIR_CELL_NEW_TAKE))||
+    return (argument==1&&op->op==XR_XIR_CELL_WRITE_TAKE)||
+        (!argument&&(op->op==XR_XIR_CELL_TAKE||op->op==XR_XIR_VALUE_TAKE||op->op==XR_XIR_CELL_NEW_TAKE))||
         move_call_parameter(module,function,op,argument);
 }
 static uint8_t move_after(const InitializationNode *node,uint32_t value,bool cell,
@@ -34,12 +35,25 @@ static uint8_t move_after(const InitializationNode *node,uint32_t value,bool cel
     uint8_t state=node->state;const XrXirInstruction *op=node->op;
     if(!op)return state;
     if(node->function->parameter_count+node->instruction==value)state=1;
-    if(cell&&(op->op==XR_XIR_CELL_WRITE||op->op==XR_XIR_CELL_LOCAL_WRITE)&&
+    if(cell&&(op->op==XR_XIR_CELL_WRITE||op->op==XR_XIR_CELL_WRITE_TAKE||op->op==XR_XIR_CELL_LOCAL_WRITE)&&
         (aliases[op->args[0]]&1))state=1;
     uint32_t count=operand_count(node->function,op,module);
     for(uint32_t a=0;a<count;++a) {
         uint32_t id=xr_xir_op_uses_operand_table(op->op)?node->function->operands[op->args[0]+a]:op->args[a];
         if(move_consumes(module,node->function,op,a)&&(cell?(aliases[id]&1)!=0:id==value))state=0;
+    }
+    return state;
+}
+/* A child can panic after argument commit. No handler may depend on the caller
+ * retaining a consumed call argument, even if another preparation can fail. */
+static uint8_t move_failed(const InitializationNode *node,uint32_t value,bool cell,
+    const uint8_t *aliases,const XrXirModule *module) {
+    if(!node->op)return node->state;
+    const XrXirInstruction *op=node->op;uint8_t state=node->state;
+    for(uint32_t a=0;a<operand_count(node->function,op,module);++a) {
+        if(!move_call_parameter(module,node->function,op,a))continue;
+        uint32_t id=node->function->operands[op->args[0]+a];
+        if(cell?(aliases[id]&1)!=0:id==value)state=0;
     }
     return state;
 }
@@ -61,7 +75,7 @@ static void move_aliases(const XrXirModule *module,const XrXirFunction *function
                 uint32_t id=xr_xir_op_uses_operand_table(op->op)?function->operands[op->args[0]+p]:op->args[p];
                 bits|=aliases[id];
             }
-            if(op->op==XR_XIR_CELL_WRITE||op->op==XR_XIR_CELL_LOCAL_WRITE) {
+            if(op->op==XR_XIR_CELL_WRITE||op->op==XR_XIR_CELL_WRITE_TAKE||op->op==XR_XIR_CELL_LOCAL_WRITE) {
                 uint8_t stored=count>1&&aliases[op->args[1]]?2u:0u;
                 uint32_t owner=op->args[0];
                 if((aliases[owner]|stored)!=aliases[owner]){aliases[owner]|=stored;changed=true;}
@@ -105,7 +119,8 @@ static XrXirStatus move_availability(InitializationGraph *graph,uint32_t value,b
             for(uint32_t e=graph->nodes[n].head;e!=UINT32_MAX;e=graph->edges[e].next) {
                 const InitializationEdge *edge=&graph->edges[e];
                 const InitializationNode *source=&graph->nodes[edge->source];
-                state&=edge->transfer?move_after(source,value,cell,aliases,context->module):source->state;
+                state&=edge->transfer?move_after(source,value,cell,aliases,context->module):
+                    move_failed(source,value,cell,aliases,context->module);
             }
             if(state!=graph->nodes[n].state){graph->nodes[n].state=state;changed=true;}
         }
@@ -114,11 +129,20 @@ static XrXirStatus move_availability(InitializationGraph *graph,uint32_t value,b
         const InitializationNode *node=&graph->nodes[n];const XrXirInstruction *op=node->op;
         if(!op)continue;
         context->location.instruction=node->instruction;context->location.block=node->block;
-        bool write=cell&&(op->op==XR_XIR_CELL_WRITE||op->op==XR_XIR_CELL_LOCAL_WRITE);
+        bool write=cell&&(op->op==XR_XIR_CELL_WRITE||op->op==XR_XIR_CELL_WRITE_TAKE||op->op==XR_XIR_CELL_LOCAL_WRITE);
         bool executing=op->op==XR_XIR_CALL||op->op==XR_XIR_INVOKE||op->op==XR_XIR_CALL_INDIRECT||
             op->op==XR_XIR_INVOKE_INDIRECT||op->op==XR_XIR_GO||op->op==XR_XIR_GENERATOR_NEW;
         if(cell&&!node->state&&(op->op==XR_XIR_CALL_INDIRECT||op->op==XR_XIR_INVOKE_INDIRECT)&&
             aliases[(uint32_t)op->immediate])return XR_XIR_BAD_VALUE;
+        if(cell&&op->op==XR_XIR_CELL_TAKE&&(aliases[op->args[0]]&1)) {
+            uint32_t frontier=function->blocks[node->block].frontier;
+            while(frontier) {
+                const XrXirInstruction *cleanup=&function->instructions[frontier-1];
+                for(uint32_t p=0;p<cleanup->args[1];++p)
+                    if(aliases[function->operands[cleanup->args[0]+p]])return XR_XIR_BAD_VALUE;
+                frontier=function->blocks[graph->nodes[frontier-1].block].frontier;
+            }
+        }
         uint32_t count=operand_count(function,op,context->module);
         for(uint32_t a=0;a<count;++a) {
             if(op->op==XR_XIR_PHI) {

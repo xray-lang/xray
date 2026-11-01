@@ -71,7 +71,8 @@ static bool source_binding_write(SourceContext *ctx,const SourceName *symbol,Sou
 static bool source_binding_write_reason(SourceContext *ctx,AstNode *node,const SourceName *symbol,SourceValue value,const char *failure) {
     XrHirBodyBinding binding={0};if(!source_hir_binding_receive(ctx,symbol,&binding))return false;
     XrHirBindingUseInput input={.types=&ctx->types,.scope=ctx->bodies[ctx->function].typed_scope,.origin=source_hir_origin(ctx,node,symbol->declaration),
-        .kind=XR_HIR_BINDING_WRITE,.value=value.type,.value_id=value.id,.type_failure=failure};
+        .kind=source_value_taken(ctx,value)?XR_HIR_BINDING_WRITE_TAKE:XR_HIR_BINDING_WRITE,
+        .value=value.type,.value_id=value.id,.type_failure=failure};
     XrHirBindingAction action;const char *reason=NULL;
     XrXirStatus status=xr_hir_body_binding_use(ctx->typed_body,binding,&input,ctx->request,&action,&reason);
     if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason?reason:"typed assignment failed");

@@ -515,7 +515,7 @@ static XrXirStatus effect_invocation_barriers(EffectInvocationFlow *flow) {
         XrXirStatus body_read_3=effect_invocation_flow_instruction(flow,i,&body_op_3,&op);
         if (body_read_3!=XR_XIR_OK) return body_read_3;
         if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-        bool store=op->op==XR_XIR_CELL_NEW || op->op==XR_XIR_CELL_WRITE ||
+        bool store=(op->op==XR_XIR_CELL_NEW||op->op==XR_XIR_CELL_NEW_TAKE) || (op->op==XR_XIR_CELL_WRITE||op->op==XR_XIR_CELL_WRITE_TAKE) ||
             op->op==XR_XIR_CELL_LOCAL_WRITE || op->op==XR_XIR_PLACE_WRITE ||
             op->op==XR_XIR_SLOT_INIT || op->op==XR_XIR_SLOT_GROUP_INIT ||
             op->op==XR_XIR_SLOT_STORE || op->op==XR_XIR_MAP_NEW || op->op==XR_XIR_SET_NEW || op->op==XR_XIR_MAP_SET || op->op==XR_XIR_SET_ADD || op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_SET ||
@@ -526,9 +526,9 @@ static XrXirStatus effect_invocation_barriers(EffectInvocationFlow *flow) {
         bool table=xr_xir_op_uses_operand_table(op->op);
         uint32_t count=table ? op->args[1] : effect_parameter_operands[op->op];
         if (op->op==XR_XIR_NULLABLE_SOME && xr_xir_nullable_is_unit(module->types,op->type)) count=0;
-        if (op->op==XR_XIR_CELL_NEW || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE) {
+        if ((op->op==XR_XIR_CELL_NEW||op->op==XR_XIR_CELL_NEW_TAKE) || (op->op==XR_XIR_CELL_WRITE||op->op==XR_XIR_CELL_WRITE_TAKE) || op->op==XR_XIR_CELL_LOCAL_WRITE) {
             XrXirType cell=op->type;
-            if (op->op!=XR_XIR_CELL_NEW) {
+            if ((op->op!=XR_XIR_CELL_NEW&&op->op!=XR_XIR_CELL_NEW_TAKE)) {
                 XrXirStatus status=effect_invocation_flow_type(flow,op->args[0],&cell);
                 if (status!=XR_XIR_OK) return status;
             }

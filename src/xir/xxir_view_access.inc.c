@@ -363,7 +363,7 @@ static uint32_t view_access_operands(const ViewAccess *a,const XrXirInstruction 
         const XrXirDeclarations *d=a->resolver->check.module->declarations;
         return xr_xir_slot_payload_operands(d->slots,d->slot_count,op);
     }
-    if (op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE)
+    if (op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CELL_WRITE_TAKE || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE)
         return xr_xir_cell_payload_operands(a->resolver->check.module->types,xr_xir_operand_type(a->body,op->args[0]),op->op);
     return xr_xir_op_uses_operand_table(op->op)?op->args[1]:view_access_rules[op->op].operands;
 }
@@ -516,7 +516,7 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
             if (status!=XR_XIR_OK) return status;
         } else if (cell || object || type==XR_XIR_BUFFER_STORAGE || place!=XR_XIR_PLACE_NONE) {
             bool read=op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CLASS_GET || role==XR_XIR_OPERAND_READ || (receiver_read && p==0);
-            bool write=(call && !(receiver_read && p==0)) || op->op==XR_XIR_CELL_TAKE || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE ||
+            bool write=(call && !(receiver_read && p==0)) || op->op==XR_XIR_CELL_TAKE || op->op==XR_XIR_CELL_WRITE_TAKE || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE ||
                 op->op==XR_XIR_CELL_STRING_APPEND || op->op==XR_XIR_CLASS_SET || role==XR_XIR_OPERAND_WRITE;
             if (!read && !write) return XR_XIR_UNRESOLVED;
             bool blocked=false;XrXirStatus status=view_access_use(a,&event->before,value,write,false,&blocked);

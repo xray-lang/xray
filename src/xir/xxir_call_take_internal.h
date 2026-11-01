@@ -15,6 +15,7 @@
 #include "xxir.h"
 #include "xxir_call.h"
 #include "xxir_types.h"
+#include "xxir_value_take_internal.h"
 typedef struct XirCallTakeArguments {
     const XrXirFunction *caller,*callee;
     const XrXirTypeNode *signature;
@@ -27,4 +28,11 @@ typedef struct XirCallTakeArguments {
 XR_FUNC XrXirCallStatus xir_call_arguments_stage(XrXirCallView *view,const XirCallTakeArguments *take);
 /* The driver already owns this logical argument independently of its caller. */
 XR_FUNC XrXirValueStatus xir_call_owned_argument_take(XrXirCallView *view,uint32_t parameter,XrXirValue *output);
+XR_FUNC XrXirValueStatus xir_call_cell_write_take_prepare(const XrXirCallView *view,
+    const XrXirValue *cell,const XrXirValue *value,XirCellWriteTake *output);
+XR_FUNC XrXirCallStatus xir_call_compact_return_move(XrXirCallView *view,
+    void *word,XrXirAction *output);
+/* The returned logical value is already owned by the actual driver inbox. */
+XR_FUNC XrXirValueStatus xir_call_compact_inbox_take(XrXirCallView *view,
+    void *word,XrXirType type);
 #endif /* XXIR_CALL_TAKE_INTERNAL_H */

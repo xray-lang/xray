@@ -906,10 +906,11 @@ static bool source_recipe_append(SourceContext *ctx, XrXirInstruction op, Source
             if (input >= parameters && input - parameters < body->count && body->recipes[input - parameters].root.kind == 2)
                 body->recipes[input - parameters].root.peer = own;
         }
-    } else if (op.op == XR_XIR_CELL_NEW || op.op == XR_XIR_CELL_WRITE) {
-        uint32_t input = op.args[op.op == XR_XIR_CELL_WRITE ? 1 : 0], parameters = ctx->functions[ctx->function].parameter_count;
+    } else if (op.op == XR_XIR_CELL_NEW || op.op==XR_XIR_CELL_NEW_TAKE || op.op == XR_XIR_CELL_WRITE || op.op==XR_XIR_CELL_WRITE_TAKE) {
+        bool construct=op.op==XR_XIR_CELL_NEW||op.op==XR_XIR_CELL_NEW_TAKE;
+        uint32_t input = op.args[construct?0:1], parameters = ctx->functions[ctx->function].parameter_count;
         if (input >= parameters && input - parameters < body->count && body->recipes[input - parameters].root.kind == 2)
-            body->recipes[input - parameters].root.peer = op.op == XR_XIR_CELL_NEW ? own : op.args[0];
+            body->recipes[input - parameters].root.peer = construct ? own : op.args[0];
     }
     ++body->count; ++body->blocks[body->current_block.identity].block.count; --ctx->remaining_instructions;
     return true;
@@ -1992,7 +1993,9 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         if (symbol->kind == SOURCE_UNIT_LOCAL) {
             *value = (SourceValue){.id=UINT32_MAX, .type=XR_XIR_UNIT,.place={0}}; return true;
         }
+        bool taken=source_value_taken(ctx,assigned);
         if (!source_binding_assign(ctx,node,symbol,assigned)) return false;
+        if(taken)return source_binding_read(ctx,symbol,value);
         *value = assigned; return true;
     }
     default: return source_fail_syntax(ctx, node, "expression");

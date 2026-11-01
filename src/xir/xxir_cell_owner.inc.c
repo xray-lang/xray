@@ -374,6 +374,53 @@ XR_FUNC void xir_cell_new_take_commit(XirCellNewTake *prepared,void *source_payl
     *output=(XrXirValue){cell->object.type,0,(int64_t)(uintptr_t)cell};
     *prepared=(XirCellNewTake){0};xr_xir_value_graph_end();
 }
+XR_FUNC XrXirValueStatus xir_cell_write_take_prepare(const XrXirValue *destination,
+    const XrXirValue *value,const XrXirCellAuthority *authority,XrXirValueAdmission *admission,XirCellWriteTake *output) {
+    if(!admission||!admission->domain||!admission->arena||!value||!authority||!output||output->cell||output->admission)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();XirCell *cell=cell_owner(destination);
+    XrXirValueStatus status=XR_XIR_VALUE_BAD_ARGUMENT;
+    if(cell&&!cell->projection_count&&(cell_write_access(cell,authority)||cell_empty_local(cell))) {
+        status=storage_admission_begin(destination,admission,&output->local);
+        if(status!=XR_XIR_VALUE_OK){xr_xir_value_graph_end();return status;}
+        if(status==XR_XIR_VALUE_OK&&!admission_owner(&output->local,cell->object.arena,cell->object.domain))
+            status=XR_XIR_VALUE_BAD_ARGUMENT;
+        XrXirType element=xr_xir_cell_element(xr_xir_compile_type_arena_types(cell->object.arena),cell->object.type);
+        if(status==XR_XIR_VALUE_OK&&element==XR_XIR_UNIT) {
+            if(!unit_value(value))status=XR_XIR_VALUE_BAD_ARGUMENT;
+            else if(!output->local.work||!xr_xir_domain_work(output->local.domain,1))status=XR_XIR_VALUE_LIMIT;
+            else --output->local.work;
+        } else if(status==XR_XIR_VALUE_OK)status=xr_xir_value_admit(value,element,&output->local);
+        if(status==XR_XIR_VALUE_OK&&cell->module_storage)
+            status=xr_xir_class_publication_prepare(value,1,&output->local,&output->publication);
+        if(status==XR_XIR_VALUE_OK) {
+            output->cell=cell;output->value=*value;output->previous=cell->value;
+            output->authority=*authority;output->admission=admission;
+        }
+        storage_admission_end(admission,&output->local,status);
+    }
+    xr_xir_value_graph_end();return status;
+}
+XR_FUNC void xir_cell_write_take_abort(XirCellWriteTake *prepared) {
+    if(!prepared||!prepared->cell)return;
+    xr_xir_class_publication_drop(&prepared->publication);
+    storage_admission_end(prepared->admission,&prepared->local,XR_XIR_VALUE_OK);
+    *prepared=(XirCellWriteTake){0};
+}
+XR_FUNC void xir_cell_write_take_commit(XirCellWriteTake *prepared,void *source_payload) {
+    xr_xir_value_graph_begin();XirCell *cell=prepared?prepared->cell:NULL;int64_t payload=0;
+    if(source_payload)memcpy(&payload,source_payload,sizeof(payload));
+    XR_CHECK(cell&&(cell_write_access(cell,&prepared->authority)||cell_empty_local(cell))&&
+        cell->value.type==prepared->previous.type&&cell->value.reserved==prepared->previous.reserved&&
+        cell->value.payload==prepared->previous.payload&&payload==prepared->value.payload&&
+        (source_payload||unit_value(&prepared->value)),"take assignment preserves its exact prepared Cell and source word");
+    if(prepared->publication.operation)xr_xir_class_publication_commit(&prepared->publication);
+    cell->value=prepared->value;cell->initialized=true;
+    if(source_payload)memset(source_payload,0,sizeof(payload));
+    xr_xir_value_drop(&prepared->previous);xr_xir_class_publication_drop(&prepared->publication);
+    storage_admission_end(prepared->admission,&prepared->local,XR_XIR_VALUE_OK);
+    *prepared=(XirCellWriteTake){0};xr_xir_value_graph_end();
+}
 XR_FUNC XrXirValueStatus xr_xir_cell_authorized_place(const XrXirValue *cell,
     const XrXirCellAuthority *authority, XrXirValueAdmission *admission, XrXirValuePlace *output) {
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;

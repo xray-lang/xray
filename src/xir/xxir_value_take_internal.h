@@ -13,6 +13,8 @@
 #ifndef XXIR_VALUE_TAKE_INTERNAL_H
 #define XXIR_VALUE_TAKE_INTERNAL_H
 #include "xxir_value.h"
+#include "xxir_cell_owner_internal.h"
+#include "xxir_class_origin_internal.h"
 
 typedef struct XirCellTake {
     void *cell;
@@ -22,6 +24,13 @@ typedef struct XirCellNewTake {
     void *cell;
     XrXirValue value;
 } XirCellNewTake;
+typedef struct XirCellWriteTake {
+    void *cell;
+    XrXirValue value,previous;
+    XrXirCellAuthority authority;
+    XrXirValueAdmission *admission,local;
+    XrXirClassPublication publication;
+} XirCellWriteTake;
 /* The caller keeps its actual Cell alive and excludes mutation until commit.
  * This grants no Source availability, projection or reference authority. */
 XR_FUNC XrXirValueStatus xir_cell_take_prepare(const XrXirValue *source,
@@ -34,4 +43,9 @@ XR_FUNC XrXirValueStatus xir_cell_new_take_prepare(XrXirType type,
 XR_FUNC void xir_cell_new_take_abort(XirCellNewTake *prepared);
 XR_FUNC void xir_cell_new_take_commit(XirCellNewTake *prepared,
     void *source_payload,XrXirValue *output);
+/* Preparation keeps the same Cell identity and preserves the caller's owner. */
+XR_FUNC XrXirValueStatus xir_cell_write_take_prepare(const XrXirValue *cell,
+    const XrXirValue *value,const XrXirCellAuthority *authority,XrXirValueAdmission *admission,XirCellWriteTake *output);
+XR_FUNC void xir_cell_write_take_abort(XirCellWriteTake *prepared);
+XR_FUNC void xir_cell_write_take_commit(XirCellWriteTake *prepared,void *source_payload);
 #endif // XXIR_VALUE_TAKE_INTERNAL_H

@@ -763,10 +763,23 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     int64_t value = 0;
     *action =
         (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {{0}, {0}, {0}, {0}}, 0};
+    if(op->op==XR_XIR_RETURN&&run->function->result!=XR_XIR_UNIT&&op->args[0]>=run->function->parameter_count) {
+        XrXirOp producer=run->function->instructions[op->args[0]-run->function->parameter_count].op;
+        if(producer==XR_XIR_CELL_TAKE||producer==XR_XIR_VALUE_TAKE) {
+            XrXirCallStatus status=xr_xir_instance_return_take_at(run->view,instruction,run->frame,action);
+            if(status!=XR_XIR_CALL_READY)*action=(XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};
+            state->instruction=next;return XR_XIR_RUN_OK;
+        }
+    }
     bool handled=false;
     XrXirRunStatus dispatched=vm_step_dispatch(run,state,op,action,&handled);
     if (handled) return dispatched;
     switch (op->op) {
+    case XR_XIR_CELL_WRITE_TAKE: {
+        XrXirCallStatus status=xr_xir_instance_cell_write_take_at(run->view,instruction,run->frame);
+        if(status!=XR_XIR_CALL_READY)*action=(XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};
+        state->instruction=next;return XR_XIR_RUN_OK;
+    }
     case XR_XIR_CELL_NEW_TAKE: {
         XrXirValue created={0};
         XrXirCallStatus status=xr_xir_instance_cell_new_take_at(run->view,instruction,run->frame,&created);
@@ -1032,7 +1045,9 @@ static XrXirAction vm_resume_observed(XrXirCallView *view, const XrXirVmBinding 
                 state->arguments[0]=(XrXirValue){0};
                 XrXirValueStatus status=xir_call_owned_argument_take(view,i,state->arguments);
                 if(status!=XR_XIR_VALUE_OK)return xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0});
-                xr_xir_owned_slot_move(run.frame,layout->offsets[i],state->arguments);
+                if(xr_xir_type_is_owned(module->types,function->parameters[i]))
+                    xr_xir_owned_slot_move(run.frame,layout->offsets[i],state->arguments);
+                else {xr_xir_scalar_store(run.frame,layout->offsets[i],state->arguments[0].payload);state->arguments[0]=(XrXirValue){0};}
             } else if (xr_xir_type_is_owned(module->types, function->parameters[i])) {
                 if (xr_xir_owned_slot_copy(run.frame, layout->offsets[i], view->arena, function->parameters[i], view->arguments[i].payload) != XR_XIR_VALUE_OK)
                     return (XrXirAction) {
@@ -1089,6 +1104,9 @@ static XrXirAction vm_resume_observed(XrXirCallView *view, const XrXirVmBinding 
             XrXirValueStatus status=xr_xir_call_view_inbox_take(view,(XrXirType)state->expected,state->arguments);
             if (status!=XR_XIR_VALUE_OK) return xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0});
             xr_xir_owned_slot_move(run.frame,state->destination,state->arguments);
+        } else if (xr_xir_type_is_owned(module->types,state->expected)&&view->inbox.status==XR_XIR_CALL_RETURNED) {
+            XrXirValueStatus status=xir_call_compact_inbox_take(view,(unsigned char *)run.frame+state->destination,(XrXirType)state->expected);
+            if(status!=XR_XIR_VALUE_OK)return xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0});
         } else if (xr_xir_type_is_owned(module->types, state->expected)) {
             if (xr_xir_owned_slot_copy(run.frame, state->destination, view->arena, state->expected, inbox.payload) != XR_XIR_VALUE_OK)
                 return (XrXirAction) {

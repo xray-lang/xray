@@ -55,7 +55,7 @@ static bool effect_physical_origin(const XrXirTypes *types,XrXirType type) {
  * Call identity, ROOT or NO_SUSPEND never substitute for its answer. */
 static bool effect_physical_error_empty_opcode(XrXirOp op) {
     switch (op) {
-    case XR_XIR_CELL_TAKE: case XR_XIR_VALUE_TAKE: case XR_XIR_CELL_NEW_TAKE:
+    case XR_XIR_CELL_TAKE: case XR_XIR_VALUE_TAKE: case XR_XIR_CELL_NEW_TAKE: case XR_XIR_CELL_WRITE_TAKE:
         return true;
     /* View faults enter the panic protocol; none throws a language Error. */
     case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW: case XR_XIR_VIEW_LEN:
@@ -141,7 +141,7 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     default:break;
     }
     switch (op) {
-    case XR_XIR_CELL_TAKE: case XR_XIR_VALUE_TAKE: case XR_XIR_CELL_NEW_TAKE:
+    case XR_XIR_CELL_TAKE: case XR_XIR_VALUE_TAKE: case XR_XIR_CELL_NEW_TAKE: case XR_XIR_CELL_WRITE_TAKE:
     case XR_XIR_CELL_NEW: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_STRING_APPEND: case XR_XIR_CELL_LOCAL_WRITE:
     case XR_XIR_PLACE_WRITE: case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_GROUP_INIT:
     case XR_XIR_MAP_NEW: case XR_XIR_SET_NEW: case XR_XIR_MAP_SET: case XR_XIR_SET_ADD:

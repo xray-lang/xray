@@ -601,9 +601,9 @@ XR_FUNC XrXirCallStatus xir_call_vm_visit_ready(XrXirCall *call,const XrXirExecu
 #include "xxir_call_view_operation.inc.c"
 static bool call_take_parameter(const XirCallTakeArguments *,uint32_t);
 #include "xxir_call_view_arguments.inc.c"
-#include "xxir_call_take.inc.c"
 #include "xxir_call_view_moves.inc.c"
 #include "xxir_call_view_returns.inc.c"
+#include "xxir_call_take.inc.c"
 
 XR_FUNC XrXirCallStatus xr_xir_call_return_move(XrXirCallView *view,
     XrXirValue *source, XrXirAction *action) {

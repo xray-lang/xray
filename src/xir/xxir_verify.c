@@ -110,7 +110,7 @@ static uint32_t operand_count_metadata(const XrXirTypes *types,const XrXirDeclar
         return declarations ? xr_xir_slot_payload_operands(declarations->slots,
             declarations->slot_count,op) : 1u;
     if (op->op == XR_XIR_CELL_NEW || op->op == XR_XIR_CELL_READ || op->op==XR_XIR_CELL_NEW_TAKE || op->op==XR_XIR_CELL_TAKE ||
-        op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE)
+        op->op == XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_WRITE_TAKE || op->op == XR_XIR_CELL_LOCAL_WRITE)
         return xr_xir_cell_payload_operands(types,op->op == XR_XIR_CELL_NEW || op->op==XR_XIR_CELL_NEW_TAKE ? op->type : cell,op->op);
     if (xr_xir_op_uses_operand_table(op->op)) return op->args[1];
     if (op->op==XR_XIR_GENERATOR_YIELD) return xr_xir_iterator_element(types,result)!=XR_XIR_UNIT;
@@ -119,7 +119,7 @@ static uint32_t operand_count_metadata(const XrXirTypes *types,const XrXirDeclar
 static uint32_t operand_count(const XrXirFunction *function,const XrXirInstruction *op,
     const XrXirModule *module) {
     XrXirType cell=XR_XIR_UNIT;
-    if (op->op == XR_XIR_CELL_READ || op->op==XR_XIR_CELL_TAKE || op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE)
+    if (op->op == XR_XIR_CELL_READ || op->op==XR_XIR_CELL_TAKE || op->op==XR_XIR_CELL_WRITE_TAKE || op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE)
         cell=xr_xir_operand_type(function,op->args[0]);
     return operand_count_metadata(module->types,module->declarations,function->result,cell,
         xr_xir_function_is_generator(module,(uint32_t)(function-module->functions)),op);
@@ -274,7 +274,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                                     const XrXirConstruction *construction) {
     if (op->op <= XR_XIR_INVALID || op->op >= XR_XIR_OP_COUNT)
         return XR_XIR_BAD_STRUCTURE;
-    if(op->op==XR_XIR_CELL_TAKE||op->op==XR_XIR_VALUE_TAKE||op->op==XR_XIR_CELL_NEW_TAKE) {
+    if(op->op==XR_XIR_CELL_TAKE||op->op==XR_XIR_VALUE_TAKE||op->op==XR_XIR_CELL_NEW_TAKE||op->op==XR_XIR_CELL_WRITE_TAKE) {
         if(op->immediate||op->targets[0]||op->targets[1]||op->type_arguments[0]||op->type_arguments[1])
             return XR_XIR_BAD_STRUCTURE;
         if(op->op==XR_XIR_CELL_NEW_TAKE&&!xr_xir_type_is_cell(module->types,op->type))return XR_XIR_BAD_TYPE;
@@ -1176,7 +1176,7 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
         if (!xr_xir_type_is_cell(context->module->types, expected) ||
             xr_xir_cell_element(context->module->types, expected) != op->type) return XR_XIR_BAD_TYPE;
     }
-    if (op->op == XR_XIR_CELL_WRITE) {
+    if (op->op == XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_WRITE_TAKE) {
         expected = xr_xir_operand_type(function, op->args[0]);
         if (!xr_xir_type_is_cell(context->module->types, expected)) return XR_XIR_BAD_TYPE;
     }
@@ -1249,7 +1249,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             }
             if ((op->op == XR_XIR_STRING_INDEX_OF && a == 2) || (op->op == XR_XIR_ITERATOR_NTH && a == 1)) operand_type = XR_XIR_I64;
             if (op->op == XR_XIR_ASSERT_CONDITION) operand_type = a ? XR_XIR_STRING : XR_XIR_BOOL;
-            if ((op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE) && a == 1) operand_type = xr_xir_cell_element(context->module->types, expected);
+            if ((op->op == XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_WRITE_TAKE || op->op == XR_XIR_CELL_LOCAL_WRITE) && a == 1) operand_type = xr_xir_cell_element(context->module->types, expected);
             if (op->op == XR_XIR_CELL_STRING_APPEND && a == 1) {
                 operand_type = XR_XIR_STRING;
                 if (op->immediate) {

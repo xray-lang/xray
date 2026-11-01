@@ -10,6 +10,7 @@ add_test(NAME test_xir_move_values COMMAND test_xir_move_values)
 set_tests_properties(test_xir_move_values PROPERTIES TIMEOUT 120 LABELS "unit;xir;ownership")
 add_executable(test_xir_move_source "${CMAKE_CURRENT_LIST_DIR}/test_xir_move_source.c")
 target_link_libraries(test_xir_move_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+target_compile_definitions(test_xir_move_source PRIVATE XR_MOVE_PREVIOUS_PACKET="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_move/previous119-read-ref.chk")
 set(move_generated "${CMAKE_CURRENT_BINARY_DIR}/generated/move_values.c")
 add_custom_command(OUTPUT "${move_generated}"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"

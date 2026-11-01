@@ -44,6 +44,15 @@ static bool source_move(SourceContext *ctx,AstNode *node,SourceValue *output) {
         return source_fail(ctx,node,status!=XR_XIR_OK?status:XR_XIR_BAD_TYPE,"move cannot consume a borrowed value");
     if(binding->type==XR_XIR_UNIT)
         return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"Unit move has no executable local value yet");
+    if(xr_xir_type_is_owned(&ctx->types,binding->type)) {
+        SourceExpressionPlan *parent=ctx->active_expression->parent;
+        while(parent&&parent->syntax->type==AST_GROUPING)parent=parent->parent;
+        if(parent&&parent->syntax->type!=AST_CALL_EXPR&&parent->syntax->type!=AST_ASSIGNMENT)
+            return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"move destination has no owned transfer recipe");
+        SourceExpectedType expected=ctx->active_expression->expected;
+        if(expected.present&&expected.type!=binding->type)
+            return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"move conversion has no owned transfer recipe");
+    }
     XrHirBindingAction action;
     if(!source_hir_binding_use(ctx,node,binding,XR_HIR_BINDING_TAKE,(SourceValue){0},&action)||
         !source_query_reference(ctx,position,binding,binding,XR_XIR_SOURCE_READ_WRITE))return false;

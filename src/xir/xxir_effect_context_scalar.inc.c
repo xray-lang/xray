@@ -219,10 +219,10 @@ static XrXirStatus effect_scalar_capture(EffectScalarFlow *flow, uint32_t instru
 static XrXirStatus effect_scalar_escape(EffectScalarFlow *flow, uint32_t instruction) {
     XrXirInstruction op=flow->function->instructions[instruction];
     uint32_t destination=flow->function->parameter_count+instruction;
-    bool construct=op.op==XR_XIR_CELL_NEW || op.op==XR_XIR_NULLABLE_SOME ||
+    bool construct=(op.op==XR_XIR_CELL_NEW||op.op==XR_XIR_CELL_NEW_TAKE) || op.op==XR_XIR_NULLABLE_SOME ||
         op.op==XR_XIR_MAP_NEW || op.op==XR_XIR_SET_NEW || op.op==XR_XIR_ARRAY_NEW || op.op==XR_XIR_STRUCT_NEW || op.op==XR_XIR_CLASS_NEW ||
         op.op==XR_XIR_ENUM_NEW || op.op==XR_XIR_TUPLE_NEW;
-    bool store=construct || op.op==XR_XIR_CELL_WRITE || op.op==XR_XIR_CELL_LOCAL_WRITE ||
+    bool store=construct || (op.op==XR_XIR_CELL_WRITE||op.op==XR_XIR_CELL_WRITE_TAKE) || op.op==XR_XIR_CELL_LOCAL_WRITE ||
         op.op==XR_XIR_PLACE_WRITE || op.op==XR_XIR_SLOT_STORE || op.op==XR_XIR_SLOT_INIT ||
         op.op==XR_XIR_SLOT_GROUP_INIT || op.op==XR_XIR_MAP_SET || op.op==XR_XIR_SET_ADD || op.op==XR_XIR_ARRAY_SET || op.op==XR_XIR_ARRAY_PUSH ||
         op.op==XR_XIR_STRUCT_SET || op.op==XR_XIR_CLASS_SET;
@@ -238,8 +238,8 @@ static XrXirStatus effect_scalar_escape(EffectScalarFlow *flow, uint32_t instruc
             (uint64_t)op.immediate>=flow->declarations->slot_count) return XR_XIR_BAD_STRUCTURE;
         count=xr_xir_slot_payload_operands(flow->declarations->slots,flow->declarations->slot_count,&op);
     }
-    if (op.op==XR_XIR_CELL_NEW || op.op==XR_XIR_CELL_WRITE || op.op==XR_XIR_CELL_LOCAL_WRITE) {
-        XrXirType owner_type=op.op==XR_XIR_CELL_NEW ? op.type : xr_xir_operand_type(flow->function,op.args[0]);
+    if ((op.op==XR_XIR_CELL_NEW||op.op==XR_XIR_CELL_NEW_TAKE) || (op.op==XR_XIR_CELL_WRITE||op.op==XR_XIR_CELL_WRITE_TAKE) || op.op==XR_XIR_CELL_LOCAL_WRITE) {
+        XrXirType owner_type=(op.op==XR_XIR_CELL_NEW||op.op==XR_XIR_CELL_NEW_TAKE) ? op.type : xr_xir_operand_type(flow->function,op.args[0]);
         count=xr_xir_cell_payload_operands(&flow->terms->types,owner_type,op.op);
     }
     if (table && ((count && !flow->function->operands) || op.args[0]>flow->function->operand_count ||

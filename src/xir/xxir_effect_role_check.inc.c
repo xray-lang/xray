@@ -96,7 +96,7 @@ static XrXirStatus effect_role_transfer(EffectRoleCheck *check,EffectRoleIndex *
     case XR_XIR_CALL_REQUIREMENT:
         return effect_role_group(check,uses,head,op,0,EFFECT_ROLE_CONDITIONAL);
     case XR_XIR_CELL_PROJECT:return XR_XIR_OK;
-    case XR_XIR_CELL_NEW:
+    case XR_XIR_CELL_NEW_TAKE: case XR_XIR_CELL_NEW:
         if (xr_xir_cell_is_unit(body->domain.types,op->type)) return XR_XIR_OK;
         return effect_role_value(check,uses,op->args[0],0,EFFECT_ROLE_FIXED);
     case XR_XIR_NULLABLE_SOME:
@@ -105,7 +105,7 @@ static XrXirStatus effect_role_transfer(EffectRoleCheck *check,EffectRoleIndex *
     case XR_XIR_FUNCTION_WEAKEN:
         return effect_role_value(check,uses,op->args[0],0,EFFECT_ROLE_FIXED);
     case XR_XIR_PLACE_WRITE:return effect_role_value(check,uses,op->args[1],0,EFFECT_ROLE_FIXED);
-    case XR_XIR_CELL_WRITE: case XR_XIR_CELL_LOCAL_WRITE: {
+    case XR_XIR_CELL_WRITE_TAKE: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_LOCAL_WRITE: {
         XrXirType type;XrXirStatus status=effect_body_request_type(body,f,op->args[0],&type);
         if (status!=XR_XIR_OK || xr_xir_cell_is_unit(body->domain.types,type)) return status;
         return effect_role_value(check,uses,op->args[1],0,EFFECT_ROLE_FIXED);
@@ -125,10 +125,10 @@ static XrXirStatus effect_role_opaque(EffectRoleCheck *check,EffectRoleIndex *us
         count=xr_xir_slot_payload_operands(body->domain.declarations->slots,
             body->domain.declarations->slot_count,op);
     }
-    if (op->op==XR_XIR_CELL_NEW || op->op==XR_XIR_CELL_READ ||
-        op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE) {
+    if ((op->op==XR_XIR_CELL_NEW||op->op==XR_XIR_CELL_NEW_TAKE) || op->op==XR_XIR_CELL_READ ||
+        (op->op==XR_XIR_CELL_WRITE||op->op==XR_XIR_CELL_WRITE_TAKE) || op->op==XR_XIR_CELL_LOCAL_WRITE) {
         XrXirType type=op->type;
-        if (op->op!=XR_XIR_CELL_NEW) {
+        if ((op->op!=XR_XIR_CELL_NEW&&op->op!=XR_XIR_CELL_NEW_TAKE)) {
             XrXirStatus status=effect_body_request_type(body,f,op->args[0],&type);
             if (status!=XR_XIR_OK) return status;
         }

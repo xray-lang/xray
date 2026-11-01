@@ -84,10 +84,20 @@ static bool source_hir_binding_receive(SourceContext *ctx,const SourceName *symb
         return source_fail(ctx,symbol->node,XR_XIR_BAD_STRUCTURE,"typed binding was not registered by its declaration producer");
     *out=symbol->typed_binding;return true;
 }
+static bool source_value_taken(SourceContext *ctx,SourceValue value) {
+    uint32_t parameters=ctx->functions[ctx->function].parameter_count;
+    if(value.type==XR_XIR_UNIT||value.id<parameters||value.id-parameters>=ctx->bodies[ctx->function].count)return false;
+    XrXirInstruction op=ctx->bodies[ctx->function].recipes[value.id-parameters].instruction;
+    return op.type==value.type&&(op.op==XR_XIR_CELL_TAKE||op.op==XR_XIR_VALUE_TAKE);
+}
 static bool source_hir_binding_use(SourceContext *ctx,AstNode *node,const SourceName *symbol,
     XrHirBindingUseKind kind,SourceValue value,XrHirBindingAction *out) {
     XrHirBodyBinding binding={0};if(!source_hir_binding_receive(ctx,symbol,&binding))return false;
     XrHirBodyScope use_scope={0};if(!source_hir_current_scope(ctx,&use_scope))return false;
+    if(source_value_taken(ctx,value)) {
+            if(kind==XR_HIR_BINDING_INITIALIZE)kind=XR_HIR_BINDING_INITIALIZE_TAKE;
+            if(kind==XR_HIR_BINDING_WRITE)kind=XR_HIR_BINDING_WRITE_TAKE;
+    }
     XrHirBindingUseInput input={.types=&ctx->types,.scope=use_scope,.origin=source_hir_origin(ctx,node,symbol->declaration),.kind=kind,.value=value.type,.value_id=value.id};const char *reason=NULL;
     XrXirStatus status=xr_hir_body_binding_use(ctx->typed_body,binding,&input,ctx->request,out,&reason);
     return status==XR_XIR_OK||source_fail(ctx,node,status,reason?reason:"typed binding use failed");

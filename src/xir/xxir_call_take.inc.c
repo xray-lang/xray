@@ -90,3 +90,46 @@ XR_FUNC XrXirValueStatus xir_call_owned_argument_take(XrXirCallView *view,uint32
     if(xr_xir_call_execution_status(view)!=XR_XIR_CALL_READY)return XR_XIR_VALUE_BAD_ARGUMENT;
     *output=frame->arguments[parameter];frame->arguments[parameter]=(XrXirValue){0};return XR_XIR_VALUE_OK;
 }
+XR_FUNC XrXirValueStatus xir_call_cell_write_take_prepare(const XrXirCallView *view,
+    const XrXirValue *cell,const XrXirValue *value,XirCellWriteTake *output) {
+    XrXirCellAuthority authority={0};
+    if(!view_cell_authority(view,&authority))return XR_XIR_VALUE_BAD_ARGUMENT;
+    if(!call_cell_work(view->activation,1))return XR_XIR_VALUE_LIMIT;
+    return xir_cell_write_take_prepare(cell,value,&authority,xr_xir_call_admission(view),output);
+}
+XR_FUNC XrXirCallStatus xir_call_compact_return_move(XrXirCallView *view,void *word,XrXirAction *output) {
+    XrXirValueAdmission *admission=xr_xir_call_admission(view);
+    if(!admission||!word||!output||view->phase!=XR_XIR_CALL_NORMAL||view->activation->admitting||
+        !xir_call_frame_span(view,word,sizeof(int64_t)))return XR_XIR_CALL_BAD_ARGUMENT;
+    CallFrame *frame=view->activation->top;
+    if(frame->return_staged||frame->entry->result==XR_XIR_UNIT||
+        xr_xir_compile_type_arena_borrowed(view->arena,frame->entry->result))return XR_XIR_CALL_BAD_ARGUMENT;
+    int64_t payload=0;memcpy(&payload,word,sizeof(payload));
+    XrXirValue value=xr_xir_value_load(view->arena,frame->entry->result,payload);
+    XrXirCallStatus status=xr_xir_call_execution_status(view);
+    if(status!=XR_XIR_CALL_READY)return status;
+    if(!call_cell_work(view->activation,sizeof(*output)+sizeof(value)+sizeof(payload)))return XR_XIR_CALL_LIMIT;
+    view->activation->admitting=true;status=call_view_result_admit(view->activation,&value,frame->entry->result);
+    view->activation->admitting=false;
+    if(status==XR_XIR_CALL_READY)status=xr_xir_call_execution_status(view);
+    if(status!=XR_XIR_CALL_READY)return status;
+    XR_CHECK(frame->pending.status==XR_XIR_CALL_READY&&xir_call_empty_destination(&frame->pending.value)&&
+        xr_xir_panic_empty(&frame->pending.panic),
+        "a compact owned return prepares before its only ownership mutation");
+    frame->pending=call_result(XR_XIR_CALL_RETURNED);frame->pending.value=value;
+    memset(word,0,sizeof(payload));frame->return_staged=true;
+    *output=(XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value=value};return XR_XIR_CALL_READY;
+}
+XR_FUNC XrXirValueStatus xir_call_compact_inbox_take(XrXirCallView *view,void *word,XrXirType type) {
+    XrXirValueAdmission *admission=xr_xir_call_admission(view);
+    if(!admission||view->activation->admitting||view->phase!=XR_XIR_CALL_NORMAL||
+        !xir_call_frame_span(view,word,sizeof(int64_t))||
+        !xr_xir_type_is_owned(xr_xir_compile_type_arena_types(view->arena),type)||
+        xr_xir_compile_type_arena_borrowed(view->arena,type))return XR_XIR_VALUE_BAD_ARGUMENT;
+    CallFrame *frame=view->activation->top;
+    if(frame->inbox.status!=XR_XIR_CALL_RETURNED||
+        !xr_xir_value_argument(&frame->inbox.value,view->arena,type))return XR_XIR_VALUE_BAD_ARGUMENT;
+    if(!call_cell_work(view->activation,1))return XR_XIR_VALUE_LIMIT;
+    if(xr_xir_call_execution_status(view)!=XR_XIR_CALL_READY)return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_owned_slot_move(word,0,&frame->inbox.value);return XR_XIR_VALUE_OK;
+}

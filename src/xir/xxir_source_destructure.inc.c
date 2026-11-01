@@ -176,8 +176,10 @@ static bool source_destructure_binding(SourceContext *ctx,AstNode *node,bool top
         }
     }
     SourceValue initial={0};
-    if (!expression(ctx,node->as.destructure_decl.initializer,&initial) ||
-        !source_destructure_project(ctx,node,node->as.destructure_decl.pattern,initial,&plan,0)) return false;
+    if (!expression(ctx,node->as.destructure_decl.initializer,&initial)) return false;
+    if (source_value_taken(ctx,initial))
+        return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"product binding has no owned transfer recipe");
+    if (!source_destructure_project(ctx,node,node->as.destructure_decl.pattern,initial,&plan,0)) return false;
     if (plan.next!=plan.count)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"product binding inventory is incomplete");
     uint32_t first_slot=0,payloads=0;
