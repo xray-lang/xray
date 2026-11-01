@@ -41,7 +41,7 @@ typedef struct XtcXirLocalToolchainRequest {
 typedef struct XtcXirLocalToolchainView {
     const char *compiler, *linker, *workspace_parent;
     XrXirMsvcRecipe msvc;
-    XrXirInvocationLibrary libraries[5];
+    XrXirInvocationLibrary libraries[6];
     uint32_t library_count;
 } XtcXirLocalToolchainView;
 

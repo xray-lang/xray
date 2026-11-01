@@ -122,13 +122,14 @@ static int run_test(int argc,char **argv) {
 #ifdef ADMISSION_INJECTED
     if(argc==5 && !strcmp(argv[1],"unit")) return admission_unit(argv[2],argv[3],argv[4]);
 #endif
-    CHECK(argc==21 && !strcmp(argv[1],"--seal"));
+    CHECK(argc==22 && !strcmp(argv[1],"--seal"));
     const XrCompileResourceLimits limits={64*1024*1024,8*1024*1024,128000000};
     XrCompileResources *r=sdk_ledger(&limits);
     XrXirNativeProjection *projection=real_projection(r,argv[2],argv[3],argv[4]);
     XrXirRuntimeSdk *sdk=real_sdk(r,argv[5]);
-    XrXirInvocationLibrary libraries[5];for(unsigned i=0;i<5;++i)libraries[i]=(XrXirInvocationLibrary){argv[9+i],i==4?XR_XIR_INVOCATION_SYSTEM:XR_XIR_INVOCATION_CRT};
-    XtcXirNativeOperationRequest request={projection,sdk,argv[6],argv[7],{argv[14],argv[15],argv[16],argv[17],argv[18]},libraries,5,NULL,NULL};
+    XrXirInvocationLibrary libraries[6];for(unsigned i=0;i<5;++i)libraries[i]=(XrXirInvocationLibrary){argv[9+i],i==4?XR_XIR_INVOCATION_SYSTEM:XR_XIR_INVOCATION_CRT};
+    libraries[5]=(XrXirInvocationLibrary){argv[21],XR_XIR_INVOCATION_SYSTEM};
+    XtcXirNativeOperationRequest request={projection,sdk,argv[6],argv[7],{argv[14],argv[15],argv[16],argv[17],argv[18]},libraries,6,NULL,NULL};
     XtcXirWorkspaceRequest ws={argv[8],{32767,32,65536}};XtcXirNativeOperation *op=NULL;
     CHECK(xtc_xir_native_operation_new(r,&ws,&operation_limits,&op)==XTC_XIR_NATIVE_OK);
     CHECK(!xtc_xir_native_operation_command(op,XR_XIR_INVOCATION_GENERATED));

@@ -183,10 +183,11 @@ static void real_once(char **argv) {
         CHECK(owner && xtc_xir_local_toolchain_resources(owner)==r);
         const XtcXirLocalToolchainView *view=xtc_xir_local_toolchain_view(owner);
         const XrXirRuntimeSdk *sdk=xtc_xir_local_toolchain_sdk(owner);
-        CHECK(view->library_count==5 && xr_xir_runtime_sdk_resources(sdk)==r);
+        CHECK(view->library_count==6 && xr_xir_runtime_sdk_resources(sdk)==r);
+        CHECK(view->libraries[4].kind==XR_XIR_INVOCATION_SYSTEM && view->libraries[5].kind==XR_XIR_INVOCATION_SYSTEM);
         CHECK(xr_xir_runtime_sdk_facts(sdk)->program_abi==XR_XIR_PROGRAM_ABI_VERSION);
         printf("compiler=%s\nlinker=%s\nworkspace=%s\nsdk=%s\n",view->compiler,view->linker,view->workspace_parent,xr_xir_runtime_sdk_root(sdk));
-        for(unsigned i=0;i<5;++i) { CHECK(view->libraries[i].path); printf("library%u=%s\n",i,view->libraries[i].path); }
+        for(unsigned i=0;i<6;++i) { CHECK(view->libraries[i].path); printf("library%u=%s\n",i,view->libraries[i].path); }
     } else CHECK(!owner);
     xtc_xir_local_toolchain_free(owner); CHECK(!live);
     printf("initial_handles=%lu final_handles=%lu allocations=%zu total=%zu peak=%zu work=%llu physical_heap=0\n",
