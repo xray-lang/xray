@@ -112,6 +112,25 @@ export fn breakBoundary() -> i64 {
     }
     return caught ? 42 : 0
 }
+fn deferredWorker(ready: Channel<i64>, waiting: Channel<i64>) throws(SendResult) {
+    defer { assert(waiting.isClosed) }
+    try ready.send(1)
+    waiting.recv()
+}
+export fn exitOrder() -> i64 throws(SendResult) {
+    const ready = Channel<i64>(1)
+    const waiting = Channel<i64>(1)
+    var value = 1
+    try scope {
+        go deferredWorker(ready, waiting)
+        match (ready.recv()) {
+            Recv.Value { value: signal } -> { assert(signal == 1) }
+            _ -> { assert(false) }
+        }
+        defer { value = 42; waiting.close() }
+        return value
+    }
+}
 fn assertedBody() {
     var caught = false
     try { scope { go worker(0); try! businessError() } } catch panic { caught = true }

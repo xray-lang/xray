@@ -100,6 +100,49 @@ static void scope_raw_controls(const XrXirCompileContext *context) {
     }
     xr_free(identities);xr_free(functions);xr_xir_compile_source_result_free(&source);
 }
+static void scope_typed_exit_controls(const XrXirCompileContext *context) {
+    const char text[]="enum Failure{Bad}\nfn worker() throws(Failure){throw Failure.Bad}\n"
+        "fn run() throws(Failure){try scope{go worker()}}";
+    XrXirSourceResult source={0};CHECK(check(context,text,&source,NULL)==XR_XIR_OK);
+    const XrXirModule *original=xr_xir_compile_artifact_module(source.checked);
+    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(source.checked);
+    uint32_t run=UINT32_MAX,worker=UINT32_MAX,helper=UINT32_MAX;XrXirType group=XR_XIR_UNIT;
+    for(uint32_t f=0;f<original->function_count;++f) {
+        const XrXirFunction *function=original->functions+f;
+        if(function->name_length==3&&!memcmp(function->name,"run",3))run=f;
+        if(function->name_length==6&&!memcmp(function->name,"worker",6))worker=f;
+    }
+    CHECK(run!=UINT32_MAX&&worker!=UINT32_MAX);
+    for(uint32_t f=0;f<original->function_count;++f)
+        if(original->declarations->functions[f].cleanup_owner==run+1){CHECK(helper==UINT32_MAX);helper=f;}
+    for(uint32_t i=0;i<original->functions[run].instruction_count;++i)
+        if(original->functions[run].instructions[i].op==XR_XIR_SCOPE_BEGIN)group=original->functions[run].instructions[i].type;
+    CHECK(helper!=UINT32_MAX&&group!=XR_XIR_UNIT);
+    XrXirFunction *functions=xr_malloc((size_t)original->function_count*sizeof(*functions));CHECK(functions);
+    memcpy(functions,original->functions,(size_t)original->function_count*sizeof(*functions));
+    XrXirModule built=*original;built.stage=XR_XIR_BUILT;built.provenance=NULL;built.functions=functions;
+    XrXirInstruction ops[]={
+        {.op=XR_XIR_CLEANUP_REGISTER,.targets={1},.immediate=helper},
+        {.op=XR_XIR_SCOPE_BEGIN,.type=group},
+        {.op=XR_XIR_SCOPED_GO,.type=group,.args={0,1},.immediate=worker},
+        {.op=XR_XIR_SCOPE_JOIN,.args={1},.targets={3,2}},
+        {.op=XR_XIR_INVOKE_ERROR,.type=XR_XIR_ERROR,.immediate=3},
+        {.op=XR_XIR_THROW,.args={4}},
+        {.op=XR_XIR_CLEANUP_LEAVE,.targets={4}},
+        {.op=XR_XIR_RETURN}};
+    const XrXirBlock blocks[]={{0,1,0,0},{1,3,0,1},{4,2,0,1},{6,1,0,1},{7,1,0,0}};
+    uint32_t operands[]={1};functions[run].instructions=ops;functions[run].instruction_count=8;
+    functions[run].blocks=blocks;functions[run].block_count=5;functions[run].operands=operands;functions[run].operand_count=1;
+    uint64_t baseline=held(context->resources);XrXirArtifact *output=NULL;XrXirDiagnostic issue={0};
+    CHECK(xr_xir_compile_check_v2(context,&built,construction,&output,&issue)==XR_XIR_OK&&output);
+    xr_xir_compile_artifact_free(output);output=NULL;CHECK(held(context->resources)==baseline);
+    const XrXirBlock unjoined[]={{0,1,0,0},{1,3,0,1}};
+    ops[3]=(XrXirInstruction){.op=XR_XIR_RETURN};functions[run].instruction_count=4;
+    functions[run].blocks=unjoined;functions[run].block_count=2;functions[run].error_type=XR_XIR_NEVER;
+    CHECK(xr_xir_compile_check_v2(context,&built,construction,&output,&issue)==XR_XIR_BAD_TYPE&&!output);
+    CHECK(issue.function==run&&issue.instruction==3&&held(context->resources)==baseline);
+    xr_free(functions);xr_xir_compile_source_result_free(&source);
+}
 static void scope_receiving_controls(const XrXirCompileContext *context) {
     char text[8192];size_t length=0;
     const char *head="fn worker(){}\nfn large(flag:bool){scope{go worker();\n";
