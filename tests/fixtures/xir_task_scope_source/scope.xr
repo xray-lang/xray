@@ -6,6 +6,27 @@ fn worker(value: i64) { total.add(value) }
 fn failed() { assert(false) }
 enum WorkError { Failed }
 fn businessError() throws(WorkError) { throw WorkError.Failed }
+fn consume(values: move Array<i64>) {
+    assert(values[0] == 41)
+    values[0] = 42
+    assert(values[0] == 42)
+}
+fn ownershipTransfers() {
+    var independent = [41]
+    const independentSnapshot = independent
+    const task = go consume(move independent)
+    try! await task
+    assert(independentSnapshot[0] == 41)
+    var scoped = [41]
+    const scopedSnapshot = scoped
+    scope { go consume(move scoped) }
+    assert(scopedSnapshot[0] == 41)
+    var referenced = [41]
+    const referencedSnapshot = referenced
+    const callback = consume
+    scope { go callback(move referenced) }
+    assert(referencedSnapshot[0] == 41)
+}
 fn borrowedAcross() -> i64 {
     var values = [42]
     const view: Slice<i64> = values[:]
@@ -42,6 +63,7 @@ fn leaving() {
     }
 }
 export fn main() -> i64 {
+    ownershipTransfers()
     assert(borrowedAcross() == 42 && borrowedPanic() == 42)
     borrowedBeforeJoin()
     handledBody()

@@ -20,7 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"task scope %d: %s\n",__LINE__,#c);exit(1);}}while(0)
-#include "xir_task_initializer_slot_controls.h"
+#include "xir_task_go_transfer_controls.h"
 static uint64_t held(XrCompileResources *resources) {
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(resources,&stats)==XR_COMPILE_RESOURCE_OK);
     return stats.held_bytes;
@@ -41,6 +41,7 @@ static void execute(XrXirProgram *program,const uint32_t ids[2]) {
     }
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     CHECK(initializer_slot_controls==4);
+    CHECK(task_go_transfers>=2&&task_go_refusals==task_go_transfers*2&&task_go_oom==task_go_transfers*3);
 }
 #if defined(XR_TASK_SCOPE_SOURCE_NATIVE)
 XR_DATA const XrXirProgramSpec task_scope_source_program;

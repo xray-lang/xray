@@ -90,8 +90,13 @@ static bool source_go_value_arguments(SourceContext *ctx, AstNode *call, uint32_
             if (actual!=type) return source_fail(ctx,call,XR_XIR_BAD_TYPE,"go capture type disagrees with its declaration");
             storage.values[p]=(SourceValue){.id=capture,.type=actual};
         }
-        else if (signature.parameters[p-captures].type!=type || signature.parameters[p-captures].mode!=XR_PARAM_READ)
-            return source_fail(ctx,call,XR_XIR_BAD_TYPE,"go callable tail disagrees with its physical declaration");
+        else {
+            uint32_t mode=xr_xir_declared_parameter_mode(&ctx->types,type,function.consume_parameters,
+                function.consume_parameter_count,p);
+            if(mode==XR_PARAM_REF || signature.parameters[p-captures].type!=type ||
+                signature.parameters[p-captures].mode!=mode)
+                return source_fail(ctx,call,XR_XIR_BAD_TYPE,"go callable tail disagrees with its physical declaration");
+        }
     }
     XrXirType result,error;
     if (!source_substitute(ctx,&substitution,function.result,0,&result) ||
@@ -122,7 +127,7 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
     if (!source_call_syntax(ctx, call, &syntax)) return false;
     for (int a = 0; a < syntax.arg_count; ++a) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        if (syntax.arg_accesses && syntax.arg_accesses[a] != XR_CALL_ARG_PLAIN)
+        if (syntax.arg_accesses && syntax.arg_accesses[a]!=XR_CALL_ARG_PLAIN && syntax.arg_accesses[a]!=XR_CALL_ARG_MOVE)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "go argument access mode is not admitted");
     }
     SourceExpectedType child = ctx->active_expression->task_element_context;
