@@ -42,6 +42,16 @@ static void call_scope_cleanup_complete(XrXirCall *call,XrXirCallResult *outcome
         xr_xir_call_result_drop(&frame->pending);frame->pending=call_result(XR_XIR_CALL_CANCELLED);
     }
     if(outcome->status==XR_XIR_CALL_RETURNED) {xr_xir_call_result_drop(outcome);return;}
+    if(outcome->status==XR_XIR_CALL_THROWN) {
+        if(frame->pending.status==XR_XIR_CALL_CANCELLED||
+            xr_xir_call_panic_status(frame->pending.status)||call->abort_reason!=XR_XIR_CALL_READY||
+            (frame->pending.status==XR_XIR_CALL_THROWN&&frame->scope_failure_order&&
+             frame->scope_failure_order<failure_order)) {
+            xr_xir_call_result_drop(outcome);return;
+        }
+        xr_xir_call_result_drop(&frame->pending);
+        xr_xir_call_result_move(outcome,&frame->pending);frame->scope_failure_order=failure_order;return;
+    }
     if(xr_xir_call_panic_status(outcome->status)) {
         if(frame->pending.status==XR_XIR_CALL_CANCELLED||
             (xr_xir_call_panic_status(frame->pending.status)&&frame->scope_failure_order&&
