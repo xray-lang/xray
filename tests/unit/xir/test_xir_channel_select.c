@@ -188,8 +188,24 @@ static void select_deadline_changed(void) {
     CHECK(select->arms[0].storage->buffer.count==1);xr_xir_channel_select_drop(select);
     xr_xir_value_drop(&channels[0]);xr_xir_value_drop(&channels[1]);result_owner_free(&owner);
 }
+static void select_result_oom(void) {
+    ResultOwner owner={0};result_owner_ready(&owner);XrXirValue channels[2]={{0}},message={0};
+    select_channels(&owner,channels,true);CHECK(xr_xir_string_new(owner.domain,"payload",7,&message)==XR_XIR_VALUE_OK);
+    int64_t identity=message.payload;result_send(&owner,&channels[1],&message);
+    size_t live=runtime_memory.live,bytes=runtime_memory.bytes;
+    XrXirChannelSelect *select=select_begin(&owner,channels,2,false,-1);
+    CHECK(select_probe(&owner,select,0,0)==XR_XIR_CHANNEL_SELECT_CANDIDATE);
+    XrXirValue bridge_result={0};runtime_memory.fail_at=runtime_memory.attempts;
+    CHECK(xr_xir_string_new(owner.domain,"prepared result",15,&bridge_result)==XR_XIR_VALUE_OOM&&result_empty(&bridge_result));
+    runtime_memory.fail_at=SIZE_MAX;CHECK(select->arms[1].storage->buffer.count==1);
+    xr_xir_channel_select_drop(select);CHECK(runtime_memory.live==live&&runtime_memory.bytes==bytes);
+    XrXirChannelState state=XR_XIR_CHANNEL_RETRY;
+    CHECK(xr_xir_channel_receive(&channels[1],&owner.admission,&message,&state)==XR_XIR_VALUE_OK&&
+        state==XR_XIR_CHANNEL_VALUE&&message.type==XR_XIR_STRING&&message.payload==identity);
+    xr_xir_value_drop(&message);xr_xir_value_drop(&channels[0]);xr_xir_value_drop(&channels[1]);result_owner_free(&owner);
+}
 int main(void) {
     select_typed();select_aliases();select_changed();select_notifications(false);select_notifications(true);
-    select_default_timeout();select_failures();select_closed_zero();select_due_ready();select_deadline_changed();
+    select_default_timeout();select_failures();select_closed_zero();select_due_ready();select_deadline_changed();select_result_oom();
     puts("Buffered Channel select: typed joint snapshots, arm-weighted choice, one commit, race recheck, deadlines and rollback PASS");return 0;
 }
