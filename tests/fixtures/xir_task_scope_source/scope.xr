@@ -117,7 +117,7 @@ fn deferredWorker(ready: Channel<i64>, waiting: Channel<i64>) throws(SendResult)
     try ready.send(1)
     waiting.recv()
 }
-export fn exitOrder() -> i64 throws(SendResult) {
+export fn exitOrder() throws(SendResult) -> i64 {
     const ready = Channel<i64>(1)
     const waiting = Channel<i64>(1)
     var value = 1
