@@ -152,7 +152,8 @@ static XrXirStatus source_debug_handler_validate(
         if (route->instruction>=body->instruction_count || !route->handler || route->handler>function->handler_count ||
             (r && function->routes[r-1].instruction>=route->instruction)) return XR_XIR_BAD_STRUCTURE;
         XrXirOp op=body->instructions[route->instruction].op;
-        bool invocation=op==XR_XIR_INVOKE || op==XR_XIR_INVOKE_INDIRECT || op==XR_XIR_INVOKE_DEFAULT || op==XR_XIR_TASK_AWAIT;
+        bool invocation=op==XR_XIR_INVOKE || op==XR_XIR_INVOKE_INDIRECT || op==XR_XIR_INVOKE_DEFAULT ||
+            op==XR_XIR_TASK_AWAIT || op==XR_XIR_SCOPE_JOIN;
         bool thrown=false;uint32_t low=0,high=function->throw_count;
         while (!invocation && low<high) {
             uint32_t middle=low+(high-low)/2,position=function->throw_sites[middle].instruction;
