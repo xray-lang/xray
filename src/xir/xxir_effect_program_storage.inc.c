@@ -32,7 +32,7 @@ static XrXirStatus effect_program_types_storage(const XrXirCompileContext *work,
     for (uint32_t t = 0; t < types->count; ++t) {
 
         const XrXirTypeNode *node = &types->nodes[t];
-        PROGRAM_STORAGE(node->parameters, node->parameter_count, XrXirCallableParameter);
+        PROGRAM_STORAGE(node->parameters, xr_xir_type_parameter_slots(node), XrXirCallableParameter);
         PROGRAM_STORAGE(node->nominal.arguments, node->nominal.argument_count, XrXirType);
         PROGRAM_STORAGE(node->nominal.fields, node->nominal.field_count, XrXirType);
     }

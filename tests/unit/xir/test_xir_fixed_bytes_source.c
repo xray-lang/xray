@@ -58,7 +58,9 @@ int main(int argc,char **argv) {
     }
     xr_xir_compile_c_source_free(&native);
     if(argc==1) {
-        XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK);
+        XrXirProgram *program=NULL;status=xr_xir_compile_vm_program_take(&code,&program);
+        if(status!=XR_XIR_OK)fprintf(stderr,"fixed VM Program status%u\n",status);
+        CHECK(status==XR_XIR_OK);
         fixed_bytes_run(program,entry);xr_xir_compile_program_drop(program);
     }
     xr_xir_compile_artifact_free(code);source_fixture_owner_free(&owner);return 0;

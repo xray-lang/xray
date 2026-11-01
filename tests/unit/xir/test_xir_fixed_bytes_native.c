@@ -21,7 +21,9 @@ XR_DATA const XrXirProgramSpec fixed_bytes_program;
 XR_DATA const uint32_t fixed_bytes_entry;
 int main(void) {
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);XrXirProgram *program=NULL;
-    CHECK(xr_xir_compile_program_seal(&owner.context,&fixed_bytes_program,&program)==XR_XIR_OK);
+    XrXirStatus status=xr_xir_compile_program_seal(&owner.context,&fixed_bytes_program,&program);
+    if(status!=XR_XIR_OK)fprintf(stderr,"fixed native Program status%u\n",status);
+    CHECK(status==XR_XIR_OK);
     fixed_bytes_run(program,fixed_bytes_entry);xr_xir_compile_program_drop(program);
     source_fixture_owner_free(&owner);return 0;
 }
