@@ -67,6 +67,8 @@ static void execute(XrXirProgram *program,const uint32_t ids[4]) {
     }
     CHECK(task_go_refusals==(task_go_transfers+task_go_cancellations)*2);
     CHECK(task_go_oom==(task_go_transfers+task_go_cancellations)*3);
+    printf("GO ownership: transfers=%u refusals=%u OOM=%u cancellations=%u; commit allocations=3/4\n",
+        task_go_transfers,task_go_refusals,task_go_oom,task_go_cancellations);
 }
 #if defined(XR_TASK_SCOPE_SOURCE_NATIVE)
 XR_DATA const XrXirProgramSpec task_scope_source_program;
@@ -91,6 +93,8 @@ static void rejections(const XrXirCompileContext *context) {
         {"scope {}",XR_XIR_BAD_STRUCTURE},
         {"scope {fn worker(){}}",XR_XIR_BAD_STRUCTURE},
         {"fn bad(f:fn()){scope {go f()}}",XR_XIR_BAD_TYPE},
+        {"fn worker(values:ref Array<i64>){}\nfn run(){var values=[42];const task=go worker(ref values)}",XR_XIR_BAD_TYPE},
+        {"fn worker(values:Array<i64>){}\nfn run(){var values=[42];const task=go worker(move values)}",XR_XIR_BAD_TYPE},
         {"fn bad(){var x=42;scope {go fn(){print(x)}()}}",XR_XIR_BAD_TYPE},
         {"enum ErrorCode{Bad}\nfn bad(){scope {go fn() throws(ErrorCode){throw ErrorCode.Bad}()}}",XR_XIR_UNSUPPORTED},
         {"enum WorkError{Failed}\nfn failed() throws(WorkError){throw WorkError.Failed}\nfn worker(){}\n"
