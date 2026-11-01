@@ -1,4 +1,16 @@
-/* Actual typed native calls retain the original storage fixture unchanged. */
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xir_mem_native_fixture.h - Governed memory through actual typed programs
+ *
+ * KEY CONCEPT:
+ *   VM and generated C execute the same checked calls while the original
+ *   storage fixture and independent rejection oracles remain intact.
+ */
 #ifndef XIR_MEM_NATIVE_FIXTURE_H
 #define XIR_MEM_NATIVE_FIXTURE_H
 #ifndef XIR_MEM_NATIVE_RUNTIME_ONLY
