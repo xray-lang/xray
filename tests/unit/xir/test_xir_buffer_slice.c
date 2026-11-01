@@ -173,6 +173,20 @@ int main(void) {
     CHECK(xr_xir_cell_loan_prepare(&owner,NULL,&native_loan)==XR_XIR_VALUE_OK);
     xr_xir_cell_loan_commit(&owner,&native_loan,&native_authority);
     spec=(XrXirViewStorageSpec){authority,0,4,XR_XIR_TYPE_MUT_SLICE};
+    const uint64_t before_begin=xr_xir_domain_stats(domain).live_bytes;
+#ifdef XR_BUFFER_SLICE_FAULT
+    buffer_slice_fail(0);
+    CHECK(xr_xir_buffer_storage_mutable_view(&pointer,&storage,(XrXirType)257,&spec,&admission,&view)==XR_XIR_VALUE_OOM);
+    buffer_slice_fail_end();
+    CHECK(!view.type && xr_xir_domain_stats(domain).live_bytes==before_begin);
+#endif
+    CHECK(xr_xir_buffer_storage_mutable_view(&pointer,&storage,(XrXirType)257,&spec,&admission,&view)==XR_XIR_VALUE_OK);
+    work=admission.work;admission.work=0;
+    CHECK(xr_xir_buffer_view_bind_root(&view,&owner,&native_authority,&admission)==XR_XIR_VALUE_LIMIT);
+    admission.work=work;xr_xir_value_drop(&view);
+    CHECK(xr_xir_domain_stats(domain).live_bytes==before_begin);
+    CHECK(xr_xir_cell_authorized_read(&owner,&native_authority,&owner_read)==XR_XIR_VALUE_OK);
+    xr_xir_value_drop(&owner_read);
     CHECK(xr_xir_buffer_storage_mutable_view(&pointer,&storage,(XrXirType)257,&spec,&admission,&view)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_buffer_view_bind_root(&view,&owner,&native_authority,&admission)==XR_XIR_VALUE_OK);
     scope.count=0;scope.writable=true;bind_view(&scope,&view,authority);
