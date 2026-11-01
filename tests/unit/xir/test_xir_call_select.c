@@ -17,8 +17,21 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"select Call %d: %s\n",__LINE__,#c);exit(1);}}while(0)
+static void select_after_allocate(void *pointer,size_t bytes);
+#define XIR_RUNTIME_AFTER_ALLOCATE(pointer,bytes) select_after_allocate(pointer,bytes)
 #include "xir_runtime_allocations.h"
+#undef XIR_RUNTIME_AFTER_ALLOCATE
 #include "xir_native_metadata_fixture.h"
+static XrXirCall *select_cancel_call;
+static unsigned select_allocations;
+static bool select_cancel_hit;
+static void select_after_allocate(void *pointer,size_t bytes) {
+    (void)pointer;(void)bytes;
+    if(select_cancel_call&&++select_allocations==5) {
+        CHECK(xr_xir_call_request_cancel(select_cancel_call)==XR_XIR_CALL_CANCEL_REQUESTED);
+        select_cancel_hit=true;
+    }
+}
 enum { SELECT_INNER_NULLABLE=256,SELECT_CHANNEL,SELECT_NULLABLE,SELECT_STRING_CHANNEL,
        SELECT_STRING_NULLABLE,SELECT_RESULT };
 typedef struct SelectWitness {
@@ -27,6 +40,8 @@ typedef struct SelectWitness {
 static XrXirTimeStatus select_clock(void *opaque,XrXirClockKind kind,int64_t *out) {
     SelectWitness *w=opaque;CHECK(kind==XR_XIR_CLOCK_MONOTONIC);++w->samples;
     if(w->mode==5)return XR_XIR_TIME_FAILED;
+    if(w->mode==12&&w->samples==2)return XR_XIR_TIME_FAILED;
+    if(w->mode==13&&w->samples==2)--w->now;
     if(w->mode==4&&w->samples==2)w->now+=UINT64_C(1000000);
     *out=(int64_t)w->now;return XR_XIR_TIME_OK;
 }
@@ -36,18 +51,25 @@ static XrXirTimeStatus select_offset(void *opaque,int64_t seconds,int64_t *out) 
 static XrXirAction select_root(XrXirCallView *view) {
     SelectWitness *w=(SelectWitness *)view->environment;++w->steps;
     XrXirChannelSelectCallRequest request={.channels=w->channels,.count=2,.result_type=(XrXirType)SELECT_RESULT,
-        .has_default=w->mode==1,.has_timeout=w->mode==2||w->mode==3||w->mode==4||w->mode==5,
+        .has_default=w->mode==1,.has_timeout=w->mode==2||w->mode==3||w->mode==4||w->mode==5||w->mode==12||w->mode==13,
         .timeout_ms=w->mode==4?1:100};
     if(!request.has_timeout)request.timeout_ms=0;
     size_t live=runtime_live,bytes=runtime_bytes;
     if(w->mode==6||w->mode==8)runtime_fail_at=runtime_attempts+(w->mode==6?3:4);
+    if(w->mode==14){select_cancel_call=view->activation;select_allocations=0;select_cancel_hit=false;}
     XrXirValue result={0};XrXirCallStatus status=xr_xir_call_select_step(view,view->state,&request,&result);
+    select_cancel_call=NULL;
     if(w->mode==6||w->mode==8) {
         CHECK(runtime_attempts==runtime_fail_at+1&&status==XR_XIR_CALL_OOM);
         CHECK(!result.type&&!result.payload&&runtime_live==live&&runtime_bytes==bytes);
     }
+    if(w->mode==12||w->mode==13||w->mode==14) {
+        CHECK(status==(w->mode==14?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_HOST_ERROR));
+        CHECK(!result.type&&!result.payload&&runtime_live==live&&runtime_bytes==bytes);
+        if(w->mode==14)CHECK(select_cancel_hit&&select_allocations==5);
+    }
     runtime_fail_at=SIZE_MAX;
-    if(status==XR_XIR_CALL_BUSY)return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};
+    if(status==XR_XIR_CALL_BUSY||status==XR_XIR_CALL_CANCELLED)return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};
     if(status==XR_XIR_CALL_SUSPENDED)return (XrXirAction){.kind=XR_XIR_ACTION_AWAIT_CHANNEL};
     if(status!=XR_XIR_CALL_READY)return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};
     XrXirValue tag={0};CHECK(xr_xir_tuple_get(&result,0,&tag)==XR_XIR_VALUE_OK&&tag.type==XR_XIR_I64);
@@ -112,8 +134,8 @@ static void select_case(uint32_t mode) {
     XrXirValueAdmission admission={program->arena,domain,NULL,NULL,XR_RESOURCE_SANDBOX_RUNTIME_WORK,4194304};
     for(unsigned a=0;a<2;++a)CHECK(xr_xir_channel_new(mode==9&&a==1?
         (XrXirType)SELECT_STRING_CHANNEL:(XrXirType)SELECT_CHANNEL,2,&admission,&witness.channels[a])==XR_XIR_VALUE_OK);
-    if(mode==0||mode==4||mode==6||mode==8)select_send(&admission,&witness.channels[0]);
-    if(mode>=9) {
+    if(mode==0||mode==4||mode==6||mode==8||mode>=12)select_send(&admission,&witness.channels[0]);
+    if(mode>=9&&mode<=11) {
         XrXirValue message={0};XrXirChannelState sent=XR_XIR_CHANNEL_RETRY;
         if(mode==9)CHECK(xr_xir_string_new(domain,"42",2,&message)==XR_XIR_VALUE_OK);
         if(mode==11) {
@@ -142,13 +164,14 @@ static void select_case(uint32_t mode) {
         CHECK(steps<100);result=xr_xir_call_poll_bounded(call,1);
     }
     fprintf(stderr,"select mode%u status%u steps%u winner%u samples%u\n",mode,result.status,witness.steps,witness.winner,witness.samples);
-    CHECK(result.status==(mode==5?XR_XIR_CALL_HOST_ERROR:mode==6||mode==8?XR_XIR_CALL_OOM:mode==7?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_RETURNED));
+    CHECK(result.status==(mode==5||mode==12||mode==13?XR_XIR_CALL_HOST_ERROR:
+        mode==6||mode==8?XR_XIR_CALL_OOM:mode==7||mode==14?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_RETURNED));
     if(mode==1||mode==2)CHECK(witness.winner==2);
     if(mode==3)CHECK(witness.winner==1);
     if(mode==4)CHECK(witness.steps==2);
-    if(mode>=9)CHECK(witness.winner==(mode==9?1u:0u));
+    if(mode>=9&&mode<=11)CHECK(witness.winner==(mode==9?1u:0u));
     CHECK(xr_xir_call_free(call)==XR_XIR_CALL_READY);
-    if(mode==6||mode==8) {
+    if(mode==6||mode==8||mode>=12) {
         XrXirValue untouched={0};XrXirChannelState received=XR_XIR_CHANNEL_RETRY;
         CHECK(xr_xir_channel_receive(&witness.channels[0],&admission,&untouched,&received)==XR_XIR_VALUE_OK&&
             received==XR_XIR_CHANNEL_VALUE&&untouched.type==XR_XIR_I64&&untouched.payload==42);
@@ -159,4 +182,4 @@ static void select_case(uint32_t mode) {
     CHECK(native_fixture_stats(&compiler.context).held_bytes==baseline.held_bytes);native_fixture_owner_free(&compiler);
     CHECK(!runtime_live&&!runtime_bytes);
 }
-int main(void) {for(uint32_t mode=0;mode<12;++mode)select_case(mode);return 0;}
+int main(void) {for(uint32_t mode=0;mode<15;++mode)select_case(mode);return 0;}
