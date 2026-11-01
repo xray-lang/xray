@@ -135,9 +135,16 @@ static void one_shot(XrSourceExecution *execution,XrSourceArtifact *artifact,Clo
     XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),&result,&pending,&failure,&cleanup};
     XrSourceCallOptions old=options;old.api_version=1;
     CHECK(xray_source_invoke(execution,artifact,&invocation,&old,(XrSourceCompletion *)(uintptr_t)1)==XR_SOURCE_BAD_ARGUMENT);
+    XrSourceCompletion malformed={XRAY_SOURCE_API_VERSION,0,
+        (XrSourceResult **)(uintptr_t)1,(XrSourceCall **)(uintptr_t)1,NULL,NULL};
+    CHECK(xray_source_invoke(execution,artifact,&invocation,&options,&malformed)==XR_SOURCE_BAD_ARGUMENT && !capture->writes);
+    malformed=completion;malformed.pending_close=NULL;
+    CHECK(xray_source_invoke(execution,artifact,&invocation,&options,&malformed)==XR_SOURCE_BAD_ARGUMENT && !result && !capture->writes);
     CHECK(xray_source_invoke(execution,artifact,&invocation,&options,&completion)==XR_SOURCE_IO);
     CHECK(pending && result && capture->writes==1 && failure.state==XR_SOURCE_RUN_RETURNED &&
         cleanup.state==XR_SOURCE_RUN_CLEANUP_FAILED && cleanup.engine_status==XR_XIR_CALL_CLOSE_FAILED);
+    completion=(XrSourceCompletion){0,0,(XrSourceResult **)(uintptr_t)1,
+        (XrSourceCall **)(uintptr_t)1,(XrSourceEvent *)(uintptr_t)1,(XrSourceEvent *)(uintptr_t)1};
     int64_t value=0;CHECK(xray_source_result_i64(result,&value)==XR_SOURCE_OK && value==42);
     XrSourceEvent untouched={.epoch=123};XrSourceResult *other=NULL;
     CHECK(xray_source_call_poll(pending,1,&untouched)==XR_SOURCE_BAD_STATE && untouched.epoch==123);
@@ -196,6 +203,32 @@ static void repl_generation(XrSourceExecution *execution,CloseCapture *capture) 
     CHECK(xr_xir_domain_stats(domain).live_bytes==pointer_instance_observed_frame());
     pointer_instance_observer_drop();
 }
+static void persistent_instance(XrSourceExecution *execution,XrSourceArtifact *artifact,CloseCapture *capture) {
+    capture->writes=0;capture->partial=true;
+    XrSourceCallOptions options;CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.write=capture_write;options.context=capture;
+    XrSourceInstance *owner=NULL;CHECK(xray_source_instance_new(execution,artifact,&options,&owner)==XR_SOURCE_OK);
+    XrSourceInvocation invocation;CHECK(xray_source_invocation_init(&invocation,sizeof(invocation))==XR_SOURCE_OK);
+    invocation.name="answer";invocation.name_length=6;
+    XrSourceResult *result=NULL;XrSourceEvent event={0};
+    CHECK(xray_source_instance_execute(owner,&invocation,&result,&event)==XR_SOURCE_OK && result && capture->writes==1);
+    int64_t answer=0;CHECK(xray_source_result_i64(result,&answer)==XR_SOURCE_OK && answer==42);
+    uint8_t byte=0;CHECK(xr_xir_pointer_store(&capture->pages[0],0,91)==XR_XIR_VALUE_OK &&
+        xr_xir_pointer_load(&capture->pages[0],0,&byte)==XR_XIR_VALUE_OK && byte==91);
+    XrSourceInstance *same=owner;
+    CHECK(xray_source_instance_drop(&owner,&event)==XR_SOURCE_IO && owner==same &&
+        event.engine_status==XR_XIR_CALL_CLOSE_FAILED && capture->writes==1);
+    XrSourceResult *other=NULL;
+    CHECK(xray_source_instance_execute(owner,&invocation,&other,&event)==XR_SOURCE_BAD_STATE && !other && capture->writes==1);
+    XrXirDomain *domain=pointer_instance_observed_domain();uint64_t held=xr_xir_domain_stats(domain).live_bytes;
+    pointer_fail_next_unmap();
+    CHECK(xray_source_instance_drop(&owner,&event)==XR_SOURCE_IO && owner==same &&
+        xr_xir_domain_stats(domain).live_bytes==held && capture->writes==1);
+    CHECK(xray_source_instance_drop(&owner,&event)==XR_SOURCE_OK && !owner && capture->writes==1);
+    CHECK(xray_source_result_i64(result,&answer)==XR_SOURCE_OK && answer==42);xray_source_result_free(result);
+    xr_xir_value_drop(&capture->pages[0]);xr_xir_value_drop(&capture->pages[1]);
+    CHECK(xr_xir_domain_stats(domain).live_bytes==pointer_instance_observed_frame());pointer_instance_observer_drop();
+}
 int main(void) {
     XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
     XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
@@ -211,6 +244,7 @@ int main(void) {
     capture.writes=0;capture.partial=true;one_shot(execution,artifact,&capture);
     repl_generation(execution,&capture);
     terminal_outcomes(execution,&capture);
+    persistent_instance(execution,artifact,&capture);
     xray_source_artifact_free(artifact);xray_source_execution_free(execution);
     xr_xir_compile_type_arena_drop(capture.arena);XrCompileResourceStats final={0};
     CHECK(xr_compile_resources_stats(context.resources,&final)==XR_COMPILE_RESOURCE_OK && final.held_bytes==frame.held_bytes);
