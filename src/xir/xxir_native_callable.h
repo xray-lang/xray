@@ -32,6 +32,29 @@ static inline bool xir_native_callable_types(uint32_t id,const XrXirTypes *types
     const XrXirType *parameters,uint32_t count,XrXirType result,XrXirType error) {
     const XrNativeCallableDeclaration *canonical=xr_native_callable_by_id(id);
     if (xir_mem_native_id(id)) return xir_mem_native_signature(id,types,parameters,count,result,error);
+    if (id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM || id==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL) {
+        bool fill=id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM;uint32_t required=fill?1u:2u;
+        if (!canonical || canonical->owner || canonical->error_e_type || canonical->ctfe ||
+            !canonical->namespace_id || strcmp(canonical->namespace_id,"crypto") ||
+            !canonical->source_path || strcmp(canonical->source_path,"stdlib/defs/core.def") ||
+            !canonical->member || strcmp(canonical->member->name,fill?"__fillRandomBytes":"__timingSafeEqualBytes") ||
+            strcmp(canonical->member->signature,fill?"(bytes: ref Array<u8>): ()":"(a: Array<u8>, b: Array<u8>): bool") ||
+            canonical->member->is_method || canonical->member->is_static || canonical->member->is_public ||
+            canonical->member->parameter_count!=required || !canonical->member->parameters ||
+            canonical->member->allocation!=(fill?XR_NATIVE_ALLOCATION_UNKNOWN:XR_NATIVE_ALLOCATION_NO_HEAP) ||
+            canonical->member->ownership!=XR_NATIVE_RESULT_OWNERSHIP_OWNED ||
+            strcmp(canonical->member->failures,"none") ||
+            canonical->member->result!=(fill?XR_NATIVE_TERM_UNIT:XR_NATIVE_TERM_BOOL) ||
+            count!=required || !parameters || result!=(fill?XR_XIR_UNIT:XR_XIR_BOOL) || error!=XR_XIR_NEVER) return false;
+        for(uint32_t p=0;p<count;++p) {
+            XrXirType type=parameters[p];
+            if(fill) { if(!xr_xir_type_is_cell(types,type))return false;type=xr_xir_cell_element(types,type); }
+            if(!xr_xir_type_is_array(types,type) || xr_xir_array_element(types,type)!=XR_XIR_U8 ||
+                canonical->member->parameters[p].type!=XR_NATIVE_TERM_ARRAY_U8 ||
+                canonical->member->parameters[p].optional || canonical->member->parameters[p].variadic) return false;
+        }
+        return true;
+    }
     if (id==XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY) {
         return canonical && !canonical->owner && !canonical->error_e_type && canonical->ctfe &&
             canonical->namespace_id && !strcmp(canonical->namespace_id,"regex") &&
