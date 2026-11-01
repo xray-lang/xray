@@ -267,8 +267,10 @@ XR_FUNC bool xir_call_frame_span(const XrXirCallView *view,const void *frame,uin
     if(!xr_xir_call_admission(view)||!frame)return false;
     const CallFrame *owner=view->activation->top;
     uintptr_t base=(uintptr_t)owner->state,address=(uintptr_t)frame;
+    /* Generated C embeds compact bytes after ordinary state fields. Payload
+     * access uses memcpy; byte alignment grants no additional ownership. */
     return address>=base && address-base<=owner->entry->state_bytes &&
-        bytes<=owner->entry->state_bytes-(address-base) && !(address&7u);
+        bytes<=owner->entry->state_bytes-(address-base);
 }
 
 XR_FUNC XrXirCallStatus xr_xir_call_cleanup_frontier(XrXirCallView *view, uint32_t frontier) {

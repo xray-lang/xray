@@ -24,6 +24,7 @@
 #undef xr_xir_instance_return_take_at
 static unsigned move_test_transfers,move_test_prepare_failures;
 static unsigned move_test_writes,move_test_returns;
+static unsigned move_test_payload_refusals;
 static int64_t move_test_expected_payload;
 static uint32_t move_test_expected_references;
 static bool move_test_selected(const XrXirFunction *function) {
@@ -40,6 +41,18 @@ XR_FUNC XrXirCallStatus xr_xir_instance_move_arguments_at(XrXirCallView *view,
         CHECK(count==1);move_test_expected_payload=arguments[0].payload;
         move_test_expected_references=atomic_load(&object_pointer(arguments)->references);
         CHECK(move_test_expected_references>0);
+        XrXirValue different={0};const XrXirValue item={XR_XIR_I64,0,7};
+        CHECK(xr_xir_array_new((XrXirType)arguments[0].type,&item,1,xr_xir_call_admission(view),&different)==XR_XIR_VALUE_OK);
+        CHECK(different.payload!=arguments[0].payload);
+        const XrXirFunction *caller=&module->functions[entry];
+        const XrXirFunctionLayout *layout=&instance->program->permissions->layouts[entry];
+        uint32_t value=caller->operands[caller->instructions[instruction].args[0]];
+        void *word=(unsigned char *)frame+layout->offsets[value];int64_t before=0,after=0;
+        memcpy(&before,word,sizeof(before));
+        CHECK(move_test_arguments_at_real(view,instruction,frame,&different,1)==XR_XIR_CALL_BAD_ARGUMENT);
+        memcpy(&after,word,sizeof(after));CHECK(before==after&&before==move_test_expected_payload);
+        CHECK(atomic_load(&object_pointer(arguments)->references)==move_test_expected_references);
+        xr_xir_value_drop(&different);++move_test_payload_refusals;
     }
     XrXirCallStatus status=move_test_arguments_at_real(view,instruction,frame,arguments,count);
     if(selected)CHECK(status==XR_XIR_CALL_READY&&arguments[0].payload==move_test_expected_payload&&
@@ -160,6 +173,7 @@ static void move_test_run(XrXirProgram *program,uint32_t entry,const XrXirCompil
     CHECK(output.count==sizeof(expected)-1&&!memcmp(output.bytes,expected,output.count));
     CHECK(move_test_transfers==3&&move_test_prepare_failures==1);
     CHECK(move_test_writes==1&&move_test_returns==1);
+    CHECK(move_test_payload_refusals==3);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     CHECK(runtime_live==blocks&&runtime_bytes==bytes);
     CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==before.held_bytes);
