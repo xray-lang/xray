@@ -71,6 +71,17 @@ static void emit_cleanup_entry(CBuffer *buffer, const XrXirFunction *function,
         append(buffer,"            if (xr_xir_call_panic_status(view->inbox.status)) { ");
         emit_fault_return(buffer,function,layout,i,"(XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,view->inbox.status},view->inbox.panic,0}");
         append(buffer," }\n");
+        uint32_t first=function->blocks[op->targets[0]].first;
+        const XrXirInstruction *landing=function->instructions+first;
+        if(op->op==XR_XIR_CLEANUP_ERROR&&landing->op==XR_XIR_INVOKE_ERROR) {
+            if(landing->type!=XR_XIR_ERROR||landing->immediate!=i){emit_reject(buffer,XR_XIR_BAD_STRUCTURE);return;}
+            append(buffer,"            if(view->inbox.status!=XR_XIR_CALL_THROWN)goto invalid;\n"
+                "            { XrXirValueStatus copied=xr_xir_owned_slot_copy(state->frame,%uu,view->arena,XR_XIR_ERROR,view->inbox.value.payload);\n"
+                "              if(copied!=XR_XIR_VALUE_OK)return xr_xir_call_view_operation_fault(copied,(XrXirFaultDetail){0}); }\n"
+                "            state->pc=%uu;return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};\n",
+                layout->offsets[function->parameter_count+first],first+1);
+            continue;
+        }
         emit_edge(buffer, function, layout, i, op->targets[0], true);
         append(buffer, "            return (XrXirAction){XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n");
     }
