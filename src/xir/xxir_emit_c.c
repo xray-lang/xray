@@ -23,6 +23,7 @@
 #include "xxir_call_native_source_internal.h"
 #include "xxir_atomic.h"
 #include "xxir_channel_call_internal.h"
+#include "xxir_call_select_internal.h"
 #include "xxir_map.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
@@ -900,6 +901,7 @@ static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
 
 #include "xxir_emit_atomic.inc.c"
 #include "xxir_emit_channel.inc.c"
+#include "xxir_emit_select.inc.c"
 #include "xxir_emit_cleanup.inc.c"
 
 static void emit_io_step(CBuffer *buffer, const XrXirFunction *function,
@@ -1255,6 +1257,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     }
     if (op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_CLASS_GET || op->op == XR_XIR_CLASS_SET) {
         emit_class_step(buffer,function,op,layout,destination); return;
+    }
+    if(op->op==XR_XIR_CHANNEL_SELECT) {
+        emit_select_step(buffer,function,op,layout,destination,index);return;
     }
     if (xr_xir_op_is_channel(op->op)) {
         emit_channel_step(buffer,function,op,layout,destination,index);return;
@@ -1690,7 +1695,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     }
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(artifact, index);
     if ((uint64_t) layout->frame_bytes + (uint64_t) layout->outgoing_count * sizeof(XrXirValue) +
-        (uint64_t) layout->path_count * sizeof(XrXirValuePathStep) > UINT32_MAX - 128u - sizeof(XrXirAtomicProgress) - sizeof(XrXirChannelCallState)) {
+        (uint64_t) layout->path_count * sizeof(XrXirValuePathStep) > UINT32_MAX - 128u - sizeof(XrXirAtomicProgress) - sizeof(XrXirChannelCallState) - sizeof(XrXirChannelSelectCallState)) {
         emit_reject(buffer, XR_XIR_BUDGET);
         return;
     }
@@ -1699,6 +1704,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
            "    bool initialized, waiting, invoking, discard;\n"
            "    XrXirAtomicProgress atomic;\n", prefix, index);
     append(buffer,"    XrXirChannelCallState channel;\n");
+    append(buffer,"    XrXirChannelSelectCallState select;\n");
     if (!((buffer)->status == XR_XIR_OK)) return;
     bool has_cleanup = emit_has_cleanup(buffer, function);
     if (!((buffer)->status == XR_XIR_OK)) return;
@@ -2079,6 +2085,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n",
            XR_XIR_CALL_ABI_VERSION, XR_XIR_VALUE_ABI_VERSION);
     append(buffer,"#include \"xir/xxir_channel_call_internal.h\"\n");
+    append(buffer,"#include \"xir/xxir_call_select_internal.h\"\n");
     append(buffer,"#include \"xir/xxir_instance_hash.h\"\n");
     append(buffer,
         "_Static_assert(sizeof(XrXirFaultDetail)==24"

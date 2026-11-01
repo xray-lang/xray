@@ -211,6 +211,7 @@ static XrXirValueReceiver vm_value_receiver(const ScalarRun *run, uint32_t id) {
 }
 #include "xxir_vm_atomic.inc.c"
 #include "xxir_vm_channel.inc.c"
+#include "xxir_vm_select.inc.c"
 #include "xxir_vm_path.inc.c"
 #include "xxir_vm_hash.inc.c"
 #include "xxir_vm_view.inc.c"
@@ -733,6 +734,8 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
         state->instruction = next;
         return vm_class_step(run, state, op, run->layout->offsets[result_id]);
     }
+    if(op->op==XR_XIR_CHANNEL_SELECT)
+        return vm_select_step(run,state,op,run->layout->offsets[result_id],action);
     if (xr_xir_op_is_channel(op->op))
         return vm_channel_step(run,state,op,run->layout->offsets[result_id],action);
     if (xr_xir_op_is_atomic(op->op))
