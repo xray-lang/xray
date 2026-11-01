@@ -88,8 +88,11 @@ static XrXirStatus task_scope_uses(const Graph *graph,const XrXirFunction *funct
     if(function->block_count>(UINT32_MAX-1)/2)return XR_XIR_OVERFLOW;
     uint32_t states=function->block_count*2;
     if((uint64_t)states+1>SIZE_MAX/(sizeof(uint32_t)+1))return XR_XIR_OVERFLOW;
+    size_t bytes=((size_t)states+1)*(sizeof(uint32_t)+1);
+    if(context->graph_capacity>context->remaining.limits.frame_bytes||
+        bytes>context->remaining.limits.frame_bytes-context->graph_capacity)return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
-    void *memory=xir_compile_alloc(&context->remaining,((size_t)states+1)*(sizeof(uint32_t)+1),&status);
+    void *memory=xir_compile_alloc(&context->remaining,bytes,&status);
     if(!memory)return status;
     TaskScopeScratch scratch={memory,(unsigned char *)((uint32_t *)memory+states+1),states};
     for(uint32_t i=0;status==XR_XIR_OK&&i<function->instruction_count;++i) {

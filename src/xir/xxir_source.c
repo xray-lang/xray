@@ -2907,7 +2907,6 @@ static bool source_capture_parameters(SourceContext *ctx, AstNode *node, const S
 }
 #include "xxir_source_closure_parameters.inc.c"
 #include "xxir_source_cleanup.inc.c"
-#include "xxir_source_task_scope.inc.c"
 /* Inside its own body a nested declaration is the closure value rebuilt from the
  * body's captures, so recursion needs no extra capture and no cell. */
 static bool source_closure_self(SourceContext *ctx, AstNode *node, const SourceCaptureScan *scan,
@@ -3093,6 +3092,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
 #include "xxir_source_core_panics.inc.c"
 #include "xxir_source_core_throws.inc.c"
 #include "xxir_source_comptime_expression.inc.c"
+#include "xxir_source_task_scope.inc.c"
 #include "xxir_source_materialization_finish.inc.c"
 #include "xxir_source_instance_writer.inc.c"
 /* Preparing another generated body is a synchronous scope switch. Shared tables

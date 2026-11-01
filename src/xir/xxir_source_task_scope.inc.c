@@ -42,9 +42,12 @@ static bool source_scope_cleanup(SourceContext *ctx,AstNode *node) {
     ctx->identities[index].test_role=XR_XIR_TEST_ROLE_NONE;ctx->identities[index].test_timeout_seconds=0;
     ctx->identities[index].method_kind=ctx->identities[index].nominal_owner?XR_XIR_MEMBER_HELPER:XR_XIR_NON_MEMBER;
     ctx->identities[index].exported=0;ctx->identities[index].cleanup_owner=outer+1;
-    bool returned=ctx->returned;ctx->function=index;ctx->returned=false;
+    SourceComptimeScope saved=source_comptime_scope(ctx);SourceTaskScope *scope=ctx->task_scope;
+    ctx->function=index;ctx->returned=false;ctx->task_scope=NULL;
+    ctx->locals=ctx->scope=NULL;ctx->facts=NULL;ctx->epochs=NULL;ctx->loop=NULL;
+    ctx->active_expression=ctx->effect_argument=NULL;ctx->depth=ctx->flow_alternatives=0;ctx->type_scope=(SourceTypeScope){0};
     bool ok=source_recipe_append(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}},NULL);
-    ctx->returned=true;if(ok)ok=finish_body(ctx);ctx->function=outer;ctx->returned=returned;
+    ctx->returned=true;if(ok)ok=finish_body(ctx);source_comptime_restore(ctx,&saved);ctx->task_scope=scope;
     if(!ok)return false;
     XrXirSourceDeclaration *query=(XrXirSourceDeclaration *)&ctx->query.declarations[body->declaration-1];
     query->type=source_query_type(ctx,XR_XIR_UNIT);query->generic_parent=body->generic_owner;
