@@ -75,7 +75,10 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+      - name: Install process observation dependency
+        run: python -m pip install psutil==7.0.0
       - name: Configure
+        id: configure
         run: cmake --preset default
       - name: Build compiler and current owners
         run: >-
@@ -89,12 +92,15 @@ jobs:
           -R "^(test_cli_build_options|test_cli_resource_profiles_native|native_ready_.*|workspace_.*|native_operation_.*|test_generated_c11_msvc|test_cli_dependency_output|test_mcp_publication_faults|meta_ownership_inventory)$"
           --output-junit native-host.xml
       - name: Build invocation and admission owners
+        id: native_owners
+        if: ${{ !cancelled() && steps.configure.outcome == 'success' }}
         run: >-
           cmake --build build --parallel 4 --target
           test_native_invocation_owner test_native_invocation_faults
           test_native_admission_production test_native_admission_injected
           test_local_toolchain_injected test_local_toolchain_production
       - name: Verify invocation and admission owners
+        if: ${{ !cancelled() && steps.native_owners.outcome == 'success' }}
         run: >-
           ctest --test-dir build --output-on-failure -j 4
           -R "^(native_invocation_.*|native_admission_.*|local_toolchain_.*)$"
@@ -107,3 +113,8 @@ jobs:
             build/native-host.xml
             build/native-owner.xml
             build/Testing/Temporary/LastTest.log
+            build/resource-profiles-native/results.json
+            build/resource-profiles-native/**/*.stderr
+            build/tests/unit/cli/native_ready/**/*.json
+            build/tests/unit/cli/native_ready/**/*.stdout
+            build/tests/unit/cli/native_ready/**/*.stderr
