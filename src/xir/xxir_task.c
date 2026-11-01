@@ -34,7 +34,7 @@ struct XrXirTaskExecutor {
     XirTaskActivation root;
     XirTaskActivation *current, *external;
     uint64_t external_call_wake, host_wake, root_epoch;
-    uint64_t generation, next_identity;
+    uint64_t generation, next_identity,publication_order;
     XrXirCallStatus shutdown_status;
     XrXirCallStatus first_failure;
     XrXirCallResult failure;
