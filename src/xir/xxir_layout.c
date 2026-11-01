@@ -70,6 +70,10 @@ static XrXirStatus layout_outgoing(const LayoutInputRequest *request,
             xr_xir_op_references_function(op->op) || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_CALL_INDIRECT ||
             op->op == XR_XIR_PRINT || op->op == XR_XIR_MAP_NEW || op->op == XR_XIR_SET_NEW || op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_STRUCT_NEW ||
             op->op == XR_XIR_ENUM_NEW || op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_SLOT_GROUP_INIT ? op->args[1] : 0;
+        if(op->op==XR_XIR_SCOPED_GO) {
+            uint32_t first=0;
+            if(!xr_xir_direct_argument_range(op,&first,&count))return XR_XIR_BAD_STRUCTURE;
+        }
         if (op->op==XR_XIR_TUPLE_NEW) {
             const XrXirTypeNode *tuple=xr_xir_tuple_signature(request->input->domain.types,op->type);
             if (!tuple) return XR_XIR_BAD_TYPE;
