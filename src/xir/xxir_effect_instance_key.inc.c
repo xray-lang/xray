@@ -212,12 +212,12 @@ static bool spec_effect_proofs(SpecContext *c, XrXirEffectBindingProof **output,
                 c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false;
             }
             const SpecInstance *target=&c->instances[op->immediate];
-            uint32_t first=0,count=0;if(!xr_xir_direct_argument_range(op,&first,&count)) {
+            uint32_t first=0,argument_count=0;if(!xr_xir_direct_argument_range(op,&first,&argument_count)) {
                 c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false;
             }
             for (uint32_t a=0;a<target->effect_count;++a) {
                 if (!spec_progress(c)) return false;
-                if (target->effects[a].parameter>=count) continue;
+                if (target->effects[a].parameter>=argument_count) continue;
                 if (total==UINT32_MAX) { c->diagnostic.status=XR_XIR_BUDGET;return false; }
                 ++total;
             }
@@ -235,13 +235,13 @@ static bool spec_effect_proofs(SpecContext *c, XrXirEffectBindingProof **output,
                 if (spec_effect_family(original->instructions[i].op)!=family) continue;
                 const XrXirInstruction *op=&function->instructions[i];
                 const SpecInstance *target=&c->instances[op->immediate];
-                uint32_t first=0,count=0;if(!xr_xir_direct_argument_range(op,&first,&count)) {
+                uint32_t first=0,argument_count=0;if(!xr_xir_direct_argument_range(op,&first,&argument_count)) {
                     c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false;
                 }
                 for (uint32_t a=0;a<target->effect_count;++a) {
                     if (!spec_progress(c)) return false;
                     uint32_t physical=target->effects[a].parameter;
-                    if (physical>=count) continue;
+                    if (physical>=argument_count) continue;
                     if (!function->operands || op->args[0]>function->operand_count ||
                         op->args[1]>function->operand_count-op->args[0] || at>=total) {
                         c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false;
