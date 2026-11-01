@@ -42,8 +42,12 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(cold,&special,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
-    CHECK(xr_xir_compile_lower(special,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
-        NULL,&code,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
+    XrXirDiagnostic lowered={0};
+    status=xr_xir_compile_lower(special,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
+        NULL,&code,&lowered);
+    if(status!=XR_XIR_OK)fprintf(stderr,"fixed lower status%u f%u/b%u/i%u\n",status,
+        lowered.function,lowered.block,lowered.instruction);
+    CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(special);
     const XrXirModule *module=xr_xir_compile_artifact_module(code);
     uint32_t entry=module->declarations->entry_function;
     XrXirCSource native={0};CHECK(xr_xir_compile_emit_c(code,"fixed_bytes",16777216,&native)==XR_XIR_OK);
