@@ -12,12 +12,23 @@
  */
 #ifndef XIR_TASK_GO_TRANSFER_CONTROLS_H
 #define XIR_TASK_GO_TRANSFER_CONTROLS_H
+static void task_go_after_allocate(void *pointer,size_t bytes);
+#define XIR_RUNTIME_AFTER_ALLOCATE(pointer,bytes) task_go_after_allocate(pointer,bytes)
 #define xr_xir_task_go_at task_go_transfer_actual
 #include "xir_task_initializer_slot_controls.h"
 #undef xr_xir_task_go_at
+#undef XIR_RUNTIME_AFTER_ALLOCATE
 #include "xir/xxir_task_budget.c"
 #include "xir/xxir_task.c"
 static unsigned task_go_transfers,task_go_refusals,task_go_oom;
+static bool task_go_cancel_test;
+static unsigned task_go_cancellations,task_go_allocation,task_go_cancel_at;
+static XrXirCall *task_go_cancel_parent;
+static void task_go_after_allocate(void *pointer,size_t bytes) {
+    (void)pointer;(void)bytes;
+    if(task_go_cancel_parent&&++task_go_allocation==task_go_cancel_at)
+        CHECK(xr_xir_call_request_cancel(task_go_cancel_parent)==XR_XIR_CALL_CANCEL_REQUESTED);
+}
 XR_FUNC XrXirCallStatus xr_xir_task_go_at(XrXirCallView *view,uint32_t instruction,
     void *frame,const XrXirValue *arguments,uint32_t count,XrXirValue *output) {
     XrXirInstance *instance=view_instance(view);
@@ -64,6 +75,27 @@ XR_FUNC XrXirCallStatus xr_xir_task_go_at(XrXirCallView *view,uint32_t instructi
         CHECK(xr_compile_resources_stats(instance->program->context.resources,&after)==XR_COMPILE_RESOURCE_OK&&
             after.held_bytes==before.held_bytes);
         ++task_go_oom;
+    }
+    if(task_go_cancel_test) {
+        size_t blocks=runtime_live,bytes=runtime_bytes;
+        uint64_t identity=executor->next_identity;
+        XirTask *active=executor->active;
+        XirTaskActivation *head=executor->ready_head,*tail=executor->ready_tail;
+        XrCompileResourceStats before,after;
+        CHECK(xr_compile_resources_stats(instance->program->context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+        /* This worker prepares an optional member, Task, Call and child frame.
+         * The real cancellation precedes the final actual-word recheck. */
+        task_go_cancel_at=op->op==XR_XIR_SCOPED_GO?4u:3u;
+        task_go_allocation=0;task_go_cancel_parent=view->activation;
+        XrXirCallStatus status=task_go_transfer_actual(view,instruction,frame,arguments,count,output);
+        task_go_cancel_parent=NULL;memcpy(&current,word,sizeof(current));
+        CHECK(task_go_allocation==task_go_cancel_at&&status==XR_XIR_CALL_CANCELLED&&!output->type);
+        CHECK(current==original&&atomic_load(&object->references)==references);
+        CHECK(runtime_live==blocks&&runtime_bytes==bytes&&executor->next_identity==identity&&
+            executor->active==active&&executor->ready_head==head&&executor->ready_tail==tail);
+        CHECK(xr_compile_resources_stats(instance->program->context.resources,&after)==XR_COMPILE_RESOURCE_OK&&
+            after.held_bytes==before.held_bytes);
+        ++task_go_cancellations;return status;
     }
     XrXirCallStatus status=task_go_transfer_actual(view,instruction,frame,arguments,count,output);
     memcpy(&current,word,sizeof(current));
