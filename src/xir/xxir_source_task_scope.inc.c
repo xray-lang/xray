@@ -82,6 +82,7 @@ static bool source_scope_join(SourceContext *ctx,AstNode *node,const SourceTaskS
     ok=ok&&source_recipe_append(ctx,(XrXirInstruction){XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},origin,{0}},&caught);
     if(ok)ok=body->error_context?(source_error_edge(ctx,caught)&&source_handler_site(ctx,origin,caught.id)):
         source_recipe_append(ctx,(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{caught.id},{0},0,{0}},NULL);
+    if(ok)body->recipes[origin].instruction.targets[0]=body->block_count;
     ok=ok&&begin_block(ctx);
     if(ok)body->blocks[body->current_block.identity].panic_scope=scope->block+1;
     body->error_context=saved;return ok;

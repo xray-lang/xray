@@ -228,6 +228,7 @@ static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedT
         if (!source_error_edge(ctx, caught) || !source_handler_site(ctx,origin,caught.id)) return false;
     } else if (!source_recipe_append(ctx, (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {caught.id, 0}, {0}, 0, {0}}, NULL))
         return false;
+    body->recipes[origin].instruction.targets[0]=body->block_count;
     if (!begin_block(ctx)) return false;
     if (element == XR_XIR_UNIT) { *value = (SourceValue){.id=UINT32_MAX, .type=XR_XIR_UNIT,.place={0}}; return true; }
     return source_recipe_append(ctx,

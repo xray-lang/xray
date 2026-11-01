@@ -81,7 +81,9 @@ static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, Source
     if (!source_recipe_append(ctx,op,NULL) || !begin_block(ctx)) return false;
     SourceValue caught;
     if (!source_recipe_append(ctx,(XrXirInstruction){XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},origin,{0}},&caught) ||
-        !source_error_edge(ctx,caught) || !source_handler_site(ctx,origin,caught.id) || !begin_block(ctx)) return false;
+        !source_error_edge(ctx,caught) || !source_handler_site(ctx,origin,caught.id)) return false;
+    body->recipes[origin].instruction.targets[0]=body->block_count;
+    if(!begin_block(ctx))return false;
     if (op.type == XR_XIR_UNIT) {
         if (result) *result = (SourceValue){.id=0,.type=XR_XIR_UNIT,.place={0}};
         return true;
