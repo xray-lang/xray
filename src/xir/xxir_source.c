@@ -1623,6 +1623,7 @@ static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) 
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, typed.type, {place.id, 0}, {0}, 0, {0}}, value);
 }
 #include "xxir_source_nullable.inc.c"
+#include "xxir_source_optional_chain.inc.c"
 #include "xxir_source_try_optional.inc.c"
 static bool source_cast_target(SourceContext *ctx,AstNode *node,XrHirCastTargetInput input,XrHirCastTarget *target) {
     XrXirSourceRange range=source_query_range(ctx,node,NULL);
@@ -1919,6 +1920,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     case AST_UNARY_NOT: case AST_BINARY_AND: case AST_BINARY_OR: return source_logic(ctx, node, value);
     case AST_NULLISH_COALESCE: return source_coalesce(ctx, node, context, value);
     case AST_FORCE_UNWRAP: return source_force_unwrap(ctx, node, value);
+    case AST_OPTIONAL_CHAIN: return source_optional_chain(ctx, node, value);
     case AST_MEMBER_ACCESS: {
         MemberAccessNode *member = &node->as.member_access;
         SourceName *base = member->object->type == AST_VARIABLE ? visible_name(ctx, member->object->as.variable.name) : NULL;

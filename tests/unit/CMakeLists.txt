@@ -2516,6 +2516,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/array_binding.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/nominal_inference.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/tuple_assignment.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/array_materialization.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/optional_chain.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/crypto_native.cmake)
 include(${PROJECT_SOURCE_DIR}/tests/cli/csv_errors.cmake)
 
