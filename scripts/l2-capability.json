@@ -272,10 +272,7 @@
         "xir_crypto_suite_native",
         "xir_crypto_values",
         "xir_crypto_controls",
-        "xir_crypto_controls_native",
-        "test_xir_rest_values",
-        "test_xir_rest_values_native",
-        "test_xir_rest_values_cold_native"
+        "xir_crypto_controls_native"
       ],
       "targets": [
         "test_source_nullable_print",
@@ -312,10 +309,7 @@
         "test_xir_crypto_suite_native",
         "test_xir_crypto_values",
         "test_xir_crypto_controls",
-        "test_xir_crypto_controls_native",
-        "test_xir_rest_values",
-        "test_xir_rest_values_native",
-        "test_xir_rest_values_cold_native"
+        "test_xir_crypto_controls_native"
       ]
     },
     "errors-cleanup": {
@@ -554,6 +548,27 @@
       "targets": [
         "test_lsp_stdlib",
         "xray"
+      ]
+    },
+    "rest-callables": {
+      "tier": "L2",
+      "match": [
+        "tests/unit/xir/rest_values/*",
+        "src/xir/xxir_source_rest_arguments.inc.c",
+        "src/xir/xxir_types*",
+        "src/xir/xxir.h",
+        "src/frontend/parser/xparse_type.c"
+      ],
+      "reason": "Ordinary rest function types, explicit Array tails, complete VM/native execution and two-hop cold ownership.",
+      "tests": [
+        "test_xir_rest_values",
+        "test_xir_rest_values_native",
+        "test_xir_rest_values_cold_native"
+      ],
+      "targets": [
+        "test_xir_rest_values",
+        "test_xir_rest_values_native",
+        "test_xir_rest_values_cold_native"
       ]
     }
   },
