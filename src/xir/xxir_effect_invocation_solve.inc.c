@@ -366,7 +366,8 @@ static XrXirStatus effect_invocation_intrinsics(EffectInvocationWorkspace *owner
     if(!owner || !effect_body_material_shape(owner->final.material) ||
         owner->primitives || owner->primitive_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t count=effect_body_count(owner->final.material);XrXirStatus status=XR_XIR_OK;
-    if((uint64_t)count>SIZE_MAX/sizeof(*owner->primitives)) return XR_XIR_BUDGET;
+    if ((count && sizeof(*owner->primitives) > SIZE_MAX / (uint64_t) count))
+        return XR_XIR_BUDGET;
     owner->primitives=count?xir_compile_alloc(owner->read.work,(size_t)count*sizeof(*owner->primitives),&status):NULL;
     if(count && !owner->primitives) return status;
     owner->primitive_count=count;
@@ -423,7 +424,8 @@ static XrXirStatus effect_invocation_root_input(EffectInvocationWorkspace *owner
  * remain distinct keys. No body, domain or permission verification is skipped. */
 static XrXirStatus effect_invocation_root_spaces(EffectInvocationWorkspace *owner) {
     uint32_t count=owner->read.body.domain.function_count;
-    if ((uint64_t)count>SIZE_MAX/sizeof(*owner->final.root_spaces)) return XR_XIR_BUDGET;
+    if ((count && sizeof(*owner->final.root_spaces) > SIZE_MAX / (uint64_t) count))
+        return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     owner->final.root_spaces=xir_compile_alloc(owner->read.work,(size_t)count*sizeof(*owner->final.root_spaces),&status);
     if (!owner->final.root_spaces) return status;
@@ -695,7 +697,8 @@ static XrXirStatus effect_invocation_local_inputs(const XrXirCompileContext *wor
     if (!output || *output || !xir_compile_context_valid(work) || !effect_body_material_shape(body) ||
         body->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
     uint32_t count=effect_body_count(body);XrXirStatus status=XR_XIR_OK;
-    if ((uint64_t)count>SIZE_MAX/sizeof(**output)) return XR_XIR_BUDGET;
+    if ((count && sizeof(**output) > SIZE_MAX / (uint64_t) count))
+        return XR_XIR_BUDGET;
     /* The original count branch precedes one allocation. An empty domain
      * publishes the same empty output; no result storage is created. */
     if (!count) {
@@ -760,7 +763,9 @@ static XrXirStatus effect_invocation_local_nodes(EffectInvocationWorkspace *owne
         owner->final.root_spaces || owner->read.consumers || owner->states ||
         !effect_body_material_shape(owner->final.material)) return XR_XIR_BAD_STRUCTURE;
     uint32_t count=effect_body_count(owner->final.material);XrXirStatus status=XR_XIR_OK;
-    if (count>owner->maximum || (uint64_t)count>SIZE_MAX/sizeof(*owner->final.nodes)) return XR_XIR_BUDGET;
+    if (count > owner->maximum ||
+        (count && sizeof(*owner->final.nodes) > SIZE_MAX / (uint64_t) count))
+        return XR_XIR_BUDGET;
 
     owner->final.nodes=xir_compile_alloc(owner->read.work,(size_t)count*sizeof(*owner->final.nodes),&status);
     if (status==XR_XIR_OK) owner->final.roots=xir_compile_alloc(owner->read.work,(size_t)count*sizeof(*owner->final.roots),&status);
@@ -911,7 +916,8 @@ static XrXirStatus effect_invocations_create(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) owner->read.producer_enabled=owner->final.site_count!=0;
     if (status==XR_XIR_OK) status=effect_invocation_intrinsics(owner);
     if (status==XR_XIR_OK) {
-        if ((uint64_t)functions>SIZE_MAX/sizeof(*owner->final.roots)) status=XR_XIR_BUDGET;
+        if ((functions && sizeof(*owner->final.roots) > SIZE_MAX / (uint64_t) functions))
+            status = XR_XIR_BUDGET;
         else owner->final.roots=xir_compile_alloc(work,(size_t)functions*sizeof(*owner->final.roots),&status);
         if (status==XR_XIR_OK && !owner->final.roots) status=XR_XIR_OUT_OF_MEMORY;
     }

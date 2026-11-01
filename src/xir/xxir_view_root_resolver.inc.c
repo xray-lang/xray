@@ -33,7 +33,9 @@ static XrXirStatus view_root_symbolic_slot(ViewRootQuery *q,uint32_t slot,ViewOr
             }
             if (value==UINT32_MAX) continue;
             XrXirStatus status=view_root_push(q,f,value,context.first,context.second);
-            if (status!=XR_XIR_OK) return status;++found;
+            if (status != XR_XIR_OK)
+                return status;
+            ++found;
         }
     }
     return found?XR_XIR_OK:view_root_emit(q,(ViewOriginPair){UINT32_MAX,slot},context,XR_XIR_VIEW_ROOT_MODULE);
@@ -67,7 +69,9 @@ typedef struct ViewRootForward { XrXirViewRootVisitor visitor; void *user; uint3
 static XrXirStatus view_root_forward(void *user,const XrXirCompileContext *context,const XrXirViewRootEvent *event) {
     ViewRootForward *forward=user;
 
-    if (forward->count==UINT32_MAX) return XR_XIR_BUDGET;++forward->count;
+    if (forward->count == UINT32_MAX)
+        return XR_XIR_BUDGET;
+    ++forward->count;
     return forward->visitor?forward->visitor(forward->user,context,event):XR_XIR_OK;
 }
 static XrXirStatus view_root_request(ViewRootCheck *c,const XirViewRootRequest *request) {
@@ -90,7 +94,9 @@ static XrXirStatus view_root_request(ViewRootCheck *c,const XirViewRootRequest *
         const XrXirTypeNode *node=xr_xir_type_node(c->module->types,type);uint32_t field=request->selection[i];
         if (!node) return XR_XIR_BAD_TYPE;
         if (field==UINT32_MAX) {
-            if (node->kind!=XR_XIR_TYPE_NULLABLE) return XR_XIR_BAD_TYPE;type=node->element;
+            if (node->kind != XR_XIR_TYPE_NULLABLE)
+                return XR_XIR_BAD_TYPE;
+            type = node->element;
         } else {
             if (node->kind!=XR_XIR_TYPE_TUPLE || field>=node->parameter_count) return XR_XIR_BAD_TYPE;
             type=node->parameters[field].type;
@@ -116,7 +122,10 @@ static XrXirStatus view_root_resolve(XirViewRootResolver *r,const XirViewRootReq
 }
 XR_FUNC XrXirStatus xir_compile_view_root_resolver_query(XirViewRootResolver *r,
     const XirViewRootRequest *request,XrXirViewRootVisitor visitor,void *user,XrXirDiagnostic *diagnostic) {
-    if (!r) return XR_XIR_BAD_STRUCTURE;if (r->busy) return XR_XIR_BAD_STAGE;
+    if (!r)
+        return XR_XIR_BAD_STRUCTURE;
+    if (r->busy)
+        return XR_XIR_BAD_STAGE;
     r->busy=true;XrXirStatus status=view_root_resolve(r,request,visitor,user);r->busy=false;
     if (status!=XR_XIR_OK && diagnostic) {*diagnostic=r->check.location;diagnostic->status=status;}
     return status;

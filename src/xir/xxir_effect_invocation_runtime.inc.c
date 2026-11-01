@@ -222,7 +222,9 @@ static XrXirStatus effect_runtime_inputs(const EffectInvocationCertificate *cert
             bool matched=false;
             status=effect_runtime_origin_member(certificate,request,node,p,&matched);
             if (status!=XR_XIR_OK) return status;
-            if (!matched) same=false;continue;
+            if (!matched)
+                same = false;
+            continue;
         }
         bool cell=xr_xir_type_is_cell(&certificate->terms.types,target->parameters[p]);
         uint32_t actual=cell?request->read.cell(request->read.owner,p):0;

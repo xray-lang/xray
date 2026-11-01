@@ -69,7 +69,11 @@ static XrXirStatus inspect_threads(XdapAdapter *s,const XdapRequest *r) {
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
     XDAP_TEXT(&body,"{\"threads\":[");
     for (uint32_t i=0;i<count;++i) {
-        if (i) XDAP_TEXT(&body,",");XDAP_TEXT(&body,"{\"id\":");xdap_json_unsigned(&body,ids[i]);XDAP_TEXT(&body,",\"name\":");
+        if (i)
+            XDAP_TEXT(&body, ",");
+        XDAP_TEXT(&body, "{\"id\":");
+        xdap_json_unsigned(&body, ids[i]);
+        XDAP_TEXT(&body, ",\"name\":");
         char label[64];int length=snprintf(label,sizeof(label),"%s %llu",ids[i]==1 ? "Root" : "Activation",(unsigned long long)ids[i]);
         xdap_json_quote(&body,label,(size_t)length);XDAP_TEXT(&body,"}");
     }
@@ -92,7 +96,10 @@ static XrXirStatus inspect_stack(XdapAdapter *s,const XdapRequest *r) {
         if (total++<start || (levels && shown>=levels)) { xr_xir_value_drop(&name);continue; }
         const char *text=NULL;size_t length=0;
         if (!xr_xir_string_view(&name,&text,&length)) body.status=XR_XIR_BAD_STRUCTURE;
-        if (shown++) XDAP_TEXT(&body,",");XDAP_TEXT(&body,"{\"id\":");xdap_json_unsigned(&body,s->frames[i].handle);
+        if (shown++)
+            XDAP_TEXT(&body, ",");
+        XDAP_TEXT(&body, "{\"id\":");
+        xdap_json_unsigned(&body, s->frames[i].handle);
         XDAP_TEXT(&body,",\"name\":");xdap_json_quote(&body,text,length);
         if (!inspect_source_position(s,&body,info.function,
             info.instruction,true)) { xr_xir_value_drop(&name);break; }
@@ -221,11 +228,17 @@ static XrXirStatus inspect_children(XdapAdapter *s,const XdapRequest *r,const Xd
         body.status=inspect_origin_child(s,ref,&child,steps,&origin);
         if (body.status!=XR_XIR_OK) { xr_xir_value_drop(&value);break; }
         char index[32];if (!child.name) { int bytes=snprintf(index,sizeof(index),"[%llu]",(unsigned long long)(start+i));child.name=index;child.name_length=(size_t)bytes; }
-        if (shown++) XDAP_TEXT(&body,",");bool emitted=inspect_variable(s,&body,child.name,child.name_length,&value,ref->frame,&origin);xr_xir_value_drop(&value);
+        if (shown++)
+            XDAP_TEXT(&body, ",");
+        bool emitted =
+            inspect_variable(s, &body, child.name, child.name_length, &value, ref->frame, &origin);
+        xr_xir_value_drop(&value);
         if (!emitted) break;
     }
     XDAP_TEXT(&body,"]}");XrXirStatus status=inspect_finish(s,r,&body);
-    if (status!=XR_XIR_OK) inspect_rollback_values(s,before);return status;
+    if (status != XR_XIR_OK)
+        inspect_rollback_values(s, before);
+    return status;
 }
 #include "xdap_dispatch_lexical.inc.c"
 #include "xdap_dispatch_globals.inc.c"
@@ -325,7 +338,9 @@ static XrXirStatus inspect_disassemble(XdapAdapter *s,const XdapRequest *r) {
         if (address_size<0 || (size_t)address_size>=sizeof(address) || text_size<0 || (size_t)text_size>=sizeof(description)) {
             body.status=XR_XIR_BAD_STRUCTURE;break;
         }
-        if (i) XDAP_TEXT(&body,",");XDAP_TEXT(&body,"{\"address\":");
+        if (i)
+            XDAP_TEXT(&body, ",");
+        XDAP_TEXT(&body, "{\"address\":");
         xdap_json_quote(&body,address,(size_t)address_size);XDAP_TEXT(&body,",\"instruction\":");
         xdap_json_quote(&body,description,(size_t)text_size);
         if (!valid) XDAP_TEXT(&body,",\"presentationHint\":\"invalid\"");

@@ -236,7 +236,9 @@ static XrXirStatus effect_invocation_producer_put(EffectInvocationFlow *flow,
         uint32_t capacity=receiving->capacity?receiving->capacity:8;
         if (capacity>maximum) capacity=(uint32_t)maximum;
         else if (receiving->capacity) capacity=capacity>maximum/2?(uint32_t)maximum:capacity*2;
-        if (capacity<=receiving->count || (uint64_t)capacity>SIZE_MAX/sizeof(*fact)) return XR_XIR_BUDGET;
+        if (capacity <= receiving->count ||
+            (capacity && sizeof(*fact) > SIZE_MAX / (uint64_t) capacity))
+            return XR_XIR_BUDGET;
         XrXirStatus status=XR_XIR_OK;
         EffectInvocationProducer *records=xir_compile_alloc(owner->work,(size_t)capacity*sizeof(*records),&status);
         if (!records) return status;

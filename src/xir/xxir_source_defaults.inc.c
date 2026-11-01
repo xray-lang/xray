@@ -30,7 +30,9 @@ static bool source_hir_nominal_declarations(SourceContext *ctx) {
     ctx->record_declarations_ready=true;return true;
 }
 static bool source_struct_defaultability(SourceContext *ctx) {
-    if(!source_hir_nominal_declarations(ctx))return false;uint32_t added=0,failed=UINT32_MAX;
+    if (!source_hir_nominal_declarations(ctx))
+        return false;
+    uint32_t added = 0, failed = UINT32_MAX;
     XrXirStatus status=xr_hir_body_nominal_schedule(ctx->typed_body,ctx->function_count,ctx->compile.limits.functions,ctx->request,&added,&failed);
     if(status!=XR_XIR_OK)return source_fail(ctx,failed<ctx->nominals.count?ctx->nominal_sources[failed]->node:NULL,status,
         status==XR_XIR_BUDGET?"default constructor function budget exhausted":"default declaration receiving failed");
@@ -55,7 +57,10 @@ static bool source_struct_constructors(SourceContext *ctx,uint32_t *next) {
     return true;
 }
 static bool source_default_value(SourceContext *ctx,AstNode *node,XrXirType type,SourceValue *value) {
-    if(ctx->diagnostic.status!=XR_XIR_OK)return false;XrHirNominalShape shape={0};XrHirBodyScope scope={0};
+    if (ctx->diagnostic.status != XR_XIR_OK)
+        return false;
+    XrHirNominalShape shape = {0};
+    XrHirBodyScope scope = {0};
     const XrXirTypeNode *found=xr_xir_type_node(&ctx->types,type);
     if(found&&found->kind==XR_XIR_TYPE_NOMINAL&&!source_hir_nominal_shape(ctx,node,type,&shape,NULL))return false;
     if(!source_hir_current_scope(ctx,&scope))return false;

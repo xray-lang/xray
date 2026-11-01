@@ -58,12 +58,16 @@ static XrXirValueStatus debug_selector_operation(DebugSelector *run,const XrXirI
     switch (op->op) {
     case XR_XIR_ERROR_IS: {
         XrXirValueStatus status=xr_xir_error_is(left,(XrXirType)op->immediate,&run->admission,&equal);
-        if (status==XR_XIR_VALUE_OK) *output=(XrXirValue){XR_XIR_BOOL,0,equal};return status;
+        if (status == XR_XIR_VALUE_OK)
+            *output = (XrXirValue) {XR_XIR_BOOL, 0, equal};
+        return status;
     }
     case XR_XIR_ERROR_NARROW:return xr_xir_error_narrow(left,op->type,&run->admission,output);
     case XR_XIR_ENUM_TAG: {
         uint32_t variant=0;XrXirValueStatus status=xr_xir_enum_variant(left,&variant);
-        if (status==XR_XIR_VALUE_OK) *output=(XrXirValue){XR_XIR_I64,0,variant};return status;
+        if (status == XR_XIR_VALUE_OK)
+            *output = (XrXirValue) {XR_XIR_I64, 0, variant};
+        return status;
     }
     case XR_XIR_ENUM_GET:return xr_xir_enum_get(left,(uint32_t)op->immediate,op->args[1],&run->admission,output);
     default:break;
@@ -71,7 +75,9 @@ static XrXirValueStatus debug_selector_operation(DebugSelector *run,const XrXirI
     right=debug_selector_value(run,op->args[1]);if (!right) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (op->op==XR_XIR_EQUAL) {
         XrXirValueStatus status=xr_xir_value_equal(left,right,(XrXirType)left->type,&run->admission,&equal);
-        if (status==XR_XIR_VALUE_OK) *output=(XrXirValue){XR_XIR_BOOL,0,op->immediate ? !equal : equal};return status;
+        if (status == XR_XIR_VALUE_OK)
+            *output = (XrXirValue) {XR_XIR_BOOL, 0, op->immediate ? !equal : equal};
+        return status;
     }
     if (op->op!=XR_XIR_EQ_INT && op->op!=XR_XIR_GE_INT && op->op!=XR_XIR_LE_INT) return XR_XIR_VALUE_BAD_ARGUMENT;
     int compared=0;

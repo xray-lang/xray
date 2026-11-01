@@ -66,7 +66,10 @@ static XrXirStatus owner_path_walk(ViewOwnerPath *p,uint32_t start,uint32_t stop
         uint32_t b=a->queue[head++];if (b==stop) continue;
         for (uint32_t e=0;e<3;++e) {
             uint32_t target=0;bool present=false;XrXirStatus status=owner_path_edge(p,b,e,filtered,&target,&present);
-            if (status!=XR_XIR_OK) return status;if (!present) continue;
+            if (status != XR_XIR_OK)
+                return status;
+            if (!present)
+                continue;
             *repeated|=target==start;
             if (!a->reachable[target]) {
                 XR_CHECK(tail<blocks,"each conditional CFG block enters its finite queue once");

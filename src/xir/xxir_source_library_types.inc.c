@@ -18,7 +18,9 @@ static bool source_hir_nominal_imports(SourceContext *ctx,XrHirNominalImport *in
     for(SourceLibraryUnit *unit=ctx->library_units;unit;unit=unit->next) {
         const XrXirNominalTable *table=unit->library->types?unit->library->types->nominals:NULL;
         for(uint32_t n=0;table&&n<table->count;++n) {
-            if(!source_request_poll(ctx,NULL))return false;uint32_t target=unit->nominals[n];
+            if (!source_request_poll(ctx, NULL))
+                return false;
+            uint32_t target = unit->nominals[n];
             if(table->declarations[n].flags&XR_XIR_NOMINAL_RECORD)continue;
             if(target>=count||inputs[target].construction)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library nominal owner mapping changed");
             inputs[target]=(XrHirNominalImport){unit->library->types,unit->construction,n};

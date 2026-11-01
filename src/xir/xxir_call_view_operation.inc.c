@@ -98,5 +98,6 @@ XR_FUNC XrXirAction xr_xir_call_view_operation_fault(XrXirValueStatus status,XrX
         return xr_xir_call_bounds(fault.index,fault.length);
     XrXirCallStatus code=status==XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM :
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_ARGUMENT;
-    return (XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,code},{0},0};
+    return (XrXirAction) {XR_XIR_ACTION_FAULT,  0, NULL, 0, {XR_XIR_I64, 0, code},
+                          {{0}, {0}, {0}, {0}}, 0};
 }

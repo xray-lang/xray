@@ -102,12 +102,17 @@ static bool source_record_order(SourceContext *ctx,AstNode *site,const XrXirLite
             XrXirLiteral a=names[order[at-1]],b=names[f];uint32_t n=a.length<b.length?a.length:b.length;
             int cmp=0;
             for(uint32_t offset=0;offset<n&&!cmp;) {
-                if(!source_request_poll(ctx,site))return false;uint32_t part=n-offset<4096?n-offset:4096;
+                if (!source_request_poll(ctx, site))
+                    return false;
+                uint32_t part = n - offset < 4096 ? n - offset : 4096;
                 cmp=memcmp(a.bytes+offset,b.bytes+offset,part);offset+=part;
             }
             if(!cmp)cmp=a.length<b.length?-1:a.length>b.length?1:0;
             if(!cmp)return source_fail(ctx,site,XR_XIR_BAD_TYPE,"duplicate record field");
-            if(cmp<0)break;order[at]=order[at-1];--at;
+            if (cmp < 0)
+                break;
+            order[at] = order[at - 1];
+            --at;
         }
         order[at]=f;
     }

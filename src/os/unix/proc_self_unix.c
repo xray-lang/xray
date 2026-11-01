@@ -10,6 +10,7 @@
 #include "../../base/xfileio.h"
 #include "../../base/xio_policy.inc.h"
 #include "../../shared/xr_utf8_core.h"
+#include "../../shared/xr_path_limit.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,9 +56,9 @@ static XrOsIoStatus proc_self_executable(char *buffer, size_t capacity) {
 XR_FUNC XrOsIoStatus xr_os_io_self_exe_path(const XrOsIoPolicy *policy, char **output) {
     if (!io_policy_valid(policy) || !output || *output) return XR_OS_IO_BAD_ARGUMENT;
     XrIoContext io = {policy, XR_OS_IO_OK};
-    char *raw = io_alloc(&io, XR_PATH_MAX), *result = NULL;
+    char *raw = io_alloc(&io, XR_PATH_LIMIT_MAX_PATH), *result = NULL;
     if (raw && ((&io)->status == XR_OS_IO_OK))
-        io_status(&io, proc_self_executable(raw, XR_PATH_MAX));
+        io_status(&io, proc_self_executable(raw, XR_PATH_LIMIT_MAX_PATH));
     size_t length = 0;
     if (io.status == XR_OS_IO_OK) (void)proc_self_utf8(&io, raw, &length);
     if (io.status == XR_OS_IO_OK) {

@@ -42,6 +42,20 @@ static XtcXirPublicationStatus publication_fail(XtcXirPublication *owner,
     if (!owner->diagnostic.published) owner->phase = XTC_XIR_PUBLICATION_FAILED;
     return owner->diagnostic.status;
 }
+static void publication_free(XtcXirPublication *owner) {
+#if XR_OS_WINDOWS
+    xtc_xir_file_lease_free(owner->parent_lease);
+#endif
+    xr_compile_resources_free(owner->parent);
+#if XR_OS_WINDOWS
+    xr_compile_resources_free(owner->absolute);
+    xr_compile_resources_free(owner->temporary);
+    xr_compile_resources_free(owner->leaf);
+    xr_compile_resources_free(owner->rename);
+#endif
+    xr_compile_resources_free(owner);
+}
+#if XR_OS_WINDOWS
 static XtcXirPublicationStatus publication_io_status(XrOsIoStatus status) {
     switch (status) {
     case XR_OS_IO_OK: return XTC_XIR_PUBLICATION_OK;
@@ -64,16 +78,6 @@ static void *publication_alloc(XtcXirPublication *owner, size_t size) {
         publication_io(owner, owner->policy.alloc(owner->policy.context, size, &memory));
     return memory;
 }
-static void publication_free(XtcXirPublication *owner) {
-    xtc_xir_file_lease_free(owner->parent_lease);
-    xr_compile_resources_free(owner->parent);
-#if XR_OS_WINDOWS
-    xr_compile_resources_free(owner->absolute); xr_compile_resources_free(owner->temporary);
-    xr_compile_resources_free(owner->leaf); xr_compile_resources_free(owner->rename);
-#endif
-    xr_compile_resources_free(owner);
-}
-#if XR_OS_WINDOWS
 static bool publication_windows_error(XtcXirPublication *owner, DWORD error) {
     publication_fail(owner, publication_io_status(io_windows_status(error)), error); return false;
 }

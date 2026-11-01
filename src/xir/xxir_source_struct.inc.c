@@ -348,7 +348,10 @@ static bool source_struct_construct(SourceContext *ctx,AstNode *node,AstNode *pa
     }
     for(uint32_t f=0;f<info.count;++f) {
         bool missing=false;status=xr_hir_body_nominal_missing(ctx->typed_body,plan,f,ctx->request,&missing,&reason);
-        if(!source_hir_nominal_status(ctx,node,status,reason))return false;if(!missing)continue;
+        if (!source_hir_nominal_status(ctx, node, status, reason))
+            return false;
+        if (!missing)
+            continue;
         SourceValue field;XrHirBodyUse producer={0};
         if(!source_hir_nominal_helper(ctx,node,instance_type,f,&field,&producer))return false;
         status=xr_hir_body_nominal_supply(ctx->typed_body,plan,&pool,f,(XrHirNominalValue){.type=field.type,.value=field.id,.producer=producer},&reason);

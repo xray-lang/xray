@@ -27,8 +27,10 @@ XR_FUNC XrXirStatus xdap_dispatch_function_breakpoints(XdapAdapter *s,const Xdap
     if (status!=XR_XIR_OK) return status;
     if (!list || r->document.nodes[list].kind!=XDAP_JSON_ARRAY || r->document.nodes[list].count>32)
         return xdap_dispatch_response(s,r,false,NULL,"Invalid function breakpoint list");
-    char *names[32]={0};XdapBreakpointPredicate predicates[32]={{0}};
-    XrXirVmDebugRule rules[32]={{0}},saved[32]={{0}};uint32_t locations=0,count=0,number=0;
+    char *names[32] = {0};
+    XdapBreakpointPredicate predicates[32] = {0};
+    XrXirVmDebugRule rules[32] = {0}, saved[32] = {0};
+    uint32_t locations = 0, count = 0, number = 0;
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit),response={0};const char *error=NULL;
     XDAP_TEXT(&body,"{\"breakpoints\":[");
     for (uint32_t item=r->document.nodes[list].first;item;item=r->document.nodes[item].next,++number) {

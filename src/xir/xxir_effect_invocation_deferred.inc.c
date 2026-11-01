@@ -105,7 +105,8 @@ static XrXirStatus effect_invocation_deferred_record(EffectInvocationFlow *flow,
         uint32_t capacity=owner->final->deferred_capacity ? owner->final->deferred_capacity : 8;
         if (capacity>flow->owner->maximum) capacity=flow->owner->maximum;
         else if (owner->final->deferred_capacity) capacity=capacity>flow->owner->maximum/2 ? flow->owner->maximum : capacity*2;
-        if (capacity<=owner->final->deferred_count || (uint64_t)capacity>SIZE_MAX/sizeof(EffectInvocationDeferred))
+        if (capacity <= owner->final->deferred_count ||
+            (capacity && sizeof(EffectInvocationDeferred) > SIZE_MAX / (uint64_t) capacity))
             status=XR_XIR_BUDGET;
         EffectInvocationDeferred *records=status==XR_XIR_OK ? xir_compile_alloc(owner->work,
             (size_t)capacity*sizeof(*records),&status) : NULL;

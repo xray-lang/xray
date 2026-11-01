@@ -12,7 +12,9 @@
 #include "../base/xchecks.h"
 
 static XrXirStatus nullable_failure(const char **reason,XrXirStatus status,const char *message) {
-    if(reason)*reason=message;return status;
+    if (reason)
+        *reason = message;
+    return status;
 }
 static XrXirStatus nullable_poll(XrCompileRequestControl *control,const char **reason) {
     XrXirStatus status=control?xir_compile_resource_status(xr_compile_request_control_poll(control)):XR_XIR_OK;

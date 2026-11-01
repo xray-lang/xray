@@ -174,7 +174,10 @@ static bool source_view_regions(SourceContext *ctx,uint32_t f,const XirViewNorma
     uint32_t count=0;const XrXirInitializationRegion *regions=body->initialization_regions;
     for (const XrXirInitializationRegion *r=regions;r;r=r->next) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        if (count==UINT32_MAX-1u) return source_fail(ctx,NULL,XR_XIR_BUDGET,"Source detached lifetime count exhausted");++count;
+        if (count == UINT32_MAX - 1u)
+            return source_fail(ctx, NULL, XR_XIR_BUDGET,
+                               "Source detached lifetime count exhausted");
+        ++count;
     }
     if (!count) return true;
     SourceViewRegionMap *maps=source_alloc(ctx,(size_t)count+1u,sizeof(*maps));
@@ -188,7 +191,10 @@ static bool source_view_regions(SourceContext *ctx,uint32_t f,const XirViewNorma
     while (pending) {
         uint32_t before=pending;
         for (uint32_t r=1;r<=count;++r) {
-            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;if (maps[r].ready) continue;
+            if (!((ctx)->diagnostic.status == XR_XIR_OK))
+                return false;
+            if (maps[r].ready)
+                continue;
             for (uint32_t p=0;p<=count;++p) {
                 if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                 if (!maps[p].ready || maps[p].source!=maps[r].source->parent) continue;

@@ -19,9 +19,17 @@ static XrXirStatus view_access_pair(ViewAccess *a,const ViewAccessOrigin *left_o
     if (!writable && view_access_shared(a,right->type)) {*output=VIEW_ACCESS_SAFE;return XR_XIR_OK;}
     if (left->kind==XR_XIR_VIEW_LOAN_UNRESOLVED || right->kind==XR_XIR_VIEW_LOAN_UNRESOLVED) return XR_XIR_OK;
     bool entry=false;XrXirStatus status=view_access_entry_pair(a,left,right,&entry);
-    if (status!=XR_XIR_OK) return status;if (entry) {*output=VIEW_ACCESS_SAFE;return XR_XIR_OK;}
+    if (status != XR_XIR_OK)
+        return status;
+    if (entry) {
+        *output = VIEW_ACCESS_SAFE;
+        return XR_XIR_OK;
+    }
     bool ls=false,rs=false;status=view_access_origin_stable(a,left_origin,&ls);
-    if (status==XR_XIR_OK) status=view_access_origin_stable(a,right_origin,&rs);if (status!=XR_XIR_OK) return status;
+    if (status == XR_XIR_OK)
+        status = view_access_origin_stable(a, right_origin, &rs);
+    if (status != XR_XIR_OK)
+        return status;
     if (ls && rs && view_access_same_scope(left,right)) {
         XR_CHECK(left->function==a->function && right->function==a->function,
             "scope equality compares owned observations of the current function");
@@ -31,7 +39,10 @@ static XrXirStatus view_access_pair(ViewAccess *a,const ViewAccessOrigin *left_o
     ViewAccessAncestor down=VIEW_ACCESS_ANCESTRY_UNKNOWN,up=down;
     if (ls && rs) {
         status=view_access_ancestor(a,left_origin,right_origin,&down);
-        if (status==XR_XIR_OK) status=view_access_ancestor(a,right_origin,left_origin,&up);if (status!=XR_XIR_OK) return status;
+        if (status == XR_XIR_OK)
+            status = view_access_ancestor(a, right_origin, left_origin, &up);
+        if (status != XR_XIR_OK)
+            return status;
         if (down==VIEW_ACCESS_ANCESTOR) {*output=writable || view_access_mutable(a,right->type)?VIEW_ACCESS_BLOCKED:VIEW_ACCESS_SAFE;return XR_XIR_OK;}
         if (up==VIEW_ACCESS_ANCESTOR) {*output=VIEW_ACCESS_SAFE;return XR_XIR_OK;}
     }
@@ -59,12 +70,19 @@ static XrXirStatus view_access_same_owned_leaf(ViewAccess *a,const ViewAccessOri
     if (view_access_same_scope(&left->event,&right->event)) {
         bool l=false,r=false;XrXirStatus status=view_access_entry_origin(a,&left->event,&l);
         if (status==XR_XIR_OK) status=view_access_entry_origin(a,&right->event,&r);
-        if (status!=XR_XIR_OK) return status;if (l && r) {*same=true;return XR_XIR_OK;}
+        if (status != XR_XIR_OK)
+            return status;
+        if (l && r) {
+            *same = true;
+            return XR_XIR_OK;
+        }
     }
     if (!view_access_mutable(a,left->event.type) || !view_access_same_scope(&left->event,&right->event)) return XR_XIR_OK;
     bool ls=false,rs=false;XrXirStatus status=view_access_origin_stable(a,left,&ls);
     if (status==XR_XIR_OK) status=view_access_origin_stable(a,right,&rs);
-    if (status==XR_XIR_OK) *same=ls && rs;return status;
+    if (status == XR_XIR_OK)
+        *same = ls && rs;
+    return status;
 }
 static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner,bool writable,bool view,bool *blocked) {
     if (blocked) *blocked=false;
@@ -74,7 +92,10 @@ static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner
      * need expansion to establish this permission-independent relation. */
     if (!writable && view_access_shared(a,xr_xir_operand_type(a->body,owner))) return XR_XIR_OK;
     ViewAccessOrigin *left=NULL,*right=NULL;XrXirStatus status=view_access_origins(a,owner,&right);
-    if (status==XR_XIR_OK && view) status=view_access_origins(a,value,&left);if (status!=XR_XIR_OK) return status;
+    if (status == XR_XIR_OK && view)
+        status = view_access_origins(a, value, &left);
+    if (status != XR_XIR_OK)
+        return status;
     bool all_safe=true,all_blocked=true,any=false;
     for (ViewAccessOrigin *r=right;r;r=r->next) {
         if (!view) {
@@ -85,13 +106,19 @@ static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner
             else {status=view_access_storage(a,value,r->event.value,value,r->queried_value,&decision);if (status!=XR_XIR_OK) return status;}
             if (decision!=VIEW_ACCESS_SAFE) {
                 bool present=true;status=view_access_presence(a,owner,NULL,&r->event,&present);
-                if (status!=XR_XIR_OK) return status;if (!present) decision=VIEW_ACCESS_SAFE;
+                if (status != XR_XIR_OK)
+                    return status;
+                if (!present)
+                    decision = VIEW_ACCESS_SAFE;
             }
             all_safe&=decision==VIEW_ACCESS_SAFE;all_blocked&=decision==VIEW_ACCESS_BLOCKED;any=true;continue;
         }
         for (ViewAccessOrigin *l=left;l;l=l->next) {
             bool compatible=false;status=view_access_compatible(&l->event,&r->event,&compatible);
-            if (status!=XR_XIR_OK) return status;if (!compatible) continue;
+            if (status != XR_XIR_OK)
+                return status;
+            if (!compatible)
+                continue;
             /* An owner contains its own admitted input subtree or Mut leaf.
              * Every other leaf still participates, including local children. */
             bool own=false;
@@ -103,13 +130,18 @@ static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner
             if (status!=XR_XIR_OK) return status;
             if (decision!=VIEW_ACCESS_SAFE) {
                 bool present=true;status=view_access_presence(a,owner,&l->event,&r->event,&present);
-                if (status!=XR_XIR_OK) return status;if (!present) decision=VIEW_ACCESS_SAFE;
+                if (status != XR_XIR_OK)
+                    return status;
+                if (!present)
+                    decision = VIEW_ACCESS_SAFE;
             }
             all_safe&=decision==VIEW_ACCESS_SAFE;all_blocked&=decision==VIEW_ACCESS_BLOCKED;any=true;
         }
     }
     XrXirStatus result=!any || all_safe?XR_XIR_OK:all_blocked?XR_XIR_BAD_VALUE:XR_XIR_UNRESOLVED;
-    if (blocked) *blocked=result==XR_XIR_BAD_VALUE;return result;
+    if (blocked)
+        *blocked = result == XR_XIR_BAD_VALUE;
+    return result;
 }
 static XrXirStatus view_access_use(ViewAccess *a,const XrXirViewOwnerSet *owners,uint32_t value,bool writable,bool view,bool *blocked) {
     if (blocked) *blocked=false;

@@ -2490,10 +2490,10 @@ endif()
 # The executable links only the single-pipeline libraries; none of them reach
 # the retired analyzer/Xi/Program core.
 target_link_libraries(xray PRIVATE xray_source_api xray_xir_runtime_host xray_frontend_format
-    xray_compile_resources)
+    xray_compile_resources xray_toolchain_process xray_xir_publication)
 if(WIN32)
     target_link_libraries(xray PRIVATE xray_xir_native_admission xray_xir_local_toolchain
-        xray_xir_publication xray_toolchain_dependencies xray_cli_native_probe)
+        xray_toolchain_dependencies xray_cli_native_probe)
 endif()
 
 if(XR_BUILD_MCP)

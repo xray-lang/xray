@@ -26,7 +26,11 @@ static bool hir_grow(XrHirItems *h,void **array,uint32_t *capacity,uint32_t coun
     if(count==UINT32_MAX){*status=XR_COMPILE_RESOURCE_OVERFLOW;return false;}
     uint32_t next=*capacity?(*capacity>UINT32_MAX/2?UINT32_MAX:*capacity*2):8;
     void *copy=hir_allocate(h,next,size,status);if(!copy)return false;
-    if(count)memcpy(copy,*array,(size_t)count*size);*array=copy;*capacity=next;return true;
+    if (count)
+        memcpy(copy, *array, (size_t) count * size);
+    *array = copy;
+    *capacity = next;
+    return true;
 }
 XrCompileResourceStatus xr_hir_items_new(XrCompileResources *resources,XrHirItems **out) {
     if(!resources||!out||*out)return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
@@ -34,7 +38,9 @@ XrCompileResourceStatus xr_hir_items_new(XrCompileResources *resources,XrHirItem
     if(s==XR_COMPILE_RESOURCE_OK){h->resources=resources;*out=h;}return s;
 }
 void xr_hir_items_free(XrHirItems *h) {
-    if(!h)return;xr_frontend_report_free(h->report);
+    if (!h)
+        return;
+    xr_frontend_report_free(h->report);
     while(h->memory){HirMemory *m=h->memory;h->memory=m->link.next;xr_compile_resources_free(m);}
     xr_compile_resources_free(h);
 }
@@ -83,7 +89,9 @@ XrCompileResourceStatus xr_hir_items_reserve(XrHirItems *h,const XrHirItemSpec *
         s=xr_frontend_report_add(h->report,302,spec->kind==XR_HIR_ITEM_PARAMETER?
             "duplicate parameter name":"duplicate declaration name",
             xr_frontend_report_location(h->report,source,spec->line,spec->column,spec->name),&label,1);
-        if(s!=XR_COMPILE_RESOURCE_OK)return s;++h->errors;
+        if (s != XR_COMPILE_RESOURCE_OK)
+            return s;
+        ++h->errors;
     }
     *out=h->count;h->items[h->count++]=(HirItem){copy,spec->module,spec->parent,spec->node,
         spec->line,spec->column,spec->kind,NULL};return s;
@@ -99,23 +107,40 @@ XrCompileResourceStatus xr_hir_items_claim(XrHirItems *h,const XrHirItemSpec *sp
     return xr_hir_items_reserve(h,spec,out);
 }
 bool xr_hir_items_find(const XrHirItems *h,uint32_t module,uint32_t parent,const char *name,uint32_t *out) {
-    if(!h||!name||!out)return false;uint32_t found=UINT32_MAX;
+    if (!h || !name || !out)
+        return false;
+    uint32_t found = UINT32_MAX;
     for(uint32_t i=0;i<h->count;++i)if(h->items[i].kind!=XR_HIR_ITEM_PARAMETER_SCOPE&&
         h->items[i].module==module&&h->items[i].parent==parent&&!strcmp(h->items[i].name,name)) {
-        if(found!=UINT32_MAX)return false;found=i;
+            if (found != UINT32_MAX)
+                return false;
+            found = i;
     }
-    if(found==UINT32_MAX)return false;*out=found;return true;
+    if (found == UINT32_MAX)
+        return false;
+    *out = found;
+    return true;
 }
 bool xr_hir_items_find_scope(const XrHirItems *h,uint32_t module,uint32_t node,uint32_t *out) {
-    if(!h||!node||!out)return false;uint32_t found=UINT32_MAX;
+    if (!h || !node || !out)
+        return false;
+    uint32_t found = UINT32_MAX;
     for(uint32_t i=0;i<h->count;++i)if((h->items[i].kind==XR_HIR_ITEM_PARAMETER_SCOPE||
         h->items[i].kind==XR_HIR_ITEM_METHOD)&&h->items[i].module==module&&h->items[i].node==node) {
-        if(found!=UINT32_MAX)return false;found=i;
+            if (found != UINT32_MAX)
+                return false;
+            found = i;
     }
-    if(found==UINT32_MAX)return false;*out=found;return true;
+    if (found == UINT32_MAX)
+        return false;
+    *out = found;
+    return true;
 }
 bool xr_hir_items_module(const XrHirItems *h,uint32_t item,uint32_t *out) {
-    if(!h||!out||item>=h->count)return false;*out=h->items[item].module;return true;
+    if (!h || !out || item >= h->count)
+        return false;
+    *out = h->items[item].module;
+    return true;
 }
 bool xr_hir_items_bind(XrHirItems *h,uint32_t item,void *binding) {
     if(!h||!binding||item>=h->count||h->items[item].binding)return false;
@@ -131,5 +156,9 @@ void *xr_hir_items_binding(const XrHirItems *h,uint32_t item) {return h&&item<h-
 bool xr_hir_items_errors(const XrHirItems *h){return h&&h->errors!=0;}
 bool xr_hir_items_has_report(const XrHirItems *h){return h&&h->report!=NULL;}
 XrFrontendReport *xr_hir_items_take_report(XrHirItems *h) {
-    if(!h)return NULL;XrFrontendReport *r=h->report;h->report=NULL;return r;
+    if (!h)
+        return NULL;
+    XrFrontendReport *r = h->report;
+    h->report = NULL;
+    return r;
 }

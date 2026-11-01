@@ -69,11 +69,15 @@ static XrXirStatus comptime_storage_copy(const XrXirCompileContext *context,cons
     XrXirStatus status=XR_XIR_OK;
     if (source->site_count) {
         output->sites=xir_type_copy_bytes(context,source->sites,source->site_count,sizeof(*source->sites),&status,control);
-        if (!output->sites) return status;output->site_count=source->site_count;
+        if (!output->sites)
+            return status;
+        output->site_count = source->site_count;
     }
     if (source->binding_count) {
         output->bindings=xir_type_copy_zero(context,source->binding_count,sizeof(*source->bindings),&status,control);
-        if (!output->bindings) return status;output->binding_count=source->binding_count;
+        if (!output->bindings)
+            return status;
+        output->binding_count = source->binding_count;
         uint32_t progress=0;
         for (uint32_t b=0;b<source->binding_count;++b) {
             status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;

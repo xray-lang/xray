@@ -260,12 +260,16 @@ static inline bool manifest_vformat(ManifestWriter *writer, const char *format, 
         while (byte>='0'&&byte<='9') {
             if (width>1000) return manifest_status(ctx,XR_MANIFEST_BAD_ARGUMENT);
             width=width*10+(unsigned)(byte-'0');
-            if (!((ctx)->status == XR_MANIFEST_OK))return false;byte=*format++;
+            if (!((ctx)->status == XR_MANIFEST_OK))
+                return false;
+            byte = *format++;
         }
         unsigned modifier=0;
         if (byte=='z') { modifier=1;if (!((ctx)->status == XR_MANIFEST_OK))return false;byte=*format++; }
         else if (byte=='l') {
-            if (!((ctx)->status == XR_MANIFEST_OK))return false;byte=*format++;
+            if (!((ctx)->status == XR_MANIFEST_OK))
+                return false;
+            byte = *format++;
             if (byte!='l')return manifest_status(ctx,XR_MANIFEST_BAD_ARGUMENT);
             modifier=2;if (!((ctx)->status == XR_MANIFEST_OK))return false;byte=*format++;
         }
@@ -273,8 +277,13 @@ static inline bool manifest_vformat(ManifestWriter *writer, const char *format, 
         if (byte=='s') {
             const char *text=va_arg(args,const char *);if(!text)text="(null)";
             for (;;) {
-                if(!((ctx)->status == XR_MANIFEST_OK))return false;char ch=*text++;
-                if(!ch)break;if(!manifest_put(writer,ch))return false;
+                if (!((ctx)->status == XR_MANIFEST_OK))
+                    return false;
+                char ch = *text++;
+                if (!ch)
+                    break;
+                if (!manifest_put(writer, ch))
+                    return false;
             }
             continue;
         }

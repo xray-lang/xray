@@ -510,7 +510,9 @@ XR_FUNC XrProcessStatus xtc_process_view(const XrToolchainProcess *p, XrProcessV
 static XrProcessStatus process_capture_init(XrCompileResources *r, XtcCapture *c, size_t limit) {
     c->limit = limit; c->cap = limit < 4096 ? limit + 1 : 4096;
     XrProcessStatus s = process_resource(xr_compile_resources_alloc(r, c->cap, (void **)&c->data));
-    if (s == XTC_PROCESS_OK) c->data[0] = 0; return s;
+    if (s == XTC_PROCESS_OK)
+        c->data[0] = 0;
+    return s;
 }
 static XrProcessStatus process_capture_append(XrCompileResources *r, XtcCapture *c, const uint8_t *bytes, size_t n) {
     size_t available = c->limit - c->len, accepted = n < available ? n : available;
@@ -521,7 +523,9 @@ static XrProcessStatus process_capture_append(XrCompileResources *r, XtcCapture 
         if (next < needed) next = needed;
         if (next > c->limit + 1) next = c->limit + 1;
         XrProcessStatus s = process_resource(xr_compile_resources_resize(r, (void **)&c->data, next));
-        if (s != XTC_PROCESS_OK) return s; c->cap = next;
+        if (s != XTC_PROCESS_OK)
+            return s;
+        c->cap = next;
     }
     memcpy(c->data + c->len, bytes, accepted); c->len += accepted; c->data[c->len] = 0;
     return XTC_PROCESS_OK;

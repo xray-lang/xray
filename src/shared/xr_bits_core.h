@@ -525,8 +525,10 @@ static inline int64_t xr_bits_exact_rotate_right(int64_t x, int64_t n, uint8_t n
  * portable 32x32 fallback keeps the header freestanding on toolchains without
  * __int128 or the MSVC intrinsic. */
 static inline uint64_t xr_bits_umulh64(uint64_t a, uint64_t b) {
-#if defined(__SIZEOF_INT128__)
-    return (uint64_t) (((unsigned __int128) a * (unsigned __int128) b) >> 64);
+#if defined(__SIZEOF_INT128__) && (defined(__GNUC__) || defined(__clang__))
+    /* Confine the optional provider extension to its capability-gated type. */
+    __extension__ typedef unsigned __int128 WideUnsigned;
+    return (uint64_t) (((WideUnsigned) a * (WideUnsigned) b) >> 64);
 #elif defined(_MSC_VER) && !defined(__clang__)
     return __umulh(a, b);
 #else
@@ -540,8 +542,9 @@ static inline uint64_t xr_bits_umulh64(uint64_t a, uint64_t b) {
 
 /* High 64 bits of the signed 128-bit product (AArch64 smulh / x86-64 imul high). */
 static inline int64_t xr_bits_smulh64(int64_t a, int64_t b) {
-#if defined(__SIZEOF_INT128__)
-    return (int64_t) (uint64_t) (((__int128) a * (__int128) b) >> 64);
+#if defined(__SIZEOF_INT128__) && (defined(__GNUC__) || defined(__clang__))
+    __extension__ typedef __int128 WideSigned;
+    return (int64_t) (uint64_t) (((WideSigned) a * (WideSigned) b) >> 64);
 #elif defined(_MSC_VER) && !defined(__clang__)
     return __mulh(a, b);
 #else

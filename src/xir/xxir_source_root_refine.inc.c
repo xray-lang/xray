@@ -134,7 +134,9 @@ static bool source_root_instruction(SourceContext *ctx, uint32_t f, uint32_t i,
     case XR_XIR_NULLABLE_SOME: {
         XrXirTypeNode nullable = *xr_xir_type_node(&ctx->types,op->type);
         nullable.element = source_root_operand(ctx,f,op->args[0]);
-        if (!source_intern_type(ctx,nullable,&type)) return false; break;
+        if (!source_intern_type(ctx, nullable, &type))
+            return false;
+        break;
     }
     case XR_XIR_NULLABLE_UNWRAP:
         type = xr_xir_nullable_element(&ctx->types,source_root_operand(ctx,f,op->args[0])); break;

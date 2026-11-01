@@ -98,7 +98,10 @@ static XrXirStatus view_root_path_pair(ViewRootCheck *c,const XrXirViewRootEvent
     if (left->opaque_suffix || right->opaque_suffix || left->kind==XR_XIR_VIEW_ROOT_UNRESOLVED ||
         right->kind==XR_XIR_VIEW_ROOT_UNRESOLVED) return XR_XIR_OK;
     uint32_t a=0,b=0;bool ao=false,bo=false;XrXirStatus status=view_root_class_suffix(c,left,&a,&ao);
-    if (status==XR_XIR_OK) status=view_root_class_suffix(c,right,&b,&bo);if (status!=XR_XIR_OK) return status;
+    if (status == XR_XIR_OK)
+        status = view_root_class_suffix(c, right, &b, &bo);
+    if (status != XR_XIR_OK)
+        return status;
     bool same=left->kind==right->kind && left->root_function==right->root_function && left->root_value==right->root_value;
     if (!ao && !bo && left->kind==XR_XIR_VIEW_ROOT_CELL && right->kind==XR_XIR_VIEW_ROOT_CELL && !same) {
         *output=true;return XR_XIR_OK;
@@ -132,7 +135,10 @@ static XrXirStatus view_root_save(void *user,const XrXirCompileContext *context,
     XrXirStatus status=XR_XIR_OK;ViewRootSaved *saved=xir_compile_alloc(context,(size_t)bytes,&status);if (!saved) return status;
     c->reserved+=bytes;saved->next=comparison->left;saved->event=*event;saved->bytes=bytes;
     XrXirViewRootStep *path=(XrXirViewRootStep *)(saved+1);uint32_t *selection=(uint32_t *)((unsigned char *)path+steps);
-    if (steps) memcpy(path,event->steps,(size_t)steps);if (selected) memcpy(selection,event->selection,(size_t)selected);
+    if (steps)
+        memcpy(path, event->steps, (size_t) steps);
+    if (selected)
+        memcpy(selection, event->selection, (size_t) selected);
     saved->event.steps=event->step_count?path:NULL;saved->event.selection=event->selection_count?selection:NULL;
     comparison->left=saved;return XR_XIR_OK;
 }
@@ -142,7 +148,9 @@ static XrXirStatus view_root_compare(void *user,const XrXirCompileContext *conte
     for (ViewRootSaved *p=comparison->left;p;p=p->next) {
 
         bool disjoint=false;XrXirStatus status=view_root_path_pair(&comparison->resolver->check,&p->event,event,&disjoint);
-        if (status!=XR_XIR_OK) return status;comparison->disjoint&=disjoint;
+        if (status != XR_XIR_OK)
+            return status;
+        comparison->disjoint &= disjoint;
     }
     return XR_XIR_OK;
 }
@@ -150,7 +158,9 @@ XR_FUNC XrXirStatus xir_compile_view_roots_disjoint(XirViewRootResolver *r,
     const XirViewRootRequest *left,const XirViewRootRequest *right,bool *output,XrXirDiagnostic *diagnostic) {
     if (output) *output=false;
     if (!r || !left || !right || !output || left->function!=right->function) return XR_XIR_BAD_STRUCTURE;
-    if (r->busy) return XR_XIR_BAD_STAGE;r->busy=true;
+    if (r->busy)
+        return XR_XIR_BAD_STAGE;
+    r->busy = true;
     ViewRootComparison comparison={r,NULL,true};XrXirStatus status=view_root_resolve(r,left,view_root_save,&comparison);
     if (status==XR_XIR_OK) status=view_root_resolve(r,right,view_root_compare,&comparison);
     while (comparison.left) {

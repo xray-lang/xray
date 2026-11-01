@@ -41,7 +41,9 @@ static void *view_access_allocate(ViewAccess *a,uint64_t bytes,XrXirStatus *stat
     void *p=xir_compile_calloc(c->context,1,(size_t)bytes,status);if (p) c->reserved+=bytes;return p;
 }
 static void view_access_release(ViewAccess *a,void *p,uint64_t bytes) {
-    if (!p) return;ViewRootCheck *c=&a->resolver->check;
+    if (!p)
+        return;
+    ViewRootCheck *c = &a->resolver->check;
     XR_CHECK(c->reserved>=bytes,"access observations remain owned by their exact compile ledger");
     c->reserved-=bytes;xr_compile_resources_free(p);
 }
@@ -110,7 +112,10 @@ static XrXirStatus view_access_save(void *user,const XrXirCompileContext *contex
     (void)context;XrXirStatus status=XR_XIR_OK;ViewAccessOrigin *p=view_access_allocate(r->access,bytes,&status);if (!p) return status;
     p->bytes=bytes;p->event=*event;p->queried_value=r->value;p->next=r->cache->origins;r->cache->origins=p;
     XrXirViewLoanChoice *branch=(XrXirViewLoanChoice *)(p+1);uint32_t *selected=(uint32_t *)((unsigned char *)branch+choices);
-    if (choices) memcpy(branch,event->choices,(size_t)choices);if (selections) memcpy(selected,event->selection,(size_t)selections);
+    if (choices)
+        memcpy(branch, event->choices, (size_t) choices);
+    if (selections)
+        memcpy(selected, event->selection, (size_t) selections);
     p->event.choices=event->choice_count?branch:NULL;p->event.selection=event->selection_count?selected:NULL;return XR_XIR_OK;
 }
 static XrXirStatus view_access_origins(ViewAccess *a,uint32_t value,ViewAccessOrigin **output) {
@@ -119,7 +124,9 @@ static XrXirStatus view_access_origins(ViewAccess *a,uint32_t value,ViewAccessOr
     if (!cache->ready) {
         ViewAccessReceiving receiving={a,cache,value};XirViewRootRequest request={a->function,value,a->instruction,NULL,0};
         XrXirStatus status=xir_compile_view_loan_origins(a->resolver,&request,view_access_save,&receiving,NULL);
-        if (status!=XR_XIR_OK) return status;cache->ready=true;
+        if (status != XR_XIR_OK)
+            return status;
+        cache->ready = true;
     }
     *output=cache->origins;return XR_XIR_OK;
 }

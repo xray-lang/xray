@@ -82,7 +82,9 @@ static XrXirStatus effect_runtime_key_leaf(const EffectRuntimeKeyRead *read,uint
         concrete=true;
     }
     XrXirStatus status=effect_runtime_work(&read->request->read,sizeof(*output));
-    if(status==XR_XIR_OK) *output=concrete && leaf;return status;
+    if (status == XR_XIR_OK)
+        *output = concrete && leaf;
+    return status;
 }
 
 /* Spans contain only numeric locations in this request. They neither retain
@@ -147,7 +149,9 @@ static XrXirStatus effect_runtime_key_literal(const EffectRuntimeKeyRead *read,
         if((projection->class_mask&flag) && word==read->basis.fn_words+cell/64) bits|=UINT64_C(1)<<(cell%64);
     }
     XrXirStatus status=effect_runtime_work(&read->request->read,6+sizeof(*output));
-    if(status==XR_XIR_OK) *output=bits;return status;
+    if (status == XR_XIR_OK)
+        *output = bits;
+    return status;
 }
 static XrXirStatus effect_runtime_key_row(const EffectRuntimeKeyRead *read,
     const EffectRuntimeKeyProjection *projection,const uint64_t *row,bool *matched) {
@@ -190,7 +194,9 @@ static XrXirStatus effect_runtime_key_row(const EffectRuntimeKeyRead *read,
         }
     }
     XrXirStatus status=effect_runtime_work(&read->request->read,sizeof(*matched));
-    if(status==XR_XIR_OK) *matched=same;return status;
+    if (status == XR_XIR_OK)
+        *matched = same;
+    return status;
 }
 static XrXirStatus effect_runtime_current_key(const EffectInvocationCertificate *certificate,
     const XirEffectInvocationRequest *request,const XrXirInstruction *op,uint32_t parent,

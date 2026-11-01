@@ -27,7 +27,9 @@ static XrXirCtfeStatus ctfe_external_argument_admit(const XrXirArtifact *artifac
     if (status!=XR_XIR_CTFE_OK) return status;
     status=ctfe_import_types_equal(&artifact->context,types,(XrXirType)value->type,artifact->module.types,target);
     if (status!=XR_XIR_CTFE_OK) return status;
-    if (source) *source=arena;return XR_XIR_CTFE_OK;
+    if (source)
+        *source = arena;
+    return XR_XIR_CTFE_OK;
 }
 typedef struct CtfeImportFrame {
     XrXirValue source,array;
@@ -186,13 +188,19 @@ static XrXirCtfeStatus ctfe_external_argument_store(ScalarRun *run,uint32_t offs
             state->frame_spare=import_spare-stack.bytes;
             if (frame.count) {
                 status=ctfe_import_child(run,state,arena,&stack.frames[stack.depth-1],&current,&target);
-                if (status!=XR_XIR_CTFE_OK) break;current_owned=true;continue;
+                if (status != XR_XIR_CTFE_OK)
+                    break;
+                current_owned = true;
+                continue;
             }
             status=ctfe_import_finish(run,state,&stack.frames[stack.depth-1],&result);
             if (status!=XR_XIR_CTFE_OK) break;
             ctfe_import_frame_drop(&stack,&stack.frames[--stack.depth]);
         }
-        if (current_owned) xr_xir_value_drop(&current);current=(XrXirValue){0};current_owned=false;
+        if (current_owned)
+            xr_xir_value_drop(&current);
+        current = (XrXirValue) {0};
+        current_owned = false;
         for (;;) {
             if (!stack.depth) goto done;
             state->frame_spare=import_spare-stack.bytes;
@@ -209,7 +217,10 @@ static XrXirCtfeStatus ctfe_external_argument_store(ScalarRun *run,uint32_t offs
             } else { frame->fields[frame->next]=result;result=(XrXirValue){0}; }
             if (++frame->next<frame->count) {
                 status=ctfe_import_child(run,state,arena,frame,&current,&target);
-                if (status!=XR_XIR_CTFE_OK) goto done;current_owned=true;break;
+                if (status != XR_XIR_CTFE_OK)
+                    goto done;
+                current_owned = true;
+                break;
             }
             status=ctfe_import_finish(run,state,frame,&result);
             if (status!=XR_XIR_CTFE_OK) goto done;

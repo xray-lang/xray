@@ -82,9 +82,21 @@ XrFrontendLocation xr_frontend_report_location(const XrFrontendReport *r,uint32_
         XrUtf8Step step=xr_utf8_core_decode_step((const uint8_t *)s->text+p,s->length-p);
         if(step.error!=XR_UTF8_OK || !step.scalar || step.consumed>end-p)return v;
         if(step.scalar=='\r') {if(p+1<s->length&&s->text[p+1]=='\n')++step.consumed;
-            if(step.consumed>end-p||urow==UINT32_MAX)return v;++urow;units=0;}
-        else if(step.scalar=='\n'){if(urow==UINT32_MAX)return v;++urow;units=0;}
-        else {uint32_t width=step.scalar>UINT32_C(0xffff)?2u:1u;if(units>UINT32_MAX-width)return v;units+=width;}
+            if (step.consumed > end - p || urow == UINT32_MAX)
+                return v;
+            ++urow;
+            units = 0;
+        } else if (step.scalar == '\n') {
+            if (urow == UINT32_MAX)
+                return v;
+            ++urow;
+            units = 0;
+        } else {
+            uint32_t width = step.scalar > UINT32_C(0xffff) ? 2u : 1u;
+            if (units > UINT32_MAX - width)
+                return v;
+            units += width;
+        }
         p+=step.consumed;
     }
     if(at==end){start_row=urow;start_units=units;}
@@ -102,14 +114,22 @@ XrCompileResourceStatus xr_frontend_report_add(XrFrontendReport *r,uint32_t code
     root.view.message=report_text(r,message,strlen(message),&s);
     root.labels=report_alloc(r,count,sizeof(*root.labels),&s);
     for(uint32_t i=0;i<count&&s==XR_COMPILE_RESOURCE_OK;++i){root.labels[i]=labels[i];root.labels[i].message=report_text(r,labels[i].message,strlen(labels[i].message),&s);}
-    if(s==XR_COMPILE_RESOURCE_OK)r->roots[r->count++]=root;return s;
+    if (s == XR_COMPILE_RESOURCE_OK)
+        r->roots[r->count++] = root;
+    return s;
 }
 void xr_frontend_report_seal(XrFrontendReport *r,bool complete) {if(r&&r->state==REPORT_BUILDING)r->state=complete?REPORT_COMPLETE:REPORT_INCOMPLETE;}
 bool xr_frontend_report_info(const XrFrontendReport *r,XrFrontendReportInfo *out) {
-    if(!r||!out||r->state==REPORT_BUILDING)return false;*out=(XrFrontendReportInfo){r->count,r->state==REPORT_COMPLETE};return true;
+    if (!r || !out || r->state == REPORT_BUILDING)
+        return false;
+    *out = (XrFrontendReportInfo) {r->count, r->state == REPORT_COMPLETE};
+    return true;
 }
 bool xr_frontend_report_root(const XrFrontendReport *r,uint32_t at,XrFrontendRoot *out) {
-    if(!r||!out||r->state==REPORT_BUILDING||at>=r->count)return false;*out=r->roots[at].view;return true;
+    if (!r || !out || r->state == REPORT_BUILDING || at >= r->count)
+        return false;
+    *out = r->roots[at].view;
+    return true;
 }
 bool xr_frontend_report_label(const XrFrontendReport *r,uint32_t root,uint32_t at,XrFrontendLabel *out) {
     if(!r||!out||r->state==REPORT_BUILDING||root>=r->count||at>=r->roots[root].view.labels)return false;

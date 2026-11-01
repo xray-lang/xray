@@ -1032,8 +1032,9 @@ static XrXirStatus cell_proof_resident_bytes(
     uint64_t count[]={proof->function_count,proof->value_count,proof->scope_count,words,proof->class_count,proof->class_dependency_count};
     uint64_t stride[]={sizeof(*proof->functions),3u+sizeof(uint32_t),sizeof(uint32_t),sizeof(uint64_t),sizeof(*proof->class_roots),sizeof(uint64_t)};
     for (uint32_t p=0;p<6;++p) {
-
-        if (count[p]>(UINT64_MAX-total)/stride[p]) return XR_XIR_BUDGET;total+=count[p]*stride[p];
+        if (count[p] > (UINT64_MAX - total) / stride[p])
+            return XR_XIR_BUDGET;
+        total += count[p] * stride[p];
     }
     *output=total;return XR_XIR_OK;
 }

@@ -872,9 +872,13 @@ static bool source_recipe_append(SourceContext *ctx, XrXirInstruction op, Source
     if (result) *result = (SourceValue) {.id=ctx->functions[ctx->function].parameter_count + body->count, .type=op.type,.place={0}};
     uint32_t environment=0;
     if (!source_debug_environment(ctx,&environment)) return false;
-    body->recipes[body->count] = (SourceInstructionRecipe){op,ctx->function,
-        ctx->functions[ctx->function].parameter_count+body->count,{0,op.type,UINT32_MAX},
-        ctx->debug_function==ctx->function ? ctx->debug_point : (XrXirSourceDebugPoint){0}};
+    body->recipes[body->count] = (SourceInstructionRecipe) {
+        op,
+        ctx->function,
+        ctx->functions[ctx->function].parameter_count + body->count,
+        {0, op.type, UINT32_MAX},
+        ctx->debug_function == ctx->function ? ctx->debug_point
+                                             : (XrXirSourceDebugPoint) {.flags = 0}};
     body->recipes[body->count].debug.environment=environment;
     if (ctx->debug_function==ctx->function && ctx->debug_entry && (op.op!=XR_XIR_JUMP || ctx->debug_jump_entry)) {
         body->recipes[body->count].debug.flags=XR_XIR_SOURCE_DEBUG_ENTRY;

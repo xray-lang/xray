@@ -398,14 +398,18 @@ static XrXirAction initialization_resume(XrXirCallView *view) {
     uint32_t *phase = view->state;
     if (*phase) {
         if (view->inbox.status == XR_XIR_CALL_THROWN)
-            return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, view->inbox.value, {0}, 0};
+            return (XrXirAction) {XR_XIR_ACTION_THROW,  0, NULL, 0, view->inbox.value,
+                                  {{0}, {0}, {0}, {0}}, 0};
         if (view->inbox.status != XR_XIR_CALL_RETURNED)
-            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};
+            return (XrXirAction) {XR_XIR_ACTION_FAULT,  0, NULL, 0, {0, 0, 0},
+                                  {{0}, {0}, {0}, {0}}, 0};
         if (*phase == 2)
-            return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, view->inbox.value, {0}, 0};
+            return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, view->inbox.value,
+                                  {{0}, {0}, {0}, {0}}, 0};
         uint32_t module = instance->current_module;
         if (instance->published_counts[module] != instance->program->module_slots[module])
-            return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};
+            return (XrXirAction) {XR_XIR_ACTION_FAULT,  0, NULL, 0, {0, 0, 0},
+                                  {{0}, {0}, {0}, {0}}, 0};
         instance->ready[module] = 1;
         instance_trace(instance, XR_XIR_MODULE_READY, module);
         ++instance->cursor;
@@ -414,20 +418,32 @@ static XrXirAction initialization_resume(XrXirCallView *view) {
     while (instance->cursor < instance->program->initialization_count &&
         instance->ready[instance->program->order[instance->cursor]]) {
         if (!xr_xir_domain_work(instance->domain,1))
-            return (XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,XR_XIR_CALL_LIMIT},{0},0};
+            return (XrXirAction) {
+                XR_XIR_ACTION_FAULT,  0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT},
+                {{0}, {0}, {0}, {0}}, 0};
         ++instance->cursor;
     }
     if (instance->cursor < instance->program->initialization_count) {
         instance->current_module = instance->program->order[instance->cursor];
         *phase = 1;
         instance_trace(instance, XR_XIR_MODULE_BEGIN, instance->current_module);
-        return (XrXirAction) {XR_XIR_ACTION_CALL, d->modules[instance->current_module].initializer,
-            NULL, 0, {0, 0, 0}, {0}, 0};
+        return (XrXirAction) {XR_XIR_ACTION_CALL,
+                              d->modules[instance->current_module].initializer,
+                              NULL,
+                              0,
+                              {0, 0, 0},
+                              {{0}, {0}, {0}, {0}},
+                              0};
     }
     instance->state = XR_XIR_INSTANCE_READY;
     *phase = 2;
-    return (XrXirAction) {XR_XIR_ACTION_CALL, instance->requested, view->arguments,
-        view->argument_count, instance->pending_function, {0}, 0};
+    return (XrXirAction) {XR_XIR_ACTION_CALL,
+                          instance->requested,
+                          view->arguments,
+                          view->argument_count,
+                          instance->pending_function,
+                          {{0}, {0}, {0}, {0}},
+                          0};
 }
 XR_FUNC bool xr_xir_instance_initialization_publication_missing(
     XrXirCallView *view, const XrXirAction *action) {
@@ -1996,9 +2012,10 @@ XrXirAction xr_xir_instance_panic_land(XrXirCallView *view, void *frame, XrXirAc
         if (status == XR_XIR_CALL_READY) xr_xir_owned_slot_move(frame, destination, &info);
     }
     if (status != XR_XIR_CALL_READY)
-        return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};
+        return (XrXirAction) {XR_XIR_ACTION_FAULT,  0, NULL, 0, {XR_XIR_I64, 0, status},
+                              {{0}, {0}, {0}, {0}}, 0};
     *pc = handler_pc;
-    return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {0}, 0};
+    return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {{0}, {0}, {0}, {0}}, 0};
 }
 
 #include "xxir_instance_binding.inc.c"
@@ -2050,10 +2067,17 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     }
     status=value_call_status(converted);if (status!=XR_XIR_CALL_READY) goto failed;
     status=xr_xir_call_execution_status(view);if (status!=XR_XIR_CALL_READY) goto failed;
-    return (XrXirAction){thrown?XR_XIR_ACTION_THROW:XR_XIR_ACTION_RETURN,0,NULL,0,*value,{0},0};
+    return (XrXirAction) {thrown ? XR_XIR_ACTION_THROW : XR_XIR_ACTION_RETURN,
+                          0,
+                          NULL,
+                          0,
+                          *value,
+                          {{0}, {0}, {0}, {0}},
+                          0};
 failed:
     if (value) xr_xir_value_drop(value);
-    return (XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{0},0};
+    return (XrXirAction) {XR_XIR_ACTION_FAULT,  0, NULL, 0, {XR_XIR_I64, 0, status},
+                          {{0}, {0}, {0}, {0}}, 0};
 }
 XR_FUNC void xr_xir_instance_native_callable_release(XrXirCallView *view,XrXirCallStatus reason) {
     (void)reason;

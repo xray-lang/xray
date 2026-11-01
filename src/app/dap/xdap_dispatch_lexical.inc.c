@@ -50,5 +50,7 @@ static XrXirStatus inspect_lexical(XdapAdapter *s,const XdapRequest *r,uint32_t 
     }
     xr_compile_resources_free(bindings);
     XDAP_TEXT(&body,"]}");status=inspect_finish(s,r,&body);
-    if (status!=XR_XIR_OK) inspect_rollback_values(s,before);return status;
+    if (status != XR_XIR_OK)
+        inspect_rollback_values(s, before);
+    return status;
 }

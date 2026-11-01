@@ -47,7 +47,9 @@ static XrXirRunStatus vm_channel_step(ScalarRun *run,VmState *state,
         status=send ? xr_xir_channel_try_send(&receiver,&message,op->type,admission,&output,&outcome) :
             xr_xir_channel_receive_result(&receiver,op->type,admission,&output,&outcome);
         if (status==XR_XIR_VALUE_OK && outcome==XR_XIR_CHANNEL_RETRY) {
-            *action=(XrXirAction){XR_XIR_ACTION_CONTINUE,0,NULL,0,{0},{0},0};return XR_XIR_RUN_OK;
+            *action =
+                (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {{0}, {0}, {0}, {0}}, 0};
+            return XR_XIR_RUN_OK;
         }
     } else {
         XrXirValue receiver=vm_value_operand(run,op->args[0]);
@@ -55,7 +57,9 @@ static XrXirRunStatus vm_channel_step(ScalarRun *run,VmState *state,
             XrXirChannelState outcome=XR_XIR_CHANNEL_RETRY;
             status=xr_xir_channel_close(&receiver,admission,&outcome);
             if (status==XR_XIR_VALUE_OK && outcome==XR_XIR_CHANNEL_RETRY) {
-                *action=(XrXirAction){XR_XIR_ACTION_CONTINUE,0,NULL,0,{0},{0},0};return XR_XIR_RUN_OK;
+                *action = (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0},
+                                         {{0}, {0}, {0}, {0}},   0};
+                return XR_XIR_RUN_OK;
             }
         } else {
             int64_t capacity=0;bool closed=false;

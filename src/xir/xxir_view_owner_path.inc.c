@@ -15,7 +15,10 @@ static XrXirStatus owner_path_edges(ViewOwnerPath *p,uint32_t b,bool *changed) {
     AffineCheck *a=&p->may.affine;
     for (uint32_t e=0;e<3;++e) {
         uint32_t target=0;bool present=false;XrXirStatus status=owner_path_edge(p,b,e,true,&target,&present);
-        if (status!=XR_XIR_OK) return status;if (!present) continue;
+        if (status != XR_XIR_OK)
+            return status;
+        if (!present)
+            continue;
         XR_CHECK(a->reachable[target],"conditional propagation stays inside its computed reachable segment");
         status=affine_copy(a,a->edge,e<2?a->current:p->may.panic);
         if (status==XR_XIR_OK && e<2) status=affine_phi_edge(a,b,target,false);
@@ -40,10 +43,14 @@ static XrXirStatus owner_path_phase(ViewOwnerPath *p,uint32_t start,uint32_t sto
     while (changed) {
         changed=false;
         for (uint32_t b=0;b<a->function->block_count;++b) {
-
-            if (!a->reachable[b] || b==stop) continue;a->location.block=b;
+            if (!a->reachable[b] || b == stop)
+                continue;
+            a->location.block = b;
             status=view_may_transfer(&p->may,b,false);
-            if (status==XR_XIR_OK) status=owner_path_edges(p,b,&changed);if (status!=XR_XIR_OK) return status;
+            if (status == XR_XIR_OK)
+                status = owner_path_edges(p, b, &changed);
+            if (status != XR_XIR_OK)
+                return status;
         }
     }
     if (stop!=UINT32_MAX) status=affine_copy(a,a->initial,a->inputs+(size_t)stop*a->words);
@@ -55,7 +62,9 @@ static XrXirStatus owner_path_result(ViewOwnerPath *p,bool *possible) {
     if (status!=XR_XIR_OK || p->conflicting) return status;
     for (uint32_t i=0;i<p->count;++i) {
         status=owner_path_phase(p,start,p->points[i].block,&reached);
-        if (status!=XR_XIR_OK || !reached) return status;start=p->points[i].block;
+        if (status != XR_XIR_OK || !reached)
+            return status;
+        start = p->points[i].block;
     }
     status=owner_path_phase(p,start,UINT32_MAX,&reached);if (status!=XR_XIR_OK) return status;
     uint32_t block=UINT32_MAX;
@@ -70,7 +79,9 @@ static XrXirStatus owner_path_result(ViewOwnerPath *p,bool *possible) {
     for (uint32_t i=a->function->blocks[block].first;i<p->request->instruction && status==XR_XIR_OK;++i) {
         status=affine_instruction(a,i,false);
     }
-    if (status==XR_XIR_OK) *possible=affine_has(a->current,affine_index(a,p->request->owner));return status;
+    if (status == XR_XIR_OK)
+        *possible = affine_has(a->current, affine_index(a, p->request->owner));
+    return status;
 }
 XR_FUNC XrXirStatus xir_compile_view_owner_path_possible(const XrXirCompileContext *context,
     const XrXirModule *module,const XirViewOwnerPathRequest *request,bool *possible,XrXirDiagnostic *diagnostic) {
@@ -93,7 +104,9 @@ XR_FUNC XrXirStatus xir_compile_view_owner_path_possible(const XrXirCompileConte
         .location={XR_XIR_OK,request->function,UINT32_MAX,request->instruction,XR_XIR_DIAGNOSTIC_NONE}}},.request=request};
     XrXirStatus status=XR_XIR_OK;uint8_t *flags=NULL;bool result=false;
     if (points) p.points=xir_compile_calloc(context,1,(size_t)points,&status);
-    if (status==XR_XIR_OK) status=xir_compile_view_flags_new(&limited,module->types,&flags);p.may.affine.types=flags;
+    if (status == XR_XIR_OK)
+        status = xir_compile_view_flags_new(&limited, module->types, &flags);
+    p.may.affine.types = flags;
     if (status==XR_XIR_OK && (!flags || !affine_owner(&p.may.affine,request->owner))) status=XR_XIR_BAD_TYPE;
     if (status==XR_XIR_OK) status=view_may_allocate(&p.may);
     if (status==XR_XIR_OK) status=owner_path_result(&p,&result);

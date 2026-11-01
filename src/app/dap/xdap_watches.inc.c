@@ -11,7 +11,10 @@ static bool watch_owner(const XdapAdapter *s) {
     return s && !s->busy && !s->closed && s->watch_count<=128 && s->watch_bytes<=s->config.message_limit;
 }
 XR_FUNC void xdap_watch_text_drop(XdapWatchText *text) {
-    if (!text) return;xr_compile_resources_free(text->bytes);*text=(XdapWatchText){0};
+    if (!text)
+        return;
+    xr_compile_resources_free(text->bytes);
+    *text = (XdapWatchText) {0};
 }
 XR_FUNC void xdap_watches_dispose(XdapAdapter *s) {
     XR_CHECK(s->watch_count<=128,"watch table stays within its finite owner");

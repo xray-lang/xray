@@ -63,7 +63,9 @@ static XrXirStatus view_root_parameter(ViewRootQuery *q,ViewOriginPair site,View
         const XrXirTypeNode *n=xr_xir_type_node(c->module->types,selected_type);
         if (!n) return XR_XIR_BAD_TYPE;
         if (field==UINT32_MAX) {
-            if (n->kind!=XR_XIR_TYPE_NULLABLE) return XR_XIR_BAD_TYPE;selected_type=n->element;
+            if (n->kind != XR_XIR_TYPE_NULLABLE)
+                return XR_XIR_BAD_TYPE;
+            selected_type = n->element;
         } else {
             if (n->kind!=XR_XIR_TYPE_TUPLE || field>=n->parameter_count) return XR_XIR_BAD_TYPE;
             selected_type=n->parameters[field].type;

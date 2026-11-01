@@ -125,7 +125,8 @@ static XrXirStatus effect_capture_emit(EffectCaptureRead *read,EffectCaptureFact
         uint32_t capacity=proof->capacity?proof->capacity:16;
         if(capacity>read->maximum) capacity=read->maximum;
         if(proof->capacity) capacity=capacity>read->maximum/2?read->maximum:capacity*2;
-        if(capacity<=proof->count || (uint64_t)capacity>SIZE_MAX/sizeof(fact)) return XR_XIR_BUDGET;
+        if (capacity <= proof->count || (capacity && sizeof(fact) > SIZE_MAX / (uint64_t) capacity))
+            return XR_XIR_BUDGET;
         /* Lookup loans never cross either allocator or release callbacks. */
         read->edge_views=NULL;read->edge_view_count=0;read->node_view=NULL;
         if(read->complete_scope) { read->node_views=NULL;read->node_view_count=0;read->actuals=NULL; }
@@ -237,7 +238,9 @@ static XrXirStatus effect_capture_kind(const EffectCaptureRead *read,const Effec
     else return XR_XIR_BAD_STRUCTURE;
     if(status!=XR_XIR_OK) return status;
     *output=effect_capture_type_kind(read->body.domain.types,type);
-    if(provided) *provided=type;return XR_XIR_OK;
+    if (provided)
+        *provided = type;
+    return XR_XIR_OK;
 }
 static XrXirStatus effect_capture_word(const EffectCaptureRead *read,EffectCaptureFact key,uint64_t *output) {
     key.bit=0;uint32_t at=0;XrXirStatus status=effect_capture_lower(read,&key,&at);if(status!=XR_XIR_OK) return status;

@@ -101,7 +101,11 @@ static XrXirCtfeStatus ctfe_value_graph_visit(ScalarRun *run,CtfeOwnedState *sta
         }
         if (descend && node && xr_xir_type_is_enum(run->module->types,(XrXirType)current.type)) {
             XrXirEnumBorrow borrowed={0};status=ctfe_value_status(xr_xir_enum_borrow(&current,&borrowed));
-            if (status!=XR_XIR_CTFE_OK) break;count=borrowed.field_count;if (!count) descend=false;
+            if (status != XR_XIR_CTFE_OK)
+                break;
+            count = borrowed.field_count;
+            if (!count)
+                descend = false;
         }
         if (descend) {
             /* Active ancestors detect actual object cycles; shared siblings
@@ -113,7 +117,10 @@ static XrXirCtfeStatus ctfe_value_graph_visit(ScalarRun *run,CtfeOwnedState *sta
                 uint64_t next=capacity?(uint64_t)capacity*2:1,bytes=next*sizeof(*stack),old=(uint64_t)capacity*sizeof(*stack);
                 if (next>UINT32_MAX || bytes>SIZE_MAX || old>ctfe_frame_spare(state) || bytes>ctfe_frame_spare(state)-old) { status=XR_XIR_CTFE_FRAME_LIMIT;break; }
                 void *memory=stack;status=ctfe_compile_status(xir_compile_resource_status(xr_compile_resources_resize(run->compile_resources,&memory,(size_t)bytes)));
-                if (status!=XR_XIR_CTFE_OK) break;stack=memory;capacity=(uint32_t)next;
+                if (status != XR_XIR_CTFE_OK)
+                    break;
+                stack = memory;
+                capacity = (uint32_t) next;
             }
             /* The borrowed binding lives in the retained immutable Function
              * object, never in the growing traversal vector. */
@@ -151,7 +158,10 @@ static XrXirCtfeStatus ctfe_value_graph_visit(ScalarRun *run,CtfeOwnedState *sta
                 if (!xr_xir_nullable_view(&frame->value,&some,&payload) || !some) { status=XR_XIR_CTFE_BAD_ARTIFACT;goto done; }
                 status=ctfe_value_status(xr_xir_value_copy(payload,&current));++frame->next;
             }
-            if (status!=XR_XIR_CTFE_OK) goto done;owned=true;break;
+            if (status != XR_XIR_CTFE_OK)
+                goto done;
+            owned = true;
+            break;
         }
     }
 done:
@@ -233,13 +243,18 @@ static XrXirCtfeStatus ctfe_array_step(ScalarRun *run,VmState *vm,CtfeOwnedState
         else {
             XrXirValue fill=ctfe_array_operand(run,op->args[1]);status=ctfe_value_graph_admit(run,state,&fill);
             if (status==XR_XIR_CTFE_OK) status=ctfe_array_elements_admit(run,state,(XrXirType)fill.type);
-            if (status!=XR_XIR_CTFE_OK) return status;value_status=xr_xir_array_repeat(op->type,count,&fill,&admission,&result);
+            if (status != XR_XIR_CTFE_OK)
+                return status;
+            value_status = xr_xir_array_repeat(op->type, count, &fill, &admission, &result);
         }
     } else if (op->op==XR_XIR_PLACE_READ) value_status=xr_xir_value_copy(&receiver,&result);
     else if (op->op==XR_XIR_PLACE_WRITE) {
         if (!place.payload) return XR_XIR_CTFE_NOT_SUPPORTED;
         XrXirValue value=ctfe_array_operand(run,ids[1]);status=ctfe_array_incoming_admit(run,state,&receiver_cell,&value);
-        if (status!=XR_XIR_CTFE_OK) return status;admission=ctfe_value_admission(state);XrXirValuePath path={0};
+        if (status != XR_XIR_CTFE_OK)
+            return status;
+        admission = ctfe_value_admission(state);
+        XrXirValuePath path = {0};
         value_status=xr_xir_value_path_write(&place,&path,&value,&admission,&fault);
     } else if (op->op==XR_XIR_ARRAY_GET) value_status=xr_xir_array_get(&receiver,ctfe_array_operand(run,ids[1]).payload,&admission,&result,&fault);
     else if (op->op==XR_XIR_ARRAY_LEN || op->op==XR_XIR_ARRAY_CAPACITY) {
@@ -253,7 +268,9 @@ static XrXirCtfeStatus ctfe_array_step(ScalarRun *run,VmState *vm,CtfeOwnedState
         if (!place.payload) return XR_XIR_CTFE_NOT_SUPPORTED;
         XrXirValue element=ctfe_array_operand(run,ids[op->op==XR_XIR_ARRAY_SET?2:1]);
         status=ctfe_array_incoming_admit(run,state,&receiver_cell,&element);
-        if (status!=XR_XIR_CTFE_OK) return status;admission=ctfe_value_admission(state);
+        if (status != XR_XIR_CTFE_OK)
+            return status;
+        admission = ctfe_value_admission(state);
         int64_t capacity=0;value_status=xr_xir_array_capacity(&receiver,&admission,&capacity);
         if (value_status!=XR_XIR_VALUE_OK) return ctfe_value_status(value_status);
         if ((uint64_t)capacity>(UINT64_MAX-4)/2) return XR_XIR_CTFE_OVERFLOW;

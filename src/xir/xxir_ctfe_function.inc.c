@@ -41,7 +41,9 @@ static XrXirValueStatus ctfe_function_admit(void *context,const XrXirFunctionBin
         return XR_XIR_VALUE_BAD_ARGUMENT;
     CtfeFunctionLease *lease=state->identity->functions;
     while (lease) {
-        if (lease==binding->owner) break;lease=lease->next;
+        if (lease == binding->owner)
+            break;
+        lease = lease->next;
     }
     if (!lease || lease->state!=state->identity || state->identity->artifact!=state->artifact || !state->reachable)
         return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -84,7 +86,9 @@ static XrXirCtfeStatus ctfe_function_binding(CtfeOwnedState *state,const XrXirVa
 
     const XrXirFunctionBinding *binding=xr_xir_function_binding(value);if (!binding) return XR_XIR_CTFE_BAD_ARTIFACT;
     XrXirCtfeStatus status=ctfe_value_status(ctfe_function_admit(state,binding,(XrXirType)value->type,NULL));
-    if (status==XR_XIR_CTFE_OK) *output=binding;return status;
+    if (status == XR_XIR_CTFE_OK)
+        *output = binding;
+    return status;
 }
 static XrXirCtfeStatus ctfe_function_step(ScalarRun *run,VmState *vm,CtfeOwnedState *state,uint32_t function) {
     const XrXirInstruction *op=&run->function->instructions[vm->instruction];
@@ -105,7 +109,9 @@ static XrXirCtfeStatus ctfe_function_step(ScalarRun *run,VmState *vm,CtfeOwnedSt
         state->context->resources,1,sizeof(CtfeFunctionLease),&memory)));if (status!=XR_XIR_CTFE_OK) return status;
     CtfeFunctionLease *lease=memory;CtfeOwnedState *identity=state->identity;
     *lease=(CtfeFunctionLease){NULL,identity->functions,identity,function,vm->instruction,origin_function,origin_instruction,entry,count,op->type};
-    if (lease->next) lease->next->previous=lease;identity->functions=lease;
+    if (lease->next)
+        lease->next->previous = lease;
+    identity->functions = lease;
     XrXirFunctionBinding binding={lease,ctfe_function_release,entry,captures,count};XrXirValue result={0};
     XrXirValueAdmission admission=ctfe_value_admission(state);
     XrXirValueStatus created=xr_xir_function_new(state->domain,state->arena,op->type,&binding,&admission,&result);

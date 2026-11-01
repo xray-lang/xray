@@ -44,7 +44,10 @@ static XrXirStatus body_binding_reserve(XrHirBody *body,XrHirBindingKey key,
         (size_t)map_count*sizeof(*map),(void **)&map));
     if(status==XR_XIR_OK)status=body_bytes(map,NULL,(size_t)map_count*sizeof(*map),control);
     for(uint32_t i=0;status==XR_XIR_OK&&i<body->binding_count;++i) {
-        if(!(i%64))status=body_poll(control);if(status!=XR_XIR_OK)break;
+        if (!(i % 64))
+            status = body_poll(control);
+        if (status != XR_XIR_OK)
+            break;
         if(!rows[i].is_declaration)continue;
         uint32_t slot=body_binding_hash(rows[i].declaration.key)&(map_count-1);
         while(map[slot]){status=body_poll(control);if(status!=XR_XIR_OK)break;slot=(slot+1)&(map_count-1);}
@@ -79,7 +82,9 @@ XR_FUNC XrXirStatus xr_hir_body_binding_declare(XrHirBody *body,const XrHirBindi
     if(input->storage==XR_HIR_BODY_UNIT_LOCAL&&(input->logical!=XR_XIR_UNIT||input->physical!=XR_XIR_UNIT||input->rebindable))
         return XR_XIR_BAD_STRUCTURE;
     if(input->has_annotation&&input->annotation!=input->logical) {
-        if(reason)*reason="binding annotation mismatch";return XR_XIR_BAD_TYPE;
+        if (reason)
+            *reason = "binding annotation mismatch";
+        return XR_XIR_BAD_TYPE;
     }
     if(input->mode!=XR_PARAM_READ&&input->mode!=XR_PARAM_REF)return XR_XIR_BAD_TYPE;
     for(uint32_t write=0;write<2;++write) {
@@ -99,7 +104,10 @@ XR_FUNC XrXirStatus xr_hir_body_binding_declare(XrHirBody *body,const XrHirBindi
     if((!input->rebindable||input->direct_borrowed)&&input->physical!=input->logical)return XR_XIR_BAD_STRUCTURE;
     XrHirBodyBinding previous={0};
     bool found=false;XrXirStatus status=xr_hir_body_binding_find(body,input->key,control,&previous,&found);
-    if(status!=XR_XIR_OK)return status;if(found)return XR_XIR_BAD_STRUCTURE;
+    if (status != XR_XIR_OK)
+        return status;
+    if (found)
+        return XR_XIR_BAD_STRUCTURE;
     char *name=NULL;uint32_t slot=0;
     if(status==XR_XIR_OK)status=xir_compile_resource_status(xr_compile_resources_alloc(body->resources,
         input->name_length+1,(void **)&name));
@@ -134,7 +142,9 @@ XR_FUNC XrXirStatus xr_hir_body_binding_instance(XrHirBody *body,XrHirBodyBindin
     body->bindings[body->binding_count]=row;*output=(XrHirBodyBinding){body,body->binding_count++};return XR_XIR_OK;
 }
 static XrXirStatus body_binding_failure(const char **reason,const char *message) {
-    if(reason)*reason=message;return XR_XIR_BAD_TYPE;
+    if (reason)
+        *reason = message;
+    return XR_XIR_BAD_TYPE;
 }
 XR_FUNC XrXirStatus xr_hir_body_binding_use(XrHirBody *body,XrHirBodyBinding binding,
     const XrHirBindingUseInput *input,XrCompileRequestControl *control,XrHirBindingAction *output,const char **reason) {
@@ -157,7 +167,9 @@ XR_FUNC XrXirStatus xr_hir_body_binding_use(XrHirBody *body,XrHirBodyBinding bin
         local?XR_HIR_BINDING_DIRECT:XR_HIR_BINDING_SLOT_VALUE;
     switch(input->kind) {
     case XR_HIR_BINDING_CAPTURE:
-        if(input->value!=decl.physical)return XR_XIR_BAD_STRUCTURE;break;
+        if (input->value != decl.physical)
+            return XR_XIR_BAD_STRUCTURE;
+        break;
     case XR_HIR_BINDING_PARAMETER:
         if(!decl.is_parameter)return XR_XIR_BAD_STRUCTURE;
         if((decl.mode==XR_PARAM_REF)!=xr_xir_type_is_cell(body->types,decl.physical))return XR_XIR_BAD_STRUCTURE;

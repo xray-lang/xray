@@ -124,9 +124,15 @@ XR_FUNC void xfmt_emit_throws_clause(XrFmtContext *ctx, const XrThrowsClause *cl
     }
 }
 XR_FUNC void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *type) {
-    if (!xfmt_healthy(ctx)) return; fmt_type_text(ctx, type, false); }
+    if (!xfmt_healthy(ctx))
+        return;
+    fmt_type_text(ctx, type, false);
+}
 XR_FUNC void xfmt_emit_type_structural(XrFmtContext *ctx, XrTypeRef *type) {
-    if (!xfmt_healthy(ctx)) return; fmt_type_text(ctx, type, true); }
+    if (!xfmt_healthy(ctx))
+        return;
+    fmt_type_text(ctx, type, true);
+}
 
 XR_FUNC void xfmt_emit_param_annotation(XrFmtContext *ctx, XrParamMode mode, XrTypeRef *tref) {
     if (!xfmt_healthy(ctx)) return;

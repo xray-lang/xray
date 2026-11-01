@@ -70,7 +70,9 @@ XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *body,const XrHirSignatureIn
     if(input->family==XR_HIR_CALL_CONSTRUCTOR)for(uint32_t a=0;a<input->constructor_argument_count;++a) {
         if(!(a%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
         if(input->constructor_accesses&&input->constructor_accesses[a]!=XR_CALL_ARG_PLAIN) {
-            if(reason)*reason="constructor argument requires a value";return XR_XIR_BAD_TYPE;
+            if (reason)
+                *reason = "constructor argument requires a value";
+            return XR_XIR_BAD_TYPE;
         }
     }
     if(count&&(sizeof(XrXirCallableParameter)+1)>SIZE_MAX/count)return XR_XIR_OVERFLOW;
@@ -79,7 +81,10 @@ XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *body,const XrHirSignatureIn
         (size_t)count*(sizeof(*parameters)+1),(void **)&parameters));
     if(status==XR_XIR_OK)status=body_bytes(parameters,NULL,(size_t)count*(sizeof(*parameters)+1),control);
     for(uint32_t p=0;status==XR_XIR_OK&&p<count;++p) {
-        if(!(p%64))status=body_poll(control);if(status!=XR_XIR_OK)break;
+        if (!(p % 64))
+            status = body_poll(control);
+        if (status != XR_XIR_OK)
+            break;
         if(input->family==XR_HIR_CALL_ARRAY&&!p) {
             /* This formal is an owned shape, not a provisional Unit type. */
             parameters[p]=(XrXirCallableParameter){(XrXirType)UINT32_MAX,XR_PARAM_READ};continue;
@@ -121,19 +126,27 @@ static XrXirStatus body_array_callback(const XrHirBody *body,const HirBodySignat
     const XrXirTypeNode *actual=xr_xir_callable_signature(body->types,type);
     XrHirArrayCallbackShape shape=call->callback;
     if(!actual||actual->parameter_count<shape.minimum||actual->parameter_count>shape.maximum) {
-        if(reason)*reason="Array callback requires a function of the declared shape";return XR_XIR_BAD_TYPE;
+        if (reason)
+            *reason = "Array callback requires a function of the declared shape";
+        return XR_XIR_BAD_TYPE;
     }
     if(!xr_xir_error_bound_accepts(body->types,actual->element,shape.error)) {
-        if(reason)*reason="Array callback error exceeds its declaration";return XR_XIR_BAD_TYPE;
+        if (reason)
+            *reason = "Array callback error exceeds its declaration";
+        return XR_XIR_BAD_TYPE;
     }
     for(uint32_t p=0;p<actual->parameter_count;++p) {
         XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;
         if(actual->parameters[p].type!=shape.parameters[p]||actual->parameters[p].mode!=XR_PARAM_READ) {
-            if(reason)*reason="Array callback parameter type differs from the element";return XR_XIR_BAD_TYPE;
+            if (reason)
+                *reason = "Array callback parameter type differs from the element";
+            return XR_XIR_BAD_TYPE;
         }
     }
     if(shape.has_result&&actual->result!=shape.result) {
-        if(reason)*reason="Array callback result differs from its declared result";return XR_XIR_BAD_TYPE;
+        if (reason)
+            *reason = "Array callback result differs from its declared result";
+        return XR_XIR_BAD_TYPE;
     }
     return XR_XIR_OK;
 }
@@ -163,7 +176,9 @@ XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *body,XrHirBodySignature
     if(callback&&input->kind==XR_HIR_CALL_VALUE&&declaration.callback_received)return XR_XIR_BAD_STRUCTURE;
     if((input->kind==XR_HIR_CALL_VALUE||input->kind==XR_HIR_CALL_EXACT||input->kind==XR_HIR_CALL_FINAL)&&
         input->type==XR_XIR_UNIT&&declaration.declaration.family!=XR_HIR_CALL_REQUIREMENT) {
-        if(input->reason)*input->reason="unit argument is not admitted";return XR_XIR_BAD_TYPE;
+        if (input->reason)
+            *input->reason = "unit argument is not admitted";
+        return XR_XIR_BAD_TYPE;
     }
     bool callback_final=callback&&input->kind==XR_HIR_CALL_FINAL;
     if(callback_final) {

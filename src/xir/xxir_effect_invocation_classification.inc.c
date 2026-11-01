@@ -190,7 +190,8 @@ static XrXirStatus effect_physical_record(const XrXirCompileContext *work,
         uint32_t capacity=body->capacity?body->capacity:8;
         if (capacity>body->values) capacity=body->values;
         else if (body->capacity) capacity=capacity>body->values/2?body->values:capacity*2;
-        if (capacity<=body->count || (uint64_t)capacity>SIZE_MAX/sizeof(*body->records))
+        if (capacity <= body->count ||
+            (capacity && sizeof(*body->records) > SIZE_MAX / (uint64_t) capacity))
             return XR_XIR_BUDGET;
         XrXirStatus status=XR_XIR_OK;
         EffectPhysicalRecord *records=xir_compile_alloc(work,(size_t)capacity*sizeof(*records),&status);
@@ -269,8 +270,10 @@ static inline XrXirStatus effect_physical_new(const XrXirCompileContext *work,
     const XrXirModule *module,EffectPhysicalDomain **output) {
     if (!xir_compile_context_valid(work) || !module || !output || *output ||
         (module->function_count && !module->functions)) return XR_XIR_BAD_STRUCTURE;
-    if (module->function_count>work->limits.functions ||
-        (uint64_t)module->function_count>SIZE_MAX/sizeof(EffectPhysicalFunction)) return XR_XIR_BUDGET;
+    if (module->function_count > work->limits.functions ||
+        (module->function_count &&
+         sizeof(EffectPhysicalFunction) > SIZE_MAX / (uint64_t) module->function_count))
+        return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     EffectPhysicalDomain *domain=xir_compile_calloc(work,1,sizeof(*domain),&status);
     if (!domain) return status;

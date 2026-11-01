@@ -25,5 +25,7 @@ static XrXirStatus inspect_globals(XdapAdapter *s,const XdapRequest *r,uint32_t 
         if (!emitted) break;
     }
     XDAP_TEXT(&body,"]}");status=inspect_finish(s,r,&body);
-    if (status!=XR_XIR_OK) inspect_rollback_values(s,before);return status;
+    if (status != XR_XIR_OK)
+        inspect_rollback_values(s, before);
+    return status;
 }

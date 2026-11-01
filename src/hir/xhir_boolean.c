@@ -11,7 +11,9 @@
 #include "../base/xchecks.h"
 
 static XrXirStatus boolean_failure(const char **reason,XrXirStatus status,const char *message) {
-    if(reason)*reason=message;return status;
+    if (reason)
+        *reason = message;
+    return status;
 }
 XR_FUNC XrXirStatus xr_hir_boolean_check(const XrXirTypes *types,const XrHirBooleanInput *input,
     XrCompileRequestControl *control,XrHirBoolean *output,const char **reason) {

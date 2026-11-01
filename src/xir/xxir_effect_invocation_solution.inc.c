@@ -367,7 +367,8 @@ static XrXirStatus effect_invocation_local_result_new(const XrXirCompileContext 
         !effect_body_material_shape(owner->final.material) || owner->final.material->resources!=work->resources)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t count=effect_body_count(owner->final.material);XrXirStatus status=XR_XIR_OK;
-    if (!count || (uint64_t)count>SIZE_MAX/sizeof(EffectFinalFunction)) return XR_XIR_BUDGET;
+    if (!count || (count && sizeof(EffectFinalFunction) > SIZE_MAX / (uint64_t) count))
+        return XR_XIR_BUDGET;
     EffectFinalFunctions *result=xir_compile_alloc(work,sizeof(*result),&status);
     if (!result) return status;
 

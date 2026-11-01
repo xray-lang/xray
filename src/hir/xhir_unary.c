@@ -12,7 +12,9 @@
 #include "../base/xchecks.h"
 
 static XrXirStatus unary_failure(const char **reason,XrXirStatus status,const char *message) {
-    if(reason)*reason=message;return status;
+    if (reason)
+        *reason = message;
+    return status;
 }
 XR_FUNC XrXirStatus xr_hir_unary_check(const XrXirTypes *types,const XrHirUnaryInput *input,
     XrCompileRequestControl *control,XrHirUnary *output,const char **reason) {

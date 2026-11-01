@@ -49,7 +49,8 @@ static XrXirRunStatus vm_atomic_step(ScalarRun *run, VmState *state,
         if (outcome.permission != XR_XIR_CALL_READY) return XR_XIR_RUN_BAD_ARTIFACT;
         if (outcome.status != XR_XIR_RUN_OK) return outcome.status;
         if (outcome.continuing) {
-            *action = (XrXirAction){XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};
+            *action =
+                (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {{0}, {0}, {0}, {0}}, 0};
             return XR_XIR_RUN_OK;
         }
     }

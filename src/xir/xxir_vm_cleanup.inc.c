@@ -22,7 +22,7 @@ static XrXirAction vm_cleanup_exit(ScalarRun *run, VmState *state) {
     }
     uint32_t target = run->view->scope_exit ? state->exit_target : 0;
     if (state->frontier == target)
-        return (XrXirAction){XR_XIR_ACTION_EXIT_DONE, 0, NULL, 0, {0}, {0}, 0};
+        return (XrXirAction) {XR_XIR_ACTION_EXIT_DONE, 0, NULL, 0, {0}, {{0}, {0}, {0}, {0}}, 0};
     if (!state->frontier || state->frontier > run->function->instruction_count)
         return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
     const XrXirInstruction *registration = &run->function->instructions[state->frontier - 1];
@@ -30,8 +30,13 @@ static XrXirAction vm_cleanup_exit(ScalarRun *run, VmState *state) {
     for (uint32_t i = 0; i < registration->args[1]; ++i)
         state->arguments[i] = vm_value_operand(run, run->function->operands[registration->args[0] + i]);
     state->cleanup_waiting = true;
-    return (XrXirAction){XR_XIR_ACTION_CALL, (uint32_t)registration->immediate, state->arguments,
-        registration->args[1], {0}, {0}, XR_XIR_ACTION_CLEANUP};
+    return (XrXirAction) {XR_XIR_ACTION_CALL,
+                          (uint32_t) registration->immediate,
+                          state->arguments,
+                          registration->args[1],
+                          {0},
+                          {{0}, {0}, {0}, {0}},
+                          XR_XIR_ACTION_CLEANUP};
 }
 static XrXirAction vm_cleanup_continue(ScalarRun *run, VmState *state) {
     state->leaving = false;
@@ -49,7 +54,7 @@ static XrXirAction vm_cleanup_continue(ScalarRun *run, VmState *state) {
     XrXirRunStatus status = scalar_edge(run, state->instruction, state->exit_block);
     if (status != XR_XIR_RUN_OK) return xr_xir_call_fault(status);
     state->instruction = run->function->blocks[state->exit_block].first;
-    return (XrXirAction){XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};
+    return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {{0}, {0}, {0}, {0}}, 0};
 }
 static XrXirRunStatus vm_cleanup_step(ScalarRun *run, VmState *state,
     const XrXirInstruction *op, XrXirAction *action) {

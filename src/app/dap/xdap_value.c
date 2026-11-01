@@ -55,7 +55,9 @@ XR_FUNC XrXirValueStatus xdap_value_shape(const XdapValueView *view,XdapValueSha
         shape.children=some ? 1 : 0;
     } else if (xr_xir_type_is_enum(types,(XrXirType)value->type)) {
         XrXirEnumBorrow borrow={0};XrXirValueStatus status=xr_xir_enum_borrow(value,&borrow);
-        if (status!=XR_XIR_VALUE_OK) return status;shape=(XdapValueShape){borrow.field_count,true};
+        if (status != XR_XIR_VALUE_OK)
+            return status;
+        shape = (XdapValueShape) {borrow.field_count, true};
     }
     *output=shape;return XR_XIR_VALUE_OK;
 }

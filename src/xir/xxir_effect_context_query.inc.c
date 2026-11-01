@@ -307,7 +307,8 @@ static XrXirStatus effect_context_base_owner_origins(const XrXirCompileContext *
         if (module->generics && module->generics[current].parameter_count) return XR_XIR_BAD_TYPE;
         ++count;
     }
-    if ((uint64_t)count>SIZE_MAX/sizeof(XrXirOrigin)) return XR_XIR_BUDGET;
+    if ((count && sizeof(XrXirOrigin) > SIZE_MAX / (uint64_t) count))
+        return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     XrXirOrigin *owners=count ? xir_compile_alloc(context,(size_t)count*sizeof(*owners),&status) : NULL;
     if (count && !owners) return status;

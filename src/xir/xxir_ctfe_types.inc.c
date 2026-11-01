@@ -159,7 +159,9 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
             if (!depth) { *output=information[frame->index];break; }
             CtfeTypeFrame *parent=&stack[depth-1];
             parent->dynamic|=information[frame->index].dynamic;
-            if (types->nodes[parent->index].kind==XR_XIR_TYPE_ARRAY) parent->pure_arrays=information[frame->index].pure_arrays;continue;
+            if (types->nodes[parent->index].kind == XR_XIR_TYPE_ARRAY)
+                parent->pure_arrays = information[frame->index].pure_arrays;
+            continue;
         }
 
         XrXirCallableParameter field=single?(XrXirCallableParameter){node->element,0}:
@@ -185,7 +187,9 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
             frame->dynamic=true;frame->pure_arrays=false;continue;
         }
         if (ctfe_result_type(field.type)) {
-            if (node->kind==XR_XIR_TYPE_ARRAY) frame->pure_arrays=field.type!=XR_XIR_UNIT;continue;
+            if (node->kind == XR_XIR_TYPE_ARRAY)
+                frame->pure_arrays = field.type != XR_XIR_UNIT;
+            continue;
         }
         const XrXirTypeNode *child=ctfe_execution_node(types,field.type,internal);
         if (!child) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
@@ -200,7 +204,9 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
         }
         if (colors[index]==2) {
             frame->dynamic|=information[index].dynamic;
-            if (node->kind==XR_XIR_TYPE_ARRAY) frame->pure_arrays=information[index].pure_arrays;continue;
+            if (node->kind == XR_XIR_TYPE_ARRAY)
+                frame->pure_arrays = information[index].pure_arrays;
+            continue;
         }
         if (depth>=types->count) { status=XR_XIR_CTFE_BAD_ARTIFACT;break; }
 
@@ -295,11 +301,15 @@ static XrXirCtfeStatus ctfe_tuple_scratch(const XrXirArtifact *artifact,uint32_t
     for (uint32_t i=0;i<body->instruction_count;++i) {
 
         if (ctfe_view_opcode(body->instructions[i].op)) {
-            if (body->instructions[i].op!=XR_XIR_VIEW_CLEANUP && count<2) count=2;continue;
+            if (body->instructions[i].op != XR_XIR_VIEW_CLEANUP && count < 2)
+                count = 2;
+            continue;
         }
         if (body->instructions[i].op==XR_XIR_ARRAY_NEW || body->instructions[i].op==XR_XIR_CLASS_NEW || body->instructions[i].op==XR_XIR_STRUCT_NEW || body->instructions[i].op==XR_XIR_ENUM_NEW || body->instructions[i].op==XR_XIR_FUNCTION_REF) {
             uint32_t arity=body->instructions[i].args[1];
-            if (arity>count) count=arity;continue;
+            if (arity > count)
+                count = arity;
+            continue;
         }
         if (body->instructions[i].op!=XR_XIR_TUPLE_NEW) continue;
         const XrXirTypeNode *tuple=xr_xir_tuple_signature(artifact->module.types,body->instructions[i].type);

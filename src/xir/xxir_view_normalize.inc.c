@@ -70,7 +70,9 @@ static XrXirStatus view_normalize_visit(void *user,const XrXirCompileContext *co
         uint64_t bytes=(uint64_t)f->instruction_count*2u*sizeof(ViewDropPlan *);
         if (bytes>SIZE_MAX || bytes>context->limits.frame_bytes) return XR_XIR_BUDGET;
         plan->before=xir_compile_calloc(context,(size_t)f->instruction_count*2u,sizeof(*plan->before),&status);
-        if (!plan->before) return status;plan->after=plan->before+f->instruction_count;
+        if (!plan->before)
+            return status;
+        plan->after = plan->before + f->instruction_count;
     }
     if (event->kind==XR_XIR_VIEW_LIVE_ENTRY) {
         const XrXirBlock *block=f->blocks+event->block;uint32_t at=block->first;
@@ -247,7 +249,9 @@ static XrXirStatus view_normalize_verified(const XrXirCompileContext *context,
         }
     }
     XirViewNormalization *n=xir_compile_calloc(context,1,sizeof(*n),&status);
-    if (!n) return status;n->module=*module;
+    if (!n)
+        return status;
+    n->module = *module;
     builder.plans=xir_compile_calloc(context,module->function_count,sizeof(*builder.plans),&status);
     n->functions=xir_compile_calloc(context,module->function_count,sizeof(*n->functions),&status);
     n->bodies=xir_compile_copy(context,module->functions,(size_t)module->function_count*sizeof(*n->bodies),&status);

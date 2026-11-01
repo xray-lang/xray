@@ -38,7 +38,8 @@ static XrXirStatus effect_body_runs_reserve(const XrXirCompileContext *work,
         capacity=capacity>UINT32_MAX/2?function->instruction_count:capacity*2;
     }
     if (capacity>function->instruction_count) capacity=function->instruction_count;
-    if ((uint64_t)capacity>(SIZE_MAX-sizeof(EffectBodyRunStorage))/sizeof(*function->runs))
+    if ((capacity &&
+         sizeof(*function->runs) > (SIZE_MAX - sizeof(EffectBodyRunStorage)) / (uint64_t) capacity))
         return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     EffectBodyRunStorage *owner=xir_compile_alloc(work,

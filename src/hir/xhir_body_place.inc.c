@@ -1,7 +1,9 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License.
  * Places own the ordered root and projections; selectors are evaluated IDs. */
 static XrXirStatus body_place_failure(const XrHirPlaceInput *input,const char **reason,const char *text) {
-    if(reason)*reason=input->failure?input->failure:text;return XR_XIR_BAD_TYPE;
+    if (reason)
+        *reason = input->failure ? input->failure : text;
+    return XR_XIR_BAD_TYPE;
 }
 static XrXirStatus body_place_root(XrHirBody *body,const XrHirPlaceInput *input,HirBodyPlace *row,
     XrHirPlaceAction *action,const char **reason,XrCompileRequestControl *control) {
@@ -175,5 +177,10 @@ XR_FUNC XrXirStatus xr_hir_body_place(XrHirBody *body,const XrHirPlaceInput *inp
     row.depth+=input->parent.owner?1u:0u;
     ((HirBodyPlace *)body->places.items)[body->places.count]=row;
     action.place=(XrHirBodyPlace){body,body->places.count++};
-    if(record->required_instruction)record->place=action.place;if(input->kind!=XR_HIR_PLACE_ROUTE)action.object_root=row.object_root;*output=action;return XR_XIR_OK;
+    if (record->required_instruction)
+        record->place = action.place;
+    if (input->kind != XR_HIR_PLACE_ROUTE)
+        action.object_root = row.object_root;
+    *output = action;
+    return XR_XIR_OK;
 }

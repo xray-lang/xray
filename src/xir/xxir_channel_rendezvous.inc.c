@@ -158,7 +158,9 @@ static XrXirValueStatus channel_rendezvous_send_begin(const XrXirValue *value,co
     xr_xir_class_publication_drop(&publication);channel_send_wait_release_list(released);
     if (status==XR_XIR_VALUE_OK && outcome==XR_XIR_CHANNEL_SEND_WAIT_PENDING) *output=send;
     else xr_xir_channel_send_wait_drop(send);
-    if (status==XR_XIR_VALUE_OK) *state=outcome;return status;
+    if (status == XR_XIR_VALUE_OK)
+        *state = outcome;
+    return status;
 }
 XR_FUNC XrXirValueStatus xr_xir_channel_rendezvous_send_begin(const XrXirValue *value,const XrXirValue *message,
     XrXirValueAdmission *admission,XrXirChannelSendWait **output,XrXirChannelSendWaitState *state) {

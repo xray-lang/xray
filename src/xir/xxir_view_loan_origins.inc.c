@@ -22,7 +22,9 @@ static XrXirStatus view_loan_selected(ViewLoanQuery *q,ViewOriginPair site,uint3
         const XrXirTypeNode *node=xr_xir_type_node(c->module->types,*type);
         uint32_t field=q->root.selections.pairs[p-1u].first;if (!node) return XR_XIR_BAD_TYPE;
         if (field==UINT32_MAX) {
-            if (node->kind!=XR_XIR_TYPE_NULLABLE) return XR_XIR_BAD_TYPE;*type=node->element;
+            if (node->kind != XR_XIR_TYPE_NULLABLE)
+                return XR_XIR_BAD_TYPE;
+            *type = node->element;
         } else {
             if (node->kind!=XR_XIR_TYPE_TUPLE || field>=node->parameter_count) return XR_XIR_BAD_TYPE;
             *type=node->parameters[field].type;
@@ -45,7 +47,9 @@ static XrXirStatus view_loan_emit(ViewLoanQuery *q,ViewOriginPair site,ViewOrigi
     if (bytes>SIZE_MAX || c->reserved>c->context->limits.frame_bytes ||
         bytes>c->context->limits.frame_bytes-c->reserved) return XR_XIR_BUDGET;
     unsigned char *storage=bytes?xir_compile_alloc(c->context,(size_t)bytes,&status):NULL;
-    if (bytes && !storage) return status;c->reserved+=bytes;
+    if (bytes && !storage)
+        return status;
+    c->reserved += bytes;
     XrXirViewLoanChoice *branch=choices?(XrXirViewLoanChoice *)storage:NULL;
     uint32_t *selected=selections?(uint32_t *)(storage+(size_t)choices*sizeof(*branch)):NULL,index=0;
     for (uint32_t p=context.first;p;p=q->root.paths.pairs[p-1u].second) {
@@ -160,7 +164,10 @@ static XrXirStatus view_loan_resolve(XirViewRootResolver *resolver,const XirView
 }
 XR_FUNC XrXirStatus xir_compile_view_loan_origins(XirViewRootResolver *resolver,
     const XirViewRootRequest *request,XrXirViewLoanOriginVisitor visitor,void *user,XrXirDiagnostic *diagnostic) {
-    if (!resolver) return XR_XIR_BAD_STRUCTURE;if (resolver->busy) return XR_XIR_BAD_STAGE;
+    if (!resolver)
+        return XR_XIR_BAD_STRUCTURE;
+    if (resolver->busy)
+        return XR_XIR_BAD_STAGE;
     resolver->busy=true;XrXirStatus status=view_loan_resolve(resolver,request,visitor,user);resolver->busy=false;
     ViewRootCheck *c=&resolver->check;
     if (status!=XR_XIR_OK && diagnostic) {*diagnostic=c->location;diagnostic->status=status;}

@@ -230,7 +230,9 @@ static XrXirStatus expression_compiled(ExpressionState *state,XrXirValue *output
         const ExpressionBinding *binding=&state->bindings[i];XrXirType type=(XrXirType)binding->value.type;
         if (type!=XR_XIR_BOOL && !xr_xir_type_is_integer(type)) { source.status=XR_XIR_BAD_TYPE;break; }
         const char *name=expression_primitive(type);
-        if (i) xdap_json_text(&source,",",1);xdap_json_text(&source,binding->name,binding->length);
+        if (i)
+            xdap_json_text(&source, ",", 1);
+        xdap_json_text(&source, binding->name, binding->length);
         xdap_json_text(&source,":",1);xdap_json_text(&source,name,strlen(name));scalar_arguments[i]=binding->value;
     }
     xdap_json_text(&source,")",1);

@@ -88,7 +88,10 @@ XRAY_API XrSourceStatus xray_source_value_copy(const XrSourceValue *value,XrSour
     return api_value_wrap(value->resources,&value->value,output);
 }
 XRAY_API void xray_source_value_free(XrSourceValue *value) {
-    if(!value)return;xr_xir_value_drop(&value->value);xr_compile_resources_free(value);
+    if (!value)
+        return;
+    xr_xir_value_drop(&value->value);
+    xr_compile_resources_free(value);
 }
 XRAY_API XrSourceStatus xray_source_value_kind(const XrSourceValue *value,XrSourceValueKind *output) {
     if(!value || !output)return XR_SOURCE_BAD_ARGUMENT;
@@ -149,7 +152,9 @@ XRAY_API XrSourceStatus xray_source_value_format(const XrSourceValue *value,XrSo
     if(!xr_xir_value_valid(&value->value))return XR_SOURCE_INVALID;
     const XrXirValue *source=&value->value;XrXirValue borrowed={0};
     if(source->type==XR_XIR_ERROR) {
-        if(!xr_xir_error_borrow(source,&borrowed))return XR_SOURCE_INVALID;source=&borrowed;
+        if (!xr_xir_error_borrow(source, &borrowed))
+            return XR_SOURCE_INVALID;
+        source = &borrowed;
     }
     ApiFormat output={write?write:api_stdio,context,XR_SOURCE_STDOUT,XR_SOURCE_WRITE_OK};
     XrXirFormatContext format={0};

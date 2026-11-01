@@ -273,7 +273,9 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
             }
             if (ctfe_owned_equal_opcode(&run,&body->instructions[state->instruction])) {
                 status=ctfe_owned_equal_step(&run,&state->instruction,&owned);
-                if (status!=XR_XIR_CTFE_OK) break;continue;
+                if (status != XR_XIR_CTFE_OK)
+                    break;
+                continue;
             }
             if (ctfe_nominal_opcode(body->instructions[state->instruction].op)) {
                 status=ctfe_nominal_step(&run,state,&owned);if (status!=XR_XIR_CTFE_OK) break;continue;

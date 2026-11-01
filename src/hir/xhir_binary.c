@@ -11,7 +11,9 @@
 #include "../base/xchecks.h"
 
 static XrXirStatus binary_failure(const char **reason,XrXirStatus status,const char *message) {
-    if(reason)*reason=message;return status;
+    if (reason)
+        *reason = message;
+    return status;
 }
 static XrXirStatus binary_operation(const XrHirConversionContext *context,
     const XrHirBinaryInput *input,XrHirBinary *node,XrXirType *target,const char **reason) {

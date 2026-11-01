@@ -74,7 +74,9 @@ static XrXirStatus effect_body_advertisements_append(EffectBodyAdvertisementBuil
         uint32_t capacity=builder->capacity?builder->capacity:8;
         if (capacity>function->values) capacity=function->values;
         else if (builder->capacity) capacity=capacity>function->values/2?function->values:capacity*2;
-        if (capacity<=function->count || (uint64_t)capacity>SIZE_MAX/sizeof(*function->bounds)) return XR_XIR_BUDGET;
+        if (capacity <= function->count ||
+            (capacity && sizeof(*function->bounds) > SIZE_MAX / (uint64_t) capacity))
+            return XR_XIR_BUDGET;
         XrXirStatus status=XR_XIR_OK;
         EffectInvocationValueBound *fresh=xir_compile_alloc(builder->work,(size_t)capacity*sizeof(*fresh),&status);
         if (!fresh) return status;

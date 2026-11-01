@@ -37,7 +37,9 @@ static bool source_pattern_integer_key(SourceContext *ctx, AstNode *node, XrXirT
     if (!source_direct_integer(ctx,node,&literal)) return false;
     if (!literal.present) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"range endpoint constant is not admitted");
     SourceNumericRequest request={&literal,NULL,{true,type,false,false},true};XrHirLiteral checked={0};
-    if (!source_hir_literal(ctx,node,&request,&checked)) return false;bits=checked.bits;
+    if (!source_hir_literal(ctx, node, &request, &checked))
+        return false;
+    bits = checked.bits;
     *key=(bits&source_pattern_integer_max(type))^source_pattern_integer_bias(type);
     return true;
 }
@@ -108,7 +110,9 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
             SourceInteger integer;
             if (!source_direct_integer(ctx,path,&integer) || !integer.present) return false;
             SourceNumericRequest request={&integer,NULL,{true,type,false,false},true};XrHirLiteral checked={0};
-            if (!source_hir_literal(ctx,path,&request,&checked)) return false;bits=checked.bits;
+            if (!source_hir_literal(ctx, path, &request, &checked))
+                return false;
+            bits = checked.bits;
             if (xr_xir_type_is_integer(type)) {
                 out->interval=true;
                 out->low=(bits&source_pattern_integer_max(type))^source_pattern_integer_bias(type); out->high=out->low;
@@ -117,7 +121,9 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
             SourceDecimal decimal;
             if (!source_direct_decimal(ctx,path,&decimal) || !decimal.node) return false;
             SourceNumericRequest request={NULL,&decimal,{true,type,false,false},true};XrHirLiteral checked={0};
-            if (!source_hir_literal(ctx,path,&request,&checked)) return false;bits=checked.bits;
+            if (!source_hir_literal(ctx, path, &request, &checked))
+                return false;
+            bits = checked.bits;
         }
         if (!source_copy_bytes(ctx, path, &out->literal_payload, &bits, sizeof(bits))) return false;
         return source_query_expression(ctx,path,type);

@@ -151,5 +151,7 @@ static XrXirStatus effect_runtime_origin_member(const EffectInvocationCertificat
     if(status==XR_XIR_OK) status=effect_runtime_origin_shape(&read,&value,
         certificate->body->functions[node->body].parameters[parameter],0,&captures);
     if(status==XR_XIR_OK) status=effect_runtime_origin_walk(&read,parameter,&value,captures);
-    if(status==XR_XIR_OK) *output=true;return status;
+    if (status == XR_XIR_OK)
+        *output = true;
+    return status;
 }

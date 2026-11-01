@@ -68,7 +68,9 @@ static XrXirStatus materialization_data_type(const XrXirCompileContext *context,
         uint32_t index=(uint32_t)child-XR_XIR_CONSTRUCTED_TYPE_BASE;
         if (colors[index]==1) {
             status=materialization_type_cycle(types,stack,depth,child);
-            if (status!=XR_XIR_OK) break;continue;
+            if (status != XR_XIR_OK)
+                break;
+            continue;
         }
         if (colors[index]==2) continue;
         if (depth==types->count) { status=XR_XIR_BAD_STRUCTURE;break; }

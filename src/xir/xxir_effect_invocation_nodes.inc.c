@@ -359,7 +359,8 @@ static XrXirStatus effect_invocation_edge(EffectInvocationWorkspace *owner,
     }
     if (owner->final.edge_count==owner->final.edge_capacity) {
         uint32_t maximum=owner->maximum;
-        if ((uint64_t)maximum>SIZE_MAX/sizeof(*owner->final.edges)) return XR_XIR_BUDGET;
+        if ((maximum && sizeof(*owner->final.edges) > SIZE_MAX / (uint64_t) maximum))
+            return XR_XIR_BUDGET;
         uint32_t capacity=owner->final.edge_capacity ? owner->final.edge_capacity : 8;
         if (capacity>maximum) capacity=maximum;
         else if (owner->final.edge_capacity) capacity=capacity>maximum/2 ? maximum : capacity*2;

@@ -341,7 +341,9 @@ static bool source_call_spread_events(SourceContext *ctx,AstNode *node,const Sou
          * siblings keep their contexts, including empty Array literals. */
         SourceTuplePrefix *prefix=source_recipe_storage(ctx,1,sizeof(*prefix));
         if (!prefix) return false;
-        if(!source_tuple_prefix(ctx,fields,spread->count,NULL,prefix))return false;literal->tuple_prefix=prefix;
+        if (!source_tuple_prefix(ctx, fields, spread->count, NULL, prefix))
+            return false;
+        literal->tuple_prefix = prefix;
     }
     return true;
 }

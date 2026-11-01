@@ -334,7 +334,10 @@ XRAY_API XrSourceStatus xray_source_build(const XrSourceInput *input,const XrSou
 }
 #include "xsource_ast_api.inc.c"
 XRAY_API XrSourceStatus xray_source_artifact_info(const XrSourceArtifact *program,XrSourceArtifactInfo *output) {
-    if(!program || !output)return XR_SOURCE_BAD_ARGUMENT;*output=program->info;return XR_SOURCE_OK;
+    if (!program || !output)
+        return XR_SOURCE_BAD_ARGUMENT;
+    *output = program->info;
+    return XR_SOURCE_OK;
 }
 XRAY_API void xray_source_artifact_free(XrSourceArtifact *artifact) {
     if (!artifact) return;
@@ -412,7 +415,9 @@ static XrSourceStatus api_prepare_names(XrXirSourceProduct *product,XrSourceArti
         if(identity->module!=declarations->root_module || !identity->exported ||
             identity->method_kind!=XR_XIR_NON_MEMBER || identity->cleanup_owner || !function->name_length)
             continue;
+#if SIZE_MAX <= UINT32_MAX
         if((uint64_t)function->name_length>=SIZE_MAX){status=XR_SOURCE_OVERFLOW;break;}
+#endif
         ApiNamedEntry *entry=&artifact->names[artifact->name_count];
         status=api_resource(xr_compile_resources_calloc(artifact->resources,
             (size_t)function->name_length+1u,1,(void **)&entry->name));
@@ -503,7 +508,9 @@ XRAY_API XrSourceStatus xray_source_call_resume(XrSourceCall *call,uint64_t epoc
     if(!call)return XR_SOURCE_BAD_ARGUMENT;
     if(call->busy)return XR_SOURCE_BUSY;
     call->busy=true;XrXirCallStatus status=xr_xir_host_call_resume(call->host,epoch,wake);call->busy=false;
-    if(status==XR_XIR_CALL_READY)call->observed=XR_XIR_CALL_READY;return api_call(status);
+    if (status == XR_XIR_CALL_READY)
+        call->observed = XR_XIR_CALL_READY;
+    return api_call(status);
 }
 XRAY_API XrSourceStatus xray_source_call_wait_request(const XrSourceCall *call,uint64_t epoch,uint64_t wake,XrSourceWait *output,size_t size) {
     if(!call || !output || size!=sizeof(*output))return XR_SOURCE_BAD_ARGUMENT;
@@ -524,7 +531,9 @@ XRAY_API XrSourceStatus xray_source_call_cancel(XrSourceCall *call) {
     if(!call)return XR_SOURCE_BAD_ARGUMENT;
     if(call->busy)return XR_SOURCE_BUSY;
     call->busy=true;XrXirCallStatus status=xr_xir_host_call_request_cancel(call->host);call->busy=false;
-    if(status==XR_XIR_CALL_CANCEL_REQUESTED)call->observed=XR_XIR_CALL_READY;return api_call(status);
+    if (status == XR_XIR_CALL_CANCEL_REQUESTED)
+        call->observed = XR_XIR_CALL_READY;
+    return api_call(status);
 }
 XRAY_API XrSourceStatus xray_source_call_take(XrSourceCall *call,XrSourceResult **output) {
     if(!call || !output || *output)return XR_SOURCE_BAD_ARGUMENT;
@@ -575,10 +584,16 @@ XRAY_API XrSourceStatus xray_source_artifact_execute(XrSourceExecution *executio
 #include "xsource_entry_api.inc.c"
 #include "xsource_instance_api.inc.c"
 XRAY_API XrSourceStatus xray_source_result_event(const XrSourceResult *result,XrSourceEvent *output) {
-    if(!result || !output)return XR_SOURCE_BAD_ARGUMENT;*output=api_event(result->value.status,0,result->value.wake);return XR_SOURCE_OK;
+    if (!result || !output)
+        return XR_SOURCE_BAD_ARGUMENT;
+    *output = api_event(result->value.status, 0, result->value.wake);
+    return XR_SOURCE_OK;
 }
 XRAY_API XrSourceStatus xray_source_result_i64(const XrSourceResult *result,int64_t *output) {
-    if(!result || !output)return XR_SOURCE_BAD_ARGUMENT;if(result->value.value.type!=XR_XIR_I64)return XR_SOURCE_INVALID;
+    if (!result || !output)
+        return XR_SOURCE_BAD_ARGUMENT;
+    if (result->value.value.type != XR_XIR_I64)
+        return XR_SOURCE_INVALID;
     *output=result->value.value.payload;return XR_SOURCE_OK;
 }
 XRAY_API XrSourceStatus xray_source_result_bytes(const XrSourceResult *result,const char **bytes,size_t *length) {
@@ -612,7 +627,10 @@ XRAY_API XrSourceStatus xray_source_result_format(const XrSourceResult *result,X
         out.status==XR_SOURCE_WRITE_IO?XR_SOURCE_IO:XR_SOURCE_INVALID;
 }
 XRAY_API void xray_source_result_free(XrSourceResult *result) {
-    if(!result)return;xr_xir_call_result_drop(&result->value);xr_compile_resources_free(result);
+    if (!result)
+        return;
+    xr_xir_call_result_drop(&result->value);
+    xr_compile_resources_free(result);
 }
 #include "xsource_value_api.inc.c"
 #include "xsource_value_projection_api.inc.c"

@@ -1073,7 +1073,9 @@ XR_FUNC XrXirStatus xir_effects_class_call_access_site(XirEffectDefaultAccessSco
         }
     }
     if (status==XR_XIR_OK && scope->graph.default_access_denied[query.callee]) status=XR_XIR_UNRESOLVED;
-    if (status!=XR_XIR_OK) scope->status=status;return status;
+    if (status != XR_XIR_OK)
+        scope->status = status;
+    return status;
 }
 XR_FUNC XrXirStatus xir_effects_default_access_operation_input(const XrXirCompileContext *context,
     XirEffectInput input,XirEffectDefaultAccessOperation operation,void *data) {

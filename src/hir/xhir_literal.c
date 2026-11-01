@@ -15,7 +15,9 @@
 #include <string.h>
 
 static XrXirStatus literal_failure(const char **reason,XrXirStatus status,const char *message) {
-    if(reason)*reason=message;return status;
+    if (reason)
+        *reason = message;
+    return status;
 }
 static XrXirStatus literal_poll(XrCompileRequestControl *control,const char **reason) {
     XrXirStatus status=control?xir_compile_resource_status(xr_compile_request_control_poll(control)):XR_XIR_OK;
@@ -27,7 +29,9 @@ static bool literal_integer_float(const XrHirLiteralInput *input,XrXirType type,
     if(xr_xir_integer_to_float(format,xr_xir_float_bits(type),magnitude,bits)!=XR_XIR_NUMERIC_OK ||
         xr_xir_float_to_integer(xr_xir_float_bits(type),format,*bits,&exact)!=XR_XIR_NUMERIC_OK ||
         (uint64_t)exact!=input->magnitude)return false;
-    if(input->negative)*bits^=UINT64_C(1)<<(xr_xir_float_bits(type)-1);return true;
+    if (input->negative)
+        *bits ^= UINT64_C(1) << (xr_xir_float_bits(type) - 1);
+    return true;
 }
 XR_FUNC XrXirStatus xr_hir_literal_check(const XrXirTypes *types,const XrHirLiteralInput *input,
     XrCompileRequestControl *control,XrHirLiteral *output,const char **reason) {

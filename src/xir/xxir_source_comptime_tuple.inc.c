@@ -123,7 +123,10 @@ static bool source_comptime_constant(SourceContext *ctx,AstNode *node,
         bool materialized=false;
         if (nominal && !source_materialization_receive(ctx,node,&current,target,&result,&materialized)) { ok=false;break; }
         if (materialized) {
-            if (current_owned) xr_xir_value_drop(&current);current=(XrXirValue){0};current_owned=false;
+            if (current_owned)
+                xr_xir_value_drop(&current);
+            current = (XrXirValue) {0};
+            current_owned = false;
             goto receive_parent;
         }
         if (nominal) tuple=xr_xir_type_node(&ctx->types,target);
@@ -133,7 +136,10 @@ static bool source_comptime_constant(SourceContext *ctx,AstNode *node,
             if (!xr_xir_nullable_view(&current,&some,&payload)) { ok=source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime Nullable is invalid");break; }
             if (!some) {
                 if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_NULLABLE_NONE,target,{0},{0},0,{0}},&result)) { ok=false;break; }
-                if (current_owned) xr_xir_value_drop(&current);current=(XrXirValue){0};current_owned=false;
+                if (current_owned)
+                    xr_xir_value_drop(&current);
+                current = (XrXirValue) {0};
+                current_owned = false;
                 goto receive_parent;
             }
         }
@@ -173,7 +179,10 @@ static bool source_comptime_constant(SourceContext *ctx,AstNode *node,
             if (array && !source_comptime_array_begin(ctx,&stack[depth-1])) { ok=false;break; }
         } else {
             if (!source_comptime_constant_leaf(ctx,node,&current,target,&result)) { ok=false;break; }
-            if (current_owned) xr_xir_value_drop(&current);current=(XrXirValue){0};current_owned=false;
+            if (current_owned)
+                xr_xir_value_drop(&current);
+            current = (XrXirValue) {0};
+            current_owned = false;
         }
 receive_parent:
         for (;;) {
@@ -211,7 +220,9 @@ receive_parent:
             } else if (frame->nullable) {
                 if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_NULLABLE_SOME,frame->target,{result.type==XR_XIR_UNIT?0:result.id},{0},0,{0}},&result)) { ok=false;goto done; }
             } else if (!source_tuple_construct(ctx,node,frame->target,frame->payloads,frame->count,NULL,&result)) { ok=false;goto done; }
-            if (frame->owned) xr_xir_value_drop(&frame->value);--depth;
+            if (frame->owned)
+                xr_xir_value_drop(&frame->value);
+            --depth;
         }
     }
 done:

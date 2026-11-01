@@ -178,11 +178,15 @@ static XrXirStatus body_vector_stage(XrHirBody *body,HirBodyVector original,size
     *staged=(HirBodyVector){items,original.count,capacity};return XR_XIR_OK;
 }
 static void body_vector_commit(HirBodyVector *original,HirBodyVector staged) {
-    if(original->items!=staged.items)xr_compile_resources_free(original->items);*original=staged;
+    if (original->items != staged.items)
+        xr_compile_resources_free(original->items);
+    *original = staged;
 }
 static XrXirStatus body_vector_reserve(XrHirBody *body,HirBodyVector *vector,size_t element,XrCompileRequestControl *control) {
     HirBodyVector staged={0};XrXirStatus status=body_vector_stage(body,*vector,element,control,&staged);
-    if(status==XR_XIR_OK)body_vector_commit(vector,staged);return status;
+    if (status == XR_XIR_OK)
+        body_vector_commit(vector, staged);
+    return status;
 }
 static XrXirStatus body_place_reserve(XrHirBody *body,XrCompileRequestControl *control) {
     HirBodyVector uses={body->uses,body->count,body->capacity},new_uses=uses,new_places=body->places;
@@ -238,7 +242,9 @@ XR_FUNC XrXirStatus xr_hir_body_emit(XrHirBody *body,XrHirBodyUse handle,XrXirTy
     HirBodyUse *use=&body->uses[handle.index];
     if(!use->consumed||use->retired||use->projected||use->action.target!=type)return XR_XIR_BAD_STRUCTURE;
     if(use->nominal_helper) {
-        if(use->nominal_emitted)return XR_XIR_BAD_STRUCTURE;use->nominal_emitted=true;
+        if (use->nominal_emitted)
+            return XR_XIR_BAD_STRUCTURE;
+        use->nominal_emitted = true;
         if(type!=XR_XIR_UNIT){use->nominal_result=value;use->nominal_has_result=true;}
     }
     if(use->binding.owner&&use->initializes) {
@@ -287,7 +293,13 @@ XR_FUNC XrXirStatus xr_hir_body_retire(XrHirBody *body,XrHirBodyUse handle) {
     use->retired=true;return XR_XIR_OK;
 }
 XR_FUNC void xr_hir_body_end(XrHirBody *body) {
-    if(!body)return;body->types=NULL;body->declarations=(XrHirBodyDeclarations){0};body->nominal_modules=NULL;body->nominal_generics=NULL;body->ended=true;
+    if (!body)
+        return;
+    body->types = NULL;
+    body->declarations = (XrHirBodyDeclarations) {0};
+    body->nominal_modules = NULL;
+    body->nominal_generics = NULL;
+    body->ended = true;
 }
 XR_FUNC bool xr_hir_body_live(const XrHirBody *body){return body&&!body->ended;}
 XR_FUNC XrXirStatus xr_hir_body_scope(XrHirBody *body,XrHirBodyScope parent,
@@ -367,7 +379,9 @@ XR_FUNC XrXirStatus xr_hir_body_check(XrHirBody *body,const XrXirTypes *types,
     switch(input->rule) {
     case XR_HIR_BODY_IDENTITY:break;
     case XR_HIR_BODY_EQUAL:
-        if(input->source!=input->target)status=XR_XIR_BAD_TYPE;break;
+        if (input->source != input->target)
+            status = XR_XIR_BAD_TYPE;
+        break;
     case XR_HIR_BODY_PROJECTION:break;
     default:status=XR_XIR_BAD_STRUCTURE;break;
     }
@@ -384,7 +398,9 @@ XR_FUNC XrXirStatus xr_hir_body_consume(XrHirBody *body,XrHirBodyUse handle,XrHi
     body->uses[use].consumed=true;*output=body->uses[use].action;return XR_XIR_OK;
 }
 static XrXirStatus body_projection_failure(const char **reason,const char *message) {
-    if(reason)*reason=message;return XR_XIR_BAD_STRUCTURE;
+    if (reason)
+        *reason = message;
+    return XR_XIR_BAD_STRUCTURE;
 }
 XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,const XrHirBodyProjection *projection,XrCompileRequestControl *control,const char **reason) {
     if(reason)*reason="typed projection does not match its owned use";
@@ -471,5 +487,8 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
 }
 XR_FUNC uint32_t xr_hir_body_use_count(const XrHirBody *body){return body?body->count:0;}
 XR_FUNC bool xr_hir_body_origin(const XrHirBody *body,uint32_t use,XrHirBodyOrigin *out) {
-    if(!body||use>=body->count||!out)return false;*out=body->uses[use].origin;return true;
+    if (!body || use >= body->count || !out)
+        return false;
+    *out = body->uses[use].origin;
+    return true;
 }

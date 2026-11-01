@@ -240,14 +240,18 @@ XR_FUNC XrSourceStatus xr_source_submission_resume(XrSourceSubmission *owner,uin
     if(owner->busy)return XR_SOURCE_BUSY;
     if(!owner->runtime_serial)return XR_SOURCE_BAD_STATE;
     owner->busy=true;XrSourceStatus status=submission_call(xr_xir_instance_resume(owner->runtime,epoch,wake));owner->busy=false;
-    if(status==XR_SOURCE_OK)owner->has_observed=false;return status;
+    if (status == XR_SOURCE_OK)
+        owner->has_observed = false;
+    return status;
 }
 XR_FUNC XrSourceStatus xr_source_submission_cancel(XrSourceSubmission *owner) {
     if(!owner)return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy)return XR_SOURCE_BUSY;
     if(!owner->runtime_serial)return XR_SOURCE_BAD_STATE;
     owner->busy=true;XrSourceStatus status=submission_call(xr_xir_instance_cancel_current(owner->runtime));owner->busy=false;
-    if(status==XR_SOURCE_OK)owner->has_observed=false;return status;
+    if (status == XR_SOURCE_OK)
+        owner->has_observed = false;
+    return status;
 }
 XR_FUNC XrSourceStatus xr_source_submission_take(XrSourceSubmission *owner,XrXirCallResult *output) {
     if(!owner || !output)return XR_SOURCE_BAD_ARGUMENT;
@@ -281,7 +285,9 @@ XR_FUNC XrSourceStatus xr_source_submission_abort(XrSourceSubmission *owner,XrXi
     if(owner->busy)return XR_SOURCE_BUSY;
     if(!owner->source_serial)return XR_SOURCE_BAD_STATE;
     owner->busy=true;XrXirCallStatus status=submission_abort(owner);owner->busy=false;
-    if(status!=XR_XIR_CALL_BUSY && cleanup)*cleanup=status;return submission_call(status);
+    if (status != XR_XIR_CALL_BUSY && cleanup)
+        *cleanup = status;
+    return submission_call(status);
 }
 XR_FUNC XrSourceStatus xr_source_submission_lookup(const XrSourceSubmission *owner,const char *name,XrXirSourceGenerationBinding *output) {
     if(!owner || !name || !output)return XR_SOURCE_BAD_ARGUMENT;
@@ -378,5 +384,7 @@ XR_FUNC XrSourceStatus xr_source_submission_drop(XrSourceSubmission **output,XrX
         xr_compile_resources_free(owner->published_births);owner->published_births=previous;
     }
     xr_compile_resources_free(owner);*output=NULL;
-    if(cleanup)*cleanup=status;return submission_call(status);
+    if (cleanup)
+        *cleanup = status;
+    return submission_call(status);
 }

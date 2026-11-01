@@ -52,7 +52,8 @@ static XrXirAction vm_view_return(ScalarRun *run,VmState *state,const XrXirInstr
     XrXirAction action={0};XrXirCallStatus status=xr_xir_call_return_move(run->view,scratch,&action);
     if (status!=XR_XIR_CALL_READY) {
         xr_xir_owned_slot_move(run->frame,offset,scratch);
-        return (XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{0},0};
+        return (XrXirAction) {XR_XIR_ACTION_FAULT,  0, NULL, 0, {XR_XIR_I64, 0, status},
+                              {{0}, {0}, {0}, {0}}, 0};
     }
     return action;
 }

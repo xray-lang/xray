@@ -19,7 +19,10 @@
 
 /* Literals share the same allocation and raw-span writer as syntax. */
 static void lit_byte(XrFmtContext *ctx, char c) {
-    if (!xfmt_healthy(ctx)) return; xfmt_write_char(ctx, c); }
+    if (!xfmt_healthy(ctx))
+        return;
+    xfmt_write_char(ctx, c);
+}
 static void lit_bytes(XrFmtContext *ctx, const char *bytes, size_t length) {
     if (!xfmt_healthy(ctx)) return;
     xfmt_write_bytes(ctx, bytes, length);
@@ -29,7 +32,10 @@ static void lit_str(XrFmtContext *ctx, const char *text) {
     if (text) xfmt_write_bytes(ctx, text, xfmt_length(ctx, text));
 }
 static void lit_indent(XrFmtContext *ctx) {
-    if (!xfmt_healthy(ctx)) return; xfmt_write_indent(ctx); }
+    if (!xfmt_healthy(ctx))
+        return;
+    xfmt_write_indent(ctx);
+}
 
 static void emit_escaped_byte(XrFmtContext *ctx, unsigned char c, bool escape_dollar, bool block,
                               bool binary) {

@@ -55,7 +55,8 @@ static XrXirStatus effect_invocation_bounds_capacity(const XrXirCompileContext *
 
         capacity=capacity>maximum/2 ? maximum : capacity*2;
     }
-    if ((uint64_t)capacity>SIZE_MAX/sizeof(*bounds->functions)) return XR_XIR_BUDGET;
+    if ((capacity && sizeof(*bounds->functions) > SIZE_MAX / (uint64_t) capacity))
+        return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     EffectInvocationFunctionBounds *functions=xir_compile_alloc(work,
         (size_t)capacity*sizeof(*functions),&status);
@@ -168,10 +169,14 @@ static XrXirStatus effect_invocation_bounds_copy_physical(const XrXirCompileCont
 
         const EffectInvocationFunctionBounds *body=&source->functions[f];
         const EffectPhysicalFunction *domain=&physical->functions[f];
-        if (body->values!=domain->values || domain->rows!=body->count || body->count>body->values ||
-            domain->count>domain->capacity || domain->capacity>domain->values ||
-            !!domain->records!=!!domain->capacity || !!body->bounds!=!!body->count ||
-            (uint64_t)body->count>SIZE_MAX/sizeof(*body->bounds)) { status=XR_XIR_BAD_STRUCTURE;break; }
+        if (body->values != domain->values || domain->rows != body->count ||
+            body->count > body->values || domain->count > domain->capacity ||
+            domain->capacity > domain->values || !!domain->records != !!domain->capacity ||
+            !!body->bounds != !!body->count ||
+            (body->count && sizeof(*body->bounds) > SIZE_MAX / (uint64_t) body->count)) {
+            status = XR_XIR_BAD_STRUCTURE;
+            break;
+        }
         EffectInvocationValueBound *records=body->count?xir_compile_alloc(work,
             (size_t)body->count*sizeof(*records),&status):NULL;
         if (status!=XR_XIR_OK) break;

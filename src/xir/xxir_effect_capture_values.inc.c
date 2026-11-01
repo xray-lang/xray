@@ -189,7 +189,9 @@ static XrXirStatus effect_capture_reference(EffectCaptureRead *read,const Effect
     for(uint32_t s=0;s<read->final->site_count;++s) {
 
         if(read->final->sites[s].function==body && read->final->sites[s].instruction==instruction) {
-            if(site!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;site=s;
+            if (site != UINT32_MAX)
+                return XR_XIR_BAD_STRUCTURE;
+            site = s;
         }
     }
     if(site==UINT32_MAX) return XR_XIR_BAD_STRUCTURE;

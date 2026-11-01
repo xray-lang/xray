@@ -70,7 +70,9 @@ static XrXirStatus effect_invocation_formal_prepare(EffectInvocationFlow *flow,
     if (node->root!=node->body) {
         EffectBodyFunctionDimensions root={0};
         status=effect_body_request_dimensions(request,node->root,&root);
-        if (status!=XR_XIR_OK) return status;parameters=root.parameter_count;
+        if (status != XR_XIR_OK)
+            return status;
+        parameters = root.parameter_count;
     }
     status=effect_invocation_basis_parameters(owner,parameters,&flow->basis);
     if (status!=XR_XIR_OK) return status;

@@ -118,7 +118,9 @@ static XrXirCtfeStatus ctfe_tuple_export_bytes(ScalarRun *run,const XrXirValue *
         if (tuple && tuple->kind==XR_XIR_TYPE_ARRAY) {
             XrXirValueAdmission admission=ctfe_value_admission(state);int64_t length=0;
             status=ctfe_value_status(xr_xir_array_len(&current,&admission,&length));
-            if (status!=XR_XIR_CTFE_OK) break;count=(uint64_t)length;
+            if (status != XR_XIR_CTFE_OK)
+                break;
+            count = (uint64_t) length;
         }
         if (tuple) {
             if (depth==capacity) {
@@ -151,7 +153,9 @@ static XrXirCtfeStatus ctfe_tuple_export_bytes(ScalarRun *run,const XrXirValue *
             CtfeTupleExportFrame *frame=&stack[depth-1];
             tuple=ctfe_composite_node(run->module->types,(XrXirType)frame->value.type);
             if (frame->next<frame->count) break;
-            if (frame->owned) xr_xir_value_drop(&frame->value);--depth;
+            if (frame->owned)
+                xr_xir_value_drop(&frame->value);
+            --depth;
         }
         if (!depth) break;
         CtfeTupleExportFrame *frame=&stack[depth-1];

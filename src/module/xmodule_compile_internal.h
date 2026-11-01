@@ -48,7 +48,9 @@ static inline size_t module_length(ModuleWork *work, const char *text) {
 }
 static inline bool module_copy(ModuleWork *work, void *dest, const void *source, size_t length) {
     if (!((work)->status == XR_MODULE_OK)) return false;
-    if (length) memcpy(dest,source,length); return true;
+    if (length)
+        memcpy(dest, source, length);
+    return true;
 }
 static inline char *module_dup(ModuleWork *work, const char *text) {
     if (!text) return NULL;
@@ -105,11 +107,15 @@ static inline size_t module_format_pass(ModuleWork *work, char *out, size_t capa
             for (size_t j = 0; (work)->status == XR_MODULE_OK; ++j) {
                 if (!text[j]) break;
                 if (n == SIZE_MAX-1 || (out && n+1 >= capacity)) { module_status(work,XR_MODULE_BUDGET); break; }
-                if (out) out[n] = text[j]; ++n;
+                if (out)
+                    out[n] = text[j];
+                ++n;
             }
         } else {
             if (n == SIZE_MAX-1 || (out && n+1 >= capacity)) { module_status(work,XR_MODULE_BUDGET); break; }
-            if (out) out[n] = c; ++n;
+            if (out)
+                out[n] = c;
+            ++n;
         }
     }
     if (out && ((work)->status == XR_MODULE_OK)) out[n] = 0;

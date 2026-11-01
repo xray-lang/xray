@@ -81,7 +81,10 @@ static XrXirStatus view_access_ancestor(ViewAccess *a,const ViewAccessOrigin *pa
             bool compatible=false,other=false,stable=false;
             status=view_access_compatible(parent,&p->event,&compatible);
             if (status==XR_XIR_OK) status=view_access_compatible(child,&p->event,&other);
-            if (status!=XR_XIR_OK) return status;if (!compatible || !other || p->event.kind==XR_XIR_VIEW_LOAN_ABSENT) continue;
+            if (status != XR_XIR_OK)
+                return status;
+            if (!compatible || !other || p->event.kind == XR_XIR_VIEW_LOAN_ABSENT)
+                continue;
             status=view_access_origin_stable(a,p,&stable);if (status!=XR_XIR_OK) return status;
             if (stable) {
                 bool unique=false;status=view_access_stable(a,p->event.value,&unique);
@@ -98,7 +101,9 @@ static XrXirStatus view_access_ancestor(ViewAccess *a,const ViewAccessOrigin *pa
         if (count!=1) return XR_XIR_OK;
         XR_CHECK(next,"a unique compatible parent keeps its owned scope observation");
         bool pinned=false;status=view_access_pinned_choices(&next->event,parent,child,&pinned);
-        if (status!=XR_XIR_OK || !pinned) return status;current_origin=next;
+        if (status != XR_XIR_OK || !pinned)
+            return status;
+        current_origin = next;
     }
     return XR_XIR_OK;
 }
@@ -180,7 +185,9 @@ static XrXirStatus view_access_class_body(ViewAccess *a,uint32_t value,bool *bod
             xir_effects_default_access_site(a->cells->default_access,a->resolver->check.context,a->function,parent) :
             xir_effects_class_call_access_site(a->cells->default_access,a->resolver->check.context,
                 a->resolver->check.module,a->function,parent,producer->type);
-        if (status==XR_XIR_OK) *body=true;return status;
+        if (status == XR_XIR_OK)
+            *body = true;
+        return status;
     }
     if ((producer->op!=XR_XIR_CALL_DEFAULT && producer->op!=XR_XIR_CALL) ||
         !xr_xir_type_is_class(a->resolver->check.module->types,producer->type) ||
@@ -189,7 +196,9 @@ static XrXirStatus view_access_class_body(ViewAccess *a,uint32_t value,bool *bod
         xir_effects_default_access_site(a->cells->default_access,a->resolver->check.context,a->function,instruction) :
         xir_effects_class_call_access_site(a->cells->default_access,a->resolver->check.context,
             a->resolver->check.module,a->function,instruction,producer->type);
-    if (status==XR_XIR_OK) *body=true;return status;
+    if (status == XR_XIR_OK)
+        *body = true;
+    return status;
 }
 static bool view_access_cell_storage(const ViewAccess *a,const XrXirViewRootEvent *root) {
     if (root->kind!=XR_XIR_VIEW_ROOT_CELL || root->opaque_suffix || root->dynamic_identity) return false;
@@ -223,7 +232,10 @@ static XrXirStatus view_access_storage(ViewAccess *a,uint32_t left,uint32_t righ
         if (status==XR_XIR_OK && !disjoint && !fresh && !entry) status=view_access_entry_regions(a,&p->event,&q->event,&entry);
         if (status==XR_XIR_OK && !disjoint && !fresh && !entry) status=view_access_epoch_separation(a,&p->event,&q->event,left_query,right_query,&epochs);
         if (status==XR_XIR_OK && !disjoint && !fresh && !entry && !epochs) status=view_access_overlap(a,&p->event,&q->event,left_query,right_query,&overlap);
-        if (status!=XR_XIR_OK) break;all_safe&=disjoint || fresh || entry || epochs;all_overlap&=overlap;
+        if (status != XR_XIR_OK)
+            break;
+        all_safe &= disjoint || fresh || entry || epochs;
+        all_overlap &= overlap;
     }
     if (status==XR_XIR_OK && l.left && r.left) *output=all_safe?VIEW_ACCESS_SAFE:all_overlap?VIEW_ACCESS_BLOCKED:VIEW_ACCESS_UNKNOWN;
 done:

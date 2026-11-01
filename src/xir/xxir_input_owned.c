@@ -152,12 +152,18 @@ static XirOwnedInputFunction *input_copy_head(const XrXirCompileContext *context
 XR_FUNC XrXirStatus xir_input_function_new(const XrXirCompileContext *context,
     const XirInputFunctionReceive *source,XirOwnedInputFunction **output) {
     if(!xir_compile_context_valid(context)||!source||!output||*output)return XR_XIR_BAD_STRUCTURE;
-    if(source->head.parameter_count>context->limits.parameters||source->head.block_count>context->limits.blocks||
-        source->head.instruction_count>context->limits.instructions||
-        (uint64_t)source->head.parameter_count>SIZE_MAX/sizeof(*source->head.parameters)||
-        (uint64_t)source->head.block_count>SIZE_MAX/sizeof(*source->head.blocks)||
-        (uint64_t)source->head.operand_count>SIZE_MAX/sizeof(*source->head.operands)||
-        (uint64_t)source->head.instruction_count>SIZE_MAX/sizeof(*source->instructions))return XR_XIR_BUDGET;
+    if (source->head.parameter_count > context->limits.parameters ||
+        source->head.block_count > context->limits.blocks ||
+        source->head.instruction_count > context->limits.instructions ||
+        (source->head.parameter_count &&
+         sizeof(*source->head.parameters) > SIZE_MAX / (uint64_t) source->head.parameter_count) ||
+        (source->head.block_count &&
+         sizeof(*source->head.blocks) > SIZE_MAX / (uint64_t) source->head.block_count) ||
+        (source->head.operand_count &&
+         sizeof(*source->head.operands) > SIZE_MAX / (uint64_t) source->head.operand_count) ||
+        (source->head.instruction_count &&
+         sizeof(*source->instructions) > SIZE_MAX / (uint64_t) source->head.instruction_count))
+        return XR_XIR_BUDGET;
     XrXirStatus status=input_source_shape(source);if(status!=XR_XIR_OK)return status;
     XirOwnedInputFunction *input=input_copy_head(context,&source->head,&status);
     if(!input)return status;

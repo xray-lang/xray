@@ -12,7 +12,9 @@
 #include "../base/xchecks.h"
 
 static XrXirStatus conversion_failure(const char **reason,XrXirStatus status,const char *message) {
-    if(reason)*reason=message;return status;
+    if (reason)
+        *reason = message;
+    return status;
 }
 static XrXirStatus conversion_poll(XrCompileRequestControl *control,const char **reason) {
     XrXirStatus status=control?xir_compile_resource_status(xr_compile_request_control_poll(control)):XR_XIR_OK;
@@ -43,7 +45,9 @@ XR_FUNC XrXirStatus xr_hir_conversion_contains_callable(const XrXirTypes *types,
     if(reason)*reason=NULL;
     if(!types || !output)return conversion_failure(reason,XR_XIR_BAD_STRUCTURE,"conversion type pool is missing");
     bool contains=false;XrXirStatus status=conversion_contains(types,type,control,0,&contains,reason);
-    if(status==XR_XIR_OK)*output=contains;return status;
+    if (status == XR_XIR_OK)
+        *output = contains;
+    return status;
 }
 XR_FUNC XrXirStatus xr_hir_conversion_check(const XrHirConversionContext *context,
     const XrHirConversionInput *input,XrHirConversion *output,const char **reason) {

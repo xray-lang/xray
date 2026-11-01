@@ -34,6 +34,54 @@ env:
 # nightly lane marked continue-on-error, i.e. not running at all.
 
 jobs:
+  # File-input portability must run even when an unrelated architecture gate fails.
+  unix-file-input:
+    name: Unix file input (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Configure file input regression
+      run: cmake -S tests/unit/base/file_read_unix -B build-file-input -G Ninja -DCMAKE_BUILD_TYPE=Release
+    - name: Build file input regression
+      run: cmake --build build-file-input --parallel 4
+    - name: Verify physical-root and allocation failures
+      run: ctest --test-dir build-file-input --output-on-failure
+    - name: Configure default project
+      run: cmake --preset default
+    - name: Build compiler
+      run: cmake --build build --target xray test_bits_wide_c11 test_bits_wide_fallback --parallel 4
+    - name: Verify strict C11 wide multiply
+      run: ctest --test-dir build/tests/unit/shared/bits_wide --output-on-failure
+    - name: Verify compiler identity and module smoke
+      run: |
+        ./build/xray --version --json
+        ./build/xray test -q tests/fixtures/public_source_program/test_root.xr
+
+  msvc-generated-c:
+    name: MSVC generated C11
+    runs-on: windows-2022
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+    - name: Configure compiler
+      run: cmake --preset default
+    - name: Build compiler and numeric regression
+      run: cmake --build build --target xray test_bits_wide_c11 --parallel 4
+    - name: Compile real generated C under MSVC
+      run: ctest --test-dir build/tests/unit/shared/bits_wide --output-on-failure
+
   # ===========================================================================
   # Architecture lint (Phase 3, X-01 / C-01 / C-02)
   # Fast grep-only check that catches frontend boundary violations

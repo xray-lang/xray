@@ -173,7 +173,8 @@ XrXirAction xr_xir_call_fault(XrXirRunStatus status) {
         case XR_XIR_RUN_FRAME_LIMIT: reason = XR_XIR_CALL_LIMIT; break;
         default: reason = XR_XIR_CALL_BAD_STATE; break;
     }
-    XrXirAction action = {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, reason}, {0}, 0};
+    XrXirAction action = {XR_XIR_ACTION_FAULT,  0, NULL, 0, {XR_XIR_I64, 0, reason},
+                          {{0}, {0}, {0}, {0}}, 0};
     if (reason == XR_XIR_CALL_DIVIDE_BY_ZERO) action.panic.detail.code = XR_XIR_PANIC_DIVIDE;
     else if (reason == XR_XIR_CALL_NUMERIC_RANGE) action.panic.detail.code = XR_XIR_PANIC_RANGE;
     else if (reason == XR_XIR_CALL_RUNTIME_PANIC) action.panic.detail.code = XR_XIR_PANIC_NULL_UNWRAP;

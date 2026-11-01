@@ -53,7 +53,9 @@ static XrXirStatus view_access_entry_root_type(ViewAccess *a,const XrXirViewRoot
         const XrXirTypeNode *node=xr_xir_type_node(types,*type);uint32_t field=event->selection[p];
         if (!node) return XR_XIR_BAD_TYPE;
         if (field==UINT32_MAX) {
-            if (node->kind!=XR_XIR_TYPE_NULLABLE) return XR_XIR_BAD_TYPE;*type=node->element;
+            if (node->kind != XR_XIR_TYPE_NULLABLE)
+                return XR_XIR_BAD_TYPE;
+            *type = node->element;
         } else {
             if (node->kind!=XR_XIR_TYPE_TUPLE || field>=node->parameter_count) return XR_XIR_BAD_TYPE;
             *type=node->parameters[field].type;

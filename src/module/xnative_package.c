@@ -224,7 +224,10 @@ static bool native_sha256_file(ManifestContext *ctx, const char *root, const cha
         if(!((ctx)->status == XR_MANIFEST_OK))return false;
         uint8_t byte=digest[i];output[2*i]=hex[byte>>4];output[2*i+1]=hex[byte&15];
     }
-    if(!((ctx)->status == XR_MANIFEST_OK))return false;output[64]=0;return true;
+    if (!((ctx)->status == XR_MANIFEST_OK))
+        return false;
+    output[64] = 0;
+    return true;
 }
 
 static bool native_valid_sha256(ManifestContext *ctx, const char *text) {

@@ -188,7 +188,8 @@ XR_FUNC XrXirStatus xdap_launch_source_point(const XdapLaunch *launch,uint32_t f
 XR_FUNC XrXirStatus xdap_launch_function_rules(const XdapLaunch *launch,const XdapFunctionSelection *selection,
     XrXirVmDebugRule *output,uint32_t capacity,uint32_t *count) {
     if (!launch || !selection || !selection->name || !count || (capacity && !output) || capacity>32) return XR_XIR_BAD_STRUCTURE;
-    uint32_t origin=UINT32_MAX,matches=0;XrXirVmDebugRule fresh[32]={{0}};
+    uint32_t origin = UINT32_MAX, matches = 0;
+    XrXirVmDebugRule fresh[32] = {0};
     for (uint32_t f=0;f<launch->function_count;++f) {
         const XdapCodeFunction *function=&launch->functions[f];
         size_t length=strlen(function->source_name);
@@ -198,7 +199,10 @@ XR_FUNC XrXirStatus xdap_launch_function_rules(const XdapLaunch *launch,const Xd
         if (matches==capacity) return XR_XIR_BUDGET;
         fresh[matches]=selection->rule;fresh[matches++].location=(XrXirVmDebugLocation){f,0};
     }
-    if (matches) memcpy(output,fresh,(size_t)matches*sizeof(*output));*count=matches;return XR_XIR_OK;
+    if (matches)
+        memcpy(output, fresh, (size_t) matches * sizeof(*output));
+    *count = matches;
+    return XR_XIR_OK;
 }
 static XrXirStatus launch_program(const XdapLaunchRequest *request,const XrXirSourceProduct *source,
     XrXirArtifact **lowered,XrXirVmDebug *debug,XdapLaunch *launch,XrXirProgram **output) {

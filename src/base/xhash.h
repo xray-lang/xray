@@ -48,7 +48,7 @@
 
 // Disable unsigned integer overflow sanitizer for hash functions.
 // FNV-1a intentionally uses unsigned overflow (well-defined in C as modular arithmetic).
-#if defined(__clang__) || defined(__GNUC__)
+#if defined(__clang__)
 #define XR_NO_SANITIZE_UNSIGNED XR_NO_SANITIZE("unsigned-integer-overflow")
 #else
 #define XR_NO_SANITIZE_UNSIGNED

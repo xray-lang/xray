@@ -18,7 +18,9 @@ static XrNameSpan source_import_binding_span(const ImportStmtNode *decl,int inde
 static bool source_import_marker(SourceContext *ctx,uint32_t declaration,XrXirSourceRange range,XrXirSourceMarkerRole role) {
     XrXirSourceMarker *facts=source_query_append(ctx,ctx->syntax.markers,&ctx->syntax.marker_count,
         &ctx->syntax_marker_capacity,sizeof(*facts));
-    if(!facts)return false;ctx->syntax.markers=facts;
+    if (!facts)
+        return false;
+    ctx->syntax.markers = facts;
     XrXirSourceMarker marker={range,declaration,role};
     return source_copy_bytes(ctx,NULL,&facts[ctx->syntax.marker_count-1],&marker,sizeof(marker));
 }

@@ -158,7 +158,9 @@ static XrXirValueStatus channel_rendezvous_recv_begin(const XrXirValue *value,Xr
     }
     channel_recv_wait_release_list(released);
     if (status==XR_XIR_VALUE_OK && outcome==XR_XIR_CHANNEL_RECV_WAIT_PENDING) *output=recv;else xr_xir_channel_recv_wait_drop(recv);
-    if (status==XR_XIR_VALUE_OK) *state=outcome;return status;
+    if (status == XR_XIR_VALUE_OK)
+        *state = outcome;
+    return status;
 }
 XR_FUNC XrXirValueStatus xr_xir_channel_rendezvous_recv_begin(const XrXirValue *channel,XrXirType type,
     XrXirValueAdmission *admission,XrXirChannelRecvWait **output,XrXirChannelRecvWaitState *state) {

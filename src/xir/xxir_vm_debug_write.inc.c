@@ -29,7 +29,9 @@ static XrXirValueStatus debug_write_begin(XrXirVmDebug *debug,const DebugWriteTa
     XrXirValuePathStep *steps=NULL;XrXirValueStatus status=XR_XIR_VALUE_OK;
     if (path->count) {
         steps=debug_allocate(debug->domain,(uint64_t)path->count*sizeof(*steps),&status);
-        if (!steps) return status;memcpy(steps,path->steps,(size_t)path->count*sizeof(*steps));
+        if (!steps)
+            return status;
+        memcpy(steps, path->steps, (size_t) path->count * sizeof(*steps));
     }
     XrXirValue owned={0};status=xr_xir_value_copy(value,&owned);
     if (status!=XR_XIR_VALUE_OK) { debug_deallocate(debug->domain,steps,(uint64_t)path->count*sizeof(*steps));return status; }

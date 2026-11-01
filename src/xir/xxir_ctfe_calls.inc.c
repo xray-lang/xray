@@ -298,7 +298,11 @@ static XrXirCtfeStatus ctfe_call_enter(CtfeCallExecution *execution,
     if (status!=XR_XIR_CTFE_OK) { execution->owned.frame_spare=spare;ctfe_call_frame_free(child);return status; }
 
     execution->owned.frame_spare=spare;ctfe_call_loans_commit(execution,child);
-    if (!cleanup && !child->invoked) ++parent->state.instruction;execution->top=child;++execution->depth;execution->live_bytes+=child->bytes;
+    if (!cleanup && !child->invoked)
+        ++parent->state.instruction;
+    execution->top = child;
+    ++execution->depth;
+    execution->live_bytes += child->bytes;
     return XR_XIR_CTFE_OK;
 }
 
@@ -366,14 +370,18 @@ static XrXirCtfeStatus ctfe_call_execute(CtfeCallExecution *execution,XrXirValue
         execution->owned.authority=(XrXirCellAuthority){execution,frame,frame->epoch};execution->owned.activation=frame;
         if (frame->state.leaving) {
             bool done=false;XrXirCtfeStatus status=ctfe_cleanup_continue(execution,output,&done);
-            if (status!=XR_XIR_CTFE_OK || done) return status;continue;
+            if (status != XR_XIR_CTFE_OK || done)
+                return status;
+            continue;
         }
         uint32_t at=frame->state.instruction;execution->owned.fault=(XrXirFaultDetail){0};
         XirScalarCoreAction action={0};
         XrXirCtfeStatus stepped=native?ctfe_native_callable_step(execution,&action):ctfe_call_step(execution,&action);
         if (stepped!=XR_XIR_CTFE_OK) {
             XrXirCtfeStatus caught=ctfe_panic_fault(execution,stepped,at);
-            if (caught!=XR_XIR_CTFE_OK) return caught;continue;
+            if (caught != XR_XIR_CTFE_OK)
+                return caught;
+            continue;
         }
         if (action.kind==XIR_SCALAR_RETURN) {
             if (frame->state.frontier) {

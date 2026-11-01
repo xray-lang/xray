@@ -43,7 +43,9 @@ static XrXirSourceRange source_query_token_range(SourceContext *ctx,AstNode *nod
 static bool source_query_syntax_declaration(SourceContext *ctx,XrXirSourceRange range) {
     XrXirSourceDeclarationSyntax *facts=source_query_append(ctx,ctx->syntax.declarations,
         &ctx->syntax.declaration_count,&ctx->syntax_declaration_capacity,sizeof(*facts));
-    if(!facts)return false;ctx->syntax.declarations=facts;
+    if (!facts)
+        return false;
+    ctx->syntax.declarations = facts;
     XrXirSourceDeclarationSyntax fact={.name=range,.role=!range.line?XR_XIR_SOURCE_SYNTAX_NONE:
         range.line==range.end_line&&range.column>0&&range.end_column>range.column?
         XR_XIR_SOURCE_SYNTAX_NAME:XR_XIR_SOURCE_SYNTAX_UNRESOLVED};
@@ -74,13 +76,17 @@ static bool source_query_call(SourceContext *ctx,uint32_t reference,XrXirSourceR
         .module_initializer=ctx->function<ctx->module_count&&ctx->function==ctx->module,.selection_known=known};
     XrXirSourceCall *facts=source_query_append(ctx,ctx->calls.items,&ctx->calls.count,
         &ctx->call_capacity,sizeof(*facts));
-    if(!facts)return false;ctx->calls.items=facts;
+    if (!facts)
+        return false;
+    ctx->calls.items = facts;
     return source_copy_bytes(ctx,NULL,&facts[ctx->calls.count-1],&call,sizeof(call));
 }
 static bool source_query_syntax_reference(SourceContext *ctx,XrXirSourceRange range) {
     XrXirSourceRange *facts=source_query_append(ctx,ctx->syntax.references,
         &ctx->syntax.reference_count,&ctx->syntax_reference_capacity,sizeof(*facts));
-    if(!facts)return false;ctx->syntax.references=facts;
+    if (!facts)
+        return false;
+    ctx->syntax.references = facts;
     if(!source_copy_bytes(ctx,NULL,&facts[ctx->syntax.reference_count-1],&range,sizeof(range)))return false;
     if(ctx->syntax.reference_count!=ctx->query.reference_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source reference observations diverged");
@@ -90,7 +96,9 @@ static bool source_query_syntax_reference(SourceContext *ctx,XrXirSourceRange ra
 static bool source_query_pattern_binding(SourceContext *ctx,uint32_t declaration,XrXirSourceRange range) {
     XrXirSourceMarker *facts=source_query_append(ctx,ctx->syntax.markers,&ctx->syntax.marker_count,
         &ctx->syntax_marker_capacity,sizeof(*facts));
-    if(!facts)return false;ctx->syntax.markers=facts;
+    if (!facts)
+        return false;
+    ctx->syntax.markers = facts;
     XrXirSourceMarker marker={range,declaration,XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING};
     return source_copy_bytes(ctx,NULL,&facts[ctx->syntax.marker_count-1],&marker,sizeof(marker));
 }
@@ -101,7 +109,9 @@ static bool source_query_mode(SourceContext *ctx,uint32_t declaration,XrParamMod
     if(ctx->diagnostic.status!=XR_XIR_OK)return false;
     XrXirSourceMarker *facts=source_query_append(ctx,ctx->syntax.markers,&ctx->syntax.marker_count,
         &ctx->syntax_marker_capacity,sizeof(*facts));
-    if(!facts)return false;ctx->syntax.markers=facts;
+    if (!facts)
+        return false;
+    ctx->syntax.markers = facts;
     XrXirSourceMarker marker={range,declaration,
         mode==XR_PARAM_REF?XR_XIR_SOURCE_MARKER_REF:XR_XIR_SOURCE_MARKER_MOVE};
     return source_copy_bytes(ctx,NULL,&facts[ctx->syntax.marker_count-1],&marker,sizeof(marker));
@@ -111,7 +121,9 @@ static bool source_query_ref_argument(SourceContext *ctx,uint32_t declaration,Xr
     if(ctx->diagnostic.status!=XR_XIR_OK)return false;
     XrXirSourceMarker *facts=source_query_append(ctx,ctx->syntax.markers,&ctx->syntax.marker_count,
         &ctx->syntax_marker_capacity,sizeof(*facts));
-    if(!facts)return false;ctx->syntax.markers=facts;
+    if (!facts)
+        return false;
+    ctx->syntax.markers = facts;
     XrXirSourceMarker marker={range,declaration,XR_XIR_SOURCE_MARKER_REF_ARGUMENT};
     return source_copy_bytes(ctx,NULL,&facts[ctx->syntax.marker_count-1],&marker,sizeof(marker));
 }

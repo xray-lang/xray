@@ -65,7 +65,9 @@ static XrXirStatus effect_final_inventory_tracked(const XrXirCompileContext *wor
         status=effect_role_range(work,table->identities,table->count,sizeof(*table->identities));
         if(status==XR_XIR_OK) kind=table->identities[node->nominal.declaration].kind;
     }
-    if(status==XR_XIR_OK) *output=kind==XR_XIR_NOMINAL_CLASS;return status;
+    if (status == XR_XIR_OK)
+        *output = kind == XR_XIR_NOMINAL_CLASS;
+    return status;
 }
 static XrXirStatus effect_final_inventory_roots(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,const EffectInvocationFinal *final) {

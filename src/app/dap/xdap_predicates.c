@@ -78,7 +78,9 @@ static XrXirStatus predicate_log(XdapAdapter *s,const XdapBreakpointPredicate *p
         if (value.type==XR_XIR_STRING) { if (!xr_xir_string_view(&value,&content,&size)) status=XR_XIR_BAD_STRUCTURE; }
         else if (value.type==XR_XIR_UNIT) { content="()";size=2; }
         else if (!xr_xir_scalar_text(&value,scalar,&content,&size)) { content="<owned value>";size=13; }
-        if (status==XR_XIR_OK) xdap_json_text(text,content,size);xr_xir_value_drop(&value);
+        if (status == XR_XIR_OK)
+            xdap_json_text(text, content, size);
+        xr_xir_value_drop(&value);
         if (status!=XR_XIR_OK) return status;
     }
     xdap_json_text(text,"\n",1);return text->status;
@@ -115,5 +117,7 @@ XR_FUNC XrXirStatus xdap_predicates_probe(XdapAdapter *s,bool *visible) {
         XDAP_TEXT(&body,"}");status=xdap_dispatch_event(s,"output",&body);xdap_json_writer_free(&body);
     }
     xdap_json_writer_free(&text);
-    if (status==XR_XIR_OK) *visible=show;return status;
+    if (status == XR_XIR_OK)
+        *visible = show;
+    return status;
 }

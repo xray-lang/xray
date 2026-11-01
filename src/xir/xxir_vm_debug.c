@@ -616,7 +616,9 @@ static void capture_publish(XrXirVmDebug *debug,XrXirVmDebugSnapshot *snapshot) 
 }
 static XrXirValueStatus capture(XrXirVmDebug *debug,XrXirCallView *view,const DebugExceptionPlan *exception,XirVmDebugStopCause cause) {
     XrXirVmDebugSnapshot *snapshot=NULL;XrXirValueStatus status=capture_prepare(debug,view,exception,cause,&snapshot);
-    if (status==XR_XIR_VALUE_OK) capture_publish(debug,snapshot);return status;
+    if (status == XR_XIR_VALUE_OK)
+        capture_publish(debug, snapshot);
+    return status;
 }
 #include "xxir_vm_debug_write.inc.c"
 #include "xxir_vm_debug_native_source.inc.c"
@@ -638,9 +640,10 @@ XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
     if (!xr_xir_domain_work(debug->domain, (uint64_t)debug->count * 2 + 33))
         return XR_XIR_VALUE_LIMIT;
     if (!xr_xir_domain_work(debug->domain,32)) return XR_XIR_VALUE_LIMIT;
-    DebugFrame *frame;
+    DebugFrame *frame = NULL;
     XrXirValueStatus status = register_frame(debug, point, &frame);
     if (status != XR_XIR_VALUE_OK) return status;
+    XR_CHECK(frame != NULL, "successful frame registration publishes its frame");
     if (debug->skip_once && frame->id == debug->resume_id &&
         point->instruction == debug->resume_instruction) {
         debug->skip_once = false;
@@ -765,7 +768,10 @@ XR_FUNC XrXirValueStatus xir_vm_debug_threads(XrXirVmDebug *debug,uint64_t *outp
         if (size==capacity) return XR_XIR_VALUE_LIMIT;
         memmove(fresh+at+1,fresh+at,(size_t)(size-at)*sizeof(*fresh));fresh[at]=frame->thread;++size;
     }
-    if (size) memcpy(output,fresh,(size_t)size*sizeof(*output));*count=size;return XR_XIR_VALUE_OK;
+    if (size)
+        memcpy(output, fresh, (size_t) size * sizeof(*output));
+    *count = size;
+    return XR_XIR_VALUE_OK;
 }
 XR_FUNC uint64_t xr_xir_vm_debug_snapshot_stopped_thread(const XrXirVmDebugSnapshot *snapshot) {
     return snapshot_valid(snapshot) ? snapshot->stopped_thread : 0;

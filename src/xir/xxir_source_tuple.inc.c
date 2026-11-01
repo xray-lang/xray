@@ -168,7 +168,9 @@ static bool source_tuple_expanded_literal(SourceContext *ctx,AstNode *node,
     bool exact=context==NULL && expected.present;
     SourceTuplePrefix owned={0};
     if (exact) {
-        if(!source_tuple_context(ctx,node,expected,UINT32_MAX,&owned))return false;context=&owned;
+        if (!source_tuple_context(ctx, node, expected, UINT32_MAX, &owned))
+            return false;
+        context = &owned;
     }
     SourceValue *fields=NULL;uint32_t count=0,capacity=0;
     for (int i=0;i<literal->count;++i) {

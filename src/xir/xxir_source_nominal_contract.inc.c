@@ -42,7 +42,10 @@ static bool source_hir_nominal_emit(SourceContext *ctx,AstNode *node,const XrHir
         SourceValue *values=action->count?source_recipe_storage(ctx,action->count,sizeof(*values)):NULL;
         if(action->count&&!values)return false;
         for(uint32_t f=0;f<action->count;++f) {
-            if(!source_request_poll(ctx,node))return false;values[f]=(SourceValue){.id=action->values[f].value,.type=action->values[f].type};
+            if (!source_request_poll(ctx, node))
+                return false;
+            values[f] =
+                (SourceValue) {.id = action->values[f].value, .type = action->values[f].type};
         }
         if(!source_recipe_group(ctx,(XrXirInstruction){.op=action->operation,.type=action->type,.immediate=action->variant},values,action->count,value))return false;
     } else {
@@ -97,5 +100,7 @@ static bool source_hir_nominal_helper(SourceContext *ctx,AstNode *node,XrXirType
     XrHirNominalUseInput input={.pool=&pool,.shape=shape,.scope=scope,.origin=source_hir_origin(ctx,node,0),.type=type,.field=field};
     XrXirStatus status=xr_hir_body_nominal_helper(ctx->typed_body,&input,ctx->request,&action,&reason);
     if(!source_hir_nominal_status(ctx,node,status,reason)||!source_hir_nominal_emit(ctx,node,&action,value))return false;
-    if(use)*use=action.use;return true;
+    if (use)
+        *use = action.use;
+    return true;
 }

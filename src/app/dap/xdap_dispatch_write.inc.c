@@ -20,7 +20,9 @@ static XrXirStatus inspect_write_binding(const XdapLexicalView *lexical,const Xd
         if (!(binding->flags&XR_XIR_SOURCE_DEBUG_CELL)) return XR_XIR_BAD_TYPE;
         const char *read_name=NULL;size_t length=0;
         XrXirStatus status=inspect_write_status(xdap_lexical_read(lexical,b,expected,&read_name,&length));
-        if (status==XR_XIR_OK) *operand=binding->value;return status;
+        if (status == XR_XIR_OK)
+            *operand = binding->value;
+        return status;
     }
     return XR_XIR_UNRESOLVED;
 }

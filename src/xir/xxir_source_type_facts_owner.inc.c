@@ -31,7 +31,11 @@ static XrXirStatus query_type_identity(SourceQueryCopy *copy,const XrXirSourceTy
         const XrXirNominalDeclaration *nominal=&table->declarations[fact->table_index];
         uint32_t kind=fact->kind==XR_XIR_SOURCE_TYPE_CLASS?XR_XIR_NOMINAL_CLASS:
             fact->kind==XR_XIR_SOURCE_TYPE_ENUM?XR_XIR_NOMINAL_ENUM:XR_XIR_NOMINAL_STRUCT;
-        if(nominal->kind!=kind)return XR_XIR_BAD_STRUCTURE;module=nominal->module;name=nominal->name;}
+        if (nominal->kind != kind)
+            return XR_XIR_BAD_STRUCTURE;
+        module = nominal->module;
+        name = nominal->name;
+    }
     bool same=query_type_literal_same(copy,module,view->modules[source->range.module].identity)&&
         query_type_literal_same(copy,name,source->name);
     return copy->status!=XR_XIR_OK?copy->status:same?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;

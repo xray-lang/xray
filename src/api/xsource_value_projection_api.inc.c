@@ -45,7 +45,9 @@ XRAY_API XrSourceStatus xray_source_value_nullable(const XrSourceValue *value,in
     bool present=false;const XrXirValue *payload=NULL;
     if(!xr_xir_nullable_view(&value->value,&present,&payload))return XR_SOURCE_INVALID;
     if(present)status=api_value_wrap(value->resources,payload,output);
-    if(status==XR_SOURCE_OK)*some=present?1:0;return status;
+    if (status == XR_SOURCE_OK)
+        *some = present ? 1 : 0;
+    return status;
 }
 XRAY_API XrSourceStatus xray_source_value_panic_code(const XrSourceValue *value,int64_t *output) {
     if(!value || !output)return XR_SOURCE_BAD_ARGUMENT;

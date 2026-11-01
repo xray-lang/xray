@@ -43,7 +43,9 @@ static bool source_point_after(const XrXirSourceDebugPoint *point,const SourceSe
 }
 static XrXirStatus source_rules(const XdapLaunch *launch,const SourceSelection *selection,
     XrXirVmDebugRule *output,uint32_t capacity,uint32_t *count,XrXirSourceDebugPoint *resolved) {
-    XrXirSourceDebugPoint best={0};XrXirVmDebugRule fresh[32]={{0}};uint32_t matches=0;
+    XrXirSourceDebugPoint best = {0};
+    XrXirVmDebugRule fresh[32] = {0};
+    uint32_t matches = 0;
     if (capacity>32 || !count || !resolved || (capacity && !output)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<launch->function_count;++f) {
         const XdapCodeFunction *function=&launch->functions[f];
@@ -80,7 +82,8 @@ XR_FUNC XrXirStatus xdap_breakpoints_collect(const XdapLaunch *launch,const Xdap
     if (!launch || !set || !output || !count || set->function_count>32 || set->source_count>32-set->function_count ||
         (set->function_count && (!set->functions || !set->function_rules)) || (set->source_count && !set->sources))
         return XR_XIR_BAD_STRUCTURE;
-    XrXirVmDebugRule fresh[32]={{0}};uint32_t used=0;
+    XrXirVmDebugRule fresh[32] = {0};
+    uint32_t used = 0;
     for (uint32_t i=0;i<set->function_count;++i) {
         XdapFunctionSelection selection={set->functions[i],strlen(set->functions[i]),set->function_rules[i]};
         selection.rule.group=i+1;uint32_t found=0;
@@ -99,7 +102,10 @@ XR_FUNC XrXirStatus xdap_breakpoints_collect(const XdapLaunch *launch,const Xdap
         if (status!=XR_XIR_OK) return status;
         used+=found;
     }
-    if (used) memcpy(output,fresh,(size_t)used*sizeof(*output));*count=used;return XR_XIR_OK;
+    if (used)
+        memcpy(output, fresh, (size_t) used * sizeof(*output));
+    *count = used;
+    return XR_XIR_OK;
 }
 static XrXirStatus source_coordinate(const XdapRequest *request,uint32_t node,uint64_t fallback,uint32_t *output) {
     uint64_t value=fallback;
@@ -134,11 +140,12 @@ static XrXirStatus source_request_point(XdapAdapter *s,const XdapRequest *reques
     uint32_t predicates[3]={hits,condition,log};
     for (uint32_t i=0;i<3;++i) if (predicates[i] && request->document.nodes[predicates[i]].kind!=XDAP_JSON_STRING)
         return XR_XIR_BAD_STRUCTURE;
-    SourceSelection selection={module,row,col,{0}};
+    SourceSelection selection = {.module = module, .line = row, .column = col};
     if (hits) status=xdap_hit_parse(s->resources,request->document.nodes[hits].text,request->document.nodes[hits].length,&selection.rule);
     if (status!=XR_XIR_OK) return status;
     if (module==UINT32_MAX) return XR_XIR_UNRESOLVED;
-    XrXirVmDebugRule rules[32]={{0}};uint32_t matches=0;
+    XrXirVmDebugRule rules[32] = {0};
+    uint32_t matches = 0;
     status=source_rules(s->launch,&selection,rules,32,&matches,resolved);
     if (status!=XR_XIR_OK || !matches) return status==XR_XIR_OK ? XR_XIR_UNRESOLVED : status;
     XdapBreakpointPredicate predicate={0};status=xdap_predicate_prepare(s,request,condition,log,&predicate);
@@ -174,7 +181,9 @@ XR_FUNC XrXirStatus xdap_dispatch_source_breakpoints(XdapAdapter *s,const XdapRe
     status=source_module(s->launch,request->document.nodes[path].text,request->document.nodes[path].length,false,&module);
     if (status!=XR_XIR_OK && status!=XR_XIR_UNRESOLVED) return status;
     const XdapCodeModule *matched=module==UINT32_MAX ? NULL : &s->launch->modules[module];
-    XdapSourceBreakpoint fresh[32]={{0}};uint32_t kept=0,used=0;bool replaced[32]={0};
+    XdapSourceBreakpoint fresh[32] = {0};
+    uint32_t kept = 0, used = 0;
+    bool replaced[32] = {0};
     for (uint32_t i=0;i<s->source_breakpoint_count;++i) {
         replaced[i]=source_same_module(&s->source_breakpoints[i],matched);
         if (!replaced[i]) fresh[kept++]=s->source_breakpoints[i];
@@ -198,7 +207,8 @@ XR_FUNC XrXirStatus xdap_dispatch_source_breakpoints(XdapAdapter *s,const XdapRe
     }
     XDAP_TEXT(&body,"]}");status=body.status;
     if (status==XR_XIR_OK && !matched) { status=xdap_dispatch_response(s,request,true,&body,NULL);goto done; }
-    XrXirVmDebugRule rules[32]={{0}};uint32_t count=0;
+    XrXirVmDebugRule rules[32] = {0};
+    uint32_t count = 0;
     XdapBreakpointSet set={s->function_breakpoints,s->function_rules,s->function_breakpoint_count,fresh,used};
     if (status==XR_XIR_OK) status=xdap_breakpoints_collect(s->launch,&set,rules,&count);
     XdapJsonWriter response={0};

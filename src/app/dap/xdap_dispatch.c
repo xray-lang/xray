@@ -83,7 +83,11 @@ XR_FUNC XrXirStatus xdap_dispatch_number(const XdapRequest *r,const char *key,ui
     return xdap_json_u64(&r->document,index,output);
 }
 XR_FUNC void xdap_value_ref_drop(XdapValueRef *ref) {
-    if (!ref) return;xr_xir_value_drop(&ref->value);xr_compile_resources_free((void *)ref->origin.path.steps);*ref=(XdapValueRef){0};
+    if (!ref)
+        return;
+    xr_xir_value_drop(&ref->value);
+    xr_compile_resources_free((void *) ref->origin.path.steps);
+    *ref = (XdapValueRef) {0};
 }
 XR_FUNC void xdap_dispatch_clear_stop(XdapAdapter *s) {
     for (uint32_t i=0;i<s->value_count;++i) xdap_value_ref_drop(&s->values[i]);
@@ -280,7 +284,8 @@ static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
     if (candidate->native_startup && s->stop_entry) {
         xdap_launch_free(candidate);return xdap_dispatch_response(s,r,false,NULL,"Native startup pause is unsupported");
     }
-    XrXirVmDebugRule rules[32]={{0}};uint32_t count=0;
+    XrXirVmDebugRule rules[32] = {0};
+    uint32_t count = 0;
     XdapBreakpointSet breakpoints={s->function_breakpoints,s->function_rules,s->function_breakpoint_count,
         s->source_breakpoints,s->source_breakpoint_count};
     status=xdap_breakpoints_collect(candidate,&breakpoints,rules,&count);

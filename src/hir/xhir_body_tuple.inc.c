@@ -1,7 +1,9 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License.
  * Tuple metadata and executable uses share one ordered logical shape. */
 static XrXirStatus body_tuple_failure(const char **reason,XrXirStatus status,const char *message) {
-    if(reason)*reason=message;return status;
+    if (reason)
+        *reason = message;
+    return status;
 }
 static bool body_tuple_type_known(const XrXirTypes *types,XrXirType type) {
     uint32_t id=(uint32_t)type;
@@ -111,7 +113,10 @@ XR_FUNC XrXirStatus xr_hir_body_tuple_receive(XrHirBody *body,const XrXirTypes *
     if(field_bytes+map_bytes)status=xir_compile_resource_status(xr_compile_resources_alloc(body->resources,field_bytes+map_bytes,(void **)&tuple.fields));
     if(status==XR_XIR_OK&&tuple.fields)tuple.physical_fields=(uint32_t *)((unsigned char *)tuple.fields+field_bytes);
     for(uint32_t p=0,a=0;status==XR_XIR_OK&&p<view.count;++p) {
-        if(!(p%64))status=body_poll(control);if(status!=XR_XIR_OK)break;
+        if (!(p % 64))
+            status = body_poll(control);
+        if (status != XR_XIR_OK)
+            break;
         bool unit=view.fields[p].type==XR_XIR_UNIT;
         tuple.fields[p]=(XrHirTupleField){view.fields[p].type,unit?UINT32_MAX:a};
         if(!unit)tuple.physical_fields[a++]=p;
@@ -154,7 +159,10 @@ XR_FUNC XrXirStatus xr_hir_body_tuple_context(XrHirBody *body,const XrHirTupleCo
     XrHirTupleExpected *fields=NULL;
     if(count)status=xir_compile_resource_status(xr_compile_resources_alloc(body->resources,(size_t)count*sizeof(*fields),(void **)&fields));
     for(uint32_t p=0;status==XR_XIR_OK&&p<count;++p) {
-        if(!(p%64))status=body_poll(control);if(status!=XR_XIR_OK)break;
+        if (!(p % 64))
+            status = body_poll(control);
+        if (status != XR_XIR_OK)
+            break;
         fields[p]=input->from_type?(XrHirTupleExpected){view.fields[p].type,true,false,input->inferred}:input->fields[p];
         if(fields[p].present&&!body_tuple_type_known(body->types,fields[p].type))status=XR_XIR_BAD_TYPE;
     }
@@ -171,7 +179,10 @@ XR_FUNC XrXirStatus xr_hir_body_tuple_context(XrHirBody *body,const XrHirTupleCo
 XR_FUNC bool xr_hir_body_tuple_expected(const XrHirBody *body,XrHirTupleContext context,uint32_t index,XrHirTupleExpected *out) {
     if(!body||body->ended||context.owner!=body||context.index>=body->tuple_contexts.count||!out)return false;
     HirBodyTupleContext row=((HirBodyTupleContext *)body->tuple_contexts.items)[context.index];
-    if(index>=row.count)return false;*out=row.fields[index];return true;
+    if (index >= row.count)
+        return false;
+    *out = row.fields[index];
+    return true;
 }
 XR_FUNC bool xr_hir_body_tuple_context_size(const XrHirBody *body,XrHirTupleContext context,uint32_t *out) {
     if(!body||body->ended||context.owner!=body||context.index>=body->tuple_contexts.count||!out)return false;
@@ -213,7 +224,10 @@ XR_FUNC XrXirStatus xr_hir_body_tuple_construct(XrHirBody *body,const XrHirTuple
     }
     XrXirStatus status=body_poll(control);
     for(uint32_t p=0;status==XR_XIR_OK&&p<tuple.count;++p) {
-        if(!(p%64))status=body_poll(control);if(status!=XR_XIR_OK)break;
+        if (!(p % 64))
+            status = body_poll(control);
+        if (status != XR_XIR_OK)
+            break;
         if(input->values[p].type!=tuple.fields[p].type)return XR_XIR_BAD_TYPE;
         if(context&&context->fields[input->context_offset+p].present) {
             XrHirTupleExpected expected=context->fields[input->context_offset+p];
@@ -233,7 +247,10 @@ XR_FUNC XrXirStatus xr_hir_body_tuple_construct(XrHirBody *body,const XrHirTuple
     if(status==XR_XIR_OK&&tuple.physical_count)status=xir_compile_resource_status(xr_compile_resources_alloc(body->resources,
         (size_t)tuple.physical_count*sizeof(*arguments),(void **)&arguments));
     for(uint32_t p=0;status==XR_XIR_OK&&p<tuple.physical_count;++p) {
-        if(!(p%64))status=body_poll(control);if(status!=XR_XIR_OK)break;
+        if (!(p % 64))
+            status = body_poll(control);
+        if (status != XR_XIR_OK)
+            break;
         arguments[p]=input->values[tuple.physical_fields[p]].value;
         if(arguments[p]==UINT32_MAX)status=XR_XIR_BAD_STRUCTURE;
     }
