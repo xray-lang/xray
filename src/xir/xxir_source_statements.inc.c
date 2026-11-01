@@ -78,6 +78,7 @@ static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
         body->saw_return = true;
         if (value.type != (generator ? XR_XIR_UNIT : ctx->functions[ctx->function].result))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "return type does not match declaration");
+        if(!source_task_scope_transfer(ctx,node,0))return false;
         ctx->returned = true;
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.type == XR_XIR_UNIT ? 0 : value.id, 0}, {0, 0}, 0, {0}}, NULL);
     }

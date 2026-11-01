@@ -167,7 +167,7 @@ typedef struct SourceInstructionRecipe {
     SourceRootValue root;
     XrXirSourceDebugPoint debug;
 } SourceInstructionRecipe;
-typedef struct SourceBlockRecipe { XrXirBlock block; uint32_t owner, identity, runtime; } SourceBlockRecipe;
+typedef struct SourceBlockRecipe { XrXirBlock block; uint32_t owner, identity, runtime, panic_scope; } SourceBlockRecipe;
 typedef struct SourceRecipeStorage { struct SourceRecipeStorage *next; } SourceRecipeStorage;
 typedef struct SourceThrowRecipe {
     struct SourceThrowRecipe *next;
@@ -258,6 +258,8 @@ typedef struct SourceTaskScope {
     XrXirType body_error;
     XrXirType child_error;
     uint32_t begin,mode;
+    uint32_t block,frontier;
+    SourceErrorContext *error_context;
 } SourceTaskScope;
 struct SourceErrorEdge {
     struct SourceErrorEdge *next;
@@ -865,7 +867,7 @@ static bool begin_block(SourceContext *ctx) {
         if (!source_copy_bytes(ctx, NULL, blocks, body->blocks, body->block_count * sizeof(*blocks))) return false;
         body->blocks = blocks; body->block_capacity = capacity;
     }
-    body->blocks[body->block_count] = (SourceBlockRecipe){{body->count,0,0,body->frontier},ctx->function,body->block_count,body->block_count};
+    body->blocks[body->block_count] = (SourceBlockRecipe){{body->count,0,0,body->frontier},ctx->function,body->block_count,body->block_count,0};
     body->current_block=(SourceBlockReference){ctx->function,body->block_count};
     ++body->block_count;
     --ctx->remaining_blocks; ctx->returned = false; return true;
@@ -1851,6 +1853,7 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value);
 static bool source_defer(SourceContext *ctx, AstNode *node);
 static bool source_task_scope(SourceContext *ctx,AstNode *node,bool marked);
+static bool source_task_scope_transfer(SourceContext *ctx,AstNode *node,uint32_t frontier);
 static bool source_select(SourceContext *ctx,AstNode *node);
 static bool source_block_functions(SourceContext *ctx,AstNode *block);
 #include "xxir_source_view.inc.c"
@@ -2235,11 +2238,12 @@ static bool source_loop_exit(SourceContext *ctx, AstNode *node) {
     if (!ctx->loop || label) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE,
         ctx->identities[ctx->function].cleanup_owner ? "E0395: defer cannot exit an enclosing loop outside its body" :
         "loop exit requires an unlabelled enclosing loop");
+    uint32_t target = ctx->loop->frontier;
+    if(!source_task_scope_transfer(ctx,node,target))return false;
     SourcePatch **head = stop ? &ctx->loop->breaks : &ctx->loop->continues;
     SourcePatch *patch = source_alloc(ctx, 1, sizeof(*patch)); if (!patch) return false;
     *patch = (SourcePatch) {*head, ctx->bodies[ctx->function].count}; *head = patch;
     ctx->returned = true;
-    uint32_t target = ctx->loop->frontier;
     bool leaving = ctx->bodies[ctx->function].frontier != target;
     return source_recipe_record(ctx, (XrXirInstruction) {leaving ? XR_XIR_CLEANUP_LEAVE : XR_XIR_JUMP,
         XR_XIR_UNIT, {0}, {0}, leaving ? target : 0, {0}}, NULL);

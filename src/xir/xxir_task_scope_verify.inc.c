@@ -71,12 +71,15 @@ static XrXirStatus task_scope_between(const Graph *graph,const XrXirFunction *fu
         for(uint32_t i=end;i>range->first;) {
             --i;status=xir_receive_step(control,&steps);if(status!=XR_XIR_OK)return status;
             if(i==stop){found=true;reached=true;break;}
-            if(i==root)return XR_XIR_BAD_VALUE;
+            if(i==root)return stop==UINT32_MAX?XR_XIR_BAD_TYPE:XR_XIR_BAD_VALUE;
             const XrXirInstruction *op=function->instructions+i;
             if(op->op==XR_XIR_SCOPE_JOIN) {
                 uint32_t joined=UINT32_MAX;status=task_scope_origin(function,op->args[0],control,&joined);
                 if(status!=XR_XIR_OK)return status;
-                if(joined==root)return XR_XIR_BAD_VALUE;
+                if(joined==root) {
+                    if(stop!=UINT32_MAX)return XR_XIR_BAD_VALUE;
+                    found=true;reached=true;break;
+                }
             }
         }
         if(found)continue;
@@ -91,6 +94,33 @@ static XrXirStatus task_scope_between(const Graph *graph,const XrXirFunction *fu
         if(!predecessor)return XR_XIR_BAD_VALUE;
     }
     return reached?XR_XIR_OK:XR_XIR_BAD_VALUE;
+}
+/* A typed error cannot escape through an untyped normal control transfer.
+ * Reuse the same backward CFG witness, accepting any real join of this group. */
+static XrXirStatus task_scope_exit_closed(const Graph *graph,const XrXirFunction *function,
+    VerifyContext *context,uint32_t instruction,TaskScopeScratch *scratch) {
+    const XrXirInstruction *op=function->instructions+instruction;
+    if(op->op!=XR_XIR_RETURN&&op->op!=XR_XIR_CLEANUP_LEAVE)return XR_XIR_OK;
+    uint32_t frontier=function->blocks[graph->owner[instruction]].frontier,steps=0;
+    while(frontier) {
+        XrXirStatus status=xir_receive_step(context->control,&steps);if(status!=XR_XIR_OK)return status;
+        if(frontier>function->instruction_count||function->instructions[frontier-1].op!=XR_XIR_CLEANUP_REGISTER)
+            return XR_XIR_BAD_STRUCTURE;
+        if(op->op==XR_XIR_RETURN||(uint64_t)op->immediate<frontier)
+            for(uint32_t root=0;root<function->instruction_count;++root) {
+                status=xir_receive_step(context->control,&steps);if(status!=XR_XIR_OK)return status;
+                const XrXirInstruction *begin=function->instructions+root;
+                if(begin->op!=XR_XIR_SCOPE_BEGIN||function->blocks[graph->owner[root]].frontier!=frontier)continue;
+                const XrXirTypeNode *type=xr_xir_type_node(context->module->types,begin->type);
+                if(!type||type->kind!=XR_XIR_TYPE_TASK)return XR_XIR_BAD_TYPE;
+                if(type->result==XR_XIR_NEVER)continue;
+                status=task_scope_between(graph,function,(uint32_t[]){root,UINT32_MAX,instruction},scratch,context->control);
+                if(status!=XR_XIR_OK)return status;
+            }
+        uint32_t parent=function->blocks[graph->owner[frontier-1]].frontier;
+        if(parent>=frontier)return XR_XIR_BAD_STRUCTURE;frontier=parent;
+    }
+    return XR_XIR_OK;
 }
 static XrXirStatus task_scope_uses(const Graph *graph,const XrXirFunction *function,VerifyContext *context) {
     bool present=false;uint32_t progress=0;XrCompileRequestControl *control=context->control;
@@ -114,6 +144,7 @@ static XrXirStatus task_scope_uses(const Graph *graph,const XrXirFunction *funct
         const XrXirInstruction *op=function->instructions+i;
         context->location.instruction=i;context->location.block=graph->owner[i];
         status=xir_receive_step(control,&progress);if(status!=XR_XIR_OK)break;
+        status=task_scope_exit_closed(graph,function,context,i,&scratch);if(status!=XR_XIR_OK)break;
         if(op->op==XR_XIR_SCOPE_BEGIN) {
             uint32_t frontier=function->blocks[graph->owner[i]].frontier;
             if(!frontier||frontier>function->instruction_count)return xr_compile_resources_free(memory),XR_XIR_BAD_STRUCTURE;
