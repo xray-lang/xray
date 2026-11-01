@@ -446,7 +446,7 @@ static void sdk_legacy_known_bytes(void) {
     _Static_assert(sizeof(previous69_sdk_kat_preimage)==3098,"complete previous69 SDK preimage");
     xr_sha256(previous69_sdk_kat_preimage,sizeof(previous69_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous69_sdk_kat_digest,32));
-    _Static_assert(sizeof(previous70_sdk_kat_preimage)==3098 && sizeof(current_sdk_kat_preimage)==3362,
+    _Static_assert(sizeof(previous70_sdk_kat_preimage)==3098 && sizeof(current_sdk_kat_preimage)==3372,
         "complete current and previous70 SDK preimages");
     xr_sha256(previous70_sdk_kat_preimage,sizeof(previous70_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous70_sdk_kat_digest,32));
@@ -709,12 +709,25 @@ static int sdk_legacy_main(int argc,char **argv) {
     sdk_locked_files(sdk);xr_xir_runtime_sdk_free(sdk);CHECK(!runtime_live && !runtime_bytes && sdk_handles()==initial_handles);
     puts("SDK producer destroyed, immutable same-source facts and locked actual bundle PASS");return 0;
 }
+static void sdk_library_known_bytes(void) {
+    const char *cases[] = {"[\"kernel32\",\"bcrypt\"]", "[\"kernel32\"]", "[\"bcrypt\"]",
+        "[\"bcrypt\",\"kernel32\"]", "[\"kernel32\",\"bcrypt\",\"bcrypt\"]",
+        "[\"kernel32\",\"bcrypt\",\"user32\"]", "[]", "[\"kernel32\",\"Bcrypt\"]"};
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        char bytes[128];size_t length = strlen(cases[i]);CHECK(length < sizeof(bytes));
+        memcpy(bytes, cases[i], length + 1);
+        XrJsonCursor json = xr_json_cursor_make(bytes, length);
+        CHECK(sdk_json_libraries(&json) == (i == 0));
+        if (i == 0) CHECK(json.status == XR_JSON_CURSOR_OK && json.cursor == json.end);
+    }
+}
 /* Ordinary identity and ownership checks do not enter the pressure census. */
 static void sdk_known_bytes(void) {
+    sdk_library_known_bytes();
     _Static_assert(XR_XIR_CHECKED_SCHEMA==39 && XR_XIR_CHECKED_CONTRACT==116 &&
         XR_XIR_VALUE_ABI_VERSION==30 && XR_XIR_CALL_ABI_VERSION==37 && XR_XIR_PROGRAM_ABI_VERSION==37,
         "current known bytes require their independently framed identity");
-    _Static_assert(sizeof(current_sdk_kat_preimage)==3362 && sizeof(historical32_91_sdk_kat_preimage)==3330,
+    _Static_assert(sizeof(current_sdk_kat_preimage)==3372 && sizeof(historical32_91_sdk_kat_preimage)==3330,
         "complete current and historical wire images");
     uint8_t digest[32];
     xr_sha256(current_sdk_kat_preimage,sizeof(current_sdk_kat_preimage),digest);

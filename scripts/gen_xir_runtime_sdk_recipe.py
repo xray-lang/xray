@@ -27,11 +27,11 @@ def recipe(root: Path) -> dict:
                 raise ValueError(f'exactly one literal source owner required: {owner}')
             groups[owner] = [(path.parent / spelling).resolve().relative_to(root).as_posix()
                              for spelling in declaration[0].split()]
-            if owner == 'xray_compile_resources':
+            if owner in ('xray_compile_resources', 'xray_xir_scalar'):
                 windows = re.findall(r'if\(WIN32\)\s*target_sources\(' + owner +
                                      r'\s+PRIVATE\s+([^\n)]*)\)', text)
                 if len(windows) != 1:
-                    raise ValueError('exactly one Windows compiler request clock source branch required')
+                    raise ValueError(f'exactly one Windows runtime source branch required: {owner}')
                 groups[owner] += [(path.parent / spelling).resolve().relative_to(root).as_posix()
                                   for spelling in windows[0].split()]
     roots = [name for entries in groups.values() for name in entries] + GENERATED_RUNTIME_ROOTS
@@ -62,7 +62,7 @@ def recipe(root: Path) -> dict:
         entries[f'lib/{owner}.lib'] = 5
     if len(entries) > 512:
         raise ValueError('runtime recipe exceeds its file cap')
-    return {'archive_source_groups': groups,
+    return {'archive_source_groups': groups, 'system_libraries': ['kernel32', 'bcrypt'],
             'files': [{'path': name, 'kind': entries[name]} for name in sorted(entries)]}
 
 def write_if_changed(path: Path, text: str) -> None:

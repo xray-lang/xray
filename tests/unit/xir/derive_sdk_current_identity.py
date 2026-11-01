@@ -4,7 +4,8 @@ import argparse,hashlib,json,struct,sys,tempfile
 root=Path(__file__).resolve().parents[3];sys.path.insert(0,str(root/'scripts'))
 from derive_xir_sdk_abi import prepare
 
-def current_preimage(rows, semantic=77, value_abi=29, call_abi=33, wire=30, program_abi=35):
+def current_preimage(rows, semantic=77, value_abi=29, call_abi=33, wire=30, program_abi=35,
+                     system_libraries=('kernel32',)):
     word=lambda value:struct.pack('<I',value)
     def text(value):
         data=value.encode('utf-8');return word(len(data))+data
@@ -23,7 +24,7 @@ def current_preimage(rows, semantic=77, value_abi=29, call_abi=33, wire=30, prog
     image+=b''.join(struct.pack('<II',row['id'],row['value']) for row in rows)
     file_digest=hashlib.sha256(b'hi').digest()
     image+=word(1)+text('lib/test.lib')+word(5)+struct.pack('<Q',2)+file_digest
-    image+=word(1)+text('kernel32')
+    image+=word(len(system_libraries))+b''.join(text(name) for name in system_libraries)
     return image,file_digest,hashlib.sha256(image).digest()
 
 def main():
@@ -223,7 +224,7 @@ def main():
     for suffix,data in zip(('preimage','file_digest','digest'),current_preimage(active_rows,115,30,37,39,37)):
         match=re.search(r'static const uint8_t previous39_115_sdk_kat_'+suffix+r'\[\] = \{(.*?)\};',prior115,re.S)
         assert match and bytes(int(v,16) for v in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete common115 SDK KAT changed'
-    image,file_digest,digest=current_preimage(active_rows,116,30,37,39,37)
+    image,file_digest,digest=current_preimage(active_rows,116,30,37,39,37,('kernel32','bcrypt'))
     prior_resources_image,prior_resources_file,prior_resources_digest=current_preimage(frozen_rows,98,30,35,37,36)
     assert len(prior_resources_image)==3338
     assert prior_resources_digest.hex()=='8fd650c91daccdcad55f6bf8c40b5f4e2f9ed9611d721eff0c26321e84adeca1'
@@ -233,7 +234,7 @@ def main():
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
     assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(39,116,30,37,37)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
-    assert len(image)==3362 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
+    assert len(image)==3372 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest
     output='/* Independent current SDK framing and natural Windows C layout facts. */\n'
     for name,data in (('current_sdk_kat_preimage',image),('current_sdk_kat_file_digest',file_digest),('current_sdk_kat_digest',digest),

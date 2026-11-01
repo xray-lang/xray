@@ -118,15 +118,16 @@ def main():
                  '-c',proof/'abi_probe.c','-o',obj]
     run('compile-independent-abi',command)
     libraries=[narrow/'lib'/(name+'.lib') for name in groups]
-    assert manifest['system_libraries']==['kernel32']
+    assert manifest['system_libraries']==recipe['system_libraries']==['kernel32','bcrypt']
     run('force-all-objects-link',[args.linker,'/nologo','/incremental:no','/opt:noref','/opt:noicf',
                                  '/verbose:lib','/map:'+str(link_map),'/out:'+str(exe),obj,
                                  *['/wholearchive:'+str(p) for p in libraries],
-                                 'kernel32.lib','/defaultlib:MSVCRT','/defaultlib:OLDNAMES'])
+                                 *[name+'.lib' for name in manifest['system_libraries']],
+                                 '/defaultlib:MSVCRT','/defaultlib:OLDNAMES'])
     link_log=(out/'force-all-objects-link.stdout').read_text(encoding='utf-8',errors='strict')
     loaded={name.lower() for name in re.findall(r'\b([a-z_0-9]+\.lib)\b',link_log,re.I)}
     allowed={name.lower()+'.lib' for name in groups}
-    allowed.update({'kernel32.lib','msvcrt.lib','oldnames.lib','vcruntime.lib','ucrt.lib'})
+    allowed.update({'kernel32.lib','bcrypt.lib','msvcrt.lib','oldnames.lib','vcruntime.lib','ucrt.lib'})
     assert loaded==allowed,loaded
     actual=json.loads(run('run-complete-link',[exe]));assert actual==expected
     mapping=link_map.read_text(encoding='utf-8');mapped=[]

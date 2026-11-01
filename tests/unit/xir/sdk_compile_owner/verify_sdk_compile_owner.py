@@ -59,6 +59,8 @@ def main():
     code, text = execute([old / 'build/old_sdk_calls.exe'], output / 'old-sdk-positive.log')
     assert code == 0, text
     libraries = [bundle / 'lib' / (name + '.lib') for name in ARCHIVES]
+    manifest = json.loads((bundle / 'sdk_manifest.json').read_text())
+    assert manifest['system_libraries'] == ['kernel32', 'bcrypt']
     exports = set()
     for library in libraries:
         code, text = execute(['dumpbin', '/nologo', '/linkermember:1', library], output / (library.stem + '-exports.log'))
@@ -75,7 +77,9 @@ def main():
     for symbol, row in baseline['objects'].items():
         executable = output / (symbol + '.exe')
         command = ['link', '/nologo', '/incremental:no', '/opt:noref', '/out:' + str(executable),
-                   old / row['object'], *libraries, 'kernel32.lib', '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES']
+                   old / row['object'], *libraries,
+                   *[name+'.lib' for name in manifest['system_libraries']],
+                   '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES']
         code, text = execute(command, output / (symbol + '.log'))
         if symbol in RETAINED:
             assert code == 0, (symbol, text)

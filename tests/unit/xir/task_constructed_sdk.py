@@ -40,6 +40,7 @@ def main():
         libraries = [Path(lease.stdout.readline().strip()) for _ in range(5)]
         assert sdk.is_dir() and all(p.is_file() for p in libraries)
         manifest = json.loads((sdk / 'sdk_manifest.json').read_text(encoding='utf-8'))
+        assert manifest['system_libraries'] == ['kernel32', 'bcrypt']
         for row in manifest['files']:
             p = sdk / row['path']
             assert p.is_file() and p.stat().st_size == row['length']
@@ -65,7 +66,8 @@ def main():
             objects.append(obj)
         executable = output / 'task-sdk.exe'
         checked([args.linker, '/nologo', '/incremental:no', '/out:' + str(executable),
-                 *(str(p) for p in objects + libraries), 'kernel32.lib',
+                 *(str(p) for p in objects + libraries),
+                 *[name+'.lib' for name in manifest['system_libraries']],
                  '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
         actual = checked([str(executable)]).decode('utf-8').strip()
         assert actual == 'TASK_SDK families=8 twoInstances repeatedAwait escapedStickyCopies2 hostedOutcomesAfterCodeDeath lastCodeLease1 ownerBaselines=restored', actual

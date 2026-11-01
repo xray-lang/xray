@@ -21,12 +21,21 @@ foreach(owner xray_compile_resources xray_xir_admission xray_xir_declarations xr
     set_target_properties(sdk_${owner} PROPERTIES IMPORTED_LOCATION "${XIR_SDK_BUNDLE_DIR}/lib/${owner}.lib")
     list(APPEND SDK_OWNER_LIBRARIES sdk_${owner})
 endforeach()
+file(READ "${XIR_SDK_BUNDLE_DIR}/sdk_manifest.json" XIR_SDK_LINK_MANIFEST)
+string(JSON XIR_SDK_LIBRARY_COUNT LENGTH "${XIR_SDK_LINK_MANIFEST}" system_libraries)
+string(JSON XIR_SDK_LIBRARY_FIRST GET "${XIR_SDK_LINK_MANIFEST}" system_libraries 0)
+string(JSON XIR_SDK_LIBRARY_SECOND GET "${XIR_SDK_LINK_MANIFEST}" system_libraries 1)
+if(NOT XIR_SDK_LIBRARY_COUNT EQUAL 2 OR NOT XIR_SDK_LIBRARY_FIRST STREQUAL "kernel32" OR
+   NOT XIR_SDK_LIBRARY_SECOND STREQUAL "bcrypt")
+    message(FATAL_ERROR "The runtime SDK requires exactly kernel32 and bcrypt")
+endif()
+set(XIR_SDK_SYSTEM_LIBRARIES ${XIR_SDK_LIBRARY_FIRST} ${XIR_SDK_LIBRARY_SECOND})
 add_executable(sdk_owner_generator
     "${CMAKE_CURRENT_LIST_DIR}/../test_xir_compile_emit_owner.c"
     "${SDK_OWNER_ROOT}/src/xir/xxir_specialize.c"
     "${SDK_OWNER_ROOT}/src/xir/xxir_emit_c.c"
     "${SDK_OWNER_ROOT}/src/aot/xi_cgen_verify_output.c")
-target_link_libraries(sdk_owner_generator PRIVATE ${SDK_OWNER_LIBRARIES} kernel32)
+target_link_libraries(sdk_owner_generator PRIVATE ${SDK_OWNER_LIBRARIES} ${XIR_SDK_SYSTEM_LIBRARIES})
 set(SDK_OWNER_GENERATED "${CMAKE_CURRENT_BINARY_DIR}/sdk-owner-generated.c")
 add_custom_command(OUTPUT "${SDK_OWNER_GENERATED}"
     COMMAND $<TARGET_FILE:sdk_owner_generator> "${SDK_OWNER_GENERATED}"
@@ -35,10 +44,10 @@ add_executable(test_sdk_compile_owner "${CMAKE_CURRENT_LIST_DIR}/test_sdk_compil
     "${SDK_OWNER_GENERATED}" "${SDK_OWNER_ROOT}/src/toolchain/xr_xir_runtime_sdk.c"
     "${SDK_OWNER_ROOT}/src/base/xjson_cursor.c"
     "${XIR_OLD_ABI_DIR}/build/CMakeFiles/old_admission_data.dir/fixtures/old_admission_data.c.obj")
-target_link_libraries(test_sdk_compile_owner PRIVATE ${SDK_OWNER_LIBRARIES} kernel32)
+target_link_libraries(test_sdk_compile_owner PRIVATE ${SDK_OWNER_LIBRARIES} ${XIR_SDK_SYSTEM_LIBRARIES})
 add_executable(test_sdk_old_data "${CMAKE_CURRENT_LIST_DIR}/../test_xir_compile_old_data.c"
     "${XIR_OLD_ABI_DIR}/build/CMakeFiles/old_admission_data.dir/fixtures/old_admission_data.c.obj")
-target_link_libraries(test_sdk_old_data PRIVATE ${SDK_OWNER_LIBRARIES} kernel32)
+target_link_libraries(test_sdk_old_data PRIVATE ${SDK_OWNER_LIBRARIES} ${XIR_SDK_SYSTEM_LIBRARIES})
 set(XIR_TARGET_SOURCE_ROOT "${SDK_OWNER_ROOT}")
 include("${CMAKE_CURRENT_LIST_DIR}/../sdk_resources.cmake")
 foreach(target sdk_owner_generator test_sdk_compile_owner test_sdk_old_data xir_sdk_resources_production test_xir_sdk_resources test_xir_sdk_resources_lease)

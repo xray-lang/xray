@@ -105,6 +105,12 @@ def main():
         for case in cleanup_abi_cases(original):add(*case)
         escaped=json.dumps(original).replace('"schema"','"\\u0073chema"').replace('kernel32','kernel\\u0033\\u0032')
         add('escaped-same',escaped.encode(),0)
+        assert original['system_libraries']==['kernel32','bcrypt']
+        for name,libraries in (
+            ('missing-bcrypt',['kernel32']),('missing-kernel32',['bcrypt']),
+            ('reordered',['bcrypt','kernel32']),('duplicate',['kernel32','bcrypt','bcrypt']),
+            ('extra',['kernel32','bcrypt','user32']),('empty',[])):
+            value=modified();value['system_libraries']=libraries;add('libraries-'+name,value)
         for name in list(original)[:17]:
             value=modified();value[name]+=1;add('prefix-'+name,value,6 if name in ('sanitizers','allocator') else 1)
         for name,old in (('schema',1),('semantic',57),('semantic',84),('value_abi',16),('call_abi',20),('program_abi',25)):
