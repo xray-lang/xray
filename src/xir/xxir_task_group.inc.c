@@ -21,7 +21,7 @@ struct XirTaskGroup {
     XrXirTaskExecutor *executor;
     XrXirCall *owner;
     uint64_t frame,count,pending;
-    uint64_t first_panic_order;
+    uint64_t first_panic_order,first_error_order;
     uint32_t frontier;
     XirTask *completion;
     XirTaskSubscription *first,*last,*first_error,*first_panic;
@@ -83,7 +83,9 @@ static void task_group_notify(XrXirTaskExecutor *executor,XirTask *task) {
         if(xr_xir_call_panic_status(status)) {
             if(!group->first_panic) {group->first_panic=member;group->first_panic_order=order;}
         }
-        else if(status==XR_XIR_CALL_THROWN) {if(!group->first_error)group->first_error=member;}
+        else if(status==XR_XIR_CALL_THROWN) {
+            if(!group->first_error) {group->first_error=member;group->first_error_order=order;}
+        }
         else if(status!=XR_XIR_CALL_RETURNED&&status!=XR_XIR_CALL_CANCELLED&&group->fault==XR_XIR_CALL_READY)
             group->fault=status;
         if(!group->isolated&&(xr_xir_call_panic_status(status)||status==XR_XIR_CALL_THROWN))
@@ -111,7 +113,7 @@ XR_FUNC XrXirCallStatus xir_task_scope_begin(XrXirTaskExecutor *executor,XrXirCa
     const XrXirTypeNode *node=xr_xir_type_node(executor->config.program->types,type);
     if(!node||node->kind!=XR_XIR_TYPE_TASK||node->parameter_span||node->element!=XR_XIR_UNIT)
         return XR_XIR_CALL_BAD_ARGUMENT;
-    if(node->result!=XR_XIR_NEVER)return XR_XIR_CALL_UNSUPPORTED;
+    if(mode==2&&node->result!=XR_XIR_NEVER)return XR_XIR_CALL_UNSUPPORTED;
     XrXirCallStatus status=xir_call_scope_frame(view,&frame,&frontier);
     if(status!=XR_XIR_CALL_READY)return status;
     if(executor->next_identity==UINT64_MAX||!task_pending_member_work(xr_xir_call_admission(view),4))
@@ -140,7 +142,10 @@ XR_FUNC XrXirCallStatus xir_task_spawn_scoped(XrXirTaskExecutor *executor,XrXirC
     if(status!=XR_XIR_CALL_READY)return status;
     if(!request||!task_core_empty_value(output)||group->sealed)return XR_XIR_CALL_BAD_STATE;
     const XrXirTypeNode *node=xr_xir_type_node(executor->config.program->types,type);
-    if(!node||node->kind!=XR_XIR_TYPE_TASK||node->result!=XR_XIR_NEVER)return XR_XIR_CALL_UNSUPPORTED;
+    const XrXirTypeNode *bound=xr_xir_type_node(executor->config.program->types,group->completion->object.type);
+    if(!node||node->kind!=XR_XIR_TYPE_TASK||!bound||bound->kind!=XR_XIR_TYPE_TASK||
+        !xr_xir_error_bound_accepts(executor->config.program->types,node->result,bound->result))
+        return XR_XIR_CALL_UNSUPPORTED;
     if(group->count==UINT64_MAX||!task_pending_member_work(xr_xir_call_admission(view),4))return XR_XIR_CALL_LIMIT;
     XrXirValueStatus allocation=XR_XIR_VALUE_OK;
     XirTaskSubscription *member=xr_xir_domain_metadata_allocate(executor->config.domain,sizeof(*member),&allocation);
@@ -169,7 +174,8 @@ XR_FUNC XrXirCallStatus xir_task_scope_observe(const XrXirValue *value,
     if(!group)return XR_XIR_CALL_READY;
     if(group->owner!=call||group->frame!=frame||!group->published||group->pending)
         return XR_XIR_CALL_BAD_STATE;
-    *failure_order=group->first_panic_order;group->observed=true;return XR_XIR_CALL_READY;
+    *failure_order=group->first_panic?group->first_panic_order:group->first_error_order;
+    group->observed=true;return XR_XIR_CALL_READY;
 }
 XR_FUNC XrXirCallStatus xir_task_scope_failure_order(XrXirTaskExecutor *executor,uint64_t *output) {
     if(!executor||!output||!task_executor_owner_current(executor)||task_executor_observing(executor))
