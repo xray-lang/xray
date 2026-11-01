@@ -24,8 +24,9 @@
 typedef struct ScopeWitness {
     XrXirTaskExecutor *executor;
     XrXirValue group,members[2];
-    uint32_t mode,root_calls,child_calls;
+    uint32_t mode,root_calls,child_calls,cleanup_calls;
 } ScopeWitness;
+typedef struct ScopeState {uint32_t phase;bool cleanup_waiting,cleanup_done;} ScopeState;
 static XrXirAction scope_worker(XrXirCallView *view) {
     ScopeWitness *witness=(ScopeWitness *)view->environment;++witness->child_calls;
     uint32_t *phase=view->state;
@@ -36,8 +37,21 @@ static XrXirAction scope_worker(XrXirCallView *view) {
 }
 static XrXirAction scope_root(XrXirCallView *view) {
     ScopeWitness *witness=(ScopeWitness *)view->environment;++witness->root_calls;
-    uint32_t *phase=view->state;
-    if(!(*phase)++) {
+    ScopeState *state=view->state;
+    if(view->phase==XR_XIR_CALL_EXIT) {
+        if(state->cleanup_done)return (XrXirAction){.kind=XR_XIR_ACTION_EXIT_DONE};
+        if(!state->cleanup_waiting) {
+            state->cleanup_waiting=true;
+            return (XrXirAction){.kind=XR_XIR_ACTION_CALL,.callee=3,.flags=XR_XIR_ACTION_CLEANUP};
+        }
+        CHECK(view->inbox.status==XR_XIR_CALL_RETURNED&&!view->inbox.value.type);
+        CHECK(xr_xir_call_cleanup_frontier(view,0)==XR_XIR_CALL_READY);
+        state->cleanup_done=true;
+        return (XrXirAction){.kind=XR_XIR_ACTION_EXIT_DONE};
+    }
+    uint32_t phase=state->phase++;
+    if(!phase) {
+        CHECK(xr_xir_call_cleanup_frontier(view,1)==XR_XIR_CALL_READY);
         CHECK(xir_task_scope_begin(witness->executor,view,(XrXirType)257,1,&witness->group)==XR_XIR_CALL_BAD_ARGUMENT);
         CHECK(xir_task_scope_begin(witness->executor,view,(XrXirType)257,0,&witness->group)==XR_XIR_CALL_READY);
         XrXirCallView forged=*view;XrXirValue refused={0};
@@ -50,12 +64,41 @@ static XrXirAction scope_root(XrXirCallView *view) {
         }
         XirTask *completion=(XirTask *)(uintptr_t)witness->group.payload;
         CHECK(completion->aggregation->count==2&&completion->aggregation->pending==2&&!witness->child_calls);
+        if(witness->mode==3)return (XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value={XR_XIR_I64,0,42}};
+        if(witness->mode==4) {
+            XrXirAction leave=xr_xir_call_bounds(-9,2);leave.kind=XR_XIR_ACTION_LEAVE;
+            leave.flags=XR_XIR_ACTION_LEAVE_PANIC;return leave;
+        }
+        if(witness->mode==5)return (XrXirAction){.kind=XR_XIR_ACTION_CALL,.callee=4,.flags=XR_XIR_ACTION_PROTECTED};
         CHECK(xir_task_scope_seal(witness->executor,view,&witness->group,witness->mode==1)==XR_XIR_CALL_READY);
         CHECK(xir_task_scope_seal(witness->executor,view,&witness->group,false)==XR_XIR_CALL_BAD_STATE);
         return (XrXirAction){.kind=XR_XIR_ACTION_AWAIT_TASK,.value=witness->group};
     }
+    if(witness->mode==4) {
+        CHECK(view->inbox.status==XR_XIR_CALL_BOUNDS&&witness->cleanup_calls==1);
+        CHECK(((XirTask *)(uintptr_t)witness->group.payload)->aggregation->pending==0);
+        return (XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value={XR_XIR_I64,0,42}};
+    }
+    if(witness->mode==5&&phase==1) {
+        CHECK(view->inbox.status==XR_XIR_CALL_BOUNDS&&!witness->cleanup_calls);
+        XirTaskGroup *group=((XirTask *)(uintptr_t)witness->group.payload)->aggregation;
+        CHECK(!group->sealed&&!group->cancelling);
+        CHECK(xir_task_scope_seal(witness->executor,view,&witness->group,false)==XR_XIR_CALL_READY);
+        return (XrXirAction){.kind=XR_XIR_ACTION_AWAIT_TASK,.value=witness->group};
+    }
     CHECK(view->inbox.status==XR_XIR_CALL_RETURNED&&!view->inbox.value.type);
     return (XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value={XR_XIR_I64,0,42}};
+}
+static XrXirAction scope_cleanup(XrXirCallView *view) {
+    ScopeWitness *witness=(ScopeWitness *)view->environment;++witness->cleanup_calls;
+    for(uint32_t i=0;i<2;++i) {
+        const XirTask *task=(const XirTask *)(uintptr_t)witness->members[i].payload;
+        CHECK(atomic_load_explicit(&task->state,memory_order_acquire)==XIR_TASK_TERMINAL);
+    }
+    return (XrXirAction){.kind=XR_XIR_ACTION_RETURN};
+}
+static XrXirAction scope_inner_panic(XrXirCallView *view) {
+    (void)view;return xr_xir_call_bounds(-11,2);
 }
 static XrXirAction scope_init(XrXirCallView *view) {
     (void)view;return (XrXirAction){.kind=XR_XIR_ACTION_RETURN};
@@ -66,17 +109,20 @@ static void scope_case(uint32_t mode) {
     const XrXirType parameter=XR_XIR_I64;
     const XrXirCallEntry entries[]={
         {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_UNIT,.resume=scope_init},
-        {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_I64,.state_bytes=sizeof(uint32_t),.resume=scope_root,.environment=&witness},
+        {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_I64,.state_bytes=sizeof(ScopeState),
+         .flags=XR_XIR_ENTRY_EXIT,.resume=scope_root,.environment=&witness},
         {.abi_version=XR_XIR_CALL_ABI_VERSION,.parameters=&parameter,.parameter_count=1,.result=XR_XIR_I64,
-         .state_bytes=sizeof(uint32_t),.resume=scope_worker,.environment=&witness}};
-    XrXirFunctionIdentity identities[3]={{0},{.exported=1},{.exported=1}};
+         .state_bytes=sizeof(uint32_t),.resume=scope_worker,.environment=&witness},
+        {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_UNIT,.cleanup_owner=2,.resume=scope_cleanup,.environment=&witness},
+        {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_UNIT,.resume=scope_inner_panic}};
+    XrXirFunctionIdentity identities[5]={{0},{.exported=1},{.exported=1},{.cleanup_owner=2},{.exported=1}};
     const XrXirSourceModule source={"scope",5,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
     const XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_I64,.result=XR_XIR_NEVER},
         {.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_UNIT,.result=XR_XIR_NEVER}};
     const XrXirTypes types={nodes,2,NULL,NULL};
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
-        entries,3,&declarations,{0},&types,{0}};
+        entries,5,&declarations,{0},&types,{0}};
     XrXirArtifact *artifact=NULL;CHECK(native_metadata_fixture(&compiler.context,&spec,&artifact)==XR_XIR_OK);
     XrXirProgramInput *input=NULL;
     CHECK(xir_program_input_take(&compiler.context,&artifact,&input)==XR_XIR_OK&&!artifact);
@@ -101,7 +147,8 @@ static void scope_case(uint32_t mode) {
     do {CHECK(++polls<128);result=xr_xir_task_executor_poll_root(witness.executor,1);}while(result.status==XR_XIR_CALL_READY);
     fprintf(stderr,"scope mode%u status%u root%u child%u polls%u\n",mode,result.status,witness.root_calls,witness.child_calls,polls);
     CHECK(result.status==(mode==2?XR_XIR_CALL_BOUNDS:XR_XIR_CALL_RETURNED));
-    CHECK(witness.root_calls==(mode==2?1u:2u));
+    CHECK(witness.cleanup_calls==1);
+    CHECK(witness.root_calls==(mode==2||mode==3?3u:mode==4||mode==5?5u:4u));
     XrXirCallResult group={0};CHECK(xr_xir_task_copy_outcome(&witness.group,&group)==result.status);
     xr_xir_call_result_drop(&group);CHECK(xr_xir_task_executor_root_idle(witness.executor));
     CHECK(xr_xir_call_free(root)==XR_XIR_CALL_READY);
@@ -112,4 +159,4 @@ static void scope_case(uint32_t mode) {
     CHECK(native_fixture_stats(&compiler.context).held_bytes==baseline.held_bytes);native_fixture_owner_free(&compiler);
     CHECK(!runtime_live&&!runtime_bytes);
 }
-int main(void) {for(uint32_t mode=0;mode<3;++mode)scope_case(mode);return 0;}
+int main(void) {for(uint32_t mode=0;mode<6;++mode)scope_case(mode);return 0;}

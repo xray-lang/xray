@@ -114,6 +114,8 @@ typedef struct CallFrame {
     uint32_t effect_instruction;
     bool effect_pending;
     uint32_t cleanup_frontier;
+    uint32_t scope_cleanup_callee;
+    bool scope_draining,scope_resume,scope_child_first;
     bool protected_call, entered, exiting, scope_exit, cleanup_call, in_cleanup, exit_done, return_staged;
     bool observer_announced;
     bool native_pending;
@@ -290,9 +292,10 @@ XR_FUNC XrXirCallStatus xr_xir_call_execution_status(const XrXirCallView *view) 
     return call->cancel_requested && !cleanup_active(call) && call->abort_reason == XR_XIR_CALL_READY ?
         XR_XIR_CALL_CANCELLED : XR_XIR_CALL_READY;
 }
-XR_FUNC XrXirCallStatus xir_call_scope_frame(const XrXirCallView *view,uint64_t *output) {
-    if(!output||!xr_xir_call_admission(view))return XR_XIR_CALL_BAD_ARGUMENT;
-    *output=view->activation->top->epoch;return XR_XIR_CALL_READY;
+XR_FUNC XrXirCallStatus xir_call_scope_frame(const XrXirCallView *view,uint64_t *epoch,uint32_t *frontier) {
+    if(!epoch||!frontier||!xr_xir_call_admission(view))return XR_XIR_CALL_BAD_ARGUMENT;
+    *epoch=view->activation->top->epoch;*frontier=view->activation->top->cleanup_frontier;
+    return XR_XIR_CALL_READY;
 }
 
 static XrXirCallResult call_result(XrXirCallStatus status) {
@@ -1068,6 +1071,7 @@ static void accept_output_action(XrXirCall *call, XrXirAction action) {
     return;
 }
 
+#include "xxir_call_scope.inc.c"
 static void accept_child_action(XrXirCall *call, XrXirAction action) {
     bool cleanup = (action.flags & XR_XIR_ACTION_CLEANUP) != 0;
     CallFrame *parent = call->top;
@@ -1091,6 +1095,7 @@ static void accept_child_action(XrXirCall *call, XrXirAction action) {
     if ((!binding && !boundary_value(action.value, XR_XIR_UNIT)) || (binding && binding->entry != action.callee)) {
         abort_frames(call, XR_XIR_CALL_BAD_STATE);return;
     }
+    if(cleanup&&call_scope_cleanup_wait(call,&action))return;
     call->admitting = true;
     if (binding) {
         XrXirType type=(XrXirType)action.value.type;
@@ -1407,6 +1412,14 @@ XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
             clear_channel_wait(call);
             request_exit_status(call, XR_XIR_CALL_CANCELLED);
         }
+        if(call->top->scope_resume) {
+            --quantum;uint32_t callee=call->top->scope_cleanup_callee;
+            call->top->scope_resume=false;
+            XrXirCallView view=frame_view(call);call->active_view=&view;
+            accept_child_action(call,(XrXirAction){.kind=XR_XIR_ACTION_CALL,
+                .callee=callee,.flags=XR_XIR_ACTION_CLEANUP});
+            call->active_view=NULL;continue;
+        }
         if (call->top->native_pending) {
             --quantum;XrXirCallResult original=call_result(XR_XIR_CALL_READY);
             bool scope=call->top->scope_exit;
@@ -1554,7 +1567,8 @@ XR_FUNC bool xr_xir_call_task_wait_token(const XrXirCall *call, XrXirTaskWaitTok
 static bool task_wait_token_matches(const XrXirCall *call, const XrXirTaskWaitToken *token) {
     if (!call || !token) return false;
     const XrXirWaitRequest *wait = &token->request;
-    return xr_xir_call_executor_member(call, &token->binding) && call->top && !call->cancel_requested &&
+    return xr_xir_call_executor_member(call, &token->binding) && call->top &&
+        (!call->cancel_requested||call->top->scope_draining) &&
         call->result.status == XR_XIR_CALL_SUSPENDED && token->wake && call->result.wake == token->wake &&
         call->wait.kind == XR_XIR_WAIT_TASK && wait->kind == XR_XIR_WAIT_TASK && !wait->reserved && !wait->after_ms &&
         call->wait.subject == wait->subject && call->wait.generation == wait->generation &&
@@ -1625,6 +1639,15 @@ static XrXirCallStatus call_cancelled_error(XrXirCall *call,XrXirCallResult *out
     return XR_XIR_CALL_READY;
 }
 static XrXirCallStatus complete_owned_wait(XrXirCall *call,XrXirCallResult *outcome) {
+    if(call->wait.kind==XR_XIR_WAIT_TASK) {
+        XrXirCallStatus observed=xir_task_scope_observe(&call->waiting_task,call,call->top->epoch);
+        if(observed!=XR_XIR_CALL_READY) {xr_xir_call_result_drop(outcome);outcome->status=observed;}
+    }
+    if(call->top->scope_draining) {
+        xr_xir_value_drop(&call->waiting_task);call->wait=(XrXirWaitRequest){0};
+        call->result=call_result(XR_XIR_CALL_READY);
+        call_scope_cleanup_complete(call,outcome);return XR_XIR_CALL_READY;
+    }
     if (call->top->task_result) {
         XrXirValue result={0};
         call->driving=true;
@@ -1710,6 +1733,7 @@ XR_FUNC XrXirCallStatus xr_xir_call_fail_task_wait(XrXirCall *call, const XrXirT
         reason != XR_XIR_CALL_BAD_STATE && reason != XR_XIR_CALL_BAD_ARGUMENT && reason != XR_XIR_CALL_UNSUPPORTED))
         return XR_XIR_CALL_BAD_STATE;
     unlink_task_wait(call,true); xr_xir_value_drop(&call->waiting_task);
+    if(call->top->scope_draining) {call->top->scope_draining=false;call->top->scope_resume=true;}
     call->top->task_result=XR_XIR_UNIT;call->top->task_result_subject=NULL;
     call->wait = (XrXirWaitRequest){0}; call->result = call_result(XR_XIR_CALL_READY);
     request_execution_failure(call, reason);
@@ -1750,6 +1774,8 @@ XrXirCallStatus xr_xir_call_request_cancel(XrXirCall *call) {
         return XR_XIR_CALL_BAD_STATE;
     call->cancel_requested = true;
     if (call->budget && call->budget->native_hold==call) call->budget->native_hold=NULL;
+    if(call->result.status==XR_XIR_CALL_SUSPENDED&&call->top&&call->top->scope_draining)
+        return XR_XIR_CALL_CANCEL_REQUESTED;
     if(call->result.status==XR_XIR_CALL_SUSPENDED && call->wait.kind==XR_XIR_WAIT_ITERATOR_CLOSE && cleanup_active(call))
         return XR_XIR_CALL_CANCEL_REQUESTED;
     if (call->result.status == XR_XIR_CALL_SUSPENDED || call->result.status == XR_XIR_CALL_YIELDED) {
