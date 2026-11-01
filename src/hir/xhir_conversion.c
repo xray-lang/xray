@@ -31,7 +31,7 @@ static XrXirStatus conversion_contains(const XrXirTypes *types,XrXirType type,
     bool contains=false;
     status=conversion_contains(types,node->element,control,depth+1,&contains,reason);
     if(status!=XR_XIR_OK || contains) {*output=contains;return status;}
-    for(uint32_t p=0;p<node->parameter_count;++p) {
+    for(uint32_t p=0;p<xr_xir_type_parameter_slots(node);++p) {
         status=conversion_contains(types,node->parameters[p].type,control,depth+1,&contains,reason);
         if(status!=XR_XIR_OK || contains) {*output=contains;return status;}
     }

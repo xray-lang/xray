@@ -175,10 +175,11 @@ static XrXirType effect_term_intern_raw(EffectTerms *pool, XrXirTypeNode node) {
         {  memcpy(arguments, node.nominal.arguments, (size_t)node.nominal.argument_count * sizeof(*arguments)); }
         node.nominal.arguments = arguments;
     }
-    if (node.parameter_count) {
-        XrXirCallableParameter *parameters = effect_terms_alloc(pool, node.parameter_count, sizeof(*parameters));
+    uint32_t slots=xr_xir_type_parameter_slots(&node);
+    if (slots) {
+        XrXirCallableParameter *parameters = effect_terms_alloc(pool, slots, sizeof(*parameters));
         if (!parameters) return XR_XIR_UNIT;
-        {  memcpy(parameters, node.parameters, (size_t)node.parameter_count * sizeof(*parameters)); }
+        {  memcpy(parameters, node.parameters, (size_t)slots * sizeof(*parameters)); }
         node.parameters = parameters;
     }
     node.nominal.fields = NULL; node.nominal.field_count = 0;
