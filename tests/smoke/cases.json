@@ -229,13 +229,9 @@
       "id": "demos/07-advanced/borrow_span_examples.xr",
       "path": "demos/07-advanced/borrow_span_examples.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F05",
-        "first_diagnostic": "demos/07-advanced/borrow_span_examples.xr:56:4: error: move parameter syntax is not yet supported by the compiler"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/borrow_span_examples.txt"
     },
     {
       "id": "demos/07-advanced/crypto_entropy.xr",
@@ -820,6 +816,14 @@
       "expect": "pass",
       "exit_code": 0,
       "stdout": "tests/smoke/expected/one.txt"
+    },
+    {
+      "id": "native:demos/07-advanced/borrow_span_examples.xr",
+      "path": "demos/07-advanced/borrow_span_examples.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/borrow_span_examples.txt"
     }
   ]
 }

@@ -1,0 +1,11 @@
+value param: 11, original: 10
+sumBorrowed: 10
+nums still usable: 4
+bytes after fillZero: 0, 0
+answer after initializeAnswer: 42
+copied length: 4
+holder length: 4
+moved bytes length: 8
+scaled view: 30, 40, 50
+owner after view write: 30, 40, 50
+buffer view: 7, 9, len 4
