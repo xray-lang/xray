@@ -598,10 +598,14 @@ static XrSourceStatus api_execute_entry(const ApiEntry *entry,
         }
         bool guest=terminal==XR_XIR_CALL_RETURNED || terminal==XR_XIR_CALL_THROWN ||
             xr_xir_call_panic_status(terminal) || terminal==XR_XIR_CALL_CLEANUP_FAILED;
+        bool owned_guest=guest && result->value.status!=XR_XIR_CALL_READY;
         if (result->value.status!=XR_XIR_CALL_READY && (guest || pending)) {
             *completion->result=result;result=NULL;
         }
-        status=cleanup!=XR_XIR_CALL_READY?api_call(cleanup):guest?XR_SOURCE_OK:api_call(executed);
+        /* Disposal can repeat the owned guest terminal without a new close failure. */
+        bool repeated_cleanup=owned_guest && !pending && cleanup==terminal;
+        status=cleanup!=XR_XIR_CALL_READY && !repeated_cleanup?api_call(cleanup):
+            guest?XR_SOURCE_OK:api_call(executed);
     }
     xr_compile_resources_free(call);xray_source_result_free(result);return status;
 }
