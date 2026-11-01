@@ -38,6 +38,11 @@
 #include "xxir_task_result.h"
 #include "xxir_channel_watch_internal.h"
 #include "xxir_channel_call_internal.h"
+#include "xxir_call_select_internal.h"
+#include "xxir_channel_select_internal.h"
+#include "xxir_tuple.h"
+#include "xxir_nullable.h"
+#include "../os/os_random.h"
 #include "xxir_call_time_internal.h"
 #include "xxir_generator_internal.h"
 #include "xxir_instance_generator_internal.h"
@@ -146,6 +151,10 @@ struct XrXirCall {
     XrXirChannelWatch *channel_watch;
     XrXirChannelSendWait *channel_send;
     XrXirChannelRecvWait *channel_recv;
+    XrXirChannelSelect *channel_select;
+    XrXirType channel_select_type;
+    uint64_t channel_select_clock;
+    bool channel_select_pending,channel_select_due;
     uint64_t channel_epoch;
     CallChannelTiming channel_timing;
     const void *executor_owner;
@@ -312,15 +321,20 @@ static void release_channel_wait(XrXirCall *call) {
     XrXirChannelSendWait *send = call->channel_send;
     XrXirChannelRecvWait *recv = call->channel_recv;
     call->channel_watch = NULL; call->channel_send = NULL; call->channel_recv = NULL; call->channel_epoch = 0;
+    XrXirChannelSelect *select=call->channel_select;
+    call->channel_select=NULL;call->channel_select_type=XR_XIR_UNIT;
+    call->channel_select_clock=0;call->channel_select_pending=false;call->channel_select_due=false;
     if (call->wait.kind == XR_XIR_WAIT_CHANNEL) call->wait = (XrXirWaitRequest){0};
     xr_xir_channel_watch_drop(watch);
     xr_xir_channel_send_wait_drop(send);
     xr_xir_channel_recv_wait_drop(recv);
+    xr_xir_channel_select_drop(select);
 }
 static void clear_channel_wait(XrXirCall *call) {
     release_channel_wait(call);channel_timing_clear(call);
 }
 static XrXirCallStatus channel_timing_poll(XrXirCall *call);
+static XrXirCallStatus call_select_deadline_poll(XrXirCall *call);
 
 static bool boundary_value(XrXirValue value, XrXirType type) {
     if (type == XR_XIR_UNIT)
@@ -876,6 +890,7 @@ static void abort_frames(XrXirCall *call, XrXirCallStatus reason) {
 #include "xxir_call_exit.inc.c"
 #include "xxir_call_channel.inc.c"
 #include "xxir_channel_call.inc.c"
+#include "xxir_call_select.inc.c"
 
 XrXirCallStatus xr_xir_call_config_init(XrXirCallConfig *config, size_t size) {
     if (!config) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -1169,7 +1184,9 @@ static void accept_child_action(XrXirCall *call, XrXirAction action) {
 }
 
 static void accept_action(XrXirCall *call, XrXirAction action) {
-    if ((call->channel_watch || call->channel_send || call->channel_recv) && action.kind != XR_XIR_ACTION_AWAIT_CHANNEL) {
+    if ((call->channel_watch || call->channel_send || call->channel_recv ||
+        (call->channel_select&&(call->channel_select_pending||action.kind!=XR_XIR_ACTION_CONTINUE))) &&
+        action.kind != XR_XIR_ACTION_AWAIT_CHANNEL) {
         abort_frames(call, XR_XIR_CALL_BAD_STATE); return;
     }
     CallFrame *frame=call->top;
@@ -1401,8 +1418,9 @@ XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
         return call_result(XR_XIR_CALL_BAD_ARGUMENT);
     if (call->driving || call_observing(call))
         return call_result(XR_XIR_CALL_BUSY);
-    if (xr_xir_call_channel_waiting(call) && call->channel_timing.active) {
-        call->driving=true;XrXirCallStatus timed=channel_timing_poll(call);
+    if (xr_xir_call_channel_waiting(call) && (call->channel_timing.active||call->channel_select)) {
+        call->driving=true;XrXirCallStatus timed=call->channel_select?
+            call_select_deadline_poll(call):channel_timing_poll(call);
         if (timed!=XR_XIR_CALL_READY) {
             clear_channel_wait(call);call->result=call_result(XR_XIR_CALL_READY);request_execution_failure(call,timed);
         }

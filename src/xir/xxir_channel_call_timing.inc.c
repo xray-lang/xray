@@ -90,5 +90,5 @@ XR_FUNC XrXirCallStatus xr_xir_call_channel_deadline_poll(XrXirCall *call,const 
     if (!call || !binding || !call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->driving || call_observing(call)) return XR_XIR_CALL_BUSY;
     if (!xr_xir_call_executor_member(call,binding) || !xr_xir_call_channel_waiting(call)) return XR_XIR_CALL_BAD_STATE;
-    return channel_timing_poll(call);
+    return call->channel_select?call_select_deadline_poll(call):channel_timing_poll(call);
 }
