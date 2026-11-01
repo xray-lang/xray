@@ -252,11 +252,13 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
             !xr_xir_module_imports(d, caller_module, callee_module))
             return XR_XIR_BAD_STRUCTURE;
         if (!xr_xir_module_same_scope(d,caller_module,callee_module) && !d->functions[op->immediate].exported && !materializer) {
-            bool source_visible = false;
-            XrXirStatus status = instance_call_visibility(module, caller_id,
-                (uint32_t)(op - function->instructions), (uint32_t)op->immediate, &source_visible);
-            if (status != XR_XIR_OK) return status;
-            if (!source_visible && !scoped_authorized) return XR_XIR_BAD_STRUCTURE;
+            bool source_visible = scoped_authorized;
+            if (!source_visible) {
+                XrXirStatus status = instance_call_visibility(module, caller_id,
+                    (uint32_t)(op - function->instructions), (uint32_t)op->immediate, &source_visible);
+                if (status != XR_XIR_OK) return status;
+            }
+            if (!source_visible) return XR_XIR_BAD_STRUCTURE;
         }
     }
 
