@@ -48,7 +48,7 @@ static void wire_built(const XrXirCompileContext *context) {
     XrXirConstruction *owner=NULL;CHECK(xr_xir_compile_construction_new_v5(context,&types,&input,&(XrXirSlotFacts){NULL,0},&owner, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_OK);
     CHECK(xr_xir_compile_declarations_verify(context,&declarations,&types,4,XR_XIR_PROGRAM)==XR_XIR_OK);
-    CHECK(xir_construction_verify(context,&built,owner)==XR_XIR_OK);
+    CHECK(xir_construction_verify(context,&built,owner,NULL)==XR_XIR_OK);
     XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_check_v2(context,&built,owner,&checked,&diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"Independent Built status=%u function=%u instruction=%u\n",(unsigned)status,diagnostic.function,diagnostic.instruction);
