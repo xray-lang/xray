@@ -159,12 +159,23 @@ static XrXirStatus declaration_instruction(const XrXirFunction *function,
 #include "xxir_task_verify.inc.c"
 
 static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
-    const XrXirInstruction *op,const XrXirModule *module,XrXirCompileContext *remaining) {
+    const XrXirInstruction *op,const XrXirModule *module,XrXirCompileContext *remaining,
+    const XrXirConstruction *construction) {
     uint32_t caller_id=(uint32_t)(function-module->functions);
     if (op->immediate < 0 || (uint64_t) op->immediate >= module->function_count)
         return XR_XIR_BAD_STRUCTURE;
     if (xr_xir_function_is_generator(module,(uint32_t)op->immediate)!=
         (op->op==XR_XIR_GENERATOR_NEW)) return XR_XIR_BAD_TYPE;
+    bool scoped_authorized=false;
+    if (module->declarations && module->declarations->functions[op->immediate].native_callable==
+        XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN) {
+        if (op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE) return XR_XIR_BAD_TYPE;
+        XirEffectInput input={module,construction,NULL};
+        XrXirStatus status=xir_compile_buffer_scoped_site(remaining,input,caller_id,
+            (uint32_t)(op-function->instructions),&scoped_authorized);
+        if (status!=XR_XIR_OK) return status;
+        if (!scoped_authorized) return XR_XIR_BAD_TYPE;
+    }
     bool bound_helper=false,default_authorized=false;
     XrXirStatus helper_status=xr_xir_compile_default_helper(remaining, module, (uint32_t)op->immediate, &bound_helper);
     if (helper_status!=XR_XIR_OK) return helper_status;
@@ -245,7 +256,7 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
             XrXirStatus status = instance_call_visibility(module, caller_id,
                 (uint32_t)(op - function->instructions), (uint32_t)op->immediate, &source_visible);
             if (status != XR_XIR_OK) return status;
-            if (!source_visible) return XR_XIR_BAD_STRUCTURE;
+            if (!source_visible && !scoped_authorized) return XR_XIR_BAD_STRUCTURE;
         }
     }
 
@@ -323,7 +334,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if (op->op == XR_XIR_F64_TRY_PARSE &&
         xr_xir_nullable_element(module->types, op->type) != XR_XIR_F64) return XR_XIR_BAD_TYPE;
     if (xr_xir_op_references_function(op->op)) {
-        XrXirStatus status=instruction_direct_call_shape(function,op,module,remaining);
+        XrXirStatus status=instruction_direct_call_shape(function,op,module,remaining,construction);
         if (status!=XR_XIR_OK) return status;
     }
     if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) {
