@@ -94,7 +94,8 @@ static inline bool xir_stringable_body(const XrXirModule *m,uint32_t index,XrXir
         identity->cleanup_owner || identity->native_callable || identity->test_role || identity->test_timeout_seconds ||
         (identity->promises&~XR_XIR_FUNCTION_NO_SUSPEND) ||
         (m->generics && (m->generics[index].parameter_count || m->generics[index].argument_count)) ||
-        f->parameter_count!=1 || !f->parameters || f->parameters[0]!=subject || f->result!=XR_XIR_STRING ||
+        f->parameter_count!=1 || !f->parameters || f->consume_parameter_count || f->consume_parameters ||
+        f->parameters[0]!=subject || f->result!=XR_XIR_STRING ||
         f->error_type!=XR_XIR_NEVER || f->block_count!=1 || !f->blocks ||
         !f->instruction_count || !f->instructions || f->blocks[0].first ||
         f->blocks[0].count!=f->instruction_count || f->blocks[0].panic || f->blocks[0].frontier || f->operand_count || f->operands) return false;

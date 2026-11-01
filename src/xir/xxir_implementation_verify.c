@@ -66,6 +66,7 @@ static XrXirStatus implementation_function(const XrXirModule *module, const XrXi
     uint32_t full_count = owner->parameter_count+requirement->own_parameter_count;
     if ((generic ? generic->parameter_count : 0) != full_count) return XR_XIR_BAD_TYPE;
     const XrXirFunction *f = &module->functions[function];
+    if(f->consume_parameter_count||f->consume_parameters)return XR_XIR_BAD_TYPE;
     const XrXirTypes *types = xr_xir_interface_closure_types(closure);
     const XrXirTypeNode *signature = xr_xir_callable_signature(types,requirement->signature);
     if (!signature || f->parameter_count != signature->parameter_count+1 || !f->parameters) return XR_XIR_BAD_TYPE;

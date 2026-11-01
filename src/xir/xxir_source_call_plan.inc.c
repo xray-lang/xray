@@ -331,6 +331,11 @@ static bool source_call_complete_argument(SourceContext *ctx,AstNode *node,
     bool completed = source_plan_complete(ctx,arguments[a].value,value);
     ctx->effect_argument = previous_argument;
     if (!completed) return false;
+    XrHirBodyAction consuming={0};
+    if(!source_call_rest_argument(plan,a)&&!source_hir_call_use(ctx,node,plan,
+        (XrHirCallUseInput){.kind=XR_HIR_CALL_PLAN,.formal=parameter},NULL,&consuming))return false;
+    if(consuming.consuming&&source_call_argument_access(call,a)==XR_CALL_ARG_PLAIN&&
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_COPY,value->type,{value->id},{0},0,{0}},value))return false;
     if (inferred && !arguments[a].value->conversion_ready &&
         !source_call_observe(ctx,node,state,formal,value->type,requirement)) return false;
     return source_call_rest_argument(plan,a) || source_hir_call_use(ctx,node,plan,(XrHirCallUseInput){.kind=XR_HIR_CALL_VALUE,

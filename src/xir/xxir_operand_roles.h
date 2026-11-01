@@ -33,8 +33,8 @@ static inline bool xr_xir_cell_is_unit(const XrXirTypes *types, XrXirType cell) 
 static inline uint32_t xr_xir_cell_payload_operands(const XrXirTypes *types,
     XrXirType cell, XrXirOp op) {
     bool unit = xr_xir_cell_is_unit(types, cell);
-    return op == XR_XIR_CELL_NEW ? !unit :
-        op == XR_XIR_CELL_READ ? 1u : 1u + !unit;
+    return op == XR_XIR_CELL_NEW || op==XR_XIR_CELL_NEW_TAKE ? !unit :
+        op == XR_XIR_CELL_READ || op==XR_XIR_CELL_TAKE ? 1u : 1u + !unit;
 }
 
 /* A present Unit has a tag and an exact zero value, not an SSA payload. */

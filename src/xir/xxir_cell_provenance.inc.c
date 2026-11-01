@@ -704,7 +704,7 @@ static bool cell_proof_edge_row(CellProofBuild *build,uint32_t f,uint32_t i,
     uint32_t result = begin+function->parameter_count+i;
     bool cell = cell_proof_tracking(proof,f,function->parameter_count+i) == 1;
     if (op->op == XR_XIR_CELL_PROJECT && !cell_proof_project_identity(build,f,op->args[0])) return false;
-    if (cell && op->op == XR_XIR_CELL_NEW) {
+    if (cell && (op->op == XR_XIR_CELL_NEW || op->op==XR_XIR_CELL_NEW_TAKE)) {
         if (!cell_proof_seed(build,result,XR_XIR_CELL_ORIGIN_OWNED)) return false;
     } else if (cell && op->op == XR_XIR_CELL_PROJECT) {
         if (!cell_proof_seed(build,result,XR_XIR_CELL_ORIGIN_SCOPED) ||
@@ -930,6 +930,8 @@ static bool cell_proof_sink(CellProofBuild *build, uint32_t f, uint32_t i,
     if (op->op==XR_XIR_VIEW_NEW && !ordinal) return cell_proof_view_root(build,f,i,source);
     if (op->op == XR_XIR_CELL_STRING_APPEND && !ordinal)
         return !(origin & XR_XIR_CELL_ORIGIN_SCOPED) || cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
+    if(op->op==XR_XIR_CELL_TAKE&&!ordinal)
+        return origin==XR_XIR_CELL_ORIGIN_OWNED||cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
     if ((op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_WRITE ||
         op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_CELL_LOCAL_WRITE) && !ordinal) return true;
     if (op->op == XR_XIR_LOCAL_WRITE || op->op == XR_XIR_OWNED_LOCAL_WRITE) return true;

@@ -576,6 +576,9 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
             " if (status != XR_XIR_CALL_READY) return (XrXirAction) "
             "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};\n",
             (uint32_t)(op-function->instructions),op->args[1]?"state->arguments":"NULL",op->args[1]);
+    append(buffer," XrXirCallStatus transferred=xr_xir_instance_move_arguments_at(view,%uu,state->frame,%s,%uu);\n"
+        " if(transferred!=XR_XIR_CALL_READY)return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,transferred}};\n",
+        (uint32_t)(op-function->instructions),op->args[1]?"state->arguments":"NULL",op->args[1]);
     append(buffer," XrXirCallStatus observed = xir_call_native_source_call(view,%uu,callee,%s);\n"
         " if (observed != XR_XIR_CALL_READY) return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,observed}};\n",
         (uint32_t)(op-function->instructions),(op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT) ? "true" : "false");
@@ -1706,6 +1709,12 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
                 " { XrXirValueStatus status=xr_xir_call_view_argument_take(view,%uu,state->arguments);\n"
                 " if (status!=XR_XIR_VALUE_OK) return xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0}); }\n"
                 " xr_xir_owned_slot_move(state->frame,%uu,state->arguments);\n",p,layout->offsets[p]);
+        else if (xr_xir_declared_parameter_mode(module->types,function->parameters[p],
+            function->consume_parameters,function->consume_parameter_count,p)==XR_PARAM_MOVE)
+            append(buffer," state->arguments[0]=(XrXirValue){0};\n"
+                " { XrXirValueStatus status=xir_call_owned_argument_take(view,%uu,state->arguments);\n"
+                " if(status!=XR_XIR_VALUE_OK)return xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0}); }\n"
+                " xr_xir_owned_slot_move(state->frame,%uu,state->arguments);\n",p,layout->offsets[p]);
         else if (xr_xir_type_is_owned(module->types, function->parameters[p]))
             EMIT_FORMAT(buffer, et_6743ad1a0cb6e9cf, " if (xr_xir_owned_slot_copy(state->frame, %uu, view->arena, (XrXirType) %u, view->arguments[%u].payload) "
                    "!= XR_XIR_VALUE_OK) goto limit;\n", layout->offsets[p], (uint32_t) function->parameters[p], p);
@@ -2017,6 +2026,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     EMIT_LITERAL(buffer,"#include \"xir/xxir_call_native_source_internal.h\"\n");
     EMIT_LITERAL(buffer,"#include \"xir/xxir_call_view_operation_internal.h\"\n");
     EMIT_LITERAL(buffer,"#include \"xir/xxir_call_view_moves_internal.h\"\n");
+    append(buffer,"#include \"xir/xxir_call_take_internal.h\"\n");
     append(buffer,"_Static_assert(XIR_CALL_NATIVE_SOURCE_VERSION==%uu,\"native source observation version\");\n",XIR_CALL_NATIVE_SOURCE_VERSION);
     EMIT_FORMAT(buffer, et_3a8a16cd770e8ec2, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_generator_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"

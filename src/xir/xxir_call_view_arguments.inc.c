@@ -82,7 +82,11 @@ static XrXirCallStatus call_view_argument_copy(XrXirCall *call,CallFrame *frame,
 static void frame_view_arguments_release(XrXirCall *call,CallFrame *frame) {
     bool admitting=call->admitting;call->admitting=true;
     frame_view_release(call,frame);
-    for (uint32_t p=frame->entry->parameter_count;p;--p) xr_xir_value_drop(&frame->arguments[p-1]);
+    for (uint32_t p=frame->entry->parameter_count;p;--p) {
+        if(frame->take_source&&p-1>=frame->take_captures&&
+            call_take_parameter(frame->take_source,p-1-frame->take_captures))frame->arguments[p-1]=(XrXirValue){0};
+        else xr_xir_value_drop(&frame->arguments[p-1]);
+    }
     if (frame->view_return) xr_xir_view_origin_unpin(&frame->view_return->origin);
     call_view_return_program_drop(frame->view_return);
     call->admitting=admitting;

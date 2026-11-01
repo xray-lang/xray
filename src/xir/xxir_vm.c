@@ -38,6 +38,7 @@
 #include "xxir_operand_roles.h"
 #include "xxir_call_view_operation_internal.h"
 #include "xxir_call_view_moves_internal.h"
+#include "xxir_call_take_internal.h"
 #include "xxir_view_types_internal.h"
 #include "xxir_instance_value.h"
 #include "xxir_instance_hash.h"
@@ -424,6 +425,12 @@ static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirIn
                                      {{0}, {0}, {0}, {0}}, 0};
             return XR_XIR_RUN_OK;
         }
+    }
+    XrXirCallStatus transferred=xr_xir_instance_move_arguments_at(run->view,at,run->frame,
+        op->args[1]?state->arguments:NULL,op->args[1]);
+    if(transferred!=XR_XIR_CALL_READY) {
+        *action=(XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,transferred}};
+        return XR_XIR_RUN_OK;
     }
     state->invoke = op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT ? at + 1 : 0;
     state->panic = run->function->blocks[vm_block(run->function, at)].panic;
@@ -1019,6 +1026,12 @@ static XrXirAction vm_resume_observed(XrXirCallView *view, const XrXirVmBinding 
                 state->arguments[0]=(XrXirValue){0};
                 XrXirValueStatus status=xr_xir_call_view_argument_take(view,i,state->arguments);
                 if (status!=XR_XIR_VALUE_OK) return xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0});
+                xr_xir_owned_slot_move(run.frame,layout->offsets[i],state->arguments);
+            } else if (xr_xir_declared_parameter_mode(module->types,function->parameters[i],
+                function->consume_parameters,function->consume_parameter_count,i)==XR_PARAM_MOVE) {
+                state->arguments[0]=(XrXirValue){0};
+                XrXirValueStatus status=xir_call_owned_argument_take(view,i,state->arguments);
+                if(status!=XR_XIR_VALUE_OK)return xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0});
                 xr_xir_owned_slot_move(run.frame,layout->offsets[i],state->arguments);
             } else if (xr_xir_type_is_owned(module->types, function->parameters[i])) {
                 if (xr_xir_owned_slot_copy(run.frame, layout->offsets[i], view->arena, function->parameters[i], view->arguments[i].payload) != XR_XIR_VALUE_OK)

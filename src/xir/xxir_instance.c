@@ -29,6 +29,7 @@
 #include "xxir_instance_function_internal.h"
 #include "xxir_value_internal.h"
 #include "xxir_value_take_internal.h"
+#include "xxir_call_take_internal.h"
 #include "xxir_type_arena_internal.h"
 #include "xxir_call_internal.h"
 #include "xxir_cell_owner_internal.h"
@@ -1757,6 +1758,54 @@ XR_FUNC XrXirCallStatus xr_xir_instance_resolve_function_at(XrXirCallView *view,
     status=xr_xir_call_invocation_stage(view,&selected);
     if (status!=XR_XIR_CALL_READY) return status;
     *entry=selected.target;return XR_XIR_CALL_READY;
+}
+XR_FUNC XrXirCallStatus xr_xir_instance_move_arguments_at(XrXirCallView *view,
+    uint32_t instruction,void *frame,const XrXirValue *arguments,uint32_t count) {
+    if(!instance_view_current(view))return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance=view_instance(view);
+    const XrXirProgramPermissions *permissions=instance?instance->program->permissions:NULL;
+    uint32_t entry=xr_xir_call_current_entry(view->activation);
+    if(!permissions||!permissions->input||!permissions->input->artifact||!permissions->layouts||
+        entry>=permissions->input->artifact->module.function_count)return XR_XIR_CALL_BAD_STATE;
+    const XrXirModule *module=&permissions->input->artifact->module;
+    const XrXirFunction *caller=&module->functions[entry];
+    const XrXirFunctionLayout *layout=&permissions->layouts[entry];
+    if(instruction>=caller->instruction_count)return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirInstruction *op=&caller->instructions[instruction];
+    XirCallTakeArguments take={.caller=caller,.layout=layout,.frame=frame,
+        .arguments=arguments,.instruction=instruction,.count=count};
+    bool needed=false;
+    if(op->op==XR_XIR_CALL||op->op==XR_XIR_INVOKE) {
+        if(op->immediate<0||(uint64_t)op->immediate>=module->function_count)return XR_XIR_CALL_BAD_ARGUMENT;
+        take.target=(uint32_t)op->immediate;take.callee=&module->functions[take.target];
+        needed=take.callee->consume_parameter_count!=0;
+    } else if(op->op==XR_XIR_CALL_INDIRECT||op->op==XR_XIR_INVOKE_INDIRECT) {
+        take.signature=xr_xir_callable_signature(module->types,xr_xir_operand_type(caller,(uint32_t)op->immediate));
+        if(!take.signature)return XR_XIR_CALL_BAD_ARGUMENT;
+        for(uint32_t p=0;p<take.signature->parameter_count;++p) {
+            if(!xr_xir_domain_work(instance->domain,1))return XR_XIR_CALL_LIMIT;
+            needed|=take.signature->parameters[p].mode==XR_PARAM_MOVE;
+        }
+        if(needed) {
+            if(!xir_call_frame_span(view,frame,layout->frame_bytes))return XR_XIR_CALL_BAD_ARGUMENT;
+            uint32_t offset=layout->offsets[(uint32_t)op->immediate];int64_t payload=0;
+            if(offset>layout->frame_bytes||sizeof(payload)>layout->frame_bytes-offset)return XR_XIR_CALL_BAD_STATE;
+            memcpy(&payload,(unsigned char *)frame+offset,sizeof(payload));
+            XrXirValue function=xr_xir_value_load(view->arena,xr_xir_operand_type(caller,(uint32_t)op->immediate),payload);
+            XrXirCallStatus status=xr_xir_instance_resolve_function(view,&function,&take.target);
+            if(status!=XR_XIR_CALL_READY)return status;
+        }
+    } else return XR_XIR_CALL_BAD_ARGUMENT;
+    if(!needed)return XR_XIR_CALL_READY;
+    if(count!=op->args[1]||(count&&!arguments)||!xir_call_frame_span(view,frame,layout->frame_bytes))
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    for(uint32_t p=0;p<count;++p) {
+        if(!xr_xir_domain_work(instance->domain,1))return XR_XIR_CALL_LIMIT;
+        uint32_t value=caller->operands[op->args[0]+p];
+        if(!xr_xir_value_argument(&arguments[p],view->arena,xr_xir_operand_type(caller,value)))
+            return XR_XIR_CALL_BAD_ARGUMENT;
+    }
+    return xir_call_arguments_stage(view,&take);
 }
 static XrXirCallStatus prepare_function_gate(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_argument_weakening_admit(XrXirCallView *view,

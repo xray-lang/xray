@@ -38,7 +38,7 @@ typedef struct XrHirBodyAction {
     XrXirType source,target,key;
     XrXirOp operation;
     uint32_t formal,argument,receiver_count,argument_count,field;
-    bool reference;
+    bool reference,consuming;
 } XrHirBodyAction;
 typedef struct XrHirBindingKey {uint32_t module,declaration,node,parent_declaration,function,storage;} XrHirBindingKey;
 typedef struct XrHirBindingInput {

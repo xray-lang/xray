@@ -497,7 +497,7 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
             if (status!=XR_XIR_OK) return status;
         } else if (cell || object || type==XR_XIR_BUFFER_STORAGE || place!=XR_XIR_PLACE_NONE) {
             bool read=op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CLASS_GET || role==XR_XIR_OPERAND_READ || (receiver_read && p==0);
-            bool write=(call && !(receiver_read && p==0)) || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE ||
+            bool write=(call && !(receiver_read && p==0)) || op->op==XR_XIR_CELL_TAKE || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE ||
                 op->op==XR_XIR_CELL_STRING_APPEND || op->op==XR_XIR_CLASS_SET || role==XR_XIR_OPERAND_WRITE;
             if (!read && !write) return XR_XIR_UNRESOLVED;
             bool blocked=false;XrXirStatus status=view_access_use(a,&event->before,value,write,false,&blocked);

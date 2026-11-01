@@ -17,6 +17,7 @@
 #include "../base/xresource_limits.h"
 #include "xxir_call_generator.h"
 #include "xxir_call_internal.h"
+#include "xxir_call_take_internal.h"
 #include "xxir_program.h"
 #include "xxir_call_observer_internal.h"
 #include "xxir_call_native_observer_internal.h"
@@ -107,6 +108,9 @@ typedef struct CallFrame {
     XrXirCallCodeKind code_kind;
     uint32_t depth, loan_count, cell_capacity;
     XirEffectInvocationSelection invocation,pending_invocation;
+    XirCallTakeArguments take;
+    const XirCallTakeArguments *take_source;
+    uint32_t take_captures;
     uint32_t effect_instruction;
     bool effect_pending;
     uint32_t cleanup_frontier;
@@ -595,7 +599,9 @@ XR_FUNC XrXirCallStatus xir_call_vm_visit_ready(XrXirCall *call,const XrXirExecu
 #include "xxir_call_class_access.inc.c"
 #include "xxir_call_view.inc.c"
 #include "xxir_call_view_operation.inc.c"
+static bool call_take_parameter(const XirCallTakeArguments *,uint32_t);
 #include "xxir_call_view_arguments.inc.c"
+#include "xxir_call_take.inc.c"
 #include "xxir_call_view_moves.inc.c"
 #include "xxir_call_view_returns.inc.c"
 
@@ -634,6 +640,7 @@ typedef struct CallFramePreparation {
     bool admitted;
     XrXirFaultDetail *fault;
     const XirEffectInvocationSelection *invocation;
+    const XirCallTakeArguments *take;
     const XrXirValue *function;
     const XrXirCallMetadata *metadata;
 } CallFramePreparation;
@@ -725,6 +732,11 @@ static XrXirCallStatus push_frame_owned(XrXirCall *call, uint32_t id,
     frame->loans = (CallCellLoan *)((unsigned char *)frame + (size_t)loans_offset);
     frame->view_return=borrowed_result ? (CallViewReturn *)((unsigned char *)frame+(size_t)returns_offset) : NULL;
     uint32_t captures = binding ? binding->capture_count : 0;
+    if(preparation->take) {
+        if(preparation->take->target!=id||preparation->take->arguments!=arguments||
+            preparation->take->count!=count) {frame_release(call,frame);return XR_XIR_CALL_BAD_ARGUMENT;}
+        frame->take_source=preparation->take;frame->take_captures=captures;
+    }
     bool admitting=call->admitting;
     status=call_view_return_capture(call,frame,arguments,captures);
     call->admitting=admitting;
@@ -735,7 +747,11 @@ static XrXirCallStatus push_frame_owned(XrXirCall *call, uint32_t id,
         const XrXirValue *value = i < captures ? &binding->captures[i] : &arguments[i - captures];
         bool borrowed=xr_xir_compile_type_arena_borrowed(call->config.admission.arena,entry->parameters[i])!=0;
         bool callable=xr_xir_callable_signature(xr_xir_compile_type_arena_types(call->config.admission.arena),entry->parameters[i])!=NULL;
-        status=!borrowed && callable && value->type!=(uint32_t)entry->parameters[i] ?
+        if(call_take_pending(frame,i)) {
+            if(borrowed||xr_xir_type_is_cell(xr_xir_compile_type_arena_types(call->config.admission.arena),entry->parameters[i]))
+                status=XR_XIR_CALL_BAD_ARGUMENT;
+            else {frame->arguments[i]=*value;status=XR_XIR_CALL_READY;}
+        } else status=!borrowed && callable && value->type!=(uint32_t)entry->parameters[i] ?
             (call->active_view ? xr_xir_instance_weaken_function(call->active_view,entry->parameters[i],value,&frame->arguments[i]) :
              XR_XIR_CALL_BAD_ARGUMENT) :
             call_view_argument_copy(call,frame,value,entry->parameters[i],&frame->arguments[i]);
@@ -763,6 +779,7 @@ static XrXirCallStatus push_frame_owned(XrXirCall *call, uint32_t id,
     call->config.admission.arena=frame->parent?frame->parent->metadata->arena:call->metadata.arena;
     call->config.admission.context=frame->parent?frame->parent->metadata->admission_context:call->metadata.admission_context;
     if (status == XR_XIR_CALL_READY) status = frame_class_recheck(call, frame, preparation);
+    if (status == XR_XIR_CALL_READY) status = call_take_recheck(call,frame);
     if (status != XR_XIR_CALL_READY) {
         frame_cell_abort(frame);
         frame_view_arguments_release(call,frame);
@@ -770,6 +787,7 @@ static XrXirCallStatus push_frame_owned(XrXirCall *call, uint32_t id,
         return status;
     }
     frame_cell_commit(call, frame);
+    call_take_commit(frame);
     if (call->budget) ++call->budget->release_tickets;
     call->top = frame;
     ++accounting->depth;
@@ -1082,12 +1100,14 @@ static void accept_child_action(XrXirCall *call, XrXirAction action) {
     XrXirFaultDetail preparation_fault = {0};
     CallFramePreparation preparation = {.admitted=false, .fault=&preparation_fault,
         .invocation=parent->pending_invocation.owner?&parent->pending_invocation:NULL,
+        .take=parent->take.caller?&parent->take:NULL,
         .function=&action.value,.metadata=&metadata};
     if (status == XR_XIR_CALL_READY)
         status = push_frame(call, action.callee, action.arguments, action.argument_count, binding,&preparation);
     call->admitting = false;
     parent->effect_pending=false;
     parent->pending_invocation=(XirEffectInvocationSelection){0};
+    parent->take=(XirCallTakeArguments){0};
     if (status != XR_XIR_CALL_READY) {
         if (!cleanup && ((status == XR_XIR_CALL_BOUNDS && xr_xir_fault_bounds_valid(preparation_fault)) ||
             (status == XR_XIR_CALL_RUNTIME_PANIC && xr_xir_fault_runtime_valid(preparation_fault)))) {
@@ -1413,6 +1433,7 @@ XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
         call->top->effect_pending=false;
         call->top->effect_instruction=UINT32_MAX;
         call->top->pending_invocation=(XirEffectInvocationSelection){0};
+        call->top->take=(XirCallTakeArguments){0};
         call_observer_event(call, call->top, XR_XIR_CALL_DISPATCH_BEGIN, XR_XIR_CALL_READY);
         XrXirAction action = call->top->entry->resume(&view);
         if (call->top->code_kind == XR_XIR_CALL_CODE_UNKNOWN) {

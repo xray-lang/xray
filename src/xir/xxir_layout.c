@@ -197,6 +197,7 @@ static XrXirStatus function_layout(const LayoutInputRequest *request,uint32_t in
         }
     }
     XrXirLayout result;
+    if(function->consume_parameter_count&&!outgoing)outgoing=1;
     XrXirStatus outgoing_status=layout_outgoing(request,function,index,&outgoing);
     if (outgoing_status!=XR_XIR_OK) return outgoing_status;
     uint32_t paths = 0;

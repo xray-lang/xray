@@ -193,7 +193,8 @@ XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *body,XrHirBodySignature
         formal.type=input->type;
     } else if(callback&&!declaration.callback_ready)formal.type=XR_XIR_UNIT;
     XrHirBodyAction action={.source=formal.type,.target=formal.type,.formal=input->formal,.argument=input->argument,
-        .receiver_count=declaration.declaration.receiver_count,.reference=formal.mode==XR_PARAM_REF};
+        .receiver_count=declaration.declaration.receiver_count,.reference=formal.mode==XR_PARAM_REF,
+        .consuming=formal.mode==XR_PARAM_MOVE};
     if(callback_final)action.argument_count=xr_xir_callable_signature(body->types,input->type)->parameter_count;
     if(input->spread&&action.reference)return XR_XIR_BAD_TYPE;
     if(input->kind==XR_HIR_CALL_PLAN) {

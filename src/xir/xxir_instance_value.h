@@ -23,9 +23,12 @@ XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp oper
 /* The current sealed whole-local take instruction supplies its exact type. */
 XR_FUNC XrXirCallStatus xr_xir_instance_cell_take_at(XrXirCallView *view,
     uint32_t instruction,const XrXirValue *cell,XrXirValue *output);
-/* Construction moves the actual checked compact-frame word after preparation. */
+/* Exact frame addresses come from trusted compiler adapters, not Actions.
+ * Range checks defend that borrowed span; they do not discover its owner. */
 XR_FUNC XrXirCallStatus xr_xir_instance_cell_new_take_at(XrXirCallView *view,
     uint32_t instruction,void *frame,XrXirValue *output);
+XR_FUNC XrXirCallStatus xr_xir_instance_move_arguments_at(XrXirCallView *view,
+    uint32_t instruction,void *frame,const XrXirValue *arguments,uint32_t count);
 
 typedef enum XrXirValueRootKind {
     XR_XIR_ROOT_VALUE, XR_XIR_ROOT_LOCAL, XR_XIR_ROOT_CELL, XR_XIR_ROOT_SLOT,
