@@ -26,7 +26,8 @@ static XrXirCallStatus buffer_poll(XrXirInstance *instance) {
 static void buffer_initialize(XrXirInstance *instance,uint32_t entry) {
     CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
     CHECK(buffer_poll(instance)==XR_XIR_CALL_RETURNED);
-    XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED && !value.type);
+    XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED &&
+        value.type==XR_XIR_I64 && value.payload==0);xr_xir_value_drop(&value);
 }
 static void buffer_invoke(XrXirProgram *program,XrXirInstance *instance,uint32_t target) {
     uint32_t baseline=buffer_program_refs(program),peak=baseline;
@@ -36,6 +37,9 @@ static void buffer_invoke(XrXirProgram *program,XrXirInstance *instance,uint32_t
         CHECK(step<100000);status=xr_xir_instance_poll_bounded(instance,1).outcome.status;
         uint32_t refs=buffer_program_refs(program);if (refs>peak) peak=refs;
     }
+    if (status!=XR_XIR_CALL_RETURNED || peak<baseline+2u || buffer_program_refs(program)!=baseline)
+        fprintf(stderr,"Buffer invoke target%u status%u refs%u peak%u baseline%u\n",
+            target,status,buffer_program_refs(program),peak,baseline);
     CHECK(status==XR_XIR_CALL_RETURNED && peak>=baseline+2u && buffer_program_refs(program)==baseline);
     XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED &&
         value.type==XR_XIR_I64 && value.payload==42);xr_xir_value_drop(&value);
