@@ -2067,7 +2067,8 @@ XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp oper
         uint8_t value=0;
         if (type==XR_XIR_U8 && arguments[1].type==XR_XIR_I64)
             status=xr_xir_pointer_load(&arguments[0],arguments[1].payload,&value);
-        if (status==XR_XIR_VALUE_OK) *output=(XrXirValue){XR_XIR_U8,0,value};break;
+        if (status==XR_XIR_VALUE_OK) *output=(XrXirValue){XR_XIR_U8,0,value};
+        break;
     }
     case XR_XIR_PTR_STORE:
         if (type==XR_XIR_UNIT && arguments[1].type==XR_XIR_I64 && arguments[2].type==XR_XIR_U8)
@@ -2079,7 +2080,8 @@ XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp oper
         break;
     case XR_XIR_PTR_EQ: {
         bool equal=false;if (type==XR_XIR_BOOL) status=xr_xir_pointer_equal(&arguments[0],&arguments[1],&equal);
-        if (status==XR_XIR_VALUE_OK) *output=(XrXirValue){XR_XIR_BOOL,0,equal};break;
+        if (status==XR_XIR_VALUE_OK) *output=(XrXirValue){XR_XIR_BOOL,0,equal};
+        break;
     }
     default:break;
     }
