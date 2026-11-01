@@ -14,6 +14,7 @@
  *   call is protected; every other failure unwinds the whole activation.
  */
 #include "xxir_call.h"
+#include "xxir_operand_roles.h"
 #include "../base/xresource_limits.h"
 #include "xxir_call_generator.h"
 #include "xxir_call_internal.h"

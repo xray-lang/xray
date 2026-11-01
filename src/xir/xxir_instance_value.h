@@ -29,6 +29,8 @@ XR_FUNC XrXirCallStatus xr_xir_instance_cell_new_take_at(XrXirCallView *view,
     uint32_t instruction,void *frame,XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_move_arguments_at(XrXirCallView *view,
     uint32_t instruction,void *frame,const XrXirValue *arguments,uint32_t count);
+XR_FUNC XrXirCallStatus xr_xir_task_go_at(XrXirCallView *view,uint32_t instruction,
+    void *frame,const XrXirValue *arguments,uint32_t count,XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_cell_write_take_at(XrXirCallView *view,
     uint32_t instruction,void *frame);
 XR_FUNC XrXirCallStatus xr_xir_instance_return_take_at(XrXirCallView *view,
