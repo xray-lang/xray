@@ -67,7 +67,7 @@ for row in observed.values():
 (out/'observed.json').write_text(json.dumps(list(observed.values()),indent=2)+'\n',encoding='utf-8')
 assert build.returncode==0,(build.returncode,build.stderr)
 compilers=[x for x in observed.values() if x['name'] in ['cl.exe','link.exe']]
-assert compilers and any(x['name']=='cl.exe' for x in compilers) and all(x['onlyExplicitThree'] and x['exactValues'] and x['exactWorkspace'] and x['strictRecipe'] for x in compilers),observed
+assert all(any(x['name']==name for x in compilers) for name in ['cl.exe','link.exe']) and all(x['onlyExplicitThree'] and x['exactValues'] and x['exactWorkspace'] and x['strictRecipe'] for x in compilers),observed
 assert any(x['name']=='cmd.exe' for x in observed.values())==a.cold,observed
 run=command('run',[str(exe)],out)
 cases=json.loads((a.root/'tests/smoke/cases.json').read_text())['cases'];case=next(x for x in cases if x['mode']=='build-run' and x['path']=='demos/01-basics/hello.xr')
