@@ -3095,6 +3095,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
 #include "xxir_source_core_throws.inc.c"
 #include "xxir_source_comptime_expression.inc.c"
 #include "xxir_source_task_scope.inc.c"
+#include "xxir_source_select.inc.c"
 #include "xxir_source_materialization_finish.inc.c"
 #include "xxir_source_instance_writer.inc.c"
 /* Preparing another generated body is a synchronous scope switch. Shared tables

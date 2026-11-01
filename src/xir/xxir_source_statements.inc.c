@@ -12,6 +12,12 @@ static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
     if (ctx->returned) return source_unreachable_statement(ctx, node);
     switch (node->type) {
     case AST_SCOPE_BLOCK: return source_task_scope(ctx,node,false);
+    case AST_SELECT_STMT: {
+        ++ctx->flow_alternatives;
+        bool selected=source_facts_kill(ctx,node)&&source_select(ctx,node);
+        --ctx->flow_alternatives;
+        return selected&&source_facts_kill(ctx,node);
+    }
     case AST_DEFER_STMT: return source_defer(ctx, node);
     case AST_TRY_CATCH: {
         /* Handlers are alternative paths: no fact about a binding they write survives, and none is learned inside. */
