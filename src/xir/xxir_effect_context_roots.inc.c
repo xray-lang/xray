@@ -56,6 +56,21 @@ static XrXirStatus effect_ordinary_op_match(const EffectOrdinaryContexts *contex
     return status==XR_XIR_BAD_TYPE ? XR_XIR_BAD_STRUCTURE : status;
 }
 
+static XrXirStatus effect_ordinary_consumes_match(const XrXirFunction *original,
+    const XrXirFunction *actual) {
+    if(original->consume_parameter_count!=actual->consume_parameter_count ||
+        original->consume_parameter_count>original->parameter_count ||
+        actual->consume_parameter_count>actual->parameter_count ||
+        (original->consume_parameter_count==0)!=(original->consume_parameters==NULL) ||
+        (actual->consume_parameter_count==0)!=(actual->consume_parameters==NULL))return XR_XIR_BAD_STRUCTURE;
+    for(uint32_t p=0;p<original->consume_parameter_count;++p) {
+        uint32_t ordinal=original->consume_parameters[p];
+        if(ordinal>=original->parameter_count || ordinal>=actual->parameter_count ||
+            ordinal!=actual->consume_parameters[p] || (p&&original->consume_parameters[p-1]>=ordinal))
+            return XR_XIR_BAD_STRUCTURE;
+    }
+    return XR_XIR_OK;
+}
 static XrXirStatus effect_ordinary_signature_match(const EffectOrdinaryContexts *contexts,
     const XrXirModule *source, uint32_t function, EffectTerms *terms) {
     EffectOrdinaryNode identity=contexts->nodes[function];
@@ -63,7 +78,7 @@ static XrXirStatus effect_ordinary_signature_match(const EffectOrdinaryContexts 
     const XrXirFunction *actual=&contexts->functions[function];
     XrXirGeneric environment={.arguments=identity.arguments,.argument_count=identity.argument_count};
     XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(terms);
-    XrXirStatus status=XR_XIR_OK;
+    XrXirStatus status=effect_ordinary_consumes_match(original,actual);
     for (uint32_t p=0;p<=actual->parameter_count && status==XR_XIR_OK;++p) {
         XrXirType expected=p==actual->parameter_count ? original->result : original->parameters[p];
         XrXirType type=p==actual->parameter_count ? actual->result :

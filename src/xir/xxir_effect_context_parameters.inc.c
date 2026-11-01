@@ -267,6 +267,7 @@ static XrXirStatus effect_ordinary_snapshot(EffectOrdinaryContexts *contexts,
     return status;
 }
 
+static XrXirStatus effect_ordinary_consumes_match(const XrXirFunction *original,const XrXirFunction *actual);
 static XrXirStatus effect_ordinary_signature_match(const EffectOrdinaryContexts *contexts,
     const XrXirModule *source,uint32_t function, EffectTerms *terms);
 
@@ -311,6 +312,8 @@ static XrXirStatus effect_body_ordinary_input_verify(const XrXirCompileContext *
             function->parameter_count!=source->functions[node->declaration].parameter_count ||
             (function->parameter_count && (!function->parameters || !node->source_parameters ||
              (contexts->dense && !node->physical_types)))) return XR_XIR_BAD_STRUCTURE;
+        status=effect_ordinary_consumes_match(&source->functions[node->declaration],function);
+        if(status!=XR_XIR_OK)return status;
         XrXirFunctionIdentity identity=source->declarations->functions[node->declaration];
         if (identity.cleanup_owner) {
             if (node->owner>=contexts->count ||

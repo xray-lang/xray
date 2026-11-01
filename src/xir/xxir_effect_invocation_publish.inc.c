@@ -223,6 +223,10 @@ static XrXirStatus effect_context_dense_body_match(const XrXirCompileContext *co
     const EffectOrdinaryNode *node=&dense->nodes[index];const XrXirOrigin *origin=&certificate->origins[index];
 
     if (actual->name_length!=sealed->name_length || actual->parameter_count!=sealed->parameter_count ||
+        actual->consume_parameter_count!=sealed->consume_parameter_count ||
+        actual->consume_parameter_count>actual->parameter_count ||
+        (actual->consume_parameter_count==0)!=(actual->consume_parameters==NULL) ||
+        (sealed->consume_parameter_count==0)!=(sealed->consume_parameters==NULL) ||
         actual->result!=sealed->result || actual->instruction_count!=sealed->instruction_count ||
         actual->operand_count!=sealed->operand_count || actual->block_count!=sealed->block_count ||
         node->declaration!=origin->function || node->argument_count!=origin->argument_count ||
@@ -230,6 +234,8 @@ static XrXirStatus effect_context_dense_body_match(const XrXirCompileContext *co
     XrXirStatus status=effect_context_dense_bytes(actual->name,sealed->name,actual->name_length,1);
     if (status==XR_XIR_OK) status=effect_context_dense_bytes(actual->parameters,sealed->parameters,
         actual->parameter_count,sizeof(*actual->parameters));
+    if(status==XR_XIR_OK)status=effect_context_dense_bytes(actual->consume_parameters,sealed->consume_parameters,
+        actual->consume_parameter_count,sizeof(*actual->consume_parameters));
     if (status==XR_XIR_OK) status=effect_context_dense_bytes(node->physical_types,sealed->parameters,
         actual->parameter_count,sizeof(*actual->parameters));
     if (status==XR_XIR_OK) {
