@@ -8,6 +8,14 @@ extern "C" {
 #include "task_result_bridge.h"
 #define CHECK(c) do {if(!(c)){std::fprintf(stderr,"C++ TaskResult %d: %s\n",__LINE__,#c);std::exit(1);}}while(0)
 int main(int argc,char **argv) {
+    static_assert(sizeof(XrXirType)==sizeof(uint32_t) && alignof(XrXirType)==alignof(uint32_t),
+        "Type IDs retain their physical ABI");
+    const uint32_t ids[]={XR_XIR_CONSTRUCTED_TYPE_BASE,XR_XIR_CONSTRUCTED_TYPE_LIMIT-1,
+        XR_XIR_TYPE_PARAMETER_BASE,XR_XIR_TYPE_PARAMETER_LIMIT-1};
+    for(uint32_t id:ids) {
+        volatile XrXirType carried=static_cast<XrXirType>(id);
+        CHECK(static_cast<uint32_t>(carried)==id);
+    }
     CHECK(argc==6);XrXirValue first[4],copies[4];std::memset(first,0,sizeof(first));std::memset(copies,0,sizeof(copies));
     const char *names[4]={argv[1],argv[2],argv[3],argv[4]};const XrXirTypes *types=nullptr;TestTaskResultOwner *owner=nullptr;
     test_task_result_produce(names,argv[5],first,&types,&owner);CHECK(types && owner);

@@ -24,7 +24,10 @@
 #define XR_XIR_ARCH_LE64 1u
 typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64, XR_XIR_STRING,
     XR_XIR_I8 = 5, XR_XIR_I16, XR_XIR_I32, XR_XIR_U8, XR_XIR_U16, XR_XIR_U32, XR_XIR_U64, XR_XIR_F32, XR_XIR_F64,
-    XR_XIR_ERROR, XR_XIR_PANIC_INFO, XR_XIR_RUNE, XR_XIR_NEVER, XR_XIR_BUFFER_STORAGE } XrXirType;
+    XR_XIR_ERROR, XR_XIR_PANIC_INFO, XR_XIR_RUNE, XR_XIR_NEVER, XR_XIR_BUFFER_STORAGE,
+    /* Constructed and binder IDs inhabit the same published representation.
+     * This bound makes their C++ enum loads defined; pool checks admit types. */
+    XR_XIR_TYPE_ID_LAST = XR_XIR_TYPE_PARAMETER_LIMIT - 1 } XrXirType;
 /* Never denotes an empty error type expression and has no runtime values. */
 /* A Rune is one Unicode scalar, independently of every integer type. */
 static inline bool xr_xir_rune_payload_valid(int64_t payload) {
