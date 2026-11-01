@@ -25,7 +25,7 @@ def main():
     environment.pop('XRAY_STDLIB_PATH', None)
     original, prefix = out/'original', out/'moved'
     manifest = json.loads((args.bundle/'sdk_manifest.json').read_text(encoding='utf-8'))
-    assert tuple(manifest[key] for key in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')) == (40, 119, 31, 38, 37)
+    assert tuple(manifest[key] for key in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')) == (41, 120, 31, 38, 37)
     assert manifest['crt'] == 2 and manifest['sanitizers'] == 0
     for row in manifest['files']:
         source, destination = args.bundle/row['path'], original/row['path']
