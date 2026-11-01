@@ -36,6 +36,15 @@ typedef struct WorkspaceFrame {
     int fixed;
     XtcXirWorkspaceStatus rejection;
 } WorkspaceFrame;
+#else
+#include <dirent.h>
+#include <limits.h>
+typedef struct WorkspaceFrame {
+    int fd;
+    DIR *stream;
+    bool removed;
+    char name[NAME_MAX + 1];
+} WorkspaceFrame;
 #endif
 struct XtcXirWorkspace {
     XrCompileResources *resources;
@@ -51,6 +60,14 @@ struct XtcXirWorkspace {
     WorkspaceNode nodes[3];
     WorkspaceFrame *frames;
     uint32_t close_phase, close_index, close_substage, frame_count;
+#else
+    XtcXirFileLease *parent_lease, *leases[3];
+    WorkspaceFrame *frames;
+    int parent_fd, root_fd;
+    uint64_t root_device, root_inode;
+    char root_name[38];
+    bool exists[3], identified;
+    uint32_t close_phase, frame_count;
 #endif
 };
 static XtcXirWorkspaceStatus workspace_fail(XtcXirWorkspace *owner, XtcXirWorkspaceStatus status, uint32_t error) {
@@ -75,9 +92,7 @@ static bool workspace_length(XtcXirWorkspace *owner, const char *text, size_t *l
     }
 }
 static void workspace_free(XtcXirWorkspace *owner) {
-#ifdef XR_OS_WINDOWS
     xr_compile_resources_free(owner->frames);
-#endif
     xr_compile_resources_free(owner->enumeration);
     xr_compile_resources_free(owner->parent); xr_compile_resources_free(owner->text);
     xr_compile_resources_free(owner);
@@ -96,10 +111,15 @@ XR_FUNC XtcXirWorkspaceStatus xtc_xir_workspace_new(XrCompileResources *resource
     owner->limits = request->limits;
     size_t length = 0;
     if (!workspace_length(owner, request->absolute_parent, &length)) goto failed;
-    if (length < 3) goto invalid;
     const char *p = request->absolute_parent;
+#ifdef XR_OS_WINDOWS
+    if (length < 3) goto invalid;
     if (!((p[0] >= 'A' && p[0] <= 'Z') || (p[0] >= 'a' && p[0] <= 'z')) || p[1] != ':' ||
         (p[2] != '/' && p[2] != '\\')) goto invalid;
+#else
+    if (!length || p[0] != '/') goto invalid;
+    owner->parent_fd = owner->root_fd = -1;
+#endif
     XrUtf8ScanResult scan = xr_utf8_core_scan_strict((const uint8_t *)p, length);
     if (scan.error != XR_UTF8_OK) goto invalid;
     if (!workspace_resource(owner, xr_compile_resources_alloc(resources, length + 1, (void **)&owner->parent))) goto failed;
@@ -107,10 +127,8 @@ XR_FUNC XtcXirWorkspaceStatus xtc_xir_workspace_new(XrCompileResources *resource
     if (!workspace_resource(owner, xr_compile_resources_calloc(resources, 3,
         (size_t)owner->limits.path_bytes + 1, (void **)&owner->text)) ||
         !workspace_resource(owner, xr_compile_resources_alloc(resources, owner->limits.enum_bytes, &owner->enumeration))) goto failed;
-#ifdef XR_OS_WINDOWS
     if (!workspace_resource(owner, xr_compile_resources_calloc(resources, (size_t)owner->limits.depth + 1,
         sizeof(*owner->frames), (void **)&owner->frames))) goto failed;
-#endif
     *output = owner; return XTC_XIR_WORKSPACE_OK;
 invalid:
     workspace_fail(owner, XTC_XIR_WORKSPACE_INVALID, 0);
@@ -122,6 +140,8 @@ failed:
 }
 #ifdef XR_OS_WINDOWS
 #include "xtc_xir_workspace_windows.inc.c"
+#else
+#include "xtc_xir_workspace_posix.inc.c"
 #endif
 XR_FUNC XtcXirWorkspaceStatus xtc_xir_workspace_create(XtcXirWorkspace *owner) {
     if (!owner || owner->attempted || owner->closing) return XTC_XIR_WORKSPACE_INVALID;
@@ -129,7 +149,7 @@ XR_FUNC XtcXirWorkspaceStatus xtc_xir_workspace_create(XtcXirWorkspace *owner) {
 #ifdef XR_OS_WINDOWS
     return workspace_create_windows(owner);
 #else
-    return workspace_fail(owner, XTC_XIR_WORKSPACE_UNSUPPORTED, 0);
+    return workspace_create_posix(owner);
 #endif
 }
 XR_FUNC XtcXirWorkspaceStatus xtc_xir_workspace_close(XtcXirWorkspace **slot, uint32_t step_limit) {
@@ -139,8 +159,10 @@ XR_FUNC XtcXirWorkspaceStatus xtc_xir_workspace_close(XtcXirWorkspace **slot, ui
     owner->closing = true;
 #ifdef XR_OS_WINDOWS
     XtcXirWorkspaceStatus status = workspace_close_windows(owner, step_limit);
-    if (status != XTC_XIR_WORKSPACE_OK) return status;
+#else
+    XtcXirWorkspaceStatus status = workspace_close_posix(owner, step_limit);
 #endif
+    if (status != XTC_XIR_WORKSPACE_OK) return status;
     workspace_free(owner); *slot = NULL; return XTC_XIR_WORKSPACE_OK;
 }
 XR_FUNC const XtcXirWorkspacePaths *xtc_xir_workspace_paths(const XtcXirWorkspace *owner) { return owner ? &owner->paths : NULL; }

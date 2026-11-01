@@ -14,7 +14,10 @@ typedef enum XrDependencyFormat {
     XR_DEPENDENCY_MSVC_SOURCE_1_2,
     XR_DEPENDENCY_WINDOWS_MAKE,
     XR_DEPENDENCY_MSVC_LIBRARY_ZH_CN,
-    XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE
+    XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE,
+    XR_DEPENDENCY_POSIX_MAKE,
+    XR_DEPENDENCY_POSIX_LINK_MAKE,
+    XR_DEPENDENCY_DARWIN_LD_INFO
 } XrDependencyFormat;
 typedef enum XrDependencyKind {
     XR_DEPENDENCY_SOURCE, XR_DEPENDENCY_HEADER, XR_DEPENDENCY_LIBRARY_SEARCH,
@@ -49,6 +52,14 @@ typedef struct XrDependencyFacts XrDependencyFacts;
  * by CRLF. Options and response references are unsupported. LINK_INPUT offsets
  * refer to the first path code unit in the original byte frame. This explicit
  * list does not establish transitive dependencies or linker command policy.
+ * POSIX_MAKE is one LF make rule from cc -MD; every prerequisite is a HEADER
+ * record because drivers may list configuration files before the source, so
+ * the consumer identifies its source by file identity. POSIX_LINK_MAKE is the
+ * GNU ld/LLD --dependency-file rule whose prerequisites are LINK_INPUT records,
+ * followed by one empty rule per prerequisite in the same order. DARWIN_LD_INFO
+ * is ld64 -dependency_info: one version record, then used inputs (LINK_INPUT),
+ * unresolved candidates (LIBRARY_SEARCH) and the output (the target). POSIX
+ * paths are absolute and are not normalized or resolved here.
  * Output must be empty and is unchanged on every failure. */
 XR_FUNC XrXirTargetStatus xtc_dependencies_parse(XrCompileResources *resources,
     const XrDependencyInput *input, XrDependencyLimits limits,

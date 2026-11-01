@@ -10,10 +10,13 @@
 #include "xtc_xir_file_lease.h"
 #include "../../base/xfileio.h"
 #include "../../os/os_fs.h"
+#include "../../base/xchecks.h"
 #include <string.h>
 #ifdef XR_OS_WINDOWS
 #include <windows.h>
 #include "../../base/xwindows_utf8.h"
+#else
+#include <stdio.h>
 #endif
 
 struct XtcXirLocalToolchain {
@@ -22,7 +25,7 @@ struct XtcXirLocalToolchain {
     XrXirRuntimeSdk *sdk;
     XtcXirLocalToolchainView view;
     XtcXirLocalDiagnostic diagnostic;
-    char *strings[32];
+    char *strings[64];
     uint32_t count;
 };
 static bool local_fail(XtcXirLocalToolchain *owner, XtcXirLocalStatus status,
@@ -74,7 +77,7 @@ static bool local_keep(XtcXirLocalToolchain *owner, char *text, const char **out
     if (owner->diagnostic.status != XTC_XIR_LOCAL_OK) {
         xr_compile_resources_free(text); return false;
     }
-    if (owner->count >= 32) {
+    if (owner->count >= sizeof(owner->strings) / sizeof(owner->strings[0])) {
         local_fail(owner, XTC_XIR_LOCAL_BUDGET, XTC_XIR_LOCAL_SELF, 0);
         xr_compile_resources_free(text); return false;
     }
@@ -132,12 +135,14 @@ static bool local_path(XtcXirLocalToolchain *owner, const char *path, bool direc
     char *absolute=NULL;
     return local_path_receive(owner,path,directory,&absolute) && local_keep(owner,absolute,output);
 }
+#ifdef XR_OS_WINDOWS
 static bool local_join_path(XtcXirLocalToolchain *owner, const char *root, const char *suffix,
     bool directory, const char **output) {
     char *joined = NULL;
     if (!local_io(owner, xr_path_join_owned(&owner->policy, root, suffix, &joined))) return false;
     bool okay = local_path(owner, joined, directory, output); xr_compile_resources_free(joined); return okay;
 }
+#endif
 static bool local_process_status(XtcXirLocalToolchain *owner, XrProcessStatus status) {
     if (status != XTC_PROCESS_OK) {
         XtcXirLocalStatus mapped = status == XTC_PROCESS_BUDGET ? XTC_XIR_LOCAL_BUDGET :
@@ -171,6 +176,8 @@ static bool local_process(XtcXirLocalToolchain *owner, const XrProcessSpec *spec
 }
 #ifdef XR_OS_WINDOWS
 #include "xtc_xir_local_toolchain_windows.inc.c"
+#elif defined(XR_XIR_SDK_POSIX_HOST)
+#include "xtc_xir_local_toolchain_posix.inc.c"
 #endif
 
 static bool local_sdk_load(XtcXirLocalToolchain *owner, const char *root, size_t limit) {
@@ -222,7 +229,7 @@ XR_FUNC XtcXirLocalStatus xtc_xir_local_toolchain_open(XrCompileResources *resou
         if (diagnostic) *diagnostic = initial;
         return initial.status;
     }
-#if !defined(XR_OS_WINDOWS) || !defined(_M_X64) && !defined(__x86_64__)
+#if !(defined(XR_OS_WINDOWS) && defined(XR_ARCH_X86_64)) && !defined(XR_XIR_SDK_POSIX_HOST)
     initial.status = XTC_XIR_LOCAL_UNSUPPORTED;
     if (diagnostic) *diagnostic = initial;
     return initial.status;

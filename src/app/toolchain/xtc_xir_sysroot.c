@@ -20,6 +20,11 @@ struct XtcXirFileLease {
     bool directory;
     XtcXirFileFacts file;
     XtcXirDirectoryFacts directory_facts;
+#ifndef XR_OS_WINDOWS
+    /* Observed size and modification/change times; reads must find them again. */
+    uint64_t size;
+    int64_t changed[4];
+#endif
 };
 #ifdef XR_OS_WINDOWS
 #include <windows.h>
@@ -27,38 +32,16 @@ struct XtcXirFileLease {
 #include "xtc_xir_hash_proof.inc.c"
 #include "xtc_xir_file_lease_windows.inc.c"
 #else
-XR_FUNC bool xtc_xir_sysroot_capture(XrXirTargetSnapshot *snapshot, const XrXirTargetSnapshotRequest *request) {
-    (void)request;
-    return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_UNSUPPORTED);
-}
-XR_FUNC void xtc_xir_sysroot_close(XrXirTargetSnapshot *snapshot) { (void)snapshot; }
-XR_FUNC bool xtc_xir_sysroot_observe(XrXirImageCollector *images, const XrProcImageEvent *event) {
-    (void)event; return xtc_xir_target_fail(&images->storage, XR_XIR_TARGET_UNSUPPORTED);
-}
-XR_FUNC bool xtc_xir_sysroot_hash(XrXirTargetSnapshot *snapshot, XtcXirLock *lock, XrXirTargetFile *file) {
-    (void)lock; (void)file; return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_UNSUPPORTED);
-}
-XR_FUNC XrXirTargetStatus xtc_xir_file_lease_open(XrCompileResources *resources,
-    const char *path, XtcXirFileLease **output) {
-    if (!resources || !path || !output || *output) return XR_XIR_TARGET_INVALID;
-    return XR_XIR_TARGET_UNSUPPORTED;
-}
-XR_FUNC XrXirTargetStatus xtc_xir_file_lease_directory_open(XrCompileResources *resources,
-    const char *path, XtcXirFileLease **output) {
-    return xtc_xir_file_lease_open(resources, path, output);
-}
-XR_FUNC XrXirTargetStatus xtc_xir_sysroot_read(XrXirTargetSnapshot *storage,
-    XtcXirLock *lock, uint64_t file_length, size_t limit, void **owned_bytes, size_t *length) {
-    (void)file_length;
-    if (!storage || !lock || lock->directory || !limit || !owned_bytes || *owned_bytes || !length || *length)
-        return XR_XIR_TARGET_INVALID;
-    return XR_XIR_TARGET_UNSUPPORTED;
-}
+#include "xtc_xir_file_lease_posix.inc.c"
 #endif
 XR_FUNC XrXirTargetStatus xtc_xir_file_lease_read(XtcXirFileLease *lease, size_t limit,
     void **owned_bytes, size_t *length) {
     if (!lease || lease->directory) return XR_XIR_TARGET_INVALID;
+#ifdef XR_OS_WINDOWS
     return xtc_xir_sysroot_read(&lease->storage, lease->lock, lease->file.length, limit, owned_bytes, length);
+#else
+    return file_lease_posix_read(lease, limit, owned_bytes, length);
+#endif
 }
 XR_FUNC XrCompileResources *xtc_xir_file_lease_resources(const XtcXirFileLease *lease) {
     return lease ? lease->storage.resources : NULL;

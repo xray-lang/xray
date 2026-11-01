@@ -66,7 +66,7 @@ static int fmt_publication_exit(XtcXirPublicationStatus status) {
 }
 static bool fmt_publish(FmtWork *work, const char *path, const XrFmtOutput *output) {
     XtcXirPublication *owner = NULL;
-    XtcXirPublicationRequest request = {path,{XR_PATH_MAX,16,output->length ? output->length : 1}};
+    XtcXirPublicationRequest request = {path,{XR_PATH_MAX,16,output->length ? output->length : 1},false};
     XtcXirPublicationStatus status = xtc_xir_publication_new(work->resources,&request,&owner);
     if (status == XTC_XIR_PUBLICATION_OK) status = xtc_xir_publication_write(owner,output->text,output->length);
     if (status == XTC_XIR_PUBLICATION_OK) status = xtc_xir_publication_commit(owner);

@@ -1146,6 +1146,17 @@ else()
     set(XR_TARGET_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
 endif()
 
+# macOS and Linux link native executables on x86_64 and arm64. The runtime SDK
+# bundle records the architecture under this name; other hosts emit C only.
+set(XR_XIR_POSIX_SDK_ARCHITECTURE "")
+if(APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    if(XR_TARGET_ARCH MATCHES "^(x86_64|amd64|AMD64)$")
+        set(XR_XIR_POSIX_SDK_ARCHITECTURE x86_64)
+    elseif(XR_TARGET_ARCH MATCHES "^(arm64|aarch64|ARM64)$")
+        set(XR_XIR_POSIX_SDK_ARCHITECTURE arm64)
+    endif()
+endif()
+
 # VM Profiler configuration
 option(XR_ENABLE_VM_PROFILER "Enable VM instruction profiler" OFF)
 option(XR_PROFILE_TIMING "Enable per-instruction timing (requires XR_ENABLE_VM_PROFILER)" OFF)
@@ -2506,6 +2517,9 @@ endif()
 target_link_libraries(xray PRIVATE xray_source_api xray_xir_runtime_host xray_frontend_format
     xray_compile_resources xray_toolchain_process xray_xir_publication xray_xir_native_projection)
 if(WIN32)
+    target_link_libraries(xray PRIVATE xray_xir_native_admission xray_xir_local_toolchain
+        xray_toolchain_dependencies xray_cli_native_probe)
+elseif(XR_XIR_POSIX_SDK_ARCHITECTURE)
     target_link_libraries(xray PRIVATE xray_xir_native_admission xray_xir_local_toolchain
         xray_toolchain_dependencies xray_cli_native_probe)
 endif()

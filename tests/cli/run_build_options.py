@@ -24,7 +24,8 @@ def main() -> int:
     source = work / "main.xr"
     source.write_bytes(b"print(42)\n")
     config_root = work / "private-config"
-    env = dict(os.environ, LOCALAPPDATA=str(config_root), NO_COLOR="1",
+    # Windows reads LOCALAPPDATA; POSIX reads XDG_CONFIG_HOME before HOME.
+    env = dict(os.environ, LOCALAPPDATA=str(config_root), XDG_CONFIG_HOME=str(config_root), NO_COLOR="1",
                XRAY_STDLIB_PATH=str(args.root.resolve() / "stdlib"))
     commands = []
     state = dict(state="RUNNING", commands=commands)
@@ -82,7 +83,15 @@ def main() -> int:
     assert b"XR_BUILD_6006" in missing.stderr and protected.read_bytes() == sentinel
     for name in ("output", "cc"):
         invoke("missing-" + name, ["build", source, "--" + name], 2)
+    if os.name != "nt":
+        # macOS and Linux probe the one discovered C driver end to end.
+        probe = json.loads(invoke("probe-native", ["toolchain", "probe", "--json"], 0).stdout)
+        assert probe["selection"]["ready"] and probe["selection"]["provider"] in ("clang", "gcc"), probe
+        assert all(probe["capabilities"][name] == "ok" for name in ("cCompile", "sdkCompile", "runtimeLink", "nativeRun"))
+        assert not probe["diagnostics"], probe
+        invoke("probe-unsupported-provider", ["toolchain", "probe", "--provider", "msvc", "--json"], 3)
     assert source.read_bytes() == b"print(42)\n" and not (config_root / "Xray/toolchains.toml").exists()
+    assert not (config_root / "xray/toolchains.toml").exists()
     state.update(state="PASS", source=fact(source), cSource=fact(work / "long.c"))
     save()
     print("Build option help/parser/publication, retired flags and compiler rules PASS")

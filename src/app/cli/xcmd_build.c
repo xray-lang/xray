@@ -71,8 +71,16 @@ static int build_publication_close(XtcXirPublication **owner) {
      * Process termination is explicit here; the publication API never exits. */
     _Exit(XR_CLI_EXIT_INTERNAL);
 }
-#if defined(XR_ARCH_X86_64) && XR_OS_WINDOWS
+/* Windows x86_64 links with MSVC; macOS and Linux link with one C driver on
+ * x86_64 and arm64. Every other host publishes generated C only. */
+#if (defined(XR_ARCH_X86_64) && XR_OS_WINDOWS) || defined(XR_XIR_SDK_POSIX_HOST)
+#define BUILD_NATIVE_HOST 1
 #include "xcmd_build_native.inc.c"
+#endif
+#if XR_OS_WINDOWS
+#define BUILD_NATIVE_OUTPUT "app.exe"
+#else
+#define BUILD_NATIVE_OUTPUT "app"
 #endif
 XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     if (!inv || (inv->options.count && (!inv->options.spec || !inv->options.present))) return XR_CLI_EXIT_INTERNAL;
@@ -93,14 +101,14 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     fprintf(stderr,"XR_BUILD_6001: this Source publication target is unsupported\n"); return XR_CLI_EXIT_FAIL;
 #else
     bool c_only=xr_cli_opt_bool(&inv->options,"c-only");
-#if !defined(XR_ARCH_X86_64) || !XR_OS_WINDOWS
-    /* Generated C is portable; only the Windows x86_64 driver links executables. */
+#ifndef BUILD_NATIVE_HOST
     if (!c_only) {
-        fprintf(stderr,"XR_BUILD_6001: native executables are published only on Windows x86_64; use --c-only\n");
+        fprintf(stderr,"XR_BUILD_6001: native executables are published only on Windows x86_64 and "
+            "macOS/Linux x86_64 or arm64; use --c-only\n");
         return XR_CLI_EXIT_FAIL;
     }
 #endif
-    const char *output=xr_cli_opt_string(&inv->options,"output",c_only ? "app.c" : "app.exe");
+    const char *output=xr_cli_opt_string(&inv->options,"output",c_only ? "app.c" : BUILD_NATIVE_OUTPUT);
     XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     XrCompileResources *resources=NULL;
     XrCompileResourceStatus opened=xr_compile_resources_new(&limits,&resources);
@@ -138,13 +146,13 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         const XrXirNativeProjectionSource *c=xr_compile_native_projection_source(projection);
         fprintf(stderr,"XR_BUILD: Source %s\nXR_BUILD: C projection %zu bytes\n",paths.entry,c->length);
     }
-#if defined(XR_ARCH_X86_64) && XR_OS_WINDOWS
+#ifdef BUILD_NATIVE_HOST
     if (!c_only) {
         result=build_native_prepare(state,inv,projection,&artifact);
         if (result!=XR_CLI_EXIT_OK) goto cleanup;
     }
 #endif
-    XtcXirPublicationRequest publish={output,{XR_PATH_LIMIT_MAX_PATH,8,BUILD_C_LIMIT}};
+    XtcXirPublicationRequest publish={output,{XR_PATH_LIMIT_MAX_PATH,8,BUILD_C_LIMIT},!c_only};
     XtcXirPublicationStatus status=xtc_xir_publication_new(resources,&publish,&publication);
     if (status==XTC_XIR_PUBLICATION_OK) {
         if (c_only) {

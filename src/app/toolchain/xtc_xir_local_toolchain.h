@@ -43,10 +43,13 @@ typedef struct XtcXirLocalToolchainView {
     XrXirMsvcRecipe msvc;
     XrXirInvocationLibrary libraries[6];
     uint32_t library_count;
+    XrXirPosixRecipe posix;
 } XtcXirLocalToolchainView;
 
-/* Windows x64 MSVC only. NULL paths select automatic discovery; explicit paths
- * never fall back. Discovery uses owned child output without modifying the
+/* Windows x64 MSVC, or one POSIX C driver on macOS/Linux x86_64 and arm64.
+ * NULL paths select automatic discovery (vswhere/VsDevCmd on Windows; xcrun
+ * on macOS; /usr/bin/cc on Linux); explicit paths never fall back. A POSIX
+ * compiler name without a slash is searched in PATH. Discovery uses owned child output without modifying the
  * parent environment. SDK admission is real, but these paths do not grant
  * Target or execution authority. All allocations use the required caller memory owner. Output must be NULL and is preserved on failure. Diagnostics are
  * fixed values and retain the first failure without additional allocation.

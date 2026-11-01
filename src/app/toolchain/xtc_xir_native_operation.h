@@ -50,6 +50,7 @@ typedef struct XtcXirNativeOperationRequest {
     uint32_t library_count;
     XrProcessCancelled cancelled;
     void *cancel_context;
+    XrXirPosixRecipe posix;
 } XtcXirNativeOperationRequest;
 
 /* Copies/preallocates without disk I/O. All operations are serial. The single

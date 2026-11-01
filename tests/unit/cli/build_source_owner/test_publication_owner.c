@@ -33,7 +33,7 @@ static XtcXirPublicationStatus replace(const char *path,bool commit,XrCompileRes
     if(opened!=XR_COMPILE_RESOURCE_OK)return opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XTC_XIR_PUBLICATION_OUT_OF_MEMORY:
         opened==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XTC_XIR_PUBLICATION_MEMORY_LIMIT:XTC_XIR_PUBLICATION_OVERFLOW;
     XrCompileResourceStats empty={0};CHECK(xr_compile_resources_stats(resources,&empty)==XR_COMPILE_RESOURCE_OK);
-    XtcXirPublicationRequest request={path,{4096,8,4096}};
+    XtcXirPublicationRequest request={path,{4096,8,4096},false};
     XtcXirPublicationStatus status=xtc_xir_publication_new(resources,&request,&owner);
     if(status==XTC_XIR_PUBLICATION_OK)status=xtc_xir_publication_write(owner,payload,sizeof(payload)-1);
     if(status==XTC_XIR_PUBLICATION_OK && commit)status=xtc_xir_publication_commit(owner);
@@ -55,7 +55,7 @@ static XtcXirPublicationStatus replace(const char *path,bool commit,XrCompileRes
 }
 static XtcXirPublication *ready(const char *path,XrCompileResources **resources) {
     CHECK(xr_compile_resources_new(&limits,resources)==XR_COMPILE_RESOURCE_OK);
-    XtcXirPublication *owner=NULL;XtcXirPublicationRequest request={path,{4096,8,4096}};
+    XtcXirPublication *owner=NULL;XtcXirPublicationRequest request={path,{4096,8,4096},false};
     CHECK(xtc_xir_publication_new(*resources,&request,&owner)==XTC_XIR_PUBLICATION_OK);
     CHECK(xtc_xir_publication_write(owner,payload,sizeof(payload)-1)==XTC_XIR_PUBLICATION_OK);
     CHECK(xtc_xir_publication_phase(owner)==XTC_XIR_PUBLICATION_READY);return owner;
@@ -67,7 +67,7 @@ static void lifetime_and_limits(const char *path) {
     CHECK(xtc_xir_publication_diagnostic(owner)->published);
     CHECK(xtc_xir_publication_close(&owner)==XTC_XIR_PUBLICATION_OK);file_is(path,payload,sizeof(payload)-1);
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
-    XtcXirPublicationRequest request={path,{4096,8,3}};
+    XtcXirPublicationRequest request={path,{4096,8,3},false};
     XtcXirPublication *sentinel=(XtcXirPublication *)(uintptr_t)1;
     CHECK(xtc_xir_publication_new(resources,&request,&sentinel)==XTC_XIR_PUBLICATION_INVALID);
     CHECK(sentinel==(XtcXirPublication *)(uintptr_t)1);
@@ -128,7 +128,7 @@ static void empty_write_discard(const char *path) {
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats empty,closed;
     CHECK(xr_compile_resources_stats(resources,&empty)==XR_COMPILE_RESOURCE_OK);
-    XtcXirPublicationRequest request={path,{4096,8,4096}};
+    XtcXirPublicationRequest request={path,{4096,8,4096},false};
     CHECK(xtc_xir_publication_new(resources,&request,&owner)==XTC_XIR_PUBLICATION_OK);
     CHECK(xtc_xir_publication_write(owner,payload,0)==XTC_XIR_PUBLICATION_OK);
     CHECK(xtc_xir_publication_phase(owner)==XTC_XIR_PUBLICATION_READY);
@@ -151,7 +151,7 @@ static void commit_memory(const char *path) {
 static void typed_allocation_failures(const char *path) {
     XrCompileResources *resources=NULL;XtcXirPublication *owner=NULL;
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
-    XtcXirPublicationRequest request={path,{4096,8,4096}};
+    XtcXirPublicationRequest request={path,{4096,8,4096},false};
     CHECK(xtc_xir_publication_new(resources,&request,&owner)==XTC_XIR_PUBLICATION_OK);
     CHECK(!publication_alloc(owner,SIZE_MAX));
     CHECK(xtc_xir_publication_write(owner,payload,sizeof(payload)-1)==XTC_XIR_PUBLICATION_OVERFLOW);

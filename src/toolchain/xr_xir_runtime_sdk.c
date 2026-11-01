@@ -82,7 +82,11 @@ static void *sdk_allocate(XrXirRuntimeSdk *sdk, size_t bytes) {
     sdk->metadata_bytes+=resident;
     return memory+1;
 }
+#ifdef XR_OS_WINDOWS
 #include "xr_xir_runtime_sdk_windows.inc.c"
+#else
+#include "xr_xir_runtime_sdk_posix.inc.c"
+#endif
 
 static void sdk_facts_publish(XrXirRuntimeSdk *sdk) {
     const uint32_t *p=sdk->manifest.prefix;

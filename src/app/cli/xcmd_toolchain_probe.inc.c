@@ -16,6 +16,14 @@
 #include "xray_build_identity.h"
 #if XR_OS_WINDOWS
 #include <windows.h>
+#define toolchain_clock_ms() GetTickCount64()
+#else
+#include "../../os/os_time.h"
+#define toolchain_clock_ms() xr_time_monotonic_ms()
+#endif
+/* Native capability is probed where `xray build` can publish executables. */
+#if (XR_OS_WINDOWS && defined(XR_ARCH_X86_64)) || defined(XR_XIR_SDK_POSIX_HOST)
+#define TOOLCHAIN_PROBE_NATIVE 1
 #endif
 
 typedef struct ToolchainProbeReport {
@@ -75,7 +83,7 @@ static void toolchain_probe_failure(ToolchainProbeReport *report,const char *cod
     report->code=code;report->stage=stage;report->ready=false;
     snprintf(report->message,sizeof(report->message),"%s failed (status=%u detail=%d)",stage,status,detail);
 }
-#if XR_OS_WINDOWS && defined(XR_ARCH_X86_64)
+#ifdef TOOLCHAIN_PROBE_NATIVE
 static bool toolchain_probe_close(XrCliNativeProbe **owner) {
     bool failed=false;
     for (unsigned i=0;i<8;++i) {
@@ -89,7 +97,7 @@ static bool toolchain_probe_close(XrCliNativeProbe **owner) {
 static void toolchain_probe_native(XrCompileState *state,const XrCliInvocation *inv,
     ToolchainProbeReport *report) {
     XrCompileResources *resources=xr_compile_state_resources(state);
-    uint64_t started=GetTickCount64();XrCliToolchainConfig *preferences=NULL;XrCliNativeProbe *owner=NULL;
+    uint64_t started=toolchain_clock_ms();XrCliToolchainConfig *preferences=NULL;XrCliNativeProbe *owner=NULL;
     XrCliToolchainConfigStatus configured=xr_cli_toolchain_config_open(state,NULL,&preferences);
     if (configured!=XR_CLI_TOOLCHAIN_CONFIG_OK) {
         toolchain_probe_failure(report,configured==XR_CLI_TOOLCHAIN_CONFIG_MEMORY_LIMIT ? "PROBE_MEMORY_LIMIT" :
@@ -141,7 +149,7 @@ static void toolchain_probe_native(XrCompileState *state,const XrCliInvocation *
 done:
     xr_cli_toolchain_config_free(preferences);
     if (!toolchain_probe_close(&owner)) toolchain_probe_failure(report,"PROBE_CLEANUP_FAILED","cleanup",0,0);
-    report->duration_ms=GetTickCount64()-started;toolchain_probe_report(inv,report);
+    report->duration_ms=toolchain_clock_ms()-started;toolchain_probe_report(inv,report);
 }
 
 #endif
@@ -152,7 +160,7 @@ static int toolchain_probe(XrCompileState *state,const XrCliInvocation *inv) {
     if (!xtc_target_parse(report.requested,&target,error,sizeof(error))) return XR_CLI_EXIT_USAGE;
     report.normalized=target.name;report.provider="none";
     report.c_compile=report.sdk_compile=report.runtime_link=report.native_run="skipped";
-#if XR_OS_WINDOWS && defined(XR_ARCH_X86_64)
+#ifdef TOOLCHAIN_PROBE_NATIVE
     if (target.is_native) toolchain_probe_native(state,inv,&report);
     else {
         toolchain_probe_failure(&report,"TARGET_UNSUPPORTED","target",0,0);toolchain_probe_report(inv,&report);

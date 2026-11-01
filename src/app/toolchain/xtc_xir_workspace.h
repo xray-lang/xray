@@ -27,11 +27,13 @@ typedef struct XtcXirWorkspaceDiagnostic { XtcXirWorkspaceStatus status; uint32_
 
 /* Copies and preallocates through the supplied memory owner without disk I/O.
  * Output must be NULL and remains unchanged on failure. Calls are serial.
- * Limits include the root in depth; enum_bytes must hold one NTFS name. */
+ * Limits include the root in depth; enum_bytes must hold one NTFS name.
+ * Windows requires a drive-absolute parent; POSIX requires an absolute one. */
 XR_FUNC XtcXirWorkspaceStatus xtc_xir_workspace_new(XrCompileResources *resources,
     const XtcXirWorkspaceRequest *request, XtcXirWorkspace **output);
 /* Creates root/input/output exactly once. Any failure keeps this owner and
- * every partial creation for close. Local drive-absolute NTFS only. */
+ * every partial creation for close. Windows: local drive-absolute NTFS only.
+ * POSIX: mkdirat under the identity-checked parent descriptor, mode 0700. */
 XR_FUNC XtcXirWorkspaceStatus xtc_xir_workspace_create(XtcXirWorkspace *owner);
 /* Description only: paths can describe a partial failed create. */
 XR_FUNC const XtcXirWorkspacePaths *xtc_xir_workspace_paths(const XtcXirWorkspace *owner);
@@ -41,7 +43,8 @@ XR_FUNC const XtcXirWorkspaceDiagnostic *xtc_xir_workspace_diagnostic(const XtcX
 /* Caller must first complete all processes and release borrowed leases.
  * Deletes ordinary descendants of the original private root, never follows a
  * reparse point, and only unlinks the named entry of a regular hard link.
- * No new heap allocation or memory admission is needed. Each explicit OS call
+ * No new heap allocation or memory admission is needed; POSIX enumeration
+ * uses the C library's directory streams, outside the compile ledger. Each explicit OS call
  * and existing lease-owner release consumes one step; the latter's internal ancestor cleanup
  * is indivisible. A positive finite step_limit is not a real-time deadline.
  * PENDING/errors retain all remaining responsibility for retry. OK frees/nulls;

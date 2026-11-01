@@ -29,7 +29,10 @@ typedef struct NativeAdmission {
     uint32_t *indices, selected;
     uint32_t sdk_words[17];
 } NativeAdmission;
+#ifdef XR_OS_WINDOWS
+typedef XtcXirPeImage AdmissionImage;
 static const char admission_triple[] = "x86_64-pc-windows-msvc";
+#endif
 static const char admission_options[] = "xray:xir-native-commands:trusted-host:v1:sha256:";
 static bool admission_fail(NativeAdmission *a, XtcXirNativeAdmissionStatus status,
     XtcXirNativeAdmissionDomain domain, int code) {
@@ -88,6 +91,10 @@ static void admission_sdk_words(const XrXirRuntimeSdkFacts *sdk, uint32_t words[
     WORD(13, assertions); WORD(14, build_provider); WORD(15, abi_recipe_version); WORD(16, closure_recipe_version);
 #undef WORD
 }
+#ifndef XR_OS_WINDOWS
+static bool admission_row(NativeAdmission *a, uint32_t index, XrXirInvocationFile *row);
+#include "xtc_xir_native_admission_posix.inc.c"
+#endif
 static bool admission_producers(NativeAdmission *a) {
     a->facts = *xtc_xir_native_operation_facts(a->operation);
     a->source = *xr_compile_native_projection_facts(a->projection);
@@ -121,8 +128,13 @@ static bool admission_producers(NativeAdmission *a) {
     if (s->target.architecture != XR_XIR_ARCH_LE64 || s->target.abi_version != XR_XIR_VALUE_ABI_VERSION ||
         a->runtime.schema != 2 || a->runtime.wire != XR_XIR_CHECKED_SCHEMA || a->runtime.semantic != XR_XIR_CHECKED_CONTRACT ||
         a->runtime.value_abi != XR_XIR_VALUE_ABI_VERSION || a->runtime.call_abi != XR_XIR_CALL_ABI_VERSION ||
-        a->runtime.program_abi != XR_XIR_PROGRAM_ABI_VERSION || a->runtime.architecture != 1 ||
-        a->runtime.object_format != 1 || a->runtime.hosted != 1 || a->runtime.c_dialect != 11 || a->runtime.crt != 2 ||
+        a->runtime.program_abi != XR_XIR_PROGRAM_ABI_VERSION ||
+#ifdef XR_OS_WINDOWS
+        a->runtime.architecture != 1 || a->runtime.object_format != 1 || a->runtime.crt != 2 ||
+#else
+        !admission_runtime_supported(a) ||
+#endif
+        a->runtime.hosted != 1 || a->runtime.c_dialect != 11 ||
         a->runtime.sanitizers != 0 || a->runtime.allocator != 1 || a->runtime.assertions != 0 ||
         a->runtime.abi_recipe_version != 1 || a->runtime.closure_recipe_version != 1)
         return admission_fail(a, XTC_XIR_ADMISSION_UNSUPPORTED, XTC_XIR_ADMISSION_SDK, 0);
@@ -133,8 +145,12 @@ static bool admission_producers(NativeAdmission *a) {
         a->commands[i] = *view;
         if (!view->executable || !view->cwd || !view->argv || !view->env_keys || !view->env_values ||
             view->completion_policy != XR_PROC_COMPLETE_ROOT || view->image_mode != XR_PROC_IMAGES_NONE ||
-            !view->argc || view->argc > XTC_PROCESS_MAX_ARGS || view->env_count != 3 ||
-            (i < 2 && view->argc != 26 + i) || (i == 2 && view->argc < 15))
+            !view->argc || view->argc > XTC_PROCESS_MAX_ARGS ||
+#ifdef XR_OS_WINDOWS
+            view->env_count != 3 || (i < 2 && view->argc != 26 + i) || (i == 2 && view->argc < 15))
+#else
+            !admission_command_shape(i, view))
+#endif
             return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_OPERATION, 0);
     }
     return true;
@@ -205,12 +221,13 @@ static bool admission_archives(NativeAdmission *a) {
     }
     return okay;
 }
-#else
-static bool admission_archives(NativeAdmission *a) {
-    return admission_fail(a, XTC_XIR_ADMISSION_UNSUPPORTED, XTC_XIR_ADMISSION_SELF, 0);
-}
 #endif
 static bool admission_files(NativeAdmission *a) {
+#ifdef XR_OS_WINDOWS
+    const uint32_t configs = 1;
+#else
+    const uint32_t configs = 0;
+#endif
     uint32_t counts[3][10];
     bool provider_seen[3] = {false, false, false};
     memset(counts, 0, sizeof(counts));
@@ -269,11 +286,13 @@ static bool admission_files(NativeAdmission *a) {
     for (unsigned stage = 0; stage < 3; ++stage) {
         if (!provider_seen[stage] || counts[stage][XR_XIR_INVOCATION_REPORT] != 1 ||
             (stage < 2 && (counts[stage][XR_XIR_INVOCATION_SOURCE] != 1 || counts[stage][XR_XIR_INVOCATION_OBJECT] != 1)) ||
-            (stage != 1 && counts[stage][XR_XIR_INVOCATION_PROVIDER_CONFIG] != 1))
+            counts[stage][XR_XIR_INVOCATION_PROVIDER_CONFIG] != (stage != 1 ? configs : 0u))
             return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_SELF, 0);
     }
+    /* POSIX drivers have no configuration file and resolve the C runtime
+     * themselves, so every implicit link input is a SYSTEM file. */
     if (counts[2][XR_XIR_INVOCATION_OUTPUT] != 1 || counts[2][XR_XIR_INVOCATION_SDK_ARCHIVE] != 5 ||
-        !counts[2][XR_XIR_INVOCATION_CRT] || !counts[2][XR_XIR_INVOCATION_SYSTEM] || !a->selected)
+        (configs && !counts[2][XR_XIR_INVOCATION_CRT]) || !counts[2][XR_XIR_INVOCATION_SYSTEM] || !a->selected)
         return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_SELF, 0);
     return admission_archives(a);
 }
@@ -370,7 +389,7 @@ static bool admission_provider(NativeAdmission *a, XrSHA256Context *hash,
     for (unsigned i = 0; i < 4; ++i) admission_integer(hash, p->version.product[i], 2);
     return true;
 }
-static bool admission_profile(NativeAdmission *a, const XtcXirPeImage *image,
+static bool admission_profile(NativeAdmission *a, const AdmissionImage *image,
     const XrFingerprint *commands, const XrFingerprint *sysroot, XrFingerprint *output) {
     static const char domain[] = "xray:xir-native-target-profile:trusted-local:v1";
     XrSHA256Context hash;
@@ -378,7 +397,11 @@ static bool admission_profile(NativeAdmission *a, const XtcXirPeImage *image,
     xr_sha256_update(&hash, (const uint8_t *)domain, sizeof(domain) - 1);
     admission_integer(&hash, 1, 4);
     admission_integer(&hash, 1, 4);
+#ifdef XR_OS_WINDOWS
     admission_integer(&hash, XR_TOOLCHAIN_BINDING_PROVIDER_MSVC, 4);
+#else
+    admission_integer(&hash, a->provider.binding, 4);
+#endif
     if (!admission_text(a, &hash, admission_triple)) return false;
     admission_integer(&hash, a->source.source.target.architecture, 4);
     admission_integer(&hash, a->source.source.target.abi_version, 4);
@@ -387,10 +410,14 @@ static bool admission_profile(NativeAdmission *a, const XtcXirPeImage *image,
     for (unsigned i = 0; i < sizeof(abi) / sizeof(*abi); ++i)
         admission_integer(&hash, abi[i], 4);
     for (unsigned i = 0; i < 17; ++i) admission_integer(&hash, a->sdk_words[i], 4);
+#ifdef XR_OS_WINDOWS
 #define FIELD(field, width) admission_integer(&hash, image->field, width)
     FIELD(machine, 2); FIELD(optional_magic, 2); FIELD(characteristics, 2); FIELD(subsystem, 2);
     FIELD(entry_rva, 4); FIELD(size_of_image, 4); FIELD(size_of_headers, 4); FIELD(entry_section_characteristics, 4);
 #undef FIELD
+#else
+    admission_image_hash(&hash, image);
+#endif
     if (!admission_provider(a, &hash, &a->provider.compiler) || !admission_provider(a, &hash, &a->provider.linker)) return false;
     xr_sha256_update(&hash, commands->bytes, 32);
     xr_sha256_update(&hash, sysroot->bytes, 32);
@@ -421,6 +448,7 @@ static bool admission_read(NativeAdmission *a, uint64_t limit, void **bytes, siz
         status == XTC_XIR_NATIVE_IO ? XTC_XIR_ADMISSION_IO : status == XTC_XIR_NATIVE_UNSUPPORTED ?
         XTC_XIR_ADMISSION_UNSUPPORTED : XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_OPERATION, status);
 }
+#ifdef XR_OS_WINDOWS
 static bool admission_image(NativeAdmission *a, const void *bytes, size_t length, XtcXirPeImage *image) {
     XtcXirPeVersionStatus status = xtc_xir_pe_image_parse(bytes, length, image);
     if (status != XTC_XIR_PE_VERSION_OK)
@@ -433,7 +461,8 @@ static bool admission_image(NativeAdmission *a, const void *bytes, size_t length
         return admission_fail(a, XTC_XIR_ADMISSION_UNSUPPORTED, XTC_XIR_ADMISSION_PE, XTC_XIR_PE_VERSION_UNSUPPORTED);
     return true;
 }
-static bool admission_binding(NativeAdmission *a, const XtcXirPeImage *image, XrToolchainBinding *binding) {
+#endif
+static bool admission_binding(NativeAdmission *a, const AdmissionImage *image, XrToolchainBinding *binding) {
     XrFingerprint commands, sysroot, profile;
     if (!admission_commands(a, &commands) || !admission_sysroot(a, &sysroot) ||
         !admission_profile(a, image, &commands, &sysroot, &profile)) return false;
@@ -450,7 +479,11 @@ static bool admission_binding(NativeAdmission *a, const XtcXirPeImage *image, Xr
     options[sizeof(options) - 1] = 0;
     XrToolchainInput input;
     memset(&input, 0, sizeof(input));
+#ifdef XR_OS_WINDOWS
     input.schema_version = XR_TOOLCHAIN_BINDING_SCHEMA_VERSION; input.provider = XR_TOOLCHAIN_BINDING_PROVIDER_MSVC;
+#else
+    input.schema_version = XR_TOOLCHAIN_BINDING_SCHEMA_VERSION; input.provider = a->provider.binding;
+#endif
     input.provider_version = a->provider.compiler.version.file_text;
     input.target_triple = admission_triple; input.codegen_options = options;
     input.sysroot_id = sysroot;
@@ -479,7 +512,7 @@ XR_FUNC XtcXirNativeAdmissionStatus xtc_xir_native_admit(XtcXirNativeOperation *
         return a.diagnostic.status;
     }
     void *bytes = NULL; size_t length = 0; XrXirNativeArtifact *artifact = NULL;
-    XtcXirPeImage image; XrToolchainBinding binding; XrXirNativeInput input;
+    AdmissionImage image; XrToolchainBinding binding; XrXirNativeInput input;
     bool okay = admission_producers(&a) && admission_files(&a) &&
         admission_read(&a, byte_limit, &bytes, &length);
     if (okay && length != a.output.length)

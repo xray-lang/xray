@@ -44,16 +44,29 @@ static int build_native_prepare(XrCompileState *state, const XrCliInvocation *in
     }
     const XrCliToolchainConfigView *preferences = xr_cli_toolchain_config_view(config);
     const char *compiler = xr_cli_opt_string(&inv->options, "cc", NULL);
+    uint32_t required = 0;
     for (size_t i = 0; i < preferences->count; ++i) {
         const XrCliToolchainPreference *preference = &preferences->preferences[i];
         if (strcmp(preference->target, "native")) continue;
-        if (preference->selector != XR_TOOLCHAIN_SELECTOR_AUTO &&
-            preference->selector != XR_TOOLCHAIN_SELECTOR_MSVC &&
+#if XR_OS_WINDOWS
+        bool supported = preference->selector == XR_TOOLCHAIN_SELECTOR_MSVC;
+#else
+        /* A POSIX clang or gcc preference names that driver unless it gives a
+         * path, and the discovered provider must then be of that kind. */
+        bool supported = preference->selector == XR_TOOLCHAIN_SELECTOR_CLANG ||
+            preference->selector == XR_TOOLCHAIN_SELECTOR_GCC;
+        if (preference->selector == XR_TOOLCHAIN_SELECTOR_CLANG) required = XR_TOOLCHAIN_BINDING_PROVIDER_CLANG;
+        if (preference->selector == XR_TOOLCHAIN_SELECTOR_GCC) required = XR_TOOLCHAIN_BINDING_PROVIDER_GCC;
+#endif
+        if (preference->selector != XR_TOOLCHAIN_SELECTOR_AUTO && !supported &&
             preference->selector != XR_TOOLCHAIN_SELECTOR_HOST) {
             fputs("XR_BUILD_6011: selected native toolchain provider is unsupported by this build\n", stderr);
             xr_cli_toolchain_config_free(config); return XR_CLI_EXIT_FAIL;
         }
         if (!compiler) compiler = preference->compiler;
+#if !XR_OS_WINDOWS
+        if (!compiler && required) compiler = required == XR_TOOLCHAIN_BINDING_PROVIDER_CLANG ? "clang" : "gcc";
+#endif
         break;
     }
     XtcXirLocalToolchainRequest locate = {compiler,
@@ -71,6 +84,10 @@ static int build_native_prepare(XrCompileState *state, const XrCliInvocation *in
     }
     const XtcXirLocalToolchainView *view = xtc_xir_local_toolchain_view(local);
     if (build_verbose(inv)) fprintf(stderr,"XR_BUILD: native compiler %s\n",view->compiler);
+    if (required && view->posix.provider != required) {
+        fputs("XR_BUILD_6011: selected native toolchain provider does not match the discovered compiler\n", stderr);
+        xtc_xir_local_toolchain_free(local); return XR_CLI_EXIT_FAIL;
+    }
     XtcXirWorkspaceRequest workspace = {view->workspace_parent, {XR_PATH_LIMIT_MAX_PATH, 32, 65536}};
     XtcXirNativeOperationLimits limits = {{{4 * 1024 * 1024, XR_PATH_LIMIT_MAX_PATH, 4096},
         BUILD_C_LIMIT, 4096}, 30000, 4 * 1024 * 1024};
@@ -78,7 +95,7 @@ static int build_native_prepare(XrCompileState *state, const XrCliInvocation *in
     XtcXirNativeOperationStatus status = xtc_xir_native_operation_new(resources, &workspace, &limits, &operation);
     if (status == XTC_XIR_NATIVE_OK) {
         XtcXirNativeOperationRequest request = {projection, xtc_xir_local_toolchain_sdk(local),
-            view->compiler, view->linker, view->msvc, view->libraries, view->library_count, NULL, NULL};
+            view->compiler, view->linker, view->msvc, view->libraries, view->library_count, NULL, NULL, view->posix};
         status = xtc_xir_native_operation_run(operation, &request);
     }
     int result = XR_CLI_EXIT_OK;

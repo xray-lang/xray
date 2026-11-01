@@ -33,6 +33,9 @@ typedef struct XtcXirPublicationLimits {
 typedef struct XtcXirPublicationRequest {
     const char *destination;
     XtcXirPublicationLimits limits;
+    /* POSIX creates the entry with mode 0777 instead of 0666, both reduced by
+     * the process umask; Windows has no execute bit to set. */
+    bool executable;
 } XtcXirPublicationRequest;
 typedef struct XtcXirPublicationDiagnostic {
     XtcXirPublicationStatus status;

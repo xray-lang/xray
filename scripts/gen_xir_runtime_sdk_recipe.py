@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse
 import json
+import os
 import re
 from pathlib import Path
 
@@ -15,7 +16,24 @@ GENERATED_RUNTIME_ROOTS = ['src/xir/xxir_equal.h', 'src/xir/xxir_panic.h', 'src/
                            'src/xir/xxir_channel.h', 'src/xir/xxir_output.h', 'src/xir/xxir_nullable.h', 'src/shared/xr_error_core.h',
                            'src/execution/xr_xir_native_main.inc.c']
 
-def recipe(root: Path) -> dict:
+PLATFORMS = ('windows', 'posix')
+# Each platform links its own system library set; POSIX hosts need only libm,
+# which the C library may also provide.
+SYSTEM_LIBRARIES = {'windows': ['kernel32', 'bcrypt'], 'posix': ['m']}
+
+
+def host_platform() -> str:
+    return 'windows' if os.name == 'nt' else 'posix'
+
+
+def archive_path(owner: str, platform: str) -> str:
+    return f'lib/{owner}.lib' if platform == 'windows' else f'lib/lib{owner}.a'
+
+
+def recipe(root: Path, platform: str | None = None) -> dict:
+    platform = platform or host_platform()
+    if platform not in PLATFORMS:
+        raise ValueError(f'unsupported runtime platform: {platform}')
     root = root.resolve()
     groups: dict[str, list[str]] = {}
     for filename, owners in OWNERS.items():
@@ -28,12 +46,14 @@ def recipe(root: Path) -> dict:
             groups[owner] = [(path.parent / spelling).resolve().relative_to(root).as_posix()
                              for spelling in declaration[0].split()]
             if owner in ('xray_compile_resources', 'xray_xir_scalar'):
-                windows = re.findall(r'if\(WIN32\)\s*target_sources\(' + owner +
-                                     r'\s+PRIVATE\s+([^\n)]*)\)', text)
-                if len(windows) != 1:
-                    raise ValueError(f'exactly one Windows runtime source branch required: {owner}')
+                branches = re.findall(r'if\(WIN32\)\s*target_sources\(' + owner +
+                                      r'\s+PRIVATE\s+([^\n)]*)\)\s*else\(\)\s*target_sources\(' +
+                                      owner + r'\s+PRIVATE\s+([^\n)]*)\)', text)
+                if len(branches) != 1:
+                    raise ValueError(f'exactly one platform runtime source branch required: {owner}')
+                selected = branches[0][0 if platform == 'windows' else 1]
                 groups[owner] += [(path.parent / spelling).resolve().relative_to(root).as_posix()
-                                  for spelling in windows[0].split()]
+                                  for spelling in selected.split()]
     roots = [name for entries in groups.values() for name in entries] + GENERATED_RUNTIME_ROOTS
     pending = [root / name for name in roots]
     entries: dict[str, int] = {}
@@ -59,10 +79,10 @@ def recipe(root: Path) -> dict:
                 raise ValueError(f'missing quoted dependency: {relative}: {spelling}')
             pending.append(found)
     for owner in groups:
-        entries[f'lib/{owner}.lib'] = 5
+        entries[archive_path(owner, platform)] = 5
     if len(entries) > 512:
         raise ValueError('runtime recipe exceeds its file cap')
-    return {'archive_source_groups': groups, 'system_libraries': ['kernel32', 'bcrypt'],
+    return {'archive_source_groups': groups, 'system_libraries': SYSTEM_LIBRARIES[platform],
             'files': [{'path': name, 'kind': entries[name]} for name in sorted(entries)]}
 
 def write_if_changed(path: Path, text: str) -> None:
@@ -78,8 +98,9 @@ def main() -> None:
     parser.add_argument('--output', required=True)
     parser.add_argument('--record')
     parser.add_argument('--depfile')
+    parser.add_argument('--platform', choices=PLATFORMS, default=host_platform())
     args = parser.parse_args()
-    result = recipe(Path(args.root))
+    result = recipe(Path(args.root), args.platform)
     lines = ['/* Generated from the actual runtime CMake source owners. */',
              'static const XrXirSdkRecipeFile sdk_recipe_files[] = {']
     lines.extend('    {' + json.dumps(entry['path']) + ', ' + str(entry['kind']) + 'u},'

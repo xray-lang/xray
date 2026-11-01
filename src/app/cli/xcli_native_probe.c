@@ -13,7 +13,13 @@
 #include "../toolchain/xtc_xir_native_admission.h"
 #include <stdio.h>
 #include <string.h>
+#if XR_OS_WINDOWS
 #include <windows.h>
+#define probe_clock_ms() GetTickCount64()
+#else
+#include "../../os/os_time.h"
+#define probe_clock_ms() xr_time_monotonic_ms()
+#endif
 
 struct XrCliNativeProbe {
     XrCompileResources *resources;
@@ -152,13 +158,19 @@ static bool probe_observe(XrCliNativeProbe *owner) {
         return probe_fail(owner,XR_CLI_NATIVE_PROBE_INTEGRITY,"PROBE_INPUT_INVALID","provider-facts",0,0);
     probe_hex(sdk->identity,owner->report.runtime);
     probe_hex(native->id.bytes,owner->report.fingerprint);
+#if XR_OS_WINDOWS
     uint32_t expected=XR_TOOLCHAIN_BINDING_PROVIDER_MSVC;
+#else
+    /* The one POSIX driver was classified by its own predefined macros. */
+    uint32_t expected=provider->binding;
+#endif
     if (native->input.toolchain.provider!=expected)
         return probe_fail(owner,XR_CLI_NATIVE_PROBE_INTEGRITY,"ABI_MISMATCH","provider-binding",0,0);
     memcpy(owner->report.version,provider->compiler.version.file_text,sizeof(owner->report.version));
     memcpy(owner->compiler_digest,provider->compiler.digest,32);memcpy(owner->linker_digest,provider->linker.digest,32);
     memcpy(owner->sdk_identity,sdk->identity,32);owner->compiler_length=provider->compiler.length;owner->linker_length=provider->linker.length;
-    owner->report.provider=expected==XR_TOOLCHAIN_BINDING_PROVIDER_CLANG ? "clang" : "msvc";
+    owner->report.provider=expected==XR_TOOLCHAIN_BINDING_PROVIDER_CLANG ? "clang" :
+        expected==XR_TOOLCHAIN_BINDING_PROVIDER_GCC ? "gcc" : "msvc";
     owner->report.native_run=probe_execute(owner) ? "ok" : "failed";
     owner->report.ready=!strcmp(owner->report.native_run,"ok");return owner->report.ready;
 }
@@ -184,7 +196,7 @@ static bool probe_attempt(XrCliNativeProbe *owner,const XrCliNativeProbeRequest 
     XtcXirNativeOperationStatus status=xtc_xir_native_operation_new(owner->resources,&workspace,&limits,&owner->operation);
     if (status==XTC_XIR_NATIVE_OK) {
         XtcXirNativeOperationRequest run={owner->projection,xtc_xir_local_toolchain_sdk(owner->local),local->compiler,
-            local->linker,local->msvc,local->libraries,local->library_count,NULL,NULL};
+            local->linker,local->msvc,local->libraries,local->library_count,NULL,NULL,local->posix};
         status=xtc_xir_native_operation_run(owner->operation,&run);
     }
     if (status==XTC_XIR_NATIVE_OK) {
@@ -234,22 +246,38 @@ XR_FUNC XrCliNativeProbeStatus xr_cli_native_probe_resolve(const XrCliNativeProb
     if (!selected.compiler && preference && (selected.selector==preference->selector ||
         (selected.selector==XR_TOOLCHAIN_SELECTOR_AUTO && preference->selector==XR_TOOLCHAIN_SELECTOR_MSVC)))
         selected.compiler=preference->compiler;
+#if !XR_OS_WINDOWS
+    /* A POSIX clang or gcc selection without a path names that driver. */
+    if (!selected.compiler && selected.selector==XR_TOOLCHAIN_SELECTOR_CLANG) selected.compiler="clang";
+    if (!selected.compiler && selected.selector==XR_TOOLCHAIN_SELECTOR_GCC) selected.compiler="gcc";
+#endif
     *output=selected;return XR_CLI_NATIVE_PROBE_OK;
 }
 XR_FUNC XrCliNativeProbeStatus xr_cli_native_probe_run(XrCliNativeProbe *owner,const XrCliNativeProbeRequest *request) {
     if (!owner || !request || owner->ran) return XR_CLI_NATIVE_PROBE_INVALID;
-    owner->ran=true;uint64_t started=GetTickCount64();
-    if (request->selector!=XR_TOOLCHAIN_SELECTOR_AUTO && request->selector!=XR_TOOLCHAIN_SELECTOR_HOST &&
-        request->selector!=XR_TOOLCHAIN_SELECTOR_MSVC) {
+    owner->ran=true;uint64_t started=probe_clock_ms();
+#if XR_OS_WINDOWS
+    bool supported=request->selector==XR_TOOLCHAIN_SELECTOR_MSVC;
+#else
+    bool supported=request->selector==XR_TOOLCHAIN_SELECTOR_CLANG || request->selector==XR_TOOLCHAIN_SELECTOR_GCC;
+#endif
+    if (request->selector!=XR_TOOLCHAIN_SELECTOR_AUTO && request->selector!=XR_TOOLCHAIN_SELECTOR_HOST && !supported) {
         probe_fail(owner,XR_CLI_NATIVE_PROBE_UNSUPPORTED,"TARGET_UNSUPPORTED","provider",0,0);goto done;
     }
     (void)probe_attempt(owner,request);
+#if !XR_OS_WINDOWS
+    /* A named provider must be the kind of driver discovery actually found. */
+    if (owner->report.ready && request->selector!=XR_TOOLCHAIN_SELECTOR_AUTO &&
+        request->selector!=XR_TOOLCHAIN_SELECTOR_HOST && strcmp(owner->report.provider,
+            request->selector==XR_TOOLCHAIN_SELECTOR_CLANG ? "clang" : "gcc"))
+        probe_fail(owner,XR_CLI_NATIVE_PROBE_UNSUPPORTED,"PROVIDER_UNSUPPORTED","provider",0,0);
+#endif
     XrCliNativeProbeStatus closed=probe_operation_close(owner);
     if (closed!=XR_CLI_NATIVE_PROBE_OK) { owner->status=closed;goto done; }
 
 done:
     if (!owner->operation) probe_source_free(owner);
-    owner->report.duration_ms=GetTickCount64()-started;return owner->status;
+    owner->report.duration_ms=probe_clock_ms()-started;return owner->status;
 }
 XR_FUNC const XrCliNativeProbeReport *xr_cli_native_probe_report(const XrCliNativeProbe *owner) {
     return owner ? &owner->report : NULL;

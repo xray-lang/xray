@@ -12,7 +12,9 @@ add_test(NAME test_cli_usability
 set_tests_properties(test_cli_usability PROPERTIES
     TIMEOUT 120 PROCESSORS 1 LABELS "cli;usability;stdlib")
 
-if(WIN32 AND XR_TARGET_ARCH MATCHES "^(x86_64|AMD64|amd64)$")
+# Native executables are published on Windows x86_64 and on macOS/Linux
+# x86_64 and arm64; every other host emits C only.
+if((WIN32 AND XR_TARGET_ARCH MATCHES "^(x86_64|AMD64|amd64)$") OR XR_XIR_POSIX_SDK_ARCHITECTURE)
 add_test(NAME test_cli_build_options
     COMMAND ${XRAY_PYTHON} -B -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_build_options.py
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}

@@ -51,7 +51,7 @@ static XtcXirPublicationStatus replace(const char *path, bool commit, uint64_t m
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats empty = {0}, closed = {0};
     CHECK(xr_compile_resources_stats(resources, &empty) == XR_COMPILE_RESOURCE_OK);
-    XtcXirPublicationRequest request = {path, {4096, 8, max_bytes}};
+    XtcXirPublicationRequest request = {path, {4096, 8, max_bytes}, false};
     XtcXirPublicationStatus status = xtc_xir_publication_new(resources, &request, &owner);
     if (status == XTC_XIR_PUBLICATION_OK) status = xtc_xir_publication_write(owner, payload, sizeof(payload) - 1);
     if (status == XTC_XIR_PUBLICATION_OK && commit) status = xtc_xir_publication_commit(owner);
@@ -105,7 +105,7 @@ static void lifetime(void) {
     char path[4200]; path_in(path, sizeof(path), "late.c");
     XrCompileResources *resources = NULL; XtcXirPublication *owner = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
-    XtcXirPublicationRequest request = {path, {4096, 8, 4096}};
+    XtcXirPublicationRequest request = {path, {4096, 8, 4096}, false};
     CHECK(xtc_xir_publication_new(resources, &request, &owner) == XTC_XIR_PUBLICATION_OK);
     CHECK(xtc_xir_publication_write(owner, payload, sizeof(payload) - 1) == XTC_XIR_PUBLICATION_OK);
     CHECK(xtc_xir_publication_phase(owner) == XTC_XIR_PUBLICATION_READY);
@@ -115,12 +115,32 @@ static void lifetime(void) {
     CHECK(xtc_xir_publication_close(&owner) == XTC_XIR_PUBLICATION_OK && !owner);
     file_is(path, payload, sizeof(payload) - 1); directory_holds(1); CHECK(!unlink(path));
 }
+/* Native executables are published with execute permission under the umask;
+ * generated C keeps the ordinary 0666 creation mode. */
+static void modes(void) {
+    char path[4200]; path_in(path, sizeof(path), "program");
+    mode_t previous = umask(022);
+    for (int executable = 0; executable < 2; ++executable) {
+        XrCompileResources *resources = NULL; XtcXirPublication *owner = NULL;
+        CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+        XtcXirPublicationRequest request = {path, {4096, 8, 4096}, executable != 0};
+        CHECK(xtc_xir_publication_new(resources, &request, &owner) == XTC_XIR_PUBLICATION_OK);
+        CHECK(xtc_xir_publication_write(owner, payload, sizeof(payload) - 1) == XTC_XIR_PUBLICATION_OK);
+        CHECK(xtc_xir_publication_commit(owner) == XTC_XIR_PUBLICATION_OK);
+        CHECK(xtc_xir_publication_close(&owner) == XTC_XIR_PUBLICATION_OK);
+        xr_compile_resources_release(resources);
+        struct stat information; CHECK(!stat(path, &information));
+        CHECK((information.st_mode & 0777) == (executable ? 0755u : 0644u));
+        CHECK(!unlink(path));
+    }
+    umask(previous);
+}
 int main(int argc, char **argv) {
     CHECK(argc == 2 && strlen(argv[1]) + 1 < sizeof(root));
     memcpy(root, argv[1], strlen(argv[1]) + 1);
     CHECK(!mkdir(root, 0700) || errno == EEXIST);
     directory_holds(0);
-    replacement(); refusals(); lifetime();
+    replacement(); refusals(); lifetime(); modes();
     CHECK(!rmdir(root));
     puts("publication posix: ok");
     return 0;

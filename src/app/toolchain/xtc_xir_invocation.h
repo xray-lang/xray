@@ -68,6 +68,19 @@ typedef struct XrXirInvocationLimits {
 typedef struct XrXirMsvcRecipe {
     const char *vc_include, *ucrt_include, *shared_include, *um_include, *system_root;
 } XrXirMsvcRecipe;
+#define XR_XIR_POSIX_ROOT_LIMIT 32u
+/* One POSIX C driver (cc, clang or gcc) compiles both translation units and
+ * links them. Discovery supplies every fact: the Darwin SDK and -arch value
+ * (NULL elsewhere), the PATH given to each command, the canonical toolchain
+ * roots that may supply headers and implicit link inputs, the provider kind
+ * (CLANG or GCC binding provider) and its version from predefined macros. */
+typedef struct XrXirPosixRecipe {
+    const char *sysroot, *arch, *path;
+    const char *roots[XR_XIR_POSIX_ROOT_LIMIT];
+    uint32_t root_count, provider;
+    XtcXirPeVersion version;
+} XrXirPosixRecipe;
+
 typedef struct XrXirInvocationRequest {
     const XrXirNativeProjection *projection;
     const XrXirRuntimeSdk *sdk;
@@ -82,6 +95,7 @@ typedef struct XrXirInvocationRequest {
     XrXirInvocationLimits limits;
     XrProcessCancelled cancelled;
     void *cancel_context;
+    XrXirPosixRecipe posix;
 } XrXirInvocationRequest;
 typedef struct XrXirInvocationFile {
     XrXirInvocationStage stage;
@@ -103,6 +117,8 @@ typedef struct XrXirInvocationProviderImageFacts {
 } XrXirInvocationProviderImageFacts;
 typedef struct XrXirInvocationProviderFacts {
     XrXirInvocationProviderImageFacts compiler, linker;
+    /* POSIX binding provider (CLANG or GCC) of the one driver; 0 on Windows. */
+    uint32_t binding;
 } XrXirInvocationProviderFacts;
 typedef struct XrXirInvocation XrXirInvocation;
 

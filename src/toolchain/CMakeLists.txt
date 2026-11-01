@@ -12,7 +12,12 @@ foreach(target xray_toolchain_binding xray_xir_native_artifact xray_xir_native_p
     endif()
 endforeach()
 
-if(WIN32)
+if(WIN32 OR XR_XIR_POSIX_SDK_ARCHITECTURE)
+    if(WIN32)
+        set(XIR_SDK_TARGET_ARGS --crt MD)
+    else()
+        set(XIR_SDK_TARGET_ARGS --crt system --architecture ${XR_XIR_POSIX_SDK_ARCHITECTURE})
+    endif()
     set(XIR_SDK_DIR ${CMAKE_BINARY_DIR}/xir-runtime-sdk)
     file(MAKE_DIRECTORY ${XIR_SDK_DIR})
     execute_process(COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/scripts/gen_xir_runtime_sdk_recipe.py
@@ -57,7 +62,7 @@ if(WIN32)
     add_custom_command(OUTPUT ${XIR_SDK_DIR}/sdk_generated.h ${XIR_SDK_DIR}/sdk_manifest.json
         COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/scripts/build_xir_runtime_sdk.py
             --root ${PROJECT_SOURCE_DIR} --output ${XIR_SDK_DIR}
-            --compiler ${CMAKE_C_COMPILER} --crt MD --jobs ${xir_sdk_build_jobs}
+            --compiler ${CMAKE_C_COMPILER} ${XIR_SDK_TARGET_ARGS} --jobs ${xir_sdk_build_jobs}
         DEPENDS ${XIR_SDK_DIR}/sdk_recipe.json ${XIR_SDK_DEPENDENCIES}
             ${PROJECT_SOURCE_DIR}/src/xir/CMakeLists.txt
             ${PROJECT_SOURCE_DIR}/src/execution/xir_runtime_host.cmake
@@ -75,6 +80,13 @@ if(WIN32)
         target_compile_options(xray_xir_runtime_sdk PRIVATE /W4 /WX)
     else()
         target_compile_options(xray_xir_runtime_sdk PRIVATE -Wall -Wextra -Werror)
+    endif()
+    if(NOT WIN32)
+        # Strict C11 hides openat/O_NOFOLLOW unless POSIX.1-2008 is requested.
+        target_compile_definitions(xray_xir_runtime_sdk PRIVATE _POSIX_C_SOURCE=200809L)
+        if(APPLE)
+            target_compile_definitions(xray_xir_runtime_sdk PRIVATE _DARWIN_C_SOURCE)
+        endif()
     endif()
     install(FILES ${XIR_SDK_DIR}/sdk_manifest.json DESTINATION lib/xray/xir-runtime-sdk COMPONENT XraySDK)
 endif()

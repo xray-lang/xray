@@ -27,6 +27,35 @@ typedef struct XrXirRuntimeSdkRequest {
     size_t manifest_length;
     XrCompileResources *resources;
 } XrXirRuntimeSdkRequest;
+/* POSIX bundle facts for this host. macOS and Linux publish their native
+ * object format (Mach-O 3, ELF 2) for x86_64 (1) or arm64 (2), linked against
+ * the system C library (crt 3). XR_XIR_SDK_POSIX_HOST is defined only where a
+ * native executable can be built; Windows keeps its fixed x86_64 MSVC facts. */
+#if (defined(XR_OS_MACOS) || defined(XR_OS_LINUX)) && (defined(XR_ARCH_X86_64) || defined(XR_ARCH_ARM64))
+#define XR_XIR_SDK_POSIX_HOST 1
+#endif
+#if defined(XR_XIR_SDK_POSIX_HOST) && defined(XR_ARCH_X86_64)
+#define XR_XIR_SDK_POSIX_ARCHITECTURE 1u
+#define XR_XIR_SDK_POSIX_CPU "x86_64"
+#define XR_XIR_SDK_POSIX_ARCH_NAME "x86_64"
+#elif defined(XR_XIR_SDK_POSIX_HOST)
+#define XR_XIR_SDK_POSIX_ARCHITECTURE 2u
+#define XR_XIR_SDK_POSIX_CPU "aarch64"
+#define XR_XIR_SDK_POSIX_ARCH_NAME "arm64"
+#endif
+#if defined(XR_XIR_SDK_POSIX_HOST) && defined(XR_OS_MACOS)
+#define XR_XIR_SDK_POSIX_OBJECT_FORMAT 3u
+#define XR_XIR_SDK_POSIX_SYSTEM "apple-darwin"
+#define XR_XIR_SDK_POSIX_OS_NAME "darwin"
+#elif defined(XR_XIR_SDK_POSIX_HOST)
+#define XR_XIR_SDK_POSIX_OBJECT_FORMAT 2u
+#define XR_XIR_SDK_POSIX_SYSTEM "linux-gnu"
+#define XR_XIR_SDK_POSIX_OS_NAME "linux"
+#endif
+#define XR_XIR_SDK_POSIX_CRT 3u
+#define XR_XIR_SDK_POSIX_TRIPLE XR_XIR_SDK_POSIX_CPU "-" XR_XIR_SDK_POSIX_SYSTEM
+#define XR_XIR_SDK_POSIX_CLOSURE_RECIPE \
+    "xray:xir-runtime-recipe:" XR_XIR_SDK_POSIX_OS_NAME "-" XR_XIR_SDK_POSIX_ARCH_NAME "-hosted:v1"
 typedef struct XrXirRuntimeSdkFacts {
     uint32_t schema, wire, semantic, value_abi, call_abi, program_abi;
     uint32_t architecture, object_format, hosted, c_dialect, crt, sanitizers;

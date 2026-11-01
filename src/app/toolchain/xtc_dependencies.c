@@ -91,10 +91,9 @@ static bool dependency_path(DependencyParser *p, const char *path) {
     }
     return dependency_fail(p, XR_JSON_CURSOR_INVALID);
 }
-static bool dependency_append(DependencyParser *p, const char *path, size_t offset,
+static bool dependency_store(DependencyParser *p, const char *path, size_t offset,
     XrDependencyKind kind) {
     XrDependencyFacts *f = p->facts;
-    if (!dependency_path(p, path)) return false;
     if (f->count == p->limits.records) return dependency_fail(p, XR_JSON_CURSOR_BUDGET);
     if (f->count == f->capacity) {
         uint32_t capacity = f->capacity > UINT32_MAX / 2 ? UINT32_MAX : f->capacity * 2;
@@ -110,6 +109,10 @@ static bool dependency_append(DependencyParser *p, const char *path, size_t offs
 
     f->records[f->count++] = (XrDependencyRecord){path, offset, kind};
     return true;
+}
+static bool dependency_append(DependencyParser *p, const char *path, size_t offset,
+    XrDependencyKind kind) {
+    return dependency_path(p, path) && dependency_store(p, path, offset, kind);
 }
 static bool dependency_json_path(DependencyParser *p, XrDependencyKind kind) {
     const char *path = NULL;
@@ -354,6 +357,7 @@ static bool dependency_rsp(DependencyParser *p) {
     }
     return p->facts->count != 0 || dependency_fail(p, XR_JSON_CURSOR_INVALID);
 }
+#include "xtc_dependencies_posix.inc.c"
 static bool dependency_arguments(DependencyParser *p, const XrDependencyInput *input) {
     for (uint32_t i = 0; i < input->argc; ++i) {
 
@@ -377,7 +381,7 @@ XR_FUNC XrXirTargetStatus xtc_dependencies_parse(XrCompileResources *resources,
     if (!resources || !input || !input->bytes || !input->length || !input->argv ||
         !input->argc || !output || *output || !limits.frame_bytes || !limits.path_bytes || !limits.records)
         return XR_XIR_TARGET_INVALID;
-    if (input->format < XR_DEPENDENCY_MSVC_SOURCE_1_2 || input->format > XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE)
+    if (input->format < XR_DEPENDENCY_MSVC_SOURCE_1_2 || input->format > XR_DEPENDENCY_DARWIN_LD_INFO)
         return XR_XIR_TARGET_UNSUPPORTED;
     if (input->length > limits.frame_bytes || input->length > PTRDIFF_MAX) return XR_XIR_TARGET_BUDGET;
     DependencyParser p = {0}; p.limits = limits;
@@ -392,7 +396,8 @@ XR_FUNC XrXirTargetStatus xtc_dependencies_parse(XrCompileResources *resources,
     if (p.json.status == XR_JSON_CURSOR_OK) {
         memcpy(p.facts->bytes, input->bytes, input->length); p.facts->bytes[input->length] = 0;
         p.json.begin = p.json.cursor = p.facts->bytes; p.json.end = p.json.begin + input->length;
-        if (input->format == XR_DEPENDENCY_WINDOWS_MAKE || input->format == XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE) {
+        if (input->format == XR_DEPENDENCY_WINDOWS_MAKE || input->format == XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE ||
+            input->format == XR_DEPENDENCY_POSIX_MAKE || input->format == XR_DEPENDENCY_POSIX_LINK_MAKE) {
             p.text_capacity = input->length + 1;
             /* A UTF-16 code unit needs at most three UTF-8 bytes. Quotes and
              * CRLF leave more room than the terminating byte for each path. */
@@ -409,7 +414,10 @@ XR_FUNC XrXirTargetStatus xtc_dependencies_parse(XrCompileResources *resources,
             if (input->format == XR_DEPENDENCY_MSVC_SOURCE_1_2) dependency_json(&p);
             else if (input->format == XR_DEPENDENCY_WINDOWS_MAKE) dependency_make(&p);
             else if (input->format == XR_DEPENDENCY_MSVC_LIBRARY_ZH_CN) dependency_libraries(&p);
-            else dependency_rsp(&p);
+            else if (input->format == XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE) dependency_rsp(&p);
+            else if (input->format == XR_DEPENDENCY_POSIX_MAKE) dependency_posix_make(&p, XR_DEPENDENCY_HEADER);
+            else if (input->format == XR_DEPENDENCY_POSIX_LINK_MAKE) dependency_posix_make(&p, XR_DEPENDENCY_LINK_INPUT);
+            else dependency_darwin_info(&p);
         }
     }
     if (p.json.status != XR_JSON_CURSOR_OK) {

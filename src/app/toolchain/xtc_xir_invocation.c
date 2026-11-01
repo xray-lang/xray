@@ -20,6 +20,7 @@
 #include "../../base/xsha256.h"
 #include "../../os/os_fs.h"
 #include "../../os/os_dir.h"
+#include "../../base/xchecks.h"
 #include <string.h>
 #ifdef XR_OS_WINDOWS
 #include "../../base/xwindows_utf8.h"
@@ -57,6 +58,9 @@ struct XrXirInvocation {
     XtcXirFileLease *directories[2];
     XtcXirFileLease *output_lease; /* Borrowed from the owned file table. */
     InvocationInputs inputs;
+#ifndef XR_OS_WINDOWS
+    const XrXirInvocationRequest *running; /* Borrowed only during run. */
+#endif
 };
 static bool invocation_fail(XrXirInvocation *owner, XrXirInvocationStatus status,
     XrXirInvocationFailureDomain domain, int code) {
@@ -217,7 +221,7 @@ static bool invocation_file_add(XrXirInvocation *owner, XrXirInvocationStage sta
     return true;
 }
 static bool invocation_platform(void) {
-#ifdef XR_OS_WINDOWS
+#if defined(XR_OS_WINDOWS) || defined(XR_XIR_SDK_POSIX_HOST)
     return true;
 #else
     return false;
@@ -235,6 +239,7 @@ static bool invocation_join_argument(XrXirInvocation *owner, const char *actual,
     }
     return invocation_expect(owner, actual, suffix);
 }
+#ifdef XR_OS_WINDOWS
 static bool invocation_environment(XrXirInvocation *owner, const XrProcessView *view,
     const XrXirInvocationRequest *request) {
     static const char *const keys[] = {"SystemRoot", "TEMP", "TMP"};
@@ -316,6 +321,7 @@ static bool invocation_link_recipe(XrXirInvocation *owner, const XrXirInvocation
     }
     return invocation_expect(owner, view->cwd, request->input_directory) && invocation_environment(owner, view, request);
 }
+#endif
 static bool invocation_child_path(XrXirInvocation *owner, const char *path, const char *directory) {
     char *parent = NULL;
     if (!invocation_io(owner, xr_path_dirname_owned(&owner->io, path, &parent))) return false;
@@ -354,8 +360,8 @@ static bool invocation_empty_directory(XrXirInvocation *owner, const char *path)
         invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0) : invocation_io(owner, status);
     return true;
 }
-static bool invocation_disjoint_directories(XrXirInvocation *owner) {
 #ifdef XR_OS_WINDOWS
+static bool invocation_disjoint_directories(XrXirInvocation *owner) {
     const XtcXirDirectoryFacts *facts[2] = {
         xtc_xir_file_lease_directory_facts(owner->directories[0]),
         xtc_xir_file_lease_directory_facts(owner->directories[1])};
@@ -383,10 +389,8 @@ static bool invocation_disjoint_directories(XrXirInvocation *owner) {
     wchar_t last = facts[shorter]->native_path[common - 1], next = facts[longer]->native_path[common];
     return (last != L'\\' && last != L'/' && next != L'\\' && next != L'/') ||
         invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
-#else
-    return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
-#endif
 }
+#endif
 static void invocation_input_free(InvocationInputs *profile) {
     for (unsigned i = 0; i < 8; ++i) {
         xtc_xir_file_lease_free(profile->directories[i]);
@@ -396,6 +400,7 @@ static void invocation_input_free(InvocationInputs *profile) {
 #endif
     }
 }
+#ifdef XR_OS_WINDOWS
 static bool invocation_input_suffix(XrXirInvocation *owner, const char *path, const char *suffix, char **output) {
     size_t a = 0, b = 0;
     if (!invocation_length(owner, path, &a) || !invocation_length(owner, suffix, &b)) return false;
@@ -450,6 +455,7 @@ static bool invocation_input_fields(const XrXirInvocationRequest *request) {
         request->msvc.vc_include && request->msvc.ucrt_include && request->msvc.shared_include &&
         request->msvc.um_include && request->msvc.system_root;
 }
+#endif
 #ifdef XR_OS_WINDOWS
 static bool invocation_input_wide(XrXirInvocation *owner, const char *path,
     wchar_t **output, size_t *length) {
@@ -570,12 +576,7 @@ static bool invocation_input_contains(XrXirInvocation *owner, const char *path) 
         invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0));
 }
 #else
-static bool invocation_inputs_derive(XrXirInvocation *owner, const XrXirInvocationRequest *request) {
-    (void)request; return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
-}
-static bool invocation_input_contains(XrXirInvocation *owner, const char *path) {
-    (void)path; return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
-}
+#include "xtc_xir_invocation_posix.inc.c"
 #endif
 
 
@@ -651,8 +652,14 @@ static bool invocation_report(XrXirInvocation *owner, const char *path, unsigned
     if (okay) okay = invocation_target(owner, xtc_xir_file_lease_read(lease,
         owner->limits.dependencies.frame_bytes, &bytes, &length));
     const XrProcessView *command = &owner->commands[stage];
-    XrDependencyInput input = {stage == 2 ? XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE : XR_DEPENDENCY_MSVC_SOURCE_1_2,
-        bytes, length, command->argv, (uint32_t)command->argc};
+#ifdef XR_OS_WINDOWS
+    XrDependencyFormat format = stage == 2 ? XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE : XR_DEPENDENCY_MSVC_SOURCE_1_2;
+#elif defined(XR_OS_MACOS)
+    XrDependencyFormat format = stage == 2 ? XR_DEPENDENCY_DARWIN_LD_INFO : XR_DEPENDENCY_POSIX_MAKE;
+#else
+    XrDependencyFormat format = stage == 2 ? XR_DEPENDENCY_POSIX_LINK_MAKE : XR_DEPENDENCY_POSIX_MAKE;
+#endif
+    XrDependencyInput input = {format, bytes, length, command->argv, (uint32_t)command->argc};
     if (okay) okay = invocation_target(owner, xtc_dependencies_parse(owner->context.resources,
         &input, owner->limits.dependencies, &report));
     if (okay) okay = invocation_file_add(owner, (XrXirInvocationStage)stage,
@@ -680,6 +687,7 @@ static bool invocation_file_find(XrXirInvocation *owner, const XtcXirFileFacts *
     }
     *index = UINT32_MAX; return true;
 }
+#ifdef XR_OS_WINDOWS
 static bool invocation_compile_inputs(XrXirInvocation *owner, const XrDependencyFacts *report,
     unsigned stage) {
     uint32_t count = xtc_dependencies_count(report);
@@ -752,6 +760,7 @@ static bool invocation_link_inputs(XrXirInvocation *owner, const XrDependencyFac
     xr_compile_resources_free(seen);
     return owner->status == XR_XIR_INVOCATION_OK;
 }
+#endif
 static bool invocation_run_process(XrXirInvocation *owner, const XrXirInvocationRequest *request,
     const XrToolchainProcess *process) {
     XrProcessResult result = {0};
@@ -794,8 +803,12 @@ static bool invocation_arguments(XrXirInvocation *owner, const XrProcessView *vi
 }
 static bool invocation_prepare(XrXirInvocation *owner, const XrXirInvocationRequest *request,
     const char **sdk_libraries) {
+#ifdef XR_OS_WINDOWS
     static const char *const paths[5] = {"lib/xray_compile_resources.lib", "lib/xray_xir_admission.lib",
         "lib/xray_xir_declarations.lib", "lib/xray_xir_scalar.lib", "lib/xray_xir_runtime_host.lib"};
+#else
+    const char *const *paths = invocation_posix_archives;
+#endif
     owner->diagnostic.stage = XR_XIR_INVOCATION_LINK;
     owner->diagnostic.pass = XR_XIR_INVOCATION_NO_PASS;
     for (unsigned i = 0; i < 5; ++i)
@@ -833,6 +846,7 @@ static bool invocation_prepare(XrXirInvocation *owner, const XrXirInvocationRequ
     return invocation_compile_recipe(owner, request, 0) && invocation_compile_recipe(owner, request, 1) &&
         invocation_link_recipe(owner, request, sdk_libraries);
 }
+#ifdef XR_OS_WINDOWS
 /* Pin the actual provider executable before any command runs. The path and
  * version describe those held bytes, not the OS loader's transitive DLL set. */
 static bool invocation_provider_read(XrXirInvocation *owner, unsigned stage,
@@ -861,6 +875,7 @@ static bool invocation_provider_read(XrXirInvocation *owner, unsigned stage,
     xtc_xir_file_lease_free(lease);
     return okay;
 }
+#endif
 static bool invocation_providers(XrXirInvocation *owner) {
     if (!invocation_provider_read(owner, 0, &owner->provider.compiler) ||
         !invocation_provider_read(owner, 2, &owner->provider.linker)) return false;
@@ -890,8 +905,15 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
     }
     const XrXirRuntimeSdkFacts *sdk = xr_xir_runtime_sdk_facts(request->sdk);
     const XrXirNativeProjectionFacts *projection = xr_compile_native_projection_facts(request->projection);
-    if (!invocation_platform() || !sdk || !projection || sdk->architecture != 1 || sdk->crt != 2 || sdk->c_dialect != 11 ||
-        projection->source.target.architecture != XR_XIR_ARCH_LE64) {
+#ifdef XR_OS_WINDOWS
+    const uint32_t architecture = 1, crt = 2;
+#elif defined(XR_XIR_SDK_POSIX_HOST)
+    const uint32_t architecture = XR_XIR_SDK_POSIX_ARCHITECTURE, crt = XR_XIR_SDK_POSIX_CRT;
+#else
+    const uint32_t architecture = 0, crt = 0;
+#endif
+    if (!invocation_platform() || !sdk || !projection || sdk->architecture != architecture || sdk->crt != crt ||
+        sdk->c_dialect != 11 || projection->source.target.architecture != XR_XIR_ARCH_LE64) {
         initial.code = XR_XIR_INVOCATION_UNSUPPORTED;
         if (diagnostic) *diagnostic = initial;
         return XR_XIR_INVOCATION_UNSUPPORTED;
@@ -911,6 +933,9 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
     owner->io = xr_compile_io_policy(context->resources);
     bool okay = invocation_copy(owner,  &owner->context, context, sizeof(*context)) &&
         invocation_copy(owner,  &owner->limits, &request->limits, sizeof(request->limits));
+#ifndef XR_OS_WINDOWS
+    owner->running = request;
+#endif
 #ifdef XR_OS_WINDOWS
     if(okay)okay=invocation_target(owner,xtc_xir_hash_proof_cache_new(context->resources,
         request->limits.files,&owner->proof_cache));
@@ -931,6 +956,9 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
     for (unsigned stage = 0; okay && stage < 2; ++stage) okay = invocation_stage(owner, request, stage);
     if (okay) okay = invocation_stage(owner, request, 2);
 
+#ifndef XR_OS_WINDOWS
+    owner->running = NULL;
+#endif
     XrXirInvocationStatus status = owner->status;
     if (diagnostic) *diagnostic = owner->diagnostic;
     if (okay) *output = owner;

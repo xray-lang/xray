@@ -256,7 +256,7 @@ XR_FUNC XrCliToolchainUpdateStatus xr_cli_toolchain_update_new(XrCompileState *s
         update_copy(owner,request->compiler,XR_PATH_LIMIT_MAX_PATH,&owner->compiler) &&
         update_copy(owner,request->zig,XR_PATH_LIMIT_MAX_PATH,&owner->zig);
     if (okay) {
-        XtcXirPublicationRequest prepare = {owner->path,{XR_PATH_LIMIT_MAX_PATH,8,UPDATE_BYTES}};
+        XtcXirPublicationRequest prepare = {owner->path,{XR_PATH_LIMIT_MAX_PATH,8,UPDATE_BYTES},false};
         okay = update_publication(owner,xtc_xir_publication_new(resources,&prepare,&owner->publication));
     }
     if (okay) {

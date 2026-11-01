@@ -103,6 +103,7 @@ static bool sdk_json_files(XrJsonCursor *json, XrXirSdkManifest *manifest) {
     manifest->file_count = count;
     return xr_json_cursor_take(json, ']');
 }
+#ifdef XR_OS_WINDOWS
 static bool sdk_json_libraries(XrJsonCursor *json) {
     const char *name = NULL;
     return xr_json_cursor_take(json, '[') && xr_json_cursor_string(json, 128, &name) &&
@@ -110,19 +111,44 @@ static bool sdk_json_libraries(XrJsonCursor *json) {
         xr_json_cursor_string(json, 128, &name) && xr_json_cursor_equal(json, name, "bcrypt") &&
         xr_json_cursor_take(json, ']');
 }
+#else
+/* POSIX bundles name only the math library beside the system C library. */
+static bool sdk_json_libraries(XrJsonCursor *json) {
+    const char *name = NULL;
+    return xr_json_cursor_take(json, '[') && xr_json_cursor_string(json, 128, &name) &&
+        xr_json_cursor_equal(json, name, "m") && xr_json_cursor_take(json, ']');
+}
+#endif
 static bool sdk_json_prefix(XrJsonCursor *json, const XrXirSdkManifest *manifest) {
+#ifdef XR_OS_WINDOWS
     static const uint32_t fixed[] = {2, XR_XIR_CHECKED_SCHEMA, XR_XIR_CHECKED_CONTRACT,
         XR_XIR_VALUE_ABI_VERSION, XR_XIR_CALL_ABI_VERSION, XR_XIR_PROGRAM_ABI_VERSION, 1, 1, 1, 11};
+    static const char triple[] = "x86_64-windows-msvc";
+    static const char closure[] = "xray:xir-runtime-recipe:windows-x86_64-hosted:v1";
+    const uint32_t crt_low = 1, crt_high = 2;
+#elif defined(XR_XIR_SDK_POSIX_HOST)
+    static const uint32_t fixed[] = {2, XR_XIR_CHECKED_SCHEMA, XR_XIR_CHECKED_CONTRACT,
+        XR_XIR_VALUE_ABI_VERSION, XR_XIR_CALL_ABI_VERSION, XR_XIR_PROGRAM_ABI_VERSION,
+        XR_XIR_SDK_POSIX_ARCHITECTURE, XR_XIR_SDK_POSIX_OBJECT_FORMAT, 1, 11};
+    static const char triple[] = XR_XIR_SDK_POSIX_TRIPLE;
+    static const char closure[] = XR_XIR_SDK_POSIX_CLOSURE_RECIPE;
+    const uint32_t crt_low = XR_XIR_SDK_POSIX_CRT, crt_high = XR_XIR_SDK_POSIX_CRT;
+#else
+    (void)manifest;
+    return xr_json_cursor_fail(json, XR_JSON_CURSOR_UNSUPPORTED);
+#endif
+#if defined(XR_OS_WINDOWS) || defined(XR_XIR_SDK_POSIX_HOST)
     for (uint32_t i = 0; i < sizeof(fixed) / sizeof(fixed[0]); ++i)
         if (manifest->prefix[i] != fixed[i]) return xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID);
     const uint32_t *p = manifest->prefix;
-    if (p[10] < 1 || p[10] > 2 || (p[11] & ~7u) || (p[11] & 5u) == 5u ||
+    if (p[10] < crt_low || p[10] > crt_high || (p[11] & ~7u) || (p[11] & 5u) == 5u ||
         p[12] < 1 || p[12] > 2 || p[13] > 1 || p[14] < 1 || p[14] > 4 || p[15] != 1 || p[16] != 1)
         return xr_json_cursor_fail(json, XR_JSON_CURSOR_INVALID);
     if (p[11] || p[12] != 1) return xr_json_cursor_fail(json, XR_JSON_CURSOR_UNSUPPORTED);
-    return xr_json_cursor_equal(json, manifest->target_triple, "x86_64-windows-msvc") &&
+    return xr_json_cursor_equal(json, manifest->target_triple, triple) &&
         xr_json_cursor_equal(json, manifest->abi_recipe, "xray:xir-runtime-abi-measurements:v1") &&
-        xr_json_cursor_equal(json, manifest->closure_recipe, "xray:xir-runtime-recipe:windows-x86_64-hosted:v1");
+        xr_json_cursor_equal(json, manifest->closure_recipe, closure);
+#endif
 }
 static XrXirRuntimeSdkStatus sdk_json_parse(char *bytes, size_t length,
     XrXirSdkManifest *manifest, size_t *failure_offset) {

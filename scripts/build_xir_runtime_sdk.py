@@ -1,8 +1,8 @@
-"""Build one closed Windows runtime bundle and its compiler-owned admission facts."""
+"""Build one closed host runtime bundle and its compiler-owned admission facts."""
 from __future__ import annotations
-import argparse, hashlib, json, shutil, struct, subprocess, tempfile
+import argparse, hashlib, json, shutil, struct, subprocess, sys, tempfile
 from pathlib import Path
-from gen_xir_runtime_sdk_recipe import recipe
+from gen_xir_runtime_sdk_recipe import host_platform, recipe
 from derive_xir_sdk_abi import prepare
 
 
@@ -37,9 +37,38 @@ def version(root: Path, name: str) -> int:
     return int(found[0])
 
 
-def build(root: Path, output: Path, compiler: str, crt: str, jobs: int) -> None:
+# POSIX hosts publish their native object format against the system C library.
+# The manifest words, triple and closure recipe must equal the compiler's
+# XR_XIR_SDK_HOST_* facts for the same host.
+POSIX_ARCHITECTURES={'x86_64':(1,'x86_64',0x3e,0x01000007),'arm64':(2,'aarch64',0xb7,0x0100000c)}
+
+
+def posix_target(architecture: str) -> dict:
+    if architecture not in POSIX_ARCHITECTURES:raise ValueError('unsupported runtime architecture: '+architecture)
+    word,cpu,_,_=POSIX_ARCHITECTURES[architecture]
+    darwin=sys.platform=='darwin'
+    system='apple-darwin' if darwin else 'linux-gnu'
+    return dict(architecture=word,object_format=3 if darwin else 2,crt=3,
+                target_triple=cpu+'-'+system,
+                closure_recipe='xray:xir-runtime-recipe:'+('darwin' if darwin else 'linux')+'-'+
+                    architecture+'-hosted:v1')
+
+
+def posix_image(image: bytes, architecture: str) -> None:
+    _,_,elf_machine,macho_cpu=POSIX_ARCHITECTURES[architecture]
+    if sys.platform=='darwin':
+        assert struct.unpack_from('<II',image,0)==(0xfeedfacf,macho_cpu), 'ABI probe is not a native Mach-O image'
+    else:
+        assert image[:6]==b'\x7fELF\x02\x01' and struct.unpack_from('<H',image,18)[0]==elf_machine, \
+            'ABI probe is not a native ELF64 image'
+
+
+def build(root: Path, output: Path, compiler: str, crt: str, jobs: int, architecture: str) -> None:
     root=root.resolve();output=output.resolve();output.mkdir(parents=True,exist_ok=True)
-    derived=recipe(root);guards={}
+    platform=host_platform();posix=platform=='posix'
+    if posix!=(crt=='system'):raise ValueError('POSIX bundles use the system C library; Windows selects MT or MD')
+    target=posix_target(architecture) if posix else None
+    derived=recipe(root,platform);guards={}
     for row in derived['files']:
         if row['kind']==5:continue
         source=root/row['path'];data=source.read_bytes();guards[row['path']]=hashlib.sha256(data).digest()
@@ -53,7 +82,16 @@ def build(root: Path, output: Path, compiler: str, crt: str, jobs: int) -> None:
         (output/'abi-expected.json').write_text(json.dumps(expected,indent=2)+'\n',encoding='utf-8')
     lines=['cmake_minimum_required(VERSION 3.25)','project(XirRuntimeSdk C)',
            'set(CMAKE_C_STANDARD 11)','set(CMAKE_C_STANDARD_REQUIRED ON)',
-           'set(CMAKE_C_EXTENSIONS OFF)',
+           'set(CMAKE_C_EXTENSIONS OFF)']
+    if posix:lines+=[
+           'if(WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)',
+           '  message(FATAL_ERROR "This runtime bundle requires a hosted 64-bit POSIX target")','endif()',
+           # The same feature macros the compiler build gives these sources.
+           'add_compile_definitions(NDEBUG)',
+           'if(APPLE)','  add_compile_definitions(_POSIX_C_SOURCE=200809L _DARWIN_C_SOURCE)',
+           'else()','  add_compile_definitions(_GNU_SOURCE)','endif()',
+           'add_compile_options(-Wall -Wextra -Werror -ffp-contract=off)']
+    else:lines+=[
            'if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)',
            '  message(FATAL_ERROR "This runtime bundle requires hosted Windows x86_64")','endif()',
            'add_compile_definitions(NDEBUG NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)',
@@ -62,38 +100,53 @@ def build(root: Path, output: Path, compiler: str, crt: str, jobs: int) -> None:
            'if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")','  add_compile_options(/experimental:c11atomics)','endif()',
            'if(CMAKE_C_COMPILER_ID STREQUAL "Clang")',
            '  if(MSVC)','    add_compile_options(/clang:-ffp-contract=off)',
-           '  else()','    add_compile_options(-ffp-contract=off)','  endif()','endif()',
-           'include_directories(src include generated)',
+           '  else()','    add_compile_options(-ffp-contract=off)','  endif()','endif()']
+    lines+=['include_directories(src include generated)',
            'set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/lib")',
            'file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/compiler-id.txt" "${CMAKE_C_COMPILER_ID}")']
     for name,sources in derived['archive_source_groups'].items():
         lines.append('add_library('+name+' STATIC '+' '.join(sources)+')')
-    lines+=['add_executable(abi_probe abi_probe.c)',
-            'target_link_libraries(abi_probe PRIVATE '+' '.join(derived['archive_source_groups'])+
-            ' '+' '.join(derived['system_libraries'])+')']
+    archives=' '.join(derived['archive_source_groups'])
+    lines.append('add_executable(abi_probe abi_probe.c)')
+    if posix:
+        # Admission and declaration archives reference each other; single-pass
+        # ELF linkers need an explicit group, while Darwin rescans archives.
+        lines+=['if(APPLE)','  target_link_libraries(abi_probe PRIVATE '+archives+')','else()',
+                '  target_link_libraries(abi_probe PRIVATE -Wl,--start-group '+archives+' -Wl,--end-group)',
+                'endif()','target_link_libraries(abi_probe PRIVATE '+' '.join(derived['system_libraries'])+')']
+    else:lines.append('target_link_libraries(abi_probe PRIVATE '+archives+' '+' '.join(derived['system_libraries'])+')')
     (output/'CMakeLists.txt').write_text('\n'.join(lines)+'\n',encoding='utf-8')
     builddir=output/'build'
-    subprocess.run(['cmake','-S',str(output),'-B',str(builddir),'-G','Ninja',
-                    '-DCMAKE_BUILD_TYPE=Release','-DCMAKE_C_COMPILER='+compiler,
-                    '-DCMAKE_MSVC_RUNTIME_LIBRARY='+('MultiThreadedDLL' if crt=='MD' else 'MultiThreaded')],check=True)
+    configure=['cmake','-S',str(output),'-B',str(builddir),'-G','Ninja',
+               '-DCMAKE_BUILD_TYPE=Release','-DCMAKE_C_COMPILER='+compiler]
+    if posix:
+        if sys.platform=='darwin':configure.append('-DCMAKE_OSX_ARCHITECTURES='+architecture)
+    else:configure.append('-DCMAKE_MSVC_RUNTIME_LIBRARY='+('MultiThreadedDLL' if crt=='MD' else 'MultiThreaded'))
+    subprocess.run(configure,check=True)
     subprocess.run(['cmake','--build',str(builddir),'-j',str(jobs)],check=True)
-    image=(builddir/'abi_probe.exe').read_bytes()
-    pe=struct.unpack_from('<I',image,60)[0]
-    assert image[pe:pe+4]==b'PE\0\0' and struct.unpack_from('<H',image,pe+4)[0]==0x8664
-    measured=json.loads(subprocess.check_output([str(builddir/'abi_probe.exe')]))
+    probe=builddir/('abi_probe' if posix else 'abi_probe.exe')
+    image=probe.read_bytes()
+    if posix:posix_image(image,architecture)
+    else:
+        pe=struct.unpack_from('<I',image,60)[0]
+        assert image[pe:pe+4]==b'PE\0\0' and struct.unpack_from('<H',image,pe+4)[0]==0x8664
+    measured=json.loads(subprocess.check_output([str(probe)]))
     assert measured==[{'id':row['id'],'value':row['value']} for row in expected], 'runtime ABI oracle mismatch'
-    provider={'Clang':1,'GNU':2,'MSVC':3}.get((builddir/'compiler-id.txt').read_text().strip())
+    provider={'Clang':1,'AppleClang':1,'GNU':2,'MSVC':3}.get((builddir/'compiler-id.txt').read_text().strip())
     if provider is None:raise ValueError('unqualified archive provider')
     manifest=dict(schema=2,wire=version(root,'XR_XIR_CHECKED_SCHEMA'),
                   semantic=version(root,'XR_XIR_CHECKED_CONTRACT'),
                   value_abi=version(root,'XR_XIR_VALUE_ABI_VERSION'),
                   call_abi=version(root,'XR_XIR_CALL_ABI_VERSION'),
                   program_abi=version(root,'XR_XIR_PROGRAM_ABI_VERSION'),
-                  architecture=1,object_format=1,hosted=1,c_dialect=11,
-                  crt=2 if crt=='MD' else 1,sanitizers=0,allocator=1,assertions=0,
+                  architecture=target['architecture'] if posix else 1,
+                  object_format=target['object_format'] if posix else 1,hosted=1,c_dialect=11,
+                  crt=3 if posix else 2 if crt=='MD' else 1,sanitizers=0,allocator=1,assertions=0,
                   build_provider=provider,abi_recipe_version=1,closure_recipe_version=1,
-                  target_triple='x86_64-windows-msvc',abi_recipe='xray:xir-runtime-abi-measurements:v1',
-                  closure_recipe='xray:xir-runtime-recipe:windows-x86_64-hosted:v1',
+                  target_triple=target['target_triple'] if posix else 'x86_64-windows-msvc',
+                  abi_recipe='xray:xir-runtime-abi-measurements:v1',
+                  closure_recipe=target['closure_recipe'] if posix else
+                      'xray:xir-runtime-recipe:windows-x86_64-hosted:v1',
                   abi_measurements=measured,files=[],system_libraries=derived['system_libraries'])
     for row in derived['files']:
         data=(output/row['path']).read_bytes()
@@ -113,10 +166,12 @@ def build(root: Path, output: Path, compiler: str, crt: str, jobs: int) -> None:
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root',type=Path,required=True);parser.add_argument('--output',type=Path,required=True)
-    parser.add_argument('--compiler',required=True);parser.add_argument('--crt',choices=('MT','MD'),default='MD')
+    parser.add_argument('--compiler',required=True)
+    parser.add_argument('--crt',choices=('MT','MD','system'),default='MD' if host_platform()=='windows' else 'system')
+    parser.add_argument('--architecture',default='x86_64',help='POSIX target architecture: x86_64 or arm64')
     parser.add_argument('--jobs',type=int,default=4);args=parser.parse_args()
     if not 1<=args.jobs<=64:parser.error('jobs must be between 1 and 64')
-    build(args.root,args.output,args.compiler,args.crt,args.jobs)
+    build(args.root,args.output,args.compiler,args.crt,args.jobs,args.architecture)
 
 
 if __name__=='__main__':main()

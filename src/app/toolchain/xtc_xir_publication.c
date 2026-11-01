@@ -36,6 +36,7 @@ struct XtcXirPublication {
     int parent_fd, file_fd;
     char *leaf;
     char temporary[64];
+    bool executable;
 #endif
 };
 static XtcXirPublicationStatus publication_fail(XtcXirPublication *owner,
@@ -274,6 +275,7 @@ XR_FUNC XtcXirPublicationStatus xtc_xir_publication_new(XrCompileResources *reso
     owner->file = owner->parent_handle = INVALID_HANDLE_VALUE;
 #else
     owner->file_fd = owner->parent_fd = -1;
+    owner->executable = request->executable;
 #endif
     owner->limits = request->limits;
     if (!publication_prepare(owner, request->destination)) {

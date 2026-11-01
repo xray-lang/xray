@@ -187,6 +187,11 @@ static bool native_join(XtcXirNativeOperation *owner, const char *a, const char 
 
     value[offset] = 0; *out = value; return true;
 }
+#ifdef XR_OS_WINDOWS
+static bool native_request_valid(const XtcXirNativeOperationRequest *request) {
+    return request->msvc.vc_include && request->msvc.ucrt_include && request->msvc.shared_include &&
+        request->msvc.um_include && request->msvc.system_root;
+}
 static bool native_spec(XtcXirNativeOperation *owner, const XtcXirNativeOperationRequest *request,
     const char *executable, XrProcessSpec *spec) {
 
@@ -272,6 +277,9 @@ static bool native_commands(XtcXirNativeOperation *owner, const XtcXirNativeOper
     invocation->output_directory = paths->output; invocation->link_report = files[6]; invocation->output = files[7];
     return true;
 }
+#else
+#include "xtc_xir_native_operation_posix.inc.c"
+#endif
 static void native_release_inputs(XtcXirNativeOperation *owner) {
     xtc_xir_invocation_free(owner->invocation); owner->invocation = NULL;
     for (unsigned i = 0; i < 3; ++i) { xtc_process_free(owner->processes[i]); owner->processes[i] = NULL; }
@@ -306,8 +314,7 @@ XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_run(XtcXirNativeOpe
     const XrXirCompileContext *context = request ? xr_compile_native_projection_context(request->projection) : NULL;
     if (!request || !context || context->resources != owner->resources ||
         xr_xir_runtime_sdk_resources(request->sdk) != owner->resources || !request->compiler || !request->linker ||
-        !request->msvc.vc_include || !request->msvc.ucrt_include || !request->msvc.shared_include ||
-        !request->msvc.um_include || !request->msvc.system_root ||
+        !native_request_valid(request) ||
         request->library_count > XTC_PROCESS_MAX_ARGS - 15 || (request->library_count && !request->libraries))
         return native_fail(owner, XTC_XIR_NATIVE_INVALID, XTC_XIR_NATIVE_SELF, 0);
     owner->phase = XTC_XIR_NATIVE_RUNNING;
@@ -332,6 +339,7 @@ XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_run(XtcXirNativeOpe
     XrXirInvocationRequest invoke = {0};
     if (!native_commands(owner, request, &invoke)) return owner->first.status;
     invoke.projection = request->projection; invoke.sdk = request->sdk; invoke.msvc = request->msvc;
+    invoke.posix = request->posix;
     invoke.launcher = owner->launcher; invoke.launcher_length = owner->launcher_length;
     invoke.libraries = request->libraries; invoke.library_count = request->library_count;
     invoke.limits = owner->limits.invocation; invoke.cancelled = request->cancelled; invoke.cancel_context = request->cancel_context;

@@ -90,7 +90,7 @@ static bool publication_create(XtcXirPublication *owner) {
         }
         memcpy(owner->temporary + 38, ".tmp", 5);
         owner->file_fd = openat(owner->parent_fd, owner->temporary,
-            O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0666);
+            O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, owner->executable ? 0777 : 0666);
         if (owner->file_fd >= 0) return true;
         if (errno != EEXIST && errno != EINTR) return publication_posix_error(owner, errno);
     }
