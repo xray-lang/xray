@@ -70,3 +70,5 @@ else()
 endif()
 add_test(NAME xir_buffer_slice_fault COMMAND test_xir_buffer_slice_fault)
 set_tests_properties(xir_buffer_slice_fault PROPERTIES TIMEOUT 120 LABELS "unit;xir;borrow;ownership;memory;budget;target-impact")
+
+include("${CMAKE_CURRENT_LIST_DIR}/buffer_slice_call.cmake")
