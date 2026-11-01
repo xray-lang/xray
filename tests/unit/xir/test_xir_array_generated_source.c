@@ -117,7 +117,7 @@ static void array_lowered_attack(ArrayAttack attack) {
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(checked);xr_xir_compile_source_product_free(product);
     CHECK(!runtime_live && !runtime_bytes);array_compile_owner_free(&owner);
 }
-static void array_source_contract(const char *file,const char *message,bool accepted) {
+static void array_source_reject(const char *file,const char *message) {
     ArrayCompileOwner owner;CHECK(array_compile_owner_new(array_compile_caps(),&owner)==XR_COMPILE_RESOURCE_OK);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
     char path[1024];int length=snprintf(path,sizeof(path),"%s/%s",XR_ARRAY_FIXTURES,file);
@@ -132,15 +132,9 @@ static void array_source_contract(const char *file,const char *message,bool acce
         XrFrontendReportInfo info={0};CHECK(xr_frontend_report_info(diagnostic.failure.report,&info)&&info.roots==1);
         CHECK(xr_frontend_report_root(diagnostic.failure.report,0,&diagnostic_root));
     }
-    if (accepted) {
-        if(status!=XR_XIR_OK)fprintf(stderr,"Source Array accept %s status=%u message=%s\n",file,status,diagnostic_root.message);
-        CHECK(status==XR_XIR_OK && product);
-        xr_xir_compile_source_product_free(product);
-    } else {
-        if(status!=XR_XIR_BAD_TYPE)fprintf(stderr,"Source Array reject %s status=%u message=%s\n",file,status,diagnostic_root.message);
-        CHECK(status==XR_XIR_BAD_TYPE && !product && diagnostic.stage==XR_XIR_SOURCE_PRODUCT_CHECK && diagnostic_root.primary.line==1);
-        if(message)CHECK(strstr(diagnostic_root.message,message));
-    }
+    if(status!=XR_XIR_BAD_TYPE)fprintf(stderr,"Source Array reject %s status=%u message=%s\n",file,status,diagnostic_root.message);
+    CHECK(status==XR_XIR_BAD_TYPE && !product && diagnostic.stage==XR_XIR_SOURCE_PRODUCT_CHECK && diagnostic_root.primary.line==1);
+    if(message)CHECK(strstr(diagnostic_root.message,message));
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);xr_compile_session_free(session);
     CHECK(!runtime_live && !runtime_bytes);array_compile_owner_free(&owner);
 }
@@ -167,10 +161,10 @@ static void array_lowered_admission(void) {
         {ARRAY_DEFAULT,XR_XIR_ARRAY_REPEAT,11,XR_XIR_BAD_STRUCTURE,"default spurious type argument"},
         {ARRAY_DEFAULT,XR_XIR_ARRAY_REPEAT,2,XR_XIR_BAD_TYPE,"default owner result"}};
     for(size_t i=0;i<sizeof(attacks)/sizeof(*attacks);++i)array_lowered_attack(attacks[i]);
-    array_source_contract("reject-default-string.xr","no admitted default initializer",false);
-    array_source_contract("reject-default-bool.xr",NULL,false);
-    array_source_contract("reject-read-push.xr","mutable",false);
-    array_source_contract("move-copyable-string.xr",NULL,true);
+    array_source_reject("reject-default-string.xr","no admitted default initializer");
+    array_source_reject("reject-default-bool.xr",NULL);
+    array_source_reject("reject-read-push.xr","mutable");
+    array_source_reject("reject-move-copyable.xr","parameter contract");
     puts("Array 20 Source-derived Lowered graph refusals; restored artifact reverified after each attack");
 }
 static XrXirStatus array_compiler_probe(XrCompileResourceLimits caps,XrCompileResourceStats *stats) {

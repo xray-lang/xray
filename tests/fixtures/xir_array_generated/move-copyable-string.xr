@@ -1,1 +1,0 @@
-export fn consume(value:move string) { var values:Array<string>=[]; values.push(value) }
