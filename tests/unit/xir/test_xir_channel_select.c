@@ -11,10 +11,7 @@
  *   Tests observe actual queue owners, failure allocation sites and lock races;
  *   random words and monotonic samples are explicit kernel inputs.
  */
-#include "shared/xr_sync_core.h"
-#define main channel_select_reference_main
-#include "test_xir_channel_results.c"
-#undef main
+#include "xir_channel_select_fixture.h"
 #include "xir/xxir_channel_select_internal.h"
 
 static void select_channels(ResultOwner *owner,XrXirValue *channels,bool mixed) {
@@ -135,9 +132,10 @@ static void select_failures(void) {
     runtime_memory.fail_at=SIZE_MAX;CHECK(runtime_memory.live==live&&runtime_memory.bytes==bytes);
     CHECK(!select->arms[0].storage->watch_count&&!select->arms[1].storage->watch_count);
     XrXirValue message=result_integer(42);result_send(&owner,&channels[0],&message);
-    CHECK(select_probe(&owner,select,0,0)==XR_XIR_CHANNEL_SELECT_CANDIDATE);owner.admission.work=0;
+    CHECK(select_probe(&owner,select,0,0)==XR_XIR_CHANNEL_SELECT_CANDIDATE);
+    uint64_t work=owner.admission.work;owner.admission.work=0;
     CHECK(xr_xir_channel_select_commit(select,&owner.admission,&state)==XR_XIR_VALUE_LIMIT&&state==XR_XIR_CHANNEL_SELECT_COMMITTED);
-    CHECK(select->arms[0].storage->buffer.count==1);owner.admission.work=128000000;
+    CHECK(select->arms[0].storage->buffer.count==1);owner.admission.work=work;
     CHECK(select_probe(&owner,select,0,0)==XR_XIR_CHANNEL_SELECT_CANDIDATE);
     CHECK(xr_xir_channel_select_cancel(select));
     CHECK(xr_xir_channel_select_commit(select,&owner.admission,&state)==XR_XIR_VALUE_OK&&state==XR_XIR_CHANNEL_SELECT_CANCELLED);
