@@ -414,12 +414,10 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         if (op->immediate!=0 && op->immediate!=1) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op == XR_XIR_CELL_STRING_APPEND || op->op==XR_XIR_STRING_REPLACE) {
         if (op->immediate != 0 && op->immediate != 1) return XR_XIR_BAD_STRUCTURE;
-    } else if (op->op==XR_XIR_CHANNEL_SELECT) {
-        if(op->immediate<0||op->immediate>2)return XR_XIR_BAD_STRUCTURE;
     } else if (op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
         if (op->immediate < 0 || (uint64_t)op->immediate > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op != XR_XIR_CONST_INT && op->op != XR_XIR_CLEANUP_REGISTER && op->op != XR_XIR_CALL && op->op != XR_XIR_CALL_INTRINSIC &&
-               op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_GO && op->op != XR_XIR_SCOPED_GO && op->op!=XR_XIR_SCOPE_BEGIN && op->op!=XR_XIR_SCOPE_JOIN && op->op != XR_XIR_GENERATOR_NEW && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
+               op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_GO && op->op != XR_XIR_SCOPED_GO && op->op!=XR_XIR_SCOPE_BEGIN && op->op!=XR_XIR_SCOPE_JOIN && op->op!=XR_XIR_CHANNEL_SELECT && op->op != XR_XIR_GENERATOR_NEW && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
                op->op != XR_XIR_INVOKE_RESULT && op->op != XR_XIR_INVOKE_ERROR && op->op != XR_XIR_INVOKE_DISCARD && op->op != XR_XIR_CALL_INDIRECT &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE && op->op != XR_XIR_SLOT_GROUP_INIT &&
