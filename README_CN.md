@@ -137,7 +137,7 @@ print(greet(user.name))
 ```xray
 const ch = Channel<i64>(2)
 go fn() {
-    ch.send(42)
+    try ch.send(42)
 }()
 select {
     value from ch -> {
