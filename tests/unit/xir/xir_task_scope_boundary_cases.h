@@ -14,7 +14,7 @@ static void scope_normalized_controls(const XrXirCompileContext *context,const X
     bool normalized=false;
     for(uint32_t f=0;f<module->function_count;++f)
         for(uint32_t i=0;i<module->functions[f].instruction_count;++i)
-            normalized|=module->functions[f].instructions[i].op==XR_XIR_VIEW_END;
+            normalized|=module->functions[f].instructions[i].op==XR_XIR_VIEW_CLEANUP;
     CHECK(normalized);uint64_t baseline=held(context->resources);
     ScopeCancel state={0,2};XrCompileRequestOptions options={scope_cancel_later,&state,XR_COMPILE_DEADLINE_NONE,0};
     XrCompileRequestControl control={0};CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
