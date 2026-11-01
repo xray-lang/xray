@@ -35,7 +35,8 @@ typedef struct ResultOwner {
 static bool result_empty(const XrXirValue *value) {return !value->type&&!value->reserved&&!value->payload;}
 static XrXirValue result_integer(int64_t value) {return (XrXirValue){XR_XIR_I64,0,value};}
 static void result_owner_ready(ResultOwner *owner) {
-    XrCompileResourceLimits limits={8388608,4194304,128000000};
+    XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_FINITE,
+        .memory_limit=8388608,.profile_allocations=true};
     CHECK(xr_compile_resources_new(&limits,&owner->context.resources)==XR_COMPILE_RESOURCE_OK);
     owner->context.limits=xr_xir_compile_default_limits();
     XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_CHANNEL,.element=XR_XIR_I64},
