@@ -137,7 +137,7 @@ static XrXirStatus source_handler_edge_validate(const XrXirFunction *body,
             if(!block->count||(uint64_t)block->first+block->count-1!=edge)continue;
             const XrXirInstruction *first=body->instructions+block->first;
             if(first->op!=XR_XIR_INVOKE_ERROR||first->immediate<0)break;
-            uint32_t producer=(uint32_t)first->immediate;
+            producer=(uint32_t)first->immediate;
             if(source_handler_landing(body,producer,&next,&winner)&&next==edge&&
                 body->instructions[producer].args[0]==error)error=winner;
             break;
