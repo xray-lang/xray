@@ -77,8 +77,8 @@ static bool source_local_marked(SourceContext *ctx) {
             plan->syntax->as.try_expr.mode==XR_TRY_OPTIONAL)) return true;
     return false;
 }
-static bool source_local_escape(SourceContext *ctx,AstNode *node,XrXirType error,
-    SourceLocalHandler *handlers,bool asserted,XrXirType *output) {
+static bool source_local_escape_until(SourceContext *ctx,AstNode *node,XrXirType error,
+    SourceLocalHandler *handlers,SourceLocalHandler *stop,bool asserted,XrXirType *output) {
     if (error==XR_XIR_UNIT) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"call has no declared error type");
     if (error==XR_XIR_NEVER || asserted) { *output=XR_XIR_NEVER;return true; }
     const XrXirTypeNode *error_node=xr_xir_type_node(&ctx->types,error);
@@ -89,19 +89,30 @@ static bool source_local_escape(SourceContext *ctx,AstNode *node,XrXirType error
     for (uint32_t p=0;p<member_count;++p) {
         XrXirType member=union_error ? error_node->parameters[p].type : error;
         bool handled=false;
-        for (SourceLocalHandler *handler=handlers;handler;handler=handler->previous)
+        SourceLocalHandler *handler=handlers;
+        for (;handler&&handler!=stop;handler=handler->previous)
             for (uint32_t i=0;i<handler->count;++i)
                 handled|=handler->complete[i] && (handler->types[i]==XR_XIR_ERROR || handler->types[i]==member);
+        if(stop&&!handler)return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"scope error handler is outside its lexical chain");
         if (!handled) remaining[escaping++]=(XrXirCallableParameter){member,0};
     }
     if (!escaping) { *output=XR_XIR_NEVER;return true; }
     return source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
         .parameters=remaining,.parameter_count=escaping},output);
 }
+static bool source_local_escape(SourceContext *ctx,AstNode *node,XrXirType error,
+    SourceLocalHandler *handlers,bool asserted,XrXirType *output) {
+    return source_local_escape_until(ctx,node,error,handlers,NULL,asserted,output);
+}
 static bool source_local_accept(SourceContext *ctx, AstNode *node, XrXirType error,
     bool marked, SourceLocalHandler *handlers, bool asserted) {
     if (error!=XR_XIR_NEVER && error!=XR_XIR_UNIT && !marked)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"E0330: throwing call requires try or a try body");
+    for(SourceTaskScope *scope=ctx->task_scope;scope;scope=scope->parent) if(scope->function==ctx->function) {
+        XrXirType body_error=XR_XIR_NEVER;
+        if(!source_local_escape_until(ctx,node,error,handlers,scope->handler,asserted,&body_error))return false;
+        if(body_error!=XR_XIR_NEVER)return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"escaping scope body errors are not yet admitted");
+    }
     if (!source_local_escape(ctx,node,error,handlers,asserted,&error)) return false;
     if (error==XR_XIR_NEVER) return true;
     SourceFunction *body=&ctx->bodies[ctx->function];
@@ -226,6 +237,11 @@ static bool source_local_call(SourceContext *ctx,const XrXirInstruction *op) {
     if (target!=UINT32_MAX) {
         SourceFunction *body=&ctx->bodies[ctx->function];
         if (ctx->bodies[target].infer_initializer) {
+            if(ctx->task_scope&&ctx->task_scope->function==ctx->function) {
+                if(!source_initialization_require(ctx,target)||
+                    !source_local_declared_error(ctx,target,op->type_arguments[0],op->type_arguments[1],&error))return false;
+                return source_local_error(ctx,node,error,true);
+            }
             if (body->infer_errors && !body->infer_initializer) {
                 if (!source_initialization_require(ctx,target) ||
                     !source_local_declared_error(ctx,target,op->type_arguments[0],op->type_arguments[1],&error)) return false;

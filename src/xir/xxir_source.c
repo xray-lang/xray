@@ -253,7 +253,9 @@ typedef struct SourceFunction {
 } SourceFunction;
 typedef struct SourcePatch { struct SourcePatch *next; uint32_t instruction; } SourcePatch;
 typedef struct SourceLoop { struct SourceLoop *parent; SourcePatch *breaks, *continues; uint32_t frontier; } SourceLoop;
-typedef struct SourceTaskScope { struct SourceTaskScope *parent; uint32_t function; SourceValue group; } SourceTaskScope;
+typedef struct SourceTaskScope {
+    struct SourceTaskScope *parent; uint32_t function; SourceValue group; SourceLocalHandler *handler;
+} SourceTaskScope;
 struct SourceErrorEdge {
     struct SourceErrorEdge *next;
     uint32_t block, jump;

@@ -68,11 +68,11 @@ static bool source_task_scope(SourceContext *ctx,AstNode *node,bool marked) {
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"scope requires a real lexical block and supported mode");
     SourceScopeScan scan={ctx,0,0};if(!source_scope_member(scope->body,&scan))return false;
     if(!scan.count)return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"scope has no direct go member; use an ordinary block");
-    uint32_t frontier=body->frontier;SourceTaskScope group={ctx->task_scope,ctx->function,{0}};
+    uint32_t frontier=body->frontier;SourceTaskScope group={ctx->task_scope,ctx->function,{0},body->local_handler};
     if(!source_scope_cleanup(ctx,node)||!source_task_type(ctx,node,XR_XIR_UNIT,XR_XIR_NEVER,&group.group.type)||
         !source_recipe_append(ctx,(XrXirInstruction){XR_XIR_SCOPE_BEGIN,group.group.type,{0},{0},scope->scope_mode,{0}},&group.group))return false;
     ctx->task_scope=&group;bool ok=statement(ctx,scope->body,false);ctx->task_scope=group.parent;
-    (void)marked; /* Never has no implicit business propagation to mark. */
+    (void)marked; /* Both escaping body errors and child errors remain closed. */
     if(ok&&!ctx->returned) {
         uint32_t error=body->block_count;
         if(error==UINT32_MAX)return source_fail(ctx,node,XR_XIR_OVERFLOW,"scope continuation overflow");
