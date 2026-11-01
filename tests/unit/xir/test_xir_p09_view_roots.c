@@ -22,7 +22,7 @@ static XrXirStatus root_observe(void *user,const XrXirCompileContext *c,const Xr
     o->events[i].steps=o->steps[i];o->events[i].selection=o->selections[i];return XR_XIR_OK;
 }
 static XrXirStatus root_prove(const XrXirCompileContext *c,const RootFixture *f,RootObserved *o,XrXirDiagnostic *d) {
-    *o=(RootObserved){0};return xir_compile_view_roots_verified(c,&f->module,root_observe,o,d);
+    *o=(RootObserved){0};return xir_compile_view_roots_verified(c,(XirEffectInput){&f->module,NULL,NULL},root_observe,o,d);
 }
 static bool root_rejected(uint32_t kind) {return kind==2 || kind==3 || kind==5 || kind==7 || kind==9 || kind==17;}
 static void root_want(const RootObserved *o,uint32_t index,uint32_t function,uint32_t value,XrXirViewRootKind kind) {
@@ -105,7 +105,7 @@ static void root_normal(void) {
         if (root_rejected(kind)) CHECK(d.instruction!=UINT32_MAX);
     }
     root_type_access(&c);RootFixture f;root_prepare(&f,0);uint32_t stopped=0;XrXirDiagnostic d={0};
-    CHECK(xir_compile_view_roots_verified(&c,&f.module,root_stop,&stopped,&d)==XR_XIR_BAD_VALUE && stopped==1);
+    CHECK(xir_compile_view_roots_verified(&c,(XirEffectInput){&f.module,NULL,NULL},root_stop,&stopped,&d)==XR_XIR_BAD_VALUE && stopped==1);
     CHECK(d.function==0 && d.instruction==4);owner_free(&c,baseline);
     puts("root observations: 22 producer/capture/PHI/call/Field/Index/Map/wrapper/module/loop/invoke families PASS");
 }

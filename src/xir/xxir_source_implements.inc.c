@@ -26,6 +26,7 @@ static bool source_implementation_applications(SourceContext *ctx) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (ctx->nominals.declarations[d].kind==XR_XIR_NOMINAL_CLASS &&
                 source_sendable_marker(ctx,declaration.interfaces[i])) continue;
+            if (source_mem_length_marker(ctx,d,declaration.interfaces[i])) continue;
             if (count==UINT32_MAX) return source_fail(ctx,owner->node,XR_XIR_BUDGET,"implementation count exhausted");
             ++count;
         }
@@ -56,6 +57,7 @@ static bool source_implementation_applications(SourceContext *ctx) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) {ok=false;break;}
             if (ctx->nominals.declarations[d].kind==XR_XIR_NOMINAL_CLASS &&
                 source_sendable_marker(ctx,declaration.interfaces[i])) continue;
+            if (source_mem_length_marker(ctx,d,declaration.interfaces[i])) continue;
             XrXirImplementation *record = &records[next++]; record->nominal_declaration = d;
             ok = source_interface_application(ctx,owner->node,declaration.interfaces[i],&record->interface);
             for (uint32_t earlier = first; earlier + 1 < next && ok; ++earlier) {

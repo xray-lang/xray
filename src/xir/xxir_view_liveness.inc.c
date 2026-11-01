@@ -252,7 +252,7 @@ XR_FUNC XrXirStatus xir_compile_view_liveness_verified(const XrXirCompileContext
     const XrXirModule *module,XrXirViewLiveVisitor visitor,void *user,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !module || !module->function_count || !module->functions)
         return XR_XIR_BAD_STRUCTURE;
-    uint8_t *flags=NULL;XrXirStatus status=xir_compile_view_flags_new(context,module->types,&flags);
+    uint8_t *flags=NULL;XrXirStatus status=xir_compile_view_static_flags_new(context,module->types,&flags);
     if (status!=XR_XIR_OK || !flags) return status;
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
 

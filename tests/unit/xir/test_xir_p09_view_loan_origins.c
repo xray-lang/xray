@@ -190,7 +190,7 @@ static XrXirStatus loan_sequence(const XrXirCompileContext *context,uint32_t kin
     status=xir_compile_view_prepare_ordinary(context,&f.module,construction,&diagnostic);
     if (status==XR_XIR_BUDGET || status==XR_XIR_OUT_OF_MEMORY) goto done;
     if (status!=XR_XIR_OK) fprintf(stderr,"loan ordinary kind=%u status=%u at %u/%u/%u\n",kind,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
-    CHECK(status==XR_XIR_OK);status=xir_compile_view_root_resolver_new(context,&f.module,&resolver,&diagnostic);
+    CHECK(status==XR_XIR_OK);status=xir_compile_view_root_resolver_new(context,(XirEffectInput){&f.module,NULL,NULL},&resolver,&diagnostic);
     if (status!=XR_XIR_OK) goto done;LoanObserved observed={.resolver=resolver,.request=&f.request};
     status=xir_compile_view_loan_origins(resolver,&f.request,loan_observe,&observed,&diagnostic);
     if (status!=XR_XIR_OK) goto done;loan_assert(&f,kind,&observed);

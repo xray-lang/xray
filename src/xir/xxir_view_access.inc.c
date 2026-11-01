@@ -10,6 +10,54 @@
 #include "xxir_view_access_entry.inc.c"
 #include "xxir_view_access_epoch.inc.c"
 #include "xxir_view_access_relation.inc.c"
+static XrXirStatus view_access_buffer_alias(ViewAccess *a,uint32_t *value) {
+    uint32_t progress=0;
+    while (*value>=a->body->parameter_count) {
+        XrXirStatus status=xir_receive_step(a->cells?a->cells->control:NULL,&progress);if (status!=XR_XIR_OK) return status;
+        if (*value-a->body->parameter_count>=a->body->instruction_count) return XR_XIR_BAD_STRUCTURE;
+        const XrXirInstruction *op=&a->body->instructions[*value-a->body->parameter_count];
+        if (op->op!=XR_XIR_COPY && op->op!=XR_XIR_OWNED_RETAIN) break;
+        if (op->args[0]>=*value) return XR_XIR_BAD_STRUCTURE;
+        *value=op->args[0];
+    }
+    return XR_XIR_OK;
+}
+static XrXirStatus view_access_buffer_source(ViewAccess *a,uint32_t value,uint32_t *receiver,bool *known) {
+    *known=false;if (value<a->body->parameter_count) return XR_XIR_OK;
+    uint32_t instruction=value-a->body->parameter_count;
+    if (instruction>=a->body->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    const XrXirInstruction *op=&a->body->instructions[instruction];
+    ViewRootCheck *c=&a->resolver->check;
+    if (op->op!=XR_XIR_CALL || op->immediate<0 || (uint64_t)op->immediate>=c->module->function_count ||
+        op->args[1]!=1 || op->args[0]>=a->body->operand_count) return XR_XIR_OK;
+    const XrXirBorrowReturn *row=xir_borrow_return_find(c->construction,(uint32_t)op->immediate);
+    uint32_t argument=a->body->operands[op->args[0]];
+    if (!row) {
+        uint32_t leaf=c->module->declarations->functions[op->immediate].native_callable;
+        row=xir_borrow_return_find(c->construction,a->function);
+        if (!row || leaf!=row->native_callable) return XR_XIR_OK;
+        XrXirStatus status=view_access_buffer_alias(a,&argument);
+        if (status!=XR_XIR_OK) return status;
+        if (argument<a->body->parameter_count) return XR_XIR_OK;
+        const XrXirInstruction *field=&a->body->instructions[argument-a->body->parameter_count];
+        if (field->op!=XR_XIR_CLASS_GET || field->immediate!=row->field || field->type!=XR_XIR_BUFFER_STORAGE)
+            return XR_XIR_OK;
+        argument=field->args[0];
+    }
+    const XrXirTypeNode *type=xr_xir_type_node(c->module->types,xr_xir_operand_type(a->body,argument));
+    if (!type || type->kind!=XR_XIR_TYPE_NOMINAL || type->nominal.declaration!=row->nominal) return XR_XIR_OK;
+    XrXirStatus status=view_access_buffer_alias(a,&argument);if (status!=XR_XIR_OK) return status;
+    *receiver=argument;*known=true;return XR_XIR_OK;
+}
+static XrXirStatus view_access_buffer_binding(ViewAccess *a,uint32_t receiver,uint32_t *cell,bool *present) {
+    *present=false;ViewRootCheck *c=&a->resolver->check;
+    XrXirStatus status=view_access_buffer_alias(a,&receiver);if (status!=XR_XIR_OK) return status;
+    if (receiver<a->body->parameter_count) return XR_XIR_OK;
+    const XrXirInstruction *read=&a->body->instructions[receiver-a->body->parameter_count];
+    if (read->op!=XR_XIR_CELL_READ || !xr_xir_type_is_cell(c->module->types,xr_xir_operand_type(a->body,read->args[0])))
+        return XR_XIR_OK;
+    *cell=read->args[0];*present=true;return XR_XIR_OK;
+}
 
 static XrXirStatus view_access_pair(ViewAccess *a,const ViewAccessOrigin *left_origin,
     const ViewAccessOrigin *right_origin,bool writable,ViewAccessDecision *output) {
@@ -100,6 +148,14 @@ static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner
     for (ViewAccessOrigin *r=right;r;r=r->next) {
         if (!view) {
             ViewAccessDecision decision=VIEW_ACCESS_UNKNOWN;
+            if (writable && r->event.kind==XR_XIR_VIEW_LOAN_CALL) {
+                uint32_t receiver=0,cell=0;bool known=false,present=false;
+                status=view_access_buffer_source(a,r->event.value,&receiver,&known);
+                if (status==XR_XIR_OK && known) status=view_access_buffer_binding(a,receiver,&cell,&present);
+                if (status==XR_XIR_OK && present) status=view_access_storage(a,value,cell,value,cell,&decision);
+                if (status!=XR_XIR_OK) return status;
+                if (present && decision!=VIEW_ACCESS_SAFE) return decision==VIEW_ACCESS_BLOCKED?XR_XIR_BAD_VALUE:XR_XIR_UNRESOLVED;
+            }
             if (r->event.kind==XR_XIR_VIEW_LOAN_ABSENT || (!writable && view_access_shared(a,r->event.type)))
                 decision=VIEW_ACCESS_SAFE;
             else if (r->event.kind==XR_XIR_VIEW_LOAN_UNRESOLVED) decision=VIEW_ACCESS_UNKNOWN;
@@ -154,8 +210,19 @@ static XrXirStatus view_access_use(ViewAccess *a,const XrXirViewOwnerSet *owners
     return XR_XIR_OK;
 }
 static XrXirStatus view_access_constructor(ViewAccess *a,uint32_t value) {
+    uint32_t receiver=0;bool buffer=false;
+    XrXirStatus status=view_access_buffer_source(a,value,&receiver,&buffer);
+    if (status!=XR_XIR_OK) return status;
+    if (buffer) {
+        uint32_t cell=0;bool binding=false;
+        status=view_access_buffer_binding(a,receiver,&cell,&binding);if (status!=XR_XIR_OK) return status;
+        bool stable=receiver<a->body->parameter_count || binding;
+        if (!stable) status=view_access_class_body(a,receiver,&stable);
+        if (status!=XR_XIR_OK) return status;
+        if (stable) return XR_XIR_OK;
+    }
     ViewRootComparison roots={a->resolver,NULL,false};XirViewRootRequest request={a->function,value,a->instruction,NULL,0};
-    XrXirStatus status=xir_compile_view_root_resolver_query(a->resolver,&request,view_root_save,&roots,NULL);
+    status=xir_compile_view_root_resolver_query(a->resolver,&request,view_root_save,&roots,NULL);
     bool unresolved=!roots.left;
     for (ViewRootSaved *p=roots.left;p && status==XR_XIR_OK;p=p->next) {
         const XrXirViewRootEvent *event=&p->event;
@@ -169,6 +236,7 @@ static XrXirStatus view_access_constructor(ViewAccess *a,uint32_t value) {
 }
 static bool view_access_structural(XrXirOp op) {
     return op==XR_XIR_PHI || op==XR_XIR_COPY || op==XR_XIR_OWNED_RETAIN || op==XR_XIR_RETURN ||
+        op==XR_XIR_PTR_NULL || op==XR_XIR_PTR_READONLY || op==XR_XIR_PTR_OFFSET ||
         op==XR_XIR_VIEW_END || op==XR_XIR_VIEW_CLEANUP || op==XR_XIR_NULLABLE_NONE || op==XR_XIR_NULLABLE_SOME ||
         op==XR_XIR_NULLABLE_UNWRAP || op==XR_XIR_NULLABLE_IS_SOME || op==XR_XIR_TUPLE_NEW || op==XR_XIR_TUPLE_FIELD ||
         op==XR_XIR_CELL_NEW || op==XR_XIR_CELL_PLACE || op==XR_XIR_OBJECT_PLACE || op==XR_XIR_FIELD_PLACE || op==XR_XIR_INDEX_PLACE;
@@ -291,6 +359,15 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
         return view_access_use(a,&event->before,source,op->op==XR_XIR_VIEW_SET,true,NULL);
     }
     bool call=op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT;
+    bool pointer=op->op==XR_XIR_PTR_LOAD || op->op==XR_XIR_PTR_STORE || op->op==XR_XIR_PTR_COPY || op->op==XR_XIR_PTR_EQ;
+    bool receiver_read=false;
+    if (op->op==XR_XIR_CALL && op->immediate>=0 && (uint64_t)op->immediate<a->resolver->check.module->function_count) {
+        XrXirBorrowReturn row={0};bool present=false;
+        XrXirStatus status=xir_borrow_return_describe(a->resolver->check.context,a->resolver->check.module,
+            (uint32_t)op->immediate,&row,&present,a->cells?a->cells->control:NULL);
+        if (status!=XR_XIR_OK) return status;
+        receiver_read=present || row.native_callable==XR_NATIVE_CALLABLE_BUFFER_LENGTH;
+    }
     if (op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
         if (!a->cells || !a->cells->default_access || view_flags_at(types,flags,op->type))
             return XR_XIR_UNRESOLVED;
@@ -310,12 +387,12 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
         bool cell=xr_xir_type_is_cell(types,type),object=xr_xir_type_is_class(types,type);
         XrXirPlaceKind place=xr_xir_place_kind(a->body,value);XrXirOperandRole role=xr_xir_operand_role(op->op,p);
         if (borrowed) {
-            if (!call) return XR_XIR_UNRESOLVED;
+            if (!call && !pointer) return XR_XIR_UNRESOLVED;
             XrXirStatus status=view_access_use(a,&event->before,value,(borrowed&XR_XIR_VIEW_MUTABLE)!=0,true,NULL);
             if (status!=XR_XIR_OK) return status;
-        } else if (cell || object || place!=XR_XIR_PLACE_NONE) {
-            bool read=op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CLASS_GET || role==XR_XIR_OPERAND_READ;
-            bool write=call || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE ||
+        } else if (cell || object || type==XR_XIR_BUFFER_STORAGE || place!=XR_XIR_PLACE_NONE) {
+            bool read=op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CLASS_GET || role==XR_XIR_OPERAND_READ || (receiver_read && p==0);
+            bool write=(call && !(receiver_read && p==0)) || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE ||
                 op->op==XR_XIR_CELL_STRING_APPEND || op->op==XR_XIR_CLASS_SET || role==XR_XIR_OPERAND_WRITE;
             if (!read && !write) return XR_XIR_UNRESOLVED;
             bool blocked=false;XrXirStatus status=view_access_use(a,&event->before,value,write,false,&blocked);
@@ -354,13 +431,14 @@ static XrXirStatus view_access_check(const XrXirCompileContext *context,
     bool needed=false;
     if (module->types) for (uint32_t i=0;i<module->types->count;++i) {
 
-        uint32_t kind=module->types->nodes[i].kind;needed|=kind==XR_XIR_TYPE_SLICE || kind==XR_XIR_TYPE_MUT_SLICE;
+        uint32_t kind=module->types->nodes[i].kind;needed|=kind==XR_XIR_TYPE_SLICE || kind==XR_XIR_TYPE_MUT_SLICE ||
+            kind==XR_XIR_TYPE_PTR || kind==XR_XIR_TYPE_MUT_PTR;
     }
     if (!needed) return XR_XIR_OK;
     XrXirStatus status=view_types_verify(context,module->types);
-    if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(context,module,NULL,NULL,diagnostic);
+    if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(context,(XirEffectInput){module,cells?cells->construction:NULL,cells?cells->control:NULL},NULL,NULL,diagnostic);
     XirViewRootResolver *resolver=NULL;
-    if (status==XR_XIR_OK) status=xir_compile_view_root_resolver_new(context,module,&resolver,diagnostic);
+    if (status==XR_XIR_OK) status=xir_compile_view_root_resolver_new(context,(XirEffectInput){module,cells?cells->construction:NULL,cells?cells->control:NULL},&resolver,diagnostic);
     if (status!=XR_XIR_OK) return status;
     ViewRootCheck *c=&resolver->check;uint64_t fixed=sizeof(ViewAccess)+sizeof(XrXirCompileContext);
     if (c->reserved>context->limits.frame_bytes || fixed>context->limits.frame_bytes-c->reserved) {
@@ -368,6 +446,9 @@ static XrXirStatus view_access_check(const XrXirCompileContext *context,
     }
     c->reserved+=fixed;ViewAccess access={.resolver=resolver,.cells=cells};
     for (uint32_t f=0;f<module->function_count;++f) {
+        if (module->declarations && module->declarations->functions[f].native_callable) {
+            status=xir_native_callable_verify(module,f);if (status!=XR_XIR_OK) break;continue;
+        }
         status=view_access_function_needed(&access,f,&needed);if (status!=XR_XIR_OK) break;
         if (!needed) continue;
         status=view_access_function_new(&access,f);

@@ -45,7 +45,14 @@ XR_FUNC XrXirStatus xir_construction_empty(const XrXirCompileContext *context,
 XR_FUNC XrXirStatus xir_construction_project(const XrXirCompileContext *context,
     const XrXirTypes *types, const XrXirSlotFacts *slots, XrXirConstruction **output, XrCompileRequestControl *control);
 XR_FUNC XrXirStatus xir_construction_verify(const XrXirCompileContext *context,
-    const XrXirModule *module, const XrXirConstruction *construction);
+    const XrXirModule *module, const XrXirConstruction *construction,XrCompileRequestControl *control);
+/* A successful description is still a fact, never access authority. Only
+ * complete checking of the actual module and its owner permits its use. */
+XR_FUNC XrXirStatus xir_borrow_return_describe(const XrXirCompileContext *context,
+    const XrXirModule *module,uint32_t function,XrXirBorrowReturn *output,bool *present,XrCompileRequestControl *control);
+XR_FUNC XrXirStatus xir_borrow_returns_verify(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,XrCompileRequestControl *control);
+XR_FUNC const XrXirBorrowReturn *xir_borrow_return_find(const XrXirConstruction *construction,uint32_t function);
 XR_FUNC XrXirStatus xir_materialization_verify(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction);
 /* Only closed private data recipes need to name substituted opaque types.

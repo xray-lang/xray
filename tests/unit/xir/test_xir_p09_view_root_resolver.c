@@ -254,8 +254,8 @@ static XrXirStatus resolve_sequence(const XrXirCompileContext *context,uint32_t 
     if (status!=XR_XIR_OK) fprintf(stderr,"ordinary resolver kind=%u status=%u f=%u b=%u i=%u\n",kind,status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK);
     XrXirCompileContext bounded=*context;bounded.limits.frame_bytes=1;
-    CHECK(xir_compile_view_root_resolver_new(&bounded,&f.module,&resolver,NULL)==XR_XIR_BUDGET && !resolver);
-    status=xir_compile_view_root_resolver_new(context,&f.module,&resolver,&diagnostic);
+    CHECK(xir_compile_view_root_resolver_new(&bounded,(XirEffectInput){&f.module,NULL,NULL},&resolver,NULL)==XR_XIR_BUDGET && !resolver);
+    status=xir_compile_view_root_resolver_new(context,(XirEffectInput){&f.module,NULL,NULL},&resolver,&diagnostic);
     if (status!=XR_XIR_OK) goto done;
     ResolveObserved observed={resolver,&f.left,0};
     status=xir_compile_view_root_resolver_query(resolver,&f.left,resolve_observe,&observed,&diagnostic);

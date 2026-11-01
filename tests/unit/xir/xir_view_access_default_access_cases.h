@@ -179,7 +179,7 @@ static XrXirStatus da_sequence(const XrXirCompileContext *context,uint32_t kind)
     XrXirStatus status=xir_fixture_module_construction(context,&f.module,&construction);
     const char *stage="construction";
     if (status==XR_XIR_OK) {stage="ordinary";status=xir_compile_view_prepare_ordinary(context,&f.module,construction,&diagnostic);}
-    if (status==XR_XIR_OK) {stage="origins";status=xir_compile_view_return_origins_verified(context,&f.module,&diagnostic);}
+    if (status==XR_XIR_OK) {stage="origins";status=xir_compile_view_return_origins_verified(context,(XirEffectInput){&f.module,NULL,NULL},&diagnostic);}
     if (status==XR_XIR_OK) {stage="affine";status=xir_compile_view_affine_verified(context,&f.module,&diagnostic);}
     if (status==XR_XIR_OK) {
         stage="access";status=xir_compile_view_cell_access_verified(context,&f.module,&diagnostic);
@@ -228,7 +228,7 @@ static XrXirStatus da_scope_visit(void *data,const XrXirCompileContext *remainin
 static void da_scope_admit(const XrXirCompileContext *context,const DefaultAccessFixture *f,XrXirConstruction **construction) {
     CHECK(xir_fixture_module_construction(context,&f->module,construction)==XR_XIR_OK);
     CHECK(xir_compile_view_prepare_ordinary(context,&f->module,*construction,NULL)==XR_XIR_OK);
-    CHECK(xir_compile_view_return_origins_verified(context,&f->module,NULL)==XR_XIR_OK);
+    CHECK(xir_compile_view_return_origins_verified(context,(XirEffectInput){&f->module,NULL,NULL},NULL)==XR_XIR_OK);
     CHECK(xir_compile_view_affine_verified(context,&f->module,NULL)==XR_XIR_OK);
 }
 static void da_scope_cases(void) {

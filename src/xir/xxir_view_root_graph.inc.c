@@ -13,6 +13,7 @@ typedef struct ViewRootEdge {uint32_t function,value,next;} ViewRootEdge;
 typedef struct ViewRootCheck {
     const XrXirCompileContext *context;
     const XrXirModule *module;
+    const XrXirConstruction *construction;
     const uint8_t *flags;
     XrXirViewRootVisitor visitor;
     void *user;
@@ -110,7 +111,7 @@ static XrXirStatus view_root_edges(ViewRootCheck *c,bool fill) {
     if (fill) return count==c->edge_count ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
     c->edge_count=count;return XR_XIR_OK;
 }
-static XrXirStatus view_root_graph(ViewRootCheck *c) {
+static XrXirStatus view_root_graph(ViewRootCheck *c,XrCompileRequestControl *control) {
     uint64_t parameters=0,functions=c->module->function_count;
     for (uint32_t f=0;f<functions;++f) {
 
@@ -132,7 +133,7 @@ static XrXirStatus view_root_graph(ViewRootCheck *c) {
     }
     c->offsets[functions]=offset;
     for (uint32_t p=0;p<offset;++p) {c->heads[p]=UINT32_MAX;}
-    status=view_origin_candidates(c->module,c->flags,c->captures,c->candidates);
+    status=view_origin_candidates(c->context,c->module,c->construction,c->flags,c->captures,c->candidates,control);
     if (status==XR_XIR_OK) status=view_root_edges(c,false);
     uint64_t edge_bytes=(uint64_t)c->edge_count*sizeof(*c->edges);
     if (status!=XR_XIR_OK) return status;

@@ -11,7 +11,7 @@
  */
 #ifndef XXIR_VIEW_ROOTS_INTERNAL_H
 #define XXIR_VIEW_ROOTS_INTERNAL_H
-#include "xxir.h"
+#include "xxir_effect_input_internal.h"
 typedef enum XrXirViewRootKind {
     XR_XIR_VIEW_ROOT_CELL,XR_XIR_VIEW_ROOT_PARAMETER,XR_XIR_VIEW_ROOT_MODULE,
     XR_XIR_VIEW_ROOT_OBJECT,XR_XIR_VIEW_ROOT_BORROWED_PARAMETER,
@@ -43,8 +43,7 @@ typedef XrXirStatus (*XrXirViewRootVisitor)(void *user,const XrXirCompileContext
  * UINT32_MAX for Optional. Arrays expire on return from the visitor; discard
  * every partial observation on later failure. No Source or runtime permission,
  * root lifetime, NLL, physical END or arbitrary indirect target proof is issued. */
-XR_FUNC XrXirStatus xir_compile_view_roots_verified(const XrXirCompileContext *context,
-    const XrXirModule *module,XrXirViewRootVisitor visitor,void *user,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_compile_view_roots_verified(const XrXirCompileContext *context,XirEffectInput input,XrXirViewRootVisitor visitor,void *user,XrXirDiagnostic *diagnostic);
 
 typedef struct XirViewRootResolver XirViewRootResolver;
 typedef struct XirViewRootRequest {
@@ -58,8 +57,7 @@ typedef struct XirViewRootRequest {
  * are still independently replayed. Module Cell loads follow every actual
  * initializer producer, including grouped initialization. No saved
  * observation, source bit or caller-supplied root grants access permission. */
-XR_FUNC XrXirStatus xir_compile_view_root_resolver_new(const XrXirCompileContext *context,
-    const XrXirModule *module,XirViewRootResolver **output,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_compile_view_root_resolver_new(const XrXirCompileContext *context,XirEffectInput input,XirViewRootResolver **output,XrXirDiagnostic *diagnostic);
 XR_FUNC void xir_compile_view_root_resolver_free(XirViewRootResolver *resolver);
 XR_FUNC XrXirStatus xir_compile_view_root_resolver_query(XirViewRootResolver *resolver,
     const XirViewRootRequest *request,XrXirViewRootVisitor visitor,void *user,XrXirDiagnostic *diagnostic);

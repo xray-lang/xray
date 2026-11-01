@@ -887,7 +887,7 @@ static XrXirStatus access_sequence(const XrXirCompileContext *context,uint32_t k
     XrXirStatus status=xir_fixture_construction(context,&f.types,&construction);if (status!=XR_XIR_OK) goto done;
     stage="ordinary";
     status=xir_compile_view_prepare_ordinary(context,&f.module,construction,&diagnostic);
-    if (status==XR_XIR_OK) {stage="return origins";status=xir_compile_view_return_origins_verified(context,&f.module,&diagnostic);}
+    if (status==XR_XIR_OK) {stage="return origins";status=xir_compile_view_return_origins_verified(context,(XirEffectInput){&f.module,NULL,NULL},&diagnostic);}
     if (f.prefix_expected && status!=XR_XIR_BUDGET && status!=XR_XIR_MEMORY_LIMIT && status!=XR_XIR_OUT_OF_MEMORY) CHECK(status==XR_XIR_OK);
     if (status==XR_XIR_OK) {stage="affine";status=xir_compile_view_affine_verified(context,&f.module,&diagnostic);}
     if (status==XR_XIR_BUDGET || status==XR_XIR_MEMORY_LIMIT || status==XR_XIR_OUT_OF_MEMORY) goto done;

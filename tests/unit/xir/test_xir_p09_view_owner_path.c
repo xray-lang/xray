@@ -153,7 +153,7 @@ static XrXirStatus path_sequence(const XrXirCompileContext *context,uint32_t kin
     XrXirConstruction *construction=NULL;XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xir_fixture_construction(context,&f.types,&construction);if (status!=XR_XIR_OK) goto done;
     status=xir_compile_view_prepare_ordinary(context,&f.module,construction,&diagnostic);
-    if (status==XR_XIR_OK) status=xir_compile_view_return_origins_verified(context,&f.module,&diagnostic);
+    if (status==XR_XIR_OK) status=xir_compile_view_return_origins_verified(context,(XirEffectInput){&f.module,NULL,NULL},&diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_affine_verified(context,&f.module,&diagnostic);
     if (status==XR_XIR_BUDGET || status==XR_XIR_OUT_OF_MEMORY) goto done;
     if (status!=XR_XIR_OK) fprintf(stderr,"owner path prefix kind=%u status=%u at %u/%u/%u\n",kind,status,diagnostic.function,diagnostic.block,diagnostic.instruction);

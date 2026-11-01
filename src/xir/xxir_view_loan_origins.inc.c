@@ -100,12 +100,14 @@ static XrXirStatus view_loan_call(ViewLoanQuery *q,ViewOriginPair site,ViewOrigi
     ViewRootCheck *c=q->root.check;const XrXirFunction *body=c->module->functions+site.first;uint32_t candidate=UINT32_MAX;
     if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE) candidate=c->candidates[op->immediate];
     else if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) {
+        if (view_pointer(c->module->types,op->type)) return XR_XIR_UNRESOLVED;
         const XrXirTypeNode *signature=xr_xir_callable_signature(c->module->types,
             xr_xir_operand_type(body,(uint32_t)op->immediate));
         if (!signature) return XR_XIR_BAD_TYPE;
         XrXirStatus status=view_return_candidate(c->module->types,c->flags,signature,&candidate);
         if (status!=XR_XIR_OK) return status;
     }
+    if (candidate==UINT32_MAX-1u) return view_loan_emit(q,site,context,XR_XIR_VIEW_LOAN_ABSENT,UINT32_MAX,false);
     if (candidate==UINT32_MAX) return view_loan_emit(q,site,context,XR_XIR_VIEW_LOAN_UNRESOLVED,UINT32_MAX,false);
     if (candidate>=op->args[1]) return XR_XIR_BAD_TYPE;
     return view_loan_emit(q,site,context,XR_XIR_VIEW_LOAN_CALL,body->operands[op->args[0]+candidate],false);
@@ -116,6 +118,9 @@ static XrXirStatus view_loan_step(ViewLoanQuery *q,ViewOriginPair site,ViewOrigi
     if (site.second<body->parameter_count) return view_loan_emit(q,site,context,XR_XIR_VIEW_LOAN_INPUT,UINT32_MAX,false);
     const XrXirInstruction *op=body->instructions+site.second-body->parameter_count;
     switch (op->op) {
+    case XR_XIR_PTR_NULL:return view_loan_emit(q,site,context,XR_XIR_VIEW_LOAN_ABSENT,UINT32_MAX,false);
+    case XR_XIR_PTR_OFFSET:case XR_XIR_PTR_READONLY:
+        return view_root_push(&q->root,site.first,op->args[0],context.first,context.second);
     case XR_XIR_VIEW_NEW:case XR_XIR_VIEW_REBORROW:
         if (context.second || op->args[1]!=3) return XR_XIR_BAD_STRUCTURE;
         return view_loan_emit(q,site,context,op->op==XR_XIR_VIEW_NEW?XR_XIR_VIEW_LOAN_NEW:XR_XIR_VIEW_LOAN_REBORROW,

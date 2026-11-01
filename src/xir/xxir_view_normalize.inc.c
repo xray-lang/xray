@@ -22,19 +22,23 @@ typedef struct ViewNormalize {
     const XrXirModule *module;
     const XirViewNormalizationSource *source;
     ViewNormalizeFunction *plans;
+    uint8_t *physical;
     uint32_t marker;
 } ViewNormalize;
 static bool view_normalize_has(const XrXirViewLiveSet *set,uint32_t index) {
     return (set->bits[index/64u]&(UINT64_C(1)<<(index%64u)))!=0;
 }
-static XrXirStatus view_normalize_group(const XrXirCompileContext *context,
+static XrXirStatus view_normalize_group(const XrXirCompileContext *context,ViewNormalize *n,
     const XrXirViewLiveEvent *event,ViewDropPlan **output,bool entry,uint32_t result) {
     uint32_t count=0;const XrXirViewLiveSet *before=&event->before,*after=&event->after;
     for (uint32_t i=0;i<before->count;++i) {
 
         bool dead=entry ? !view_normalize_has(before,i) :
             !view_normalize_has(after,i) && (view_normalize_has(before,i) || before->values[i]==result);
-        count+=dead;
+        XrXirType type=xr_xir_operand_type(&n->module->functions[event->function],before->values[i]);
+        bool physical=n->physical && xr_xir_type_node(n->module->types,type) &&
+            (n->physical[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]&3u);
+        count+=dead && physical;
     }
     if (!count) return XR_XIR_OK;
     if (count>65536u) return XR_XIR_BUDGET;
@@ -47,7 +51,10 @@ static XrXirStatus view_normalize_group(const XrXirCompileContext *context,
 
         bool dead=entry ? !view_normalize_has(before,i) :
             !view_normalize_has(after,i) && (view_normalize_has(before,i) || before->values[i]==result);
-        if (dead) plan->values[count++]=before->values[i];
+        XrXirType type=xr_xir_operand_type(&n->module->functions[event->function],before->values[i]);
+        bool physical=n->physical && xr_xir_type_node(n->module->types,type) &&
+            (n->physical[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]&3u);
+        if (dead && physical) plan->values[count++]=before->values[i];
     }
     return XR_XIR_OK;
 }
@@ -87,14 +94,15 @@ static XrXirStatus view_normalize_visit(void *user,const XrXirCompileContext *co
         n->marker=at;return XR_XIR_OK;
     }
     uint32_t i=event->instruction;const XrXirInstruction *op=f->instructions+i;
-    if (i==n->marker) status=view_normalize_group(context,event,plan->before+i,true,UINT32_MAX);
+    if (i==n->marker) status=view_normalize_group(context,n,event,plan->before+i,true,UINT32_MAX);
     bool selector=op->op==XR_XIR_PANIC_CATCH || op->op==XR_XIR_ERROR_NARROW || op->op==XR_XIR_INVOKE_RESULT ||
         op->op==XR_XIR_INVOKE_ERROR || op->op==XR_XIR_INVOKE_DISCARD;
     if (status==XR_XIR_OK && !view_normalize_terminals[op->op] && op->op!=XR_XIR_PHI && !selector)
-        status=view_normalize_group(context,event,plan->after+i,false,f->parameter_count+i);
+        status=view_normalize_group(context,n,event,plan->after+i,false,f->parameter_count+i);
     return status;
 }
 static void view_normalize_plans_free(ViewNormalize *n) {
+    xr_compile_resources_free(n->physical);n->physical=NULL;
     if (!n->plans) return;
     for (uint32_t f=0;f<n->module->function_count;++f) {
         ViewNormalizeFunction *plan=n->plans+f;if (!plan->before) continue;
@@ -252,7 +260,8 @@ static XrXirStatus view_normalize_verified(const XrXirCompileContext *context,
     if (!n)
         return status;
     n->module = *module;
-    builder.plans=xir_compile_calloc(context,module->function_count,sizeof(*builder.plans),&status);
+    status=xir_compile_view_flags_new(context,module->types,&builder.physical);
+    if (status==XR_XIR_OK) builder.plans=xir_compile_calloc(context,module->function_count,sizeof(*builder.plans),&status);
     n->functions=xir_compile_calloc(context,module->function_count,sizeof(*n->functions),&status);
     n->bodies=xir_compile_copy(context,module->functions,(size_t)module->function_count*sizeof(*n->bodies),&status);
     if (status==XR_XIR_OK) status=xir_compile_view_liveness_verified(context,module,view_normalize_visit,&builder,diagnostic);

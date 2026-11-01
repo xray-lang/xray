@@ -10,6 +10,13 @@
  *   Earlier descriptor edges propagate borrowed leaves without expanding a DAG.
  */
 #include "xxir_view_access_internal.h"
+#include "xxir_construction_internal.h"
+#include "xxir_native_callable.h"
+#include "xxir_receive_control.h"
+static bool view_pointer(const XrXirTypes *types,XrXirType type) {
+    const XrXirTypeNode *node=xr_xir_type_node(types,type);
+    return node && (node->kind==XR_XIR_TYPE_PTR || node->kind==XR_XIR_TYPE_MUT_PTR);
+}
 static uint32_t view_flags_at(const XrXirTypes *types,const uint8_t *flags,XrXirType type) {
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     return node && flags ? flags[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]&3u : 0;
@@ -21,15 +28,16 @@ static uint32_t view_leaves_at(const XrXirTypes *types,const uint8_t *flags,XrXi
 
 /* The descriptor pass has already checked every edge and payload. A single
  * ascending walk visits each physical Tuple edge once, including shared DAGs. */
-static XrXirStatus view_flags_build(const XrXirCompileContext *context,
-    const XrXirTypes *types,uint8_t **output) {
+static XrXirStatus view_flags_build_mode(const XrXirCompileContext *context,
+    const XrXirTypes *types,uint8_t **output,bool pointers) {
     *output=NULL;
     if (!types) return XR_XIR_OK;
     if (!!types->count!=!!types->nodes) return XR_XIR_BAD_STRUCTURE;
     bool present=false;
     for (uint32_t i=0;i<types->count;++i) {
 
-        present|=types->nodes[i].kind==XR_XIR_TYPE_SLICE || types->nodes[i].kind==XR_XIR_TYPE_MUT_SLICE;
+        present|=types->nodes[i].kind==XR_XIR_TYPE_SLICE || types->nodes[i].kind==XR_XIR_TYPE_MUT_SLICE ||
+            (pointers && view_pointer(types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i)));
     }
     if (!present) return XR_XIR_OK;
     if (types->count>context->limits.frame_bytes) return XR_XIR_BUDGET;
@@ -41,6 +49,8 @@ static XrXirStatus view_flags_build(const XrXirCompileContext *context,
         const XrXirTypeNode *node=&types->nodes[i];
         if (node->kind==XR_XIR_TYPE_SLICE) flags[i]=XR_XIR_VIEW_SHARED|4u;
         else if (node->kind==XR_XIR_TYPE_MUT_SLICE) flags[i]=XR_XIR_VIEW_MUTABLE|4u;
+        else if (pointers && view_pointer(types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i)))
+            flags[i]=XR_XIR_VIEW_SHARED|4u;
         else if (node->kind==XR_XIR_TYPE_NULLABLE) flags[i]=(uint8_t)(view_flags_at(types,flags,node->element)|
             (view_leaves_at(types,flags,node->element)<<2));
         else if (node->kind==XR_XIR_TYPE_TUPLE)
@@ -53,6 +63,15 @@ static XrXirStatus view_flags_build(const XrXirCompileContext *context,
     }
     if (status==XR_XIR_OK) *output=flags;else xr_compile_resources_free(flags);
     return status;
+}
+static XrXirStatus view_flags_build(const XrXirCompileContext *context,
+    const XrXirTypes *types,uint8_t **output) {
+    return view_flags_build_mode(context,types,output,false);
+}
+XR_FUNC XrXirStatus xir_compile_view_static_flags_new(const XrXirCompileContext *context,
+    const XrXirTypes *types,uint8_t **output) {
+    if (!xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
+    return view_flags_build_mode(context,types,output,true);
 }
 XR_FUNC XrXirStatus xir_compile_view_flags_new(const XrXirCompileContext *context,
     const XrXirTypes *types,uint8_t **output) {
@@ -74,6 +93,7 @@ static XrXirStatus view_return_candidate(
             candidates=candidates>1 || leaves>1 ? 2u : candidates+leaves;candidate=p;
             permission=parameter->mode==XR_PARAM_REF ? XR_XIR_VIEW_MUTABLE : borrowed;
         }
+        if (!candidates && view_pointer(types,node->result)) {*output=UINT32_MAX-1u;return XR_XIR_OK;}
         if (candidates!=1 || ((result&XR_XIR_VIEW_MUTABLE) && !(permission&XR_XIR_VIEW_MUTABLE)))
             return XR_XIR_BAD_TYPE;
     }
@@ -136,7 +156,8 @@ XR_FUNC XrXirStatus xr_xir_compile_view_return_candidate(const XrXirCompileConte
 static bool view_boundary_supported(const XrXirTypes *types,const uint8_t *flags,XrXirType type) {
     if (!view_flags_at(types,flags,type)) return true;
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
-    return node && node->kind==XR_XIR_TYPE_SLICE && node->element==XR_XIR_U8;
+    return node && (node->kind==XR_XIR_TYPE_SLICE || node->kind==XR_XIR_TYPE_PTR ||
+        node->kind==XR_XIR_TYPE_MUT_PTR) && node->element==XR_XIR_U8;
 }
 XR_FUNC XrXirStatus xir_compile_view_module_boundary_input(const XrXirCompileContext *context,
     XirEffectInput input,XrXirDiagnostic *diagnostic) {
@@ -144,12 +165,12 @@ XR_FUNC XrXirStatus xir_compile_view_module_boundary_input(const XrXirCompileCon
     if(!input.construction)return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_context_valid(context) || !module) return XR_XIR_BAD_STRUCTURE;
     uint8_t *flags=NULL;
-    XrXirStatus status=view_flags_build(context,module->types,&flags);
+    XrXirStatus status=view_flags_build_mode(context,module->types,&flags,true);
     if (status!=XR_XIR_OK || !flags) return status;
-    status=view_origins_verify(context,module,flags,diagnostic);
+    status=view_origins_verify(context,module,input.construction,flags,diagnostic,input.control);
     if (status==XR_XIR_OK) status=xir_compile_view_affine_verified(context,module,diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_liveness_verified(context,module,NULL,NULL,diagnostic);
-    if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(context,module,NULL,NULL,diagnostic);
+    if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(context,(XirEffectInput){module,input.construction,input.control},NULL,NULL,diagnostic);
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
         const XrXirFunction *body=&module->functions[f];
 

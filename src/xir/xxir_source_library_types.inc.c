@@ -13,6 +13,7 @@ struct SourceLibraryUnit {
     XrXirMaterializationBinding *materializations;
     uint32_t materialization_count;
     XrXirComptimeTable comptime;
+    XrXirBorrowReturns borrow_returns;
 };
 static bool source_hir_nominal_imports(SourceContext *ctx,XrHirNominalImport *inputs,uint32_t count) {
     for(SourceLibraryUnit *unit=ctx->library_units;unit;unit=unit->next) {

@@ -41,7 +41,7 @@ int main(void) {
     const XrXirFunction function={.name="sdkOrigin",.name_length=9,.parameters=&input,.parameter_count=1,
         .result=input,.blocks=&block,.block_count=1,.instructions=&returned,.instruction_count=1};
     const XrXirModule module={.stage=XR_XIR_BUILT,.functions=&function,.function_count=1,.types=owned};
-    CHECK(xir_compile_view_return_origins_verified(&c,&module,NULL)==XR_XIR_OK);
+    CHECK(xir_compile_view_return_origins_verified(&c,(XirEffectInput){&module,NULL,NULL},NULL)==XR_XIR_OK);
     XrXirTypeArena *arena=NULL;
     CHECK(xr_xir_compile_type_arena_new(&c,owned,&arena)==XR_XIR_VALUE_OK && arena);
     CHECK(xr_xir_compile_type_arena_has_borrowed(arena));

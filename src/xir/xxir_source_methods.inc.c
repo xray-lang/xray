@@ -72,6 +72,15 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
     if (identity->method_kind == XR_XIR_STATIC_METHOD)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "static method requires type-qualified access");
     CallExprNode *call = &node->as.call_expr;
+    const XrXirTypeNode *returned=xr_xir_type_node(&ctx->types,ctx->functions[method->index].result);
+    if (identity->nominal_owner && source_mem_buffer(ctx,identity->nominal_owner-1u) &&
+        (xr_xir_type_is_pointer(&ctx->types,ctx->functions[method->index].result) ||
+         (returned && returned->kind==XR_XIR_TYPE_SLICE))) {
+        AstNode *object=call->callee->as.member_access.object;
+        SourceName *binding=object && (object->type==AST_VARIABLE || object->type==AST_THIS_EXPR)?source_ref_binding(ctx,object):NULL;
+        if (!binding || (binding->kind!=SOURCE_LOCAL && binding->kind!=SOURCE_SLOT) || binding->construction)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Buffer borrowing requires one stable receiver binding");
+    }
     if (identity->member_access && ctx->identities[ctx->function].nominal_owner != identity->nominal_owner)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method requires its declaration owner");
     XrXirType receiver_type = xr_xir_type_is_cell(&ctx->types,receiver.type) ?
@@ -236,9 +245,10 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                 owner->node->type != AST_CLASS_DECL;
             if ((method->is_private && method->is_protected) ||
                 method->is_override || method->is_getter || method->is_setter || method->is_static_constructor ||
-                method->is_variadic || method->is_operator || (method->receiver_mode != XR_PARAM_READ && !by_reference) ||
-                method->attr_count || method->borrow_origin_count ||
-                method->borrow_origin_syntax || !method->body || method->param_count < 0 || method->param_count >= 65536)
+                method->is_variadic || (method->is_operator && !source_mem_method_contract(ctx,owner,method)) ||
+                (method->receiver_mode != XR_PARAM_READ && !by_reference) || method->attr_count ||
+                ((method->borrow_origin_count || method->borrow_origin_syntax) && !source_mem_method_contract(ctx,owner,method)) ||
+                !method->body || method->param_count < 0 || method->param_count >= 65536)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method declaration contract is not admitted");
             if (enumeration) {
                 if (!source_enum_method_name(ctx,owner,node)) return false;

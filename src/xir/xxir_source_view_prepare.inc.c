@@ -17,7 +17,7 @@ static bool source_view_preparation_needed(SourceContext *ctx,bool *needed) {
     for (uint32_t i=0;i<ctx->types.count;++i) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t kind=ctx->types.nodes[i].kind;
-        if (kind==XR_XIR_TYPE_SLICE || kind==XR_XIR_TYPE_MUT_SLICE) {*needed=true;break;}
+        if (kind==XR_XIR_TYPE_SLICE || kind==XR_XIR_TYPE_MUT_SLICE || kind==XR_XIR_TYPE_PTR || kind==XR_XIR_TYPE_MUT_PTR) {*needed=true;break;}
     }
     return true;
 }
@@ -40,10 +40,10 @@ static bool source_view_prepare(SourceContext *ctx) {
         if (!ctx->bodies[f].initialization_regions) continue;
         status=xr_xir_compile_initialization_check(&ctx->compile,&module,f,ctx->bodies[f].initialization_regions,&diagnostic);
     }
-    if (status==XR_XIR_OK) status=xir_compile_view_return_origins_verified(&ctx->compile,&module,&diagnostic);
+    if (status==XR_XIR_OK) status=xir_compile_view_return_origins_verified(&ctx->compile,(XirEffectInput){&module,ctx->construction,ctx->request},&diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_affine_verified(&ctx->compile,&module,&diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_liveness_verified(&ctx->compile,&module,NULL,NULL,&diagnostic);
-    if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(&ctx->compile,&module,NULL,NULL,&diagnostic);
+    if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(&ctx->compile,(XirEffectInput){&module,ctx->construction,ctx->request},NULL,NULL,&diagnostic);
     bool normalizing=status==XR_XIR_OK;
     if (normalizing) status=source_view_normalize(ctx,&module,&diagnostic);
     if (status==XR_XIR_OK) return true;
@@ -51,7 +51,14 @@ static bool source_view_prepare(SourceContext *ctx) {
     if (diagnostic.function<ctx->function_count) {
         site=ctx->bodies[diagnostic.function].node;ctx->module=ctx->bodies[diagnostic.function].module;
     }
-    return source_fail(ctx,site,status,normalizing?
-        "constructed XIR failed checking during view lifetime normalization":
-        "constructed XIR failed checking before view lifetime normalization");
+    char message[256]={0};const char *operation="unknown";
+    if (diagnostic.function<module.function_count &&
+        diagnostic.instruction<module.functions[diagnostic.function].instruction_count)
+        operation=xr_xir_op_name(module.functions[diagnostic.function].instructions[diagnostic.instruction].op);
+    if (!operation) operation="unknown";
+    if (status!=XR_XIR_BUDGET && status!=XR_XIR_OUT_OF_MEMORY && source_format(ctx,message,sizeof(message),
+        "constructed XIR failed checking %s view lifetime normalization at function %u block %u instruction %u (%s)",
+        normalizing?"during":"before",diagnostic.function,diagnostic.block,diagnostic.instruction,operation)!=XR_DIAG_OK)
+        status=XR_XIR_BUDGET;
+    return source_fail(ctx,site,status,message);
 }

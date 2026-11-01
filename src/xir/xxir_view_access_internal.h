@@ -27,6 +27,7 @@ typedef struct XirViewAccessCells {
     /* Synchronous request observation borrows the current input only. It is
      * never retained by the resolver or any published proof owner. */
     XrCompileRequestControl *control;
+    const XrXirConstruction *construction;
 } XirViewAccessCells;
 /* Requires ordinary type/structure/SSA, return-origin and affine admission of
  * the immutable generation. Recomputes actual may-owned state, scope ancestry,

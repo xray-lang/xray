@@ -20,6 +20,10 @@
  * The owned packed table uses the caller's finite metadata ledger. */
 XR_FUNC XrXirStatus xir_compile_view_flags_new(const XrXirCompileContext *context,
     const XrXirTypes *types, uint8_t **output);
+/* Raw pointers add copyable static demand only. This table is not a runtime
+ * view layout, affine grant or scope authority and is never cached in an arena. */
+XR_FUNC XrXirStatus xir_compile_view_static_flags_new(const XrXirCompileContext *context,
+    const XrXirTypes *types,uint8_t **output);
 
 /* Requires an admitted descriptor pool. Tuple and Optional preserve every
  * borrowed leaf; an owned callable's signature is not its capture storage.
@@ -35,8 +39,7 @@ XR_FUNC XrXirStatus xr_xir_compile_view_return_candidate(const XrXirCompileConte
 /* Requires complete ordinary function structure, type and SSA checks. Replays
  * actual signatures, capture bindings and every returned borrowed leaf.
  * This proves input provenance only, never moves, liveness or access authority. */
-XR_FUNC XrXirStatus xir_compile_view_return_origins_verified(const XrXirCompileContext *context,
-    const XrXirModule *module, XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_compile_view_return_origins_verified(const XrXirCompileContext *context,XirEffectInput input, XrXirDiagnostic *diagnostic);
 /* Requires ordinary type, structure and SSA admission. Independently checks
  * Shared/Mut owner availability after END, logical affine transfers and PHIs.
  * Shared copies retain independent owners; calls temporarily borrow inputs.

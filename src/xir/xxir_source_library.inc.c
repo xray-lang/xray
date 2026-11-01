@@ -606,7 +606,7 @@ static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
         if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_library_function(ctx, library, map, f)) return false;
     }
     if (!source_library_initializers(ctx,library,map) || !source_library_materializations(ctx,map) ||
-        !source_library_comptime(ctx,map) ||
+        !source_library_comptime(ctx,map) || !source_library_borrow_returns(ctx,map) ||
         !source_library_implementations(ctx,library,map)) return false;
     if (!library->defaults) return true;
     for (uint32_t i = 0; i < library->defaults->count; ++i) {

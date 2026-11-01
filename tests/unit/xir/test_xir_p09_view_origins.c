@@ -60,7 +60,7 @@ static void origin_captured(OriginFixture *f) {
     f->operands[1][0]=0;f->functions[1].operands=f->operands[1];f->functions[1].operand_count=1;
 }
 static XrXirStatus origin_prove(const XrXirCompileContext *c,const OriginFixture *f) {
-    return xir_compile_view_return_origins_verified(c,&f->module,NULL);
+    return xir_compile_view_return_origins_verified(c,(XirEffectInput){&f->module,NULL,NULL},NULL);
 }
 static void origin_expect(const XrXirCompileContext *c,const OriginFixture *f,XrXirStatus expected) {
     uint64_t baseline=stats(c).live_bytes;
@@ -161,7 +161,7 @@ static uint64_t origin_dag(const XrXirCompileContext *c) {
     const XrXirModule module={.stage=XR_XIR_BUILT,.functions=&function,.function_count=1,.types=&types};
     CHECK(xr_xir_compile_types_structure_verify(c,&types)==XR_XIR_OK);
     uint64_t before=stats(c).work;
-    CHECK(xir_compile_view_return_origins_verified(c,&module,NULL)==XR_XIR_OK);
+    CHECK(xir_compile_view_return_origins_verified(c,(XirEffectInput){&module,NULL,NULL},NULL)==XR_XIR_OK);
     uint64_t work=stats(c).work-before;CHECK(work<10000);return work;
 }
 static void origin_fault_fixture(OriginFixture *f) {
