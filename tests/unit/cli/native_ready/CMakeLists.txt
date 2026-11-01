@@ -35,4 +35,8 @@ add_test(NAME native_ready_probe COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_SOURCE_DIR}/../test_cli_toolchain_probe.py" "$<TARGET_FILE:xray>"
     "${NATIVE_READY_MSVC}" "${CMAKE_CURRENT_BINARY_DIR}/probe")
 set_tests_properties(native_ready_cold_cli PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;cli;toolchain;native;environment")
+add_test(NAME native_ready_dos_alias COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_SOURCE_DIR}/test_native_windows_paths.py" --binary "$<TARGET_FILE:xray>")
+set_tests_properties(native_ready_dos_alias PROPERTIES
+    TIMEOUT 300 RUN_SERIAL TRUE LABELS "unit;cli;toolchain;native;filesystem")
 set_tests_properties(native_ready_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE COST 15 LABELS "unit;cli;toolchain;native;ownership;runtime-sdk")

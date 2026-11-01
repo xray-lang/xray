@@ -22,6 +22,23 @@ static bool sysroot_error(XrXirTargetSnapshot *snapshot, DWORD error) {
         XR_XIR_TARGET_INVALID : XR_XIR_TARGET_IO;
     return xtc_xir_target_fail(snapshot, status);
 }
+/* DOS aliases name the same entry but differ from its handle's normalized
+ * spelling. Expand them before the ancestor walk; every expanded component
+ * still has to pass the retained-handle identity and no-reparse checks. */
+static wchar_t *sysroot_expand_alias(XrXirTargetSnapshot *snapshot, wchar_t *path) {
+    if (!wcschr(path, L'~')) return path;
+    DWORD capacity = GetLongPathNameW(path, NULL, 0);
+    if (!capacity) { sysroot_error(snapshot, GetLastError()); return NULL; }
+    if (capacity > XTC_XIR_TARGET_PATH_LIMIT) {
+        xtc_xir_target_fail(snapshot, XR_XIR_TARGET_BUDGET); return NULL;
+    }
+    wchar_t *expanded = xtc_xir_target_allocate(snapshot, (size_t)capacity * sizeof(*expanded));
+    if (!expanded) return NULL;
+    DWORD length = GetLongPathNameW(path, expanded, capacity);
+    if (!length) { sysroot_error(snapshot, GetLastError()); return NULL; }
+    if (length >= capacity) { xtc_xir_target_fail(snapshot, XR_XIR_TARGET_BUDGET); return NULL; }
+    return expanded;
+}
 static wchar_t *sysroot_path(XrXirTargetSnapshot *snapshot, const char *input, bool directory) {
     char *text = xtc_xir_target_text(snapshot, input);
     if (!text) return NULL;
@@ -64,7 +81,7 @@ static wchar_t *sysroot_path(XrXirTargetSnapshot *snapshot, const char *input, b
             xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID); return NULL;
         }
     }
-    return path;
+    return sysroot_expand_alias(snapshot, path);
 }
 static bool sysroot_same_path(XrXirTargetSnapshot *snapshot, const wchar_t *left,
     const wchar_t *right, bool *same) {
