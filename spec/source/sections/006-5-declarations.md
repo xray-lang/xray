@@ -65,7 +65,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-`const` 只修饰绑定或字段。通用类型形式 `const T` 已删除：参数、返回类型、类型别名、字段类型、函数类型、元组、union 和泛型实参中的旧拼写均为语法错误，不产生类型身份、隐式转换或兼容别名。只读权限沿值语义部分传播，并在 class 或同步身份边界停止；不能沿用旧的整个图深冻结规则。普通值 `copy(array)` 的公开拼写和可复制值的独立 `move` 表达式同样不作为上述绑定规则的前置条件，见 §2.14.5。
+`const` 只修饰绑定或字段。通用类型形式 `const T` 已删除：参数、返回类型、类型别名、字段类型、函数类型、元组、union 和泛型实参中的旧拼写均为语法错误，不产生类型身份、隐式转换或兼容别名。只读权限沿值语义部分传播，并在 class 或同步身份边界停止；不能沿用旧的整个图深冻结规则。普通值复制不要求显式 `copy value` 或 `move value`；这两种前缀表达式的规则见 §2.14.5。
 
 这些是语言合同；完整声明族的当前新 XIR 实现资格见 §17，不因本节示例而宣称实现完成。跨执行共享还须满足 §10 的类型与边界合同。
 
@@ -187,7 +187,7 @@ var result = divmod(10, 3)        // result 类型 (i64, i64)
 
 #### 5.2.4 参数模式
 
-普通参数默认为 READ；写借用使用 `name: ref T`，不可复制资源的消费交接使用 `name: move T`。参数模式属于声明合同，不由具体 ABI 是传值、指针还是句柄决定。
+普通参数默认为 READ；写借用使用 `name: ref T`，取得值的持有权使用 `name: move T`，包括可复制值与不可复制资源。参数模式属于声明合同，不由具体 ABI 是传值、指针还是句柄决定。
 
 ```xray @id=decl-fn-param-modes
 fn length_sq(v: Vec2) -> f64 {
@@ -212,13 +212,13 @@ translate(ref point, 1.0, 2.0)
 |--|--|
 | 无（READ） | 参数绑定不可重绑，其值语义部分只读；可复制、可保存的值可以保存或返回逻辑副本 |
 | `ref` | 独占可写 place 借用，修改回写调用方；调用点必须写 `ref place` |
-| `move` | 仅用于不可复制类型，转移持有权及最终析构责任；调用是否消费由声明模式决定，`move value` 可选标明该转移 |
+| `move` | 接收方取得持有权及最终析构责任，参数绑定可重绑并修改其值语义部分；可复制实参在默认模式下可保留逻辑副本，显式 `move value` 保证转移且使源绑定失效 |
 
 READ Array 参数不能直接索引写入、调用 `push` 或重绑参数；保存到本地 `var` 后可以修改副本，原实参不受影响。保存可复制值不等于允许借用逃逸；视图或不可复制资源不能借此成为普通拥有式副本。READ class 参数同样不能重绑，但可调用修改同一对象的方法，不能把 READ 解释为整个可达图不可变。
 
 `ref` 实参必须是类型精确匹配的可写 place，不能是 `const`、只读参数或临时值；`ref` 类型不变。调用先按 §3.0 E2 完成 receiver 与全部实参求值，再建立独占借用，覆盖检查、必要的 COW 分离、修改及回写。不得提前借用 receiver 而拒绝 `a.push(a[0])`。赋值仍遵循 E5 的位置子表达式、索引、右值、存储顺序。
 
-可复制类型（包括 Array）不能声明 `move` 参数或 receiver；不可复制资源的初始化、消费后使用和活动借用仍须检查，详见 §2.14.5。资源声明族和完整 `ref` / 视图调用的当前实现资格见 §17，不能由该语言合同推定已经实现。
+可复制类型（包括 Array）也可声明 `move` 参数或值类型 receiver；class 方法仍不声明 receiver 模式。初始化、显式移动后使用、不可复制资源消费和活动借用均须检查，详见 §2.14.5。参数模式参与函数类型身份，不隐式互换 READ/ref/move。消费、资源声明族和完整 `ref` / 视图调用的当前实现资格见 §17，不能由该语言合同推定已经实现。
 
 普通输出使用返回值、tuple 或 struct；业务错误按 §8 的类型化 `throw` / `catch` 通道处理，不引入全局 `Result<T,E>`。C ABI 输出位置使用 `MutPtr<T>`，不把输出参数模式引入普通 Xray 函数。
 
@@ -780,7 +780,7 @@ main()
 
 可复制 struct 按字段声明类型保留逻辑副本：Array 等拥有式容器字段保持值语义，class 与同步字段只复制身份引用。字段可以是 Array 或 class；不能将 struct 限制为仅含标量和 string，也不能把 struct 复制误写为复制整个 class 对象图。字段仍须满足初始化、存储及可复制性要求（§2.14.6）。
 
-struct / enum 修改自身值语义部分的方法显式使用 `ref` receiver；只读 receiver 可以保存可复制副本，不能直接修改自身。可复制类型不得声明 `move` receiver。完整聚合、receiver 和借用声明族的实现资格见 §17。
+struct / enum 修改自身值语义部分的方法显式使用 `ref` receiver；只读 receiver 可以保存可复制副本，不能直接修改自身。取得自身持有权的方法可声明 `move` receiver，包括可复制类型。完整聚合、receiver 和借用声明族的实现资格见 §17。
 
 ```ebnf
 StructDecl ::= 'struct' Identifier TypeParams?
@@ -1208,7 +1208,7 @@ print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
 
-静态方法使用 `static name(...)`；实例方法默认 READ receiver，修改值语义部分使用 `ref` receiver。`move` receiver 仅适用于不可复制 enum，可复制 enum 不得声明；不可复制声明族的准入见 §17。enum 方法不写 `fn`：
+静态方法使用 `static name(...)`；实例方法默认 READ receiver，修改值语义部分使用 `ref` receiver，取得持有权使用 `move` receiver，可复制与不可复制 enum 均适用；完整声明族的准入见 §17。enum 方法不写 `fn`：
 
 ```xray
 enum Color {
@@ -1366,7 +1366,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-`const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries; old whole-graph deep-freeze rules must not be inherited. The public `copy(array)` spelling and standalone `move` expressions for copyable values are likewise not prerequisites for these binding rules; see §2.14.5.
+`const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries; old whole-graph deep-freeze rules must not be inherited. Ordinary value copying requires neither explicit `copy value` nor `move value`; see §2.14.5 for these prefix expressions.
 
 These are language contracts. See §17 for current new XIR implementation qualification of complete declaration families; these examples do not claim implementation completion. Cross-execution sharing additionally requires the type and boundary contracts in §10.
 
@@ -1488,7 +1488,7 @@ var result = divmod(10, 3)        // result has type (i64, i64)
 
 #### 5.2.4 Parameter modes
 
-Ordinary parameters default to READ. Writable borrowing uses `name: ref T`; consuming a noncopyable resource uses `name: move T`. A parameter mode is a declaration contract, independent of whether the concrete ABI passes a value, pointer, or handle.
+Ordinary parameters default to READ. Writable borrowing uses `name: ref T`; acquiring ownership of a value uses `name: move T`, for copyable values as well as noncopyable resources. A parameter mode is a declaration contract, independent of whether the concrete ABI passes a value, pointer, or handle.
 
 ```xray @id=decl-fn-param-modes
 fn length_sq(v: Vec2) -> f64 {
@@ -1513,13 +1513,13 @@ translate(ref point, 1.0, 2.0)
 |--|--|
 | none (READ) | The parameter binding cannot be rebound and its value-semantic components are read-only; copyable, storable values may be saved or returned as logical copies |
 | `ref` | Exclusive writable place borrow; mutations write back to the caller, and the call site must write `ref place` |
-| `move` | Restricted to noncopyable types; transfers ownership and final destruction responsibility. The declaration mode determines consumption; `move value` optionally marks that transfer |
+| `move` | The callee acquires ownership and final destruction responsibility; the parameter binding may be rebound and its value-semantic components mutated. A copyable argument may retain a logical copy in the default mode; explicit `move value` guarantees transfer and invalidates the source binding |
 
 A READ Array parameter cannot be indexed for writing, passed as a receiver to `push`, or rebound. Saving it into a local `var` permits mutation of the copy without changing the original argument. Saving a copyable value does not permit a borrow to escape; views and noncopyable resources cannot thereby become ordinary owned copies. A READ class parameter also cannot be rebound, but may invoke methods that mutate the same object. READ does not mean that the entire reachable graph is immutable.
 
 A `ref` argument must be an exactly typed writable place, not a `const`, READ parameter, or temporary. `ref` types are invariant. §3.0 E2 evaluates the receiver and every argument before exclusive access begins. That access covers checks, necessary COW detachment, mutation, and writeback. Borrowing the receiver early must not reject `a.push(a[0])`. Assignment still follows E5: location subexpressions, index, right-hand side, then storage.
 
-Copyable types, including Array, cannot declare `move` parameters or receivers. Initialization, use after consumption, and active borrows of noncopyable resources still require checking; see §2.14.5. See §17 for current implementation qualification of resource declarations and complete `ref` / view calls; these language contracts do not imply implementation completion.
+Copyable types, including Array, may also declare `move` parameters or value-type receivers; class methods still do not declare receiver modes. Initialization, use after explicit movement, consumption of noncopyable resources and active borrows require checking; see §2.14.5. Parameter modes participate in function type identity; READ/ref/move do not implicitly interchange. See §17 for current implementation qualification of consumption, resource declarations and complete `ref` / view calls; these language contracts do not imply implementation completion.
 
 Ordinary outputs use return values, tuples, or structs. Business errors follow §8's typed `throw` / `catch` channel; no global `Result<T,E>` is introduced. C ABI output locations use `MutPtr<T>` rather than an output parameter mode in ordinary Xray functions.
 
@@ -2072,7 +2072,7 @@ main()
 
 A copyable struct preserves logical copies according to the declared type of each field. Owned container fields such as Array retain value semantics; class and synchronized fields copy identity references only. Fields may be Arrays or classes. Structs are not restricted to scalars and strings, and copying a struct does not copy an entire class object graph. Fields still satisfy initialization, storage, and copyability requirements (§2.14.6).
 
-A struct / enum method that mutates its own value-semantic components explicitly uses a `ref` receiver. A READ receiver may save a copyable value but cannot mutate itself directly. Copyable types cannot declare `move` receivers. See §17 for implementation qualification of complete aggregate, receiver, and borrow declaration families.
+A struct / enum method that mutates its own value-semantic components explicitly uses a `ref` receiver. A READ receiver may save a copyable value but cannot mutate itself directly. A method acquiring ownership of its receiver may declare `move`, including for copyable types. See §17 for implementation qualification of complete aggregate, receiver, and borrow declaration families.
 
 ```ebnf
 StructDecl ::= 'struct' Identifier TypeParams?
@@ -2500,7 +2500,7 @@ print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
 
-Static methods use `static name(...)`. Instance methods have a READ receiver by default and use `ref` to mutate value-semantic components. A `move` receiver is restricted to noncopyable enums and is forbidden for copyable enums; see §17 for admission of noncopyable declarations. Enum methods do not write `fn`:
+Static methods use `static name(...)`. Instance methods have a READ receiver by default, use `ref` to mutate value-semantic components and `move` to acquire ownership. Both copyable and noncopyable enums may declare a `move` receiver; see §17 for qualification of complete declaration families. Enum methods do not write `fn`:
 
 ```xray
 enum Color {

@@ -1678,9 +1678,9 @@ Ordinary closures capture outer `var` bindings through shared cells; `const` and
 
 #### 2.14.5 Consumption and unadmitted surfaces
 
-Consumption of a noncopyable resource transfers ownership and final destruction responsibility. Whether a call consumes is determined by the declared parameter or receiver mode; `move x` optionally marks such a transfer explicitly. Successful consumption makes the source binding unusable. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` borrows do not consume ownership. A rejected operation must not incorrectly mark a valid source as consumed.
+A consuming parameter or value-type receiver transfers ownership and final destruction responsibility for copyable types, including Array, as well as noncopyable resources. Class methods do not declare receiver modes. The declaration determines ownership acquisition, independently of the concrete ABI. In the default mode, a copyable argument may retain a logical copy for later caller use; explicit `move x` guarantees transfer without copying and invalidates the source binding until reinitialization. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` parameters are borrows and cannot themselves be consumed. A rejected operation must not incorrectly mark a valid source as consumed.
 
-Copyable types, including Array, cannot declare `move` parameters or receivers. The general type-position `const T` form is removed and creates no type identity or conversion. Ordinary `copy array` uses prefix-expression syntax. Whether a standalone `move x` expression is allowed for copyable values still requires a separate decision before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
+Standalone `move x` accepts only an initialized local variable, local constant or consuming parameter binding of the current function. Fields, indexes, call results, module bindings and READ/ref parameters are not valid sources, and an active borrow prevents transfer. All nontrivial values may be explicitly moved; trivial scalars are also allowed, with an optional no-benefit diagnostic. `copy array` uses prefix-expression syntax, and ordinary Array copying retains a logical copy. The general type-position `const T` form is removed and creates no type identity or conversion. See §17 for current declaration-family qualification: these language rules do not admit unfinished consumption, view or resource entry points or inherit old unique-root, terminal heap-escape or whole-graph deep-freeze rules.
 
 #### 2.14.6 Struct-field copying and initialization
 
@@ -2894,7 +2894,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-`const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries; old whole-graph deep-freeze rules must not be inherited. The public `copy(array)` spelling and standalone `move` expressions for copyable values are likewise not prerequisites for these binding rules; see §2.14.5.
+`const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries; old whole-graph deep-freeze rules must not be inherited. Ordinary value copying requires neither explicit `copy value` nor `move value`; see §2.14.5 for these prefix expressions.
 
 These are language contracts. See §17 for current new XIR implementation qualification of complete declaration families; these examples do not claim implementation completion. Cross-execution sharing additionally requires the type and boundary contracts in §10.
 
@@ -3016,7 +3016,7 @@ var result = divmod(10, 3)        // result has type (i64, i64)
 
 #### 5.2.4 Parameter modes
 
-Ordinary parameters default to READ. Writable borrowing uses `name: ref T`; consuming a noncopyable resource uses `name: move T`. A parameter mode is a declaration contract, independent of whether the concrete ABI passes a value, pointer, or handle.
+Ordinary parameters default to READ. Writable borrowing uses `name: ref T`; acquiring ownership of a value uses `name: move T`, for copyable values as well as noncopyable resources. A parameter mode is a declaration contract, independent of whether the concrete ABI passes a value, pointer, or handle.
 
 ```xray
 fn length_sq(v: Vec2) -> f64 {
@@ -3041,13 +3041,13 @@ translate(ref point, 1.0, 2.0)
 |--|--|
 | none (READ) | The parameter binding cannot be rebound and its value-semantic components are read-only; copyable, storable values may be saved or returned as logical copies |
 | `ref` | Exclusive writable place borrow; mutations write back to the caller, and the call site must write `ref place` |
-| `move` | Restricted to noncopyable types; transfers ownership and final destruction responsibility. The declaration mode determines consumption; `move value` optionally marks that transfer |
+| `move` | The callee acquires ownership and final destruction responsibility; the parameter binding may be rebound and its value-semantic components mutated. A copyable argument may retain a logical copy in the default mode; explicit `move value` guarantees transfer and invalidates the source binding |
 
 A READ Array parameter cannot be indexed for writing, passed as a receiver to `push`, or rebound. Saving it into a local `var` permits mutation of the copy without changing the original argument. Saving a copyable value does not permit a borrow to escape; views and noncopyable resources cannot thereby become ordinary owned copies. A READ class parameter also cannot be rebound, but may invoke methods that mutate the same object. READ does not mean that the entire reachable graph is immutable.
 
 A `ref` argument must be an exactly typed writable place, not a `const`, READ parameter, or temporary. `ref` types are invariant. §3.0 E2 evaluates the receiver and every argument before exclusive access begins. That access covers checks, necessary COW detachment, mutation, and writeback. Borrowing the receiver early must not reject `a.push(a[0])`. Assignment still follows E5: location subexpressions, index, right-hand side, then storage.
 
-Copyable types, including Array, cannot declare `move` parameters or receivers. Initialization, use after consumption, and active borrows of noncopyable resources still require checking; see §2.14.5. See §17 for current implementation qualification of resource declarations and complete `ref` / view calls; these language contracts do not imply implementation completion.
+Copyable types, including Array, may also declare `move` parameters or value-type receivers; class methods still do not declare receiver modes. Initialization, use after explicit movement, consumption of noncopyable resources and active borrows require checking; see §2.14.5. Parameter modes participate in function type identity; READ/ref/move do not implicitly interchange. See §17 for current implementation qualification of consumption, resource declarations and complete `ref` / view calls; these language contracts do not imply implementation completion.
 
 Ordinary outputs use return values, tuples, or structs. Business errors follow §8's typed `throw` / `catch` channel; no global `Result<T,E>` is introduced. C ABI output locations use `MutPtr<T>` rather than an output parameter mode in ordinary Xray functions.
 
@@ -3600,7 +3600,7 @@ main()
 
 A copyable struct preserves logical copies according to the declared type of each field. Owned container fields such as Array retain value semantics; class and synchronized fields copy identity references only. Fields may be Arrays or classes. Structs are not restricted to scalars and strings, and copying a struct does not copy an entire class object graph. Fields still satisfy initialization, storage, and copyability requirements (§2.14.6).
 
-A struct / enum method that mutates its own value-semantic components explicitly uses a `ref` receiver. A READ receiver may save a copyable value but cannot mutate itself directly. Copyable types cannot declare `move` receivers. See §17 for implementation qualification of complete aggregate, receiver, and borrow declaration families.
+A struct / enum method that mutates its own value-semantic components explicitly uses a `ref` receiver. A READ receiver may save a copyable value but cannot mutate itself directly. A method acquiring ownership of its receiver may declare `move`, including for copyable types. See §17 for implementation qualification of complete aggregate, receiver, and borrow declaration families.
 
 ```ebnf
 StructDecl ::= 'struct' Identifier TypeParams?
@@ -4028,7 +4028,7 @@ print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
 
-Static methods use `static name(...)`. Instance methods have a READ receiver by default and use `ref` to mutate value-semantic components. A `move` receiver is restricted to noncopyable enums and is forbidden for copyable enums; see §17 for admission of noncopyable declarations. Enum methods do not write `fn`:
+Static methods use `static name(...)`. Instance methods have a READ receiver by default, use `ref` to mutate value-semantic components and `move` to acquire ownership. Both copyable and noncopyable enums may declare a `move` receiver; see §17 for qualification of complete declaration families. Enum methods do not write `fn`:
 
 ```xray
 enum Color {

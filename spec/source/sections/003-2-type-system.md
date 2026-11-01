@@ -1057,9 +1057,9 @@ print(len(a))               // 4
 
 #### 2.14.5 消费与尚未准入的表面
 
-不可复制资源的消费转移持有权和最终析构责任，调用是否消费由声明的参数或 receiver 模式决定。对这类转移，`move x` 是可选的显式标记；源绑定成功消费后不可再用，未被所有路径重新初始化的循环再次消费也必须拒绝。只读与 `ref` 借用不消费持有权。被拒绝的操作不能把有效源状态错误地标为已消费。
+消费参数或值类型的消费 receiver 转移持有权和最终析构责任，适用于可复制类型（包括 Array）与不可复制资源；class 方法不声明 receiver 模式。调用是否取得持有权由声明模式决定，不由具体 ABI 决定。默认模式下，可复制值仍可保留逻辑副本供调用后使用；显式 `move x` 则保证转移而不复制，源绑定失效，重新初始化前不可再用。未被所有相关路径重新初始化的循环再次消费也必须拒绝。READ 与 `ref` 参数本身是借用，不能被消费。被拒绝的操作不能把有效源状态错误地标为已消费。
 
-可复制类型（包括 Array）不能声明 `move` 参数或 receiver。通用 type-position `const T` 已删除，不产生类型身份或转换。独立的 `copy array` 使用前缀表达式拼写；可复制值是否另行允许独立的 `move x` 表达式，仍须在准入前单独确定。这些待定表面不阻塞普通 Array 复制；不得继承旧唯一根、堆逃逸终态或整个图深冻结规则作为默认答案。
+独立的 `move x` 仅接受当前函数的已初始化局部变量、局部常量或消费参数绑定；不接受字段、索引、调用结果、模块绑定或 READ/ref 参数，也不能穿过活动借用。非平凡值均可显式移动，平凡标量也允许，编译器可提示其没有收益。`copy array` 使用前缀表达式拼写，普通 Array 复制仍保留逻辑副本。通用 type-position `const T` 已删除，不产生类型身份或转换。当前声明族的实现资格见 §17；这些语言规则不授予尚未完成的消费、视图或资源入口，也不继承旧唯一根、堆逃逸终态或整个图深冻结规则。
 
 #### 2.14.6 struct 字段的复制与初始化
 
@@ -2202,9 +2202,9 @@ Ordinary closures capture outer `var` bindings through shared cells; `const` and
 
 #### 2.14.5 Consumption and unadmitted surfaces
 
-Consumption of a noncopyable resource transfers ownership and final destruction responsibility. Whether a call consumes is determined by the declared parameter or receiver mode; `move x` optionally marks such a transfer explicitly. Successful consumption makes the source binding unusable. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` borrows do not consume ownership. A rejected operation must not incorrectly mark a valid source as consumed.
+A consuming parameter or value-type receiver transfers ownership and final destruction responsibility for copyable types, including Array, as well as noncopyable resources. Class methods do not declare receiver modes. The declaration determines ownership acquisition, independently of the concrete ABI. In the default mode, a copyable argument may retain a logical copy for later caller use; explicit `move x` guarantees transfer without copying and invalidates the source binding until reinitialization. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` parameters are borrows and cannot themselves be consumed. A rejected operation must not incorrectly mark a valid source as consumed.
 
-Copyable types, including Array, cannot declare `move` parameters or receivers. The general type-position `const T` form is removed and creates no type identity or conversion. Ordinary `copy array` uses prefix-expression syntax. Whether a standalone `move x` expression is allowed for copyable values still requires a separate decision before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
+Standalone `move x` accepts only an initialized local variable, local constant or consuming parameter binding of the current function. Fields, indexes, call results, module bindings and READ/ref parameters are not valid sources, and an active borrow prevents transfer. All nontrivial values may be explicitly moved; trivial scalars are also allowed, with an optional no-benefit diagnostic. `copy array` uses prefix-expression syntax, and ordinary Array copying retains a logical copy. The general type-position `const T` form is removed and creates no type identity or conversion. See §17 for current declaration-family qualification: these language rules do not admit unfinished consumption, view or resource entry points or inherit old unique-root, terminal heap-escape or whole-graph deep-freeze rules.
 
 #### 2.14.6 Struct-field copying and initialization
 
