@@ -306,7 +306,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if (range && (op->args[1] > 65536u+(op->op==XR_XIR_SCOPED_GO) || op->args[0] > function->operand_count ||
         op->args[1] > function->operand_count - op->args[0] || (!op->args[1] && op->args[0])))
         return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus scope_status=task_scope_shape(function,op,module,context->control);
+    XrXirStatus scope_status=task_scope_shape(function,op,context);
     if(scope_status!=XR_XIR_OK)return scope_status;
     if (op->op == XR_XIR_CALL_INTRINSIC) {
         const XrNativeIntrinsicDeclaration *call = xr_xir_intrinsic(op->immediate);

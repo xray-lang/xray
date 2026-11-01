@@ -69,19 +69,37 @@ static bool source_task_scope(SourceContext *ctx,AstNode *node,bool marked) {
     SourceScopeScan scan={ctx,0,0};if(!source_scope_member(scope->body,&scan))return false;
     if(!scan.count)return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"scope has no direct go member; use an ordinary block");
     uint32_t frontier=body->frontier;
-    SourceTaskScope group={ctx->task_scope,ctx->function,{0},body->local_handler,XR_XIR_NEVER};
-    if(!source_scope_cleanup(ctx,node)||!source_task_type(ctx,node,XR_XIR_UNIT,XR_XIR_NEVER,&group.group.type)||
-        !source_recipe_append(ctx,(XrXirInstruction){XR_XIR_SCOPE_BEGIN,group.group.type,{0},{0},scope->scope_mode,{0}},&group.group))return false;
+    SourceTaskScope group={.parent=ctx->task_scope,.function=ctx->function,.handler=body->local_handler,
+        .body_error=XR_XIR_NEVER,.child_error=XR_XIR_NEVER,.mode=scope->scope_mode};
+    if(!source_scope_cleanup(ctx,node)||!source_task_type(ctx,node,XR_XIR_UNIT,XR_XIR_NEVER,&group.group.type))return false;
+    group.begin=body->count;
+    if(!source_recipe_append(ctx,(XrXirInstruction){XR_XIR_SCOPE_BEGIN,group.group.type,{0},{0},scope->scope_mode,{0}},&group.group))return false;
     ctx->task_scope=&group;bool ok=statement(ctx,scope->body,false);ctx->task_scope=group.parent;
     if(ok&&group.body_error!=XR_XIR_NEVER)
         ok=source_local_accept(ctx,node,group.body_error,marked||group.handler!=NULL,group.handler,false);
+    if(ok&&group.child_error!=XR_XIR_NEVER) {
+        ok=source_local_accept(ctx,node,group.child_error,marked||group.handler!=NULL,group.handler,false)&&
+            source_task_type(ctx,node,XR_XIR_UNIT,group.child_error,&group.group.type);
+        if(ok) {
+            if(body->region_sealed||group.begin>=body->count||
+                body->recipes[group.begin].instruction.op!=XR_XIR_SCOPE_BEGIN||
+                body->recipes[group.begin].value!=group.group.id)
+                return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"scope error bound has no unsealed owning producer");
+            /* This private token cannot escape. Its complete error bound is
+             * finalized before the owning recipe region can be sealed. */
+            body->recipes[group.begin].instruction.type=group.group.type;
+            body->recipes[group.begin].root.type=group.group.type;
+        }
+    }
     if(ok&&!ctx->returned) {
         uint32_t error=body->block_count;
         if(error==UINT32_MAX)return source_fail(ctx,node,XR_XIR_OVERFLOW,"scope continuation overflow");
         uint32_t origin=body->count;SourceValue caught;
         ok=source_recipe_append(ctx,(XrXirInstruction){XR_XIR_SCOPE_JOIN,XR_XIR_UNIT,{group.group.id},{error+1,error},0,{0}},NULL)&&begin_block(ctx)&&
-            source_recipe_append(ctx,(XrXirInstruction){XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},origin,{0}},&caught)&&
-            source_recipe_append(ctx,(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{caught.id},{0},0,{0}},NULL)&&begin_block(ctx)&&
+            source_recipe_append(ctx,(XrXirInstruction){XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},origin,{0}},&caught);
+        if(ok)ok=body->error_context?(source_error_edge(ctx,caught)&&source_handler_site(ctx,origin,caught.id)):
+            source_recipe_append(ctx,(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{caught.id},{0},0,{0}},NULL);
+        ok=ok&&begin_block(ctx)&&
             source_recipe_append(ctx,(XrXirInstruction){XR_XIR_CLEANUP_LEAVE,XR_XIR_UNIT,{0},{body->block_count},frontier,{0}},NULL);
         body->frontier=frontier;if(ok)ok=begin_block(ctx);
     } else body->frontier=frontier;

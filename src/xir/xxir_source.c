@@ -256,6 +256,8 @@ typedef struct SourceLoop { struct SourceLoop *parent; SourcePatch *breaks, *con
 typedef struct SourceTaskScope {
     struct SourceTaskScope *parent; uint32_t function; SourceValue group; SourceLocalHandler *handler;
     XrXirType body_error;
+    XrXirType child_error;
+    uint32_t begin,mode;
 } SourceTaskScope;
 struct SourceErrorEdge {
     struct SourceErrorEdge *next;

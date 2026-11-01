@@ -19,8 +19,9 @@ static XrXirStatus task_scope_origin(const XrXirFunction *function,uint32_t valu
     return XR_XIR_OK;
 }
 static XrXirStatus task_scope_shape(const XrXirFunction *function,const XrXirInstruction *op,
-    const XrXirModule *module,XrCompileRequestControl *control) {
+    VerifyContext *context) {
     if(op->op!=XR_XIR_SCOPE_BEGIN&&op->op!=XR_XIR_SCOPED_GO&&op->op!=XR_XIR_SCOPE_JOIN)return XR_XIR_OK;
+    const XrXirModule *module=context->module;XrCompileRequestControl *control=context->control;
     uint32_t origin=UINT32_MAX,value=0;
     XrXirType type=op->type;
     if(op->op!=XR_XIR_SCOPE_BEGIN) {
@@ -36,11 +37,17 @@ static XrXirStatus task_scope_shape(const XrXirFunction *function,const XrXirIns
     }
     const XrXirTypeNode *group=xr_xir_type_node(module->types,type);
     if(!group||group->kind!=XR_XIR_TYPE_TASK||group->element!=XR_XIR_UNIT)return XR_XIR_BAD_TYPE;
-    /* Non-Never propagation lands with its real Source and exit consumers. */
-    if(group->result!=XR_XIR_NEVER)return XR_XIR_UNSUPPORTED;
+    if(group->result==XR_XIR_UNIT)return XR_XIR_BAD_TYPE;
+    const XrXirInstruction *begin=origin==UINT32_MAX?op:function->instructions+origin;
+    if(begin->immediate==2&&group->result!=XR_XIR_NEVER)return XR_XIR_UNSUPPORTED;
+    XrXirProofContext proof={module,{XR_XIR_CONTEXT_FUNCTION,context->location.function,0}};
+    XrXirStatus error=xr_xir_compile_type_markers_prove(&context->remaining,&proof,group->result,
+        XR_XIR_CONSTRAINT_ERROR|XR_XIR_CONSTRAINT_SENDABLE);
+    if(error!=XR_XIR_OK)return error;
     if(op->op==XR_XIR_SCOPED_GO) {
         const XrXirTypeNode *child=xr_xir_type_node(module->types,op->type);
-        if(!child||child->kind!=XR_XIR_TYPE_TASK||child->result!=group->result)return XR_XIR_BAD_TYPE;
+        if(!child||child->kind!=XR_XIR_TYPE_TASK||
+            !xr_xir_error_bound_accepts(module->types,child->result,group->result))return XR_XIR_BAD_TYPE;
     }
     if(op->op==XR_XIR_SCOPE_BEGIN&&op->immediate!=0&&op->immediate!=2)return XR_XIR_BAD_STRUCTURE;
     if(op->op==XR_XIR_SCOPE_JOIN&&op->immediate!=0&&op->immediate!=1)return XR_XIR_BAD_STRUCTURE;

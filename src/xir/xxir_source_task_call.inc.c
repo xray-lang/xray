@@ -156,7 +156,12 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
         return source_fail(ctx,call,status,"Task worker declared error type must satisfy Sendable");
     XrXirInstruction op = {XR_XIR_GO, XR_XIR_UNIT, {0}, {0}, function, {0}};
     if(ctx->task_scope&&ctx->task_scope->function==ctx->function) {
-        if(error!=XR_XIR_NEVER)return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"scope child error propagation is not yet admitted");
+        SourceTaskScope *scope=ctx->task_scope;
+        if(error!=XR_XIR_NEVER&&scope->mode==XR_SOURCE_SCOPE_ISOLATED)
+            return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"isolated scope child error aggregation is not yet admitted");
+        XrXirCallableParameter errors[2]={{scope->child_error,XR_PARAM_READ},{error,XR_PARAM_READ}};
+        if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
+            .parameters=errors,.parameter_count=2},&scope->child_error))return false;
         if(prepared.count==UINT32_MAX)return source_fail(ctx,node,XR_XIR_OVERFLOW,"scoped argument count overflow");
         SourceValue *arguments=source_alloc(ctx,(size_t)prepared.count+1,sizeof(*arguments));if(!arguments)return false;
         arguments[0]=ctx->task_scope->group;
