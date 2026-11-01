@@ -139,7 +139,7 @@ def main():
             *[str(source/path) for path in manifest['archives']],
             *[name+'.lib' for name in recipe['system_libraries']], '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
         old_stdout = run('previous-api4-'+language+'-run', [old_exe, stdlib])
-        assert old_stdout.replace(b'\r\n', b'\n') == b'Previous Source API4 header: old execute rejected with empty owners PASS\n'
+        assert old_stdout.replace(b'\r\n', b'\n') == b'Previous Source API4 header: old execute and invoke rejected with empty owners PASS\n'
     assert not list(stdlib.rglob('*.xr')) and not list(stdlib.rglob('*.chk'))
     if args.consumers_only:
         assert len(records) == 16

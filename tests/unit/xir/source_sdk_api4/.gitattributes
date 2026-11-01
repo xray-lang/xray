@@ -1,3 +1,5 @@
 # Keep the authenticated installed CRLF headers byte-for-byte on every checkout.
 xray_source.h -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 xray_export.h -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+xray_source_entry.h -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+xray_source_value.h -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

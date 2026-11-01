@@ -10,7 +10,7 @@
  *   The Windows x64 customer keeps its original public prototype and empty
  *   output contract. The test makes no cross-platform prototype guarantee.
  */
-#include "xray_source.h"
+#include "xray_source_entry.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,11 +24,14 @@ _Static_assert(XRAY_SOURCE_API_VERSION==4 && XRAY_SOURCE_EXECUTION_ABI_VERSION==
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"previous Source header %d: %s\n",__LINE__,#c);exit(1);}} while (0)
 typedef XrSourceStatus (*PreviousExecute)(XrSourceExecution *,XrSourceArtifact *,
     const XrSourceCallOptions *,XrSourceResult **,XrSourceEvent *);
+typedef XrSourceStatus (*PreviousInvoke)(XrSourceExecution *,XrSourceArtifact *,const XrSourceInvocation *,
+    const XrSourceCallOptions *,XrSourceResult **,XrSourceEvent *);
 int main(int argc,char **argv) {
     CHECK(argc==2);
     XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=argv[1];
     XrSourceInput input;memset(&input,0,sizeof(input));input.kind=XR_SOURCE_INPUT_TEXT;
-    input.value.text.namespace_id="api4_previous";input.value.text.bytes="assert(40 + 2 == 42)\n";
+    input.value.text.namespace_id="api4_previous";
+    input.value.text.bytes="assert(40 + 2 == 42)\nexport fn answer()->i64{return 42}\n";
     input.value.text.length=strlen(input.value.text.bytes);
     XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *diagnostic=NULL;XrSourceFailure build_failure;
     memset(&build_failure,0,sizeof(build_failure));
@@ -59,6 +62,14 @@ int main(int argc,char **argv) {
     CHECK(execute(execution,artifact,&call,&owner.result,&failure)==XR_SOURCE_BAD_ARGUMENT);
     CHECK(!owner.result && owner.before==UINT64_C(0x1122334455667788) && owner.after==UINT64_C(0x8877665544332211));
     CHECK(!memcmp(&failure,&prior,sizeof(failure)));
+    XrSourceInvocation invocation;
+    CHECK(xray_source_invocation_init(&invocation,sizeof(invocation))==XR_SOURCE_OK);
+    invocation.name="answer";invocation.name_length=6;
+    CHECK(!invocation.arguments && !invocation.argument_count);
+    PreviousInvoke invoke=xray_source_invoke;
+    CHECK(invoke(execution,artifact,&invocation,&call,&owner.result,&failure)==XR_SOURCE_BAD_ARGUMENT);
+    CHECK(!owner.result && owner.before==UINT64_C(0x1122334455667788) && owner.after==UINT64_C(0x8877665544332211));
+    CHECK(!memcmp(&failure,&prior,sizeof(failure)));
     xray_source_artifact_free(artifact);xray_source_execution_free(execution);
-    puts("Previous Source API4 header: old execute rejected with empty owners PASS");return 0;
+    puts("Previous Source API4 header: old execute and invoke rejected with empty owners PASS");return 0;
 }

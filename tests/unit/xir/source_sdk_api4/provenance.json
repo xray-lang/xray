@@ -12,6 +12,16 @@
       "path": "xray_export.h",
       "bytes": 916,
       "sha256": "936bf998ae100a62bef896616390a1b5a3d2628be4543dccf7614a7ddeb5fa72"
+    },
+    {
+      "path": "xray_source_entry.h",
+      "bytes": 2621,
+      "sha256": "16a494f47fac4796fe434ca13a1ab720ddddb394aec725e3128b942b2c79f81b"
+    },
+    {
+      "path": "xray_source_value.h",
+      "bytes": 4833,
+      "sha256": "e67fdcdf6bffa9261f87ac742a834e44e6b5c2196694e3ebe1df34507f8f4e22"
     }
   ],
   "installed_manifest_sha256": "49a63f7c19856f50e17c2fdec94555efda5664f1724f3d389c053957f318eb08",
