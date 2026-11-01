@@ -29,6 +29,7 @@
 #include "xxir_types.h"
 #include "xxir_task_result.h"
 #include "xxir_array.h"
+#include "xxir_fixed_array.h"
 #include "xxir_struct.h"
 #include "xxir_class.h"
 #include "xxir_enum.h"
@@ -329,7 +330,7 @@ static uint32_t object_storage_kind(uint32_t node_kind) {
 static bool value_object_kind_known(uint32_t kind) {
     return !kind || kind == XIR_OBJECT_BUFFER_STORAGE || kind == XIR_OBJECT_CLASS || kind == XIR_OBJECT_CELL ||
         kind == XIR_OBJECT_FUNCTION || kind == XR_XIR_TYPE_ARRAY ||
-        kind == XR_XIR_TYPE_PTR || kind == XR_XIR_TYPE_MUT_PTR ||
+        kind == XR_XIR_TYPE_PTR || kind == XR_XIR_TYPE_MUT_PTR || kind==XR_XIR_TYPE_FIXED_ARRAY ||
         kind == XR_XIR_TYPE_NOMINAL || kind == XR_XIR_TYPE_NULLABLE ||
         kind == XR_XIR_TYPE_TUPLE || kind == XR_XIR_TYPE_ATOMIC || kind == XR_XIR_TYPE_TASK || kind == XR_XIR_TYPE_ITERATOR || kind == XR_XIR_TYPE_CHANNEL ||
         kind == XR_XIR_TYPE_MAP || kind == XR_XIR_TYPE_SET || kind==XR_XIR_TYPE_SLICE || kind==XR_XIR_TYPE_MUT_SLICE;
@@ -371,7 +372,7 @@ static bool value_header_valid(const XrXirValue *value) {
     return node && !node->parameter_span && object_storage_kind(node->kind) == object->kind &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_ARRAY ||
          node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
-         node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR ||
+         node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR || node->kind==XR_XIR_TYPE_FIXED_ARRAY ||
          node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
          node->kind == XR_XIR_TYPE_SLICE || node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR ||
          (node->kind == XR_XIR_TYPE_CHANNEL && ((XirChannel *)object)->element ==
@@ -430,6 +431,11 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
     if (!value_header_valid(value)) return false;
     if (!owned_carrier_type((XrXirType) value->type)) return true;
     XirObject *object = object_pointer(value);
+    if(object->kind==XR_XIR_TYPE_FIXED_ARRAY) {
+        const XirFixedArray *fixed=(const XirFixedArray *)object;
+        uint32_t length=xr_xir_fixed_array_length(xr_xir_compile_type_arena_types(object->arena),object->type);
+        return length && length==fixed->length && fixed->bytes==(const uint8_t *)(fixed+1);
+    }
     if (object->kind == XIR_OBJECT_BUFFER_STORAGE) {
         const XirBufferStorage *storage=(const XirBufferStorage *)object;
         return (storage->length != 0) == (storage->data != NULL) &&
@@ -1139,6 +1145,9 @@ static void release_pending(XirObject *pending) {
                 class_release_fields(object,layout->field_count,&pending);
             }
             class_storage_deallocate((XirClassObject *)object, false, 0, XR_XIR_VALUE_OK);
+        } else if(object->kind==XR_XIR_TYPE_FIXED_ARRAY) {
+            XirFixedArray *fixed=(XirFixedArray *)object;
+            xr_xir_domain_deallocate(domain,fixed,sizeof(*fixed)+(size_t)fixed->length);
         } else if (object->kind == XR_XIR_TYPE_TUPLE) {
             XirTuple *tuple=(XirTuple *)object;
             for (uint32_t i=object->graph_dead ? 0 : tuple->count;i;--i) queue_release(&tuple->fields[i-1],&pending);
@@ -1523,6 +1532,7 @@ static bool admission_owner(const XrXirValueAdmission *admission,
 #include "xxir_value_admission.inc.c"
 #include "xxir_nullable_value.inc.c"
 #include "xxir_tuple_value.inc.c"
+#include "xxir_fixed_array_value.inc.c"
 #include "xxir_atomic_value.inc.c"
 #include "xxir_channel_value.inc.c"
 static XrXirValueStatus xr_xir_function_new_graph_operation(XrXirDomain *domain, XrXirTypeArena *arena,

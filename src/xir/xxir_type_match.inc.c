@@ -171,7 +171,7 @@ static XrXirStatus type_match_pair(TypeMatchContext *c,XrXirType expected,
         bool identity=c->nominal_match ? c->nominal_match(c->owner,c->source_types,from,c->types,to) :
             from->nominal.declaration==to->nominal.declaration;
         if (!identity || from->nominal.argument_count!=to->nominal.argument_count) return XR_XIR_BAD_TYPE;
-    } else if (from->kind!=XR_XIR_TYPE_ARRAY && from->kind!=XR_XIR_TYPE_CELL &&
+    } else if (from->kind!=XR_XIR_TYPE_FIXED_ARRAY && from->kind!=XR_XIR_TYPE_ARRAY && from->kind!=XR_XIR_TYPE_CELL &&
         from->kind!=XR_XIR_TYPE_CALLABLE && from->kind!=XR_XIR_TYPE_NULLABLE && from->kind!=XR_XIR_TYPE_TUPLE &&
         from->kind!=XR_XIR_TYPE_ATOMIC && from->kind!=XR_XIR_TYPE_TASK && from->kind!=XR_XIR_TYPE_MAP &&
         from->kind!=XR_XIR_TYPE_SET && from->kind!=XR_XIR_TYPE_SLICE && from->kind!=XR_XIR_TYPE_MUT_SLICE &&

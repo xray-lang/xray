@@ -2292,6 +2292,8 @@ def unique_vm_binding_entries(entries: list[StdlibEntry]) -> list[StdlibEntry]:
     seen: dict[tuple[str, str], tuple[str, str, str]] = {}
     unique: list[StdlibEntry] = []
     for e in entries:
+        if not e.vm:
+            continue
         key = (e.module, e.name)
         existing = seen.get(key)
         if existing is not None:

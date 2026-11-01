@@ -103,7 +103,7 @@ static bool source_intern_type_raw(SourceContext *ctx, XrXirTypeNode node, XrXir
             node.kind == XR_XIR_TYPE_CALLABLE ? node.element : node.result);
         if (value_span > span) span = value_span;
     }
-    for (uint32_t p = 0; p < node.parameter_count; ++p) {
+    for (uint32_t p = 0; p < xr_xir_type_parameter_slots(&node); ++p) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (!node.parameters[p].type && node.kind != XR_XIR_TYPE_TUPLE)
             return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "callable parameter must be a value type");
@@ -130,7 +130,7 @@ static bool source_intern_type_raw(SourceContext *ctx, XrXirTypeNode node, XrXir
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (s->nominal.arguments[a] != node.nominal.arguments[a]) same = false;
         }
-        for (uint32_t p = 0; p < node.parameter_count; ++p) {
+        for (uint32_t p = 0; p < xr_xir_type_parameter_slots(&node); ++p) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (s->parameters[p].type != node.parameters[p].type ||
                 s->parameters[p].mode != node.parameters[p].mode) same = false;

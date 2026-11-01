@@ -66,9 +66,10 @@ static XrXirValueStatus arena_pool_walk(
         if (!((&cursor)->status == XR_XIR_VALUE_OK)) break;
         const XrXirTypeNode *source = &types->nodes[i];
         if (source->parameter_span) return XR_XIR_VALUE_BAD_ARGUMENT;
-        XrXirCallableParameter *parameters = arena_nominal_span(&cursor, source->parameter_count,
+        uint32_t slots=xr_xir_type_parameter_slots(source);
+        XrXirCallableParameter *parameters = arena_nominal_span(&cursor, slots,
             sizeof(*parameters), _Alignof(XrXirCallableParameter));
-        uint64_t parameter_bytes = (uint64_t)source->parameter_count * sizeof(*parameters);
+        uint64_t parameter_bytes = (uint64_t)slots * sizeof(*parameters);
         if (nodes && ((&cursor)->status == XR_XIR_VALUE_OK)) {
             nodes[i] = *source;
             nodes[i].parameters = parameters;

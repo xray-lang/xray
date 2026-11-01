@@ -92,7 +92,9 @@ static XrXirValueStatus type_needs_admission(const XrXirTypes *types, XrXirType 
             (node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL)) {
             *needed = true; return XR_XIR_VALUE_OK;
         }
-        if (node->kind == XR_XIR_TYPE_SET) { *needed = false; return XR_XIR_VALUE_OK; }
+        if (node->kind == XR_XIR_TYPE_SET || node->kind==XR_XIR_TYPE_FIXED_ARRAY) {
+            *needed = false; return XR_XIR_VALUE_OK;
+        }
         /* Nullable adds no execution authority beyond its element type. */
         if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_MAP &&
             node->kind != XR_XIR_TYPE_NULLABLE) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -199,7 +201,9 @@ static XrXirValueStatus value_admit_summary_mode(const XrXirValue *value, XrXirT
             status = XR_XIR_VALUE_LIMIT; break;
         }
         if (!admission_is_compile(admission)) --admission->work;
-        if (inlined && inline_nominal_type(xr_xir_compile_type_arena_types(arena), type)) {
+        if(inlined && xr_xir_type_is_fixed_array(xr_xir_compile_type_arena_types(arena),type)) {
+            if(!span.bytes || !admission->domain) {status=XR_XIR_VALUE_BAD_ARGUMENT;break;}
+        } else if (inlined && inline_nominal_type(xr_xir_compile_type_arena_types(arena), type)) {
             status = admission_inline(&stack, span,arena,admission);
             if (status != XR_XIR_VALUE_OK) break;
         } else {
@@ -257,6 +261,8 @@ static XrXirValueStatus value_admit_summary_mode(const XrXirValue *value, XrXirT
                         }
                     }
                     if (status != XR_XIR_VALUE_OK) break;
+                } else if(object->kind==XR_XIR_TYPE_FIXED_ARRAY) {
+                    if(!admission->domain) {status=XR_XIR_VALUE_BAD_ARGUMENT;break;}
                 } else if (object->kind==XR_XIR_TYPE_TUPLE) {
                     if (!admission->domain) {status=XR_XIR_VALUE_BAD_ARGUMENT;break;}
                     count=((XirTuple *)object)->count;

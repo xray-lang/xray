@@ -145,7 +145,7 @@ int main(int argc,char **argv) {
  memset(packet.bytes,0x5a,packet.length);xr_xir_compile_checked_packet_free(&packet);
  XrXirDiagnostic issue={0};status=xr_xir_compile_specialize(checked,&closed,&issue,NULL);
  fprintf(stderr,"Specialize%u f%u b%u i%u\n",status,issue.function,issue.block,issue.instruction);CHECK(status==XR_XIR_OK);
- xr_xir_compile_artifact_free(checked);const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+ xr_xir_compile_artifact_free(checked);const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
  CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,&issue)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
  uint32_t selected=xr_xir_compile_artifact_module(lowered)->declarations->entry_function;
  if(argc==2) source_controls(&context,argv[1]);

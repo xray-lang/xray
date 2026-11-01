@@ -63,6 +63,11 @@ typedef struct XirTuple {
     uint32_t count;
     XrXirValue *fields;
 } XirTuple;
+typedef struct XirFixedArray {
+    XirObject object;
+    uint32_t length;
+    uint8_t *bytes;
+} XirFixedArray;
 typedef struct XirHash {
     XirObject object;
     XrXirType key_type, value_type;

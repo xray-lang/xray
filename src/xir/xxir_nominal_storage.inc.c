@@ -107,7 +107,8 @@ static XrXirStatus nominal_storage_walk(const XrXirTypes *types, const XrXirTarg
         } else {
             status = xr_xir_compile_layout(budget, types, field, target, XR_XIR_LAYOUT_STORAGE, &physical);
             if (status != XR_XIR_OK) break;
-            if (xr_xir_type_is_owned(types, field) && !current->owned_depth) current->owned_depth = 1;
+            if (xr_xir_type_is_owned(types, field) && !xr_xir_type_is_fixed_array(types,field) &&
+                !current->owned_depth) current->owned_depth = 1;
         }
         uint32_t offset = 0;
         if (!nominal_storage_align(current->layout.size, physical.alignment, &offset) ||

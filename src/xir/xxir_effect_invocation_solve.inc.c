@@ -541,7 +541,7 @@ static XrXirStatus effect_invocation_local_type(EffectInvocationLocalRead *read,
             if (status==XR_XIR_OK && node->result!=XR_XIR_NEVER)
                 status=effect_invocation_local_type_edge(read,node->result,i,&value_span);
             if (value_span>span) span=value_span;
-        } else if (node->kind==XR_XIR_TYPE_ARRAY || node->kind==XR_XIR_TYPE_SET || node->kind==XR_XIR_TYPE_CELL ||
+        } else if (node->kind==XR_XIR_TYPE_FIXED_ARRAY || node->kind==XR_XIR_TYPE_ARRAY || node->kind==XR_XIR_TYPE_SET || node->kind==XR_XIR_TYPE_CELL ||
             node->kind==XR_XIR_TYPE_SLICE || node->kind==XR_XIR_TYPE_MUT_SLICE ||
             node->kind==XR_XIR_TYPE_PTR || node->kind==XR_XIR_TYPE_MUT_PTR ||
             node->kind==XR_XIR_TYPE_NULLABLE || node->kind==XR_XIR_TYPE_ATOMIC ||

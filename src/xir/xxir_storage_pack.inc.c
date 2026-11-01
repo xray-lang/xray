@@ -27,6 +27,17 @@ typedef struct StoragePack {
 static XrXirValueStatus storage_pack_leaf(StoragePack *pack,
     XrXirType type,const XrXirValue *value,unsigned char *bytes) {
     XrXirLayout layout = {0};
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(pack->admission->arena);
+    if(xr_xir_type_is_fixed_array(types,type)) {
+        if(!bytes || !xr_xir_value_argument(value,pack->admission->arena,type))return XR_XIR_VALUE_BAD_ARGUMENT;
+        const XirFixedArray *fixed=(const XirFixedArray *)object_pointer(value);
+        if(!admission_is_compile(pack->admission)) {
+            if(fixed->length>pack->admission->work || !xr_xir_domain_work(pack->admission->domain,fixed->length))
+                return XR_XIR_VALUE_LIMIT;
+            pack->admission->work-=fixed->length;
+        }
+        memcpy(bytes,fixed->bytes,fixed->length);return XR_XIR_VALUE_OK;
+    }
     if (!xr_xir_compile_type_arena_layout(pack->admission->arena,type,&layout) ||
         layout.size > sizeof(value->payload) || (layout.size && !bytes)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue owned = {0};

@@ -31,11 +31,12 @@ static XrXirStatus effect_terms_seed(EffectTerms *pool, const XrXirTypes *source
     for (uint32_t i=0;i<source->count;++i) {
 
         XrXirTypeNode node=source->nodes[i];
-        if (node.parameter_count) {
-            XrXirCallableParameter *parameters=effect_terms_alloc(pool,node.parameter_count,sizeof(*parameters));
+        uint32_t slots=xr_xir_type_parameter_slots(&node);
+        if (slots) {
+            XrXirCallableParameter *parameters=effect_terms_alloc(pool,slots,sizeof(*parameters));
             if (!parameters) return pool->status;
 
-            memcpy(parameters,node.parameters,(size_t)node.parameter_count*sizeof(*parameters));
+            memcpy(parameters,node.parameters,(size_t)slots*sizeof(*parameters));
             node.parameters=parameters;
         }
         if (node.nominal.argument_count) {

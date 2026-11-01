@@ -2515,6 +2515,7 @@ set_tests_properties(test_xr_program_aot_provider_output PROPERTIES
     LABELS "unit;aot;canonical-program;generated-c;native;provider;pure-aot;task-300")
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/rune_text_output.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/fixed_bytes.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/source_copy.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/array_binding.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/nominal_inference.cmake)

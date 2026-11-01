@@ -46,8 +46,8 @@ static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b) {
         MATCH(x->kind, y->kind); MATCH(x->element, y->element);
         MATCH(x->parameter_count, y->parameter_count); MATCH(x->result, y->result);
         MATCH(x->flags, y->flags); MATCH(x->parameter_span, y->parameter_span);
-        if (x->parameter_count && (!x->parameters || !y->parameters)) return XR_XIR_BAD_STRUCTURE;
-        for (uint32_t p = 0; p < x->parameter_count; ++p) {
+        if (xr_xir_type_parameter_slots(x) && (!x->parameters || !y->parameters)) return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t p = 0; p < xr_xir_type_parameter_slots(x); ++p) {
             MATCH(x->parameters[p].type, y->parameters[p].type);
             MATCH(x->parameters[p].mode, y->parameters[p].mode);
         }

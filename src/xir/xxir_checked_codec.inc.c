@@ -468,6 +468,11 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
             s.result = (XrXirType) checked_u32(c, (uint32_t) s.result);
             s.element = (XrXirType) checked_u32(c, (uint32_t) s.element);
             s.flags = checked_u32(c, s.flags);
+        } else if (s.kind==XR_XIR_TYPE_FIXED_ARRAY) {
+            s.element=(XrXirType)checked_u32(c,(uint32_t)s.element);
+            s.parameter_count=checked_u32(c,s.parameter_count);
+            if(s.element!=XR_XIR_U8 || !s.parameter_count || s.parameter_count>65535)
+                c->status=XR_XIR_BAD_TYPE;
         } else if ((s.kind == XR_XIR_TYPE_TUPLE || s.kind == XR_XIR_TYPE_UNION)) {
             s.parameter_count = checked_count(c, s.parameter_count, &c->structural.parameters, 4);
             XrXirCallableParameter *fields = checked_array(c, s.parameters, s.parameter_count, sizeof(*fields), 4);

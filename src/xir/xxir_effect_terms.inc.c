@@ -147,7 +147,7 @@ static bool effect_term_same( const XrXirTypeNode *a, const XrXirTypeNode *b) {
         a->result != b->result || a->parameter_count != b->parameter_count ||
         a->nominal.declaration != b->nominal.declaration ||
         a->nominal.argument_count != b->nominal.argument_count) return false;
-    for (uint32_t i = 0; i < a->parameter_count; ++i)
+    for (uint32_t i = 0; i < xr_xir_type_parameter_slots(a); ++i)
         if (a->parameters[i].type != b->parameters[i].type || a->parameters[i].mode != b->parameters[i].mode)
             return false;
     for (uint32_t i = 0; i < a->nominal.argument_count; ++i)
@@ -175,10 +175,11 @@ static XrXirType effect_term_intern_raw(EffectTerms *pool, XrXirTypeNode node) {
         {  memcpy(arguments, node.nominal.arguments, (size_t)node.nominal.argument_count * sizeof(*arguments)); }
         node.nominal.arguments = arguments;
     }
-    if (node.parameter_count) {
-        XrXirCallableParameter *parameters = effect_terms_alloc(pool, node.parameter_count, sizeof(*parameters));
+    uint32_t slots=xr_xir_type_parameter_slots(&node);
+    if (slots) {
+        XrXirCallableParameter *parameters = effect_terms_alloc(pool, slots, sizeof(*parameters));
         if (!parameters) return XR_XIR_UNIT;
-        {  memcpy(parameters, node.parameters, (size_t)node.parameter_count * sizeof(*parameters)); }
+        {  memcpy(parameters, node.parameters, (size_t)slots * sizeof(*parameters)); }
         node.parameters = parameters;
     }
     node.nominal.fields = NULL; node.nominal.field_count = 0;

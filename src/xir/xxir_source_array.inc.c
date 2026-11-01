@@ -340,7 +340,8 @@ static bool source_length(SourceContext *ctx, AstNode *node,
     bool range=source_range_is(ctx,array.type);
     if(ctx->diagnostic.status!=XR_XIR_OK) return false;
     if (array.type != XR_XIR_STRING && !xr_xir_type_is_array(&ctx->types, array.type) &&
-        !xr_xir_type_is_map(&ctx->types, array.type) && !xr_xir_type_is_set(&ctx->types, array.type) && !view && !range)
+        !xr_xir_type_is_map(&ctx->types, array.type) && !xr_xir_type_is_set(&ctx->types, array.type) &&
+        !xr_xir_type_is_fixed_array(&ctx->types,array.type) && !view && !range)
         return source_mem_length(ctx,node,array,value);
     if (!ctx->length_declaration) {
         XrXirSourceQueryModule *modules = source_query_append(ctx, ctx->query.modules,
@@ -361,7 +362,7 @@ static bool source_length(SourceContext *ctx, AstNode *node,
         record->type = (XrXirSourceType) {XR_XIR_I64, 0, true};
         record->parameters = parameter; record->parameter_count = 1;
     }
-    return (range?source_range_length(ctx,node,array,value):source_recipe_record(ctx, (XrXirInstruction) {view ? XR_XIR_VIEW_LEN : array.type == XR_XIR_STRING ? XR_XIR_STRING_LEN : xr_xir_type_is_array(&ctx->types, array.type) ? XR_XIR_ARRAY_LEN : XR_XIR_HASH_LEN, XR_XIR_I64, {array.id, 0}, {0}, 0, {0}}, value)) &&
+    return (range?source_range_length(ctx,node,array,value):source_recipe_record(ctx, (XrXirInstruction) {view ? XR_XIR_VIEW_LEN : array.type == XR_XIR_STRING ? XR_XIR_STRING_LEN : xr_xir_type_is_fixed_array(&ctx->types,array.type) ? XR_XIR_FIXED_ARRAY_LEN : xr_xir_type_is_array(&ctx->types, array.type) ? XR_XIR_ARRAY_LEN : XR_XIR_HASH_LEN, XR_XIR_I64, {array.id, 0}, {0}, 0, {0}}, value)) &&
         source_query_target_token_reference(ctx,call->callee,
             ctx->length_declaration, XR_XIR_SOURCE_CALL);
 }

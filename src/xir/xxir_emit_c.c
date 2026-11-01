@@ -852,6 +852,7 @@ static void emit_tuple_step(CBuffer *buffer,const XrXirFunction *function,
     else if (op->type!=XR_XIR_UNIT) EMIT_FORMAT(buffer, et_2ab808f49ceeebf8, " xr_xir_scalar_store(state->frame, %uu, value.payload);\n",destination);
     EMIT_STATIC(buffer, es_babd64ba6b0681db," }\n return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n");
 }
+#include "xxir_emit_fixed_array.inc.c"
 static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination) {
     if (op->op == XR_XIR_STRUCT_SET) {
@@ -1277,6 +1278,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     }
     if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_TUPLE_FIELD) {
         emit_tuple_step(buffer,function,op,layout,destination);return;
+    }
+    if(op->op>=XR_XIR_FIXED_ARRAY_NEW && op->op<=XR_XIR_FIXED_ARRAY_LEN) {
+        emit_fixed_array_step(buffer,function,op,layout,destination,index);return;
     }
     if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
         (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||
@@ -1899,9 +1903,9 @@ static void emit_types(CBuffer *buffer, const XrXirTypes *types, const char *pre
         const XrXirTypeNode *node = &types->nodes[i];
         emit_type_ids(buffer, prefix, i, "nominal_arguments", node->nominal.arguments, node->nominal.argument_count);
         emit_type_ids(buffer, prefix, i, "nominal_types", node->nominal.fields, node->nominal.field_count);
-        if (!node->parameter_count) continue;
+        if (!xr_xir_type_parameter_slots(node)) continue;
         EMIT_FORMAT(buffer, et_952ab3861223aaad, "static const XrXirCallableParameter %s_type_parameters_%u[] = {", prefix, i);
-        for (uint32_t p = 0; p < node->parameter_count && ((buffer)->status == XR_XIR_OK); ++p)
+        for (uint32_t p = 0; p < xr_xir_type_parameter_slots(node) && ((buffer)->status == XR_XIR_OK); ++p)
             append(buffer, "%s{(XrXirType) %u, %uu}", p ? ", " : "", (uint32_t) node->parameters[p].type, node->parameters[p].mode);
         EMIT_LITERAL(buffer, "};\n");
     }
@@ -1909,7 +1913,7 @@ static void emit_types(CBuffer *buffer, const XrXirTypes *types, const char *pre
     for (uint32_t i = 0; i < types->count && ((buffer)->status == XR_XIR_OK); ++i) {
         const XrXirTypeNode *node = &types->nodes[i];
         append(buffer, "    {%uu, (XrXirType) %u, ", node->kind, (uint32_t) node->element);
-        if (node->parameter_count) append(buffer, "%s_type_parameters_%u", prefix, i); else EMIT_LITERAL(buffer, "NULL");
+        if (xr_xir_type_parameter_slots(node)) append(buffer, "%s_type_parameters_%u", prefix, i); else EMIT_LITERAL(buffer, "NULL");
         append(buffer, ", %uu, (XrXirType) %u, %uu, %uu, {%uu, ", node->parameter_count,
             (uint32_t) node->result, node->flags, node->parameter_span, node->nominal.declaration);
         if (node->nominal.argument_count) append(buffer, "%s_nominal_arguments_%u", prefix, i); else EMIT_LITERAL(buffer, "NULL");
@@ -2072,6 +2076,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     EMIT_LITERAL(buffer,"#include \"xir/xxir_call_view_moves_internal.h\"\n");
     append(buffer,"#include \"xir/xxir_call_take_internal.h\"\n");
     append(buffer,"_Static_assert(XIR_CALL_NATIVE_SOURCE_VERSION==%uu,\"native source observation version\");\n",XIR_CALL_NATIVE_SOURCE_VERSION);
+    EMIT_LITERAL(buffer,"#include \"xir/xxir_fixed_array.h\"\n");
     EMIT_FORMAT(buffer, et_3a8a16cd770e8ec2, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_generator_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"

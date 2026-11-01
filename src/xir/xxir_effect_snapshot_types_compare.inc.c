@@ -127,7 +127,7 @@ static XrXirStatus effect_body_type_nodes_compare(
     for (uint32_t t=0;t<a->count && status==XR_XIR_OK;++t) {
         const XrXirTypeNode *x=&a->nodes[t],*y=&b->nodes[t];
 
-        if ((x->parameter_count && !x->parameters) || (y->parameter_count && !y->parameters) ||
+        if ((xr_xir_type_parameter_slots(x) && !x->parameters) || (xr_xir_type_parameter_slots(y) && !y->parameters) ||
             (x->nominal.argument_count && !x->nominal.arguments) || (y->nominal.argument_count && !y->nominal.arguments) ||
             (x->nominal.field_count && !x->nominal.fields) || (y->nominal.field_count && !y->nominal.fields))
             return XR_XIR_BAD_STRUCTURE;
@@ -135,7 +135,7 @@ static XrXirStatus effect_body_type_nodes_compare(
             x->parameter_span!=y->parameter_span || x->parameter_count!=y->parameter_count ||
             x->nominal.declaration!=y->nominal.declaration || x->nominal.argument_count!=y->nominal.argument_count ||
             x->nominal.field_count!=y->nominal.field_count) return effect_body_difference(same);
-        for (uint32_t p=0;p<x->parameter_count;++p) {
+        for (uint32_t p=0;p<xr_xir_type_parameter_slots(x);++p) {
 
             if (x->parameters[p].mode!=y->parameters[p].mode || x->parameters[p].type!=y->parameters[p].type) {
                 XrXirStatus difference=effect_body_difference(same);

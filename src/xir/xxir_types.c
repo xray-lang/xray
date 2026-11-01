@@ -210,7 +210,7 @@ bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return type == XR_XIR_STRING || type == XR_XIR_BUFFER_STORAGE || type == XR_XIR_ERROR ||
         type == XR_XIR_PANIC_INFO || (node && (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
-                  node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL ||
+                  node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL || node->kind==XR_XIR_TYPE_FIXED_ARRAY ||
                   node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
                   node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
                   node->kind == XR_XIR_TYPE_SLICE || (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL || node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR)));
@@ -218,6 +218,14 @@ bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type) {
 XR_FUNC const XrXirTypeNode *xr_xir_tuple_signature(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && node->kind == XR_XIR_TYPE_TUPLE ? node : NULL;
+}
+XR_FUNC bool xr_xir_type_is_fixed_array(const XrXirTypes *types,XrXirType type) {
+    const XrXirTypeNode *node=xr_xir_type_node(types,type);
+    return node && node->kind==XR_XIR_TYPE_FIXED_ARRAY;
+}
+XR_FUNC uint32_t xr_xir_fixed_array_length(const XrXirTypes *types,XrXirType type) {
+    const XrXirTypeNode *node=xr_xir_type_node(types,type);
+    return node && node->kind==XR_XIR_TYPE_FIXED_ARRAY ? node->parameter_count : 0;
 }
 const XrXirTypeNode *xr_xir_callable_signature(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -253,7 +261,7 @@ static bool type_component(const XrXirTypes *types, XrXirType type, uint32_t ear
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) return true;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && id - XR_XIR_CONSTRUCTED_TYPE_BASE < earlier &&
-        (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
+        (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY || node->kind==XR_XIR_TYPE_FIXED_ARRAY ||
          node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
          node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
          node->kind == XR_XIR_TYPE_SLICE || (node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL || node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR));
@@ -322,6 +330,9 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
             uint32_t component = xr_xir_type_span(types, member);
             if (component > span) span = component;
         }
+    } else if (node->kind == XR_XIR_TYPE_FIXED_ARRAY) {
+        if(node->element!=XR_XIR_U8 || !node->parameter_count || node->parameter_count>65535 ||
+            node->parameters || node->result!=XR_XIR_UNIT || node->flags) return XR_XIR_BAD_TYPE;
     } else if (node->kind == XR_XIR_TYPE_TUPLE) {
         if (node->element != XR_XIR_UNIT || node->result != XR_XIR_UNIT || node->flags)
             return XR_XIR_BAD_STRUCTURE;
@@ -416,7 +427,7 @@ static XrXirStatus type_unique(const XrXirTypes *types, uint32_t index) {
 
 
         bool same = true;
-        for (uint32_t p = 0; p < node->parameter_count; ++p)
+        for (uint32_t p = 0; p < xr_xir_type_parameter_slots(node); ++p)
             if (node->parameters[p].type != previous->parameters[p].type ||
                 node->parameters[p].mode != previous->parameters[p].mode) same = false;
 
@@ -462,7 +473,7 @@ XrXirStatus xr_xir_compile_types_parameter_count(const XrXirCompileContext *cont
     if (types) {
         for (uint32_t i = 0; i < types->count; ++i) {
             const XrXirTypeNode *node = &types->nodes[i];
-            uint64_t slots = (uint64_t)node->parameter_count + node->nominal.argument_count + node->nominal.field_count;
+            uint64_t slots = (uint64_t)xr_xir_type_parameter_slots(node) + node->nominal.argument_count + node->nominal.field_count;
             if (!type_parameter_count_add(context, &total, slots)) return XR_XIR_BUDGET;
         }
         if (types->nominals) {
@@ -523,7 +534,7 @@ XR_FUNC XrXirStatus xr_xir_compile_types_clone(const XrXirCompileContext *compil
         if(allocation_status!=XR_XIR_OK) {xr_xir_compile_types_free(copy);return allocation_status;}
         nodes[i] = types->nodes[i];
         nodes[i].parameters = NULL; nodes[i].nominal.arguments = NULL; nodes[i].nominal.fields = NULL;
-        uint32_t count = nodes[i].parameter_count;
+        uint32_t count = xr_xir_type_parameter_slots(&nodes[i]);
         XrXirCallableParameter *parameters = xir_type_copy_bytes(compile_context, types->nodes[i].parameters, count, sizeof(*parameters), &allocation_status,control);
         nodes[i].parameters = parameters;
         if (count && !parameters) { xr_xir_compile_types_free(copy); return allocation_status; }

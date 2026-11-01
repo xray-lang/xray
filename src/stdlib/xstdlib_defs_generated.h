@@ -256,6 +256,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"mem", "__allocAligned", "(n: i64, align: i64): __BufferStorage", "Allocate n private managed bytes aligned to align (power-of-two >= sizeof(void*))", "mem_alloc_aligned", "normal", "", "xrt_mem_alloc_aligned", "vv", "value", "", "", "", "core", "method", "fresh", "xray.runtime.provider.v1/byte-storage", "xray.runtime.provider-operation.v1/byte-storage/allocate-aligned", "", 0, 2, true},
     {"mem", "__bufferLength", "(storage: __BufferStorage): i64", "Read the byte length from a private Buffer storage handle", "mem_buffer_length", "normal", "", "xrt_mem_buffer_length", "v", "value", "", "", "", "runtime", "method", "", "xray.runtime.provider.v1/byte-storage", "xray.runtime.provider-operation.v1/byte-storage/length", "", 0, 1, true},
     {"mem", "__bufferAsBytes", "(storage: __BufferStorage): Slice<u8>", "Borrow a readonly byte view from a private Buffer storage handle", "mem_buffer_as_bytes", "normal", "", "xrt_mem_buffer_as_bytes", "v", "value", "", "", "", "runtime", "method", "borrowed_param:0", "", "", "", 0, 1, true},
+    {"mem", "__bufferSliceMutBegin", "(ptr: MutPtr<u8>, bytes: i64, owner: ref Buffer): MutSlice<u8>", "Begin a bounded exclusive byte scope of the exact referenced Buffer", "", "normal", "", "", "vvv", "value", "", "", "", "runtime", "", "borrowed_param:2", "", "", "", 0, 3, false},
     {"mem", "__bufferBorrowPtr", "(storage: __BufferStorage): MutPtr<u8>", "Borrow the raw pointer from a private Buffer storage handle", "mem_buffer_borrow_ptr", "normal", "", "xrt_mem_buffer_borrow_ptr", "v", "value", "", "", "", "runtime", "method", "borrowed_param:0", "", "", "", 0, 1, true},
     {"mem", "__bufferResize", "(storage: __BufferStorage, n: i64): bool", "Resize a private Buffer storage handle", "mem_buffer_resize", "normal", "", "xrt_mem_buffer_resize", "vv", "value", "", "", "", "runtime", "method", "", "", "", "", 0, 2, true},
     {"mem", "__pageAlloc", "(bytes: i64, prot: i64): MutPtr<u8>", "Map zero-filled anonymous pages with explicit protection bits", "mem_page_alloc", "normal", "", "xrt_mem_page_alloc", "vv", "value", "", "", "", "core", "method", "", "", "", "", 0, 2, true},
@@ -298,7 +299,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"net", "__udpFromHost", "(conn: NetConn): string", "Sender address of the last successful datagram receive; empty when none", "net_udp_from_host", "normal", "", "xrt_net_udp_from_host", "v", "value", "", "", "", "runtime", "method", "fresh", "", "", "", XR_CAP_COROUTINE | XR_CAP_NETPOLL, 1, true},
     {"net", "__udpFromPort", "(conn: NetConn): i64", "Sender port of the last successful datagram receive; 0 when none", "net_udp_from_port", "normal", "", "xrt_net_udp_from_port", "v", "value", "", "", "", "runtime", "method", "", "", "", "", 0, 1, true},
 };
-#define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) 153)
+#define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) 154)
 
 static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[1] = {0};
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) 0)

@@ -87,7 +87,8 @@ static XrXirValueStatus storage_cursor_next_bounded(StorageCursor *cursor, uint6
         if (inline_nominal_type(types, span.type)) {
             XrXirValueStatus status = storage_cursor_enter(cursor, span);
             if (status != XR_XIR_VALUE_OK) return status;
-        } else if (!cursor->owned_only || owned_carrier_type(span.type)) {
+        } else if (!cursor->owned_only || (owned_carrier_type(span.type) &&
+            !xr_xir_type_is_fixed_array(types,span.type))) {
             *leaf = span; *found = true; return XR_XIR_VALUE_OK;
         }
     }

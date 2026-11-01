@@ -112,6 +112,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_ARRAY_CAPACITY:
     case XR_XIR_ARRAY_WITH_CAPACITY:
     case XR_XIR_ARRAY_RESERVE:
+    case XR_XIR_FIXED_ARRAY_NEW: case XR_XIR_FIXED_ARRAY_GET: case XR_XIR_FIXED_ARRAY_LEN:
     case XR_XIR_TUPLE_NEW:
     case XR_XIR_TUPLE_FIELD:
     case XR_XIR_NULLABLE_NONE:
@@ -226,7 +227,7 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m) {
     for (uint32_t t=0; t<types->count; ++t) {
 
         const XrXirTypeNode *node=&types->nodes[t];
-        if (node->kind!=XR_XIR_TYPE_NOMINAL && node->kind!=XR_XIR_TYPE_CALLABLE &&
+        if (node->kind!=XR_XIR_TYPE_FIXED_ARRAY && node->kind!=XR_XIR_TYPE_NOMINAL && node->kind!=XR_XIR_TYPE_CALLABLE &&
             node->kind!=XR_XIR_TYPE_ARRAY && node->kind!=XR_XIR_TYPE_MAP && node->kind!=XR_XIR_TYPE_SET &&
             node->kind!=XR_XIR_TYPE_TUPLE && node->kind!=XR_XIR_TYPE_UNION &&
             !(node->kind==XR_XIR_TYPE_SLICE && node->element==XR_XIR_U8) &&

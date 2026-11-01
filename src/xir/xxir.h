@@ -184,7 +184,8 @@ typedef enum XrXirTypeKind {
     XR_XIR_TYPE_CHANNEL = 14,
     XR_XIR_TYPE_UNION = 15,
     XR_XIR_TYPE_PTR = 16,
-    XR_XIR_TYPE_MUT_PTR = 17
+    XR_XIR_TYPE_MUT_PTR = 17,
+    XR_XIR_TYPE_FIXED_ARRAY = 18
 } XrXirTypeKind;
 typedef struct XrXirNominalType {
     uint32_t declaration;
@@ -197,6 +198,7 @@ typedef struct XrXirTypeNode {
     uint32_t kind;
     XrXirType element;
     const XrXirCallableParameter *parameters;
+    /* FIXED_ARRAY owns a scalar length here and has no parameters vector. */
     uint32_t parameter_count;
     /* Callable return, Map value, or required Task/Iterator error type. */
     XrXirType result;

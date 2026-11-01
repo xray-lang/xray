@@ -91,9 +91,9 @@ static void move_test_refusals(const XrXirCompileContext *context) {
         XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=XR_XIR_PROGRAM};
         XrXirSourceText input={.text=text,.length=(size_t)count};XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,NULL);
-        fprintf(stderr,"MOVE refusal%zu status%u %d:%d %s\n",i,status,diagnostic.line,diagnostic.column,diagnostic.message?diagnostic.message:"");
+        fprintf(stderr,"MOVE refusal%zu status%u %d:%d %s\n",i,status,diagnostic.line,diagnostic.column,diagnostic.message);
         CHECK(status!=XR_XIR_OK&&!result.checked&&!result.snapshot);
-        if(i+1==sizeof(bodies)/sizeof(*bodies))CHECK(status==XR_XIR_UNSUPPORTED&&diagnostic.message&&
+        if(i+1==sizeof(bodies)/sizeof(*bodies))CHECK(status==XR_XIR_UNSUPPORTED&&diagnostic.message[0]&&
             !strcmp(diagnostic.message,"product binding has no owned transfer recipe"));
         xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
         CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==before.held_bytes);
@@ -168,7 +168,7 @@ int main(int argc,char **argv) {
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"Source status%u %d:%d %s\n",status,
-        diagnostic.line,diagnostic.column,diagnostic.message?diagnostic.message:"");
+        diagnostic.line,diagnostic.column,diagnostic.message);
     if(status!=XR_XIR_OK) {
         xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
         CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==before.held_bytes);
@@ -193,7 +193,7 @@ int main(int argc,char **argv) {
     memset(packet.bytes,0x5a,packet.length);xr_xir_compile_checked_packet_free(&packet);
     status=xr_xir_compile_specialize(checked,&closed,&issue,NULL);
     fprintf(stderr,"MOVE Spec%u f%u b%u i%u\n",status,issue.function,issue.block,issue.instruction);CHECK(status==XR_XIR_OK);
-    xr_xir_compile_artifact_free(checked);const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    xr_xir_compile_artifact_free(checked);const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     status=xr_xir_compile_lower(closed,&target,NULL,&lowered,&issue);
     fprintf(stderr,"MOVE Lower%u f%u b%u i%u\n",status,issue.function,issue.block,issue.instruction);CHECK(status==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);

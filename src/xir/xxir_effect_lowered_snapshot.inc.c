@@ -42,9 +42,9 @@ static XrXirStatus effect_lowered_snapshot_node(
         left->nominal.declaration != right->nominal.declaration ||
         left->nominal.argument_count != right->nominal.argument_count ||
         left->nominal.field_count != right->nominal.field_count ||
-        (left->parameter_count && (!left->parameters || !right->parameters)))
+        (xr_xir_type_parameter_slots(left) && (!left->parameters || !right->parameters)))
         return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t p = 0; p < left->parameter_count; ++p) {
+    for (uint32_t p = 0; p < xr_xir_type_parameter_slots(left); ++p) {
 
         if (left->parameters[p].mode != right->parameters[p].mode ||
             left->parameters[p].type != right->parameters[p].type) return XR_XIR_BAD_STRUCTURE;

@@ -59,7 +59,8 @@
         "xir_checked_previous114",
         "xir_checked_previous115",
         "xir_checked_previous116",
-        "xir_checked_previous118"
+        "xir_checked_previous118",
+        "xir_checked_previous120"
       ],
       "targets": [
         "test_xir_cleanup_replaced_sdk_reader",
@@ -170,7 +171,10 @@
         "xir_typed_display_source",
         "xir_typed_display_values",
         "xir_typed_display_native",
-        "test_xir_move_values"
+        "test_xir_move_values",
+        "xir_fixed_bytes",
+        "xir_fixed_bytes_source",
+        "xir_fixed_bytes_native"
       ],
       "targets": [
         "test_xir_json_float",
@@ -222,7 +226,10 @@
         "test_xir_typed_display_source",
         "test_xir_typed_display_values",
         "test_xir_typed_display_native",
-        "test_xir_move_values"
+        "test_xir_move_values",
+        "test_xir_fixed_bytes",
+        "test_xir_fixed_bytes_source",
+        "test_xir_fixed_bytes_native"
       ]
     },
     "frontend": {
