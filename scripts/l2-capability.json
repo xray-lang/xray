@@ -266,7 +266,8 @@
         "tests/unit/xir/xir_task_scope_boundary_cases.h",
         "tests/unit/xir/task_scope_source.cmake",
         "tests/unit/xir/*go_closure*",
-        "tests/unit/xir/*scope_syntax*"
+        "tests/unit/frontend/test_scope_syntax.c",
+        "tests/fixtures/xir_go_closure/*"
       ],
       "reason": "HIR and complete Source language-family consumers.",
       "tests": [
