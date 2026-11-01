@@ -457,12 +457,7 @@ static XrXirRunStatus vm_go_step(ScalarRun *run, VmState *state, const XrXirInst
     for (uint32_t i = 0; i < count; ++i)
         state->arguments[i] = vm_value_operand(run, run->function->operands[op->args[0]+prefix+i]);
     XrXirValue task = {0};
-    XrXirCallStatus status;
-    if(prefix) {
-        XrXirValue scope=vm_value_operand(run,run->function->operands[op->args[0]]);
-        const XrXirScopedSpawn spawn={op->type,(uint32_t)op->immediate,count?state->arguments:NULL,count};
-        status=xr_xir_task_go_scoped(run->view,&scope,&spawn,&task);
-    } else status=xr_xir_task_go(run->view,op->type,(uint32_t)op->immediate,
+    XrXirCallStatus status=xr_xir_task_go_at(run->view,state->instruction,run->frame,
         count?state->arguments:NULL,count,&task);
     if (status != XR_XIR_CALL_READY) {
         *action = (XrXirAction) {XR_XIR_ACTION_FAULT,  0, NULL, 0, {XR_XIR_I64, 0, status},
