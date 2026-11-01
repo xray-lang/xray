@@ -253,13 +253,17 @@
       "id": "demos/07-advanced/generics.xr",
       "path": "demos/07-advanced/generics.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F08",
-        "first_diagnostic": "demos/07-advanced/generics.xr:59:9: error: method declaration contract is not admitted"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/generics.txt"
+    },
+    {
+      "id": "native:demos/07-advanced/generics.xr",
+      "path": "demos/07-advanced/generics.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/generics.txt"
     },
     {
       "id": "demos/07-advanced/testing.xr",
