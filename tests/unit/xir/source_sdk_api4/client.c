@@ -28,11 +28,21 @@ int main(int argc,char **argv) {
     CHECK(argc==2);
     XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=argv[1];
     XrSourceInput input;memset(&input,0,sizeof(input));input.kind=XR_SOURCE_INPUT_TEXT;
-    input.value.text.namespace_id="api4_previous";input.value.text.bytes="40 + 2\n";
+    input.value.text.namespace_id="api4_previous";input.value.text.bytes="assert(40 + 2 == 42)\n";
     input.value.text.length=strlen(input.value.text.bytes);
     XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *diagnostic=NULL;XrSourceFailure build_failure;
     memset(&build_failure,0,sizeof(build_failure));
-    CHECK(xray_source_build(&input,&options,&artifact,&build_failure,&diagnostic)==XR_SOURCE_OK);
+    XrSourceStatus built=xray_source_build(&input,&options,&artifact,&build_failure,&diagnostic);
+    if (built!=XR_SOURCE_OK) {
+        fprintf(stderr,"previous Source build status=%u cleanup=%u stage=%u\n",
+            (unsigned)built,(unsigned)build_failure.cleanup_status,(unsigned)build_failure.stage);
+        if (diagnostic) {
+            XrSourceDiagnosticRoot root;memset(&root,0,sizeof(root));
+            if (xray_source_diagnostic_root(diagnostic,0,&root)==XR_SOURCE_OK && root.message)
+                fprintf(stderr,"%s\n",root.message);
+        }
+    }
+    CHECK(built==XR_SOURCE_OK);
     CHECK(artifact && !diagnostic);
     XrSourceExecutionOptions execution_options=xray_source_execution_options_default();
     XrSourceExecution *execution=NULL;
