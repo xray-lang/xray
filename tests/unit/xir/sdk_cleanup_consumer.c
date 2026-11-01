@@ -43,7 +43,7 @@ int main(int argc,char **argv) {
     XrXirRuntimeSdkRequest request={argv[1],bytes,(size_t)length,resources};XrXirRuntimeSdk *sdk=NULL;
     XrXirRuntimeSdkStatus status=xr_xir_runtime_sdk_load(&request,&sdk);free(bytes);xr_compile_resources_release(resources);
     printf("%u",(unsigned)status);
-    if(sdk){const XrXirRuntimeSdkFacts *facts=xr_xir_runtime_sdk_facts(sdk);CHECK(facts && facts->call_abi==37 && facts->semantic==117);
+    if(sdk){const XrXirRuntimeSdkFacts *facts=xr_xir_runtime_sdk_facts(sdk);CHECK(facts && facts->call_abi==38 && facts->semantic==118);
         printf(" %u ",facts->file_count);for(size_t i=0;i<32;++i)printf("%02x",facts->identity[i]);}
     puts("");xr_xir_runtime_sdk_free(sdk);return 0;
 }
@@ -121,12 +121,12 @@ int main(void) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1024*1024,&domain)==XR_XIR_VALUE_OK);Context context;memset(&context,0,sizeof(context));
     static const char text[]="cleanup é\0界";CHECK(xr_xir_string_new(domain,text,sizeof(text)-1,&context.message)==XR_XIR_VALUE_OK);
     XrXirCallEntry entries[2];memset(entries,0,sizeof(entries));
-    for(unsigned i=0;i<2;++i){entries[i].abi_version=37;entries[i].resume=i?cleanup_resume:root_resume;entries[i].release=release_frame;entries[i].environment=&context;}
+    for(unsigned i=0;i<2;++i){entries[i].abi_version=38;entries[i].resume=i?cleanup_resume:root_resume;entries[i].release=release_frame;entries[i].environment=&context;}
     entries[0].state_bytes=sizeof(unsigned);entries[0].result=XR_XIR_I64;entries[0].flags=XR_XIR_ENTRY_EXIT;entries[1].cleanup_owner=1;
     XrXirCallAccounting accounting;memset(&accounting,0,sizeof(accounting));
     XrXirCallConfig config;CHECK(xr_xir_call_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);config.entries=entries;config.entry_count=2;config.accounting=&accounting;
     config.admission.domain=domain;config.admission.work=100000;config.admission.scratch_bytes=100000;
-    XrXirCall *call=NULL;config.abi_version=36;CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_BAD_ABI && !call);config.abi_version=37;
+    XrXirCall *call=NULL;config.abi_version=36;CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_BAD_ABI && !call);config.abi_version=38;
     CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_READY);XrXirCallResult result;memset(&result,0,sizeof(result));
     XrXirCallResult observed;do{observed=xr_xir_call_poll_bounded(call,1);}while(observed.status==XR_XIR_CALL_READY);
     CHECK(observed.status==XR_XIR_CALL_CLEANUP_FAILED && xr_xir_call_result_copy(&observed,&result)==XR_XIR_VALUE_OK);

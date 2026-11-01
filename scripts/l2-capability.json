@@ -159,6 +159,7 @@
         "xir_buffer_storage_fault",
         "xir_buffer_storage_previous",
         "xir_buffer_storage_previous109",
+        "xir_buffer_storage_previous117",
         "xir_rune_whitespace",
         "xir_rune_whitespace_native",
         "xir_rune_whitespace_source",

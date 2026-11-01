@@ -218,6 +218,9 @@ set_tests_properties(xir_buffer_storage_previous PROPERTIES LABELS "unit;xir;ide
 add_test(NAME xir_buffer_storage_previous109 COMMAND test_xir_buffer_storage --previous109
     "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_buffer_storage/source-schema39-contract109.xrc")
 set_tests_properties(xir_buffer_storage_previous109 PROPERTIES LABELS "unit;xir;identity" TIMEOUT 60)
+add_test(NAME xir_buffer_storage_previous117 COMMAND test_xir_buffer_storage --previous117
+    "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_buffer_storage/source-schema39-contract117.xrc")
+set_tests_properties(xir_buffer_storage_previous117 PROPERTIES LABELS "unit;xir;identity" TIMEOUT 60)
 
 add_executable(test_xir_string_runes_source xir/test_xir_string_runes_source.c)
 target_link_libraries(test_xir_string_runes_source PRIVATE xray_xir_source xray_xir_vm)

@@ -165,11 +165,11 @@ static XrXirArtifact *fixture(const XrXirCompileContext *context,bool attacks) {
 int main(int argc,char **argv) {
     payload_cases();XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
     XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
-    if(argc==3 && (!strcmp(argv[1],"--previous") || !strcmp(argv[1],"--previous109"))) {
+    if(argc==3 && (!strcmp(argv[1],"--previous") || !strcmp(argv[1],"--previous109") || !strcmp(argv[1],"--previous117"))) {
         FILE *file=fopen(argv[2],"rb");CHECK(file && !fseek(file,0,SEEK_END));long size=ftell(file);
         CHECK(size>64 && !fseek(file,0,SEEK_SET));unsigned char *bytes=malloc((size_t)size);CHECK(bytes);
         CHECK(fread(bytes,1,(size_t)size,file)==(size_t)size && !fclose(file));
-        uint32_t previous=!strcmp(argv[1],"--previous109")?109u:108u;
+        uint32_t previous=!strcmp(argv[1],"--previous117")?117u:!strcmp(argv[1],"--previous109")?109u:108u;
         CHECK(bytes[8]==39 && bytes[12]==previous && !bytes[13] && !bytes[14] && !bytes[15]);
         XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
         XrXirArtifact *output=NULL;CHECK(xr_xir_compile_checked_read(&context,bytes,(size_t)size,&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
