@@ -108,12 +108,22 @@ def main() -> int:
         (0, f'Generated: {rest_c}\n'.encode(), b''))
     assert rest_c.is_file() and rest_c.stat().st_size > 0
 
+    # Nonempty byte literals have exact fixed storage in every public command.
+    fixed = work / 'fixed-bytes.xr'
+    fixed.write_bytes(b'const value = b"AB"\nprint(len(value))\nprint(value[1])\n')
+    run('fixed-bytes-check', [binary, 'check', fixed], work, stdlib_env, (0, b'', b''))
+    run('fixed-bytes-run', [binary, 'run', fixed], work, stdlib_env, (0, b'2\n66\n', b''))
+    fixed_c = work / 'fixed-bytes.c'
+    run('fixed-bytes-build-c', [binary, 'build', '-c', fixed, '-o', fixed_c], work, stdlib_env,
+        (0, f'Generated: {fixed_c}\n'.encode(), b''))
+    assert fixed_c.is_file() and fixed_c.stat().st_size > 0
+
     # Shared Source refusals name the feature and its actual source position.
     # None of the three public commands may publish output before admission.
     unsupported = (
-        ('bytes', 'var value = b"x"\n', 13, 'fixed byte literal syntax'),
+        ('empty-bytes', 'var value = b""\n', 13, 'this fixed byte length'),
         ('scope', '    scope {}\n', 5, 'scope statement syntax'),
-        ('fixed-array', 'var value:[i64;2]=[1,2]\n', 11, 'fixed array type syntax'),
+        ('fixed-array', 'var value:[i64;2]=[1,2]\n', 11, 'this fixed array element'),
         ('unit-parameter', 'fn consume(value:())->i64{return 41}\n', 4, 'this parameter declaration syntax'),
         ('target-scalar', 'var value:usize=0\n', 5, 'usize type'),
         ('target-array', 'var value=Array<usize>()\n', 5, 'usize type'),
