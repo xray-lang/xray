@@ -1256,7 +1256,9 @@ XR_FUNC XrXirCallStatus xr_xir_instance_call_entry_recheck(XrXirCallView *view, 
 static bool worker_slot_read(const XrXirInstance *instance, uint32_t slot) {
     const XrXirProgram *program = instance->program;
     const XrXirSlot *entry = &program->declarations->slots[slot];
-    return !entry->mutable && instance->ready[entry->module] && program->permissions &&
+    return !entry->mutable && instance->published[slot] &&
+        (instance->ready[entry->module] || (instance->state==XR_XIR_INSTANCE_INITIALIZING &&
+            instance->current_module==entry->module)) && program->permissions &&
         program->permissions->entries[(uint64_t)program->entry_count + slot].worker == XR_XIR_OK;
 }
 static bool value_unit(XrXirValue value) {
