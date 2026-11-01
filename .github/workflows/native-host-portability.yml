@@ -1,0 +1,109 @@
+name: Native host portability
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, agent/host-arch-portability]
+  workflow_dispatch:
+
+concurrency:
+  group: native-host-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  linux:
+    name: Native Linux (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Record host and providers
+        run: |
+          uname -a
+          gcc --version
+          clang --version
+          ld --version
+      - name: Check generated declaration identity
+        run: python scripts/gen_native_declarations.py --check
+      - name: Configure
+        run: cmake --preset default
+      - name: Build compiler and native owners
+        run: >-
+          cmake --build build --parallel 4 --target xray test_native_posix
+          test_publication_posix test_cli_dependency_output test_mcp_publication_faults
+      - name: Verify native owners and public commands
+        run: >-
+          ctest --test-dir build --output-on-failure -j 4
+          -R '^(test_native_posix|test_publication_posix|test_cli_build_options|test_cli_resource_profiles_native|test_cli_resource_profiles_vm|test_cli_dependency_output|test_mcp_publication_faults|meta_ownership_inventory)$'
+          --output-junit native-host.xml
+      - name: Verify both native C providers
+        run: |
+          set -euo pipefail
+          ./build/xray --version --json
+          for provider in gcc clang; do
+            ./build/xray toolchain probe --provider "$provider" --cc "/usr/bin/$provider" --json > "build/probe-$provider.json"
+            python -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["selection"]["ready"] and not p["diagnostics"]; assert all(p["capabilities"][k] == "ok" for k in ("cCompile","sdkCompile","runtimeLink","nativeRun"))' "build/probe-$provider.json"
+            ./build/xray build tests/fixtures/public_source_program/root.xr --cc "/usr/bin/$provider" -o "build/native-$provider"
+            "./build/native-$provider" > "build/native-$provider.out"
+            cmp tests/fixtures/public_source_program/root.out "build/native-$provider.out"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-${{ matrix.os }}
+          path: |
+            build/native-host.xml
+            build/probe-*.json
+            build/native-*.out
+            build/Testing/Temporary/LastTest.log
+
+  windows:
+    name: Native Windows (MSVC x64)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Configure
+        run: cmake --preset default
+      - name: Build compiler and current owners
+        run: >-
+          cmake --build build --parallel 4 --target xray test_native_ready
+          test_xir_workspace_injected test_xir_workspace_production
+          test_native_operation_owner test_native_operation_faults test_bits_wide_c11
+          test_cli_dependency_output test_mcp_publication_faults
+      - name: Verify native preparation, workspace and operation
+        run: >-
+          ctest --test-dir build --output-on-failure -j 4
+          -R "^(test_cli_build_options|test_cli_resource_profiles_native|native_ready_.*|workspace_.*|native_operation_.*|test_generated_c11_msvc|test_cli_dependency_output|test_mcp_publication_faults|meta_ownership_inventory)$"
+          --output-junit native-host.xml
+      - name: Build invocation and admission owners
+        run: >-
+          cmake --build build --parallel 4 --target
+          test_native_invocation_owner test_native_invocation_faults
+          test_native_admission_production test_native_admission_injected
+          test_local_toolchain_injected test_local_toolchain_production
+      - name: Verify invocation and admission owners
+        run: >-
+          ctest --test-dir build --output-on-failure -j 4
+          -R "^(native_invocation_.*|native_admission_.*|local_toolchain_.*)$"
+          --output-junit native-owner.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-windows-msvc-x64
+          path: |
+            build/native-host.xml
+            build/native-owner.xml
+            build/Testing/Temporary/LastTest.log
