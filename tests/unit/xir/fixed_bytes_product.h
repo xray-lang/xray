@@ -13,6 +13,11 @@
 #ifndef FIXED_BYTES_PRODUCT_H
 #define FIXED_BYTES_PRODUCT_H
 #include "xir/xxir_output.h"
+#include "base/xplatform.h"
+#ifdef XR_OS_WINDOWS
+#include <io.h>
+#include <fcntl.h>
+#endif
 static const char fixed_bytes_expected[]=
     "<section class=\"card\">\n"
     "  <h1>Xray</h1>\n"
@@ -32,6 +37,9 @@ static XrXirOutputStatus fixed_bytes_group(void *owner,const XrXirOutputGroup *g
     ++output->groups;return xr_xir_output_render(&sink,group);
 }
 static void fixed_bytes_run(XrXirProgram *program,uint32_t entry) {
+#ifdef XR_OS_WINDOWS
+    CHECK(_setmode(_fileno(stdout),_O_BINARY)!=-1);
+#endif
     FixedBytesOutput output={0};XrXirInstanceConfig config;
     CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,fixed_bytes_group,&output};
