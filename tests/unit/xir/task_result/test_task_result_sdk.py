@@ -77,7 +77,7 @@ def main():
         b'TaskResult generated C: four owned variants, exact full output and retired producers PASS\r\n')
     run('run-cpp17', [customer/'cpp17.exe', *entries],
         b'C++17 TaskResult: new header, type_info and detached four-state ownership PASS\r\n')
-    result = dict(state='PASS', semantic=119, callABI=38, source='real generated C11 Program',
+    result = dict(state='PASS', semantic=120, callABI=38, source='real generated C11 Program',
                   programSHA256=hashlib.sha256((customer/'program.c').read_bytes()).hexdigest(),
                   commandCount=len(records), originalPrefixAbsent=True,
                   producerRetiredBeforeRead=True, cppBoundary='TaskResult/value headers through a C11 Program bridge')

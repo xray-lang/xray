@@ -42,6 +42,8 @@ static size_t body_wire_error(BodyWire *wire,uint32_t target,uint32_t functions)
     for (uint32_t f=0;f<functions;++f) {
         uint32_t name=body_wire_u32(wire);body_wire_skip(wire,name,1);
         uint32_t parameters=body_wire_u32(wire);body_wire_skip(wire,parameters,4);
+        uint32_t consumes=body_wire_u32(wire);CHECK(consumes<=parameters);
+        body_wire_skip(wire,consumes,4);
         (void)body_wire_u32(wire);
         size_t error=wire->position;(void)body_wire_u32(wire);
         if (f==target) return error;
@@ -53,7 +55,7 @@ static size_t body_wire_error(BodyWire *wire,uint32_t target,uint32_t functions)
 }
 static void body_packet_never(uint8_t *bytes,size_t length,uint32_t target,uint32_t functions) {
     CHECK(length>64 && !memcmp(bytes,"XRCHK\0\0\0",8));
-    BodyWire wire={bytes,length,8};CHECK(body_wire_u32(&wire)==40);
+    BodyWire wire={bytes,length,8};CHECK(body_wire_u32(&wire)==41);
     wire.position=64;size_t error=body_wire_error(&wire,target,functions);
     for (unsigned i=0;i<4;++i) bytes[error+i]=(uint8_t)((uint32_t)XR_XIR_NEVER>>(8*i));
     XrSHA256Context digest;xr_sha256_init(&digest);xr_sha256_update(&digest,bytes,32);
