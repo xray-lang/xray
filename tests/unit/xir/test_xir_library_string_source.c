@@ -129,7 +129,7 @@ int main(int argc,char **argv) {
         CHECK(library_compile_owner_new(&owner,&limits)==XR_XIR_OK);
         CHECK(string_literal_operation(&owner.context,&fixture)==XR_XIR_OK);
         library_compile_owner_drop(&owner);
-        string_literal_boundaries(false);string_literal_boundaries(true);library_compile_observer_free();
+        library_string_source_boundaries();string_literal_boundaries(true);library_compile_observer_free();
         puts("Source-owned literal growth and retirement PASS");return 0;
     }
     library_string_source_boundaries();library_string_growth_boundaries();

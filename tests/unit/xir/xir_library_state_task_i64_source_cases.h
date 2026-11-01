@@ -11,18 +11,19 @@ static XrXirStatus library_state_task_i64_map_operation(const XrXirCompileContex
     XrXirSlot slots[3]={{0,XR_XIR_I64,1},{1,XR_XIR_I64,1},{1,XR_XIR_STRING,1}};
     XrXirDeclarations declarations={.slots=slots,.slot_count=3};
     XrXirModule library={.declarations=&declarations};uint32_t modules[2]={UINT32_MAX,4};
+    /* These local mapping probes have no enclosing function; zero is unused. */
     SourceLibraryMap map={.modules=modules,.module_count=2};
     if (!source_library_slot_map(&ctx,&library,&map,2)) {xr_compile_resources_free(map.slots);return ctx.diagnostic.status;}
     CHECK(map.slots[0]==UINT32_MAX && map.slots[1]==2 && map.slots[2]==3 && map.next_slot==4);
     XrXirInstruction group={XR_XIR_SLOT_GROUP_INIT,XR_XIR_UNIT,{0},{0},(INT64_C(1)<<32)|2,{0}},output={0};
-    if (!source_library_instruction(&ctx,&map,&group,&output)) {xr_compile_resources_free(map.slots);return ctx.diagnostic.status;}
+    if (!source_library_instruction(&ctx,&map,0,&group,&output)) {xr_compile_resources_free(map.slots);return ctx.diagnostic.status;}
     CHECK((uint64_t)output.immediate==((UINT64_C(2)<<32)|2));
     XrXirInstruction sentinel=output;group.immediate=(INT64_C(0)<<32)|2;
-    bool accepted=source_library_instruction(&ctx,&map,&group,&output);
+    bool accepted=source_library_instruction(&ctx,&map,0,&group,&output);
     if (ctx.diagnostic.status==XR_XIR_BUDGET) {xr_compile_resources_free(map.slots);return XR_XIR_BUDGET;}
     CHECK(!accepted && ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE && !memcmp(&sentinel,&output,sizeof(output)));
     ctx.diagnostic=(XrXirSourceDiagnostic){0};group.immediate=(INT64_C(1)<<32)|2;map.slots[2]=4;
-    accepted=source_library_instruction(&ctx,&map,&group,&output);
+    accepted=source_library_instruction(&ctx,&map,0,&group,&output);
     if (ctx.diagnostic.status==XR_XIR_BUDGET) {xr_compile_resources_free(map.slots);return XR_XIR_BUDGET;}
     CHECK(!accepted && ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE && !memcmp(&sentinel,&output,sizeof(output)));
     xr_compile_resources_free(map.slots);return XR_XIR_OK;
@@ -75,16 +76,16 @@ static XrXirStatus library_state_task_i64_callee_map(const XrXirCompileContext *
     XrXirInstruction input={.op=XR_XIR_GO,.type=XR_XIR_I64,.immediate=1},output={0};
     for (uint32_t which=0;which<2;++which) {
         input.op=which ? XR_XIR_INVOKE : XR_XIR_GO;
-        if (!source_library_instruction(&ctx,&map,&input,&output)) {status=ctx.diagnostic.status;goto done;}
+        if (!source_library_instruction(&ctx,&map,0,&input,&output)) {status=ctx.diagnostic.status;goto done;}
         CHECK(output.immediate==11 && output.op==input.op);
         XrXirInstruction sentinel=output;functions[1]=UINT32_MAX;
-        bool accepted=source_library_instruction(&ctx,&map,&input,&output);
+        bool accepted=source_library_instruction(&ctx,&map,0,&input,&output);
         if (ctx.diagnostic.status==XR_XIR_BUDGET) {status=XR_XIR_BUDGET;goto done;}
         CHECK(!accepted && ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE && !memcmp(&sentinel,&output,sizeof(output)));
         ctx.diagnostic=(XrXirSourceDiagnostic){0};functions[1]=11;
     }
     input.op=XR_XIR_INVOKE_RESULT;input.immediate=23;
-    if (!source_library_instruction(&ctx,&map,&input,&output)) {status=ctx.diagnostic.status;goto done;}
+    if (!source_library_instruction(&ctx,&map,0,&input,&output)) {status=ctx.diagnostic.status;goto done;}
     CHECK(output.immediate==23);
 done:
     xr_compile_resources_free(functions);return status;
