@@ -154,11 +154,16 @@ export fn childFirstFailure() -> i64 {
       catch (error: WorkError) { caught = 1 }
     return caught
 }
+fn blockedError(waiting: Channel<i64>) throws(WorkError) {
+    try { try waiting.recv() } catch (error) {}
+    throw WorkError.Failed
+}
 fn bodyFirstFailure() -> i64 {
+    const waiting = Channel<i64>(1)
     var caught = 0
     try {
         try scope {
-            go businessError()
+            go blockedError(waiting)
             throw PayloadError.Failed { values: [40, 2] }
         }
     } catch (error: PayloadError) {
