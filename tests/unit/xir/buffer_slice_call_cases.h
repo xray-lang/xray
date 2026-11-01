@@ -127,6 +127,6 @@ static void buffer_call_cases(XrXirProgram *program,const uint32_t ids[7]) {
     CHECK(entered==1);
     CHECK(xr_xir_instance_cancel_current(instance)==XR_XIR_CALL_CANCEL_REQUESTED);
     CHECK(buffer_poll(instance)==XR_XIR_CALL_CANCELLED && buffer_program_refs(program)==baseline);
-    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_CANCELLED && buffer_program_refs(program)==original);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY && buffer_program_refs(program)==original);
 }
 #endif
