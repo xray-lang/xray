@@ -31,9 +31,10 @@ typedef struct XirBufferViewOriginQuery {
 XR_FUNC XrXirCallStatus xir_instance_buffer_view_origin(XrXirCallView *view,
     const XirBufferViewOriginQuery *query,XrXirProgram **owner,
     uint32_t *parameter,uint32_t *field,XrXirValue *output);
-/* The frame owns the Program returned by origin capture. Terminal observation
- * uses that exact owner and metadata identity, without inventing a callback. */
+/* The frame owns the Program returned by origin capture. Its busy Instance
+ * remains alive until the Call drains. Terminal observation checks both exact
+ * owners and the actual entry table, without inventing a callback. */
 XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *owner,
-    const void *context,const XirBufferViewOriginQuery *query,
+    const XrXirInstance *instance,const XirBufferViewOriginQuery *query,
     uint32_t *parameter,uint32_t *field,XrXirValue *output);
 #endif /* XXIR_INSTANCE_VIEW_INTERNAL_H */

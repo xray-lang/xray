@@ -15,7 +15,7 @@ static bool instance_buffer_view_work(XrXirValueAdmission *admission,uint64_t wo
     admission->work-=work;return true;
 }
 XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *program,
-    const void *context,const XirBufferViewOriginQuery *query,
+    const XrXirInstance *instance,const XirBufferViewOriginQuery *query,
     uint32_t *parameter,uint32_t *field,XrXirValue *output) {
     if (!program || !query || !query->metadata || !parameter || !field || !output ||
         !value_unit(*output) || !query->admission)
@@ -24,15 +24,24 @@ XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *pro
     const XrXirValue *arguments=query->arguments;const XrXirCellAuthority *authority=query->authority;
     XrXirValueAdmission *admission=query->admission;
     *parameter=UINT32_MAX;*field=UINT32_MAX;
-    if (!context || metadata->admission_context!=context || metadata->entries!=program->entries ||
-        metadata->entry_count!=program->entry_count || metadata->arena!=program->arena ||
+    bool program_table=metadata->entries==program->entries && metadata->entry_count==program->entry_count;
+    bool instance_table=instance && metadata->entries==instance->entries &&
+        (uint64_t)metadata->entry_count==(uint64_t)program->entry_count+1u;
+    if (!instance || !instance_owner_current(instance) || instance->program!=program ||
+        metadata->admission_context!=instance || (!program_table && !instance_table) ||
+        admission->domain!=instance->domain || metadata->arena!=program->arena ||
         metadata->cell_role!=instance_cell_role || metadata->cell_context!=program || target>=program->entry_count)
         return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirProgramInput *input=program->permissions?program->permissions->input:NULL;
     const XrXirArtifact *artifact=input?input->artifact:NULL;
     if (!artifact || artifact->module.declarations!=program->declarations ||
         target>=artifact->module.function_count) return XR_XIR_CALL_BAD_STATE;
-    const XrXirCallEntry *entry=&program->entries[target];
+    const XrXirCallEntry *entry=&metadata->entries[target],*sealed=&program->entries[target];
+    if (entry->parameters!=sealed->parameters || entry->parameter_count!=sealed->parameter_count ||
+        entry->result!=sealed->result || entry->resume!=sealed->resume || entry->release!=sealed->release ||
+        entry->state_bytes!=sealed->state_bytes || entry->environment!=sealed->environment ||
+        entry->flags!=sealed->flags || entry->cleanup_owner!=sealed->cleanup_owner)
+        return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirFunctionIdentity *identity=&program->declarations->functions[target];
     const XrXirTypeNode *result=xr_xir_type_node(program->types,entry->result);
     if (!result || result->kind!=XR_XIR_TYPE_SLICE || result->element!=XR_XIR_U8)
