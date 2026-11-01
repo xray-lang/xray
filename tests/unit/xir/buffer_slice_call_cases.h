@@ -44,15 +44,16 @@ static void buffer_initialize(XrXirInstance *instance,uint32_t entry) {
 static void buffer_invoke(XrXirProgram *program,XrXirInstance *instance,uint32_t target) {
     uint32_t baseline=buffer_program_refs(program),peak=baseline;
     CHECK(xr_xir_instance_start(instance,target,NULL,0)==XR_XIR_CALL_READY);
-    XrXirCallStatus status=XR_XIR_CALL_READY;
+    XrXirCallStatus status=XR_XIR_CALL_READY;XrXirInstanceResult observed={0};
     for (uint32_t step=0;status==XR_XIR_CALL_READY;++step) {
-        CHECK(step<100000);status=xr_xir_instance_poll_bounded(instance,1).outcome.status;
+        CHECK(step<100000);observed=xr_xir_instance_poll_bounded(instance,1);status=observed.outcome.status;
         uint32_t refs=buffer_program_refs(program);if (refs>peak) peak=refs;
     }
     if (status!=XR_XIR_CALL_RETURNED || peak<baseline+2u || buffer_program_refs(program)!=baseline)
-        fprintf(stderr,"Buffer invoke target%u status%u refs%u peak%u baseline%u last%u/%u callee%u\n",
+        fprintf(stderr,"Buffer invoke target%u status%u refs%u peak%u baseline%u last%u/%u callee%u value%u/%lld prior%u\n",
             target,status,buffer_program_refs(program),peak,baseline,
-            buffer_call_trace.entry,buffer_call_trace.instruction,buffer_call_trace.callee);
+            buffer_call_trace.entry,buffer_call_trace.instruction,buffer_call_trace.callee,
+            observed.outcome.value.type,(long long)observed.outcome.value.payload,observed.outcome.prior_status);
     CHECK(status==XR_XIR_CALL_RETURNED && peak>=baseline+2u && buffer_program_refs(program)==baseline);
     XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED &&
         value.type==XR_XIR_I64 && value.payload==42);xr_xir_value_drop(&value);
