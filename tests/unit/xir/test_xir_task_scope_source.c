@@ -16,6 +16,7 @@
 #include "xir/xxir_vm.h"
 #include "toolchain/xcompiler_session.h"
 #include "base/xresource_limits.h"
+#include "execution/xr_xir_host_time.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,6 +45,7 @@ static XrXirCallStatus execute_entry(XrXirInstance *instance,uint32_t entry,int6
 }
 static XrXirInstance *new_instance(XrXirProgram *program,uint32_t initializer) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    xr_xir_host_time_provider(&config.time);
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(execute_entry(instance,initializer,0)==XR_XIR_CALL_RETURNED);
     return instance;

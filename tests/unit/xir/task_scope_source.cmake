@@ -10,6 +10,8 @@ add_executable(test_xir_task_scope_source_native xir/test_xir_task_scope_source.
 target_compile_definitions(test_xir_task_scope_source_native PRIVATE XR_TASK_SCOPE_SOURCE_NATIVE=1)
 target_link_libraries(test_xir_task_scope_source_native PRIVATE xray_xir_scalar)
 foreach(target test_xir_task_scope_source test_xir_task_scope_source_native)
+    target_link_libraries(${target} PRIVATE xray_xir_runtime_host)
+    target_sources(${target} PRIVATE "${PROJECT_SOURCE_DIR}/${AOT_TIME_SRC}")
     target_include_directories(${target} PRIVATE "${PROJECT_SOURCE_DIR}/src")
     target_compile_definitions(${target} PRIVATE
         XR_TASK_SCOPE_SOURCE_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_task_scope_source"
