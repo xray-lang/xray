@@ -154,6 +154,20 @@ export fn childFirstFailure() -> i64 {
       catch (error: WorkError) { caught = 1 }
     return caught
 }
+fn bodyFirstFailure() -> i64 {
+    var caught = 0
+    try {
+        try scope {
+            go businessError()
+            throw PayloadError.Failed { values: [40, 2] }
+        }
+    } catch (error: PayloadError) {
+        match (error) {
+            PayloadError.Failed { values: items } -> { caught = items[0] + items[1] }
+        }
+    } catch (error: WorkError) { caught = 1 }
+    return caught
+}
 fn assertedBody() {
     var caught = false
     try { scope { go worker(0); try! businessError() } } catch panic { caught = true }
@@ -171,6 +185,7 @@ fn leaving() {
     }
 }
 export fn main() -> i64 {
+    assert(bodyFirstFailure() == 42)
     ownershipTransfers()
     assert(borrowedAcross() == 42 && borrowedPanic() == 42)
     borrowedBeforeJoin()

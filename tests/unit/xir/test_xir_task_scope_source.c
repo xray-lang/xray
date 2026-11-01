@@ -181,7 +181,7 @@ int main(int argc,char **argv) {
     } else {
         CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK && !code);execute(program,ids);
         xr_xir_compile_program_drop(program);program=NULL;rejections(&context);scope_raw_controls(&context);
-        scope_typed_exit_controls(&context);scope_receiving_controls(&context);
+        scope_typed_exit_controls(&context);scope_cleanup_error_controls(&context);scope_receiving_controls(&context);
     }
 #endif
     xr_xir_compile_program_drop(program);CHECK(held(context.resources)==before);

@@ -52,6 +52,7 @@ static XrXirStatus invoke_edges(const Graph *graph, const XrXirFunction *functio
             uint32_t block = graph->owner[i];
             const XrXirInstruction *call = &function->instructions[op->immediate];
             if(call->op==XR_XIR_CLEANUP_ERROR) {
+                context->location.block=block;context->location.instruction=i;
                 uint32_t incoming=graph->head[block];
                 if(op->op!=XR_XIR_INVOKE_ERROR||op->type!=XR_XIR_ERROR||!block||
                     function->blocks[block].first!=i||call->targets[0]!=block||incoming==UINT32_MAX||

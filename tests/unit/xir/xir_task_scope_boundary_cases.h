@@ -143,6 +143,68 @@ static void scope_typed_exit_controls(const XrXirCompileContext *context) {
     CHECK(issue.function==run&&issue.instruction==3&&held(context->resources)==baseline);
     xr_free(functions);xr_xir_compile_source_result_free(&source);
 }
+static void scope_cleanup_error_controls(const XrXirCompileContext *context) {
+    const char *text="enum Body{Failed}\nenum Child{Failed}\n"
+        "fn bodyError()throws(Body){throw Body.Failed}\n"
+        "fn worker()throws(Child){throw Child.Failed}\n"
+        "fn run()throws(Body|Child){try{try scope{go worker();throw Body.Failed}}"
+        "catch(error:Body){throw error}catch(error:Child){throw error}}";
+    XrXirSourceResult source={0};CHECK(check(context,text,&source,NULL)==XR_XIR_OK);
+    const XrXirModule *original=xr_xir_compile_artifact_module(source.checked);
+    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(source.checked);
+    uint32_t run=UINT32_MAX;XrXirType body_error=XR_XIR_UNIT;
+    for(uint32_t f=0;f<original->function_count;++f) {
+        const XrXirFunction *function=original->functions+f;
+        if(function->name_length==3&&!memcmp(function->name,"run",3))run=f;
+        if(function->name_length==9&&!memcmp(function->name,"bodyError",9))body_error=function->error_type;
+    }
+    CHECK(run!=UINT32_MAX&&body_error!=XR_XIR_UNIT);
+    const XrXirFunction *actual=original->functions+run;
+    uint32_t producer=UINT32_MAX,branch=UINT32_MAX,owner=UINT32_MAX;
+    for(uint32_t i=0;i<actual->instruction_count;++i) {
+        CHECK(actual->instructions[i].op!=XR_XIR_SCOPE_JOIN);
+        if(actual->instructions[i].op==XR_XIR_CLEANUP_ERROR){CHECK(producer==UINT32_MAX);producer=i;}
+        if(actual->instructions[i].op==XR_XIR_BRANCH)branch=i;
+    }
+    CHECK(producer!=UINT32_MAX&&branch!=UINT32_MAX);
+    for(uint32_t b=0;b<actual->block_count;++b)
+        if(producer>=actual->blocks[b].first&&producer-actual->blocks[b].first<actual->blocks[b].count)owner=b;
+    CHECK(owner!=UINT32_MAX);
+    uint32_t target=actual->instructions[producer].targets[0],landing=actual->blocks[target].first;
+    CHECK(actual->instructions[landing].op==XR_XIR_INVOKE_ERROR);
+    XrXirFunction *functions=xr_malloc((size_t)original->function_count*sizeof(*functions));CHECK(functions);
+    XrXirInstruction *ops=xr_malloc((size_t)actual->instruction_count*sizeof(*ops));CHECK(ops);
+    XrXirBlock *blocks=xr_malloc((size_t)actual->block_count*sizeof(*blocks));CHECK(blocks);
+    uint32_t *operands=xr_malloc(((size_t)actual->operand_count+2)*sizeof(*operands));CHECK(operands);
+    memcpy(functions,original->functions,(size_t)original->function_count*sizeof(*functions));
+    XrXirModule built=*original;built.stage=XR_XIR_BUILT;built.provenance=NULL;built.functions=functions;
+    for(unsigned mode=0;mode<8;++mode) {
+        functions[run]=*actual;memcpy(ops,actual->instructions,(size_t)actual->instruction_count*sizeof(*ops));
+        memcpy(blocks,actual->blocks,(size_t)actual->block_count*sizeof(*blocks));
+        memcpy(operands,actual->operands,(size_t)actual->operand_count*sizeof(*operands));
+        functions[run].instructions=ops;functions[run].blocks=blocks;functions[run].operands=operands;
+        if(mode==1)functions[run].error_type=body_error;
+        if(mode==2){ops[producer].immediate=blocks[owner].frontier;blocks[target].frontier=blocks[owner].frontier;}
+        if(mode==3)ops[landing].immediate=0;
+        if(mode==4)ops[landing]=(XrXirInstruction){.op=XR_XIR_ERROR_ERASE,.type=XR_XIR_ERROR,.args={ops[producer].args[0]}};
+        if(mode==5)ops[branch].targets[1]=target;
+        if(mode==6) {
+            operands[actual->operand_count]=owner;operands[actual->operand_count+1]=ops[producer].args[0];
+            functions[run].operand_count+=2;
+            ops[landing]=(XrXirInstruction){.op=XR_XIR_PHI,.type=XR_XIR_ERROR,.args={actual->operand_count,2}};
+        }
+        if(mode==7)ops[landing].op=XR_XIR_INVOKE_RESULT;
+        uint64_t baseline=held(context->resources);XrXirArtifact *output=NULL;XrXirDiagnostic issue={0};
+        XrXirStatus expected=mode==0?XR_XIR_OK:(mode==1||mode==4||mode==6)?XR_XIR_BAD_TYPE:XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status=xr_xir_compile_check_v2(context,&built,construction,&output,&issue);
+        if(status!=expected)fprintf(stderr,"cleanup control %u actual%u expected%u f%u b%u i%u\n",
+            mode,status,expected,issue.function,issue.block,issue.instruction);
+        CHECK(status==expected&&!!output==(mode==0));
+        if(mode)CHECK(issue.function==run);
+        xr_xir_compile_artifact_free(output);CHECK(held(context->resources)==baseline);
+    }
+    xr_free(operands);xr_free(blocks);xr_free(ops);xr_free(functions);xr_xir_compile_source_result_free(&source);
+}
 static void scope_receiving_controls(const XrXirCompileContext *context) {
     char text[8192];size_t length=0;
     const char *head="fn worker(){}\nfn large(flag:bool){scope{go worker();\n";
