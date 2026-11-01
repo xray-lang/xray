@@ -187,11 +187,20 @@ static void scope_cleanup_error_controls(const XrXirCompileContext *context) {
         if(mode==2){ops[producer].immediate=blocks[owner].frontier;blocks[target].frontier=blocks[owner].frontier;}
         if(mode==3)ops[landing].immediate=0;
         if(mode==4)ops[landing]=(XrXirInstruction){.op=XR_XIR_ERROR_ERASE,.type=XR_XIR_ERROR,.args={ops[producer].args[0]}};
-        if(mode==5)ops[branch].targets[1]=target;
+        if(mode==5) {
+            uint32_t extra=actual->instruction_count-1;CHECK(ops[extra].op==XR_XIR_THROW);
+            ops[extra]=(XrXirInstruction){.op=XR_XIR_JUMP,.targets={target}};
+        }
         if(mode==6) {
-            operands[actual->operand_count]=owner;operands[actual->operand_count+1]=ops[producer].args[0];
+            uint32_t first=0;
+            for(uint32_t i=0;i<landing;++i)
+                if(xr_xir_op_uses_operand_table(ops[i].op))first+=ops[i].args[1];
+            memmove(operands+first+2,operands+first,(size_t)(actual->operand_count-first)*sizeof(*operands));
+            operands[first]=owner;operands[first+1]=ops[producer].args[0];
             functions[run].operand_count+=2;
-            ops[landing]=(XrXirInstruction){.op=XR_XIR_PHI,.type=XR_XIR_ERROR,.args={actual->operand_count,2}};
+            ops[landing]=(XrXirInstruction){.op=XR_XIR_PHI,.type=XR_XIR_ERROR,.args={first,2}};
+            for(uint32_t i=landing+1;i<actual->instruction_count;++i)
+                if(xr_xir_op_uses_operand_table(ops[i].op)&&ops[i].args[1])ops[i].args[0]+=2;
         }
         if(mode==7)ops[landing].op=XR_XIR_INVOKE_RESULT;
         uint64_t baseline=held(context->resources);XrXirArtifact *output=NULL;XrXirDiagnostic issue={0};
