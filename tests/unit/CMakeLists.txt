@@ -4325,6 +4325,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/program/source_product_consumers.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/go_source.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/go_closure.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/task_scope_source.cmake")
 add_executable(test_xir_scope_syntax frontend/test_scope_syntax.c)
 target_link_libraries(test_xir_scope_syntax PRIVATE xray_frontend_format)
 if(MSVC)

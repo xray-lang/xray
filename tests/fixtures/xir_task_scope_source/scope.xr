@@ -1,0 +1,36 @@
+const total = Atomic(0)
+fn worker(value: i64) { total.add(value) }
+fn failed() { assert(false) }
+fn returning() -> Array<i64> {
+    var value = [42]
+    scope { go worker(1); return move value }
+}
+fn leaving() {
+    var i = 0
+    while (i < 3) {
+        i++
+        scope { go worker(1); if (i == 1) { continue }; break }
+    }
+}
+export fn main() -> i64 {
+    scope { go worker(20); go fn() { total.add(22) }() }
+    assert(total.load() == 42)
+    scope(isolated) { go worker(1); go worker(2) }
+    assert(total.load() == 45)
+    scope { scope { go worker(1) }; go worker(2) }
+    assert(total.load() == 48)
+    const callback = fn() { total.add(2) }
+    scope { go callback() }
+    assert(total.load() == 50)
+    scope { for (var i = 0; i < 3; i++) { go worker(1) } }
+    assert(total.load() == 53)
+    scope { try { assert(false) } catch panic {}; go worker(1) }
+    assert(total.load() == 54)
+    var caught = false
+    try { scope { go failed() } } catch panic { caught = true }
+    assert(caught)
+    const result = returning()
+    assert(len(result) == 1 && result[0] == 42)
+    leaving()
+    return 42
+}
