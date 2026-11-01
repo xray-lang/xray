@@ -414,7 +414,7 @@ static void sdk_fixed_parent_prefixes(XrCompileResources *resources,const XrXirS
     }
 }
 static void sdk_legacy_known_bytes(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==40 && XR_XIR_CHECKED_CONTRACT==119 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==41 && XR_XIR_CHECKED_CONTRACT==120 &&
         XR_XIR_VALUE_ABI_VERSION==31 && XR_XIR_CALL_ABI_VERSION==38 && XR_XIR_PROGRAM_ABI_VERSION==37,
         "SDK known bytes require the independently framed public contract");
     _Static_assert(sizeof(previous_call29_sdk_kat_preimage)==3186,"complete retired Call29 SDK preimage");
@@ -728,7 +728,7 @@ static void sdk_library_known_bytes(void) {
 /* Ordinary identity and ownership checks do not enter the pressure census. */
 static void sdk_known_bytes(void) {
     sdk_library_known_bytes();
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==40 && XR_XIR_CHECKED_CONTRACT==119 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==41 && XR_XIR_CHECKED_CONTRACT==120 &&
         XR_XIR_VALUE_ABI_VERSION==31 && XR_XIR_CALL_ABI_VERSION==38 && XR_XIR_PROGRAM_ABI_VERSION==37,
         "current known bytes require their independently framed identity");
     _Static_assert(sizeof(current_sdk_kat_preimage)==3372 && sizeof(historical32_91_sdk_kat_preimage)==3330,
