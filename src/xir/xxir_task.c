@@ -420,9 +420,9 @@ static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirC
     config.admission = (XrXirValueAdmission){program->arena, executor->config.domain, NULL, NULL,
         executor->config.poll_limit, executor->config.call_limit};
     if (executor->config.admission.arena) config.admission = executor->config.admission;
-    task->generation=executor->generation;task->identity=executor->next_identity+1;
-    task->activation=(XirTaskActivation){.task=task,.ticket=task->identity,.entry=request->entry};
-    const XrXirExecutorBinding binding={executor,&task->activation,executor->generation,task->identity};
+    uint64_t ticket=executor->next_identity+1;
+    task->activation=(XirTaskActivation){.task=task,.ticket=ticket,.entry=request->entry};
+    const XrXirExecutorBinding binding={executor,&task->activation,executor->generation,ticket};
     XrXirCallStatus status=consuming ?
         xir_call_task_new_budgeted(&config,request,executor->budget,view,&binding,&task->call) :
         xr_xir_call_new_budgeted(&config,request,executor->budget,&task->call);
@@ -440,7 +440,8 @@ static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirC
         XrXirValue unpublished = task_core_task_value(task); xr_xir_value_drop(&unpublished);
         return freed == XR_XIR_CALL_READY ? status : freed;
     }
-    ++executor->next_identity;task->activation.call=task->call;
+    task->generation=executor->generation;task->identity=++executor->next_identity;
+    task->activation.call=task->call;
     if(!consuming)XR_CHECK(xr_xir_call_bind_executor(task->call, &binding) == XR_XIR_CALL_READY,
         "new child activation owns one non-reusable executor ticket");
     task->executor = executor; task->state = XIR_TASK_PENDING;
