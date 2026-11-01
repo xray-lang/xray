@@ -48,7 +48,7 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     if (node->type==AST_GO_EXPR) {
         SourceName *binding,*target;
         if (!source_go_target(ctx,node,&binding,&target)) return false;
-        if (!ctx->generics[target->index].parameter_count) {
+        if (target && !ctx->generics[target->index].parameter_count) {
             if (!source_task_type(ctx,node->as.go_expr.expr,ctx->functions[target->index].result,
                 ctx->functions[target->index].error_type,&output->type)) return false;
             output->present=true;

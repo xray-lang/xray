@@ -50,7 +50,11 @@ XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *body,const XrHirSignatureIn
         const XrXirFunctionIdentity *identities=*body->declarations.identities;
         if(input->family==XR_HIR_CALL_FUNCTION) {
             uint32_t receiver=identities[input->function].method_kind==XR_XIR_READ_METHOD?1u:0u;
-            if(input->receiver_count!=receiver||input->parameter_offset!=receiver)return XR_XIR_BAD_STRUCTURE;
+            if(input->callable!=XR_XIR_UNIT) {
+                const XrXirTypeNode *callable=xr_xir_callable_signature(body->types,input->callable);
+                if(receiver||input->receiver_count||!callable||input->parameter_offset>count||
+                    callable->parameter_count!=count-input->parameter_offset)return XR_XIR_BAD_STRUCTURE;
+            } else if(input->receiver_count!=receiver||input->parameter_offset!=receiver)return XR_XIR_BAD_STRUCTURE;
         } else if(input->receiver_count||input->parameter_offset)return XR_XIR_BAD_STRUCTURE;
         function_parameters=declaration.parameters;
         if(count&&!function_parameters)return XR_XIR_BAD_STRUCTURE;
@@ -303,6 +307,8 @@ XR_FUNC XrXirStatus xr_hir_body_call_finish(XrHirBody *body,XrHirBodySignature s
     if(row.finished||((!native||row.declaration.family==XR_HIR_CALL_ARRAY)&&row.argument_count!=expected)||
         (native&&row.declaration.family!=XR_HIR_CALL_VARIADIC_READ&&row.argument_count>expected))return XR_XIR_BAD_STRUCTURE;
     XrXirOp operation=instruction->op;
+    if(row.declaration.family==XR_HIR_CALL_FUNCTION&&row.declaration.callable!=XR_XIR_UNIT&&operation!=XR_XIR_GO)
+        return XR_XIR_BAD_STRUCTURE;
     if(native) {
         if(operation!=XR_XIR_INVALID)return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;
