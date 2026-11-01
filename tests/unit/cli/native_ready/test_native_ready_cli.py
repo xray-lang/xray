@@ -15,6 +15,20 @@ def command(label,argv,cwd):
  with (out/(label+'.stdout')).open('xb') as stdout,(out/(label+'.stderr')).open('xb') as stderr:
   code=run_child(argv,env=env,cwd=cwd,stdout=stdout,stderr=stderr,timeout=30)
  return subprocess.CompletedProcess(argv,code,(out/(label+'.stdout')).read_bytes(),(out/(label+'.stderr')).read_bytes())
+def exact_link_libraries(argv,compiler):
+ sdk=a.binary.resolve().parent/'xir-runtime-sdk'
+ manifest=json.loads((sdk/'sdk_manifest.json').read_text(encoding='utf-8'))
+ names=['xray_compile_resources','xray_xir_admission','xray_xir_declarations','xray_xir_scalar','xray_xir_runtime_host']
+ if {x['path'] for x in manifest['files'] if x['kind']==5}!={'lib/'+x+'.lib' for x in names}:return False
+ if manifest['system_libraries']!=['kernel32','bcrypt']:return False
+ cc=compiler['argv'];vc=Path(cc[0]).parents[3];um=Path(cc[20][2:])
+ if um.name.lower()!='um':return False
+ kit=um.parents[2]/'Lib'/um.parent.name
+ expected=[sdk/'lib'/(name+'.lib') for name in names]
+ expected += [vc/'lib/x64'/name for name in ['msvcrt.lib','oldnames.lib','vcruntime.lib']]
+ expected += [kit/'ucrt/x64/ucrt.lib',kit/'um/x64/kernel32.lib',kit/'um/x64/bcrypt.lib']
+ return len(argv)==9+len(expected) and [canonical(x) for x in argv[9:]]==[canonical(str(x)) for x in expected]
+
 def observe():
  while not stop.wait(.01):
   try:children=psutil.Process(os.getpid()).children(recursive=True)
@@ -35,7 +49,7 @@ def observe():
       row['strictRecipe']=argv[1:14]==fixed and len(argv) in [26,27] and argv[21]=='/c' and argv[24]=='/sourceDependencies' and all(x.startswith('/I') for x in argv[14:21])
      else:
       destination=next((x[5:] for x in argv if x.startswith('/out:')),None)
-      row['strictRecipe']=argv[1:5]==['/nologo','/incremental:no','/NODEFAULTLIB','/verbose:lib'] and len(argv)==19
+      row['strictRecipe']=argv[1:5]==['/nologo','/incremental:no','/NODEFAULTLIB','/verbose:lib'] and len(argv)==20
      expected=Path(destination).parent if destination else Path('X:/invalid')
      system=next(v for k,v in env.items() if k.upper()=='SYSTEMROOT')
      row['exactValues']=row['onlyExplicitThree'] and canonical(values['SYSTEMROOT'])==canonical(system) and canonical(values['TEMP'])==canonical(str(expected)) and canonical(values['TMP'])==canonical(str(expected))
@@ -46,6 +60,10 @@ thread=threading.Thread(target=observe);thread.start()
 try:
  build=command('build',[str(a.binary),'build',str(a.root/'demos/01-basics/hello.xr'),'-o',str(exe)],a.root)
 finally:stop.set();thread.join()
+for row in observed.values():
+ if row['name']=='link.exe':
+  compiler=next((x for x in observed.values() if x['name']=='cl.exe'),None)
+  row['strictRecipe']=row['strictRecipe'] and compiler is not None and exact_link_libraries(row['argv'],compiler)
 (out/'observed.json').write_text(json.dumps(list(observed.values()),indent=2)+'\n',encoding='utf-8')
 assert build.returncode==0,(build.returncode,build.stderr)
 compilers=[x for x in observed.values() if x['name'] in ['cl.exe','link.exe']]

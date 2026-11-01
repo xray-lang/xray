@@ -85,7 +85,7 @@ static void vm_and_lifetime(void) {
     CHECK(out.size==13 && !memcmp(out.bytes,"owned-result\n",13));
 }
 static void exact_rejections(void) {
-    const char *inputs[]={"const text:i64?=null\nprint(text)\n", "const text:Array<string>?=null\nprint(text)\n"};
+    const char *inputs[]={"class Hidden{init(){}}\nconst x=Hidden()\nprint(x)\n", "fn hidden()->i64{return 1}\nprint(hidden)\n"};
     XrSourceCompileOptions o=options();
     for(size_t i=0;i<sizeof(inputs)/sizeof(*inputs);++i) {
         XrSourceArtifact *artifact=NULL;XrSourceDiagnostic *diagnostic=NULL;XrSourceFailure failure={0};
@@ -93,7 +93,7 @@ static void exact_rejections(void) {
         XrSourceStatus status=xray_source_build(&in,&o,&artifact,&failure,&diagnostic);
         CHECK(status==XR_SOURCE_REJECTED && !artifact && diagnostic && failure.status==status);
         XrSourceDiagnosticRoot info={0};XrSourceDiagnosticReportInfo report_info={0};CHECK((xray_source_diagnostic_report(diagnostic,&report_info)==XR_SOURCE_OK && report_info.roots==1 ? xray_source_diagnostic_root(diagnostic,0,&info) : XR_SOURCE_BAD_STATE)==XR_SOURCE_OK);
-        CHECK(!strcmp(info.message,"print requires an admitted display type"));xray_source_diagnostic_free(diagnostic);
+        CHECK(!strcmp(info.message,"value has no admitted builtin display"));xray_source_diagnostic_free(diagnostic);
     }
 }
 static void refusal_without_publication(void) {
