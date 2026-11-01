@@ -106,3 +106,6 @@ tests/cli/fixtures/csv/* text eol=lf
 tests/fixtures/xir_rune_whitespace/*.chk -text
 tests/fixtures/xir_buffer_storage/*.xrc -text
 tests/fixtures/xir_move/*.chk -text
+
+# Emitter freshness compares the generator's canonical LF output byte for byte.
+src/xir/xxir_emit_literal_tables.inc.c text eol=lf
