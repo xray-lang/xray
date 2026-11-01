@@ -1028,10 +1028,12 @@ def render_unicode_callable(root, decoder):
         (21, '__move', '(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()'),
         (22, '__volatileLoad', '(ptr: Ptr<u8>, size: i64): i64'),
         (23, '__volatileStore', '(ptr: MutPtr<u8>, v: i64, size: i64): ()'),
+        (24, '__bufferSliceMutBegin', '(ptr: MutPtr<u8>, bytes: i64, owner: ref Buffer): MutSlice<u8>'),
     )
     terms = {'__BufferStorage': 'BUFFER_STORAGE', 'i64': 'I64',
              'bool': 'BOOL', '()': 'UNIT', 'Slice<u8>': 'SLICE_U8',
-             'Ptr<u8>': 'PTR_U8', 'MutPtr<u8>': 'MUT_PTR_U8'}
+             'Ptr<u8>': 'PTR_U8', 'MutPtr<u8>': 'MUT_PTR_U8',
+             'ref Buffer': 'BUFFER_REF', 'MutSlice<u8>': 'MUT_SLICE_U8'}
     buffer_lines, buffer_rows = [], []
     for ordinal, (identity, name, signature) in enumerate(buffer_contracts):
         rows = [row for row in declarations if row.module == 'mem' and row.name == name]
@@ -1044,12 +1046,13 @@ def render_unicode_callable(root, decoder):
         if row.argc != str(len(params)) or row.arg_spec != 'v' * len(params):
             raise ValueError('Memory callable arity disagrees: ' + name)
         borrowed = row.return_ownership == 'borrowed_param:0'
-        if borrowed != (ordinal in (4, 5)):
+        scoped = identity == 24
+        if borrowed != (ordinal in (4, 5)) or (row.return_ownership == 'borrowed_param:2') != scoped:
             raise ValueError('Memory callable borrow origin disagrees: ' + name)
-        allocation = 'MAY_HEAP' if ordinal in (0, 1, 2, 4, 5, 6, 12) else 'NO_HEAP'
+        allocation = 'MAY_HEAP' if ordinal in (0, 1, 2, 4, 5, 6, 12) or scoped else 'NO_HEAP'
         if row.allocation.upper() != allocation:
             raise ValueError('Memory callable allocation facts disagree: ' + name)
-        ownership = 'BORROWED_PARAM_0' if borrowed else 'UNIT' if result_text == '()' else 'OWNED'
+        ownership = 'BORROWED_PARAM_2' if scoped else 'BORROWED_PARAM_0' if borrowed else 'UNIT' if result_text == '()' else 'OWNED'
         symbol = 'xr_native_buffer_' + str(ordinal)
         if params:
             buffer_lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']

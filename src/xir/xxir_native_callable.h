@@ -109,6 +109,9 @@ static inline XrXirStatus xir_native_callable_verify(const XrXirModule *module,u
     const XrXirFunction *function=&module->functions[index];
     if (xir_mem_native_id(id->native_callable) && !xir_buffer_storage_scope(module->declarations,index))
         return XR_XIR_BAD_TYPE;
+    if (id->native_callable==XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN &&
+        (function->parameter_count!=3 || !function->parameters ||
+            !xir_mem_buffer_ref_scope(module,index,function->parameters[2]))) return XR_XIR_BAD_TYPE;
     if ((id->native_callable==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM || id->native_callable==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL) &&
         !xir_crypto_scope(module->declarations,index)) return XR_XIR_BAD_TYPE;
     if (!xir_native_callable_identity(id) ||

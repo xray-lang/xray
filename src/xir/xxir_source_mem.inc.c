@@ -19,7 +19,8 @@ static const uint32_t source_mem_callables[]={
     XR_NATIVE_CALLABLE_MEM_CACHE_FLUSH,XR_NATIVE_CALLABLE_MEM_NONTEMPORAL_STORE,
     XR_NATIVE_CALLABLE_MEM_CACHE_LINE_SIZE,XR_NATIVE_CALLABLE_MEM_PAGE_ALLOCATE,
     XR_NATIVE_CALLABLE_MEM_PAGE_PROTECT,XR_NATIVE_CALLABLE_MEM_PAGE_FREE,XR_NATIVE_CALLABLE_MEM_MOVE,
-    XR_NATIVE_CALLABLE_MEM_VOLATILE_LOAD,XR_NATIVE_CALLABLE_MEM_VOLATILE_STORE
+    XR_NATIVE_CALLABLE_MEM_VOLATILE_LOAD,XR_NATIVE_CALLABLE_MEM_VOLATILE_STORE,
+    XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN
 };
 static bool source_mem_module(SourceContext *ctx,uint32_t module) {
     if (module>=(uint32_t)ctx->graph->spec_count) return false;
@@ -54,8 +55,15 @@ static bool source_mem_term(SourceContext *ctx,XrNativeTypeTerm term,XrXirType *
     case XR_NATIVE_TERM_I64:*output=XR_XIR_I64;return true;
     case XR_NATIVE_TERM_BOOL:*output=XR_XIR_BOOL;return true;
     case XR_NATIVE_TERM_BUFFER_STORAGE:*output=XR_XIR_BUFFER_STORAGE;return true;
-    case XR_NATIVE_TERM_SLICE_U8:case XR_NATIVE_TERM_PTR_U8:case XR_NATIVE_TERM_MUT_PTR_U8:
+    case XR_NATIVE_TERM_BUFFER_REF: {
+        SourceName *buffer=find_name(ctx,ctx->names[ctx->module],"Buffer");
+        if (!buffer || buffer->kind!=SOURCE_NOMINAL || !source_mem_buffer(ctx,buffer->index))
+            return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"mutable Buffer scope requires its actual owning declaration");
+        return source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=buffer->type},output);
+    }
+    case XR_NATIVE_TERM_MUT_SLICE_U8:case XR_NATIVE_TERM_SLICE_U8:case XR_NATIVE_TERM_PTR_U8:case XR_NATIVE_TERM_MUT_PTR_U8:
         return source_intern_type(ctx,(XrXirTypeNode){.kind=term==XR_NATIVE_TERM_SLICE_U8?XR_XIR_TYPE_SLICE:
+            term==XR_NATIVE_TERM_MUT_SLICE_U8?XR_XIR_TYPE_MUT_SLICE:
             term==XR_NATIVE_TERM_PTR_U8?XR_XIR_TYPE_PTR:XR_XIR_TYPE_MUT_PTR,.element=XR_XIR_U8},output);
     default:return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"memory callable has an unsupported physical term");
     }

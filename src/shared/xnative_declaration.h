@@ -50,7 +50,8 @@ typedef enum XrNativeTypeTerm {
     /* The two retired type-term slots remain unassigned. */
     XR_NATIVE_TERM_NULLABLE_F64 = 35, XR_NATIVE_TERM_SLICE_U8 = 36,
     XR_NATIVE_TERM_TASK_RESULT, XR_NATIVE_TERM_NULLABLE_TASK_RESULT, XR_NATIVE_TERM_BUFFER_STORAGE,
-    XR_NATIVE_TERM_ITERATOR_RUNE, XR_NATIVE_TERM_ARRAY_STRING, XR_NATIVE_TERM_PTR_U8, XR_NATIVE_TERM_MUT_PTR_U8
+    XR_NATIVE_TERM_ITERATOR_RUNE, XR_NATIVE_TERM_ARRAY_STRING, XR_NATIVE_TERM_PTR_U8, XR_NATIVE_TERM_MUT_PTR_U8,
+    XR_NATIVE_TERM_BUFFER_REF, XR_NATIVE_TERM_MUT_SLICE_U8
 } XrNativeTypeTerm;
 /* RESULT_VARIABLE and the callback terms require an admitted recipe's exact
  * signature. They never grant authority to an arbitrary unparsed signature. */
@@ -164,7 +165,7 @@ typedef enum XrNativeAllocation {
 } XrNativeAllocation;
 typedef enum XrNativeResultOwnership {
     XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, XR_NATIVE_RESULT_OWNERSHIP_OWNED, XR_NATIVE_RESULT_OWNERSHIP_UNIT,
-    XR_NATIVE_RESULT_OWNERSHIP_BORROWED_PARAM_0
+    XR_NATIVE_RESULT_OWNERSHIP_BORROWED_PARAM_0, XR_NATIVE_RESULT_OWNERSHIP_BORROWED_PARAM_2
 } XrNativeResultOwnership;
 typedef struct XrNativeParameter {
     const char *name, *type_text;
@@ -221,7 +222,8 @@ typedef enum XrNativeCallableId {
     XR_NATIVE_CALLABLE_MEM_PAGE_FREE = 20,
     XR_NATIVE_CALLABLE_MEM_MOVE = 21,
     XR_NATIVE_CALLABLE_MEM_VOLATILE_LOAD = 22,
-    XR_NATIVE_CALLABLE_MEM_VOLATILE_STORE = 23
+    XR_NATIVE_CALLABLE_MEM_VOLATILE_STORE = 23,
+    XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN = 24
 } XrNativeCallableId;
 
 /* Callable IDs authenticate ordinary function bodies, independently of inline intrinsics. */

@@ -910,7 +910,11 @@ def validate_source_provider_bridges(
                     parameter_type = function_parameter_type(param, entry.symbol)
                 except ValueError as exc:
                     raise SystemExit(str(exc)) from exc
-                if parameter_type != wrapper:
+                scoped_buffer = (wrapper == "Buffer" and entry.module == "mem" and
+                    entry.name == "__bufferSliceMutBegin" and index == 2 and
+                    entry.signature == "(ptr: MutPtr<u8>, bytes: i64, owner: ref Buffer): MutSlice<u8>" and
+                    entry.return_ownership == "borrowed_param:2")
+                if parameter_type != wrapper and not (scoped_buffer and parameter_type == "ref Buffer"):
                     raise SystemExit(
                         f"{entry.symbol}: source provider wrapper {wrapper} must be an exact "
                         "non-nullable nominal parameter type"

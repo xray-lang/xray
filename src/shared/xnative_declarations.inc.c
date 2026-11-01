@@ -782,6 +782,16 @@ static const XrNativeMemberDeclaration xr_native_buffer_17 = {
     false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,
     "none", XR_NATIVE_RESULT_OWNERSHIP_UNIT, xr_native_buffer_17_parameters, 3, XR_NATIVE_TERM_UNIT
 };
+static const XrNativeParameter xr_native_buffer_18_parameters[] = {
+    {"ptr", "MutPtr<u8>", XR_NATIVE_TERM_MUT_PTR_U8, false, false},
+    {"bytes", "i64", XR_NATIVE_TERM_I64, false, false},
+    {"owner", "ref Buffer", XR_NATIVE_TERM_BUFFER_REF, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_buffer_18 = {
+    19, "__bufferSliceMutBegin", "(ptr: MutPtr<u8>, bytes: i64, owner: ref Buffer): MutSlice<u8>", "MutSlice<u8>", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_MAY_HEAP,
+    "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_BORROWED_PARAM_2, xr_native_buffer_18_parameters, 3, XR_NATIVE_TERM_MUT_SLICE_U8
+};
 static const XrNativeParameter xr_native_crypto_0_parameters[] = {
     {"bytes", "ref Array<u8>", XR_NATIVE_TERM_ARRAY_U8, false, false},
 };
@@ -818,26 +828,27 @@ static const XrNativeMemberDeclaration xr_native_unicode_has_property = {
 };
 static const XrNativeCallableDeclaration xr_native_callables[] = {
     {XR_NATIVE_CALLABLE_STRING_FROM_UTF8, &xr_native_string, &xr_native_string_members[0], &xr_native_utf8_error, false, NULL, NULL, {{0}}},
-    {XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID, NULL, &xr_native_unicode_property, NULL, true, "regex", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY, NULL, &xr_native_unicode_has_property, NULL, true, "regex", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {4, NULL, &xr_native_buffer_0, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {5, NULL, &xr_native_buffer_1, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {6, NULL, &xr_native_buffer_2, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {7, NULL, &xr_native_buffer_3, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {10, NULL, &xr_native_buffer_4, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {11, NULL, &xr_native_buffer_5, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {12, NULL, &xr_native_buffer_6, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {13, NULL, &xr_native_buffer_7, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {14, NULL, &xr_native_buffer_8, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {15, NULL, &xr_native_buffer_9, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {16, NULL, &xr_native_buffer_10, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {17, NULL, &xr_native_buffer_11, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {18, NULL, &xr_native_buffer_12, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {19, NULL, &xr_native_buffer_13, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {20, NULL, &xr_native_buffer_14, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {21, NULL, &xr_native_buffer_15, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {22, NULL, &xr_native_buffer_16, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {23, NULL, &xr_native_buffer_17, NULL, false, "mem", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {8, NULL, &xr_native_crypto_0, NULL, false, "crypto", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}},
-    {9, NULL, &xr_native_crypto_1, NULL, false, "crypto", "stdlib/defs/core.def", {{157,228,106,113,116,90,194,11,129,170,226,111,63,163,23,36,200,73,233,192,42,100,183,171,127,207,210,39,108,197,228,164}}}
+    {XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID, NULL, &xr_native_unicode_property, NULL, true, "regex", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY, NULL, &xr_native_unicode_has_property, NULL, true, "regex", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {4, NULL, &xr_native_buffer_0, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {5, NULL, &xr_native_buffer_1, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {6, NULL, &xr_native_buffer_2, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {7, NULL, &xr_native_buffer_3, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {10, NULL, &xr_native_buffer_4, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {11, NULL, &xr_native_buffer_5, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {12, NULL, &xr_native_buffer_6, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {13, NULL, &xr_native_buffer_7, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {14, NULL, &xr_native_buffer_8, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {15, NULL, &xr_native_buffer_9, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {16, NULL, &xr_native_buffer_10, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {17, NULL, &xr_native_buffer_11, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {18, NULL, &xr_native_buffer_12, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {19, NULL, &xr_native_buffer_13, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {20, NULL, &xr_native_buffer_14, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {21, NULL, &xr_native_buffer_15, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {22, NULL, &xr_native_buffer_16, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {23, NULL, &xr_native_buffer_17, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {24, NULL, &xr_native_buffer_18, NULL, false, "mem", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {8, NULL, &xr_native_crypto_0, NULL, false, "crypto", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}},
+    {9, NULL, &xr_native_crypto_1, NULL, false, "crypto", "stdlib/defs/core.def", {{90,70,221,54,187,89,206,221,246,207,195,58,81,123,185,250,85,115,109,108,21,37,244,226,218,238,143,124,33,106,150,184}}}
 };

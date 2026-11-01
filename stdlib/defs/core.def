@@ -1715,6 +1715,20 @@ module mem {
     return_ownership: "borrowed_param:0"
   }
 
+  fn __bufferSliceMutBegin {
+    signature: "(ptr: MutPtr<u8>, bytes: i64, owner: ref Buffer): MutSlice<u8>"
+    doc: "Begin a bounded exclusive byte scope of the exact referenced Buffer"
+    vm: "mem_buffer_slice_mut_begin"
+    aot: "xrt_mem_buffer_slice_mut_begin"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+    allocation: "may_heap"
+    return_ownership: "borrowed_param:2"
+  }
+
   fn __bufferBorrowPtr {
     signature: "(storage: __BufferStorage): MutPtr<u8>"
     doc: "Borrow the raw pointer from a private Buffer storage handle"
