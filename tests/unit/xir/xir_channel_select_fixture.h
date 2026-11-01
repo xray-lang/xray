@@ -15,6 +15,7 @@
 #define XIR_CHANNEL_SELECT_FIXTURE_H
 #include "base/xmalloc.h"
 #include "base/xcompile_resources.h"
+#include "base/xresource_limits.h"
 #include "xir/xxir_channel.h"
 #include "xir/xxir_type_arena.h"
 #include "xir/xxir_constraint_proof.h"
@@ -46,9 +47,10 @@ static void result_owner_ready(ResultOwner *owner) {
     for(unsigned i=0;i<2;++i)CHECK(xr_xir_compile_type_constraints(&owner->context,&module,0,
         (XrXirType)(RESULT_CHANNEL_I64+i),(XrXirConstraint){.markers=XR_XIR_CONSTRAINT_SENDABLE})==XR_XIR_OK);
     CHECK(xr_xir_compile_type_arena_new(&owner->context,&types,&owner->arena)==XR_XIR_VALUE_OK);
-    XrXirDomainBudgetControls controls={8388608,8388608,128000000,4194304,4194304};
+    XrXirDomainBudgetControls controls={8388608,8388608,XR_RESOURCE_SANDBOX_RUNTIME_WORK,4194304,4194304};
     CHECK(xr_xir_domain_new_budgeted(8388608,&controls,&owner->domain)==XR_XIR_VALUE_OK);
-    owner->admission=(XrXirValueAdmission){.arena=owner->arena,.domain=owner->domain,.work=128000000,.scratch_bytes=4194304};
+    owner->admission=(XrXirValueAdmission){.arena=owner->arena,.domain=owner->domain,
+        .work=XR_RESOURCE_SANDBOX_RUNTIME_WORK,.scratch_bytes=4194304};
 }
 static void result_owner_free(ResultOwner *owner) {
     xr_xir_domain_drop(owner->domain);xr_xir_compile_type_arena_drop(owner->arena);
