@@ -63,10 +63,15 @@ static XrXirCallStatus call_view_return_bind(XrXirCall *call,CallFrame *frame) {
 static XrXirValueStatus call_view_return_leaf(void *context,const XrXirValue *value,bool writable,
     XrXirValueAdmission *admission,XrXirCellAuthority *output) {
     CallViewArguments *current=context;(void)writable;
-    if (!call_view_arguments_current(current,admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirCall *call=current?current->call:NULL;CallFrame *source=current?current->source:NULL;
+    CallViewReturn *result=source?source->view_return:NULL;
+    bool terminal=call && call_owner_current(call) && call->driving && call->admitting &&
+        !call->cleaning && !call_observing(call) && !call->active_view && source==call->top &&
+        admission==&call->config.admission && result && result->storage && result->storage_program &&
+        (!call->cancel_requested || cleanup_active(call) || call->abort_reason!=XR_XIR_CALL_READY);
+    if (!terminal && !call_view_arguments_current(current,admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueStatus status=XR_XIR_VALUE_OK;CallViewBinding *binding=call_view_binding(current->call,value,&status);
     if (!binding) return status;
-    CallViewReturn *result=current->source->view_return;
     if (result->storage) {
         XrXirViewOriginInfo info={0};status=xr_xir_view_origin_info(&binding->pin,admission,&info);
         if (status!=XR_XIR_VALUE_OK) return status;
