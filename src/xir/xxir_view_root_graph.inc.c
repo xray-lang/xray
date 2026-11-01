@@ -27,6 +27,8 @@ typedef struct ViewRootCheck {
 } ViewRootCheck;
 typedef struct ViewRootQuery {
     ViewRootCheck *check;
+    XrCompileRequestControl *control;
+    uint32_t progress;
     ViewOriginSet sites,tasks,contexts,paths,selections;
     bool capture;
 } ViewRootQuery;

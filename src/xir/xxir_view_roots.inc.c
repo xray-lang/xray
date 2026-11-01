@@ -146,6 +146,7 @@ static XrXirStatus view_root_step(ViewRootQuery *q,ViewOriginPair site,ViewOrigi
         const XrXirBorrowReturns *rows=xr_xir_compile_construction_borrow_returns(c->construction);
         const XrXirTypeNode *receiver=xr_xir_type_node(c->module->types,xr_xir_operand_type(body,op->args[0]));
         for (uint32_t i=0;rows && i<rows->count;++i) {
+            XrXirStatus status=xir_receive_step(q->control,&q->progress);if (status!=XR_XIR_OK) return status;
             const XrXirBorrowReturn *row=&rows->rows[i];
             if (receiver && receiver->kind==XR_XIR_TYPE_NOMINAL && receiver->nominal.declaration==row->nominal &&
                 op->type==XR_XIR_BUFFER_STORAGE && op->immediate==row->field)
@@ -222,11 +223,11 @@ static XrXirStatus view_root_drain(ViewRootQuery *q,XrXirStatus status) {
     view_root_set_drop(c,&q->sites);view_root_set_drop(c,&q->tasks);view_root_set_drop(c,&q->contexts);
     view_root_set_drop(c,&q->paths);view_root_set_drop(c,&q->selections);return status;
 }
-static XrXirStatus view_root_query(ViewRootCheck *c,uint32_t f,uint32_t value,bool capture) {
-    ViewRootQuery q={.check=c,.capture=capture};
+static XrXirStatus view_root_query(ViewRootCheck *c,uint32_t f,uint32_t value,bool capture,XrCompileRequestControl *control) {
+    ViewRootQuery q={.check=c,.capture=capture,.control=control};
     return view_root_drain(&q,view_root_push(&q,f,value,0,0));
 }
-static XrXirStatus view_root_walk(ViewRootCheck *c,bool captures) {
+static XrXirStatus view_root_walk(ViewRootCheck *c,bool captures,XrCompileRequestControl *control) {
     for (uint32_t f=0;f<c->module->function_count;++f) {
         const XrXirFunction *body=&c->module->functions[f];
         for (uint32_t b=0;b<body->block_count;++b) for (uint32_t i=body->blocks[b].first;i<body->blocks[b].first+body->blocks[b].count;++i) {
@@ -239,11 +240,11 @@ static XrXirStatus view_root_walk(ViewRootCheck *c,bool captures) {
                     uint32_t value=body->operands[op->args[0]+p];
                     if (!xr_xir_type_is_cell(c->module->types,xr_xir_operand_type(body,value))) continue;
                     uint32_t ignored;XrXirStatus status=view_root_intern(c,&c->captured,(ViewOriginPair){(uint32_t)op->immediate,p},&ignored);
-                    if (status==XR_XIR_OK) status=view_root_query(c,f,value,true);
+                    if (status==XR_XIR_OK) status=view_root_query(c,f,value,true,control);
                     if (status!=XR_XIR_OK) return status;
                 }
             } else if (op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW) {
-                XrXirStatus status=view_root_query(c,f,body->parameter_count+i,false);if (status!=XR_XIR_OK) return status;
+                XrXirStatus status=view_root_query(c,f,body->parameter_count+i,false,control);if (status!=XR_XIR_OK) return status;
             }
         }
     }
@@ -264,8 +265,8 @@ XR_FUNC XrXirStatus xir_compile_view_roots_verified(const XrXirCompileContext *c
     ViewRootCheck c={.context=context,.module=module,.construction=construction,.flags=flags,.visitor=visitor,.user=user,
         .location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
     status=view_root_graph(&c,input.control);
-    if (status==XR_XIR_OK) status=view_root_walk(&c,true);
-    if (status==XR_XIR_OK) status=view_root_walk(&c,false);
+    if (status==XR_XIR_OK) status=view_root_walk(&c,true,input.control);
+    if (status==XR_XIR_OK) status=view_root_walk(&c,false,input.control);
     if (diagnostic && status!=XR_XIR_OK) {*diagnostic=c.location;diagnostic->status=status;}
     view_root_set_drop(&c,&c.captured);xr_compile_resources_free(c.meta);xr_compile_resources_free(c.edges);
     xr_compile_resources_free(flags);return status;

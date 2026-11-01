@@ -127,3 +127,95 @@ static void mem_library_root_rejection(const XrXirCompileContext *context) {
     XrXirLibraryCatalog *output=NULL;CHECK(xr_xir_compile_library_catalog_new_v2(context,&input,1,&output)!=XR_XIR_OK&&!output);
     xr_xir_compile_checked_packet_free(&packet);CHECK(held(context->resources)==baseline);
 }
+static void mem_direct_built_rejections(const XrXirCompileContext *context,const XrXirModule *original,
+    const XrXirConstruction *construction) {
+    uint64_t baseline=held(context->resources);uint32_t targets[3]={UINT32_MAX,UINT32_MAX,UINT32_MAX},resize=UINT32_MAX;
+    for (uint32_t f=0;f<original->function_count;++f) {
+        if (original->declarations->functions[f].native_callable==XR_NATIVE_CALLABLE_BUFFER_RESIZE) resize=f;
+        XrXirBorrowReturn row={0};bool present=false;
+        CHECK(xir_borrow_return_describe(context,original,f,&row,&present,NULL)==XR_XIR_OK);
+        if (row.native_callable==XR_NATIVE_CALLABLE_BUFFER_LENGTH) targets[1]=f;
+        if (present && row.native_callable==XR_NATIVE_CALLABLE_BUFFER_AS_BYTES) targets[0]=f;
+        if (present && row.native_callable==XR_NATIVE_CALLABLE_BUFFER_BORROW_PTR) targets[2]=f;
+    }
+    CHECK(resize!=UINT32_MAX);XrXirStatus allocation=XR_XIR_OK;
+    XrXirFunction *functions=xir_compile_copy(context,original->functions,original->function_count*sizeof(*functions),&allocation);
+    CHECK(allocation==XR_XIR_OK);
+    for (uint32_t k=0;k<3;++k) {
+        CHECK(targets[k]!=UINT32_MAX);const XrXirFunction *body=&original->functions[targets[k]];
+        uint32_t leaf=UINT32_MAX;
+        for (uint32_t i=0;i<body->instruction_count;++i) if (body->instructions[i].op==XR_XIR_CALL) leaf=(uint32_t)body->instructions[i].immediate;
+        CHECK(leaf!=UINT32_MAX);
+        /* New, canonical BUILT instructions borrow only the unchanged type,
+         * declaration and Construction owners until complete check_v2 clones. */
+        XrXirInstruction direct[]={
+            {.op=XR_XIR_CLASS_GET,.type=XR_XIR_BUFFER_STORAGE,.args={0}},
+            {.op=XR_XIR_CALL,.type=body->result,.args={0,1},.immediate=leaf},
+            {.op=XR_XIR_RETURN,.args={2}}};
+        uint32_t direct_operands[]={1};XrXirBlock block={0,3,0,0};
+        functions[targets[k]]=*body;functions[targets[k]].instructions=direct;functions[targets[k]].instruction_count=3;
+        functions[targets[k]].operands=direct_operands;functions[targets[k]].operand_count=1;functions[targets[k]].blocks=&block;
+        XrXirModule built=*original;built.stage=XR_XIR_BUILT;built.provenance=NULL;built.functions=functions;
+        XrXirArtifact *output=NULL;CHECK(xr_xir_compile_check_v2(context,&built,construction,&output,NULL)==XR_XIR_OK&&output);
+        xr_xir_compile_artifact_free(output);output=NULL;
+        XrXirInstruction effects[]={
+            {.op=XR_XIR_CLASS_GET,.type=XR_XIR_BUFFER_STORAGE,.args={0}},
+            {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=8},
+            {.op=XR_XIR_CALL,.type=XR_XIR_BOOL,.args={0,2},.immediate=resize},
+            {.op=XR_XIR_CALL,.type=body->result,.args={2,1},.immediate=leaf},
+            {.op=XR_XIR_RETURN,.args={4}}};
+        uint32_t effect_operands[]={1,2,1};block.count=5;
+        functions[targets[k]].instructions=effects;functions[targets[k]].instruction_count=5;
+        functions[targets[k]].operands=effect_operands;functions[targets[k]].operand_count=3;
+        CHECK(xr_xir_compile_check_v2(context,&built,construction,&output,NULL)!=XR_XIR_OK&&!output);
+        if (k==2) {
+            XrXirInstruction stores[]={direct[0],direct[1],
+                {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=0},
+                {.op=XR_XIR_CONST_INT,.type=XR_XIR_U8,.immediate=1},
+                {.op=XR_XIR_PTR_STORE,.type=XR_XIR_UNIT,.args={1,3}},
+                {.op=XR_XIR_CALL,.type=body->result,.args={4,1},.immediate=leaf},
+                {.op=XR_XIR_RETURN,.args={6}}};
+            uint32_t store_operands[]={1,2,3,4,1};block.count=7;
+            functions[targets[k]].instructions=stores;functions[targets[k]].instruction_count=7;
+            functions[targets[k]].operands=store_operands;functions[targets[k]].operand_count=5;
+            CHECK(xr_xir_compile_check_v2(context,&built,construction,&output,NULL)!=XR_XIR_OK&&!output);
+        }
+        functions[targets[k]]=*body;
+    }
+    xr_compile_resources_free(functions);CHECK(held(context->resources)==baseline);
+    puts("Direct BUILT: three exact leaves accepted; three resize bodies and one raw store rejected");
+}
+static void mem_direct_source_rejections(const XrXirCompileContext *context,const char *stdlib) {
+    uint64_t baseline=held(context->resources);XrOsIoPolicy policy=xr_compile_io_policy(context->resources);
+    char *root=NULL,*stdroot=NULL;CHECK(xr_realpath_owned(&policy,XR_MEM_COLD_ROOT,&root)==XR_OS_IO_OK);
+    CHECK(xr_realpath_owned(&policy,stdlib,&stdroot)==XR_OS_IO_OK);char path[2048],entry[2048];
+    CHECK(snprintf(path,sizeof(path),"%s/mem/mem.xr",stdlib)>0);CHECK(snprintf(entry,sizeof(entry),"%s/direct-body.xr",root)>0);
+    FILE *file=fopen(path,"rb");CHECK(file&&!fseek(file,0,SEEK_END));long bytes=ftell(file);CHECK(bytes>0&&!fseek(file,0,SEEK_SET));
+    char *original=NULL;CHECK(xr_compile_resources_alloc(context->resources,(size_t)bytes+1,(void **)&original)==XR_COMPILE_RESOURCE_OK);
+    CHECK(fread(original,1,(size_t)bytes,file)==(size_t)bytes&&!fclose(file));original[bytes]=0;
+    const char *old[]={"asBytes() -> Slice<u8> from this { return __bufferAsBytes(this._storage) }",
+        "operator len() -> i64 { return __bufferLength(this._storage) }","borrowPtr() -> MutPtr<u8> { return __bufferBorrowPtr(this._storage) }"};
+    const char *replacement[]={"asBytes() -> Slice<u8> from this { __bufferResize(this._storage,8); return __bufferAsBytes(this._storage) }",
+        "operator len() -> i64 { __bufferResize(this._storage,8); return __bufferLength(this._storage) }",
+        "borrowPtr() -> MutPtr<u8> {const p=__bufferBorrowPtr(this._storage);unsafe{p[0]=1 as u8};return __bufferBorrowPtr(this._storage)}"};
+    const char *main_text[]={"import mem\nfn use(b:mem.Buffer)->i64{const old=b.asBytes();const next=b.asBytes();return len(old)+len(next)}\n",
+        "import mem\nfn use(b:mem.Buffer)->i64{const old=b.asBytes();const n=len(b);return len(old)+n}\n",
+        "import mem\nfn use(b:mem.Buffer)->i64{const old=b.asBytes();const p=b.borrowPtr();return len(old)}\n"};
+    for (uint32_t k=0;k<3;++k) {
+        const char *match=strstr(original,old[k]);CHECK(match);size_t first=(size_t)(match-original);
+        size_t tail=(size_t)bytes-first-strlen(old[k]),length=first+strlen(replacement[k])+tail;char *candidate=NULL;
+        CHECK(xr_compile_resources_alloc(context->resources,length+1,(void **)&candidate)==XR_COMPILE_RESOURCE_OK);
+        memcpy(candidate,original,first);memcpy(candidate+first,replacement[k],strlen(replacement[k]));
+        memcpy(candidate+first+strlen(replacement[k]),match+strlen(old[k]),tail+1);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
+        XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
+        XrXirSourceRequest request={session,entry,&authority,context,stdroot,NULL,XR_XIR_PROGRAM,NULL};
+        XrModuleOverlayInput overlays[]={{authority,"direct-body.xr",entry,main_text[k],strlen(main_text[k])},
+            {{XR_MODULE_IDENTITY_STDLIB,"mem",stdroot},"mem/mem.xr",path,candidate,length}};
+        XrXirSourceResult result={0};CHECK(xr_xir_compile_source_check_overlay(&request,overlays,2,&result,NULL,NULL)!=XR_XIR_OK&&!result.checked&&!result.snapshot);
+        xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);xr_compile_resources_free(candidate);
+    }
+    xr_compile_resources_free(original);xr_compile_resources_free(root);xr_compile_resources_free(stdroot);
+    CHECK(held(context->resources)==baseline);
+    puts("Direct Source: complete asBytes/len resize and borrowPtr store overlays rejected");
+}

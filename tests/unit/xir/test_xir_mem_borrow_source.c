@@ -22,6 +22,7 @@
 #include "xir/xxir_view_liveness_internal.h"
 #include "base/xcompile_request.h"
 #include "toolchain/xcompiler_session.h"
+#include "shared/xnative_declaration.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -136,9 +137,12 @@ static void caller_controls(const XrXirCompileContext *context,const char *stdli
     for (uint32_t i=0;i<sizeof(cases)/sizeof(*cases);++i) {
         XrCompilerSession *session=NULL;
         CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
+        Cancel state={0,UINT32_MAX};XrCompileRequestControl control=request_control(&state);
+        CHECK(xr_compile_session_bind_request(session,&control)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,cases[i].name,NULL};
         XrXirSourceRequest request={session,NULL,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,NULL};
         source_control(&request,cases[i].source,cases[i].accepted,cases[i].name);
+        CHECK(state.polls);
         xr_compile_session_free(session);
     }
 }
@@ -186,11 +190,13 @@ int main(int argc,char **argv) {
     XrXirArtifact *rejected=NULL;
     CHECK(xr_xir_compile_recheck_v2(&context,module,missing,&rejected,NULL,NULL)!=XR_XIR_OK && !rejected);
     return_controls(&context,module,construction,&specification);
+    mem_direct_built_rejections(&context,module,construction);
     xr_xir_compile_construction_free(missing);xr_compile_resources_free(rows);xr_compile_resources_free(materializations);
     xr_xir_compile_artifact_free(cold);CHECK(held(resources)==frame);
     physical_flags(&context);caller_controls(&context,stdlib);
     mem_library_case(&context,stdlib,false);mem_library_case(&context,stdlib,true);
     mem_library_root_rejection(&context);
+    mem_direct_source_rejections(&context,stdlib);
     CHECK(held(resources)==frame);xr_compile_resources_release(resources);
     puts("mem source return facts PASS");return 0;
 }

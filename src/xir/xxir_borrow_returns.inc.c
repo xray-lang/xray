@@ -105,10 +105,31 @@ XR_FUNC XrXirStatus xir_borrow_return_describe(const XrXirCompileContext *contex
     for (uint32_t i=0;i<body->instruction_count;++i) {
         XrXirStatus status=xir_receive_step(control,&progress);if (status!=XR_XIR_OK) return status;
         const XrXirInstruction *op=&body->instructions[i];
-        if (op->op!=XR_XIR_RETURN) continue;
-        status=borrow_return_value(m,f,op->args[0],leaf,control);
+        switch (op->op) {
+        case XR_XIR_CONST_INT:case XR_XIR_COPY:case XR_XIR_OWNED_RETAIN:break;
+        case XR_XIR_CLASS_GET: {
+            uint32_t receiver=op->args[0];status=borrow_return_alias(body,&receiver,control);
+            if (status!=XR_XIR_OK) return status;
+            if (op->type!=XR_XIR_BUFFER_STORAGE || op->immediate || receiver) return XR_XIR_BAD_TYPE;
+            break;
+        }
+        case XR_XIR_CALL:
+            status=borrow_return_value(m,f,body->parameter_count+i,leaf,control);break;
+        case XR_XIR_VIEW_CLEANUP:
+            /* Normalization may protect the future returned Slice. These
+             * local scope ends neither mutate storage nor install a grant. */
+            if ((op->args[1] && (!result || result->kind!=XR_XIR_TYPE_SLICE)) ||
+                op->args[0]>body->operand_count || op->args[1]>body->operand_count-op->args[0]) return XR_XIR_BAD_TYPE;
+            for (uint32_t p=0;p<op->args[1] && status==XR_XIR_OK;++p) {
+                status=xir_receive_step(control,&progress);
+                if (status==XR_XIR_OK) status=borrow_return_value(m,f,body->operands[op->args[0]+p],leaf,control);
+            }
+            break;
+        case XR_XIR_RETURN:
+            status=borrow_return_value(m,f,op->args[0],leaf,control);returned=true;break;
+        default:return XR_XIR_BAD_TYPE;
+        }
         if (status!=XR_XIR_OK) return status;
-        returned=true;
     }
     if (!returned) return XR_XIR_BAD_TYPE;
     *output=(XrXirBorrowReturn){f,0,nominal,0,leaf};*present=!length;return XR_XIR_OK;

@@ -250,7 +250,7 @@ static XrXirStatus view_access_constructor(ViewAccess *a,uint32_t value) {
         if (stable) return XR_XIR_OK;
     }
     ViewRootComparison roots={a->resolver,NULL,false};XirViewRootRequest request={a->function,value,a->instruction,NULL,0};
-    status=xir_compile_view_root_resolver_query(a->resolver,&request,view_root_save,&roots,NULL);
+    status=view_root_resolver_query_controlled(a->resolver,&request,view_root_save,&roots,NULL,a->cells?a->cells->control:NULL);
     bool unresolved=!roots.left;
     for (ViewRootSaved *p=roots.left;p && status==XR_XIR_OK;p=p->next) {
         const XrXirViewRootEvent *event=&p->event;
