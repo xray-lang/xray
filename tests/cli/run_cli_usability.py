@@ -97,13 +97,23 @@ def main() -> int:
     rejected = run('bom-interior', [binary, 'run', interior], bom, stdlib_env, None)
     assert rejected.returncode == 1 and rejected.stdout == b'' and b':2:1: error:' in rejected.stderr, rejected
 
+    # Rest facts survive function values and explicit Array tails in each command.
+    rest = work / 'variadic.xr'
+    rest.write_text('fn sum(...values:i64)->i64{var total=0;for(value in values){total+=value};return total}\n'
+                    'const f:fn(...i64)->i64=sum\nprint(f(20,...[22]))\n', encoding='utf-8')
+    run('rest-check', [binary, 'check', rest], work, stdlib_env, (0, b'', b''))
+    run('rest-run', [binary, 'run', rest], work, stdlib_env, (0, b'42\n', b''))
+    rest_c = work / 'variadic.c'
+    run('rest-build-c', [binary, 'build', '-c', rest, '-o', rest_c], work, stdlib_env,
+        (0, f'Generated: {rest_c}\n'.encode(), b''))
+    assert rest_c.is_file() and rest_c.stat().st_size > 0
+
     # Shared Source refusals name the feature and its actual source position.
     # None of the three public commands may publish output before admission.
     unsupported = (
         ('bytes', 'var value = b"x"\n', 13, 'fixed byte literal syntax'),
         ('scope', '    scope {}\n', 5, 'scope statement syntax'),
         ('fixed-array', 'var value:[i64;2]=[1,2]\n', 11, 'fixed array type syntax'),
-        ('variadic', 'fn sum(...values:i64)->i64{return 0}\n', 4, 'variadic parameter syntax'),
         ('unit-parameter', 'fn consume(value:())->i64{return 41}\n', 4, 'this parameter declaration syntax'),
         ('target-scalar', 'var value:usize=0\n', 5, 'usize type'),
         ('target-array', 'var value=Array<usize>()\n', 5, 'usize type'),
@@ -120,7 +130,7 @@ def main() -> int:
             run('unsupported-' + name + '-' + mode, command, work, stdlib_env, (1, b'', expected_error))
             assert not published.exists()
 
-    print(f'CLI usability: {passed} commands, stdlib discovery, BOM and located feature refusals PASS')
+    print(f'CLI usability: {passed} commands, stdlib discovery, BOM, rest values and located feature refusals PASS')
     return 0
 
 
