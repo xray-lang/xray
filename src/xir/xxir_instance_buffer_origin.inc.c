@@ -15,11 +15,14 @@ static bool instance_buffer_view_work(XrXirValueAdmission *admission,uint64_t wo
     admission->work-=work;return true;
 }
 XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *program,
-    const void *context,const XrXirCallMetadata *metadata,uint32_t target,
-    const XrXirValue *arguments,uint32_t count,const XrXirCellAuthority *authority,
-    XrXirValueAdmission *admission,uint32_t *parameter,uint32_t *field,XrXirValue *output) {
-    if (!program || !metadata || !parameter || !field || !output || !value_unit(*output) || !admission)
+    const void *context,const XirBufferViewOriginQuery *query,
+    uint32_t *parameter,uint32_t *field,XrXirValue *output) {
+    if (!program || !query || !query->metadata || !parameter || !field || !output ||
+        !value_unit(*output) || !query->admission)
         return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirCallMetadata *metadata=query->metadata;uint32_t target=query->target,count=query->count;
+    const XrXirValue *arguments=query->arguments;const XrXirCellAuthority *authority=query->authority;
+    XrXirValueAdmission *admission=query->admission;
     *parameter=UINT32_MAX;*field=UINT32_MAX;
     if (!context || metadata->admission_context!=context || metadata->entries!=program->entries ||
         metadata->entry_count!=program->entry_count || metadata->arena!=program->arena ||
@@ -83,10 +86,11 @@ XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *pro
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_ARGUMENT;
 }
 XR_FUNC XrXirCallStatus xir_instance_buffer_view_origin(XrXirCallView *view,
-    const XrXirCallMetadata *metadata,uint32_t target,const XrXirValue *arguments,uint32_t count,
-    const XrXirCellAuthority *authority,XrXirProgram **owner,
+    const XirBufferViewOriginQuery *query,XrXirProgram **owner,
     uint32_t *parameter,uint32_t *field,XrXirValue *output) {
-    if (!owner || *owner || !metadata) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!owner || *owner || !query || !query->metadata || query->admission!=xr_xir_call_admission(view))
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirCallMetadata *metadata=query->metadata;
     XrXirInstance *instance=view_instance(view);
     if (!instance) return XR_XIR_CALL_READY;
     XrXirInstance *root=instance_root(instance),*selected=NULL;
@@ -98,8 +102,7 @@ XR_FUNC XrXirCallStatus xir_instance_buffer_view_origin(XrXirCallView *view,
     }
     if (!selected) return XR_XIR_CALL_READY;
     if (selected->domain!=instance->domain || !selected->program) return XR_XIR_CALL_BAD_ARGUMENT;
-    XrXirCallStatus status=xir_instance_buffer_view_recheck(selected->program,selected,metadata,target,
-        arguments,count,authority,xr_xir_call_admission(view),parameter,field,output);
+    XrXirCallStatus status=xir_instance_buffer_view_recheck(selected->program,selected,query,parameter,field,output);
     if (status==XR_XIR_CALL_READY && output->type) {
         if (!xr_xir_compile_program_retain(selected->program)) {xr_xir_value_drop(output);return XR_XIR_CALL_LIMIT;}
         *owner=selected->program;

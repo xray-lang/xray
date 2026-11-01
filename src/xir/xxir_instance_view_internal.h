@@ -15,17 +15,25 @@
 #include "xxir_program.h"
 
 XR_FUNC XrXirCallStatus xir_instance_view_module_root(XrXirCallView *view,const XrXirValue *root);
+/* Borrowed only by the synchronous query; none of these coordinates grants
+ * permission or outlives the actual frame and its admission owner. */
+typedef struct XirBufferViewOriginQuery {
+    const XrXirCallMetadata *metadata;
+    uint32_t target;
+    const XrXirValue *arguments;
+    uint32_t count;
+    const XrXirCellAuthority *authority;
+    XrXirValueAdmission *admission;
+} XirBufferViewOriginQuery;
 /* A missing genuine native/owned body proof returns no root. A present proof
  * independently resolves the current actual receiver and returns one temporary
  * owned Storage observation; callers drop it before leaving this operation. */
 XR_FUNC XrXirCallStatus xir_instance_buffer_view_origin(XrXirCallView *view,
-    const XrXirCallMetadata *metadata,uint32_t target,const XrXirValue *arguments,uint32_t count,
-    const XrXirCellAuthority *authority,XrXirProgram **owner,
+    const XirBufferViewOriginQuery *query,XrXirProgram **owner,
     uint32_t *parameter,uint32_t *field,XrXirValue *output);
 /* The frame owns the Program returned by origin capture. Terminal observation
  * uses that exact owner and metadata identity, without inventing a callback. */
 XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *owner,
-    const void *context,const XrXirCallMetadata *metadata,uint32_t target,
-    const XrXirValue *arguments,uint32_t count,const XrXirCellAuthority *authority,
-    XrXirValueAdmission *admission,uint32_t *parameter,uint32_t *field,XrXirValue *output);
+    const void *context,const XirBufferViewOriginQuery *query,
+    uint32_t *parameter,uint32_t *field,XrXirValue *output);
 #endif /* XXIR_INSTANCE_VIEW_INTERNAL_H */
