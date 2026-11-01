@@ -13,7 +13,8 @@
 static bool view_storage_empty(const XrXirViewStorage *view) {
     return view && unit_value(&view->root) && !view->kind && !view->element &&
         !view->offset && !view->length && cell_loan_empty(&view->loan.exclusive) &&
-        unit_value(&view->buffer_root) && !view->buffer_origin && !view->buffer_generation;
+        unit_value(&view->buffer_root) && !view->buffer_origin && !view->buffer_generation &&
+        !view->buffer_parent && !view->buffer_children && !view->buffer_linked;
 }
 static bool view_storage_work(XrXirValueAdmission *admission,uint64_t work) {
     if (!admission_domain_current(admission)) return false;
@@ -115,7 +116,7 @@ XR_FUNC XrXirValueStatus xr_xir_view_storage_reborrow(const XrXirViewStorage *pa
         (spec->kind==XR_XIR_TYPE_MUT_SLICE && parent->kind!=XR_XIR_TYPE_MUT_SLICE) ||
         spec->offset<0 || spec->length<0 || spec->offset>parent->length ||
         spec->length>parent->length-spec->offset) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (spec->kind==XR_XIR_TYPE_MUT_SLICE) {
+    if (spec->kind==XR_XIR_TYPE_MUT_SLICE && !parent->buffer_origin) {
         const XirObject *array=object_pointer(&cell_read_loan_root(&parent->root)->value);
         if (atomic_load_explicit(&array->references,memory_order_acquire)!=1 || array->domain!=admission->domain)
             return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -123,7 +124,7 @@ XR_FUNC XrXirValueStatus xr_xir_view_storage_reborrow(const XrXirViewStorage *pa
     XrXirViewStorageSpec child=*spec;child.offset+=parent->offset;
     if (parent->buffer_origin) {
         xr_xir_value_graph_begin();
-        XrXirValueStatus status=view_storage_buffer_begin(&parent->buffer_root,&child,admission,output);
+        XrXirValueStatus status=view_storage_buffer_begin(&parent->buffer_root,parent,&child,admission,output);
         xr_xir_value_graph_end();return status;
     }
     const XrXirCellAuthority *root_parent=parent->kind==XR_XIR_TYPE_SLICE ? NULL : authority;
@@ -136,6 +137,8 @@ XR_FUNC void xr_xir_view_storage_end(XrXirViewStorage *view) {
     if (!view || view_storage_empty(view)) return;
     xr_xir_value_graph_begin();
     if (view->buffer_origin) {
+        XR_CHECK(!view->buffer_children,"physical Buffer view retirement follows its retained children");
+        view_storage_buffer_detach(view);
         pointer_origin_drop(view->buffer_origin);
         *view=(XrXirViewStorage){0};xr_xir_value_graph_end();return;
     }
@@ -198,6 +201,14 @@ XR_FUNC XrXirValueStatus xr_xir_view_storage_set(const XrXirViewStorage *view,
     const XrXirCellAuthority *authority,int64_t index,const XrXirValue *value,
     XrXirValueAdmission *admission,XrXirFaultDetail *fault) {
     if (fault) *fault=(XrXirFaultDetail){0};
+    if (view && view->buffer_origin) {
+        const XirBufferStorage *buffer=view_storage_buffer_access(view,authority,admission);
+        if (!buffer || !fault || view->kind!=XR_XIR_TYPE_MUT_SLICE ||
+            !xr_xir_value_argument(value,NULL,XR_XIR_U8)) return XR_XIR_VALUE_BAD_ARGUMENT;
+        XrXirValueStatus status=view_storage_index(view,index,admission,fault);
+        if (status==XR_XIR_VALUE_OK) ((uint8_t *)buffer->data)[view->offset+index]=(uint8_t)value->payload;
+        return status;
+    }
     XirCell *cell=view_storage_access(view,authority,admission);
     if (!cell || !fault || view->kind!=XR_XIR_TYPE_MUT_SLICE || !cell_write_access(cell,authority))
         return XR_XIR_VALUE_BAD_ARGUMENT;

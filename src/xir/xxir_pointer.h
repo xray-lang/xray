@@ -29,6 +29,10 @@ XR_FUNC XrXirValueStatus xr_xir_pointer_null(XrXirDomain *domain,const XrXirType
 XR_FUNC XrXirValueStatus xr_xir_pointer_readonly(const XrXirValue *source,
     const XrXirTypeArena *arena,XrXirType type,XrXirValue *output);
 XR_FUNC XrXirValueStatus xr_xir_pointer_offset(const XrXirValue *source,int64_t offset,XrXirValue *output);
+/* Checks an existing writable byte pointer against an actual payload owner.
+ * This observation grants no loan or lifetime extension. */
+XR_FUNC bool xr_xir_pointer_buffer_range(const XrXirValue *pointer,
+    const XrXirValue *storage,int64_t bytes,uint64_t *offset);
 /* These raw accesses require a live origin and actual writable type for stores.
  * The unsafe caller is responsible for address, bounds, NULL and alignment. */
 XR_FUNC XrXirValueStatus xr_xir_pointer_load(const XrXirValue *source,int64_t offset,uint8_t *output);

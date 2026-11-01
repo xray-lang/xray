@@ -53,17 +53,28 @@ static bool view_value_valid(const XirView *view) {
     if (!storage->buffer_origin) return view_value_cell_valid(view);
     const XirPointerOrigin *origin=storage->buffer_origin;
     const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(view->object.arena),view->object.type);
-    if (!node || node->kind!=XR_XIR_TYPE_SLICE || node->element!=XR_XIR_U8 ||
-        view->object.kind!=XR_XIR_TYPE_SLICE || storage->kind!=XR_XIR_TYPE_SLICE ||
-        storage->element!=XR_XIR_U8 || !unit_value(&storage->root) ||
+    if (!node || !view_value_kind(node->kind) || node->element!=XR_XIR_U8 ||
+        view->object.kind!=node->kind || storage->kind!=node->kind ||
+        storage->element!=XR_XIR_U8 ||
         storage->buffer_root.type!=XR_XIR_BUFFER_STORAGE || storage->buffer_root.reserved ||
         !storage->buffer_root.payload || !storage->buffer_generation ||
         !atomic_load_explicit(&origin->references,memory_order_relaxed) || origin->domain!=view->object.domain ||
-        storage->offset<0 || storage->length<0 || storage->length>INT64_MAX-storage->offset ||
-        storage->loan.shared.cell || storage->loan.shared.next || storage->loan.shared.previous) return false;
+        storage->offset<0 || storage->length<0 || storage->length>INT64_MAX-storage->offset) return false;
+    if (unit_value(&storage->root)) {
+        if (storage->loan.shared.cell || storage->loan.shared.next || storage->loan.shared.previous) return false;
+    } else {
+        const XirCell *cell=cell_read_loan_root(&storage->root);
+        const XrXirCellLoan *loan=&storage->loan.exclusive;
+        if (storage->kind!=XR_XIR_TYPE_MUT_SLICE || !cell || loan->cell!=cell || loan->scope!=cell ||
+            cell->object.domain!=view->object.domain || cell->object.arena!=view->object.arena ||
+            (loan->child ? loan->child->previous!=loan : cell->borrow_top!=loan) ||
+            (loan->previous && loan->previous->child!=loan)) return false;
+    }
     if (view->state==XIR_VIEW_RETIRED) {
-        if (!cell_loan_empty(&storage->loan.exclusive)) return false;
-    } else if (view->state!=XIR_VIEW_ACTIVE || !cell_authority_valid(&storage->loan.shared.authority)) return false;
+        if (!unit_value(&storage->root) || !cell_loan_empty(&storage->loan.exclusive) || storage->buffer_linked || storage->buffer_parent ||
+            (storage->kind==XR_XIR_TYPE_MUT_SLICE && storage->buffer_children)) return false;
+    } else if (view->state!=XIR_VIEW_ACTIVE || !storage->buffer_linked ||
+        !cell_authority_valid(&storage->loan.shared.authority)) return false;
     /* Invalidated payloads remain valid tombstones for late handle drops.
      * No weak Buffer identity is dereferenced after its origin closes. */
     if (origin->active && !view_storage_buffer_live(storage)) return false;
@@ -77,7 +88,10 @@ static bool view_value_valid(const XirView *view) {
 }
 static void view_value_detach(XirView *view) {
     XR_CHECK(view->state==XIR_VIEW_ACTIVE,"a logical view reservation retires exactly once");
-    if (view->storage.buffer_origin) memset(&view->storage.loan,0,sizeof(view->storage.loan));
+    if (view->storage.buffer_origin) {
+        view_storage_buffer_detach(&view->storage);
+        memset(&view->storage.loan,0,sizeof(view->storage.loan));
+    }
     else if (view->storage.kind==XR_XIR_TYPE_MUT_SLICE) cell_loan_detach(&view->storage.loan.exclusive);
     else {
         XR_CHECK(view->storage.kind==XR_XIR_TYPE_SLICE,"retirement retains a known view kind");
@@ -242,10 +256,71 @@ XR_FUNC XrXirValueStatus xr_xir_buffer_storage_view(const XrXirValue *root,XrXir
         (XrXirTypeArena *)admission->arena,type,sizeof(*view),&status) : NULL;
     if (view) {
         view->storage=(XrXirViewStorage){0};view->parent=(XrXirValue){0};view->children=0;view->state=XIR_VIEW_ACTIVE;
-        status=view_storage_buffer_begin(root,&spec,admission,&view->storage);
+        status=view_storage_buffer_begin(root,NULL,&spec,admission,&view->storage);
         if (status==XR_XIR_VALUE_OK) {xr_xir_value_object_publish(&view->object);*output=view_value_handle(view);}
         else constructed_discard(&view->object,sizeof(*view));
     }
+    xr_xir_value_graph_end();return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_buffer_storage_mutable_view(const XrXirValue *pointer,
+    const XrXirValue *root,XrXirType type,const XrXirViewStorageSpec *spec,
+    XrXirValueAdmission *admission,XrXirValue *output) {
+    XrXirType element;uint64_t offset=0;
+    if (!unit_value(output) || !admission || !admission->arena || !admission->domain ||
+        !spec || spec->kind!=XR_XIR_TYPE_MUT_SLICE || spec->offset ||
+        !cell_authority_valid(&spec->authority) || !view_value_type(type,spec,admission,&element) ||
+        element!=XR_XIR_U8 || !xr_xir_pointer_buffer_range(pointer,root,spec->length,&offset) ||
+        offset>INT64_MAX) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status=XR_XIR_VALUE_OK;
+    const XirBufferStorage *storage=(const XirBufferStorage *)object_pointer(root);
+    if (storage->object.domain!=admission->domain) status=XR_XIR_VALUE_BAD_ARGUMENT;
+    else if (!view_storage_work(admission,sizeof(XirView))) status=XR_XIR_VALUE_LIMIT;
+    XirView *view=status==XR_XIR_VALUE_OK ? (XirView *)constructed_allocate(admission->domain,
+        (XrXirTypeArena *)admission->arena,type,sizeof(*view),&status) : NULL;
+    if (view) {
+        view->storage=(XrXirViewStorage){0};view->parent=(XrXirValue){0};view->children=0;view->state=XIR_VIEW_ACTIVE;
+        /* Allocation can observe the caller, so neither the earlier pointer
+         * check nor the earlier weak payload identity authorizes publication. */
+        uint64_t current=0;XrXirViewStorageSpec actual=*spec;actual.offset=(int64_t)offset;
+        status=!xr_xir_pointer_buffer_range(pointer,root,spec->length,&current) || current!=offset ?
+            XR_XIR_VALUE_BAD_ARGUMENT:view_storage_buffer_begin(root,NULL,&actual,admission,&view->storage);
+        if (status==XR_XIR_VALUE_OK) {xr_xir_value_object_publish(&view->object);*output=view_value_handle(view);}
+        else constructed_discard(&view->object,sizeof(*view));
+    }
+    xr_xir_value_graph_end();return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_buffer_view_bind_root(XrXirValue *value,
+    const XrXirValue *owner,const XrXirCellAuthority *parent,XrXirValueAdmission *admission) {
+    if (!admission || !admission->arena || !admission->domain || !xr_xir_value_valid(value) ||
+        !cell_authority_valid(parent)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)value->type);
+    if (!node || node->kind!=XR_XIR_TYPE_MUT_SLICE) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();XirObject *object=object_pointer(value);XirCell *cell=cell_read_loan_root(owner);
+    XirView *view=(XirView *)object;XrXirValueStatus status=XR_XIR_VALUE_BAD_ARGUMENT;
+    if (object->kind!=XR_XIR_TYPE_MUT_SLICE || !cell || cell->projection_count ||
+        !admission_owner(admission,cell->object.arena,cell->object.domain) || !cell_access(cell,parent) ||
+        !view->storage.buffer_origin || view->state!=XIR_VIEW_ACTIVE || view->children ||
+        !unit_value(&view->storage.root) || view->storage.buffer_children ||
+        atomic_load_explicit(&object->references,memory_order_acquire)!=1) goto done;
+    XrXirValue receiver={0},storage={0};
+    status=xr_xir_cell_authorized_read(owner,parent,&receiver);
+    if (status==XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,0,admission,&storage);
+    if (status==XR_XIR_VALUE_OK && (storage.type!=XR_XIR_BUFFER_STORAGE ||
+        storage.payload!=view->storage.buffer_root.payload)) status=XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_drop(&storage);xr_xir_value_drop(&receiver);
+    if (status!=XR_XIR_VALUE_OK) goto done;
+    status=value_copy_on_domain(owner,NULL,&view->storage.root);
+    if (status!=XR_XIR_VALUE_OK) goto done;
+    XrXirCellAuthority authority=view->storage.loan.exclusive.authority;
+    memset(&view->storage.loan,0,sizeof(view->storage.loan));
+    status=xr_xir_cell_loan_prepare(owner,parent,&view->storage.loan.exclusive);
+    if (status==XR_XIR_VALUE_OK) xr_xir_cell_loan_commit(owner,&view->storage.loan.exclusive,&authority);
+    else {
+        xr_xir_value_drop(&view->storage.root);
+        view->storage.loan.exclusive.authority=authority;
+    }
+done:
     xr_xir_value_graph_end();return status;
 }
 XR_FUNC XrXirValueStatus xr_xir_view_reborrow(XrXirType type,const XrXirValue *parent,

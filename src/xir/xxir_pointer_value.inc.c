@@ -66,7 +66,26 @@ static bool pointer_argument(const XrXirValue *value,bool writable,const XirPoin
 }
 static bool pointer_live(const XirPointer *pointer) {
     return !pointer->origin || (pointer->origin->active && pointer->generation==pointer->origin->generation &&
-        pointer->origin->domain==pointer->object.domain);
+        pointer->origin->domain==pointer->object.domain && !pointer->origin->exclusive);
+}
+static bool pointer_write_live(const XirPointer *pointer) {
+    return pointer_live(pointer) && (!pointer->origin || !pointer->origin->shared_views);
+}
+XR_FUNC bool xr_xir_pointer_buffer_range(const XrXirValue *source,
+    const XrXirValue *owner,int64_t bytes,uint64_t *offset) {
+    const XirPointer *pointer=NULL;
+    if (!offset || bytes<0 || !pointer_argument(source,true,&pointer) || !pointer_live(pointer) ||
+        !xr_xir_value_argument(owner,NULL,XR_XIR_BUFFER_STORAGE)) return false;
+    const XirBufferStorage *storage=(const XirBufferStorage *)object_pointer(owner);
+    const XirPointerOrigin *origin=storage->origin;
+    if (!origin || pointer->origin!=origin || !origin->active || origin->page ||
+        origin->domain!=storage->object.domain || pointer->object.domain!=storage->object.domain ||
+        pointer->generation!=origin->generation) return false;
+    uintptr_t base=(uintptr_t)storage->data;
+    if (pointer->address<base) return false;
+    uint64_t displacement=(uint64_t)(pointer->address-base);
+    if (displacement>storage->length || (uint64_t)bytes>storage->length-displacement) return false;
+    *offset=displacement;return true;
 }
 XR_FUNC XrXirValueStatus xr_xir_pointer_null(XrXirDomain *domain,const XrXirTypeArena *arena,
     XrXirType type,XrXirValue *output) {
@@ -97,13 +116,13 @@ XR_FUNC XrXirValueStatus xr_xir_pointer_load(const XrXirValue *source,int64_t of
 }
 XR_FUNC XrXirValueStatus xr_xir_pointer_store(const XrXirValue *target,int64_t offset,uint8_t value) {
     const XirPointer *pointer=NULL;
-    if (!pointer_argument(target,true,&pointer) || !pointer_live(pointer)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!pointer_argument(target,true,&pointer) || !pointer_write_live(pointer)) return XR_XIR_VALUE_BAD_ARGUMENT;
     *(uint8_t *)(pointer->address+(uintptr_t)offset)=value;return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_pointer_copy(const XrXirValue *target,const XrXirValue *source,int64_t bytes,bool overlap) {
     const XirPointer *to=NULL,*from=NULL;
     if (bytes<0 || (uint64_t)bytes>SIZE_MAX || !pointer_argument(target,true,&to) ||
-        !pointer_argument(source,false,&from) || !pointer_live(to) || !pointer_live(from) ||
+        !pointer_argument(source,false,&from) || !pointer_write_live(to) || !pointer_live(from) ||
         to->object.domain!=from->object.domain) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (bytes) {
         if (overlap) memmove((void *)to->address,(const void *)from->address,(size_t)bytes);
@@ -119,7 +138,8 @@ XR_FUNC XrXirValueStatus xr_xir_pointer_equal(const XrXirValue *left,const XrXir
 }
 XR_FUNC XrXirValueStatus xr_xir_pointer_prefetch(const XrXirValue *source,int64_t write) {
     const XirPointer *pointer=NULL;
-    if (!pointer_argument(source,false,&pointer) || !pointer_live(pointer)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!pointer_argument(source,false,&pointer) || !pointer_live(pointer) ||
+        (write && !pointer_write_live(pointer))) return XR_XIR_VALUE_BAD_ARGUMENT;
 #if defined(__GNUC__) || defined(__clang__)
     if (write) __builtin_prefetch((const void *)pointer->address,1,3);
     else __builtin_prefetch((const void *)pointer->address,0,3);
@@ -157,7 +177,7 @@ XR_FUNC XrXirValueStatus xr_xir_pointer_volatile_load(const XrXirValue *source,i
 }
 XR_FUNC XrXirValueStatus xr_xir_pointer_volatile_store(const XrXirValue *target,int64_t value,int64_t size,bool streaming) {
     const XirPointer *pointer=NULL;
-    if (!pointer_argument(target,true,&pointer) || !pointer_live(pointer)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!pointer_argument(target,true,&pointer) || !pointer_write_live(pointer)) return XR_XIR_VALUE_BAD_ARGUMENT;
     bool streamed=false;
 #if (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__))
     if (streaming && size==4 && !(pointer->address&3u)) {
@@ -187,6 +207,9 @@ XR_FUNC XrXirValueStatus xr_xir_buffer_storage_pointer(const XrXirValue *value,
     if (xr_xir_value_argument(value,NULL,XR_XIR_BUFFER_STORAGE) &&
         xr_xir_pointer_writable(xr_xir_compile_type_arena_types(arena),type) && unit_value(output)) {
         XirBufferStorage *storage=(XirBufferStorage *)object_pointer(value);
+        if (storage->origin && storage->origin->exclusive) {
+            xr_xir_value_graph_end();return XR_XIR_VALUE_BAD_ARGUMENT;
+        }
         XirPointerOrigin *origin=storage->origin;
         status=origin ? XR_XIR_VALUE_OK:pointer_origin_new(storage->object.domain,&origin);
         if (status==XR_XIR_VALUE_OK) {

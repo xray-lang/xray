@@ -193,6 +193,8 @@ typedef struct XirPointerOrigin {
     uint64_t generation;
     bool active;
     XirPageRecord *page;
+    XrXirViewStorage *exclusive;
+    uint32_t shared_views;
 } XirPointerOrigin;
 typedef struct XirBufferStorage {
     XirObject object;

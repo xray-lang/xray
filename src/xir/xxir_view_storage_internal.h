@@ -25,6 +25,9 @@ typedef struct XrXirViewStorage {
     XrXirValue buffer_root;
     void *buffer_origin;
     uint64_t buffer_generation;
+    struct XrXirViewStorage *buffer_parent;
+    uint32_t buffer_children;
+    bool buffer_linked;
 } XrXirViewStorage;
 
 typedef struct XrXirViewStorageSpec {

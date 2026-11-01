@@ -47,16 +47,23 @@ XR_FUNC XrXirValueStatus xr_xir_buffer_storage_new(XrXirDomain *domain,int64_t b
 XR_FUNC XrXirValueStatus xr_xir_buffer_storage_length(const XrXirValue *storage,int64_t *output) {
     if (!output || !xr_xir_value_argument(storage,NULL,XR_XIR_BUFFER_STORAGE)) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XirBufferStorage *body=(const XirBufferStorage *)object_pointer(storage);
-    if (body->length>INT64_MAX) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (body->length>INT64_MAX || (body->origin && body->origin->exclusive)) return XR_XIR_VALUE_BAD_ARGUMENT;
     *output=(int64_t)body->length;return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_buffer_storage_resize(const XrXirValue *value,int64_t bytes,bool *output) {
     if (!output || bytes<0 || (uint64_t)bytes>SIZE_MAX ||
         !xr_xir_value_argument(value,NULL,XR_XIR_BUFFER_STORAGE)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();XirBufferStorage *storage=(XirBufferStorage *)object_pointer(value);
+    if (storage->origin && (storage->origin->exclusive || storage->origin->shared_views)) {
+        xr_xir_value_graph_end();return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
     XrXirValueStatus status=XR_XIR_VALUE_OK;void *replacement=NULL;
     if ((size_t)bytes!=storage->length) {
         if (bytes) replacement=domain_payload_allocate(storage->object.domain,(size_t)bytes,storage->alignment,false,&status);
+        if (status==XR_XIR_VALUE_OK && storage->origin && (storage->origin->exclusive || storage->origin->shared_views)) {
+            if (replacement) domain_payload_deallocate(storage->object.domain,replacement,(size_t)bytes,storage->alignment);
+            replacement=NULL;status=XR_XIR_VALUE_BAD_ARGUMENT;
+        }
         if (status==XR_XIR_VALUE_OK) {
             size_t copied=(size_t)bytes<storage->length?(size_t)bytes:storage->length;
             if (copied) memcpy(replacement,storage->data,copied);
@@ -72,5 +79,6 @@ XR_FUNC bool xr_xir_buffer_storage_observe(const XrXirValue *storage,
     const void **bytes,size_t *length,size_t *alignment) {
     if (!bytes || !length || !alignment || !xr_xir_value_argument(storage,NULL,XR_XIR_BUFFER_STORAGE)) return false;
     const XirBufferStorage *body=(const XirBufferStorage *)object_pointer(storage);
+    if (body->origin && body->origin->exclusive) return false;
     *bytes=body->data;*length=body->length;*alignment=body->alignment;return true;
 }

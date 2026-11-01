@@ -68,6 +68,16 @@ XR_FUNC bool xr_xir_view_scope_active(const XrXirViewOriginPin *pin);
 XR_FUNC XrXirValueStatus xr_xir_view_new(XrXirType type, const XrXirValue *root,
     const XrXirCellAuthority *parent, const XrXirViewStorageSpec *spec,
     XrXirValueAdmission *admission, XrXirValue *output);
+/* The authenticated Buffer entry supplies its actual payload and parent scope.
+ * Offset is zero in the request; the live pointer determines the bounded range.
+ * This constructor neither retains that payload nor authenticates a caller. */
+XR_FUNC XrXirValueStatus xr_xir_buffer_storage_mutable_view(const XrXirValue *pointer,
+    const XrXirValue *root, XrXirType type, const XrXirViewStorageSpec *spec,
+    XrXirValueAdmission *admission, XrXirValue *output);
+/* Before publication, bind the unique created view to the actual ref Buffer
+ * Cell. Its current parent loan and exact payload field must both agree. */
+XR_FUNC XrXirValueStatus xr_xir_buffer_view_bind_root(XrXirValue *view,
+    const XrXirValue *owner,const XrXirCellAuthority *parent,XrXirValueAdmission *admission);
 XR_FUNC XrXirValueStatus xr_xir_view_reborrow(XrXirType type,
     const XrXirValue *parent, const XrXirViewStorageSpec *spec,
     const XrXirViewAccess *access, XrXirValue *output);

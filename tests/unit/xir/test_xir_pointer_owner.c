@@ -48,6 +48,21 @@ int main(void) {
     CHECK(xr_xir_pointer_store(&read,3,1)==XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xr_xir_pointer_offset(&pointer,3,&offset)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_pointer_load(&offset,0,&byte)==XR_XIR_VALUE_OK && byte==42);
+    uint64_t range=77;
+    CHECK(xr_xir_pointer_buffer_range(&pointer,&storage,8,&range) && range==0);
+    CHECK(xr_xir_pointer_buffer_range(&offset,&storage,5,&range) && range==3);
+    range=77;
+    CHECK(!xr_xir_pointer_buffer_range(&offset,&storage,6,&range) && range==77);
+    CHECK(!xr_xir_pointer_buffer_range(&pointer,&storage,-1,&range) && range==77);
+    CHECK(!xr_xir_pointer_buffer_range(&read,&storage,1,&range) && range==77);
+    XrXirValue other={0},other_pointer={0},null_pointer={0};
+    CHECK(xr_xir_buffer_storage_new(domain,8,0,true,&other)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_buffer_storage_pointer(&other,arena,writable,&other_pointer)==XR_XIR_VALUE_OK);
+    CHECK(!xr_xir_pointer_buffer_range(&pointer,&other,1,&range) && range==77);
+    CHECK(!xr_xir_pointer_buffer_range(&other_pointer,&storage,1,&range) && range==77);
+    CHECK(xr_xir_pointer_null(domain,arena,writable,&null_pointer)==XR_XIR_VALUE_OK);
+    CHECK(!xr_xir_pointer_buffer_range(&null_pointer,&storage,0,&range) && range==77);
+    xr_xir_value_drop(&other_pointer);xr_xir_value_drop(&other);xr_xir_value_drop(&null_pointer);
     const int64_t widths[]={1,2,4,8};
     for (unsigned i=0;i<4;++i) {
         int64_t stored=widths[i]==8?INT64_MIN+42:INT64_C(0x10203040),loaded=73;
@@ -64,6 +79,7 @@ int main(void) {
     CHECK(xr_xir_pointer_prefetch(&read,0)==XR_XIR_VALUE_OK && xr_xir_pointer_prefetch(&pointer,1)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_pointer_cache_flush(&read,8)==XR_XIR_VALUE_OK);
     bool resized=false;CHECK(xr_xir_buffer_storage_resize(&storage,16,&resized)==XR_XIR_VALUE_OK && resized);
+    CHECK(!xr_xir_pointer_buffer_range(&pointer,&storage,1,&range) && range==77);
     byte=77;CHECK(xr_xir_pointer_load(&pointer,0,&byte)==XR_XIR_VALUE_BAD_ARGUMENT && byte==77);
     CHECK(xr_xir_pointer_load(&read,0,&byte)==XR_XIR_VALUE_BAD_ARGUMENT && byte==77);
     xr_xir_value_drop(&pointer);xr_xir_value_drop(&read);xr_xir_value_drop(&offset);
