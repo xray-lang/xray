@@ -86,9 +86,13 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_LOCAL_WRITE:
     case XR_XIR_LOCAL_UNINIT:
     case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW:
-    case XR_XIR_VIEW_LEN: case XR_XIR_VIEW_GET: case XR_XIR_VIEW_END:
+    case XR_XIR_VIEW_LEN: case XR_XIR_VIEW_GET: case XR_XIR_VIEW_SET: case XR_XIR_VIEW_END:
     case XR_XIR_VIEW_CLEANUP:
     case XR_XIR_CELL_NEW:
+    case XR_XIR_CELL_NEW_TAKE:
+    case XR_XIR_CELL_WRITE_TAKE:
+    case XR_XIR_CELL_TAKE:
+    case XR_XIR_VALUE_TAKE:
     case XR_XIR_CELL_READ:
     case XR_XIR_CELL_WRITE:
     case XR_XIR_CELL_LOCAL_WRITE:
@@ -226,6 +230,8 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m) {
             node->kind!=XR_XIR_TYPE_ARRAY && node->kind!=XR_XIR_TYPE_MAP && node->kind!=XR_XIR_TYPE_SET &&
             node->kind!=XR_XIR_TYPE_TUPLE && node->kind!=XR_XIR_TYPE_UNION &&
             !(node->kind==XR_XIR_TYPE_SLICE && node->element==XR_XIR_U8) &&
+            !(node->kind==XR_XIR_TYPE_MUT_SLICE &&
+              (node->element==XR_XIR_U8 || node->element==XR_XIR_I64)) &&
             !((node->kind==XR_XIR_TYPE_PTR || node->kind==XR_XIR_TYPE_MUT_PTR) && node->element==XR_XIR_U8) &&
             node->kind!=XR_XIR_TYPE_NULLABLE && node->kind!=XR_XIR_TYPE_CELL && node->kind!=XR_XIR_TYPE_ITERATOR &&
             !((node->kind==XR_XIR_TYPE_ATOMIC || node->kind==XR_XIR_TYPE_TASK) &&
