@@ -24,6 +24,7 @@
 #include "xir_construction_fixture.h"
 #include "xir_buffer_class_cases.h"
 #include "xir_buffer_domain_cases.h"
+#include "xir_mem_native_fixture.h"
 static void payload_cases(void) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
     XrXirDomainStats frame=xr_xir_domain_stats(domain);
@@ -179,7 +180,11 @@ int main(int argc,char **argv) {
     XrXirArtifact *lowered=fixture(&context,true);
     if(argc==3 && !strcmp(argv[1],"--emit")) {
         XrXirCSource source={0};CHECK(xr_xir_compile_emit_c(lowered,"buffer_storage",1048576,&source)==XR_XIR_OK);
-        FILE *file=fopen(argv[2],"wb");CHECK(file && fwrite(source.text,1,source.length,file)==source.length && !fclose(file));
+        FILE *file=fopen(argv[2],"wb");CHECK(file && fwrite(source.text,1,source.length,file)==source.length);
+        xr_xir_compile_c_source_free(&source);xr_xir_compile_artifact_free(lowered);
+        lowered=mem_native_fixture(&context);
+        CHECK(xr_xir_compile_emit_c(lowered,"mem_native",1048576,&source)==XR_XIR_OK);
+        CHECK(fwrite(source.text,1,source.length,file)==source.length && !fclose(file));
         xr_xir_compile_c_source_free(&source);xr_xir_compile_artifact_free(lowered);
     } else {
         CHECK(argc==1);buffer_domain_cases(&context);
@@ -204,6 +209,10 @@ int main(int argc,char **argv) {
         }
         buffer_class_cases(program);
         int64_t size=0;CHECK(xr_xir_buffer_storage_length(&result,&size)==XR_XIR_VALUE_OK && size==13);xr_xir_value_drop(&result);
+        program=NULL;
+        lowered=mem_native_fixture(&context);
+        CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
+        mem_native_execute(program);xr_xir_compile_program_drop(program);
     }
     xr_compile_resources_release(context.resources);puts("Private buffer storage: real owned bytes and checked transport PASS");return 0;
 }
