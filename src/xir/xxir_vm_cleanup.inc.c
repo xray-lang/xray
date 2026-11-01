@@ -32,7 +32,7 @@ static XrXirAction vm_cleanup_exit(ScalarRun *run, VmState *state) {
     state->cleanup_waiting = true;
     return (XrXirAction) {XR_XIR_ACTION_CALL,
                           (uint32_t) registration->immediate,
-                          state->arguments,
+                          registration->args[1] ? state->arguments : NULL,
                           registration->args[1],
                           {0},
                           {{0}, {0}, {0}, {0}},
