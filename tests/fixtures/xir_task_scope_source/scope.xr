@@ -178,6 +178,51 @@ fn assertedBody() {
     try { scope { go worker(0); try! businessError() } } catch panic { caught = true }
     assert(caught)
 }
+const selectOrder = Atomic(0)
+fn selectedDelay() -> i64 {
+    assert(selectOrder.load() == 0)
+    selectOrder.add(1)
+    return 0
+}
+fn selectedChannel(channel: Channel<i64>) -> Channel<i64> {
+    assert(selectOrder.load() == 1)
+    selectOrder.add(1)
+    return channel
+}
+fn selections() {
+    const words = Channel<string>(1)
+    const numbers = Channel<i64>(1)
+    try! words.send("selected")
+    var chosen = 0
+    select {
+        word from words -> { assert(word == "selected"); chosen = 1 }
+        number from numbers -> { assert(false) }
+        default -> { assert(false) }
+    }
+    assert(chosen == 1)
+    select {
+        number from numbers -> { assert(false) }
+        default -> { chosen = 2 }
+    }
+    assert(chosen == 2)
+    select {
+        after selectedDelay() -> { chosen = 3 }
+        number from selectedChannel(numbers) -> { assert(false) }
+    }
+    assert(chosen == 3 && selectOrder.load() == 2)
+    scope {
+        go fn() { try! numbers.send(42) }()
+        select { number from numbers -> { assert(number == 42); chosen = 4 } }
+    }
+    assert(chosen == 4)
+    const maybe = Channel<i64?>(1)
+    try! maybe.send(null)
+    select {
+        value from maybe -> { assert(value == null); chosen = 5 }
+        default -> { assert(false) }
+    }
+    assert(chosen == 5)
+}
 fn returning() -> Array<i64> {
     var value = [42]
     scope { go worker(1); return move value }
@@ -190,6 +235,7 @@ fn leaving() {
     }
 }
 export fn main() -> i64 {
+    selections()
     assert(bodyFirstFailure() == 42)
     ownershipTransfers()
     assert(borrowedAcross() == 42 && borrowedPanic() == 42)
