@@ -13,6 +13,18 @@
 #ifndef BUFFER_SLICE_CALL_CASES_H
 #define BUFFER_SLICE_CALL_CASES_H
 #include "xir/xxir_program_internal.h"
+#include "xir/xxir_instance_debug_internal.h"
+static struct {uint32_t entry,instruction,callee;} buffer_call_trace;
+static XrXirCallStatus buffer_trace_before(void *owner,const XirCallNativeSourcePoint *point,bool *stopped) {
+    (void)owner;buffer_call_trace.entry=point->entry;buffer_call_trace.instruction=point->instruction;
+    buffer_call_trace.callee=UINT32_MAX;*stopped=false;return XR_XIR_CALL_READY;
+}
+static XrXirCallStatus buffer_trace_call(void *owner,const XirCallNativeSourcePending *point) {
+    (void)owner;buffer_call_trace.entry=point->entry;buffer_call_trace.instruction=point->instruction;
+    buffer_call_trace.callee=point->callee;return XR_XIR_CALL_READY;
+}
+static const XirCallNativeSourceObserver buffer_call_observer={
+    &buffer_call_trace,buffer_trace_before,buffer_trace_call};
 static uint32_t buffer_program_refs(const XrXirProgram *program) {
     return atomic_load_explicit(&program->references,memory_order_acquire);
 }
@@ -38,8 +50,9 @@ static void buffer_invoke(XrXirProgram *program,XrXirInstance *instance,uint32_t
         uint32_t refs=buffer_program_refs(program);if (refs>peak) peak=refs;
     }
     if (status!=XR_XIR_CALL_RETURNED || peak<baseline+2u || buffer_program_refs(program)!=baseline)
-        fprintf(stderr,"Buffer invoke target%u status%u refs%u peak%u baseline%u\n",
-            target,status,buffer_program_refs(program),peak,baseline);
+        fprintf(stderr,"Buffer invoke target%u status%u refs%u peak%u baseline%u last%u/%u callee%u\n",
+            target,status,buffer_program_refs(program),peak,baseline,
+            buffer_call_trace.entry,buffer_call_trace.instruction,buffer_call_trace.callee);
     CHECK(status==XR_XIR_CALL_RETURNED && peak>=baseline+2u && buffer_program_refs(program)==baseline);
     XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED &&
         value.type==XR_XIR_I64 && value.payload==42);xr_xir_value_drop(&value);
@@ -48,6 +61,7 @@ static void buffer_call_cases(XrXirProgram *program,const uint32_t ids[3]) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     uint32_t original=buffer_program_refs(program);XrXirInstance *instance=NULL;
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+    CHECK(xir_instance_native_source_bind(instance,program,&buffer_call_observer)==XR_XIR_CALL_READY);
     buffer_initialize(instance,ids[0]);buffer_invoke(program,instance,ids[1]);buffer_invoke(program,instance,ids[2]);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY && buffer_program_refs(program)==original);
     /* Cancel only after a real borrowed-return frame owns its metadata lease. */
