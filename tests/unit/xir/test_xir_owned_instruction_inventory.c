@@ -35,6 +35,7 @@ enum { INVENTORY_ROWS=17 };
 typedef struct InventoryFixture {
     char name[10];
     XrXirType parameters[2];
+    uint32_t consumes[2];
     XrXirBlock block;
     uint32_t operands[3];
     XrXirInstruction instructions[INVENTORY_ROWS];
@@ -52,6 +53,9 @@ static void inventory_fixture(InventoryFixture *fixture) {
         {fixture->name,9,fixture->parameters,2,XR_XIR_I64,&fixture->block,1,INVENTORY_ROWS,fixture->operands,3},
         fixture->instructions};
     fixture->source.head.error_type=XR_XIR_NEVER;
+    fixture->consumes[0]=0;fixture->consumes[1]=1;
+    fixture->source.head.consume_parameters=fixture->consumes;
+    fixture->source.head.consume_parameter_count=2;
 }
 static XrXirCompileContext inventory_owner(XrCompileResourceLimits caps) {
     XrCompileResources *resources=NULL;CHECK(xr_compile_resources_new(&caps,&resources)==XR_COMPILE_RESOURCE_OK);
@@ -64,6 +68,9 @@ static void inventory_equal(const XrXirCompileContext *context,const XirOwnedInp
     const XrXirInstruction *expected) {
     CHECK(xir_input_function_resources(input)==context->resources);
     CHECK(xir_input_function_shape(input)==XR_XIR_OK);
+    XirInputFunctionHead head={0};CHECK(xir_input_function_head(input,&head)==XR_XIR_OK);
+    CHECK(head.consume_parameter_count==2&&head.consume_parameters&&
+        head.consume_parameters[0]==0&&head.consume_parameters[1]==1);
     XirInputInstructionSpan span={0};
     CHECK(xir_input_function_instruction_span(input,&span)==XR_XIR_OK);
     CHECK(span.rows==input->instructions&&span.count==INVENTORY_ROWS);
@@ -104,6 +111,34 @@ static void inventory_reads(XirOwnedInputFunction *input) {
     input->instructions=storage;
     XrXirOp opcode=storage[3].op;storage[3].op=XR_XIR_INVALID;
     CHECK(xir_input_function_shape(input)==XR_XIR_BAD_STRUCTURE);storage[3].op=opcode;
+    const uint32_t *consumes=input->head.consume_parameters;
+    uint32_t substituted[]={0,1};input->head.consume_parameters=substituted;
+    CHECK(xir_input_function_shape(input)==XR_XIR_BAD_STRUCTURE);
+    input->head.consume_parameters=consumes;
+    ++input->head.consume_parameter_count;
+    CHECK(xir_input_function_shape(input)==XR_XIR_BAD_STRUCTURE);
+    --input->head.consume_parameter_count;
+}
+static void inventory_consume_shape(void) {
+    InventoryFixture fixture;inventory_fixture(&fixture);
+    XrXirCompileContext context=inventory_owner((XrCompileResourceLimits){XR_COMPILE_MEMORY_ORDINARY,0,false});
+    uint64_t baseline=inventory_stats(&context).held_bytes;size_t physical=physical_live;
+    for(uint32_t attack=0;attack<5;++attack) {
+        XirOwnedInputFunction *input=NULL;inventory_fixture(&fixture);
+        if(attack==0)fixture.consumes[1]=0;
+        else if(attack==1){fixture.consumes[0]=1;fixture.consumes[1]=0;}
+        else if(attack==2)fixture.consumes[1]=2;
+        else if(attack==3)fixture.source.head.consume_parameters=NULL;
+        else fixture.source.head.consume_parameter_count=0;
+        CHECK(xir_input_function_new(&context,&fixture.source,&input)==XR_XIR_BAD_STRUCTURE&&!input);
+        CHECK(inventory_stats(&context).held_bytes==baseline&&physical_live==physical);
+    }
+    inventory_fixture(&fixture);fixture.source.head.consume_parameters=NULL;
+    fixture.source.head.consume_parameter_count=0;XirOwnedInputFunction *input=NULL;
+    CHECK(xir_input_function_new(&context,&fixture.source,&input)==XR_XIR_OK);
+    XirInputFunctionHead head={0};CHECK(xir_input_function_head(input,&head)==XR_XIR_OK);
+    CHECK(!head.consume_parameter_count&&!head.consume_parameters);
+    xir_input_function_free(input);xr_compile_resources_release(context.resources);CHECK(!physical_live);
 }
 static void inventory_faults(void) {
     InventoryFixture fixture;inventory_fixture(&fixture);
@@ -146,11 +181,13 @@ int main(void) {
     CHECK(xir_input_function_new(&context,&fixture.source,&input)==XR_XIR_OK);
     CHECK(xir_input_function_clone(&context,input,&copy)==XR_XIR_OK);
     CHECK(copy->instructions!=input->instructions&&input->instructions!=fixture.instructions);
+    CHECK(copy->head.consume_parameters!=input->head.consume_parameters&&
+        input->head.consume_parameters!=fixture.consumes);
     memset(&fixture,0xCE,sizeof(fixture));xir_input_function_free(input);
     inventory_equal(&context,copy,expected);inventory_reads(copy);
     xr_compile_resources_release(context.resources);
     CHECK(xir_input_function_resources(copy));xir_input_function_free(copy);CHECK(!physical_live);
-    inventory_faults();inventory_limits();
+    inventory_faults();inventory_limits();inventory_consume_shape();
     puts("Owned instruction inventory: direct ordinals, all fields, producer death and physical release passed");
     return 0;
 }

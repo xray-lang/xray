@@ -20,6 +20,8 @@ typedef struct EffectBodyFunctionHead {
     const uint32_t *operands;
     uint32_t operand_count;
     XrXirType error_type;
+    uint32_t consume_parameter_count;
+    const uint32_t *consume_parameters;
 } EffectBodyFunctionHead;
 /* A partial head request retains the same storage preconditions. It writes
  * only the two real dimensions consumed by this call edge, never a complete
@@ -34,6 +36,8 @@ typedef struct EffectBodyFunctionSignature {
     const XrXirType *parameters;
     uint32_t parameter_count;
     XrXirType result;
+    uint32_t consume_parameter_count;
+    const uint32_t *consume_parameters;
 } EffectBodyFunctionSignature;
 
 typedef struct EffectBodyInstructionShape {
@@ -74,7 +78,8 @@ static XrXirStatus effect_body_raw_head(const EffectBodyRequest *request,uint32_
     const XrXirFunction *a=&module->functions[f];
     if (signature) {
         if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, 11+sizeof(*signature)) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
-        *signature=(EffectBodyFunctionSignature){a->parameters,a->parameter_count,a->result};return XR_XIR_OK;
+        *signature=(EffectBodyFunctionSignature){a->parameters,a->parameter_count,a->result,
+            a->consume_parameter_count,a->consume_parameters};return XR_XIR_OK;
     }
     if (dimensions) {
         if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, 11+sizeof(*dimensions)) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
@@ -82,7 +87,8 @@ static XrXirStatus effect_body_raw_head(const EffectBodyRequest *request,uint32_
     }
     if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, 12+sizeof(*output)) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
     *output=(EffectBodyFunctionHead){a->name,a->name_length,a->parameters,a->parameter_count,
-        a->result,a->blocks,a->block_count,a->instruction_count,a->operands,a->operand_count,a->error_type};
+        a->result,a->blocks,a->block_count,a->instruction_count,a->operands,a->operand_count,a->error_type,
+        a->consume_parameter_count,a->consume_parameters};
     return XR_XIR_OK;
 }
 static XrXirStatus effect_body_raw_instruction(const EffectBodyRequest *request,
@@ -127,6 +133,8 @@ static const EffectBodyFunction *effect_body_owned_function(const EffectBodyRequ
     if(!effect_body_material_shape(material) || f>=effect_body_count(material)) return NULL;
     const EffectBodyFunction *a=&material->functions[f];
     if ((a->name_length && !a->name) || (a->parameter_count && !a->parameters) ||
+        a->consume_parameter_count>a->parameter_count ||
+        (a->consume_parameter_count==0)!=(a->consume_parameters==NULL) ||
         (a->block_count && !a->blocks) || (a->operand_count && !a->operands) ||
         (a->instruction_count && (!a->runs || !a->run_count)) ||
         a->run_count>a->run_capacity) return NULL;
@@ -139,7 +147,8 @@ static XrXirStatus effect_body_owned_head(const EffectBodyRequest *request,uint3
     if(!a) return XR_XIR_BAD_STRUCTURE;
     if (signature) {
         if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, 11+sizeof(*signature)) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
-        *signature=(EffectBodyFunctionSignature){a->parameters,a->parameter_count,a->result};return XR_XIR_OK;
+        *signature=(EffectBodyFunctionSignature){a->parameters,a->parameter_count,a->result,
+            a->consume_parameter_count,a->consume_parameters};return XR_XIR_OK;
     }
     if (dimensions) {
         if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, 11+sizeof(*dimensions)) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
@@ -147,7 +156,8 @@ static XrXirStatus effect_body_owned_head(const EffectBodyRequest *request,uint3
     }
     if (!(((&request->read)->execution ? effect_body_execution_work((&request->read)->execution, 12+sizeof(*output)) : xir_compile_context_valid((&request->read)->owner)))) return XR_XIR_BUDGET;
     *output=(EffectBodyFunctionHead){a->name,a->name_length,a->parameters,a->parameter_count,
-        a->result,a->blocks,a->block_count,a->instruction_count,a->operands,a->operand_count,a->error_type};
+        a->result,a->blocks,a->block_count,a->instruction_count,a->operands,a->operand_count,a->error_type,
+        a->consume_parameter_count,a->consume_parameters};
     return XR_XIR_OK;
 }
 static XrXirStatus effect_body_owned_instruction(const EffectBodyRequest *request,

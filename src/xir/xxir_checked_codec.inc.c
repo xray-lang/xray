@@ -136,6 +136,15 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
         uint32_t type = checked_u32(c, (uint32_t) parameters[i]);
         if (c->reading) parameters[i] = (XrXirType) type;
     }
+    f->consume_parameter_count=checked_u32(c,f->consume_parameter_count);
+    if(f->consume_parameter_count>f->parameter_count)c->status=XR_XIR_BAD_STRUCTURE;
+    uint32_t *consumes=checked_array(c,f->consume_parameters,f->consume_parameter_count,sizeof(*consumes),4);
+    f->consume_parameters=consumes;
+    for(uint32_t p=0;p<f->consume_parameter_count && c->status==XR_XIR_OK;++p) {
+        uint32_t ordinal=checked_u32(c,consumes[p]);
+        if(c->reading)consumes[p]=ordinal;
+        if(ordinal>=f->parameter_count || (p&&consumes[p-1]>=ordinal))c->status=XR_XIR_BAD_STRUCTURE;
+    }
     f->result = (XrXirType) checked_u32(c, (uint32_t) f->result);
     f->error_type = (XrXirType) checked_u32(c, (uint32_t) f->error_type);
     f->block_count = checked_count(c, f->block_count, &c->structural.blocks, 16);

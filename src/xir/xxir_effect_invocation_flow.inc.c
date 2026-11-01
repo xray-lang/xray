@@ -359,6 +359,8 @@ static XrXirStatus effect_invocation_ref_target(EffectInvocationFlow *flow,
 
         const XrXirCallableParameter *parameter=&signature->parameters[p];
         if (!xr_xir_callable_parameter_storage_valid(module->types,parameter)) return XR_XIR_BAD_TYPE;
+        if(parameter->mode!=xr_xir_declared_parameter_mode(module->types,target->parameters[p+op->args[1]],
+            target->consume_parameters,target->consume_parameter_count,p+op->args[1]))return XR_XIR_BAD_TYPE;
         if (xr_xir_type_span(module->types,parameter->type) ||
             xr_xir_type_span(module->types,target->parameters[p+op->args[1]])) return XR_XIR_OK;
         if (parameter->mode==XR_PARAM_REF) {

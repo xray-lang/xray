@@ -396,9 +396,13 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
     c->instances[index] = (SpecInstance) {declaration, owned_types, count, type_cache,owned_effects,effect_count,c->cleanup_owner};
     XrXirFunction *to = &c->functions[index]; *to = *source;
     XrXirType *parameters = spec_alloc(c, source->parameter_count, sizeof(*parameters));
+    uint32_t *consumes=spec_alloc(c,source->consume_parameter_count,sizeof(*consumes));
     XrXirInstruction *ops = spec_alloc(c, source->instruction_count, sizeof(*ops));
     if (c->diagnostic.status != XR_XIR_OK) return UINT32_MAX;
     to->parameters = parameters; to->instructions = ops;
+    to->consume_parameters=consumes;
+    if(source->consume_parameter_count &&
+        !spec_copy(c,consumes,source->consume_parameters,(size_t)source->consume_parameter_count*sizeof(*consumes)))return UINT32_MAX;
     const SpecInstance *instance = &c->instances[index];
     to->result = spec_type(c, instance, source->result);
     to->error_type = spec_type(c, instance, source->error_type);

@@ -40,6 +40,9 @@ static XrXirStatus effect_capture_reference_seed(const EffectCaptureRead *read,
             if(!xr_xir_callable_parameter_storage_valid(read->body.domain.types,parameter) ||
                 (parameter->mode==XR_PARAM_REF && reference->captures)) return XR_XIR_BAD_TYPE;
             if(parameter->type!=target.parameters[reference->captures+p]) return XR_XIR_BAD_TYPE;
+            if(parameter->mode!=xr_xir_declared_parameter_mode(read->body.domain.types,
+                target.parameters[reference->captures+p],target.consume_parameters,
+                target.consume_parameter_count,reference->captures+p))return XR_XIR_BAD_TYPE;
         }
     }
     EffectBodyFunctionHead source={0};status=effect_body_request_head(&read->body,reference->function,&source);

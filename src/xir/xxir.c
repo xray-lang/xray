@@ -59,6 +59,7 @@ void xr_xir_compile_artifact_free(XrXirArtifact *artifact) {
     for (uint32_t i = 0; functions && i < artifact->module.function_count; ++i) {
         xr_compile_resources_free((void *) functions[i].name);
         xr_compile_resources_free((void *) functions[i].parameters);
+        xr_compile_resources_free((void *) functions[i].consume_parameters);
         xr_compile_resources_free((void *) functions[i].blocks);
         xr_compile_resources_free((void *) functions[i].instructions);
         xr_compile_resources_free((void *) functions[i].operands);
@@ -173,14 +174,18 @@ static XrXirArtifact *clone_module_receiving(const XrXirCompileContext *compile_
         }
         *to = *from;
         to->name=NULL;to->parameters=NULL;to->blocks=NULL;to->instructions=NULL;to->operands=NULL;
+        to->consume_parameters=NULL;
         to->name = lower_copy_bytes(compile_context, from->name, from->name_length, allocation_status, control);
         to->parameters = lower_copy_bytes(compile_context, from->parameters,
                                    (size_t) from->parameter_count * sizeof(*from->parameters), allocation_status, control);
+        to->consume_parameters=lower_copy_bytes(compile_context,from->consume_parameters,
+            (size_t)from->consume_parameter_count*sizeof(*from->consume_parameters),allocation_status,control);
         to->blocks = lower_copy_bytes(compile_context, from->blocks, (size_t) from->block_count * sizeof(*from->blocks), allocation_status, control);
         to->instructions = lower_copy_bytes(compile_context, from->instructions,
                                      (size_t) from->instruction_count * sizeof(*from->instructions), allocation_status, control);
         to->operands = lower_copy_bytes(compile_context, from->operands, (size_t) from->operand_count * sizeof(*from->operands), allocation_status, control);
         if (!to->name || (to->parameter_count && !to->parameters) ||
+            (to->consume_parameter_count && !to->consume_parameters) ||
             (!native && (!to->blocks || !to->instructions)) || (to->operand_count && !to->operands)) {
             if (*allocation_status==XR_XIR_OK) *allocation_status=XR_XIR_BAD_STRUCTURE;
             xr_xir_compile_artifact_free(copy);

@@ -33,6 +33,8 @@ typedef struct XirInputFunctionHead {
     const uint32_t *operands;
     uint32_t operand_count;
     XrXirType error_type;
+    uint32_t consume_parameter_count;
+    const uint32_t *consume_parameters;
 } XirInputFunctionHead;
 /* This readable external span is borrowed only during complete receiving.
  * It is never retained, used as a digest or accepted as semantic authority. */

@@ -122,6 +122,9 @@ typedef struct XrXirFunction {
     uint32_t operand_count;
     /* Required declaration metadata. Unit is missing, never implicit Never. */
     XrXirType error_type;
+    /* Sorted parameter ordinals declared to consume an owned argument. */
+    uint32_t consume_parameter_count;
+    const uint32_t *consume_parameters;
 } XrXirFunction;
 
 #define XR_XIR_CONSTRAINT_SENDABLE 1u

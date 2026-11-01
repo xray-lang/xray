@@ -80,6 +80,9 @@ XR_FUNC XrXirStatus xir_effects_producer(const XrXirCompileContext *context,
 
         if (!xr_xir_callable_parameter_storage_valid(&certificate->terms.types,&signature->parameters[p]))
             return XR_XIR_BAD_STRUCTURE;
+        if(signature->parameters[p].mode!=xr_xir_declared_parameter_mode(&certificate->terms.types,
+            target->parameters[p+op->args[1]],target->consume_parameters,target->consume_parameter_count,p+op->args[1]))
+            return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status=xir_metadata_call_type_matches(context,&certificate->body->domain,function,op,
             target->parameters[p+op->args[1]],signature->parameters[p].type);
         if (status!=XR_XIR_OK) return status==XR_XIR_BAD_TYPE?XR_XIR_BAD_STRUCTURE:status;

@@ -108,6 +108,11 @@ static XrXirStatus view_types_verify(const XrXirCompileContext *context,const Xr
 
         const XrXirTypeNode *node=&types->nodes[i];
         if (node->kind==XR_XIR_TYPE_CALLABLE) {
+            for(uint32_t p=0;p<node->parameter_count;++p)
+                if(node->parameters[p].mode==XR_PARAM_MOVE && view_flags_at(types,flags,node->parameters[p].type)) {
+                    status=XR_XIR_BAD_TYPE;break;
+                }
+            if(status!=XR_XIR_OK)break;
             uint32_t candidate;
             status=view_return_candidate(types,flags,node,&candidate);
         } else if (node->kind==XR_XIR_TYPE_NOMINAL) {

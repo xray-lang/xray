@@ -233,6 +233,9 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
     if (generic_status != XR_XIR_OK) return generic_status;
     if (signature) for (uint32_t p = 0; p < signature->parameter_count; ++p) {
         if (!xr_xir_callable_parameter_storage_valid(module->types, &signature->parameters[p])) return XR_XIR_BAD_TYPE;
+        if(signature->parameters[p].mode!=xr_xir_declared_parameter_mode(module->types,
+            callee->parameters[p+op->args[1]],callee->consume_parameters,callee->consume_parameter_count,p+op->args[1]))
+            return XR_XIR_BAD_TYPE;
         generic_status = xr_xir_compile_call_type_matches(remaining, module, caller_id, op, callee->parameters[p + op->args[1]], signature->parameters[p].type);
         if (generic_status != XR_XIR_OK) return generic_status;
     }
@@ -443,6 +446,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
         return XR_XIR_BUDGET;
     uint64_t bytes = sizeof(*function) + (uint64_t) function->name_length +
         (uint64_t) function->parameter_count * sizeof(*function->parameters) +
+        (uint64_t) function->consume_parameter_count * sizeof(*function->consume_parameters) +
         (uint64_t) function->block_count * sizeof(*function->blocks) +
         (uint64_t) function->operand_count * sizeof(*function->operands) +
         (uint64_t) function->instruction_count * sizeof(*function->instructions);
@@ -461,6 +465,21 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
         function->parameter_count > 65536 ||
         function->parameter_count > UINT32_MAX - function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
+    if(function->consume_parameter_count>function->parameter_count ||
+        (function->consume_parameter_count==0)!=(function->consume_parameters==NULL))return XR_XIR_BAD_STRUCTURE;
+    for(uint32_t p=0;p<function->consume_parameter_count;++p) {
+        uint32_t ordinal=function->consume_parameters[p];
+        if(ordinal>=function->parameter_count || (p&&function->consume_parameters[p-1]>=ordinal))
+            return XR_XIR_BAD_STRUCTURE;
+        if(xr_xir_type_is_cell(context->module->types,function->parameters[ordinal]))return XR_XIR_BAD_TYPE;
+        uint32_t borrowed=0;
+        XrXirStatus status=xr_xir_compile_view_type_flags(&context->remaining,context->module->types,
+            function->parameters[ordinal],&borrowed);
+        if(status!=XR_XIR_OK)return status;
+        if(borrowed)return XR_XIR_BAD_TYPE;
+    }
+    /* Executable ownership transfer requires its complete instruction protocol. */
+    if(function->consume_parameter_count)return XR_XIR_UNSUPPORTED;
     uint32_t function_id = (uint32_t) (function - context->module->functions);
     if (xr_xir_function_is_generator(context->module,function_id) &&
         (!xr_xir_type_node(context->module->types,function->result) ||

@@ -223,10 +223,13 @@ static bool function_bound_admitted(const XrXirProgram *program,uint32_t entry,
 static bool instance_function_parameters(XrXirProgram *program, uint32_t entry,
     const XrXirTypeNode *signature, uint32_t captures) {
     const XrXirCallEntry *target = &program->entries[entry];
+    const XrXirFunction *declaration=&program->permissions->input->artifact->module.functions[entry];
     for (uint32_t p = 0; p < signature->parameter_count; ++p) {
         const XrXirCallableParameter *parameter = &signature->parameters[p];
         if (!xr_xir_callable_parameter_storage_valid(program->types,parameter) ||
-            target->parameters[p+captures] != parameter->type) return false;
+            target->parameters[p+captures] != parameter->type ||
+            parameter->mode!=xr_xir_declared_parameter_mode(program->types,target->parameters[p+captures],
+                declaration->consume_parameters,declaration->consume_parameter_count,p+captures)) return false;
         if (parameter->mode == XR_PARAM_REF &&
             instance_cell_role(program,entry,p+captures) != XR_XIR_CELL_ROLE_SCOPED_REF) return false;
     }

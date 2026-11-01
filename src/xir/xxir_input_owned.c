@@ -20,8 +20,9 @@ typedef struct XirInputFunctionExtent {
     const XrXirType *parameters;
     const XrXirBlock *blocks;
     const uint32_t *operands;
+    const uint32_t *consume_parameters;
     XrXirInstruction *instructions;
-    uint32_t name_length,parameters_count,blocks_count,instructions_count,operands_count;
+    uint32_t name_length,parameters_count,blocks_count,instructions_count,operands_count,consume_parameter_count;
 } XirInputFunctionExtent;
 struct XirOwnedInputFunction {
     XrCompileResources *resources;
@@ -37,6 +38,8 @@ static bool input_function_storage_extent(const XirOwnedInputFunction *input) {
         head->blocks==extent->blocks&&head->block_count==extent->blocks_count&&
         head->instruction_count==extent->instructions_count&&head->operands==extent->operands&&
         head->operand_count==extent->operands_count&&input->instructions==extent->instructions&&
+        head->consume_parameters==extent->consume_parameters&&
+        head->consume_parameter_count==extent->consume_parameter_count&&
         (!head->instruction_count||input->instructions);
 }
 XR_FUNC XrCompileResources *xir_input_function_resources(const XirOwnedInputFunction *input) {
@@ -56,6 +59,11 @@ static XrXirStatus input_head_shape(const XirInputFunctionHead *head) {
         (head->block_count&&!head->blocks)||(head->operand_count&&!head->operands)||
         head->parameter_count>UINT32_MAX-head->instruction_count ||
         head->block_count>head->instruction_count)return XR_XIR_BAD_STRUCTURE;
+    if(head->consume_parameter_count>head->parameter_count ||
+        (head->consume_parameter_count==0)!=(head->consume_parameters==NULL))return XR_XIR_BAD_STRUCTURE;
+    for(uint32_t p=0;p<head->consume_parameter_count;++p)
+        if(head->consume_parameters[p]>=head->parameter_count ||
+            (p&&head->consume_parameters[p-1]>=head->consume_parameters[p]))return XR_XIR_BAD_STRUCTURE;
     uint32_t first=0;
     for(uint32_t b=0;b<head->block_count;++b) {
         const XrXirBlock *block=&head->blocks[b];
@@ -85,6 +93,7 @@ XR_FUNC void xir_input_function_free(XirOwnedInputFunction *input) {
     xr_compile_resources_free((void *)input->extent.parameters);
     xr_compile_resources_free((void *)input->extent.blocks);
     xr_compile_resources_free((void *)input->extent.operands);
+    xr_compile_resources_free((void *)input->extent.consume_parameters);
     xr_compile_resources_free(input->extent.instructions);xr_compile_resources_free(input);
 }
 static XrXirStatus input_records_equal(
@@ -101,7 +110,7 @@ static XrXirStatus input_metadata_equal(
     const XirInputFunctionHead *a,const XirInputFunctionHead *b) {
     if(a->name_length!=b->name_length || a->parameter_count!=b->parameter_count || a->result!=b->result ||
         a->block_count!=b->block_count || a->instruction_count!=b->instruction_count || a->operand_count!=b->operand_count ||
-        a->error_type!=b->error_type)
+        a->error_type!=b->error_type || a->consume_parameter_count!=b->consume_parameter_count)
         return XR_XIR_BAD_STRUCTURE;
     for(uint32_t i=0;i<a->name_length;++i) {
         if(a->name[i]!=b->name[i])return XR_XIR_BAD_STRUCTURE;
@@ -109,6 +118,8 @@ static XrXirStatus input_metadata_equal(
     for(uint32_t i=0;i<a->parameter_count;++i) {
         if(a->parameters[i]!=b->parameters[i])return XR_XIR_BAD_STRUCTURE;
     }
+    for(uint32_t i=0;i<a->consume_parameter_count;++i)
+        if(a->consume_parameters[i]!=b->consume_parameters[i])return XR_XIR_BAD_STRUCTURE;
     for(uint32_t i=0;i<a->block_count;++i) {
         if(a->blocks[i].first!=b->blocks[i].first || a->blocks[i].count!=b->blocks[i].count ||
             a->blocks[i].panic!=b->blocks[i].panic || a->blocks[i].frontier!=b->blocks[i].frontier)
@@ -131,13 +142,18 @@ static XirOwnedInputFunction *input_copy_head(const XrXirCompileContext *context
         input->head=current;
         input->extent=(XirInputFunctionExtent){.name_length=current.name_length,
             .parameters_count=current.parameter_count,.blocks_count=current.block_count,
-            .instructions_count=current.instruction_count,.operands_count=current.operand_count};
+            .instructions_count=current.instruction_count,.operands_count=current.operand_count,
+            .consume_parameter_count=current.consume_parameter_count};
         input->head.name=NULL;input->head.parameters=NULL;input->head.blocks=NULL;input->head.operands=NULL;
+        input->head.consume_parameters=NULL;
         input->head.name=xir_compile_copy(context,current.name,current.name_length,status);
         input->extent.name=input->head.name;
         input->head.parameters=xir_compile_copy(context,current.parameters,
             (size_t)current.parameter_count*sizeof(*current.parameters),status);
         input->extent.parameters=input->head.parameters;
+        input->head.consume_parameters=xir_compile_copy(context,current.consume_parameters,
+            (size_t)current.consume_parameter_count*sizeof(*current.consume_parameters),status);
+        input->extent.consume_parameters=input->head.consume_parameters;
         input->head.blocks=xir_compile_copy(context,current.blocks,
             (size_t)current.block_count*sizeof(*current.blocks),status);
         input->extent.blocks=input->head.blocks;
@@ -270,7 +286,8 @@ XR_FUNC XrXirStatus xir_input_function_raw_match(const XrXirCompileContext *cont
         (source->instruction_count&&!source->instructions))return XR_XIR_BAD_STRUCTURE;
 
     XirInputFunctionHead head={source->name,source->name_length,source->parameters,source->parameter_count,
-        source->result,source->blocks,source->block_count,source->instruction_count,source->operands,source->operand_count,source->error_type};
+        source->result,source->blocks,source->block_count,source->instruction_count,source->operands,source->operand_count,source->error_type,
+        source->consume_parameter_count,source->consume_parameters};
     XrXirStatus status=input_head_shape(&head);
     if(status==XR_XIR_OK)status=xir_input_function_shape(input);
     if(status==XR_XIR_OK)status=input_metadata_equal(&head,&input->head);

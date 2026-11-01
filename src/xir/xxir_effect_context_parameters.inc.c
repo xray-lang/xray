@@ -118,8 +118,12 @@ static XrXirStatus effect_ordinary_function(EffectOrdinaryContexts *contexts,
         effect_terms_reserve(&contexts->terms,function.instruction_count,sizeof(*ops)) : NULL;
     uint32_t *operands=function.operand_count ?
         effect_terms_alloc(&contexts->terms,function.operand_count,sizeof(*operands)) : NULL;
+    uint32_t *consumes=function.consume_parameter_count ?
+        effect_terms_alloc(&contexts->terms,function.consume_parameter_count,sizeof(*consumes)) : NULL;
     if ((function.parameter_count && !parameters) || (function.instruction_count && !ops) ||
-        (function.operand_count && !operands)) return contexts->terms.status;
+        (function.operand_count && !operands) || (function.consume_parameter_count && !consumes)) return contexts->terms.status;
+    if(function.consume_parameter_count)memcpy(consumes,function.consume_parameters,
+        (size_t)function.consume_parameter_count*sizeof(*consumes));
     for (uint32_t p=0;p<function.parameter_count;++p) {
 
         XrXirStatus status=substitute ? effect_terms_substitute(&contexts->terms,
@@ -142,6 +146,7 @@ static XrXirStatus effect_ordinary_function(EffectOrdinaryContexts *contexts,
         if (status!=XR_XIR_OK) return status;
     }
     function.parameters=parameters;function.instructions=ops;function.operands=operands;
+    function.consume_parameters=consumes;
     char *name=function.name_length ? effect_terms_alloc(&contexts->terms,function.name_length,1) : NULL;
     if (function.name_length && !name) return contexts->terms.status;
 

@@ -105,12 +105,24 @@ XR_FUNC XrXirType xr_xir_nullable_element(const XrXirTypes *types, XrXirType typ
 /* Bounded closed class storage capability; grants no access or generic proof. */
 XR_FUNC XrXirStatus xr_xir_compile_class_field_verify(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_cell(const XrXirTypes *types, XrXirType type);
-/* Parameter mode describes physical storage, never ownership or call authority. */
+/* This projection requires a completely validated declaration ordinal set.
+ * It conveys no loan, lifetime or executable entry permission. */
+static inline uint32_t xr_xir_declared_parameter_mode(const XrXirTypes *types,
+    XrXirType type,const uint32_t *consumes,uint32_t count,uint32_t parameter) {
+    uint32_t low=0,high=count;
+    while(low<high) {
+        uint32_t middle=low+(high-low)/2;
+        if(consumes[middle]<parameter)low=middle+1;else high=middle;
+    }
+    return low<count&&consumes[low]==parameter?XR_PARAM_MOVE:
+        xr_xir_type_is_cell(types,type)?XR_PARAM_REF:XR_PARAM_READ;
+}
+/* Physical storage validity does not establish the declared mode or authority. */
 static inline bool xr_xir_callable_parameter_storage_valid(const XrXirTypes *types,
     const XrXirCallableParameter *parameter) {
     if (!parameter) return false;
     bool cell = xr_xir_type_is_cell(types, parameter->type);
-    return parameter->mode == XR_PARAM_READ ? !cell :
+    return parameter->mode == XR_PARAM_READ || parameter->mode == XR_PARAM_MOVE ? !cell :
         parameter->mode == XR_PARAM_REF && cell;
 }
 XR_FUNC bool xr_xir_type_is_nominal(const XrXirTypes *types, XrXirType type);

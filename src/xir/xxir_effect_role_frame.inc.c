@@ -21,7 +21,9 @@ static bool effect_role_same_head(const EffectBodyFunctionHead *a,const EffectBo
     return a->name==b->name && a->name_length==b->name_length &&
         a->parameters==b->parameters && a->parameter_count==b->parameter_count && a->result==b->result &&
         a->blocks==b->blocks && a->block_count==b->block_count &&
-        a->instruction_count==b->instruction_count && a->operands==b->operands && a->operand_count==b->operand_count;
+        a->instruction_count==b->instruction_count && a->operands==b->operands && a->operand_count==b->operand_count &&
+        a->error_type==b->error_type && a->consume_parameter_count==b->consume_parameter_count &&
+        a->consume_parameters==b->consume_parameters;
 }
 static XrXirStatus effect_role_material_frame(const XrXirCompileContext *work,
     const EffectBodyMaterial *material) {
@@ -64,6 +66,8 @@ static XrXirStatus effect_role_frame(EffectRoleCheck *check) {
         if (head->run_count>head->run_capacity ||
             (head->instruction_count && (!head->runs || !head->run_count))) return XR_XIR_BAD_STRUCTURE;
         status=effect_role_range(work,head->parameters,count,sizeof(*head->parameters));
+        if(status==XR_XIR_OK)status=effect_role_range(work,head->consume_parameters,
+            head->consume_parameter_count,sizeof(*head->consume_parameters));
         if (status==XR_XIR_OK) status=effect_role_range(work,head->operands,head->operand_count,sizeof(*head->operands));
         if (status==XR_XIR_OK) status=effect_role_range(work,head->blocks,head->block_count,sizeof(*head->blocks));
         if (status==XR_XIR_OK) status=effect_role_range(work,head->runs,head->run_capacity,sizeof(*head->runs));

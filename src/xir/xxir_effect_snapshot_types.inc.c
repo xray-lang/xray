@@ -68,6 +68,8 @@ typedef struct EffectBodyFunction {
     const uint32_t *operands;
     uint32_t operand_count;
     XrXirType error_type;
+    uint32_t consume_parameter_count;
+    const uint32_t *consume_parameters;
     EffectBodyRun *runs;
     uint32_t run_count,run_capacity;
     /* The record allocation owns its reference count, never the caller. */

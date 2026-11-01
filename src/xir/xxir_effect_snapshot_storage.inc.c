@@ -90,8 +90,11 @@ static XrXirStatus effect_body_function_copy(EffectTerms *terms,
     *target=(EffectBodyFunction){.name_length=source->name_length,
         .parameter_count=source->parameter_count,.result=source->result,
         .block_count=source->block_count,.instruction_count=source->instruction_count,
-        .operand_count=source->operand_count,.error_type=source->error_type};
+        .operand_count=source->operand_count,.error_type=source->error_type,
+        .consume_parameter_count=source->consume_parameter_count};
     target->parameters=effect_body_copy(terms,source->parameters,source->parameter_count,sizeof(*source->parameters));
+    target->consume_parameters=effect_body_copy(terms,source->consume_parameters,
+        source->consume_parameter_count,sizeof(*source->consume_parameters));
     target->blocks=effect_body_copy(terms,source->blocks,source->block_count,sizeof(*source->blocks));
     target->operands=effect_body_copy(terms,source->operands,source->operand_count,sizeof(*source->operands));
     target->name=effect_body_copy(terms,source->name,source->name_length,1);
@@ -343,17 +346,19 @@ static XrXirStatus effect_body_function_compare(const XrXirCompileContext *work,
         (source->block_count && !source->blocks) || (source->instruction_count && !source->instructions) ||
         (source->operand_count && !source->operands) || (body->name_length && !body->name) ||
         (body->parameter_count && !body->parameters) || (body->block_count && !body->blocks) ||
-        (body->operand_count && !body->operands)) return XR_XIR_BAD_STRUCTURE;
+        (body->operand_count && !body->operands) || (source->consume_parameter_count && !source->consume_parameters) ||
+        (body->consume_parameter_count && !body->consume_parameters)) return XR_XIR_BAD_STRUCTURE;
     if (source->name_length!=body->name_length || source->parameter_count!=body->parameter_count ||
         source->result!=body->result || source->block_count!=body->block_count ||
         source->instruction_count!=body->instruction_count || source->operand_count!=body->operand_count ||
-        source->error_type!=body->error_type)
+        source->error_type!=body->error_type || source->consume_parameter_count!=body->consume_parameter_count)
         return effect_body_difference(same);
-    const void *left[4]={source->name,source->parameters,source->blocks,source->operands};
-    const void *right[4]={body->name,body->parameters,body->blocks,body->operands};
-    uint64_t bytes[4]={source->name_length,(uint64_t)source->parameter_count*sizeof(*source->parameters),
-        (uint64_t)source->block_count*sizeof(*source->blocks),(uint64_t)source->operand_count*sizeof(*source->operands)};
-    for (uint32_t p=0;p<4;++p) {
+    const void *left[5]={source->name,source->parameters,source->blocks,source->operands,source->consume_parameters};
+    const void *right[5]={body->name,body->parameters,body->blocks,body->operands,body->consume_parameters};
+    uint64_t bytes[5]={source->name_length,(uint64_t)source->parameter_count*sizeof(*source->parameters),
+        (uint64_t)source->block_count*sizeof(*source->blocks),(uint64_t)source->operand_count*sizeof(*source->operands),
+        (uint64_t)source->consume_parameter_count*sizeof(*source->consume_parameters)};
+    for (uint32_t p=0;p<5;++p) {
         if (bytes[p]>SIZE_MAX) return XR_XIR_BUDGET;
 
         if (bytes[p] && memcmp(left[p],right[p],(size_t)bytes[p])) {

@@ -41,7 +41,8 @@ static XrXirStatus effect_cell_replay_rows_create(const XrXirCompileContext *wor
             .parameters=head.parameters,.parameter_count=head.parameter_count,.result=head.result,
             .blocks=head.blocks,.block_count=head.block_count,.instructions=rows,
             .instruction_count=head.instruction_count,.operands=head.operands,.operand_count=head.operand_count,
-            .error_type=head.error_type};
+            .error_type=head.error_type,.consume_parameter_count=head.consume_parameter_count,
+            .consume_parameters=head.consume_parameters};
         EffectBodyRecordCursor cursor;status=effect_body_request_sequence_begin(body,&cursor);
         for (uint32_t i=0;i<head.instruction_count && status==XR_XIR_OK;++i) {
             XrXirInstruction storage;const XrXirInstruction *op=NULL;
