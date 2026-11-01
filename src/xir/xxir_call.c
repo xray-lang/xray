@@ -653,6 +653,7 @@ typedef struct CallFramePreparation {
     const XirCallTakeArguments *take;
     const XrXirValue *function;
     const XrXirCallMetadata *metadata;
+    const XrXirCallView *source;
 } CallFramePreparation;
 /* The real parent callback stays active until child preparation completes.
  * Class reservations, not the graph operation lease, exclude publication. */
@@ -789,7 +790,7 @@ static XrXirCallStatus push_frame_owned(XrXirCall *call, uint32_t id,
     call->config.admission.arena=frame->parent?frame->parent->metadata->arena:call->metadata.arena;
     call->config.admission.context=frame->parent?frame->parent->metadata->admission_context:call->metadata.admission_context;
     if (status == XR_XIR_CALL_READY) status = frame_class_recheck(call, frame, preparation);
-    if (status == XR_XIR_CALL_READY) status = call_take_recheck(call,frame);
+    if (status == XR_XIR_CALL_READY) status = call_take_recheck(call,frame,preparation->source);
     if (status != XR_XIR_CALL_READY) {
         frame_cell_abort(frame);
         frame_view_arguments_release(call,frame);
@@ -930,8 +931,15 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
     return XR_XIR_CALL_READY;
 }
 
+static void call_executor_binding_assign(XrXirCall *call,const XrXirExecutorBinding *binding) {
+    call->executor_owner=binding->owner;call->executor_activation=binding->activation;
+    call->executor_generation=binding->generation;call->executor_ticket=binding->ticket;
+}
+typedef struct CallRootPreparation {
+    XrXirCallView *source;const XrXirExecutorBinding *binding;bool generator;
+} CallRootPreparation;
 static XrXirCallStatus call_new(const XrXirCallConfig *config, uint32_t entry,
-    const XrXirCallRequest *request, XrXirCallBudget *budget, XrXirCall **output,bool generator) {
+    const XrXirCallRequest *request, XrXirCallBudget *budget, XrXirCall **output,CallRootPreparation root) {
     const XrXirValue *arguments = request->arguments;
     uint32_t count = request->count;
     if (!output)
@@ -949,10 +957,23 @@ static XrXirCallStatus call_new(const XrXirCallConfig *config, uint32_t entry,
     if (budget && budget->native_observer && budget->native_instance!=config->instance) return XR_XIR_CALL_BAD_STATE;
     if (budget && budget->native_source && budget->native_source_instance!=config->instance) return XR_XIR_CALL_BAD_STATE;
     if (entry >= config->entry_count || config->entries[entry].cleanup_owner ||
-        ((config->entries[entry].flags & XR_XIR_ENTRY_GENERATOR)!=0)!=generator ||
+        ((config->entries[entry].flags & XR_XIR_ENTRY_GENERATOR)!=0)!=root.generator ||
         xr_xir_compile_type_arena_borrowed(config->admission.arena,config->entries[entry].result))
         return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirValueAdmission admission = config->admission;
+    const XirCallTakeArguments *take=NULL;
+    if(root.source) {
+        XrXirValueAdmission *parent=xr_xir_call_admission(root.source);
+        if(!parent||root.source->phase!=XR_XIR_CALL_NORMAL||config->instance!=root.source->instance||
+            admission.arena!=parent->arena||admission.domain!=parent->domain||!root.binding||
+            !root.binding->owner||!root.binding->activation||!root.binding->generation||!root.binding->ticket)
+            return XR_XIR_CALL_BAD_ARGUMENT;
+        take=&root.source->activation->top->take;
+        if(!take->caller||!take->callee||take->signature||take->target!=entry||
+            take->arguments!=arguments||take->count!=count)return XR_XIR_CALL_UNSUPPORTED;
+        XrXirOp op=take->caller->instructions[take->instruction].op;
+        if(op!=XR_XIR_GO&&op!=XR_XIR_SCOPED_GO)return XR_XIR_CALL_BAD_ARGUMENT;
+    }
     status = entry_arguments(&config->entries[entry], arguments, count, NULL, &admission,NULL);
     if (status != XR_XIR_CALL_READY) return status;
     XrXirTypeArena *arena = (XrXirTypeArena *) admission.arena;
@@ -970,6 +991,7 @@ static XrXirCallStatus call_new(const XrXirCallConfig *config, uint32_t entry,
     call->allocation_bytes = bytes;
     call->polls_left = config->poll_limit;
     call->result = call_result(XR_XIR_CALL_READY);
+    if(root.binding)call_executor_binding_assign(call,root.binding);
     XrXirCallEntry *entries = (XrXirCallEntry *) (call + 1);
     XrXirType *parameters = (XrXirType *) (entries + config->entry_count);
     memcpy(entries, config->entries, (size_t) config->entry_count * sizeof(*entries));
@@ -983,7 +1005,8 @@ static XrXirCallStatus call_new(const XrXirCallConfig *config, uint32_t entry,
         } else entries[i].parameters = NULL;
     }
     XrXirFaultDetail preparation_fault = {0};
-    CallFramePreparation preparation = {.admitted=true, .fault=&preparation_fault,.metadata=&call->metadata};
+    CallFramePreparation preparation = {.admitted=true, .fault=&preparation_fault,.metadata=&call->metadata,
+        .take=take,.source=root.source};
     status = push_frame(call, entry, arguments, count, NULL, &preparation);
     if (status != XR_XIR_CALL_READY) {
         xr_xir_compile_type_arena_drop(arena);
@@ -1342,7 +1365,7 @@ XR_FUNC XrXirCallStatus xr_xir_call_new(const XrXirCallConfig *config, uint32_t 
         config->struct_size == sizeof(*config) && config->admission.domain &&
         !xr_xir_domain_current(config->admission.domain)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCallRequest request = {entry, arguments, count, NULL, NULL};
-    return call_new(config, entry, &request, NULL, output,false);
+    return call_new(config, entry, &request, NULL, output,(CallRootPreparation){0});
 }
 XR_FUNC XrXirCallStatus xr_xir_call_new_budgeted(const XrXirCallConfig *config,
     const XrXirCallRequest *request, XrXirCallBudget *budget, XrXirCall **output) {
@@ -1350,7 +1373,14 @@ XR_FUNC XrXirCallStatus xr_xir_call_new_budgeted(const XrXirCallConfig *config,
         config->struct_size == sizeof(*config) && config->admission.domain &&
         !xr_xir_domain_current(config->admission.domain)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!request || !budget || !xr_xir_domain_current(budget->work_domain)) return XR_XIR_CALL_BAD_ARGUMENT;
-    return call_new(config, request->entry, request, budget, output,false);
+    return call_new(config, request->entry, request, budget, output,(CallRootPreparation){0});
+}
+XR_FUNC XrXirCallStatus xir_call_task_new_budgeted(const XrXirCallConfig *config,
+    const XrXirCallRequest *request,XrXirCallBudget *budget,XrXirCallView *source,
+    const XrXirExecutorBinding *binding,XrXirCall **output) {
+    if(!config||!request||!budget||!source||!binding||!xr_xir_domain_current(budget->work_domain))
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    return call_new(config,request->entry,request,budget,output,(CallRootPreparation){.source=source,.binding=binding});
 }
 XR_FUNC XrXirCallStatus xr_xir_call_take_outcome(XrXirCall *call, XrXirCallResult *output) {
     if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -1512,8 +1542,7 @@ XR_FUNC XrXirCallStatus xr_xir_call_bind_executor(XrXirCall *call, const XrXirEx
     if (call->driving || call_observing(call)) return XR_XIR_CALL_BUSY;
     if (call->executor_owner || call->result.status != XR_XIR_CALL_READY || call->next_wake ||
         !call->top || call->top->entered) return XR_XIR_CALL_BAD_STATE;
-    call->executor_owner = binding->owner; call->executor_activation = binding->activation;
-    call->executor_generation = binding->generation; call->executor_ticket = binding->ticket;
+    call_executor_binding_assign(call,binding);
     return XR_XIR_CALL_READY;
 }
 XR_FUNC bool xr_xir_call_executor_member(const XrXirCall *call, const XrXirExecutorBinding *binding) {
