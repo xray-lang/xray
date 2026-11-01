@@ -12,6 +12,7 @@
  */
 #include "xir/xxir_program_internal.h"
 #include "xir/xxir_call_select_internal.h"
+#include "base/xresource_limits.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,8 +38,13 @@ static XrXirAction select_root(XrXirCallView *view) {
         .has_default=w->mode==1,.has_timeout=w->mode==2||w->mode==3||w->mode==4||w->mode==5,
         .timeout_ms=w->mode==4?1:100};
     if(!request.has_timeout)request.timeout_ms=0;
-    if(w->mode==6)runtime_fail_at=runtime_attempts+3;
+    size_t live=runtime_live,bytes=runtime_bytes;
+    if(w->mode==6||w->mode==8)runtime_fail_at=runtime_attempts+(w->mode==6?3:4);
     XrXirValue result={0};XrXirCallStatus status=xr_xir_call_select_step(view,view->state,&request,&result);
+    if(w->mode==6||w->mode==8) {
+        CHECK(runtime_attempts==runtime_fail_at+1&&status==XR_XIR_CALL_OOM);
+        CHECK(!result.type&&!result.payload&&runtime_live==live&&runtime_bytes==bytes);
+    }
     runtime_fail_at=SIZE_MAX;
     if(status==XR_XIR_CALL_BUSY)return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};
     if(status==XR_XIR_CALL_SUSPENDED)return (XrXirAction){.kind=XR_XIR_ACTION_AWAIT_CHANNEL};
@@ -83,11 +89,11 @@ static void select_case(uint32_t mode) {
     XrXirProgramInput *input=NULL;CHECK(xir_program_input_take(&compiler.context,&artifact,&input)==XR_XIR_OK&&!artifact);
     XrXirProgram *program=NULL;CHECK(xir_program_receive(&compiler.context,&spec,&input,NULL,&program)==XR_XIR_OK&&!input);
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(8388608,&domain)==XR_XIR_VALUE_OK);
-    const XrXirDomainBudgetControls controls={8388608,8388608,128000000,4194304,4194304};
+    const XrXirDomainBudgetControls controls={8388608,8388608,XR_RESOURCE_SANDBOX_RUNTIME_WORK,4194304,4194304};
     CHECK(xr_xir_domain_budget_bind(domain,&controls)==XR_XIR_VALUE_OK);
-    XrXirValueAdmission admission={program->arena,domain,NULL,NULL,128000000,4194304};
+    XrXirValueAdmission admission={program->arena,domain,NULL,NULL,XR_RESOURCE_SANDBOX_RUNTIME_WORK,4194304};
     for(unsigned a=0;a<2;++a)CHECK(xr_xir_channel_new((XrXirType)SELECT_CHANNEL,2,&admission,&witness.channels[a])==XR_XIR_VALUE_OK);
-    if(mode==0||mode==4||mode==6)select_send(&admission,&witness.channels[0]);
+    if(mode==0||mode==4||mode==6||mode==8)select_send(&admission,&witness.channels[0]);
     XrXirCallAccounting accounting={0};
     XrXirCallConfig config;CHECK(xr_xir_call_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     config.accounting=&accounting;
@@ -107,13 +113,19 @@ static void select_case(uint32_t mode) {
         CHECK(steps<100);result=xr_xir_call_poll_bounded(call,1);
     }
     fprintf(stderr,"select mode%u status%u steps%u winner%u samples%u\n",mode,result.status,witness.steps,witness.winner,witness.samples);
-    CHECK(result.status==(mode==5?XR_XIR_CALL_HOST_ERROR:mode==6?XR_XIR_CALL_OOM:mode==7?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_RETURNED));
+    CHECK(result.status==(mode==5?XR_XIR_CALL_HOST_ERROR:mode==6||mode==8?XR_XIR_CALL_OOM:mode==7?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_RETURNED));
     if(mode==1||mode==2)CHECK(witness.winner==2);
     if(mode==3)CHECK(witness.winner==1);
     CHECK(xr_xir_call_free(call)==XR_XIR_CALL_READY);
+    if(mode==6||mode==8) {
+        XrXirValue untouched={0};XrXirChannelState received=XR_XIR_CHANNEL_RETRY;
+        CHECK(xr_xir_channel_receive(&witness.channels[0],&admission,&untouched,&received)==XR_XIR_VALUE_OK&&
+            received==XR_XIR_CHANNEL_VALUE&&untouched.type==XR_XIR_I64&&untouched.payload==42);
+        xr_xir_value_drop(&untouched);
+    }
     for(unsigned a=0;a<2;++a)xr_xir_value_drop(&witness.channels[a]);
     xr_xir_domain_drop(domain);xr_xir_compile_program_drop(program);
     CHECK(native_fixture_stats(&compiler.context).held_bytes==baseline.held_bytes);native_fixture_owner_free(&compiler);
     CHECK(!runtime_live&&!runtime_bytes);
 }
-int main(void) {for(uint32_t mode=0;mode<8;++mode)select_case(mode);return 0;}
+int main(void) {for(uint32_t mode=0;mode<9;++mode)select_case(mode);return 0;}

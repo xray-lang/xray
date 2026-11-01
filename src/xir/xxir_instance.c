@@ -33,6 +33,8 @@
 #include "xxir_call_take_internal.h"
 #include "xxir_type_arena_internal.h"
 #include "xxir_call_internal.h"
+#include "xxir_call_select_internal.h"
+#include "xxir_channel_select_shape.h"
 #include "xxir_call_move_internal.h"
 #include "xxir_cell_owner_internal.h"
 #include "xxir_class_origin_internal.h"
@@ -2066,6 +2068,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_go_at(XrXirCallView *view,uint32_t instructi
     const XrXirScopedSpawn spawn={op->type,(uint32_t)op->immediate,arguments,count};
     return instance_task_spawn(view,&spawn,op->op==XR_XIR_SCOPED_GO?&scope:NULL,output);
 }
+#include "xxir_instance_select.inc.c"
 XR_FUNC XrXirCallStatus xr_xir_task_scope_begin(XrXirCallView *view,XrXirType type,
     uint32_t mode,XrXirValue *output) {
     if(!instance_view_current(view))return XR_XIR_CALL_BAD_ARGUMENT;

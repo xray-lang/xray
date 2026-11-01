@@ -25,4 +25,8 @@ typedef struct XrXirChannelSelectCallRequest {
  * requires CONTINUE at the same instruction. Neither result consumes a queue. */
 XR_FUNC XrXirCallStatus xr_xir_call_select_step(XrXirCallView *view,
     XrXirChannelSelectCallState *state,const XrXirChannelSelectCallRequest *request,XrXirValue *output);
+/* Compiler adapters borrow their actual compact frame only for this step. */
+XR_FUNC XrXirCallStatus xr_xir_instance_channel_select_at(XrXirCallView *view,
+    uint32_t instruction,void *frame,XrXirChannelSelectCallState *state,
+    const XrXirValue *channels,XrXirValue *output);
 #endif // XXIR_CALL_SELECT_INTERNAL_H
