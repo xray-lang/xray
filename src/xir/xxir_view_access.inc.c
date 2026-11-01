@@ -211,6 +211,24 @@ static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner
     /* Shared owners never block a read; aggregate input identities do not
      * need expansion to establish this permission-independent relation. */
     if (!writable && view_access_shared(a,xr_xir_operand_type(a->body,owner))) return XR_XIR_OK;
+    if(writable&&view && view_pointer(a->resolver->check.module->types,xr_xir_operand_type(a->body,owner))) {
+        const XrXirInstruction *call=a->body->instructions+a->instruction;
+        if((call->op==XR_XIR_CALL_INDIRECT || call->op==XR_XIR_INVOKE_INDIRECT) &&
+            call->args[1]==1 && call->args[0]<a->body->operand_count) {
+            uint32_t argument=a->body->operands[call->args[0]],current=value;
+            XrXirStatus status=view_access_buffer_alias(a,&argument);
+            if(status==XR_XIR_OK)status=view_access_buffer_alias(a,&current);
+            if(status!=XR_XIR_OK)return status;
+            if(current==argument && view_access_mutable(a,xr_xir_operand_type(a->body,current))) {
+                uint32_t receiver=0,cell=0,borrowed=0;bool source=false,binding=false,known=false;
+                status=view_access_buffer_source(a,current,&receiver,&source);
+                if(status==XR_XIR_OK&&source)status=view_access_buffer_binding(a,receiver,&cell,&binding);
+                if(status==XR_XIR_OK&&binding)status=view_access_buffer_pointer_binding(a,owner,&borrowed,&known);
+                if(status!=XR_XIR_OK)return status;
+                if(binding&&known&&cell==borrowed)return XR_XIR_OK;
+            }
+        }
+    }
     if(writable&&!view && view_pointer(a->resolver->check.module->types,xr_xir_operand_type(a->body,owner))) {
         uint32_t cell=0;bool scoped=false;XrXirStatus status=view_access_buffer_scope(a,&cell,&scoped);
         if(status!=XR_XIR_OK)return status;
@@ -463,7 +481,8 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
     }
     bool pointer=op->op==XR_XIR_PTR_LOAD || op->op==XR_XIR_PTR_STORE || op->op==XR_XIR_PTR_COPY || op->op==XR_XIR_PTR_EQ;
     bool receiver_read=false;
-    if (op->op==XR_XIR_CALL && op->immediate>=0 && (uint64_t)op->immediate<a->resolver->check.module->function_count) {
+    if ((op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE) && op->immediate>=0 &&
+        (uint64_t)op->immediate<a->resolver->check.module->function_count) {
         XrXirBorrowReturn row={0};bool present=false;
         XrXirStatus status=xir_borrow_return_describe(a->resolver->check.context,a->resolver->check.module,
             (uint32_t)op->immediate,&row,&present,a->cells?a->cells->control:NULL);

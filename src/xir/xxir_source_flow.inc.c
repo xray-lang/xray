@@ -145,8 +145,9 @@ static bool source_region_writes(SourceContext *ctx, AstNode *region, const char
     *writes = scan.found; return true;
 }
 /* This is a physical storage choice for an actual mutable local, not a
- * language or callee promise. Any same-spelling write/ref/capture conservatively
- * prevents it, including shadowed uses and unreachable syntax. Ordinary Cell,
+ * language or callee promise. Possible writes/ref/captures conservatively
+ * prevent it, including unreachable syntax. A function's actual parameters
+ * shadow the binding in its body; default expressions are still visited. Ordinary Cell,
  * module storage and all borrowed lifetime checks retain their old authority. */
 static bool source_local_borrowed_storage(SourceContext *ctx,const SourceName *symbol,bool *direct) {
     *direct=false;

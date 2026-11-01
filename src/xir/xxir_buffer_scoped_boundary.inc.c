@@ -93,7 +93,8 @@ static bool buffer_scoped_callback_shape(const XrXirModule *module,uint32_t func
     const XrXirFunction *body=&module->functions[function];
     const XrXirFunctionIdentity *identity=&module->declarations->functions[function];
     if(!buffer_scoped_body(body) || !body->parameter_count || body->result!=XR_XIR_UNIT ||
-        identity->exported || identity->native_callable || identity->cleanup_owner || identity->test_role ||
+        identity->exported || identity->native_callable || identity->nominal_owner || identity->member_access ||
+        identity->method_kind || identity->cleanup_owner || identity->test_role ||
         (identity->promises&(XR_XIR_FUNCTION_GENERATOR|XR_XIR_FUNCTION_REST)))return false;
     const XrXirTypeNode *tail=xr_xir_type_node(module->types,body->parameters[body->parameter_count-1]);
     return tail && tail->kind==XR_XIR_TYPE_MUT_SLICE && tail->element==XR_XIR_U8;
