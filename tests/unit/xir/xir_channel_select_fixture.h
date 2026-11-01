@@ -18,6 +18,7 @@
 #include "xir/xxir_channel.h"
 #include "xir/xxir_type_arena.h"
 #include "xir/xxir_constraint_proof.h"
+#include "xir/xxir_generic.h"
 #include "shared/xr_sync_core.h"
 #include <stdio.h>
 #include <stdlib.h>

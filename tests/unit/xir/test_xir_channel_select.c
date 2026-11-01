@@ -30,7 +30,7 @@ static XrXirChannelSelectState select_probe(ResultOwner *owner,XrXirChannelSelec
 }
 static XrXirValue select_take(ResultOwner *owner,XrXirChannelSelect *select,uint32_t expected,XrXirChannelSelectKind kind) {
     XrXirChannelSelectState state=XR_XIR_CHANNEL_SELECT_RETRY;
-    CHECK(xr_xir_channel_select_commit(select,&owner->admission,&state)==XR_XIR_VALUE_OK&&state==XR_XIR_CHANNEL_SELECT_COMMITTED);
+    CHECK(xr_xir_channel_select_commit(select,select->last_ns,&owner->admission,&state)==XR_XIR_VALUE_OK&&state==XR_XIR_CHANNEL_SELECT_COMMITTED);
     XrXirValue value={0};uint32_t arm=0;XrXirChannelSelectKind actual=XR_XIR_CHANNEL_SELECT_TIMEOUT;
     CHECK(xr_xir_channel_select_take(select,&actual,&arm,&value)&&arm==expected&&actual==kind);
     CHECK(!xr_xir_channel_select_cancel(select));return value;
@@ -73,7 +73,7 @@ static void select_changed(void) {
     XrXirChannelSelect *select=select_begin(&owner,channels,2,false,-1);
     CHECK(select_probe(&owner,select,0,0)==XR_XIR_CHANNEL_SELECT_CANDIDATE);
     result_send(&owner,&channels[1],&b);XrXirChannelSelectState state=XR_XIR_CHANNEL_SELECT_PENDING;
-    CHECK(xr_xir_channel_select_commit(select,&owner.admission,&state)==XR_XIR_VALUE_OK&&state==XR_XIR_CHANNEL_SELECT_RETRY);
+    CHECK(xr_xir_channel_select_commit(select,0,&owner.admission,&state)==XR_XIR_VALUE_OK&&state==XR_XIR_CHANNEL_SELECT_RETRY);
     CHECK(select->arms[0].storage->buffer.count==1&&select->arms[1].storage->buffer.count==1);
     CHECK(select_probe(&owner,select,0,1)==XR_XIR_CHANNEL_SELECT_CANDIDATE);
     XrXirValue value=select_take(&owner,select,1,XR_XIR_CHANNEL_SELECT_RECEIVE);CHECK(value.payload==9);xr_xir_value_drop(&value);
@@ -134,11 +134,11 @@ static void select_failures(void) {
     XrXirValue message=result_integer(42);result_send(&owner,&channels[0],&message);
     CHECK(select_probe(&owner,select,0,0)==XR_XIR_CHANNEL_SELECT_CANDIDATE);
     uint64_t work=owner.admission.work;owner.admission.work=0;
-    CHECK(xr_xir_channel_select_commit(select,&owner.admission,&state)==XR_XIR_VALUE_LIMIT&&state==XR_XIR_CHANNEL_SELECT_COMMITTED);
+    CHECK(xr_xir_channel_select_commit(select,0,&owner.admission,&state)==XR_XIR_VALUE_LIMIT&&state==XR_XIR_CHANNEL_SELECT_COMMITTED);
     CHECK(select->arms[0].storage->buffer.count==1);owner.admission.work=work;
     CHECK(select_probe(&owner,select,0,0)==XR_XIR_CHANNEL_SELECT_CANDIDATE);
     CHECK(xr_xir_channel_select_cancel(select));
-    CHECK(xr_xir_channel_select_commit(select,&owner.admission,&state)==XR_XIR_VALUE_OK&&state==XR_XIR_CHANNEL_SELECT_CANCELLED);
+    CHECK(xr_xir_channel_select_commit(select,0,&owner.admission,&state)==XR_XIR_VALUE_OK&&state==XR_XIR_CHANNEL_SELECT_CANCELLED);
     CHECK(select->arms[0].storage->buffer.count==1);xr_xir_channel_select_drop(select);select=NULL;
     request.has_default=true;request.has_timeout=true;
     CHECK(xr_xir_channel_select_begin(&request,&owner.admission,&select)==XR_XIR_VALUE_UNSUPPORTED);
@@ -172,8 +172,24 @@ static void select_due_ready(void) {
         xr_xir_channel_select_drop(select);xr_xir_value_drop(&channels[0]);xr_xir_value_drop(&channels[1]);result_owner_free(&owner);
     }
 }
+static void select_deadline_changed(void) {
+    ResultOwner owner={0};result_owner_ready(&owner);XrXirValue channels[2]={{0}},message=result_integer(23);
+    select_channels(&owner,channels,false);result_send(&owner,&channels[0],&message);
+    XrXirChannelSelect *select=select_begin(&owner,channels,2,false,500);
+    CHECK(select_probe(&owner,select,UINT64_C(1499000000),0)==XR_XIR_CHANNEL_SELECT_CANDIDATE);
+    XrXirChannelSelectDeadline deadline={0};CHECK(xr_xir_channel_select_deadline(select,&deadline));
+    CHECK(deadline.enabled&&deadline.start_ns==UINT64_C(1000000000)&&deadline.duration_ns==UINT64_C(500000000)&&
+        deadline.last_ns==UINT64_C(1499000000));
+    XrXirChannelSelectState state=XR_XIR_CHANNEL_SELECT_COMMITTED;
+    CHECK(xr_xir_channel_select_commit(select,UINT64_C(1500000000),&owner.admission,&state)==XR_XIR_VALUE_OK&&state==XR_XIR_CHANNEL_SELECT_RETRY);
+    CHECK(select->arms[0].storage->buffer.count==1);
+    CHECK(select_probe(&owner,select,UINT64_C(1500000000),1)==XR_XIR_CHANNEL_SELECT_CANDIDATE);
+    XrXirValue value=select_take(&owner,select,UINT32_MAX,XR_XIR_CHANNEL_SELECT_TIMEOUT);CHECK(result_empty(&value));
+    CHECK(select->arms[0].storage->buffer.count==1);xr_xir_channel_select_drop(select);
+    xr_xir_value_drop(&channels[0]);xr_xir_value_drop(&channels[1]);result_owner_free(&owner);
+}
 int main(void) {
     select_typed();select_aliases();select_changed();select_notifications(false);select_notifications(true);
-    select_default_timeout();select_failures();select_closed_zero();select_due_ready();
+    select_default_timeout();select_failures();select_closed_zero();select_due_ready();select_deadline_changed();
     puts("Buffered Channel select: typed joint snapshots, arm-weighted choice, one commit, race recheck, deadlines and rollback PASS");return 0;
 }
