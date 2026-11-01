@@ -23,7 +23,7 @@
 #include "xir_native_metadata_fixture.h"
 typedef struct ScopeWitness {
     XrXirTaskExecutor *executor;
-    XrXirValue group,members[2],inner,inner_member;
+    XrXirValue group,members[2],inner,inner_member,cleanup_argument;
     uint32_t mode,root_calls,child_calls,cleanup_calls;
     bool user_panic;
 } ScopeWitness;
@@ -51,7 +51,9 @@ static XrXirAction scope_root(XrXirCallView *view) {
             case 1:
                 CHECK(view->inbox.status==XR_XIR_CALL_RETURNED);
                 CHECK(xr_xir_call_cleanup_frontier(view,3)==XR_XIR_CALL_READY);
-                return (XrXirAction){.kind=XR_XIR_ACTION_CALL,.callee=6,.flags=XR_XIR_ACTION_CLEANUP};
+                witness->cleanup_argument=(XrXirValue){XR_XIR_I64,0,42};
+                return (XrXirAction){.kind=XR_XIR_ACTION_CALL,.callee=6,
+                    .arguments=&witness->cleanup_argument,.argument_count=1,.flags=XR_XIR_ACTION_CLEANUP};
             case 2:
                 CHECK(view->inbox.status==XR_XIR_CALL_BOUNDS);
                 CHECK(xr_xir_call_cleanup_frontier(view,1)==XR_XIR_CALL_READY);
@@ -173,6 +175,7 @@ static XrXirAction scope_inner_cleanup(XrXirCallView *view) {
     return (XrXirAction){.kind=XR_XIR_ACTION_RETURN};
 }
 static XrXirAction scope_user_cleanup(XrXirCallView *view) {
+    CHECK(view->argument_count==1&&view->arguments[0].type==XR_XIR_I64&&view->arguments[0].payload==42);
     ScopeWitness *witness=(ScopeWitness *)view->environment;witness->user_panic=true;
     return xr_xir_call_bounds(-13,2);
 }
@@ -192,7 +195,8 @@ static void scope_case(uint32_t mode) {
         {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_UNIT,.cleanup_owner=2,.resume=scope_cleanup,.environment=&witness},
         {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_UNIT,.resume=scope_inner_panic},
         {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_UNIT,.cleanup_owner=2,.resume=scope_inner_cleanup,.environment=&witness},
-        {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_UNIT,.cleanup_owner=2,.resume=scope_user_cleanup,.environment=&witness},
+        {.abi_version=XR_XIR_CALL_ABI_VERSION,.parameters=&parameter,.parameter_count=1,
+         .result=XR_XIR_UNIT,.cleanup_owner=2,.resume=scope_user_cleanup,.environment=&witness},
         {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_UNIT,.cleanup_owner=3,.resume=scope_init}};
     XrXirFunctionIdentity identities[8]={{0},{.exported=1},{.exported=1},{.cleanup_owner=2},{.exported=1},
         {.cleanup_owner=2},{.cleanup_owner=2},{.cleanup_owner=3}};
