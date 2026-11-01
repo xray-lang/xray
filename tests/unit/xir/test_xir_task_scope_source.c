@@ -63,7 +63,7 @@ static void rejections(const XrXirCompileContext *context) {
         {"scope {fn worker(){}}",XR_XIR_BAD_STRUCTURE},
         {"fn bad(f:fn()){scope {go f()}}",XR_XIR_BAD_TYPE},
         {"fn bad(){var x=42;scope {go fn(){print(x)}()}}",XR_XIR_BAD_TYPE},
-        {"enum ErrorCode{Bad} fn bad(){scope {go fn() throws(ErrorCode){throw ErrorCode.Bad}()}}",XR_XIR_UNSUPPORTED}
+        {"enum ErrorCode{Bad}\nfn bad(){scope {go fn() throws(ErrorCode){throw ErrorCode.Bad}()}}",XR_XIR_UNSUPPORTED}
     };
     for(size_t c=0;c<sizeof(cases)/sizeof(*cases);++c) {
         uint64_t before=held(context->resources);XrXirSourceResult result={0};
