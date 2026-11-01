@@ -32,6 +32,7 @@
 #include "xxir_call_internal.h"
 #include "xxir_cell_owner_internal.h"
 #include "xxir_class_origin_internal.h"
+#include "xxir_class.h"
 #include "xxir_cell_provenance_internal.h"
 #include "xxir_effect_runtime_internal.h"
 #include "xxir_task_internal.h"
