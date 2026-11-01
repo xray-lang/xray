@@ -20,6 +20,10 @@
  * No caller-supplied authority, binding flag or copied callback is accepted. */
 XR_FUNC XrXirValueStatus xr_xir_call_view_new(XrXirCallView *view,
     XrXirType type,uint32_t parameter,int64_t offset,int64_t length,XrXirValue *output);
+/* Only the actual canonical borrowed_param0 Buffer native frame may publish
+ * this readonly view. The driver supplies and registers its own real scope. */
+XR_FUNC XrXirValueStatus xr_xir_call_buffer_view(XrXirCallView *view,
+    XrXirType type,XrXirValue *output);
 /* A local root is an owned unpublished whole Cell in this actual frame's state. Existing
  * exclusive loans cannot be bypassed through a copied Cell handle. The native
  * producer owns the state values; this grants no Source binding/NLL proof. */

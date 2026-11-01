@@ -17,6 +17,17 @@ typedef struct Output {
     char bytes[64];
     size_t length;
 } Output;
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_22c0e578(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrSourceWriteStatus collect(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
     Output *out=context;CHECK(stream==XR_SOURCE_STDOUT && length<=sizeof(out->bytes)-out->length);
     XrSourceInstance *owner=out->owner;XrSourceCall *call=NULL;
@@ -83,7 +94,7 @@ static void default_output(XrSourceExecution *execution,XrSourceArtifact *progra
     CHECK(out.calls==258 && out.bytes==expected && out.bytes>1048576);
     CHECK(xray_source_instance_drop(&owner,NULL)==XR_SOURCE_OK && !owner);
     out.bytes=out.calls=0;XrSourceResult *result=NULL;
-    CHECK(xray_source_invoke(execution,program,&request,&runtime,&result,NULL)==XR_SOURCE_OK && result);
+    CHECK(fixture_xray_source_invoke_22c0e578(execution,program,&request,&runtime,&result,NULL)==XR_SOURCE_OK && result);
     returned_i64(result,40);CHECK(out.calls==258 && out.bytes==expected);
     xray_source_value_free(argument);
     puts("public default output: persistent and one-shot cumulative bytes exceed 1 MiB PASS");
@@ -107,7 +118,7 @@ static void completed_child(void) {
         if(persistent) {CHECK(xray_source_instance_new(execution,program,&runtime,&owner)==XR_SOURCE_OK);out.owner=owner;}
         XrSourceResult *result=NULL;XrSourceEvent failure={0},event={0};
         XrSourceStatus status=persistent?xray_source_instance_execute(owner,&request,&result,&failure):
-            xray_source_invoke(execution,program,&request,&runtime,&result,&failure);
+            fixture_xray_source_invoke_22c0e578(execution,program,&request,&runtime,&result,&failure);
         if(result)CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK);
         if(status!=XR_SOURCE_OK || !result || event.state!=XR_SOURCE_RUN_CLEANUP_FAILED)
             fprintf(stderr,"completed child persistent=%u status=%u result=%p event=%u engine=%u failure=%u bytes=%zu\n",
@@ -117,7 +128,7 @@ static void completed_child(void) {
         CHECK(out.length==2 && !memcmp(out.bytes,"7\n",2));
         CHECK(xray_source_result_copy(result,&retained[persistent])==XR_SOURCE_OK);xray_source_result_free(result);result=NULL;
         CHECK(xray_source_instance_drop(&owner,NULL)==XR_SOURCE_OK && !owner);out.owner=NULL;
-        request=invocation("again",NULL,0);CHECK(xray_source_invoke(execution,program,&request,&runtime,&result,NULL)==XR_SOURCE_OK);
+        request=invocation("again",NULL,0);CHECK(fixture_xray_source_invoke_22c0e578(execution,program,&request,&runtime,&result,NULL)==XR_SOURCE_OK);
         returned_i64(result,42);
     }
     xray_source_artifact_free(program);xray_source_execution_free(execution);
@@ -162,7 +173,7 @@ static void initializing_child(unsigned mode) {
     Output out={0};XrSourceCallOptions runtime;CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
     runtime.write=collect;runtime.context=&out;XrSourceInvocation request=invocation("answer",NULL,0);
     XrSourceResult *result=NULL;XrSourceEvent failure={0},event={0};
-    XrSourceStatus status=xray_source_invoke(execution,program,&request,&runtime,&result,&failure);
+    XrSourceStatus status=fixture_xray_source_invoke_22c0e578(execution,program,&request,&runtime,&result,&failure);
     if(result)CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK);
     fprintf(stderr,"initializing child status=%u result=%p event=%u engine=%u failure=%u bytes=%zu\n",
         (unsigned)status,(void *)result,(unsigned)event.state,(unsigned)event.engine_status,(unsigned)failure.engine_status,out.length);
@@ -212,7 +223,7 @@ int main(int argc,char **argv) {
     XrSourceInvocation two_lines=invocation("twoLines",NULL,0);XrSourceResult *limited=NULL;
     /* The initial module line spends three bytes, leaving only one full line. */
     XrSourceEvent limited_failure={0},limited_event={0};
-    status=xray_source_invoke(execution,program,&two_lines,&runtime,&limited,&limited_failure);
+    status=fixture_xray_source_invoke_22c0e578(execution,program,&two_lines,&runtime,&limited,&limited_failure);
     if(status!=XR_SOURCE_LIMIT || limited) {
         if(limited)CHECK(xray_source_result_event(limited,&limited_event)==XR_SOURCE_OK);
         fprintf(stderr,"one-shot output status=%u result=%p event=%u engine=%u failure=%u bytes=%zu hex=",
@@ -227,7 +238,7 @@ int main(int argc,char **argv) {
     const XrSourceStatus rejected[]={XR_SOURCE_OUT_OF_MEMORY,XR_SOURCE_LIMIT,XR_SOURCE_IO};
     for(unsigned i=0;i<3;++i) {
         RefusedOutput out={refused[i],0};runtime.write=refuse_output;runtime.context=&out;
-        CHECK(xray_source_invoke(execution,program,&two_lines,&runtime,&limited,&limited_failure)==rejected[i] && !limited);
+        CHECK(fixture_xray_source_invoke_22c0e578(execution,program,&two_lines,&runtime,&limited,&limited_failure)==rejected[i] && !limited);
         CHECK(out.calls==1);
     }
     xray_source_artifact_free(program);xray_source_execution_free(execution);

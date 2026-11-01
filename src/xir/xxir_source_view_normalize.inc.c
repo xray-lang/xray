@@ -306,10 +306,10 @@ static XrXirStatus source_view_normalize(SourceContext *ctx,const XrXirModule *m
     for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f)
         if (bodies[f].initialization_regions)
             status=xr_xir_compile_initialization_check(&ctx->compile,&replacement,f,bodies[f].initialization_regions,diagnostic);
-    if (status==XR_XIR_OK) status=xir_compile_view_return_origins_verified(&ctx->compile,&replacement,diagnostic);
+    if (status==XR_XIR_OK) status=xir_compile_view_return_origins_verified(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_affine_verified(&ctx->compile,&replacement,diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_liveness_verified(&ctx->compile,&replacement,NULL,NULL,diagnostic);
-    if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(&ctx->compile,&replacement,NULL,NULL,diagnostic);
+    if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},NULL,NULL,diagnostic);
     /* Access sees the actual cleanup and relocated SSA before publication. */
     if (status==XR_XIR_OK) {
         status=xir_compile_view_cell_access_verified_input(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},diagnostic);

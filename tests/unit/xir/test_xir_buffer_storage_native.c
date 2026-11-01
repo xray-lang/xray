@@ -16,6 +16,9 @@
 #include <stdlib.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"native buffer %d: %s\n",__LINE__,#c);exit(1);}}while(0)
 extern const XrXirProgramSpec buffer_storage_program;
+extern const XrXirProgramSpec mem_native_program;
+#define XIR_MEM_NATIVE_RUNTIME_ONLY
+#include "xir_mem_native_fixture.h"
 #include "xir_buffer_class_cases.h"
 int main(void) {
     XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
@@ -42,5 +45,11 @@ int main(void) {
     }
     buffer_class_cases(program);
     int64_t length=-1;CHECK(xr_xir_buffer_storage_length(&result,&length)==XR_XIR_VALUE_OK && length==13);
-    xr_xir_value_drop(&result);puts("Generated C native byte storage and retired class fields PASS");return 0;
+    xr_xir_value_drop(&result);program=NULL;
+    context.resources=NULL;
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_xir_compile_program_seal(&context,&mem_native_program,&program)==XR_XIR_OK);
+    xr_compile_resources_release(context.resources);
+    mem_native_execute(program);xr_xir_compile_program_drop(program);
+    puts("Generated C native byte storage and retired class fields PASS");return 0;
 }

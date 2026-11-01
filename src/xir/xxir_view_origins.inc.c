@@ -17,10 +17,11 @@ typedef struct ViewOriginSet {
 typedef struct ViewOriginQuery {
     const XrXirCompileContext *context;
     const XrXirModule *module;
+    const XrXirConstruction *construction;
     const uint8_t *flags;
     const uint32_t *candidates;
     const XrXirFunction *function;
-    uint32_t candidate;
+    uint32_t candidate,function_index;
     ViewOriginSet tasks,paths;
 } ViewOriginQuery;
 
@@ -90,7 +91,12 @@ static XrXirStatus view_origin_select(ViewOriginQuery *q,uint32_t value,uint32_t
 /* Captures are the actual bound physical prefix, not a return-body guess.
  * Every exposed callable signature must name the same physical candidate. */
 static XrXirStatus view_origin_candidates(
-    const XrXirModule *module,const uint8_t *flags,uint32_t *captures,uint32_t *candidates) {
+    const XrXirCompileContext *context,const XrXirModule *module,const XrXirConstruction *construction,
+    const uint8_t *flags,uint32_t *captures,uint32_t *candidates,XrCompileRequestControl *control) {
+    if (construction) {
+        XrXirStatus status=xir_borrow_returns_verify(context,module,construction,control);
+        if (status!=XR_XIR_OK) return status;
+    }
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *body=&module->functions[f];
         for (uint32_t i=0;i<body->instruction_count;++i) {
@@ -107,6 +113,23 @@ static XrXirStatus view_origin_candidates(
         const XrXirFunction *body=&module->functions[f];candidates[f]=UINT32_MAX;
         uint32_t result=view_flags_at(module->types,flags,body->result),count=0,permission=0;
         if (!result) continue;
+        XrXirBorrowReturn actual={0};bool receiver=false;
+        XrXirStatus described=xir_borrow_return_describe(context,module,f,&actual,&receiver,control);
+        if (described!=XR_XIR_OK) return described;
+        if (receiver) {
+            const XrXirBorrowReturn *row=xir_borrow_return_find(construction,f);
+            if (!row || row->nominal!=actual.nominal || row->receiver!=actual.receiver ||
+                row->field!=actual.field || row->native_callable!=actual.native_callable) return XR_XIR_BAD_TYPE;
+            candidates[f]=row->receiver;continue;
+        }
+        uint32_t native=module->declarations?module->declarations->functions[f].native_callable:0;
+        if (native==XR_NATIVE_CALLABLE_BUFFER_AS_BYTES || native==XR_NATIVE_CALLABLE_BUFFER_BORROW_PTR) {
+            XrXirStatus status=xir_native_callable_verify(module,f);if (status!=XR_XIR_OK) return status;
+            candidates[f]=0;continue;
+        }
+        /* A pointer without a receiver summary must prove a nonborrowed
+         * producer in every return path. A parameter is never such evidence. */
+        if (view_pointer(module->types,body->result)) {candidates[f]=UINT32_MAX-1u;continue;}
         for (uint32_t p=captures[f];p<body->parameter_count;++p) {
 
             bool reference=xr_xir_type_is_cell(module->types,body->parameters[p]);
@@ -132,7 +155,8 @@ static XrXirStatus view_origin_candidates(
             uint32_t candidate;
             XrXirStatus status=view_return_candidate(module->types,flags,signature,&candidate);
             if (status!=XR_XIR_OK) return status;
-            if (candidate==UINT32_MAX || candidate+op->args[1]!=candidates[target]) return XR_XIR_BAD_TYPE;
+            if (candidate>=UINT32_MAX-1u ? candidate!=candidates[target] :
+                candidate+op->args[1]!=candidates[target]) return XR_XIR_BAD_TYPE;
         }
     }
     return XR_XIR_OK;
@@ -162,6 +186,7 @@ static XrXirStatus view_origin_call(ViewOriginQuery *q,const XrXirInstruction *o
         if (op->immediate<0 || (uint64_t)op->immediate>=q->module->function_count) return XR_XIR_BAD_STRUCTURE;
         candidate=q->candidates[op->immediate];
     } else {
+        if (view_pointer(q->module->types,op->type)) return XR_XIR_UNRESOLVED;
         if (op->immediate<0 || (uint64_t)op->immediate>=
             (uint64_t)q->function->parameter_count+q->function->instruction_count) return XR_XIR_BAD_STRUCTURE;
         const XrXirTypeNode *signature=xr_xir_callable_signature(q->module->types,
@@ -170,6 +195,7 @@ static XrXirStatus view_origin_call(ViewOriginQuery *q,const XrXirInstruction *o
         XrXirStatus status=view_return_candidate(q->module->types,q->flags,signature,&candidate);
         if (status!=XR_XIR_OK) return status;
     }
+    if (candidate==UINT32_MAX-1u) return XR_XIR_OK;
     if (candidate==UINT32_MAX || candidate>=op->args[1] || op->args[0]>q->function->operand_count ||
         candidate>=q->function->operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;
     return view_origin_push(q,q->function->operands[op->args[0]+candidate],0);
@@ -180,6 +206,15 @@ static XrXirStatus view_origin_step(ViewOriginQuery *q,ViewOriginPair task) {
         return task.first==q->candidate ? XR_XIR_OK : XR_XIR_BAD_VALUE;
     const XrXirInstruction *op=&q->function->instructions[task.first-q->function->parameter_count];
     switch (op->op) {
+    case XR_XIR_PTR_NULL:return q->candidate==UINT32_MAX-1u?XR_XIR_OK:XR_XIR_BAD_VALUE;
+    case XR_XIR_PTR_OFFSET:case XR_XIR_PTR_READONLY:
+        return view_origin_push(q,op->args[0],task.second);
+    case XR_XIR_CLASS_GET: {
+        const XrXirBorrowReturn *row=xir_borrow_return_find(q->construction,q->function_index);
+        if (!row || task.second || op->type!=XR_XIR_BUFFER_STORAGE || op->immediate!=row->field)
+            return XR_XIR_BAD_VALUE;
+        return view_origin_push(q,op->args[0],0);
+    }
     case XR_XIR_VIEW_NEW:case XR_XIR_VIEW_REBORROW:
         if (task.second || op->args[1]!=3 || op->args[0]>q->function->operand_count ||
             3u>q->function->operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;
@@ -218,7 +253,8 @@ static XrXirStatus view_origin_query(ViewOriginQuery *q,uint32_t value) {
     view_origin_set_free(&q->tasks);view_origin_set_free(&q->paths);return status;
 }
 static XrXirStatus view_origins_verify(const XrXirCompileContext *context,
-    const XrXirModule *module,const uint8_t *flags,XrXirDiagnostic *diagnostic) {
+    const XrXirModule *module,const XrXirConstruction *construction,const uint8_t *flags,
+    XrXirDiagnostic *diagnostic,XrCompileRequestControl *control) {
     if (!module->function_count || !module->functions) return XR_XIR_BAD_STRUCTURE;
     bool needed=false;
     for (uint32_t f=0;f<module->function_count;++f) {
@@ -230,11 +266,13 @@ static XrXirStatus view_origins_verify(const XrXirCompileContext *context,
     uint32_t *storage=xir_compile_calloc(context,module->function_count,2*sizeof(uint32_t),&status);
     if (!storage) return status;
     uint32_t *captures=storage,*candidates=storage+module->function_count;
-    status=view_origin_candidates(module,flags,captures,candidates);
+    status=view_origin_candidates(context,module,construction,flags,captures,candidates,control);
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
         if (candidates[f]==UINT32_MAX) continue;
         const XrXirFunction *body=&module->functions[f];
-        ViewOriginQuery query={context,module,flags,candidates,body,candidates[f],{0},{0}};
+        if (module->declarations && module->declarations->functions[f].native_callable) continue;
+        ViewOriginQuery query={.context=context,.module=module,.construction=construction,.flags=flags,
+            .candidates=candidates,.function=body,.function_index=f,.candidate=candidates[f]};
         for (uint32_t b=0;b<body->block_count && status==XR_XIR_OK;++b) {
 
             uint32_t last=body->blocks[b].first+body->blocks[b].count-1u;
@@ -246,11 +284,11 @@ static XrXirStatus view_origins_verify(const XrXirCompileContext *context,
     }
     xr_compile_resources_free(storage);return status;
 }
-XR_FUNC XrXirStatus xir_compile_view_return_origins_verified(const XrXirCompileContext *context,
-    const XrXirModule *module,XrXirDiagnostic *diagnostic) {
+XR_FUNC XrXirStatus xir_compile_view_return_origins_verified(const XrXirCompileContext *context,XirEffectInput input,XrXirDiagnostic *diagnostic) {
+    const XrXirModule *module=input.module;const XrXirConstruction *construction=input.construction;
     if (!xir_compile_context_valid(context) || !module) return XR_XIR_BAD_STRUCTURE;
     uint8_t *flags=NULL;
-    XrXirStatus status=view_flags_build(context,module->types,&flags);
-    if (status==XR_XIR_OK && flags) status=view_origins_verify(context,module,flags,diagnostic);
+    XrXirStatus status=view_flags_build_mode(context,module->types,&flags,true);
+    if (status==XR_XIR_OK && flags) status=view_origins_verify(context,module,construction,flags,diagnostic,input.control);
     xr_compile_resources_free(flags);return status;
 }

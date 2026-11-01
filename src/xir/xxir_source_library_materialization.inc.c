@@ -34,3 +34,25 @@ static bool source_library_materializations(SourceContext *ctx,const SourceLibra
     }
     unit->materializations=rows;unit->materialization_count=next;return true;
 }
+static bool source_library_borrow_returns(SourceContext *ctx,const SourceLibraryMap *map) {
+    SourceLibraryUnit *unit=map->unit;if (!unit) return true;
+    const XrXirBorrowReturns *input=xr_xir_compile_construction_borrow_returns(unit->construction);
+    if (!input || unit->borrow_returns.rows || unit->borrow_returns.count)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library receiver facts have no unique owner");
+    XrXirBorrowReturn *rows=input->count?source_alloc(ctx,input->count,sizeof(*rows)):NULL;
+    if (input->count && !rows) return false;
+    uint32_t count=0;
+    for (uint32_t i=0;i<input->count;++i) {
+        if (!(i%64u) && !source_request_poll(ctx,NULL)) return false;
+        XrXirBorrowReturn row=input->rows[i];
+        if (row.function>=map->function_count || !unit->library->types ||
+            !unit->library->types->nominals || row.nominal>=unit->library->types->nominals->count)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library receiver facts have invalid coordinates");
+        if (map->functions[row.function]==UINT32_MAX) continue;
+        row.function=map->functions[row.function];row.nominal=unit->nominals[row.nominal];
+        if (row.nominal==UINT32_MAX)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library receiver owner is outside the selected closure");
+        rows[count++]=row;
+    }
+    unit->borrow_returns=(XrXirBorrowReturns){count?rows:NULL,count};return true;
+}

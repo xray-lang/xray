@@ -161,8 +161,8 @@ XR_FUNC XrXirStatus xir_compile_view_roots_disjoint(XirViewRootResolver *r,
     if (r->busy)
         return XR_XIR_BAD_STAGE;
     r->busy = true;
-    ViewRootComparison comparison={r,NULL,true};XrXirStatus status=view_root_resolve(r,left,view_root_save,&comparison);
-    if (status==XR_XIR_OK) status=view_root_resolve(r,right,view_root_compare,&comparison);
+    ViewRootComparison comparison={r,NULL,true};XrXirStatus status=view_root_resolve(r,left,view_root_save,&comparison,NULL);
+    if (status==XR_XIR_OK) status=view_root_resolve(r,right,view_root_compare,&comparison,NULL);
     while (comparison.left) {
         ViewRootSaved *p=comparison.left;comparison.left=p->next;
         XR_CHECK(r->check.reserved>=p->bytes,"saved root paths remain owned by their replay ledger");

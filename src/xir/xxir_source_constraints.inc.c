@@ -30,6 +30,7 @@ static SourceName *source_interface_name(SourceContext *ctx, AstNode *node, cons
         if (symbol) *binding = symbol->declaration;
     } else {
         symbol = visible_name(ctx, name);
+        if (!symbol) symbol=source_prelude_lookup(ctx,name);
         if (symbol) *binding = symbol->declaration;
         if (symbol && symbol->kind == SOURCE_IMPORT) symbol = imported_declaration(ctx, symbol, symbol->imported);
     }

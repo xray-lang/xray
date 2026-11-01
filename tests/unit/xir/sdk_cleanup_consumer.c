@@ -10,6 +10,19 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"SDK cleanup %d: %s\n",__LINE__,#c);exit(1);}}while(0)
+#if defined(XR_CLEANUP_SOURCE_SDK)
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_7c1e8b97(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
+#endif
 #if defined(XR_CLEANUP_READER) || defined(XR_CLEANUP_SOURCE_SDK)
 static FILE *input_file(const char *path) {
     FILE *file=NULL;
@@ -32,7 +45,7 @@ int main(int argc,char **argv) {
     XrXirRuntimeSdkRequest request={argv[1],bytes,(size_t)length,resources};XrXirRuntimeSdk *sdk=NULL;
     XrXirRuntimeSdkStatus status=xr_xir_runtime_sdk_load(&request,&sdk);free(bytes);xr_compile_resources_release(resources);
     printf("%u",(unsigned)status);
-    if(sdk){const XrXirRuntimeSdkFacts *facts=xr_xir_runtime_sdk_facts(sdk);CHECK(facts && facts->call_abi==37 && facts->semantic==117);
+    if(sdk){const XrXirRuntimeSdkFacts *facts=xr_xir_runtime_sdk_facts(sdk);CHECK(facts && facts->call_abi==38 && facts->semantic==119);
         printf(" %u ",facts->file_count);for(size_t i=0;i<32;++i)printf("%02x",facts->identity[i]);}
     puts("");xr_xir_runtime_sdk_free(sdk);return 0;
 }
@@ -52,7 +65,7 @@ static XrSourceResult *invoke(XrSourceExecution *owner,XrSourceArtifact *artifac
     request.name=name;request.name_length=strlen(name);XrSourceCallOptions options;
     CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);options.write=write_bytes;options.context=trace;
     XrSourceResult *result=NULL;XrSourceEvent failure;
-    CHECK(xray_source_invoke(owner,artifact,&request,&options,&result,&failure)==XR_SOURCE_OK && result);return result;
+    CHECK(fixture_xray_source_invoke_7c1e8b97(owner,artifact,&request,&options,&result,&failure)==XR_SOURCE_OK && result);return result;
 }
 int main(int argc,char **argv) {
     CHECK(argc==3);FILE *file=input_file(argv[1]);CHECK(file && !fseek(file,0,SEEK_END));long length=ftell(file);
@@ -88,9 +101,9 @@ extern "C" {
 #endif
 #include "xir/xxir_call.h"
 #if defined(__cplusplus)
-static_assert(XR_XIR_CALL_ABI_VERSION==37 && sizeof(XrXirPanicPayload)==72 && sizeof(XrXirCallResult)==184,"Call37 physical layout");
+static_assert(XR_XIR_CALL_ABI_VERSION==38 && sizeof(XrXirPanicPayload)==72 && sizeof(XrXirCallResult)==184,"Call38 physical layout");
 #else
-_Static_assert(XR_XIR_CALL_ABI_VERSION==37 && sizeof(XrXirPanicPayload)==72 && sizeof(XrXirCallResult)==184,"Call37 physical layout");
+_Static_assert(XR_XIR_CALL_ABI_VERSION==38 && sizeof(XrXirPanicPayload)==72 && sizeof(XrXirCallResult)==184,"Call38 physical layout");
 #endif
 typedef struct Context {XrXirValue message;unsigned releases;} Context;
 static XrXirAction root_resume(XrXirCallView *view) {
@@ -110,12 +123,13 @@ int main(void) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1024*1024,&domain)==XR_XIR_VALUE_OK);Context context;memset(&context,0,sizeof(context));
     static const char text[]="cleanup é\0界";CHECK(xr_xir_string_new(domain,text,sizeof(text)-1,&context.message)==XR_XIR_VALUE_OK);
     XrXirCallEntry entries[2];memset(entries,0,sizeof(entries));
-    for(unsigned i=0;i<2;++i){entries[i].abi_version=37;entries[i].resume=i?cleanup_resume:root_resume;entries[i].release=release_frame;entries[i].environment=&context;}
+    for(unsigned i=0;i<2;++i){entries[i].abi_version=38;entries[i].resume=i?cleanup_resume:root_resume;entries[i].release=release_frame;entries[i].environment=&context;}
     entries[0].state_bytes=sizeof(unsigned);entries[0].result=XR_XIR_I64;entries[0].flags=XR_XIR_ENTRY_EXIT;entries[1].cleanup_owner=1;
     XrXirCallAccounting accounting;memset(&accounting,0,sizeof(accounting));
     XrXirCallConfig config;CHECK(xr_xir_call_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);config.entries=entries;config.entry_count=2;config.accounting=&accounting;
     config.admission.domain=domain;config.admission.work=100000;config.admission.scratch_bytes=100000;
-    XrXirCall *call=NULL;config.abi_version=36;CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_BAD_ABI && !call);config.abi_version=37;
+    XrXirCall *call=NULL;config.abi_version=36;CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_BAD_ABI && !call);
+    config.abi_version=37;CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_BAD_ABI && !call);config.abi_version=38;
     CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_READY);XrXirCallResult result;memset(&result,0,sizeof(result));
     XrXirCallResult observed;do{observed=xr_xir_call_poll_bounded(call,1);}while(observed.status==XR_XIR_CALL_READY);
     CHECK(observed.status==XR_XIR_CALL_CLEANUP_FAILED && xr_xir_call_result_copy(&observed,&result)==XR_XIR_VALUE_OK);
@@ -125,6 +139,6 @@ int main(void) {
     CHECK(xr_xir_call_result_copy(&result,&copied)==XR_XIR_VALUE_OK);xr_xir_call_result_move(&copied,&moved);CHECK(xr_xir_call_result_empty(&copied));
     xr_xir_call_result_drop(&result);const char *actual=NULL;size_t length=0;
     CHECK(xr_xir_string_view(&moved.panic.message,&actual,&length) && length==sizeof(text)-1 && !memcmp(actual,text,length));
-    xr_xir_call_result_drop(&moved);puts("Installed Runtime Call37: owned fatal, moved result, retired Domain and old ABI refusal PASS");return 0;
+    xr_xir_call_result_drop(&moved);puts("Installed Runtime Call38: owned fatal, moved result, retired Domain and old ABI refusal PASS");return 0;
 }
 #endif

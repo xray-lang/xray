@@ -14,6 +14,17 @@ typedef struct ProjectionOwners {
     XrSourceResult *result;
     XrSourceValue *root,*parts[6];
 } ProjectionOwners;
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_18f9cdea(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrSourceStatus projection_prepare(ProjectionOwners *owners,const XrCompileResourceLimits *limits) {
     runtime_fail_at=SIZE_MAX;
     XrSourceCompilerOptions options;CHECK(xray_source_compiler_options_init(&options,sizeof(options))==XR_SOURCE_OK);
@@ -27,7 +38,7 @@ static XrSourceStatus projection_prepare(ProjectionOwners *owners,const XrCompil
     XrSourceInvocation request;CHECK(xray_source_invocation_init(&request,sizeof(request))==XR_SOURCE_OK);
     request.name="data";request.name_length=4;XrSourceCallOptions runtime;
     CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);runtime.write=discard;
-    status=xray_source_invoke(owners->program,&request,&runtime,&owners->result,NULL);if(status!=XR_SOURCE_OK)return status;
+    status=fixture_xray_source_invoke_18f9cdea(owners->program,&request,&runtime,&owners->result,NULL);if(status!=XR_SOURCE_OK)return status;
     XrSourceEvent event;CHECK(xray_source_result_event(owners->result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
     status=xray_source_result_value(owners->result,&owners->root);if(status!=XR_SOURCE_OK)return status;
     xray_source_result_free(owners->result);owners->result=NULL;

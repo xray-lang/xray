@@ -113,6 +113,8 @@ static bool effect_root_seed_local(XrXirOp opcode) {
     case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW: case XR_XIR_VIEW_LEN:
     case XR_XIR_VIEW_GET: case XR_XIR_VIEW_SET: case XR_XIR_VIEW_COPY:
     case XR_XIR_VIEW_END: case XR_XIR_VIEW_CLEANUP:
+    case XR_XIR_PTR_NULL: case XR_XIR_PTR_READONLY: case XR_XIR_PTR_OFFSET:
+    case XR_XIR_PTR_LOAD: case XR_XIR_PTR_STORE: case XR_XIR_PTR_COPY: case XR_XIR_PTR_EQ:
     case XR_XIR_TASK_CANCEL: case XR_XIR_TASK_POLL:
     case XR_XIR_F64_TRY_PARSE: case XR_XIR_STRING_COPY_BYTES: case XR_XIR_STRING_REPLACE:
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING:

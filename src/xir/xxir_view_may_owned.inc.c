@@ -138,7 +138,7 @@ XR_FUNC XrXirStatus xir_compile_view_may_owned_verified(const XrXirCompileContex
         return XR_XIR_BAD_STRUCTURE;
     if (module->types && (sizeof(ViewMayOwner)>context->limits.frame_bytes ||
         module->types->count>context->limits.frame_bytes-sizeof(ViewMayOwner))) return XR_XIR_BUDGET;
-    uint8_t *flags=NULL;XrXirStatus status=xir_compile_view_flags_new(context,module->types,&flags);
+    uint8_t *flags=NULL;XrXirStatus status=xir_compile_view_static_flags_new(context,module->types,&flags);
     if (status!=XR_XIR_OK || !flags) return status;
     for (uint32_t f=0;f<module->function_count;++f) {
 
@@ -172,7 +172,7 @@ XR_FUNC XrXirStatus xir_compile_view_may_owned_function_scoped(const XrXirCompil
     XrXirCompileContext limited=*context;limited.limits.frame_bytes-=fixed;
     if (module->types && (sizeof(ViewMayOwner)>limited.limits.frame_bytes ||
         module->types->count>limited.limits.frame_bytes-sizeof(ViewMayOwner))) return XR_XIR_BUDGET;
-    uint8_t *flags=NULL;XrXirStatus status=xir_compile_view_flags_new(&limited,module->types,&flags);
+    uint8_t *flags=NULL;XrXirStatus status=xir_compile_view_static_flags_new(&limited,module->types,&flags);
     if (status!=XR_XIR_OK || !flags) return status;
     ViewMayOwner m={.affine={.context=&limited,.module=module,.function=module->functions+function,.types=flags,
         .location={XR_XIR_OK,function,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}}};

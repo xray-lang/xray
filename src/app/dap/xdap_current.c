@@ -174,7 +174,7 @@ XR_FUNC XrXirCallStatus xdap_current_free(XdapCurrent *session) {
     if (session->driving) return XR_XIR_CALL_BUSY;
     xr_xir_vm_debug_disable(session->debug);
     XrXirCallStatus status = xr_xir_instance_free(session->instance);
-    if (status == XR_XIR_CALL_BUSY) return status;
+    if (status==XR_XIR_CALL_BUSY || status==XR_XIR_CALL_CLOSE_FAILED) return status;
     xr_xir_vm_debug_drop(session->debug);
     XrXirDomain *metadata = session->metadata;
     xr_xir_domain_metadata_deallocate(metadata, session, sizeof(*session));

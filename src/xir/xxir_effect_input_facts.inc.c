@@ -23,7 +23,7 @@ static XrXirStatus effect_input_shape(const XrXirCompileContext *work, XirEffect
     if (!xir_compile_context_valid(work) || !input.module || !input.construction)
         return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=xir_receive_poll(input.control);
-    return status==XR_XIR_OK?xir_construction_verify(work,input.module,input.construction):status;
+    return status==XR_XIR_OK?xir_construction_verify(work,input.module,input.construction,input.control):status;
 }
 
 static void effect_input_facts_free(EffectInputFacts *facts) {

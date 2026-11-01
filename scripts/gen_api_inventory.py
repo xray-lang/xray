@@ -1045,10 +1045,11 @@ def collect_native_declaration(root: Path, path: Path, text: str,
     out = [declaration]
     for member_id, member in enumerate(members, 1):
         if member.method:
-            close = matching_paren_index(member.signature, 0)
-            params = member.signature[1:close]
-            tail = member.signature[close + 1:].strip()
-            signature = normalize_signature(params, tail[2:].strip() if tail else None)
+            parsed = parse_signature_tail(member.signature, 0)
+            if parsed is None:
+                raise ValueError("native method has an incomplete signature")
+            params, result = parsed
+            signature = normalize_signature(params, result, source_throws_clause(member.signature, 0))
             kind = "static-method" if member.static else "method"
         else:
             signature = member.signature

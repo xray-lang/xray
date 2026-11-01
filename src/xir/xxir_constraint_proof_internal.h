@@ -17,6 +17,9 @@
 #include "xxir_metadata_domain_internal.h"
 #include "xxir_read_scratch.h"
 struct ConstraintProofMemory;
+/* The request is borrowed only by this stack operation. Legacy queries pass NULL. */
+XR_FUNC XrXirStatus xir_compile_constraints_prove_controlled(const XrXirCompileContext *context,
+    const XrXirProofContext *proof,const XrXirConstraintUse *use,XrCompileRequestControl *control);
 typedef struct XirConstraintScratch {
     XrCompileResources *resources;
     struct ConstraintProofMemory *memory;

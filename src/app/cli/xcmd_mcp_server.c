@@ -64,7 +64,10 @@ XR_FUNC int cmd_mcp_server(const XrCliInvocation *inv) {
     }
 
     int rc = xmcp_server_run(s);
-    xmcp_server_free(s);
+    if (!xmcp_server_free(s) && !xmcp_server_free(s)) {
+        xr_cli_error("mcp-server","page owner close retry failed at process exit");
+        return XR_CLI_EXIT_FAIL;
+    }
     return (rc != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
 }
 

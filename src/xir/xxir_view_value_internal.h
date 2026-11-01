@@ -41,7 +41,10 @@ typedef struct XrXirViewOriginInfo {
     bool logical_active;
 } XrXirViewOriginInfo;
 /* Input pin creation authenticates the current logical binding. The metadata
- * snapshot never proves a live origin; root is borrowed until pin drop. */
+ * snapshot never proves a live origin. A Cell root is borrowed until pin drop.
+ * A Buffer root is NULL after invalidation; while active it is borrowed only
+ * during observation with the real payload owner still alive. The pin does
+ * not retain that payload and cannot authorize a later use of its weak root. */
 XR_FUNC XrXirValueStatus xr_xir_view_origin_pin(const XrXirValue *value,
     const XrXirViewAccess *access, XrXirViewOriginPin *output);
 XR_FUNC XrXirValueStatus xr_xir_view_origin_info(const XrXirViewOriginPin *pin,

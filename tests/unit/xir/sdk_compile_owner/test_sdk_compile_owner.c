@@ -17,6 +17,16 @@
 #include <windows.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
 #include "../xir_sdk_resource_test.h"
+#include "execution/xr_xir_host_execution.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrXirCallStatus fixture_host_execute_93eb9d29(const XrXirHostExecutionRequest *request,XrXirCallResult *output) {
+    XrXirHostCall *pending=NULL;XrXirCallStatus cleanup=XR_XIR_CALL_READY;
+    XrXirCallStatus status=xr_xir_host_execute(request,output,&pending,&cleanup);
+    if (pending) {fputs("unexpected retained page-close owner\n",stderr);abort();}
+    return status;
+}
+
 static const XrCompileResourceLimits sdk_measurement_limits={
     UINT64_C(4294967296),UINT64_C(67108864),UINT64_C(68719476736)};
 extern const XrXirProgramSpec compile_owner_program;
@@ -37,7 +47,7 @@ typedef XrXirStatus (*CheckPrototype)(const XrXirCompileContext *, const XrXirMo
     const XrXirConstruction *, XrXirArtifact **, XrXirDiagnostic *);
 typedef XrXirStatus (*VerifyPrototype)(const XrXirCompileContext *, const XrXirModule *,
     const XrXirConstruction *, XrXirDiagnostic *);
-_Static_assert(_Generic(&xr_xir_compile_construction_new_v4, ConstructionPrototype:1, default:0),
+_Static_assert(_Generic(&xr_xir_compile_construction_new_v5, ConstructionPrototype:1, default:0),
     "Explicit immutable construction owner");
 _Static_assert(_Generic(&xr_xir_compile_check_v2, CheckPrototype:1, default:0),
     "Mandatory construction check input");
@@ -223,7 +233,7 @@ static void current_entry_version(const XrXirRuntimeSdkRequest *original) {
     CHECK(xr_xir_compile_program_seal(&compile,&spec,&program)==XR_XIR_OK && program);
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     XrXirHostExecutionRequest execution={program,&config,1,NULL,0};XrXirCallResult result={0};
-    CHECK(xr_xir_host_execute(&execution,&result)==XR_XIR_CALL_RETURNED);
+    CHECK(fixture_host_execute_93eb9d29(&execution,&result)==XR_XIR_CALL_RETURNED);
     CHECK(result.value.type==XR_XIR_I64 && !result.value.reserved && result.value.payload==42);
     xr_xir_call_result_drop(&result);
     CHECK(sdk_abi_observation.resumes && sdk_abi_observation.releases && !sdk_abi_observation.leases);
@@ -250,8 +260,8 @@ static void positive(const XrXirRuntimeSdkRequest *original) {
     CHECK(after.live_bytes==runtime_bytes);
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     XrXirHostExecutionRequest call={program,&config,1,NULL,0};XrXirCallResult number={0},text={0};
-    CHECK(xr_xir_host_execute(&call,&number)==XR_XIR_CALL_RETURNED && number.value.type==XR_XIR_I64 && number.value.payload==42);
-    call.entry=2;CHECK(xr_xir_host_execute(&call,&text)==XR_XIR_CALL_RETURNED);
+    CHECK(fixture_host_execute_93eb9d29(&call,&number)==XR_XIR_CALL_RETURNED && number.value.type==XR_XIR_I64 && number.value.payload==42);
+    call.entry=2;CHECK(fixture_host_execute_93eb9d29(&call,&text)==XR_XIR_CALL_RETURNED);
     xr_compile_resources_release(request.resources);xr_xir_compile_program_drop(program);
     before=sdk_stats(request.resources);
     CHECK(!xr_xir_runtime_sdk_resources(NULL) && xr_xir_runtime_sdk_resources(sdk)==request.resources);

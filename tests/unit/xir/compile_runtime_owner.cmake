@@ -22,6 +22,14 @@ add_library(xir_compile_owner_runtime STATIC
     "${XIR_OWNER_ROOT}/src/xir/xxir_task_budget.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_format.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_instance.c")
+if(WIN32)
+    target_sources(xir_compile_owner_runtime PRIVATE
+        "${XIR_OWNER_ROOT}/src/os/win/random_win.c" "${XIR_OWNER_ROOT}/src/os/win/mem_win.c")
+else()
+    target_sources(xir_compile_owner_runtime PRIVATE
+        "${XIR_OWNER_ROOT}/src/os/unix/random_unix.c" "${XIR_OWNER_ROOT}/src/os/unix/mem_unix.c")
+    target_compile_definitions(xir_compile_owner_runtime PRIVATE _POSIX_C_SOURCE=200809L _GNU_SOURCE)
+endif()
 target_link_libraries(xir_compile_owner_runtime PRIVATE compile_owner_core)
 add_executable(test_xir_compile_runtime_owner
     "${CMAKE_CURRENT_LIST_DIR}/test_xir_compile_runtime_owner.c"

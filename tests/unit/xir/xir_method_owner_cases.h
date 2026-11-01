@@ -118,11 +118,11 @@ static void method_owner_cases(void) {
         XrXirConstructionRow rows[2] = {{0}, {0}};
         CHECK(identities[2].nominal_owner && identities[2].nominal_owner <= 2);
         rows[identities[2].nominal_owner - 1].default_initializer = 3;
-        XrXirConstructionSpec spec = {rows, 2, NULL, 0, NULL};
+        XrXirConstructionSpec spec = {rows, 2, NULL, 0, NULL,NULL};
         XrXirSlotFacts slots = {NULL, 0};
         XrXirConstruction *construction = NULL;
         CHECK(xr_xir_compile_types_structure_verify(&stage_context, &types) == XR_XIR_OK);
-        CHECK(xr_xir_compile_construction_new_v4(&stage_context, &types, &spec, &slots, &construction, NULL) == XR_XIR_OK);
+        CHECK(xr_xir_compile_construction_new_v5(&stage_context, &types, &spec, &slots, &construction, NULL) == XR_XIR_OK);
         XrXirDiagnostic diagnostic = {0};
         XrXirStatus status = xr_xir_compile_check_v2(&stage_context, &module, construction, &checked, &diagnostic);
         xr_xir_compile_construction_free(construction);

@@ -14,6 +14,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do { if(!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while(0)
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_artifact_execute_9f52fffd(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_artifact_execute(execution,program,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 int main(void) {
     XrSourceCompileOptions options=xray_source_compile_options_default();options.stdlib_path=XR_PUBLIC_STDLIB;
     static const char bytes[]="const answer:i64=42\n";
@@ -39,7 +50,7 @@ int main(void) {
     CHECK(xray_source_execution_new(&policy,&execution)==XR_SOURCE_OK);
     XrSourceCallOptions call;CHECK(xray_source_call_options_init(&call,sizeof(call))==XR_SOURCE_OK);
     XrSourceResult *result=NULL;
-    CHECK(xray_source_artifact_execute(execution,artifact,&call,&result,NULL)==XR_SOURCE_OK && result);
+    CHECK(fixture_xray_source_artifact_execute_9f52fffd(execution,artifact,&call,&result,NULL)==XR_SOURCE_OK && result);
     xray_source_artifact_free(artifact);xray_source_execution_free(execution);
     int64_t answer=-1;CHECK(xray_source_result_i64(result,&answer)==XR_SOURCE_OK && answer==0);
     xray_source_result_free(result);

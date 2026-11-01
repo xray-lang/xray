@@ -8,6 +8,7 @@
  */
 #include "xxir_view_access_internal.h"
 #include "xxir_view_may_owned_internal.h"
+#include "xxir_view_liveness_internal.h"
 #include "xxir_view_owner_path_internal.h"
 typedef struct ViewAccessRule { uint8_t operands,edges; } ViewAccessRule;
 static const ViewAccessRule view_access_rules[XR_XIR_OP_COUNT]={
@@ -22,7 +23,7 @@ typedef struct ViewAccessOrigin {
     uint64_t bytes;
     uint32_t queried_value;
 } ViewAccessOrigin;
-typedef struct ViewAccessCache { ViewAccessOrigin *origins;bool ready; } ViewAccessCache;
+typedef struct ViewAccessCache { ViewAccessOrigin *origins;uint32_t raw_index;bool ready; } ViewAccessCache;
 typedef struct ViewAccess {
     XirViewRootResolver *resolver;
     const XirViewAccessCells *cells;
@@ -32,6 +33,8 @@ typedef struct ViewAccess {
     uint32_t *queue;
     uint8_t *seen,*repeated;
     uint64_t function_bytes,initial_reservation;
+    uint64_t *raw_live,raw_bytes;
+    uint32_t raw_words;
 } ViewAccess;
 static void *view_access_allocate(ViewAccess *a,uint64_t bytes,XrXirStatus *status) {
     ViewRootCheck *c=&a->resolver->check;
@@ -52,7 +55,20 @@ static void view_access_function_free(ViewAccess *a) {
         ViewAccessOrigin *p=a->cache[v].origins;
         while (p) {ViewAccessOrigin *next=p->next;view_access_release(a,p,p->bytes);p=next;}
     }
+    view_access_release(a,a->raw_live,a->raw_bytes);a->raw_live=NULL;a->raw_bytes=0;a->raw_words=0;
     view_access_release(a,a->cache,a->function_bytes);a->cache=NULL;a->function_bytes=0;
+}
+static XrXirStatus view_access_raw_demand(void *user,const XrXirCompileContext *context,const XrXirViewLiveEvent *event) {
+    ViewAccess *a=user;(void)context;if (event->kind!=XR_XIR_VIEW_LIVE_INSTRUCTION) return XR_XIR_OK;
+    if (event->function!=a->function || event->instruction>=a->body->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    uint64_t *row=a->raw_live+(size_t)event->instruction*a->raw_words;uint32_t progress=0;
+    for (uint32_t p=0;p<event->before.count;++p) {
+        XrXirStatus status=xir_receive_step(a->cells?a->cells->control:NULL,&progress);if (status!=XR_XIR_OK) return status;
+        uint32_t index=a->cache[event->before.values[p]].raw_index;
+        if (index && (event->before.bits[p/64u]&(UINT64_C(1)<<(p%64u))))
+            row[(index-1u)/64u]|=UINT64_C(1)<<((index-1u)%64u);
+    }
+    return XR_XIR_OK;
 }
 static XrXirStatus view_access_function_new(ViewAccess *a,uint32_t function) {
     ViewRootCheck *c=&a->resolver->check;a->function=function;a->body=c->module->functions+function;
@@ -61,6 +77,19 @@ static XrXirStatus view_access_function_new(ViewAccess *a,uint32_t function) {
     uint64_t bytes=values*sizeof(ViewAccessCache)+blocks*(sizeof(uint32_t)+2u);
     XrXirStatus status=XR_XIR_OK;a->cache=view_access_allocate(a,bytes,&status);if (!a->cache) return status;
     a->function_bytes=bytes;a->queue=(uint32_t *)(a->cache+values);a->seen=(uint8_t *)(a->queue+blocks);a->repeated=a->seen+blocks;
+    uint32_t raw=0,progress=0;
+    for (uint32_t v=0;v<values;++v) {
+        status=xir_receive_step(a->cells?a->cells->control:NULL,&progress);if (status!=XR_XIR_OK) return status;
+        if (view_pointer(c->module->types,xr_xir_operand_type(a->body,v))) a->cache[v].raw_index=++raw;
+    }
+    if (raw) {
+        a->raw_words=raw/64u+(raw%64u!=0);a->raw_bytes=(uint64_t)a->body->instruction_count*a->raw_words*sizeof(uint64_t);
+        a->raw_live=view_access_allocate(a,a->raw_bytes,&status);if (!a->raw_live) return status;
+        XrXirCompileContext remaining=*c->context;remaining.limits.frame_bytes-=c->reserved;
+        status=xir_compile_view_liveness_function_verified(&remaining,c->module,function,view_access_raw_demand,a,NULL,
+            a->cells?a->cells->control:NULL);
+        if (status!=XR_XIR_OK) return status;
+    }
     for (uint32_t start=0;start<blocks;++start) {
 
         memset(a->seen,0,(size_t)blocks);uint32_t head=0,tail=1;a->queue[0]=start;a->seen[start]=1;

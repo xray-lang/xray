@@ -116,14 +116,14 @@ static XrXirStatus function_layout(const LayoutInputRequest *request,uint32_t in
         layout->slot_count = slots;
         layout->offsets = xir_compile_calloc(budget, slots, sizeof(*layout->offsets), &allocation_status);
         layout->owned_offsets = xir_compile_calloc(budget, (size_t) slots * 2, sizeof(*layout->owned_offsets), &allocation_status);
-        if (!layout->offsets || !layout->owned_offsets)
+        if (slots && (!layout->offsets || !layout->owned_offsets))
             return allocation_status;
         if (function->parameter_count) {
             layout->parameters = xir_compile_calloc(budget, function->parameter_count, sizeof(*layout->parameters), &allocation_status);
             if (!layout->parameters)
                 return allocation_status;
         }
-    } else if (layout->slot_count != slots || !layout->offsets || !layout->owned_offsets ||
+    } else if (layout->slot_count != slots || (!!slots!=!!layout->offsets) || (!!slots!=!!layout->owned_offsets) ||
                (function->parameter_count && !layout->parameters) ||
                (!function->parameter_count && layout->parameters)) {
         return XR_XIR_BAD_LAYOUT;

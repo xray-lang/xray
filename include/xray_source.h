@@ -14,7 +14,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#define XRAY_SOURCE_API_VERSION 4u
+#define XRAY_SOURCE_API_VERSION 5u
 
 typedef struct XrSourceArtifact XrSourceArtifact;
 typedef struct XrSourceExecution XrSourceExecution;
@@ -107,8 +107,8 @@ typedef struct XrSourceEvent {
 typedef enum XrSourceOutputStream { XR_SOURCE_STDOUT=1, XR_SOURCE_STDERR=2 } XrSourceOutputStream;
 typedef enum XrSourceWriteStatus { XR_SOURCE_WRITE_OK, XR_SOURCE_WRITE_OOM, XR_SOURCE_WRITE_LIMIT, XR_SOURCE_WRITE_IO } XrSourceWriteStatus;
 typedef XrSourceWriteStatus (*XrSourceWrite)(void *, XrSourceOutputStream, const char *, size_t);
-/* This identity belongs only to the unchanged runtime-call option shape. */
-#define XRAY_SOURCE_EXECUTION_ABI_VERSION 1u
+/* This identity includes the stopped-owner close and completion protocol. */
+#define XRAY_SOURCE_EXECUTION_ABI_VERSION 2u
 typedef struct XrSourceExecutionOptions {
     XrSourceMemoryMode memory_mode;
     uint64_t memory_limit;
@@ -123,8 +123,18 @@ typedef struct XrSourceCallOptions {
     uint32_t depth_limit;
     size_t output_byte_limit;
     XrSourceWrite write; /* NULL uses the host's stdio mode; callbacks receive exact bytes. */
-    void *context; /* Host-owned until call_drop or execute returns. */
+    void *context; /* Host-owned through successful drop, including pending close. */
 } XrSourceCallOptions;
+/* Borrowed only during one execute call. Both owner output pointers are required
+ * and initially empty. A close failure may publish a terminal result and a
+ * pending Call together. It preserves the original execution event separately
+ * from cleanup; retry only call_drop on that stopped pending owner. */
+typedef struct XrSourceCompletion {
+    uint32_t api_version,struct_size;
+    XrSourceResult **result;
+    XrSourceCall **pending_close;
+    XrSourceEvent *failure,*cleanup;
+} XrSourceCompletion;
 typedef enum XrSourceWaitKind { XR_SOURCE_WAIT_YIELD, XR_SOURCE_WAIT_TIMER, XR_SOURCE_WAIT_TASK } XrSourceWaitKind;
 typedef struct XrSourceWait {
     XrSourceWaitKind kind;
@@ -178,11 +188,13 @@ XRAY_API XrSourceStatus xray_source_call_resume(XrSourceCall *, uint64_t epoch, 
 XRAY_API XrSourceStatus xray_source_call_wait_request(const XrSourceCall *, uint64_t epoch, uint64_t wake, XrSourceWait *, size_t);
 XRAY_API XrSourceStatus xray_source_call_cancel(XrSourceCall *);
 XRAY_API XrSourceStatus xray_source_call_take(XrSourceCall *, XrSourceResult **);
-/* Consumes and clears call except on BUSY. Cleanup failure is reported in the
- * event and does not revoke a result that the caller already owns. */
+/* BUSY and IO/CLOSE_FAILED preserve *call. A nonNULL output is still owned and
+ * permits close retry only; its borrowed host callbacks must remain alive.
+ * Other outcomes consume *call. Always inspect the output owner after failure.
+ * Cleanup cannot revoke an independently owned terminal result. */
 XRAY_API XrSourceStatus xray_source_call_drop(XrSourceCall **, XrSourceEvent *cleanup);
 /* Uses the real host clock for timers and drains host failures before return. */
-XRAY_API XrSourceStatus xray_source_artifact_execute(XrSourceExecution *, XrSourceArtifact *, const XrSourceCallOptions *, XrSourceResult **, XrSourceEvent *failure);
+XRAY_API XrSourceStatus xray_source_artifact_execute(XrSourceExecution *,XrSourceArtifact *,const XrSourceCallOptions *,XrSourceCompletion *);
 XRAY_API XrSourceStatus xray_source_result_event(const XrSourceResult *, XrSourceEvent *);
 XRAY_API XrSourceStatus xray_source_result_i64(const XrSourceResult *, int64_t *);
 /* Reads owned STRING outcome or assertion message bytes, including NUL. */

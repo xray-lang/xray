@@ -21,6 +21,10 @@ typedef struct XrXirViewStorage {
     XrXirType element;
     int64_t offset, length;
     union { XrXirCellLoan exclusive; XrXirCellReadLoan shared; } loan;
+    /* Weak payload identity; the retained origin outlives payload retirement. */
+    XrXirValue buffer_root;
+    void *buffer_origin;
+    uint64_t buffer_generation;
 } XrXirViewStorage;
 
 typedef struct XrXirViewStorageSpec {
@@ -32,7 +36,8 @@ typedef struct XrXirViewStorageSpec {
 /* The authenticated caller owns complete root admission and keeps the actual
  * origin scope and any parent loan alive. Output is zero and its address must
  * remain stable until end; moving a handle must never memcpy this storage.
- * Only whole Cell<Array<T>> and shared Cell<string> byte ranges are handled.
+ * Cell<Array<T>> and shared Cell<string> ranges retain their actual loans.
+ * Readonly BufferStorage ranges instead retain only live-origin metadata.
  * All fallible COW work precedes publication; failure preserves root and output.
  * This core grants neither Source escape permission nor a public Value handle. */
 XR_FUNC XrXirValueStatus xr_xir_view_storage_begin(const XrXirValue *root,

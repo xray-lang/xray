@@ -12,6 +12,14 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"ground type collection depth exhausted");
     if (node->type==AST_GROUPING) return source_ground_type(ctx,node->as.grouping,depth+1,output);
     if (node->type==AST_COPY_EXPR) return source_ground_type(ctx,node->as.unary.operand,depth+1,output);
+    if (node->type==AST_UNSAFE_EXPR) {
+        AstNode *block=node->as.unsafe_expr.operand;
+        if (!block || block->type!=AST_BLOCK) return true;
+        int count=block->as.block.count;
+        AstNode *last=count?block->as.block.statements[count-1]:NULL;
+        if (last && last->type==AST_EXPR_STMT) return source_ground_type(ctx,last->as.expr_stmt,depth+1,output);
+        *output=(SourceExpectedType){true,XR_XIR_UNIT,false,false};return true;
+    }
     if (node->type==AST_COMPTIME_EXPR) {
         AstNode *child=node->as.comptime_expr.expr;
         if (!child || child->type==AST_BLOCK) return true;
@@ -64,6 +72,8 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
         if (!source_ground_type(ctx,node->as.index_get.array,depth+1,&receiver)) return false;
         if (receiver.present && xr_xir_type_is_array(&ctx->types,receiver.type))
             *output=(SourceExpectedType){true,xr_xir_array_element(&ctx->types,receiver.type), false, false};
+        if (receiver.present && xr_xir_type_is_pointer(&ctx->types,receiver.type))
+            *output=(SourceExpectedType){true,XR_XIR_U8,false,false};
         uint32_t kind=0;XrXirType element=XR_XIR_UNIT;
         if (receiver.present && source_view_shape(ctx,receiver.type,&kind,&element))
             *output=(SourceExpectedType){true,element,false,false};
@@ -81,6 +91,10 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
         return true;
     }
     if (!member || member->type!=AST_MEMBER_ACCESS) return true;
+    if (call && source_pointer_namespace(ctx,member->as.member_access.object)) {
+        if (!source_pointer_namespace_type(ctx,member->as.member_access.object,&output->type)) return false;
+        output->present=true;return true;
+    }
     if (call && member->as.member_access.object && member->as.member_access.object->type==AST_VARIABLE) {
         SourceName *space=visible_name(ctx,member->as.member_access.object->as.variable.name);
         if (space && space->kind==SOURCE_MODULE) {
@@ -101,6 +115,13 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     }
     SourceExpectedType receiver;
     if (!source_ground_type(ctx,member->as.member_access.object,depth+1,&receiver)) return false;
+    if (call && receiver.present && xr_xir_type_is_pointer(&ctx->types,receiver.type)) {
+        const char *name=member->as.member_access.name;
+        if (source_text_same(ctx,node,name,"offset")) *output=receiver;
+        else if (source_text_same(ctx,node,name,"deref")) *output=(SourceExpectedType){true,XR_XIR_U8,false,false};
+        else if (source_text_same(ctx,node,name,"copyFromNonOverlapping")) *output=(SourceExpectedType){true,XR_XIR_UNIT,false,false};
+        return true;
+    }
     const XrXirTypeNode *iterator=receiver.present ? xr_xir_type_node(&ctx->types,receiver.type) : NULL;
     if(call && iterator && iterator->kind==XR_XIR_TYPE_ITERATOR) {
         const XrNativeMemberDeclaration *native=source_iterator_member(ctx,member,member->as.member_access.name);

@@ -153,7 +153,7 @@ XR_FUNC XrXirCallStatus xdap_adapter_free(XdapAdapter *s) {
     if (!s) return XR_XIR_CALL_READY;
     if (s->busy) return XR_XIR_CALL_BUSY;
     s->busy=true;xdap_dispatch_clear_stop(s);XrXirCallStatus status=xdap_launch_free(s->launch);
-    if (status==XR_XIR_CALL_BUSY) { s->busy=false;return status; }
+    if (status==XR_XIR_CALL_BUSY || status==XR_XIR_CALL_CLOSE_FAILED) { s->busy=false;return status; }
     xr_xir_call_result_drop(&s->outcome);
     for (uint32_t i=0;i<s->function_breakpoint_count;++i) {
         xr_compile_resources_free(s->function_breakpoints[i]);xdap_predicate_free(&s->function_predicates[i]);
@@ -300,7 +300,8 @@ static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
     if (started!=XR_XIR_CALL_READY) { xdap_launch_free(candidate);return xdap_dispatch_response(s,r,false,NULL,"Restart start rejected"); }
     XdapJsonWriter response={0};status=xdap_dispatch_stage_response(s,r,true,NULL,NULL,&response);
     if (status!=XR_XIR_OK) { xdap_launch_free(candidate);return status; }
-    XrXirCallStatus retired=xdap_launch_free(s->launch);s->launch=NULL;
+    XrXirCallStatus retired=xdap_launch_free(s->launch);
+    if (retired!=XR_XIR_CALL_CLOSE_FAILED && retired!=XR_XIR_CALL_BUSY) s->launch=NULL;
     if (retired!=XR_XIR_CALL_READY) {
         xdap_launch_free(candidate);xdap_json_writer_free(&response);xdap_dispatch_clear_stop(s);
         s->terminal=true;s->running=false;return xdap_dispatch_response(s,r,false,NULL,"Previous execution cleanup failed");

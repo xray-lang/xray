@@ -95,7 +95,7 @@ static XrSourceArtifact *build_text(XrSourceTarget target,const char *text,size_
     compile_cancel.finished=compile_cancel.polls;compile_cancel.cancelled=1;return artifact;
 }
 static void identity_truncation(const XrXirCompileContext *context,const XrXirSourceProductPacketView *packet,const XrXirModule *module) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==39,"this prefix test describes current wire39");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==40,"this prefix test describes current wire40");
     size_t offset=64+12;
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *body=module->functions+f;
@@ -132,7 +132,7 @@ static void identity_truncation(const XrXirCompileContext *context,const XrXirSo
     }
     XrXirArtifact *restored=NULL;CHECK(xr_xir_compile_checked_read(context,packet->bytes,packet->length,&restored,NULL)==XR_XIR_OK && restored);
     xr_xir_compile_artifact_free(restored);free(truncated);
-    puts("Wire39 native identity tenth-field truncation precedes finite allocation refusal and preserves output PASS");
+    puts("Wire40 native identity tenth-field truncation precedes finite allocation refusal and preserves output PASS");
 }
 static void identity_checks(const XrXirCompileContext *context,const XrXirSourceProduct *product) {
     XrXirSourceProductPacketView packet={0};XrXirArtifact *closed=NULL;

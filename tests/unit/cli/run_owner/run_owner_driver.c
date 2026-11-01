@@ -54,10 +54,10 @@ static XrSourceStatus observed_take(XrXirSourceProduct **product,XrSourceTarget 
     phase_allocations[3]=runtime_attempts;
     return xr_source_artifact_take_product(product,target,output);
 }
-static int observed_program(XrXirProgram *program,uint32_t entry,bool sandbox) {
+static int observed_program(XrXirProgram *program,uint32_t entry,bool sandbox,XrXirHostCall **pending) {
     phase_allocations[4]=runtime_attempts;
     CHECK(sandbox==sandbox_expected);
-    return xr_xir_host_program_main(program,entry,sandbox);
+    return xr_xir_host_program_main(program,entry,sandbox,pending);
 }
 #define xr_compile_resources_new observed_resources
 #define xr_source_paths observed_paths

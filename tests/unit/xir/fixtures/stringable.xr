@@ -1,0 +1,17 @@
+class Box<T> {
+ value:T
+ init(value:T){this.value=value}
+ toString()->string where T:Stringable{return "Box("+this.value.toString()+")"}
+}
+class Pair<A,B> {
+ first:A
+ second:B
+ init(a:A,b:B){this.first=a;this.second=b}
+ toString()->string where A:Stringable,B:Stringable{return "("+this.first.toString()+", "+this.second.toString()+")"}
+}
+fn text<T:Stringable>(value:T)->string{return value.toString()}
+print(Box<i64>(42).toString())
+print(Box<string>("hello").toString())
+print(Pair<string,i64>("age",25).toString())
+assertEqual(text<i64>(-42),"-42")
+assertEqual(text<string>("abc"),"abc")

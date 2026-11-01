@@ -67,7 +67,7 @@ static bool source_requirement_prove(SourceContext *ctx, AstNode *node,
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         XrXirConstraintUse use = {&module,
             {XR_XIR_CONTEXT_INTERFACE_METHOD,application.declaration,member},parent+p,types,count};
-        XrXirStatus status = xr_xir_compile_constraints_prove(&ctx->compile, &context, &use);
+        XrXirStatus status = xir_compile_constraints_prove_controlled(&ctx->compile, &context, &use,ctx->request);
         if (status == XR_XIR_OK) status = xr_xir_compile_type_access(&ctx->compile, &module, ctx->function, types[parent+p]);
         if (status != XR_XIR_OK)
             return source_fail(ctx,node,status,"method type argument does not prove the declared constraint");

@@ -127,7 +127,22 @@ static bool product_facts_poll(const void *context) {
             static const uint8_t expected[]={0xe1,0x63,0x2e,0x21,0x6d,0x2d,0x61,0x6c,
                 0xc2,0x07,0xc9,0x29,0x00,0x0b,0xa8,0x5a,0x8a,0xc9,0xe9,0x41,0x61,0x2e,
                 0x9d,0x72,0xc1,0x3b,0xa8,0xe8,0xe4,0x18,0x33,0x6e};
-            CHECK(!memcmp(probe->prefix_digest,expected,32)&&probe->hash->count==4122);
+            _Static_assert(XR_XIR_VALUE_ABI_VERSION==31 && XR_XIR_CALL_ABI_VERSION==38,
+                "Only the two admitted ABI words may differ from this historical layout prefix");
+            static const uint8_t domain[]="xray:xir-lowered-layout:v1";
+            _Static_assert(sizeof(domain)-1==26,"The layout domain precedes canonical u32 words");
+            CHECK(probe->hash && probe->hash->count==4122 && probe->bytes==4122);
+            CHECK(!memcmp(probe->preimage,domain,sizeof(domain)-1));
+            const uint32_t current[]={31,38},historical[]={30,37};
+            uint8_t normalized[4122],digest[32];memcpy(normalized,probe->preimage,sizeof(normalized));
+            for(unsigned word=0;word<2;++word) for(unsigned byte=0;byte<4;++byte) {
+                size_t offset=sizeof(domain)-1+(2+word)*4+byte;
+                CHECK(normalized[offset]==(uint8_t)(current[word]>>(8*byte)));
+                normalized[offset]=(uint8_t)(historical[word]>>(8*byte));
+            }
+            xr_sha256(probe->preimage,sizeof(normalized),digest);
+            CHECK(!memcmp(digest,probe->prefix_digest,32));
+            xr_sha256(normalized,sizeof(normalized),digest);CHECK(!memcmp(digest,expected,32));
         }
     } else if(probe->phase==2)
         reached=!strcmp(caller,"source_product_layout_digest")&&probe->bytes==11838;

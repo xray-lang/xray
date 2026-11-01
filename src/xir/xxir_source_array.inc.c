@@ -341,7 +341,7 @@ static bool source_length(SourceContext *ctx, AstNode *node,
     if(ctx->diagnostic.status!=XR_XIR_OK) return false;
     if (array.type != XR_XIR_STRING && !xr_xir_type_is_array(&ctx->types, array.type) &&
         !xr_xir_type_is_map(&ctx->types, array.type) && !xr_xir_type_is_set(&ctx->types, array.type) && !view && !range)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "len receiver family is not admitted");
+        return source_mem_length(ctx,node,array,value);
     if (!ctx->length_declaration) {
         XrXirSourceQueryModule *modules = source_query_append(ctx, ctx->query.modules,
             &ctx->query.module_count, &ctx->query_module_capacity, sizeof(*modules));

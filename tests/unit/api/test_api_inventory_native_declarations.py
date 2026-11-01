@@ -77,6 +77,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             ("concat", "ARRAY_CONCAT", "read", "owned", ordinary),
             ("clear", "ARRAY_CLEAR", "ref", "unit", ordinary),
             ("reverse", "ARRAY_REVERSE", "ref", "owned", ordinary),
+            ("sort", "ARRAY_SORT", "ref", "owned", ordinary),
             ("unshift", "ARRAY_UNSHIFT", "ref", "unit", ordinary),
             ("contains", "ARRAY_CONTAINS", "read", "owned", ordinary),
             ("indexOf", "ARRAY_INDEX_OF", "read", "owned", ordinary),
@@ -90,7 +91,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             ("every", "ARRAY_EVERY", "read", "owned", callback),
             ("some", "ARRAY_SOME", "read", "owned", callback),
         )
-        self.assertEqual(26, len(admitted))
+        self.assertEqual(27, len(admitted))
         self.assertEqual({row[0] for row in expected}, set(admitted))
         for name, operation, receiver, ownership, failures in expected:
             with self.subTest(name=name):
@@ -101,8 +102,8 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
                 self.assertEqual(ownership, entry["ownership"])
                 self.assertEqual(failures, entry["failures"])
         unadmitted = [entry for entry in members if not entry["xir_admitted"]]
-        self.assertEqual(6, len(unadmitted))
-        self.assertEqual({"ptr", "mutPtr", "sort", "toString",
+        self.assertEqual(5, len(unadmitted))
+        self.assertEqual({"ptr", "mutPtr", "toString",
                           "iterator", "entriesIterator"}, {entry["name"] for entry in unadmitted})
         self.assertTrue(all(entry["operation"] == "NONE" for entry in unadmitted))
         self.assertTrue(all(entry["allocation"] == "unknown" for entry in unadmitted))
@@ -125,7 +126,16 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
         self.assertEqual("(): Array<(i64, T)>", actual["entries"]["signature"])
         self.assertEqual("(...arrays: Array<T>): Array<T>", actual["concat"]["signature"])
         self.assertEqual(14, actual["concat"]["native_member_id"])
+        self.assertEqual(19, actual["sort"]["native_member_id"])
+        self.assertEqual("(compareFn?: fn(a: T, b: T) -> i64): Array<T>", actual["sort"]["signature"])
         self.assertEqual(32, actual["entries"]["native_member_id"])
+        for name, identity, result in (("ptr", 6, "Ptr<T>"), ("mutPtr", 7, "MutPtr<T>")):
+            with self.subTest(name=name):
+                self.assertEqual(identity, actual[name]["native_member_id"])
+                self.assertEqual("(): " + result, actual[name]["signature"])
+                self.assertTrue(self.members[identity - 1].lowered)
+                self.assertFalse(actual[name]["xir_admitted"])
+                self.assertEqual("NONE", actual[name]["operation"])
 
     def test_string_identity_contracts_and_member_completeness(self) -> None:
         path = ROOT / "stdlib/types/string.xr"
@@ -149,21 +159,39 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             self.assertEqual(entry["operation"], member.operation)
             self.assertEqual(entry["xir_admitted"], member.name in {
                 "contains", "startsWith", "endsWith", "indexOf", "lastIndexOf", "toString", "repeat",
-                "copyBytes", "replace", "replaceAll", "fromUtf8", "slice"})
+                "copyBytes", "replace", "replaceAll", "fromUtf8", "slice", "split", "runes"})
             if entry["xir_admitted"]:
                 self.assertEqual(entry["allocation"], "may_heap" if member.name in {
-                    "repeat", "copyBytes", "replace", "replaceAll", "fromUtf8", "slice"} else "no_heap")
+                    "repeat", "copyBytes", "replace", "replaceAll", "fromUtf8", "slice", "split", "runes"} else "no_heap")
                 failures = {"indexOf": ["bounds", "limit"], "lastIndexOf": ["limit"],
                             "toString": ["retain"], "repeat": ["allocation", "retain", "limit"],
                             "copyBytes": ["allocation", "retain", "limit"],
                             "replace": ["allocation", "retain", "limit"],
                             "replaceAll": ["allocation", "retain", "limit"],
+                            "split": ["allocation", "retain", "limit"],
+                            "runes": ["allocation", "retain", "limit"],
                             "fromUtf8": ["utf8", "allocation", "retain", "limit"],
                             "slice": ["bounds", "allocation", "retain", "limit"]}
                 self.assertEqual(entry["failures"], failures.get(member.name, []))
                 self.assertEqual(entry["ownership"], "owned")
         self.assertEqual(actual["fromUtf8"]["operation"], "STRING_FROM_UTF8")
+        self.assertEqual(actual["fromUtf8"]["signature"], "(bytes: Slice<u8>) throws(Utf8Error): string")
         self.assertEqual(actual["slice"]["operation"], "STRING_SLICE")
+        self.assertEqual((actual["split"]["native_member_id"], actual["split"]["operation"],
+                          members[10].signature, members[10].error),
+                         (11, "STRING_SPLIT", "(separator: string) throws(StringPatternError) -> Array<string>",
+                          "StringPatternError"))
+        self.assertEqual(actual["split"]["signature"], "(separator: string) throws(StringPatternError): Array<string>")
+        self.assertEqual((actual["runes"]["native_member_id"], actual["runes"]["operation"],
+                          actual["runes"]["signature"]),
+                         (19, "STRING_RUNES", "(): Iterator<rune>"))
+        unadmitted = {entry["name"] for entry in actual.values() if not entry["xir_admitted"]}
+        self.assertEqual({"fromUtf8Lossy", "fromRune", "join", "sliceBytes", "bytes"}, unadmitted)
+        self.assertEqual((actual["bytes"]["native_member_id"], actual["bytes"]["signature"],
+                          actual["bytes"]["operation"], actual["bytes"]["allocation"],
+                          actual["bytes"]["ownership"]),
+                         (18, "(): Slice<u8>", "NONE", "unknown", "unknown"))
+        self.assertTrue(members[17].lowered)
         with self.assertRaises(ValueError):
             inventory.collect_native_declaration(ROOT, path,
                 source.replace("contains(search: string)", "contains(search: i64)"), "stdlib", "string")

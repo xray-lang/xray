@@ -17,7 +17,7 @@ typedef struct SourcePreludeScan { SourceContext *ctx; uint32_t depth; bool need
 static bool source_prelude_word(SourcePreludeScan *scan,const char *name) {
     if (!name) return true;
     if (source_text_same(scan->ctx,NULL,name,"Atomic") || source_text_same(scan->ctx,NULL,name,"Channel") ||
-        source_text_same(scan->ctx,NULL,name,"Range"))
+        source_text_same(scan->ctx,NULL,name,"Range") || source_text_same(scan->ctx,NULL,name,"Stringable"))
         scan->needed=true;
     for (uint32_t e=0;e<xir_prelude_source.enum_count && !scan->needed;++e) {
         if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;
@@ -159,7 +159,7 @@ static bool source_prelude_discover(SourceContext *ctx) {
         if(!canonical)continue;
         const XrXirModule *history=source_owned_module_view(ctx,m);bool admitted=false;
         if(!history)return false;
-        XrXirStatus checked=library_prelude_module(history,spec->history_module,&admitted);
+        XrXirStatus checked=library_prelude_module(history,spec->history_module,&admitted,ctx->request);
         if(checked!=XR_XIR_OK||!admitted||index>=0)
             return source_fail(ctx,NULL,checked==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:checked,
                 "governed prelude history is not unique and authenticated");
@@ -182,7 +182,7 @@ static bool source_prelude_discover(SourceContext *ctx) {
     if (ctx->graph->specs[index].representation==XR_MODULE_CHECKED_LIBRARY) {
         const XrXirModule *library=source_library_module(ctx,(uint32_t)index); bool admitted=false;
         if (!library) return false;
-        XrXirStatus checked=library_prelude_module(library,ctx->graph->specs[index].resource->checked_module,&admitted);
+        XrXirStatus checked=library_prelude_module(library,ctx->graph->specs[index].resource->checked_module,&admitted,ctx->request);
         if (checked!=XR_XIR_OK || !admitted)
             return source_fail(ctx,NULL,checked==XR_XIR_OK ? XR_XIR_BAD_STRUCTURE : checked,"canonical prelude Catalog inventory is invalid");
     }
@@ -199,7 +199,7 @@ static bool source_prelude_discover(SourceContext *ctx) {
 
 static SourceName *source_prelude_name(SourceContext *ctx,const char *name) {
     if (!ctx->prelude_module || !ctx->names || !name) return NULL;
-    bool known=source_text_same(ctx,NULL,name,"Range");
+    bool known=source_text_same(ctx,NULL,name,"Range") || source_text_same(ctx,NULL,name,"Stringable");
     for (uint32_t e=0;e<xir_prelude_source.enum_count && !known;++e) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
         known=source_text_same(ctx,NULL,name,xir_prelude_source.enums[e].name);

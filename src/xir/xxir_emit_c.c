@@ -418,6 +418,20 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
     if (op->op != XR_XIR_CELL_WRITE && op->op != XR_XIR_SLOT_GROUP_INIT &&
         op->op != XR_XIR_CELL_STRING_APPEND) EMIT_STATIC(buffer, es_2543e90d643759e3, " XrXirValue value = {0};\n");
     switch (op->op) {
+    case XR_XIR_PTR_NULL: case XR_XIR_PTR_READONLY: case XR_XIR_PTR_OFFSET:
+    case XR_XIR_PTR_LOAD: case XR_XIR_PTR_STORE: case XR_XIR_PTR_COPY: case XR_XIR_PTR_EQ: {
+        uint32_t count=op->op==XR_XIR_PTR_NULL?0u:op->op==XR_XIR_PTR_READONLY?1u:
+            (op->op==XR_XIR_PTR_STORE || op->op==XR_XIR_PTR_COPY)?3u:2u;
+        const uint32_t *ids=xr_xir_op_uses_operand_table(op->op)?function->operands+op->args[0]:op->args;
+        append(buffer," XrXirValue arguments[3]={{0}};\n");
+        for (uint32_t p=0;p<count;++p) {
+            append(buffer," arguments[%uu]=",p);emit_value(buffer,function,layout,ids[p]);append(buffer,";\n");
+        }
+        append(buffer," status=xr_xir_instance_pointer(view,(XrXirOp)%uu,(XrXirType)%uu,arguments,%uu,&value);\n",
+            (uint32_t)op->op,(uint32_t)op->type,count);
+        if (op->op==XR_XIR_PTR_EQ && op->immediate) append(buffer," if(status==XR_XIR_CALL_READY)value.payload^=1;\n");
+        break;
+    }
     case XR_XIR_CELL_LOCAL_WRITE: {
         uint32_t offset=layout->offsets[op->args[0]];
         XrXirType type=xr_xir_operand_type(function,op->args[0]);
@@ -1220,7 +1234,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_SLOT_GROUP_INIT || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
         op->op == XR_XIR_TO_STRING || op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_STRING_REPLACE ||
         (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE ||
-        op->op == XR_XIR_CELL_STRING_APPEND) {
+        op->op == XR_XIR_CELL_STRING_APPEND || (op->op>=XR_XIR_PTR_NULL && op->op<=XR_XIR_PTR_EQ)) {
         emit_instance_step(buffer, module, function, op, layout, destination);
         return;
     }
@@ -1607,6 +1621,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     const XrXirFunction *function = &module->functions[index];
     if (module->declarations && module->declarations->functions[index].native_callable) {
+        if (!function->parameter_count) return;
         append(buffer, "static const XrXirType %s_parameters_%u[] = {", prefix, index);
         for (uint32_t p = 0; p < function->parameter_count && ((buffer)->status == XR_XIR_OK); ++p)
             append(buffer, "%s(XrXirType) %u", p ? ", " : "", (uint32_t) function->parameters[p]);

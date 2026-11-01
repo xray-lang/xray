@@ -35,6 +35,11 @@ static int observed_flush(FILE *file) {return stream_failure==4 ? EOF : fflush(f
 #undef _setmode
 #undef fwrite
 #undef fflush
+static int fixture_owned_program_main(XrXirProgram *program,uint32_t entry,bool sandbox) {
+    XrXirHostCall *pending=NULL;
+    int result=xr_xir_host_program_main(program,entry,sandbox,&pending);
+    CHECK(!pending);return result;
+}
 int main(int argc,char **argv) {
     CHECK((argc==5 || argc==6) && _setmode(_fileno(stdout),_O_BINARY)!=-1 && _setmode(_fileno(stderr),_O_BINARY)!=-1);
     XrCompileResourceLimits limits={.memory_mode=XR_COMPILE_MEMORY_ORDINARY};
@@ -64,7 +69,7 @@ int main(int argc,char **argv) {
     xr_xir_compile_source_product_free(product);xr_compile_resources_release(resources);
     if(argc==6){stream_failure=(unsigned)atoi(argv[5]);CHECK(stream_failure>=1 && stream_failure<=4);}
     size_t attempts=runtime_attempts;
-    int exit_code=xr_xir_host_program_main(program,entry,false);
+    int exit_code=fixture_owned_program_main(program,entry,false);
     CHECK(!runtime_live && !runtime_bytes);
     if(stream_failure==1 || stream_failure==2)CHECK(runtime_attempts==attempts);
     return exit_code;

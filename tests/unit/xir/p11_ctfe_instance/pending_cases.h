@@ -45,8 +45,8 @@ static XrXirStatus pending_source(XrXirCompileContext *context,const char *kind,
             table.binding_count=mode==2?0:table.binding_count-1;
         if (!table.binding_count) table.bindings=NULL;
         XrXirConstructionSpec spec={source.checked->construction->rows,source.checked->construction->count,
-            source.checked->construction->materializations,source.checked->construction->materialization_count,&table};
-        status=xr_xir_compile_construction_new_v4(context,source.checked->module.types,&spec,xr_xir_compile_construction_slots(source.checked->construction),&construction, NULL);
+            source.checked->construction->materializations,source.checked->construction->materialization_count,&table,NULL};
+        status=xr_xir_compile_construction_new_v5(context,source.checked->module.types,&spec,xr_xir_compile_construction_slots(source.checked->construction),&construction, NULL);
         if (status==XR_XIR_OK) {
             XrXirModule built=source.checked->module;built.stage=XR_XIR_BUILT;
             status=xr_xir_compile_check_v2(context,&built,construction,output,NULL);

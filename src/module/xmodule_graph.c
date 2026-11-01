@@ -177,15 +177,46 @@ static void graph_checked_imports(ModuleWork *work, XrModuleGraph *graph, int fr
     if (!owner || !owner->checked || (owner->dependency_count && !owner->dependencies)) {
         module_status(work,XR_MODULE_INVALID); return;
     }
+    const XrXirModule *checked=xr_xir_compile_artifact_module(owner->checked);
+    if (!checked || !checked->declarations || owner->checked_module>=checked->declarations->module_count) {
+        module_status(work,XR_MODULE_INVALID);return;
+    }
+    const XrXirSourceModule *actual=&checked->declarations->modules[owner->checked_module];
+    if (actual->dependency_count!=owner->dependency_count) {module_status(work,XR_MODULE_INVALID);return;}
     for (uint32_t e = 0; e < owner->dependency_count && ((work)->status == XR_MODULE_OK); ++e) {
+        if (!(e&63u) && !module_status(work,xr_module_status_from_resource(xr_compile_session_poll(graph->compiler_session)))) break;
         const XrModuleResourceBinding *edge = owner->dependencies[e];
-        if (!edge || !edge->checked || edge->checked != owner->checked || !edge->canonical ||
-            !edge->logical_path || !edge->source_locator) { module_status(work,XR_MODULE_INVALID); break; }
+        if (!edge || edge->checked != owner->checked || !edge->canonical ||
+            edge->checked_module!=actual->dependencies[e]) { module_status(work,XR_MODULE_INVALID); break; }
+        bool internal=edge->authority.kind==XR_MODULE_IDENTITY_MEMORY;
+        if (internal ? edge->logical_path || edge->source_locator || edge->authority.physical_root ||
+                edge->checked_module==checked->declarations->root_module :
+            !edge->logical_path || !edge->source_locator) {module_status(work,XR_MODULE_INVALID);break;}
+        if (internal) {
+            char *identity=NULL;
+            module_status(work,xr_compile_module_identity_from_logical(graph->resources,&edge->authority,NULL,&identity));
+            const XrXirSourceModule *module=&checked->declarations->modules[edge->checked_module];
+            XrCompileState *state=xr_compile_session_compile_state(graph->compiler_session);
+            XrCompileRequestControl *control=xr_compile_session_request(graph->compiler_session);size_t length=0,canonical=0;
+            if (work->status==XR_MODULE_OK) module_status(work,xr_module_status_from_resource(xr_source_input_length(
+                state,control,identity,XR_SOURCE_INPUT_CHUNK_BYTES,&length)));
+            if (work->status==XR_MODULE_OK) module_status(work,xr_module_status_from_resource(xr_source_input_length(
+                state,control,edge->canonical,XR_SOURCE_INPUT_CHUNK_BYTES,&canonical)));
+            if (work->status==XR_MODULE_OK && (length!=canonical || length!=module->name_length)) module_status(work,XR_MODULE_INVALID);
+            for (size_t offset=0;offset<length && work->status==XR_MODULE_OK;) {
+                module_status(work,xr_module_status_from_resource(xr_compile_session_poll(graph->compiler_session)));
+                size_t count=length-offset;if (count>XR_SOURCE_INPUT_CHUNK_BYTES) count=XR_SOURCE_INPUT_CHUNK_BYTES;
+                if (work->status==XR_MODULE_OK && (memcmp(identity+offset,edge->canonical+offset,count) ||
+                    memcmp(identity+offset,module->name+offset,count))) module_status(work,XR_MODULE_INVALID);
+                offset+=count;
+            }
+            xr_compile_resources_free(identity);if (work->status!=XR_MODULE_OK) break;
+        }
         int target = -1;
         module_status(work,xr_compile_module_graph_find(graph,edge->canonical,&target));
         if (work->status != XR_MODULE_OK) break;
         bool fresh = target < 0;
-        XrModuleKind kind = edge->authority.kind == XR_MODULE_IDENTITY_STDLIB ? XR_MOD_STDLIB : XR_MOD_FILE;
+        XrModuleKind kind = internal?XR_MOD_MEMORY:edge->authority.kind == XR_MODULE_IDENTITY_STDLIB ? XR_MOD_STDLIB : XR_MOD_FILE;
         if (fresh) target = graph_add_spec(work,graph,edge->canonical,edge->logical_path,edge->source_locator,kind,&edge->authority);
         if (work->status != XR_MODULE_OK) break;
         XrModuleSpec *spec = &graph->specs[target];

@@ -1,0 +1,11 @@
+{
+  "source": "qualified main310 original complete JSON Source/VM producer",
+  "head": "310977e7d95d27694dd9a888812c15cb7710b7f3",
+  "wire": 39,
+  "common": 117,
+  "value_abi": 30,
+  "call_abi": 37,
+  "packet_length": 31995,
+  "sha256": "36f02882fb2881fb37d87083123e17f7def6012eb9495c986eca96332462f38a",
+  "retagged": false
+}

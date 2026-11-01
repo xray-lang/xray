@@ -233,8 +233,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/mem/mem.xr:37:20: error: name does not resolve to an admitted nominal type"
+        "feature": "F05",
+        "first_diagnostic": "demos/07-advanced/borrow_span_examples.xr:56:4: error: move parameter syntax is not yet supported by the compiler"
       }
     },
     {
@@ -253,13 +253,17 @@
       "id": "demos/07-advanced/generics.xr",
       "path": "demos/07-advanced/generics.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F08",
-        "first_diagnostic": "demos/07-advanced/generics.xr:59:9: error: method declaration contract is not admitted"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/generics.txt"
+    },
+    {
+      "id": "native:demos/07-advanced/generics.xr",
+      "path": "demos/07-advanced/generics.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/generics.txt"
     },
     {
       "id": "demos/07-advanced/testing.xr",
@@ -346,7 +350,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/mem/mem.xr:37:20: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
       }
     },
     {
@@ -465,13 +469,9 @@
       "id": "stdlib/mem/mem.xr",
       "path": "stdlib/mem/mem.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F02",
-        "first_diagnostic": "stdlib/mem/mem.xr:37:20: error: name does not resolve to an admitted nominal type"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/net/net.xr",
@@ -570,13 +570,21 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/sys/sys.xr:426:29: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/sys/sys.xr:439:23: error: name does not resolve to an admitted nominal type"
       }
     },
     {
       "id": "stdlib/text/text.xr",
       "path": "stdlib/text/text.xr",
       "mode": "run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
+    },
+    {
+      "id": "native:stdlib/mem/mem.xr",
+      "path": "stdlib/mem/mem.xr",
+      "mode": "build-run",
       "expect": "pass",
       "exit_code": 0,
       "stdout": "tests/smoke/expected/one.txt"

@@ -20,8 +20,8 @@ static XrXirStatus xir_fixture_comptime_construction(const XrXirCompileContext *
     const XrXirArtifact *owner, const XrXirComptimeTable *table, XrXirConstruction **output) {
     const XrXirConstruction *original = owner->construction;
     const XrXirConstructionSpec input = {original->rows, original->count,
-        original->materializations, original->materialization_count, table};
+        original->materializations, original->materialization_count, table,NULL};
     // The source owner stays live until the receiving constructor copies every vector.
-    return xr_xir_compile_construction_new_v4(context, owner->module.types, &input,xr_xir_compile_construction_slots(original), output, NULL);
+    return xr_xir_compile_construction_new_v5(context, owner->module.types, &input,xr_xir_compile_construction_slots(original), output, NULL);
 }
 #endif // XIR_COMPTIME_CONSTRUCTION_FIXTURE_H

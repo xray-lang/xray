@@ -87,7 +87,7 @@ XR_FUNC XrXirCallStatus xdap_detached_free(XdapDetached *target) {
     if (target->adapter) return XR_XIR_CALL_BAD_STATE;
     if (target->driving) return XR_XIR_CALL_BUSY;
     target->driving=true;XrXirCallStatus status=xdap_launch_free(target->launch);
-    if (status==XR_XIR_CALL_BUSY) { target->driving=false;return status; }
+    if (status==XR_XIR_CALL_BUSY || status==XR_XIR_CALL_CLOSE_FAILED) { target->driving=false;return status; }
     xr_xir_call_result_drop(&target->outcome);xr_compile_resources_free(target);return status;
 }
 static XrXirStatus dispatch_prepare_end(XdapAdapter *s,XdapJsonWriter *event) {

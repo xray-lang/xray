@@ -103,3 +103,6 @@ set_tests_properties(xir_checked_previous115 PROPERTIES TIMEOUT 60 LABELS "unit;
 add_test(NAME xir_checked_previous116 COMMAND test_xir_rune_whitespace --previous116
     ${PROJECT_SOURCE_DIR}/tests/fixtures/xir_rune_whitespace/previous116-json-float.chk)
 set_tests_properties(xir_checked_previous116 PROPERTIES TIMEOUT 60 LABELS "unit;xir;checked;identity;sdk")
+add_test(NAME xir_checked_previous118 COMMAND test_xir_rune_whitespace --previous118
+    ${PROJECT_SOURCE_DIR}/tests/fixtures/xir_rune_whitespace/previous118-integer-bits.chk)
+set_tests_properties(xir_checked_previous118 PROPERTIES TIMEOUT 60 LABELS "unit;xir;checked;identity;sdk")

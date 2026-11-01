@@ -51,8 +51,8 @@ static bool literal_construction(SourceContext *ctx,const XrXirConstruction *ori
         !source_copy_bytes(ctx,NULL,all?all+before:NULL,appended,(size_t)added*sizeof(*all))) return false;
     XrXirComptimeTable table={0};
     if (!literal_site_bind(ctx,original,binding,site,&table)) return false;
-    XrXirConstructionSpec input={original->rows,original->count,all,before+added,&table};
-    XrXirStatus status=xr_xir_compile_construction_new_v4(&ctx->compile,&ctx->types,&input,
+    XrXirConstructionSpec input={original->rows,original->count,all,before+added,&table,&original->borrow_returns};
+    XrXirStatus status=xr_xir_compile_construction_new_v5(&ctx->compile,&ctx->types,&input,
         xr_xir_compile_construction_slots(original),&ctx->construction,ctx->request);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"literal construction receiving failed");
 }

@@ -12,6 +12,17 @@
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 typedef struct Output {char bytes[512];size_t length;} Output;
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_7fd321fc(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrSourceWriteStatus collect(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
     Output *out=context;CHECK(stream==XR_SOURCE_STDOUT);
     if(length>sizeof(out->bytes)-out->length)return XR_SOURCE_WRITE_LIMIT;
@@ -37,7 +48,7 @@ static XrSourceInvocation invocation(const char *name,const XrSourceValue *const
 static XrSourceResult *invoke(XrSourceProgram *program,const XrSourceInvocation *request,const XrSourceCallOptions *options) {
     XrSourceCallOptions defaults;
     if(!options){CHECK(xray_source_call_options_init(&defaults,sizeof(defaults))==XR_SOURCE_OK);options=&defaults;}
-    XrSourceResult *result=NULL;XrSourceStatus status=xray_source_invoke(program,request,options,&result,NULL);
+    XrSourceResult *result=NULL;XrSourceStatus status=fixture_xray_source_invoke_7fd321fc(program,request,options,&result,NULL);
     if(status!=XR_SOURCE_OK)fprintf(stderr,"invoke %.*s status=%u\n",(int)request->name_length,request->name,(unsigned)status);
     CHECK(status==XR_SOURCE_OK && result);XrSourceEvent event;
     CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);return result;
@@ -179,7 +190,7 @@ static void aggregates(void) {
     CHECK(xray_source_result_i64(added,&total)==XR_SOURCE_OK && total==42);
     xray_source_result_free(added);xray_source_value_free(left);xray_source_value_free(right);
     XrSourceInvocation request=invocation("fail",NULL,0);XrSourceResult *result=NULL;
-    CHECK(xray_source_invoke(program,&request,&options,&result,NULL)==XR_SOURCE_OK && result);
+    CHECK(fixture_xray_source_invoke_7fd321fc(program,&request,&options,&result,NULL)==XR_SOURCE_OK && result);
     XrSourceEvent event;CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_THROWN);
     XrSourceValue *error=NULL;CHECK(xray_source_result_value(result,&error)==XR_SOURCE_OK);xray_source_result_free(result);
     XrSourceValueKind kind;CHECK(xray_source_value_kind(error,&kind)==XR_SOURCE_OK && kind==XR_SOURCE_VALUE_ENUM);
@@ -239,7 +250,7 @@ static void authority_values(void) {
         const XrSourceValue *arguments[]={copies[i]};request=invocation(cases[i].consumer,arguments,1);XrSourceCall *call=NULL;
         if(i<2)CHECK(xray_source_invoke_begin(program,&request,&options,&call)==XR_SOURCE_BAD_ARGUMENT && !call);
         else {XrSourceResult *denied=NULL;XrSourceEvent failure={0};
-            CHECK(xray_source_invoke(program,&request,&options,&denied,&failure)==XR_SOURCE_BAD_STATE && !denied &&
+            CHECK(fixture_xray_source_invoke_7fd321fc(program,&request,&options,&denied,&failure)==XR_SOURCE_BAD_STATE && !denied &&
                 failure.state==XR_SOURCE_RUN_API_ERROR);}
     }
     xray_source_program_free(program);xray_source_compiler_free(compiler);

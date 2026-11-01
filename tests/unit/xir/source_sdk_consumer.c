@@ -24,6 +24,28 @@ _Static_assert(offsetof(XrSourceWait, generation) == 24, "wait generation ABI");
 _Static_assert(offsetof(XrSourceWait, ticket) == 32, "wait ticket ABI");
 _Static_assert(offsetof(XrSourceCallOptions, write) == 64, "callback ABI");
 typedef struct Output { char bytes[256]; size_t length; } Output;
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_artifact_execute_4c7e5d3d(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_artifact_execute(execution,program,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_4c7e5d3d(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrSourceWriteStatus capture(void *context, XrSourceOutputStream stream, const char *bytes, size_t length) {
     Output *out = context;
     CHECK(stream == XR_SOURCE_STDOUT && length <= sizeof(out->bytes) - out->length);
@@ -39,7 +61,7 @@ static XrSourceStatus execute_owned(XrSourceArtifact *artifact,const XrSourceCal
     XrSourceExecutionOptions policy=xray_source_execution_options_default();
     XrSourceExecution *execution=NULL;
     XrSourceStatus status=xray_source_execution_new(&policy,&execution);
-    if(status==XR_SOURCE_OK)status=xray_source_artifact_execute(execution,artifact,options,result,failure);
+    if(status==XR_SOURCE_OK)status=fixture_xray_source_artifact_execute_4c7e5d3d(execution,artifact,options,result,failure);
     xray_source_execution_free(execution);return status;
 }
 static XrSourceStatus begin_owned(XrSourceArtifact *artifact,const XrSourceCallOptions *options,
@@ -1048,7 +1070,7 @@ static void installed_error_union(const char *stdlib) {
     CHECK(xray_source_execution_new(&policy,&execution)==XR_SOURCE_OK);
     XrSourceInvocation invocation;CHECK(xray_source_invocation_init(&invocation,sizeof(invocation))==XR_SOURCE_OK);
     invocation.name="escaped";invocation.name_length=7;
-    CHECK(xray_source_invoke(execution,artifact,&invocation,&options,&result,&event)==XR_SOURCE_OK && result);
+    CHECK(fixture_xray_source_invoke_4c7e5d3d(execution,artifact,&invocation,&options,&result,&event)==XR_SOURCE_OK && result);
     xray_source_execution_free(execution);xray_source_artifact_free(artifact);
     CHECK(output.length==3 && !memcmp(output.bytes,"42\n",3));
     XrSourceResult *copy=NULL;CHECK(xray_source_result_copy(result,&copy)==XR_SOURCE_OK && copy);xray_source_result_free(result);

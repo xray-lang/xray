@@ -14,7 +14,8 @@ static XrXirStatus view_access_entry_origin(ViewAccess *a,const XrXirViewLoanOri
     *input=false;
     if (event->kind!=XR_XIR_VIEW_LOAN_INPUT || event->function!=a->function ||
         event->value>=a->body->parameter_count || event->repeated_phi ||
-        !view_flags_at(a->resolver->check.module->types,a->resolver->check.flags,event->type)) return XR_XIR_OK;
+        !view_flags_at(a->resolver->check.module->types,a->resolver->check.flags,event->type) ||
+        view_pointer(a->resolver->check.module->types,event->type)) return XR_XIR_OK;
     for (uint32_t p=0;p<event->choice_count;++p) {
 
         if (event->choices[p].block>=a->body->block_count) return XR_XIR_BAD_STRUCTURE;

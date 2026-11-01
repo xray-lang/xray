@@ -10,6 +10,7 @@
  *   Normal edge operands and protected entry demand are distinct CFG facts.
  */
 #include "xxir_view_liveness_internal.h"
+#include "xxir_receive_control.h"
 #include "../base/xchecks.h"
 
 typedef struct ViewLive {
@@ -19,6 +20,8 @@ typedef struct ViewLive {
     const uint8_t *types;
     XrXirViewLiveVisitor visitor;
     void *user;
+    XrCompileRequestControl *control;
+    uint32_t progress;
     XrXirDiagnostic location;
     uint32_t *indices,*values,*graph,*queue,*heads,*predecessors,*next;
     uint8_t *reachable,*queued;
@@ -46,7 +49,7 @@ static XrXirStatus view_live_allocate(ViewLive *a) {
     if (!f->block_count || !f->blocks || !f->instructions || total>UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
     a->total=(uint32_t)total;
     for (uint32_t v=0;v<a->total;++v) {
-
+        XrXirStatus status=xir_receive_step(a->control,&a->progress);if (status!=XR_XIR_OK) return status;
         a->count+=view_live_owner(a,v);
     }
     if (!a->count) return XR_XIR_OK;
@@ -59,14 +62,14 @@ static XrXirStatus view_live_allocate(ViewLive *a) {
     XrXirStatus status=XR_XIR_OK;
     a->indices=xir_compile_alloc(a->context,(size_t)total*sizeof(*a->indices),&status);
     a->values=xir_compile_alloc(a->context,(size_t)a->count*sizeof(*a->values),&status);
-    a->graph=xir_compile_calloc(a->context,f->block_count,8u*sizeof(*a->graph),&status);
-    a->reachable=xir_compile_calloc(a->context,f->block_count,1,&status);
-    a->queued=xir_compile_calloc(a->context,f->block_count,1,&status);
-    a->storage=xir_compile_calloc(a->context,(size_t)cells,sizeof(*a->storage),&status);
+    a->graph=xir_type_copy_zero(a->context,f->block_count,8u*sizeof(*a->graph),&status,a->control);
+    a->reachable=xir_type_copy_zero(a->context,f->block_count,1,&status,a->control);
+    a->queued=xir_type_copy_zero(a->context,f->block_count,1,&status,a->control);
+    a->storage=xir_type_copy_zero(a->context,(size_t)cells,sizeof(*a->storage),&status,a->control);
     if (status!=XR_XIR_OK) return status;
     uint32_t count=0;
     for (uint32_t v=0;v<a->total;++v) {
-
+        status=xir_receive_step(a->control,&a->progress);if (status!=XR_XIR_OK) return status;
         a->indices[v]=UINT32_MAX;
         if (view_live_owner(a,v)) {a->indices[v]=count;a->values[count++]=v;}
     }
@@ -79,13 +82,13 @@ static XrXirStatus view_live_allocate(ViewLive *a) {
 }
 static XrXirStatus view_live_row(ViewLive *a,uint64_t *to,const uint64_t *from,bool merge) {
     for (uint32_t w=0;w<a->words;++w) {
-
-        to[w]=merge ? to[w]|from[w] : from[w];
+        XrXirStatus status=xir_receive_step(a->control,&a->progress);if (status!=XR_XIR_OK) return status;
+        to[w]=!from?0:merge ? to[w]|from[w] : from[w];
     }
     return XR_XIR_OK;
 }
 static XrXirStatus view_live_value(ViewLive *a,uint64_t *bits,uint32_t value,bool use) {
-
+    XrXirStatus status=xir_receive_step(a->control,&a->progress);if (status!=XR_XIR_OK) return status;
     if (value>=a->total) return XR_XIR_BAD_STRUCTURE;
     uint32_t id=a->indices[value];if (id==UINT32_MAX) return XR_XIR_OK;
     uint64_t mask=UINT64_C(1)<<(id%64u);
@@ -101,11 +104,12 @@ static void view_live_enqueue(ViewLive *a,uint32_t block) {
 static XrXirStatus view_live_graph(ViewLive *a) {
     const XrXirFunction *f=a->function;
     for (uint32_t b=0;b<f->block_count;++b) {
-
+        XrXirStatus status=xir_receive_step(a->control,&a->progress);if (status!=XR_XIR_OK) return status;
         a->heads[b]=UINT32_MAX;
     }
     a->reachable[0]=1;view_live_enqueue(a,0);
     while (a->pending) {
+        XrXirStatus status=xir_receive_step(a->control,&a->progress);if (status!=XR_XIR_OK) return status;
         uint32_t b=a->queue[a->head++];if (a->head==f->block_count) a->head=0;
         --a->pending;a->queued[b]=0;const XrXirBlock *block=&f->blocks[b];
         const XrXirInstruction *term=&f->instructions[block->first+block->count-1u];
@@ -119,7 +123,7 @@ static XrXirStatus view_live_graph(ViewLive *a) {
         }
     }
     for (uint32_t b=f->block_count;b>0;--b) {
-
+        XrXirStatus status=xir_receive_step(a->control,&a->progress);if (status!=XR_XIR_OK) return status;
         if (!a->reachable[b-1u]) {a->location.block=b-1u;return XR_XIR_BAD_STRUCTURE;}
         view_live_enqueue(a,b-1u);
     }
@@ -133,7 +137,7 @@ static XrXirStatus view_live_edge(ViewLive *a,uint32_t from,uint32_t target,bool
 
         const XrXirInstruction *op=&f->instructions[i];if (op->op!=XR_XIR_PHI) break;
         for (uint32_t p=0;p<op->args[1];p+=2) {
-
+            status=xir_receive_step(a->control,&a->progress);if (status!=XR_XIR_OK) return status;
             if (f->operands[op->args[0]+p]!=from) continue;
             status=view_live_value(a,a->edge,f->operands[op->args[0]+p+1u],true);
             if (status!=XR_XIR_OK) return status;
@@ -173,7 +177,7 @@ static XrXirStatus view_live_output(ViewLive *a,uint32_t b) {
     const XrXirBlock *block=&a->function->blocks[b];
     const XrXirInstruction *term=&a->function->instructions[block->first+block->count-1u];
 
-    memset(a->current,0,(size_t)a->words*sizeof(*a->current));
+    XrXirStatus cleared=view_live_row(a,a->current,NULL,false);if (cleared!=XR_XIR_OK) return cleared;
     for (uint32_t e=0;e<3;++e) {
 
         if (e<2 ? e>=affine_rules[term->op].edges : !block->panic) continue;
@@ -187,6 +191,7 @@ static XrXirStatus view_live_output(ViewLive *a,uint32_t b) {
 static XrXirStatus view_live_solve(ViewLive *a) {
     const XrXirFunction *f=a->function;
     while (a->pending) {
+        XrXirStatus poll=xir_receive_step(a->control,&a->progress);if (poll!=XR_XIR_OK) return poll;
         uint32_t b=a->queue[a->head++];if (a->head==f->block_count) a->head=0;
         --a->pending;a->queued[b]=0;a->location.block=b;
         XrXirStatus status=view_live_output(a,b);if (status!=XR_XIR_OK) return status;
@@ -196,12 +201,12 @@ static XrXirStatus view_live_solve(ViewLive *a) {
         }
         bool changed=false;
         for (uint32_t w=0;w<a->words;++w) {
-
+            status=xir_receive_step(a->control,&a->progress);if (status!=XR_XIR_OK) return status;
             uint64_t *input=&a->inputs[(size_t)b*a->words+w];changed|=*input!=a->current[w];*input=a->current[w];
         }
         if (!changed) continue;
         for (uint32_t edge=a->heads[b];edge!=UINT32_MAX;edge=a->next[edge]) {
-
+            status=xir_receive_step(a->control,&a->progress);if (status!=XR_XIR_OK) return status;
             view_live_enqueue(a,a->predecessors[edge]);
         }
     }
@@ -252,7 +257,7 @@ XR_FUNC XrXirStatus xir_compile_view_liveness_verified(const XrXirCompileContext
     const XrXirModule *module,XrXirViewLiveVisitor visitor,void *user,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !module || !module->function_count || !module->functions)
         return XR_XIR_BAD_STRUCTURE;
-    uint8_t *flags=NULL;XrXirStatus status=xir_compile_view_flags_new(context,module->types,&flags);
+    uint8_t *flags=NULL;XrXirStatus status=xir_compile_view_static_flags_new(context,module->types,&flags);
     if (status!=XR_XIR_OK || !flags) return status;
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
 
@@ -269,4 +274,26 @@ XR_FUNC XrXirStatus xir_compile_view_liveness_verified(const XrXirCompileContext
         view_live_free(&a);
     }
     xr_compile_resources_free(flags);return status;
+}
+XR_FUNC XrXirStatus xir_compile_view_liveness_function_verified(const XrXirCompileContext *context,
+    const XrXirModule *module,uint32_t function,XrXirViewLiveVisitor visitor,void *user,XrXirDiagnostic *diagnostic,
+    XrCompileRequestControl *control) {
+    if (!xir_compile_context_valid(context) || !module || !module->functions || function>=module->function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    if (module->declarations && module->declarations->functions[function].native_callable)
+        return xir_native_callable_verify(module,function);
+    uint64_t fixed=sizeof(ViewLive)+(module->types?module->types->count:0u);
+    if (fixed>context->limits.frame_bytes) return XR_XIR_BUDGET;
+    XrXirCompileContext remaining=*context;remaining.limits.frame_bytes-=fixed;
+    uint8_t *flags=NULL;XrXirStatus status=xir_receive_poll(control);if (status!=XR_XIR_OK) return status;
+    status=xir_compile_view_static_flags_new(&remaining,module->types,&flags);
+    if (status!=XR_XIR_OK || !flags) return status;
+    ViewLive a={.context=&remaining,.module=module,.function=module->functions+function,.types=flags,.visitor=visitor,.user=user,.control=control,
+        .location={XR_XIR_OK,function,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
+    status=view_live_allocate(&a);
+    if (status==XR_XIR_OK && a.count) status=view_live_graph(&a);
+    if (status==XR_XIR_OK && a.count) status=view_live_solve(&a);
+    if (status==XR_XIR_OK && a.count) status=view_live_visit(&a);
+    if (status!=XR_XIR_OK && diagnostic) {*diagnostic=a.location;diagnostic->status=status;}
+    view_live_free(&a);xr_compile_resources_free(flags);return status;
 }

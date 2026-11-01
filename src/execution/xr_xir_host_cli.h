@@ -28,8 +28,9 @@ XR_FUNC XrXirHostReportStatus xr_xir_host_report_result(const XrXirCallResult *r
  * stream/configuration failure. NULL returns internal failure without running.
  * The entry is the admitted module initializer; no new admission ledger is made.
  * Program destruction precedes terminal rendering; the owned result dies last. */
-XR_FUNC int xr_xir_host_program_main(XrXirProgram *owned_program, uint32_t entry, bool sandbox);
+XR_FUNC int xr_xir_host_program_main(XrXirProgram *owned_program,uint32_t entry,bool sandbox,
+    XrXirHostCall **pending_close);
 /* A module initializer must return the admitted I64 zero control value.
  * The generated executable supplies its actual immutable ProgramSpec. */
-XR_FUNC int xr_xir_host_main(const XrXirProgramSpec *spec, bool sandbox);
+XR_FUNC int xr_xir_host_main(const XrXirProgramSpec *spec,bool sandbox,XrXirHostCall **pending_close);
 #endif // XR_XIR_HOST_CLI_H

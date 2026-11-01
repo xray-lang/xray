@@ -128,7 +128,7 @@ static XrXirStatus view_cell_sequence(const XrXirCompileContext *context,uint32_
     } else if (kind==C_CAPTURE) {
         CHECK(origin==XR_XIR_CELL_ORIGIN_OWNED);CHECK(xr_xir_cell_provenance_role(proof,1,0)==XR_XIR_CELL_PROOF_OWNED_CAPTURE);
     } else CHECK(origin==(kind==C_MODULE?XR_XIR_CELL_ORIGIN_MODULE:XR_XIR_CELL_ORIGIN_OWNED));
-    status=xir_compile_view_roots_verified(context,&f->module,NULL,NULL,&diagnostic);
+    status=xir_compile_view_roots_verified(context,(XirEffectInput){&f->module,NULL,NULL},NULL,NULL,&diagnostic);
     if (status==XR_XIR_BUDGET || status==XR_XIR_OUT_OF_MEMORY) goto done;
     CHECK(status==(kind==C_CAPTURE?XR_XIR_BAD_VALUE:XR_XIR_OK));
     status=XR_XIR_OK;

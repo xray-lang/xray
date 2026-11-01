@@ -13,6 +13,16 @@
 #error "An actual generated Program symbol is required"
 #endif
 XR_DATA const XrXirProgramSpec XIR_SDK_PROGRAM_SYMBOL;
+#include "execution/xr_xir_host_execution.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrXirCallStatus fixture_host_execute_fe686f62(const XrXirHostExecutionRequest *request,XrXirCallResult *output) {
+    XrXirHostCall *pending=NULL;XrXirCallStatus cleanup=XR_XIR_CALL_READY;
+    XrXirCallStatus status=xr_xir_host_execute(request,output,&pending,&cleanup);
+    if (pending) {fputs("unexpected retained page-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrXirOutputStatus sdk_consumer_bytes(void *context,XrXirOutputStream stream,const char *bytes,size_t length) {
     (void)context;
     FILE *file=stream==XR_XIR_STDOUT ? stdout : stream==XR_XIR_STDERR ? stderr : NULL;
@@ -34,7 +44,7 @@ int main(void) {
     config.poll_limit=64000000;
     XrXirCallResult result={0};
     XrXirHostExecutionRequest request={program,&config,spec->declarations->entry_function,NULL,0};
-    XrXirCallStatus status=xr_xir_host_execute(&request,&result);
+    XrXirCallStatus status=fixture_host_execute_fe686f62(&request,&result);
     xr_xir_compile_program_drop(program);
     bool returned=status==XR_XIR_CALL_RETURNED && result.status==status &&
         result.value.type==XR_XIR_I64 && !result.value.reserved && !result.value.payload;

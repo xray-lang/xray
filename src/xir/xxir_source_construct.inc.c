@@ -9,6 +9,36 @@
 /* Dense construction facts freeze before Built enters the common checker.
  * The producer's bookkeeping supplies bindings, not independent authority. */
 #include "xxir_source_generator_methods.inc.c"
+static bool source_mem_return_facts(SourceContext *ctx,XrXirBorrowReturns *output) {
+    XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);
+    XrXirBorrowReturn *rows=source_alloc(ctx,ctx->function_count,sizeof(*rows));
+    if (!rows) return false;
+    uint32_t count=0;
+    for (uint32_t f=0;f<ctx->function_count;++f) {
+        if (!(f%64u) && !source_request_poll(ctx,NULL)) return false;
+        XrXirBorrowReturn row={0};bool present=false;
+        XrXirStatus status=xir_borrow_return_describe(&ctx->compile,&module,f,&row,&present,ctx->request);
+        if (status!=XR_XIR_OK) return source_fail(ctx,ctx->bodies[f].node,status,"Buffer borrowed return has no complete receiver path");
+        if (present) rows[count++]=row;
+    }
+    uint32_t expected=0,received=0;
+    for (uint32_t i=0;i<count;++i) expected+=ctx->bodies[rows[i].function].checked_library;
+    for (SourceLibraryUnit *unit=ctx->library_units;unit;unit=unit->next) {
+        for (uint32_t i=0;i<unit->borrow_returns.count;++i) {
+            if (!(i%64u) && !source_request_poll(ctx,NULL)) return false;
+            const XrXirBorrowReturn *from=&unit->borrow_returns.rows[i];
+            uint32_t lo=0,hi=count;
+            while (lo<hi) {uint32_t mid=lo+(hi-lo)/2u;if (rows[mid].function<from->function) lo=mid+1u;else hi=mid;}
+            if (lo==count || rows[lo].function!=from->function || rows[lo].receiver!=from->receiver ||
+                rows[lo].nominal!=from->nominal || rows[lo].field!=from->field ||
+                rows[lo].native_callable!=from->native_callable || !ctx->bodies[from->function].checked_library)
+                return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"received receiver facts do not match the current body");
+            ++received;
+        }
+    }
+    if (expected!=received) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"received receiver facts are incomplete");
+    *output=(XrXirBorrowReturns){count?rows:NULL,count};return true;
+}
 static bool source_slot_facts_prepare(SourceContext *ctx,XrXirSlotFacts *output) {
     if (ctx->slot_count>ctx->slot_capacity ||
         (ctx->slot_count && (!ctx->slots || !ctx->slot_facts || !ctx->slot_fact_present)))
@@ -78,8 +108,10 @@ static bool source_construction_prepare(SourceContext *ctx) {
     if (!source_library_comptime_table(ctx,&comptime)) return false;
     XrXirSlotFacts slots={0};
     if (!source_slot_facts_prepare(ctx,&slots)) return false;
-    XrXirConstructionSpec input={rows,count,bindings,binding_count,&comptime};
-    XrXirStatus status=xr_xir_compile_construction_new_v4(&ctx->compile,&ctx->types,&input,&slots,&ctx->construction,ctx->request);
+    XrXirBorrowReturns returns={0};
+    if (!source_mem_return_facts(ctx,&returns)) return false;
+    XrXirConstructionSpec input={rows,count,bindings,binding_count,&comptime,&returns};
+    XrXirStatus status=xr_xir_compile_construction_new_v5(&ctx->compile,&ctx->types,&input,&slots,&ctx->construction,ctx->request);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"source construction ownership failed");
 }
 #include "xxir_source_quiescent_storage.inc.c"

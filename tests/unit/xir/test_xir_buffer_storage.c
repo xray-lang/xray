@@ -24,6 +24,7 @@
 #include "xir_construction_fixture.h"
 #include "xir_buffer_class_cases.h"
 #include "xir_buffer_domain_cases.h"
+#include "xir_mem_native_fixture.h"
 static void payload_cases(void) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
     XrXirDomainStats frame=xr_xir_domain_stats(domain);
@@ -164,11 +165,11 @@ static XrXirArtifact *fixture(const XrXirCompileContext *context,bool attacks) {
 int main(int argc,char **argv) {
     payload_cases();XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
     XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
-    if(argc==3 && (!strcmp(argv[1],"--previous") || !strcmp(argv[1],"--previous109"))) {
+    if(argc==3 && (!strcmp(argv[1],"--previous") || !strcmp(argv[1],"--previous109") || !strcmp(argv[1],"--previous117"))) {
         FILE *file=fopen(argv[2],"rb");CHECK(file && !fseek(file,0,SEEK_END));long size=ftell(file);
         CHECK(size>64 && !fseek(file,0,SEEK_SET));unsigned char *bytes=malloc((size_t)size);CHECK(bytes);
         CHECK(fread(bytes,1,(size_t)size,file)==(size_t)size && !fclose(file));
-        uint32_t previous=!strcmp(argv[1],"--previous109")?109u:108u;
+        uint32_t previous=!strcmp(argv[1],"--previous117")?117u:!strcmp(argv[1],"--previous109")?109u:108u;
         CHECK(bytes[8]==39 && bytes[12]==previous && !bytes[13] && !bytes[14] && !bytes[15]);
         XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
         XrXirArtifact *output=NULL;CHECK(xr_xir_compile_checked_read(&context,bytes,(size_t)size,&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
@@ -179,7 +180,11 @@ int main(int argc,char **argv) {
     XrXirArtifact *lowered=fixture(&context,true);
     if(argc==3 && !strcmp(argv[1],"--emit")) {
         XrXirCSource source={0};CHECK(xr_xir_compile_emit_c(lowered,"buffer_storage",1048576,&source)==XR_XIR_OK);
-        FILE *file=fopen(argv[2],"wb");CHECK(file && fwrite(source.text,1,source.length,file)==source.length && !fclose(file));
+        FILE *file=fopen(argv[2],"wb");CHECK(file && fwrite(source.text,1,source.length,file)==source.length);
+        xr_xir_compile_c_source_free(&source);xr_xir_compile_artifact_free(lowered);
+        lowered=mem_native_fixture(&context);
+        CHECK(xr_xir_compile_emit_c(lowered,"mem_native",1048576,&source)==XR_XIR_OK);
+        CHECK(fwrite(source.text,1,source.length,file)==source.length && !fclose(file));
         xr_xir_compile_c_source_free(&source);xr_xir_compile_artifact_free(lowered);
     } else {
         CHECK(argc==1);buffer_domain_cases(&context);
@@ -204,6 +209,10 @@ int main(int argc,char **argv) {
         }
         buffer_class_cases(program);
         int64_t size=0;CHECK(xr_xir_buffer_storage_length(&result,&size)==XR_XIR_VALUE_OK && size==13);xr_xir_value_drop(&result);
+        program=NULL;
+        lowered=mem_native_fixture(&context);
+        CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
+        mem_native_execute(program);xr_xir_compile_program_drop(program);
     }
     xr_compile_resources_release(context.resources);puts("Private buffer storage: real owned bytes and checked transport PASS");return 0;
 }

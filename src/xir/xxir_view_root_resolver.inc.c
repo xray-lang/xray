@@ -47,8 +47,8 @@ XR_FUNC void xir_compile_view_root_resolver_free(XirViewRootResolver *resolver) 
     xr_compile_resources_free(c->meta);xr_compile_resources_free(c->edges);
     xr_compile_resources_free(resolver->flags);xr_compile_resources_free(resolver);
 }
-XR_FUNC XrXirStatus xir_compile_view_root_resolver_new(const XrXirCompileContext *context,
-    const XrXirModule *module,XirViewRootResolver **output,XrXirDiagnostic *diagnostic) {
+XR_FUNC XrXirStatus xir_compile_view_root_resolver_new(const XrXirCompileContext *context,XirEffectInput input,XirViewRootResolver **output,XrXirDiagnostic *diagnostic) {
+    const XrXirModule *module=input.module;const XrXirConstruction *construction=input.construction;
     if (!xir_compile_context_valid(context) || !module || !module->functions || !module->function_count ||
         !output || *output) return XR_XIR_BAD_STRUCTURE;
     if (!module->types || !module->types->count) return XR_XIR_BAD_TYPE;
@@ -56,11 +56,11 @@ XR_FUNC XrXirStatus xir_compile_view_root_resolver_new(const XrXirCompileContext
         module->types->count>context->limits.frame_bytes-sizeof(XirViewRootResolver)) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     XirViewRootResolver *r=xir_compile_calloc(context,1,sizeof(*r),&status);if (!r) return status;
-    r->check=(ViewRootCheck){.context=context,.module=module,.reserved=sizeof(*r),.symbolic_parameters=true,
+    r->check=(ViewRootCheck){.context=context,.module=module,.construction=construction,.reserved=sizeof(*r),.symbolic_parameters=true,
         .location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
-    status=view_flags_build(context,module->types,&r->flags);r->check.flags=r->flags;
-    if (status==XR_XIR_OK) status=view_root_graph(&r->check);
-    if (status==XR_XIR_OK) status=view_root_walk(&r->check,true);
+    status=view_flags_build_mode(context,module->types,&r->flags,true);r->check.flags=r->flags;
+    if (status==XR_XIR_OK) status=view_root_graph(&r->check,input.control);
+    if (status==XR_XIR_OK) status=view_root_walk(&r->check,true,input.control);
     if (status==XR_XIR_OK) {*output=r;return XR_XIR_OK;}
     if (diagnostic) {*diagnostic=r->check.location;diagnostic->status=status;}
     xir_compile_view_root_resolver_free(r);return status;
@@ -102,16 +102,16 @@ static XrXirStatus view_root_request(ViewRootCheck *c,const XirViewRootRequest *
             type=node->parameters[field].type;
         }
     }
-    return xr_xir_type_is_cell(c->module->types,type) || xr_xir_type_is_class(c->module->types,type) ||
+    return type==XR_XIR_BUFFER_STORAGE || xr_xir_type_is_cell(c->module->types,type) || xr_xir_type_is_class(c->module->types,type) ||
         view_flags_at(c->module->types,c->flags,type)?XR_XIR_OK:XR_XIR_BAD_TYPE;
 }
 static XrXirStatus view_root_resolve(XirViewRootResolver *r,const XirViewRootRequest *request,
-    XrXirViewRootVisitor visitor,void *user) {
+    XrXirViewRootVisitor visitor,void *user,XrCompileRequestControl *control) {
     ViewRootCheck *c=&r->check;
     c->location=(XrXirDiagnostic){XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirStatus status=view_root_request(c,request);if (status!=XR_XIR_OK) return status;
     ViewRootForward forward={visitor,user,0};c->visitor=view_root_forward;c->user=&forward;
-    ViewRootQuery q={.check=c};uint32_t selection=0;
+    ViewRootQuery q={.check=c,.control=control};uint32_t selection=0;
     for (uint32_t i=request->selection_count;i && status==XR_XIR_OK;--i) {
         uint32_t index=0;status=view_root_intern(c,&q.selections,(ViewOriginPair){request->selection[i-1u],selection},&index);
         selection=index+1u;
@@ -120,15 +120,22 @@ static XrXirStatus view_root_resolve(XirViewRootResolver *r,const XirViewRootReq
     status=view_root_drain(&q,status);c->visitor=NULL;c->user=NULL;
     return status==XR_XIR_OK && !forward.count?XR_XIR_BAD_VALUE:status;
 }
-XR_FUNC XrXirStatus xir_compile_view_root_resolver_query(XirViewRootResolver *r,
-    const XirViewRootRequest *request,XrXirViewRootVisitor visitor,void *user,XrXirDiagnostic *diagnostic) {
+static XrXirStatus view_root_resolver_query_controlled(XirViewRootResolver *r,
+    const XirViewRootRequest *request,XrXirViewRootVisitor visitor,void *user,XrXirDiagnostic *diagnostic,XrCompileRequestControl *control) {
     if (!r)
         return XR_XIR_BAD_STRUCTURE;
     if (r->busy)
         return XR_XIR_BAD_STAGE;
-    r->busy=true;XrXirStatus status=view_root_resolve(r,request,visitor,user);r->busy=false;
+    r->check.location=(XrXirDiagnostic){XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    r->busy=true;XrXirStatus status=xir_receive_poll(control);
+    if (status==XR_XIR_OK) status=view_root_resolve(r,request,visitor,user,control);
+    r->busy=false;
     if (status!=XR_XIR_OK && diagnostic) {*diagnostic=r->check.location;diagnostic->status=status;}
     return status;
+}
+XR_FUNC XrXirStatus xir_compile_view_root_resolver_query(XirViewRootResolver *r,
+    const XirViewRootRequest *request,XrXirViewRootVisitor visitor,void *user,XrXirDiagnostic *diagnostic) {
+    return view_root_resolver_query_controlled(r,request,visitor,user,diagnostic,NULL);
 }
 
 #include "xxir_view_root_relation.inc.c"

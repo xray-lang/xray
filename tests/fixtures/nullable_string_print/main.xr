@@ -11,3 +11,7 @@ print(next(ref count),count)
 print(text,change(ref text),text,alias)
 print("line\nbreak",absent)
 print("owned"+"-result")
+const displayNullNumber:i64?=null
+print(displayNullNumber)
+const displayNullArray:Array<string>?=null
+print(displayNullArray)

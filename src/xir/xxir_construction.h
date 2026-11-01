@@ -13,7 +13,7 @@
 #ifndef XXIR_CONSTRUCTION_H
 #define XXIR_CONSTRUCTION_H
 #include "xxir.h"
-#define XR_XIR_CONSTRUCTION_C_INTERFACE_VERSION 4u
+#define XR_XIR_CONSTRUCTION_C_INTERFACE_VERSION 5u
 
 typedef struct XrXirConstruction XrXirConstruction;
 /* Complete slot names belong to the actual dense module storage inventory.
@@ -59,12 +59,24 @@ typedef struct XrXirComptimeTable {
     uint32_t binding_count;
 } XrXirComptimeTable;
 
+/* Current physical coordinates describe a checked receiver-to-storage return.
+ * The complete body and the governed leaf are independently replayed. These
+ * rows confer neither owner lifetime nor field or execution permission. */
+typedef struct XrXirBorrowReturn {
+    uint32_t function,receiver,nominal,field,native_callable;
+} XrXirBorrowReturn;
+typedef struct XrXirBorrowReturns {
+    const XrXirBorrowReturn *rows;
+    uint32_t count;
+} XrXirBorrowReturns;
+
 typedef struct XrXirConstructionSpec {
     const XrXirConstructionRow *rows;
     uint32_t count;
     const XrXirMaterializationBinding *materializations;
     uint32_t materialization_count;
     const XrXirComptimeTable *comptime;
+    const XrXirBorrowReturns *borrow_returns;
 } XrXirConstructionSpec;
 
 /* Earlier constructor symbols are retired because their input layouts differ.
@@ -75,7 +87,7 @@ typedef struct XrXirConstructionSpec {
  * exact dense ordinal. All input rows and name bytes are copied to the receiver.
  * Complete module admission also checks the actual slot denominator and owner.
  * Even a zero-row construction produces a real immutable receiving owner. */
-XR_FUNC XrXirStatus xr_xir_compile_construction_new_v4(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xr_xir_compile_construction_new_v5(const XrXirCompileContext *context,
     const XrXirTypes *types, const XrXirConstructionSpec *input,
     const XrXirSlotFacts *complete_slots, XrXirConstruction **output, XrCompileRequestControl *control);
 XR_FUNC void xr_xir_compile_construction_free(XrXirConstruction *construction);
@@ -91,5 +103,6 @@ XR_FUNC const XrXirComptimeTable *xr_xir_compile_construction_comptime(const XrX
 /* Borrowed until this owner is freed. A valid zero-slot owner returns a real
  * view with count zero; a missing owner returns NULL, never fabricated facts. */
 XR_FUNC const XrXirSlotFacts *xr_xir_compile_construction_slots(const XrXirConstruction *construction);
+XR_FUNC const XrXirBorrowReturns *xr_xir_compile_construction_borrow_returns(const XrXirConstruction *construction);
 
 #endif // XXIR_CONSTRUCTION_H

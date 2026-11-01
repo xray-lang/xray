@@ -105,7 +105,7 @@ XR_FUNC XrXirStatus xir_compile_view_owner_path_possible(const XrXirCompileConte
     XrXirStatus status=XR_XIR_OK;uint8_t *flags=NULL;bool result=false;
     if (points) p.points=xir_compile_calloc(context,1,(size_t)points,&status);
     if (status == XR_XIR_OK)
-        status = xir_compile_view_flags_new(&limited, module->types, &flags);
+        status = xir_compile_view_static_flags_new(&limited, module->types, &flags);
     p.may.affine.types = flags;
     if (status==XR_XIR_OK && (!flags || !affine_owner(&p.may.affine,request->owner))) status=XR_XIR_BAD_TYPE;
     if (status==XR_XIR_OK) status=view_may_allocate(&p.may);

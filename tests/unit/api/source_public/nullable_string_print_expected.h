@@ -7,5 +7,6 @@ static const char nullable_print_expected[] =
     "once! 1\n"
     "heap-é中😀\0tail changed changed heap-é中😀\0tail\n"
     "line\nbreak null\n"
-    "owned-result\n";
+    "owned-result\n"
+    "null\nnull\n";
 #endif // NULLABLE_STRING_PRINT_EXPECTED_H

@@ -18,6 +18,17 @@
 #include "xir/xxir_task.c"
 #include "execution/xr_xir_host_execution.c"
 #include "api/xsource_api.c"
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_fa959da5(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrSourceWriteStatus discard(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
     (void)context;CHECK(stream==XR_SOURCE_STDOUT || stream==XR_SOURCE_STDERR);CHECK(bytes || !length);return XR_SOURCE_WRITE_OK;
 }
@@ -43,7 +54,7 @@ static XrSourceStatus drive(unsigned mode,XrSourceCompiler **compiler,XrSourcePr
         XrSourceInvocation invocation;
         CHECK(xray_source_invocation_init(&invocation,sizeof(invocation))==XR_SOURCE_OK);
         invocation.name="answer";invocation.name_length=6;
-        status=xray_source_invoke(*program,&invocation,&runtime,&original,NULL);
+        status=fixture_xray_source_invoke_fa959da5(*program,&invocation,&runtime,&original,NULL);
         xray_source_program_free(*program);*program=NULL;
         if(status==XR_SOURCE_OK)status=xray_source_result_copy(original,result);
         if(status==XR_SOURCE_OK && mode==6 && (*result)->value.status==XR_XIR_CALL_RETURNED) {

@@ -29,6 +29,7 @@
 #include "xxir_operand_roles.h"
 #include "xxir_library_catalog.h"
 #include "xxir_constraint_proof.h"
+#include "xxir_constraint_proof_internal.h"
 #include "xxir_view_types_internal.h"
 #include "xxir_implementation.h"
 #include "xxir_implementation_verify.h"
@@ -37,6 +38,7 @@
 #include "xxir_source_query_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_pointer.h"
 #include "xxir_task_result.h"
 #include "xxir_nominal.h"
 #include "xxir_float.h"
@@ -243,6 +245,7 @@ typedef struct SourceFunction {
     SourceErrorContext *error_context;
     SourceLocalHandler *local_handler;
     bool infer_errors, infer_initializer;
+    uint32_t unsafe_depth;
     SourceInitializerState initializer_state;
     XrXirType initializer_seed, initializer_bound;
     SourcePendingError *pending_errors;
@@ -649,6 +652,9 @@ static bool source_hir_tuple_type(SourceContext *ctx,const XrXirCallableParamete
 #include "xxir_source_channel_type.inc.c"
 #include "xxir_source_iterator_type.inc.c"
 #include "xxir_source_view_type.inc.c"
+#include "xxir_source_pointer_type.inc.c"
+static bool source_owned_checked(const XrModuleSpec *spec);
+#include "xxir_source_mem.inc.c"
 #include "xxir_source_ordering.inc.c"
 typedef struct SourceSubstitution { const XrXirType *types; uint32_t count; } SourceSubstitution;
 static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
@@ -789,6 +795,8 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
         if (source_text_same(ctx, NULL, ref->name, "PanicInfo") && !source_nominal_name(ctx, ref->name)) {
             *type = XR_XIR_PANIC_INFO; return true;
         }
+        if (source_text_same(ctx,NULL,ref->name,"__BufferStorage") && source_mem_module(ctx,ctx->module) &&
+            !source_native_type_shadowed(ctx,ref->name)) {*type=XR_XIR_BUFFER_STORAGE;return true;}
         return source_nominal_type(ctx, ref->name, type);
     }
     case XR_TREF_SCALAR:
@@ -809,6 +817,8 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
     case XR_TREF_GENERIC:
         if (source_nominal_name(ctx, ref->name))
             return source_nominal_arguments(ctx, ref->name, ref->children, ref->nchildren, type);
+        if (ref->name && (source_text_same(ctx,NULL,ref->name,"Ptr") || source_text_same(ctx,NULL,ref->name,"MutPtr")))
+            return source_pointer_type_ref(ctx,ref,type);
         if (ref->name && source_text_same(ctx,NULL,ref->name,"Atomic"))
             return source_native_atomic_type(ctx,ref,type);
         if (ref->name && source_text_same(ctx,NULL,ref->name,"Task"))
@@ -929,6 +939,7 @@ static bool source_plan_discard(SourceContext *ctx,uint32_t first);
 static bool source_plan_binary_prepare(SourceContext *ctx,SourceExpressionPlan *plan,SourceExpectedType hint,bool default_literals);
 static bool source_plan_numeric_prepare(SourceContext *ctx,SourceExpressionPlan *plan,SourceExpectedType hint,bool defaults);
 static bool source_plan_soft_numeric(SourceContext *ctx,SourceExpressionPlan *plan,bool *soft);
+static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,SourceExpectedType *output);
 #include "xxir_source_conversion.inc.c"
 #include "xxir_source_try_assert.inc.c"
 
@@ -1129,7 +1140,7 @@ static bool source_instantiation_prove(SourceContext *ctx, AstNode *node,
         bool result = callee.kind == XR_XIR_CONTEXT_FUNCTION &&
             xr_xir_binder_kind(&ctx->generics[callee.declaration],i) == XR_XIR_BINDER_RESULT_VARIABLE;
         XrXirStatus status = result ? xr_xir_compile_result_argument(&ctx->compile, &view, ctx->function, substitution.types[i]) : XR_XIR_OK;
-        if (status == XR_XIR_OK) status = xr_xir_compile_constraints_prove(&ctx->compile, &context, &use);
+        if (status == XR_XIR_OK) status = xir_compile_constraints_prove_controlled(&ctx->compile, &context, &use,ctx->request);
         if (status == XR_XIR_OK)
             status = xr_xir_compile_type_access(&ctx->compile, &view, ctx->function, substitution.types[i]);
         if (status != XR_XIR_OK)
@@ -1189,7 +1200,9 @@ static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceAr
 static bool source_range_is(SourceContext *ctx,XrXirType type);
 static bool source_range_length(SourceContext *ctx,AstNode *node,SourceValue receiver,SourceValue *value);
 static bool source_range_index(SourceContext *ctx,AstNode *node,SourceValue receiver,AstNode *index,SourceValue *value);
+static bool source_mem_length(SourceContext *ctx,AstNode *node,SourceValue receiver,SourceValue *value);
 #include "xxir_source_array.inc.c"
+#include "xxir_source_pointer.inc.c"
 static bool source_hash_for_each(SourceContext *ctx, AstNode *node, const SourceValue *evaluated,
     XrXirType receiver_type, SourceValue *value);
 #include "xxir_source_hash.inc.c"
@@ -1262,6 +1275,33 @@ static bool source_generator_yield(SourceContext *ctx,AstNode *node,bool top);
 #include "xxir_source_requirement_calls.inc.c"
 #include "xxir_source_requirement_values.inc.c"
 #include "xxir_source_methods.inc.c"
+static bool source_mem_length_marker(SourceContext *ctx,uint32_t nominal,const XrTypeRef *ref) {
+    if (!ref || ref->kind!=XR_TREF_NAMED || ref->nchildren || !ref->name ||
+        !source_text_same(ctx,NULL,ref->name,"Lengthable") || !source_mem_buffer(ctx,nominal)) return false;
+    uint32_t saved=ctx->module;ctx->module=ctx->nominal_sources[nominal]->module;
+    bool shadowed=visible_name(ctx,ref->name)!=NULL;ctx->module=saved;
+    if (shadowed) return false;
+    SourceName *method=find_name(ctx,ctx->nominal_methods[nominal],"__operator_len");
+    if (!method || !method->node || method->node->type!=AST_METHOD_DECL ||
+        !source_mem_method_contract(ctx,ctx->nominal_sources[nominal],&method->node->as.method_decl)) return false;
+    const XrXirFunction *body=&ctx->functions[method->index];
+    return body->parameter_count==1 && body->result==XR_XIR_I64 && body->error_type==XR_XIR_NEVER &&
+        !ctx->generics[method->index].parameter_count;
+}
+static bool source_mem_length(SourceContext *ctx,AstNode *node,SourceValue receiver,SourceValue *value) {
+    const XrXirTypeNode *type=xr_xir_type_node(&ctx->types,receiver.type);
+    if (!type || type->kind!=XR_XIR_TYPE_NOMINAL || !source_mem_buffer(ctx,type->nominal.declaration))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"len receiver family is not admitted");
+    SourceName *method=source_method_find(ctx,receiver.type,"__operator_len");
+    const XrXirFunctionIdentity *id=source_method_identity(ctx,node,method);
+    if (!id) return false;
+    const XrXirFunction *body=&ctx->functions[method->index];
+    if (id->method_kind!=XR_XIR_READ_METHOD || body->parameter_count!=1 || body->parameters[0]!=receiver.type ||
+        body->result!=XR_XIR_I64 || body->error_type!=XR_XIR_NEVER)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Buffer length declaration has an inconsistent signature");
+    return source_query_target_token_reference(ctx,node->as.call_expr.callee,method->declaration,XR_XIR_SOURCE_CALL) &&
+        source_recipe_group(ctx,(XrXirInstruction){.op=XR_XIR_CALL,.type=XR_XIR_I64,.immediate=method->index},&receiver,1,value);
+}
 static SourceName *source_core_assertion(SourceContext *ctx, AstNode *site, uint32_t intrinsic);
 static bool source_scalar_text(SourceContext *ctx,AstNode *node,SourceValue input,XrHirCastRole role,SourceValue *value);
 #include "xxir_source_rune.inc.c"
@@ -1344,6 +1384,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         if (target && target->kind == SOURCE_IMPORT) target = imported_declaration(ctx, target, target->imported);
     } else if (callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &callee->as.member_access;
+        if (source_pointer_namespace(ctx,member->object)) return source_pointer_null_call(ctx,node,value);
         if (source_from_utf8_receiver(ctx,callee))
             return source_from_utf8_call(ctx,node,value);
         if (source_decimal_static_receiver(ctx, member->object))
@@ -1413,6 +1454,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             if (xr_xir_type_is_integer(receiver.type)) return source_integer_call(ctx,node,receiver,value);
             if (source_scalar_identity(receiver.type)) return source_scalar_call(ctx,node,receiver,value);
             if (receiver.type == XR_XIR_STRING) return source_string_call(ctx, node, receiver, value);
+            if (xr_xir_type_is_pointer(&ctx->types,receiver.type)) return source_pointer_call(ctx,node,receiver,value);
             if (xr_xir_type_is_enum(&ctx->types, receiver.type) && source_text_same(ctx, NULL, member->name, "toString")) {
                 if (call->arg_count || call->type_arg_count)
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum toString accepts no value or type arguments");
@@ -1437,9 +1479,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
     if (target && target->kind == SOURCE_NOMINAL) {
         if (call->type_arg_count < 0)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "invalid constructor type arguments");
-        XrXirType type;
-        return source_nominal_apply(ctx, target, call->type_args, (uint32_t)call->type_arg_count, &type) &&
-            source_constructor_call(ctx, node, type, binding, target, value);
+        return source_constructor_call(ctx, node, result_context, binding, target, value);
     }
     if (target && target->kind == SOURCE_FUNCTION && !selected.method)
         return source_function_call(ctx,node,binding,target,result_context,value);
@@ -1584,6 +1624,7 @@ static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) 
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, typed.type, {place.id, 0}, {0}, 0, {0}}, value);
 }
 #include "xxir_source_nullable.inc.c"
+#include "xxir_source_optional_chain.inc.c"
 #include "xxir_source_try_optional.inc.c"
 static bool source_cast_target(SourceContext *ctx,AstNode *node,XrHirCastTargetInput input,XrHirCastTarget *target) {
     XrXirSourceRange range=source_query_range(ctx,node,NULL);
@@ -1794,10 +1835,13 @@ static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceE
 static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceExpectedType expected,SourceValue *value);
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value);
 static bool source_defer(SourceContext *ctx, AstNode *node);
+static bool source_block_functions(SourceContext *ctx,AstNode *block);
 #include "xxir_source_view.inc.c"
 #include "xxir_source_copy.inc.c"
+#include "xxir_source_unsafe.inc.c"
 static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
     switch (node->type) {
+    case AST_UNSAFE_EXPR: return source_unsafe_expression(ctx,node,context,value);
     case AST_LITERAL_NULL:
         return source_nullable_value(ctx,node,(XrHirNullableInput){.role=XR_HIR_NULLABLE_NULL,
             .has_expected=context.present,.expected=context.type},0,value);
@@ -1877,6 +1921,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     case AST_UNARY_NOT: case AST_BINARY_AND: case AST_BINARY_OR: return source_logic(ctx, node, value);
     case AST_NULLISH_COALESCE: return source_coalesce(ctx, node, context, value);
     case AST_FORCE_UNWRAP: return source_force_unwrap(ctx, node, value);
+    case AST_OPTIONAL_CHAIN: return source_optional_chain(ctx, node, value);
     case AST_MEMBER_ACCESS: {
         MemberAccessNode *member = &node->as.member_access;
         SourceName *base = member->object->type == AST_VARIABLE ? visible_name(ctx, member->object->as.variable.name) : NULL;
@@ -2442,6 +2487,13 @@ static bool collect_declarations(SourceContext *ctx) {
         if(natives>UINT32_MAX-capacity)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"crypto callable capacity overflow");
         capacity+=natives;
     }
+    for (uint32_t m=0;m<count;++m) {
+        if (!(m%64u) && !source_request_poll(ctx,NULL)) return false;
+        if (!source_mem_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m])) continue;
+        uint32_t natives=(uint32_t)(sizeof(source_mem_callables)/sizeof(*source_mem_callables));
+        if (natives>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"memory callable capacity overflow");
+        capacity+=natives;
+    }
     if (!ctx->core_factory && capacity <= UINT32_MAX - 9) capacity += 9;
     if (readers>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_BUDGET,"binding reader capacity exhausted");
     capacity+=readers;
@@ -2523,7 +2575,7 @@ static bool collect_declarations(SourceContext *ctx) {
         for (SourceName *p = ctx->names[m]; p; p = p->next)
             if (p->kind == SOURCE_IMPORT && !source_import_selectors(ctx,p)) return false;
     }
-    return source_unicode_declare(ctx) && source_crypto_declare(ctx);
+    return source_unicode_declare(ctx) && source_crypto_declare(ctx) && source_mem_declare(ctx);
 }
 static bool source_parameter_promise(SourceContext *ctx, uint32_t function, uint32_t parameter) {
     SourceFunction *body = &ctx->bodies[function];

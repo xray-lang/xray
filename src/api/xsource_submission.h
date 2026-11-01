@@ -73,5 +73,7 @@ XR_FUNC XrSourceStatus xr_source_submission_write(XrSourceSubmission *, const ch
 /* Immutable prepared/published display observations, never runtime authority. */
 XR_FUNC XrSourceStatus xr_source_submission_names(const XrSourceSubmission *, bool pending,
     const XrXirSourceGenerationName **, size_t *);
+/* BUSY or CLOSE_FAILED preserves the complete Source/runtime owner. Only
+ * successful physical close clears it; retries do not replay transaction abort. */
 XR_FUNC XrSourceStatus xr_source_submission_drop(XrSourceSubmission **, XrXirCallStatus *cleanup);
 #endif // XSOURCE_SUBMISSION_H

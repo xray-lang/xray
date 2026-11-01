@@ -141,11 +141,12 @@ static bool source_local_borrowed_storage(SourceContext *ctx,const SourceName *s
         !symbol->node || symbol->node->type!=AST_VAR_DECL) return true;
     const XrXirTypeNode *shape=xr_xir_type_node(&ctx->types,symbol->type);
     if (!shape || (shape->kind!=XR_XIR_TYPE_SLICE && shape->kind!=XR_XIR_TYPE_MUT_SLICE &&
-        shape->kind!=XR_XIR_TYPE_TUPLE && shape->kind!=XR_XIR_TYPE_NULLABLE)) return true;
+        shape->kind!=XR_XIR_TYPE_TUPLE && shape->kind!=XR_XIR_TYPE_NULLABLE &&
+        shape->kind!=XR_XIR_TYPE_PTR && shape->kind!=XR_XIR_TYPE_MUT_PTR)) return true;
     uint32_t flags=0;
     XrXirStatus status=xr_xir_compile_view_type_flags(&ctx->compile,&ctx->types,symbol->type,&flags);
     if (status!=XR_XIR_OK) return source_fail(ctx,symbol->node,status,"local borrowed storage type flags failed");
-    if (!flags) return true;
+    if (!flags && !xr_xir_type_is_pointer(&ctx->types,symbol->type)) return true;
     const SourceFunction *body=&ctx->bodies[ctx->function];AstNode *region=NULL;
     if (ctx->function<(uint32_t)ctx->graph->spec_count && ctx->function==ctx->module) {
         AstNode *ast=ctx->graph->specs[ctx->module].ast;

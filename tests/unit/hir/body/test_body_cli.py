@@ -99,7 +99,7 @@ def main():
                 ('Generated: '+str(generated)+'\n').encode())
             assert generated.is_file() and b'({' not in generated.read_bytes()
             native = folder/(name+'.exe')
-            run(name+'-build', [args.binary, 'build', source, '--toolchain', 'msvc', '-o', native],
+            run(name+'-build', [args.binary, 'build', source, '-o', native],
                 ('Built: '+str(native)+'\n').encode())
             run(name+'-native', [native], expected)
             for mode in ('raw', 'sccp-inline-inline-sccp'):

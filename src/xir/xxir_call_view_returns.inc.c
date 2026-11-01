@@ -9,10 +9,26 @@
  * KEY CONCEPT:
  *   Every fallible origin and root check precedes return ownership mutation.
  */
+#include "xxir_buffer_storage.h"
 static XrXirCallStatus call_view_return_capture(XrXirCall *call,CallFrame *frame,
     const XrXirValue *arguments,uint32_t captures) {
     CallViewReturn *result=frame->view_return;if (!result) return XR_XIR_CALL_READY;
     if (!frame->parent || !call->active_view) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!captures) {
+        XrXirValue root={0};uint32_t parameter=UINT32_MAX,field=UINT32_MAX;
+        XrXirCellAuthority authority=frame_cell_authority(call,frame->parent);
+        const XirBufferViewOriginQuery query={frame->metadata,
+            (uint32_t)(frame->entry-frame->metadata->entries),arguments,frame->entry->parameter_count,
+            &authority,&call->config.admission,call};
+        XrXirCallStatus status=xir_instance_buffer_view_origin(call->active_view,&query,
+            &result->storage_program,&parameter,&field,&root);
+        if (status!=XR_XIR_CALL_READY) return status;
+        if (root.type) {
+            result->storage=true;result->parameter=parameter;result->storage_field=field;
+            result->storage_context=frame->metadata->admission_context;
+            result->storage_identity=root.payload;xr_xir_value_drop(&root);return XR_XIR_CALL_READY;
+        }
+    }
     const XrXirTypes *types=xr_xir_compile_type_arena_types(call->config.admission.arena);
     uint32_t count=0,permission=0;
     for (uint32_t p=captures;p<frame->entry->parameter_count;++p) {
@@ -47,10 +63,22 @@ static XrXirCallStatus call_view_return_bind(XrXirCall *call,CallFrame *frame) {
 static XrXirValueStatus call_view_return_leaf(void *context,const XrXirValue *value,bool writable,
     XrXirValueAdmission *admission,XrXirCellAuthority *output) {
     CallViewArguments *current=context;(void)writable;
-    if (!call_view_arguments_current(current,admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirCall *call=current?current->call:NULL;CallFrame *source=current?current->source:NULL;
+    CallViewReturn *result=source?source->view_return:NULL;
+    bool terminal=call && call_owner_current(call) && call->driving && call->admitting &&
+        !call->cleaning && !call_observing(call) && !call->active_view && source==call->top &&
+        admission==&call->config.admission && result && result->storage && result->storage_program &&
+        (!call->cancel_requested || cleanup_active(call) || call->abort_reason!=XR_XIR_CALL_READY);
+    if (!terminal && !call_view_arguments_current(current,admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueStatus status=XR_XIR_VALUE_OK;CallViewBinding *binding=call_view_binding(current->call,value,&status);
     if (!binding) return status;
-    CallViewReturn *result=current->source->view_return;
+    if (result->storage) {
+        XrXirViewOriginInfo info={0};status=xr_xir_view_origin_info(&binding->pin,admission,&info);
+        if (status!=XR_XIR_VALUE_OK) return status;
+        if (binding->root_loan || !info.logical_active || !info.root || info.kind!=XR_XIR_TYPE_SLICE ||
+            info.element!=XR_XIR_U8 || info.root->type!=XR_XIR_BUFFER_STORAGE ||
+            info.root->payload!=result->storage_identity) return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
     if (result->reference) {
         if (binding->root_loan!=&result->loan->loan) return XR_XIR_VALUE_BAD_ARGUMENT;
         XrXirViewOriginInfo info={0};status=xr_xir_view_origin_info(&binding->pin,admission,&info);
@@ -62,6 +90,21 @@ static XrXirValueStatus call_view_return_leaf(void *context,const XrXirValue *va
 }
 static XrXirValueStatus call_view_return_root_prepare(XrXirCall *call,CallFrame *frame) {
     CallViewReturn *result=frame->view_return;
+    if (result->storage) {
+        XrXirValue root={0};uint32_t parameter=UINT32_MAX,field=UINT32_MAX;
+        XrXirCellAuthority authority=frame_cell_authority(call,frame);
+        const XirBufferViewOriginQuery query={frame->metadata,
+            (uint32_t)(frame->entry-frame->metadata->entries),frame->arguments,frame->entry->parameter_count,
+            &authority,&call->config.admission,call};
+        XrXirCallStatus status=xir_instance_buffer_view_recheck(result->storage_program,result->storage_context,
+            &query,&parameter,&field,&root);
+        bool matches=root.type==XR_XIR_BUFFER_STORAGE && root.payload==result->storage_identity &&
+            parameter==result->parameter && field==result->storage_field;
+        xr_xir_value_drop(&root);
+        if (status!=XR_XIR_CALL_READY) return call_view_status(status);
+        if (!matches) return XR_XIR_VALUE_BAD_ARGUMENT;
+        result->authority=frame_cell_authority(call,frame->parent);return XR_XIR_VALUE_OK;
+    }
     if (!result->reference) return XR_XIR_VALUE_OK;
     result->parent_loan=result->loan->loan.previous;
     if (result->parent_loan) {
@@ -88,7 +131,7 @@ static XrXirCallStatus call_view_result_admit(XrXirCall *call,const XrXirValue *
         binding->returned=false;
     }
     CallViewArguments current={call,frame,NULL};XrXirViewAccess access={admission,call_view_return_leaf,&current};
-    XrXirValueStatus status=result->reference ? xr_xir_borrowed_value_admit(value,type,&access) :
+    XrXirValueStatus status=result->reference || result->storage ? xr_xir_borrowed_value_admit(value,type,&access) :
         xr_xir_borrowed_value_origin_match(value,type,&result->origin,&access);
     bool any=false;
     for (CallViewBinding *binding=frame->views;binding;binding=binding->next) any|=binding->returned;
@@ -119,6 +162,36 @@ static void call_view_return_adopt(XrXirCall *call,CallFrame *frame) {
         xr_xir_view_ref_return_commit(&result->loan->loan);result->loan->adopted=true;
     }
     result->prepared=false;call->admitting=admitting;
+}
+XR_FUNC XrXirValueStatus xr_xir_call_buffer_view(XrXirCallView *view,
+    XrXirType type,XrXirValue *output) {
+    CallViewCreation creation={0};XrXirValueStatus status=call_view_prepare(view,type,output,&creation);
+    if (status!=XR_XIR_VALUE_OK) return status;
+    CallViewReturn *result=creation.frame->view_return;
+    if (!result || !result->storage || result->parameter || result->storage_field!=UINT32_MAX ||
+        creation.frame->entry->result!=type || creation.spec.kind!=XR_XIR_TYPE_SLICE)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValue root={0};uint32_t parameter=UINT32_MAX,field=UINT32_MAX;
+    XrXirCellAuthority authority=frame_cell_authority(creation.call,creation.frame);
+    const XirBufferViewOriginQuery query={creation.frame->metadata,
+        (uint32_t)(creation.frame->entry-creation.frame->metadata->entries),view->arguments,view->argument_count,
+        &authority,&creation.call->config.admission,creation.call};
+    XrXirCallStatus selected=xir_instance_buffer_view_recheck(result->storage_program,result->storage_context,
+        &query,&parameter,&field,&root);
+    if (selected!=XR_XIR_CALL_READY) return call_view_status(selected);
+    if (root.type!=XR_XIR_BUFFER_STORAGE || root.payload!=result->storage_identity || parameter || field!=UINT32_MAX) {
+        xr_xir_value_drop(&root);return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
+    xr_xir_value_drop(&root);
+    creation.spec.authority=frame_cell_authority(creation.call,creation.frame);
+    status=call_view_reserve(&creation);
+    if (status==XR_XIR_VALUE_OK) {
+        XrXirValue created={0};creation.call->admitting=true;
+        status=xr_xir_buffer_storage_view(&creation.frame->arguments[0],type,&creation.spec.authority,
+            &creation.call->config.admission,&created);
+        call_view_finish(&creation,status,&created,output);
+    }
+    return status;
 }
 XR_FUNC XrXirValueStatus xr_xir_call_view_inbox_take(XrXirCallView *view,
     XrXirType type,XrXirValue *output) {

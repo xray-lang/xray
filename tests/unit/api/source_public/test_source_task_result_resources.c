@@ -27,6 +27,17 @@ typedef struct TaskResultOwners {
     XrSourceResult *result,*copy;
     uint64_t runtime_work;
 } TaskResultOwners;
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_9aef0dd9(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrSourceWriteStatus task_discard(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
     (void)context;CHECK(stream==XR_SOURCE_STDOUT || stream==XR_SOURCE_STDERR);CHECK(bytes || !length);return XR_SOURCE_WRITE_OK;
 }
@@ -52,7 +63,7 @@ static XrSourceStatus task_result_ready(TaskResultOwners *owner,const char *name
     XrSourceCallOptions options;CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);options.write=task_discard;
     if(owner->runtime_work)options.work_limit=owner->runtime_work;
     XrSourceInvocation request=task_result_invocation(name);
-    XrSourceStatus status=xray_source_invoke(owner->program,&request,&options,&owner->result,NULL);
+    XrSourceStatus status=fixture_xray_source_invoke_9aef0dd9(owner->program,&request,&options,&owner->result,NULL);
     if(status==XR_SOURCE_OK)status=xray_source_result_value(owner->result,&owner->task);
     xray_source_result_free(owner->result);owner->result=NULL;
     xray_source_program_free(owner->program);owner->program=NULL;

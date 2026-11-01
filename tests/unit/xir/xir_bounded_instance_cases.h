@@ -8,6 +8,16 @@
  */
 #ifndef XIR_BOUNDED_INSTANCE_CASES_H
 #define XIR_BOUNDED_INSTANCE_CASES_H
+#include "execution/xr_xir_host_execution.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrXirCallStatus fixture_host_execute_73a5a2a7(const XrXirHostExecutionRequest *request,XrXirCallResult *output) {
+    XrXirHostCall *pending=NULL;XrXirCallStatus cleanup=XR_XIR_CALL_READY;
+    XrXirCallStatus status=xr_xir_host_execute(request,output,&pending,&cleanup);
+    if (pending) {fputs("unexpected retained page-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrXirInstanceResult instance_until_pause(XrXirInstance *instance) {
     XrXirInstanceResult result={0}; unsigned steps=0;
     do { result=xr_xir_instance_poll_bounded(instance,1); CHECK(++steps<10000); }
@@ -97,7 +107,7 @@ static void bounded_instances(XrXirProgram *program,uint32_t normal,uint32_t cur
     CHECK(xr_xir_host_call_drop(host)==XR_XIR_CALL_READY); xr_xir_call_result_drop(&owned);
     CHECK(runtime_live==live && runtime_bytes==bytes);
     request.entry=spin;
-    CHECK(xr_xir_host_execute(&request,&owned)==XR_XIR_CALL_RETURNED);
+    CHECK(fixture_host_execute_73a5a2a7(&request,&owned)==XR_XIR_CALL_RETURNED);
     CHECK(owned.value.type==XR_XIR_I64 && owned.value.payload==1000);
     xr_xir_call_result_drop(&owned); CHECK(runtime_live==live && runtime_bytes==bytes);
     BoundedReentry reentry={0}; CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);

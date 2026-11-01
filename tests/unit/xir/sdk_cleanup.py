@@ -47,7 +47,7 @@ def main():
     runtime, source = prefix/'lib/xray/xir-runtime-sdk', prefix/'lib/xray/source-sdk'
     runtime_manifest = json.loads((runtime/'sdk_manifest.json').read_text(encoding='utf-8'))
     source_manifest = json.loads((source/'source_sdk_manifest.json').read_text(encoding='utf-8'))
-    assert (runtime_manifest['call_abi'], runtime_manifest['semantic'], runtime_manifest['value_abi'], runtime_manifest['program_abi']) == (37, 117, 30, 37)
+    assert (runtime_manifest['call_abi'], runtime_manifest['semantic'], runtime_manifest['value_abi'], runtime_manifest['program_abi']) == (38, 119, 31, 37)
     assert runtime_manifest['crt'] == 2 and runtime_manifest['sanitizers'] == 0
     assert source_manifest['crt'] == 'MD' and source_manifest['sanitizers'] == 0
     for directory, manifest in ((runtime, runtime_manifest), (source, source_manifest)):
@@ -101,8 +101,8 @@ endforeach()
             *(name if name.endswith('.lib') else name+'.lib' for name in runtime_manifest['system_libraries']),
             '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
         stdout, stderr = run('runtime-'+language, [exe])
-        assert stdout == b'Installed Runtime Call37: owned fatal, moved result, retired Domain and old ABI refusal PASS\r\n' and not stderr
-    summary = dict(state='PASS', source_api=source_manifest['api_version'], call_abi=37, common=runtime_manifest['semantic'],
+        assert stdout == b'Installed Runtime Call38: owned fatal, moved result, retired Domain and old ABI refusal PASS\r\n' and not stderr
+    summary = dict(state='PASS', source_api=source_manifest['api_version'], call_abi=38, common=runtime_manifest['semantic'],
         crt='MD', sanitizers=0, source_languages=['C11', 'C++17'], runtime_languages=['C11', 'C++17'], clients=4, prefix_moved=True,
         runtime_manifest_sha256=hashlib.sha256((runtime/'sdk_manifest.json').read_bytes()).hexdigest(),
         source_manifest_sha256=hashlib.sha256((source/'source_sdk_manifest.json').read_bytes()).hexdigest(),

@@ -47,9 +47,20 @@ static void string_literal_boundaries(bool grow) {
 }
 static void library_string_source_boundaries(void) {
     string_literal_boundaries(false);LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
+    /* This literal mapping probe has no enclosing function; zero is unused. */
     SourceContext ctx={0};ctx.compile=owner.context;SourceLibraryMap map={0};map.literal_begin=100;map.literal_count=1;
     XrXirInstruction op={XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},1,{0}},output={0};
-    CHECK(!source_library_instruction(&ctx,&map,&op,&output));CHECK(ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE&&!strcmp(ctx.diagnostic.message,"library literal identity is invalid"));
+    CHECK(!source_library_instruction(&ctx,&map,0,&op,&output));CHECK(ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE&&!strcmp(ctx.diagnostic.message,"library literal identity is invalid"));
+    ctx.diagnostic=(XrXirSourceDiagnostic){0};
+    XrXirTypes types={0};XrXirModule library={.types=&types};
+    SourceLibraryUnit unit={.library=&library};map.unit=&unit;
+    op=(XrXirInstruction){.op=XR_XIR_TO_STRING,.type=XR_XIR_STRING};
+    output=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=42};
+    XrXirInstruction sentinel=output;
+    CHECK(!source_library_instruction(&ctx,&map,0,&op,&output));
+    CHECK(ctx.diagnostic.status==XR_XIR_BAD_STAGE &&
+        !strcmp(ctx.diagnostic.message,"library scalar witness body is not admitted") &&
+        !memcmp(&sentinel,&output,sizeof(output)));
     library_compile_owner_drop(&owner);
 }
 static void library_string_growth_boundaries(void) {string_literal_boundaries(true);}

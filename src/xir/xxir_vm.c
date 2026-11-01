@@ -84,6 +84,17 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
     XrXirValue value = {0};
     XrXirCallStatus status = XR_XIR_CALL_READY;
     switch (op->op) {
+    case XR_XIR_PTR_NULL: case XR_XIR_PTR_READONLY: case XR_XIR_PTR_OFFSET:
+    case XR_XIR_PTR_LOAD: case XR_XIR_PTR_STORE: case XR_XIR_PTR_COPY: case XR_XIR_PTR_EQ: {
+        uint32_t count=op->op==XR_XIR_PTR_NULL?0u:op->op==XR_XIR_PTR_READONLY?1u:
+            (op->op==XR_XIR_PTR_STORE || op->op==XR_XIR_PTR_COPY)?3u:2u;
+        const uint32_t *ids=xr_xir_op_uses_operand_table(op->op)?run->function->operands+op->args[0]:op->args;
+        XrXirValue arguments[3]={{0}};
+        for (uint32_t p=0;p<count;++p) arguments[p]=vm_value_operand(run,ids[p]);
+        status=xr_xir_instance_pointer(run->view,op->op,op->type,arguments,count,&value);
+        if (status==XR_XIR_CALL_READY && op->op==XR_XIR_PTR_EQ) value.payload^=op->immediate;
+        break;
+    }
     case XR_XIR_CELL_LOCAL_WRITE: {
         uint32_t offset = run->layout->offsets[op->args[0]];
         XrXirType type = xr_xir_operand_type(run->function, op->args[0]);
@@ -724,7 +735,7 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
     if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
         op->op == XR_XIR_TO_STRING || op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_STRING_REPLACE ||
         (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE ||
-        op->op == XR_XIR_CELL_STRING_APPEND) {
+        op->op == XR_XIR_CELL_STRING_APPEND || (op->op>=XR_XIR_PTR_NULL && op->op<=XR_XIR_PTR_EQ)) {
         state->instruction = next;
         return instance_step(run, state, op, run->layout->offsets[result_id], action);
     }

@@ -19,6 +19,7 @@
 #include "xir/xxir_vm.h"
 #include "toolchain/xcompiler_session.h"
 #include "base/xsha256.h"
+#include "shared/xnative_declaration.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +43,27 @@ static XrXirStatus text_check(const XrXirCompileContext *context,const char *roo
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,output,&diagnostic,&failure);
     if(status!=XR_XIR_OK)fprintf(stderr,"CONTROL Source%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
     xr_xir_compile_source_failure_free(&failure);xr_compile_session_free(session);return status;
+}
+static void native_declarations(const XrXirCompileContext *context,const char *root) {
+    static const char source[]="var xs:Array<u8>=[1];__fillRandomBytes(ref xs);"
+        "assert(__timingSafeEqualBytes(xs,xs))";
+    XrXirSourceResult output={0};
+    CHECK(text_check(context,root,source,true,&output)==XR_XIR_OK);
+    const XrXirModule *module=xr_xir_compile_artifact_module(output.checked);
+    CHECK(module && module->declarations && module->declarations->functions);
+    uint32_t fill=0,compare=0;
+    for(uint32_t f=0;f<module->function_count;++f) {
+        uint32_t id=module->declarations->functions[f].native_callable;
+        if(id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM) {
+            CHECK(module->functions[f].parameter_count==1 && module->functions[f].result==XR_XIR_UNIT);
+            ++fill;
+        } else if(id==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL) {
+            CHECK(module->functions[f].parameter_count==2 && module->functions[f].result==XR_XIR_BOOL);
+            ++compare;
+        }
+    }
+    CHECK(fill==1 && compare==1);
+    xr_xir_compile_source_result_free(&output);
 }
 static void ordinary_context(const XrXirCompileContext *context,const char *root) {
     static const char accepted[]="import \"./crypto_context_library\" as lib\n"
@@ -69,6 +91,7 @@ static void ordinary_context(const XrXirCompileContext *context,const char *root
         "var xs:Array<i64>=[1];__fillRandomBytes(ref xs)",
         "var xs:Array<u8>=[1];__fillRandomBytes(xs)",
         "var xs:Array<i64>=[1];var equal=__timingSafeEqualBytes(xs,xs)",
+        "var xs:Array<u8>=[1];var equal:i64=__timingSafeEqualBytes(xs,xs)",
     };
     for(unsigned i=0;i<sizeof(bad_private)/sizeof(*bad_private);++i) {
         CHECK(text_check(context,root,bad_private[i],true,&output)!=XR_XIR_OK && !output.checked && !output.snapshot);
@@ -82,6 +105,7 @@ int main(int argc,char **argv) {
     XrXirCompileContext context={0};CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats before,after;
     CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+    native_declarations(&context,argv[1]);
     ordinary_context(&context,argv[1]);
     char path[2048],text[16384];CHECK(snprintf(path,sizeof(path),"%s/tests/unit/xir/fixtures/crypto_owner.xr",argv[1])>0);
     FILE *input=fopen(path,"rb");CHECK(input);size_t length=fread(text,1,sizeof(text)-1,input);

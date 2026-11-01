@@ -42,7 +42,7 @@ def main():
     assert not original.exists() and not (moved/'bin/xray.exe').exists()
     source = moved/'lib/xray/source-sdk'
     manifest = json.loads((source/'source_sdk_manifest.json').read_text(encoding='utf-8'))
-    assert manifest['api_version'] == 4 and manifest['crt'] == 'MD' and manifest['sanitizers'] == 0
+    assert manifest['api_version'] == 5 and manifest['crt'] == 'MD' and manifest['sanitizers'] == 0
     assert len(manifest['archives']) == 15
     for row in manifest['files']:
         data = (source/row['path']).read_bytes()
@@ -116,10 +116,35 @@ def main():
         *[name+'.lib' for name in recipe['system_libraries']], '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
     cpp_stdout = run('cpp-run', [cpp_exe, stdlib])
     assert cpp_stdout.replace(b'\r\n', b'\n') == b'Installed C++ public Source SDK: detached ownership and NUL output PASS\n'
+    previous = output/'previous-api4'
+    previous.mkdir()
+    previous_fixture = root/'tests/unit/xir/source_sdk_api4'
+    provenance = json.loads((previous_fixture/'provenance.json').read_text(encoding='utf-8'))
+    assert provenance['source_api'] == 4 and provenance['execution_abi'] == 1
+    for row in provenance['headers']:
+        data = (previous_fixture/row['path']).read_bytes()
+        assert len(data) == row['bytes'] and hashlib.sha256(data).hexdigest() == row['sha256']
+        (previous/row['path']).write_bytes(data)
+    for language, current_command, current_source, current_object in (
+            ('c', compile_command, consumer, object_file), ('cpp', cpp_command, cpp_source, cpp_object)):
+        old_source, old_object, old_exe = previous/('client.'+language), previous/(language+'.obj'), previous/(language+'.exe')
+        old_source.write_bytes((previous_fixture/'client.c').read_bytes())
+        replacements = {str(current_source): str(old_source), str(current_object): str(old_object),
+            '/Fo'+str(current_object): '/Fo'+str(old_object),
+            '-I'+str(source/'include'): '-I'+str(previous), '/I'+str(source/'include'): '/I'+str(previous)}
+        old_command = [replacements.get(str(arg), str(arg)) for arg in current_command]
+        assert not any(str(source/'include') in arg for arg in old_command)
+        run('previous-api4-'+language+'-compile', old_command)
+        run('previous-api4-'+language+'-link', ['link', '/nologo', '/incremental:no', '/out:'+str(old_exe), str(old_object),
+            *[str(source/path) for path in manifest['archives']],
+            *[name+'.lib' for name in recipe['system_libraries']], '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
+        old_stdout = run('previous-api4-'+language+'-run', [old_exe, stdlib])
+        assert old_stdout.replace(b'\r\n', b'\n') == b'Previous Source API4 header: old execute and invoke rejected with empty owners PASS\n'
     assert not list(stdlib.rglob('*.xr')) and not list(stdlib.rglob('*.chk'))
     if args.consumers_only:
-        assert len(records) == 10
+        assert len(records) == 16
         summary = dict(status='PASS', scope='relocated-public-consumers', compiler=args.compiler,
+            previous_source_api=4, previous_header_languages=['C11', 'C++17'], previous_header_scope='Windows x64 only',
             sdk_only=True, old_prefix_unavailable=True, source_files=0, checked_files=0,
             archives=len(manifest['archives']), actual_objects=sum(len(row['sources'])
                 for row in json.loads((source/'source_sdk_recipe.json').read_text())['archives']),
@@ -163,6 +188,7 @@ def main():
         finally:
             member.write_bytes(before)
     summary = dict(status='PASS', compiler=args.compiler, sdk_only=True, old_prefix_unavailable=True,
+        previous_source_api=4, previous_header_languages=['C11', 'C++17'], previous_header_scope='Windows x64 only',
         source_files=0, checked_files=0, archives=len(manifest['archives']), actual_objects=sum(len(row['sources'])
             for row in json.loads((source/'source_sdk_recipe.json').read_text())['archives']),
         sdk_manifest_sha256=hashlib.sha256((source/'source_sdk_manifest.json').read_bytes()).hexdigest(),

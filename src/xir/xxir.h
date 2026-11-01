@@ -179,7 +179,9 @@ typedef enum XrXirTypeKind {
     XR_XIR_TYPE_MUT_SLICE = 12,
     XR_XIR_TYPE_ITERATOR = 13,
     XR_XIR_TYPE_CHANNEL = 14,
-    XR_XIR_TYPE_UNION = 15
+    XR_XIR_TYPE_UNION = 15,
+    XR_XIR_TYPE_PTR = 16,
+    XR_XIR_TYPE_MUT_PTR = 17
 } XrXirTypeKind;
 typedef struct XrXirNominalType {
     uint32_t declaration;

@@ -20,6 +20,16 @@ extern unsigned old28_callback_count(void);
 extern unsigned old28_release_count(void);
 extern unsigned old28_lease_count(void);
 extern void old28_guard_clear(void);
+#include "execution/xr_xir_host_execution.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrXirCallStatus fixture_host_execute_4b2bc967(const XrXirHostExecutionRequest *request,XrXirCallResult *output) {
+    XrXirHostCall *pending=NULL;XrXirCallStatus cleanup=XR_XIR_CALL_READY;
+    XrXirCallStatus status=xr_xir_host_execute(request,output,&pending,&cleanup);
+    if (pending) {fputs("unexpected retained page-close owner\n",stderr);abort();}
+    return status;
+}
+
 static const XrCompileResourceLimits limits={16777216,8388608,67108864};
 static void unchanged(XrCompileResources *resources,XrCompileResourceStats before,size_t attempts) {
     XrCompileResourceStats after=sdk_stats(resources);
@@ -93,7 +103,7 @@ int main(void) {
     }
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     XrXirHostExecutionRequest request={program,&config,1,NULL,0};XrXirCallResult result={0};
-    CHECK(xr_xir_host_execute(&request,&result)==XR_XIR_CALL_RETURNED);
+    CHECK(fixture_host_execute_4b2bc967(&request,&result)==XR_XIR_CALL_RETURNED);
     CHECK(result.value.type==XR_XIR_I64 && result.value.payload==42);
     xr_xir_call_result_drop(&result);xr_xir_compile_program_drop(program);
     CHECK(runtime_live==base_live && runtime_bytes==base_bytes);

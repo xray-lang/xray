@@ -472,7 +472,7 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
             s.result = (XrXirType)checked_u32(c, (uint32_t)s.result);
         } else if (s.kind == XR_XIR_TYPE_ARRAY || s.kind == XR_XIR_TYPE_SET || s.kind == XR_XIR_TYPE_CELL ||
                    s.kind == XR_XIR_TYPE_NULLABLE || s.kind == XR_XIR_TYPE_ATOMIC || s.kind == XR_XIR_TYPE_TASK ||
-                   s.kind == XR_XIR_TYPE_SLICE || (s.kind == XR_XIR_TYPE_MUT_SLICE || s.kind == XR_XIR_TYPE_ITERATOR || s.kind == XR_XIR_TYPE_CHANNEL)) {
+                   s.kind == XR_XIR_TYPE_SLICE || (s.kind == XR_XIR_TYPE_MUT_SLICE || s.kind == XR_XIR_TYPE_ITERATOR || s.kind == XR_XIR_TYPE_CHANNEL || s.kind == XR_XIR_TYPE_PTR || s.kind == XR_XIR_TYPE_MUT_PTR)) {
             s.element = (XrXirType) checked_u32(c, (uint32_t) s.element);
         } else if (s.kind == XR_XIR_TYPE_NOMINAL) {
             s.nominal.declaration = checked_u32(c, s.nominal.declaration);
@@ -586,6 +586,18 @@ static void checked_construction(CheckedCursor *c, XrXirModule *module,
     }
     if (c->status==XR_XIR_OK) checked_comptime(c,owner);
     if (c->status==XR_XIR_OK) checked_slot_facts(c,module,owner);
+    if (c->status!=XR_XIR_OK) return;
+    uint32_t returns=checked_u32(c,c->reading?0:owner->borrow_returns.count);
+    if (returns>module->function_count) {c->status=XR_XIR_BAD_STRUCTURE;return;}
+    XrXirBorrowReturn *borrowed=checked_array(c,owner->borrow_returns.rows,returns,sizeof(*borrowed),20);
+    if (c->reading) owner->borrow_returns=(XrXirBorrowReturns){borrowed,borrowed?returns:0};
+    for (uint32_t i=0;i<returns && c->status==XR_XIR_OK;++i) {
+        XrXirBorrowReturn row=borrowed[i];
+        row.function=checked_u32(c,row.function);row.receiver=checked_u32(c,row.receiver);
+        row.nominal=checked_u32(c,row.nominal);row.field=checked_u32(c,row.field);
+        row.native_callable=checked_u32(c,row.native_callable);
+        if (c->reading) borrowed[i]=row;
+    }
 }
 
 static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction **construction, uint32_t evidence_limit);

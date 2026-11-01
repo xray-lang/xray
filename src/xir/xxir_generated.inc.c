@@ -99,7 +99,7 @@ static XrXirStatus generated_receive_shape(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) status=xr_xir_compile_generics_structure_verify(context,module);
     if (status==XR_XIR_OK) status=xr_xir_compile_implementations_verify(context,module);
     if (status==XR_XIR_OK) status=xr_xir_compile_defaults_verify(context,module);
-    if (status==XR_XIR_OK) status=xir_construction_verify(context,module,request->construction);
+    if (status==XR_XIR_OK) status=xir_construction_verify(context,module,request->construction,NULL);
     return status;
 }
 XR_FUNC XrXirStatus xr_xir_compile_generated_receive(const XrXirCompileContext *context,

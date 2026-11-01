@@ -19,6 +19,7 @@
 #include "xxir_source_replay_internal.h"
 #include "xxir_defaults_internal.h"
 #include "xxir_implementation_verify.h"
+#include "xxir_constraint_proof_internal.h"
 #include "xxir_type_match_internal.h"
 #include "xxir_comptime_pending_internal.h"
 #include "../base/xmalloc.h"
@@ -475,14 +476,14 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
             for (uint32_t a = 0; a < own; ++a) {
                 XrXirConstraintUse use = {c->source,
                     {XR_XIR_CONTEXT_INTERFACE_METHOD,op->targets[0],op->targets[1]},parent+a,types,count};
-                c->diagnostic.status = xr_xir_compile_constraints_prove(&c->remaining, &context, &use);
+                c->diagnostic.status = xir_compile_constraints_prove_controlled(&c->remaining, &context, &use,c->control);
                 if (c->diagnostic.status != XR_XIR_OK) return false;
             }
             XrXirWitnessRequest request = {c->source,
                 xr_xir_operand_type(function,function->operands[op->args[0]]),
                 {op->targets[0],parent ? types : NULL,parent},op->targets[1]};
             XrXirWitness witness = {0};
-            c->diagnostic.status = xr_xir_compile_witness_resolve(&c->remaining, &context, &request, &witness);
+            c->diagnostic.status = xir_compile_witness_resolve_controlled(&c->remaining, &context, &request, &witness,c->control);
             if (c->diagnostic.status != XR_XIR_OK) return false;
             if (witness.argument_count > 65536 || own > 65536 - witness.argument_count) {
                 c->diagnostic.status = XR_XIR_BAD_STRUCTURE; return false;

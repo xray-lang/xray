@@ -109,7 +109,9 @@ XR_FUNC XrXirCallStatus xr_xir_instance_wait_request(const XrXirInstance *instan
 XR_FUNC XrXirCallStatus xr_xir_instance_take_result(XrXirInstance *instance, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_copy_failure(XrXirInstance *instance, XrXirCallResult *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance);
-/* Consumes a current instance except on BUSY; reports failed language cleanup.
+/* Consumes a current instance except on BUSY or CLOSE_FAILED. CLOSE_FAILED
+ * preserves a stopped, drained owner for close retry; no task executes again.
+ * A successful retry reports the original language cleanup result.
  * A retired nonNULL Domain is rejected before mutation or consuming children. */
 XR_FUNC XrXirCallStatus xr_xir_instance_free(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_start_function(XrXirInstance *instance, const XrXirValue *function,

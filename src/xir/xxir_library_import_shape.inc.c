@@ -4,6 +4,7 @@
 #include "xxir_nominal.h"
 #include "xxir_interface.h"
 #include "xxir_types.h"
+#include "xxir_stringable_internal.h"
 #include "xxir_construction.h"
 #include "xxir_library_governed.inc.c"
 /* This is an import subset, not a replacement for Checked verification.
@@ -14,6 +15,10 @@
  * the copied body. Calls, references, literals and requirements map separately. */
 static bool library_catalog_local_instruction(XrXirOp op) {
     switch (op) {
+    case XR_XIR_ASSERT_CONDITION:case XR_XIR_INVOKE_INDIRECT:
+    case XR_XIR_INVOKE_DISCARD:case XR_XIR_PANIC_CATCH:
+    case XR_XIR_PTR_NULL:case XR_XIR_PTR_READONLY:case XR_XIR_PTR_OFFSET:
+    case XR_XIR_PTR_LOAD:case XR_XIR_PTR_STORE:case XR_XIR_PTR_COPY:case XR_XIR_PTR_EQ:
     case XR_XIR_CHANNEL_TRY_SEND: case XR_XIR_CHANNEL_TRY_RECV:
     case XR_XIR_CHANNEL_SEND: case XR_XIR_CHANNEL_RECV: case XR_XIR_CHANNEL_RECV_OR:
     case XR_XIR_CHANNEL_SEND_TIMEOUT: case XR_XIR_CHANNEL_RECV_TIMEOUT:
@@ -196,7 +201,7 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m) {
                 ((f==1 && record->fields[f].type==XR_XIR_ERROR) ||
                  (f==2 && record->fields[f].type==XR_XIR_PANIC_INFO))) continue;
             uint32_t parameter=(uint32_t)record->fields[f].type-XR_XIR_TYPE_PARAMETER_BASE;
-            if (!library_catalog_builtin(record->fields[f].type) &&
+            if (!library_catalog_builtin(record->fields[f].type) && record->fields[f].type!=XR_XIR_BUFFER_STORAGE &&
                 !xr_xir_type_node(types,record->fields[f].type) &&
                 !((uint32_t)record->fields[f].type>=XR_XIR_TYPE_PARAMETER_BASE &&
                   (uint32_t)record->fields[f].type<XR_XIR_TYPE_PARAMETER_LIMIT &&
@@ -221,6 +226,7 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m) {
             node->kind!=XR_XIR_TYPE_ARRAY && node->kind!=XR_XIR_TYPE_MAP && node->kind!=XR_XIR_TYPE_SET &&
             node->kind!=XR_XIR_TYPE_TUPLE && node->kind!=XR_XIR_TYPE_UNION &&
             !(node->kind==XR_XIR_TYPE_SLICE && node->element==XR_XIR_U8) &&
+            !((node->kind==XR_XIR_TYPE_PTR || node->kind==XR_XIR_TYPE_MUT_PTR) && node->element==XR_XIR_U8) &&
             node->kind!=XR_XIR_TYPE_NULLABLE && node->kind!=XR_XIR_TYPE_CELL && node->kind!=XR_XIR_TYPE_ITERATOR &&
             !((node->kind==XR_XIR_TYPE_ATOMIC || node->kind==XR_XIR_TYPE_TASK) &&
               node->element==XR_XIR_I64))
@@ -229,7 +235,7 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m) {
     return XR_XIR_OK;
 }
 static bool library_catalog_type(const XrXirModule *module, const XrXirGeneric *generic, XrXirType type) {
-    if (library_catalog_builtin(type)) return true;
+    if (library_catalog_builtin(type) || type==XR_XIR_U8 || type==XR_XIR_BUFFER_STORAGE) return true;
     if (xr_xir_type_node(module->types,type)) return true;
     uint32_t ordinal = (uint32_t)type - XR_XIR_TYPE_PARAMETER_BASE;
     return generic && (uint32_t)type >= XR_XIR_TYPE_PARAMETER_BASE &&
@@ -240,7 +246,8 @@ static XrXirStatus library_catalog_generic(const XrXirModule *module, const XrXi
     for (uint32_t p = 0; p < generic->parameter_count; ++p) {
 
         const XrXirConstraint *constraint = &generic->constraints[p];
-        if (xr_xir_binder_kind(generic,p) != XR_XIR_BINDER_TYPE ||
+        uint32_t kind=xr_xir_binder_kind(generic,p);
+        if ((kind!=XR_XIR_BINDER_TYPE && kind!=XR_XIR_BINDER_RESULT_VARIABLE) ||
             (constraint->markers & ~XR_XIR_CONSTRAINT_MASK)) return XR_XIR_BAD_STAGE;
     }
     for (uint32_t a = 0; a < generic->argument_count; ++a) {
@@ -333,6 +340,11 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
         for(uint32_t i=0;i<fn->instruction_count;++i){
 
             const XrXirInstruction *op=&fn->instructions[i];
+            if (op->op==XR_XIR_TO_STRING) {
+                XirStringableRead read=xir_stringable_read(NULL);
+                if (!xir_stringable_text_helper(m,f,&read)) return XR_XIR_BAD_STAGE;
+                continue;
+            }
             if (!library_catalog_local_instruction(op->op) &&
                 op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_GO &&
                 op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_GENERATOR_NEW &&

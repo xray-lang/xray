@@ -36,7 +36,7 @@ static XrXirArtifact *library_initializer_middle(const char *canonical) {
         .declarations=&declarations,.linkage_kind=XR_XIR_LIBRARY};
     XrXirArtifact *checked=NULL;
     XrXirConstruction *construction=NULL;
-    CHECK(xr_xir_compile_construction_new_v4(library_context,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction, NULL)==XR_XIR_OK&&construction);
+    CHECK(xr_xir_compile_construction_new_v5(library_context,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction, NULL)==XR_XIR_OK&&construction);
     CHECK(xr_xir_compile_check_v2(library_context,&built,construction,&checked,NULL)==XR_XIR_OK&&checked);
     xr_xir_compile_construction_free(construction);
     return checked;
@@ -46,9 +46,9 @@ static XrXirStatus library_map_operation(const XrXirCompileContext *context,void
     SourceLibraryMap map={0};bool ok=source_library_map(&ctx,library,1,4,0,&map);
     if(!ok){CHECK(!map.functions);return ctx.diagnostic.status;}
     CHECK(map.functions[0]==4&&map.functions[1]==1&&map.functions[2]==5&&map.next_function==6);
-    XrXirInstruction mapped={0};CHECK(source_library_instruction(&ctx,&map,&library->functions[2].instructions[0],&mapped));CHECK(mapped.op==XR_XIR_CALL&&mapped.immediate==4);
+    XrXirInstruction mapped={0};CHECK(source_library_instruction(&ctx,&map,2,&library->functions[2].instructions[0],&mapped));CHECK(mapped.op==XR_XIR_CALL&&mapped.immediate==4);
     XrXirInstruction untouched=mapped,bad=library->functions[2].instructions[0];bad.immediate=3;
-    CHECK(!source_library_instruction(&ctx,&map,&bad,&mapped));CHECK(ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE&&!memcmp(&mapped,&untouched,sizeof(mapped)));
+    CHECK(!source_library_instruction(&ctx,&map,2,&bad,&mapped));CHECK(ctx.diagnostic.status==XR_XIR_BAD_STRUCTURE&&!memcmp(&mapped,&untouched,sizeof(mapped)));
     source_library_map_free(&map);return XR_XIR_OK;
 }
 static void library_map_boundary_cases(const XrXirArtifact *artifact) {

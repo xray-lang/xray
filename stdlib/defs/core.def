@@ -1515,6 +1515,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn __prefetch {
@@ -1540,6 +1541,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn __nontemporalStore {
@@ -1552,6 +1554,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn __cacheLineSize {
@@ -1564,6 +1567,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn __alloc {
@@ -1707,7 +1711,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "runtime"
-    allocation: "no_heap"
+    allocation: "may_heap"
     return_ownership: "borrowed_param:0"
   }
 
@@ -1721,7 +1725,8 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "runtime"
-    allocation: "no_heap"
+    allocation: "may_heap"
+    return_ownership: "borrowed_param:0"
   }
 
   fn __bufferResize {
@@ -1760,6 +1765,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn __pageFree {
@@ -1772,6 +1778,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn __move {
@@ -1797,6 +1804,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
   fn __volatileStore {
@@ -1809,6 +1817,7 @@ module mem {
     aot_direct: true
     link_object: false
     layer: "core"
+    allocation: "no_heap"
   }
 
 }

@@ -56,7 +56,7 @@ def main():
         generated, native = directory/'original.c', directory/'original.exe'
         run('original-c', [binary, 'build', source, '-c', '-o', generated], ('Generated: '+str(generated)+'\n').encode())
         assert b'({' not in generated.read_bytes()
-        run('original-build', [binary, 'build', source, '--toolchain', 'msvc', '-o', native], ('Built: '+str(native)+'\n').encode())
+        run('original-build', [binary, 'build', source, '-o', native], ('Built: '+str(native)+'\n').encode())
         run('original-native', [native], expected)
         if evidence:
             for path in (source, generated, native):(evidence/path.name).write_bytes(path.read_bytes())

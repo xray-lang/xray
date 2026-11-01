@@ -55,9 +55,10 @@ static bool source_program_seal(SourceContext *ctx,const XrXirArtifact *source,X
     XrXirComptimeTable tables[2]={source->construction->comptime,{0}},merged={0};
     if (!source_program_sites(ctx,&source->module,&tables[1]) || !source_comptime_table_merge(ctx,tables,2,&merged)) return false;
     const XrXirConstruction *original=source->construction;
-    XrXirConstructionSpec input={original->rows,original->count,original->materializations,original->materialization_count,&merged};
+    XrXirConstructionSpec input={original->rows,original->count,original->materializations,original->materialization_count,&merged,
+        &original->borrow_returns};
     XrXirConstruction *construction=NULL;
-    XrXirStatus status=xr_xir_compile_construction_new_v4(&ctx->compile,source->module.types,&input,
+    XrXirStatus status=xr_xir_compile_construction_new_v5(&ctx->compile,source->module.types,&input,
         xr_xir_compile_construction_slots(original),&construction,ctx->request);
     if (status==XR_XIR_OK) status=xr_xir_compile_recheck_v2(&ctx->compile,&source->module,construction,output,NULL,ctx->request);
     xr_xir_compile_construction_free(construction);

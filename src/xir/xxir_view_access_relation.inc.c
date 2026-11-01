@@ -214,12 +214,12 @@ static XrXirStatus view_access_storage(ViewAccess *a,uint32_t left,uint32_t righ
     if (status==XR_XIR_OK) status=view_access_class_body(a,right,&right_body);
     if (status!=XR_XIR_OK) return status;
     XirViewRootRequest request={a->function,right,a->instruction,NULL,0};
-    status=xir_compile_view_root_resolver_query(a->resolver,&request,view_root_save,&r,NULL);
+    status=view_root_resolver_query_controlled(a->resolver,&request,view_root_save,&r,NULL,a->cells?a->cells->control:NULL);
     bool storage=r.left!=NULL;
     for (ViewRootSaved *p=r.left;p;p=p->next) storage&=view_access_cell_storage(a,&p->event);
     if (status==XR_XIR_OK && left_body && storage) { *output=VIEW_ACCESS_SAFE;goto done; }
     request.value=left;
-    if (status==XR_XIR_OK) status=xir_compile_view_root_resolver_query(a->resolver,&request,view_root_save,&l,NULL);
+    if (status==XR_XIR_OK) status=view_root_resolver_query_controlled(a->resolver,&request,view_root_save,&l,NULL,a->cells?a->cells->control:NULL);
     storage=l.left!=NULL;
     for (ViewRootSaved *p=l.left;p;p=p->next) storage&=view_access_cell_storage(a,&p->event);
     if (status==XR_XIR_OK && right_body && storage) { *output=VIEW_ACCESS_SAFE;goto done; }

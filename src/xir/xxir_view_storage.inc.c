@@ -12,7 +12,8 @@
  */
 static bool view_storage_empty(const XrXirViewStorage *view) {
     return view && unit_value(&view->root) && !view->kind && !view->element &&
-        !view->offset && !view->length && cell_loan_empty(&view->loan.exclusive);
+        !view->offset && !view->length && cell_loan_empty(&view->loan.exclusive) &&
+        unit_value(&view->buffer_root) && !view->buffer_origin && !view->buffer_generation;
 }
 static bool view_storage_work(XrXirValueAdmission *admission,uint64_t work) {
     if (!admission_domain_current(admission)) return false;
@@ -20,6 +21,7 @@ static bool view_storage_work(XrXirValueAdmission *admission,uint64_t work) {
     if (admission->work<work) return false;
     admission->work-=work;return xr_xir_domain_work(admission->domain,work);
 }
+#include "xxir_view_storage_buffer.inc.c"
 static bool view_storage_source(const XirCell *cell,XrXirType *element,int64_t *length) {
     const XrXirValue *value=&cell->value;
     if (value->type==XR_XIR_STRING) {
@@ -109,7 +111,7 @@ XR_FUNC XrXirValueStatus xr_xir_view_storage_begin(const XrXirValue *root,
 XR_FUNC XrXirValueStatus xr_xir_view_storage_reborrow(const XrXirViewStorage *parent,
     const XrXirCellAuthority *authority,const XrXirViewStorageSpec *spec,
     XrXirValueAdmission *admission,XrXirViewStorage *output) {
-    if (!view_storage_empty(output) || !spec || !view_storage_access(parent,authority,admission) ||
+    if (!view_storage_empty(output) || !spec || !view_storage_accessible(parent,authority,admission) ||
         (spec->kind==XR_XIR_TYPE_MUT_SLICE && parent->kind!=XR_XIR_TYPE_MUT_SLICE) ||
         spec->offset<0 || spec->length<0 || spec->offset>parent->length ||
         spec->length>parent->length-spec->offset) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -119,6 +121,11 @@ XR_FUNC XrXirValueStatus xr_xir_view_storage_reborrow(const XrXirViewStorage *pa
             return XR_XIR_VALUE_BAD_ARGUMENT;
     }
     XrXirViewStorageSpec child=*spec;child.offset+=parent->offset;
+    if (parent->buffer_origin) {
+        xr_xir_value_graph_begin();
+        XrXirValueStatus status=view_storage_buffer_begin(&parent->buffer_root,&child,admission,output);
+        xr_xir_value_graph_end();return status;
+    }
     const XrXirCellAuthority *root_parent=parent->kind==XR_XIR_TYPE_SLICE ? NULL : authority;
     const XrXirCellReadLoan *read_parent=parent->kind==XR_XIR_TYPE_SLICE ? &parent->loan.shared : NULL;
     xr_xir_value_graph_begin();
@@ -128,6 +135,10 @@ XR_FUNC XrXirValueStatus xr_xir_view_storage_reborrow(const XrXirViewStorage *pa
 XR_FUNC void xr_xir_view_storage_end(XrXirViewStorage *view) {
     if (!view || view_storage_empty(view)) return;
     xr_xir_value_graph_begin();
+    if (view->buffer_origin) {
+        pointer_origin_drop(view->buffer_origin);
+        *view=(XrXirViewStorage){0};xr_xir_value_graph_end();return;
+    }
     XirCell *cell=cell_read_loan_root(&view->root);
     XR_CHECK(cell,"view retirement retains its actual root");
     if (view->kind==XR_XIR_TYPE_SLICE) xr_xir_cell_read_loan_release(&view->loan.shared);
@@ -140,7 +151,7 @@ XR_FUNC void xr_xir_view_storage_end(XrXirViewStorage *view) {
 }
 XR_FUNC XrXirValueStatus xr_xir_view_storage_len(const XrXirViewStorage *view,
     const XrXirCellAuthority *authority,XrXirValueAdmission *admission,int64_t *output) {
-    if (!output || !view_storage_access(view,authority,admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!output || !view_storage_accessible(view,authority,admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!view_storage_work(admission,1)) return XR_XIR_VALUE_LIMIT;
     *output=view->length;return XR_XIR_VALUE_OK;
 }
@@ -155,6 +166,14 @@ static XrXirValueStatus view_storage_index(const XrXirViewStorage *view,int64_t 
 static XrXirValueStatus view_storage_get_operation(const XrXirViewStorage *view,
     const XrXirCellAuthority *authority,int64_t index,XrXirValueAdmission *admission,
     XrXirValue *output,XrXirFaultDetail *fault) {
+    if (view && view->buffer_origin) {
+        const XirBufferStorage *buffer=view_storage_buffer_access(view,authority,admission);
+        if (!buffer || !unit_value(output) || !fault) return XR_XIR_VALUE_BAD_ARGUMENT;
+        XrXirValueStatus status=view_storage_index(view,index,admission,fault);
+        if (status==XR_XIR_VALUE_OK)
+            *output=(XrXirValue){XR_XIR_U8,0,((const uint8_t *)buffer->data)[view->offset+index]};
+        return status;
+    }
     XirCell *cell=view_storage_access(view,authority,admission);
     if (!cell || !unit_value(output) || !fault) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueStatus status=view_storage_index(view,index,admission,fault);
@@ -193,6 +212,7 @@ XR_FUNC XrXirValueStatus xr_xir_view_storage_set(const XrXirViewStorage *view,
 static XrXirValueStatus view_storage_copy_operation(XrXirType type,
     const XrXirViewStorage *view,const XrXirCellAuthority *authority,
     XrXirValueAdmission *admission,XrXirValue *output) {
+    if (view && view->buffer_origin) return view_storage_buffer_copy(type,view,authority,admission,output);
     XirCell *cell=view_storage_access(view,authority,admission);
     const XrXirTypes *types=admission ? xr_xir_compile_type_arena_types(admission->arena) : NULL;
     if (!cell || !unit_value(output) || !xr_xir_type_is_array(types,type) ||

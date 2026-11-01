@@ -32,7 +32,7 @@ XRAY_API XrSourceStatus xray_source_invocation_init(XrSourceInvocation *, size_t
 XRAY_API XrSourceStatus xray_source_invoke_begin(XrSourceExecution *, XrSourceArtifact *, const XrSourceInvocation *,
     const XrSourceCallOptions *, XrSourceCall **);
 XRAY_API XrSourceStatus xray_source_invoke(XrSourceExecution *, XrSourceArtifact *, const XrSourceInvocation *,
-    const XrSourceCallOptions *, XrSourceResult **, XrSourceEvent *failure);
+    const XrSourceCallOptions *,XrSourceCompletion *);
 /* Copies the real outcome, including Error/Panic and every owned value/arena.
  * Copying data grants no callable, Task or Instance execution permission.
  * The source and its producer may be freed after success. Output must be NULL;

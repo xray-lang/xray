@@ -479,7 +479,7 @@ static XrXirStatus effect_context_dense_actuals(EffectContextOwner *owner,
             fixed[v]=(uint8_t)(owner->ordinary->uses.outcomes_work.contracts[dense->nodes[index].ordinary].parameters[v].kind!=
                 XR_XIR_EFFECT_PARAMETER_VARIABLE);
     }
-    if (dense->uses.outcomes_work.root && index<dense->uses.count) {
+    if (count && dense->uses.outcomes_work.root && index<dense->uses.count) {
         EffectScalarFlow flow={&dense->terms,function,dense,declared,values,fixed,(uint32_t)count,false,source->declarations};
         XrXirStatus status=effect_scalar_flow(&flow);
         if (status!=XR_XIR_OK) return status;

@@ -108,9 +108,11 @@ static void graph_object_release_locked(XirObject *object, XirObject **pending) 
         atomic_store_explicit(&((XirGenerator *)object)->orphaned,true,memory_order_release);
     }
 }
-XR_FUNC void xr_xir_domain_close(XrXirDomain *domain) {
-    if (!domain) return;
+XR_FUNC XrXirValueStatus xr_xir_domain_close(XrXirDomain *domain) {
+    if (!domain) return XR_XIR_VALUE_OK;
     XR_CHECK(xr_xir_domain_current(domain), "domain close cannot consume a retired owner");
+    XrXirValueStatus pages=domain_pages_close(domain);
+    if (pages!=XR_XIR_VALUE_OK) return pages;
     graph_lock();
     if (!domain->closed) {
         domain->closed = true;
@@ -124,4 +126,5 @@ XR_FUNC void xr_xir_domain_close(XrXirDomain *domain) {
     if (drain) value_graph_draining = true;
     graph_unlock();
     if (drain) graph_drain();
+    return XR_XIR_VALUE_OK;
 }

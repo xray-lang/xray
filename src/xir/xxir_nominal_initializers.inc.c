@@ -98,16 +98,19 @@ static XrXirStatus construction_module_slots(
     }
     return XR_XIR_OK;
 }
+#include "xxir_borrow_returns.inc.c"
 XR_FUNC XrXirStatus xir_construction_verify(
-    const XrXirCompileContext *context, const XrXirModule *m, const XrXirConstruction *construction) {
+    const XrXirCompileContext *context, const XrXirModule *m, const XrXirConstruction *construction,XrCompileRequestControl *control) {
     if (!xir_compile_context_valid(context) || !m) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus shape = xir_construction_shape(context, m->types, construction,NULL);
+    XrXirStatus shape = xir_construction_shape(context, m->types, construction,control);
     if (shape != XR_XIR_OK) return shape;
     shape=construction_module_slots(m,&construction->slots);
     if (shape!=XR_XIR_OK) return shape;
     shape=xir_materialization_verify(context,m,construction);
     if (shape!=XR_XIR_OK) return shape;
     shape=xir_comptime_verify(context,m,construction);
+    if (shape!=XR_XIR_OK) return shape;
+    shape=xir_borrow_returns_verify(context,m,construction,control);
     if (shape!=XR_XIR_OK) return shape;
     const XrXirNominalTable *table = m->types ? m->types->nominals : NULL;
     if (!table || m->stage == XR_XIR_LOWERED) return XR_XIR_OK;

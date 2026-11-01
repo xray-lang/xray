@@ -172,15 +172,15 @@ static void ordinary_current_facts(const XrXirCompileContext *context,
     XrXirConstructionSpec spec={0};XrXirConstruction *alternate=NULL;
     XrXirSlotFact row=original->rows[0];row.name="changed";
     XrXirSlotFacts changed={&row,1};
-    CHECK(xr_xir_compile_construction_new_v4(context,input.module->types,&spec,&changed,&alternate,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v5(context,input.module->types,&spec,&changed,&alternate,NULL)==XR_XIR_OK);
     CHECK(xir_fixture_effects_terminal(context,(XirFixtureEffectInput){input.module,alternate},effects)==XR_XIR_BAD_STRUCTURE);
     xr_xir_compile_construction_free(alternate);alternate=NULL;
     row=original->rows[0];row.exported=1;
-    CHECK(xr_xir_compile_construction_new_v4(context,input.module->types,&spec,&changed,&alternate,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v5(context,input.module->types,&spec,&changed,&alternate,NULL)==XR_XIR_OK);
     CHECK(xir_fixture_effects_terminal(context,(XirFixtureEffectInput){input.module,alternate},effects)==XR_XIR_BAD_STRUCTURE);
     xr_xir_compile_construction_free(alternate);alternate=NULL;
     XrXirSlotFacts empty={0};
-    CHECK(xr_xir_compile_construction_new_v4(context,input.module->types,&spec,&empty,&alternate,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v5(context,input.module->types,&spec,&empty,&alternate,NULL)==XR_XIR_OK);
     CHECK(xir_fixture_effects_terminal(context,(XirFixtureEffectInput){input.module,alternate},effects)==XR_XIR_BAD_STRUCTURE);
     xr_xir_compile_construction_free(alternate);
     CHECK(xir_fixture_effects_terminal(context,input,effects)==XR_XIR_OK);

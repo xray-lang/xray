@@ -19,6 +19,16 @@
 #include "api/xsource_compiler.c"
 #include "xir/xxir_vm.c"
 
+#include "execution/xr_xir_host_execution.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrXirCallStatus fixture_host_execute_546d39aa(const XrXirHostExecutionRequest *request,XrXirCallResult *output) {
+    XrXirHostCall *pending=NULL;XrXirCallStatus cleanup=XR_XIR_CALL_READY;
+    XrXirCallStatus status=xr_xir_host_execute(request,output,&pending,&cleanup);
+    if (pending) {fputs("unexpected retained page-close owner\n",stderr);abort();}
+    return status;
+}
+
 static XrSourceCompilerConfig configuration(XrCompileResources *resources) {
     return (XrSourceCompilerConfig){{resources,xr_xir_compile_default_limits()},
         {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},XR_COMPILER_STDLIB,{1048576,64}};
@@ -85,7 +95,7 @@ static void caller_ast_compiler(void) {
     XrXirInstanceConfig run_config;CHECK(xr_xir_instance_config_init(&run_config,sizeof(run_config))==XR_XIR_CALL_READY);
     run_config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,xr_xir_output_render,&sink};
     XrXirHostExecutionRequest run={program,&run_config,entry,NULL,0};XrXirCallResult result={0};
-    CHECK(xr_xir_host_execute(&run,&result)==XR_XIR_CALL_RETURNED);
+    CHECK(fixture_host_execute_546d39aa(&run,&result)==XR_XIR_CALL_RETURNED);
     CHECK(output.length==3 && !memcmp(output.data,"42\n",3));
     xr_xir_compile_program_drop(program);xr_xir_call_result_drop(&result);
     CHECK(!runtime_live && !runtime_bytes);

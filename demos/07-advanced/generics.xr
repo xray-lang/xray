@@ -17,8 +17,8 @@ class Box<T> {
         return Box(f(this.value))
     }
 
-    toString() -> string {
-        return "Box(${this.value})"
+    toString() -> string where T: Stringable {
+        return "Box(${this.value.toString()})"
     }
 }
 
@@ -41,8 +41,8 @@ class Pair<A, B> {
         this.second = b
     }
 
-    toString() -> string {
-        return "(${this.first}, ${this.second})"
+    toString() -> string where A: Stringable, B: Stringable {
+        return "(${this.first.toString()}, ${this.second.toString()})"
     }
 }
 
@@ -56,9 +56,9 @@ class Stack<T> {
 
     init() { this.items = [] }
 
-    ref push(item: T) { this.items.push(item) }
+    push(item: T) { this.items.push(item) }
 
-    ref pop() -> T? {
+    pop() -> T? {
         if (len(this.items) == 0) { return null }
         return this.items.pop()
     }

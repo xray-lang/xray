@@ -459,6 +459,12 @@ static bool repl_open(ReplState *state,XrSourceRepl **output) {
 }
 static bool repl_close(ReplState *state,XrSourceRepl **owner) {
     XrSourceEvent cleanup={0};XrSourceStatus status=xray_source_repl_drop(owner,&cleanup);
+    if (*owner && cleanup.engine_status==XR_XIR_CALL_CLOSE_FAILED)
+        status=xray_source_repl_drop(owner,&cleanup);
+    if (*owner) {
+        fputs("REPL: stopped owner could not close at process exit\n",stderr);
+        fflush(stderr);exit(XR_CLI_EXIT_FAIL);
+    }
     if(status!=XR_SOURCE_OK || cleanup.state!=XR_SOURCE_RUN_READY) {
         repl_failure(state,status==XR_SOURCE_OK?XR_SOURCE_EXECUTION_FAILED:status,NULL);return false;
     }
