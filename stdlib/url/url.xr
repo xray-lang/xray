@@ -142,7 +142,7 @@ fn isUnreserved(c: i64) -> bool {
 fn byteString(b: i64) -> string {
     var one = Array<u8>(1)
     one[0] = b as u8
-    return string.fromUtf8(one[:])!
+    return try! string.fromUtf8(one[:])
 }
 
 fn encodeImpl(s: string, form: bool) -> string {
@@ -203,10 +203,10 @@ fn decodeImpl(s: string, form: bool) -> string {
         oi = oi + 1
         i = i + 1
     }
-    return string.fromUtf8(out[:])!
+    return try! string.fromUtf8(out[:])
 }
 
-fn decodeQueryComponent(s: string, baseOffset: i64) -> string {
+fn decodeQueryComponent(s: string, baseOffset: i64) throws(UrlError) -> string {
     var src = s.copyBytes()
     var out = Array<u8>(decodedLen(src))
     var oi = 0
@@ -234,7 +234,7 @@ fn decodeQueryComponent(s: string, baseOffset: i64) -> string {
         oi = oi + 1
         i = i + 1
     }
-    return string.fromUtf8(out[:])!
+    return try! string.fromUtf8(out[:])
 }
 
 fn findChar(s: string, needle: rune, start: i64, end: i64) -> i64 {
@@ -405,7 +405,7 @@ export fn decodeForm(s: string) -> string {
 }
 
 // parseQuery - Parse a form-encoded query while preserving order and duplicates.
-export fn parseQuery(qs: string) -> QueryParams {
+export fn parseQuery(qs: string) throws(UrlError) -> QueryParams {
     var out = QueryParams()
     var start = 0
     if (qs.startsWith("?")) { start = 1 }
@@ -419,10 +419,10 @@ export fn parseQuery(qs: string) -> QueryParams {
         var keyEnd = pairEnd
         if (eq >= 0) { keyEnd = eq }
         if (pairEnd > start) {
-            var key = decodeQueryComponent(qs.slice(start, keyEnd), start)
+            var key = try decodeQueryComponent(qs.slice(start, keyEnd), start)
             var value = ""
             if (eq >= 0) {
-                value = decodeQueryComponent(qs.slice(eq + 1, pairEnd), eq + 1)
+                value = try decodeQueryComponent(qs.slice(eq + 1, pairEnd), eq + 1)
             }
             out.add(key, value)
         }

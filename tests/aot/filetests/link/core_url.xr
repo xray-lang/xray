@@ -16,7 +16,7 @@ print(r.host)
 print(r.origin)
 print(url.format(r))
 
-var q = url.parseQuery("msg=hello+world&key=a%26b")
+var q = try! url.parseQuery("msg=hello+world&key=a%26b")
 print(q.get("msg")!)
 print(q.get("key")!)
 print(q.encode())

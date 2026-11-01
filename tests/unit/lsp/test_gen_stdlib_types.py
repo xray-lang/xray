@@ -16,6 +16,9 @@ SPEC.loader.exec_module(GENERATOR)
 class PureFunctionSignatures(unittest.TestCase):
     def test_real_throwing_exports(self):
         expected = {
+            "url": {
+                "parseQuery": "(qs: string) throws(UrlError): QueryParams",
+            },
             "encoding": {
                 "hexDecode": "(hex: string) throws(HexError): Array<u8>",
                 "utf16Decode": "(data: Slice<u8>, options?: Utf16DecodeOptions) "

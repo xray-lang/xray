@@ -715,7 +715,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_url_symbols[] = {
     {"decode", XLSP_SYM_FUNCTION, "fn(s: string): string", "RFC 3986 percent-decode a string.", NULL, 0},
     {"encodeForm", XLSP_SYM_FUNCTION, "fn(s: string): string", "Form URL encode a string, using plus for spaces.", NULL, 0},
     {"decodeForm", XLSP_SYM_FUNCTION, "fn(s: string): string", "Form URL decode a string, treating plus as space.", NULL, 0},
-    {"parseQuery", XLSP_SYM_FUNCTION, "fn(qs: string): QueryParams", "Parse a form-encoded query while preserving order and duplicates.", NULL, 0},
+    {"parseQuery", XLSP_SYM_FUNCTION, "fn(qs: string) throws(UrlError): QueryParams", "Parse a form-encoded query while preserving order and duplicates.", NULL, 0},
     {"resolve", XLSP_SYM_FUNCTION, "fn(base: string, relative: string): string", "Resolve a relative URL reference against a base URL.", NULL, 0},
     {"join", XLSP_SYM_FUNCTION, "fn(...parts: string): string", "Join URL path segments.", NULL, 0},
     {"UrlError", XLSP_SYM_CLASS, "type UrlError", "Enum type", NULL, 0},
