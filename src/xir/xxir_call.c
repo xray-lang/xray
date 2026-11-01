@@ -76,8 +76,9 @@ typedef struct CallViewReturn {
     CallCellLoan *loan;
     const XrXirCellLoan *parent_loan;
     XrXirCellAuthority authority;
-    uint32_t parameter;
-    bool reference,prepared;
+    int64_t storage_identity;
+    uint32_t parameter,storage_field;
+    bool reference,prepared,storage;
 } CallViewReturn;
 typedef struct CallFrame {
     struct CallFrame *parent;

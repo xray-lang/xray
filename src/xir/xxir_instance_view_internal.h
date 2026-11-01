@@ -11,7 +11,13 @@
  */
 #ifndef XXIR_INSTANCE_VIEW_INTERNAL_H
 #define XXIR_INSTANCE_VIEW_INTERNAL_H
-#include "xxir_call.h"
+#include "xxir_call_internal.h"
 
 XR_FUNC XrXirCallStatus xir_instance_view_module_root(XrXirCallView *view,const XrXirValue *root);
+/* A missing genuine native/owned body proof returns no root. A present proof
+ * independently resolves the current actual receiver and returns one temporary
+ * owned Storage observation; callers drop it before leaving this operation. */
+XR_FUNC XrXirCallStatus xir_instance_buffer_view_origin(XrXirCallView *view,
+    const XrXirCallMetadata *metadata,uint32_t target,const XrXirValue *arguments,uint32_t count,
+    uint32_t *parameter,uint32_t *field,XrXirValue *output);
 #endif /* XXIR_INSTANCE_VIEW_INTERNAL_H */
