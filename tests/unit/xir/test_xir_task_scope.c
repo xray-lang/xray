@@ -56,6 +56,13 @@ static XrXirAction scope_root(XrXirCallView *view) {
     if(!phase) {
         CHECK(xr_xir_call_cleanup_frontier(view,1)==XR_XIR_CALL_READY);
         CHECK(xir_task_scope_begin(witness->executor,view,(XrXirType)257,1,&witness->group)==XR_XIR_CALL_BAD_ARGUMENT);
+        if(!witness->mode) {
+            size_t blocks=runtime_live,bytes=runtime_bytes;
+            runtime_fail_at=runtime_attempts+1;
+            CHECK(xir_task_scope_begin(witness->executor,view,(XrXirType)257,0,&witness->group)==XR_XIR_CALL_OOM);
+            runtime_fail_at=SIZE_MAX;
+            CHECK(!witness->group.type&&!witness->executor->groups&&runtime_live==blocks&&runtime_bytes==bytes);
+        }
         CHECK(xir_task_scope_begin(witness->executor,view,(XrXirType)257,0,&witness->group)==XR_XIR_CALL_READY);
         XrXirCallView forged=*view;XrXirValue refused={0};
         CHECK(xir_task_scope_begin(witness->executor,&forged,(XrXirType)257,0,&refused)!=XR_XIR_CALL_READY&&!refused.type);
@@ -63,6 +70,16 @@ static XrXirAction scope_root(XrXirCallView *view) {
             bool panic=(witness->mode==2||witness->mode==6||witness->mode==7)&&!i;
             XrXirValue argument={XR_XIR_I64,0,panic?-1:20+(int64_t)i*2};
             const XrXirCallRequest request={.entry=2,.arguments=&argument,.count=1};
+            if(!witness->mode&&!i) {
+                size_t blocks=runtime_live,bytes=runtime_bytes;
+                runtime_fail_at=runtime_attempts+1;
+                CHECK(xir_task_spawn_scoped(witness->executor,view,&witness->group,(XrXirType)256,
+                    &request,&witness->members[i])==XR_XIR_CALL_OOM);
+                runtime_fail_at=SIZE_MAX;
+                XirTaskGroup *group=((XirTask *)(uintptr_t)witness->group.payload)->aggregation;
+                CHECK(!witness->members[i].type&&!group->count&&!group->pending&&
+                    runtime_live==blocks&&runtime_bytes==bytes);
+            }
             CHECK(xir_task_spawn_scoped(witness->executor,view,&witness->group,(XrXirType)256,
                 &request,&witness->members[i])==XR_XIR_CALL_READY);
         }
