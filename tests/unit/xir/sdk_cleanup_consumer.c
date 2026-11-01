@@ -126,7 +126,8 @@ int main(void) {
     XrXirCallAccounting accounting;memset(&accounting,0,sizeof(accounting));
     XrXirCallConfig config;CHECK(xr_xir_call_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);config.entries=entries;config.entry_count=2;config.accounting=&accounting;
     config.admission.domain=domain;config.admission.work=100000;config.admission.scratch_bytes=100000;
-    XrXirCall *call=NULL;config.abi_version=36;CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_BAD_ABI && !call);config.abi_version=38;
+    XrXirCall *call=NULL;config.abi_version=36;CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_BAD_ABI && !call);
+    config.abi_version=37;CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_BAD_ABI && !call);config.abi_version=38;
     CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_READY);XrXirCallResult result;memset(&result,0,sizeof(result));
     XrXirCallResult observed;do{observed=xr_xir_call_poll_bounded(call,1);}while(observed.status==XR_XIR_CALL_READY);
     CHECK(observed.status==XR_XIR_CALL_CLEANUP_FAILED && xr_xir_call_result_copy(&observed,&result)==XR_XIR_VALUE_OK);
