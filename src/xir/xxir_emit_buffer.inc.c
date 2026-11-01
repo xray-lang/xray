@@ -255,7 +255,8 @@ static void emit_static_span(CBuffer *buffer, const EmitSpan *span) {
         buffer->status = XR_XIR_BAD_STRUCTURE;
         return;
     }
-    EmitSpanState state;
+    /* Commit reads state only after a successful begin; GCC cannot prove that. */
+    EmitSpanState state = {{NULL, NULL}, {0, 0}, {false, false}, 0};
     bool tracked = buffer->tracking;
     if (tracked && !emit_span_begin(buffer, span, &state)) return;
     if (buffer->measuring) {
