@@ -195,8 +195,8 @@ static void scope_case(uint32_t mode) {
     CHECK(xr_xir_task_copy_outcome(&witness.group,&group)==
         (mode==2||mode==6||mode==7?XR_XIR_CALL_BOUNDS:XR_XIR_CALL_RETURNED));
     xr_xir_call_result_drop(&group);CHECK(xr_xir_task_executor_root_idle(witness.executor));
-    CHECK(xr_xir_call_free(root)==XR_XIR_CALL_READY);
     CHECK(xr_xir_task_executor_free(witness.executor,NULL)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_call_free(root)==XR_XIR_CALL_READY);
     xr_xir_value_drop(&witness.group);
     for(unsigned i=0;i<2;++i)xr_xir_value_drop(&witness.members[i]);
     CHECK(!budget.live_bytes);xr_xir_domain_drop(domain);xr_xir_compile_program_drop(program);
