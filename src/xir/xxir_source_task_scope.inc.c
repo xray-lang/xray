@@ -88,7 +88,7 @@ static bool source_task_scope(SourceContext *ctx,AstNode *node,bool marked) {
             /* This private token cannot escape. Its complete error bound is
              * finalized before the owning recipe region can be sealed. */
             body->recipes[group.begin].instruction.type=group.group.type;
-            body->recipes[group.begin].root.type=group.group.type;
+            body->recipes[group.begin].root.declared=group.group.type;
         }
     }
     if(ok&&!ctx->returned) {
