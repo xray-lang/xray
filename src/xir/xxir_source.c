@@ -1849,6 +1849,7 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value);
 static bool source_defer(SourceContext *ctx, AstNode *node);
 static bool source_task_scope(SourceContext *ctx,AstNode *node,bool marked);
+static bool source_select(SourceContext *ctx,AstNode *node);
 static bool source_block_functions(SourceContext *ctx,AstNode *block);
 #include "xxir_source_view.inc.c"
 #include "xxir_source_copy.inc.c"

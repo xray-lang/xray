@@ -74,6 +74,11 @@ static XrXirStatus layout_outgoing(const LayoutInputRequest *request,
             uint32_t first=0;
             if(!xr_xir_direct_argument_range(op,&first,&count))return XR_XIR_BAD_STRUCTURE;
         }
+        if(op->op==XR_XIR_CHANNEL_SELECT) {
+            uint32_t timeout=op->immediate==2?1u:0u;
+            if(op->args[1]<=timeout)return XR_XIR_BAD_STRUCTURE;
+            count=op->args[1]-timeout;
+        }
         if (op->op==XR_XIR_TUPLE_NEW) {
             const XrXirTypeNode *tuple=xr_xir_tuple_signature(request->input->domain.types,op->type);
             if (!tuple) return XR_XIR_BAD_TYPE;
