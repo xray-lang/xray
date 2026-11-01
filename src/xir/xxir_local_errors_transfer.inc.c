@@ -31,7 +31,7 @@ static bool local_error_boundary(XrXirOp op) {
         op==XR_XIR_ITERATOR_CLOSE || op==XR_XIR_SUSPEND || op==XR_XIR_TIMER_AFTER_MS ||
         op==XR_XIR_PRINT || op==XR_XIR_OUTPUT || op==XR_XIR_WRITE_STREAM ||
         op==XR_XIR_CHANNEL_SEND || op==XR_XIR_CHANNEL_RECV || op==XR_XIR_CHANNEL_RECV_OR ||
-        op==XR_XIR_CHANNEL_SEND_TIMEOUT || op==XR_XIR_CHANNEL_RECV_TIMEOUT ||
+        op==XR_XIR_CHANNEL_SEND_TIMEOUT || op==XR_XIR_CHANNEL_RECV_TIMEOUT || op==XR_XIR_CHANNEL_SELECT ||
         op==XR_XIR_CLEANUP_LEAVE || op==XR_XIR_CLEANUP_ERROR || op==XR_XIR_CELL_LOCAL_WRITE;
 }
 static XrXirStatus local_error_instruction(LocalErrorCfg *cfg,uint32_t index) {
