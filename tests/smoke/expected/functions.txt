@@ -1,0 +1,11 @@
+3 + 4 = 7
+Hello, Alice!
+Hi, Bob!
+17 / 5 = 3 remainder 2
+double(5) = 10
+square(6) = 36
+clamp(15, 0, 10) = 10
+apply(square, 7) = 49
+sum(1,2,3,4,5) = 15
+10! = 3628800
+fib(10) = 55

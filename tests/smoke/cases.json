@@ -21,13 +21,17 @@
       "id": "demos/01-basics/functions.xr",
       "path": "demos/01-basics/functions.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F06",
-        "first_diagnostic": "demos/01-basics/functions.xr:47:4: error: variadic parameter syntax is not yet supported by the compiler"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/functions.txt"
+    },
+    {
+      "id": "native:demos/01-basics/functions.xr",
+      "path": "demos/01-basics/functions.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/functions.txt"
     },
     {
       "id": "demos/01-basics/hello.xr",
@@ -453,8 +457,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F06",
-        "first_diagnostic": "stdlib/math/math.xr:165:11: error: variadic parameter syntax is not yet supported by the compiler"
+        "feature": "F13",
+        "first_diagnostic": "stdlib/math/math.xr:30:12: error: name is not an initialized value"
       }
     },
     {
@@ -509,8 +513,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F06",
-        "first_diagnostic": "stdlib/path/path.xr:94:4: error: variadic parameter syntax is not yet supported by the compiler"
+        "feature": "F05",
+        "first_diagnostic": "stdlib/os/os.xr:39:4: error: move parameter syntax is not yet supported by the compiler"
       }
     },
     {
@@ -621,8 +625,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F06",
-        "first_diagnostic": "stdlib/url/url.xr:549:11: error: variadic parameter syntax is not yet supported by the compiler"
+        "feature": "F12",
+        "first_diagnostic": "stdlib/url/url.xr:145:19: error: E0330: throwing call requires try or a try body"
       }
     },
     {

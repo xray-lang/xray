@@ -130,10 +130,6 @@ static void hover_type_named(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSo
                     b->status=XR_XIR_BAD_TYPE;break;
                 }
                 hover_mode(b,p->mode);next=p->type;
-                if(n->kind==XR_XIR_TYPE_CALLABLE&&(n->flags&XR_XIR_CALLABLE_REST)&&f->index==n->parameter_count) {
-                    if(p->mode!=XR_PARAM_READ||!xr_xir_type_is_array(v->types,p->type)){b->status=XR_XIR_BAD_TYPE;break;}
-                    hover_text(b,"...");next=xr_xir_array_element(v->types,p->type);
-                }
                 if(n->kind==XR_XIR_TYPE_CALLABLE&&p->mode==XR_PARAM_REF)
                     next=xr_xir_cell_element(v->types,p->type);
                 push=true;continue;
@@ -225,12 +221,7 @@ static void hover_declaration(LspHoverBuilder *b,const XrXirSourceView *v,const 
             ++index;
             if(syntax->declarations[i].role==XR_XIR_SOURCE_SYNTAX_RECEIVER)continue;
             if(shown++)hover_text(b,", ");if(p->mutable)hover_text(b,"ref ");
-            XrXirSourceType shown_type=p->type;
-            if((d->flags&XR_XIR_SOURCE_DECL_REST)&&index==d->parameter_count) {
-                if(p->mutable||!xr_xir_type_is_array(v->types,shown_type.type)){b->status=XR_XIR_BAD_TYPE;break;}
-                hover_text(b,"...");shown_type.type=xr_xir_array_element(v->types,shown_type.type);
-            }
-            hover_text(b,p->name);hover_text(b,": ");hover_type(b,v,shown_type);
+            hover_text(b,p->name);hover_text(b,": ");hover_type(b,v,p->type);
         }
         if(b->status==XR_XIR_OK&&index!=d->parameter_count)b->status=XR_XIR_UNSUPPORTED;
         hover_text(b,") -> ");hover_type(b,v,d->type);return;
