@@ -53,13 +53,17 @@
       "id": "demos/01-basics/quoted_literals.xr",
       "path": "demos/01-basics/quoted_literals.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F16",
-        "first_diagnostic": "demos/01-basics/quoted_literals.xr:11:13: error: fixed byte literal syntax is not yet supported by the compiler"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/quoted_literals.txt"
+    },
+    {
+      "id": "native:demos/01-basics/quoted_literals.xr",
+      "path": "demos/01-basics/quoted_literals.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/quoted_literals.txt"
     },
     {
       "id": "demos/01-basics/tuples.xr",
