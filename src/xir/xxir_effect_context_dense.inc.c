@@ -39,11 +39,13 @@ typedef struct EffectDenseActual {
 
 static XrXirStatus effect_dense_actual(const EffectDenseRequest *request,
     uint32_t parameter, EffectDenseActual *actual) {
-    actual->present=parameter<request->instruction->args[1];
+    uint32_t first=0,count=0;
+    if(!xr_xir_direct_argument_range(request->instruction,&first,&count))return XR_XIR_BAD_STRUCTURE;
+    actual->present=parameter<count;
     actual->fixed=false;
     if (!actual->present) return XR_XIR_OK;
 
-    uint32_t value=request->caller->operands[request->instruction->args[0]+parameter];
+    uint32_t value=request->caller->operands[first+parameter];
     if (value>=request->value_count) return XR_XIR_BAD_VALUE;
     actual->fixed=request->fixed[value]!=0;
     actual->type=xr_xir_operand_type(request->caller,value);
@@ -100,8 +102,10 @@ static XrXirStatus effect_dense_build(const XrXirCompileContext *context,
         (op->args[1] && !caller->operands) || op->args[0]>caller->operand_count ||
         op->args[1]>caller->operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;
     uint32_t family=effect_context_family(op->op);
-    if (!family || op->args[1]>target->parameter_count ||
-        (family!=XR_XIR_EFFECT_BINDING_CAPTURE && op->args[1]!=target->parameter_count))
+    uint32_t first=0,count=0;
+    if(!xr_xir_direct_argument_range(op,&first,&count))return XR_XIR_BAD_STRUCTURE;
+    if (!family || count>target->parameter_count ||
+        (family!=XR_XIR_EFFECT_BINDING_CAPTURE && count!=target->parameter_count))
         return XR_XIR_BAD_STRUCTURE;
     EffectTerms *terms=&request->execution->terms;
     XrXirType *physical=target->parameter_count ?
