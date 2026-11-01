@@ -1478,9 +1478,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
     if (target && target->kind == SOURCE_NOMINAL) {
         if (call->type_arg_count < 0)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "invalid constructor type arguments");
-        XrXirType type;
-        return source_nominal_apply(ctx, target, call->type_args, (uint32_t)call->type_arg_count, &type) &&
-            source_constructor_call(ctx, node, type, binding, target, value);
+        return source_constructor_call(ctx, node, result_context, binding, target, value);
     }
     if (target && target->kind == SOURCE_FUNCTION && !selected.method)
         return source_function_call(ctx,node,binding,target,result_context,value);
