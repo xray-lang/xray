@@ -11,6 +11,7 @@
  *   its real callbacks must preserve both return scopes and metadata owners.
  */
 #include "xir/xxir_vm.h"
+#include "base/xresource_limits.h"
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"buffer native %d: %s\n",__LINE__,#c);exit(1);}} while (0)
