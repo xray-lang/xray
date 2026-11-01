@@ -193,7 +193,7 @@ int main(int argc,char **argv) {
     memset(packet.bytes,0x5a,packet.length);xr_xir_compile_checked_packet_free(&packet);
     status=xr_xir_compile_specialize(checked,&closed,&issue,NULL);
     fprintf(stderr,"MOVE Spec%u f%u b%u i%u\n",status,issue.function,issue.block,issue.instruction);CHECK(status==XR_XIR_OK);
-    xr_xir_compile_artifact_free(checked);const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    xr_xir_compile_artifact_free(checked);const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     status=xr_xir_compile_lower(closed,&target,NULL,&lowered,&issue);
     fprintf(stderr,"MOVE Lower%u f%u b%u i%u\n",status,issue.function,issue.block,issue.instruction);CHECK(status==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);

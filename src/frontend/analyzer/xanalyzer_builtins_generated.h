@@ -184,6 +184,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"__allocAligned", "(n: i64, align: i64): __BufferStorage", "Allocate n private managed bytes aligned to align (power-of-two >= sizeof(void*))", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_FRESH},
     {"__bufferLength", "(storage: __BufferStorage): i64", "Read the byte length from a private Buffer storage handle", true, false, true, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__bufferAsBytes", "(storage: __BufferStorage): Slice<u8>", "Borrow a readonly byte view from a private Buffer storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_BORROWED_PARAM_0},
+    {"__bufferSliceMutBegin", "(ptr: MutPtr<u8>, bytes: i64, owner: ref Buffer): MutSlice<u8>", "Begin a bounded exclusive byte scope of the exact referenced Buffer", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_BORROWED_PARAM_2},
     {"__bufferBorrowPtr", "(storage: __BufferStorage): MutPtr<u8>", "Borrow the raw pointer from a private Buffer storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_BORROWED_PARAM_0},
     {"__bufferResize", "(storage: __BufferStorage, n: i64): bool", "Resize a private Buffer storage handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__pageAlloc", "(bytes: i64, prot: i64): MutPtr<u8>", "Map zero-filled anonymous pages with explicit protection bits", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
@@ -193,7 +194,7 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
     {"__volatileLoad", "(ptr: Ptr<u8>, size: i64): i64", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
     {"__volatileStore", "(ptr: MutPtr<u8>, v: i64, size: i64): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_NO_HEAP, XR_PARAM_READ, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_MEM_FUNCTION_COUNT 18
+#define GEN_MEM_FUNCTION_COUNT 19
 
 static const XaBuiltinClass g_gen_net_classes[] = {
     {"__NetConnStorage", true, "NetConn", "_storage"},

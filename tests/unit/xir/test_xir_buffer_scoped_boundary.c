@@ -162,7 +162,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&cold,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(cold,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
-    CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},NULL,&code,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},NULL,&code,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);program_cases(&context,code);xr_xir_compile_artifact_free(code);
     CHECK(held(context.resources)==frame);xr_compile_resources_release(context.resources);
     puts("Buffer boundary: actual scope, cold ownership, Program refusal and recovery PASS");return 0;

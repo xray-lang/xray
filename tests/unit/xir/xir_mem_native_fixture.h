@@ -103,7 +103,7 @@ static XrXirArtifact *mem_native_fixture(const XrXirCompileContext *context) {
     CHECK(xir_fixture_verify(context,&module,NULL)==XR_XIR_BAD_TYPE);identities[3].native_callable=XR_NATIVE_CALLABLE_BUFFER_BORROW_PTR;
     CHECK(xir_fixture_verify(context,&module,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,&diagnostic,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     status=xr_xir_compile_lower(closed,&target,NULL,&lowered,&diagnostic);
     if(status!=XR_XIR_OK) fprintf(stderr,"mem lower status%u f%u b%u i%u\n",status,diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK);

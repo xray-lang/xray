@@ -52,6 +52,14 @@ class ContentStableGeneratorTests(unittest.TestCase):
     def test_analyzer_metadata_writer_preserves_unchanged_mtime(self) -> None:
         self.assert_content_stable(ANALYZERGEN.write_if_changed)
 
+    def test_scoped_buffer_declaration_has_no_legacy_binding(self) -> None:
+        entries = STDLIBGEN.parse_defs(ROOT)
+        entry = next(e for e in entries if e.module == "mem" and e.name == "__bufferSliceMutBegin")
+        self.assertEqual(entry.vm, "")
+        self.assertFalse(entry.aot_direct)
+        self.assertNotIn(entry, STDLIBGEN.unique_vm_binding_entries(entries))
+        self.assertNotIn("__bufferSliceMutBegin", STDLIBGEN.emit_aot_methods(entries, [], [], []))
+
     def compile_metadata(self, metadata, checks: str = "") -> None:
         compiler = COMPILER or os.environ.get("CC") or next(
             (path for name in ("cl", "clang", "cc") if (path := shutil.which(name))), None

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "evidence_scope": "generated-provider-path; binding and tests require build-bound evidence",
-  "leaf_count": 153,
+  "leaf_count": 154,
   "leaves": [
     {
       "symbol": "crypto.__fillRandomBytes",
@@ -1312,6 +1312,25 @@
     {
       "symbol": "mem.__bufferResize",
       "signature": "(storage: __BufferStorage, n: i64): bool",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "mem.__bufferSliceMutBegin",
+      "signature": "(ptr: MutPtr<u8>, bytes: i64, owner: ref Buffer): MutSlice<u8>",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [
