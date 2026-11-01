@@ -99,6 +99,39 @@ static void move_test_refusals(const XrXirCompileContext *context) {
         CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==before.held_bytes);
     }
 }
+typedef struct MoveRequestStop {uint32_t polls,stop;} MoveRequestStop;
+static bool move_request_cancel(const void *opaque) {
+    MoveRequestStop *state=(MoveRequestStop *)opaque;return ++state->polls==state->stop;
+}
+static void move_test_requests(const XrXirCompileContext *context,const char *text,size_t length) {
+    for(uint32_t kind=0;kind<4;++kind) {
+        XrXirCompileContext local=*context;XrCompileResourceStats before,after;
+        if(kind==3) {
+            const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,65536,false};local.resources=NULL;
+            CHECK(xr_compile_resources_new(&limits,&local.resources)==XR_COMPILE_RESOURCE_OK);
+        }
+        CHECK(xr_compile_resources_stats(local.resources,&before)==XR_COMPILE_RESOURCE_OK);
+        XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(local.resources,&session)==XR_COMPILE_RESOURCE_OK);
+        MoveRequestStop state={0,kind?64:1};XrCompileRequestControl control={0};
+        if(kind<3) {
+            XrCompileRequestOptions options={kind<2?move_request_cancel:NULL,kind<2?&state:NULL,
+                kind==2?XR_COMPILE_DEADLINE_AFTER:XR_COMPILE_DEADLINE_NONE,0};
+            CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+            CHECK(xr_compile_session_bind_request(session,&control)==XR_COMPILE_RESOURCE_OK);
+        }
+        XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"move-request",NULL};
+        XrXirSourceRequest request={.session=session,.authority=&authority,.context=&local,.linkage_kind=XR_XIR_PROGRAM};
+        XrXirSourceText input={.text=text,.length=length};XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+        XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,NULL);
+        fprintf(stderr,"MOVE request%u status%u polls%u\n",kind,status,state.polls);
+        CHECK(status==(kind<2?XR_XIR_CANCELLED:kind==2?XR_XIR_DEADLINE:XR_XIR_MEMORY_LIMIT)&&
+            !result.checked&&!result.snapshot);
+        if(kind<2)CHECK(state.polls==state.stop);
+        xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
+        CHECK(xr_compile_resources_stats(local.resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==before.held_bytes);
+        if(kind==3)xr_compile_resources_release(local.resources);
+    }
+}
 
 int main(int argc,char **argv) {
     CHECK(argc==1||argc==2);
@@ -124,6 +157,7 @@ int main(int argc,char **argv) {
     XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     move_test_previous(&context);move_test_panic_graph(&context);
+    if(argc==1)move_test_requests(&context,text,sizeof(text)-1);
     XrCompileResourceStats before={0},after={0};
     CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
     XrCompilerSession *session=NULL;
