@@ -209,8 +209,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F05",
-        "first_diagnostic": "demos/05-concurrency/shared_data.xr:46:4: error: move parameter syntax is not yet supported by the compiler"
+        "feature": "F19",
+        "first_diagnostic": "demos/05-concurrency/shared_data.xr:22:1: error: scope statement syntax is not yet supported by the compiler"
       }
     },
     {
@@ -433,8 +433,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F05",
-        "first_diagnostic": "stdlib/os/os.xr:39:4: error: move parameter syntax is not yet supported by the compiler"
+        "feature": "F02",
+        "first_diagnostic": "stdlib/sys/sys.xr:439:23: error: name does not resolve to an admitted nominal type"
       }
     },
     {
@@ -489,8 +489,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F05",
-        "first_diagnostic": "stdlib/os/os.xr:39:4: error: move parameter syntax is not yet supported by the compiler"
+        "feature": "F02",
+        "first_diagnostic": "stdlib/sys/sys.xr:439:23: error: name does not resolve to an admitted nominal type"
       }
     },
     {
@@ -509,8 +509,8 @@
       "exit_code": 1,
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
-        "feature": "F05",
-        "first_diagnostic": "stdlib/os/os.xr:39:4: error: move parameter syntax is not yet supported by the compiler"
+        "feature": "F02",
+        "first_diagnostic": "stdlib/sys/sys.xr:439:23: error: name does not resolve to an admitted nominal type"
       }
     },
     {
