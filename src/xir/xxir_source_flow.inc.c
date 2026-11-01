@@ -45,6 +45,7 @@ typedef struct SourceWriteScan {
     uint32_t depth;
     bool closure_only, inside_closure, found;
     bool local_storage; /* Conservative whole-region scan, including every dead branch. */
+    AstNode *hidden_body;
 } SourceWriteScan;
 /* Pattern targets are not expression children in the AST walker. Unknown
  * assignment shapes conservatively prevent narrowing and direct storage. */
@@ -66,6 +67,7 @@ static bool source_write_scan(AstNode *node, void *pointer) {
     if (!node || scan->found) return true;
     if (!((scan->ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (scan->local_storage && !source_request_poll(scan->ctx,node)) return false;
+    if(node==scan->hidden_body)return true;
     if (scan->depth == 128) return source_fail(scan->ctx, node, XR_XIR_BUDGET, "write scan depth exhausted");
     bool counted = !scan->closure_only || scan->inside_closure;
     if (!scan->local_storage && !scan->closure_only && node->type==AST_NULLISH_COALESCE) {
@@ -116,12 +118,23 @@ static bool source_write_scan(AstNode *node, void *pointer) {
     default: break;
     }
     if (counted && written && source_text_same(scan->ctx, node, written, scan->name)) { scan->found = true; return true; }
-    bool inside = scan->inside_closure;
+    bool inside = scan->inside_closure;AstNode *hidden=scan->hidden_body;
+    if(scan->local_storage && (node->type==AST_FUNCTION_EXPR || node->type==AST_FUNCTION_DECL)) {
+        const FunctionDeclNode *function=node->type==AST_FUNCTION_EXPR?&node->as.function_expr:&node->as.function_decl;
+        if(function->param_count<0 || (function->param_count&&!function->params))
+            return source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"write scan has no actual parameter bindings");
+        for(int p=0;p<function->param_count;++p) {
+            if(!source_request_poll(scan->ctx,node))return false;
+            const XrParamNode *parameter=function->params[p];
+            if(parameter && !parameter->pattern && parameter->name &&
+                source_text_same(scan->ctx,node,parameter->name,scan->name))scan->hidden_body=function->body;
+        }
+    }
     if (node->type == AST_FUNCTION_EXPR || node->type == AST_FUNCTION_DECL || node->type == AST_DEFER_STMT ||
         (scan->local_storage && node->type==AST_METHOD_DECL)) scan->inside_closure = true;
     ++scan->depth;
     bool ok = xr_ast_for_each_child(node, source_write_scan, scan);
-    --scan->depth; scan->inside_closure = inside;
+    --scan->depth; scan->inside_closure = inside;scan->hidden_body=hidden;
     return ok || source_fail(scan->ctx, node, XR_XIR_BAD_STRUCTURE, "unknown syntax in write scan");
 }
 static bool source_region_writes(SourceContext *ctx, AstNode *region, const char *name, bool closure_only, bool *writes) {
