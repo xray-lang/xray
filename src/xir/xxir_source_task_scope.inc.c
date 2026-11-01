@@ -94,7 +94,7 @@ static bool source_task_scope(SourceContext *ctx,AstNode *node,bool marked) {
     if(ok&&!ctx->returned) {
         uint32_t error=body->block_count;
         if(error==UINT32_MAX)return source_fail(ctx,node,XR_XIR_OVERFLOW,"scope continuation overflow");
-        uint32_t origin=body->count;SourceValue caught;
+        uint32_t origin=body->count;SourceValue caught={0};
         ok=source_recipe_append(ctx,(XrXirInstruction){XR_XIR_SCOPE_JOIN,XR_XIR_UNIT,{group.group.id},{error+1,error},0,{0}},NULL)&&begin_block(ctx)&&
             source_recipe_append(ctx,(XrXirInstruction){XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},origin,{0}},&caught);
         if(ok)ok=body->error_context?(source_error_edge(ctx,caught)&&source_handler_site(ctx,origin,caught.id)):
