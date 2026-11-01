@@ -2134,6 +2134,12 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     }
     status=value_call_status(converted);if (status!=XR_XIR_CALL_READY) goto failed;
     status=xr_xir_call_execution_status(view);if (status!=XR_XIR_CALL_READY) goto failed;
+    if (!thrown && id==XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN) {
+        XrXirAction action={0};
+        status=xr_xir_call_return_move(view,value,&action);
+        if (status!=XR_XIR_CALL_READY) goto failed;
+        return action;
+    }
     return (XrXirAction) {thrown ? XR_XIR_ACTION_THROW : XR_XIR_ACTION_RETURN,
                           0,
                           NULL,
