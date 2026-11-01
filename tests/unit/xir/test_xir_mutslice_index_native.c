@@ -20,9 +20,9 @@ static void mutslice_program_refusals(const XrXirCompileContext *context) {
         XrXirType type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);uint32_t f=mutslice_index_ids[0];
         XrXirCallEntry saved=entries[f];XrXirProgram *rejected=NULL;
         entries[f].result=type;
-        CHECK(xr_xir_compile_program_seal(context,&bad,&rejected)==XR_XIR_BAD_TYPE&&!rejected);
+        CHECK(xr_xir_compile_program_seal(context,&bad,&rejected)==XR_XIR_BAD_STRUCTURE&&!rejected);
         entries[f]=saved;entries[f].parameters=&type;entries[f].parameter_count=1;
-        CHECK(xr_xir_compile_program_seal(context,&bad,&rejected)==XR_XIR_BAD_TYPE&&!rejected);
+        CHECK(xr_xir_compile_program_seal(context,&bad,&rejected)==XR_XIR_BAD_STRUCTURE&&!rejected);
         entries[f]=saved;++tested;
         CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&before.held_bytes==after.held_bytes);
     }
