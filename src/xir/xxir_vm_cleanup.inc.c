@@ -51,6 +51,19 @@ static XrXirAction vm_cleanup_continue(ScalarRun *run, VmState *state) {
         return vm_panic_land(run, state, handler, (XrXirAction){XR_XIR_ACTION_FAULT, 0, NULL, 0,
             {XR_XIR_I64, 0, run->view->inbox.status}, run->view->inbox.panic, 0});
     }
+    const XrXirInstruction *producer=run->function->instructions+state->instruction;
+    uint32_t first=run->function->blocks[state->exit_block].first;
+    const XrXirInstruction *landing=run->function->instructions+first;
+    if(producer->op==XR_XIR_CLEANUP_ERROR&&landing->op==XR_XIR_INVOKE_ERROR) {
+        if(landing->type!=XR_XIR_ERROR||landing->immediate!=state->instruction||
+            run->view->inbox.status!=XR_XIR_CALL_THROWN)return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
+        uint32_t destination=run->layout->offsets[run->function->parameter_count+first];
+        XrXirValueStatus copied=xr_xir_owned_slot_copy(run->frame,destination,run->view->arena,
+            XR_XIR_ERROR,run->view->inbox.value.payload);
+        if(copied!=XR_XIR_VALUE_OK)return xr_xir_call_view_operation_fault(copied,(XrXirFaultDetail){0});
+        state->instruction=first+1;
+        return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};
+    }
     XrXirRunStatus status = scalar_edge(run, state->instruction, state->exit_block);
     if (status != XR_XIR_RUN_OK) return xr_xir_call_fault(status);
     state->instruction = run->function->blocks[state->exit_block].first;
