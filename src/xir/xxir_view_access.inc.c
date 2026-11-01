@@ -66,6 +66,12 @@ static XrXirStatus view_access_pair(ViewAccess *a,const ViewAccessOrigin *left_o
     if (left->kind==XR_XIR_VIEW_LOAN_ABSENT || right->kind==XR_XIR_VIEW_LOAN_ABSENT) {*output=VIEW_ACCESS_SAFE;return XR_XIR_OK;}
     if (!writable && view_access_shared(a,right->type)) {*output=VIEW_ACCESS_SAFE;return XR_XIR_OK;}
     if (left->kind==XR_XIR_VIEW_LOAN_UNRESOLVED || right->kind==XR_XIR_VIEW_LOAN_UNRESOLVED) return XR_XIR_OK;
+    if (view_pointer(a->resolver->check.module->types,left->type) &&
+        view_pointer(a->resolver->check.module->types,right->type)) {
+        /* Raw aliases are copyable; this compatibility proves no separation
+         * and cannot remove a physical Slice's independent write restriction. */
+        *output=VIEW_ACCESS_SAFE;return XR_XIR_OK;
+    }
     bool entry=false;XrXirStatus status=view_access_entry_pair(a,left,right,&entry);
     if (status != XR_XIR_OK)
         return status;
@@ -181,7 +187,8 @@ static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner
             if (value==owner) status=view_access_same_owned_leaf(a,l,r,&own);
             if (status!=XR_XIR_OK) return status;
             ViewAccessDecision decision=own?VIEW_ACCESS_SAFE:VIEW_ACCESS_UNKNOWN;
-            bool write=writable && !view_access_shared(a,l->event.type);
+            bool write=writable && (!view_access_shared(a,l->event.type) ||
+                view_pointer(a->resolver->check.module->types,l->event.type));
             if (!own) status=view_access_pair(a,l,r,write,&decision);
             if (status!=XR_XIR_OK) return status;
             if (decision!=VIEW_ACCESS_SAFE) {
@@ -204,6 +211,9 @@ static XrXirStatus view_access_use(ViewAccess *a,const XrXirViewOwnerSet *owners
     for (uint32_t p=0;p<owners->count;++p) {
 
         if (!(owners->bits[p/64]&(UINT64_C(1)<<(p%64)))) continue;
+        uint32_t raw=a->cache[owners->values[p]].raw_index;
+        if (raw && !(a->raw_live[(size_t)a->instruction*a->raw_words+(raw-1u)/64u]&
+            (UINT64_C(1)<<((raw-1u)%64u)))) continue;
         XrXirStatus status=view_access_owner(a,value,owners->values[p],writable,view,blocked);
         if (status!=XR_XIR_OK) return status;
     }
@@ -388,7 +398,10 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
         XrXirPlaceKind place=xr_xir_place_kind(a->body,value);XrXirOperandRole role=xr_xir_operand_role(op->op,p);
         if (borrowed) {
             if (!call && !pointer) return XR_XIR_UNRESOLVED;
-            XrXirStatus status=view_access_use(a,&event->before,value,(borrowed&XR_XIR_VIEW_MUTABLE)!=0,true,NULL);
+            const XrXirTypeNode *node=xr_xir_type_node(types,type);
+            bool write=(borrowed&XR_XIR_VIEW_MUTABLE)!=0 || (node && node->kind==XR_XIR_TYPE_MUT_PTR &&
+                (call || ((op->op==XR_XIR_PTR_STORE || op->op==XR_XIR_PTR_COPY) && p==0)));
+            XrXirStatus status=view_access_use(a,&event->before,value,write,true,NULL);
             if (status!=XR_XIR_OK) return status;
         } else if (cell || object || type==XR_XIR_BUFFER_STORAGE || place!=XR_XIR_PLACE_NONE) {
             bool read=op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CLASS_GET || role==XR_XIR_OPERAND_READ || (receiver_read && p==0);

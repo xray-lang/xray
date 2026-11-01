@@ -18,6 +18,7 @@
 #include "xir/xxir_internal.h"
 #include "base/xresource_limits.h"
 #include "xir/xxir_types.h"
+#include "xir/xxir_type_arena.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +27,56 @@
 static uint64_t held(XrCompileResources *resources) {
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(resources,&stats)==XR_COMPILE_RESOURCE_OK);
     return stats.held_bytes;
+}
+static void physical_flags(const XrXirCompileContext *context) {
+    XrXirCallableParameter field={(XrXirType)256,XR_PARAM_READ};
+    XrXirTypeNode nodes[]={
+        {.kind=XR_XIR_TYPE_MUT_PTR,.element=XR_XIR_U8},
+        {.kind=XR_XIR_TYPE_ARRAY,.element=(XrXirType)256},
+        {.kind=XR_XIR_TYPE_TUPLE,.parameters=&field,.parameter_count=1},
+        {.kind=XR_XIR_TYPE_SLICE,.element=XR_XIR_U8}
+    };
+    XrXirTypes types={nodes,4,NULL,NULL};XrXirTypeArena *arena=NULL;
+    CHECK(xr_xir_compile_type_arena_new(context,&types,&arena)==XR_XIR_VALUE_OK);
+    for (uint32_t i=0;i<3;++i) CHECK(!xr_xir_compile_type_arena_borrowed(arena,(XrXirType)(256+i)));
+    CHECK(xr_xir_compile_type_arena_borrowed(arena,(XrXirType)259)==1);
+    xr_xir_compile_type_arena_drop(arena);
+}
+static void source_control(const XrXirSourceRequest *request,const char *text,bool accepted,const char *name) {
+    XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    XrXirStatus status=xr_xir_compile_source_check_text(request,
+        &(XrXirSourceText){NULL,text,strlen(text)},&source,&diagnostic,NULL);
+    if ((status==XR_XIR_OK)!=accepted) fprintf(stderr,"case %s status%u %d:%d %s\n",
+        name,status,diagnostic.line,diagnostic.column,diagnostic.message);
+    CHECK((status==XR_XIR_OK)==accepted && (accepted?source.checked!=NULL:source.checked==NULL));
+    xr_xir_compile_source_result_free(&source);
+}
+static void caller_controls(const XrXirCompileContext *context,const char *stdlib) {
+    static const struct {const char *name,*source;bool accepted;} cases[]={
+        {"receiver-slice","import mem\nfn use(b:mem.Buffer)->i64 {const v=b.asBytes();return len(v)}\nprint(1)\n",true},
+        {"pointer-copy-length","import mem\nfn use(b:mem.Buffer)->i64 {const p=b.borrowPtr();const q=p;const n=len(b);unsafe {return (q[0] as i64)+n}}\nprint(1)\n",true},
+        {"local-buffer","import mem\nfn use()->i64 {var b=mem.alloc(4);const p=b.borrowPtr();unsafe {return (p[0] as i64)+len(b)}}\nprint(1)\n",true},
+        {"raw-alias-write","import mem\nfn use(b:mem.Buffer)->i64 {const p=b.borrowPtr();const q=p;unsafe {p[0]=1 as u8;return q[0] as i64}}\nprint(1)\n",true},
+        {"resize-after-pointer","import mem\nfn use(b:mem.Buffer)->i64 {unsafe {const p=b.borrowPtr();p[0]=1 as u8};b.resize(8);return len(b)}\nprint(1)\n",true},
+        {"null-return","import mem\nfn use()->MutPtr<u8> {return MutPtr<u8>.null()}\nprint(1)\n",true},
+        {"resize-live-pointer","import mem\nfn use(b:mem.Buffer) {const p=b.borrowPtr();b.resize(8);unsafe {print(p[0])}}\nprint(1)\n",false},
+        {"alias-resize-live-slice","import mem\nfn use(a:mem.Buffer,b:mem.Buffer) {const v=a.asBytes();b.resize(8);print(len(v))}\nprint(1)\n",false},
+        {"pointer-write-live-slice","import mem\nfn use(b:mem.Buffer) {const v=b.asBytes();const p=b.borrowPtr();unsafe {p[0]=1 as u8};print(len(v))}\nprint(1)\n",false},
+        {"rebind-buffer","import mem\nfn use() {var b=mem.alloc(4);const p=b.borrowPtr();b=mem.alloc(8);unsafe {print(p[0])}}\nprint(1)\n",false},
+        {"alias-demand-survives","import mem\nfn use(b:mem.Buffer) {const p=b.borrowPtr();const q=p;unsafe {print(p[0])};b.resize(8);unsafe {print(q[0])}}\nprint(1)\n",false},
+        {"local-buffer-return","import mem\nfn use()->MutPtr<u8> {const b=mem.alloc(4);return b.borrowPtr()}\nprint(1)\n",false},
+        {"temporary-buffer","import mem\nfn use() {const p=mem.alloc(4).borrowPtr();unsafe {print(p[0])}}\nprint(1)\n",false},
+        {"pointer-array-escape","import mem\nfn use(b:mem.Buffer) {const p=b.borrowPtr();const escaped=[p];print(len(escaped))}\nprint(1)\n",false},
+        {"bound-method-escape","import mem\nfn use(b:mem.Buffer) {const f=b.borrowPtr;const p=f();unsafe {print(p[0])}}\nprint(1)\n",false}
+    };
+    for (uint32_t i=0;i<sizeof(cases)/sizeof(*cases);++i) {
+        XrCompilerSession *session=NULL;
+        CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
+        XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,cases[i].name,NULL};
+        XrXirSourceRequest request={session,NULL,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,NULL};
+        source_control(&request,cases[i].source,cases[i].accepted,cases[i].name);
+        xr_compile_session_free(session);
+    }
 }
 int main(int argc,char **argv) {
     CHECK(argc==2);char stdlib[2048];
@@ -70,6 +121,7 @@ int main(int argc,char **argv) {
     XrXirArtifact *rejected=NULL;
     CHECK(xr_xir_compile_recheck_v2(&context,module,missing,&rejected,NULL,NULL)!=XR_XIR_OK && !rejected);
     xr_xir_compile_construction_free(missing);xr_compile_resources_free(rows);xr_compile_resources_free(materializations);
-    xr_xir_compile_artifact_free(cold);CHECK(held(resources)==frame);xr_compile_resources_release(resources);
+    xr_xir_compile_artifact_free(cold);CHECK(held(resources)==frame);
+    physical_flags(&context);caller_controls(&context,stdlib);CHECK(held(resources)==frame);xr_compile_resources_release(resources);
     puts("mem source return facts PASS");return 0;
 }

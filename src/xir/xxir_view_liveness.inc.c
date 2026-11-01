@@ -270,3 +270,23 @@ XR_FUNC XrXirStatus xir_compile_view_liveness_verified(const XrXirCompileContext
     }
     xr_compile_resources_free(flags);return status;
 }
+XR_FUNC XrXirStatus xir_compile_view_liveness_function_verified(const XrXirCompileContext *context,
+    const XrXirModule *module,uint32_t function,XrXirViewLiveVisitor visitor,void *user,XrXirDiagnostic *diagnostic) {
+    if (!xir_compile_context_valid(context) || !module || !module->functions || function>=module->function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    if (module->declarations && module->declarations->functions[function].native_callable)
+        return xir_native_callable_verify(module,function);
+    uint64_t fixed=sizeof(ViewLive)+(module->types?module->types->count:0u);
+    if (fixed>context->limits.frame_bytes) return XR_XIR_BUDGET;
+    XrXirCompileContext remaining=*context;remaining.limits.frame_bytes-=fixed;
+    uint8_t *flags=NULL;XrXirStatus status=xir_compile_view_static_flags_new(&remaining,module->types,&flags);
+    if (status!=XR_XIR_OK || !flags) return status;
+    ViewLive a={.context=&remaining,.module=module,.function=module->functions+function,.types=flags,.visitor=visitor,.user=user,
+        .location={XR_XIR_OK,function,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
+    status=view_live_allocate(&a);
+    if (status==XR_XIR_OK && a.count) status=view_live_graph(&a);
+    if (status==XR_XIR_OK && a.count) status=view_live_solve(&a);
+    if (status==XR_XIR_OK && a.count) status=view_live_visit(&a);
+    if (status!=XR_XIR_OK && diagnostic) {*diagnostic=a.location;diagnostic->status=status;}
+    view_live_free(&a);xr_compile_resources_free(flags);return status;
+}
