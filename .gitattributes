@@ -105,3 +105,4 @@ tests/cli/fixtures/csv/* text eol=lf
 # Checked historical packets retain their authentic producer bytes.
 tests/fixtures/xir_rune_whitespace/*.chk -text
 tests/fixtures/xir_buffer_storage/*.xrc -text
+tests/fixtures/xir_move/*.chk -text
