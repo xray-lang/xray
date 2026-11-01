@@ -19,7 +19,8 @@
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"select Call %d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_runtime_allocations.h"
 #include "xir_native_metadata_fixture.h"
-enum { SELECT_CHANNEL=256,SELECT_NULLABLE,SELECT_RESULT };
+enum { SELECT_INNER_NULLABLE=256,SELECT_CHANNEL,SELECT_NULLABLE,SELECT_STRING_CHANNEL,
+       SELECT_STRING_NULLABLE,SELECT_RESULT };
 typedef struct SelectWitness {
     XrXirValue channels[2];uint64_t now;uint32_t mode,samples,steps,winner;
 } SelectWitness;
@@ -55,7 +56,18 @@ static XrXirAction select_root(XrXirCallView *view) {
         XrXirValue field={0};bool some=false;const XrXirValue *payload=NULL;
         CHECK(xr_xir_tuple_get(&result,a+1,&field)==XR_XIR_VALUE_OK);
         CHECK(xr_xir_nullable_view(&field,&some,&payload)&&some==(a==w->winner));
-        if(some)CHECK(payload&&payload->type==XR_XIR_I64&&payload->payload==42);
+        if(some) {
+            CHECK(payload);
+            if(w->mode==9) {
+                const char *text=NULL;size_t length=0;
+                CHECK(xr_xir_string_view(payload,&text,&length)&&length==2&&!memcmp(text,"42",2));
+            } else if(w->mode==10)CHECK(!payload->type&&!payload->reserved&&!payload->payload);
+            else if(w->mode==11) {
+                bool inner=false;const XrXirValue *integer=NULL;
+                CHECK(payload->type==SELECT_INNER_NULLABLE&&xr_xir_nullable_view(payload,&inner,&integer)&&
+                    inner&&integer&&integer->type==XR_XIR_I64&&integer->payload==42);
+            } else CHECK(payload->type==XR_XIR_I64&&payload->payload==42);
+        }
         xr_xir_value_drop(&field);
     }
     xr_xir_value_drop(&tag);xr_xir_value_drop(&result);
@@ -75,11 +87,17 @@ static void select_case(uint32_t mode) {
         {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_UNIT,.resume=select_init},
         {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_I64,.state_bytes=sizeof(XrXirChannelSelectCallState),
          .resume=select_root,.environment=&witness}};
-    const XrXirCallableParameter fields[]={{XR_XIR_I64,XR_PARAM_READ},{(XrXirType)SELECT_NULLABLE,XR_PARAM_READ},{(XrXirType)SELECT_NULLABLE,XR_PARAM_READ}};
-    const XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_CHANNEL,.element=XR_XIR_I64},
-        {.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_I64},
+    XrXirType element=mode==10?XR_XIR_UNIT:mode==11?(XrXirType)SELECT_INNER_NULLABLE:XR_XIR_I64;
+    XrXirType outer=mode==10||mode==11?(XrXirType)SELECT_NULLABLE:(XrXirType)SELECT_INNER_NULLABLE;
+    const XrXirCallableParameter fields[]={{XR_XIR_I64,XR_PARAM_READ},{outer,XR_PARAM_READ},
+        {mode==9?(XrXirType)SELECT_STRING_NULLABLE:outer,XR_PARAM_READ}};
+    const XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_I64},
+        {.kind=XR_XIR_TYPE_CHANNEL,.element=element},
+        {.kind=XR_XIR_TYPE_NULLABLE,.element=mode==11?(XrXirType)SELECT_INNER_NULLABLE:XR_XIR_UNIT},
+        {.kind=XR_XIR_TYPE_CHANNEL,.element=XR_XIR_STRING},
+        {.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_STRING},
         {.kind=XR_XIR_TYPE_TUPLE,.parameters=fields,.parameter_count=3}};
-    const XrXirTypes types={nodes,3,NULL,NULL};
+    const XrXirTypes types={nodes,6,NULL,NULL};
     const XrXirSourceModule source={"selection",9,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[]={{0},{.exported=1}};
     const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
@@ -92,8 +110,19 @@ static void select_case(uint32_t mode) {
     const XrXirDomainBudgetControls controls={8388608,8388608,XR_RESOURCE_SANDBOX_RUNTIME_WORK,4194304,4194304};
     CHECK(xr_xir_domain_budget_bind(domain,&controls)==XR_XIR_VALUE_OK);
     XrXirValueAdmission admission={program->arena,domain,NULL,NULL,XR_RESOURCE_SANDBOX_RUNTIME_WORK,4194304};
-    for(unsigned a=0;a<2;++a)CHECK(xr_xir_channel_new((XrXirType)SELECT_CHANNEL,2,&admission,&witness.channels[a])==XR_XIR_VALUE_OK);
+    for(unsigned a=0;a<2;++a)CHECK(xr_xir_channel_new(mode==9&&a==1?
+        (XrXirType)SELECT_STRING_CHANNEL:(XrXirType)SELECT_CHANNEL,2,&admission,&witness.channels[a])==XR_XIR_VALUE_OK);
     if(mode==0||mode==4||mode==6||mode==8)select_send(&admission,&witness.channels[0]);
+    if(mode>=9) {
+        XrXirValue message={0};XrXirChannelState sent=XR_XIR_CHANNEL_RETRY;
+        if(mode==9)CHECK(xr_xir_string_new(domain,"42",2,&message)==XR_XIR_VALUE_OK);
+        if(mode==11) {
+            XrXirValue integer={XR_XIR_I64,0,42};
+            CHECK(xr_xir_nullable_new((XrXirType)SELECT_INNER_NULLABLE,&integer,&admission,&message)==XR_XIR_VALUE_OK);
+        }
+        CHECK(xr_xir_channel_send_owned(&witness.channels[mode==9?1:0],&message,&admission,&sent)==XR_XIR_VALUE_OK&&
+            sent==XR_XIR_CHANNEL_SENT&&!message.type&&!message.payload);
+    }
     XrXirCallAccounting accounting={0};
     XrXirCallConfig config;CHECK(xr_xir_call_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     config.accounting=&accounting;
@@ -116,6 +145,8 @@ static void select_case(uint32_t mode) {
     CHECK(result.status==(mode==5?XR_XIR_CALL_HOST_ERROR:mode==6||mode==8?XR_XIR_CALL_OOM:mode==7?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_RETURNED));
     if(mode==1||mode==2)CHECK(witness.winner==2);
     if(mode==3)CHECK(witness.winner==1);
+    if(mode==4)CHECK(witness.steps==2);
+    if(mode>=9)CHECK(witness.winner==(mode==9?1u:0u));
     CHECK(xr_xir_call_free(call)==XR_XIR_CALL_READY);
     if(mode==6||mode==8) {
         XrXirValue untouched={0};XrXirChannelState received=XR_XIR_CHANNEL_RETRY;
@@ -128,4 +159,4 @@ static void select_case(uint32_t mode) {
     CHECK(native_fixture_stats(&compiler.context).held_bytes==baseline.held_bytes);native_fixture_owner_free(&compiler);
     CHECK(!runtime_live&&!runtime_bytes);
 }
-int main(void) {for(uint32_t mode=0;mode<9;++mode)select_case(mode);return 0;}
+int main(void) {for(uint32_t mode=0;mode<12;++mode)select_case(mode);return 0;}
