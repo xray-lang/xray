@@ -96,7 +96,9 @@ static void rejections(const XrXirCompileContext *context) {
         {"fn worker(values:ref Array<i64>){}\nfn run(){var values=[42];const task=go worker(ref values)}",XR_XIR_BAD_TYPE},
         {"fn worker(values:Array<i64>){}\nfn run(){var values=[42];const task=go worker(move values)}",XR_XIR_BAD_TYPE},
         {"fn bad(){var x=42;scope {go fn(){print(x)}()}}",XR_XIR_BAD_TYPE},
-        {"enum ErrorCode{Bad}\nfn bad(){scope {go fn() throws(ErrorCode){throw ErrorCode.Bad}()}}",XR_XIR_UNSUPPORTED},
+        {"enum ErrorCode{Bad}\nfn bad(){scope(isolated) {go fn() throws(ErrorCode){throw ErrorCode.Bad}()}}",XR_XIR_UNSUPPORTED},
+        {"enum ErrorCode{Bad}\nfn bad() throws(ErrorCode){scope {go fn() throws(ErrorCode){throw ErrorCode.Bad}()}}",XR_XIR_BAD_TYPE},
+        {"enum ErrorCode{Bad}\nfn bad(){try scope {go fn() throws(ErrorCode){throw ErrorCode.Bad}()}}",XR_XIR_BAD_TYPE},
         {"enum WorkError{Failed}\nfn failed() throws(WorkError){throw WorkError.Failed}\nfn worker(){}\n"
             "fn run() throws(WorkError){scope{go worker();try failed()}}",XR_XIR_BAD_TYPE},
         {"enum WorkError{Failed}\nfn failed() throws(WorkError){throw WorkError.Failed}\nfn worker(){}\n"

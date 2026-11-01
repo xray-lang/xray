@@ -5,7 +5,9 @@ assert(initTotal.load() == 42)
 fn worker(value: i64) { total.add(value) }
 fn failed() { assert(false) }
 enum WorkError { Failed }
+enum PayloadError { Failed { values: Array<i64> } }
 fn businessError() throws(WorkError) { throw WorkError.Failed }
+fn payloadError() throws(PayloadError) { throw PayloadError.Failed { values: [40, 2] } }
 fn consume(values: move Array<i64>) {
     assert(values[0] == 41)
     values[0] = 42
@@ -64,6 +66,24 @@ fn protectedBody() {
     try { try propagatedBody() } catch (error: WorkError) { caught = true }
     assert(caught)
 }
+fn propagatedChildren() throws(WorkError) {
+    try scope { go businessError(); go worker(0) }
+}
+fn childErrors() {
+    var caught = false
+    try { try propagatedChildren() } catch (error: WorkError) { caught = true }
+    assert(caught)
+    caught = false
+    try {
+        try scope { go payloadError(); go worker(0) }
+    } catch (error: PayloadError) {
+        match (error) {
+            PayloadError.Failed { values: items } -> { assert(len(items) == 2 && items[0] + items[1] == 42) }
+        }
+        caught = true
+    }
+    assert(caught)
+}
 fn assertedBody() {
     var caught = false
     try { scope { go worker(0); try! businessError() } } catch panic { caught = true }
@@ -86,6 +106,7 @@ export fn main() -> i64 {
     borrowedBeforeJoin()
     handledBody()
     protectedBody()
+    childErrors()
     assertedBody()
     scope { go worker(20); go fn() { total.add(22) }() }
     assert(total.load() == 42)
