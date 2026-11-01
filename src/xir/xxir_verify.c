@@ -274,6 +274,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                                     const XrXirConstruction *construction) {
     if (op->op <= XR_XIR_INVALID || op->op >= XR_XIR_OP_COUNT)
         return XR_XIR_BAD_STRUCTURE;
+    if(op->op==XR_XIR_CELL_TAKE || op->op==XR_XIR_VALUE_TAKE || op->op==XR_XIR_CELL_NEW_TAKE)
+        return XR_XIR_UNSUPPORTED;
     if (op->op>=XR_XIR_PTR_NULL && op->op<=XR_XIR_PTR_EQ &&
         (op->targets[0] || op->targets[1] || op->type_arguments[0] || op->type_arguments[1] ||
          (op->op==XR_XIR_PTR_EQ?(op->immediate<0 || op->immediate>1):op->immediate!=0) ||

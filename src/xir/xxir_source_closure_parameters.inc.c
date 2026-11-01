@@ -18,17 +18,18 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"closure parameter scope was not reserved");
     SourceFunction *body = &ctx->bodies[ctx->function];
     FunctionDeclNode *decl = &node->as.function_expr;
+    if(!source_move_parameters(ctx,ctx->function,decl->params,(uint32_t)decl->param_count,scan->count))return false;
     for (int i = 0; i < decl->param_count; ++i) {
         XrParamNode *param = decl->params[i];
         XrXirType type;
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-        if ((param->passing_mode != XR_PARAM_READ && param->passing_mode != XR_PARAM_REF) ||
+        if ((param->passing_mode != XR_PARAM_READ && param->passing_mode != XR_PARAM_REF && param->passing_mode!=XR_PARAM_MOVE) ||
             param->default_value || param->pattern ||
             (param->is_rest && (node->type!=AST_FUNCTION_DECL || i+1!=decl->param_count ||
                 param->passing_mode!=XR_PARAM_READ || !param->type)) || (!param->type && !context))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter requires an annotation or complete callable context");
         XrParamMode mode = param->passing_mode;
-        if (context && mode == XR_PARAM_READ) mode = (XrParamMode)context->parameters[i].mode;
+        if (context && mode == XR_PARAM_READ && context->parameters[i].mode==XR_PARAM_REF)mode=XR_PARAM_REF;
         if (context && (uint32_t)mode != context->parameters[i].mode)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter mode differs from its callable context");
         bool by_reference = mode == XR_PARAM_REF;
@@ -47,7 +48,10 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
         SourceName *symbol = source_parameter_name(ctx,node,param,scope+1);
         if (!symbol) return false;
         symbol->kind = SOURCE_LOCAL; symbol->index = scan->count + (uint32_t)i;
-        symbol->type=type;symbol->mutable=by_reference;symbol->declared_mode=mode;
+        symbol->type=type;symbol->mutable=by_reference||mode==XR_PARAM_MOVE;symbol->declared_mode=mode;
+        XrXirType physical=type;
+        if(by_reference&&!source_cell_type(ctx,type,&physical))return false;
+        body->parameters[symbol->index]=physical;
         XrXirSourceRange range = {ctx->module, param->line, param->column, param->line, 0};
         if (param->column > 0 && source_text_size(ctx, param->name) <= (size_t)(INT_MAX - param->column))
             range.end_column = param->column + (int)source_text_size(ctx, param->name);
@@ -55,9 +59,7 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
             !source_query_mode(ctx, symbol->declaration, param->passing_mode, param->mode_span)) return false;
         if(!source_hir_parameter_declared(ctx,symbol))return false;
         source_query_binding_type(ctx, symbol);
-        if (by_reference && !source_cell_type(ctx, type, &type)) return false;
-        body->parameters[symbol->index] = type;
-        parameters[i] = (XrXirCallableParameter){type, mode};
+        parameters[i] = (XrXirCallableParameter){physical, mode};
     }
     return true;
 }

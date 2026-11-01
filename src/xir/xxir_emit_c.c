@@ -1185,6 +1185,32 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
             " if (stopped) return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE}; }\n",index,layout->frame_bytes);
     }
     append(buffer," state->pc = %uu;\n",index+1);
+    if(op->op==XR_XIR_CELL_NEW_TAKE) {
+        append(buffer," { XrXirValue created={0};\n"
+            " XrXirCallStatus status=xr_xir_instance_cell_new_take_at(view,%uu,state->frame,&created);\n"
+            " if(status!=XR_XIR_CALL_READY)return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};\n"
+            " xr_xir_owned_slot_move(state->frame,%uu,&created); }\n",index,destination);return;
+    }
+    if(op->op==XR_XIR_CELL_TAKE || op->op==XR_XIR_VALUE_TAKE) {
+        append(buffer," { XrXirValue taken = ");
+        if(op->op==XR_XIR_VALUE_TAKE)emit_value(buffer,function,layout,op->args[0]);
+        else append(buffer,"{0}");
+        append(buffer,";\n");
+        if(op->op==XR_XIR_CELL_TAKE) {
+            append(buffer," XrXirValue source = ");emit_value(buffer,function,layout,op->args[0]);
+            append(buffer,"; XrXirCallStatus status = xr_xir_instance_cell_take_at(view,%uu,&source,&taken);\n"
+                " if(status != XR_XIR_CALL_READY)return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};\n",index);
+        } else {
+            append(buffer," if(!xr_xir_value_argument(&taken,view->arena,(XrXirType)%uu))return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);\n",
+                (uint32_t)op->type);
+            if(layout->offsets[op->args[0]]==destination){append(buffer," }\n");return;}
+            append(buffer," xr_xir_scalar_store(state->frame,%uu,0);\n",layout->offsets[op->args[0]]);
+        }
+        if(xr_xir_type_is_owned(module->types,op->type))
+            append(buffer," xr_xir_owned_slot_move(state->frame,%uu,&taken);\n",destination);
+        else append(buffer," xr_xir_scalar_store(state->frame,%uu,taken.payload);\n",destination);
+        append(buffer," }\n");return;
+    }
     if (op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_LAST_INDEX_OF ||
         op->op == XR_XIR_CALL_INTRINSIC ||
         op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||

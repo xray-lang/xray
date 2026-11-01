@@ -760,6 +760,40 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     XrXirRunStatus dispatched=vm_step_dispatch(run,state,op,action,&handled);
     if (handled) return dispatched;
     switch (op->op) {
+    case XR_XIR_CELL_NEW_TAKE: {
+        XrXirValue created={0};
+        XrXirCallStatus status=xr_xir_instance_cell_new_take_at(run->view,instruction,run->frame,&created);
+        if(status!=XR_XIR_CALL_READY) {
+            *action=(XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};
+            return XR_XIR_RUN_OK;
+        }
+        xr_xir_owned_slot_move(run->frame,run->layout->offsets[result_id],&created);
+        state->instruction=next;return XR_XIR_RUN_OK;
+    }
+    case XR_XIR_CELL_TAKE: {
+        XrXirValue source=vm_value_operand(run,op->args[0]),taken={0};
+        XrXirCallStatus status=xr_xir_instance_cell_take_at(run->view,instruction,&source,&taken);
+        if(status!=XR_XIR_CALL_READY) {
+            *action=(XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,status}};
+            return XR_XIR_RUN_OK;
+        }
+        if(xr_xir_type_is_owned(run->module->types,op->type))
+            xr_xir_owned_slot_move(run->frame,run->layout->offsets[result_id],&taken);
+        else xr_xir_scalar_store(run->frame,run->layout->offsets[result_id],taken.payload);
+        state->instruction=next;return XR_XIR_RUN_OK;
+    }
+    case XR_XIR_VALUE_TAKE: {
+        uint32_t source=run->layout->offsets[op->args[0]],destination=run->layout->offsets[result_id];
+        XrXirValue taken=vm_value_operand(run,op->args[0]);
+        if(!xr_xir_value_argument(&taken,run->view?run->view->arena:NULL,op->type))return XR_XIR_RUN_BAD_ARTIFACT;
+        if(source!=destination) {
+            xr_xir_scalar_store(run->frame,source,0);
+            if(xr_xir_type_is_owned(run->module->types,op->type))
+                xr_xir_owned_slot_move(run->frame,destination,&taken);
+            else xr_xir_scalar_store(run->frame,destination,taken.payload);
+        }
+        state->instruction=next;return XR_XIR_RUN_OK;
+    }
     case XR_XIR_OWNED_LOCAL_NEW:
     case XR_XIR_OWNED_LOCAL_READ:
     case XR_XIR_OWNED_RETAIN:

@@ -117,7 +117,8 @@ static inline XrXirStatus xir_native_callable_verify(const XrXirModule *module,u
     if (!xir_native_callable_identity(id) ||
         (module->generics && (module->generics[index].parameter_count || module->generics[index].argument_count)) || function->blocks ||
         function->block_count || function->instructions || function->instruction_count ||
-        function->operands || function->operand_count || index==module->declarations->entry_function)
+        function->operands || function->operand_count || function->consume_parameter_count ||
+        function->consume_parameters || index==module->declarations->entry_function)
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t m=0;m<module->declarations->module_count;++m)
         if (module->declarations->modules[m].initializer==index) return XR_XIR_BAD_STRUCTURE;

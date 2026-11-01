@@ -81,7 +81,7 @@ static bool cell_write_access(const XirCell *cell,const XrXirCellAuthority *auth
 XR_FUNC XrXirValueStatus xr_xir_cell_publication_prepare(const XrXirValue *value,
     const XrXirCellPublication *publication) {
     XirCell *cell = cell_owner(value);
-    return cell && publication && publication->owner && publication->domain &&
+    return cell && cell->initialized && publication && publication->owner && publication->domain &&
         publication->slot != UINT32_MAX && cell->object.domain == publication->domain &&
         !cell->projection_count && !cell->module_storage && !cell->borrow_top &&
         !cell->prepared_loan && !cell->read_loans && !cell->prepared_read_loan ?
@@ -151,6 +151,7 @@ static XrXirValueStatus cell_loan_prepare_operation(const XrXirValue *value,
     const XrXirCellAuthority *parent, XrXirCellLoan *output, XrXirValueAdmission *admission) {
     if (!cell_loan_empty(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirCell *cell = cell_owner(value);
+    if(!cell || !cell->initialized)return XR_XIR_VALUE_BAD_ARGUMENT;
     XirObject *owner = cell_root_object(cell);
     XrXirCellLoan **top = cell_root_loans(owner);
     if (!top) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -291,11 +292,87 @@ XR_FUNC XrXirValueStatus xr_xir_cell_authorized_read(const XrXirValue *value,
 XR_FUNC XrXirValueStatus xr_xir_cell_authorized_write(const XrXirValue *cell,
     const XrXirCellAuthority *authority, const XrXirValue *value, XrXirValueAdmission *admission) {
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!cell_write_access(cell_owner(cell), authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirCell *owner=cell_owner(cell);
+    if (!cell_write_access(owner, authority) && !cell_empty_local(owner)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus status = xr_xir_cell_write_graph_operation(cell, value, admission, authority);
     xr_xir_value_graph_end();
     return status;
+}
+XR_FUNC XrXirValueStatus xir_cell_take_prepare(const XrXirValue *source,
+    XrXirType expected,XrXirValueAdmission *admission,XirCellTake *output) {
+    if(!admission || !admission->arena || !admission->domain || !output || output->cell ||
+        !unit_value(&output->value) || !admission_domain_current(admission))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();XirCell *cell=cell_owner(source);
+    XrXirValueStatus status=XR_XIR_VALUE_BAD_ARGUMENT;
+    if(cell && cell->initialized && !cell->module_storage && !cell->projection_count &&
+        !cell->borrow_top && !cell->prepared_loan && !cell->read_loans && !cell->prepared_read_loan &&
+        cell->object.domain==admission->domain &&
+        !xr_xir_compile_type_arena_borrowed(admission->arena,expected)) {
+        if(expected==XR_XIR_UNIT) {
+            if(unit_value(&cell->value)) {
+                status=admission->work && xr_xir_domain_work(admission->domain,1)?XR_XIR_VALUE_OK:XR_XIR_VALUE_LIMIT;
+                if(status==XR_XIR_VALUE_OK)--admission->work;
+            }
+        } else status=xr_xir_value_admit(&cell->value,expected,admission);
+        if(status==XR_XIR_VALUE_OK)*output=(XirCellTake){cell,cell->value};
+    }
+    xr_xir_value_graph_end();return status;
+}
+XR_FUNC void xir_cell_take_commit(XirCellTake *prepared,XrXirValue *output) {
+    xr_xir_value_graph_begin();XirCell *cell=prepared?prepared->cell:NULL;
+    XR_CHECK(cell && output && unit_value(output) && cell->initialized &&
+        !cell->module_storage && !cell->projection_count && !cell->borrow_top && !cell->prepared_loan &&
+        !cell->read_loans && !cell->prepared_read_loan && cell->value.type==prepared->value.type &&
+        cell->value.reserved==prepared->value.reserved && cell->value.payload==prepared->value.payload,
+        "take commit preserves the exact prepared local owner and empty destination");
+    *output=cell->value;cell->value=(XrXirValue){0};cell->initialized=false;
+    *prepared=(XirCellTake){0};xr_xir_value_graph_end();
+}
+XR_FUNC XrXirValueStatus xir_cell_new_take_prepare(XrXirType type,
+    const XrXirValue *initial,XrXirValueAdmission *admission,XirCellNewTake *output) {
+    if(!admission || !admission->arena || !admission->domain || !initial || !output ||
+        output->cell || !unit_value(&output->value) || !admission_domain_current(admission) ||
+        !xr_xir_type_is_cell(xr_xir_compile_type_arena_types(admission->arena),type))return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirType element=xr_xir_cell_element(xr_xir_compile_type_arena_types(admission->arena),type);
+    if(xr_xir_type_is_cell(xr_xir_compile_type_arena_types(admission->arena),element) ||
+        xr_xir_compile_type_arena_borrowed(admission->arena,element))return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();XrXirValueStatus status=XR_XIR_VALUE_BAD_ARGUMENT;
+    if(element==XR_XIR_UNIT) {
+        if(unit_value(initial)) {
+            status=admission->work && xr_xir_domain_work(admission->domain,1)?XR_XIR_VALUE_OK:XR_XIR_VALUE_LIMIT;
+            if(status==XR_XIR_VALUE_OK)--admission->work;
+        }
+    } else status=xr_xir_value_admit(initial,element,admission);
+    if(status==XR_XIR_VALUE_OK && owned_carrier_type((XrXirType)initial->type) &&
+        !arena_free_carrier((XrXirType)initial->type) && object_pointer(initial)->domain &&
+        object_pointer(initial)->domain!=admission->domain)status=XR_XIR_VALUE_BAD_ARGUMENT;
+    if(status==XR_XIR_VALUE_OK) {
+        XirCell *cell=cell_allocate_empty(admission->domain,(XrXirTypeArena *)admission->arena,type,&status);
+        if(cell)*output=(XirCellNewTake){cell,*initial};
+    }
+    xr_xir_value_graph_end();return status;
+}
+XR_FUNC void xir_cell_new_take_abort(XirCellNewTake *prepared) {
+    if(!prepared || !prepared->cell)return;
+    xr_xir_value_graph_begin();XirCell *cell=prepared->cell;
+    XR_CHECK(cell_empty_local(cell)&&!cell->object.graph_registered,
+        "aborted take construction owns only its unpublished empty Cell");
+    constructed_discard(&cell->object,sizeof(*cell));*prepared=(XirCellNewTake){0};xr_xir_value_graph_end();
+}
+XR_FUNC void xir_cell_new_take_commit(XirCellNewTake *prepared,void *source_payload,XrXirValue *output) {
+    xr_xir_value_graph_begin();XirCell *cell=prepared?prepared->cell:NULL;int64_t payload=0;
+    if(source_payload)memcpy(&payload,source_payload,sizeof(payload));
+    XR_CHECK(cell && output && unit_value(output) && cell_empty_local(cell) &&
+        !cell->object.graph_registered && payload==prepared->value.payload &&
+        (source_payload || unit_value(&prepared->value)),
+        "construction commit preserves its exact source word and unpublished Cell");
+    cell->value=prepared->value;cell->initialized=true;
+    if(source_payload)memset(source_payload,0,sizeof(payload));
+    xr_xir_value_object_publish(&cell->object);
+    *output=(XrXirValue){cell->object.type,0,(int64_t)(uintptr_t)cell};
+    *prepared=(XirCellNewTake){0};xr_xir_value_graph_end();
 }
 XR_FUNC XrXirValueStatus xr_xir_cell_authorized_place(const XrXirValue *cell,
     const XrXirCellAuthority *authority, XrXirValueAdmission *admission, XrXirValuePlace *output) {

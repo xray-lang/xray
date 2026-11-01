@@ -86,7 +86,16 @@ XR_FUNC XrXirStatus xr_hir_body_binding_declare(XrHirBody *body,const XrHirBindi
             *reason = "binding annotation mismatch";
         return XR_XIR_BAD_TYPE;
     }
-    if(input->mode!=XR_PARAM_READ&&input->mode!=XR_PARAM_REF)return XR_XIR_BAD_TYPE;
+    if(input->mode!=XR_PARAM_READ&&input->mode!=XR_PARAM_REF&&input->mode!=XR_PARAM_MOVE)return XR_XIR_BAD_TYPE;
+    if(input->mode==XR_PARAM_MOVE && input->is_parameter) {
+        if(!body->declarations.functions || !*body->declarations.functions || !body->declarations.function_count ||
+            input->origin.function>=*body->declarations.function_count)return XR_XIR_BAD_STRUCTURE;
+        XrXirFunction function=(*body->declarations.functions)[input->origin.function];
+        if(input->parameter>=function.parameter_count || function.parameters[input->parameter]!=input->logical ||
+            xr_xir_declared_parameter_mode(body->types,function.parameters[input->parameter],
+                function.consume_parameters,function.consume_parameter_count,input->parameter)!=XR_PARAM_MOVE ||
+            !input->rebindable)return XR_XIR_BAD_TYPE;
+    }
     for(uint32_t write=0;write<2;++write) {
         uint32_t accessor=write?input->writer:input->reader;if(!accessor)continue;
         if(!slot_input||!body->declarations.functions||!*body->declarations.functions||
@@ -172,7 +181,11 @@ XR_FUNC XrXirStatus xr_hir_body_binding_use(XrHirBody *body,XrHirBodyBinding bin
         break;
     case XR_HIR_BINDING_PARAMETER:
         if(!decl.is_parameter)return XR_XIR_BAD_STRUCTURE;
-        if((decl.mode==XR_PARAM_REF)!=xr_xir_type_is_cell(body->types,decl.physical))return XR_XIR_BAD_STRUCTURE;
+        if(decl.mode==XR_PARAM_MOVE) {
+            if(!local || !decl.rebindable || !xr_xir_type_is_cell(body->types,decl.physical) ||
+                xr_xir_cell_element(body->types,decl.physical)!=decl.logical)return XR_XIR_BAD_STRUCTURE;
+            action.operation=XR_XIR_CELL_NEW_TAKE;
+        } else if((decl.mode==XR_PARAM_REF)!=xr_xir_type_is_cell(body->types,decl.physical))return XR_XIR_BAD_STRUCTURE;
         break;
     case XR_HIR_BINDING_INITIALIZE:
         if(input->value!=decl.logical)return body_binding_failure(reason,input->type_failure?input->type_failure:"binding annotation mismatch");
@@ -186,6 +199,12 @@ XR_FUNC XrXirStatus xr_hir_body_binding_use(XrHirBody *body,XrHirBodyBinding bin
             return body_binding_failure(reason,"module Cell element differs from its logical binding");
         action.operation=action.route==XR_HIR_BINDING_LOCAL_CELL||action.route==XR_HIR_BINDING_SLOT_CELL?
             XR_XIR_CELL_READ:action.route==XR_HIR_BINDING_SLOT_VALUE?XR_XIR_SLOT_LOAD:XR_XIR_INVALID;
+        break;
+    case XR_HIR_BINDING_TAKE:
+        if(!local||decl.construction||decl.direct_borrowed||
+            (decl.is_parameter&&decl.mode!=XR_PARAM_MOVE))
+            return body_binding_failure(reason,"move requires a whole owned local binding");
+        action.operation=decl.rebindable?XR_XIR_CELL_TAKE:XR_XIR_VALUE_TAKE;
         break;
     case XR_HIR_BINDING_ASSIGN:
         if(!decl.rebindable||(!local&&!slot))return body_binding_failure(reason,"assignment requires a mutable binding");
@@ -246,13 +265,14 @@ XR_FUNC XrXirStatus xr_hir_body_binding_use(XrHirBody *body,XrHirBodyBinding bin
     if(!record->foreign_slot&&(action.operation==XR_XIR_SLOT_LOAD||action.operation==XR_XIR_SLOT_INIT)) {
         record->has_immediate=true;record->expected_immediate=owned.location;
     }
-    if(!slot&&(action.operation==XR_XIR_CELL_READ||action.operation==XR_XIR_CELL_WRITE)) {
+    if(!slot&&(action.operation==XR_XIR_CELL_READ||action.operation==XR_XIR_CELL_WRITE||
+        action.operation==XR_XIR_CELL_TAKE||action.operation==XR_XIR_VALUE_TAKE)) {
         record->has_operand=true;record->source_operand=owned.location;
     }
     if(input->kind==XR_HIR_BINDING_WRITE) {
         record->has_second_operand=!record->foreign_slot;record->second_operand=decl.logical==XR_XIR_UNIT?0:input->value_id;
     }
-    if(initialization&&action.operation==XR_XIR_CELL_NEW) {
+    if(initialization&&(action.operation==XR_XIR_CELL_NEW || action.operation==XR_XIR_CELL_NEW_TAKE)) {
         record->has_operand=true;record->source_operand=decl.logical==XR_XIR_UNIT?0:input->value_id;
     }
     if(input->kind==XR_HIR_BINDING_PUBLISH) {

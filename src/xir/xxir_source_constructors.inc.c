@@ -144,7 +144,8 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
     if (!source_error_clause_type(ctx,node,&method->throws_clause,&ctx->functions[index].error_type)) return false;
     for (uint32_t p = 0; p < count; ++p) {
         XrParamNode *param = method->params[p];
-        if (param->passing_mode != XR_PARAM_READ || param->pattern || param->is_rest || source_text_same(ctx, NULL, param->name, "this"))
+        if ((param->passing_mode != XR_PARAM_READ && param->passing_mode!=XR_PARAM_MOVE) ||
+            param->pattern || param->is_rest || source_text_same(ctx, NULL, param->name, "this"))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor parameter contract is not admitted");
         if (param->type) { if (!source_type(ctx, param->type, &body->parameters[p])) return false; }
         else {
@@ -157,7 +158,8 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
         }
         if (body->parameters[p] == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor parameter needs a declaration type");
     }
-    return source_hir_nominal_bind(ctx,node,owner->index,index,XR_HIR_NOMINAL_EXPLICIT,UINT32_MAX)&&source_query_parameters(ctx, symbol.declaration);
+    return source_move_parameters(ctx,index,method->params,count,0)&&
+        source_hir_nominal_bind(ctx,node,owner->index,index,XR_HIR_NOMINAL_EXPLICIT,UINT32_MAX)&&source_query_parameters(ctx, symbol.declaration);
 }
 typedef struct SourceConstructorCall {
     AstNode *reference;
@@ -309,6 +311,7 @@ static bool source_constructor_body(SourceContext *ctx) {
             range.end_column = parameter->column + (int)source_text_size(ctx, symbol->name);
         if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_PARAMETER, body->declaration, range)) return false;
         symbol->declared_mode=parameter->passing_mode;
+        if(symbol->declared_mode==XR_PARAM_MOVE)symbol->mutable=true;
         if(!source_hir_parameter_declared(ctx,symbol))return false;
         source_query_binding_type(ctx, symbol);
     }

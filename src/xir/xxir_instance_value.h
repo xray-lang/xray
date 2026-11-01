@@ -20,6 +20,12 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view);
 XR_FUNC void xr_xir_instance_native_callable_release(XrXirCallView *,XrXirCallStatus);
 XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp operation,
     XrXirType type,const XrXirValue *arguments,uint32_t count,XrXirValue *output);
+/* The current sealed whole-local take instruction supplies its exact type. */
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_take_at(XrXirCallView *view,
+    uint32_t instruction,const XrXirValue *cell,XrXirValue *output);
+/* Construction moves the actual checked compact-frame word after preparation. */
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_new_take_at(XrXirCallView *view,
+    uint32_t instruction,void *frame,XrXirValue *output);
 
 typedef enum XrXirValueRootKind {
     XR_XIR_ROOT_VALUE, XR_XIR_ROOT_LOCAL, XR_XIR_ROOT_CELL, XR_XIR_ROOT_SLOT,

@@ -296,7 +296,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             for (int i = 0; i < method->param_count; ++i) {
                 XrParamNode *param = method->params[i];
                 bool parameter_reference = param->passing_mode == XR_PARAM_REF;
-                if (!param->type || (param->passing_mode != XR_PARAM_READ && !parameter_reference) ||
+                if (!param->type || (param->passing_mode != XR_PARAM_READ && param->passing_mode!=XR_PARAM_MOVE && !parameter_reference) ||
                     (parameter_reference && param->default_value) ||
                     param->pattern || param->is_rest || source_text_same(ctx, NULL, param->name, "this") ||
                     !source_type(ctx, param->type, &body->parameters[i + offset]) ||
@@ -305,7 +305,8 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                 if (parameter_reference && !source_cell_type(ctx, body->parameters[i + offset], &body->parameters[i + offset]))
                     return false;
             }
-            if (!source_generator_declaration(ctx,node,index,&ctx->identities[index],0) ||
+            if (!source_move_parameters(ctx,index,method->params,(uint32_t)method->param_count,offset) ||
+                !source_generator_declaration(ctx,node,index,&ctx->identities[index],0) ||
                 !source_query_parameters(ctx, symbol->declaration)) return false;
         }
     }
@@ -341,6 +342,7 @@ static bool source_method_body(SourceContext *ctx) {
             if (!source_query_mode(ctx, symbol->declaration, parameter->passing_mode, parameter->mode_span)) return false;
         }
         symbol->declared_mode=i<offset?method->receiver_mode:method->params[i-offset]->passing_mode;
+        if(symbol->declared_mode==XR_PARAM_MOVE)symbol->mutable=true;
         if(!source_hir_parameter_declared(ctx,symbol))return false;
         source_query_binding_type(ctx, symbol);
     }

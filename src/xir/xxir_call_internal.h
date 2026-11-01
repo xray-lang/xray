@@ -81,6 +81,8 @@ XR_FUNC XrXirCallStatus xr_xir_call_invocation_stage(XrXirCallView *view,
     const XirEffectInvocationSelection *selection);
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_accept(XrXirCallView *view,
     const XirEffectInvocationSelection *selection);
+/* Only the current callback may borrow a compact frame inside its own state. */
+XR_FUNC bool xir_call_frame_span(const XrXirCallView *view,const void *frame,uint32_t bytes);
 /* This view borrows the existing root frame only during a synchronous read. */
 typedef struct XirGeneratorCaptureView {
     const XrXirValue *values;uint32_t count,entry;

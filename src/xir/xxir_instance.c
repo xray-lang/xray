@@ -28,6 +28,7 @@
 #include "xxir_instance_hash.h"
 #include "xxir_instance_function_internal.h"
 #include "xxir_value_internal.h"
+#include "xxir_value_take_internal.h"
 #include "xxir_type_arena_internal.h"
 #include "xxir_call_internal.h"
 #include "xxir_cell_owner_internal.h"
@@ -1983,6 +1984,53 @@ XrXirCallStatus xr_xir_instance_cell_read(XrXirCallView *view, const XrXirValue 
     if (!instance) return XR_XIR_CALL_BAD_STATE;
     XrXirCallStatus status = instance_cell_access(view, instance, cell);
     return status == XR_XIR_CALL_READY ? value_call_status(xr_xir_call_cell_read(view, cell, output)) : status;
+}
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_take_at(XrXirCallView *view,
+    uint32_t instruction,const XrXirValue *cell,XrXirValue *output) {
+    if(!instance_view_current(view) || !output || !value_unit(*output))return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance=view_instance(view);
+    const XrXirProgramPermissions *permissions=instance?instance->program->permissions:NULL;
+    uint32_t entry=xr_xir_call_current_entry(view->activation);
+    if(!permissions || !permissions->input || !permissions->input->artifact ||
+        entry>=permissions->input->artifact->module.function_count)return XR_XIR_CALL_BAD_STATE;
+    const XrXirFunction *function=&permissions->input->artifact->module.functions[entry];
+    if(instruction>=function->instruction_count || function->instructions[instruction].op!=XR_XIR_CELL_TAKE)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirCallStatus status=xr_xir_call_execution_status(view);XirCellTake prepared={0};
+    if(status==XR_XIR_CALL_READY)status=value_call_status(xir_cell_take_prepare(cell,
+        function->instructions[instruction].type,xr_xir_call_admission(view),&prepared));
+    if(status==XR_XIR_CALL_READY)status=xr_xir_call_execution_status(view);
+    if(status==XR_XIR_CALL_READY)xir_cell_take_commit(&prepared,output);
+    return status;
+}
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_new_take_at(XrXirCallView *view,
+    uint32_t instruction,void *frame,XrXirValue *output) {
+    if(!instance_view_current(view)||!output||!value_unit(*output))return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance=view_instance(view);
+    const XrXirProgramPermissions *permissions=instance?instance->program->permissions:NULL;
+    uint32_t entry=xr_xir_call_current_entry(view->activation);
+    if(!permissions||!permissions->input||!permissions->input->artifact||!permissions->layouts||
+        entry>=permissions->input->artifact->module.function_count)return XR_XIR_CALL_BAD_STATE;
+    const XrXirFunction *function=&permissions->input->artifact->module.functions[entry];
+    const XrXirFunctionLayout *layout=&permissions->layouts[entry];
+    if(instruction>=function->instruction_count||function->instructions[instruction].op!=XR_XIR_CELL_NEW_TAKE||
+        !xir_call_frame_span(view,frame,layout->frame_bytes))return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirInstruction *op=&function->instructions[instruction];
+    XrXirType element=xr_xir_cell_element(instance->program->types,op->type);
+    void *word=NULL;XrXirValue source={0};
+    if(element!=XR_XIR_UNIT) {
+        if(op->args[0]>=function->parameter_count+function->instruction_count||layout->offsets[op->args[0]]>layout->frame_bytes||
+            sizeof(int64_t)>layout->frame_bytes-layout->offsets[op->args[0]])return XR_XIR_CALL_BAD_STATE;
+        word=(unsigned char *)frame+layout->offsets[op->args[0]];int64_t payload=0;
+        memcpy(&payload,word,sizeof(payload));source=xr_xir_value_load(view->arena,element,payload);
+    }
+    XirCellNewTake prepared={0};XrXirCallStatus status=xr_xir_call_execution_status(view);
+    if(status==XR_XIR_CALL_READY)status=value_call_status(xir_cell_new_take_prepare(op->type,&source,
+        xr_xir_call_admission(view),&prepared));
+    if(status==XR_XIR_CALL_READY)status=xr_xir_call_execution_status(view);
+    if(status==XR_XIR_CALL_READY)xir_cell_new_take_commit(&prepared,word,output);
+    else xir_cell_new_take_abort(&prepared);
+    return status;
 }
 XrXirCallStatus xr_xir_instance_cell_write(XrXirCallView *view, const XrXirValue *cell, const XrXirValue *value) {
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;

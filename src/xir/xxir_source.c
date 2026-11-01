@@ -361,6 +361,7 @@ static XrXirSourceRange source_query_range(SourceContext *,AstNode *,const char 
 static XrXirType source_symbol_type(SourceContext *,const SourceName *);
 static bool source_hir_binding_receive(SourceContext *,const SourceName *,XrHirBodyBinding *);
 static bool source_hir_binding_register(SourceContext *,SourceName *,XrHirBodyBinding *);
+static bool source_recipe_record(SourceContext *,XrXirInstruction,SourceValue *);
 static bool source_recipe_group(SourceContext *,XrXirInstruction,const SourceValue *,uint32_t,SourceValue *);
 static XrHirBodyStorage source_hir_storage(const SourceName *symbol) {
     return !symbol?XR_HIR_BODY_TEMPORARY:symbol->kind==SOURCE_LOCAL?XR_HIR_BODY_LOCAL:
@@ -709,7 +710,7 @@ static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *
     if (count && !parameters) return false;
     for (uint32_t p = 0; p < count; ++p) {
         uint32_t mode = ref->function_param_modes ? ref->function_param_modes[p] : XR_PARAM_READ;
-        if (mode != XR_PARAM_READ && mode != XR_PARAM_REF)
+        if (mode != XR_PARAM_READ && mode != XR_PARAM_REF && mode != XR_PARAM_MOVE)
             return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "callable mode requires an implemented contract");
         if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx, ref->children[p], &parameters[p].type)) return false;
         if (ref->function_rest && p + 1 == count &&
@@ -1268,6 +1269,7 @@ static bool source_string_literal(SourceContext *ctx, AstNode *node, const char 
 static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *binding,
     SourceName *target,SourceExpectedType result_context,SourceValue *value);
 #include "xxir_source_buffer_scoped.inc.c"
+#include "xxir_source_move.inc.c"
 #include "xxir_source_constructors.inc.c"
 #include "xxir_source_range.inc.c"
 #include "xxir_source_panic.inc.c"
@@ -1806,7 +1808,8 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
     if (count && !parameters) return false;
     for (uint32_t p = 0; p < count; ++p) {
         if (!source_substitute(ctx,&arguments.substitution,function->parameters[p],0,&parameters[p].type)) return false;
-        parameters[p].mode = xr_xir_type_is_cell(&ctx->types, parameters[p].type) ? XR_PARAM_REF : XR_PARAM_READ;
+        parameters[p].mode=xr_xir_declared_parameter_mode(&ctx->types,function->parameters[p],
+            function->consume_parameters,function->consume_parameter_count,p);
     }
     XrXirType result, error_type;
     if (!source_substitute(ctx,&arguments.substitution,function->result,0,&result) ||
@@ -1910,6 +1913,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     }
     case AST_COMPTIME_EXPR: return source_comptime_expression(ctx,node,context,value);
     case AST_COPY_EXPR: return source_copy(ctx,node,context,value);
+    case AST_MOVE_EXPR: return source_move(ctx,node,value);
     case AST_CALL_EXPR: return source_call(ctx, node, context, value);
     case AST_GO_EXPR: return source_go_call(ctx, node, context, value);
     case AST_AWAIT_EXPR: return source_task_await(ctx, node, context, value);
@@ -2328,7 +2332,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     for (int i = 0; i < decl->param_count; ++i) {
         XrParamNode *param = decl->params[i];
         bool by_reference = param->passing_mode == XR_PARAM_REF;
-        if (!param->type || (param->passing_mode != XR_PARAM_READ && !by_reference) || param->pattern ||
+        if (!param->type || (param->passing_mode != XR_PARAM_READ && param->passing_mode!=XR_PARAM_MOVE && !by_reference) || param->pattern ||
             (by_reference && param->default_value) ||
             !source_type(ctx, param->type, &body->parameters[i]) || (body->parameters[i] == XR_XIR_UNIT && !by_reference))
             return source_fail_feature(ctx, node, XR_XIR_BAD_TYPE,
@@ -2338,7 +2342,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
                 by_reference && param->default_value ? "default-value syntax for ref parameters" :
                 !param->type ? "untyped parameter syntax" : "this parameter declaration syntax");
         if (param->is_rest) {
-            if (i + 1 != decl->param_count || by_reference || param->default_value || identity.test_role)
+            if (i + 1 != decl->param_count || param->passing_mode!=XR_PARAM_READ || param->default_value || identity.test_role)
                 return source_fail(ctx,node,XR_XIR_BAD_TYPE,"rest requires one final READ parameter without a default");
             if (!source_array_element_type(ctx,body->parameters[i],&body->parameters[i])) return false;
             identity.promises|=XR_XIR_FUNCTION_REST;
@@ -2347,7 +2351,8 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
          * caller's binding through it, exactly as a captured mutable variable does. */
         if (by_reference && !source_cell_type(ctx, body->parameters[i], &body->parameters[i])) return false;
     }
-    if (!source_generator_declaration(ctx,node,index,&identity,0)) return false;
+    if (!source_move_parameters(ctx,index,decl->params,(uint32_t)decl->param_count,0) ||
+        !source_generator_declaration(ctx,node,index,&identity,0)) return false;
     ctx->identities[index] = identity;
     return source_query_parameters(ctx, symbol->declaration);
 }
@@ -2740,6 +2745,7 @@ static bool capture_pattern(SourceCaptureScan *scan, AstNode *node, uint32_t dep
 static bool capture_children(SourceCaptureScan *scan, AstNode *node) {
     switch (node->type) {
     case AST_COPY_EXPR: return capture_scan(node->as.unary.operand,scan);
+    case AST_MOVE_EXPR: return capture_scan(node->as.move_expr.expr,scan);
     case AST_MATCH_EXPR: {
         if (!capture_scan(node->as.match_expr.expr,scan)) return false;
         SourceName *saved=scan->bound;
@@ -2942,7 +2948,8 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure arity differs from its callable context");
         for (uint32_t p = 0; p < context->parameter_count; ++p) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-            if (context->parameters[p].mode != XR_PARAM_READ && context->parameters[p].mode != XR_PARAM_REF)
+            if (context->parameters[p].mode != XR_PARAM_READ && context->parameters[p].mode != XR_PARAM_REF &&
+                context->parameters[p].mode!=XR_PARAM_MOVE)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure context requires an unsupported parameter mode");
         }
     }
@@ -3149,6 +3156,7 @@ static bool build_bodies(SourceContext *ctx) {
             if (!symbol) return false;
             symbol->kind = SOURCE_LOCAL; symbol->index = (uint32_t) i; symbol->type = ctx->bodies[f].parameters[i];
             XrParamNode *param = decl->params[i];symbol->declared_mode=param->passing_mode;
+            if(param->passing_mode==XR_PARAM_MOVE)symbol->mutable=true;
             if (param->passing_mode == XR_PARAM_REF) {
                 symbol->type = xr_xir_cell_element(&ctx->types, symbol->type);
                 symbol->mutable = true;

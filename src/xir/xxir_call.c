@@ -257,6 +257,14 @@ XrXirValueAdmission *xr_xir_call_admission(const XrXirCallView *view) {
 
 #include "xxir_call_invocation.inc.c"
 
+XR_FUNC bool xir_call_frame_span(const XrXirCallView *view,const void *frame,uint32_t bytes) {
+    if(!xr_xir_call_admission(view)||!frame)return false;
+    const CallFrame *owner=view->activation->top;
+    uintptr_t base=(uintptr_t)owner->state,address=(uintptr_t)frame;
+    return address>=base && address-base<=owner->entry->state_bytes &&
+        bytes<=owner->entry->state_bytes-(address-base) && !(address&7u);
+}
+
 XR_FUNC XrXirCallStatus xr_xir_call_cleanup_frontier(XrXirCallView *view, uint32_t frontier) {
     if (!(!view || call_owner_current(view->activation))) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!xr_xir_call_admission(view) || !(view->activation->top->entry->flags & XR_XIR_ENTRY_EXIT))

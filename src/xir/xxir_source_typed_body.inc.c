@@ -145,9 +145,14 @@ static bool source_hir_parameter_declared(SourceContext *ctx,SourceName *symbol)
     symbol->is_parameter=true;XrHirBodyBinding binding={0};if(!source_hir_binding_register(ctx,symbol,&binding))return false;
     XrHirBindingAction action;
     if(!source_hir_binding_use(ctx,symbol->node,symbol,XR_HIR_BINDING_PARAMETER,(SourceValue){.id=symbol->index,.type=symbol->type,.place={0}},&action))return false;
-    ctx->bodies[ctx->function].parameters[symbol->index]=action.physical;
+    uint32_t before=ctx->bodies[ctx->function].count;
     SourceValue parameter={.id=symbol->index,.type=action.physical,.place={0}};
-    return source_hir_binding_emitted(ctx,&action,&parameter,ctx->bodies[ctx->function].count);
+    if(action.operation==XR_XIR_CELL_NEW_TAKE) {
+        if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW_TAKE,action.physical,
+            {symbol->index,0},{0},0,{0}},&parameter))return false;
+        symbol->index=parameter.id;
+    } else ctx->bodies[ctx->function].parameters[symbol->index]=action.physical;
+    return source_hir_binding_emitted(ctx,&action,&parameter,before);
 }
 static bool source_hir_value_declared(SourceContext *ctx,AstNode *node,SourceName *symbol,SourceValue value) {
     XrHirBodyBinding binding={0};if(!source_hir_binding_register(ctx,symbol,&binding))return false;

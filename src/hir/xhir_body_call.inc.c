@@ -34,6 +34,7 @@ XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *body,const XrHirSignatureIn
     HirBodyScope scope=((HirBodyScope *)body->scopes.items)[input->scope.index];
     if(scope.origin.function!=input->origin.function||scope.origin.module!=input->origin.module)return XR_XIR_BAD_STRUCTURE;
     const XrXirType *function_parameters=NULL;
+    XrXirFunction function_declaration={0};
     const XrXirCallableParameter *callable_parameters=NULL;
     uint32_t count=input->count;
     XrHirArrayCallbackShape callback={0};
@@ -44,6 +45,7 @@ XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *body,const XrHirSignatureIn
         if(!body->declarations.functions||!*body->declarations.functions||
             input->function>=*body->declarations.function_count)return XR_XIR_BAD_STRUCTURE;
         XrXirFunction declaration=(*body->declarations.functions)[input->function];
+        function_declaration=declaration;
         if(count!=declaration.parameter_count)return XR_XIR_BAD_STRUCTURE;
         const XrXirFunctionIdentity *identities=*body->declarations.identities;
         if(input->family==XR_HIR_CALL_FUNCTION) {
@@ -96,7 +98,9 @@ XR_FUNC XrXirStatus xr_hir_body_signature(XrHirBody *body,const XrHirSignatureIn
             XrXirType type=function_parameters[p];
             /* Direct REF is the verified declaration's existing physical Cell
              * ABI. Actual argument Cells never create this authority. */
-            XrParamMode mode=input->family==XR_HIR_CALL_FUNCTION&&xr_xir_type_is_cell(body->types,type)?XR_PARAM_REF:XR_PARAM_READ;
+            XrParamMode mode=input->family==XR_HIR_CALL_FUNCTION||input->family==XR_HIR_CALL_CONSTRUCTOR?
+                (XrParamMode)xr_xir_declared_parameter_mode(body->types,type,function_declaration.consume_parameters,
+                    function_declaration.consume_parameter_count,p):XR_PARAM_READ;
             parameters[p]=(XrXirCallableParameter){type,mode};
             if(mode==XR_PARAM_READ&&xr_xir_type_is_cell(body->types,type))
                 status=input->family==XR_HIR_CALL_VARIADIC_READ?XR_XIR_BAD_STRUCTURE:XR_XIR_BAD_TYPE;
@@ -205,7 +209,9 @@ XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *body,XrHirBodySignature
         action.target=tuple.fields[input->spread_field].type;action.operation=XR_XIR_TUPLE_FIELD;
         action.field=input->spread_field;
     } else if(input->kind==XR_HIR_CALL_ACCESS) {
-        if(input->access!=(action.reference?XR_CALL_ARG_REF:XR_CALL_ARG_PLAIN))return XR_XIR_BAD_TYPE;
+        if(formal.mode==XR_PARAM_MOVE) {
+            if(input->access!=XR_CALL_ARG_PLAIN&&input->access!=XR_CALL_ARG_MOVE)return XR_XIR_BAD_TYPE;
+        } else if(input->access!=(action.reference?XR_CALL_ARG_REF:XR_CALL_ARG_PLAIN))return XR_XIR_BAD_TYPE;
     } else if(input->kind==XR_HIR_CALL_VALUE||input->kind==XR_HIR_CALL_EXACT||input->kind==XR_HIR_CALL_FINAL) {
         if(input->kind==XR_HIR_CALL_EXACT&&input->type!=formal.type)return XR_XIR_BAD_TYPE;
         if(input->kind==XR_HIR_CALL_FINAL) {
