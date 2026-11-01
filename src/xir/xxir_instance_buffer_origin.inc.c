@@ -28,16 +28,19 @@ XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *pro
     bool instance_table=instance && metadata->entries==instance->entries &&
         (uint64_t)metadata->entry_count==(uint64_t)program->entry_count+1u;
     if (!instance || !instance_owner_current(instance) || instance->program!=program ||
-        metadata->admission_context!=instance || (!program_table && !instance_table) ||
+        metadata->admission_context!=instance ||
+        (!program_table && !instance_table && !xir_call_buffer_metadata_owned(query)) ||
         admission->domain!=instance->domain || metadata->arena!=program->arena ||
         metadata->cell_role!=instance_cell_role || metadata->cell_context!=program || target>=program->entry_count)
         return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirProgramInput *input=program->permissions?program->permissions->input:NULL;
     const XrXirArtifact *artifact=input?input->artifact:NULL;
-    if (!artifact || artifact->module.declarations!=program->declarations ||
-        target>=artifact->module.function_count) return XR_XIR_CALL_BAD_STATE;
+    if (!artifact || artifact->context.resources!=program->context.resources ||
+        artifact->module.stage!=XR_XIR_LOWERED || artifact->module.function_count!=program->entry_count ||
+        artifact->program_final!=program->permissions->effects || !artifact->module.declarations)
+        return XR_XIR_CALL_BAD_STATE;
     const XrXirCallEntry *entry=&metadata->entries[target],*sealed=&program->entries[target];
-    if (entry->parameters!=sealed->parameters || entry->parameter_count!=sealed->parameter_count ||
+    if (entry->parameter_count!=sealed->parameter_count ||
         entry->result!=sealed->result || entry->resume!=sealed->resume || entry->release!=sealed->release ||
         entry->state_bytes!=sealed->state_bytes || entry->environment!=sealed->environment ||
         entry->flags!=sealed->flags || entry->cleanup_owner!=sealed->cleanup_owner)
@@ -47,6 +50,11 @@ XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *pro
     if (!result || result->kind!=XR_XIR_TYPE_SLICE || result->element!=XR_XIR_U8)
         return XR_XIR_CALL_READY;
     if (count!=entry->parameter_count || (count && !arguments)) return XR_XIR_CALL_BAD_ARGUMENT;
+    for (uint32_t p=0;p<entry->parameter_count;++p) {
+        if (!instance_buffer_view_work(admission,1)) return XR_XIR_CALL_LIMIT;
+        if (!entry->parameters || !sealed->parameters || entry->parameters[p]!=sealed->parameters[p])
+            return XR_XIR_CALL_BAD_ARGUMENT;
+    }
     XrXirValue receiver={0};XrXirValueStatus status=XR_XIR_VALUE_OK;
     if (identity->native_callable==XR_NATIVE_CALLABLE_BUFFER_AS_BYTES) {
         if (!instance_buffer_view_work(admission,(uint64_t)program->declarations->module_count+1u))
@@ -97,7 +105,8 @@ XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *pro
 XR_FUNC XrXirCallStatus xir_instance_buffer_view_origin(XrXirCallView *view,
     const XirBufferViewOriginQuery *query,XrXirProgram **owner,
     uint32_t *parameter,uint32_t *field,XrXirValue *output) {
-    if (!owner || *owner || !query || !query->metadata || query->admission!=xr_xir_call_admission(view))
+    if (!owner || *owner || !query || !query->metadata || !view || query->activation!=view->activation ||
+        query->admission!=xr_xir_call_admission(view))
         return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirCallMetadata *metadata=query->metadata;
     XrXirInstance *instance=view_instance(view);

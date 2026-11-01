@@ -19,7 +19,7 @@ static XrXirCallStatus call_view_return_capture(XrXirCall *call,CallFrame *frame
         XrXirCellAuthority authority=frame_cell_authority(call,frame->parent);
         const XirBufferViewOriginQuery query={frame->metadata,
             (uint32_t)(frame->entry-frame->metadata->entries),arguments,frame->entry->parameter_count,
-            &authority,&call->config.admission};
+            &authority,&call->config.admission,call};
         XrXirCallStatus status=xir_instance_buffer_view_origin(call->active_view,&query,
             &result->storage_program,&parameter,&field,&root);
         if (status!=XR_XIR_CALL_READY) return status;
@@ -90,7 +90,7 @@ static XrXirValueStatus call_view_return_root_prepare(XrXirCall *call,CallFrame 
         XrXirCellAuthority authority=frame_cell_authority(call,frame);
         const XirBufferViewOriginQuery query={frame->metadata,
             (uint32_t)(frame->entry-frame->metadata->entries),frame->arguments,frame->entry->parameter_count,
-            &authority,&call->config.admission};
+            &authority,&call->config.admission,call};
         XrXirCallStatus status=xir_instance_buffer_view_recheck(result->storage_program,result->storage_context,
             &query,&parameter,&field,&root);
         bool matches=root.type==XR_XIR_BUFFER_STORAGE && root.payload==result->storage_identity &&
@@ -170,7 +170,7 @@ XR_FUNC XrXirValueStatus xr_xir_call_buffer_view(XrXirCallView *view,
     XrXirCellAuthority authority=frame_cell_authority(creation.call,creation.frame);
     const XirBufferViewOriginQuery query={creation.frame->metadata,
         (uint32_t)(creation.frame->entry-creation.frame->metadata->entries),view->arguments,view->argument_count,
-        &authority,&creation.call->config.admission};
+        &authority,&creation.call->config.admission,creation.call};
     XrXirCallStatus selected=xir_instance_buffer_view_recheck(result->storage_program,result->storage_context,
         &query,&parameter,&field,&root);
     if (selected!=XR_XIR_CALL_READY) return call_view_status(selected);

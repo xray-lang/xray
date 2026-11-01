@@ -24,7 +24,10 @@ typedef struct XirBufferViewOriginQuery {
     uint32_t count;
     const XrXirCellAuthority *authority;
     XrXirValueAdmission *admission;
+    const XrXirCall *activation;
 } XirBufferViewOriginQuery;
+/* Only this activation's physically owned metadata copy can match here. */
+XR_FUNC bool xir_call_buffer_metadata_owned(const XirBufferViewOriginQuery *query);
 /* A missing genuine native/owned body proof returns no root. A present proof
  * independently resolves the current actual receiver and returns one temporary
  * owned Storage observation; callers drop it before leaving this operation. */

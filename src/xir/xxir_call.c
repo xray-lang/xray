@@ -23,6 +23,7 @@
 #include "xxir_call_native_source_internal.h"
 #include "xxir_call_move_internal.h"
 #include "xxir_call_view_internal.h"
+#include "xxir_instance_view_internal.h"
 #include "xxir_call_view_operation_internal.h"
 #include "xxir_call_view_moves_internal.h"
 #include "xxir_view_transfer_internal.h"
@@ -162,6 +163,15 @@ static bool call_owner_current(const XrXirCall *call) {
         call->config.struct_size != sizeof(call->config)) return false;
     if (call->config.admission.domain && !xr_xir_domain_current(call->config.admission.domain)) return false;
     return !call->budget || xr_xir_domain_current(call->budget->work_domain);
+}
+XR_FUNC bool xir_call_buffer_metadata_owned(const XirBufferViewOriginQuery *query) {
+    const XrXirCall *call=query?query->activation:NULL;
+    if (!call || !call_owner_current(call) || !call->driving || call->cleaning || call_observing(call) ||
+        !call->top || query->admission!=&call->config.admission || !query->metadata) return false;
+    const XrXirCallMetadata *owned=&call->metadata,*actual=query->metadata;
+    return actual->entries==owned->entries && actual->entry_count==owned->entry_count &&
+        actual->arena==owned->arena && actual->admission_context==owned->admission_context &&
+        actual->cell_role==owned->cell_role && actual->cell_context==owned->cell_context;
 }
 XR_FUNC bool xr_xir_call_time_provider(const XrXirCall *call,XrXirTimeProvider *output) {
     if (!call || !output || !call_owner_current(call)) return false;
