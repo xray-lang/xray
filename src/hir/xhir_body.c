@@ -74,6 +74,7 @@ typedef struct HirBodySignature {
     uint32_t default_type_count;
     unsigned char *accesses;
     XrHirArrayCallbackShape callback;
+    XrHirScopeArgument group;
     uint32_t first_argument,last_argument,argument_count,access_count,callback_use;
     bool finished,callback_ready,callback_received,default_types_ready;
 } HirBodySignature;
@@ -438,15 +439,19 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
                 projection->call.targets[1]!=call.declaration.interface_member)return body_projection_failure(reason,"typed requirement projection changed its target");
         } else if(projection->call.immediate!=(int64_t)(call.declaration.family==XR_HIR_CALL_INDIRECT?
             call.declaration.callee_value:call.declaration.function))return body_projection_failure(reason,"typed call projection changed its callee");
-        if(!call.finished||call.argument_count!=projection->source_argument_count||
-            (call.argument_count&&!projection->source_arguments))return XR_XIR_BAD_STRUCTURE;
+        uint32_t prefix=call.group.type!=XR_XIR_UNIT?1u:0u;
+        if(!call.finished||call.argument_count>UINT32_MAX-prefix||
+            call.argument_count+prefix!=projection->source_argument_count||
+            (projection->source_argument_count&&!projection->source_arguments))return XR_XIR_BAD_STRUCTURE;
+        if(prefix&&(projection->operation!=XR_XIR_SCOPED_GO||projection->source_arguments[0]!=call.group.value))
+            return body_projection_failure(reason,"typed spawn changed its lexical group operand");
         uint32_t argument=call.first_argument;
         for(uint32_t p=0;p<call.argument_count;++p) {
             if(!(p%64)){XrXirStatus status=body_poll(control);if(status!=XR_XIR_OK)return status;}
             if(argument>=body->count)return XR_XIR_BAD_STRUCTURE;
             HirBodyUse actual=body->uses[argument];
             if(actual.signature.owner!=body||actual.signature.index!=row->signature.index||
-                projection->source_arguments[p]!=actual.source_value)return XR_XIR_BAD_STRUCTURE;
+                projection->source_arguments[p+prefix]!=actual.source_value)return XR_XIR_BAD_STRUCTURE;
             argument=actual.next_argument;
         }
         if(argument!=UINT32_MAX)return XR_XIR_BAD_STRUCTURE;

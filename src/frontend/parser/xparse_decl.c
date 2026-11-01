@@ -2574,9 +2574,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
         return xr_parse_function_declaration(parser);
     }
 
-    // Context keyword: "linked" before go/scope.
-    // An identifier that acts as a modifier only when followed by go or scope.
-    // Note: "monitored" prefix was removed — use task.monitor() API instead.
+    // A contextual identifier remains usable; the retired modifier does not.
     if (xr_parser_check(parser, TK_NAME)) {
         Token name_token = parser->current;
 
@@ -2586,27 +2584,9 @@ AstNode *xr_parse_declaration(Parser *parser) {
             if (xr_compile_state_copy(parser->state, &saved, &parser->scanner, sizeof(saved)) != XR_COMPILE_RESOURCE_OK) return NULL;
             Token peek = xr_scanner_scan(&saved);
             if (!xr_parser_healthy(parser)) return NULL;
-            if (peek.type == TK_GO) {
-                do {
-                    xr_parser_advance(parser);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);  // consume "linked"
-                do {
-                    xr_parser_advance(parser);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);  // consume "go"
-                return xr_parse_go_expr_with_link(parser, XR_LINK_LINKED);
-            }
-            if (peek.type == TK_SCOPE) {
-                do {
-                    xr_parser_advance(parser);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);  // consume "linked"
-                do {
-                    xr_parser_advance(parser);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);  // consume "scope"
-                return xr_parse_scope_block_with_mode(parser, XR_SCOPE_LINKED);
+            if (peek.type == TK_GO || peek.type == TK_SCOPE) {
+                xr_parser_error_at_current(parser, "linked concurrency syntax was removed; use scope or scope(isolated)");
+                return NULL;
             }
         }
     }
