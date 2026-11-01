@@ -51,6 +51,16 @@ static XrXirStatus invoke_edges(const Graph *graph, const XrXirFunction *functio
                 return XR_XIR_BAD_STRUCTURE;
             uint32_t block = graph->owner[i];
             const XrXirInstruction *call = &function->instructions[op->immediate];
+            if(call->op==XR_XIR_CLEANUP_ERROR) {
+                uint32_t incoming=graph->head[block];
+                if(op->op!=XR_XIR_INVOKE_ERROR||op->type!=XR_XIR_ERROR||!block||
+                    function->blocks[block].first!=i||call->targets[0]!=block||incoming==UINT32_MAX||
+                    graph->next[incoming]!=UINT32_MAX||
+                    graph->predecessor[incoming]!=graph->owner[(uint32_t)op->immediate]||
+                    call->immediate<0||function->blocks[graph->owner[(uint32_t)op->immediate]].frontier<=
+                        (uint64_t)call->immediate)return XR_XIR_BAD_STRUCTURE;
+                continue;
+            }
             if (!block || function->blocks[block].first != i ||
                 (call->op != XR_XIR_INVOKE && call->op != XR_XIR_INVOKE_INDIRECT && call->op != XR_XIR_INVOKE_DEFAULT &&
                     call->op != XR_XIR_SCOPE_JOIN && call->op != XR_XIR_TASK_AWAIT && call->op!=XR_XIR_TASK_AWAIT_RESULT && call->op != XR_XIR_ITERATOR_HAS_NEXT && call->op != XR_XIR_ITERATOR_NEXT && call->op != XR_XIR_ITERATOR_NTH && call->op != XR_XIR_ITERATOR_CLOSE) ||

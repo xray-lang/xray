@@ -100,7 +100,7 @@ static XrXirStatus task_scope_between(const Graph *graph,const XrXirFunction *fu
 static XrXirStatus task_scope_exit_closed(const Graph *graph,const XrXirFunction *function,
     VerifyContext *context,uint32_t instruction,TaskScopeScratch *scratch) {
     const XrXirInstruction *op=function->instructions+instruction;
-    if(op->op!=XR_XIR_RETURN&&op->op!=XR_XIR_CLEANUP_LEAVE)return XR_XIR_OK;
+    if(op->op!=XR_XIR_RETURN&&op->op!=XR_XIR_CLEANUP_LEAVE&&op->op!=XR_XIR_CLEANUP_ERROR)return XR_XIR_OK;
     uint32_t frontier=function->blocks[graph->owner[instruction]].frontier,steps=0;
     while(frontier) {
         XrXirStatus status=xir_receive_step(context->control,&steps);if(status!=XR_XIR_OK)return status;
@@ -114,6 +114,14 @@ static XrXirStatus task_scope_exit_closed(const Graph *graph,const XrXirFunction
                 const XrXirTypeNode *type=xr_xir_type_node(context->module->types,begin->type);
                 if(!type||type->kind!=XR_XIR_TYPE_TASK)return XR_XIR_BAD_TYPE;
                 if(type->result==XR_XIR_NEVER)continue;
+                if(op->op==XR_XIR_CLEANUP_ERROR) {
+                    uint32_t target=op->targets[0];
+                    if(target>=function->block_count||!function->blocks[target].count)return XR_XIR_BAD_STRUCTURE;
+                    const XrXirInstruction *landing=function->instructions+function->blocks[target].first;
+                    if(landing->op!=XR_XIR_INVOKE_ERROR||landing->type!=XR_XIR_ERROR||
+                        landing->immediate!=instruction)return XR_XIR_BAD_TYPE;
+                    continue;
+                }
                 status=task_scope_between(graph,function,(uint32_t[]){root,UINT32_MAX,instruction},scratch,context->control);
                 if(status!=XR_XIR_OK)return status;
             }

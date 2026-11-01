@@ -89,12 +89,60 @@ static XrXirStatus source_selector_validate(
     }
     return XR_XIR_OK;
 }
+/* A cleanup winner is a new owned value from one dedicated producer edge. */
+static bool source_handler_landing(const XrXirFunction *body,uint32_t producer,
+    uint32_t *edge,uint32_t *value) {
+    if(producer>=body->instruction_count||!body->blocks)return false;
+    const XrXirInstruction *op=body->instructions+producer;
+    if(op->op!=XR_XIR_CLEANUP_ERROR||op->targets[0]>=body->block_count)return false;
+    const XrXirBlock *block=body->blocks+op->targets[0];
+    if(block->count<2||block->first>=body->instruction_count||
+        block->count>body->instruction_count-block->first)return false;
+    const XrXirInstruction *first=body->instructions+block->first;
+    if(first->op!=XR_XIR_INVOKE_ERROR||first->type!=XR_XIR_ERROR||first->immediate!=producer)return false;
+    *edge=block->first+block->count-1;*value=body->parameter_count+block->first;
+    for(uint32_t i=block->first+1;i<*edge;++i)
+        if(!source_handler_cleanup_shape(body,body->instructions+i))return false;
+    return body->instructions[*edge].op==XR_XIR_JUMP;
+}
+static bool source_handler_cleanup_route(const XrXirFunction *body,uint32_t from,
+    uint32_t *producer,uint32_t *edge,uint32_t *value) {
+    *producer=from;
+    if(from>=body->instruction_count||!body->blocks)return false;
+    const XrXirInstruction *op=body->instructions+from;
+    if(op->op==XR_XIR_JUMP) {
+        if(op->targets[0]>=body->block_count)return false;
+        const XrXirBlock *block=body->blocks+op->targets[0];
+        if(!block->count||block->first>=body->instruction_count||
+            block->count>body->instruction_count-block->first)return false;
+        *producer=block->first+block->count-1;
+        for(uint32_t i=block->first;i<*producer;++i)
+            if(!source_handler_cleanup_shape(body,body->instructions+i))return false;
+    }
+    return source_handler_landing(body,*producer,edge,value);
+}
 static XrXirStatus source_handler_edge_validate(const XrXirFunction *body,
     const XrXirSourceDebugHandler *handler,uint32_t edge,uint32_t error,uint32_t input) {
     if (edge>=body->instruction_count || (uint64_t)error>=(uint64_t)body->parameter_count+body->instruction_count ||
         (error<body->parameter_count && !body->parameters) || xr_xir_operand_type(body,error)!=XR_XIR_ERROR ||
         handler->error<body->parameter_count || handler->error-body->parameter_count>=body->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
+    uint32_t producer=0,next=0,winner=0;
+    if(source_handler_cleanup_route(body,edge,&producer,&next,&winner)) {
+        if(body->instructions[producer].args[0]!=error)return XR_XIR_BAD_STRUCTURE;
+        edge=next;error=winner;
+    } else if(body->instructions[edge].op==XR_XIR_JUMP) {
+        for(uint32_t b=0;b<body->block_count;++b) {
+            const XrXirBlock *block=body->blocks+b;
+            if(!block->count||(uint64_t)block->first+block->count-1!=edge)continue;
+            const XrXirInstruction *first=body->instructions+block->first;
+            if(first->op!=XR_XIR_INVOKE_ERROR||first->immediate<0)break;
+            uint32_t producer=(uint32_t)first->immediate;
+            if(source_handler_landing(body,producer,&next,&winner)&&next==edge&&
+                body->instructions[producer].args[0]==error)error=winner;
+            break;
+        }
+    }
     const XrXirInstruction *op=&body->instructions[edge],*phi=&body->instructions[handler->error-body->parameter_count];
     if ((op->op!=XR_XIR_JUMP && op->op!=XR_XIR_CLEANUP_ERROR) ||
         (op->op==XR_XIR_CLEANUP_ERROR && op->args[0]!=error) || !body->blocks ||
@@ -168,16 +216,24 @@ static XrXirStatus source_debug_handler_validate(
                 route->error-body->parameter_count>=body->instruction_count) return XR_XIR_BAD_STRUCTURE;
             const XrXirBlock *error=&body->blocks[call->targets[1]];
             const XrXirInstruction *value=&body->instructions[route->error-body->parameter_count];
-            if (error->count<2 || error->first!=route->error-body->parameter_count ||
-                error->count>body->instruction_count-error->first ||
-                (uint64_t)error->first+error->count-1!=route->edge || value->op!=XR_XIR_INVOKE_ERROR ||
+            if(error->count<2||error->first>=body->instruction_count||
+                error->count>body->instruction_count-error->first)return XR_XIR_BAD_STRUCTURE;
+            uint32_t final=error->first+error->count-1,edge=final,winner=0,producer=0;
+            if(source_handler_cleanup_route(body,final,&producer,&edge,&winner)&&
+                body->instructions[producer].args[0]!=route->error)return XR_XIR_BAD_STRUCTURE;
+            if (error->first!=route->error-body->parameter_count ||
+                edge!=route->edge || value->op!=XR_XIR_INVOKE_ERROR ||
                 value->immediate!=route->instruction) return XR_XIR_BAD_STRUCTURE;
-            for (uint32_t i=error->first+1;i<route->edge;++i) {
+            for (uint32_t i=error->first+1;i<final;++i) {
                 const XrXirInstruction *cleanup=body->instructions+i;
                 if (!source_handler_cleanup_shape(body,cleanup) || function->points[i].statement ||
                     function->points[i].flags) return XR_XIR_BAD_STRUCTURE;
             }
-        } else if (route->edge!=route->instruction) return XR_XIR_BAD_STRUCTURE;
+        } else if (route->edge!=route->instruction) {
+            uint32_t edge=0,winner=0,producer=0;
+            if(!source_handler_cleanup_route(body,route->instruction,&producer,&edge,&winner)||edge!=route->edge)
+                return XR_XIR_BAD_STRUCTURE;
+        }
         XrXirStatus status=source_handler_edge_validate(body,&function->handlers[route->handler-1],route->edge,route->error,route->input);
         if (status!=XR_XIR_OK) return status;
     }

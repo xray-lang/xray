@@ -265,7 +265,7 @@ struct SourceErrorEdge {
     struct SourceErrorEdge *next;
     uint32_t block, jump;
     SourceValue value;
-    uint32_t input;
+    uint32_t input, source, producer;
 };
 struct SourceErrorContext {
     SourceErrorEdge *edges;

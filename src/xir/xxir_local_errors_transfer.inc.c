@@ -34,6 +34,37 @@ static bool local_error_boundary(XrXirOp op) {
         op==XR_XIR_CHANNEL_SEND_TIMEOUT || op==XR_XIR_CHANNEL_RECV_TIMEOUT || op==XR_XIR_CHANNEL_SELECT ||
         op==XR_XIR_CLEANUP_LEAVE || op==XR_XIR_CLEANUP_ERROR || op==XR_XIR_CELL_LOCAL_WRITE;
 }
+/* Cleanup may replace the original error only with a crossed group's error.
+ * Keep the actual incoming value flow; a declared function bound is no proof. */
+static XrXirStatus local_error_cleanup(LocalErrorCfg *cfg,uint32_t producer,uint64_t *out) {
+    const XrXirInstruction *op=cfg->operations+producer;
+    if(op->args[0]>=cfg->values||op->immediate<0)return XR_XIR_BAD_STRUCTURE;
+    memcpy(out,local_error_read(cfg,cfg->row,op->args[0]),(size_t)cfg->words*sizeof(*out));
+    uint32_t frontier=UINT32_MAX;
+    for(uint32_t b=0;b<cfg->head.block_count;++b) {
+        const XrXirBlock *block=cfg->head.blocks+b;
+        if(producer>=block->first&&producer-block->first<block->count){frontier=block->frontier;break;}
+    }
+    if(frontier==UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
+    while(frontier>(uint64_t)op->immediate) {
+        if(frontier>cfg->head.instruction_count||cfg->operations[frontier-1].op!=XR_XIR_CLEANUP_REGISTER)
+            return XR_XIR_BAD_STRUCTURE;
+        uint32_t parent=UINT32_MAX;
+        for(uint32_t b=0;b<cfg->head.block_count;++b) {
+            const XrXirBlock *block=cfg->head.blocks+b;
+            if(frontier-1>=block->first&&frontier-1-block->first<block->count)parent=block->frontier;
+            if(block->frontier!=frontier)continue;
+            for(uint32_t i=block->first;i<block->first+block->count;++i) {
+                if(cfg->operations[i].op!=XR_XIR_SCOPE_BEGIN)continue;
+                const XrXirTypeNode *group=xr_xir_type_node(&cfg->terms.types,cfg->operations[i].type);
+                if(!group||group->kind!=XR_XIR_TYPE_TASK)return XR_XIR_BAD_TYPE;
+                local_error_type(cfg,group->result,out);
+            }
+        }
+        if(parent>=frontier)return XR_XIR_BAD_STRUCTURE;frontier=parent;
+    }
+    return frontier==(uint64_t)op->immediate?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+}
 static XrXirStatus local_error_instruction(LocalErrorCfg *cfg,uint32_t index) {
     const XrXirInstruction *op=&cfg->operations[index];cfg->instruction=index;
     uint64_t *out=local_error_value(cfg,cfg->row,cfg->head.parameter_count+index);
@@ -57,7 +88,10 @@ static XrXirStatus local_error_instruction(LocalErrorCfg *cfg,uint32_t index) {
                     out[(a+1)/64]|=UINT64_C(1)<<((a+1)%64);
         } else if (op->op==XR_XIR_INVOKE_ERROR) {
             if (op->immediate<0 || (uint64_t)op->immediate>=cfg->head.instruction_count) return XR_XIR_BAD_STRUCTURE;
-            local_error_type(cfg,cfg->calls[(uint32_t)op->immediate],out);
+            if(cfg->operations[(uint32_t)op->immediate].op==XR_XIR_CLEANUP_ERROR) {
+                XrXirStatus status=local_error_cleanup(cfg,(uint32_t)op->immediate,out);
+                if(status!=XR_XIR_OK)return status;
+            } else local_error_type(cfg,cfg->calls[(uint32_t)op->immediate],out);
         } else if (op->op==XR_XIR_ENUM_GET && op->args[0]<cfg->values) {
             XrXirTaskResultType outcome={0};
             if (op->immediate==XR_XIR_TASK_RESULT_ERROR && !op->args[1] &&
