@@ -2265,6 +2265,23 @@ if(APPLE)
     endif()
 endif()
 find_package(OpenSSL QUIET)
+# FindOpenSSL reports "optimized;<release>;debug;<debug>" on installs that ship
+# both variants. The runtime SDK bundles one archive, and a list would split the
+# quoted compile definition into several command-line arguments.
+function(xray_release_library input output)
+    set(selected "${input}")
+    list(FIND input optimized position)
+    if(NOT position EQUAL -1)
+        math(EXPR position "${position} + 1")
+        list(GET input ${position} selected)
+    endif()
+    list(LENGTH selected count)
+    if(NOT count EQUAL 1)
+        message(FATAL_ERROR "OpenSSL must resolve to one release archive: ${input}")
+    endif()
+    string(REPLACE "\\" "/" selected "${selected}")
+    set(${output} "${selected}" PARENT_SCOPE)
+endfunction()
 if(OpenSSL_FOUND)
     message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
     target_include_directories(xray_core_objs PRIVATE ${OPENSSL_INCLUDE_DIR})
@@ -2280,8 +2297,8 @@ if(OpenSSL_FOUND)
             "${CMAKE_STATIC_LIBRARY_PREFIX}xray_tls_ssl${CMAKE_STATIC_LIBRARY_SUFFIX}")
         set(XRAY_RUNTIME_TLS_CRYPTO_FILE
             "${CMAKE_STATIC_LIBRARY_PREFIX}xray_tls_crypto${CMAKE_STATIC_LIBRARY_SUFFIX}")
-        file(TO_CMAKE_PATH "${OPENSSL_SSL_LIBRARY}" XRAY_RUNTIME_TLS_SSL_SOURCE)
-        file(TO_CMAKE_PATH "${OPENSSL_CRYPTO_LIBRARY}" XRAY_RUNTIME_TLS_CRYPTO_SOURCE)
+        xray_release_library("${OPENSSL_SSL_LIBRARY}" XRAY_RUNTIME_TLS_SSL_SOURCE)
+        xray_release_library("${OPENSSL_CRYPTO_LIBRARY}" XRAY_RUNTIME_TLS_CRYPTO_SOURCE)
         add_compile_definitions(
             XRT_TLS_SSL_LIBRARY="${XRAY_RUNTIME_TLS_SSL_SOURCE}"
             XRT_TLS_CRYPTO_LIBRARY="${XRAY_RUNTIME_TLS_CRYPTO_SOURCE}"
