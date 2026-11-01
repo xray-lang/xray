@@ -56,6 +56,25 @@ bool rest_producer_fault_observed(void) { return source_program_compile_injected
 void rest_producer_physical(size_t *blocks,size_t *bytes) {
     *blocks=source_program_compile_live;*bytes=source_program_compile_bytes;
 }
+static void captured_factory_query(const XrXirSourceView *view) {
+    uint32_t owner=0;bool found=false;
+    for(uint32_t i=0;i<view->declaration_count;++i) {
+        const XrXirSourceDeclaration *d=&view->declarations[i];
+        if(d->kind==XR_XIR_SOURCE_FUNCTION&&d->name&&!strcmp(d->name,"capturedValues"))owner=d->id;
+    }
+    CHECK(owner);
+    for(uint32_t i=0;i<view->declaration_count;++i) {
+        const XrXirSourceDeclaration *d=&view->declarations[i];
+        static const char prefix[]="$generator_factory";
+        if(d->kind!=XR_XIR_SOURCE_FUNCTION||!d->name||strncmp(d->name,prefix,sizeof(prefix)-1)||d->generic_parent!=owner)continue;
+        CHECK(d->id!=owner&&d->generic_parameter_count==1&&d->generic_parent_count==1);
+        CHECK(d->type.known&&d->type.generic_owner==owner);
+        bool parameter=false;
+        for(uint32_t p=0;p<d->parameter_count;++p)parameter|=d->parameters[p].known&&d->parameters[p].generic_owner==owner;
+        CHECK(parameter);found=true;
+    }
+    CHECK(found);
+}
 static void query_controls(const XrXirCompileContext *c,XrXirSourceResult *r) {
     const XrXirSourceView *v=xr_xir_compile_source_snapshot_view(r->snapshot);
     const XrXirSourceSyntaxView *syntax=xr_xir_compile_source_snapshot_syntax(r->snapshot);
@@ -214,7 +233,8 @@ int main(int argc,char **argv) {
     if(argc!=3) {
         char *text=read_text(XR_REST_VALUES);CHECK(source(&c,text,&r,NULL)==XR_XIR_OK);
         if(argc==1){rest_source_refusals(&c);rest_request_failures(&c,text);}
-        xr_free(text);query_controls(&c,&r);raw_controls(r.checked);rest_generator_controls(r.checked);
+        xr_free(text);captured_factory_query(xr_xir_compile_source_snapshot_view(r.snapshot));
+        query_controls(&c,&r);raw_controls(r.checked);rest_generator_controls(r.checked);
         if(argc==1)rest_producer_controls(r.checked);
         lowered=receive(&c,&r);
         execute(&c,lowered,argc==2?argv[1]:NULL);xr_xir_compile_artifact_free(lowered);

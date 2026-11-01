@@ -14,6 +14,11 @@ fn passPlain(f:fn(Array<i64>)->i64)->fn(Array<i64>)->i64{return f}
 fn invoke(f:fn(...i64)->i64)->i64{return f(20,...[22])}
 fn values(...xs:i64)->Iterator<i64>{for(x in xs){yield x}}
 fn genericValues<T>(...xs:T)->Iterator<T>{for(x in xs){yield x}}
+fn capturedValues<T>(seed:T,...xs:T)->Iterator<T>{
+ var held=seed
+ fn items()->Iterator<T>{yield held;for(x in xs){yield x}}
+ return items()
+}
 fn plainValues(xs:Array<i64>)->Iterator<i64>{for(x in xs){yield x}}
 fn fail()->i64{trace=trace*10+2;assert(false,"rest-partial-failure");return 0}
 fn nested(seed:i64)->i64{
@@ -78,6 +83,7 @@ export fn referenceAnswer()->i64{
     const genericGenerator=genericValues<i64>
     n=0;for(x in genericGenerator(20,22)){n+=x};assert(n==42,"rest-generic-generator")
     n=0;for(x in genericValues<i64>(20,22)){n+=x};assert(n==42,"rest-generic-direct")
+    n=0;for(x in capturedValues<i64>(20,22)){n+=x};assert(n==42,"rest-generic-captured-factory")
     assert(mergedCapture(false)==42,"rest-merged-capture")
     assert(mergedCapture(true)==42,"rest-merged-opaque")
     const plainGenerator=plainValues

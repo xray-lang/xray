@@ -47,7 +47,8 @@ static bool source_generator_closure_factory(SourceContext *ctx,AstNode *node,ui
     ctx->function=factory;ctx->returned=false;
     XrXirInstruction op={XR_XIR_GENERATOR_NEW,before->result,{0},{0},producer,{0}};
     SourceValue value;
-    bool ok=source_type_arguments(ctx,node,types,generic,&op) &&
+    bool ok=source_query_parameters(ctx,body->declaration) &&
+        source_type_arguments(ctx,node,types,generic,&op) &&
         source_recipe_group(ctx,op,arguments,count,&value) &&
         source_recipe_append(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.id},{0},0,{0}},NULL);
     if(ok) {ctx->returned=true;ok=finish_body(ctx);}
