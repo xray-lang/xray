@@ -37,7 +37,8 @@ XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *pro
     const XrXirArtifact *artifact=input?input->artifact:NULL;
     if (!artifact || artifact->context.resources!=program->context.resources ||
         artifact->module.stage!=XR_XIR_LOWERED || artifact->module.function_count!=program->entry_count ||
-        artifact->program_final!=program->permissions->effects || !artifact->module.declarations)
+        artifact->program_final!=program->permissions->effects || artifact->layouts!=program->permissions->layouts ||
+        !artifact->module.declarations)
         return XR_XIR_CALL_BAD_STATE;
     const XrXirCallEntry *entry=&metadata->entries[target],*sealed=&program->entries[target];
     if (entry->parameter_count!=sealed->parameter_count ||
