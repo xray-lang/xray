@@ -135,24 +135,28 @@ static XrXirValueStatus channel_select_snapshot(XrXirChannelSelect *select,uint6
         ChannelSelectArm *arm=&select->arms[i];arm->sequence=arm->storage->sequence;
         if(arm->storage->buffer.count)++ready;
     }
-    if(ready) {
-        uint64_t threshold=(UINT64_C(0)-ready)%ready;
+    uint64_t eligible=ready+(due?1u:0u);
+    if(eligible) {
+        uint64_t threshold=(UINT64_C(0)-eligible)%eligible;
         if(entropy<threshold) {channel_select_unlock(select,select->unique_count);return XR_XIR_VALUE_OK;}
-        uint64_t choice=entropy%ready;
-        for(uint32_t i=0;i<select->count;++i)if(select->arms[i].storage->buffer.count) {
+        uint64_t choice=entropy%eligible;
+        if(choice==ready) {
+            select->kind=XR_XIR_CHANNEL_SELECT_TIMEOUT;select->arm=UINT32_MAX;
+        } else for(uint32_t i=0;i<select->count;++i)if(select->arms[i].storage->buffer.count) {
             if(choice--)continue;
             XirChannel *channel=select->arms[i].storage;
             if(channel->sequence==UINT64_MAX)status=XR_XIR_VALUE_LIMIT;
             else status=xr_xir_value_copy(&channel_slots(channel)[xr_channel_buffer_slot(&channel->buffer,0)],&select->candidate);
             select->arm=i;select->kind=XR_XIR_CHANNEL_SELECT_RECEIVE;break;
         }
-    } else if(select->has_default||due) {
-        select->kind=select->has_default?XR_XIR_CHANNEL_SELECT_DEFAULT:XR_XIR_CHANNEL_SELECT_TIMEOUT;select->arm=UINT32_MAX;
+    } else if(select->has_default) {
+        select->kind=XR_XIR_CHANNEL_SELECT_DEFAULT;select->arm=UINT32_MAX;
     } else *empty=true;
     channel_select_unlock(select,select->unique_count);
     if(status!=XR_XIR_VALUE_OK)return status;
-    if(ready)status=channel_element_admit(select->arms[select->arm].storage,&select->candidate,admission);
-    if(status==XR_XIR_VALUE_OK&&(ready||select->has_default||due)) {
+    if(eligible&&select->kind==XR_XIR_CHANNEL_SELECT_RECEIVE)
+        status=channel_element_admit(select->arms[select->arm].storage,&select->candidate,admission);
+    if(status==XR_XIR_VALUE_OK&&(eligible||select->has_default)) {
         select->prepared=true;*state=XR_XIR_CHANNEL_SELECT_CANDIDATE;
     }
     return status;

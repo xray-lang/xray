@@ -11,6 +11,7 @@
  *   Tests observe actual queue owners, failure allocation sites and lock races;
  *   random words and monotonic samples are explicit kernel inputs.
  */
+#include "shared/xr_sync_core.h"
 #define main channel_select_reference_main
 #include "test_xir_channel_results.c"
 #undef main
@@ -160,8 +161,21 @@ static void select_closed_zero(void) {
     CHECK(xr_xir_channel_select_begin(&request,&owner.admission,&select)==XR_XIR_VALUE_UNSUPPORTED&&!select);
     xr_xir_value_drop(&channels[0]);xr_xir_value_drop(&channels[1]);result_owner_free(&owner);
 }
+static void select_due_ready(void) {
+    for(uint64_t choice=0;choice<2;++choice) {
+        ResultOwner owner={0};result_owner_ready(&owner);XrXirValue channels[2]={{0}},message=result_integer(17);
+        select_channels(&owner,channels,false);result_send(&owner,&channels[0],&message);
+        XrXirChannelSelect *select=select_begin(&owner,channels,2,false,500);
+        CHECK(select_probe(&owner,select,UINT64_C(1500000000),choice)==XR_XIR_CHANNEL_SELECT_CANDIDATE);
+        XrXirValue value=select_take(&owner,select,choice?UINT32_MAX:0,
+            choice?XR_XIR_CHANNEL_SELECT_TIMEOUT:XR_XIR_CHANNEL_SELECT_RECEIVE);
+        CHECK(choice?result_empty(&value):value.payload==17);
+        CHECK(select->arms[0].storage->buffer.count==(choice?1u:0u));xr_xir_value_drop(&value);
+        xr_xir_channel_select_drop(select);xr_xir_value_drop(&channels[0]);xr_xir_value_drop(&channels[1]);result_owner_free(&owner);
+    }
+}
 int main(void) {
     select_typed();select_aliases();select_changed();select_notifications(false);select_notifications(true);
-    select_default_timeout();select_failures();select_closed_zero();
+    select_default_timeout();select_failures();select_closed_zero();select_due_ready();
     puts("Buffered Channel select: typed joint snapshots, arm-weighted choice, one commit, race recheck, deadlines and rollback PASS");return 0;
 }
