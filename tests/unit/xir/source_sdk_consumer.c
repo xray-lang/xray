@@ -225,6 +225,40 @@ static void installed_crypto_primitives(const char *stdlib) {
     CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
     xray_source_result_free(result);
 }
+static void installed_rest_function_values(const char *stdlib) {
+    XrSourceCompileOptions compiler=compile_options(stdlib);
+    char source[]=
+        "fn sum(...nums:i64)->i64 {\n"
+        "    var result:i64=0\n"
+        "    for(n in nums) { result+=n }\n"
+        "    return result\n"
+        "}\n"
+        "fn invoke(f:fn(...i64)->i64,nums:Array<i64>)->i64 { return f(10,...nums) }\n"
+        "fn fromArray(nums:Array<i64>)->i64 { return sum(...nums) }\n"
+        "const nums:Array<i64>=[12,20]\n"
+        "const f:fn(...i64)->i64=sum\n"
+        "assert(f()==0 && f(...nums)==32)\n"
+        "assert(invoke(f,nums)==42)\n"
+        "assert(sum(1,...(2,3),...nums)==38)\n"
+        "assert(fromArray(nums)==32)\n"
+        "print(42)\n";
+    XrSourceArtifact *artifact=compile(&compiler,source,__func__);
+    Output output={0};XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.write=capture;options.context=&output;
+    XrSourceCall *call=NULL;CHECK(begin_owned(artifact,&options,&call)==XR_SOURCE_OK && call);
+    xray_source_artifact_free(artifact);XrSourceEvent event={0};
+    for(size_t ticks=0;;++ticks) {
+        CHECK(ticks<10000 && xray_source_call_poll(call,1024,&event)==XR_SOURCE_OK);
+        if(event.state!=XR_SOURCE_RUN_READY)break;
+    }
+    CHECK(event.state==XR_SOURCE_RUN_RETURNED && output.length==3 && !memcmp(output.bytes,"42\n",3));
+    XrSourceResult *result=NULL;
+    CHECK(xray_source_call_take(call,&result)==XR_SOURCE_OK && result);
+    CHECK(xray_source_call_drop(&call,NULL)==XR_SOURCE_OK && !call);
+    CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
+    xray_source_result_free(result);
+}
 static void detached_cancellation(const char *stdlib) {
     XrSourceCompileOptions compiler = compile_options(stdlib);
     char source[] = "var n:i64=0\nwhile(true){ n+=1 }\n";
@@ -1233,6 +1267,7 @@ int main(int argc, char **argv) {
     installed_view_class_defaults(argv[1]);
     installed_array_materialization(argv[1]);
     installed_crypto_primitives(argv[1]);
+    installed_rest_function_values(argv[1]);
     installed_nominal_projection(argv[1]);
     const char *source_path=__FILE__,*separator=strrchr(source_path,'/'),*windows_separator=strrchr(source_path,'\\');
     if(windows_separator && (!separator || windows_separator>separator))separator=windows_separator;
