@@ -13,9 +13,6 @@
 static bool call_scope_cleanup_wait(XrXirCall *call,const XrXirAction *action) {
     CallFrame *frame=call->top;
     if(!call->executor_owner||!frame->cleanup_frontier)return false;
-    if(action->argument_count||action->arguments||call->next_wake==UINT64_MAX) {
-        abort_frames(call,XR_XIR_CALL_BAD_STATE);return true;
-    }
     XrXirValue completion={0};
     XrXirCallStatus status=xir_task_scope_cleanup((XrXirTaskExecutor *)call->executor_owner,
         call->active_view,&completion);
@@ -25,6 +22,10 @@ static bool call_scope_cleanup_wait(XrXirCall *call,const XrXirAction *action) {
         return true;
     }
     if(!completion.type)return false;
+    if(action->argument_count||call->next_wake==UINT64_MAX) {
+        xr_xir_value_drop(&completion);
+        abort_frames(call,XR_XIR_CALL_BAD_STATE);return true;
+    }
     XirTask *task=(XirTask *)(uintptr_t)completion.payload;
     XR_CHECK(!call->waiting_task.type,"a frontier parks on only its own current group");
     call->waiting_task=completion;
