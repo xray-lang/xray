@@ -273,6 +273,8 @@ static bool source_constructor_new(SourceContext *ctx, AstNode *node, SourceExpe
     if (syntax->module_name) {
         if (!target || target->kind != SOURCE_MODULE)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor namespace is not an imported module");
+        if (source_mem_module(ctx,target->module) && source_text_same(ctx,node,syntax->class_name,"withSliceMut"))
+            return source_buffer_scoped_call(ctx,node,target,value);
         target = imported_declaration(ctx, target, syntax->class_name);
     } else if (target && target->kind == SOURCE_IMPORT)
         target = imported_declaration(ctx, target, target->imported);

@@ -1267,6 +1267,7 @@ static bool source_string_literal(SourceContext *ctx, AstNode *node, const char 
 #include "xxir_source_channel_calls.inc.c"
 static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *binding,
     SourceName *target,SourceExpectedType result_context,SourceValue *value);
+#include "xxir_source_buffer_scoped.inc.c"
 #include "xxir_source_constructors.inc.c"
 #include "xxir_source_range.inc.c"
 #include "xxir_source_panic.inc.c"
@@ -1404,6 +1405,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             binding = target = selected.method;
         } else if (base && base->kind == SOURCE_MODULE) {
             if(!source_query_module_qualifier(ctx,callee,base))return false;
+            if (source_mem_module(ctx,base->module) && source_text_same(ctx,node,member->name,"withSliceMut"))
+                return source_buffer_scoped_call(ctx,node,base,value);
             binding = base; target = imported_declaration(ctx, base, member->name);
         }
         else if (source_constructor_receiver(ctx, member->object) &&

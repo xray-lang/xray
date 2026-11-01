@@ -123,9 +123,10 @@ static XrXirStatus view_origin_candidates(
             candidates[f]=row->receiver;continue;
         }
         uint32_t native=module->declarations?module->declarations->functions[f].native_callable:0;
-        if (native==XR_NATIVE_CALLABLE_BUFFER_AS_BYTES || native==XR_NATIVE_CALLABLE_BUFFER_BORROW_PTR) {
+        if (native==XR_NATIVE_CALLABLE_BUFFER_AS_BYTES || native==XR_NATIVE_CALLABLE_BUFFER_BORROW_PTR ||
+            native==XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN) {
             XrXirStatus status=xir_native_callable_verify(module,f);if (status!=XR_XIR_OK) return status;
-            candidates[f]=0;continue;
+            candidates[f]=native==XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN?2:0;continue;
         }
         /* A pointer without a receiver summary must prove a nonborrowed
          * producer in every return path. A parameter is never such evidence. */
