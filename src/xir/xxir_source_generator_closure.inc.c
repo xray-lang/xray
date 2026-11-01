@@ -37,7 +37,7 @@ static bool source_generator_closure_factory(SourceContext *ctx,AstNode *node,ui
     body->declaration=declaration.declaration;
     const XrXirFunction *before=&ctx->functions[producer];
     ctx->functions[factory]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),
-        body->parameters,before->parameter_count,before->result,NULL,0,NULL,0,NULL,0, XR_XIR_NEVER};
+        body->parameters,before->parameter_count,before->result,NULL,0,NULL,0,NULL,0, XR_XIR_NEVER,0,NULL};
     ctx->functions[factory].consume_parameter_count=before->consume_parameter_count;
     ctx->functions[factory].consume_parameters=before->consume_parameters;
     uint32_t count=before->parameter_count,generic=ctx->generics[producer].parameter_count;

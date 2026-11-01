@@ -290,7 +290,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             }
             XrXirFunction *function = &ctx->functions[index];
             *function = (XrXirFunction) {method->name, (uint32_t)source_text_size(ctx, method->name), body->parameters,
-                count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER};
+                count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER,0,NULL};
             if (!source_type(ctx, method->return_type, &function->result) ||
                 !source_error_clause_type(ctx,node,&method->throws_clause,&function->error_type)) return false;
             for (int i = 0; i < method->param_count; ++i) {

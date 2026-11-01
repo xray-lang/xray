@@ -116,7 +116,7 @@ static bool source_string_runes_producer(SourceContext *ctx,AstNode *node,
     SourceFunction *body=&ctx->bodies[index];body->node=node;body->module=module;
     body->type_owner=NULL;body->parameters=parameter;body->declaration=declaration.declaration;
     ctx->functions[index]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),parameter,1,
-        result,NULL,0,NULL,0,NULL,0,XR_XIR_NEVER};
+        result,NULL,0,NULL,0,NULL,0,XR_XIR_NEVER,0,NULL};
     ctx->generics[index]=(XrXirGeneric){0};
     ctx->identities[index]=(XrXirFunctionIdentity){.module=module,.promises=XR_XIR_FUNCTION_GENERATOR,
         .method_kind=XR_XIR_NON_MEMBER};

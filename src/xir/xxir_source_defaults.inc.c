@@ -46,7 +46,7 @@ static bool source_struct_constructors(SourceContext *ctx,uint32_t *next) {
         if(!defaults.available)continue;
         if(*next>=ctx->first_closure)return source_fail(ctx,symbol->node,XR_XIR_BAD_STRUCTURE,"default constructor function inventory mismatch");
         uint32_t index=(*next)++;
-        ctx->functions[index]=(XrXirFunction){"$default",8,NULL,0,symbol->type,NULL,0,NULL,0,NULL,0,XR_XIR_UNIT};
+        ctx->functions[index]=(XrXirFunction){"$default",8,NULL,0,symbol->type,NULL,0,NULL,0,NULL,0,XR_XIR_UNIT,0,NULL};
         ctx->bodies[index].infer_errors=ctx->bodies[index].infer_initializer=true;
         ctx->bodies[index].node=symbol->node;ctx->bodies[index].module=symbol->module;ctx->bodies[index].declaration=symbol->declaration;
         if(!source_nominal_function_scope(ctx,index,symbol))return false;

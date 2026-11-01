@@ -169,7 +169,8 @@
         "xir_map_iteration_source",
         "xir_typed_display_source",
         "xir_typed_display_values",
-        "xir_typed_display_native"
+        "xir_typed_display_native",
+        "test_xir_move_values"
       ],
       "targets": [
         "test_xir_json_float",
@@ -220,7 +221,8 @@
         "test_xir_map_iteration_source",
         "test_xir_typed_display_source",
         "test_xir_typed_display_values",
-        "test_xir_typed_display_native"
+        "test_xir_typed_display_native",
+        "test_xir_move_values"
       ]
     },
     "frontend": {
@@ -299,7 +301,9 @@
         "xir_crypto_controls",
         "xir_crypto_controls_native",
         "xir_stringable_source",
-        "xir_stringable_native"
+        "xir_stringable_native",
+        "test_xir_move_source",
+        "test_xir_move_native"
       ],
       "targets": [
         "test_source_nullable_print",
@@ -345,7 +349,9 @@
         "test_xir_crypto_controls",
         "test_xir_crypto_controls_native",
         "test_xir_stringable_source",
-        "test_xir_stringable_native"
+        "test_xir_stringable_native",
+        "test_xir_move_source",
+        "test_xir_move_native"
       ]
     },
     "errors-cleanup": {
