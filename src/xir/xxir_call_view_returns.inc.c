@@ -26,7 +26,10 @@ static XrXirCallStatus call_view_return_capture(XrXirCall *call,CallFrame *frame
         if (root.type) {
             result->storage=true;result->parameter=parameter;result->storage_field=field;
             result->storage_context=frame->metadata->admission_context;
-            result->storage_identity=root.payload;xr_xir_value_drop(&root);return XR_XIR_CALL_READY;
+            result->storage_identity=root.payload;
+            const XrXirTypes *types=xr_xir_compile_type_arena_types(call->config.admission.arena);
+            result->reference=xr_xir_type_is_cell(types,frame->entry->parameters[parameter]);
+            xr_xir_value_drop(&root);return XR_XIR_CALL_READY;
         }
     }
     const XrXirTypes *types=xr_xir_compile_type_arena_types(call->config.admission.arena);
@@ -75,11 +78,13 @@ static XrXirValueStatus call_view_return_leaf(void *context,const XrXirValue *va
     if (result->storage) {
         XrXirViewOriginInfo info={0};status=xr_xir_view_origin_info(&binding->pin,admission,&info);
         if (status!=XR_XIR_VALUE_OK) return status;
-        if (binding->root_loan || !info.logical_active || !info.root || info.kind!=XR_XIR_TYPE_SLICE ||
+        const XrXirTypeNode *type=xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena),source->entry->result);
+        if ((result->reference ? binding->root_loan!=&result->loan->loan : binding->root_loan!=NULL) ||
+            !type || !info.logical_active || !info.root || info.kind!=type->kind ||
             info.element!=XR_XIR_U8 || info.root->type!=XR_XIR_BUFFER_STORAGE ||
             info.root->payload!=result->storage_identity) return XR_XIR_VALUE_BAD_ARGUMENT;
     }
-    if (result->reference) {
+    if (result->reference && !result->storage) {
         if (binding->root_loan!=&result->loan->loan) return XR_XIR_VALUE_BAD_ARGUMENT;
         XrXirViewOriginInfo info={0};status=xr_xir_view_origin_info(&binding->pin,admission,&info);
         if (status!=XR_XIR_VALUE_OK) return status;
@@ -93,6 +98,16 @@ static XrXirValueStatus call_view_return_root_prepare(XrXirCall *call,CallFrame 
     if (result->storage) {
         XrXirValue root={0};uint32_t parameter=UINT32_MAX,field=UINT32_MAX;
         XrXirCellAuthority authority=frame_cell_authority(call,frame);
+        if (result->reference) {
+            bool found=false;
+            for (CallViewBinding *binding=frame->views;binding;binding=binding->next) {
+                if (!call_cell_work(call,1)) return XR_XIR_VALUE_LIMIT;
+                if (!binding->returned) continue;
+                if (found || binding->root_loan!=&result->loan->loan) return XR_XIR_VALUE_BAD_ARGUMENT;
+                found=true;authority=binding->pin.authority;
+            }
+            if (!found) return XR_XIR_VALUE_BAD_ARGUMENT;
+        }
         const XirBufferViewOriginQuery query={frame->metadata,
             (uint32_t)(frame->entry-frame->metadata->entries),frame->arguments,frame->entry->parameter_count,
             &authority,&call->config.admission,call};
@@ -103,7 +118,8 @@ static XrXirValueStatus call_view_return_root_prepare(XrXirCall *call,CallFrame 
         xr_xir_value_drop(&root);
         if (status!=XR_XIR_CALL_READY) return call_view_status(status);
         if (!matches) return XR_XIR_VALUE_BAD_ARGUMENT;
-        result->authority=frame_cell_authority(call,frame->parent);return XR_XIR_VALUE_OK;
+        result->authority=frame_cell_authority(call,frame->parent);
+        if (!result->reference) return XR_XIR_VALUE_OK;
     }
     if (!result->reference) return XR_XIR_VALUE_OK;
     result->parent_loan=result->loan->loan.previous;
@@ -192,6 +208,40 @@ XR_FUNC XrXirValueStatus xr_xir_call_buffer_view(XrXirCallView *view,
         call_view_finish(&creation,status,&created,output);
     }
     return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_call_buffer_mutable_view(XrXirCallView *view,
+    XrXirType type,XrXirValue *output) {
+    CallViewCreation creation={0};XrXirValueStatus status=call_view_prepare(view,type,output,&creation);
+    if (status!=XR_XIR_VALUE_OK) return status;
+    CallViewReturn *result=creation.frame->view_return;
+    if (!result || !result->storage || !result->reference || !result->loan || result->parameter!=2 ||
+        result->storage_field || creation.frame->entry->result!=type ||
+        creation.spec.kind!=XR_XIR_TYPE_MUT_SLICE || view->argument_count!=3)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValue root={0};uint32_t parameter=UINT32_MAX,field=UINT32_MAX;
+    XrXirCellAuthority authority=frame_cell_authority(creation.call,creation.frame);
+    const XirBufferViewOriginQuery query={creation.frame->metadata,
+        (uint32_t)(creation.frame->entry-creation.frame->metadata->entries),view->arguments,view->argument_count,
+        &authority,&creation.call->config.admission,creation.call};
+    XrXirCallStatus selected=xir_instance_buffer_view_recheck(result->storage_program,result->storage_context,
+        &query,&parameter,&field,&root);
+    if (selected!=XR_XIR_CALL_READY) return call_view_status(selected);
+    if (root.type!=XR_XIR_BUFFER_STORAGE || root.payload!=result->storage_identity || parameter!=2 || field) {
+        xr_xir_value_drop(&root);return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
+    creation.root_loan=&result->loan->loan;
+    creation.spec.length=view->arguments[1].payload;
+    status=call_view_reserve(&creation);
+    if (status==XR_XIR_VALUE_OK) {
+        XrXirValue created={0};creation.call->admitting=true;
+        status=xr_xir_buffer_storage_mutable_view(&creation.frame->arguments[0],&root,type,&creation.spec,
+            &creation.call->config.admission,&created);
+        if (status==XR_XIR_VALUE_OK) status=xr_xir_buffer_view_bind_root(&created,
+            &creation.frame->arguments[2],&authority,&creation.call->config.admission);
+        if (status!=XR_XIR_VALUE_OK) xr_xir_value_drop(&created);
+        call_view_finish(&creation,status,&created,output);
+    }
+    xr_xir_value_drop(&root);return status;
 }
 XR_FUNC XrXirValueStatus xr_xir_call_view_inbox_take(XrXirCallView *view,
     XrXirType type,XrXirValue *output) {

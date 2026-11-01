@@ -48,7 +48,8 @@ XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *pro
         return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirFunctionIdentity *identity=&program->declarations->functions[target];
     const XrXirTypeNode *result=xr_xir_type_node(program->types,entry->result);
-    if (!result || result->kind!=XR_XIR_TYPE_SLICE || result->element!=XR_XIR_U8)
+    bool mutable=identity->native_callable==XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN;
+    if (!result || result->kind!=(uint32_t)(mutable?XR_XIR_TYPE_MUT_SLICE:XR_XIR_TYPE_SLICE) || result->element!=XR_XIR_U8)
         return XR_XIR_CALL_READY;
     if (count!=entry->parameter_count || (count && !arguments)) return XR_XIR_CALL_BAD_ARGUMENT;
     for (uint32_t p=0;p<entry->parameter_count;++p) {
@@ -57,7 +58,7 @@ XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *pro
             return XR_XIR_CALL_BAD_ARGUMENT;
     }
     XrXirValue receiver={0};XrXirValueStatus status=XR_XIR_VALUE_OK;
-    if (identity->native_callable==XR_NATIVE_CALLABLE_BUFFER_AS_BYTES) {
+    if (identity->native_callable==XR_NATIVE_CALLABLE_BUFFER_AS_BYTES || mutable) {
         if (!instance_buffer_view_work(admission,(uint64_t)program->declarations->module_count+1u))
             return XR_XIR_CALL_LIMIT;
         if (xir_native_callable_verify(&artifact->module,target)!=XR_XIR_OK ||
@@ -66,7 +67,12 @@ XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *pro
             !xir_native_callable_types(identity->native_callable,program->types,entry->parameters,
                 count,entry->result,xir_native_callable_error(program->types,identity->native_callable)))
             return XR_XIR_CALL_BAD_ARGUMENT;
-        *parameter=0;status=xr_xir_value_copy(&arguments[0],output);
+        if (mutable) {
+            *parameter=2;*field=0;
+            status=xr_xir_cell_authorized_read(&arguments[2],authority,&receiver);
+            if (status==XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,0,admission,output);
+            xr_xir_value_drop(&receiver);
+        } else {*parameter=0;status=xr_xir_value_copy(&arguments[0],output);}
     } else {
         const XrXirBorrowReturns *rows=xr_xir_compile_construction_borrow_returns(artifact->construction);
         const XrXirBorrowReturn *row=NULL;

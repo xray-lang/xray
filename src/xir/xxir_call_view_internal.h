@@ -24,6 +24,10 @@ XR_FUNC XrXirValueStatus xr_xir_call_view_new(XrXirCallView *view,
  * this readonly view. The driver supplies and registers its own real scope. */
 XR_FUNC XrXirValueStatus xr_xir_call_buffer_view(XrXirCallView *view,
     XrXirType type,XrXirValue *output);
+/* The exact governed begin owns the real ref-Buffer loan at parameter two.
+ * Its independently checked native identity also authenticates pointer/length. */
+XR_FUNC XrXirValueStatus xr_xir_call_buffer_mutable_view(XrXirCallView *view,
+    XrXirType type,XrXirValue *output);
 /* A local root is an owned unpublished whole Cell in this actual frame's state. Existing
  * exclusive loans cannot be bypassed through a copied Cell handle. The native
  * producer owns the state values; this grants no Source binding/NLL proof. */
