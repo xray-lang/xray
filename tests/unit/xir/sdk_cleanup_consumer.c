@@ -99,9 +99,9 @@ extern "C" {
 #endif
 #include "xir/xxir_call.h"
 #if defined(__cplusplus)
-static_assert(XR_XIR_CALL_ABI_VERSION==37 && sizeof(XrXirPanicPayload)==72 && sizeof(XrXirCallResult)==184,"Call37 physical layout");
+static_assert(XR_XIR_CALL_ABI_VERSION==38 && sizeof(XrXirPanicPayload)==72 && sizeof(XrXirCallResult)==184,"Call38 physical layout");
 #else
-_Static_assert(XR_XIR_CALL_ABI_VERSION==37 && sizeof(XrXirPanicPayload)==72 && sizeof(XrXirCallResult)==184,"Call37 physical layout");
+_Static_assert(XR_XIR_CALL_ABI_VERSION==38 && sizeof(XrXirPanicPayload)==72 && sizeof(XrXirCallResult)==184,"Call38 physical layout");
 #endif
 typedef struct Context {XrXirValue message;unsigned releases;} Context;
 static XrXirAction root_resume(XrXirCallView *view) {
@@ -136,6 +136,6 @@ int main(void) {
     CHECK(xr_xir_call_result_copy(&result,&copied)==XR_XIR_VALUE_OK);xr_xir_call_result_move(&copied,&moved);CHECK(xr_xir_call_result_empty(&copied));
     xr_xir_call_result_drop(&result);const char *actual=NULL;size_t length=0;
     CHECK(xr_xir_string_view(&moved.panic.message,&actual,&length) && length==sizeof(text)-1 && !memcmp(actual,text,length));
-    xr_xir_call_result_drop(&moved);puts("Installed Runtime Call37: owned fatal, moved result, retired Domain and old ABI refusal PASS");return 0;
+    xr_xir_call_result_drop(&moved);puts("Installed Runtime Call38: owned fatal, moved result, retired Domain and old ABI refusal PASS");return 0;
 }
 #endif
