@@ -11,14 +11,14 @@
  *   Literal bytes are real u8 operands; construction does not substitute an Array.
  */
 static bool source_fixed_type(SourceContext *ctx,AstNode *node,uint32_t count,XrXirType *output) {
-    if(!count)
+    if(!count || count>65535)
         return source_fail_feature(ctx,node,XR_XIR_BAD_TYPE,"this fixed byte length");
     return source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_FIXED_ARRAY,
         .element=XR_XIR_U8,.parameter_count=count},output);
 }
 static bool source_fixed_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *output) {
     if(ref->nchildren!=1 || !ref->children || !ref->children[0] || ctx->depth>=128 ||
-        ref->fixed_length<=0 ||
+        ref->fixed_length<=0 || ref->fixed_length>65535 ||
         (ref->fixed_length_expr && (ref->fixed_length_expr->type!=AST_LITERAL_INT ||
         ref->fixed_length_expr->as.literal.int_overflows_i64 ||
         ref->fixed_length_expr->as.literal.int_bits!=(uint64_t)ref->fixed_length)))
@@ -31,8 +31,8 @@ static bool source_fixed_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *o
 }
 static bool source_fixed_literal_type(SourceContext *ctx,AstNode *node,XrXirType *output) {
     const FixedBytesLiteralNode *literal=&node->as.fixed_bytes_literal;
-    if((literal->payload_length && !literal->payload) || literal->payload_length>UINT32_MAX ||
-        (literal->append_nul && literal->payload_length==UINT32_MAX))
+    if((literal->payload_length && !literal->payload) || literal->payload_length>65535 ||
+        (literal->append_nul && literal->payload_length==65535))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"fixed literal has invalid exact byte storage");
     uint32_t count=(uint32_t)literal->payload_length+(uint32_t)literal->append_nul;
     return source_fixed_type(ctx,node,count,output);
