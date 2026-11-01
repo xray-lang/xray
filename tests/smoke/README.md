@@ -38,7 +38,7 @@ paths use `#xray-N` to identify the Nth Xray fence.
   output disappeared. A gap that succeeds must be reviewed, given an output
   oracle, and promoted to `pass` with its native companion in the same change.
 
-The current five native companions build through the trusted-host direct-C
+The native companions build through the trusted-host direct-C
 CLI path and execute against their original, complete VM output oracles.
 Provider and explicit input identities, private workspace/output ownership,
 C11/W1-W4 validation, cancellation and owned-child cleanup remain required.
@@ -58,7 +58,9 @@ legacy `xray build` path built and ran hello, control_flow, and the time import
 probe with matching output. This differs from the historical native failure
 record. It is not evidence that the new direct-C path has been implemented.
 
-The summary counts actual `pass` results, not accepted known failures:
+The summary counts actual `pass` results, not accepted known failures. The
+following is the historical 2026-10-21 observation; current counts come from
+`results.json` and the project status:
 
 ```text
 smoke: demos 3/23 stdlib 2/29 readme 0/6 native 5/5
