@@ -10,9 +10,9 @@
  *   Sealed current construction rows select a real receiver field. Neither a
  *   Storage-shaped parameter nor a retained physical view invents that proof.
  */
-static bool instance_buffer_view_work(XrXirValueAdmission *admission) {
-    if (!admission || !admission->work || !admission->domain || !xr_xir_domain_work(admission->domain,1)) return false;
-    --admission->work;return true;
+static bool instance_buffer_view_work(XrXirValueAdmission *admission,uint64_t work) {
+    if (!admission || work>admission->work || !admission->domain || !xr_xir_domain_work(admission->domain,work)) return false;
+    admission->work-=work;return true;
 }
 XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *program,
     const void *context,const XrXirCallMetadata *metadata,uint32_t target,
@@ -37,6 +37,8 @@ XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *pro
     if (count!=entry->parameter_count || (count && !arguments)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirValue receiver={0};XrXirValueStatus status=XR_XIR_VALUE_OK;
     if (identity->native_callable==XR_NATIVE_CALLABLE_BUFFER_AS_BYTES) {
+        if (!instance_buffer_view_work(admission,(uint64_t)program->declarations->module_count+1u))
+            return XR_XIR_CALL_LIMIT;
         if (xir_native_callable_verify(&artifact->module,target)!=XR_XIR_OK ||
             entry->resume!=xr_xir_instance_native_callable || entry->release!=xr_xir_instance_native_callable_release ||
             entry->state_bytes!=sizeof(XrXirValue) || entry->environment || entry->flags || entry->cleanup_owner ||
@@ -49,7 +51,7 @@ XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *pro
         const XrXirBorrowReturn *row=NULL;
         if (!rows || (rows->count && !rows->rows)) return XR_XIR_CALL_BAD_STATE;
         for (uint32_t i=0;i<rows->count;++i) {
-            if (!instance_buffer_view_work(admission)) return XR_XIR_CALL_LIMIT;
+            if (!instance_buffer_view_work(admission,1)) return XR_XIR_CALL_LIMIT;
             if (rows->rows[i].function!=target) continue;
             if (row) return XR_XIR_CALL_BAD_ARGUMENT;
             row=&rows->rows[i];
