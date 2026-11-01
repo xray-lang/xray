@@ -17,6 +17,7 @@
 #include "xxir_compile_memory.h"
 #include "xxir_atomic.h"
 #include "xxir_native_callable.h"
+#include "xxir_operand_roles.h"
 #include "xxir_instance_value.h"
 #include "xxir_view_types_internal.h"
 #include "../base/xchecks.h"
@@ -28,10 +29,11 @@ static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
     }
     return type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || xr_xir_type_is_owned(spec->types, type);
 }
-static XrXirStatus program_view_boundary(const XrXirCompileContext *context,const XrXirProgramSpec *spec,XrXirType type) {
+static XrXirStatus program_view_boundary(const XrXirCompileContext *context,const XrXirProgramSpec *spec,
+    XrXirType type,bool scoped) {
     uint32_t flags=0;
     XrXirStatus status=xr_xir_compile_view_type_flags(context,spec->types,type,&flags);
-    return status==XR_XIR_OK&&(flags&XR_XIR_VIEW_MUTABLE)?XR_XIR_BAD_TYPE:status;
+    return status==XR_XIR_OK&&(flags&XR_XIR_VIEW_MUTABLE)&&!scoped?XR_XIR_BAD_TYPE:status;
 }
 static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXirProgramSpec *spec) {
     if (!spec) return XR_XIR_BAD_STRUCTURE;
@@ -101,13 +103,11 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
         } else if (entry->resume==xr_xir_instance_native_callable) return XR_XIR_BAD_STRUCTURE;
         if (xr_xir_type_is_cell(spec->types, entry->result) ||
             (entry->result != XR_XIR_UNIT && !program_value_type(spec, entry->result))) return XR_XIR_BAD_TYPE;
-        status=program_view_boundary(context,spec,entry->result);if(status!=XR_XIR_OK)return status;
         if (entry->parameter_count > context->limits.parameters) return XR_XIR_BUDGET;
         for (uint32_t p = 0; p < entry->parameter_count; ++p) {
 
             /* A cell parameter is a ref parameter: only the program's own functions can build one. */
             if (!program_value_type(spec, entry->parameters[p])) return XR_XIR_BAD_TYPE;
-            status=program_view_boundary(context,spec,entry->parameters[p]);if(status!=XR_XIR_OK)return status;
         }
     }
     const XrXirDeclarations *d = spec->declarations;
@@ -117,6 +117,41 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
 
         const XrXirCallEntry *init = &spec->entries[d->modules[m].initializer];
         if (init->parameter_count || init->result != XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
+    }
+    return XR_XIR_OK;
+}
+static XrXirStatus program_scoped_boundaries(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec,const XrXirProgramInput *input) {
+    if(!input||!input->artifact)return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *module=xr_xir_compile_artifact_module(input->artifact);
+    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(input->artifact);
+    if(!module||!construction||module->function_count!=spec->entry_count)return XR_XIR_BAD_STRUCTURE;
+    for(uint32_t f=0;f<spec->entry_count;++f) {
+        bool callback=false;
+        XrXirStatus status=xir_compile_buffer_scoped_callback(context,(XirEffectInput){module,construction,NULL},f,&callback);
+        if(status!=XR_XIR_OK)return status;
+        bool begin=module->declarations->functions[f].native_callable==XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN;
+        if(begin){status=xir_native_callable_verify(module,f);if(status!=XR_XIR_OK)return status;}
+        const XrXirCallEntry *entry=&spec->entries[f];
+        status=program_view_boundary(context,spec,entry->result,begin);if(status!=XR_XIR_OK)return status;
+        for(uint32_t p=0;p<entry->parameter_count;++p) {
+            const XrXirTypeNode *node=xr_xir_type_node(spec->types,entry->parameters[p]);
+            bool scoped=callback&&p+1u==entry->parameter_count&&node&&
+                node->kind==XR_XIR_TYPE_MUT_SLICE&&node->element==XR_XIR_U8;
+            status=program_view_boundary(context,spec,entry->parameters[p],scoped);
+            if(status!=XR_XIR_OK)return status;
+        }
+        const XrXirFunction *body=module->functions+f;
+        for(uint32_t i=0;i<body->instruction_count;++i) {
+            const XrXirInstruction *op=body->instructions+i;
+            if(!xr_xir_op_references_function(op->op) || op->immediate<0 ||
+                (uint64_t)op->immediate>=module->function_count ||
+                module->declarations->functions[op->immediate].native_callable!=XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN)continue;
+            bool scoped=false;
+            status=xir_compile_buffer_scoped_site(context,(XirEffectInput){module,construction,NULL},f,i,&scoped);
+            if(status!=XR_XIR_OK)return status;
+            if(!scoped)return XR_XIR_BAD_TYPE;
+        }
     }
     return XR_XIR_OK;
 }
@@ -217,6 +252,8 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
     XrXirProgramPermissions *permissions = NULL;
     status = xir_program_input_prepare(context,&physical,*input,&permissions);
     if (status != XR_XIR_OK) return status;
+    status=program_scoped_boundaries(context,&physical,*input);
+    if(status!=XR_XIR_OK){xir_program_permissions_free(permissions);return status;}
     const XrXirTypes *types = NULL;
     const XrXirDeclarations *declarations = NULL;
     status = xir_effects_program_metadata(context, permissions->effects, &types, &declarations);
@@ -287,6 +324,7 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
     }
     if (status==XR_XIR_OK) status=xr_xir_compile_program_descriptor_match(context,spec,permissions);
     if (status==XR_XIR_OK) status=xr_xir_compile_program_descriptor_match(context,&owned,permissions);
+    if(status==XR_XIR_OK)status=program_scoped_boundaries(context,&owned,*input);
     if (status==XR_XIR_OK && (packet.bytes || packet.length || packet.identity)) {
         if (!packet.bytes || !packet.identity) status=XR_XIR_BAD_STRUCTURE;
         else if (packet.length>UINT64_MAX-32) status=XR_XIR_BUDGET;

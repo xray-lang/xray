@@ -152,6 +152,7 @@ XR_FUNC XrXirStatus xr_xir_compile_view_return_candidate(const XrXirCompileConte
 #include "xxir_view_origins.inc.c"
 #include "xxir_view_liveness_internal.h"
 #include "xxir_view_roots.inc.c"
+#include "xxir_buffer_scoped_boundary.inc.c"
 
 static bool view_boundary_supported(const XrXirTypes *types,const uint8_t *flags,XrXirType type) {
     if (!view_flags_at(types,flags,type)) return true;
@@ -173,16 +174,30 @@ XR_FUNC XrXirStatus xir_compile_view_module_boundary_input(const XrXirCompileCon
     if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(context,(XirEffectInput){module,input.construction,input.control},NULL,NULL,diagnostic);
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
         const XrXirFunction *body=&module->functions[f];
-
-        if (!view_boundary_supported(module->types,flags,body->result)) {
+        bool callback=false;
+        status=xir_compile_buffer_scoped_callback(context,input,f,&callback);
+        if(status!=XR_XIR_OK)break;
+        bool begin=module->declarations->functions[f].native_callable==XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN;
+        if(begin){status=xir_native_callable_verify(module,f);if(status!=XR_XIR_OK)break;}
+        if (!view_boundary_supported(module->types,flags,body->result)&&!begin) {
             status=XR_XIR_BAD_TYPE;
             if (diagnostic) *diagnostic=(XrXirDiagnostic){status,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
             break;
         }
         for (uint32_t p=0;p<body->parameter_count && status==XR_XIR_OK;++p) {
-            if (!view_boundary_supported(module->types,flags,body->parameters[p])) status=XR_XIR_BAD_TYPE;
+            if (!view_boundary_supported(module->types,flags,body->parameters[p])&&
+                !(callback&&p+1u==body->parameter_count)) status=XR_XIR_BAD_TYPE;
         }
         for (uint32_t i=0;i<body->instruction_count && status==XR_XIR_OK;++i) {
+            const XrXirInstruction *op=body->instructions+i;
+            if(xr_xir_op_references_function(op->op) && op->immediate>=0 &&
+                (uint64_t)op->immediate<module->function_count &&
+                module->declarations->functions[op->immediate].native_callable==XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN) {
+                bool scoped=false;
+                status=xir_compile_buffer_scoped_site(context,input,f,i,&scoped);
+                if(status==XR_XIR_OK&&!scoped)status=XR_XIR_BAD_TYPE;
+                if(status!=XR_XIR_OK)break;
+            }
             if (!view_boundary_supported(module->types,flags,body->instructions[i].type)) {
                 const XrXirTypeNode *temporary=xr_xir_type_node(module->types,body->instructions[i].type);
                 bool local=temporary&&((temporary->kind==XR_XIR_TYPE_SLICE&&temporary->element==XR_XIR_I64)||

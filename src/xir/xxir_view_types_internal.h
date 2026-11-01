@@ -49,4 +49,13 @@ XR_FUNC XrXirStatus xir_compile_view_affine_verified(const XrXirCompileContext *
 /* Requires a structurally and semantically admitted module. No executable
  * borrowed value is admitted without independent CFG proof. */
 XR_FUNC XrXirStatus xir_compile_view_module_boundary_input(const XrXirCompileContext *context, XirEffectInput input, XrXirDiagnostic *diagnostic);
+/* Complete ordinary Module and Construction checks precede the exact replay
+ * of every callback reference and use; a signature alone grants no scope. */
+XR_FUNC XrXirStatus xir_compile_buffer_scoped_callback(const XrXirCompileContext *context,
+    XirEffectInput input,uint32_t function,bool *accepted);
+/* Called after declaration and Construction verification. Replays the exact
+ * native begin, actual callback reference and nonescaping view use; the normal
+ * full function/CFG/root checks remain mandatory before publication. */
+XR_FUNC XrXirStatus xir_compile_buffer_scoped_site(const XrXirCompileContext *context,
+    XirEffectInput input,uint32_t function,uint32_t instruction,bool *accepted);
 #endif // XXIR_VIEW_TYPES_INTERNAL_H
