@@ -133,7 +133,7 @@ static void identity_truncation(const XrXirCompileContext *context,const XrXirSo
     }
     XrXirArtifact *restored=NULL;CHECK(xr_xir_compile_checked_read(context,packet->bytes,packet->length,&restored,NULL)==XR_XIR_OK && restored);
     xr_xir_compile_artifact_free(restored);free(truncated);
-    puts("Wire40 native identity tenth-field truncation precedes finite allocation refusal and preserves output PASS");
+    puts("Wire41 native identity tenth-field truncation precedes finite allocation refusal and preserves output PASS");
 }
 static void identity_checks(const XrXirCompileContext *context,const XrXirSourceProduct *product) {
     XrXirSourceProductPacketView packet={0};XrXirArtifact *closed=NULL;
