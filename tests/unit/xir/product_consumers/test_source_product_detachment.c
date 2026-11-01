@@ -93,7 +93,7 @@ static XrXirStatus produce(const XrXirCompileContext *context, const DetachmentC
     const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, test->root};
     const XrXirSourceProductRequest request = {
         {session, test->file, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL},
-        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProductDiagnostic error = {0};
     XrXirStatus status = xr_xir_compile_source_product_build(&request, product, &error);
     xr_compile_session_free(session);

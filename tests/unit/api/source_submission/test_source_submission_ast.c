@@ -98,7 +98,7 @@ int main(void) {
     XrSourceAst *failed=parse(compiler,"state+=1\nvar zero=0\nvar never=1/zero\n");
     XrSourceSubmissionConfig config={0};config.state=xr_source_compiler_state(compiler);
     config.source=(XrXirSourceGenerationConfig){*xr_source_compiler_context(compiler),"paired-owned-ast",XR_SUBMISSION_STDLIB,NULL,NULL};
-    config.target=(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    config.target=(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_instance_config_init(&config.runtime,sizeof(config.runtime))==XR_XIR_CALL_READY);
     AstSubmissionTrace trace={0};config.runtime.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,ast_output,&trace};
     CHECK(xr_source_submission_new(&config,&trace.owner)==XR_SOURCE_OK);

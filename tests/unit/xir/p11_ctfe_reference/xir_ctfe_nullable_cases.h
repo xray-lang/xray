@@ -69,7 +69,7 @@ static void reference_nullable(const XrXirCompileContext *context,XrXirSourceRes
     }
     CHECK(recipe);uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,(uint64_t)selected->value}};
     memcpy(request.checked_identity,identity,sizeof(identity));XrXirValue output={0};
     XrCompileResourceStats baseline=reference_stats(context);size_t first=source_fixture_compile_attempts;
@@ -97,7 +97,7 @@ static void reference_nullable(const XrXirCompileContext *context,XrXirSourceRes
 static void reference_nullable_direct(const XrXirCompileContext *context,XrXirSourceResult *source) {
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);XrXirValue output={0};
-    XrXirCtfeRequest request={.artifact=lowered,.target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+    XrXirCtfeRequest request={.artifact=lowered,.target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,8}};
     memcpy(request.checked_identity,identity,sizeof(identity));XrCompileResourceStats baseline=reference_stats(context);
     request.function=reference_named(module,"absent");XrXirCtfeCallRequest calls={request,XR_XIR_CTFE_MAX_CALL_DEPTH};
@@ -128,7 +128,7 @@ static void reference_nullable_late_owner(void) {
     CHECK(reference_source(&context,"nullable_tuple",&source,&diagnostic)==XR_XIR_OK);
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(&context,&source,identity);
     XrXirCtfeCallRequest request={.evaluation={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,4}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,4}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
     memcpy(request.evaluation.checked_identity,identity,sizeof(identity));XrXirValue value={0};
     CHECK(xr_xir_compile_ctfe_calls(&request,&value)==XR_XIR_CTFE_OK);
     xr_xir_compile_artifact_free(lowered);xr_compile_resources_release(context.resources);

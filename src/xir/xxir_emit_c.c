@@ -380,7 +380,7 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_leaf_c(const XrXirArtifact *artifact, co
         if (module->declarations->functions[f].cleanup_owner) return XR_XIR_BAD_STAGE;
     emit_checked_identity(&buffer);
     append(&buffer, "#include \"xir/xxir_float.h\"\n"
-           "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
+           "#if !defined(XR_ARCH_LE64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_VALUE_ABI_VERSION == %uu, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR boundary size\");\n"
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR boundary alignment\");\n"
@@ -1943,7 +1943,7 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     EMIT_U_SHAPE(buffer, et_4c51538f4bdf2e07, ", %uu, ", ", ", "u, ", d->slot_count);
     if (d->literal_count) append(buffer, "%s_literals", prefix); else EMIT_LITERAL(buffer, "NULL");
     append(buffer, ", %uu, %uu, %uu, NULL};\n", d->literal_count, d->root_module, d->entry_function);
-    EMIT_FORMAT(buffer, et_19845b6223cea369, "_Static_assert(sizeof(XrXirFunctionIdentity) == 40, \"XIR function identity stride\");\n"
+    EMIT_FORMAT(buffer, et_98a4126d317164f7, "_Static_assert(sizeof(XrXirFunctionIdentity) == 40, \"XIR function identity stride\");\n"
         "_Static_assert(offsetof(XrXirFunctionIdentity, method_kind) == 24, \"XIR method role offset\");\n"
         "_Static_assert(offsetof(XrXirFunctionIdentity, test_role) == 28, \"XIR test role offset\");\n"
         "_Static_assert(offsetof(XrXirFunctionIdentity, test_timeout_seconds) == 32, \"XIR test timeout offset\");\n"
@@ -1952,7 +1952,7 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
         "_Static_assert(sizeof(XrXirDeclarations) == 72, \"XIR declaration stride\");\n"
         "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == %uu, \"XIR program ABI\");\n"
         "XR_DATADEF const XrXirProgramSpec %s_program = {XR_XIR_PROGRAM_ABI_VERSION, "
-        "{XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, %s_entries, %uu, &%s_declarations, {NULL, NULL}, ",
+        "{XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION}, %s_entries, %uu, &%s_declarations, {NULL, NULL}, ",
         XR_XIR_PROGRAM_ABI_VERSION, prefix, prefix, module->function_count, prefix);
     if (module->types) append(buffer, "&%s_types", prefix); else EMIT_LITERAL(buffer, "NULL");
     append(buffer, ", {%s_checked, sizeof(%s_checked), %s_identity}};\n",
@@ -1977,7 +1977,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     EMIT_LITERAL(buffer,"#include \"xir/xxir_call_view_operation_internal.h\"\n");
     EMIT_LITERAL(buffer,"#include \"xir/xxir_call_view_moves_internal.h\"\n");
     append(buffer,"_Static_assert(XIR_CALL_NATIVE_SOURCE_VERSION==%uu,\"native source observation version\");\n",XIR_CALL_NATIVE_SOURCE_VERSION);
-    EMIT_FORMAT(buffer, et_d764f24a0c1d87b2, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
+    EMIT_FORMAT(buffer, et_3a8a16cd770e8ec2, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_generator_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#include \"xir/xxir_atomic.h\"\n"
@@ -1985,7 +1985,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
            "#include \"xir/xxir_task.h\"\n"
            "#include \"xir/xxir_task_result_internal.h\"\n"
            "#include \"xir/xxir_types.h\"\n#include \"xir/xxir_type_arena.h\"\n"
-           "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
+           "#if !defined(XR_ARCH_LE64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_CALL_ABI_VERSION == %uu, \"XIR call ABI\");\n"
            "_Static_assert(XR_XIR_VALUE_ABI_VERSION == %uu, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR scalar size\");\n"

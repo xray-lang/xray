@@ -7,7 +7,7 @@
  * source_repl_original_hosted.h - Original hosted authority and root obligations
  */
 static bool original_target(XrXirTarget target) {
-    return target.architecture==XR_XIR_ARCH_X86_64 && target.abi_version==XR_XIR_VALUE_ABI_VERSION;
+    return target.architecture==XR_XIR_ARCH_LE64 && target.abi_version==XR_XIR_VALUE_ABI_VERSION;
 }
 static bool original_inline_root(void) {
     XrXirInstance *runtime=instance_current(fixture.owner->submission->runtime);

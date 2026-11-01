@@ -81,7 +81,7 @@ static void run_order(unsigned reverse) {
     CHECK(module->types && module->types->nominals && module->types->nominals->count==2);
     XrXirArtifact *closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL, NULL)==XR_XIR_OK);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);xr_xir_compile_source_result_free(&source);
     xr_xir_compile_library_catalog_free(library);

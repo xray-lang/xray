@@ -8,7 +8,7 @@
  */
 #include "xir/xxir_comptime_resolve_internal.h"
 static XirComptimeResolveRequest resolution_request(const XrXirArtifact *source) {
-    return (XirComptimeResolveRequest){source,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+    return (XirComptimeResolveRequest){source,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         {XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},XR_XIR_CTFE_MAX_CALL_DEPTH,NULL};
 }
 static XrXirStatus resolution_changed_source(XrXirCompileContext *context,XrXirArtifact **output,unsigned mode) {
@@ -55,7 +55,7 @@ static void resolution_normal(const char *kind) {
     xr_xir_compile_artifact_free(source);CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK && !lowered->evaluation_only);
     xr_xir_compile_artifact_free(closed);uint32_t run=named(&lowered->module,"run");XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);

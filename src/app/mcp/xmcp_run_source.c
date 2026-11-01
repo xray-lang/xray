@@ -158,7 +158,7 @@ XR_FUNC XrXirStatus xmcp_run_source_product(const XmcpSourceRequest *request,
     xr_source_paths_diagnostic_free(&located);
     if (built == XR_SOURCE_COMPILE_OK) {
         XrSourceCompilerConfig config = {*request->context,
-            {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, path.path,
+            {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION}, path.path,
             xr_source_compile_default_manifest_limits()};
         built = xr_source_compiler_new(&config,request->control, &compiler, &detail);
     }

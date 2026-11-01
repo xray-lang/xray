@@ -86,7 +86,7 @@ static XrXirProgram *compile(XrXirCompileContext *context,uint32_t ids[3]) {
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_source_result_free(&source);
     CHECK(xr_xir_compile_specialize(decoded,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(decoded);
-    CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     ids[0]=named(module,"entry");ids[1]=named(module,"early");ids[2]=named(module,"retained");
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK&&!lowered);return program;

@@ -162,7 +162,7 @@ static XrXirArtifact *fuel_lowered(const XrXirCompileContext *context) {
     const XrXirModule built={XR_XIR_BUILT,functions,2,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL,*lowered=NULL;
     CHECK(xir_fixture_check(context,&built,&checked,NULL)==XR_XIR_OK && checked);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(checked,&target, NULL,&lowered,NULL)==XR_XIR_OK && lowered);
     xr_xir_compile_artifact_free(checked);return lowered;
 }
@@ -175,7 +175,7 @@ static XrXirProgram *fuel_program(const XrXirCompileContext *context, FuelObserv
         {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_I64,
             .resume=fuel_main_resume,.environment=observation}};
     XrXirProgramSpec spec={.abi_version=XR_XIR_PROGRAM_ABI_VERSION,
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.entries=entries,.entry_count=2,
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},.entries=entries,.entry_count=2,
         .declarations=module->declarations,.code={observation,fuel_code_release},
         .types=module->types,.packet=xir_program_packet_borrow(lowered)};
     CHECK(spec.packet.bytes && spec.packet.length && spec.packet.identity && xr_xir_compile_artifact_layout(lowered, 0));

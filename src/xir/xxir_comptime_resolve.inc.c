@@ -85,7 +85,7 @@ static XrXirStatus source_comptime_resolve(const XirComptimeResolveRequest *requ
     if (input->module.stage!=XR_XIR_CHECKED || input->module.linkage_kind!=XR_XIR_PROGRAM ||
         xir_effect_evidence_is_closed(&input->module) || xir_artifact_is_evaluation(input))
         return resolution_status(diagnostic,XR_XIR_BAD_STAGE);
-    if (request->target.architecture!=XR_XIR_ARCH_X86_64 || request->target.abi_version!=XR_XIR_VALUE_ABI_VERSION)
+    if (request->target.architecture!=XR_XIR_ARCH_LE64 || request->target.abi_version!=XR_XIR_VALUE_ABI_VERSION)
         return resolution_status(diagnostic,XR_XIR_BAD_LAYOUT);
     XrXirCheckedPacket packet={0};XrXirArtifact *current=NULL;
     XrXirStatus status=xir_checked_write(input,&packet,diagnostic,request->control);

@@ -891,7 +891,7 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
     const XrXirRuntimeSdkFacts *sdk = xr_xir_runtime_sdk_facts(request->sdk);
     const XrXirNativeProjectionFacts *projection = xr_compile_native_projection_facts(request->projection);
     if (!invocation_platform() || !sdk || !projection || sdk->architecture != 1 || sdk->crt != 2 || sdk->c_dialect != 11 ||
-        projection->source.target.architecture != XR_XIR_ARCH_X86_64) {
+        projection->source.target.architecture != XR_XIR_ARCH_LE64) {
         initial.code = XR_XIR_INVOCATION_UNSUPPORTED;
         if (diagnostic) *diagnostic = initial;
         return XR_XIR_INVOCATION_UNSUPPORTED;

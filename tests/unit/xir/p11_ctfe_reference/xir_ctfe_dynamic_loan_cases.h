@@ -27,7 +27,7 @@ static void reference_dynamic_job_new(ReferenceDynamicJob *job,const XrXirChecke
     job->context.limits=xr_xir_compile_default_limits();
     uint8_t digest[32]={0};CHECK(xr_compile_resources_work(job->context.resources,wire->length)==XR_COMPILE_RESOURCE_OK);
     xr_sha256(wire->bytes,wire->length,digest);CHECK(!memcmp(digest,identity,32));
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     /* This existing byte consumer fully decodes/checks an exclusive input and
      * immediately lowers it with complete receiving checks. No artifact or
      * retained proof enters the factory. Both evaluator calls below still
@@ -85,7 +85,7 @@ static void reference_dynamic_source_string(const XrXirCompileContext *context,X
     CHECK(xr_xir_compile_checked_write(closed,&wire,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);XrXirValue output={0};
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}};
     memcpy(request.checked_identity,identity,32);XrCompileResourceStats baseline=reference_stats(context);
     size_t start=source_fixture_compile_attempts;CHECK(reference_text_evaluate(&request,true,&output)==XR_XIR_CTFE_OK);
@@ -107,7 +107,7 @@ static void reference_dynamic_direct(const XrXirCompileContext *context,XrXirSou
         for (uint32_t i=0;i<module->functions[f].instruction_count;++i)
             if (module->functions[f].instructions[i].op==XR_XIR_CELL_PROJECT) ++projects;
     CHECK(projects || !require_projection);XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(module),
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}};
     memcpy(request.checked_identity,identity,32);XrCompileResourceStats baseline=reference_stats(context);
     CHECK(reference_text_evaluate(&request,false,&output)==XR_XIR_CTFE_NOT_LEAF && !output.type && !output.payload);
@@ -164,7 +164,7 @@ static void reference_dynamic_last_owner(const char *name) {
     CHECK(reference_source(&context,name,&source,&diagnostic)==XR_XIR_OK);
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(&context,&source,identity);XrXirValue output={0};
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,2}};
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,2}};
     memcpy(request.checked_identity,identity,32);CHECK(reference_text_evaluate(&request,true,&output)==XR_XIR_CTFE_OK);
     xr_xir_compile_artifact_free(lowered);xr_compile_resources_release(context.resources);reference_class_string(&output);
     size_t attempts=source_fixture_compile_attempts;source_fixture_compile_fail_at=attempts;xr_xir_value_drop(&output);

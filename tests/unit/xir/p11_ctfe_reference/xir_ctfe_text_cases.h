@@ -35,7 +35,7 @@ static void reference_text_direct(const XrXirCompileContext *context,XrXirSource
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     XrXirDomain *reader=NULL;CHECK(xr_xir_compile_domain_new(context->resources,UINT64_MAX,&reader)==XR_XIR_VALUE_OK);
     XrXirValue args[2]={{0}},output={0};
-    XrXirCtfeRequest request={.artifact=lowered,.target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+    XrXirCtfeRequest request={.artifact=lowered,.target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .arguments=args,.argument_count=1,.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}};
     memcpy(request.checked_identity,identity,sizeof(identity));
     for (size_t i=0;i<sizeof(rows)/sizeof(rows[0]);++i) {
@@ -91,7 +91,7 @@ static void reference_text_last_owner(void) {
     XrXirArtifact *lowered=reference_lower(&context,&source,identity);xr_xir_compile_source_result_free(&source);
     XrXirValue input={XR_XIR_F64,0,INT64_C(0x400c000000000000)},value={0};
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_named(xr_xir_compile_artifact_module(lowered),"format"),
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.arguments=&input,.argument_count=1,
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},.arguments=&input,.argument_count=1,
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,3}};
     memcpy(request.checked_identity,identity,sizeof(identity));CHECK(reference_text_evaluate(&request,true,&value)==XR_XIR_CTFE_OK);
     xr_xir_compile_artifact_free(lowered);xr_compile_resources_release(context.resources);reference_text_value(&value,"3.5");

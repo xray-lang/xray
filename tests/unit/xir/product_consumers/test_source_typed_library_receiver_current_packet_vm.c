@@ -499,7 +499,7 @@ static void catalog_import_controls(ReceiverRun *run) {
     CHECK(session_completed(xr_compile_session_new(run->context->resources, &run->control_session), "no-Catalog-control-session-new"));
     XrXirSourceProductRequest absent = {{run->control_session, run->paths[0], &authority,
         run->context, run->stdlib, NULL, XR_XIR_PROGRAM, NULL},
-        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION}};
     XrXirStatus status = xr_xir_compile_source_product_build(&absent, &run->control_product, &run->control_diagnostic);
     CHECK(compile_expected(run, status, XR_XIR_UNRESOLVED, "no-Catalog-original-root-missing-Library-control"));
     CHECK(!run->control_product && run->control_diagnostic.status == status);
@@ -544,7 +544,7 @@ static bool program_source_build(ReceiverRun *run) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, run->root};
     XrXirSourceProductRequest request = {{run->program_session, run->paths[0], &authority,
         run->context, run->stdlib, NULL, XR_XIR_PROGRAM, run->catalog},
-        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION}};
     CHECK(request.source.libraries == run->catalog);
     if (!completed(run, xr_xir_compile_source_product_build(&request, &run->product,
         &run->diagnostic), "Program-SourceProduct-Catalog-import")) {
@@ -569,7 +569,7 @@ static bool program_source_build(ReceiverRun *run) {
     CHECK(facts && dependencies && view && view->complete && dependencies->count == view->module_count);
     CHECK(completed(run, xr_xir_compile_artifact_verify(run->source_checked, NULL), "Program-owned-SOURCE-full-verify"));
     construction_owner(run, run->source_checked, "Program-owned-SOURCE-full-v2"); run->roles = receiver_shape(run->source_checked);
-    CHECK(facts->entry < facts->function_count && facts->target.architecture == XR_XIR_ARCH_X86_64 &&
+    CHECK(facts->entry < facts->function_count && facts->target.architecture == XR_XIR_ARCH_LE64 &&
         facts->target.abi_version == XR_XIR_VALUE_ABI_VERSION);
     CHECK(facts->module_count == view->module_count && run->roles.library_module < view->module_count);
     CHECK(view->modules[run->roles.library_module].path && same_path(view->modules[run->roles.library_module].path, run->paths[1]));
@@ -598,7 +598,7 @@ static bool detach_program(ReceiverRun *run, char **argv) {
     CHECK(completed(run, xr_xir_compile_artifact_verify(run->closed, NULL), "detached-CLOSED-full-verify"));
     construction_owner(run, run->closed, "detached-CLOSED-full-v2"); (void)receiver_shape(run->closed);
     exact_packet(run, run->closed, &run->expected_closed);
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     if (!completed(run, xr_xir_compile_lower(run->closed, &target, NULL, &run->lowered, NULL), "owned-Closed-lower")) return false;
     xr_xir_compile_artifact_free(run->closed); run->closed = NULL;
     CHECK(completed(run, xr_xir_compile_artifact_verify(run->lowered, NULL), "detached-Lowered-full-verify"));
@@ -673,7 +673,7 @@ static bool admit_packet(ReceiverRun *run, char **argv) {
     CHECK(completed(run, xr_xir_compile_artifact_verify(run->closed, NULL), "receiver-poisoned-input-dead-Closed-full-verify"));
     construction_owner(run, run->closed, "receiver-input-dead-Construction-full-v2");
     (void)receiver_shape(run->closed);
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     if (!completed(run, xr_xir_compile_lower(run->closed, &target, NULL, &run->lowered, NULL), "receiver-owned-Closed-lower")) return false;
     xr_xir_compile_artifact_free(run->closed); run->closed = NULL;
     CHECK(completed(run, xr_xir_compile_artifact_verify(run->lowered, NULL), "receiver-Closed-dead-Lowered-full-verify"));

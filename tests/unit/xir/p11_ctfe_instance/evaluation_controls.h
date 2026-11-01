@@ -39,7 +39,7 @@ static void evaluation_wire_controls(XrXirCompileContext *context,const XrXirArt
 static void evaluation_controls(void) {
     XrXirCompileContext context;context_new(&context);XrXirArtifact *checked=NULL,*lowered=NULL,*out=NULL;
     CHECK(evaluation_source(&context,"scalar",&checked)==XR_XIR_OK);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_specialize(checked,&out,NULL, NULL)==XR_XIR_BAD_STAGE && !out);
     XirComptimePending *pending=NULL;CHECK(xr_xir_compile_comptime_pending(checked,&pending,NULL, NULL)==XR_XIR_BAD_STAGE && !pending);
     CHECK(xr_xir_compile_lower(checked,&target, NULL,&lowered,NULL)==XR_XIR_OK && lowered->evaluation_only);

@@ -146,7 +146,7 @@ static void check_syntax(CheckWork *work, const char *path) {
     if (io.status != XR_OS_IO_OK) check_io_failure(work, path, io.status);
 }
 static void check_semantic(CheckWork *work, const char *path) {
-#if defined(XR_ARCH_X86_64)
+#if defined(XR_ARCH_LE64)
     XrSourcePaths paths = {0};
     XrSourcePathsDiagnostic path_diagnostic = {0};
     XrSourceCompileDiagnostic diagnostic = {0};

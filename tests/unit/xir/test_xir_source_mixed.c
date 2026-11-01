@@ -57,7 +57,7 @@ int main(void) {
     const XrXirCompileContext context=*source_fixture_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
     MixedSource *owner=NULL;CHECK(xr_compile_resources_calloc(context.resources,1,sizeof(*owner),(void **)&owner)==XR_COMPILE_RESOURCE_OK);
     owner->artifact=source_fixture_lower(&context,NULL);
-    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     const XrXirModule *module = xr_xir_compile_artifact_module(owner->artifact);
     CHECK(module->function_count == fixture_source_program.entry_count);
     CHECK(xr_xir_compile_vm_bind_table(owner->artifact,&owner->bindings,&owner->entries)==XR_XIR_OK &&

@@ -94,7 +94,7 @@ static void body_false_never(const BodyErrorCase *test) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"body-errors",NULL};
     XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceText input={NULL,test->text,strlen(test->text)};XrXirSourceProduct *product=NULL;
     XrXirSourceProductDiagnostic source={0};XrFrontendRoot source_root={.message=""};
     XrXirStatus created=xr_xir_compile_source_product_build_text(&request,&input,&product,&source);

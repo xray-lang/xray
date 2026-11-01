@@ -114,7 +114,7 @@ static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, 
     XrXirStatus status = xr_xir_compile_specialize(decoded, &specialized, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "specialize=%u function=%u instruction=%u\n", (unsigned)status, diagnostic.function, diagnostic.instruction);
     CHECK(status == XR_XIR_OK && specialized); xr_xir_compile_artifact_free(decoded);
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized, &target, NULL, &lowered, &diagnostic) == XR_XIR_OK && lowered);
     xr_xir_compile_artifact_free(specialized);
     if (output) {

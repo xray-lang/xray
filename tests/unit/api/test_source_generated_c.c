@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
     XrSourceCompileRequest request = {&context, argv[1], argv[3], NULL,
         xr_source_compile_default_manifest_limits(),
-        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL};
+        {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION}, NULL};
     XrXirSourceProduct *product = NULL;
     XrSourceCompileDiagnostic diagnostic = {0};
     XrXirNativeProjection *projection = NULL;

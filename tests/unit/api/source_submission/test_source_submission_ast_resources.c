@@ -73,7 +73,7 @@ static XrSourceStatus history_drive(AstHistoryOwners *owner,const XrCompileResou
     if(status!=XR_SOURCE_OK)return status;
     XrSourceSubmissionConfig config={0};config.state=xr_source_compiler_state(owner->compiler);
     config.source=(XrXirSourceGenerationConfig){*xr_source_compiler_context(owner->compiler),"actual-retained-history",XR_PUBLIC_STDLIB,NULL,NULL};
-    config.target=(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    config.target=(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_instance_config_init(&config.runtime,sizeof(config.runtime))==XR_XIR_CALL_READY);
     config.runtime.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,history_output,owner};
     status=xr_source_submission_new(&config,&owner->submission);if(status!=XR_SOURCE_OK)return status;

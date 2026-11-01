@@ -73,7 +73,7 @@ static void forged_recipe(const XrXirCompileContext *context,const XrXirSourcePr
 static XrXirProgram *build(XrXirCompileContext *context,uint32_t ids[11]){
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"throws-controls",NULL};
-    XrXirSourceProductRequest request={{session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+    XrXirSourceProductRequest request={{session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_product_build_text(&request,&(XrXirSourceText){NULL,source_text,sizeof(source_text)-1},&product,&diagnostic);
     if(status!=XR_XIR_OK){XrFrontendRoot root={0};if(diagnostic.failure.report)xr_frontend_report_root(diagnostic.failure.report,0,&root);fprintf(stderr,"Source %u stage%u %d:%d %s\n",status,diagnostic.stage,root.primary.line,root.primary.column,root.message?root.message:"");}

@@ -27,7 +27,7 @@ static void nested_source_case(const char *name,bool accept,bool hidden) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
     XrXirSourceProductRequest request={{session,path,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     if(hidden){
         XrXirSourceResult result={0};XrXirArtifact *closed=NULL;
         CHECK(xr_xir_compile_source_check(&request.source,&result,NULL,NULL)==XR_XIR_OK);
@@ -81,7 +81,7 @@ static uint64_t nested_source_quota(uint64_t work,XrXirStatus expected) {
     CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_NESTED_SOURCE_FIXTURES "/single"};
     const XrXirSourceProductRequest request={{session,XR_NESTED_SOURCE_FIXTURES "/single/root.xr",&authority,
-        &owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        &owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
     diagnostic_root=(XrFrontendRoot){.message=""};

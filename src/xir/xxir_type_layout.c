@@ -20,7 +20,7 @@ XrXirStatus xr_xir_builtin_layout(XrXirType type, const XrXirTarget *target,
     XrXirLayoutContext context, XrXirLayout *layout) {
     bool carrier = type == XR_XIR_STRING || type == XR_XIR_BUFFER_STORAGE ||
         type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO;
-    if (!layout || !target || target->architecture != XR_XIR_ARCH_X86_64 ||
+    if (!layout || !target || target->architecture != XR_XIR_ARCH_LE64 ||
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         context < XR_XIR_LAYOUT_STORAGE || context > XR_XIR_LAYOUT_FRAME ||
         (type != XR_XIR_UNIT && type != XR_XIR_BOOL && type != XR_XIR_RUNE && !xr_xir_type_is_number(type) && !carrier) ||
@@ -42,7 +42,7 @@ XrXirStatus xr_xir_compile_layout(const XrXirCompileContext *compile_context,
     const XrXirTypes *types, XrXirType type, const XrXirTarget *target,
     XrXirLayoutContext context, XrXirLayout *layout) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
-    if (!layout || !target || target->architecture != XR_XIR_ARCH_X86_64 ||
+    if (!layout || !target || target->architecture != XR_XIR_ARCH_LE64 ||
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         context < XR_XIR_LAYOUT_STORAGE || context > XR_XIR_LAYOUT_FRAME) return XR_XIR_BAD_LAYOUT;
 
@@ -66,7 +66,7 @@ static XrXirStatus storage_layouts_into(const XrXirCompileContext *compile_conte
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
-    if (!remaining || !target || target->architecture != XR_XIR_ARCH_X86_64 ||
+    if (!remaining || !target || target->architecture != XR_XIR_ARCH_LE64 ||
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         count != (types ? types->count : 0) || (count != 0) != (layouts != NULL)) return XR_XIR_BAD_LAYOUT;
     XrXirCompileContext budget = *remaining;

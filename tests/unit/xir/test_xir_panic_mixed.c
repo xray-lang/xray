@@ -39,7 +39,7 @@ static void panic_mixed(bool root_native) {
     xr_xir_compile_artifact_free(checked);
     PanicMixed *owner = NULL;
     CHECK(xr_compile_resources_calloc(context.resources, 1, sizeof(*owner), (void **)&owner) == XR_COMPILE_RESOURCE_OK && owner);
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &owner->artifact, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     const XrXirModule *module = xr_xir_compile_artifact_module(owner->artifact);

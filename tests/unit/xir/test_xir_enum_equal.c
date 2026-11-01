@@ -77,7 +77,7 @@ static XrXirArtifact *compile_case(const char *root,unsigned index,uint8_t ident
     CHECK(xr_xir_compile_specialize(read,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     xr_sha256(packet.bytes,packet.length,identity);xr_xir_compile_checked_packet_free(&packet);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     return lowered;
 }
@@ -126,7 +126,7 @@ static void ctfe_cases(const char *root) {
     assert_compile_begin();uint8_t identity[32];XrXirArtifact *lowered=compile_case(root,6,identity);
     const XrXirModule *m=xr_xir_compile_artifact_module(lowered);const char *names[]={"direct","arrays","relay"};
     for(unsigned i=0;i<3;++i){XrXirCtfeRequest request={0};request.artifact=lowered;request.function=named(m,names[i],true);
-        request.target=(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};memcpy(request.checked_identity,identity,32);
+        request.target=(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};memcpy(request.checked_identity,identity,32);
         request.limits=(XrXirCtfeLimits){XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,1};XrXirValue result={0};
         XrXirCtfeCallRequest calls={request,64};
         XrXirCtfeStatus status=i==2?xr_xir_compile_ctfe_calls(&calls,&result):xr_xir_compile_ctfe_leaf(&request,&result);

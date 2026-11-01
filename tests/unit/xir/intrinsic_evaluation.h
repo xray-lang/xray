@@ -29,7 +29,7 @@ static void evaluation_transport(Fixture *fixture) {
         "fn make<T>()->bool{return comptime zero<T>()}\n"
         "export fn run()->bool{return make<i64>()}\n";
     XrXirSourceText input = {NULL, text, sizeof(text) - 1};
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirCtfeLimits limits = {XR_XIR_CTFE_MAX_STEPS, XR_XIR_CTFE_MAX_FRAME_BYTES, XR_XIR_CTFE_MAX_OUTPUT_BYTES};
     XirSourceComptimeRequest request = {&source_request, &input, NULL, 0, target, limits, XR_XIR_CTFE_MAX_CALL_DEPTH};
     XirSourceComptimeInstances stage = {0};

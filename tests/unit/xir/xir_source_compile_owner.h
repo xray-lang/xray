@@ -155,7 +155,7 @@ static XrXirArtifact *source_fixture_lower(const XrXirCompileContext *context,co
                     (unsigned)op->op,(unsigned)op->type,op->args[0],op->args[1],op->targets[0],op->targets[1],
                     (long long)op->immediate,op->type_arguments[0],op->type_arguments[1]);}}}
     CHECK(status==XR_XIR_OK && specialized);xr_xir_compile_artifact_free(checked);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     XrXirDiagnostic lower_diagnostic={0};source_fixture_compile_phase="Lower";status=xr_xir_compile_lower(specialized,&target, NULL,&lowered,&lower_diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"lower status %u function %u block %u instruction %u\n",(unsigned)status,lower_diagnostic.function,lower_diagnostic.block,lower_diagnostic.instruction);
     CHECK(status==XR_XIR_OK && lowered);xr_xir_compile_artifact_free(specialized);return lowered;

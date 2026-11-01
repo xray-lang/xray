@@ -193,14 +193,14 @@ static XrXirStatus pipeline(const XrXirCompileContext *context,const PreparedMat
     xr_xir_compile_artifact_free(closed);closed=NULL;
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,wire.bytes,wire.length,&closed,NULL);
     xr_xir_compile_checked_packet_free(&wire);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&target, NULL,output,NULL);
     xr_xir_compile_artifact_free(closed);
     return status;
 }
 static void compiler_entries(const XrXirArtifact *artifact,uint32_t helper,uint32_t run) {
     XrXirCtfeRequest request={.artifact=artifact,.function=helper,
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}};
     memcpy(request.checked_identity,artifact->checked_identity,sizeof(request.checked_identity));
     XrXirValue output={0};XrXirCtfeStatus status=xr_xir_compile_ctfe_leaf(&request,&output);
@@ -319,7 +319,7 @@ static void source_materializers(unsigned mode) {
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&read,NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(read,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     xr_compile_resources_release(context.resources);execute(&lowered,"run",expected);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
@@ -339,7 +339,7 @@ static void independent_wire(void) {
     CHECK(packet.length==sizeof(materialization76_golden) && !memcmp(packet.bytes,materialization76_golden,packet.length));
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     xr_compile_resources_release(context.resources);execute(&lowered,"entry",1);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);

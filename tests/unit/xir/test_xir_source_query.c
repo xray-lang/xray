@@ -695,7 +695,7 @@ static void source_struct_facts(XrXirSourceRequest *request) {
     CHECK(declaration(generic_view,"value",box->id)->type.generic_owner == box->id);
     XrXirArtifact *specialized = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_specialize(generic.checked, &specialized, NULL, NULL) == XR_XIR_OK);
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(lowered); xr_xir_compile_artifact_free(specialized); xr_xir_compile_source_result_free(&generic);
     write_source(request->entry_path, "struct Pair { value:i64\n label:string }\n"

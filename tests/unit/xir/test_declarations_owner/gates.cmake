@@ -28,12 +28,27 @@ add_custom_command(OUTPUT "${old_root}/extracted.stamp" BYPRODUCTS ${old_headers
     DEPENDS "${CMAKE_CURRENT_LIST_DIR}/old_program27_headers.zip" "${CMAKE_CURRENT_LIST_DIR}/old_program27.json"
     WORKING_DIRECTORY "${old_root}" VERBATIM)
 add_custom_target(test_test_old_headers DEPENDS "${old_root}/extracted.stamp")
-add_library(test_test_old_program27 OBJECT "${CMAKE_CURRENT_LIST_DIR}/old_program27.c")
-add_dependencies(test_test_old_program27 test_test_old_headers)
-target_include_directories(test_test_old_program27 BEFORE PRIVATE "${old_root}/src")
-add_executable(test_test_old_rebuilt "${CMAKE_CURRENT_LIST_DIR}/test_old_object.c" $<TARGET_OBJECTS:test_test_old_program27>)
-target_link_libraries(test_test_old_rebuilt PRIVATE xray_xir_scalar xray_compile_resources)
-add_test(NAME test_test_old_rebuilt COMMAND test_test_old_rebuilt)
+# The preserved image and its headers come from the x86_64-only producer, whose
+# generated C rejects every other target at compile time. Only an x86_64 target
+# can rebuild that authentic object; its provenance is still checked everywhere.
+# Ask the compiler, since the host processor differs from a cross-arch target.
+include(CheckCSourceCompiles)
+set(CMAKE_REQUIRED_INCLUDES "${XR_ROOT}/src")
+check_c_source_compiles("#include \"base/xplatform.h\"
+#if !defined(XR_ARCH_X86_64)
+#error not an x86_64 target
+#endif
+int main(void) { return 0; }" XR_TEST_DECLARATIONS_X86_64_TARGET)
+unset(CMAKE_REQUIRED_INCLUDES)
+if(XR_TEST_DECLARATIONS_X86_64_TARGET)
+    add_library(test_test_old_program27 OBJECT "${CMAKE_CURRENT_LIST_DIR}/old_program27.c")
+    add_dependencies(test_test_old_program27 test_test_old_headers)
+    target_include_directories(test_test_old_program27 BEFORE PRIVATE "${old_root}/src")
+    add_executable(test_test_old_rebuilt "${CMAKE_CURRENT_LIST_DIR}/test_old_object.c"
+        $<TARGET_OBJECTS:test_test_old_program27>)
+    target_link_libraries(test_test_old_rebuilt PRIVATE xray_xir_scalar xray_compile_resources)
+    add_test(NAME test_test_old_rebuilt COMMAND test_test_old_rebuilt)
+endif()
 add_executable(test_test_source_cases "${CMAKE_CURRENT_LIST_DIR}/test_source_cases.c")
 target_link_libraries(test_test_source_cases PRIVATE xray_xir_source_product)
 add_test(NAME test_test_source_cases COMMAND "${Python3_EXECUTABLE}" -X utf8
@@ -72,9 +87,16 @@ if(XR_OLD_TEST_OBJECT)
     add_test(NAME test_test_old_object COMMAND test_test_old_object)
 endif()
 
-set(test_declaration_targets test_test_old_program27 test_test_old_rebuilt
-    test_test_source_cases test_test_directory_resources test_test_identity
-    test_test_packets test_method_role_regression test_test_declarations test_test_native)
+set(test_declaration_targets test_test_source_cases test_test_directory_resources
+    test_test_identity test_test_packets test_method_role_regression
+    test_test_declarations test_test_native)
+set(test_declaration_tests test_test_source_cases test_test_directory_resources
+    test_test_identity test_test_packet_oracle test_test_packets test_method_role_regression
+    test_test_declarations test_test_native)
+if(XR_TEST_DECLARATIONS_X86_64_TARGET)
+    list(APPEND test_declaration_targets test_test_old_program27 test_test_old_rebuilt)
+    list(APPEND test_declaration_tests test_test_old_rebuilt)
+endif()
 if(TARGET test_test_old_object)
     list(APPEND test_declaration_targets test_test_old_object)
 endif()
@@ -91,7 +113,5 @@ foreach(target IN LISTS test_declaration_targets)
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -pedantic)
     endif()
 endforeach()
-set_tests_properties(test_test_old_rebuilt test_test_source_cases test_test_directory_resources
-    test_test_identity test_test_packet_oracle test_test_packets test_method_role_regression
-    test_test_declarations test_test_native PROPERTIES
+set_tests_properties(${test_declaration_tests} PROPERTIES
     LABELS "unit;xir;test-declarations;ownership;budget;abi" TIMEOUT 90)

@@ -21,7 +21,7 @@ static XrXirStatus atomic_build(AtomicCompileOwner *owner,XrXirSourceProduct **p
     if(ss!=XR_COMPILER_SESSION_OK)return ss==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ATOMIC_FIXTURES};
     XrXirSourceProductRequest request={{session,XR_ATOMIC_FIXTURES "/root.xr",&authority,&owner->context,
-        XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,product,&diagnostic);
     diagnostic_root=(XrFrontendRoot){.message=""};

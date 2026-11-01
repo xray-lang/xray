@@ -172,7 +172,7 @@ static XrXirStatus rci_pipeline(const XrXirCompileContext *c,
     RootCaptureFixture f;rci_fixture(&f,probe);
     XrXirArtifact *checked=NULL,*read=NULL,*instance=NULL,*reloaded=NULL,*lowered=NULL;
     XrXirCheckedPacket first={0},second={0};XrXirDiagnostic d={0};
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     XrXirStatus status=xir_fixture_check(c, &f.module, &checked, &d);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(checked,&first,&d);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(c,first.bytes,first.length,&read,&d);

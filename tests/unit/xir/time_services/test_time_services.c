@@ -65,7 +65,7 @@ static Fixture build(const char *entry_path, const char *stdlib) {
     CHECK(xr_compile_resources_new(&limits, &fixture.resources) == XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context = {fixture.resources, xr_xir_compile_default_limits()};
     XrSourceCompileRequest request = {&context, entry_path, stdlib, NULL,
-        xr_source_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL};
+        xr_source_compile_default_manifest_limits(), {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION}, NULL};
     XrXirSourceProduct *product = NULL;
     XrSourceCompileDiagnostic diagnostic = {0};
     XrSourceCompileStatus status = xr_source_compile_build(&request, &product, &diagnostic);

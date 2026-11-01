@@ -26,7 +26,7 @@ static XrXirStatus source_receiving_operation(XrXirCompileContext *context,const
     XrXirSourceText text={NULL,instance_source_text(),strlen(instance_source_text())};
     XirSourceInstanceSelection selections[2]={{fixture->definition,fixture->functions[0]},{fixture->definition,fixture->functions[1]}};
     XirSourceInstanceRequest request={.source=&source,.text=&text,.selections=selections,.count=2,
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
     XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=!strcmp(kind,"foreign")?instance_foreign_source(&source,NULL,&diagnostic,output,selections,2):

@@ -77,7 +77,7 @@ static bool source_case(const XrXirCompileContext *context, const char *path,
     XrCliCompileSourceRequest request = {0};
     request.context = context; request.absolute_entry_path = path; request.absolute_stdlib_path = stdlib;
     request.manifest_limits = xr_cli_compile_default_manifest_limits();
-    request.target = (XrXirTarget){XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    request.target = (XrXirTarget){XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrCliCompileSourceDiagnostic diagnostic = {0};
     XrXirSourceProduct *product = NULL;
     XrCliCompileSourceStatus status = xr_cli_compile_source_build(&request, &product, &diagnostic);

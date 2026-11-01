@@ -157,7 +157,7 @@ static XrXirStatus rb_bind(RiFixture *f, uint32_t function, XrXirCallEntry *entr
     return XR_XIR_OK;
 }
 static XrXirStatus rb_seal(const RbOwner *owner, RiFixture *f, const XrXirCallEntry *entries) {
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     const XrXirModule *module = xr_xir_compile_artifact_module(f->lowered);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, entries, RI_FUNCTIONS,
         module->declarations, {f, ri_code_drop}, module->types, xir_program_packet_borrow(f->lowered)};
@@ -170,7 +170,7 @@ static XrXirStatus rb_pipeline(const RbOwner *owner, RiFixture *f, RbTrace *trac
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL;
     XrXirCheckedPacket packet = {0};
     XrXirCallEntry entries[RI_FUNCTIONS] = {0};
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     const XrXirCompileContext *context = &owner->source->context;
     XrXirStatus status = XR_XIR_OK;
     size_t runtime_before = runtime_attempts;

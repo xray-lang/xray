@@ -26,14 +26,14 @@ static XrXirArtifact *import_lower(XrXirCompileContext *context,const char *text
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     return lowered;
 }
 static XrXirCtfeCallRequest import_request(XrXirArtifact *artifact,const char *name,const XrXirValue *argument) {
     XrXirCtfeCallRequest request={0};request.evaluation.artifact=artifact;
     request.evaluation.function=named(xr_xir_compile_artifact_module(artifact),name);
-    request.evaluation.target=(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    request.evaluation.target=(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     memcpy(request.evaluation.checked_identity,artifact->checked_identity,32);
     request.evaluation.limits=(XrXirCtfeLimits){65536,65536,8388608};
     request.evaluation.arguments=argument;request.evaluation.argument_count=argument?1:0;request.call_depth=128;return request;

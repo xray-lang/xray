@@ -49,7 +49,7 @@ static XrXirArtifact *program_input(const XrXirCompileContext *context) {
     };
     const XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1,NULL};
     const XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     const XrXirConstructionSpec spec={0};
     const XrXirSlotFacts slots={NULL,0};

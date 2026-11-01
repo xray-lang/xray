@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_write(checked, &packet, &diagnostic);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(&context, packet.bytes, packet.length, &decoded, &diagnostic);
     if (status == XR_XIR_OK) status = xr_xir_compile_specialize(decoded, &closed, &diagnostic, NULL);
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     if (status == XR_XIR_OK) status = xr_xir_compile_lower(closed, &target, NULL, &lowered, &diagnostic);
     if (status == XR_XIR_OK) status = xr_xir_compile_emit_c(lowered, mode == TASK_FAULT_BODY ? "pending_body" : mode == TASK_FAULT_CALL ? "pending_call" : "pending_await", 4194304, &output);
     xr_xir_compile_artifact_free(lowered); xr_xir_compile_artifact_free(closed);

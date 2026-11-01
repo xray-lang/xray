@@ -103,7 +103,7 @@ static XrXirArtifact *native_inbox_fixture(const XrXirCompileContext *context, u
     const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,4,NULL};
     ErrorFixture error; error_fixture_init(&error,false);
     const XrXirModule built={XR_XIR_BUILT,functions,5,&declarations,NULL,&error.types,NULL,XR_XIR_PROGRAM,NULL};
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xir_fixture_check(context, &built, &checked, &diagnostic);

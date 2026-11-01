@@ -142,7 +142,7 @@ static XrXirArtifact *receive(const XrXirCompileContext *receiver,const char *pa
     CHECK(empty>0 && xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     xr_sha256(packet.bytes,packet.length,identity);xr_xir_compile_checked_packet_free(&packet);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);return lowered;
 }
@@ -152,7 +152,7 @@ static XrXirCtfeCallRequest selected(const XrXirArtifact *artifact,const uint8_t
         !memcmp(module->functions[i].name,name,strlen(name))) {CHECK(found==UINT32_MAX);found=i;}
     CHECK(found!=UINT32_MAX);
     XrXirCtfeCallRequest request={.evaluation={.artifact=artifact,.function=found,
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},
         .call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
     memcpy(request.evaluation.checked_identity,identity,32);return request;

@@ -147,7 +147,7 @@ static XrXirStatus visibility_pipeline(const XrXirCompileContext *c, unsigned mo
     VisibilityFixture f;visibility_fixture(&f,c,mode);
     XrXirArtifact *checked=NULL,*read=NULL,*instance=NULL,*reloaded=NULL,*lowered=NULL;
     XrXirCheckedPacket first={0},second={0};XrXirDiagnostic d={0};
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     const char *phase="check";
     XrXirStatus status=xir_fixture_check(c, &f.module, &checked, &d);
     if (status==XR_XIR_OK) { phase="write-template";status=xr_xir_compile_checked_write(checked,&first,&d); }
@@ -179,7 +179,7 @@ static void visibility_literals(void) {
         XrXirStatus status=visibility_pipeline(&c,mode,&artifact,true);
         if (status!=XR_XIR_OK) fprintf(stderr,"visibility mode%u status%u\n",mode,status);
         CHECK(status==XR_XIR_OK && artifact);
-        const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+        const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
         XrXirArtifact *lowered=NULL;
         CHECK(xr_xir_compile_lower(artifact,&target, NULL,&lowered,NULL)==XR_XIR_OK && lowered);
         xr_xir_compile_artifact_free(artifact);

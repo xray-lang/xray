@@ -143,7 +143,7 @@ static NominalRun graph_build(const SourceProductNominalFixture *fixture,
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, fixture->root};
     XrXirSourceProductRequest request = {
         {session, fixture->file, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL},
-        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION}};
     run.status = xr_xir_compile_source_product_build(&request, &product, &diagnostic);
     diagnostic_root=(XrFrontendRoot){.message=""};
     if(diagnostic.failure.report) {
@@ -174,7 +174,7 @@ static NominalRun graph_build(const SourceProductNominalFixture *fixture,
     graph_shape(xr_xir_compile_artifact_module(checked), fixture->classes);
     run.status = xr_xir_compile_artifact_verify(checked, NULL);
     if (run.status != XR_XIR_OK) goto release;
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     run.status = xr_xir_compile_lower(checked, &target, NULL, &lowered, NULL);
     if (run.status != XR_XIR_OK) goto release;
     graph_shape(xr_xir_compile_artifact_module(lowered), fixture->classes);

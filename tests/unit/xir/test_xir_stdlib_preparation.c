@@ -72,7 +72,7 @@ static XrXirStatus preparation_pipeline(const XrXirCompileContext *context,
     *stage = 7;
     status = xr_xir_compile_artifact_verify(closed,NULL);
     if (status != XR_XIR_OK) goto finish;
-    XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     preparation_stage_offsets[8] = effects_compile_attempts-first_attempt;
     preparation_stage_ticks[8] = clock();
     *stage = 8;

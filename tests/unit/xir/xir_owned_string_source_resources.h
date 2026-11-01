@@ -141,7 +141,7 @@ static void cs_lower(CsFixture *f, CsMetrics *m, XrXirArtifact *checked) {
     CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
     cs_compiler_step(m, 6, begin);
     begin = instance_compile_attempts;
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &f->lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_artifact_module(f->lowered)->stage == XR_XIR_LOWERED);
@@ -163,7 +163,7 @@ static void cs_seal(CsFixture *f, CsMetrics *m) {
     for (uint32_t i = 0; i < module->function_count; ++i)
         CHECK(xr_xir_compile_vm_bind(f->lowered, i, &f->bindings[i], &f->entries[i]) == XR_XIR_OK);
     cs_compiler_step(m, 8, begin);
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     const XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, f->entries, module->function_count,
         d, {f, cs_code_release}, module->types, xir_program_packet_borrow(f->lowered)};
     begin = instance_compile_attempts;

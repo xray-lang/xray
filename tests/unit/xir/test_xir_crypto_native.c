@@ -25,7 +25,7 @@ static void crypto_product(const XrXirCompileContext *context,const char *root,c
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     status=xr_xir_compile_specialize(checked,&closed,&issue,NULL);fprintf(stderr,"SPECIALIZE %u f%u b%u i%u\n",status,issue.function,issue.block,issue.instruction);CHECK(status==XR_XIR_OK);
-    xr_xir_compile_artifact_free(checked);const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    xr_xir_compile_artifact_free(checked);const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,&issue)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     uint32_t selected=xr_xir_compile_artifact_module(lowered)->declarations->entry_function;
     if(output) {

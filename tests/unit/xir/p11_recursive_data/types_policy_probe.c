@@ -11,7 +11,7 @@ int main(void) {
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(&context,&source,identity);
     XrXirDomain *reader=NULL;CHECK(xr_xir_compile_domain_new(context.resources,UINT64_MAX,&reader)==XR_XIR_VALUE_OK);
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,3}};
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,3}};
     memcpy(request.checked_identity,identity,32);XrXirValue value={0};
     CHECK(xr_xir_compile_ctfe_leaf(&request,&value)==XR_XIR_CTFE_OK);
     CtfeReferenceCase selected={"array_deep_gap",XR_XIR_UNIT,3,XR_XIR_OK,NULL,0};reference_array_value(&value,&selected,reader);

@@ -115,7 +115,7 @@ static inline XrXirArtifact *struct_set_lowered(const XrXirCompileContext *conte
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);closed=NULL; return lowered;
 }

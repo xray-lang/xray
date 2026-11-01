@@ -125,7 +125,7 @@ static void cleanup_role_cases(void) {
     --closed->module.function_count; --proof->count;
     CHECK(xr_xir_compile_verify_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), NULL) == XR_XIR_BAD_STRUCTURE);
     ++closed->module.function_count; ++proof->count;
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);closed=NULL;
     CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);

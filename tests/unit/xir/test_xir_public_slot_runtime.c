@@ -76,7 +76,7 @@ static void runtime_case(XrXirInstance *owner,unsigned mode,bool same_scope) {
 }
 static XrXirProgram *runtime_program(const XrXirCompileContext *context,const XrXirArtifact *closed) {
     XrXirArtifact *lowered=NULL;XrXirProgram *program=NULL;
-    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
     (void)context;return program;

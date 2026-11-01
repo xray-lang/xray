@@ -57,7 +57,7 @@ static XrXirStatus cleanup_source_lower(const XrXirCompileContext *context,XrXir
     xr_xir_compile_checked_packet_free(&packet);
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&closed,NULL, NULL);
     xr_xir_compile_artifact_free(checked);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(closed,&target, NULL,output,NULL);
     xr_xir_compile_artifact_free(closed);return status;
 }

@@ -25,7 +25,7 @@ static void enum_storage_layout(void) {
         nodes[i].nominal.fields = i ? outer_types : inner_types; nodes[i].nominal.field_count = 3;
     }
     XrXirTypes types = {nodes, 2, &table, NULL};
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirCompileContext budget = consumer_context_default(); XrXirLayout layout = {0};
     uint32_t offsets[3] = {99, 99, 99};
     CHECK(xr_xir_compile_nominal_layout(&budget, &types, (XrXirType)256, &target, &layout, offsets, 3) == XR_XIR_OK);
@@ -62,7 +62,7 @@ static void enum_tag_widths(void) {
     XrXirTypeNode node = {0}; node.kind = XR_XIR_TYPE_NOMINAL;
     XrXirTypes types = {&node, 1, &table, NULL};
     const uint32_t counts[] = {1, 2, 256, 257}, widths[] = {0, 1, 1, 2};
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     for (uint32_t i = 0; i < 4; ++i) {
         identity.variant_count = counts[i];
         XrXirCompileContext budget = consumer_context_default(); XrXirLayout layout = {0};

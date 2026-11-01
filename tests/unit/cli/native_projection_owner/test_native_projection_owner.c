@@ -30,7 +30,7 @@ static XrXirNativeProjection *prepare(const char *root,const char *source,const 
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceProductRequest request={{session,source,&authority,&context,stdlib,NULL,XR_XIR_PROGRAM,NULL},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product=NULL;CHECK(xr_xir_compile_source_product_build(&request,&product,NULL)==XR_XIR_OK);
     xr_compile_session_free(session);
     char prefix[]="bound_source";
@@ -55,7 +55,7 @@ static XrXirStatus bounded(const char *root,const char *source,const char *stdli
         session_status==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceProductRequest request={{session,source,&authority,&context,stdlib,NULL,XR_XIR_PROGRAM,NULL},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     if(status==XR_XIR_OK)status=xr_xir_compile_source_product_build(&request,&product,NULL);
     xr_compile_session_free(session);
     XrXirNativeProjectionRequest project={product,"bound_source",16777216};

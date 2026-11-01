@@ -56,7 +56,7 @@ static XrXirArtifact *cleanup_program_fixture(const XrXirCompileContext *context
     XrXirModule module = {XR_XIR_BUILT, functions, 3, &declarations, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xir_fixture_check(context, &module, &checked, NULL) == XR_XIR_OK);
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     return lowered;

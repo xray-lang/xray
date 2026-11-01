@@ -31,7 +31,7 @@ static XrSourceCompileStatus build(const XrXirCompileContext *context, char **ar
     XrXirSourceProduct **output) {
     if (!strcmp(argv[5],"catalog")) {
         XrSourceCompileRequest request={context,argv[2],argv[3],NULL,
-            xr_source_compile_default_manifest_limits(),{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL};
+            xr_source_compile_default_manifest_limits(),{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}, NULL};
         XrSourceCompileDiagnostic diagnostic={0};
         XrSourceCompileStatus status=xr_source_compile_build(&request,output,&diagnostic);
         if (status != XR_SOURCE_COMPILE_OK) fprintf(stderr,"build status=%u stage=%u\n",status,diagnostic.stage);
@@ -50,7 +50,7 @@ static XrSourceCompileStatus build(const XrXirCompileContext *context, char **ar
     }
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"fixture",argv[1]};
     XrXirSourceProductRequest request={{session,argv[2],&authority,context,argv[3],lock,XR_XIR_PROGRAM,NULL},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProductDiagnostic diagnostic={0};
     if (status==XR_SOURCE_COMPILE_OK)
         status=raw_status(xr_xir_compile_source_product_build(&request,output,&diagnostic));

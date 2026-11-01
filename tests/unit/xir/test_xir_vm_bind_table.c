@@ -83,7 +83,7 @@ static XrXirArtifact *fixture(const XrXirCompileContext *c,bool lowered) {
     XrXirArtifact *checked=NULL,*result=NULL;
     CHECK(xir_fixture_check(c,&built,&checked,NULL)==XR_XIR_OK);
     if (!lowered) return checked;
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(checked,&target, NULL,&result,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);return result;
 }

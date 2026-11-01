@@ -132,7 +132,7 @@ static void built_after_retirement(void) {
     XrXirArtifact *checked_artifact=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_check_v2(&receiver,&built,construction,&checked_artifact,NULL)==XR_XIR_OK);xr_xir_compile_construction_free(construction);
     CHECK(xr_xir_compile_specialize(checked_artifact,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked_artifact);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirRunContext run={1024,1024,0,0,0,0};XrXirValue value={0};
     CHECK(xr_xir_compile_vm_run(lowered,1,&run,NULL,0,&value)==XR_XIR_RUN_OK && value.type==XR_XIR_I64 && value.payload==42);

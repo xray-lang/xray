@@ -55,7 +55,7 @@ int main(int argc,char **argv) {
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t entries[2]={source_copy_entry(module,"answer"),source_copy_entry(module,"kept")};
     if(argc==2) {
         XrXirCSource c={0};CHECK(xr_xir_compile_emit_c(lowered,"source_copy",8388608,&c)==XR_XIR_OK);

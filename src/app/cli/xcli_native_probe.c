@@ -74,7 +74,7 @@ static bool probe_source(XrCliNativeProbe *owner) {
     xr_source_paths_diagnostic_free(&path);
     XrSourceCompiler *compiler=NULL;
     XrSourceCompilerConfig config={{owner->resources,xr_xir_compile_default_limits()},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->stdlib.path,xr_source_compile_default_manifest_limits()};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},owner->stdlib.path,xr_source_compile_default_manifest_limits()};
     if (status==XR_SOURCE_COMPILE_OK) status=xr_source_compiler_new(&config,NULL,&compiler,&owner->source_diagnostic);
     const XrSourceCompilerText text={NULL,"xray-toolchain-probe","print(42)\n",10};
     if (status==XR_SOURCE_COMPILE_OK) status=xr_source_compiler_build_text(compiler,&text,&owner->product,&owner->source_diagnostic);

@@ -211,7 +211,7 @@ static void fixture_spec(Fixture *f, uint32_t mode) {
     f->literals[1] = (XrXirLiteral) {"independent", 11};
     f->declarations = (XrXirDeclarations) {f->modules, 3, f->identities, f->slots, 3, f->literals, 2, 0, 3, NULL};
     f->spec = (XrXirProgramSpec) {XR_XIR_PROGRAM_ABI_VERSION,
-        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, f->entries, mode == 5 ? 11u : 10u,
+        {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION}, f->entries, mode == 5 ? 11u : 10u,
         &f->declarations, {&f->witness, release}, NULL, {0}};
     error_fixture_init(&f->error,false);
     f->types_nodes[0]=f->error.node;

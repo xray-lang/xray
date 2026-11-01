@@ -53,7 +53,7 @@ static void produce_mode(const char *directory,FILE *header,unsigned kind) {
         CHECK(xr_xir_compile_source_generation_view(owner,serial,&view)==XR_XIR_OK);
         XrXirArtifact *closed=NULL,*lowered=NULL;
         CHECK(xr_xir_compile_specialize(view.result->checked,&closed,NULL, NULL)==XR_XIR_OK);
-        const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+        const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
         CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(closed);
         char prefix[80],path[4096];const char *mode=history_mode_name(kind);

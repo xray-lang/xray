@@ -202,7 +202,7 @@ static void frame_boundary(const XrXirArtifact *decoded, uint32_t bytes) {
     XrXirModule module = *xr_xir_compile_artifact_module(decoded);
     XrXirFunction function = module.functions[2];
     module.functions = &function; module.function_count = 1; module.stage = XR_XIR_BUILT;
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     for (unsigned mode = 0; mode < 2; ++mode) {
         SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
         owner.context.limits.frame_bytes = bytes - mode;
@@ -231,7 +231,7 @@ int main(int argc, char **argv) {
     xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_checked_read(&owner.context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     frame_boundary(decoded, xr_xir_compile_artifact_layout(lowered, 2)->frame_bytes);

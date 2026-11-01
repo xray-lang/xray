@@ -20,7 +20,7 @@ static const XrCompileResourceLimits string_factory_limits={
     UINT64_C(67108864),UINT64_C(8388608),UINT64_C(128000000)};
 static XrXirStatus string_factory_operation(const XrXirCompileContext *context,
     const XrXirProgramPacket *proof) {
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *artifact=NULL;XrXirProgram *program=NULL;
     XrXirStatus status=xr_xir_compile_checked_read_lower(context,proof->bytes,proof->length,
         &target,&artifact,NULL);

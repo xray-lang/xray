@@ -156,7 +156,7 @@ static XrXirArtifact *comparator_artifact(const XrXirCompileContext *context) {
     XrXirBlock block = {0, 2, 0, 0};
     XrXirFunction function = {"compare", 7, types, 2, XR_XIR_BOOL, &block, 1, instructions, 2, NULL, 0};
     XrXirModule module = {XR_XIR_BUILT, &function, 1, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xir_fixture_check(context, &module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);

@@ -17,7 +17,7 @@ static void reference_panic_uncaught_fault(const XrXirCheckedPacket *wire,const 
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);uint8_t digest[32]={0};
     CHECK(xr_compile_resources_work(context.resources,packet.length)==XR_COMPILE_RESOURCE_OK);xr_sha256(packet.bytes,packet.length,digest);
     CHECK(!memcmp(digest,identity,sizeof(digest)));xr_xir_compile_checked_packet_free(&packet);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_named(xr_xir_compile_artifact_module(lowered),"unhandled"),.target=target,
@@ -42,7 +42,7 @@ static void reference_panic_abort(const XrXirCompileContext *context,XrXirSource
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);XrXirValue output={0};
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_named(module,"unhandled"),
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,8}};
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,8}};
     memcpy(request.checked_identity,identity,32);XrCompileResourceStats baseline=reference_stats(context);size_t start=source_fixture_compile_attempts;
     CHECK(reference_text_evaluate(&request,true,&output)==expected && !output.type && !output.payload);
     size_t sites=source_fixture_compile_attempts-start;CHECK(sites);

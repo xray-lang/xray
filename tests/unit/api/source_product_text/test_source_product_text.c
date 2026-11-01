@@ -42,7 +42,7 @@ static void world_open_limits(TextWorld *w, XrCompileResourceLimits limits) {
         .namespace_id = "source-product-text-owned"};
     w->request = (XrXirSourceProductRequest){{w->session, NULL, &w->authority,
         &w->context, NULL, NULL, XR_XIR_PROGRAM, NULL},
-        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION}};
 }
 static void world_open(TextWorld *w, uint64_t work) {
     world_open_limits(w, (XrCompileResourceLimits){UINT64_C(64) << 20, UINT64_C(8) << 20, work});
@@ -222,7 +222,7 @@ static void complete_compiler_failures(void) {
             w.context = (XrXirCompileContext){w.resources, xr_xir_compile_default_limits()};
             w.authority = (XrModuleIdentityAuthority){.kind=XR_MODULE_IDENTITY_MEMORY,.namespace_id="source-text-faults"};
             w.request = (XrXirSourceProductRequest){{w.session,NULL,&w.authority,&w.context,NULL,NULL,XR_XIR_PROGRAM,NULL},
-                {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+                {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
             const char source[] = "const n:i64 = 42\n";
             XrXirSourceText text = {NULL,source,sizeof(source)-1};
             status = xr_xir_compile_source_product_build_text(&w.request,&text,&out,&diagnostic);
@@ -257,7 +257,7 @@ static XrXirStatus ast_compile_trial(XrCompileResourceLimits limits,
         w.context = (XrXirCompileContext){w.resources, xr_xir_compile_default_limits()};
         w.authority = (XrModuleIdentityAuthority){XR_MODULE_IDENTITY_MEMORY,"caller-ast",NULL};
         w.request = (XrXirSourceProductRequest){{w.session,NULL,&w.authority,&w.context,
-            NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+            NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
         XrParseStatus parsed = xr_compile_parse(w.session, source, &ast);
         status = parsed == XR_PARSE_OK ? XR_XIR_OK : parsed == XR_PARSE_BUDGET ?
             XR_XIR_BUDGET : parsed == XR_PARSE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;

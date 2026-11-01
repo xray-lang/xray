@@ -161,7 +161,7 @@ static void pce_prepare_lowered(PceFixture *f) {
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);
     CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &f->lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_artifact_context(f->lowered)->resources == f->compiler.resources);
@@ -219,7 +219,7 @@ static void pce_build(PceFixture *f, PceMode mode) {
         entries[i].resume = pce_resume;
         entries[i].release = pce_release;
     }
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     const XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, entries, f->functions,
         m->declarations, {f,pce_code_release}, m->types, {0}};
     XrXirArtifact *pending = f->lowered;

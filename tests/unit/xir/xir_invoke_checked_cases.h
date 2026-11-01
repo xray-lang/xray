@@ -45,7 +45,7 @@ static void invoke_generic_cases(void) {
             CHECK(call->op == XR_XIR_INVOKE && call->targets[0] == 1 && call->targets[1] == 2);
             CHECK(!call->type_arguments[0] && !call->type_arguments[1]);
             CHECK(call->immediate == 1 && specialized->functions[1].parameters[0] == XR_XIR_I64);
-            XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+            XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
             CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
         }
         xr_xir_compile_artifact_free(lowered);lowered=NULL; xr_xir_compile_artifact_free(closed);closed=NULL;
@@ -93,7 +93,7 @@ static void invoke_checked_cases(void) {
         if (attack) { CHECK(status != XR_XIR_OK && !checked); continue; }
         CHECK(status == XR_XIR_OK);
         XrXirArtifact *lowered = NULL;
-        XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+        XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
         CHECK(xr_xir_compile_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
         const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(lowered, 0);
         CHECK(layout->offsets[1] == UINT32_MAX && layout->offsets[2] != UINT32_MAX &&

@@ -118,7 +118,7 @@ static bool admission_producers(NativeAdmission *a) {
     if (a->runtime.file_count != a->facts.sdk.file_count || a->runtime.file_bytes != a->facts.sdk.file_bytes)
         return admission_fail(a, XTC_XIR_ADMISSION_MISMATCH, XTC_XIR_ADMISSION_SDK, 0);
 
-    if (s->target.architecture != XR_XIR_ARCH_X86_64 || s->target.abi_version != XR_XIR_VALUE_ABI_VERSION ||
+    if (s->target.architecture != XR_XIR_ARCH_LE64 || s->target.abi_version != XR_XIR_VALUE_ABI_VERSION ||
         a->runtime.schema != 2 || a->runtime.wire != XR_XIR_CHECKED_SCHEMA || a->runtime.semantic != XR_XIR_CHECKED_CONTRACT ||
         a->runtime.value_abi != XR_XIR_VALUE_ABI_VERSION || a->runtime.call_abi != XR_XIR_CALL_ABI_VERSION ||
         a->runtime.program_abi != XR_XIR_PROGRAM_ABI_VERSION || a->runtime.architecture != 1 ||

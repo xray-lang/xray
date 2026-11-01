@@ -127,7 +127,7 @@ static XrXirStatus capture_index_pipeline(const XrXirCompileContext *c, XrXirArt
     CaptureIndexFixture f;capture_index_fixture(&f);XrXirDiagnostic d={0};
     XrXirArtifact *checked=NULL,*read=NULL,*instance=NULL,*lowered=NULL;XrXirEffects *effects=NULL;
     XrXirCheckedPacket packet={0};const char *phase="check";
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     XrXirStatus status=xir_fixture_check(c, &f.module, &checked, &d);memset(&f,0x95,sizeof(f));
     if (status==XR_XIR_OK) { phase="write";status=xr_xir_compile_checked_write(checked,&packet,&d); }
     xr_xir_compile_artifact_free(checked);

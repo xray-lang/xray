@@ -57,7 +57,7 @@ int main(void) {
     XrCompileResourceLimits limits={XR_COMPILE_MEMORY_FINITE,8388608,true};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
-    XrSourceCompilerConfig compiler_config={context,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,
+    XrSourceCompilerConfig compiler_config={context,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,
         xr_source_compile_default_manifest_limits()};XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
     CHECK(xr_source_compiler_new(&compiler_config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
     XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};XrXirDomain *domain=NULL;

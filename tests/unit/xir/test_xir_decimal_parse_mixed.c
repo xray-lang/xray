@@ -36,7 +36,7 @@ static void decimal_mixed(bool native_caller) {
     CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     DecimalMixedOwner *owner=NULL;CHECK(xr_compile_resources_calloc(context.resources,1,sizeof(*owner),(void **)&owner)==XR_COMPILE_RESOURCE_OK);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&owner->artifact,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(owner->artifact);CHECK(module->function_count==decimal_source_program.entry_count);
     CHECK(xr_xir_compile_vm_bind_table(owner->artifact,&owner->bindings,&owner->entries)==XR_XIR_OK);
@@ -50,7 +50,7 @@ static void decimal_mixed(bool native_caller) {
     CHECK(packet.identity && packet.length==decimal_source_program.packet.length &&
         !memcmp(packet.identity,decimal_source_program.packet.identity,32) &&
         !memcmp(packet.bytes,decimal_source_program.packet.bytes,packet.length));
-    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},owner->entries,
         module->function_count,module->declarations,{owner,decimal_mixed_free},module->types,packet};
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(&context,&spec,&program)==XR_XIR_OK);
     XrXirValue kept=decimal_program_cases(program,decimal_source_functions);xr_compile_resources_release(context.resources);decimal_retained(&kept);

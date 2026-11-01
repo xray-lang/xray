@@ -253,7 +253,7 @@ static void product_layout_vector(void) {
     const XrXirFunctionIdentity ids[3]={{0,1,0,0,0,0,0, 0, 0},{0},{0}};
     const XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,2,NULL};
     const XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     size_t live=runtime_live,bytes=runtime_bytes;
     /* The framing contains 26 domain bytes and 43 little-endian words.
      * Work includes hash init/final, each encoded byte and each hash input byte. */

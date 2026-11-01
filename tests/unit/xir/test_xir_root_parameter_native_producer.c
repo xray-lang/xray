@@ -116,7 +116,7 @@ static void h1n_emit(const RootParameterSourceOracle *oracle, unsigned index, co
     uint32_t run = h1n_export(cm); h1n_facts(closed, oracle, run);
     h1n_compiler_report(oracle, "specialize_reverify", &context, begin);
     XrXirArtifact *lowered = NULL; begin = instance_compile_attempts;
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     h1n_ok(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL), oracle, "Lower");
     xr_xir_compile_artifact_free(closed); closed = NULL;
     h1n_ok(xr_xir_compile_artifact_verify(lowered, NULL), oracle, "Lowered_reverify");

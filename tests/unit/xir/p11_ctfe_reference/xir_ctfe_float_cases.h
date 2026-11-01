@@ -41,7 +41,7 @@ static void reference_float_direct(const XrXirCompileContext *context,XrXirSourc
         {"exact",XR_XIR_F32,XR_XIR_UNIT,XR_XIR_UNIT,UINT64_C(0x13f800000),0,0,XR_XIR_CTFE_BAD_ARGUMENT}
     };
     XrXirValue output={0},args[2]={{0},{0}};
-    XrXirCtfeRequest request={.artifact=lowered,.target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+    XrXirCtfeRequest request={.artifact=lowered,.target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,8}};
     memcpy(request.checked_identity,identity,sizeof(identity));XrCompileResourceStats baseline=reference_stats(context);
     for (size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {

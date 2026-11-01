@@ -120,7 +120,7 @@ static void nullable_layouts(void) {
         XR_XIR_U8,XR_XIR_U16,XR_XIR_U32,XR_XIR_U64,XR_XIR_F32,XR_XIR_F64,XR_XIR_STRING};
     const uint32_t sizes[]={2,2,4,8,16,2,4,8,16,8,16,16};
     const uint32_t alignments[]={1,1,2,4,8,1,2,4,8,4,8,8};
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     for (uint32_t i=0;i<sizeof(elements)/sizeof(elements[0]);++i) {
         XrXirTypeNode node={.kind=XR_XIR_TYPE_NULLABLE,.element=elements[i]};
         XrXirTypes types={&node,1,NULL,NULL};XrXirLayout layout={0};

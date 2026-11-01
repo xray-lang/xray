@@ -7386,7 +7386,7 @@ and types reject. The exact internal fields are verified by assertions such as
 `test_xir_stages`; these assertions do not grant execution qualification.
 
 Internal scalar execution is verified by `test_xir_execution` and `test_xir_native`.
-The initial target is little-endian x86_64 with the current value boundary ABI defined in this section. Layout
+The sole target is the 64-bit-pointer, little-endian value model with the current value boundary ABI defined in this section. Layouts depend only on pointer width and byte order, so every 64-bit little-endian host, including x86_64 and AArch64, executes the same images; other hosts have no XIR execution target and `run`, `test`, `check` and the debugger reject explicitly. Layout
 queries include type, target, context, and ABI. Lowering stores authoritative
 frame offsets and boundary layouts; VM/C consumers cannot choose another layout.
 Bool/i64 SSA and frame lanes use eight bytes. Boundary values use sixteen bytes

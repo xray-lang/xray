@@ -32,7 +32,7 @@ static void reference_output_fault(const XrXirCheckedPacket *wire,const uint8_t 
     CHECK(xr_xir_compile_checked_read(&context,wire->bytes,wire->length,&closed,NULL)==XR_XIR_OK);
     uint8_t digest[32]={0};CHECK(xr_compile_resources_work(context.resources,wire->length)==XR_COMPILE_RESOURCE_OK);
     xr_sha256(wire->bytes,wire->length,digest);CHECK(!memcmp(digest,identity,32));
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),.target=target,
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,logical}};
@@ -61,7 +61,7 @@ static void reference_output(const XrXirCompileContext *context,XrXirSourceResul
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t run=reference_run_function(module);
     if (!direct) for (uint32_t i=0;i<module->functions[run].instruction_count;++i)
         CHECK(module->functions[run].instructions[i].op!=XR_XIR_CALL && module->functions[run].instructions[i].op!=XR_XIR_CALL_INDIRECT);
-    XrXirCtfeRequest request={.artifact=lowered,.function=run,.target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+    XrXirCtfeRequest request={.artifact=lowered,.function=run,.target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,8}};
     memcpy(request.checked_identity,identity,32);XrCompileResourceStats baseline=reference_stats(context);
     CHECK(reference_text_evaluate(&request,true,&output)==XR_XIR_CTFE_OUTPUT_LIMIT && !output.type && !output.payload);
@@ -100,7 +100,7 @@ static void reference_output_last_owner(const CtfeReferenceCase *selected) {
     CHECK(reference_source(&context,selected->name,&source,&diagnostic)==XR_XIR_OK);
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(&context,&source,identity);xr_xir_compile_source_result_free(&source);
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,(uint64_t)selected->value}};
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,(uint64_t)selected->value}};
     memcpy(request.checked_identity,identity,32);XrXirValue output={0};CHECK(reference_text_evaluate(&request,true,&output)==XR_XIR_CTFE_OK);
     xr_xir_compile_artifact_free(lowered);xr_compile_resources_release(context.resources);reference_output_value(&output,strstr(selected->name,"fibonacci")!=NULL);
     size_t attempts=source_fixture_compile_attempts;source_fixture_compile_fail_at=attempts;xr_xir_value_drop(&output);source_fixture_compile_fail_at=SIZE_MAX;

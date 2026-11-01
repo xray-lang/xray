@@ -35,7 +35,7 @@ static XrXirArtifact *float_mixed_lower(const XrXirCompileContext *context) {
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(checked,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&closed,NULL, NULL);
     xr_xir_compile_artifact_free(checked);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);
     xr_xir_compile_artifact_free(closed);
     if(status!=XR_XIR_OK) {
@@ -75,7 +75,7 @@ static void float_mixed(unsigned direction) {
     CHECK(packet.identity && packet.length==json_float_program.packet.length &&
         !memcmp(packet.identity,json_float_program.packet.identity,32) &&
         !memcmp(packet.bytes,json_float_program.packet.bytes,packet.length));
-    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},owner->entries,
         module->function_count,module->declarations,{owner,float_mixed_release},module->types,packet};
     XrXirProgram *program=NULL;XrXirStatus status=xr_xir_compile_program_seal(&context,&spec,&program);
     if(status!=XR_XIR_OK) {

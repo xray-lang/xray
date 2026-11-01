@@ -50,7 +50,7 @@ static void channel_task_new(ChannelTaskFixture *f) {
         {.kind=XR_XIR_TYPE_CHANNEL,.element=XR_XIR_I64} };
     const XrXirTypes program_types={nodes,2,NULL,NULL};
     CHECK(xr_xir_compile_declarations_verify(&f->owner.context,&declarations,&program_types,4,XR_XIR_PROGRAM)==XR_XIR_OK);
-    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         entries,4,&declarations,{&f->witness,channel_task_code_drop},
         &program_types,{0}};
     /* Trusted native entries use a real checked and lowered metadata proof.

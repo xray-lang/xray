@@ -62,7 +62,7 @@ int main(void) {
     XrXirNativeInput in={0}, sealed;
     in.schema_version=2; in.checked_schema=XR_XIR_CHECKED_SCHEMA; in.checked_contract=XR_XIR_CHECKED_CONTRACT;
     in.value_abi=XR_XIR_VALUE_ABI_VERSION; in.call_abi=XR_XIR_CALL_ABI_VERSION; in.program_abi=XR_XIR_PROGRAM_ABI_VERSION;
-    in.architecture=XR_XIR_ARCH_X86_64; in.function_count=1; in.module_count=1;
+    in.architecture=XR_XIR_ARCH_LE64; in.function_count=1; in.module_count=1;
     in.source_checked_id.bytes[0]=1; in.closed_checked_id.bytes[0]=2; in.lowered_layout_id.bytes[0]=3;
     in.codegen_policy_id.bytes[0]=4; in.generated_digest.bytes[0]=5; in.toolchain=binding;
     XrXirCompileContext ctx={r,{0}};

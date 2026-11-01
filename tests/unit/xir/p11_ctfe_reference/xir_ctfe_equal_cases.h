@@ -12,7 +12,7 @@ static void reference_owned_equal(const XrXirCompileContext *context,XrXirSource
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);XrXirValue output={0};
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_named(module,"compare"),
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,1}};
     memcpy(request.checked_identity,identity,sizeof(identity));XrCompileResourceStats baseline=reference_stats(context);
     size_t first=source_fixture_compile_attempts;

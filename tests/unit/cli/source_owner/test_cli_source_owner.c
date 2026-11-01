@@ -177,7 +177,7 @@ static void catalog_rejections(const XrSourceCompileRequest *request) {
 static void fault_scan(const char *entry,const char *stdlib) {
     XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
-    XrSourceCompileRequest request={&context,entry,stdlib,NULL,{1048576,64},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL};
+    XrSourceCompileRequest request={&context,entry,stdlib,NULL,{1048576,64},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}, NULL};
     XrXirSourceProduct *product=NULL;XrSourceCompileDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     runtime_attempts=0;CHECK(xr_source_compile_build(&request,&product,&diagnostic)==XR_SOURCE_COMPILE_OK);
     diagnostic_root=(XrFrontendRoot){.message=""};
@@ -323,7 +323,7 @@ static int source_owner_main(int argc,char **argv) {
     CHECK(argc==4 || argc==5);DWORD baseline=handles();
     XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
-    XrSourceCompileRequest request={&context,argv[1],argv[2],NULL,{1048576,64},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL};
+    XrSourceCompileRequest request={&context,argv[1],argv[2],NULL,{1048576,64},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}, NULL};
     runtime_attempts=0;input_rejections(&request);
     bool library=!strcmp(argv[3],"catalog") || !strcmp(argv[3],"catalog-state-reject");
     XrXirLibraryCatalog *libraries=library?catalog(&request):NULL;

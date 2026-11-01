@@ -18,7 +18,7 @@ static void reference_string_read_direct(const XrXirCompileContext *context,XrXi
     CHECK(xr_xir_string_new(domain,"\xc3\xa9" "a" "\xc3\xa9",5,&args[0])==XR_XIR_VALUE_OK);
     CHECK(xr_xir_string_new(domain,"\xc3\xa9",2,&args[1])==XR_XIR_VALUE_OK);
     XrXirCtfeRequest request={.artifact=lowered,.function=search,
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.arguments=args,.argument_count=3,
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},.arguments=args,.argument_count=3,
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,8}};
     memcpy(request.checked_identity,identity,sizeof(identity));
     XrCompileResourceStats baseline=reference_stats(context);

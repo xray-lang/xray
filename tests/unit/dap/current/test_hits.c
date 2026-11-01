@@ -19,7 +19,7 @@ static XrXirStatus hits_write(void *context,const char *bytes,size_t length) {
 static XdapAdapter *hits_setup(XrCompileResources **ledger,XrXirDomain **domain,XrCompileResourceStats *baseline) {
     memset(&capture,0,sizeof(capture));XrCompileResourceLimits limits={67108864,8388608,128000000};
     CHECK(xr_compile_resources_new(&limits,ledger)==XR_COMPILE_RESOURCE_OK);CHECK(xr_compile_resources_stats(*ledger,baseline)==XR_COMPILE_RESOURCE_OK);
-    XrSourceCompilerConfig source={{*ledger,xr_xir_compile_default_limits()},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
+    XrSourceCompilerConfig source={{*ledger,xr_xir_compile_default_limits()},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
     CHECK(xr_source_compiler_new(&source,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);xr_source_compile_diagnostic_free(&diagnostic);
     XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};CHECK(xr_xir_domain_new_budgeted(1048576,&budget,domain)==XR_XIR_VALUE_OK);

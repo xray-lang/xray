@@ -19,8 +19,8 @@
 #include "../base/xchecks.h"
 
 XR_FUNC XrXirTarget xr_xir_host_target(void) {
-#if defined(XR_ARCH_X86_64)
-    return (XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+#if defined(XR_ARCH_LE64)
+    return (XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
 #else
     return (XrXirTarget){0};
 #endif

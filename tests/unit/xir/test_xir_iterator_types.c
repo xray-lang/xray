@@ -60,7 +60,7 @@ static XrXirStatus iterator_pipeline(const XrXirCompileContext *c, bool unit) {
         s=xr_xir_compile_artifact_verify(checked,NULL);
         if (s==XR_XIR_OK) s=xr_xir_compile_artifact_verify(decoded,NULL);
         if (s==XR_XIR_OK) s=xr_xir_compile_lower(decoded,
-            &(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);
+            &(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);
         if (s==XR_XIR_OK) s=xr_xir_compile_artifact_verify(lowered,NULL);
     }
     if (s==XR_XIR_OK) {
@@ -190,7 +190,7 @@ static void iterator_obligations(void) {
     CHECK(xr_xir_compile_type_expression_shape(&c,&f.types,(XrXirType)256,0)==XR_XIR_OK);
     XrXirLayout layout={0};
     CHECK(xr_xir_compile_layout(&c,&f.types,(XrXirType)256,
-        &(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_XIR_LAYOUT_STORAGE,&layout)==XR_XIR_OK);
+        &(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},XR_XIR_LAYOUT_STORAGE,&layout)==XR_XIR_OK);
     CHECK(layout.size==8 && layout.alignment==8);
     CHECK(iterator_substitution(&c)==XR_XIR_OK); owner_free(&c,baseline);
 }

@@ -18,7 +18,7 @@
 #include "xir/xxir_ctfe.h"
 
 static const XrCompileResourceLimits caps={UINT64_C(67108864),UINT64_C(8388608),UINT64_C(128000000)};
-static const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+static const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
 typedef struct ReceivingJob { XrXirCompileContext context;XrXirArtifact *artifact;size_t blocks,bytes; } ReceivingJob;
 static XrCompileResourceStats stats(const XrXirCompileContext *context) {
     XrCompileResourceStats result={0};CHECK(xr_compile_resources_stats(context->resources,&result)==XR_COMPILE_RESOURCE_OK);return result;

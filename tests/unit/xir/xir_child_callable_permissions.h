@@ -222,7 +222,7 @@ static void cp_build(CpFixture *f) {
     CHECK(xr_xir_compile_specialize(decoded, &closed, &d, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);
     CHECK(xr_xir_compile_artifact_verify(closed, &d) == XR_XIR_OK);
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &f->lowered, &d) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     const XrXirModule *module = xr_xir_compile_artifact_module(f->lowered);

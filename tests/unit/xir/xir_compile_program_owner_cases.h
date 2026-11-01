@@ -123,7 +123,7 @@ static XrXirArtifact *program_method_lowered(const XrXirCompileContext *context,
     ClassOwnedFixture fixture;
     class_owned_fixture(&fixture);
     fixture.identities[2].method_kind = method_kind;
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
     CHECK(xir_fixture_check(context, &fixture.module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);

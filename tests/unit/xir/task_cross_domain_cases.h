@@ -33,7 +33,7 @@ static void task_cross_fixture_new(TaskFixture *fixture) {
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)258},
         {.kind = XR_XIR_TYPE_CELL, .element = (XrXirType)259}};
     const XrXirTypes types = {nodes, 5, NULL, NULL};
-    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
+    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION},
         entries, 7, &declarations, {&fixture->witness, task_test_code_drop}, &types, {0}};
     XrXirArtifact *proof = NULL;
     XrXirStatus proof_status = native_metadata_fixture(&fixture->compiler.context, &spec, &proof);

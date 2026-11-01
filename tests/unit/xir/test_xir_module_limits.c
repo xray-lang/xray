@@ -162,7 +162,7 @@ int main(int argc,char **argv) {
     XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,true};XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);uint64_t empty=stats(context.resources).held_bytes;
     XrXirArtifact *closed=source_closed(&context,text,length);CHECK(closed->module.function_count==606&&closed->module.provenance->source->module.function_count==606);
-    if(argc==3){XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};XrXirArtifact *lowered=NULL;CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);XrXirCSource code={0};CHECK(xr_xir_compile_emit_c(lowered,"source_artifact",UINT64_C(64)<<20,&code)==XR_XIR_OK);FILE *f=fopen(argv[2],"wb");CHECK(f&&fwrite(code.text,1,code.length,f)==code.length&&!fclose(f));xr_xir_compile_c_source_free(&code);xr_xir_compile_artifact_free(lowered);}
+    if(argc==3){XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};XrXirArtifact *lowered=NULL;CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);XrXirCSource code={0};CHECK(xr_xir_compile_emit_c(lowered,"source_artifact",UINT64_C(64)<<20,&code)==XR_XIR_OK);FILE *f=fopen(argv[2],"wb");CHECK(f&&fwrite(code.text,1,code.length,f)==code.length&&!fclose(f));xr_xir_compile_c_source_free(&code);xr_xir_compile_artifact_free(lowered);}
     else {
         child_limit(&context);
         XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);malformed(&context,closed,&packet);

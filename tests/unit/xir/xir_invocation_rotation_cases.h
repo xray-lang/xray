@@ -121,7 +121,7 @@ static XrXirStatus invocation_rotation_pipeline(InvocationRotationStages *run) {
         run->phase=6;status=xr_xir_compile_artifact_verify(run->specialized,&run->diagnostic);
     }
     if (status==XR_XIR_OK) {
-        const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+        const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
         run->phase=7;status=xr_xir_compile_lower(run->specialized,&target, NULL,&run->lowered,&run->diagnostic);
     }
     if (status==XR_XIR_OK) {

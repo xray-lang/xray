@@ -154,7 +154,7 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
     XrXirStatus status=xr_xir_compile_specialize(checked,&closed,NULL,ctx->request);
     /* The supported target profile is explicit. Family admission and canonical
      * receiving use authentic type owners, never host sizeof or pointers. */
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     /* Specialization returned this sole owner.
      * Lowering consumes it on success or failure; no later step reads closed. */
     if (status==XR_XIR_OK) status=xr_xir_compile_lower_take(&closed,&target, ctx->request,&lowered,NULL);

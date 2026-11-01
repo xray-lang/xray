@@ -102,7 +102,7 @@ static inline XrXirArtifact *nominal_expression_lowered(const XrXirCompileContex
     xr_xir_compile_artifact_free(closed);closed=NULL;
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(decoded, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
     CHECK(lowered->module.types->count == 6 && lowered->module.provenance->source->module.types->count == 2);

@@ -195,7 +195,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
         return XR_XIR_CTFE_BAD_ARGUMENT;
 
     const XrXirTarget *target = xr_xir_compile_artifact_target(artifact);
-    if (!target || target->architecture != XR_XIR_ARCH_X86_64 ||
+    if (!target || target->architecture != XR_XIR_ARCH_LE64 ||
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         request->target.architecture != target->architecture ||
         request->target.abi_version != target->abi_version) return XR_XIR_CTFE_PROFILE;

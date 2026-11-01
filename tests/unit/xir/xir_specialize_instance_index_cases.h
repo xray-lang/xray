@@ -119,7 +119,7 @@ static XrXirStatus spec_index_source_operation(const XrXirCompileContext *contex
         const XrXirOrigin *origin=&instance->module.provenance->origins[f];
         total_key_elements+=4+origin->argument_count+2*(uint64_t)origin->effect_argument_count;
     }
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     xr_xir_compile_artifact_free(read);read=NULL;
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(instance,&diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_lower_take(&instance,&target, NULL,&lowered,&diagnostic);

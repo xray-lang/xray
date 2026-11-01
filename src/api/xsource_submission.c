@@ -73,7 +73,7 @@ static XrXirCallStatus submission_abort(XrSourceSubmission *owner) {
 XR_FUNC XrSourceStatus xr_source_submission_new(const XrSourceSubmissionConfig *config,XrSourceSubmission **output) {
     if(!config || !config->resources || !output || *output || !config->source.context.resources ||
         config->resources!=config->source.context.resources ||
-        config->target.architecture!=XR_XIR_ARCH_X86_64 || config->target.abi_version!=XR_XIR_VALUE_ABI_VERSION)
+        config->target.architecture!=XR_XIR_ARCH_LE64 || config->target.abi_version!=XR_XIR_VALUE_ABI_VERSION)
         return XR_SOURCE_BAD_ARGUMENT;
     XrSourceSubmission *owner=NULL;
     XrSourceStatus status=submission_resource(xr_compile_resources_calloc(config->resources,1,sizeof(*owner),(void **)&owner));

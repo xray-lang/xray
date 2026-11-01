@@ -144,7 +144,7 @@ static void range_previous_contract(const XrXirCompileContext *context,XrXirChec
 static void range_index_ctfe(const XrXirArtifact *closed,const XrXirArtifact *lowered) {
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     XrXirCtfeCallRequest request={.evaluation={.artifact=lowered,
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},
         .call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
     xr_sha256(packet.bytes,packet.length,request.evaluation.checked_identity);xr_xir_compile_checked_packet_free(&packet);
@@ -193,7 +193,7 @@ static void range_scalar_guard(const char *c_path) {
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(raw);
     CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
-    XrXirCtfeCallRequest request={.evaluation={.target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+    XrXirCtfeCallRequest request={.evaluation={.target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
     xr_sha256(packet.bytes,packet.length,request.evaluation.checked_identity);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_lower(closed,&request.evaluation.target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
@@ -278,7 +278,7 @@ static void range_authority(void) {
     result=range_source(&context,range_constructor_source,"generic.xr",XR_XIR_PROGRAM,NULL);
     XrXirArtifact *closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&result);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     uint32_t entry=range_entry(xr_xir_compile_artifact_module(lowered),"generic");
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
@@ -313,7 +313,7 @@ static void range_flow(unsigned mode,const char *packet_path) {
     XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     range_index_ctfe(closed,lowered);
     xr_xir_compile_artifact_free(closed);const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t selection[RANGE_SELECTION_COUNT];
     for(unsigned f=0;f<RANGE_SELECTION_COUNT;++f)selection[f]=range_entry(module,range_entry_names[f]);
@@ -334,7 +334,7 @@ static void task_result_catalog(void) {
     XrXirArtifact *closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const char *names[]={"success","failure","panicked","cancelled"};uint32_t functions[4];
     for(unsigned n=0;n<4;++n)functions[n]=range_entry(xr_xir_compile_artifact_module(lowered),names[n]);

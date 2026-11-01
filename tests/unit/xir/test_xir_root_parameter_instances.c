@@ -65,7 +65,7 @@ static void ri_roundtrip(void) {
     uint64_t baseline=rp_stats(&context).live_bytes;
     XrXirArtifact *instance=NULL,*read=NULL,*lowered=NULL;
     XrXirDiagnostic d={0};XrXirCheckedPacket packet={0};
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(ri_pipeline(&context,&instance)==XR_XIR_OK && instance);
     CHECK(xr_xir_compile_artifact_verify(instance,&d)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(instance,&packet,&d)==XR_XIR_OK);

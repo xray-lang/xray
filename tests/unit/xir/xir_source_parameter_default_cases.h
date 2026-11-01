@@ -50,7 +50,7 @@ static void source_parameter_defaults_execute(XrXirArtifact *owned) {
     xr_xir_compile_artifact_free(owned);
     CHECK(!xr_xir_compile_artifact_module(specialized)->defaults);
     CHECK(xr_xir_compile_artifact_verify(specialized, NULL)==XR_XIR_OK);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized, &target, NULL, &lowered, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(specialized);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t entry=UINT32_MAX;

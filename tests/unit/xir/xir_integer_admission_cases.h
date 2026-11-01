@@ -42,7 +42,7 @@ static void integer_ir_rejections(void) {
         CHECK(xir_fixture_check(&scalar_owner.context, &module, &checked, NULL) == XR_XIR_BAD_TYPE);
         CHECK(!checked);
     }
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     const XrXirType types[] = {XR_XIR_I8, XR_XIR_I16, XR_XIR_I32, XR_XIR_I64, XR_XIR_U8, XR_XIR_U16, XR_XIR_U32, XR_XIR_U64};
     for (unsigned i = 0; i < 8; ++i) {
         for (unsigned context = XR_XIR_LAYOUT_STORAGE; context <= XR_XIR_LAYOUT_FRAME; ++context) {

@@ -11,7 +11,7 @@
 int main(int argc, char **argv) {
     CHECK(argc == 3); instance_compile_zero();
     XrXirCompileContext context; oll_context(&context);
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     OllFixture fixture;
     XrXirArtifact *lowered = oll_lower(&context, oll_source(&context), &target, &fixture);
     XrXirCSource generated = {0};

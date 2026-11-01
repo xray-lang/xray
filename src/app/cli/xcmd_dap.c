@@ -90,7 +90,7 @@ static int dap_run(bool tcp,uint32_t port,XrCompileResources *resources,DapHost 
         fprintf(stderr,"DAP: %s\n",text);goto done;
     }
     XrSourceCompilerConfig compiler_config={{resources,xr_xir_compile_default_limits()},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},stdlib.path,xr_source_compile_default_manifest_limits()};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},stdlib.path,xr_source_compile_default_manifest_limits()};
     if (xr_source_compiler_new(&compiler_config,NULL,&compiler,&diagnostic)!=XR_SOURCE_COMPILE_OK) goto done;
     XrXirDomainBudgetControls budget={XR_RESOURCE_DEBUG_LIVE,XR_RESOURCE_DEBUG_LIVE,
         XR_RESOURCE_SANDBOX_RUNTIME_WORK,XR_RESOURCE_DEBUG_LIVE,XR_RESOURCE_DEBUG_LIVE};
@@ -138,7 +138,7 @@ XR_FUNC int cmd_dap(const XrCliInvocation *inv) {
     if (!dap_port(inv,&port) || (tcp && xr_cli_opt_bool(&inv->options,"stdio"))) {
         fputs("DAP: select stdio or a TCP port from 0 to 65535\n",stderr);return XR_CLI_EXIT_USAGE;
     }
-#ifndef XR_ARCH_X86_64
+#ifndef XR_ARCH_LE64
     fputs("DAP: this host has no supported XIR execution target\n",stderr);return XR_CLI_EXIT_FAIL;
 #endif
 #ifdef XR_OS_WINDOWS

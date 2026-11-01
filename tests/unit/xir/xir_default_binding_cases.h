@@ -122,7 +122,7 @@ static void default_binding_case(unsigned mode,bool generic) {
  CHECK(!special->module.defaults && special->module.provenance && special->module.provenance->source->module.defaults);
  CHECK(xr_xir_compile_specialize(special, &again, NULL, NULL)==XR_XIR_OK);
  CHECK(again->module.provenance && !again->module.provenance->source->module.provenance);
- XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+ XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
  CHECK(xr_xir_compile_lower(checked, &target, NULL, &lowered, NULL)==XR_XIR_BAD_STAGE && !lowered);
  CHECK(xr_xir_compile_lower(special, &target, NULL, &lowered, NULL)==XR_XIR_OK);
  XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(special, &packet, NULL)==XR_XIR_OK);

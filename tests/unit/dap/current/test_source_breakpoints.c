@@ -22,7 +22,7 @@ static SourceFixture source_fixture(const char *file) {
     CHECK(xr_compile_resources_new(&limits,&fixture.ledger)==XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_stats(fixture.ledger,&fixture.baseline)==XR_COMPILE_RESOURCE_OK);
     XrSourceCompilerConfig source={{fixture.ledger,xr_xir_compile_default_limits()},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
     CHECK(xr_source_compiler_new(&source,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);xr_source_compile_diagnostic_free(&diagnostic);
     XdapAdapterConfig config={.write=source_write,.context=&capture,.message_limit=16384};

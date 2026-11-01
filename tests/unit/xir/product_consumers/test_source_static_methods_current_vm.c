@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, root};
     XrXirSourceProductRequest request = {{session, file, &authority, context, argv[3], NULL, XR_XIR_PROGRAM, NULL},
-        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status = xr_xir_compile_source_product_build(&request, &product, &diagnostic);
     diagnostic_root=(XrFrontendRoot){.message=""};
@@ -178,7 +178,7 @@ int main(int argc, char **argv) {
         xr_xir_compile_checked_packet_free(&original_closed_packet);
         StaticEntries entries = source_entries(xr_xir_compile_artifact_module(closed));
         CHECK(entries.entry == product_entry);
-        XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+        XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
         CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(closed); closed = NULL;
         CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);

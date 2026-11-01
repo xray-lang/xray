@@ -50,7 +50,7 @@ static void task_error_fixture_new(TaskErrorFixture *f) {
     const XrXirSourceModule source = {"task-errors", 11, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirDeclarations declarations = {.modules = &source, .module_count = 1, .functions = identities,
         .root_module = 0, .entry_function = 2};
-    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
+    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION},
         entries, 3, &declarations, {&f->base.witness, task_test_code_drop}, &types, {0}};
     XrXirArtifact *proof = NULL;
     /* This native callback can throw both declared enums, including the unsafe

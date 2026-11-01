@@ -77,7 +77,7 @@ static void wide_boundary(const XrXirCompileContext *context) {
     ++ops[0].args[1]; ++function.operand_count;
     CHECK(xir_fixture_check(context, &module, &lowered, NULL) == XR_XIR_BAD_STRUCTURE && !lowered);
     --ops[0].args[1]; --function.operand_count;
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     xr_xir_compile_artifact_free(checked); checked = NULL;
     /* Artifacts capture structural limits at admission. Each boundary uses a
      * fresh Checked artifact, while all stages retain the same finite ledger. */

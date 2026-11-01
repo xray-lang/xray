@@ -92,7 +92,7 @@ static void source_inference_equivalence_cases(XrXirSourceRequest *request) {
     xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_checked_read(&packet_context, packet.bytes, packet.length, &copy, NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet); inference_equivalence_closed(copy);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(copy, &target, NULL, &lowered, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(copy); inference_equivalence_closed(lowered); xr_xir_compile_artifact_free(lowered);
 }

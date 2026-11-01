@@ -128,7 +128,7 @@ static void built_after_retirement(void) {
     XrXirConstruction *construction=NULL;CHECK(xr_xir_compile_construction_new_v4(&receiver,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&(XrXirSlotFacts){NULL,0},&construction, NULL)==XR_XIR_OK);
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_check_v2(&receiver,&built,construction,&checked,NULL)==XR_XIR_OK);xr_xir_compile_construction_free(construction);
-    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirRunContext run={1024,1024,0,0,0,0};XrXirValue result={0};
     CHECK(xr_xir_compile_vm_run(lowered,1,&run,NULL,0,&result)==XR_XIR_RUN_OK && result.type==XR_XIR_I8 && result.payload==-1);

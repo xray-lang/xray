@@ -138,7 +138,7 @@ static XrXirStatus seal(Consumer *run, XrXirSourceProduct *product, XrXirArtifac
     if (mode == 1)
         return xr_xir_compile_program_seal(&run->context, &product_consumer_program, &run->program);
     XrXirArtifact *lowered = NULL;
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirStatus status = xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL);
     if (status != XR_XIR_OK)
         return status;
@@ -206,7 +206,7 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
     const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CONSUMER_ROOT};
     const XrXirSourceProductRequest request = {
         {session, consumer_fixture->file, &authority, &run.context, NULL, NULL, XR_XIR_PROGRAM, NULL},
-        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION}};
     run.status = xr_xir_compile_source_product_build(&request, &product, &diagnostic);
     diagnostic_root=(XrFrontendRoot){.message=""};
     if(diagnostic.failure.report) {

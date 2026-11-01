@@ -304,7 +304,7 @@ static void callable_error_host(const XrXirCompileContext *work,const XrXirArtif
         .parameter_count=module->functions[i].parameter_count,.result=module->functions[i].result,
         .resume=callable_error_host_resume,.environment=&host};
     XrXirProgramSpec spec={.abi_version=XR_XIR_PROGRAM_ABI_VERSION,
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.entries=entries,.entry_count=module->function_count,
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},.entries=entries,.entry_count=module->function_count,
         .declarations=module->declarations,.types=module->types,.packet=xir_program_packet_borrow(lowered)};
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(work,&spec,&program)==XR_XIR_OK);
     xr_free(entries);
@@ -368,7 +368,7 @@ static void callable_error_program(const XrXirCompileContext *work,XrXirType err
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     uint8_t identity[32];xr_sha256(packet.bytes,packet.length,identity);
     xr_xir_compile_checked_packet_free(&packet);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);

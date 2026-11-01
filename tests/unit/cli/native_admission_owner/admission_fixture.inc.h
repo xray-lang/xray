@@ -42,7 +42,7 @@ static AdmissionFixture fixture_new(const char *path) {
     f.projection=fixture_alloc(f.resources,sizeof(*f.projection));
     f.projection->context=(XrXirCompileContext){f.resources,xr_xir_compile_default_limits()};
     memcpy(f.projection->prefix,"fixture",8);f.projection->facts.prefix=f.projection->prefix;
-    f.projection->facts.source=(XrXirSourceProductFacts){{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},0,1,1,{1},{2},{3}};
+    f.projection->facts.source=(XrXirSourceProductFacts){{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},0,1,1,{1},{2},{3}};
     f.projection->facts.codegen_policy_id.bytes[0]=4;f.projection->facts.generated_digest.bytes[0]=1;
     f.projection->source=(XrXirNativeProjectionSource){"abcd",4};
     f.sdk=fixture_alloc(f.resources,sizeof(*f.sdk));f.sdk->resources=f.resources;

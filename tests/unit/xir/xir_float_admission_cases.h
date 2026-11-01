@@ -88,7 +88,7 @@ static void floating_value_admission(void) {
         CHECK(xr_xir_domain_stats(domain).live_bytes == baseline);
     }
     xr_xir_domain_drop(domain);
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     for (unsigned width = 0; width < 2; ++width) for (unsigned context = XR_XIR_LAYOUT_STORAGE; context <= XR_XIR_LAYOUT_FRAME; ++context) {
         XrXirType type = width ? XR_XIR_F64 : XR_XIR_F32;
         uint32_t size = context == XR_XIR_LAYOUT_STORAGE ? (width ? 8 : 4) :

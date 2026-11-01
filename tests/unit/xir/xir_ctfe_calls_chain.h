@@ -47,7 +47,7 @@ static XrXirStatus ctfe_calls_fixture_build(const XrXirCompileContext *context,
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, memory_name, NULL};
     XrXirSourceRequest request = {NULL, NULL, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceText text = {NULL, producer, sizeof(producer)-1};
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     ctfe_chain_mark(trace, CTFE_CHAIN_SESSION);
     status = ctfe_session_status(xr_compile_session_new(context->resources, &session));
     if (status != XR_XIR_OK) { CHECK(!session); goto done; }

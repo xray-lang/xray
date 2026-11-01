@@ -118,7 +118,7 @@ static XrXirStatus drain_proof(const XrXirCompileContext *context, const XrXirDe
     XrXirModule built = {XR_XIR_BUILT,functions,4,declarations,NULL,types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     XrXirStatus status = xir_fixture_check(context, &built, &checked, NULL);
-    XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     if (status == XR_XIR_OK) status = xr_xir_compile_lower(checked,&target, NULL,output,NULL);
     xr_xir_compile_artifact_free(checked); return status;
 }
@@ -136,7 +136,7 @@ static void cleanup_instance_case(bool late_gate, bool malformed) {
     XrXirFunctionIdentity ids[] = {{0},{0,1,0,0,0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,0,0,0,2, 0, XR_XIR_NON_MEMBER, 0, 0},{0}};
     XrXirSourceModule module = {"main",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE}; XrXirSlot slot = {0,XR_XIR_I64,1};
     XrXirDeclarations declarations = {&module,1,ids,&slot,1,NULL,0,0,1, NULL};
-    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         entries,4,&declarations,{&w,drain_lease},&types,{0}};
     SourceFixtureOwner compiler={0}; cleanup_fixture_owner_new(&compiler);
     XrXirArtifact *proof=NULL;
@@ -196,7 +196,7 @@ static void cleanup_compiler_fixture(CleanupCompilerFixture *f, bool late) {
     f->identities[1].exported=1; f->identities[2].cleanup_owner=2;
     f->module=(XrXirSourceModule){"main",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE}; f->slot=(XrXirSlot){0,XR_XIR_I64,1};
     f->declarations=(XrXirDeclarations){&f->module,1,f->identities,&f->slot,1,NULL,0,0,1,NULL};
-    f->spec=(XrXirProgramSpec){XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+    f->spec=(XrXirProgramSpec){XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         f->entries,4,&f->declarations,{&f->witness,drain_lease},&f->types,{0}};
 }
 static XrXirStatus cleanup_compiler_pipeline(const XrXirCompileContext *context,

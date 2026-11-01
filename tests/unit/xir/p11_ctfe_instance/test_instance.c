@@ -67,7 +67,7 @@ static uint32_t instance_named(const XrXirArtifact *artifact,const char *prefix,
     CHECK(false);return 0;
 }
 static XirCtfeInstanceRequest instance_request(const XrXirArtifact *artifact,uint32_t function) {
-    return (XirCtfeInstanceRequest){artifact,function,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+    return (XirCtfeInstanceRequest){artifact,function,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         {XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},XR_XIR_CTFE_MAX_CALL_DEPTH};
 }
 static bool instance_argument_absent(const XrXirArtifact *closed,XrXirType argument) {

@@ -22,7 +22,7 @@ static XrXirArtifact *panics_lower(XrXirSourceResult *source,bool default_contro
             diagnostic.function<module->function_count ? module->functions[diagnostic.function].name : "");
     }
     CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(read);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     diagnostic=(XrXirDiagnostic){0};status=xr_xir_compile_lower(closed,&target, NULL,&lowered,&diagnostic);
     if (status!=XR_XIR_OK) {
         XrCompileResourceStats stats=library_compile_stats(assert_compile_context);

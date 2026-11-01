@@ -171,7 +171,7 @@ static void specialize_large_evaluation_controls(void) {
     xr_xir_compile_artifact_free(evaluation);xr_xir_compile_comptime_pending_free(pending);
     uint32_t functions[70];for(size_t i=0;i<70;++i)functions[i]=received->module.provenance->evaluation.callee;
     XirCtfeInstanceBatchRequest request={.checked=received,.functions=functions,.count=70,
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
     XirCtfeInstanceBatch *batch=NULL;CHECK(xr_xir_compile_ctfe_instance_batch(&request,NULL,&batch)==XR_XIR_CTFE_OK);
     xr_xir_compile_artifact_free(received);held=library_compile_stats(&owner.context).held_bytes;

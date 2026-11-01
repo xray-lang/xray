@@ -29,7 +29,7 @@ static XrXirStatus instance_foreign_source(const XrXirSourceRequest *original,
     XrXirSourceRequest request=*original;request.entry_path=paths[0];request.authority=&authority;
     if (constants) {
         XirSourceInstanceRequest input={.source=&request,.overlays=inputs,.overlay_count=4,.selections=selections,.count=count,
-            .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+            .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
             .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
         return xr_xir_compile_source_instance_constants(&input,constants,diagnostic);
     }

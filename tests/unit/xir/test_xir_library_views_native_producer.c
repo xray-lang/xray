@@ -205,7 +205,7 @@ done:
 }
 
 static XrXirStatus h1c_action(H1Compiler *c, unsigned p, const XrCompileResourceLimits *caps) {
-    XrXirStatus status = XR_XIR_OK; const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirStatus status = XR_XIR_OK; const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     switch (p) {
     case H1C_OWNER: {
         XrCompileResourceStatus s = xr_compile_resources_new(caps, &c->context.resources);

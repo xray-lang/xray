@@ -42,7 +42,7 @@ static XrXirStatus array_build(ArrayCompileOwner *owner,XrXirSourceProduct **pro
     if(ss!=XR_COMPILER_SESSION_OK)return ss==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ARRAY_FIXTURES};
     XrXirSourceProductRequest request={{session,XR_ARRAY_FIXTURES "/root.xr",&authority,&owner->context,
-        XR_ARRAY_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        XR_ARRAY_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,product,&diagnostic);
     diagnostic_root=(XrFrontendRoot){.message=""};
@@ -81,7 +81,7 @@ static void array_lowered_attack(ArrayAttack attack) {
     XrXirArtifact *checked=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
     ArrayProgramEntries entries=array_entries(xr_xir_compile_artifact_module(checked));
-    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(checked,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
@@ -124,7 +124,7 @@ static void array_source_reject(const char *file,const char *message) {
     CHECK(length>0 && (size_t)length<sizeof(path));
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ARRAY_FIXTURES};
     XrXirSourceProductRequest request={{session,path,&authority,&owner.context,XR_ARRAY_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
     diagnostic_root=(XrFrontendRoot){.message=""};

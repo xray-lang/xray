@@ -31,7 +31,7 @@ static bool is_exact_source_path(const char *path) {
     return length > 3 && strcmp(path + length - 3, ".xr") == 0;
 }
 
-#if defined(XR_ARCH_X86_64)
+#if defined(XR_ARCH_LE64)
 static int source_exit(XrSourceCompileStatus status) {
     return status == XR_SOURCE_COMPILE_OUT_OF_MEMORY ||
         status == XR_SOURCE_COMPILE_BAD_ARGUMENT ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
@@ -69,7 +69,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         fprintf(stderr, "XR_RUN_6013: canonical run accepts only an exact '.xr' source path\n");
         return XR_CLI_EXIT_FAIL;
     }
-#if !defined(XR_ARCH_X86_64)
+#if !defined(XR_ARCH_LE64)
     fprintf(stderr, "XR_RUN_6002: source VM does not support this host architecture\n");
     return XR_CLI_EXIT_FAIL;
 #else

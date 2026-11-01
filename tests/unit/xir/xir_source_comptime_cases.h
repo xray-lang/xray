@@ -40,7 +40,7 @@ static void source_comptime_test_answer(const char *text,XrXirType type,int64_t 
     CHECK(xr_xir_compile_artifact_verify(received,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_OK);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
     uint32_t f=source_comptime_test_function(xr_xir_compile_artifact_module(lowered),"run");
@@ -121,7 +121,7 @@ static void source_comptime_test_string_result(const char *text) {
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     uint8_t identity[32]={0};
     xr_sha256(packet.bytes,packet.length,identity);xr_xir_compile_checked_packet_free(&packet);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirCtfeCallRequest request={.evaluation={.artifact=lowered,
         .function=source_comptime_test_function(xr_xir_compile_artifact_module(lowered),"run"),.target=target,

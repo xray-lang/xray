@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const XrXirTarget fixture_target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+static const XrXirTarget fixture_target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
 
 static size_t allocation_calls, live, class_live_bytes, fail_at = SIZE_MAX;
 static const char *allocation_case_name = "selection", *allocation_stage = "arguments";

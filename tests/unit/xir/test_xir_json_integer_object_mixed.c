@@ -30,7 +30,7 @@ static XrXirArtifact *object_mixed_lower(const XrXirCompileContext *context,cons
     CHECK(xr_xir_compile_checked_read(context,bytes,(size_t)length,&checked,NULL)==XR_XIR_OK);
     memset(bytes,0xa5,(size_t)length);xr_compile_resources_free(bytes);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);return lowered;
 }
 static void object_mixed(unsigned direction,const char *path) {
@@ -53,7 +53,7 @@ static void object_mixed(unsigned direction,const char *path) {
         owner->entries[selected]=fixture_json_integer_object_program.entries[selected];
         CHECK(owner->entries[selected].resume==fixture_json_integer_object_program.entries[selected].resume && owner->entries[other].resume!=fixture_json_integer_object_program.entries[other].resume);
     }
-    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,module->function_count,
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},owner->entries,module->function_count,
         module->declarations,{owner,object_mixed_release},module->types,xr_xir_compile_program_proof(artifact)};
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(&context,&spec,&program)==XR_XIR_OK);
     json_object_oracles(program,fixture_json_integer_object_selection);const char input[]="{\"right\":2,\"left\":40}";

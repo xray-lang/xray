@@ -61,7 +61,7 @@ static XrXirArtifact *string_fixture(const XrXirCompileContext *context, uint32_
     const XrXirFunctionIdentity ids[5]={{.exported=1},{0},{.exported=1},{0},{0}};
     const XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,4, NULL};
     const XrXirModule built = {XR_XIR_BUILT, functions, 5, &declarations, NULL, mode ? &error.types : NULL, NULL, XR_XIR_PROGRAM, NULL};
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
     XrXirArtifact *closed=NULL; CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);

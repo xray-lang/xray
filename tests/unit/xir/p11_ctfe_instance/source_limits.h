@@ -16,7 +16,7 @@ static void source_receiving_limits(void) {
         XrXirSourceText text={NULL,instance_source_text(),strlen(instance_source_text())};
         XirSourceInstanceSelection selection={fixture.definition,fixture.functions[0]};
         XirSourceInstanceRequest original={.source=&source,.text=&text,.selections=&selection,.count=1,
-            .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+            .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
             .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
         XirSourceInstanceRequest request=original;XirSourceInstanceConstants result={0};XrXirSourceDiagnostic diagnostic={0};
         if (!axis) request.limits.steps=0;else if (axis==1) request.limits.frame_bytes=0;
@@ -38,7 +38,7 @@ static void source_receiving_limits(void) {
     XrXirSourceText text={NULL,instance_source_text(),strlen(instance_source_text())};
     XirSourceInstanceSelection selection={fixture.definition,fixture.functions[0]};
     XirSourceInstanceRequest original={.source=&source,.text=&text,.selections=&selection,.count=1,
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
     XirSourceInstanceConstants result={0};XrXirSourceDiagnostic diagnostic={0};
     CHECK(xr_xir_compile_source_instance_constants(NULL,&result,&diagnostic)==XR_XIR_BAD_STRUCTURE);

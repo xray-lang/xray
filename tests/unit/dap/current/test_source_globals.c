@@ -93,7 +93,7 @@ int main(void) {
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats initial={0};CHECK(xr_compile_resources_stats(resources,&initial)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
-    XrSourceCompilerConfig config={context,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
+    XrSourceCompilerConfig config={context,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     CHECK(xr_source_compiler_new(&config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
     XrXirSourceProduct *product=NULL;

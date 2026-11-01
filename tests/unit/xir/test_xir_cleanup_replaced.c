@@ -209,7 +209,7 @@ static Prepared prepare_text(const char *text,size_t length) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(ready.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"cleanup-owned",NULL};
     XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_CLEANUP_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceText input={NULL,text,length};
     XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
     XrXirStatus built=xr_xir_compile_source_product_build_text(&request,&input,&product,&diagnostic);

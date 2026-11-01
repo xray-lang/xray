@@ -55,6 +55,21 @@
 #define XR_COMPILER_GCC 1
 #elif defined(_MSC_VER)
 #define XR_COMPILER_MSVC 1
+#endif
+
+/* ========== Value Model ========== */
+
+/* XIR values use one physical layout on every host with 64-bit pointers and
+ * little-endian byte order. XR_ARCH_LE64 names that class of hosts; any other
+ * host has no XIR execution target. MSVC targets only little-endian hosts. */
+#if defined(_MSC_VER) && !defined(__clang__)
+#if defined(_M_X64) || defined(_M_ARM64)
+#define XR_ARCH_LE64 1
+#endif
+#elif defined(__SIZEOF_POINTER__) && defined(__BYTE_ORDER__)
+#if __SIZEOF_POINTER__ == 8 && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define XR_ARCH_LE64 1
+#endif
 #endif  // ========== CPU Primitives ==========
 
 // Pause/yield hint for spin loops. MSVC has no inline-asm syntax

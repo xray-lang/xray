@@ -79,7 +79,7 @@ static XrXirStatus source_once(const char *root,const char *stdlib,size_t failur
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/basic.xr",root)>0);
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceProductRequest request={{session,path,&authority,&context,stdlib,NULL,XR_XIR_PROGRAM,NULL},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};fail_at=failure;
     XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
     *count=attempts;CHECK(xr_compile_resources_stats(resources,stats)==XR_COMPILE_RESOURCE_OK);

@@ -144,7 +144,7 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_build(
         !request->absolute_entry_path || !request->absolute_stdlib_path || !source_catalog_matches(request) ||
         (request->session && xr_compile_session_resources(request->session) != request->context->resources))
         goto rejected;
-    if (request->target.architecture != XR_XIR_ARCH_X86_64 ||
+    if (request->target.architecture != XR_XIR_ARCH_LE64 ||
         request->target.abi_version != XR_XIR_VALUE_ABI_VERSION) {
         status = XR_SOURCE_COMPILE_UNSUPPORTED; goto rejected;
     }

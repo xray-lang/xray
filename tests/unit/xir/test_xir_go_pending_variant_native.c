@@ -93,7 +93,7 @@ static XrXirProgram *variant_vm(const XrXirCompileContext *context, unsigned mod
     memset(packet.bytes, 0xa5, packet.length); xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);

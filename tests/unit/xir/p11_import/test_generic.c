@@ -60,7 +60,7 @@ static void generic_positive(const char *text,bool library) {
     xr_compile_resources_release(producer.resources);
     if (!library) {
         XrXirArtifact *closed=NULL,*lowered=NULL;CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);
-        const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+        const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
         CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
         XrXirCtfeCallRequest request=import_request(lowered,"run",NULL);XrXirValue value={0};
         CHECK(xr_xir_compile_ctfe_calls(&request,&value)==XR_XIR_CTFE_OK && value.type==XR_XIR_I64 && value.payload==42);

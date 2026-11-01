@@ -107,7 +107,7 @@ static XrXirNativeInput native_request(XrToolchainBinding binding) {
     in.schema_version = XR_XIR_NATIVE_INPUT_SCHEMA;
     in.checked_schema = XR_XIR_CHECKED_SCHEMA; in.checked_contract = XR_XIR_CHECKED_CONTRACT;
     in.value_abi = XR_XIR_VALUE_ABI_VERSION; in.call_abi = XR_XIR_CALL_ABI_VERSION;
-    in.program_abi = XR_XIR_PROGRAM_ABI_VERSION; in.architecture = XR_XIR_ARCH_X86_64;
+    in.program_abi = XR_XIR_PROGRAM_ABI_VERSION; in.architecture = XR_XIR_ARCH_LE64;
     in.entry = 1; in.function_count = 3; in.module_count = 2;
     in.source_checked_id = digest("source"); in.closed_checked_id = digest("closed");
     in.lowered_layout_id = digest("layout"); in.codegen_policy_id = digest("policy");

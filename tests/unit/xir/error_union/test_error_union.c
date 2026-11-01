@@ -182,7 +182,7 @@ static void type_cases(void) {
     CHECK(xr_xir_compile_type_markers_prove(&context,&proof,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+302),XR_XIR_CONSTRAINT_ERROR)==XR_XIR_BAD_TYPE);
     XrXirType invalid[2]={XR_XIR_ERROR,XR_XIR_I64};XrXirErrorUnion refused={0};
     CHECK(xr_xir_compile_error_union(&context,&types,invalid,2,&refused)==XR_XIR_BAD_TYPE && !refused.members && !refused.scalar);
-    XrXirLayout layout={77,88};XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirLayout layout={77,88};XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_layout(&context,&types,all,&target,XR_XIR_LAYOUT_STORAGE,&layout)==XR_XIR_BAD_LAYOUT);
     CHECK(layout.size==77 && layout.alignment==88 && !xr_xir_type_is_owned(&types,all));
     ordinary_union_rejected(&context,&types,all);
@@ -307,7 +307,7 @@ static void late_error(XrXirValue *error) {
     CHECK(length==sizeof(expected)-1 && !memcmp(bytes,expected,length));xr_xir_value_drop(error);
 }
 static void vm_case(XrXirArtifact **checked,uint32_t entry,int64_t expected) {
-    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};XrXirArtifact *lowered=NULL;
+    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};XrXirArtifact *lowered=NULL;
     CHECK(xr_xir_compile_lower(*checked,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(*checked);*checked=NULL;
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
@@ -399,7 +399,7 @@ static void source_case(const char *text,uint32_t members,const char *tail,XrXir
     CHECK(xr_compile_session_new(producer.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"error-union",NULL};
     XrXirSourceProductRequest request={{session,NULL,&authority,&producer,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     size_t length=strlen(text);char *input=xr_malloc(length+1);CHECK(input);memcpy(input,text,length+1);
     XrXirSourceText source={NULL,input,length};XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_product_build_text(&request,&source,&product,&diagnostic);
@@ -432,7 +432,7 @@ static void source_case(const char *text,uint32_t members,const char *tail,XrXir
 }
 static XrXirProgram *generation_program(const XrXirSourceGenerationView *view,uint32_t *entry,uint32_t *escaped) {
     XrXirArtifact *closed=NULL,*lowered=NULL;XrXirProgram *program=NULL;
-    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_specialize(view->result->checked,&closed,NULL, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
@@ -567,7 +567,7 @@ static void emit_case(const char *path,const char *output) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"error-union-emit",NULL};
     XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceText source={NULL,text,length};XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
     CHECK(xr_xir_compile_source_product_build_text(&request,&source,&product,&diagnostic)==XR_XIR_OK);
     memset(text,0xa5,length);xr_free(text);xr_compile_session_free(session);

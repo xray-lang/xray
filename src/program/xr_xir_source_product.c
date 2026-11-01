@@ -223,7 +223,7 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
         (input.kind == SOURCE_PRODUCT_AST && !input.ast) || !output || *output ||
         !xir_compile_context_valid(request->source.context) ||
         request->source.linkage_kind!=XR_XIR_PROGRAM ||
-        request->target.architecture!=XR_XIR_ARCH_X86_64 ||
+        request->target.architecture!=XR_XIR_ARCH_LE64 ||
         request->target.abi_version!=XR_XIR_VALUE_ABI_VERSION)
         return source_product_reject(diagnostic,XR_XIR_SOURCE_PRODUCT_INPUT,XR_XIR_BAD_STRUCTURE);
     const XrXirCompileContext *context = request->source.context;

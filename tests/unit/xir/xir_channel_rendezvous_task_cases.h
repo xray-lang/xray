@@ -35,7 +35,7 @@ static void rendezvous_task_new_mode(RendezvousTask *f,bool receive_first) {
     XrXirDeclarations declarations={&module,1,functions,NULL,0,NULL,0,0,3,NULL};
     const XrXirTypeNode nodes[]={ {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64}, {.kind=XR_XIR_TYPE_CHANNEL,.element=XR_XIR_I64} };
     const XrXirTypes types={nodes,2,NULL,NULL};
-    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},entries,4,
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},entries,4,
         &declarations,{f,rendezvous_task_code_drop},&types,{0}};
     XrXirArtifact *proof=NULL;CHECK(native_metadata_fixture(&f->owner.context,&spec,&proof)==XR_XIR_OK);
     spec.packet=xir_program_packet_borrow(proof);

@@ -34,7 +34,7 @@ static XrXirStatus rune_leaf_build(const XrXirCompileContext *ctx,XrXirArtifact 
     XrXirModule module={XR_XIR_BUILT,functions,4,NULL,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL;
     XrXirStatus status=xir_fixture_check(ctx, &module, &checked, NULL);
-    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(checked,&target, NULL,output,NULL);
     xr_xir_compile_artifact_free(checked);return status;
 }

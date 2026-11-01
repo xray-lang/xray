@@ -526,7 +526,7 @@ static XrXirArtifact *reference_lower(const XrXirCompileContext *context,
         xr_sha256(packet.bytes, packet.length, identity);
         xr_xir_compile_checked_packet_free(&packet);
     }
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
@@ -566,7 +566,7 @@ static void reference_direct_depth(const XrXirCompileContext *context, XrXirSour
     XrXirCtfeCallRequest request = {
         .evaluation = {.artifact = lowered,
             .function = reference_run_function(xr_xir_compile_artifact_module(lowered)),
-            .target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
+            .target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION},
             .limits = {XR_XIR_CTFE_MAX_STEPS, XR_XIR_CTFE_MAX_FRAME_BYTES, XR_XIR_CTFE_MAX_OUTPUT_BYTES}},
         .call_depth = 3
     };
@@ -607,7 +607,7 @@ static void reference_leaf_locals(const XrXirCompileContext *context, XrXirSourc
     CHECK(locals == 7);
     XrXirValue arguments[2] = {{XR_XIR_BOOL, 0, 0}, {XR_XIR_BOOL, 0, 0}};
     XrXirCtfeRequest request = {.artifact = lowered, .function = function,
-        .target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
+        .target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION},
         .arguments = arguments, .argument_count = 2,
         .limits = {XR_XIR_CTFE_MAX_STEPS, XR_XIR_CTFE_MAX_FRAME_BYTES, XR_XIR_CTFE_MAX_OUTPUT_BYTES}};
     memcpy(request.checked_identity, identity, sizeof(identity));
@@ -634,7 +634,7 @@ static void reference_unit_direct(const XrXirCompileContext *context, XrXirSourc
     CHECK(noop!=UINT32_MAX && leaf!=UINT32_MAX);
     CHECK(module->functions[noop].result==XR_XIR_UNIT && module->functions[noop].instruction_count==1);
     XrXirCtfeRequest request={.artifact=lowered,.function=noop,
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={1,XR_XIR_CTFE_MAX_FRAME_BYTES,0}};
     memcpy(request.checked_identity,identity,sizeof(identity));
     XrXirValue output={0};
@@ -681,7 +681,7 @@ static void reference_rune_direct(const XrXirCompileContext *context,XrXirSource
     uint32_t same=reference_named(module,"same"),literal=reference_named(module,"literal");
     XrXirValue args[2]={{XR_XIR_RUNE,0,0},{XR_XIR_RUNE,0,0}},output={0};
     XrXirCtfeRequest request={.artifact=lowered,.function=literal,
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,4}};
     memcpy(request.checked_identity,identity,sizeof(identity));
     CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
@@ -749,7 +749,7 @@ static void reference_cell_leaf(const XrXirCompileContext *context,XrXirSourceRe
     CHECK(operations==7);
     XrXirValue argument={XR_XIR_BOOL,0,1},output={0};
     XrXirCtfeRequest request={.artifact=lowered,.function=flag,
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.arguments=&argument,.argument_count=1,
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},.arguments=&argument,.argument_count=1,
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,1}};
     memcpy(request.checked_identity,identity,sizeof(identity));
     XrCompileResourceStats baseline=reference_stats(context);
@@ -802,7 +802,7 @@ static void reference_string(const XrXirCompileContext *context,XrXirSourceResul
     CHECK(literal);
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,(uint64_t)length}};
     memcpy(request.checked_identity,identity,sizeof(identity));XrXirValue output={0};
     XrCompileResourceStats baseline=reference_stats(context);
@@ -842,7 +842,7 @@ static void reference_string_late_owner(void) {
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(&context,&source,identity);
     XrXirCtfeCallRequest request={.evaluation={.artifact=lowered,
         .function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,4}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
     memcpy(request.evaluation.checked_identity,identity,sizeof(identity));XrXirValue value={0};
     CHECK(xr_xir_compile_ctfe_calls(&request,&value)==XR_XIR_CTFE_OK);

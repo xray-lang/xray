@@ -882,7 +882,7 @@ static XrXirCallStatus call_new(const XrXirCallConfig *config, uint32_t entry,
         return XR_XIR_CALL_BAD_ARGUMENT;
     if (budget && budget->notifying) return XR_XIR_CALL_BUSY;
     *output = NULL;
-#if !defined(XR_ARCH_X86_64)
+#if !defined(XR_ARCH_LE64)
     return XR_XIR_CALL_BAD_ABI;
 #endif
     uint64_t bytes = 0;

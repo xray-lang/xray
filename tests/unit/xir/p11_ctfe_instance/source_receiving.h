@@ -22,7 +22,7 @@ static void instance_source_receiving(const char *kind,unsigned ordinal) {
     XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText text={NULL,instance_source_text(),strlen(instance_source_text())};
     XirSourceInstanceRequest receive={.source=&request,.text=&text,.selections=selections,.count=2,
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
     XirSourceInstanceConstants constants={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=!strcmp(kind,"foreign")?instance_foreign_source(&request,NULL,&diagnostic,&constants,selections,2):
@@ -69,7 +69,7 @@ static void instance_source_receiving(const char *kind,unsigned ordinal) {
         if (closed->module.provenance->origins[f].function==provider) { CHECK(function==UINT32_MAX);function=f; }
         else if (closed->module.provenance->origins[f].function==other_provider) { CHECK(other_function==UINT32_MAX);other_function=f; }
     CHECK(function!=UINT32_MAX && other_function!=UINT32_MAX);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     uint32_t entry=named(&lowered->module,"run");
     XrXirCtfeCallRequest evaluation=import_request(lowered,"run",NULL);evaluation.evaluation.function=function;

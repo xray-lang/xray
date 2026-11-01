@@ -42,7 +42,7 @@ static void task_closed_fixture_new(TaskFixture *fixture) {
     const XrXirTypeNode nodes[] = {{.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64, .result = XR_XIR_NEVER},
         {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_STRING, .result = XR_XIR_NEVER}};
     const XrXirTypes types = {nodes, 2, NULL, NULL};
-    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
+    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION},
         entries, 7, &declarations, {&fixture->witness, task_test_code_drop}, &types, {0}};
     XrXirArtifact *proof = NULL;
     XrXirStatus proof_status = native_metadata_fixture(&fixture->compiler.context, &spec, &proof);

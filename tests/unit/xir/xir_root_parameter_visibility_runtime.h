@@ -112,7 +112,7 @@ static void visibility_runtime(void) {
         XrXirArtifact *checked = NULL, *lowered = NULL;
         CHECK(visibility_pipeline(&c, 1, &checked, true) == XR_XIR_OK);
         visibility_runtime_target = visibility_shape(checked, 1);
-        const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+        const XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
         CHECK(xr_xir_compile_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(checked);
         const XrXirModule *m = xr_xir_compile_artifact_module(lowered);

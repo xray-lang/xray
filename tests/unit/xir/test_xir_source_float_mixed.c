@@ -59,7 +59,7 @@ static void source_float_mixed(bool root_native) {
         else ++vm;
     }
     CHECK(native && vm);
-    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
+    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION},
         owner->entries, module->function_count, module->declarations, {owner, source_float_mixed_free}, module->types, xir_program_packet_borrow(owner->artifact)};
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(&compiler.context, &spec, &program) == XR_XIR_OK);

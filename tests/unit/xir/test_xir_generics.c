@@ -140,7 +140,7 @@ static void nominal_field_closure(void) {
             module->types->nodes[4].nominal.arguments[0] == XR_XIR_I64 &&
             module->types->nodes[4].nominal.fields[0] == XR_XIR_I64);
         XrXirArtifact *lowered = NULL;
-        const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+        const XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
         CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(closed); closed=NULL;
         module = xr_xir_compile_artifact_module(lowered);
@@ -228,7 +228,7 @@ static void nominal_expression_closure(void) {
         CHECK(box->nominal.arguments[0] == expected && box->nominal.fields[0] == expected);
         CHECK(outer->nominal.arguments[0] == expected && outer->nominal.fields[0] == function->instructions[0].type);
     }
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed); closed=NULL;
     CHECK(xr_xir_compile_artifact_module(lowered)->types->count == 6);
@@ -259,7 +259,7 @@ static void nominal_function_closure(void) {
         CHECK(a.length == b.length && !memcmp(a.bytes, b.bytes, a.length));
         xr_xir_compile_checked_packet_free(&a); xr_xir_compile_checked_packet_free(&b);
         xr_xir_compile_artifact_free(again); again=NULL;
-        const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+        const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
         CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
         xr_xir_compile_artifact_free(closed); closed=NULL;
         CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
@@ -626,7 +626,7 @@ static void deep_body_substitution(void) {
     }
     CHECK(module->functions[0].instructions[1].immediate == module->functions[0].instructions[2].immediate);
     XrXirArtifact *lowered = NULL;
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed); closed=NULL;
     CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
@@ -696,7 +696,7 @@ int main(int argc,char **argv) {
     consumer_context=consumer_context_default();
     rejected_templates(); forwarding(); recursive_closure();
     XrXirArtifact *checked = generic_fixture(suite_context), *decoded = NULL, *closed = NULL, *lowered = NULL;
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_BAD_STAGE && !lowered);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);

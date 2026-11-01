@@ -131,7 +131,7 @@ static XrXirStatus inline_layout_query(const XrXirTypes *types, XrXirType type,
     uint32_t *field_offsets=output.field_offsets,field_count=output.field_count;
     if (!layout) return XR_XIR_BAD_LAYOUT;
 
-    if (!remaining || !target || target->architecture != XR_XIR_ARCH_X86_64 ||
+    if (!remaining || !target || target->architecture != XR_XIR_ARCH_LE64 ||
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         (field_count != 0) != (field_offsets != NULL)) return XR_XIR_BAD_LAYOUT;
     XrXirCompileContext budget = *remaining;

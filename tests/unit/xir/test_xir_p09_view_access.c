@@ -1237,7 +1237,7 @@ static void module_view_cases(void) {
         .resume=i<2?module_view_init:module_view_entry,.release=module_view_cleanup,.environment=&w};
     const XrXirType parameter=(XrXirType)MP_CELL;
     entries[4].parameters=&parameter;entries[4].parameter_count=1;entries[4].resume=module_view_borrowed;
-    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         entries,5,&declarations,{&w,module_view_code_release},&types,{0}};
     XrXirArtifact *artifact=NULL;CHECK(module_view_metadata(&owner.context,&spec,&artifact)==XR_XIR_OK);
     spec.types=xr_xir_compile_artifact_module(artifact)->types;spec.packet=xir_program_packet_borrow(artifact);

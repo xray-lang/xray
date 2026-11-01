@@ -66,7 +66,7 @@ static int object_execute(const XrXirCompileContext *context,XrXirCheckedPacket 
     CHECK(xr_xir_compile_checked_read(context,packet->bytes,packet->length,&received,NULL)==XR_XIR_OK);
     memset(packet->bytes,0xa5,packet->length);xr_xir_compile_checked_packet_free(packet);
     CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);const char *names[]={"main","inspect","reverse","unicode","empty","duplicate","jsonIntegerObject"};
     uint32_t entries[7];for(unsigned i=0;i<7;++i)entries[i]=object_entry(module,names[i]);

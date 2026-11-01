@@ -50,7 +50,7 @@ static XrSourceStatus submission_open(SubmissionOwners *owned,const XrCompileRes
     if(status!=XR_COMPILE_RESOURCE_OK)return submission_resource(status);
     XrSourceSubmissionConfig config={0};config.state=owned->state;
     config.source=(XrXirSourceGenerationConfig){{owned->resources,xr_xir_compile_default_limits()},"paired-source-records",XR_SUBMISSION_STDLIB,NULL,NULL};
-    config.target=(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    config.target=(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_instance_config_init(&config.runtime,sizeof(config.runtime))==XR_XIR_CALL_READY);
     config.runtime.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,submission_output,owned};
     return xr_source_submission_new(&config,&owned->owner);

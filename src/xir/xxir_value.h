@@ -19,7 +19,9 @@
 #define XR_XIR_CONSTRUCTED_TYPE_LIMIT 65536u
 #define XR_XIR_TYPE_PARAMETER_BASE 65536u
 #define XR_XIR_TYPE_PARAMETER_LIMIT 131072u
-#define XR_XIR_ARCH_X86_64 1u
+/* The sole XIR target: 64-bit pointers and little-endian byte order. Layouts
+ * depend on nothing else, so every XR_ARCH_LE64 host executes the same images. */
+#define XR_XIR_ARCH_LE64 1u
 typedef enum XrXirType { XR_XIR_UNIT, XR_XIR_BOOL, XR_XIR_I64, XR_XIR_STRING,
     XR_XIR_I8 = 5, XR_XIR_I16, XR_XIR_I32, XR_XIR_U8, XR_XIR_U16, XR_XIR_U32, XR_XIR_U64, XR_XIR_F32, XR_XIR_F64,
     XR_XIR_ERROR, XR_XIR_PANIC_INFO, XR_XIR_RUNE, XR_XIR_NEVER, XR_XIR_BUFFER_STORAGE } XrXirType;

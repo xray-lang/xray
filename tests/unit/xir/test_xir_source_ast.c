@@ -93,7 +93,7 @@ static XrXirStatus build(XrCompileResourceLimits caps, const char *root, const c
     XrXirSourceProductDiagnostic diagnostic = {0};
     if (status == XR_XIR_OK) {
         XrXirSourceProductRequest request = {{consumer,root ? path : NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL},
-            {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+            {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
         XrXirSourceAst input = {{root ? "root.xr" : NULL,NULL,0},ast};
         status = xr_xir_compile_source_product_build_ast(&request,&input,&product,&diagnostic);
         CHECK(diagnostic.status == status);

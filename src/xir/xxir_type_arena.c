@@ -111,7 +111,7 @@ XR_FUNC XrXirValueStatus xr_xir_compile_type_arena_new(const XrXirCompileContext
     value_status = arena_pool_walk( types, arena, bytes, &copied);
     if (value_status != XR_XIR_VALUE_OK) goto failed;
     if (copied != bytes) { value_status = XR_XIR_VALUE_BAD_ARGUMENT; goto failed; }
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     value_status = arena_status(xr_xir_compile_storage_layouts(context, &arena->types, &target,
         arena->storage, arena->types.count));
     if (value_status != XR_XIR_VALUE_OK) goto failed;
@@ -168,7 +168,7 @@ XR_FUNC bool xr_xir_compile_type_arena_layout(const XrXirTypeArena *arena,
     *layout = (XrXirLayout) {0, 0};
     const XrXirStorageLayout *stored = xr_xir_compile_type_arena_storage(arena, type);
     if (stored) { *layout = stored->value; return true; }
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     return xr_xir_builtin_layout(type, &target, XR_XIR_LAYOUT_STORAGE, layout) == XR_XIR_OK;
 }
 #include "xxir_type_arena_receiving.inc.c"

@@ -106,7 +106,7 @@ static void fixture_free(Fixture *fixture) {
 }
 static XrXirArtifact *lowered(Fixture *fixture) {
     XrXirArtifact *output = NULL;
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(fixture->closed, &target, NULL, &output, NULL) == XR_XIR_OK);
     return output;
 }
@@ -323,7 +323,7 @@ static void consumers(Fixture *fixture) {
         CHECK(xr_xir_string_new(domain, test->text, test->text_length, &arguments[0]) == XR_XIR_VALUE_OK);
         CHECK(xr_xir_string_new(domain, test->pattern, test->pattern_length, &arguments[1]) == XR_XIR_VALUE_OK);
         XrXirCtfeRequest request = {.artifact = code, .function = test->function,
-            .target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
+            .target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION},
             .arguments = arguments, .argument_count = 2,
             .limits = {XR_XIR_CTFE_MAX_STEPS, XR_XIR_CTFE_MAX_FRAME_BYTES, XR_XIR_CTFE_MAX_OUTPUT_BYTES}};
         memcpy(request.checked_identity, fixture->identity, sizeof(fixture->identity));

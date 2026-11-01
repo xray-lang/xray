@@ -39,7 +39,7 @@ static XrXirArtifact *enum_checked(const XrXirCompileContext *context) {
 static XrXirArtifact *enum_lower(XrXirArtifact *checked) {
     XrXirArtifact *specialized=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_specialize(checked,&specialized,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(specialized);return lowered;
 }
 typedef struct EnumMixed {XrXirArtifact *artifact;XrXirCallEntry *entries;XrXirVmBinding *bindings;} EnumMixed;
@@ -66,7 +66,7 @@ int main(void){
     CHECK(owner->entries[entries.values[1]].resume!=fixture_enum_program.entries[entries.values[1]].resume);
     CHECK(owner->entries[entries.values[2]].resume==fixture_enum_program.entries[entries.values[2]].resume);
     CHECK(owner->entries[entries.values[3]].resume!=fixture_enum_program.entries[entries.values[3]].resume);
-    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,module->function_count,module->declarations,{owner,enum_release},module->types,{0}};
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},owner->entries,module->function_count,module->declarations,{owner,enum_release},module->types,{0}};
     XrXirProgram *program=NULL;
     XrXirArtifact *pending=owner->artifact;XrXirProgramInput *input=NULL;
     XrXirStatus received=xir_program_input_take(&context,&pending,&input);

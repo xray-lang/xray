@@ -55,7 +55,7 @@ int main(void) {
     integer_ir_rejections();
     XrXirArtifact *artifact = fixture_lowered(&scalar_owner.context);
     execution_cases(run, artifact);
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirLayout layout;
     CHECK(xr_xir_builtin_layout(XR_XIR_BOOL, &target, XR_XIR_LAYOUT_STORAGE, &layout) == XR_XIR_OK);
     CHECK(layout.size == 1 && layout.alignment == 1);
@@ -96,7 +96,7 @@ int main(void) {
     XrXirTarget invalid = {0, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(checked, &invalid, NULL, &artifact, NULL) == XR_XIR_BAD_LAYOUT);
     CHECK(!artifact);
-    invalid = (XrXirTarget) {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION + 1};
+    invalid = (XrXirTarget) {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION + 1};
     CHECK(xr_xir_compile_lower(checked, &invalid, NULL, &artifact, NULL) == XR_XIR_BAD_LAYOUT);
     CHECK(!artifact);
     xr_xir_compile_artifact_free(checked);

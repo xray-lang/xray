@@ -58,7 +58,7 @@ static void effect_binding_cases(void) {
             entries[f] = (XrXirCallEntry){XR_XIR_CALL_ABI_VERSION, f == 4 ? &qualified : NULL,
                 f == 4 ? 1u : 0u, f == 1 || f == 3 || f == 4 || f == 6 ? XR_XIR_I64 : XR_XIR_UNIT,
                 sizeof(FunctionCaseFrame), effect_binding_resume, function_case_cleanup, &witness, 0, 0};
-        XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
+        XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION},
             entries, 7, &declarations, {&witness.releases, function_case_release}, &types, {0}};
         NativeFixtureOwner compiler = {0}; CHECK(native_fixture_owner_new(&compiler) == XR_XIR_OK);
         XrXirArtifact *proof = NULL;

@@ -155,7 +155,7 @@ static void rejected_origin_stage(const XrXirArtifact *artifact) {
 static void lowered_origin_rejected(void) {
     XrXirSourceResult result = compile_text("fn scalar()->i64{return 42}\nprint(scalar())\n");
     XrXirArtifact *closed = NULL, *lowered = NULL;
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XIR_OK(xr_xir_compile_specialize(result.checked, &closed, NULL, NULL));
     XIR_OK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL));
     xr_xir_compile_artifact_free(closed);
@@ -187,7 +187,7 @@ static void evaluation_origin_rejected(void) {
         &input,
         NULL,
         0,
-        {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
+        {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION},
         {XR_XIR_CTFE_MAX_STEPS, XR_XIR_CTFE_MAX_FRAME_BYTES, XR_XIR_CTFE_MAX_OUTPUT_BYTES},
         XR_XIR_CTFE_MAX_CALL_DEPTH};
     XirSourceComptimeInstances instances = {0};

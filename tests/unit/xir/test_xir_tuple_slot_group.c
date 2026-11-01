@@ -179,7 +179,7 @@ static XrXirArtifact *group_lower(const XrXirCompileContext *context,bool unit) 
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);CHECK(xr_xir_compile_specialize(read,&closed,NULL, NULL)==XR_XIR_OK);
-    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(read);xr_xir_compile_artifact_free(closed);return lowered;
 }
@@ -191,7 +191,7 @@ static void group_run(XrXirArtifact *lowered,GroupMode mode,bool vm,size_t fail_
             {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(GroupFrame),group_initializer,group_release,&witness,0,0},
             {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_I64,0,group_entry,NULL,NULL,0,0}};
     if(vm)for(uint32_t i=0;i<2;++i)CHECK(xr_xir_compile_vm_bind(lowered,i,&bindings[i],&entries[i])==XR_XIR_OK);
-    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
             entries,2,module->declarations,{0},module->types,xir_program_packet_borrow(lowered)};
     CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(lowered),&spec,&program)==XR_XIR_OK);
     size_t live=runtime_live,bytes=runtime_bytes;runtime_attempts=0;runtime_fail_at=fail_at;

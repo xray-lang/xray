@@ -128,7 +128,7 @@ static void construction_cross_owner(void) {
         if (copy) {
             CHECK(xr_xir_compile_artifact_verify(copy,NULL)==XR_XIR_OK);
             CHECK(xr_xir_compile_construction_count(xr_xir_compile_artifact_construction(copy))==0);
-            const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+            const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
             CHECK(xr_xir_compile_lower(copy,&target, NULL,&lowered,NULL)==XR_XIR_OK);
             xr_xir_compile_artifact_free(copy);copy=NULL;
             XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);

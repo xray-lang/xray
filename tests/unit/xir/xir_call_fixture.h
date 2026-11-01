@@ -106,7 +106,7 @@ static XrXirArtifact *call_fixture(const XrXirCompileContext *context, uint32_t 
     const XrXirFunctionIdentity ids[5]={{.exported=1},{0},{0},{0},{0}};
     const XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,4, NULL};
     const XrXirModule module = {XR_XIR_BUILT, functions, 5, &declarations, generic ? generics : NULL, &error.types, NULL, XR_XIR_PROGRAM, NULL};
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xir_fixture_check(context, &module, &checked, &diagnostic);

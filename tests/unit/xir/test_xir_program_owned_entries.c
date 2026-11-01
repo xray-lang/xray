@@ -23,7 +23,7 @@ static XrXirArtifact *entries_artifact(const XrXirCompileContext *context) {
         {0,0,0,0,0,0,XR_XIR_NON_MEMBER,0,0}};
     const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
     const XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xir_fixture_check(context,&module,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL, NULL)==XR_XIR_OK);

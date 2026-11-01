@@ -125,7 +125,7 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_new(const XrSourceCompilerConfi
         !config->absolute_stdlib_path || !config->manifest_limits.input_bytes ||
         !config->manifest_limits.depth || config->manifest_limits.depth > 128)
         return compiler_publish(diagnostic, &detail, XR_SOURCE_COMPILE_BAD_ARGUMENT);
-    if (config->target.architecture != XR_XIR_ARCH_X86_64 || config->target.abi_version != XR_XIR_VALUE_ABI_VERSION)
+    if (config->target.architecture != XR_XIR_ARCH_LE64 || config->target.abi_version != XR_XIR_VALUE_ABI_VERSION)
         return compiler_publish(diagnostic, &detail, XR_SOURCE_COMPILE_UNSUPPORTED);
     XrOsIoPolicy input_policy = xr_compile_io_policy(config->context.resources);
     XrIoContext input_io = {&input_policy, XR_OS_IO_OK};

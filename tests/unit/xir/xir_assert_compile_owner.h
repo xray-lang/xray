@@ -38,7 +38,7 @@ static inline XrXirStatus assert_compile_stage_operation(const XrXirCompileConte
     status=xr_xir_compile_specialize(read,&closed,NULL, NULL);
     if(status!=XR_XIR_OK){CHECK(!closed);goto done;}
     if(fixture->stage==ASSERT_COMPILE_SPECIALIZE)goto done;
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);
     if(status!=XR_XIR_OK){CHECK(!lowered);goto done;}
     if(fixture->stage==ASSERT_COMPILE_TAKE){XrXirArtifact *original=lowered;status=xr_xir_compile_vm_program_take(&lowered,&program);

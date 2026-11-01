@@ -36,7 +36,7 @@ CHECK(xr_xir_compile_specialize(checked,&special,NULL, NULL)==XR_XIR_OK);
 xr_xir_compile_artifact_free(checked);
 CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
 
- XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+ XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
 CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);
 xr_xir_compile_artifact_free(special);
 const XrXirModule *module=xr_xir_compile_artifact_module(lowered);

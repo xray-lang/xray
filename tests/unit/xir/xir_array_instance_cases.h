@@ -222,7 +222,7 @@ static void array_instance_cases(void) {
                 mode ? array_access_budget : array_access_permissions,array_access_cleanup,&witness, 0, 0},
             {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(ArrayAccessFrame),array_access_initializer,array_access_cleanup,&witness, 0, 0},
             {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(ArrayAccessFrame),array_access_library,array_access_cleanup,&witness, 0, 0}};
-        XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
             entries,mode ? 2 : 4,&declarations,{0},&types,{0}};
         NativeFixtureOwner compiler = {0}; CHECK(native_fixture_owner_new(&compiler) == XR_XIR_OK);
         XrXirArtifact *proof = NULL;

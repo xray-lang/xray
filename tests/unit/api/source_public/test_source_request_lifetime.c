@@ -1312,7 +1312,7 @@ static void lower_ready42(XrXirArtifact **lowered) {
 }
 static bool lower_entry_cancel(const void *context) { return *(const bool *)context; }
 static void lower_entry_controls(void) {
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     for (unsigned taking=0;taking<2;++taking) {
         XrCompileResources *resources=sdk_ledger(&sdk_unlimited);uint64_t empty=sdk_stats(resources).held_bytes;
         XrXirArtifact *closed=lower_source(resources),*lowered=NULL;uint64_t held=sdk_stats(resources).held_bytes;
@@ -1340,7 +1340,7 @@ static void lower_loop_controls(void) {
         XrCompileRequestOptions options={.cancel_poll=lower_loop_cancel,.cancel_context=&probe,
             .deadline_mode=mode==2?XR_COMPILE_DEADLINE_AFTER:XR_COMPILE_DEADLINE_NONE,.timeout_ns=mode==2?UINT64_C(5000000000):0};
         CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
-        const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};XrXirDiagnostic diagnostic={0};
+        const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};XrXirDiagnostic diagnostic={0};
         XrXirStatus status=taking?xr_xir_compile_lower_take(&closed,&target,&control,&lowered,&diagnostic):
             xr_xir_compile_lower(closed,&target,&control,&lowered,&diagnostic);
         runtime_fail_at=SIZE_MAX;probe.artifact=NULL;

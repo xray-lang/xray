@@ -43,7 +43,7 @@ static void slice_consumers(Fixture *fixture) {
         uint32_t function=test->tail?fixture->tail:fixture->cut,count=test->tail?2u:3u;
         XrXirArtifact *code=lowered(fixture);
         XrXirCtfeRequest request={.artifact=code,.function=function,
-            .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.arguments=arguments,.argument_count=count,
+            .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},.arguments=arguments,.argument_count=count,
             .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}};
         memcpy(request.checked_identity,fixture->identity,sizeof(fixture->identity));
         XrXirValue folded={0};XrXirCtfeStatus status=xr_xir_compile_ctfe_leaf(&request,&folded);

@@ -26,7 +26,7 @@ static XrXirSourceProductRequest product_packet_request(XrCompileResources *reso
     XrCompilerSession *session,const XrModuleIdentityAuthority *authority,XrXirCompileContext *context) {
     *context=(XrXirCompileContext){resources,xr_xir_compile_default_limits()};
     XrXirSourceRequest source={session,NULL,authority,context,XR_PUBLIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
-    return (XrXirSourceProductRequest){source,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+    return (XrXirSourceProductRequest){source,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
 }
 static void product_packet_after_program(XrXirSourceProduct *product) {
     XrXirSourceProductPacketView before[2]={{0}};

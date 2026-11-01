@@ -80,7 +80,7 @@ static XrXirArtifact *prelude_lower(XrXirArtifact *owned,uint32_t *answer) {
     XrXirArtifact *special=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_specialize(owned,&special,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(owned);
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);
-    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(special,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(special);
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);*answer=prelude_answer(xr_xir_compile_artifact_module(lowered));return lowered;
 }
@@ -89,7 +89,7 @@ static XrXirArtifact *prelude_lower(XrXirArtifact *owned,uint32_t *answer) {
 static XrXirProgramSpec prelude_vm_spec(XrXirArtifact *lowered,XrXirCallEntry *entries,XrXirVmBinding *bindings) {
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);CHECK(module->function_count<=128);
     XrXirProgramSpec spec={.abi_version=XR_XIR_PROGRAM_ABI_VERSION,
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.entry_count=module->function_count,
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},.entry_count=module->function_count,
         .types=module->types,.declarations=module->declarations,.packet=xir_program_packet_borrow(lowered)};
     for (uint32_t f=0;f<module->function_count;++f) CHECK(xr_xir_compile_vm_bind(lowered,f,&bindings[f],&entries[f])==XR_XIR_OK);
     spec.entries=entries;return spec;
@@ -102,7 +102,7 @@ XR_FUNC XrXirStatus xr_test_prelude_compile_pipeline(const XrXirCompileContext *
     XrXirStatus status=xr_xir_compile_specialize(checked,&special,NULL, NULL);
     if (status!=XR_XIR_OK) {CHECK(!special);goto done;}
     status=xr_xir_compile_artifact_verify(special,NULL);if (status!=XR_XIR_OK) goto done;
-    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     status=xr_xir_compile_lower(special,&target, NULL,&lowered,NULL);
     if (status!=XR_XIR_OK) {CHECK(!lowered);goto done;}
     status=xr_xir_compile_artifact_verify(lowered,NULL);if (status!=XR_XIR_OK) goto done;

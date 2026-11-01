@@ -51,7 +51,7 @@ static XrXirProgram *compile(XrXirCompileContext *context,uint32_t ids[3]) {
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_source_result_free(&source);
     CHECK(xr_xir_compile_specialize(decoded,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(decoded);
-    CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t helpers=0;
     for(uint32_t f=0;f<module->function_count;++f)if(module->functions[f].name_length>=13&&!memcmp(module->functions[f].name,"$string_runes",13)) {
         const XrXirFunctionIdentity *identity=&module->declarations->functions[f];const XrXirFunction *body=&module->functions[f];

@@ -43,7 +43,7 @@ static XrXirArtifact *output_fixture(const XrXirCompileContext *context) {
         {"continued", 9, &string, 1, XR_XIR_BOOL, &continue_block, 1, continue_ops, 3, NULL, 0}
     };
     const XrXirModule built = {XR_XIR_BUILT, functions, 3, NULL, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked, &target, NULL, &lowered, NULL) == XR_XIR_OK);

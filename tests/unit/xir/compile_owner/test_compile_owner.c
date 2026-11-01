@@ -67,7 +67,7 @@ static const XrXirInstruction instructions[] = {
 static const XrXirBlock simple_blocks[] = {{0,2,0,0}};
 static const XrXirFunction function = {"main",4,NULL,0,XR_XIR_I64,simple_blocks,1,instructions,2,NULL,0};
 static const XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
-static const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+static const XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
 
 #include "fixtures.h"
 

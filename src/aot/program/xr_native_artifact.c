@@ -36,7 +36,7 @@ static XrXirStatus native_fields(const XrXirNativeInput *input) {
     if (fields[0] != XR_XIR_NATIVE_INPUT_SCHEMA || fields[1] != XR_XIR_CHECKED_SCHEMA ||
         fields[2] != XR_XIR_CHECKED_CONTRACT || fields[3] != XR_XIR_VALUE_ABI_VERSION ||
         fields[4] != XR_XIR_CALL_ABI_VERSION || fields[5] != XR_XIR_PROGRAM_ABI_VERSION ||
-        fields[6] != XR_XIR_ARCH_X86_64 || !fields[8] || !fields[9] || fields[7] >= fields[8])
+        fields[6] != XR_XIR_ARCH_LE64 || !fields[8] || !fields[9] || fields[7] >= fields[8])
         return XR_XIR_BAD_STRUCTURE;
     if (!native_nonzero(input->source_checked_id.bytes) ||
         !native_nonzero(input->closed_checked_id.bytes) ||

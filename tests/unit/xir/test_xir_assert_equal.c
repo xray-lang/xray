@@ -62,7 +62,7 @@ static XrXirArtifact *panics_lower(XrXirSourceResult *source) {
             diagnostic.function<module->function_count ? module->functions[diagnostic.function].name : "");
     }
     CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(read);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);return lowered;
 }
 #include "xir_assert_equal_packet.inc.c"

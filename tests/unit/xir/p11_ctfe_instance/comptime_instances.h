@@ -28,7 +28,7 @@ static XrXirStatus comptime_instances_operation(XrXirCompileContext *context,con
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"comptime-instances",NULL};
     XrXirSourceRequest source={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,strlen(text)};XrXirSourceDiagnostic diagnostic={0};
-    XirSourceComptimeRequest request={&source,&input,NULL,0,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},limits,depth};
+    XirSourceComptimeRequest request={&source,&input,NULL,0,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},limits,depth};
     XrXirSourceResult unpublished={0};
     XrXirStatus status=public_source?xr_xir_compile_source_check_text(&source,&input,&unpublished,&diagnostic,NULL):
         xr_xir_compile_source_comptime_instances(&request,output,&diagnostic);

@@ -84,7 +84,7 @@ static void capacity_native_emit_path(const XrXirCompileContext *context,const c
     memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(replay,&specialized,NULL, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(replay);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(specialized);
     XrXirCSource c={0};CHECK(xr_xir_compile_emit_c(lowered,"capacity_native_path",1048576,&c)==XR_XIR_OK);

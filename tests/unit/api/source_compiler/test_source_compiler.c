@@ -22,7 +22,7 @@
 
 static XrSourceCompilerConfig configuration(XrCompileResources *resources) {
     return (XrSourceCompilerConfig){{resources,xr_xir_compile_default_limits()},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_COMPILER_STDLIB,{1048576,64}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},XR_COMPILER_STDLIB,{1048576,64}};
 }
 static XrSourceCompileStatus build_actual_ast(XrSourceCompiler *compiler, bool rooted,
     XrXirSourceProduct **product, XrSourceCompileDiagnostic *diagnostic) {

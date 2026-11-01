@@ -432,7 +432,7 @@ static void run_test_file(const char *filepath, const XrTestConfig *config,
     memset(result, 0, sizeof(*result));
     snprintf(result->filepath, sizeof(result->filepath), "%s", filepath);
     double file_start = get_time_ms();
-#if !defined(XR_ARCH_X86_64)
+#if !defined(XR_ARCH_LE64)
     fail_file(result, "source VM does not support this host architecture");
 #else
     char error[TEST_MESSAGE_MAX] = {0};

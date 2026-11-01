@@ -242,7 +242,7 @@ static void local_case_mode(const LocalErrorCase *test,bool execute,
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"local-errors",NULL};
     XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     size_t length=strlen(test->text);char *text=xr_malloc(length+1);CHECK(text);memcpy(text,test->text,length+1);
     XrXirSourceText input={NULL,text,length};XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build_text(&request,&input,&product,&diagnostic);
@@ -303,7 +303,7 @@ static uint64_t local_optional_build(uint64_t memory,uint64_t frame,size_t cance
     CHECK(xr_compile_session_bind_request(session,&control)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"optional-resources",NULL};
     XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
 #if defined(XR_LOCAL_ERROR_ALLOCATOR)
     attempt_count=0;fail_at=physical_fault;
 #else
@@ -343,7 +343,7 @@ static void local_optional_runtime_limit(void) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"optional-runtime-limit",NULL};
     XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceText input={NULL,text,length};XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
     CHECK(xr_xir_compile_source_product_build_text(&request,&input,&product,&diagnostic)==XR_XIR_OK && product);
     memset(text,0xa5,length);xr_free(text);xr_compile_session_free(session);
@@ -518,7 +518,7 @@ static void local_initialization_resources(void) {
         CHECK(xr_compile_session_bind_request(session,&control)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"initialization-resources",NULL};
         XrXirSourceProductRequest request={{session,NULL,&authority,&context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
-            {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+            {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
         XrXirSourceText input={NULL,initialization_error_source,sizeof(initialization_error_source)-1};
         XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
 #if defined(XR_LOCAL_ERROR_ALLOCATOR)

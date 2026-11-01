@@ -189,7 +189,7 @@ static XrXirArtifact *program_variant(const XrXirCompileContext *context, int64_
     if(probe_error_seed)functions[2].error_type=(XrXirType)256;
     const XrXirModule module = {XR_XIR_BUILT, functions, probe_seedless_cycle?4:probe_error_seed?3:2,
         &declarations, NULL, probe_error_seed?&seed.types:NULL, NULL, XR_XIR_PROGRAM, NULL};
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
     CHECK(xir_fixture_check(context, &module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);

@@ -111,7 +111,7 @@ static XrXirStatus rps_operation(const XrXirCompileContext *context, void *opaqu
     XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirArtifact *read=NULL,*instance=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,&failure);
     xr_compile_session_free(session);
     if (status==XR_XIR_OK) {

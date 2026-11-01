@@ -17,7 +17,7 @@
 int main(int argc,char **argv) {
     CHECK(argc==2);
     const XrXirCompileContext *context=effects_source_owner(67108864,128000000);
-    XrSourceCompilerConfig config={*context,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_SOURCE_STDLIB,
+    XrSourceCompilerConfig config={*context,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},XR_SOURCE_STDLIB,
         xr_source_compile_default_manifest_limits()};
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
     CHECK(xr_source_compiler_new(&config,NULL,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);

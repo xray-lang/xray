@@ -66,7 +66,7 @@ static XrXirStatus provenance_take_operation(const XrXirCompileContext *context,
     xr_xir_compile_checked_packet_free(&expected);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_read(context,actual.bytes,actual.length,&reread,NULL);
     xr_xir_compile_checked_packet_free(&actual);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower_take(&reread,&target, NULL,&lowered,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(lowered,NULL);
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(reread);

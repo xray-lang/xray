@@ -358,7 +358,7 @@ static void deep_body(void) {
         CHECK(type==(f==1?XR_XIR_I64:XR_XIR_STRING));
     }
     CHECK(module->functions[0].instructions[1].immediate==module->functions[0].instructions[2].immediate);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);

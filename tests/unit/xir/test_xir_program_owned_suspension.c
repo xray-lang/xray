@@ -33,7 +33,7 @@ static XrXirArtifact *suspension_program(const XrXirCompileContext *context,unsi
     const XrXirSourceModule source={"root",4,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
     const XrXirModule module={XR_XIR_BUILT,functions,5,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     const XrXirConstructionSpec spec={0};
     const XrXirSlotFacts slots={NULL,0};

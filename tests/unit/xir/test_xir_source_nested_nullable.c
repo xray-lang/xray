@@ -28,7 +28,7 @@ static void sn_source_rejections(void) {
         length=snprintf(path,sizeof(path),"%s/root.xr",directory);CHECK(length>0 && (size_t)length<sizeof(path));
         const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
         const XrXirSourceProductRequest request={{session,path,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL},
-            {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+            {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
         XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
         XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
     diagnostic_root=(XrFrontendRoot){.message=""};
@@ -50,7 +50,7 @@ static void sn_permission_control(void) {
     const char *directory=XR_SOURCE_NESTED_FIXTURES "/default_permission_control";
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
     const XrXirSourceProductRequest request={{session,XR_SOURCE_NESTED_FIXTURES "/default_permission_control/root.xr",
-        &authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        &authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
     diagnostic_root=(XrFrontendRoot){.message=""};

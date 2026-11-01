@@ -140,7 +140,7 @@ static XrXirCtfeStatus ctfe_tuple_export_bytes(ScalarRun *run,const XrXirValue *
                 if (!xr_xir_string_view(&current,&text,&length)) { status=XR_XIR_CTFE_BAD_ARTIFACT;break; }
                 size=length;
             } else {
-                XrXirLayout layout={0};const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+                XrXirLayout layout={0};const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
                 status=ctfe_compile_status(xr_xir_compile_layout(state->context,run->module->types,
                     (XrXirType)current.type,&target,XR_XIR_LAYOUT_STORAGE,&layout));
                 if (status!=XR_XIR_CTFE_OK) break;

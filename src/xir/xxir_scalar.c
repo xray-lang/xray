@@ -35,7 +35,7 @@ XrXirRunStatus xr_xir_scalar_frame_begin(XrXirRunContext *context, uint32_t byte
     if (!context || context->frees > context->allocations ||
         context->peak_bytes < context->live_bytes)
         return XR_XIR_RUN_BAD_ARGUMENT;
-#if !defined(XR_ARCH_X86_64)
+#if !defined(XR_ARCH_LE64)
     return XR_XIR_RUN_BAD_ABI;
 #endif
     if (context->live_bytes > context->frame_limit ||

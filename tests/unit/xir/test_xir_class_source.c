@@ -56,7 +56,7 @@ static XrXirStatus class_source_program(const XrXirCompileContext *context,XrXir
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(decoded,&special,NULL, NULL);
     xr_xir_compile_artifact_free(decoded);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(special,&target, NULL,&lowered,NULL);
     xr_xir_compile_artifact_free(special);
     if(status==XR_XIR_OK){const XrXirModule *m=xr_xir_compile_artifact_module(lowered);

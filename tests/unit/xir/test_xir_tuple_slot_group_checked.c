@@ -34,7 +34,7 @@ static XrXirStatus group_packet_pipeline(const uint8_t *bytes,size_t length,XrCo
     if(created!=XR_COMPILE_RESOURCE_OK)return created==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;XrXirProgram *program=NULL;
-    XrXirCheckedPacket written={0};XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirCheckedPacket written={0};XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     XrXirStatus status=xr_xir_compile_checked_read(&context,bytes,length,&checked,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(checked,&written,NULL);
     if(status==XR_XIR_OK)CHECK(written.length==length && !memcmp(written.bytes,bytes,length));

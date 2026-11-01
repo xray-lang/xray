@@ -194,7 +194,7 @@ static void nominal_field_closure_failures(void) {
 }
 static void nominal_lowering_failures(void) {
     XrXirArtifact *checked = nominal_checked_fixture(suite_context, 3), *closed = NULL, *lowered = NULL;
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     size_t baseline = live; packet_allocation_calls = 0; fail_at = SIZE_MAX;
@@ -214,7 +214,7 @@ static void nominal_layout_failures(void) {
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     const XrXirTypes *types = xr_xir_compile_artifact_module(closed)->types;
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirCompileContext original = consumer_context_default(), budget = original;
     XrXirLayout layout = {0}; uint32_t offsets[] = {99, 99};
     size_t baseline = live; packet_allocation_calls = 0;
@@ -453,7 +453,7 @@ static void native_packet_proof(void) {
 }
 
 static void provenance_lowering(XrXirArtifact *closed) {
-    XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *lowered = NULL;
     size_t baseline = live; packet_allocation_calls = 0;
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);

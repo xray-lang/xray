@@ -101,7 +101,7 @@ static XrXirStatus cell_source_lower(const XrXirCompileContext *context, const c
         cell_source_stage(name, "specialize", status, &stage_diagnostic);
     }
     xr_xir_compile_artifact_free(decoded);
-    const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     if (status == XR_XIR_OK) {
         stage_diagnostic = cell_source_diagnostic();
         status = xr_xir_compile_lower_take(&closed, &target, NULL, output, &stage_diagnostic);

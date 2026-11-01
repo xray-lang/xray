@@ -108,7 +108,7 @@ static void conditional_collector_controls(const XrXirArtifact *artifact,XrXirEf
     CHECK(source_program_compile_attempts>attempts && source_program_compile_live==hidden_blocks && source_program_compile_bytes==hidden_bytes);
     CHECK(library_compile_stats(context).live_bytes==hidden_live);
     xr_compile_resources_free(contracts);invalid=*artifact;
-    invalid.target.architecture=XR_XIR_ARCH_X86_64;
+    invalid.target.architecture=XR_XIR_ARCH_LE64;
     attempts=source_program_compile_attempts;
     /* Retained Source checking releases temporary reads before layout refusal. */
     CHECK(xr_xir_compile_artifact_verify_owned_effects(&invalid,&output,NULL)==XR_XIR_BAD_LAYOUT && !output);
@@ -163,7 +163,7 @@ static XrXirStatus conditional_operation(const XrXirCompileContext *context, voi
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirDiagnostic xir_diagnostic={0};
     XrXirArtifact *read=NULL,*instance=NULL,*reloaded=NULL,*lowered=NULL;XrXirCheckedPacket first={0},second={0};
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     const XrXirSourceText input={NULL,oracle->text,strlen(oracle->text)};
     uint32_t phase=1;
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,&failure);

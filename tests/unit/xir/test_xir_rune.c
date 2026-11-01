@@ -36,7 +36,7 @@ static XrXirStatus rune_build(const XrXirCompileContext *ctx,int64_t codepoint,b
     XrXirModule built={XR_XIR_BUILT,&fn,1,NULL,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL;
     XrXirStatus status=xir_fixture_check(ctx, &built, &checked, NULL);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(checked,&target, NULL,output,NULL);
     xr_xir_compile_artifact_free(checked);return status;
 }
@@ -63,7 +63,7 @@ static void rune_values(void) {
     }
     int64_t output=7;
     CHECK(xr_xir_rune_convert(XR_XIR_U32,XR_XIR_RUNE,65,&output)==XR_XIR_RUN_BAD_ARGUMENT && output==7);
-    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     for(XrXirLayoutContext c=XR_XIR_LAYOUT_STORAGE;c<=XR_XIR_LAYOUT_FRAME;c++) {
         XrXirLayout layout={0};CHECK(xr_xir_builtin_layout(XR_XIR_RUNE,&target,c,&layout)==XR_XIR_OK);
         CHECK(layout.size==(c==XR_XIR_LAYOUT_STORAGE?4u:c==XR_XIR_LAYOUT_SSA || c==XR_XIR_LAYOUT_FRAME?8u:16u));
@@ -146,7 +146,7 @@ static XrXirStatus rune_resource_build(const XrXirCompileContext *ctx,XrXirArtif
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(checked,&packet,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_read(ctx,packet.bytes,packet.length,&decoded,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(decoded,&closed,NULL, NULL);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_emit_leaf_c(lowered,"rune_resource",1048576,&source);
     xr_xir_compile_c_source_free(&source);xr_xir_compile_checked_packet_free(&packet);

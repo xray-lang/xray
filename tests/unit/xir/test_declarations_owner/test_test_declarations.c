@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     char input[1024]; CHECK(snprintf(input, sizeof(input), "%s/basic.xr", argv[1]) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, argv[1]};
     XrXirSourceProductRequest request = {{session,input,&authority,&context,argv[2],NULL,XR_XIR_PROGRAM,NULL},
-        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};XrFrontendRoot diagnostic_root={.message=""};
     XrXirStatus status = xr_xir_compile_source_product_build(&request,&product,&diagnostic);
     diagnostic_root=(XrFrontendRoot){.message=""};

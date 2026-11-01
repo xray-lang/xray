@@ -61,7 +61,7 @@ static void reference_nominal(const XrXirCompileContext *context,XrXirSourceResu
         if (body->instructions[i].op==XR_XIR_STRUCT_NEW || body->instructions[i].op==XR_XIR_ENUM_NEW) recipe=true;
     }
     CHECK(recipe);XrXirDomain *reader=NULL;CHECK(xr_xir_compile_domain_new(context->resources,UINT64_MAX,&reader)==XR_XIR_VALUE_OK);
-    XrXirCtfeRequest request={.artifact=lowered,.function=function,.target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+    XrXirCtfeRequest request={.artifact=lowered,.function=function,.target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,(uint64_t)selected->value}};
     memcpy(request.checked_identity,identity,sizeof(identity));XrXirValue output={0};XrCompileResourceStats baseline=reference_stats(context);
     size_t counts[2]={0};unsigned modes=strstr(selected->name,"direct")?2:1;
@@ -103,7 +103,7 @@ static void reference_nominal_last_owner(const CtfeReferenceCase *selected) {
     XrXirArtifact *lowered=reference_lower(&context,&source,identity);XrXirValue value={0};XrXirDomain *reader=NULL;
     CHECK(xr_xir_compile_domain_new(context.resources,UINT64_MAX,&reader)==XR_XIR_VALUE_OK);
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_nominal_function(xr_xir_compile_artifact_module(lowered),selected),
-        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,(uint64_t)selected->value}};
+        .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,(uint64_t)selected->value}};
     memcpy(request.checked_identity,identity,sizeof(identity));CHECK(reference_text_evaluate(&request,true,&value)==XR_XIR_CTFE_OK);
     xr_xir_compile_artifact_free(lowered);xr_compile_resources_release(context.resources);reference_nominal_value(&value,selected,reader);
     xr_xir_domain_drop(reader);size_t attempts=source_fixture_compile_attempts;source_fixture_compile_fail_at=attempts;

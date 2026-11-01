@@ -46,7 +46,7 @@ static XrXirStatus ctfe_phi_build(const XrXirCompileContext *context,
         .declarations=ctfe_resource_no_declarations?NULL:&declarations,.linkage_kind=XR_XIR_PROGRAM};
     XrXirArtifact *checked=NULL,*copy=NULL,*closed=NULL;
     XrXirCheckedPacket packet={0};XrXirStatus status;
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     ctfe_chain_mark(trace,CTFE_CHAIN_SESSION);
     ctfe_chain_mark(trace,CTFE_CHAIN_SOURCE);
     status=xir_fixture_check(context,&built,&checked,NULL);

@@ -58,7 +58,7 @@ int main(int argc,char **argv) {
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_artifact_verify(received,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(received,&closed,NULL, NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t main_entry=decimal_function(module,"main");
     uint32_t observed=decimal_function(module,"observed");const uint32_t functions[3]={main_entry,observed,decimal_function(module,"inspect")};

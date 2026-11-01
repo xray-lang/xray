@@ -233,7 +233,7 @@ static void capture_mixed(void) {
         CHECK((owner->entries[3].resume == native->entries[3].resume) !=
             (owner->entries[5].resume == native->entries[5].resume));
         XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,
-            {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,6,module->declarations,
+            {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},owner->entries,6,module->declarations,
             {owner,capture_mixed_release},module->types,xir_program_packet_borrow(owner->artifact)};
         XrXirProgram *program = NULL;
         CHECK(xr_xir_compile_program_seal(suite_context, &spec, &program) == XR_XIR_OK);
@@ -265,7 +265,7 @@ static void array_mixed(void) {
             CHECK((owner->entries[2].resume == native[mode]->entries[2].resume) !=
                 (owner->entries[3].resume == native[mode]->entries[3].resume));
             XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,
-                {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,8,module->declarations,
+                {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},owner->entries,8,module->declarations,
                 {owner,array_mixed_release},module->types,xir_program_packet_borrow(owner->artifact)};
             XrXirProgram *program = NULL;
             CHECK(xr_xir_compile_program_seal(suite_context, &spec, &program) == XR_XIR_OK);

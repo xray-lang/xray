@@ -27,7 +27,7 @@
 #include "xir/xxir_effect_terms.inc.c"
 static XrXirType constructed(uint32_t n) {return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+n);}
 static XrXirType parameter(uint32_t n) {return (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+n);}
-static const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+static const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
 typedef struct TupleFixture {
     XrXirCallableParameter fields[3];XrXirTypeNode node;XrXirTypes types;
     uint32_t operands[4];XrXirType param;

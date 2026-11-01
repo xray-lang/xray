@@ -92,8 +92,9 @@ SSA 使用必须由同块较早定义或支配块定义提供；unit 指令不�
 验证的结构、类型、支配关系和工作量有预算，未知阶段、操作和类型均拒绝。
 精确内部字段由 `test_xir_stages` 等断言验证；这些断言不授予执行资格。
 
-内部标量执行由 `test_xir_execution` 与 `test_xir_native` 验证：首个目标为x86_64小端、
-值边界使用本节所列现行 ABI。布局查询同时包含类型、目标、用途与ABI；lowering保存唯一的
+内部标量执行由 `test_xir_execution` 与 `test_xir_native` 验证：唯一目标是64位指针、小端字节序的值模型，
+值边界使用本节所列现行 ABI。布局只取决于指针宽度与字节序，因此 x86_64、AArch64 等所有64位小端宿主执行同一份映像；
+其他宿主没有 XIR 执行目标，`run`/`test`/`check`/调试器明确拒绝。布局查询同时包含类型、目标、用途与ABI；lowering保存唯一的
 帧槽偏移和边界布局，VM/C后端不得另行决定。bool/i64的SSA及帧槽为8字节，
 边界值为16字节（类型、零保留字段、i64载荷），bool载荷只准0/1，unit无帧槽。
 参数必须精确匹配，错误清空结果；每条指令消耗一步，帧和步骤均受预算限制。
@@ -1289,7 +1290,7 @@ and types reject. The exact internal fields are verified by assertions such as
 `test_xir_stages`; these assertions do not grant execution qualification.
 
 Internal scalar execution is verified by `test_xir_execution` and `test_xir_native`.
-The initial target is little-endian x86_64 with the current value boundary ABI defined in this section. Layout
+The sole target is the 64-bit-pointer, little-endian value model with the current value boundary ABI defined in this section. Layouts depend only on pointer width and byte order, so every 64-bit little-endian host, including x86_64 and AArch64, executes the same images; other hosts have no XIR execution target and `run`, `test`, `check` and the debugger reject explicitly. Layout
 queries include type, target, context, and ABI. Lowering stores authoritative
 frame offsets and boundary layouts; VM/C consumers cannot choose another layout.
 Bool/i64 SSA and frame lanes use eight bytes. Boundary values use sixteen bytes

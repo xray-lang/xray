@@ -114,7 +114,7 @@ static XrXirStatus lower_name_pipeline(const XrXirCompileContext *c, bool ordina
     LowerNameFixture f;lower_name_fixture(&f,c,ordinary);
     XrXirArtifact *checked=NULL,*instance=NULL,*read=NULL,*lowered=NULL;
     XrXirCheckedPacket packet={0};XrXirDiagnostic d={0};
-    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
     XrXirStatus status=xir_fixture_check(c, &f.base.module, &checked, &d);
     memset(&f,0x95,sizeof(f));
     if (status==XR_XIR_OK) status=xr_xir_compile_specialize(checked,&instance,&d, NULL);
