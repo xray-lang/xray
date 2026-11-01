@@ -33,7 +33,7 @@ static void aggregate_after_allocate(void) {
 enum { AGG_ERROR=256,AGG_TASK,AGG_SCOPE,AGG_INPUT,AGG_VALUES,AGG_ALL };
 typedef struct AggregateWitness {
     XrXirTaskExecutor *executor;
-    XrXirValue group,members[2],array,aggregate;
+    XrXirValue group,members[2],array,aggregate,inner;
     uint32_t mode,cleanup_calls,refusals;
     bool progressed,release_cleanup,held_cleanup;
 } AggregateWitness;
@@ -43,18 +43,19 @@ static XrXirAction aggregate_worker(XrXirCallView *view) {
     AggregateWitness *w=(AggregateWitness *)view->environment;AggregateWorkerState *state=view->state;
     bool slow=view->arguments[0].payload==20;
     if(view->phase==XR_XIR_CALL_EXIT) {
-        if(slow&&(w->mode==1||w->mode==2||w->mode==3)&&!w->release_cleanup) {
+        if(slow&&(w->mode==1||w->mode==2||w->mode==3||w->mode==10||w->mode==11||w->mode==14)&&!w->release_cleanup) {
             CHECK(view->activation->cancel_requested);w->held_cleanup=true;
             return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};
         }
         return (XrXirAction){.kind=XR_XIR_ACTION_EXIT_DONE};
     }
     if(slow&&state->phase++<4)return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};
-    if(!slow&&(w->mode==2||w->mode==3)) {
+    if(!slow&&(w->mode==2||w->mode==3||w->mode==10||w->mode==11)) {
         XrXirValue field={XR_XIR_I64,0,42};
         CHECK(xr_xir_enum_new((XrXirType)AGG_ERROR,0,&field,1,xr_xir_call_admission(view),&state->error)==XR_XIR_VALUE_OK);
         return (XrXirAction){.kind=XR_XIR_ACTION_THROW,.value=state->error};
     }
+    if(slow&&w->mode==13)runtime_fail_at=runtime_attempts;
     return (XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value=view->arguments[0]};
 }
 static void aggregate_worker_release(XrXirCallView *view,XrXirCallStatus reason) {
@@ -65,7 +66,8 @@ static void aggregate_begin(AggregateWitness *w,XrXirCallView *view) {
     XrXirValue inputs[]={w->members[0],w->members[1],w->members[0]};
     size_t count=w->mode==4?0:3;
     CHECK(xr_xir_array_new((XrXirType)AGG_INPUT,inputs,count,admission,&w->array)==XR_XIR_VALUE_OK);
-    XirTaskAggregateKind kind=w->mode==1||w->mode==2||w->mode==5?XIR_TASK_AGGREGATE_FIRST:XIR_TASK_AGGREGATE_ALL;
+    XirTaskAggregateKind kind=w->mode==1||w->mode==2||w->mode==5||w->mode==11||w->mode==12||w->mode==14?
+        XIR_TASK_AGGREGATE_FIRST:XIR_TASK_AGGREGATE_ALL;
     XrXirType result=kind==XIR_TASK_AGGREGATE_FIRST?(XrXirType)AGG_TASK:(XrXirType)AGG_ALL;
     XrXirValue refused={0};uint64_t reserved=w->executor->pending_terminals;
     CHECK(xir_task_aggregate_begin(w->executor,view,&w->array,(XrXirType)AGG_SCOPE,kind,&refused)==XR_XIR_CALL_BAD_ARGUMENT);
@@ -93,7 +95,15 @@ static void aggregate_begin(AggregateWitness *w,XrXirCallView *view) {
         }
         CHECK(failures>=3&&w->aggregate.type);
     } else CHECK(xir_task_aggregate_begin(w->executor,view,&w->array,result,kind,&w->aggregate)==XR_XIR_CALL_READY);
-    if(w->mode==6)CHECK(xr_xir_task_executor_cancel_task(w->executor,view,&w->aggregate)==XR_XIR_CALL_READY);
+    if(w->mode==12) {
+        w->inner=w->aggregate;w->aggregate=(XrXirValue){0};xr_xir_value_drop(&w->array);
+        XrXirValue nested[]={w->inner,w->members[0],w->inner};
+        CHECK(xr_xir_array_new((XrXirType)AGG_INPUT,nested,3,admission,&w->array)==XR_XIR_VALUE_OK);
+        CHECK(xir_task_aggregate_begin(w->executor,view,&w->array,(XrXirType)AGG_ALL,
+            XIR_TASK_AGGREGATE_ALL,&w->aggregate)==XR_XIR_CALL_READY);
+    }
+    if(w->mode==6||w->mode==12)
+        CHECK(xr_xir_task_executor_cancel_task(w->executor,view,&w->aggregate)==XR_XIR_CALL_READY);
     if(w->mode==4) {
         uint64_t identity=w->executor->next_identity;
         CHECK(xir_task_aggregate_begin(w->executor,view,&w->array,(XrXirType)AGG_TASK,
@@ -125,11 +135,14 @@ static XrXirAction aggregate_root(XrXirCallView *view) {
         CHECK(xir_task_scope_begin(w->executor,view,(XrXirType)AGG_SCOPE,0,&w->group)==XR_XIR_CALL_READY);
         for(size_t a=0;a<2;++a) {
             XrXirValue argument={XR_XIR_I64,0,a?22:20};const XrXirCallRequest request={.entry=2,.arguments=&argument,.count=1};
-            CHECK(xir_task_spawn_scoped(w->executor,view,&w->group,(XrXirType)AGG_TASK,&request,&w->members[a])==XR_XIR_CALL_READY);
+            XrXirCallStatus spawned=w->mode==10||w->mode==11?
+                xr_xir_task_executor_spawn_from_view(w->executor,view,(XrXirType)AGG_TASK,&request,&w->members[a]):
+                xir_task_spawn_scoped(w->executor,view,&w->group,(XrXirType)AGG_TASK,&request,&w->members[a]);
+            CHECK(spawned==XR_XIR_CALL_READY);
         }
         if(w->mode==5)return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};
         aggregate_begin(w,view);
-        if(w->mode==9||w->mode==6)return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};
+        if(w->mode==9||w->mode==6||w->mode==12)return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};
         return (XrXirAction){.kind=XR_XIR_ACTION_AWAIT_TASK,.value=w->aggregate};
     }
     if(w->mode==5&&!w->aggregate.type) {
@@ -138,7 +151,7 @@ static XrXirAction aggregate_root(XrXirCallView *view) {
         aggregate_begin(w,view);
         return (XrXirAction){.kind=XR_XIR_ACTION_AWAIT_TASK,.value=w->aggregate};
     }
-    if(w->mode==6) {
+    if(w->mode==6||w->mode==12) {
         XrXirCallResult result={0};
         CHECK(xr_xir_task_copy_outcome(&w->aggregate,&result)==XR_XIR_CALL_CANCELLED);
         xr_xir_call_result_drop(&result);
@@ -146,19 +159,19 @@ static XrXirAction aggregate_root(XrXirCallView *view) {
         xr_xir_call_result_drop(&result);
         return (XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value={XR_XIR_I64,0,42}};
     }
-    XrXirCallStatus expected=w->mode==2||w->mode==3?XR_XIR_CALL_THROWN:
+    XrXirCallStatus expected=w->mode==2||w->mode==3||w->mode==10||w->mode==11?XR_XIR_CALL_THROWN:
         w->mode==6?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_RETURNED;
     CHECK(view->inbox.status==expected);
     XrXirValueAdmission *admission=xr_xir_call_admission(view);
-    if(w->mode==2||w->mode==3||w->mode==6) {
+    if(w->mode==2||w->mode==3||w->mode==10||w->mode==11||w->mode==6) {
         if(w->mode!=6) {
             XrXirValue field={0};CHECK(xr_xir_enum_get(&view->inbox.value,0,0,admission,&field)==XR_XIR_VALUE_OK);
             CHECK(field.payload==42);xr_xir_value_drop(&field);
         }
         if(w->mode!=6)w->progressed=true;
-    } else if(w->mode==1||w->mode==5) {
+    } else if(w->mode==1||w->mode==5||w->mode==14) {
         CHECK(view->inbox.value.type==XR_XIR_I64&&view->inbox.value.payload==22);
-        if(w->mode==1) {
+        if(w->mode==1||w->mode==14) {
             XirTask *slow=(XirTask *)(uintptr_t)w->members[0].payload;
             CHECK(slow->call&&slow->call->cancel_requested&&!w->release_cleanup);
             CHECK(((XirTask *)(uintptr_t)w->group.payload)->aggregation->pending);w->progressed=true;
@@ -214,7 +227,7 @@ static void aggregate_case(uint32_t mode) {
     NativeFixtureOwner compiler={0};CHECK(native_fixture_owner_new(&compiler)==XR_XIR_OK);
     XrCompileResourceStats baseline=native_fixture_stats(&compiler.context);AggregateWitness witness={.mode=mode};
     const XrXirType parameter=XR_XIR_I64;
-    bool errors=mode==2||mode==3;
+    bool errors=mode==2||mode==3||mode==10||mode==11;
     const XrXirCallEntry entries[]={
         {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_UNIT,.resume=aggregate_init},
         {.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_I64,.state_bytes=sizeof(AggregateState),
@@ -262,26 +275,45 @@ static void aggregate_case(uint32_t mode) {
     const XrXirCallRequest request={.entry=1};XrXirCall *root=NULL;
     CHECK(xr_xir_call_new_budgeted(&config,&request,&budget,&root)==XR_XIR_CALL_READY);
     CHECK(xr_xir_task_executor_attach_root(witness.executor,root,1)==XR_XIR_CALL_READY);
-    XrXirCallResult result={0};unsigned polls=0;
+    XrXirCallResult result={0};unsigned polls=0;bool parent_cancelled=false;
     do {
         CHECK(++polls<128);result=xr_xir_task_executor_poll_root(witness.executor,1);
-        if((mode==1||errors)&&witness.progressed&&witness.held_cleanup&&!witness.release_cleanup&&
-            root->top->scope_draining) {
+        if((mode==1||mode==2||mode==3||mode==14)&&witness.progressed&&witness.held_cleanup&&!witness.release_cleanup&&
+            root->top&&root->top->scope_draining) {
             CHECK(result.status==XR_XIR_CALL_READY);
             CHECK(root->top->scope_draining&&xr_xir_call_state(root)==XR_XIR_CALL_SUSPENDED);
-            CHECK(!witness.cleanup_calls);witness.release_cleanup=true;
+            CHECK(!witness.cleanup_calls);
+            if(mode==14&&!parent_cancelled) {
+                CHECK(xr_xir_task_executor_cancel_root(witness.executor)==XR_XIR_CALL_CANCEL_REQUESTED);
+                parent_cancelled=true;
+            }
+            witness.release_cleanup=true;
+        }
+        if((mode==10||mode==11)&&witness.progressed&&witness.held_cleanup&&!witness.release_cleanup&&
+            xr_xir_call_state(root)==XR_XIR_CALL_RETURNED) {
+            CHECK(result.status==XR_XIR_CALL_READY&&witness.cleanup_calls==1);
+            CHECK(((XirTask *)(uintptr_t)witness.members[0].payload)->call->cancel_requested);
+            witness.release_cleanup=true;
         }
     }while(result.status==XR_XIR_CALL_READY);
     fprintf(stderr,"aggregate mode%u status%u polls%u refusals%u\n",mode,result.status,polls,witness.refusals);
-    CHECK(result.status==(errors?XR_XIR_CALL_THROWN:mode==9?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_RETURNED));
+    runtime_fail_at=SIZE_MAX;
+    CHECK(result.status==(mode==2||mode==3?XR_XIR_CALL_THROWN:mode==9||mode==14?XR_XIR_CALL_CANCELLED:
+        mode==13?XR_XIR_CALL_OOM:XR_XIR_CALL_RETURNED));
     CHECK(witness.cleanup_calls==1);
-    if(!errors&&mode!=9)CHECK(result.value.payload==42);
+    if(mode!=2&&mode!=3&&mode!=9&&mode!=13&&mode!=14)CHECK(result.value.payload==42);
     CHECK(!witness.executor->pending_terminals);
     if(mode==7)CHECK(witness.executor->publication_order==UINT64_MAX);
-    if(mode==1||errors)CHECK(witness.progressed&&witness.held_cleanup&&witness.release_cleanup);
-    CHECK(xr_xir_task_executor_free(witness.executor,NULL)==XR_XIR_CALL_READY);
+    if(mode==1||errors||mode==14)CHECK(witness.progressed&&witness.held_cleanup&&witness.release_cleanup);
+    if(mode==14) {
+        XrXirCallResult stable={0};CHECK(parent_cancelled);
+        CHECK(xr_xir_task_copy_outcome(&witness.aggregate,&stable)==XR_XIR_CALL_RETURNED&&stable.value.payload==22);
+        xr_xir_call_result_drop(&stable);
+    }
+    CHECK(xr_xir_task_executor_free(witness.executor,NULL)==(mode==13?XR_XIR_CALL_OOM:XR_XIR_CALL_READY));
     CHECK(xr_xir_call_free(root)==XR_XIR_CALL_READY);
-    xr_xir_value_drop(&witness.aggregate);xr_xir_value_drop(&witness.array);xr_xir_value_drop(&witness.group);
+    xr_xir_value_drop(&witness.aggregate);xr_xir_value_drop(&witness.inner);
+    xr_xir_value_drop(&witness.array);xr_xir_value_drop(&witness.group);
     for(size_t a=0;a<2;++a)xr_xir_value_drop(&witness.members[a]);
     CHECK(!budget.live_bytes);xr_xir_domain_drop(domain);xr_xir_compile_program_drop(program);
     CHECK(native_fixture_stats(&compiler.context).held_bytes==baseline.held_bytes);native_fixture_owner_free(&compiler);
@@ -289,5 +321,5 @@ static void aggregate_case(uint32_t mode) {
 }
 int main(void) {
     fprintf(stderr,"aggregate private sizes task%zu executor%zu group%zu\n",sizeof(XirTask),sizeof(XrXirTaskExecutor),sizeof(XirTaskGroup));
-    for(uint32_t mode=0;mode<10;++mode)aggregate_case(mode);return 0;
+    for(uint32_t mode=0;mode<15;++mode)aggregate_case(mode);return 0;
 }
