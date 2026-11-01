@@ -90,8 +90,8 @@ static void buffer_call_cases(XrXirProgram *program,const uint32_t ids[7]) {
     instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     buffer_initialize(instance,ids[0]);baseline=buffer_program_refs(program);
     CHECK(xr_xir_instance_start(instance,ids[5],NULL,0)==XR_XIR_CALL_READY);
-    CHECK(buffer_poll(instance)==XR_XIR_CALL_RUNTIME_PANIC && buffer_program_refs(program)==baseline);
-    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_RUNTIME_PANIC && buffer_program_refs(program)==original);
+    CHECK(buffer_poll(instance)==XR_XIR_CALL_ASSERTION && buffer_program_refs(program)==baseline);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_ASSERTION && buffer_program_refs(program)==original);
     /* This cancellation occurs after the real callback frame has begun, rather
      * than merely after capture of a future native borrowed-return frame. */
     instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);

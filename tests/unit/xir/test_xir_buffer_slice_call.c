@@ -37,7 +37,7 @@ static const char input[]=
     "enum ScopedError{Expected}\n"
     "fn scopedEdit(view:MutSlice<u8>){view[0]=7;view[1]=9}\n"
     "fn scopedThrow(view:MutSlice<u8>) throws(ScopedError){view[0]=7;throw ScopedError.Expected}\n"
-    "fn scopedPanicEdit(view:MutSlice<u8>){view[0]=7;panic(\"scoped callback\")}\n"
+    "fn scopedPanicEdit(view:MutSlice<u8>){view[0]=7;assert(false)}\n"
     "export fn scoped()->i64{var buffer=mem.allocZeroed(4);"
     "unsafe{mem.withSliceMut<u8>(buffer.borrowPtr(),len(buffer),ref buffer,scopedEdit)};"
     "const view=buffer.asBytes();if(view[0]!=7 || view[1]!=9 || len(view)!=4){return -3};"
