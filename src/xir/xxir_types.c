@@ -87,11 +87,11 @@ XrXirType xr_xir_callable_error(const XrXirTypes *types, XrXirType type) {
 }
 XR_FUNC bool xr_xir_type_is_channel(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    return node && node->kind == XR_XIR_TYPE_CHANNEL || node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR;
+    return node && node->kind == XR_XIR_TYPE_CHANNEL;
 }
 XR_FUNC XrXirType xr_xir_channel_element(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    return node && node->kind == XR_XIR_TYPE_CHANNEL || node->kind == XR_XIR_TYPE_PTR || node->kind == XR_XIR_TYPE_MUT_PTR ? node->element : XR_XIR_UNIT;
+    return node && node->kind == XR_XIR_TYPE_CHANNEL ? node->element : XR_XIR_UNIT;
 }
 XR_FUNC bool xr_xir_type_is_atomic(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
