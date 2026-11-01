@@ -1,0 +1,13 @@
+intBox: Box(42), get: 42
+strBox: Box(hello), get: hello
+doubled: Box(84)
+pair: (age, 25)
+first: age, second: 25
+size: 3, peek: 30
+pop: 30
+pop: 20
+size: 1
+10/3 = 3.3333333333333335
+10/0 = 0.0 (fallback)
+optional chain: 42
+missing chain: null
