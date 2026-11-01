@@ -1092,7 +1092,8 @@ static void release_pending(XirObject *pending) {
         } else if (object->kind==XR_XIR_TYPE_SLICE || object->kind==XR_XIR_TYPE_MUT_SLICE) {
             XirView *view=(XirView *)object;
             XR_CHECK(!object->graph_dead && !view->children,"view retirement follows all physical child pins");
-            if (view->state==XIR_VIEW_RETIRED) xr_xir_value_drop(&view->storage.root);
+            if (view->storage.buffer_origin) xr_xir_view_storage_end(&view->storage);
+            else if (view->state==XIR_VIEW_RETIRED) xr_xir_value_drop(&view->storage.root);
             else xr_xir_view_storage_end(&view->storage);
             if (!unit_value(&view->parent)) {
                 XirView *parent=(XirView *)object_pointer(&view->parent);

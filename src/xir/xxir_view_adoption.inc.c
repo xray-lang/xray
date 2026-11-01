@@ -47,7 +47,8 @@ XR_FUNC void xr_xir_view_scope_adopt(XrXirViewOriginPin *pin,const XrXirCellAuth
         view->state==XIR_VIEW_ACTIVE,"a returned logical owner remains live through terminal adoption");
     if (view->storage.kind==XR_XIR_TYPE_SLICE) {
         XrXirCellReadLoan *read=&view->storage.loan.shared;
-        XR_CHECK(read->previous && *read->previous==read && cell_authority_equal(&read->authority,&pin->authority),
+        XR_CHECK((view->storage.buffer_origin ? view_storage_buffer_live(&view->storage)!=NULL :
+            read->previous && *read->previous==read) && cell_authority_equal(&read->authority,&pin->authority),
             "shared adoption rebinds its exact authenticated guard before the old root ends");
         read->authority=*authority;pin->authority=*authority;
     }
