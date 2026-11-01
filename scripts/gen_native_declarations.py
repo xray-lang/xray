@@ -1096,7 +1096,7 @@ def render_unicode_callable(root, decoder):
             '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_' + ('UNKNOWN' if ordinal == 0 else 'NO_HEAP') + ',',
             '    "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + symbol + '_parameters, ' + count + ', XR_NATIVE_TERM_' + ('UNIT' if ordinal == 0 else 'BOOL'), '};']
         buffer_rows.append('    {' + str(ordinal + 8) + ', NULL, &' + symbol + ', NULL, false, "crypto", "stdlib/defs/core.def", FINGERPRINT}')
-    digest = hashlib.sha256((root / 'stdlib/defs/core.def').read_bytes()).digest()
+    digest = hashlib.sha256((root / 'stdlib/defs/core.def').read_text(encoding='utf-8').encode('utf-8')).digest()
     fingerprint = '{{' + ','.join(str(byte) for byte in digest) + '}}'
     return buffer_lines + [
         'static const XrNativeParameter xr_native_unicode_property_parameters[] = {',

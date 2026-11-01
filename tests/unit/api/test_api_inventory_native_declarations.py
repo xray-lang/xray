@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import call, patch
@@ -17,6 +18,27 @@ import gen_native_declarations as declarations  # noqa: E402
 
 
 class NativeDeclarationInventoryTest(unittest.TestCase):
+    def test_source_fingerprints_ignore_checkout_line_endings(self) -> None:
+        inputs = [path for relative in ('stdlib', 'tools/stdlibgen')
+                  for path in (ROOT / relative).rglob('*')
+                  if path.is_file() and path.suffix in ('.def', '.xr', '.py')]
+        with tempfile.TemporaryDirectory(prefix='xray-native-line-endings-') as directory:
+            generated = []
+            for name, ending in (('lf', b'\n'), ('crlf', b'\r\n')):
+                root = Path(directory) / name
+                for source in inputs:
+                    target = root / source.relative_to(ROOT)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    content = source.read_bytes().replace(b'\r\n', b'\n')
+                    target.write_bytes(content.replace(b'\n', ending))
+                generated.append(declarations.render(root))
+            self.assertEqual(generated[0], generated[1])
+            core = Path(directory) / 'lf/stdlib/defs/core.def'
+            core.write_bytes(core.read_bytes() + b'\n# Changed declaration provenance.\n')
+            changed = declarations.render(Path(directory) / 'lf')
+            self.assertNotEqual(generated[0]['src/shared/xnative_declarations.inc.c'],
+                                changed['src/shared/xnative_declarations.inc.c'])
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.path = ROOT / "stdlib/types/array.xr"

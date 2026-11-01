@@ -24,9 +24,14 @@ tests/benchmarks/target-machine/source_run/main.xr text eol=lf
 tests/benchmarks/target-machine/source_run/helper.xr text eol=lf
 tests/benchmarks/target-machine/source_run/helper.edited.txt text eol=lf
 
-# Native declaration digests in src/shared/xnative_declarations.inc.c hash the
-# raw .def bytes, so a CRLF checkout would publish a host-dependent identity.
+# Native declaration identities hash canonical UTF-8 text. Keep their governed
+# source inputs and generated projections LF-only across checkout settings.
 stdlib/defs/*.def text eol=lf
+stdlib/prelude/*.def text eol=lf
+stdlib/prelude/*.xr text eol=lf
+stdlib/types/*.xr text eol=lf
+src/shared/xnative_declarations.inc.c text eol=lf
+src/shared/xprelude_source.inc.c text eol=lf
 
 # Mark xisagen-generated files so GitHub auto-collapses them in PRs.
 # These are derived from xisa/*.def and xisa/arch/*.isa — single source of truth
