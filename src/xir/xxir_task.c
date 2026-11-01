@@ -398,6 +398,9 @@ static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirC
     const XrXirModule *module=xr_xir_compile_artifact_module(program->permissions->input->artifact);
     if (!module || module->function_count!=program->entry_count || !module->functions ||
         node->result!=module->functions[request->entry].error_type) return XR_XIR_CALL_BAD_ARGUMENT;
+    /* This constructor owns logical copies. Consuming workers stay closed
+     * until the caller's actual frame words participate in publication. */
+    if(module->functions[request->entry].consume_parameter_count)return XR_XIR_CALL_UNSUPPORTED;
     for (uint32_t p = 0; p < program->entries[request->entry].parameter_count; ++p) {
         XrXirType parameter = program->entries[request->entry].parameters[p];
         if (!xr_xir_task_parameter_supported(program->types, parameter)) return XR_XIR_CALL_UNSUPPORTED;
