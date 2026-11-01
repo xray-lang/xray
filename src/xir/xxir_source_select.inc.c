@@ -80,7 +80,7 @@ static bool source_select_arm(SourceContext *ctx,const SourceSelectArm *planned,
     if(!source_hir_scope_enter(ctx,node,&typed))return false;
     ctx->scope=saved;bool ok=true;
     if(!arm->is_default&&!arm->is_timeout) {
-        SourceValue nullable,value;
+        SourceValue nullable={0},value={0};
         ok=source_tuple_projection(ctx,node,result,planned->tag+1,&nullable)&&
             source_unwrap_value(ctx,node,nullable,&value);
         SourceName *binding=ok?source_alloc(ctx,1,sizeof(*binding)):NULL;
