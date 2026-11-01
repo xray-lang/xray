@@ -25,6 +25,7 @@ static bool local_workspace(XtcXirLocalToolchain *owner, const char *explicit_pa
         &owner->view.workspace_parent);
     xr_compile_resources_free(candidate); return okay;
 }
+#ifdef XR_OS_MACOS
 /* One output line without its newline; other control bytes are rejected. */
 static bool local_line(XtcXirLocalToolchain *owner, const XrProcessByteBuffer *bytes, char **output) {
     if (!bytes->data || bytes->truncated) return local_fail(owner, XTC_XIR_LOCAL_UNRESOLVED, XTC_XIR_LOCAL_SELF, 0);
@@ -37,7 +38,6 @@ static bool local_line(XtcXirLocalToolchain *owner, const XrProcessByteBuffer *b
     }
     *output = local_copy(owner, (const char *)bytes->data, end); return *output != NULL;
 }
-#ifdef XR_OS_MACOS
 static bool local_xcrun(XtcXirLocalToolchain *owner, const XtcXirLocalToolchainRequest *request,
     const char *option, const char *argument, char **output) {
     XrProcessSpec spec; XrProcessResult result = {0};
