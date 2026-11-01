@@ -15,6 +15,8 @@ static bool source_string_bytes_call(SourceContext *ctx,AstNode *node,SourceValu
     const XrNativeMemberDeclaration *member,SourceValue *value);
 static bool source_string_value_reference(SourceContext *ctx,AstNode *node,
     const XrNativeMemberDeclaration *member,XrXirType result);
+static bool source_string_split_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
+    const XrNativeMemberDeclaration *member,SourceValue *output);
 static bool source_string_value_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
     const XrNativeMemberDeclaration *member,SourceValue *value);
 static bool source_string_declaration(SourceContext *ctx) {
@@ -130,6 +132,8 @@ static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue re
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (member && member->operation==XR_NATIVE_OPERATION_STRING_RUNES)
         return source_string_runes_call(ctx,node,receiver,member,value);
+    if (member && member->operation==XR_NATIVE_OPERATION_STRING_SPLIT)
+        return source_string_split_call(ctx,node,receiver,member,value);
     if (member && member==xr_native_declaration_member(native,"bytes"))
         return source_string_bytes_call(ctx,node,receiver,member,value);
     if (member && (member->operation==XR_NATIVE_OPERATION_STRING_COPY_BYTES ||

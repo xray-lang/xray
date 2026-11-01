@@ -2234,6 +2234,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     SourceFunction *body = &ctx->bodies[index]; body->node = body->type_owner = node; body->module = ctx->module;
     body->parameter_scope = symbol->hir_item;
     ctx->function = index;
+    ctx->identities[index] = identity;
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_FUNCTION, 0, source_query_range(ctx, node, decl->name))) return false;
     body->declaration = symbol->declaration;
     body->generic_owner = decl->type_param_count ? symbol->declaration : 0;
@@ -2306,6 +2307,7 @@ static bool source_resolved_identity(SourceContext *ctx, const XrModuleSpec *spe
 #include "xxir_source_entry.inc.c"
 
 #include "xxir_source_unicode.inc.c"
+#include "xxir_source_crypto.inc.c"
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
     uint32_t readers = ctx->repl_tail ? 1u : 0u, function_values=0;
@@ -2411,11 +2413,20 @@ static bool collect_declarations(SourceContext *ctx) {
     /* Each source module can own one canonical decoder body. */
     if (count>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"native callable capacity overflow");
     capacity+=count;
+    if (count>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"split producer capacity overflow");
+    capacity+=count;
     if (count>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"string producer capacity overflow");
     capacity+=count;
     for (uint32_t m=0;m<count;++m) if (source_unicode_module(ctx,m) && !source_owned_checked(&ctx->graph->specs[m])) {
         uint32_t natives=(uint32_t)(sizeof(source_unicode_callables)/sizeof(*source_unicode_callables));
         if (natives>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"native callable capacity overflow");
+        capacity+=natives;
+    }
+    for (uint32_t m=0;m<count;++m) {
+        if (!(m%64) && !source_request_poll(ctx,NULL)) return false;
+        if (!source_crypto_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m])) continue;
+        uint32_t natives=(uint32_t)(sizeof(source_crypto_callables)/sizeof(*source_crypto_callables));
+        if(natives>UINT32_MAX-capacity)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"crypto callable capacity overflow");
         capacity+=natives;
     }
     if (!ctx->core_factory && capacity <= UINT32_MAX - 9) capacity += 9;
@@ -2499,7 +2510,7 @@ static bool collect_declarations(SourceContext *ctx) {
         for (SourceName *p = ctx->names[m]; p; p = p->next)
             if (p->kind == SOURCE_IMPORT && !source_import_selectors(ctx,p)) return false;
     }
-    return source_unicode_declare(ctx);
+    return source_unicode_declare(ctx) && source_crypto_declare(ctx);
 }
 static bool source_parameter_promise(SourceContext *ctx, uint32_t function, uint32_t parameter) {
     SourceFunction *body = &ctx->bodies[function];
@@ -2988,6 +2999,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
 #include "xxir_source_pattern_array_tail.inc.c"
 #include "xxir_source_string_owned.inc.c"
 #include "xxir_source_string_runes.inc.c"
+#include "xxir_source_string_split.inc.c"
 #include "xxir_source_hash_foreach.inc.c"
 #include "xxir_source_core_panics.inc.c"
 #include "xxir_source_core_throws.inc.c"

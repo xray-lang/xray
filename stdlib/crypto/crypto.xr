@@ -377,7 +377,7 @@ fn entropyBytes(n: i64) -> Array<u8> {
 
 // n random bytes, hex encoded. The hex form is what this module has always
 // published and what ws and http build their nonces and boundaries from.
-export fn randomBytes(n: i64) -> string {
+export fn randomBytes(n: i64) throws(CryptoError) -> string {
     if (n <= 0 || n > MAX_RANDOM_BYTES) { throw CryptoError.InvalidLength }
     return hexOf(entropyBytes(n))
 }
@@ -787,7 +787,7 @@ export fn encrypt(key: string, plaintext: string) -> string {
 // Answers null for anything that does not authenticate, without distinguishing
 // a bad tag from bad padding: telling those apart is what makes a padding
 // oracle.
-export fn decrypt(key: string, ciphertext: string) -> string? {
+export fn decrypt(key: string, ciphertext: string) throws(CryptoError | Utf8Error) -> string? {
     var raw = hexToBytes(ciphertext.bytes())
     if (raw == null) { return null }
     var bytes = raw!
@@ -818,5 +818,5 @@ export fn decrypt(key: string, ciphertext: string) -> string? {
     }
     var out: Array<u8> = []
     for (var i = 0; i < len(plain) - pad; i++) { out.push(plain[i]) }
-    return string.fromUtf8(out[:])
+    return try string.fromUtf8(out[:])
 }

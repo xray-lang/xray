@@ -2,24 +2,26 @@
 static const char *const xir_prelude_variants_0[] = {"InvalidUtf8"};
 static const char *const xir_prelude_variants_1[] = {"Relaxed", "Acquire", "Release", "AcquireRelease", "SeqCst"};
 static const char *const xir_prelude_variants_2[] = {"InvalidLength"};
-static const char *const xir_prelude_variants_3[] = {"Value", "Empty", "Timeout", "Closed"};
-static const char *const xir_prelude_variants_4[] = {"Sent", "Full", "Timeout", "Closed"};
-static const char *const xir_prelude_variants_5[] = {"Native", "LE", "BE"};
-static const char *const xir_prelude_variants_6[] = {"Cancelled"};
-static const char *const xir_prelude_variants_7[] = {"Success", "Error", "Panic", "Cancelled"};
+static const char *const xir_prelude_variants_3[] = {"EmptyPattern"};
+static const char *const xir_prelude_variants_4[] = {"Value", "Empty", "Timeout", "Closed"};
+static const char *const xir_prelude_variants_5[] = {"Sent", "Full", "Timeout", "Closed"};
+static const char *const xir_prelude_variants_6[] = {"Native", "LE", "BE"};
+static const char *const xir_prelude_variants_7[] = {"Cancelled"};
+static const char *const xir_prelude_variants_8[] = {"Success", "Error", "Panic", "Cancelled"};
 static const XirPreludeEnum xir_prelude_enums[] = {
     {"Utf8Error", 17, 1, 0, 0, xir_prelude_variants_0},
     {"Ordering", 4, 5, 0, 0, xir_prelude_variants_1},
     {"CryptoError", 0, 1, 0, 0, xir_prelude_variants_2},
-    {"Recv", 7, 4, 1, 1, xir_prelude_variants_3},
-    {"SendResult", 8, 4, 0, 0, xir_prelude_variants_4},
-    {"Endian", 0, 3, 0, 0, xir_prelude_variants_5},
-    {"Cancelled", 18, 1, 0, 0, xir_prelude_variants_6},
-    {"TaskResult", 19, 4, 2, 3, xir_prelude_variants_7},
+    {"StringPatternError", 0, 1, 0, 0, xir_prelude_variants_3},
+    {"Recv", 7, 4, 1, 1, xir_prelude_variants_4},
+    {"SendResult", 8, 4, 0, 0, xir_prelude_variants_5},
+    {"Endian", 0, 3, 0, 0, xir_prelude_variants_6},
+    {"Cancelled", 18, 1, 0, 0, xir_prelude_variants_7},
+    {"TaskResult", 19, 4, 2, 3, xir_prelude_variants_8},
 };
 static const XirPreludeSource xir_prelude_source = {
-    "// builtin_symbols.def sha256 9701bb6cfab23aaef0407ad73d9319eb2f0ede41725ea4541a421cccc5bfd65a\nexport enum Utf8Error { InvalidUtf8 }\nexport enum Ordering { Relaxed, Acquire, Release, AcquireRelease, SeqCst }\nexport enum CryptoError { InvalidLength }\nexport enum Recv<T> { Value { value: T }, Empty, Timeout, Closed }\nexport enum SendResult { Sent, Full, Timeout, Closed }\nexport enum Endian { Native, LE, BE }\nexport enum Cancelled { Cancelled }\nexport enum TaskResult<T, E: Error> { Success { value: T }, Error { error: E }, Panic { info: PanicInfo }, Cancelled }\n// range.xr sha256 b25e3a5dfd08040d2bc752edebd22e0f151ce38ae5f33389795e033b8bd89ad7\n// Integer range storage is immutable; public construction always uses a unit step.\nexport class Range {\n    const start: i64\n    const end: i64\n    private const _step: i64\n    private const _inclusive: bool\n\n    init(start: i64, end: i64, inclusive: bool) {\n        this.start = start\n        this.end = end\n        this._step = 1\n        this._inclusive = inclusive\n    }\n\n    count() -> i64 {\n        if (this.end < this.start) { return 0 }\n        const maximum: i64 = 9223372036854775807\n        var distance: i64 = 0\n        if (this.start < 0 && this.end >= 0) {\n            // Adding one before negation also handles the smallest signed integer.\n            const below: i64 = -(this.start + 1)\n            if (this.end >= maximum - below) { return maximum }\n            distance = this.end + below + 1\n        } else {\n            distance = this.end - this.start\n        }\n        if (this._inclusive && distance < maximum) { return distance + 1 }\n        return distance\n    }\n}\n",
-    {151, 1, 187, 108, 250, 178, 58, 174, 240, 64, 122, 215, 61, 147, 25, 235, 47, 14, 222, 65, 114, 94, 164, 84, 26, 66, 28, 204, 197, 191, 214, 90},
-    xir_prelude_enums, 8,
+    "// builtin_symbols.def sha256 5e58cda720a9a45ab396b4cbc2714cabdec0b0ce72ad33aee12d46abf1376ae9\nexport enum Utf8Error { InvalidUtf8 }\nexport enum Ordering { Relaxed, Acquire, Release, AcquireRelease, SeqCst }\nexport enum CryptoError { InvalidLength }\nexport enum StringPatternError { EmptyPattern }\nexport enum Recv<T> { Value { value: T }, Empty, Timeout, Closed }\nexport enum SendResult { Sent, Full, Timeout, Closed }\nexport enum Endian { Native, LE, BE }\nexport enum Cancelled { Cancelled }\nexport enum TaskResult<T, E: Error> { Success { value: T }, Error { error: E }, Panic { info: PanicInfo }, Cancelled }\n// range.xr sha256 b25e3a5dfd08040d2bc752edebd22e0f151ce38ae5f33389795e033b8bd89ad7\n// Integer range storage is immutable; public construction always uses a unit step.\nexport class Range {\n    const start: i64\n    const end: i64\n    private const _step: i64\n    private const _inclusive: bool\n\n    init(start: i64, end: i64, inclusive: bool) {\n        this.start = start\n        this.end = end\n        this._step = 1\n        this._inclusive = inclusive\n    }\n\n    count() -> i64 {\n        if (this.end < this.start) { return 0 }\n        const maximum: i64 = 9223372036854775807\n        var distance: i64 = 0\n        if (this.start < 0 && this.end >= 0) {\n            // Adding one before negation also handles the smallest signed integer.\n            const below: i64 = -(this.start + 1)\n            if (this.end >= maximum - below) { return maximum }\n            distance = this.end + below + 1\n        } else {\n            distance = this.end - this.start\n        }\n        if (this._inclusive && distance < maximum) { return distance + 1 }\n        return distance\n    }\n}\n",
+    {94, 88, 205, 167, 32, 169, 164, 90, 179, 150, 180, 203, 194, 113, 76, 171, 222, 192, 176, 206, 114, 173, 51, 174, 225, 45, 70, 171, 241, 55, 106, 233},
+    xir_prelude_enums, 9,
     {178, 94, 58, 93, 253, 8, 4, 13, 43, 199, 82, 237, 235, 210, 46, 15, 21, 28, 227, 138, 229, 243, 51, 137, 121, 94, 3, 59, 139, 216, 154, 215}
 };

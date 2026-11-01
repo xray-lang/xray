@@ -58,6 +58,8 @@ def main():
     for row in manifest['files']:
         data = (sdk/row['path']).read_bytes()
         assert len(data) == row['length'] and hashlib.sha256(data).hexdigest() == row['sha256']
+    recipe = json.loads((sdk/'source_sdk_recipe.json').read_text(encoding='utf-8'))
+    assert recipe['system_libraries'] == ['kernel32', 'bcrypt']
     assert not (moved/'bin/xray.exe').exists() and not any(p.suffix == '.xr' for p in moved.rglob('*'))
     source = out/'consumer.c'
     source.write_bytes((root/'tests/unit/xir/source_sdk_owned_consumer.c').read_bytes())
@@ -135,7 +137,8 @@ def main():
                 linker = registered.parent/'link.exe'
             assert linker.is_file(), 'registered MSVC linker is missing'
             run(label+'-link', [linker, '/nologo', '/incremental:no', '/out:'+str(exe), obj,
-                              *[sdk/p for p in manifest['archives']], 'kernel32.lib',
+                              *[sdk/p for p in manifest['archives']],
+                              *[name+'.lib' for name in recipe['system_libraries']],
                               '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
             if args.regex_only:
                 actual_output = out/(label+'.regex.stdout')

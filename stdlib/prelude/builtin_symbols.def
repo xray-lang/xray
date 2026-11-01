@@ -207,6 +207,9 @@ XR_BUILTIN_ENUM("CompressionError", 0, COMPRESSION_ERROR,
 XR_BUILTIN_ENUM("CryptoError", 0, CRYPTO_ERROR,
                 XR_BUILTIN_ENUM_VARIANT("InvalidLength", NONE))
 
+XR_BUILTIN_ENUM("StringPatternError", 0, STRING_PATTERN_ERROR,
+                XR_BUILTIN_ENUM_VARIANT("EmptyPattern", NONE))
+
 XR_BUILTIN_ENUM("Recv", 1, RECV,
                 XR_BUILTIN_ENUM_VARIANT("Value", TYPE_PARAM_0)
                 XR_BUILTIN_ENUM_VARIANT("Empty", NONE)

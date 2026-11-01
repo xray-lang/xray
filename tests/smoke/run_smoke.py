@@ -16,6 +16,7 @@ from xraytest import proc
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 from xray_progress import fixed_metrics
 from suite_catalog import SuiteCommands, expected_catalog
+from xray_crypto_suite import CryptoCommands, expected_catalog as expected_crypto_catalog
 
 
 @dataclass(frozen=True)
@@ -105,6 +106,7 @@ def load_cases(manifest: Path, root: Path, sources: dict[str, Source]) -> list[d
         target[source.path] = case
         rooted_file(root, case["stdout"])
         expected_catalog(case, root)
+        expected_crypto_catalog(case, root)
         if case["expect"] == "pass":
             if case["exit_code"] != 0 or "gap" in case:
                 raise ValueError(f"{name}: pass must exit zero without a gap allowance")
@@ -136,6 +138,8 @@ def load_cases(manifest: Path, root: Path, sources: dict[str, Source]) -> list[d
             raise ValueError(f"{case['id']}: native and VM must share the same stdout oracle")
         if case.get("suite") != primary[path].get("suite"):
             raise ValueError(f"{case['id']}: native and VM must share the same suite catalog")
+        if case.get("crypto_suite") != primary[path].get("crypto_suite"):
+            raise ValueError(f"{case['id']}: native and VM must share the complete crypto suite")
     return sorted(cases, key=lambda case: case["id"])
 
 
@@ -176,7 +180,8 @@ def classify(case: dict, result: proc.ProcResult, diagnostic: str, expected: byt
 
 
 def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
-            logs: Path, timeout: float, suites: SuiteCommands | None = None) -> dict:
+            logs: Path, timeout: float, suites: SuiteCommands | None = None,
+            crypto_suites: CryptoCommands | None = None) -> dict:
     if case.get("gap", {}).get("deferred"):
         return {"id": case["id"], "group": "native", "status": "gap", "executed": False,
                 "reason": "NOT_RUN: " + case["gap"]["deferred"], "commands": []}
@@ -225,6 +230,13 @@ def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
             "seconds": round(time.monotonic() - started, 3)}
     if suite is not None:
         row["suite"] = suite
+    if case.get("crypto_suite") is not None and row["status"] == "pass" and stage == "run":
+        try:
+            row["crypto_suite"] = (crypto_suites or CryptoCommands()).execute(case, root, logs, invoke)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            row.update(status="fail", reason=str(error))
+            row["crypto_suite"] = {"status": "fail", "reason": str(error), "executed": False}
+        row["seconds"] = round(time.monotonic() - started, 3)
     return row
 
 
@@ -246,6 +258,9 @@ def main() -> int:
     parser.add_argument("--suite-vm", type=Path)
     parser.add_argument("--suite-native", type=Path)
     parser.add_argument("--suite-generated-c", type=Path)
+    parser.add_argument("--crypto-suite-vm", type=Path)
+    parser.add_argument("--crypto-suite-native", type=Path)
+    parser.add_argument("--crypto-suite-generated-dir", type=Path)
     args = parser.parse_args()
     root, binary, output = args.root.resolve(), args.binary.resolve(), args.output.resolve()
     if args.timeout <= 0:
@@ -271,11 +286,12 @@ def main() -> int:
     log_root = Path(tempfile.mkdtemp(prefix="run-", dir=output))
     results = []
     suites = SuiteCommands(args.suite_vm, args.suite_native, args.suite_generated_c)
+    crypto_suites = CryptoCommands(args.crypto_suite_vm, args.crypto_suite_native, args.crypto_suite_generated_dir)
     for index, case in enumerate(cases):
         logs = log_root / f"{index:03d}"
         logs.mkdir()
         with tempfile.TemporaryDirectory(prefix="case-", dir=output) as directory:
-            row = execute(case, sources[case["path"]], binary, root, Path(directory), logs, args.timeout, suites)
+            row = execute(case, sources[case["path"]], binary, root, Path(directory), logs, args.timeout, suites, crypto_suites)
         results.append(row)
         row["log_directory"] = str(logs)
         print(f"{row['status'].upper()} {row['id']}: {row['reason']}", flush=True)

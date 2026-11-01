@@ -149,7 +149,7 @@ fn _normalizeRaw(p: string) -> string {
     var isAbs = _isSep(p.slice(0, (0) + 1))
 
     var segs: Array<string> = []
-    var parts = p.split("/")
+    var parts = try! p.split("/")
     for (var i = 0; i < len(parts); i++) {
         var seg = parts[i]
         if (len(seg) == 0) { continue }

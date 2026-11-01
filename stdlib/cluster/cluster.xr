@@ -2207,7 +2207,7 @@ fn _hexNibble(c: rune) -> i64 {
 }
 
 fn _handshakeNonce() -> Array<u8>? {
-    var hex = crypto.randomBytes(NONCE_SIZE)
+    var hex = try! crypto.randomBytes(NONCE_SIZE)
     if (len(hex) != NONCE_SIZE * 2) { return null }
     var nonce = Array<u8>(NONCE_SIZE)
     for (var i = 0; i < NONCE_SIZE; i++) {
@@ -2839,7 +2839,7 @@ export fn validTopicName(topic: string) -> bool {
 export fn validTopicPattern(pattern: string) -> bool {
     if (len(pattern) == 0 || len(pattern) > TOPIC_PATTERN_MAX || !_asciiVisible(pattern) ||
         _hasEmptyTopicSegment(pattern)) { return false }
-    var parts = pattern.split(".")
+    var parts = try! pattern.split(".")
     for (var i = 0; i < len(parts); i++) {
         var part = parts[i]
         if (part == ">") { return i == len(parts) - 1 }
@@ -2852,8 +2852,8 @@ export fn validTopicPattern(pattern: string) -> bool {
 export fn topicMatches(pattern: string, topic: string) -> bool {
     if (!validTopicPattern(pattern) || !validTopicName(topic)) { return false }
 
-    var p = pattern.split(".")
-    var t = topic.split(".")
+    var p = try! pattern.split(".")
+    var t = try! topic.split(".")
     var pi = 0
     var ti = 0
     while (pi < len(p)) {

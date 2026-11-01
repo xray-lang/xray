@@ -1,0 +1,76 @@
+fn fill(bytes: ref Array<u8>) { __fillRandomBytes(ref bytes) }
+export fn ctfeFill() -> i64 {
+    var bytes: Array<u8> = [1]
+    __fillRandomBytes(ref bytes)
+    return len(bytes)
+}
+export fn ctfeCompare() -> bool {
+    var bytes: Array<u8> = [0, 1, 0]
+    return __timingSafeEqualBytes(bytes, bytes)
+}
+export fn retained() -> string {
+    var parts = try! "A\0B:C".split(":")
+    return parts[0]
+}
+var bytes: Array<u8> = [11, 11, 11, 11]
+var saved = bytes
+const indirect = __fillRandomBytes
+indirect(ref bytes)
+assert(__timingSafeEqualBytes(saved, [11, 11, 11, 11]))
+var nested: Array<Array<u8>> = [saved]
+var previous = nested
+fill(ref nested[0])
+assert(__timingSafeEqualBytes(previous[0], saved))
+class Holder {
+    bytes: Array<u8>
+    init(value: Array<u8>) { this.bytes = value }
+}
+var holder = Holder(saved)
+fill(ref holder.bytes)
+assert(__timingSafeEqualBytes(saved, [11, 11, 11, 11]))
+var empty: Array<u8> = []
+fill(ref empty)
+assertEqual(len(empty), 0)
+assert(__timingSafeEqualBytes(empty, empty))
+var input = "a-b"
+var calls: i64 = 0
+fn separator() -> string { input = "changed"; calls += 1; return "-" }
+var snapshot = try! input.split(separator())
+assertEqual(snapshot[0], "a")
+assertEqual(snapshot[1], "b")
+assertEqual(input, "changed")
+assertEqual(calls, 1)
+var none = try! "".split(":")
+assertEqual(len(none), 1)
+assertEqual(none[0], "")
+var edges = try! ":a::".split(":")
+assertEqual(edges, ["", "a", "", ""])
+var unicode = try! "a你😀b你😀".split("你😀")
+assertEqual(unicode, ["a", "b", ""])
+var nul = try! "A\0B\0".split("\0")
+assertEqual(nul, ["A", "B", ""])
+var combining = try! "é".split("é")
+assertEqual(combining, ["é"])
+var alias = edges
+edges[0] = "new"
+assertEqual(alias[0], "")
+var events: i64 = 0
+fn receiver() -> string { events = events * 10 + 1; return "a" }
+fn emptySeparator() -> string { events = events * 10 + 2; return "" }
+var caught = false
+try { receiver().split(emptySeparator()) } catch (e: StringPatternError) {
+    assertEqual(e.toString(), "StringPatternError.EmptyPattern")
+    caught = true
+}
+assert(caught)
+assertEqual(events, 12)
+events = 0
+fn badSeparator() throws(CryptoError) -> string {
+    events = events * 10 + 2
+    throw CryptoError.InvalidLength
+}
+caught = false
+try { receiver().split(try badSeparator()) } catch (e: CryptoError) { caught = true }
+assert(caught)
+assertEqual(events, 12)
+print(42)

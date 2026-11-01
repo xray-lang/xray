@@ -163,14 +163,15 @@ static int run_test(int argc, char **argv) {
 #ifdef OPERATION_INJECTED
     if (argc == 3 && !strcmp(argv[1], "unit")) { unit(argv[2]); return 0; }
 #endif
-    CHECK(argc == 20);
+    CHECK(argc == 21);
     XrCompileResources *resources = sdk_ledger(&sdk_unlimited);
     XrXirNativeProjection *project = projection(resources, argv[2], argv[3], argv[4]);
     XrXirRuntimeSdk *sdk = load_sdk(resources, argv[5]);
-    XrXirInvocationLibrary libraries[5];
+    XrXirInvocationLibrary libraries[6];
     for (unsigned i = 0; i < 5; ++i) libraries[i] = (XrXirInvocationLibrary){argv[9 + i], i == 4 ? XR_XIR_INVOCATION_SYSTEM : XR_XIR_INVOCATION_CRT};
+    libraries[5] = (XrXirInvocationLibrary){argv[20], XR_XIR_INVOCATION_SYSTEM};
     XtcXirNativeOperationRequest request = {project, sdk, argv[6], argv[7],
-        {argv[14], argv[15], argv[16], argv[17], argv[18]}, libraries, 5, NULL, NULL};
+        {argv[14], argv[15], argv[16], argv[17], argv[18]}, libraries, 6, NULL, NULL};
 #ifdef OPERATION_INJECTED
     if (!strcmp(argv[1], "preflight")) {
         preflight(argv[8], resources, &request);

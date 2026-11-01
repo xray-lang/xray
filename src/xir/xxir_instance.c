@@ -2020,6 +2020,8 @@ XrXirAction xr_xir_instance_panic_land(XrXirCallView *view, void *frame, XrXirAc
 
 #include "xxir_instance_binding.inc.c"
 #include "xxir_buffer_storage.h"
+#include "xxir_crypto_call.h"
+#include "xxir_crypto_value.h"
 
 #include "xxir_instance_hash.inc.c"
 
@@ -2044,7 +2046,17 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     value=state;
     status=xr_xir_call_execution_status(view);if (status!=XR_XIR_CALL_READY) goto failed;
     XrXirViewAccess access={0};XrXirValueStatus converted=XR_XIR_VALUE_OK;
-    if (id>=XR_NATIVE_CALLABLE_BUFFER_ALLOCATE && id<=XR_NATIVE_CALLABLE_BUFFER_LENGTH) {
+    if (id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM || id==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL) {
+        if(!xir_crypto_scope(program->declarations,index)){status=XR_XIR_CALL_BAD_ARGUMENT;goto failed;}
+        if(id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM) {
+            status=instance_cell_access(view,instance,&view->arguments[0]);if(status!=XR_XIR_CALL_READY)goto failed;
+            XrXirFaultDetail fault={0};status=xir_call_crypto_fill(view,&view->arguments[0],&fault);
+            if(status!=XR_XIR_CALL_READY)goto failed;
+        } else {
+            bool equal=false;converted=xir_crypto_timing_equal(&view->arguments[0],&view->arguments[1],xr_xir_call_admission(view),&equal);
+            if(converted==XR_XIR_VALUE_OK)*value=(XrXirValue){XR_XIR_BOOL,0,equal};
+        }
+    } else if (id>=XR_NATIVE_CALLABLE_BUFFER_ALLOCATE && id<=XR_NATIVE_CALLABLE_BUFFER_LENGTH) {
         if (!xir_buffer_storage_scope(program->declarations,index)) goto failed;
         if (id==XR_NATIVE_CALLABLE_BUFFER_LENGTH) {
             int64_t length=0;converted=xr_xir_buffer_storage_length(&view->arguments[0],&length);

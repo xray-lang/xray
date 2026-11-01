@@ -4,6 +4,9 @@ add_test(NAME smoke
         --suite-vm $<TARGET_FILE:test_xir_assert_throws_source>
         --suite-native $<TARGET_FILE:test_xir_assert_throws_native>
         --suite-generated-c ${CMAKE_BINARY_DIR}/tests/unit/assert-throws/testing_demo.c
+        --crypto-suite-vm $<TARGET_FILE:test_xir_crypto_suite>
+        --crypto-suite-native $<TARGET_FILE:test_xir_crypto_suite_native>
+        --crypto-suite-generated-dir ${CMAKE_BINARY_DIR}/tests/unit/crypto-suite
         --output ${CMAKE_CURRENT_BINARY_DIR}/smoke)
 set_tests_properties(smoke PROPERTIES
     TIMEOUT 300 PROCESSORS 1 LABELS "smoke;fast;cli;usability")

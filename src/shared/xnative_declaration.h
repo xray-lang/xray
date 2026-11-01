@@ -50,7 +50,7 @@ typedef enum XrNativeTypeTerm {
     /* The two retired type-term slots remain unassigned. */
     XR_NATIVE_TERM_NULLABLE_F64 = 35, XR_NATIVE_TERM_SLICE_U8 = 36,
     XR_NATIVE_TERM_TASK_RESULT, XR_NATIVE_TERM_NULLABLE_TASK_RESULT, XR_NATIVE_TERM_BUFFER_STORAGE,
-    XR_NATIVE_TERM_ITERATOR_RUNE
+    XR_NATIVE_TERM_ITERATOR_RUNE, XR_NATIVE_TERM_ARRAY_STRING
 } XrNativeTypeTerm;
 /* RESULT_VARIABLE and the callback terms require an admitted recipe's exact
  * signature. They never grant authority to an arbitrary unparsed signature. */
@@ -156,6 +156,7 @@ typedef enum XrNativeOperation {
     XR_NATIVE_OPERATION_RUNE_IS_WHITESPACE,
     XR_NATIVE_OPERATION_STRING_RUNES,
     XR_NATIVE_OPERATION_ARRAY_SORT,
+    XR_NATIVE_OPERATION_STRING_SPLIT,
     XR_NATIVE_OPERATION_COUNT
 } XrNativeOperation;
 typedef enum XrNativeAllocation {
@@ -203,7 +204,9 @@ typedef enum XrNativeCallableId {
     XR_NATIVE_CALLABLE_BUFFER_ALLOCATE = 4,
     XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ZEROED = 5,
     XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ALIGNED = 6,
-    XR_NATIVE_CALLABLE_BUFFER_LENGTH = 7
+    XR_NATIVE_CALLABLE_BUFFER_LENGTH = 7,
+    XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM = 8,
+    XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL = 9
 } XrNativeCallableId;
 
 /* Callable IDs authenticate ordinary function bodies, independently of inline intrinsics. */

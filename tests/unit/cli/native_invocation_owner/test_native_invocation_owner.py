@@ -50,7 +50,7 @@ def run(mode):
                    Path(os.environ['WindowsSdkDir']) / 'Include' / os.environ['WindowsSDKVersion'].strip('/\\') / 'ucrt',
                    Path(os.environ['WindowsSdkDir']) / 'Include' / os.environ['WindowsSDKVersion'].strip('/\\') / 'shared',
                    Path(os.environ['WindowsSdkDir']) / 'Include' / os.environ['WindowsSDKVersion'].strip('/\\') / 'um',
-                   os.environ['SystemRoot']]
+                   os.environ['SystemRoot'], kit / 'um/x64/bcrypt.lib']
         started = time.perf_counter()
         result = subprocess.run(list(map(str, command)), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=600)
         sys.stdout.buffer.write(result.stdout); sys.stderr.buffer.write(result.stderr)

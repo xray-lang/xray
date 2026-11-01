@@ -6551,7 +6551,7 @@ Both methods prepare a private owned candidate: reverse reverses the element ord
 | `indexOf(s, start?)` / `lastIndexOf(s)` | return rune ordinals |
 | `slice(start, end?)` | independent rune-ordinal slice; requires `0 <= start <= end <= len(receiver)`, with omitted end using the receiver length; an invalid range panics with E0433 and message `string slice range is invalid` |
 | `sliceBytes(start, end)` | slice by byte offset; invalid boundaries throw `StringSliceError.InvalidByteRange` |
-| `split(sep, limit?)` | split into `Array<string>` |
+| `split(sep)` | Return owned `Array<string>`, preserving leading/trailing/adjacent empty fields; an empty separator throws `StringPatternError.EmptyPattern` |
 | `replace(from, to)` / `replaceAll(from, to)` | replacement |
 | `repeat(n)` | repeat |
 | `startsWith(s)` / `endsWith(s)` | prefix/suffix check |

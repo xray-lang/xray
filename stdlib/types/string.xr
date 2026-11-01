@@ -23,7 +23,8 @@ struct string {
     sliceBytes(start: i64, end: i64) -> string
     // @native-operation STRING_TO_STRING allocation=no_heap failures=retain ownership=owned
     toString() -> string
-    split(separator: string) -> Array<string>
+    // @native-operation STRING_SPLIT allocation=may_heap failures=allocation,retain,limit ownership=owned
+    split(separator: string) throws(StringPatternError) -> Array<string>
     // @native-operation STRING_REPLACE allocation=may_heap failures=allocation,retain,limit ownership=owned
     replace(search: string, replacement: string) -> string
     // @native-operation STRING_REPLACE_ALL allocation=may_heap failures=allocation,retain,limit ownership=owned

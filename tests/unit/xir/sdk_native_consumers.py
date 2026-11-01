@@ -49,7 +49,7 @@ def compile_source(args,sdk,source,object_file,program_symbol=None):
 
 def link(args,executable,objects,libraries):
     checked([args.linker,'/nologo','/incremental:no','/out:'+str(executable),*objects,*libraries,
-             'kernel32.lib','/defaultlib:MSVCRT','/defaultlib:OLDNAMES'])
+             *args.system_libraries,'/defaultlib:MSVCRT','/defaultlib:OLDNAMES'])
 
 
 def main():
@@ -68,6 +68,8 @@ def main():
     parser.add_argument('--key-path-generator')
     args=parser.parse_args();root=Path(__file__).resolve().parents[3];bundle=Path(args.bundle)
     manifest=json.loads((bundle/'sdk_manifest.json').read_text(encoding='utf-8'))
+    assert manifest['system_libraries']==['kernel32','bcrypt']
+    args.system_libraries=[name+'.lib' for name in manifest['system_libraries']]
     if not isinstance(manifest,dict) or type(manifest.get('crt')) is not int or manifest['crt']!=2:
         raise ValueError('Native SDK consumer requires MD CRT')
     lease=subprocess.Popen([args.lease,str(bundle),str(bundle/'sdk_manifest.json')],

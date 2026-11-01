@@ -56,7 +56,8 @@
         "xir_checked_previous111",
         "xir_checked_previous112",
         "xir_checked_previous113",
-        "xir_checked_previous114"
+        "xir_checked_previous114",
+        "xir_checked_previous115"
       ],
       "targets": [
         "test_xir_cleanup_replaced_sdk_reader",
@@ -263,7 +264,14 @@
         "xir_tuple_assignment",
         "xir_tuple_assignment_native",
         "xir_array_materialization",
-        "xir_array_materialization_native"
+        "xir_array_materialization_native",
+        "xir_crypto_native",
+        "xir_crypto_native_c",
+        "xir_crypto_suite",
+        "xir_crypto_suite_native",
+        "xir_crypto_values",
+        "xir_crypto_controls",
+        "xir_crypto_controls_native"
       ],
       "targets": [
         "test_source_nullable_print",
@@ -293,7 +301,14 @@
         "test_xir_tuple_assignment",
         "test_xir_tuple_assignment_native",
         "test_xir_array_materialization",
-        "test_xir_array_materialization_native"
+        "test_xir_array_materialization_native",
+        "test_xir_crypto_native",
+        "test_xir_crypto_native_c",
+        "test_xir_crypto_suite",
+        "test_xir_crypto_suite_native",
+        "test_xir_crypto_values",
+        "test_xir_crypto_controls",
+        "test_xir_crypto_controls_native"
       ]
     },
     "errors-cleanup": {

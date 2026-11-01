@@ -153,3 +153,25 @@ static void frame_cell_release(CallFrame *frame) {
         } else xr_xir_cell_loan_release(&record->loan);
     }
 }
+
+#include "xxir_crypto_call.h"
+#include "xxir_crypto_value.h"
+typedef struct CryptoCallCommit {const XrXirCallView *view;XrXirCallStatus status;} CryptoCallCommit;
+static bool crypto_call_ready(void *pointer) {
+    CryptoCallCommit *commit=pointer;commit->status=xr_xir_call_execution_status(commit->view);
+    return commit->status==XR_XIR_CALL_READY;
+}
+XR_FUNC XrXirCallStatus xir_call_crypto_fill(const XrXirCallView *view,const XrXirValue *cell,XrXirFaultDetail *fault) {
+    XrXirCellAuthority authority={0};
+    if(!view || !call_owner_current(view->activation))return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirCallStatus initial=xr_xir_call_execution_status(view);if(initial!=XR_XIR_CALL_READY)return initial;
+    if(!view_cell_authority(view,&authority)) {
+        initial=xr_xir_call_execution_status(view);return initial==XR_XIR_CALL_READY?XR_XIR_CALL_BAD_ARGUMENT:initial;
+    }
+    if(!call_cell_work(view->activation,1))return XR_XIR_CALL_LIMIT;
+    CryptoCallCommit commit={view,XR_XIR_CALL_READY};XirCryptoCommit check={crypto_call_ready,&commit};
+    XrXirValueStatus status=xir_cell_crypto_fill(cell,&authority,xr_xir_call_admission(view),fault,&check);
+    if(commit.status!=XR_XIR_CALL_READY)return commit.status;
+    return status==XR_XIR_VALUE_OK?XR_XIR_CALL_READY:status==XR_XIR_VALUE_OOM?XR_XIR_CALL_OOM:
+        status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT?XR_XIR_CALL_LIMIT:status==XR_XIR_VALUE_BOUNDS?XR_XIR_CALL_BOUNDS:XR_XIR_CALL_BAD_ARGUMENT;
+}

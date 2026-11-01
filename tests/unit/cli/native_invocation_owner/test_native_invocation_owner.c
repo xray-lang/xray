@@ -88,7 +88,7 @@ static XrToolchainProcess *compile(XrCompileResources *resources, const char *co
     return process;
 }
 static int run_test(int argc, char **argv) {
-    CHECK(argc == 21);
+    CHECK(argc == 22);
     XrXirMsvcRecipe recipe = {argv[16], argv[17], argv[18], argv[19], argv[20]};
     const char *mode = argv[15];
 #ifdef INVOCATION_INJECTED
@@ -133,17 +133,19 @@ static int run_test(int argc, char **argv) {
     static const char *const names[] = {"lib/xray_compile_resources.lib", "lib/xray_xir_admission.lib",
         "lib/xray_xir_declarations.lib", "lib/xray_xir_scalar.lib", "lib/xray_xir_runtime_host.lib"};
     for (unsigned i = 0; i < 5; ++i) CHECK(xr_xir_runtime_sdk_file(sdk, names[i], &spec.argv[9 + i]) == XR_XIR_SDK_OK);
-    XrXirInvocationLibrary libraries[5];
+    XrXirInvocationLibrary libraries[6];
     for (unsigned i = 0; i < 5; ++i) {
         libraries[i] = (XrXirInvocationLibrary){argv[9 + i], i == 4 ? XR_XIR_INVOCATION_SYSTEM : XR_XIR_INVOCATION_CRT};
         spec.argv[14 + i] = libraries[i].path;
     }
+    libraries[5] = (XrXirInvocationLibrary){argv[21], XR_XIR_INVOCATION_SYSTEM};
+    spec.argv[19] = libraries[5].path;
     CHECK(xtc_process_prepare(resources, &spec, &processes[2]) == XTC_PROCESS_OK);
     XrXirInvocationRequest request = {0}; request.projection = project; request.sdk = sdk; request.msvc = recipe;
     for (unsigned i = 0; i < 2; ++i) request.compile[i] = (XrXirInvocationCompile){processes[i], commands[i].source, commands[i].object, commands[i].report};
     request.link = processes[2]; request.input_directory = argv[7]; request.output_directory = argv[14];
     request.link_report = report; request.output = output;
-    request.launcher = launcher; request.launcher_length = launcher_length; request.libraries = libraries; request.library_count = 5;
+    request.launcher = launcher; request.launcher_length = launcher_length; request.libraries = libraries; request.library_count = 6;
     request.limits = (XrXirInvocationLimits){{4 * 1024 * 1024, 32768, 4096}, 64 * 1024 * 1024, 4096};
     XrXirInvocationStatus expected = XR_XIR_INVOCATION_OK;
     XrCompileResources *foreign = NULL; XrXirRuntimeSdk *foreign_sdk = NULL; XrToolchainProcess *foreign_process = NULL;

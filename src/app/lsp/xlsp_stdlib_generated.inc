@@ -152,12 +152,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_crypto_symbols[] = {
     {"sha512", XLSP_SYM_FUNCTION, "fn(data: string): string", "", NULL, 0},
     {"hmacBytes", XLSP_SYM_FUNCTION, "fn(algo: string, key: Array<u8>, msg: Array<u8>): Array<u8>?", "", NULL, 0},
     {"hmac", XLSP_SYM_FUNCTION, "fn(algo: string, key: string, data: string): string?", "", NULL, 0},
-    {"randomBytes", XLSP_SYM_FUNCTION, "fn(n: i64): string", "", NULL, 0},
+    {"randomBytes", XLSP_SYM_FUNCTION, "fn(n: i64) throws(CryptoError): string", "", NULL, 0},
     {"uuid", XLSP_SYM_FUNCTION, "fn(): string", "", NULL, 0},
     {"timingSafeEqual", XLSP_SYM_FUNCTION, "fn(a: string, b: string): bool", "", NULL, 0},
     {"timingSafeEqualBytes", XLSP_SYM_FUNCTION, "fn(a: Array<u8>, b: Array<u8>): bool", "", NULL, 0},
     {"encrypt", XLSP_SYM_FUNCTION, "fn(key: string, plaintext: string): string", "", NULL, 0},
-    {"decrypt", XLSP_SYM_FUNCTION, "fn(key: string, ciphertext: string): string?", "", NULL, 0},
+    {"decrypt", XLSP_SYM_FUNCTION, "fn(key: string, ciphertext: string) throws(CryptoError | Utf8Error): string?", "", NULL, 0},
 };
 #define GEN_XLSP_STDLIB_CRYPTO_SYMBOL_COUNT 12
 

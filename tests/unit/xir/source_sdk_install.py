@@ -47,6 +47,8 @@ def main():
     for row in manifest['files']:
         data = (source/row['path']).read_bytes()
         assert len(data) == row['length'] and hashlib.sha256(data).hexdigest() == row['sha256']
+    recipe = json.loads((source/'source_sdk_recipe.json').read_text(encoding='utf-8'))
+    assert recipe['system_libraries'] == ['kernel32', 'bcrypt']
     stdlib = output/'empty-stdlib'
     stdlib.mkdir()
     consumer = output/'consumer.c'
@@ -94,7 +96,8 @@ def main():
             '/I'+str(source/'include'), '/c', str(consumer), '/Fo'+str(object_file)]
     run('direct-compile', compile_command)
     run('direct-link', ['link', '/nologo', '/incremental:no', '/out:'+str(direct), str(object_file),
-        *[str(source/path) for path in manifest['archives']], 'kernel32.lib', '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
+        *[str(source/path) for path in manifest['archives']],
+        *[name+'.lib' for name in recipe['system_libraries']], '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
     direct_stdout = run('direct-run', [direct, stdlib])
     assert direct_stdout == stdout
     cpp_source = output/'consumer.cpp'
@@ -109,7 +112,8 @@ def main():
             '/I'+str(source/'include'), '/c', str(cpp_source), '/Fo'+str(cpp_object)]
     run('cpp-compile', cpp_command)
     run('cpp-link', ['link', '/nologo', '/incremental:no', '/out:'+str(cpp_exe), str(cpp_object),
-        *[str(source/path) for path in manifest['archives']], 'kernel32.lib', '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
+        *[str(source/path) for path in manifest['archives']],
+        *[name+'.lib' for name in recipe['system_libraries']], '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
     cpp_stdout = run('cpp-run', [cpp_exe, stdlib])
     assert cpp_stdout.replace(b'\r\n', b'\n') == b'Installed C++ public Source SDK: detached ownership and NUL output PASS\n'
     assert not list(stdlib.rglob('*.xr')) and not list(stdlib.rglob('*.chk'))

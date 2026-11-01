@@ -1,0 +1,10 @@
+export enum ContextError { Bad }
+export fn maybe() -> string? { return "x" }
+export fn throwing() throws(ContextError) -> string? { return "x" }
+export fn identity<T>(value: T) -> T { return value }
+fn privateMaybe() -> string? { return "private" }
+export class ContextBox {
+    value: i64
+    init() throws(ContextError) { this.value = 7 }
+    read() throws(ContextError) -> i64 { return this.value }
+}

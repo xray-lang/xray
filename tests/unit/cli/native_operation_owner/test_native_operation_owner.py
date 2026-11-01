@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory(prefix='xray-native-operation-') as temporary:
         libraries += [kit / 'Lib' / version / 'ucrt/x64/ucrt.lib', kit / 'Lib' / version / 'um/x64/kernel32.Lib']
         command = [exe, mode, authority, source, root / 'stdlib', sdk, compiler, linker, parent, *libraries,
                    vc / 'include', kit / 'Include' / version / 'ucrt', kit / 'Include' / version / 'shared',
-                   kit / 'Include' / version / 'um', os.environ['SystemRoot'], parent / 'export.exe']
+                   kit / 'Include' / version / 'um', os.environ['SystemRoot'], parent / 'export.exe', kit / 'Lib' / version / 'um/x64/bcrypt.lib']
         for path in [source, authority / 'counter.xr', authority / 'label.xr', sdk / 'src/execution/xr_xir_native_main.inc.c']:
             print(f'input {path} sha256={hashlib.sha256(path.read_bytes()).hexdigest()}', flush=True)
     started = time.perf_counter()

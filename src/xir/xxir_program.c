@@ -82,6 +82,8 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
         if (native) {
             if (native>=XR_NATIVE_CALLABLE_BUFFER_ALLOCATE && native<=XR_NATIVE_CALLABLE_BUFFER_LENGTH &&
                 !xir_buffer_storage_scope(spec->declarations,i)) return XR_XIR_BAD_STRUCTURE;
+            if ((native==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM || native==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL) &&
+                !xir_crypto_scope(spec->declarations,i)) return XR_XIR_BAD_STRUCTURE;
             const XrXirFunctionIdentity *id=&spec->declarations->functions[i];
             if (entry->resume!=xr_xir_instance_native_callable || entry->release!=xr_xir_instance_native_callable_release ||
                 entry->environment || entry->state_bytes!=sizeof(XrXirValue) ||
