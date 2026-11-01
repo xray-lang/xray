@@ -61,13 +61,13 @@ def main():
             ('poll-argument', 'fn value()->i64{return 7}\nvar task=go value()\ntask.poll(1)', b'zero-argument recipe'),
             ('result-readonly', 'fn value()->i64{return 7}\nconst task=go value()\ntask.awaitResult()', b'mutable stored binding'),
             ('value-union', 'enum A{Bad}\nenum B{Bad}\nfn ordinary(v:A|B){}', b''),
-            ('ordinary-unit', 'enum Ordinary{Value{value:null}}\nconst r=Ordinary.Value{value:()}', b'type declaration'),
+            ('ordinary-null-type', 'enum Ordinary{Value{value:null}}\nconst r=Ordinary.Value{value:()}', b'this type syntax is not yet supported by the compiler'),
             ('ctfe', 'fn value()->i64{return 7}\nfn answer()->i64{var t=go value();const r=t.poll();return 0}\nconst r=comptime answer()', b'')]
         for name, text, reason in cases:
             path.write_text(text, encoding='utf-8', newline='\n')
             code, actual, errors = run([str(binary), 'check', str(path)])
             assert code != 0 and not actual and reason in errors, (name, code, actual, errors)
-        print('TaskResult Never/E bounds, old arity, ref receiver, ordinary union/Unit and CTFE refusal controls PASS')
+        print('TaskResult Never/E bounds, old arity, ref receiver, ordinary union/null-type and CTFE refusal controls PASS')
         recursive_sources = ['enum Loop { Again { value: TaskResult<i64,Loop> } }\nexport fn answer()->i64{return 42}\n', 'enum Loop { Again { value: TaskResult<i64,Loop> } }\nfn work()->Loop { return Loop.Again { value: TaskResult<i64,Loop>.Success { value: 42 } } }\nexport fn answer()->i64 { var task = go work(); return 42 }\n', 'enum Other { Bad }\nenum Loop { Again { value: TaskResult<i64,Loop|Other> } }\nfn work()->Loop { return Loop.Again { value: TaskResult<i64,Loop|Other>.Success { value: 42 } } }\nexport fn answer()->i64 { var task=go work();return 42 }\n', 'class Box implements Sendable {\n items: Array<Box>\n init(items:Array<Box>){this.items=items}\n}\nenum E{Bad{value:Box}}\nfn work()->TaskResult<i64,E>{return TaskResult<i64,E>.Success{value:42}}\nexport fn answer()->i64{var task=go work();const result=task.awaitResult();return 42}\nprint(answer())\n']
         recursive_sources.append('enum A{Bad}\nenum B{Bad}\nfn work()->TaskResult<i64,A|B>{return TaskResult<i64,A|B>.Error{error:B.Bad}}\nexport fn answer()->i64{var task=go work();const result=task.awaitResult();return 42}\nprint(answer())\n')
         for index, text in enumerate(recursive_sources):

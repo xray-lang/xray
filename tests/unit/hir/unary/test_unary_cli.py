@@ -58,7 +58,7 @@ def main():
         run('c', [binary, 'build', source, '-c', '-o', generated], ('Generated: '+str(generated)+'\n').encode())
         assert generated.is_file() and b'({' not in generated.read_bytes()
         native = directory/'unary.exe'
-        run('build', [binary, 'build', source, '--toolchain', 'msvc', '-o', native], ('Built: '+str(native)+'\n').encode())
+        run('build', [binary, 'build', source, '-o', native], ('Built: '+str(native)+'\n').encode())
         run('native', [native], values['unary_expected'])
         if evidence:
             for path in (source, generated, native):

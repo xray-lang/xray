@@ -68,7 +68,7 @@ def main():
                 ('Generated: '+str(generated)+'\n').encode())
             assert generated.is_file() and b'({' not in generated.read_bytes()
             native = directory/(name+'.exe')
-            run(name+'-build', [binary, 'build', source, '--toolchain', 'msvc', '-o', native],
+            run(name+'-build', [binary, 'build', source, '-o', native],
                 ('Built: '+str(native)+'\n').encode())
             run(name+'-native', [native], expected, 1 if panic else 0, message)
             if evidence:

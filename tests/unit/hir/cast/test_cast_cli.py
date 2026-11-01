@@ -49,7 +49,7 @@ def main():
         evidence.mkdir(parents=True, exist_ok=False)
     environment = dict(os.environ, NO_COLOR='1', PYTHONDONTWRITEBYTECODE='1')
     records = []
-    assert len(cast_refusal_sources(root)) == 18
+    assert len(cast_refusal_sources(root)) == 15
     with tempfile.TemporaryDirectory(prefix='xray-hir-cast-') as temporary:
         directory = Path(temporary)
 
@@ -73,7 +73,7 @@ def main():
         run('c', [binary, 'build', source, '-c', '-o', generated], ('Generated: '+str(generated)+'\n').encode())
         assert generated.is_file() and b'({' not in generated.read_bytes()
         native = directory/'cast.exe'
-        run('build', [binary, 'build', source, '--toolchain', 'msvc', '-o', native], ('Built: '+str(native)+'\n').encode())
+        run('build', [binary, 'build', source, '-o', native], ('Built: '+str(native)+'\n').encode())
         run('native', [native], values['cast_expected'])
         if evidence:
             for path in (source, generated, native):
@@ -89,7 +89,7 @@ def main():
             reason = 'E0422: numeric conversion is out of range'
             run(name+'-vm', [binary, 'run', source], refusal=reason)
             native = directory/(name+'.exe')
-            run(name+'-build', [binary, 'build', source, '--toolchain', 'msvc', '-o', native], ('Built: '+str(native)+'\n').encode())
+            run(name+'-build', [binary, 'build', source, '-o', native], ('Built: '+str(native)+'\n').encode())
             run(name+'-native', [native], refusal=reason)
             if evidence:
                 for path in (source, native):

@@ -35,7 +35,9 @@ int main(int argc, char **argv) {
     XrSourceResult *result = nullptr;
     auto policy=xray_source_execution_options_default();XrSourceExecution *execution=nullptr;
     CHECK(xray_source_execution_new(&policy,&execution)==XR_SOURCE_OK);
-    CHECK(xray_source_artifact_execute(execution,program,&call_options,&result,nullptr)==XR_SOURCE_OK);
+    XrSourceCall *pending=nullptr;XrSourceEvent cleanup{};
+    XrSourceCompletion completion{XRAY_SOURCE_API_VERSION,sizeof(completion),&result,&pending,nullptr,&cleanup};
+    CHECK(xray_source_artifact_execute(execution,program,&call_options,&completion)==XR_SOURCE_OK && result && !pending);
     xray_source_artifact_free(program);xray_source_execution_free(execution);XrSourceEvent event{};
     CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_RETURNED);
     CHECK(out.size == 7 && !std::memcmp(out.bytes, "C++\0SDK", 7)); xray_source_result_free(result);
