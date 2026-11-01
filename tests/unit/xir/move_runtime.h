@@ -15,10 +15,15 @@
 #include "xir/xxir_output.h"
 #define xr_xir_instance_cell_new_take_at move_test_cell_new_take_at_real
 #define xr_xir_instance_move_arguments_at move_test_arguments_at_real
+#define xr_xir_instance_cell_write_take_at move_test_write_take_at_real
+#define xr_xir_instance_return_take_at move_test_return_take_at_real
 #include "xir_runtime_allocations.h"
 #undef xr_xir_instance_cell_new_take_at
 #undef xr_xir_instance_move_arguments_at
+#undef xr_xir_instance_cell_write_take_at
+#undef xr_xir_instance_return_take_at
 static unsigned move_test_transfers,move_test_prepare_failures;
+static unsigned move_test_writes,move_test_returns;
 static int64_t move_test_expected_payload;
 static uint32_t move_test_expected_references;
 static bool move_test_selected(const XrXirFunction *function) {
@@ -77,6 +82,61 @@ XR_FUNC XrXirCallStatus xr_xir_instance_cell_new_take_at(XrXirCallView *view,
         atomic_load(&object->references)==move_test_expected_references);
     int64_t empty=1;memcpy(&empty,word,sizeof(empty));CHECK(!empty);++move_test_transfers;return status;
 }
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_write_take_at(XrXirCallView *view,
+    uint32_t instruction,void *frame) {
+    XrXirInstance *instance=view_instance(view);uint32_t entry=xr_xir_call_current_entry(view->activation);
+    const XrXirModule *module=&instance->program->permissions->input->artifact->module;
+    const XrXirFunction *function=&module->functions[entry];
+    if(function->name_length!=12||memcmp(function->name,"destinations",12))
+        return move_test_write_take_at_real(view,instruction,frame);
+    const XrXirFunctionLayout *layout=&instance->program->permissions->layouts[entry];
+    const XrXirInstruction *op=&function->instructions[instruction];int64_t source=0,handle=0;
+    void *word=(unsigned char *)frame+layout->offsets[op->args[1]];
+    memcpy(&source,word,sizeof(source));memcpy(&handle,(unsigned char *)frame+layout->offsets[op->args[0]],sizeof(handle));
+    XrXirValue value=xr_xir_value_load(view->arena,xr_xir_operand_type(function,op->args[1]),source);
+    XrXirValue cell=xr_xir_value_load(view->arena,xr_xir_operand_type(function,op->args[0]),handle);
+    XirCell *owner=cell_owner(&cell);int64_t previous=owner->value.payload;
+    uint32_t references=atomic_load(&object_pointer(&value)->references);
+    size_t blocks=runtime_live,bytes=runtime_bytes;uint64_t work=view->activation->config.admission.work;
+    CHECK(move_test_write_take_at_real(view,instruction,(unsigned char *)view->state+
+        view->activation->top->entry->state_bytes)==XR_XIR_CALL_BAD_ARGUMENT);
+    view->activation->config.admission.work=0;
+    CHECK(move_test_write_take_at_real(view,instruction,frame)==XR_XIR_CALL_LIMIT);
+    view->activation->config.admission.work=work;
+    int64_t retained=0;memcpy(&retained,word,sizeof(retained));
+    CHECK(retained==source&&owner->value.payload==previous&&runtime_live==blocks&&runtime_bytes==bytes&&
+        atomic_load(&object_pointer(&value)->references)==references);
+    XrXirCallStatus status=move_test_write_take_at_real(view,instruction,frame);
+    memcpy(&retained,word,sizeof(retained));
+    CHECK(status==XR_XIR_CALL_READY&&!retained&&cell_owner(&cell)==owner&&owner->value.payload==source&&
+        atomic_load(&object_pointer(&value)->references)==references);++move_test_writes;return status;
+}
+XR_FUNC XrXirCallStatus xr_xir_instance_return_take_at(XrXirCallView *view,
+    uint32_t instruction,void *frame,XrXirAction *output) {
+    XrXirInstance *instance=view_instance(view);uint32_t entry=xr_xir_call_current_entry(view->activation);
+    const XrXirModule *module=&instance->program->permissions->input->artifact->module;
+    const XrXirFunction *function=&module->functions[entry];
+    if(function->name_length!=4||memcmp(function->name,"echo",4))
+        return move_test_return_take_at_real(view,instruction,frame,output);
+    const XrXirFunctionLayout *layout=&instance->program->permissions->layouts[entry];
+    void *word=(unsigned char *)frame+layout->offsets[function->instructions[instruction].args[0]];
+    int64_t source=0;memcpy(&source,word,sizeof(source));
+    XrXirValue value=xr_xir_value_load(view->arena,function->result,source);XrXirAction refused={0};
+    uint32_t references=atomic_load(&object_pointer(&value)->references);
+    size_t blocks=runtime_live,bytes=runtime_bytes;uint64_t work=view->activation->config.admission.work;
+    CHECK(move_test_return_take_at_real(view,instruction,(unsigned char *)view->state+
+        view->activation->top->entry->state_bytes,&refused)==XR_XIR_CALL_BAD_ARGUMENT);
+    view->activation->config.admission.work=0;
+    CHECK(move_test_return_take_at_real(view,instruction,frame,&refused)==XR_XIR_CALL_LIMIT);
+    view->activation->config.admission.work=work;
+    int64_t retained=0;memcpy(&retained,word,sizeof(retained));
+    CHECK(retained==source&&!refused.kind&&!refused.value.payload&&!view->activation->top->return_staged&&
+        runtime_live==blocks&&runtime_bytes==bytes&&atomic_load(&object_pointer(&value)->references)==references);
+    XrXirCallStatus status=move_test_return_take_at_real(view,instruction,frame,output);
+    memcpy(&retained,word,sizeof(retained));
+    CHECK(status==XR_XIR_CALL_READY&&!retained&&output->kind==XR_XIR_ACTION_RETURN&&output->value.payload==source&&
+        atomic_load(&object_pointer(&value)->references)==references);++move_test_returns;return status;
+}
 typedef struct MoveTestOutput {char bytes[256];size_t count;} MoveTestOutput;
 static XrXirOutputStatus move_test_write(void *data,XrXirOutputStream stream,const char *bytes,size_t count) {
     MoveTestOutput *out=data;CHECK(stream==XR_XIR_STDOUT&&count<=sizeof(out->bytes)-out->count);
@@ -99,6 +159,7 @@ static void move_test_run(XrXirProgram *program,uint32_t entry,const XrXirCompil
     static const char expected[]="42 2 42 42 42 42 20 text! 42 42 42 42\n";
     CHECK(output.count==sizeof(expected)-1&&!memcmp(output.bytes,expected,output.count));
     CHECK(move_test_transfers==3&&move_test_prepare_failures==1);
+    CHECK(move_test_writes==1&&move_test_returns==1);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     CHECK(runtime_live==blocks&&runtime_bytes==bytes);
     CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK&&after.held_bytes==before.held_bytes);

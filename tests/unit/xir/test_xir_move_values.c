@@ -44,6 +44,53 @@ static void new_take_controls(XrXirTypeArena *arena,XrXirDomain *domain,XrXirVal
     XrXirValue result={0};xir_cell_take_commit(&taken,&result);
     CHECK(result.payload==identity);xr_xir_value_drop(&cell);xr_xir_value_drop(&result);
 }
+static void write_take_controls(XrXirTypeArena *arena,XrXirDomain *domain,XrXirValueAdmission *admission) {
+    XrXirType array=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
+    XrXirType cell_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);
+    const XrXirValue item={XR_XIR_I64,0,42};XrXirValue initial={0},cell={0},source={0},read={0};
+    CHECK(xr_xir_array_new(array,&item,1,admission,&initial)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_cell_new(domain,arena,cell_type,&initial,admission,&cell)==XR_XIR_VALUE_OK);
+    int64_t previous=initial.payload,cell_identity=cell.payload;xr_xir_value_drop(&initial);
+    CHECK(xr_xir_array_new(array,&item,1,admission,&source)==XR_XIR_VALUE_OK);
+    int64_t word=0;xr_xir_owned_slot_move(&word,0,&source);
+    XrXirValue borrowed=xr_xir_value_load(arena,array,word);int64_t next=word;
+    XirCellWriteTake prepared={0};const XrXirCellAuthority authority={0};
+    CHECK(xir_cell_write_take_prepare(&cell,&borrowed,&authority,NULL,&prepared)==XR_XIR_VALUE_BAD_ARGUMENT&&!prepared.cell);
+    CHECK(xir_cell_write_take_prepare(&cell,&item,&authority,admission,&prepared)==XR_XIR_VALUE_BAD_ARGUMENT&&!prepared.cell);
+    XrXirValueAdmission limited=*admission;limited.work=0;
+    CHECK(xir_cell_write_take_prepare(&cell,&borrowed,&authority,&limited,&prepared)==XR_XIR_VALUE_LIMIT&&!prepared.cell);
+    XrXirDomain *foreign=NULL;CHECK(xr_xir_domain_new(UINT64_C(1048576),&foreign)==XR_XIR_VALUE_OK);
+    XrXirValueAdmission other=*admission;other.domain=foreign;
+    CHECK(xir_cell_write_take_prepare(&cell,&borrowed,&authority,&other,&prepared)==XR_XIR_VALUE_BAD_ARGUMENT&&!prepared.cell);
+    xr_xir_domain_drop(foreign);
+    XrXirCellLoan loan={0};CHECK(xr_xir_cell_loan_prepare(&cell,NULL,&loan)==XR_XIR_VALUE_OK);
+    CHECK(xir_cell_write_take_prepare(&cell,&borrowed,&authority,admission,&prepared)==XR_XIR_VALUE_BAD_ARGUMENT&&!prepared.cell);
+    xr_xir_cell_loan_abort(&loan);
+    XrXirDomainStats frame=xr_xir_domain_stats(domain);
+    CHECK(xir_cell_write_take_prepare(&cell,&borrowed,&authority,admission,&prepared)==XR_XIR_VALUE_OK);
+    xir_cell_write_take_abort(&prepared);
+    CHECK(!prepared.cell&&word==next&&xr_xir_domain_stats(domain).live_bytes==frame.live_bytes);
+    CHECK(xr_xir_cell_read(&cell,&read)==XR_XIR_VALUE_OK&&read.payload==previous);xr_xir_value_drop(&read);
+    CHECK(xir_cell_write_take_prepare(&cell,&borrowed,&authority,admission,&prepared)==XR_XIR_VALUE_OK);
+    xir_cell_write_take_commit(&prepared,&word);
+    CHECK(!prepared.cell&&!word&&cell.payload==cell_identity);
+    CHECK(xr_xir_cell_read(&cell,&read)==XR_XIR_VALUE_OK&&read.payload==next);
+    xr_xir_value_drop(&read);xr_xir_value_drop(&cell);
+}
+static void unit_take_controls(XrXirDomain *domain,XrXirValueAdmission *admission) {
+    XrXirType cell_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2);
+    XrXirValue unit={0},cell={0},taken={0};XirCellNewTake allocation={0};
+    CHECK(xir_cell_new_take_prepare(cell_type,&unit,admission,&allocation)==XR_XIR_VALUE_OK);
+    xir_cell_new_take_commit(&allocation,NULL,&cell);
+    CHECK(xr_xir_value_valid(&cell));XirCellTake transfer={0};
+    CHECK(xir_cell_take_prepare(&cell,XR_XIR_UNIT,admission,&transfer)==XR_XIR_VALUE_OK);
+    xir_cell_take_commit(&transfer,&taken);CHECK(!taken.type&&!taken.payload&&xr_xir_value_valid(&cell));
+    XirCellWriteTake replacement={0};const XrXirCellAuthority authority={0};
+    CHECK(xir_cell_write_take_prepare(&cell,&unit,&authority,admission,&replacement)==XR_XIR_VALUE_OK);
+    xir_cell_write_take_commit(&replacement,NULL);
+    CHECK(xr_xir_cell_read(&cell,&taken)==XR_XIR_VALUE_OK&&!taken.type&&!taken.payload);
+    CHECK(xr_xir_domain_stats(domain).live_bytes>0);xr_xir_value_drop(&cell);
+}
 int main(void) {
     const XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
     XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
@@ -53,13 +100,15 @@ int main(void) {
     XrXirType array=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirType cell_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);
     const XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64},
-        {.kind=XR_XIR_TYPE_CELL,.element=array}};
-    const XrXirTypes types={nodes,2,NULL,NULL};XrXirTypeArena *arena=NULL;
+        {.kind=XR_XIR_TYPE_CELL,.element=array},{.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_UNIT}};
+    const XrXirTypes types={nodes,3,NULL,NULL};XrXirTypeArena *arena=NULL;
     CHECK(xr_xir_compile_type_arena_new(&context,&types,&arena)==XR_XIR_VALUE_OK);
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(UINT64_C(1048576),&domain)==XR_XIR_VALUE_OK);
     XrXirDomainStats frame=xr_xir_domain_stats(domain);
     XrXirValueAdmission admission={.arena=arena,.domain=domain,.work=UINT64_MAX};
     new_take_controls(arena,domain,&admission);
+    write_take_controls(arena,domain,&admission);
+    unit_take_controls(domain,&admission);
     CHECK(xr_xir_domain_stats(domain).live_bytes==frame.live_bytes);
     XrXirValue initial={0},cell={0},taken={0},read={0};
     const XrXirValue elements[]={{XR_XIR_I64,0,20},{XR_XIR_I64,0,22}};

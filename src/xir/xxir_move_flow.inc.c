@@ -7,8 +7,8 @@
  * xxir_move_flow.inc.c - Availability of actual consumed owners across the CFG
  *
  * KEY CONCEPT:
- *   Successful takes clear one owner. Panic edges retain the pre-instruction
- *   state, and only a completed whole-Cell write reinitializes a moved binding.
+ *   Successful takes clear one owner. Committed child arguments stay consumed
+ *   on panic edges; whole-Cell writes restore only that Cell's own generation.
  */
 static bool move_call_parameter(const XrXirModule *module,const XrXirFunction *function,
     const XrXirInstruction *op,uint32_t argument) {
@@ -34,13 +34,15 @@ static uint8_t move_after(const InitializationNode *node,uint32_t value,bool cel
     const uint8_t *aliases,const XrXirModule *module) {
     uint8_t state=node->state;const XrXirInstruction *op=node->op;
     if(!op)return state;
-    if(node->function->parameter_count+node->instruction==value)state=1;
+    if(node->function->parameter_count+node->instruction==value)
+        state=cell?(uint8_t)(1u|(state&4u)|((state&2u)?4u:0u)):1u;
     if(cell&&(op->op==XR_XIR_CELL_WRITE||op->op==XR_XIR_CELL_WRITE_TAKE||op->op==XR_XIR_CELL_LOCAL_WRITE)&&
-        (aliases[op->args[0]]&1))state=1;
+        (aliases[op->args[0]]&1))state=(uint8_t)(1u|(state&4u));
     uint32_t count=operand_count(node->function,op,module);
     for(uint32_t a=0;a<count;++a) {
         uint32_t id=xr_xir_op_uses_operand_table(op->op)?node->function->operands[op->args[0]+a]:op->args[a];
-        if(move_consumes(module,node->function,op,a)&&(cell?(aliases[id]&1)!=0:id==value))state=0;
+        if(move_consumes(module,node->function,op,a)&&(cell?(aliases[id]&1)!=0:id==value))
+            state=cell?(uint8_t)(2u|(state&4u)):0u;
     }
     return state;
 }
@@ -53,7 +55,7 @@ static uint8_t move_failed(const InitializationNode *node,uint32_t value,bool ce
     for(uint32_t a=0;a<operand_count(node->function,op,module);++a) {
         if(!move_call_parameter(module,node->function,op,a))continue;
         uint32_t id=node->function->operands[op->args[0]+a];
-        if(cell?(aliases[id]&1)!=0:id==value)state=0;
+        if(cell?(aliases[id]&1)!=0:id==value)state=cell?(uint8_t)(2u|(state&4u)):0u;
     }
     return state;
 }
@@ -119,8 +121,12 @@ static XrXirStatus move_availability(InitializationGraph *graph,uint32_t value,b
             for(uint32_t e=graph->nodes[n].head;e!=UINT32_MAX;e=graph->edges[e].next) {
                 const InitializationEdge *edge=&graph->edges[e];
                 const InitializationNode *source=&graph->nodes[edge->source];
-                state&=edge->transfer?move_after(source,value,cell,aliases,context->module):
+                uint8_t predecessor=edge->transfer?move_after(source,value,cell,aliases,context->module):
                     move_failed(source,value,cell,aliases,context->module);
+                /* Bit zero is must-live. May-empty captures of the current and
+                 * earlier generations join separately, so a loop's fresh Cell
+                 * cannot revive a closure that retained its empty predecessor. */
+                state=(uint8_t)((state&predecessor&1u)|((state|predecessor)&6u));
             }
             if(state!=graph->nodes[n].state){graph->nodes[n].state=state;changed=true;}
         }
@@ -132,7 +138,8 @@ static XrXirStatus move_availability(InitializationGraph *graph,uint32_t value,b
         bool write=cell&&(op->op==XR_XIR_CELL_WRITE||op->op==XR_XIR_CELL_WRITE_TAKE||op->op==XR_XIR_CELL_LOCAL_WRITE);
         bool executing=op->op==XR_XIR_CALL||op->op==XR_XIR_INVOKE||op->op==XR_XIR_CALL_INDIRECT||
             op->op==XR_XIR_INVOKE_INDIRECT||op->op==XR_XIR_GO||op->op==XR_XIR_GENERATOR_NEW;
-        if(cell&&!node->state&&(op->op==XR_XIR_CALL_INDIRECT||op->op==XR_XIR_INVOKE_INDIRECT)&&
+        bool available=(node->state&1u)!=0,captured_unavailable=!available||(node->state&6u)!=0;
+        if(cell&&captured_unavailable&&(op->op==XR_XIR_CALL_INDIRECT||op->op==XR_XIR_INVOKE_INDIRECT)&&
             aliases[(uint32_t)op->immediate])return XR_XIR_BAD_VALUE;
         if(cell&&op->op==XR_XIR_CELL_TAKE&&(aliases[op->args[0]]&1)) {
             uint32_t frontier=function->blocks[node->block].frontier;
@@ -149,12 +156,13 @@ static XrXirStatus move_availability(InitializationGraph *graph,uint32_t value,b
                 uint32_t predecessor=function->operands[op->args[0]+a],id=function->operands[op->args[0]+a+1];++a;
                 if(cell?!(aliases[id]&1):id!=value)continue;
                 uint32_t last=function->blocks[predecessor].first+function->blocks[predecessor].count-1;
-                if(!move_after(&graph->nodes[last],value,cell,aliases,context->module))return XR_XIR_BAD_VALUE;
+                if(!(move_after(&graph->nodes[last],value,cell,aliases,context->module)&1u))return XR_XIR_BAD_VALUE;
                 continue;
             }
             uint32_t id=xr_xir_op_uses_operand_table(op->op)?function->operands[op->args[0]+a]:op->args[a];
             if(write&&!a)continue;
-            if(!node->state&&(cell?((aliases[id]&1)||(executing&&aliases[id])):id==value))return XR_XIR_BAD_VALUE;
+            if(cell?(((aliases[id]&1)&&!available)||
+                (executing&&(aliases[id]&2)&&captured_unavailable)):(!available&&id==value))return XR_XIR_BAD_VALUE;
             if(move_consumes(context->module,function,op,a))
                 for(uint32_t b=0;b<a;++b) {
                     uint32_t other=xr_xir_op_uses_operand_table(op->op)?function->operands[op->args[0]+b]:op->args[b];

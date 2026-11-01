@@ -79,6 +79,7 @@ static void move_test_refusals(const XrXirCompileContext *context) {
         "const action:fn(Array<i64>)->i64=eat",
         "fn bytes(xs:move Array<u8>)->i64{return len(xs)};fn bad()->i64{var xs:Array<u8>=[1];var view:Slice<u8>=xs[:];bytes(move xs);return view[0] as i64}",
         "fn bad()->i64{var xs=[1];defer{print(xs[0])};return eat(move xs)}",
+        "fn bad()->i64{var saved:fn()->i64=fn()->i64{return 0};var n=0;while(n<2){var xs=[42];if(n==1){return saved()};saved=fn()->i64{return xs[0]};eat(move xs);n+=1};return 0}",
         "fn bad()->i64{var src=([1],[2]);var(a,b)=move src;return a[0]+b[0]}",
     };
     XrCompileResourceStats before,after;CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
@@ -103,6 +104,7 @@ int main(int argc,char **argv) {
     CHECK(argc==1||argc==2);
     static const char text[]=
         "fn consume(xs: move Array<i64>)->i64{xs.push(20);xs[0]=19;return xs[0]+xs[1]+1}\n"
+        "fn loopCapture()->i64{var saved:fn()->i64=fn()->i64{return 0};var n=0;while(n<2){var xs=[42];if(n==1){return saved()};saved=fn()->i64{return xs[0]};n+=1};return 0}\n"
         "fn moved()->i64{var xs=[20,22];return consume(move xs)}\n"
         "fn copied()->i64{var xs=[20,22];consume(xs);return len(xs)}\n"
         "fn constant()->i64{const xs=[20,22];return consume(move xs)}\n"
