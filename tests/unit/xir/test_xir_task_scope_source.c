@@ -100,6 +100,7 @@ static XrXirStatus check(const XrXirCompileContext *context,const char *text,XrX
 }
 static bool cancelled(const void *pointer) {++*(unsigned *)pointer;return true;}
 #include "xir_task_scope_boundary_cases.h"
+#include "xir_task_select_controls.h"
 static void rejections(const XrXirCompileContext *context) {
     const struct {const char *text;XrXirStatus status;} cases[]={
         {"scope {}",XR_XIR_BAD_STRUCTURE},
@@ -121,6 +122,9 @@ static void rejections(const XrXirCompileContext *context) {
             "scope{go worker();print(values[0])};view[0]=1}",XR_XIR_BAD_VALUE},
         {"fn run(){var values=[42];const view:Slice<i64> =values[:];scope{go fn(){print(view[0])}()}}",XR_XIR_BAD_TYPE},
         {"fn worker(){}\nfn run(){const callback:nosuspend fn()=fn(){scope{go worker()}};callback()}",XR_XIR_BAD_TYPE}
+        ,{"fn run(){const f:nosuspend fn()=fn(){const ch=Channel<i64>(1);select{v from ch->{} _->{}}};f()}",XR_XIR_BAD_TYPE}
+        ,{"fn run(){const ch=Channel<i64>(1);select{1 to ch->{} _->{}}}",XR_XIR_UNSUPPORTED}
+        ,{"fn run(){const ch=Channel<i64>(1);select{v from ch->{} after 0->{} _->{}}}",XR_XIR_BAD_STRUCTURE}
     };
     for(size_t c=0;c<sizeof(cases)/sizeof(*cases);++c) {
         uint64_t before=held(context->resources);XrXirSourceResult result={0};
@@ -183,7 +187,8 @@ int main(int argc,char **argv) {
     } else {
         CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK && !code);execute(program,ids);
         xr_xir_compile_program_drop(program);program=NULL;rejections(&context);scope_raw_controls(&context);
-        scope_typed_exit_controls(&context);scope_cleanup_error_controls(&context);scope_receiving_controls(&context);
+        scope_typed_exit_controls(&context);scope_cleanup_error_controls(&context);scope_select_controls(&context);
+        scope_receiving_controls(&context);
     }
 #endif
     xr_xir_compile_program_drop(program);CHECK(held(context.resources)==before);
