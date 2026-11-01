@@ -197,12 +197,12 @@ fn selections() {
     select {
         word from words -> { assert(word == "selected"); chosen = 1 }
         number from numbers -> { assert(false) }
-        default -> { assert(false) }
+        _ -> { assert(false) }
     }
     assert(chosen == 1)
     select {
         number from numbers -> { assert(false) }
-        default -> { chosen = 2 }
+        _ -> { chosen = 2 }
     }
     assert(chosen == 2)
     select {
@@ -219,7 +219,7 @@ fn selections() {
     try! maybe.send(null)
     select {
         value from maybe -> { assert(value == null); chosen = 5 }
-        default -> { assert(false) }
+        _ -> { assert(false) }
     }
     assert(chosen == 5)
 }
