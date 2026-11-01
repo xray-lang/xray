@@ -28,7 +28,7 @@ struct XrXirChannelSelect {
     XrXirChannelSelectKind kind;
     XrXirValue candidate,value;
     ChannelSelectArm *arms;
-    bool has_default,has_timeout,prepared,taken;
+    bool has_default,has_timeout,prepared,taken,candidate_due;
 };
 static uint32_t *channel_select_order(XrXirChannelSelect *select) {
     return (uint32_t *)(select->arms+select->count);
@@ -157,7 +157,7 @@ static XrXirValueStatus channel_select_snapshot(XrXirChannelSelect *select,uint6
     if(eligible&&select->kind==XR_XIR_CHANNEL_SELECT_RECEIVE)
         status=channel_element_admit(select->arms[select->arm].storage,&select->candidate,admission);
     if(status==XR_XIR_VALUE_OK&&(eligible||select->has_default)) {
-        select->prepared=true;*state=XR_XIR_CHANNEL_SELECT_CANDIDATE;
+        select->prepared=true;select->candidate_due=due;*state=XR_XIR_CHANNEL_SELECT_CANDIDATE;
     }
     return status;
 }
@@ -205,9 +205,11 @@ XR_FUNC bool xr_xir_channel_select_candidate(const XrXirChannelSelect *select,
     *kind=select->kind;*arm=select->arm;*value=&select->candidate;return true;
 }
 XR_FUNC XrXirValueStatus xr_xir_channel_select_commit(XrXirChannelSelect *select,
-    XrXirValueAdmission *admission,XrXirChannelSelectState *state) {
+    uint64_t now_ns,XrXirValueAdmission *admission,XrXirChannelSelectState *state) {
     if(!state||!channel_select_owner(select,admission)||!select->prepared)return XR_XIR_VALUE_BAD_ARGUMENT;
-    xr_xir_value_graph_begin();bool locked=false;XrXirValueStatus status=channel_select_lock(select,admission,&locked);
+    xr_xir_value_graph_begin();bool locked=false,due=false;
+    XrXirValueStatus status=channel_select_clock(select,now_ns,&due);
+    if(status==XR_XIR_VALUE_OK&&due==select->candidate_due)status=channel_select_lock(select,admission,&locked);
     XrXirChannelSelectState outcome=XR_XIR_CHANNEL_SELECT_RETRY;
     if(status==XR_XIR_VALUE_OK&&locked) {
         bool same=channel_select_same(select);XirChannel *channel=NULL;
@@ -232,6 +234,10 @@ XR_FUNC XrXirValueStatus xr_xir_channel_select_commit(XrXirChannelSelect *select
         outcome=XR_XIR_CHANNEL_SELECT_CANCELLED;
     channel_select_candidate_clear(select);if(status==XR_XIR_VALUE_OK)*state=outcome;
     xr_xir_value_graph_end();return status;
+}
+XR_FUNC bool xr_xir_channel_select_deadline(const XrXirChannelSelect *select,XrXirChannelSelectDeadline *output) {
+    if(!select||!output)return false;
+    *output=(XrXirChannelSelectDeadline){select->start_ns,select->last_ns,select->duration_ns,select->has_timeout};return true;
 }
 XR_FUNC bool xr_xir_channel_select_notified(const XrXirChannelSelect *select) {
     if(!select)return false;

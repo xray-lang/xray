@@ -35,6 +35,10 @@ typedef enum XrXirChannelSelectKind {
     XR_XIR_CHANNEL_SELECT_DEFAULT,
     XR_XIR_CHANNEL_SELECT_TIMEOUT
 } XrXirChannelSelectKind;
+typedef struct XrXirChannelSelectDeadline {
+    uint64_t start_ns,last_ns,duration_ns;
+    bool enabled;
+} XrXirChannelSelectDeadline;
 
 /* Copies all Channel handles. Only buffered receive arms are accepted.
  * Closed empty Channels are not receive-ready. Default plus timeout, send
@@ -55,9 +59,14 @@ XR_FUNC bool xr_xir_channel_select_candidate(const XrXirChannelSelect *select,
     XrXirChannelSelectKind *kind,uint32_t *arm,const XrXirValue **value);
 /* Rechecks the complete observed frontier under the same lock set. RETRY or
  * failure leaves all queues unchanged. Success cannot require another fallible
- * result allocation, retain or host callback before publication by the bridge. */
+ * result allocation, retain or host callback before publication by the bridge.
+ * A changed timer readiness set also returns RETRY without consuming a queue. */
 XR_FUNC XrXirValueStatus xr_xir_channel_select_commit(XrXirChannelSelect *select,
-    XrXirValueAdmission *admission,XrXirChannelSelectState *state);
+    uint64_t now_ns,XrXirValueAdmission *admission,XrXirChannelSelectState *state);
+/* Copies the actual timer owner. Subtraction after monotonic validation avoids
+ * absolute-deadline overflow; the caller must not keep a pointer into owner. */
+XR_FUNC bool xr_xir_channel_select_deadline(const XrXirChannelSelect *select,
+    XrXirChannelSelectDeadline *output);
 /* Notification is not readiness or permission to consume. The driver probes
  * again after any event and supplies a fresh monotonic sample and entropy. */
 XR_FUNC bool xr_xir_channel_select_notified(const XrXirChannelSelect *select);
