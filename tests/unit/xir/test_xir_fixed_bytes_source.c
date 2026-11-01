@@ -22,6 +22,7 @@
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"fixed source %d: %s\n",__LINE__,#c);exit(1);}} while(0)
 #include "xir_source_fixture_owner.h"
 #include "fixed_bytes_product.h"
+#include "fixed_bytes_source_controls.h"
 int main(int argc,char **argv) {
     CHECK(argc==1 || argc==2);SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
     XrCompilerSession *session=NULL;
@@ -62,6 +63,7 @@ int main(int argc,char **argv) {
         if(status!=XR_XIR_OK)fprintf(stderr,"fixed VM Program status%u\n",status);
         CHECK(status==XR_XIR_OK);
         fixed_bytes_run(program,entry);xr_xir_compile_program_drop(program);
+        fixed_source_controls(&owner.context);fixed_cold_library(&owner.context);
     }
     xr_xir_compile_artifact_free(code);source_fixture_owner_free(&owner);return 0;
 }
