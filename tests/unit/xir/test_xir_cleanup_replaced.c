@@ -9,28 +9,6 @@
 #include "xir/xxir_instance_activation.h"
 #if defined(XR_CLEANUP_VALUE_OBSERVER)
 #include "base/xmalloc.h"
-#include "xray_source_entry.h"
-#include <stdio.h>
-#include <stdlib.h>
-static inline XrSourceStatus fixture_xray_source_artifact_execute_45615f51(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
-    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
-    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
-    XrSourceStatus status=xray_source_artifact_execute(execution,program,options,&completion);
-    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
-    return status;
-}
-
-#include "xray_source_entry.h"
-#include <stdio.h>
-#include <stdlib.h>
-static inline XrSourceStatus fixture_xray_source_invoke_45615f51(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
-    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
-    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
-    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
-    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
-    return status;
-}
-
 static size_t resource_index=SIZE_MAX,resource_calls,resource_live;
 static bool resource_active;
 static bool resource_refuse(void) {return resource_active && resource_calls++==resource_index;}
@@ -94,6 +72,28 @@ XR_FUNC XrXirCallStatus xir_cleanup_actual_call_free(XrXirCall *call);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_artifact_execute_45615f51(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_artifact_execute(execution,program,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
+#include "xray_source_entry.h"
+#include <stdio.h>
+#include <stdlib.h>
+static inline XrSourceStatus fixture_xray_source_invoke_45615f51(XrSourceExecution *execution,XrSourceArtifact *program,const XrSourceInvocation *invocation,const XrSourceCallOptions *options,XrSourceResult **output,XrSourceEvent *failure) {
+    XrSourceCall *pending=NULL;XrSourceEvent cleanup={0};
+    XrSourceCompletion completion={XRAY_SOURCE_API_VERSION,sizeof(completion),output,&pending,failure,&cleanup};
+    XrSourceStatus status=xray_source_invoke(execution,program,invocation,options,&completion);
+    if (pending) {fputs("unexpected retained Source-close owner\n",stderr);abort();}
+    return status;
+}
+
 #define CHECK(c) do { if (!(c)) {fprintf(stderr,"cleanup %d: %s\n",__LINE__,#c);exit(1);} } while (0)
 typedef struct Output { unsigned char bytes[8192];size_t size; } Output;
 static const char owned_stdout[]="true\ntrue\n420\ntrue\n420\n42\ntrue\n446\n";

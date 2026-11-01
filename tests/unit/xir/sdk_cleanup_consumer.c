@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"SDK cleanup %d: %s\n",__LINE__,#c);exit(1);}}while(0)
-#if defined(XR_CLEANUP_READER) || defined(XR_CLEANUP_SOURCE_SDK)
+#if defined(XR_CLEANUP_SOURCE_SDK)
 #include "xray_source_entry.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +22,8 @@ static inline XrSourceStatus fixture_xray_source_invoke_7c1e8b97(XrSourceExecuti
     return status;
 }
 
+#endif
+#if defined(XR_CLEANUP_READER) || defined(XR_CLEANUP_SOURCE_SDK)
 static FILE *input_file(const char *path) {
     FILE *file=NULL;
 #if defined(_MSC_VER)
