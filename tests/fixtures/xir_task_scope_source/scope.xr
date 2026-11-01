@@ -1,6 +1,32 @@
 const total = Atomic(0)
 fn worker(value: i64) { total.add(value) }
 fn failed() { assert(false) }
+enum WorkError { Failed }
+fn businessError() throws(WorkError) { throw WorkError.Failed }
+fn borrowedAcross() -> i64 {
+    var values = [42]
+    const view: Slice<i64> = values[:]
+    scope { go worker(0) }
+    return view[0]
+}
+fn borrowedPanic() -> i64 {
+    var values = [42]
+    const view: Slice<i64> = values[:]
+    try { scope { go worker(0); assert(false) } } catch panic {}
+    return view[0]
+}
+fn borrowedBeforeJoin() {
+    var values = [42]
+    scope { go worker(0); const view: Slice<i64> = values[:]; assert(view[0] == 42) }
+}
+fn handledBody() {
+    scope { go worker(0); try { try businessError() } catch (error: WorkError) {} }
+}
+fn assertedBody() {
+    var caught = false
+    try { scope { go worker(0); try! businessError() } } catch panic { caught = true }
+    assert(caught)
+}
 fn returning() -> Array<i64> {
     var value = [42]
     scope { go worker(1); return move value }
@@ -13,6 +39,10 @@ fn leaving() {
     }
 }
 export fn main() -> i64 {
+    assert(borrowedAcross() == 42 && borrowedPanic() == 42)
+    borrowedBeforeJoin()
+    handledBody()
+    assertedBody()
     scope { go worker(20); go fn() { total.add(22) }() }
     assert(total.load() == 42)
     scope(isolated) { go worker(1); go worker(2) }

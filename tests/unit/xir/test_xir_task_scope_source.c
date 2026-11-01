@@ -57,13 +57,22 @@ static XrXirStatus check(const XrXirCompileContext *context,const char *text,XrX
     xr_compile_session_free(session);return status;
 }
 static bool cancelled(const void *pointer) {++*(unsigned *)pointer;return true;}
+#include "xir_task_scope_boundary_cases.h"
 static void rejections(const XrXirCompileContext *context) {
     const struct {const char *text;XrXirStatus status;} cases[]={
         {"scope {}",XR_XIR_BAD_STRUCTURE},
         {"scope {fn worker(){}}",XR_XIR_BAD_STRUCTURE},
         {"fn bad(f:fn()){scope {go f()}}",XR_XIR_BAD_TYPE},
         {"fn bad(){var x=42;scope {go fn(){print(x)}()}}",XR_XIR_BAD_TYPE},
-        {"enum ErrorCode{Bad}\nfn bad(){scope {go fn() throws(ErrorCode){throw ErrorCode.Bad}()}}",XR_XIR_UNSUPPORTED}
+        {"enum ErrorCode{Bad}\nfn bad(){scope {go fn() throws(ErrorCode){throw ErrorCode.Bad}()}}",XR_XIR_UNSUPPORTED},
+        {"enum WorkError{Failed}\nfn failed() throws(WorkError){throw WorkError.Failed}\nfn worker(){}\n"
+            "fn run(){try{scope{go worker();try failed()}}catch(error:WorkError){}}",XR_XIR_UNSUPPORTED},
+        {"fn worker(){}\nfn run()->i64{var values=[42];const view:Slice<i64> =values[:];"
+            "scope{go worker();values[0]=1};return view[0]}",XR_XIR_BAD_VALUE},
+        {"fn worker(){}\nfn run(){var values=[42];var view:MutSlice<i64> =values[:];"
+            "scope{go worker();print(values[0])};view[0]=1}",XR_XIR_BAD_VALUE},
+        {"fn run(){var values=[42];const view:Slice<i64> =values[:];scope{go fn(){print(view[0])}()}}",XR_XIR_BAD_TYPE},
+        {"fn worker(){}\nfn run(){const callback:nosuspend fn()=fn(){scope{go worker()}};callback()}",XR_XIR_BAD_TYPE}
     };
     for(size_t c=0;c<sizeof(cases)/sizeof(*cases);++c) {
         uint64_t before=held(context->resources);XrXirSourceResult result={0};
@@ -117,7 +126,7 @@ int main(int argc,char **argv) {
         xr_xir_compile_c_source_free(&generated);xr_xir_compile_artifact_free(code);
     } else {
         CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK && !code);execute(program,ids);
-        xr_xir_compile_program_drop(program);program=NULL;rejections(&context);
+        xr_xir_compile_program_drop(program);program=NULL;rejections(&context);scope_raw_controls(&context);
     }
 #endif
     xr_xir_compile_program_drop(program);CHECK(held(context.resources)==before);

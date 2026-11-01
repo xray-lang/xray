@@ -164,6 +164,11 @@ typedef struct XrXirRootRefiner {
 } XrXirRootRefiner;
 XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);
+/* Request pointers expire with these synchronous complete verifier calls. */
+XR_FUNC XrXirStatus xir_compile_structure_verify_input(const XrXirCompileContext *context,
+    XirEffectInput input,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_compile_verify_effects_input(const XrXirCompileContext *context,
+    XirEffectInput input,const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
 /* These current readers consume genuine canonical Input and Final storage. */
 XR_FUNC XrXirStatus xir_effects_program_root_current_input(const XrXirCompileContext *context, XirEffectInput input, const XrXirEffects *effects);
 XR_FUNC XrXirStatus xir_effects_program_cells_match(const XrXirCompileContext *context,
