@@ -16,6 +16,8 @@ static XrXirValueStatus instance_memory_call(XrXirInstance *instance,XrXirCallVi
     }
     case XR_NATIVE_CALLABLE_BUFFER_LENGTH:
         status=xr_xir_buffer_storage_length(&args[0],&integer);break;
+    case XR_NATIVE_CALLABLE_BUFFER_AS_BYTES:
+        return xr_xir_call_buffer_view(view,result,output);
     case XR_NATIVE_CALLABLE_BUFFER_BORROW_PTR:
         return xr_xir_buffer_storage_pointer(&args[0],view->arena,result,output);
     case XR_NATIVE_CALLABLE_BUFFER_RESIZE:

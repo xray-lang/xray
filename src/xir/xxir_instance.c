@@ -1255,6 +1255,7 @@ static bool value_unit(XrXirValue value) {
     return value.type == XR_XIR_UNIT && !value.reserved && !value.payload;
 }
 #include "xxir_instance_cell_access.inc.c"
+#include "xxir_instance_buffer_origin.inc.c"
 #include "xxir_instance_class_access.inc.c"
 #include "xxir_instance_debug_activation.inc.c"
 static XrXirCallStatus value_place(XrXirCallView *view, XrXirInstance *instance,
