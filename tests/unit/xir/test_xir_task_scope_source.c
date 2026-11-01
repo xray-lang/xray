@@ -25,27 +25,52 @@ static uint64_t held(XrCompileResources *resources) {
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(resources,&stats)==XR_COMPILE_RESOURCE_OK);
     return stats.held_bytes;
 }
-static void execute(XrXirProgram *program,const uint32_t ids[2]) {
+static XrXirCallStatus execute_entry(XrXirInstance *instance,uint32_t entry,int64_t expected) {
+    CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
+    XrXirCallStatus status=XR_XIR_CALL_READY;
+    for(uint32_t step=0;status==XR_XIR_CALL_READY;++step) {
+        CHECK(step<100000);status=xr_xir_instance_poll_bounded(instance,1).outcome.status;
+    }
+    if(status==XR_XIR_CALL_RETURNED) {
+        XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
+        CHECK(result.type==XR_XIR_I64 && result.payload==expected);xr_xir_value_drop(&result);
+    }
+    return status;
+}
+static XrXirInstance *new_instance(XrXirProgram *program,uint32_t initializer) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
-    for(uint32_t n=0;n<2;++n) {
-        CHECK(xr_xir_instance_start(instance,ids[n],NULL,0)==XR_XIR_CALL_READY);
-        XrXirCallStatus status=XR_XIR_CALL_READY;
-        for(uint32_t step=0;status==XR_XIR_CALL_READY;++step) {
-            CHECK(step<100000);status=xr_xir_instance_poll_bounded(instance,1).outcome.status;
-        }
-        if(status!=XR_XIR_CALL_RETURNED)fprintf(stderr,"entry %u status %u\n",ids[n],status);
-        CHECK(status==XR_XIR_CALL_RETURNED);
-        XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
-        CHECK(result.type==XR_XIR_I64 && result.payload==(n?42u:0u));xr_xir_value_drop(&result);
-    }
+    CHECK(execute_entry(instance,initializer,0)==XR_XIR_CALL_RETURNED);
+    return instance;
+}
+static void execute(XrXirProgram *program,const uint32_t ids[4]) {
+    XrXirInstance *instance=new_instance(program,ids[0]);
+    CHECK(execute_entry(instance,ids[1],42)==XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
-    CHECK(initializer_slot_controls==4);
-    CHECK(task_go_transfers>=2&&task_go_refusals==task_go_transfers*2&&task_go_oom==task_go_transfers*3);
+    CHECK(initializer_slot_controls==4 && task_go_transfers>=3);
+    for(unsigned kind=0;kind<2;++kind) {
+        instance=new_instance(program,ids[0]);
+        unsigned transfers=task_go_transfers,refusals=task_go_refusals,oom=task_go_oom;
+        unsigned cancellations=task_go_cancellations;
+        task_go_cancel_test=true;
+        CHECK(execute_entry(instance,ids[2+kind],42)==XR_XIR_CALL_CANCELLED);
+        task_go_cancel_test=false;
+        CHECK(task_go_cancel_at==3+kind && task_go_allocation==3+kind);
+        CHECK(task_go_transfers==transfers && task_go_cancellations==cancellations+1);
+        CHECK(task_go_refusals==refusals+2 && task_go_oom==oom+3);
+        CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+        instance=new_instance(program,ids[0]);
+        CHECK(execute_entry(instance,ids[2+kind],42)==XR_XIR_CALL_RETURNED);
+        CHECK(task_go_transfers==transfers+1 && task_go_cancellations==cancellations+1);
+        CHECK(task_go_refusals==refusals+4 && task_go_oom==oom+6);
+        CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+    }
+    CHECK(task_go_refusals==(task_go_transfers+task_go_cancellations)*2);
+    CHECK(task_go_oom==(task_go_transfers+task_go_cancellations)*3);
 }
 #if defined(XR_TASK_SCOPE_SOURCE_NATIVE)
 XR_DATA const XrXirProgramSpec task_scope_source_program;
-XR_DATA const uint32_t task_scope_source_ids[2];
+XR_DATA const uint32_t task_scope_source_ids[4];
 #else
 static XrXirStatus check(const XrXirCompileContext *context,const char *text,XrXirSourceResult *result,
     XrCompileRequestControl *control) {
@@ -118,15 +143,18 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_specialize(cold,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
     CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},NULL,&code,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);const XrXirModule *module=xr_xir_compile_artifact_module(code);
-    uint32_t ids[2]={module->declarations->entry_function,UINT32_MAX};
+    uint32_t ids[4]={module->declarations->entry_function,UINT32_MAX,UINT32_MAX,UINT32_MAX};
+    const char *names[3]={"main","moveStandalone","moveScoped"};
     for(uint32_t f=0;f<module->function_count;++f)
-        if(module->functions[f].name_length==4 && !memcmp(module->functions[f].name,"main",4)) {CHECK(ids[1]==UINT32_MAX);ids[1]=f;}
-    CHECK(ids[1]!=UINT32_MAX);
+        for(unsigned n=0;n<3;++n)
+            if(module->functions[f].name_length==strlen(names[n]) &&
+                !memcmp(module->functions[f].name,names[n],strlen(names[n]))) {CHECK(ids[1+n]==UINT32_MAX);ids[1+n]=f;}
+    CHECK(ids[1]!=UINT32_MAX && ids[2]!=UINT32_MAX && ids[3]!=UINT32_MAX);
     if(emit) {
         XrXirCSource generated={0};CHECK(xr_xir_compile_emit_c(code,"task_scope_source",16777216,&generated)==XR_XIR_OK);
         FILE *file=fopen(argv[2],"wb");CHECK(file && !strstr(generated.text,"({"));
         CHECK(fwrite(generated.text,1,generated.length,file)==generated.length);
-        CHECK(fprintf(file,"\nconst uint32_t task_scope_source_ids[2]={%u,%u};\n",ids[0],ids[1])>0 && !fclose(file));
+        CHECK(fprintf(file,"\nconst uint32_t task_scope_source_ids[4]={%u,%u,%u,%u};\n",ids[0],ids[1],ids[2],ids[3])>0 && !fclose(file));
         xr_xir_compile_c_source_free(&generated);xr_xir_compile_artifact_free(code);
     } else {
         CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK && !code);execute(program,ids);

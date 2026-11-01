@@ -11,16 +11,23 @@ fn consume(values: move Array<i64>) {
     values[0] = 42
     assert(values[0] == 42)
 }
-fn ownershipTransfers() {
+export fn moveStandalone() -> i64 {
     var independent = [41]
     const independentSnapshot = independent
     const task = go consume(move independent)
     try! await task
     assert(independentSnapshot[0] == 41)
+    return 42
+}
+export fn moveScoped() -> i64 {
     var scoped = [41]
     const scopedSnapshot = scoped
     scope { go consume(move scoped) }
     assert(scopedSnapshot[0] == 41)
+    return 42
+}
+fn ownershipTransfers() {
+    assert(moveStandalone() == 42 && moveScoped() == 42)
     var referenced = [41]
     const referencedSnapshot = referenced
     const callback = consume
