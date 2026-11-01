@@ -17,7 +17,7 @@
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"buffer native %d: %s\n",__LINE__,#c);exit(1);}} while (0)
 #include "buffer_slice_call_cases.h"
 XR_DATA const XrXirProgramSpec buffer_slice_call_program;
-XR_DATA const uint32_t buffer_slice_call_ids[3];
+XR_DATA const uint32_t buffer_slice_call_ids[7];
 int main(void) {
     XrCompileResourceLimits limits=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);

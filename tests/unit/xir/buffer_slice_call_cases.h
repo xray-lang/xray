@@ -57,12 +57,13 @@ static void buffer_invoke(XrXirProgram *program,XrXirInstance *instance,uint32_t
     XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED &&
         value.type==XR_XIR_I64 && value.payload==42);xr_xir_value_drop(&value);
 }
-static void buffer_call_cases(XrXirProgram *program,const uint32_t ids[3]) {
+static void buffer_call_cases(XrXirProgram *program,const uint32_t ids[7]) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     uint32_t original=buffer_program_refs(program);XrXirInstance *instance=NULL;
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xir_instance_native_source_bind(instance,program,&buffer_call_observer)==XR_XIR_CALL_READY);
     buffer_initialize(instance,ids[0]);buffer_invoke(program,instance,ids[1]);buffer_invoke(program,instance,ids[2]);
+    buffer_invoke(program,instance,ids[3]);buffer_invoke(program,instance,ids[4]);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY && buffer_program_refs(program)==original);
     /* Cancel only after a real borrowed-return frame owns its metadata lease. */
     instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
@@ -85,5 +86,24 @@ static void buffer_call_cases(XrXirProgram *program,const uint32_t ids[3]) {
     CHECK(buffer_poll(instance)==XR_XIR_CALL_LIMIT && buffer_program_refs(program)==UINT32_MAX);
     atomic_store_explicit(&program->references,baseline,memory_order_release);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_LIMIT && buffer_program_refs(program)==original);
+    /* A callback panic unwinds both its reborrow and the enclosing Buffer loan. */
+    instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+    buffer_initialize(instance,ids[0]);baseline=buffer_program_refs(program);
+    CHECK(xr_xir_instance_start(instance,ids[5],NULL,0)==XR_XIR_CALL_READY);
+    CHECK(buffer_poll(instance)==XR_XIR_CALL_PANICKED && buffer_program_refs(program)==baseline);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_PANICKED && buffer_program_refs(program)==original);
+    /* This cancellation occurs after the real callback frame has begun, rather
+     * than merely after capture of a future native borrowed-return frame. */
+    instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+    CHECK(xir_instance_native_source_bind(instance,program,&buffer_call_observer)==XR_XIR_CALL_READY);
+    buffer_initialize(instance,ids[0]);baseline=buffer_program_refs(program);
+    buffer_call_trace.entry=UINT32_MAX;
+    CHECK(xr_xir_instance_start(instance,ids[3],NULL,0)==XR_XIR_CALL_READY);
+    for (uint32_t step=0;buffer_call_trace.entry!=ids[6];++step) {
+        CHECK(step<100000 && xr_xir_instance_poll_bounded(instance,1).outcome.status==XR_XIR_CALL_READY);
+    }
+    CHECK(xr_xir_instance_cancel_current(instance)==XR_XIR_CALL_CANCEL_REQUESTED);
+    CHECK(buffer_poll(instance)==XR_XIR_CALL_CANCELLED && buffer_program_refs(program)==baseline);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_CANCELLED && buffer_program_refs(program)==original);
 }
 #endif
