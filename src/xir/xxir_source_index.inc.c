@@ -43,10 +43,30 @@ static bool source_index_get(SourceContext *ctx, AstNode *node, SourceValue *val
     return source_recipe_record(ctx,(XrXirInstruction){action.operation,action.type,{container.id,key.id},{0},0,{0}},value)&&
         source_hir_place_emitted(ctx,&action,value,before)&&source_index_map_reference(ctx,node,container.type);
 }
+static bool source_view_index_set(SourceContext *ctx,AstNode *node,SourceValue *value) {
+    SourceValue args[3]={{0}};uint32_t kind=0;XrXirType element=XR_XIR_UNIT;
+    if(!expression(ctx,node->as.index_set.array,args))return false;
+    if(!source_view_shape(ctx,args[0].type,&kind,&element)||kind!=XR_XIR_TYPE_MUT_SLICE||
+        (element!=XR_XIR_U8&&element!=XR_XIR_I64))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"indexed view assignment requires an admitted MutSlice");
+    if(!source_plan_expression(ctx,node->as.index_set.index,(SourceExpectedType){true,XR_XIR_I64,false,false},args+1)||
+        !source_plan_expression(ctx,node->as.index_set.value,(SourceExpectedType){true,element,false,false},args+2))return false;
+    XrHirPlaceAction action;
+    if(!source_hir_place_check(ctx,node,(XrHirPlaceInput){.kind=XR_HIR_PLACE_INDEX_WRITE,
+        .type=args[0].type,.base=args[0].id,.key=args[1].type,.selector=args[1].id,
+        .value=args[2].type,.value_id=args[2].id},&action))return false;
+    uint32_t before=ctx->bodies[ctx->function].count;
+    if(!source_recipe_group(ctx,(XrXirInstruction){.op=action.operation,.type=action.type},args,3,NULL)||
+        !source_hir_place_emitted(ctx,&action,NULL,before))return false;
+    *value=args[2];return true;
+}
 static bool source_index_set(SourceContext *ctx, AstNode *node, SourceValue *value) {
     SourceValue args[3] = {{0}};
     SourceExpectedType receiver={0};
     if (!source_ground_type(ctx,node->as.index_set.array,0,&receiver)) return false;
+    uint32_t view_kind=0;XrXirType view_element=XR_XIR_UNIT;
+    if(receiver.present&&source_view_shape(ctx,receiver.type,&view_kind,&view_element))
+        return source_view_index_set(ctx,node,value);
     if (receiver.present && xr_xir_type_is_pointer(&ctx->types,receiver.type)) {
         if (!source_pointer_access(ctx,node,receiver.type,true) || !expression(ctx,node->as.index_set.array,args) ||
             !source_plan_expression(ctx,node->as.index_set.index,(SourceExpectedType){true,XR_XIR_I64,false,false},args+1) ||

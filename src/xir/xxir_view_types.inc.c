@@ -185,7 +185,10 @@ XR_FUNC XrXirStatus xir_compile_view_module_boundary_input(const XrXirCompileCon
         for (uint32_t i=0;i<body->instruction_count && status==XR_XIR_OK;++i) {
             if (!view_boundary_supported(module->types,flags,body->instructions[i].type)) {
                 const XrXirTypeNode *temporary=xr_xir_type_node(module->types,body->instructions[i].type);
-                if (!temporary || temporary->kind!=XR_XIR_TYPE_SLICE || temporary->element!=XR_XIR_I64)
+                bool local=temporary&&((temporary->kind==XR_XIR_TYPE_SLICE&&temporary->element==XR_XIR_I64)||
+                    (temporary->kind==XR_XIR_TYPE_MUT_SLICE&&
+                     (temporary->element==XR_XIR_U8||temporary->element==XR_XIR_I64)));
+                if (!local)
                     status=XR_XIR_BAD_TYPE;
             }
         }

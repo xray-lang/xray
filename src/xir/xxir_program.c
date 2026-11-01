@@ -18,6 +18,7 @@
 #include "xxir_atomic.h"
 #include "xxir_native_callable.h"
 #include "xxir_instance_value.h"
+#include "xxir_view_types_internal.h"
 #include "../base/xchecks.h"
 
 static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
@@ -26,6 +27,11 @@ static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
         if (type == XR_XIR_UNIT) return true;
     }
     return type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || xr_xir_type_is_owned(spec->types, type);
+}
+static XrXirStatus program_view_boundary(const XrXirCompileContext *context,const XrXirProgramSpec *spec,XrXirType type) {
+    uint32_t flags=0;
+    XrXirStatus status=xr_xir_compile_view_type_flags(context,spec->types,type,&flags);
+    return status==XR_XIR_OK&&(flags&XR_XIR_VIEW_MUTABLE)?XR_XIR_BAD_TYPE:status;
 }
 static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXirProgramSpec *spec) {
     if (!spec) return XR_XIR_BAD_STRUCTURE;
@@ -49,7 +55,8 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
 
         if (spec->types->nodes[t].parameter_span) return XR_XIR_BAD_TYPE;
         const XrXirTypeNode *node=spec->types->nodes+t;
-        if (node->kind==XR_XIR_TYPE_MUT_SLICE || (node->kind==XR_XIR_TYPE_SLICE && node->element!=XR_XIR_U8 && node->element!=XR_XIR_I64))
+        if ((node->kind==XR_XIR_TYPE_MUT_SLICE||node->kind==XR_XIR_TYPE_SLICE)&&
+            node->element!=XR_XIR_U8&&node->element!=XR_XIR_I64)
             return XR_XIR_BAD_TYPE;
     }
     status = xr_xir_compile_declarations_verify(context, spec->declarations, spec->types,
@@ -94,11 +101,13 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
         } else if (entry->resume==xr_xir_instance_native_callable) return XR_XIR_BAD_STRUCTURE;
         if (xr_xir_type_is_cell(spec->types, entry->result) ||
             (entry->result != XR_XIR_UNIT && !program_value_type(spec, entry->result))) return XR_XIR_BAD_TYPE;
+        status=program_view_boundary(context,spec,entry->result);if(status!=XR_XIR_OK)return status;
         if (entry->parameter_count > context->limits.parameters) return XR_XIR_BUDGET;
         for (uint32_t p = 0; p < entry->parameter_count; ++p) {
 
             /* A cell parameter is a ref parameter: only the program's own functions can build one. */
             if (!program_value_type(spec, entry->parameters[p])) return XR_XIR_BAD_TYPE;
+            status=program_view_boundary(context,spec,entry->parameters[p]);if(status!=XR_XIR_OK)return status;
         }
     }
     const XrXirDeclarations *d = spec->declarations;

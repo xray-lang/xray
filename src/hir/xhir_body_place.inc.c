@@ -68,6 +68,16 @@ static XrXirStatus body_place_field(XrHirBody *body,const XrHirPlaceInput *input
     action->declared=field.type;action->field=input->field;action->immediate=input->field;action->location=row->value;action->type=input->type;
     action->operation=XR_XIR_FIELD_PLACE;row->type=input->type;row->field=input->field;return XR_XIR_OK;
 }
+static XrXirStatus body_place_view_write(XrHirBody *body,const XrHirPlaceInput *input,
+    XrHirPlaceAction *action,const char **reason) {
+    const XrXirTypeNode *view=xr_xir_type_node(body->types,input->type);
+    if(input->parent.owner||input->root.owner||!view||view->kind!=XR_XIR_TYPE_MUT_SLICE||
+        (view->element!=XR_XIR_U8&&view->element!=XR_XIR_I64)||
+        input->key!=XR_XIR_I64||input->value!=view->element)
+        return body_place_failure(input,reason,"view assignment requires an actual mutable view and exact index and element types");
+    action->key=XR_XIR_I64;action->declared=view->element;
+    action->type=XR_XIR_UNIT;action->operation=XR_XIR_VIEW_SET;return XR_XIR_OK;
+}
 XR_FUNC XrXirStatus xr_hir_body_place(XrHirBody *body,const XrHirPlaceInput *input,
     XrCompileRequestControl *control,XrHirPlaceAction *output,const char **reason) {
     if(reason)*reason=NULL;
@@ -107,6 +117,11 @@ XR_FUNC XrXirStatus xr_hir_body_place(XrHirBody *body,const XrHirPlaceInput *inp
         }
         break;
     case XR_HIR_PLACE_HINT_SHAPE:case XR_HIR_PLACE_ARRAY_SHAPE:case XR_HIR_PLACE_SHAPE:case XR_HIR_PLACE_INDEX:case XR_HIR_PLACE_INDEX_READ:case XR_HIR_PLACE_INDEX_WRITE: {
+        const XrXirTypeNode *view=xr_xir_type_node(body->types,row.type);
+        if(input->kind==XR_HIR_PLACE_INDEX_WRITE&&view&&
+            (view->kind==XR_XIR_TYPE_SLICE||view->kind==XR_XIR_TYPE_MUT_SLICE)) {
+            status=body_place_view_write(body,input,&action,reason);break;
+        }
         bool map=xr_xir_type_is_map(body->types,row.type);
         if(input->kind==XR_HIR_PLACE_ARRAY_SHAPE&&!xr_xir_type_is_array(body->types,row.type))
             return body_place_failure(input,reason,"indexed receiver is not an Array");
