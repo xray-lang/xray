@@ -168,7 +168,10 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
             if (grandchild > 0) { (void)proc_write_i64(detached_pipe[1], grandchild); _exit(0); }
             close(detached_pipe[1]);
         }
-        if (o->new_process_group && setpgid(0, 0) != 0) goto child_failed;
+        /* The parent also calls setpgid(pid, pid). When both race, Darwin can
+         * fail the child's call with EPERM after the parent already made it
+         * the group leader; leading its own group is the only requirement. */
+        if (o->new_process_group && setpgid(0, 0) != 0 && getpgrp() != getpid()) goto child_failed;
         if (proc_dup_stdio(o) != 0 || (o->cwd && *o->cwd && chdir(o->cwd) != 0)) goto child_failed;
         if (o->complete_environment) execve(prog, (char *const *)argv, environment);
         else {
@@ -207,6 +210,18 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     return status;
 }
 
+/* Signal every member of an owned group. Darwin skips zombies and reports
+ * EPERM when only zombies remain, which is the normal state of a group whose
+ * exited leader this owner has not reaped yet; that group has nothing left to
+ * stop, so it reads as ESRCH. Linux signals the zombie leader instead. */
+static int proc_group_signal(pid_t group, int signal) {
+    if (kill(-group, signal) == 0) return 0;
+#ifdef XR_OS_MACOS
+    if (errno == EPERM) errno = ESRCH;
+#endif
+    return -1;
+}
+
 /* A group owner retains its unreaped leader until descendants are stopped. */
 XR_FUNC XrOsProcStatus xr_proc_release(XrProcId *owner) {
     if (!owner || *owner<=0 || (XrProcId)(pid_t)*owner!=*owner) return XR_PROC_INVALID_ARGUMENT;
@@ -220,7 +235,7 @@ XR_FUNC int xr_proc_close(XrProcId pid) {
     if (slot < 0) { errno = EINVAL; return -1; }
     /* A registered leader remains unreaped, so both identifiers still name
      * this owner while termination is sent. Release the slot only after reap. */
-    if (slot >= 0 && kill((pid_t)-pid, SIGKILL) != 0 && errno != ESRCH) stopped = false;
+    if (slot >= 0 && proc_group_signal((pid_t)pid, SIGKILL) != 0 && errno != ESRCH) stopped = false;
     if (kill((pid_t)pid, SIGKILL) != 0 && errno != ESRCH) stopped = false;
     pid_t result;
     do { result = waitpid((pid_t)pid, NULL, stopped ? 0 : WNOHANG); } while (result < 0 && errno == EINTR);
@@ -306,7 +321,7 @@ int xr_proc_kill_tree(XrProcId pid, int signal) {
     if (pid <= 0 || (XrProcId)(pid_t)pid != pid || signal <= 0)
         return -1;
     if (proc_group_slot(pid) < 0) { errno = EINVAL; return -1; }
-    return kill((pid_t) -pid, signal) == 0 ? 0 : -1;
+    return proc_group_signal((pid_t)pid, signal) == 0 || errno == ESRCH ? 0 : -1;
 }
 
 XR_FUNC XrOsProcStatus xr_proc_pump_images(XrProcId pid, XrProcImagePumpResult *output) {
