@@ -8,6 +8,23 @@ typedef struct ScopeCancel {unsigned calls,stop;} ScopeCancel;
 static bool scope_cancel_later(const void *pointer) {
     ScopeCancel *state=(ScopeCancel *)pointer;return ++state->calls>=state->stop;
 }
+static void scope_normalized_controls(const XrXirCompileContext *context,const XrXirArtifact *artifact) {
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(artifact);
+    bool normalized=false;
+    for(uint32_t f=0;f<module->function_count;++f)
+        for(uint32_t i=0;i<module->functions[f].instruction_count;++i)
+            normalized|=module->functions[f].instructions[i].op==XR_XIR_VIEW_END;
+    CHECK(normalized);uint64_t baseline=held(context->resources);
+    ScopeCancel state={0,2};XrCompileRequestOptions options={scope_cancel_later,&state,XR_COMPILE_DEADLINE_NONE,0};
+    XrCompileRequestControl control={0};CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    XrXirDiagnostic issue={0};
+    CHECK(xir_compile_view_prepare_ordinary(context,(XirEffectInput){module,construction,&control},&issue)==XR_XIR_CANCELLED);
+    CHECK(issue.function<module->function_count&&issue.instruction<module->functions[issue.function].instruction_count);
+    CHECK(held(context->resources)==baseline);
+    CHECK(xir_compile_view_prepare_ordinary(context,(XirEffectInput){module,construction,NULL},&issue)==XR_XIR_OK);
+    CHECK(held(context->resources)==baseline);
+}
 static void scope_raw_controls(const XrXirCompileContext *context) {
     XrXirSourceResult source={0};
     CHECK(check(context,"fn worker(){}\nfn run(){scope{go worker()}}",&source,NULL)==XR_XIR_OK);

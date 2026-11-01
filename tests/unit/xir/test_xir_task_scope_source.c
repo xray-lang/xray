@@ -108,6 +108,7 @@ int main(int argc,char **argv) {
 #else
     CHECK(argc==1 || argc==3);bool emit=argc==3 && !strcmp(argv[1],"--emit");CHECK(argc==1 || emit);
     XrXirSourceResult source={0};CHECK(check(&context,NULL,&source,NULL)==XR_XIR_OK);
+    if(!emit)scope_normalized_controls(&context,source.checked);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);
     XrXirArtifact *cold=NULL,*closed=NULL,*code=NULL;
