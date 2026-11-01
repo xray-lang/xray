@@ -16,6 +16,7 @@
 #include "xir/xxir_emit_c.h"
 #include "xir/xxir_generic.h"
 #include "toolchain/xcompiler_session.h"
+#include "base/xresource_limits.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
