@@ -126,6 +126,7 @@ static XrXirStatus view_root_resolver_query_controlled(XirViewRootResolver *r,
         return XR_XIR_BAD_STRUCTURE;
     if (r->busy)
         return XR_XIR_BAD_STAGE;
+    r->check.location=(XrXirDiagnostic){XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     r->busy=true;XrXirStatus status=xir_receive_poll(control);
     if (status==XR_XIR_OK) status=view_root_resolve(r,request,visitor,user,control);
     r->busy=false;
