@@ -6,6 +6,7 @@
  *
  * xxir_channel_value.inc.c - Bounded owned queue preparation and publication
  */
+#include "xxir_channel_select_internal.h"
 static bool channel_work(XrXirValueAdmission *admission, uint64_t units) {
     if (!admission || !admission->domain || admission->work < units ||
         !xr_xir_domain_work(admission->domain, units)) return false;
@@ -320,3 +321,4 @@ XR_FUNC XrXirValueStatus xr_xir_channel_info(const XrXirValue *value,
     }
     xr_xir_value_graph_end(); return status;
 }
+#include "xxir_channel_select.inc.c"
