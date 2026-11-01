@@ -89,10 +89,19 @@ if(WIN32)
         endif()
     endforeach()
 else()
-    # The common API reports unsupported publication before creating any owner.
-    add_library(xray_xir_publication STATIC ${CMAKE_CURRENT_LIST_DIR}/xtc_xir_publication.c)
-    target_link_libraries(xray_xir_publication PUBLIC xray_compile_resources)
+    # POSIX publication stages through a parent directory descriptor. Strict C11
+    # needs the POSIX.1-2008 surface requested explicitly, and Darwin hides
+    # O_NOFOLLOW under that request unless its own extensions are enabled.
+    add_library(xray_xir_publication STATIC ${CMAKE_CURRENT_LIST_DIR}/xtc_xir_publication.c
+        ${CMAKE_CURRENT_LIST_DIR}/../../base/xio_policy.c)
+    # The scalar runtime archive owns the CSPRNG object; generated programs and
+    # the runtime SDK link that archive by path, so it must stay there.
+    target_link_libraries(xray_xir_publication PUBLIC xray_compile_resources xray_xir_scalar)
     target_compile_features(xray_xir_publication PUBLIC c_std_11)
     set_target_properties(xray_xir_publication PROPERTIES C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_compile_definitions(xray_xir_publication PRIVATE _POSIX_C_SOURCE=200809L)
+    if(APPLE)
+        target_compile_definitions(xray_xir_publication PRIVATE _DARWIN_C_SOURCE)
+    endif()
     target_compile_options(xray_xir_publication PRIVATE -Wall -Wextra -Werror -pedantic)
 endif()

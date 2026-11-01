@@ -32,6 +32,10 @@ struct XtcXirPublication {
     wchar_t drive[4];
     DWORD rename_size;
     bool delete_pending;
+#else
+    int parent_fd, file_fd;
+    char *leaf;
+    char temporary[64];
 #endif
 };
 static XtcXirPublicationStatus publication_fail(XtcXirPublication *owner,
@@ -52,10 +56,11 @@ static void publication_free(XtcXirPublication *owner) {
     xr_compile_resources_free(owner->temporary);
     xr_compile_resources_free(owner->leaf);
     xr_compile_resources_free(owner->rename);
+#else
+    xr_compile_resources_free(owner->leaf);
 #endif
     xr_compile_resources_free(owner);
 }
-#if XR_OS_WINDOWS
 static XtcXirPublicationStatus publication_io_status(XrOsIoStatus status) {
     switch (status) {
     case XR_OS_IO_OK: return XTC_XIR_PUBLICATION_OK;
@@ -78,9 +83,6 @@ static void *publication_alloc(XtcXirPublication *owner, size_t size) {
         publication_io(owner, owner->policy.alloc(owner->policy.context, size, &memory));
     return memory;
 }
-static bool publication_windows_error(XtcXirPublication *owner, DWORD error) {
-    publication_fail(owner, publication_io_status(io_windows_status(error)), error); return false;
-}
 static bool publication_copy(XtcXirPublication *owner, void *out, const void *in, size_t bytes) {
     if (owner->diagnostic.status != XTC_XIR_PUBLICATION_OK) return false;
     if (bytes) memcpy(out, in, bytes);
@@ -92,6 +94,12 @@ static bool publication_text_length(XtcXirPublication *owner, const char *text, 
         if (!text[i]) { *length = i; return true; }
     }
     publication_fail(owner, XTC_XIR_PUBLICATION_BUDGET, 0); return false;
+}
+#if !XR_OS_WINDOWS
+#include "xtc_xir_publication_posix.inc.c"
+#else
+static bool publication_windows_error(XtcXirPublication *owner, DWORD error) {
+    publication_fail(owner, publication_io_status(io_windows_status(error)), error); return false;
 }
 static bool publication_prepare(XtcXirPublication *owner, const char *destination) {
     size_t text_length = 0;
@@ -255,9 +263,6 @@ XR_FUNC XtcXirPublicationStatus xtc_xir_publication_new(XrCompileResources *reso
     if (!request->limits.path_bytes || request->limits.path_bytes > 32767 ||
         !request->limits.create_attempts || request->limits.create_attempts > 64 ||
         !request->limits.max_bytes || request->limits.max_bytes >= SIZE_MAX) return XTC_XIR_PUBLICATION_BUDGET;
-#if !XR_OS_WINDOWS
-    return XTC_XIR_PUBLICATION_UNSUPPORTED;
-#else
     XtcXirPublication *owner = NULL;
     XrCompileResourceStatus allocated = xr_compile_resources_calloc(resources, 1, sizeof(*owner), (void **)&owner);
     if (allocated != XR_COMPILE_RESOURCE_OK) return allocated == XR_COMPILE_RESOURCE_MEMORY_LIMIT ?
@@ -265,13 +270,16 @@ XR_FUNC XtcXirPublicationStatus xtc_xir_publication_new(XrCompileResources *reso
         XTC_XIR_PUBLICATION_OVERFLOW : allocated == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ?
         XTC_XIR_PUBLICATION_OUT_OF_MEMORY : XTC_XIR_PUBLICATION_INVALID;
     owner->resources = resources; owner->policy = xr_compile_io_policy(resources);
+#if XR_OS_WINDOWS
     owner->file = owner->parent_handle = INVALID_HANDLE_VALUE;
+#else
+    owner->file_fd = owner->parent_fd = -1;
+#endif
     owner->limits = request->limits;
     if (!publication_prepare(owner, request->destination)) {
         XtcXirPublicationStatus status = owner->diagnostic.status; publication_free(owner); return status;
     }
     *output = owner; return XTC_XIR_PUBLICATION_OK;
-#endif
 }
 XR_FUNC XtcXirPublicationStatus xtc_xir_publication_write(XtcXirPublication *owner,
     const void *bytes, size_t length) {
@@ -281,7 +289,7 @@ XR_FUNC XtcXirPublicationStatus xtc_xir_publication_write(XtcXirPublication *own
         return publication_fail(owner, XTC_XIR_PUBLICATION_INVALID, 0);
     if (length > owner->limits.max_bytes) return publication_fail(owner, XTC_XIR_PUBLICATION_BUDGET, 0);
 #if !XR_OS_WINDOWS
-    return publication_fail(owner, XTC_XIR_PUBLICATION_UNSUPPORTED, 0);
+    return publication_posix_write(owner, bytes, length);
 #else
     owner->phase = XTC_XIR_PUBLICATION_WRITING;
     size_t prefix = 0;
@@ -308,7 +316,7 @@ XR_FUNC XtcXirPublicationStatus xtc_xir_publication_commit(XtcXirPublication *ow
     if (owner->diagnostic.status != XTC_XIR_PUBLICATION_OK) return owner->diagnostic.status;
     if (owner->phase != XTC_XIR_PUBLICATION_READY) return publication_fail(owner, XTC_XIR_PUBLICATION_INVALID, 0);
 #if !XR_OS_WINDOWS
-    return publication_fail(owner, XTC_XIR_PUBLICATION_UNSUPPORTED, 0);
+    return publication_posix_commit(owner);
 #else
     owner->diagnostic.stage = XTC_XIR_PUBLICATION_RENAME;
     if (!publication_destination(owner)) return owner->diagnostic.status;
@@ -354,6 +362,8 @@ XR_FUNC XtcXirPublicationStatus xtc_xir_publication_close(XtcXirPublication **sl
         if (!CloseHandle(owner->parent_handle)) return publication_pending(owner, GetLastError());
         owner->parent_handle = INVALID_HANDLE_VALUE;
     }
+#else
+    if (publication_posix_release(owner) != XTC_XIR_PUBLICATION_OK) return XTC_XIR_PUBLICATION_PENDING;
 #endif
     publication_free(owner); *slot = NULL; return XTC_XIR_PUBLICATION_OK;
 }

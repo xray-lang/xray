@@ -89,10 +89,17 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr,"XR_BUILD_6001: Source build requires an exact .xr source file\n"); return XR_CLI_EXIT_FAIL;
     }
     if (!build_options_supported(inv)) return XR_CLI_EXIT_FAIL;
-#if !defined(XR_ARCH_X86_64) || !XR_OS_WINDOWS
+#if !defined(XR_ARCH_LE64)
     fprintf(stderr,"XR_BUILD_6001: this Source publication target is unsupported\n"); return XR_CLI_EXIT_FAIL;
 #else
     bool c_only=xr_cli_opt_bool(&inv->options,"c-only");
+#if !defined(XR_ARCH_X86_64) || !XR_OS_WINDOWS
+    /* Generated C is portable; only the Windows x86_64 driver links executables. */
+    if (!c_only) {
+        fprintf(stderr,"XR_BUILD_6001: native executables are published only on Windows x86_64; use --c-only\n");
+        return XR_CLI_EXIT_FAIL;
+    }
+#endif
     const char *output=xr_cli_opt_string(&inv->options,"output",c_only ? "app.c" : "app.exe");
     XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     XrCompileResources *resources=NULL;
@@ -131,10 +138,12 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         const XrXirNativeProjectionSource *c=xr_compile_native_projection_source(projection);
         fprintf(stderr,"XR_BUILD: Source %s\nXR_BUILD: C projection %zu bytes\n",paths.entry,c->length);
     }
+#if defined(XR_ARCH_X86_64) && XR_OS_WINDOWS
     if (!c_only) {
         result=build_native_prepare(state,inv,projection,&artifact);
         if (result!=XR_CLI_EXIT_OK) goto cleanup;
     }
+#endif
     XtcXirPublicationRequest publish={output,{XR_PATH_LIMIT_MAX_PATH,8,BUILD_C_LIMIT}};
     XtcXirPublicationStatus status=xtc_xir_publication_new(resources,&publish,&publication);
     if (status==XTC_XIR_PUBLICATION_OK) {
