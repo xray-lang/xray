@@ -152,7 +152,7 @@ static XrXirStatus ci_reowned(const XrXirCompileContext *context,const XrXirArti
     for(uint32_t i=0;i<materials;++i)bindings[i]=*xr_xir_compile_construction_materialization(original,i);
     const XrXirModule *module=xr_xir_compile_artifact_module(producer);
     XrXirConstructionSpec spec={rows,count,bindings,materials,xr_xir_compile_construction_comptime(original)};
-    XrXirConstruction *owned=NULL;XrXirStatus status=xr_xir_compile_construction_new_v4(context,module->types,&spec,facts,&owned, NULL);
+    XrXirConstruction *owned=NULL;XrXirStatus status=xr_xir_compile_construction_new_v5(context,module->types,&spec,facts,&owned, NULL);
     xr_compile_resources_free(rows);xr_compile_resources_free(bindings);
     if(status==XR_XIR_OK)status=xr_xir_compile_recheck_v2(context,module,owned,output,NULL, NULL);
     xr_xir_compile_construction_free(owned);return status;

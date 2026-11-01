@@ -122,7 +122,7 @@ static void method_owner_cases(void) {
         XrXirSlotFacts slots = {NULL, 0};
         XrXirConstruction *construction = NULL;
         CHECK(xr_xir_compile_types_structure_verify(&stage_context, &types) == XR_XIR_OK);
-        CHECK(xr_xir_compile_construction_new_v4(&stage_context, &types, &spec, &slots, &construction, NULL) == XR_XIR_OK);
+        CHECK(xr_xir_compile_construction_new_v5(&stage_context, &types, &spec, &slots, &construction, NULL) == XR_XIR_OK);
         XrXirDiagnostic diagnostic = {0};
         XrXirStatus status = xr_xir_compile_check_v2(&stage_context, &module, construction, &checked, &diagnostic);
         xr_xir_compile_construction_free(construction);

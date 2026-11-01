@@ -54,7 +54,7 @@ static XrXirArtifact *program_input(const XrXirCompileContext *context) {
     const XrXirConstructionSpec spec={0};
     const XrXirSlotFacts slots={NULL,0};
     XrXirConstruction *construction=NULL;
-    CHECK(xr_xir_compile_construction_new_v4(context,NULL,&spec,&slots,&construction, NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v5(context,NULL,&spec,&slots,&construction, NULL)==XR_XIR_OK);
     XrXirDiagnostic diagnostic={0};
     XrXirStatus checked_status=xr_xir_compile_check_v2(context,&module,construction,&checked,&diagnostic);
     xr_xir_compile_construction_free(construction);

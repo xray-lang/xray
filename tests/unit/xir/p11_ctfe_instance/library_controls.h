@@ -54,9 +54,9 @@ static void library_slot_raw_controls(const XrXirCompileContext *context,const X
     XrXirConstructionSpec spec={original->rows,original->count,original->materializations,
         original->materialization_count,&original->comptime};
     CHECK(facts && facts->count==4);XrXirConstruction *output=NULL;
-    CHECK(xr_xir_compile_construction_new_v4(context,source->module.types,&spec,NULL,&output, NULL)==XR_XIR_BAD_STRUCTURE && !output);
+    CHECK(xr_xir_compile_construction_new_v5(context,source->module.types,&spec,NULL,&output, NULL)==XR_XIR_BAD_STRUCTURE && !output);
     XrXirConstruction *occupied=(XrXirConstruction *)(uintptr_t)1;
-    CHECK(xr_xir_compile_construction_new_v4(NULL,(const XrXirTypes *)(uintptr_t)1,
+    CHECK(xr_xir_compile_construction_new_v5(NULL,(const XrXirTypes *)(uintptr_t)1,
         (const XrXirConstructionSpec *)(uintptr_t)1,(const XrXirSlotFacts *)(uintptr_t)1,&occupied, NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(occupied==(XrXirConstruction *)(uintptr_t)1);
     for (unsigned kind=0;kind<8;++kind) {
@@ -71,14 +71,14 @@ static void library_slot_raw_controls(const XrXirCompileContext *context,const X
         if (kind==6) rows[0].exported=2;
         if (kind==7) input.rows=NULL;
         output=NULL;
-        CHECK(xr_xir_compile_construction_new_v4(context,source->module.types,&spec,&input,&output, NULL)==XR_XIR_BAD_STRUCTURE && !output);
+        CHECK(xr_xir_compile_construction_new_v5(context,source->module.types,&spec,&input,&output, NULL)==XR_XIR_BAD_STRUCTURE && !output);
     }
     for (unsigned kind=0;kind<3;++kind) {
         XrXirSlotFact rows[4];memcpy(rows,facts->rows,sizeof(rows));
         XrXirSlotFacts input={rows,kind==0?3u:kind==1?0u:4u};
         if (!input.count) input.rows=NULL;
         if (kind==2) rows[1].exported=1;
-        output=NULL;CHECK(xr_xir_compile_construction_new_v4(context,source->module.types,&spec,&input,&output, NULL)==XR_XIR_OK);
+        output=NULL;CHECK(xr_xir_compile_construction_new_v5(context,source->module.types,&spec,&input,&output, NULL)==XR_XIR_OK);
         XrXirArtifact *received=NULL;
         CHECK(xr_xir_compile_recheck_v2(context,&source->module,output,&received,NULL, NULL)==XR_XIR_BAD_STRUCTURE && !received);
         received=(XrXirArtifact *)(uintptr_t)1;
@@ -90,10 +90,10 @@ static void library_slot_raw_controls(const XrXirCompileContext *context,const X
     for (unsigned point=0;point<2;++point) {
         source_fixture_compile_attempts=0;source_fixture_compile_fail_at=failures[point];
         source_fixture_compile_injected=false;output=NULL;
-        CHECK(xr_xir_compile_construction_new_v4(context,source->module.types,&spec,facts,&output, NULL)==XR_XIR_OUT_OF_MEMORY &&
+        CHECK(xr_xir_compile_construction_new_v5(context,source->module.types,&spec,facts,&output, NULL)==XR_XIR_OUT_OF_MEMORY &&
             !output && source_fixture_compile_injected);
         source_fixture_compile_fail_at=SIZE_MAX;
-        CHECK(xr_xir_compile_construction_new_v4(context,source->module.types,&spec,facts,&output, NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_construction_new_v5(context,source->module.types,&spec,facts,&output, NULL)==XR_XIR_OK);
         xr_xir_compile_construction_free(output);
     }
     XrXirSlotFact *actual=(XrXirSlotFact *)original->slots.rows;
@@ -151,7 +151,7 @@ static void library_slot_fact_controls(void) {
         memcpy(bytes[s],rows[s].name,rows[s].name_length);rows[s].name=bytes[s];
     }
     XrXirSlotFacts input={rows,4};XrXirConstructionSpec spec={0};XrXirConstruction *owned=NULL;
-    CHECK(xr_xir_compile_construction_new_v4(&receiver,source.checked->module.types,&spec,&input,&owned, NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v5(&receiver,source.checked->module.types,&spec,&input,&owned, NULL)==XR_XIR_OK);
     memset(rows,0xa5,sizeof(rows));memset(bytes,0xa5,sizeof(bytes));library_slot_names(owned,names,4);
     XrXirArtifact *received=NULL;
     CHECK(xr_xir_compile_recheck_v2(&receiver,&source.checked->module,owned,&received,NULL, NULL)==XR_XIR_OK);
@@ -176,7 +176,7 @@ static void library_slot_fact_controls(void) {
     library_slot_program(received,names,4);xr_xir_compile_source_snapshot_free(snapshot);
     const XrXirSlotFacts zero={NULL,0};owned=NULL;
     CHECK(!xr_xir_compile_construction_slots(NULL));
-    CHECK(xr_xir_compile_construction_new_v4(&receiver,NULL,&spec,&zero,&owned, NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v5(&receiver,NULL,&spec,&zero,&owned, NULL)==XR_XIR_OK);
     library_slot_names(owned,NULL,0);xr_xir_compile_construction_free(owned);
     xr_compile_resources_release(receiver.resources);
     fprintf(stderr,"Complete slot facts: actual mutable/const/destructure, two receiving ledgers, poisoned input, snapshot/wire/projection/VM42 and raw rejects PASS\n");
@@ -409,7 +409,7 @@ static void library_comptime_controls(void) {
     CHECK(unbound.binding_count==2);unbound.bindings+=1;--unbound.binding_count;
     XrXirConstructionSpec spec={source->construction->rows,source->construction->count,source->construction->materializations,
         source->construction->materialization_count,&unbound};XrXirConstruction *removed=NULL;
-    CHECK(xr_xir_compile_construction_new_v4(&context,source->module.types,&spec,xr_xir_compile_construction_slots(source->construction),&removed, NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v5(&context,source->module.types,&spec,xr_xir_compile_construction_slots(source->construction),&removed, NULL)==XR_XIR_OK);
     literal=true;CHECK(xir_literal_type_names(&context,&source->module,removed,provider,&literal)==XR_XIR_OK && !literal);
     CHECK(xr_xir_compile_recheck_v2(&context,&source->module,removed,&received,NULL, NULL)==XR_XIR_BAD_TYPE && !received);
     xr_xir_compile_construction_free(removed);

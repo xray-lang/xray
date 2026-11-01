@@ -47,7 +47,7 @@ static inline XrXirStatus xir_fixture_module_construction(const XrXirCompileCont
     }
     XrXirSlotFacts slots={rows,count};
     XrXirConstructionSpec input={nominal->rows,nominal->count,NULL,0,NULL};
-    if (status==XR_XIR_OK) status=xr_xir_compile_construction_new_v4(context,module->types,&input,&slots,output, NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_construction_new_v5(context,module->types,&input,&slots,output, NULL);
     xr_compile_resources_free(rows);xr_xir_compile_construction_free(nominal);return status;
 }
 static inline void xir_fixture_preparation_diagnostic(XrXirStatus status,XrXirDiagnostic *diagnostic) {

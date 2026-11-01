@@ -37,7 +37,7 @@ static void ci_direct_slot_authority(const XrXirCompileContext *context,const Xr
     XrXirSlotFacts private_slots={rows,slots->count};
     XrXirConstructionSpec spec={original->rows,original->count,original->materializations,original->materialization_count,&original->comptime};
     XrXirConstruction *private_owner=NULL;
-    CHECK(xr_xir_compile_construction_new_v4(context,module->types,&spec,&private_slots,&private_owner,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v5(context,module->types,&spec,&private_slots,&private_owner,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_recheck_v2(context,module,private_owner,&received,NULL,NULL)==XR_XIR_BAD_STRUCTURE && !received);
     xr_xir_compile_construction_free(private_owner);private_owner=NULL;
     CHECK(xr_xir_compile_recheck_v2(context,module,NULL,&received,NULL,NULL)==XR_XIR_BAD_STRUCTURE && !received);
@@ -59,7 +59,7 @@ static void ci_direct_slot_authority(const XrXirCompileContext *context,const Xr
             module->declarations->slots[i].mutable)mutable_slot=i;
     CHECK(mutable_slot!=UINT32_MAX);
     memcpy(rows,slots->rows,slots->count*sizeof(*rows));rows[mutable_slot].exported=1;
-    CHECK(xr_xir_compile_construction_new_v4(context,module->types,&spec,&private_slots,&private_owner,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v5(context,module->types,&spec,&private_slots,&private_owner,NULL)==XR_XIR_OK);
     ops[selected].immediate=mutable_slot;ops[selected].type=module->declarations->slots[mutable_slot].type;
     CHECK(xr_xir_compile_recheck_v2(context,&current,private_owner,&received,NULL,NULL)==XR_XIR_BAD_STRUCTURE && !received);
     xr_xir_compile_construction_free(private_owner);xr_compile_resources_free(rows);

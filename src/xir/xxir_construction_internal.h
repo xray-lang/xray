@@ -22,6 +22,7 @@ struct XrXirConstruction {
     uint32_t materialization_count;
     XrXirComptimeTable comptime;
     XrXirSlotFacts slots;
+    XrXirBorrowReturns borrow_returns;
 };
 /* An owner is mandatory, including when no nominal declarations exist.
  * A live foreign input owner may be borrowed. Checks and copies charge the

@@ -52,7 +52,7 @@ static bool literal_construction(SourceContext *ctx,const XrXirConstruction *ori
     XrXirComptimeTable table={0};
     if (!literal_site_bind(ctx,original,binding,site,&table)) return false;
     XrXirConstructionSpec input={original->rows,original->count,all,before+added,&table};
-    XrXirStatus status=xr_xir_compile_construction_new_v4(&ctx->compile,&ctx->types,&input,
+    XrXirStatus status=xr_xir_compile_construction_new_v5(&ctx->compile,&ctx->types,&input,
         xr_xir_compile_construction_slots(original),&ctx->construction,ctx->request);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"literal construction receiving failed");
 }
