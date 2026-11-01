@@ -23,6 +23,7 @@
 #include "xxir_task_result_internal.h"
 #include "xxir_type_arena_internal.h"
 #include "xxir_enum.h"
+#include "xxir_array.h"
 #include <string.h>
 
 struct XrXirTaskExecutor {
@@ -30,12 +31,13 @@ struct XrXirTaskExecutor {
     XrXirCallBudget *budget;
     XirTask *active;
     XirTaskGroup *groups;
+    XirTaskGroup *group_notify_head,*group_notify_tail;
     XirGenerator *generators;
     XirTaskActivation *ready_head, *ready_tail;
     XirTaskActivation root;
     XirTaskActivation *current, *external;
     uint64_t external_call_wake, host_wake, root_epoch;
-    uint64_t generation, next_identity,publication_order;
+    uint64_t generation, next_identity,publication_order,pending_terminals;
     XrXirCallStatus shutdown_status;
     XrXirCallStatus first_failure;
     XrXirCallResult failure;
@@ -115,11 +117,11 @@ XR_FUNC bool xr_xir_task_storage_valid(const XirTask *task) {
             !xr_xir_task_result_shape(types, node->element)) return false;
         XirTaskState state = atomic_load_explicit(&task->state, memory_order_acquire);
         if (state == XIR_TASK_PREPARING)
-            return !task->generation && !task->identity && !task->executor && !task->call && xr_xir_call_result_empty(&task->outcome);
+            return !task->generation && !task->identity && !task->terminal_order && !task->executor && !task->call && xr_xir_call_result_empty(&task->outcome);
         /* Only the driver reads unpublished outcomes or execution pointers. */
         if (state == XIR_TASK_PENDING || state == XIR_TASK_RUNNING) return task->generation && task->identity;
         if (state != XIR_TASK_TERMINAL || task->executor || task->call || !task->generation || !task->identity ||
-            task->outcome.status == XR_XIR_CALL_READY || task->outcome.status == XR_XIR_CALL_SUSPENDED ||
+            !task->terminal_order || task->outcome.status == XR_XIR_CALL_READY || task->outcome.status == XR_XIR_CALL_SUSPENDED ||
             task->outcome.status == XR_XIR_CALL_CONSUMED) return false;
         const XrXirValue *value = &task->outcome.value;
         if (task->outcome.status == XR_XIR_CALL_RETURNED && value->type != (uint32_t)node->element) return false;
@@ -265,6 +267,7 @@ XR_FUNC bool xr_xir_task_executor_view_member(const XrXirTaskExecutor *executor,
     *child = generator ? generator->child : activation->task != NULL;
     return true;
 }
+static XrXirCallStatus task_group_cancel_target(XrXirTaskExecutor *,XirTask *,XrXirValueAdmission *,bool *);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_cancel_task(XrXirTaskExecutor *executor,
     XrXirCallView *view,const XrXirValue *value) {
     bool child=false;
@@ -282,6 +285,8 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_cancel_task(XrXirTaskExecutor *exec
     if (!task_pending_member_work(admission,1)) return XR_XIR_CALL_LIMIT;
     if (atomic_load_explicit(&target->state,memory_order_acquire)==XIR_TASK_TERMINAL)
         return XR_XIR_CALL_READY;
+    bool grouped=false;XrXirCallStatus aggregate=task_group_cancel_target(executor,target,admission,&grouped);
+    if(aggregate!=XR_XIR_CALL_READY||grouped)return aggregate;
     uint64_t walked=0;
     for (XirTask *task=executor->active;task;task=task->active_next) {
         if (++walked>executor->next_identity) return XR_XIR_CALL_BAD_STATE;
@@ -369,6 +374,17 @@ static XrXirValueStatus task_core_task_prepare(XrXirTaskExecutor *executor, XrXi
     xr_xir_value_graph_end();
     return XR_XIR_VALUE_OK;
 }
+/* Every public pending Task keeps exactly one future publication available.
+ * Failure observations cannot exhaust those prepaid terminal slots. */
+static bool task_terminal_available(const XrXirTaskExecutor *executor) {
+    return executor->pending_terminals<UINT64_MAX&&
+        executor->publication_order<UINT64_MAX-executor->pending_terminals;
+}
+static uint64_t task_terminal_publish(XrXirTaskExecutor *executor) {
+    XR_CHECK(executor->pending_terminals&&executor->publication_order<UINT64_MAX,
+        "an owned pending Task keeps its original terminal ordinal reservation");
+    --executor->pending_terminals;return ++executor->publication_order;
+}
 static void task_core_complete_wait(XrXirTaskExecutor *executor,XrXirCall *call);
 static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *,XrXirCallView *,XrXirType,
     const XrXirCallRequest *,XrXirValue *,XirTaskSubscription *);
@@ -383,6 +399,7 @@ static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirC
     } else if (view) return XR_XIR_CALL_BAD_STATE;
     if (executor->stopping || executor->budget->exhausted || executor->next_identity == UINT64_MAX)
         return XR_XIR_CALL_BAD_STATE;
+    if(!task_terminal_available(executor))return XR_XIR_CALL_LIMIT;
     const XrXirProgram *program = executor->config.program;
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(executor->config.task_arena), type);
     if (!node || node->kind != XR_XIR_TYPE_TASK) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -441,6 +458,7 @@ static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirC
         return freed == XR_XIR_CALL_READY ? status : freed;
     }
     task->generation=executor->generation;task->identity=++executor->next_identity;
+    ++executor->pending_terminals;
     task->activation.call=task->call;
     if(!consuming)XR_CHECK(xr_xir_call_bind_executor(task->call, &binding) == XR_XIR_CALL_READY,
         "new child activation owns one non-reusable executor ticket");
@@ -550,6 +568,7 @@ static void task_core_finish_task(XrXirTaskExecutor *executor, XirTask *task) {
     task->active_next = task->active_previous = NULL;
     task->executor = NULL;
     xr_xir_call_result_move(&prepared, &task->outcome);
+    task->terminal_order=task_terminal_publish(executor);
     atomic_store_explicit(&task->state, XIR_TASK_TERMINAL, memory_order_release);
     task_group_notify(executor,task);
     while (task->waiter_head) task_core_complete_wait(executor, task->waiter_head);
@@ -670,6 +689,7 @@ XR_FUNC XrXirCallStatus xir_task_executor_visit_vm(XrXirTaskExecutor *executor,c
         selected->ready_next=NULL;selected->queued=false;
         task_core_dispatch_result(executor,selected,result);
     }
+    task_group_flush(executor);
     if (executor->fatal_closing) task_core_close_group(executor);
     executor->driving=false;
     return failure!=XR_XIR_CALL_READY ? failure : result.status;
@@ -696,6 +716,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_poll(XrXirTaskExecutor *executor, u
         executor->current = NULL;
         if (executor->fatal_closing) result=xr_xir_call_poll_bounded(activation->call,1);
         task_core_dispatch_result(executor,activation,result);
+        task_group_flush(executor);
         if (executor->fatal_closing) {task_core_close_group(executor);break;}
     }
     generator_core_scan(executor);

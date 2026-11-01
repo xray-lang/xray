@@ -22,13 +22,25 @@ struct XirTaskGroup {
     XrXirCall *owner;
     uint64_t frame,count,pending;
     uint64_t first_panic_order,first_error_order;
-    uint32_t frontier;
+    uint32_t frontier,kind;
     XirTask *completion;
-    XirTaskSubscription *first,*last,*first_error,*first_panic;
-    XirTaskGroup *next;
+    XirTaskSubscription *first,*last,*first_error,*first_panic,*winner;
+    XirTaskGroup *next,*notify_next;
     XrXirCallStatus fault;
     bool isolated,sealed,cancelling,published,observed,departed;
+    bool notify_queued,notified,cancel_requested;
 };
+static void task_group_complete(XirTaskGroup *group);
+static void task_group_flush(XrXirTaskExecutor *executor);
+static void task_aggregate_complete(XirTaskGroup *group);
+static void task_aggregate_member(XirTaskGroup *group,XirTaskSubscription *member);
+static void task_group_queue(XirTaskGroup *group) {
+    if(group->notify_queued)return;
+    XrXirTaskExecutor *executor=group->executor;group->notify_queued=true;group->notify_next=NULL;
+    if(executor->group_notify_tail)executor->group_notify_tail->notify_next=group;
+    else executor->group_notify_head=group;
+    executor->group_notify_tail=group;
+}
 static XrXirCallStatus task_group_owner(XrXirTaskExecutor *executor,XrXirCallView *view,
     const XrXirValue *value,XirTaskGroup **output) {
     bool child=false;uint64_t frame=0;uint32_t frontier=0;
@@ -41,7 +53,7 @@ static XrXirCallStatus task_group_owner(XrXirTaskExecutor *executor,XrXirCallVie
     XirTask *task=(XirTask *)(uintptr_t)value->payload;XirTaskGroup *group=task->aggregation;
     XrXirCallStatus status=xir_call_scope_frame(view,&frame,&frontier);
     if(status!=XR_XIR_CALL_READY)return status;
-    if(!group||group->executor!=executor||group->completion!=task||group->owner!=view->activation||
+    if(!group||group->kind||group->executor!=executor||group->completion!=task||group->owner!=view->activation||
         group->frame!=frame||task->generation!=executor->generation)return XR_XIR_CALL_BAD_STATE;
     *output=group;return XR_XIR_CALL_READY;
 }
@@ -50,7 +62,12 @@ static void task_group_cancel_members(XirTaskGroup *group) {
     group->cancelling=true;XrXirTaskExecutor *executor=group->executor;
     /* Registration prepays bounded cancellation and completion bookkeeping. */
     for(XirTaskSubscription *member=group->first;member;member=member->next_member) {
-        XirTask *task=member->task;if(member->completed||!task->call)continue;
+        XirTask *task=member->task;if(member->completed)continue;
+        if(!task->call) {
+            XirTaskGroup *nested=task->aggregation;
+            if(nested&&nested->kind&&!nested->published){nested->cancel_requested=true;task_group_queue(nested);}
+            continue;
+        }
         XrXirCallStatus status=xr_xir_call_request_cancel(task->call);
         XR_CHECK(status==XR_XIR_CALL_CANCEL_REQUESTED||status==XR_XIR_CALL_BAD_STATE,
             "a lexical group requests cancellation only from its live owned members");
@@ -58,7 +75,15 @@ static void task_group_cancel_members(XirTaskGroup *group) {
             xr_xir_call_state(task->call)!=XR_XIR_CALL_SUSPENDED)task_core_enqueue(executor,&task->activation);
     }
 }
+static void task_group_publish(XirTaskGroup *group,XrXirCallResult *result) {
+    XirTask *completion=group->completion;group->published=true;completion->executor=NULL;
+    xr_xir_call_result_move(result,&completion->outcome);
+    completion->terminal_order=task_terminal_publish(group->executor);
+    atomic_store_explicit(&completion->state,XIR_TASK_TERMINAL,memory_order_release);
+    task_group_queue(group);
+}
 static void task_group_complete(XirTaskGroup *group) {
+    if(group->kind){task_aggregate_complete(group);return;}
     if(!group->sealed||group->pending||group->published)return;
     XrXirCallResult result={0};XirTaskSubscription *winner=group->first_panic?group->first_panic:group->first_error;
     if(group->fault!=XR_XIR_CALL_READY)result.status=group->fault;
@@ -66,20 +91,17 @@ static void task_group_complete(XirTaskGroup *group) {
         XrXirValueStatus status=xr_xir_call_result_copy(&winner->task->outcome,&result);
         if(status!=XR_XIR_VALUE_OK)result.status=task_core_value_status(status);
     } else result.status=XR_XIR_CALL_RETURNED;
-    XirTask *completion=group->completion;group->published=true;completion->executor=NULL;
-    xr_xir_call_result_move(&result,&completion->outcome);
-    atomic_store_explicit(&completion->state,XIR_TASK_TERMINAL,memory_order_release);
-    while(completion->waiter_head)task_core_complete_wait(group->executor,completion->waiter_head);
+    task_group_publish(group,&result);
 }
-static void task_group_notify(XrXirTaskExecutor *executor,XirTask *task) {
-    uint64_t order=0;
-    XrXirCallStatus ordered=task->subscriptions?xir_task_scope_failure_order(executor,&order):XR_XIR_CALL_READY;
+static void task_group_notify_members(XrXirTaskExecutor *executor,XirTask *task) {
+    uint64_t order=task->terminal_order;
+    XR_CHECK(order,"a member notification observes its actual published terminal ordinal");
     for(XirTaskSubscription *member=task->subscriptions;member;member=member->next_subscription) {
         XirTaskGroup *group=member->group;
         XR_CHECK(group->executor==executor&&!member->completed&&group->pending,
             "each accepted member publishes exactly once to its original group");
         member->completed=true;--group->pending;XrXirCallStatus status=task->outcome.status;
-        if(ordered!=XR_XIR_CALL_READY&&group->fault==XR_XIR_CALL_READY)group->fault=ordered;
+        if(group->kind){task_aggregate_member(group,member);task_group_complete(group);continue;}
         if(xr_xir_call_panic_status(status)) {
             if(!group->first_panic) {group->first_panic=member;group->first_panic_order=order;}
         }
@@ -92,6 +114,25 @@ static void task_group_notify(XrXirTaskExecutor *executor,XirTask *task) {
             task_group_cancel_members(group);
         task_group_complete(group);
     }
+}
+static void task_group_flush(XrXirTaskExecutor *executor) {
+    while(executor->group_notify_head) {
+        XirTaskGroup *group=executor->group_notify_head;
+        executor->group_notify_head=group->notify_next;
+        if(!executor->group_notify_head)executor->group_notify_tail=NULL;
+        group->notify_next=NULL;group->notify_queued=false;
+        if(group->cancel_requested&&!group->published) {
+            task_group_cancel_members(group);
+            XrXirCallResult cancelled={.status=XR_XIR_CALL_CANCELLED};task_group_publish(group,&cancelled);
+        }
+        if(group->published&&!group->notified) {
+            group->notified=true;task_group_notify_members(executor,group->completion);
+            while(group->completion->waiter_head)task_core_complete_wait(executor,group->completion->waiter_head);
+        }
+    }
+}
+static void task_group_notify(XrXirTaskExecutor *executor,XirTask *task) {
+    task_group_notify_members(executor,task);task_group_flush(executor);
 }
 static void task_group_member_commit(XirTaskSubscription *member,XirTask *task) {
     XirTaskGroup *group=member->group;
@@ -116,7 +157,8 @@ XR_FUNC XrXirCallStatus xir_task_scope_begin(XrXirTaskExecutor *executor,XrXirCa
     if(mode==2&&node->result!=XR_XIR_NEVER)return XR_XIR_CALL_UNSUPPORTED;
     XrXirCallStatus status=xir_call_scope_frame(view,&frame,&frontier);
     if(status!=XR_XIR_CALL_READY)return status;
-    if(executor->next_identity==UINT64_MAX||!task_pending_member_work(xr_xir_call_admission(view),4))
+    if(executor->next_identity==UINT64_MAX||!task_terminal_available(executor)||
+        !task_pending_member_work(xr_xir_call_admission(view),4))
         return XR_XIR_CALL_LIMIT;
     XrXirValueStatus allocation=XR_XIR_VALUE_OK;
     XirTaskGroup *group=xr_xir_domain_metadata_allocate(executor->config.domain,sizeof(*group),&allocation);
@@ -131,6 +173,7 @@ XR_FUNC XrXirCallStatus xir_task_scope_begin(XrXirTaskExecutor *executor,XrXirCa
     group->frontier=frontier;
     group->completion=task;group->isolated=mode==2;group->next=executor->groups;
     task->generation=executor->generation;task->identity=++executor->next_identity;
+    ++executor->pending_terminals;
     task->executor=executor;task->aggregation=group;atomic_store_explicit(&task->object.references,2,memory_order_relaxed);
     atomic_store_explicit(&task->state,XIR_TASK_PENDING,memory_order_release);
     executor->groups=group;*output=task_core_task_value(task);return XR_XIR_CALL_READY;
@@ -163,7 +206,7 @@ XR_FUNC XrXirCallStatus xir_task_scope_seal(XrXirTaskExecutor *executor,XrXirCal
     if(status!=XR_XIR_CALL_READY)return status;
     if(group->sealed)return XR_XIR_CALL_BAD_STATE;
     group->sealed=true;if(abandon)task_group_cancel_members(group);
-    task_group_complete(group);return XR_XIR_CALL_READY;
+    task_group_complete(group);task_group_flush(executor);return XR_XIR_CALL_READY;
 }
 XR_FUNC XrXirCallStatus xir_task_scope_observe(const XrXirValue *value,
     XrXirCall *call,uint64_t frame,uint64_t *failure_order) {
@@ -171,7 +214,7 @@ XR_FUNC XrXirCallStatus xir_task_scope_observe(const XrXirValue *value,
     *failure_order=0;
     XirTask *task=(XirTask *)(uintptr_t)value->payload;
     XirTaskGroup *group=task->aggregation;
-    if(!group)return XR_XIR_CALL_READY;
+    if(!group||group->kind)return XR_XIR_CALL_READY;
     if(group->owner!=call||group->frame!=frame||!group->published||group->pending)
         return XR_XIR_CALL_BAD_STATE;
     *failure_order=group->first_panic?group->first_panic_order:group->first_error_order;
@@ -180,7 +223,7 @@ XR_FUNC XrXirCallStatus xir_task_scope_observe(const XrXirValue *value,
 XR_FUNC XrXirCallStatus xir_task_scope_failure_order(XrXirTaskExecutor *executor,uint64_t *output) {
     if(!executor||!output||!task_executor_owner_current(executor)||task_executor_observing(executor))
         return XR_XIR_CALL_BAD_ARGUMENT;
-    if(executor->publication_order==UINT64_MAX)return XR_XIR_CALL_LIMIT;
+    if(executor->publication_order>=UINT64_MAX-executor->pending_terminals)return XR_XIR_CALL_LIMIT;
     *output=++executor->publication_order;return XR_XIR_CALL_READY;
 }
 XR_FUNC XrXirCallStatus xir_task_scope_cleanup(XrXirTaskExecutor *executor,
@@ -194,21 +237,23 @@ XR_FUNC XrXirCallStatus xir_task_scope_cleanup(XrXirTaskExecutor *executor,
         return XR_XIR_CALL_BAD_STATE;
     for(XirTaskGroup *group=executor->groups;group;group=group->next) {
         if(!task_pending_member_work(xr_xir_call_admission(view),1))return XR_XIR_CALL_LIMIT;
-        if(group->owner!=view->activation||group->frame!=frame||group->frontier!=frontier||group->departed)continue;
+        if(group->kind||group->owner!=view->activation||group->frame!=frame||group->frontier!=frontier||group->departed)continue;
         if(group->observed) {group->departed=true;return XR_XIR_CALL_READY;}
         XrXirValue lease=task_core_task_value(group->completion);
         XrXirValueStatus copied=xr_xir_value_copy(&lease,output);
         if(copied!=XR_XIR_VALUE_OK)return task_core_value_status(copied);
         group->sealed=true;group->departed=true;
-        task_group_cancel_members(group);task_group_complete(group);
+        task_group_cancel_members(group);task_group_complete(group);task_group_flush(executor);
         return XR_XIR_CALL_READY;
     }
     return XR_XIR_CALL_READY;
 }
 static void task_group_stop(XrXirTaskExecutor *executor) {
     for(XirTaskGroup *group=executor->groups;group;group=group->next) {
+        if(group->kind){group->cancel_requested=true;task_group_queue(group);continue;}
         group->sealed=true;task_group_cancel_members(group);task_group_complete(group);
     }
+    task_group_flush(executor);
 }
 static void task_group_dispose_all(XrXirTaskExecutor *executor) {
     while(executor->groups) {
@@ -218,9 +263,12 @@ static void task_group_dispose_all(XrXirTaskExecutor *executor) {
             XirTaskSubscription *next=member->next_member;XirTaskSubscription **link=&member->task->subscriptions;
             while(*link!=member) {XR_CHECK(*link,"a member keeps its original subscription");link=&(*link)->next_subscription;}
             *link=member->next_subscription;XrXirValue lease=task_core_task_value(member->task);xr_xir_value_drop(&lease);
-            xr_xir_domain_metadata_deallocate(executor->config.domain,member,sizeof(*member));member=next;
+            if(!group->kind)xr_xir_domain_metadata_deallocate(executor->config.domain,member,sizeof(*member));member=next;
         }
+        if(group->kind&&group->count)xr_xir_domain_metadata_deallocate(executor->config.domain,group->first,
+            group->count*sizeof(XirTaskSubscription));
         group->completion->aggregation=NULL;XrXirValue lease=task_core_task_value(group->completion);
         xr_xir_value_drop(&lease);xr_xir_domain_metadata_deallocate(executor->config.domain,group,sizeof(*group));
     }
 }
+#include "xxir_task_aggregate.inc.c"

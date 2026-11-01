@@ -40,7 +40,7 @@ typedef struct XirTask {
     XirTaskGroup *aggregation;
     XirTaskSubscription *subscriptions;
     XirTaskActivation activation;
-    uint64_t generation, identity;
+    uint64_t generation, identity, terminal_order;
     _Atomic(XirTaskState) state;
 } XirTask;
 typedef struct XrXirTaskExecutorConfig {
@@ -64,6 +64,10 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_spawn_from_view(XrXirTaskExecutor *
     XrXirCallView *view, XrXirType type, const XrXirCallRequest *request, XrXirValue *output);
 XR_FUNC XrXirCallStatus xir_task_scope_begin(XrXirTaskExecutor *executor,
     XrXirCallView *view,XrXirType type,uint32_t mode,XrXirValue *output);
+typedef enum XirTaskAggregateKind { XIR_TASK_AGGREGATE_ALL=1,XIR_TASK_AGGREGATE_FIRST=2 } XirTaskAggregateKind;
+/* Begin owns real subscriptions; the ordinary Task await performs the park. */
+XR_FUNC XrXirCallStatus xir_task_aggregate_begin(XrXirTaskExecutor *executor,
+    XrXirCallView *view,const XrXirValue *tasks,XrXirType result,XirTaskAggregateKind kind,XrXirValue *output);
 XR_FUNC XrXirCallStatus xir_task_spawn_scoped(XrXirTaskExecutor *executor,
     XrXirCallView *view,const XrXirValue *scope,XrXirType type,
     const XrXirCallRequest *request,XrXirValue *output);
