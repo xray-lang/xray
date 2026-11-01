@@ -10,6 +10,7 @@
 #include "xxir_view_access_entry.inc.c"
 #include "xxir_view_access_epoch.inc.c"
 #include "xxir_view_access_relation.inc.c"
+#include "xxir_view_types_internal.h"
 static XrXirStatus view_access_buffer_alias(ViewAccess *a,uint32_t *value) {
     uint32_t progress=0;
     while (*value>=a->body->parameter_count) {
@@ -28,7 +29,27 @@ static XrXirStatus view_access_buffer_source(ViewAccess *a,uint32_t value,uint32
     if (instruction>=a->body->instruction_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirInstruction *op=&a->body->instructions[instruction];
     ViewRootCheck *c=&a->resolver->check;
-    if (op->op!=XR_XIR_CALL || op->immediate<0 || (uint64_t)op->immediate>=c->module->function_count ||
+    const XrXirInstruction *producer=op;
+    if(op->op==XR_XIR_INVOKE_RESULT) {
+        if(op->immediate<0 || (uint64_t)op->immediate>=a->body->instruction_count)return XR_XIR_BAD_STRUCTURE;
+        producer=a->body->instructions+op->immediate;
+        if(producer->op!=XR_XIR_INVOKE || producer->type!=op->type ||
+            producer->targets[0]>=a->body->block_count || producer->targets[0]==producer->targets[1])return XR_XIR_BAD_TYPE;
+        const XrXirBlock *normal=a->body->blocks+producer->targets[0];
+        if(!normal->count || normal->first!=instruction)return XR_XIR_BAD_STRUCTURE;
+    }
+    if((producer->op==XR_XIR_CALL || producer->op==XR_XIR_INVOKE) && producer->immediate>=0 &&
+        (uint64_t)producer->immediate<c->module->function_count &&
+        c->module->declarations->functions[producer->immediate].native_callable==XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN) {
+        uint32_t site=(uint32_t)(producer-a->body->instructions);bool scoped=false;
+        XrXirStatus status=xir_compile_buffer_scoped_site(c->context,
+            (XirEffectInput){c->module,c->construction,a->cells?a->cells->control:NULL},a->function,site,&scoped);
+        if(status!=XR_XIR_OK)return status;
+        if(!scoped)return XR_XIR_BAD_TYPE;
+        *receiver=a->body->operands[producer->args[0]+2u];*known=true;return XR_XIR_OK;
+    }
+    op=producer;
+    if ((op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE) || op->immediate<0 || (uint64_t)op->immediate>=c->module->function_count ||
         op->args[1]!=1 || op->args[0]>=a->body->operand_count) return XR_XIR_OK;
     const XrXirBorrowReturn *row=xir_borrow_return_find(c->construction,(uint32_t)op->immediate);
     uint32_t argument=a->body->operands[op->args[0]];
@@ -59,11 +80,49 @@ static XrXirStatus view_access_buffer_source(ViewAccess *a,uint32_t value,uint32
 static XrXirStatus view_access_buffer_binding(ViewAccess *a,uint32_t receiver,uint32_t *cell,bool *present) {
     *present=false;ViewRootCheck *c=&a->resolver->check;
     XrXirStatus status=view_access_buffer_alias(a,&receiver);if (status!=XR_XIR_OK) return status;
+    if(xir_mem_buffer_ref(c->module->types,xr_xir_operand_type(a->body,receiver))) {
+        *cell=receiver;*present=true;return XR_XIR_OK;
+    }
     if (receiver<a->body->parameter_count) return XR_XIR_OK;
     const XrXirInstruction *read=&a->body->instructions[receiver-a->body->parameter_count];
     if (read->op!=XR_XIR_CELL_READ || !xr_xir_type_is_cell(c->module->types,xr_xir_operand_type(a->body,read->args[0])))
         return XR_XIR_OK;
     *cell=read->args[0];*present=true;return XR_XIR_OK;
+}
+static XrXirStatus view_access_buffer_pointer_binding(ViewAccess *a,uint32_t value,uint32_t *cell,bool *known) {
+    *known=false;
+    if(!view_pointer(a->resolver->check.module->types,xr_xir_operand_type(a->body,value)))return XR_XIR_OK;
+    uint32_t progress=0;
+    for(uint32_t n=0;value>=a->body->parameter_count;++n) {
+        XrXirStatus status=xir_receive_step(a->cells?a->cells->control:NULL,&progress);if(status!=XR_XIR_OK)return status;
+        if(n>=a->body->instruction_count || value-a->body->parameter_count>=a->body->instruction_count)return XR_XIR_BAD_STRUCTURE;
+        const XrXirInstruction *op=a->body->instructions+value-a->body->parameter_count;
+        if(op->op!=XR_XIR_COPY && op->op!=XR_XIR_OWNED_RETAIN && op->op!=XR_XIR_PTR_OFFSET && op->op!=XR_XIR_PTR_READONLY)break;
+        value=op->args[0];
+    }
+    uint32_t receiver=0;bool source=false;
+    XrXirStatus status=view_access_buffer_source(a,value,&receiver,&source);
+    return status!=XR_XIR_OK || !source?status:view_access_buffer_binding(a,receiver,cell,known);
+}
+/* The pointer supplies an address within this same proven Buffer binding.
+ * Acquisition freezes metadata aliases; it grants no pointee access while the
+ * resulting exclusive view is live. Ordinary later conflict checks stay active. */
+static XrXirStatus view_access_buffer_scope(ViewAccess *a,uint32_t *cell,bool *scoped) {
+    *scoped=false;const XrXirInstruction *op=a->body->instructions+a->instruction;
+    ViewRootCheck *c=&a->resolver->check;
+    if((op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE) || op->immediate<0 ||
+        (uint64_t)op->immediate>=c->module->function_count ||
+        c->module->declarations->functions[op->immediate].native_callable!=XR_NATIVE_CALLABLE_BUFFER_SLICE_MUT_BEGIN)return XR_XIR_OK;
+    bool site=false;XrXirStatus status=xir_compile_buffer_scoped_site(c->context,
+        (XirEffectInput){c->module,c->construction,a->cells?a->cells->control:NULL},a->function,a->instruction,&site);
+    if(status!=XR_XIR_OK)return status;
+    if(!site)return XR_XIR_BAD_TYPE;
+    uint32_t owner=a->body->operands[op->args[0]+2u],pointer=0;bool known=false;
+    status=view_access_buffer_alias(a,&owner);
+    if(status==XR_XIR_OK)status=view_access_buffer_pointer_binding(a,a->body->operands[op->args[0]],&pointer,&known);
+    if(status!=XR_XIR_OK)return status;
+    if(!known || owner!=pointer)return XR_XIR_BAD_VALUE;
+    *cell=owner;*scoped=true;return XR_XIR_OK;
 }
 
 static XrXirStatus view_access_pair(ViewAccess *a,const ViewAccessOrigin *left_origin,
@@ -152,6 +211,17 @@ static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner
     /* Shared owners never block a read; aggregate input identities do not
      * need expansion to establish this permission-independent relation. */
     if (!writable && view_access_shared(a,xr_xir_operand_type(a->body,owner))) return XR_XIR_OK;
+    if(writable&&!view && view_pointer(a->resolver->check.module->types,xr_xir_operand_type(a->body,owner))) {
+        uint32_t cell=0;bool scoped=false;XrXirStatus status=view_access_buffer_scope(a,&cell,&scoped);
+        if(status!=XR_XIR_OK)return status;
+        if(scoped) {
+            uint32_t current=value,borrowed=0;bool known=false;
+            status=view_access_buffer_alias(a,&current);
+            if(status==XR_XIR_OK && current==cell)status=view_access_buffer_pointer_binding(a,owner,&borrowed,&known);
+            if(status!=XR_XIR_OK)return status;
+            if(current==cell && known && borrowed==cell)return XR_XIR_OK;
+        }
+    }
     ViewAccessOrigin *left=NULL,*right=NULL;XrXirStatus status=view_access_origins(a,owner,&right);
     if (status == XR_XIR_OK && view)
         status = view_access_origins(a, value, &left);
@@ -387,6 +457,10 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
         return view_access_use(a,&event->before,source,op->op==XR_XIR_VIEW_SET,true,NULL);
     }
     bool call=op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT;
+    if(call) {
+        uint32_t cell=0;bool scoped=false;XrXirStatus status=view_access_buffer_scope(a,&cell,&scoped);
+        if(status!=XR_XIR_OK)return status;
+    }
     bool pointer=op->op==XR_XIR_PTR_LOAD || op->op==XR_XIR_PTR_STORE || op->op==XR_XIR_PTR_COPY || op->op==XR_XIR_PTR_EQ;
     bool receiver_read=false;
     if (op->op==XR_XIR_CALL && op->immediate>=0 && (uint64_t)op->immediate<a->resolver->check.module->function_count) {
