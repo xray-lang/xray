@@ -16,6 +16,8 @@
 #include "xxir_value_internal.h"
 #include "xxir_call_internal.h"
 typedef struct XrXirTaskExecutor XrXirTaskExecutor;
+typedef struct XirTaskGroup XirTaskGroup;
+typedef struct XirTaskSubscription XirTaskSubscription;
 typedef enum XirTaskState {
     XIR_TASK_PREPARING, XIR_TASK_PENDING, XIR_TASK_RUNNING, XIR_TASK_TERMINAL
 } XirTaskState;
@@ -35,6 +37,8 @@ typedef struct XirTask {
     XrXirTaskExecutor *executor;
     struct XirTask *active_next, *active_previous;
     XrXirCall *waiter_head, *waiter_tail;
+    XirTaskGroup *aggregation;
+    XirTaskSubscription *subscriptions;
     XirTaskActivation activation;
     uint64_t generation, identity;
     _Atomic(XirTaskState) state;
@@ -58,6 +62,15 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_spawn(XrXirTaskExecutor *executor, 
     const XrXirCallRequest *request, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_spawn_from_view(XrXirTaskExecutor *executor,
     XrXirCallView *view, XrXirType type, const XrXirCallRequest *request, XrXirValue *output);
+XR_FUNC XrXirCallStatus xir_task_scope_begin(XrXirTaskExecutor *executor,
+    XrXirCallView *view,XrXirType type,uint32_t mode,XrXirValue *output);
+XR_FUNC XrXirCallStatus xir_task_spawn_scoped(XrXirTaskExecutor *executor,
+    XrXirCallView *view,const XrXirValue *scope,XrXirType type,
+    const XrXirCallRequest *request,XrXirValue *output);
+XR_FUNC XrXirCallStatus xir_task_scope_seal(XrXirTaskExecutor *executor,
+    XrXirCallView *view,const XrXirValue *scope,bool abandon);
+/* Metadata identity of the exact active frame; it lends no state or permission. */
+XR_FUNC XrXirCallStatus xir_call_scope_frame(const XrXirCallView *view,uint64_t *output);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_poll(XrXirTaskExecutor *executor, uint64_t quantum);
 /* The instance owns its root Call; the executor only schedules the activation. */
 XR_FUNC bool xr_xir_task_executor_root_idle(const XrXirTaskExecutor *executor);

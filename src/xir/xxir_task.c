@@ -28,6 +28,7 @@ struct XrXirTaskExecutor {
     XrXirTaskExecutorConfig config;
     XrXirCallBudget *budget;
     XirTask *active;
+    XirTaskGroup *groups;
     XirGenerator *generators;
     XirTaskActivation *ready_head, *ready_tail;
     XirTaskActivation root;
@@ -367,8 +368,12 @@ static XrXirValueStatus task_core_task_prepare(XrXirTaskExecutor *executor, XrXi
     xr_xir_value_graph_end();
     return XR_XIR_VALUE_OK;
 }
+static void task_core_complete_wait(XrXirTaskExecutor *executor,XrXirCall *call);
+static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *,XrXirCallView *,XrXirType,
+    const XrXirCallRequest *,XrXirValue *,XirTaskSubscription *);
+#include "xxir_task_group.inc.c"
 static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirCallView *view, XrXirType type,
-    const XrXirCallRequest *request, XrXirValue *output) {
+    const XrXirCallRequest *request, XrXirValue *output,XirTaskSubscription *membership) {
     if (!executor || !request || !task_core_empty_value(output)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     if (executor->driving) {
@@ -432,10 +437,11 @@ static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirC
         "new child activation owns one non-reusable executor ticket");
     task->executor = executor; task->state = XIR_TASK_PENDING;
     /* One reference is the returned handle; the other is the executor running lease. */
-    atomic_store_explicit(&task->object.references, 2, memory_order_relaxed);
+    atomic_store_explicit(&task->object.references, membership?3:2, memory_order_relaxed);
     task->active_next = executor->active;
     if (executor->active) executor->active->active_previous = task;
     executor->active = task;
+    if(membership)task_group_member_commit(membership,task);
     task_core_enqueue(executor, &task->activation);
     *output = task_core_task_value(task);
     return XR_XIR_CALL_READY;
@@ -445,7 +451,7 @@ static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirC
 static XrXirCallStatus task_core_spawn(XrXirTaskExecutor *executor, XrXirCallView *view, XrXirType type,
     const XrXirCallRequest *request, XrXirValue *output) {
     xr_xir_value_graph_begin();
-    XrXirCallStatus status = task_core_spawn_inner(executor, view, type, request, output);
+    XrXirCallStatus status = task_core_spawn_inner(executor, view, type, request, output,NULL);
     xr_xir_value_graph_end();
     return status;
 }
@@ -536,6 +542,7 @@ static void task_core_finish_task(XrXirTaskExecutor *executor, XirTask *task) {
     task->executor = NULL;
     xr_xir_call_result_move(&prepared, &task->outcome);
     atomic_store_explicit(&task->state, XIR_TASK_TERMINAL, memory_order_release);
+    task_group_notify(executor,task);
     while (task->waiter_head) task_core_complete_wait(executor, task->waiter_head);
     XrXirValue running_lease = task_core_task_value(task); xr_xir_value_drop(&running_lease);
     xr_xir_value_graph_end();
@@ -791,6 +798,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_stop(XrXirTaskExecutor *executor) {
     if (!executor) return XR_XIR_CALL_BAD_ARGUMENT;
     if (task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     executor->stopping = true;
+    task_group_stop(executor);
     executor->external = NULL; executor->external_call_wake = 0;
     XrXirCallStatus final = XR_XIR_CALL_CANCEL_REQUESTED;
     if (executor->root.call) {
@@ -852,6 +860,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_free(XrXirTaskExecutor *executor, X
     XrXirTaskExecutorConfig config = executor->config;
     if (accounting) *accounting = *executor->budget;
     xr_xir_call_result_drop(&executor->failure);
+    task_group_dispose_all(executor);
     xr_xir_domain_metadata_deallocate(config.domain, executor, sizeof(*executor));
     xr_xir_compile_type_arena_drop(config.task_arena);
     xr_xir_compile_program_drop(config.program);
