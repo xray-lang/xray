@@ -1973,9 +1973,12 @@ XrXirCallStatus xr_xir_instance_function(XrXirCallView *view,XrXirType type,uint
 #include "xxir_instance_function_producer.inc.c"
 #include "xxir_instance_generator.inc.c"
 #include "xxir_instance_task_result.inc.c"
-XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type, uint32_t direct_entry,
-    const XrXirValue *arguments, uint32_t count, XrXirValue *output) {
+static XrXirCallStatus instance_task_spawn(XrXirCallView *view,const XrXirScopedSpawn *spawn,
+    const XrXirValue *scope,XrXirValue *output) {
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if(!spawn)return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirType task_type=spawn->type;uint32_t direct_entry=spawn->entry,count=spawn->count;
+    const XrXirValue *arguments=spawn->arguments;
     if (!output || !value_unit(*output) || (count && !arguments)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirInstance *instance = view_instance(view);
     if (!instance) return XR_XIR_CALL_BAD_STATE;
@@ -2010,7 +2013,34 @@ XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type,
     /* The executor owns one sealed worker table; a foreign metadata frame
      * cannot index it without a separate producer and invocation correspondence. */
     if (instance!=instance_current(instance)) return XR_XIR_CALL_BAD_STATE;
-    return xr_xir_task_executor_spawn_from_view(instance->executor, view, task_type, &request, output);
+    if(scope) {
+        return xir_task_spawn_scoped(instance->executor,view,scope,task_type,&request,output);
+    }
+    return xr_xir_task_executor_spawn_from_view(instance->executor,view,task_type,&request,output);
+}
+XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view,XrXirType task_type,uint32_t direct_entry,
+    const XrXirValue *arguments,uint32_t count,XrXirValue *output) {
+    const XrXirScopedSpawn spawn={task_type,direct_entry,arguments,count};
+    return instance_task_spawn(view,&spawn,NULL,output);
+}
+XR_FUNC XrXirCallStatus xr_xir_task_go_scoped(XrXirCallView *view,const XrXirValue *scope,
+    const XrXirScopedSpawn *spawn,XrXirValue *output) {
+    if(!scope)return XR_XIR_CALL_BAD_ARGUMENT;
+    return instance_task_spawn(view,spawn,scope,output);
+}
+XR_FUNC XrXirCallStatus xr_xir_task_scope_begin(XrXirCallView *view,XrXirType type,
+    uint32_t mode,XrXirValue *output) {
+    if(!instance_view_current(view))return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance=view_instance(view);
+    if(!instance||instance!=instance_current(instance)||xr_xir_call_cleanup_active(view->activation))
+        return XR_XIR_CALL_BAD_STATE;
+    return xir_task_scope_begin(instance->executor,view,type,mode,output);
+}
+XR_FUNC XrXirCallStatus xr_xir_task_scope_seal(XrXirCallView *view,const XrXirValue *scope,bool abandon) {
+    if(!instance_view_current(view))return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance=view_instance(view);
+    if(!instance||instance!=instance_current(instance))return XR_XIR_CALL_BAD_STATE;
+    return xir_task_scope_seal(instance->executor,view,scope,abandon);
 }
 XR_FUNC XrXirCallStatus xr_xir_task_cancel(XrXirCallView *view,const XrXirValue *task) {
     if (!view || !task || !instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;

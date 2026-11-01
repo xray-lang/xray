@@ -20,4 +20,20 @@ XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type,
     const XrXirValue *arguments, uint32_t count, XrXirValue *output);
 /* Request cancellation of this authenticated executor member without driving it. */
 XR_FUNC XrXirCallStatus xr_xir_task_cancel(XrXirCallView *view,const XrXirValue *task);
+typedef struct XrXirScopedSpawn {
+    XrXirType type;
+    uint32_t entry;
+    const XrXirValue *arguments;
+    uint32_t count;
+} XrXirScopedSpawn;
+/* Compiler-owned lexical tokens are real Tasks, but acquire members only from
+ * their original live frame. Ordinary go never inherits a lexical group. */
+XR_FUNC XrXirCallStatus xr_xir_task_scope_begin(XrXirCallView *view,
+    XrXirType type,uint32_t mode,XrXirValue *output);
+XR_FUNC XrXirCallStatus xr_xir_task_go_scoped(XrXirCallView *view,
+    const XrXirValue *scope,const XrXirScopedSpawn *spawn,XrXirValue *output);
+/* Sealing precedes one ordinary task wait. Abandon cancels children, without
+ * manufacturing a Cancelled result for the lexical join itself. */
+XR_FUNC XrXirCallStatus xr_xir_task_scope_seal(XrXirCallView *view,
+    const XrXirValue *scope,bool abandon);
 #endif // XXIR_TASK_H

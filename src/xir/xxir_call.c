@@ -290,6 +290,10 @@ XR_FUNC XrXirCallStatus xr_xir_call_execution_status(const XrXirCallView *view) 
     return call->cancel_requested && !cleanup_active(call) && call->abort_reason == XR_XIR_CALL_READY ?
         XR_XIR_CALL_CANCELLED : XR_XIR_CALL_READY;
 }
+XR_FUNC XrXirCallStatus xir_call_scope_frame(const XrXirCallView *view,uint64_t *output) {
+    if(!output||!xr_xir_call_admission(view))return XR_XIR_CALL_BAD_ARGUMENT;
+    *output=view->activation->top->epoch;return XR_XIR_CALL_READY;
+}
 
 static XrXirCallResult call_result(XrXirCallStatus status) {
     return (XrXirCallResult) {.status=status};
