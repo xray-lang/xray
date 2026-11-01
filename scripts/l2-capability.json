@@ -57,7 +57,8 @@
         "xir_checked_previous112",
         "xir_checked_previous113",
         "xir_checked_previous114",
-        "xir_checked_previous115"
+        "xir_checked_previous115",
+        "xir_checked_previous116"
       ],
       "targets": [
         "test_xir_cleanup_replaced_sdk_reader",
