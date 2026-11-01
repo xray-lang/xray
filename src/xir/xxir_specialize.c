@@ -124,7 +124,7 @@ static XrXirType spec_node_raw(SpecContext *c, XrXirTypeNode signature) {
             if (!spec_progress(c)) return XR_XIR_UNIT;
             if (s->nominal.arguments[a] != signature.nominal.arguments[a]) same = false;
         }
-        for (uint32_t p = 0; p < s->parameter_count; ++p) {
+        for (uint32_t p = 0; p < xr_xir_type_parameter_slots(s); ++p) {
             if (!spec_progress(c)) return XR_XIR_UNIT;
             if (s->parameters[p].type != signature.parameters[p].type ||
                 s->parameters[p].mode != signature.parameters[p].mode) same = false;

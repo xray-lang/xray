@@ -241,7 +241,7 @@ static bool source_library_intern_types(SourceContext *ctx, SourceLibraryUnit *u
         } else if (in->kind==XR_XIR_TYPE_MAP || in->kind==XR_XIR_TYPE_TASK || in->kind==XR_XIR_TYPE_ITERATOR) {
             if (!source_library_type(ctx,unit,in->element,&out.element) ||
                 !source_library_type(ctx,unit,in->result,&out.result)) return false;
-        } else if (in->kind==XR_XIR_TYPE_ARRAY || in->kind==XR_XIR_TYPE_SET || in->kind==XR_XIR_TYPE_CELL ||
+        } else if (in->kind==XR_XIR_TYPE_FIXED_ARRAY || in->kind==XR_XIR_TYPE_ARRAY || in->kind==XR_XIR_TYPE_SET || in->kind==XR_XIR_TYPE_CELL ||
             in->kind==XR_XIR_TYPE_NULLABLE || in->kind==XR_XIR_TYPE_ATOMIC || in->kind==XR_XIR_TYPE_TASK ||
             in->kind==XR_XIR_TYPE_SLICE || (in->kind == XR_XIR_TYPE_MUT_SLICE || in->kind == XR_XIR_TYPE_ITERATOR || in->kind == XR_XIR_TYPE_CHANNEL || in->kind == XR_XIR_TYPE_PTR || in->kind == XR_XIR_TYPE_MUT_PTR)) {
             if (!source_library_type(ctx,unit,in->element,&out.element)) return false;

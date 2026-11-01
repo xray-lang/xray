@@ -100,6 +100,12 @@ XR_FUNC XrXirType xr_xir_task_element(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_task_parameter_supported(const XrXirTypes *types, XrXirType type);
 XR_FUNC XrXirType xr_xir_atomic_element(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_array(const XrXirTypes *types, XrXirType type);
+/* Fixed byte lengths are scalar metadata, never repeated parameter rows. */
+static inline uint32_t xr_xir_type_parameter_slots(const XrXirTypeNode *node) {
+    return node && node->kind!=XR_XIR_TYPE_FIXED_ARRAY ? node->parameter_count : 0;
+}
+XR_FUNC bool xr_xir_type_is_fixed_array(const XrXirTypes *types, XrXirType type);
+XR_FUNC uint32_t xr_xir_fixed_array_length(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_nullable(const XrXirTypes *types, XrXirType type);
 XR_FUNC XrXirType xr_xir_nullable_element(const XrXirTypes *types, XrXirType type);
 /* Bounded closed class storage capability; grants no access or generic proof. */

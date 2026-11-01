@@ -634,6 +634,7 @@ static bool source_query_parameters(SourceContext *ctx, uint32_t declaration) {
     return true;
 }
 #include "xxir_source_intern.inc.c"
+#include "xxir_source_fixed_bytes.inc.c"
 static XrXirStatus source_hir_tuple_intern(void *owner,const XrXirTypeNode *node,XrXirType *out) {
     SourceContext *ctx=owner;XrXirTypeNode received=*node;
     XrXirCallableParameter *fields=source_alloc(ctx,node->parameter_count,sizeof(*fields));
@@ -775,6 +776,7 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
     }
     case XR_TREF_FUNCTION: return source_callable_type(ctx, ref, type);
     case XR_TREF_TUPLE: return source_tuple_type_ref(ctx,ref,type);
+    case XR_TREF_FIXED_ARRAY: return source_fixed_type_ref(ctx,ref,type);
     case XR_TREF_OBJECT: return source_record_type_ref(ctx,ref,type);
     case XR_TREF_UNIT: *type = XR_XIR_UNIT; return true;
     case XR_TREF_BOOL: *type = XR_XIR_BOOL; return true;
@@ -1857,6 +1859,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
             context.type = xr_xir_nullable_element(&ctx->types, context.type);
         return source_hash_literal(ctx, node, context, value);
     case AST_OBJECT_LITERAL: return source_record_literal(ctx,node,context,value);
+    case AST_FIXED_BYTES_LITERAL: return source_fixed_literal(ctx,node,value);
     case AST_ARRAY_LITERAL:
         if (context.present && xr_xir_type_is_nullable(&ctx->types,context.type))
             context.type = xr_xir_nullable_element(&ctx->types,context.type);

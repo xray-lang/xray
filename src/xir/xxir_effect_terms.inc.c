@@ -147,7 +147,7 @@ static bool effect_term_same( const XrXirTypeNode *a, const XrXirTypeNode *b) {
         a->result != b->result || a->parameter_count != b->parameter_count ||
         a->nominal.declaration != b->nominal.declaration ||
         a->nominal.argument_count != b->nominal.argument_count) return false;
-    for (uint32_t i = 0; i < a->parameter_count; ++i)
+    for (uint32_t i = 0; i < xr_xir_type_parameter_slots(a); ++i)
         if (a->parameters[i].type != b->parameters[i].type || a->parameters[i].mode != b->parameters[i].mode)
             return false;
     for (uint32_t i = 0; i < a->nominal.argument_count; ++i)

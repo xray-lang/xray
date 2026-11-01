@@ -55,7 +55,7 @@ static bool graph_storage_edges(StorageCursor *cursor, GraphEdgeVisitor visit, v
 static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void *context,
     GraphEdgeBudget *budget) {
     if (!graph_edge_work(budget)) return false;
-    if (object->type == XR_XIR_STRING || object->kind == XIR_OBJECT_BUFFER_STORAGE || object->kind == XR_XIR_TYPE_ATOMIC ||
+    if (object->type == XR_XIR_STRING || object->kind == XIR_OBJECT_BUFFER_STORAGE || object->kind==XR_XIR_TYPE_FIXED_ARRAY || object->kind == XR_XIR_TYPE_ATOMIC ||
         object->kind==XR_XIR_TYPE_PTR || object->kind==XR_XIR_TYPE_MUT_PTR) return true;
     if (object->kind==XR_XIR_TYPE_SLICE || object->kind==XR_XIR_TYPE_MUT_SLICE) {
         XirView *view=(XirView *)object;

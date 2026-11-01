@@ -1872,9 +1872,9 @@ static void emit_types(CBuffer *buffer, const XrXirTypes *types, const char *pre
         const XrXirTypeNode *node = &types->nodes[i];
         emit_type_ids(buffer, prefix, i, "nominal_arguments", node->nominal.arguments, node->nominal.argument_count);
         emit_type_ids(buffer, prefix, i, "nominal_types", node->nominal.fields, node->nominal.field_count);
-        if (!node->parameter_count) continue;
+        if (!xr_xir_type_parameter_slots(node)) continue;
         EMIT_FORMAT(buffer, et_952ab3861223aaad, "static const XrXirCallableParameter %s_type_parameters_%u[] = {", prefix, i);
-        for (uint32_t p = 0; p < node->parameter_count && ((buffer)->status == XR_XIR_OK); ++p)
+        for (uint32_t p = 0; p < xr_xir_type_parameter_slots(node) && ((buffer)->status == XR_XIR_OK); ++p)
             append(buffer, "%s{(XrXirType) %u, %uu}", p ? ", " : "", (uint32_t) node->parameters[p].type, node->parameters[p].mode);
         EMIT_LITERAL(buffer, "};\n");
     }
@@ -1882,7 +1882,7 @@ static void emit_types(CBuffer *buffer, const XrXirTypes *types, const char *pre
     for (uint32_t i = 0; i < types->count && ((buffer)->status == XR_XIR_OK); ++i) {
         const XrXirTypeNode *node = &types->nodes[i];
         append(buffer, "    {%uu, (XrXirType) %u, ", node->kind, (uint32_t) node->element);
-        if (node->parameter_count) append(buffer, "%s_type_parameters_%u", prefix, i); else EMIT_LITERAL(buffer, "NULL");
+        if (xr_xir_type_parameter_slots(node)) append(buffer, "%s_type_parameters_%u", prefix, i); else EMIT_LITERAL(buffer, "NULL");
         append(buffer, ", %uu, (XrXirType) %u, %uu, %uu, {%uu, ", node->parameter_count,
             (uint32_t) node->result, node->flags, node->parameter_span, node->nominal.declaration);
         if (node->nominal.argument_count) append(buffer, "%s_nominal_arguments_%u", prefix, i); else EMIT_LITERAL(buffer, "NULL");

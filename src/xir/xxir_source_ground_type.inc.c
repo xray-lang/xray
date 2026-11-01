@@ -11,6 +11,10 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return node==NULL;
     if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"ground type collection depth exhausted");
     if (node->type==AST_GROUPING) return source_ground_type(ctx,node->as.grouping,depth+1,output);
+    if(node->type==AST_FIXED_BYTES_LITERAL) {
+        if(!source_fixed_literal_type(ctx,node,&output->type))return false;
+        output->present=true;return true;
+    }
     if (node->type==AST_COPY_EXPR) return source_ground_type(ctx,node->as.unary.operand,depth+1,output);
     if (node->type==AST_MOVE_EXPR) return source_ground_type(ctx,node->as.move_expr.expr,depth+1,output);
     if (node->type==AST_UNSAFE_EXPR) {
@@ -73,6 +77,8 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
         if (!source_ground_type(ctx,node->as.index_get.array,depth+1,&receiver)) return false;
         if (receiver.present && xr_xir_type_is_array(&ctx->types,receiver.type))
             *output=(SourceExpectedType){true,xr_xir_array_element(&ctx->types,receiver.type), false, false};
+        if(receiver.present && xr_xir_type_is_fixed_array(&ctx->types,receiver.type))
+            *output=(SourceExpectedType){true,XR_XIR_U8,false,false};
         if (receiver.present && xr_xir_type_is_pointer(&ctx->types,receiver.type))
             *output=(SourceExpectedType){true,XR_XIR_U8,false,false};
         uint32_t kind=0;XrXirType element=XR_XIR_UNIT;
