@@ -111,7 +111,13 @@
         "src/xir/xxir_call_select*",
         "src/xir/xxir_call_channel.inc.c",
         "src/xir/xxir_channel_call_timing.inc.c",
-        "src/xir/xxir_call.c"
+        "src/xir/xxir_call.c",
+        "tests/unit/xir/test_xir_task_scope.c",
+        "tests/unit/xir/task_scope.cmake",
+        "tests/unit/xir/test_xir_call_select.c",
+        "tests/unit/xir/call_select.cmake",
+        "tests/unit/xir/test_xir_channel_select.c",
+        "tests/unit/xir/xir_channel_select_fixture.h"
       ],
       "reason": "Public slots, records, JSON float and Range complete Source/Catalog/VM/native receivers.",
       "tests": [
@@ -181,7 +187,8 @@
         "xir_fixed_bytes_source",
         "xir_fixed_bytes_native",
         "test_xir_channel_select",
-        "test_xir_call_select"
+        "test_xir_call_select",
+        "test_xir_task_scope"
       ],
       "targets": [
         "test_xir_json_float",
@@ -238,7 +245,8 @@
         "test_xir_fixed_bytes_source",
         "test_xir_fixed_bytes_native",
         "test_xir_channel_select",
-        "test_xir_call_select"
+        "test_xir_call_select",
+        "test_xir_task_scope"
       ]
     },
     "frontend": {
@@ -252,7 +260,13 @@
         "src/xir/xcore_declarations.xr",
         "src/xir/xxir_core_source*",
         "src/xir/xxir_result_binders.inc.c",
-        "tests/unit/xir/*assert_throws*"
+        "tests/unit/xir/*assert_throws*",
+        "tests/fixtures/xir_task_scope_source/*",
+        "tests/unit/xir/test_xir_task_scope_source.c",
+        "tests/unit/xir/xir_task_scope_boundary_cases.h",
+        "tests/unit/xir/task_scope_source.cmake",
+        "tests/unit/xir/*go_closure*",
+        "tests/unit/xir/*scope_syntax*"
       ],
       "reason": "HIR and complete Source language-family consumers.",
       "tests": [
@@ -319,7 +333,12 @@
         "xir_stringable_source",
         "xir_stringable_native",
         "test_xir_move_source",
-        "test_xir_move_native"
+        "test_xir_move_native",
+        "xir_go_closure",
+        "xir_go_closure_native",
+        "xir_scope_syntax",
+        "xir_task_scope_source",
+        "xir_task_scope_source_native"
       ],
       "targets": [
         "test_source_nullable_print",
@@ -367,7 +386,12 @@
         "test_xir_stringable_source",
         "test_xir_stringable_native",
         "test_xir_move_source",
-        "test_xir_move_native"
+        "test_xir_move_native",
+        "test_xir_go_closure",
+        "test_xir_go_closure_native",
+        "test_xir_scope_syntax",
+        "test_xir_task_scope_source",
+        "test_xir_task_scope_source_native"
       ]
     },
     "errors-cleanup": {
