@@ -98,6 +98,10 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     if (call && member->as.member_access.object && member->as.member_access.object->type==AST_VARIABLE) {
         SourceName *space=visible_name(ctx,member->as.member_access.object->as.variable.name);
         if (space && space->kind==SOURCE_MODULE) {
+            if (source_mem_module(ctx,space->module) &&
+                source_text_same(ctx,node,member->as.member_access.name,"withSliceMut")) {
+                *output=(SourceExpectedType){true,XR_XIR_UNIT,false,false};return true;
+            }
             SourceName *target=imported_declaration(ctx,space,member->as.member_access.name);
             if (!target) return false;
             if (target->kind==SOURCE_FUNCTION && target->index<ctx->function_count &&
