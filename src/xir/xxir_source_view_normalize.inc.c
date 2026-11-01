@@ -302,7 +302,7 @@ static XrXirStatus source_view_normalize(SourceContext *ctx,const XrXirModule *m
     SourceRootQuery *queries=source_view_queries(ctx,n);if (ctx->diagnostic.status!=XR_XIR_OK) goto source_failure;
     XrXirModule replacement=*module;replacement.functions=functions;
     if (!source_view_construction(ctx,n,&construction)) goto source_failure;
-    status=xir_compile_view_prepare_ordinary(&ctx->compile,&replacement,construction,diagnostic);
+    status=xir_compile_view_prepare_ordinary(&ctx->compile,(XirEffectInput){&replacement,construction,ctx->request},diagnostic);
     for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f)
         if (bodies[f].initialization_regions)
             status=xr_xir_compile_initialization_check(&ctx->compile,&replacement,f,bodies[f].initialization_regions,diagnostic);

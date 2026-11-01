@@ -9,11 +9,12 @@
 #ifndef XXIR_VIEW_PREPARE_INTERNAL_H
 #define XXIR_VIEW_PREPARE_INTERNAL_H
 #include "xxir_construction.h"
+#include "xxir_effect_input_internal.h"
 /* Reuses the complete ordinary module/type/declaration/function/SSA prefix of
  * the production verifier, including cleanup, panic and initialization rules.
  * No Artifact, effects, Cell provenance, borrowed permission or lifetime proof
  * is published. The producer must keep this generation immutable during its
  * analysis and repeat full admission after any rewrite. */
 XR_FUNC XrXirStatus xir_compile_view_prepare_ordinary(const XrXirCompileContext *context,
-    const XrXirModule *module,const XrXirConstruction *construction,XrXirDiagnostic *diagnostic);
+    XirEffectInput input,XrXirDiagnostic *diagnostic);
 #endif // XXIR_VIEW_PREPARE_INTERNAL_H

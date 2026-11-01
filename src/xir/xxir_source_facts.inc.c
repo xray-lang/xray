@@ -128,8 +128,8 @@ static XrXirStatus source_facts_match(const XrXirCompileContext *context,
     const XrXirArtifact *artifact,XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
     if (!artifact) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=source_facts_input_match(context,artifact,artifact->source_facts, control);
-    if (status==XR_XIR_OK) status=xr_xir_compile_verify_source_effects_v2(context,
-        &artifact->module,artifact->construction,artifact->source_facts->effects,diagnostic);
+    if (status==XR_XIR_OK) status=xir_compile_verify_source_effects_input(context,
+        (XirEffectInput){&artifact->module,artifact->construction,control},artifact->source_facts->effects,diagnostic);
     if (status==XR_XIR_OK) status=xir_effects_source_terminal_input(context,(XirEffectInput){&artifact->module,artifact->construction,control},artifact->source_facts->effects);
     if (status==XR_XIR_OK) status=xr_xir_compile_layout_match_verified(artifact);
     if (status==XR_XIR_OK) status=xir_receive_poll(control);
@@ -144,8 +144,8 @@ static XrXirStatus source_facts_build(XrXirArtifact *artifact,XrXirDiagnostic *d
         return XR_XIR_BAD_STRUCTURE;
     const XrXirCompileContext *context=&artifact->context;
     XrXirEffects *effects=NULL;
-    XrXirStatus status=xr_xir_compile_verify_owned_effects_v2(context,&artifact->module,
-        artifact->construction,&effects,diagnostic);
+    XrXirStatus status=xir_compile_verify_owned_effects_input(context,
+        (XirEffectInput){&artifact->module,artifact->construction,control},&effects,diagnostic);
     XirSourceFacts *facts=status==XR_XIR_OK?xir_type_copy_zero(context,1,sizeof(*facts),&status,control):NULL;
     if (status==XR_XIR_OK && !facts) status=XR_XIR_OUT_OF_MEMORY;
 

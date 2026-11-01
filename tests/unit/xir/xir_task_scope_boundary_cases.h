@@ -2,6 +2,7 @@
  * New BUILT bodies borrow the genuine Source declaration and Construction
  * owners only until the complete checker has independently cloned them. */
 #include "xir/xxir_internal.h"
+#include "xir/xxir_view_prepare_internal.h"
 #include "base/xmalloc.h"
 typedef struct ScopeCancel {unsigned calls,stop;} ScopeCancel;
 static bool scope_cancel_later(const void *pointer) {
@@ -56,6 +57,11 @@ static void scope_raw_controls(const XrXirCompileContext *context) {
             CHECK(status==XR_XIR_CANCELLED&&state.calls==state.stop&&issue.function==run&&issue.instruction==spawn);
             CHECK(held(context->resources)==baseline&&!output);
             CHECK(xir_compile_structure_verify_input(context,(XirEffectInput){&built,construction,NULL},&issue)==XR_XIR_OK);
+            state.calls=0;control=(XrCompileRequestControl){0};
+            CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+            CHECK(xir_compile_view_prepare_ordinary(context,(XirEffectInput){&built,construction,&control},&issue)==XR_XIR_CANCELLED);
+            CHECK(issue.function==run&&issue.instruction==spawn&&held(context->resources)==baseline);
+            CHECK(xir_compile_view_prepare_ordinary(context,(XirEffectInput){&built,construction,NULL},&issue)==XR_XIR_OK);
         } else CHECK(status==XR_XIR_OK&&state.calls<state.stop);
         CHECK(held(context->resources)==baseline);
         identities[run].promises|=XR_XIR_FUNCTION_NO_SUSPEND;
@@ -76,4 +82,45 @@ static void scope_raw_controls(const XrXirCompileContext *context) {
         xr_xir_compile_artifact_free(output);CHECK(held(context->resources)==baseline);xr_free(ops);
     }
     xr_free(identities);xr_free(functions);xr_xir_compile_source_result_free(&source);
+}
+static void scope_receiving_controls(const XrXirCompileContext *context) {
+    char text[8192];size_t length=0;
+    const char *head="fn worker(){}\nfn large(flag:bool){scope{go worker();\n";
+    memcpy(text,head,strlen(head));length=strlen(head);
+    for(uint32_t i=0;i<80;++i) {
+        const char *branch="if(flag){go worker()}\n";
+        CHECK(strlen(branch)<sizeof(text)-length);memcpy(text+length,branch,strlen(branch));length+=strlen(branch);
+    }
+    CHECK(4<sizeof(text)-length);memcpy(text+length,"}}\n",4);
+    XrXirSourceResult source={0};CHECK(check(context,text,&source,NULL)==XR_XIR_OK);
+    const XrXirModule *module=xr_xir_compile_artifact_module(source.checked);
+    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(source.checked);
+    uint32_t large=UINT32_MAX;
+    for(uint32_t f=0;f<module->function_count;++f)
+        if(module->functions[f].name_length==5&&!memcmp(module->functions[f].name,"large",5))large=f;
+    CHECK(large!=UINT32_MAX);uint64_t baseline=held(context->resources);
+    ScopeCancel state={0,2};XrCompileRequestOptions options={scope_cancel_later,&state,XR_COMPILE_DEADLINE_NONE,0};
+    XrCompileRequestControl control={0};CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    XrXirEffects *effects=NULL;XrXirDiagnostic issue={0};
+    CHECK(xir_compile_verify_owned_effects_input(context,(XirEffectInput){module,construction,&control},&effects,&issue)==XR_XIR_CANCELLED);
+    CHECK(!effects&&issue.function==large&&issue.instruction<module->functions[large].instruction_count&&held(context->resources)==baseline);
+    CHECK(xir_compile_verify_owned_effects_input(context,(XirEffectInput){module,construction,NULL},&effects,&issue)==XR_XIR_OK&&effects);
+    xr_xir_compile_effects_free(effects);CHECK(held(context->resources)==baseline);
+    XirSourceFacts *facts=NULL;CHECK(xir_source_facts_acquire(source.checked,&facts,&issue,NULL)==XR_XIR_OK&&facts);
+    state.calls=0;control=(XrCompileRequestControl){0};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xir_compile_verify_source_effects_input(context,(XirEffectInput){module,construction,&control},xir_source_facts_effects(facts),&issue)==XR_XIR_CANCELLED);
+    CHECK(issue.function==large&&issue.instruction<module->functions[large].instruction_count);
+    CHECK(xir_compile_verify_source_effects_input(context,(XirEffectInput){module,construction,NULL},xir_source_facts_effects(facts),&issue)==XR_XIR_OK);
+    xir_source_facts_release(facts);CHECK(held(context->resources)==baseline);
+    XrXirArtifact *closed=NULL,*lowered=NULL;
+    CHECK(xr_xir_compile_specialize(source.checked,&closed,&issue,NULL)==XR_XIR_OK&&closed);
+    baseline=held(context->resources);state.calls=0;control=(XrCompileRequestControl){0};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
+    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_compile_lower(closed,&target,&control,&lowered,&issue)==XR_XIR_CANCELLED&&!lowered);
+    CHECK(held(context->resources)==baseline);
+    CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,&issue)==XR_XIR_OK&&lowered);
+    xr_xir_compile_artifact_free(lowered);CHECK(held(context->resources)==baseline);
+    xr_xir_compile_artifact_free(closed);xr_xir_compile_source_result_free(&source);
 }

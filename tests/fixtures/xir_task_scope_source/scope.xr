@@ -1,4 +1,7 @@
 const total = Atomic(0)
+const initTotal = Atomic(0)
+scope { go fn() { initTotal.add(42) }() }
+assert(initTotal.load() == 42)
 fn worker(value: i64) { total.add(value) }
 fn failed() { assert(false) }
 enum WorkError { Failed }

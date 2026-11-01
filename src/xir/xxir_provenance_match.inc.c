@@ -887,7 +887,7 @@ XrXirStatus xr_xir_compile_provenance_functions_match(const XrXirCompileContext 
  * Source, permissions and destination correspondence still run every time. */
 XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *context,
     const XrXirModule *destination, const XrXirProvenance *instance,
-    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects,XrCompileRequestControl *control,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !instance ||
         !xir_effect_kind_is_closed(instance->kind) || !instance->source) {
         if (diagnostic) *diagnostic=(XrXirDiagnostic){XR_XIR_BAD_STRUCTURE,
@@ -899,10 +899,10 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *
         source->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
     XrXirEffects *effects=NULL;
     XrXirStatus status=source_effects && !source->module.provenance ?
-        xir_compile_verify_raw_source_effects(context,&source->module,source->construction,source_effects,diagnostic) : source_effects ?
-        xr_xir_compile_verify_source_effects_v2(context,&source->module,source->construction,source_effects,diagnostic) :
-        templated ? xr_xir_compile_verify_owned_effects_v2(context,&source->module,source->construction,&effects,diagnostic) :
-        xr_xir_compile_verify_v2(context,&source->module,source->construction,diagnostic);
+        xir_compile_verify_raw_source_effects_input(context,(XirEffectInput){&source->module,source->construction,control},source_effects,diagnostic) : source_effects ?
+        xir_compile_verify_source_effects_input(context,(XirEffectInput){&source->module,source->construction,control},source_effects,diagnostic) :
+        templated ? xir_compile_verify_owned_effects_input(context,(XirEffectInput){&source->module,source->construction,control},&effects,diagnostic) :
+        xir_compile_verify_effects_input(context,(XirEffectInput){&source->module,source->construction,control},NULL,diagnostic);
     if (status==XR_XIR_OK)
         status=provenance_functions_match_owned(context,&source->module,destination,instance,
             templated ? (source_effects ? source_effects : effects) : NULL,diagnostic);

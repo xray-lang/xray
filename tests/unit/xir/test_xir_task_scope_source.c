@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"task scope %d: %s\n",__LINE__,#c);exit(1);}}while(0)
+#include "xir_task_initializer_slot_controls.h"
 static uint64_t held(XrCompileResources *resources) {
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(resources,&stats)==XR_COMPILE_RESOURCE_OK);
     return stats.held_bytes;
@@ -39,6 +40,7 @@ static void execute(XrXirProgram *program,const uint32_t ids[2]) {
         CHECK(result.type==XR_XIR_I64 && result.payload==(n?42u:0u));xr_xir_value_drop(&result);
     }
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+    CHECK(initializer_slot_controls==4);
 }
 #if defined(XR_TASK_SCOPE_SOURCE_NATIVE)
 XR_DATA const XrXirProgramSpec task_scope_source_program;
@@ -126,9 +128,11 @@ int main(int argc,char **argv) {
         xr_xir_compile_c_source_free(&generated);xr_xir_compile_artifact_free(code);
     } else {
         CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK && !code);execute(program,ids);
-        xr_xir_compile_program_drop(program);program=NULL;rejections(&context);scope_raw_controls(&context);
+        xr_xir_compile_program_drop(program);program=NULL;rejections(&context);scope_raw_controls(&context);scope_receiving_controls(&context);
     }
 #endif
     xr_xir_compile_program_drop(program);CHECK(held(context.resources)==before);
-    xr_compile_resources_release(context.resources);puts("Lexical groups, pending exits and retired metadata PASS");return 0;
+    xr_compile_resources_release(context.resources);
+    CHECK(!runtime_live&&!runtime_bytes);xr_free(runtime_owned);runtime_owned=NULL;runtime_owned_capacity=0;
+    puts("Lexical groups, pending exits and retired metadata PASS");return 0;
 }

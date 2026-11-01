@@ -25,7 +25,7 @@ static const XrXirModule *source_history_module(SourceContext *ctx,const SourceH
         unit->entry_module!=module->declarations->root_module) {
         source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"history Checked owner, stage or module closure disagrees");return NULL;
     }
-    XrXirStatus status=xr_xir_compile_artifact_verify(unit->checked,NULL);
+    XrXirStatus status=xir_artifact_verify(unit->checked,NULL,ctx->request);
     if (status!=XR_XIR_OK) {source_fail(ctx,NULL,status,"history Checked verification failed");return NULL;}
     return module;
 }

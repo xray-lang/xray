@@ -22,7 +22,7 @@ static XrXirCtfeStatus ctfe_batch_received(const XirCtfeBatchRequest *request,Xr
         if (output[i].type || output[i].reserved || output[i].payload) return XR_XIR_CTFE_BAD_ARGUMENT;
     XrXirCtfeStatus status=ctfe_control_poll(control);
     if (status!=XR_XIR_CTFE_OK) return status;
-    status=ctfe_compile_status(xr_xir_compile_artifact_verify(artifact,NULL));
+    status=ctfe_compile_status(xir_artifact_verify(artifact,NULL,control));
     if (status!=XR_XIR_CTFE_OK) return status;
     for (uint32_t i=0;i<request->count;++i) {
 
