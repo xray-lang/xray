@@ -2040,6 +2040,7 @@ XrXirAction xr_xir_instance_panic_land(XrXirCallView *view, void *frame, XrXirAc
 #include "xxir_pointer.h"
 
 #include "xxir_instance_hash.inc.c"
+#include "xxir_instance_memory.inc.c"
 
 XR_FUNC XrXirCallStatus xr_xir_instance_pointer(XrXirCallView *view,XrXirOp operation,
     XrXirType type,const XrXirValue *arguments,uint32_t count,XrXirValue *output) {
@@ -2095,7 +2096,8 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
     XrXirType error=xir_native_callable_error(program->types,id);
     if (entry->resume!=xr_xir_instance_native_callable || entry->state_bytes!=sizeof(XrXirValue) ||
         entry->release!=xr_xir_instance_native_callable_release || entry->environment || entry->flags || entry->cleanup_owner ||
-        !view->state || (uintptr_t)view->state%_Alignof(XrXirValue) || view->argument_count!=entry->parameter_count || !view->arguments ||
+        !view->state || (uintptr_t)view->state%_Alignof(XrXirValue) || view->argument_count!=entry->parameter_count ||
+        (entry->parameter_count && !view->arguments) ||
         !xir_native_callable_types(id,program->types,entry->parameters,entry->parameter_count,entry->result,error)) goto failed;
     for (uint32_t p=0;p<entry->parameter_count;++p)
         if (!xr_xir_value_argument(&view->arguments[p],view->arena,entry->parameters[p])) goto failed;
@@ -2114,18 +2116,9 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
             bool equal=false;converted=xir_crypto_timing_equal(&view->arguments[0],&view->arguments[1],xr_xir_call_admission(view),&equal);
             if(converted==XR_XIR_VALUE_OK)*value=(XrXirValue){XR_XIR_BOOL,0,equal};
         }
-    } else if (id>=XR_NATIVE_CALLABLE_BUFFER_ALLOCATE && id<=XR_NATIVE_CALLABLE_BUFFER_LENGTH) {
+    } else if (xir_mem_native_id(id)) {
         if (!xir_buffer_storage_scope(program->declarations,index)) goto failed;
-        if (id==XR_NATIVE_CALLABLE_BUFFER_LENGTH) {
-            int64_t length=0;converted=xr_xir_buffer_storage_length(&view->arguments[0],&length);
-            if (converted==XR_XIR_VALUE_OK) *value=(XrXirValue){XR_XIR_I64,0,length};
-        } else {
-            int64_t alignment=id==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ALIGNED ? view->arguments[1].payload : 0;
-            if (id==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ALIGNED &&
-                (alignment<(int64_t)sizeof(void *) || (alignment&(alignment-1)))) converted=XR_XIR_VALUE_BAD_ARGUMENT;
-            else converted=xr_xir_buffer_storage_new(instance->domain,view->arguments[0].payload,alignment,
-                id==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ZEROED,value);
-        }
+        converted=instance_memory_call(instance,view,id,entry->result,value);
     } else {
         converted=xr_xir_call_view_access(view,&access);
         if (converted==XR_XIR_VALUE_OK) converted=id==XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID ?

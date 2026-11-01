@@ -28,7 +28,7 @@ static inline bool xir_mem_native_term(const XrXirTypes *types,XrNativeTypeTerm 
     case XR_NATIVE_TERM_BUFFER_STORAGE:return type==XR_XIR_BUFFER_STORAGE;
     case XR_NATIVE_TERM_SLICE_U8:case XR_NATIVE_TERM_PTR_U8:case XR_NATIVE_TERM_MUT_PTR_U8: {
         const XrXirTypeNode *node=xr_xir_type_node(types,type);
-        XrXirTypeKind kind=term==XR_NATIVE_TERM_SLICE_U8?XR_XIR_TYPE_SLICE:
+        uint32_t kind=term==XR_NATIVE_TERM_SLICE_U8?XR_XIR_TYPE_SLICE:
             term==XR_NATIVE_TERM_PTR_U8?XR_XIR_TYPE_PTR:XR_XIR_TYPE_MUT_PTR;
         return node && node->kind==kind && node->element==XR_XIR_U8 && !node->parameter_span;
     }

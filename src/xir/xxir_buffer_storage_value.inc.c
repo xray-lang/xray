@@ -64,7 +64,7 @@ XR_FUNC XrXirValueStatus xr_xir_buffer_storage_resize(const XrXirValue *value,in
             if (storage->data) domain_payload_deallocate(storage->object.domain,storage->data,storage->length,storage->alignment);
             storage->data=replacement;storage->length=(size_t)bytes;
         }
-    }
+    } else pointer_origin_close(&storage->origin);
     if (status==XR_XIR_VALUE_OK) *output=true;
     xr_xir_value_graph_end();return status;
 }

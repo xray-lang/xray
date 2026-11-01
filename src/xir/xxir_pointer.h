@@ -36,6 +36,10 @@ XR_FUNC XrXirValueStatus xr_xir_pointer_store(const XrXirValue *target,int64_t o
 XR_FUNC XrXirValueStatus xr_xir_pointer_copy(const XrXirValue *target,
     const XrXirValue *source,int64_t bytes,bool overlap);
 XR_FUNC XrXirValueStatus xr_xir_pointer_equal(const XrXirValue *left,const XrXirValue *right,bool *output);
+XR_FUNC XrXirValueStatus xr_xir_pointer_prefetch(const XrXirValue *source,int64_t write);
+XR_FUNC XrXirValueStatus xr_xir_pointer_cache_flush(const XrXirValue *source,int64_t bytes);
+XR_FUNC XrXirValueStatus xr_xir_pointer_volatile_load(const XrXirValue *source,int64_t size,int64_t *output);
+XR_FUNC XrXirValueStatus xr_xir_pointer_volatile_store(const XrXirValue *target,int64_t value,int64_t size,bool streaming);
 XR_FUNC XrXirValueStatus xr_xir_page_allocate(XrXirDomain *domain,const XrXirTypeArena *arena,
     XrXirType type,int64_t bytes,int64_t protection,XrXirValue *output);
 XR_FUNC XrXirValueStatus xr_xir_page_protect(const XrXirValue *pointer,int64_t bytes,int64_t protection,bool *output);

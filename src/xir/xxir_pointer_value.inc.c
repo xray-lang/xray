@@ -11,6 +11,7 @@
  *   Origin records outlive their payload without retaining it. A stale pointer
  *   remains destructible, but cannot be used after the actual owner closes.
  */
+#include "../shared/xr_sync_core.h"
 static void pointer_origin_drop(XirPointerOrigin *origin) {
     if (!origin || !xr_xir_reference_release(&origin->references)) return;
     XrXirDomain *domain=origin->domain;
@@ -115,6 +116,70 @@ XR_FUNC XrXirValueStatus xr_xir_pointer_equal(const XrXirValue *left,const XrXir
     if (!output || !pointer_argument(left,false,&a) || !pointer_argument(right,false,&b) ||
         a->object.domain!=b->object.domain) return XR_XIR_VALUE_BAD_ARGUMENT;
     *output=a->address==b->address;return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_pointer_prefetch(const XrXirValue *source,int64_t write) {
+    const XirPointer *pointer=NULL;
+    if (!pointer_argument(source,false,&pointer) || !pointer_live(pointer)) return XR_XIR_VALUE_BAD_ARGUMENT;
+#if defined(__GNUC__) || defined(__clang__)
+    if (write) __builtin_prefetch((const void *)pointer->address,1,3);
+    else __builtin_prefetch((const void *)pointer->address,0,3);
+#else
+    (void)write;
+#endif
+    return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_pointer_cache_flush(const XrXirValue *source,int64_t bytes) {
+    const XirPointer *pointer=NULL;
+    if (bytes<0 || (uint64_t)bytes>SIZE_MAX || !pointer_argument(source,false,&pointer) || !pointer_live(pointer))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+    uintptr_t start=pointer->address&~(uintptr_t)63u,end=pointer->address+(uintptr_t)bytes;
+    if (end<pointer->address) end=UINTPTR_MAX;
+    for (uintptr_t at=start;bytes && at<end;at+=64u) {
+        __asm__ __volatile__("clflush (%0)" : : "r"((const void *)at) : "memory");
+        if (UINTPTR_MAX-at<64u) break;
+    }
+#endif
+    if (bytes) xr_sync_core_fence(4);
+    return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_pointer_volatile_load(const XrXirValue *source,int64_t size,int64_t *output) {
+    const XirPointer *pointer=NULL;uint64_t value=0;
+    if (!output || !pointer_argument(source,false,&pointer) || !pointer_live(pointer)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    switch(size) {
+    case 1:value=*(const volatile uint8_t *)pointer->address;break;
+    case 2:value=*(const volatile uint16_t *)pointer->address;break;
+    case 4:value=*(const volatile uint32_t *)pointer->address;break;
+    case 8:value=*(const volatile uint64_t *)pointer->address;break;
+    default:return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
+    memcpy(output,&value,sizeof(value));return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_pointer_volatile_store(const XrXirValue *target,int64_t value,int64_t size,bool streaming) {
+    const XirPointer *pointer=NULL;
+    if (!pointer_argument(target,true,&pointer) || !pointer_live(pointer)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    bool streamed=false;
+#if (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__))
+    if (streaming && size==4 && !(pointer->address&3u)) {
+        __asm__ __volatile__("movnti %1, %0" : "=m"(*(uint32_t *)pointer->address) : "r"((uint32_t)value) : "memory");
+        streamed=true;
+    }
+#if defined(__x86_64__)
+    else if (streaming && size==8 && !(pointer->address&7u)) {
+        __asm__ __volatile__("movnti %1, %0" : "=m"(*(uint64_t *)pointer->address) : "r"((uint64_t)value) : "memory");
+        streamed=true;
+    }
+#endif
+#endif
+    if (!streamed) switch(size) {
+    case 1:*(volatile uint8_t *)pointer->address=(uint8_t)value;break;
+    case 2:*(volatile uint16_t *)pointer->address=(uint16_t)value;break;
+    case 4:*(volatile uint32_t *)pointer->address=(uint32_t)value;break;
+    case 8:*(volatile uint64_t *)pointer->address=(uint64_t)value;break;
+    default:return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
+    if (streaming) xr_sync_core_fence(4);
+    return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_buffer_storage_pointer(const XrXirValue *value,
     const XrXirTypeArena *arena,XrXirType type,XrXirValue *output) {
