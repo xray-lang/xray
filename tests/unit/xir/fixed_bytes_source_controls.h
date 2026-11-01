@@ -31,7 +31,7 @@ static XrXirStatus fixed_source_text(const XrXirCompileContext *context,const ch
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_FIXED_BYTES_ROOT};
     XrXirSourceRequest request={.session=session,.entry_path=path,.authority=&authority,
         .context=context,.linkage_kind=linkage,.libraries=catalog};
-    XrXirSourceText input={path,text,strlen(text)};XrXirSourceDiagnostic diagnostic={0};
+    XrXirSourceText input={name,text,strlen(text)};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,output,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"fixed text status%u %d:%d %s\n",status,
         diagnostic.line,diagnostic.column,diagnostic.message);
@@ -41,7 +41,7 @@ static void fixed_source_controls(const XrXirCompileContext *context) {
     const char *sources[]={
         "const x:[u8;2]=b\"AB\"\nassert(len(x)==2 && x[0]==65)\n",
         "const x:[u8;3]=b\"AB\"\n",
-        "const x:Array<u8>=b\"AB\"\n",
+        "const x: Array<u8> = b\"AB\"\n",
         "const x:[i64;2]=b\"AB\"\n",
         "const x=b\"\"\n",
         "const x:[u8;0]=b\"A\"\n",
