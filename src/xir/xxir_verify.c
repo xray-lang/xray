@@ -1014,6 +1014,9 @@ static XrXirStatus graph_specialized_uses(const Graph *graph,const XrXirFunction
         }
         return XR_XIR_OK;
     }
+    if (function->instructions[i].op==XR_XIR_CHANNEL_SELECT) {
+        *handled=true;return channel_select_uses(graph,function,context,i);
+    }
     if (xr_xir_op_is_channel(function->instructions[i].op)) {
         *handled=true;return channel_uses(graph,function,context,i);
     }
