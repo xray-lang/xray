@@ -87,7 +87,14 @@ static inline XrXirOperandRole xr_xir_operand_role(XrXirOp op, uint32_t ordinal)
 
 static inline bool xr_xir_op_references_function(XrXirOp op) {
     return op == XR_XIR_CALL || op == XR_XIR_INVOKE || op == XR_XIR_FUNCTION_REF ||
-        op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_GO || op == XR_XIR_GENERATOR_NEW;
+        op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_GO || op == XR_XIR_SCOPED_GO || op == XR_XIR_GENERATOR_NEW;
+}
+/* A scoped spawn's first value belongs to its lexical owner, not the worker.
+ * Callers still validate the complete operand table and actual group proof. */
+static inline bool xr_xir_direct_argument_range(const XrXirInstruction *op,uint32_t *first,uint32_t *count) {
+    uint32_t prefix=op->op==XR_XIR_SCOPED_GO?1u:0u;
+    if(op->args[1]<prefix || op->args[0]>UINT32_MAX-prefix) return false;
+    *first=op->args[0]+prefix;*count=op->args[1]-prefix;return true;
 }
 /* The declaration role is retained even when specialization removes every yield. */
 static inline bool xr_xir_function_is_generator(const XrXirModule *module,uint32_t function) {
