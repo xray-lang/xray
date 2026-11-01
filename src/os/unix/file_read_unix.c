@@ -14,6 +14,10 @@
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
+/* Strict POSIX mode hides O_NOFOLLOW on Darwin; other hosts ignore this macro. */
+#ifndef _DARWIN_C_SOURCE
+#define _DARWIN_C_SOURCE
+#endif
 #include "../os_file_read.h"
 #include "../../base/xio_policy.inc.h"
 #include "../../shared/xr_utf8_core.h"

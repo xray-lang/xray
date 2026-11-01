@@ -24,6 +24,10 @@ tests/benchmarks/target-machine/source_run/main.xr text eol=lf
 tests/benchmarks/target-machine/source_run/helper.xr text eol=lf
 tests/benchmarks/target-machine/source_run/helper.edited.txt text eol=lf
 
+# Native declaration digests in src/shared/xnative_declarations.inc.c hash the
+# raw .def bytes, so a CRLF checkout would publish a host-dependent identity.
+stdlib/defs/*.def text eol=lf
+
 # Mark xisagen-generated files so GitHub auto-collapses them in PRs.
 # These are derived from xisa/*.def and xisa/arch/*.isa — single source of truth
 # is the .def/.isa file; CI freshness check enforces consistency.

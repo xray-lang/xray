@@ -12,6 +12,10 @@
  * the syscall fall back to reading /dev/urandom.
  */
 
+/* Strict POSIX mode hides arc4random_buf on Darwin; other hosts ignore this macro. */
+#ifndef _DARWIN_C_SOURCE
+#define _DARWIN_C_SOURCE
+#endif
 #include "../os_random.h"
 
 #include "../../base/xplatform.h"
@@ -27,10 +31,13 @@
 #include <sys/random.h>  // getrandom
 #endif
 
+#if !defined(XR_OS_MACOS) && !defined(XR_OS_BSD)
+/* Only the getrandom route can fail; arc4random_buf never returns an error. */
 static void xr_random_die(const char *what) {
     fprintf(stderr, "xray: CSPRNG failure (%s); aborting to avoid biased output\n", what);
     abort();
 }
+#endif
 
 void xr_random_bytes(unsigned char *buf, size_t len) {
 #if defined(XR_OS_MACOS) || defined(XR_OS_BSD)
