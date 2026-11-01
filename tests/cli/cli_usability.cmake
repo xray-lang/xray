@@ -19,12 +19,6 @@ add_test(NAME test_cli_build_options
         --output ${CMAKE_CURRENT_BINARY_DIR}/cli-build-options)
 set_tests_properties(test_cli_build_options PROPERTIES
     TIMEOUT 120 PROCESSORS 1 LABELS "cli;usability;build")
-add_test(NAME test_cli_resource_profiles_vm
-    COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_resource_profiles.py
-        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
-        --output ${CMAKE_CURRENT_BINARY_DIR}/resource-profiles-vm --suite vm)
-set_tests_properties(test_cli_resource_profiles_vm PROPERTIES
-    TIMEOUT 90 PROCESSORS 1 LABELS "cli;resources;usability")
 
 # The legacy native builder remains observable in the nightly lane until its
 # replacement is available; it must not block VM and compiler integration.
@@ -36,10 +30,17 @@ set_tests_properties(test_cli_resource_profiles_native PROPERTIES
     TIMEOUT 300 PROCESSORS 1 LABELS "L3;cli;resources;legacy-native")
 endif()
 
+# XIR executes on every target with 64-bit pointers and little-endian bytes.
+if(CMAKE_SIZEOF_VOID_P EQUAL 8 AND CMAKE_C_BYTE_ORDER STREQUAL "LITTLE_ENDIAN")
+add_test(NAME test_cli_resource_profiles_vm
+    COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_resource_profiles.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+        --output ${CMAKE_CURRENT_BINARY_DIR}/resource-profiles-vm --suite vm)
+set_tests_properties(test_cli_resource_profiles_vm PROPERTIES
+    TIMEOUT 90 PROCESSORS 1 LABELS "cli;resources;usability")
 # Two default executions and two finite-profile rejections, each run once.
 # COST rounds the measured 94.328-second Windows Release gate up to 95 seconds.
 # The 840-second sum of command timeouts leaves time for owned-tree cleanup.
-if(XR_TARGET_ARCH MATCHES "^(x86_64|AMD64|amd64)$")
 add_test(NAME test_cli_resource_profiles_large
     COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_resource_profiles.py
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
