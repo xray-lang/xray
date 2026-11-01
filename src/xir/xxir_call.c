@@ -17,6 +17,7 @@
 #include "../base/xresource_limits.h"
 #include "xxir_call_generator.h"
 #include "xxir_call_internal.h"
+#include "xxir_program.h"
 #include "xxir_call_observer_internal.h"
 #include "xxir_call_native_observer_internal.h"
 #include "xxir_call_native_source_internal.h"
@@ -76,10 +77,17 @@ typedef struct CallViewReturn {
     CallCellLoan *loan;
     const XrXirCellLoan *parent_loan;
     XrXirCellAuthority authority;
+    XrXirProgram *storage_program;
+    const void *storage_context;
     int64_t storage_identity;
     uint32_t parameter,storage_field;
     bool reference,prepared,storage;
 } CallViewReturn;
+static void call_view_return_program_drop(CallViewReturn *result) {
+    if (!result) return;
+    XrXirProgram *program=result->storage_program;result->storage_program=NULL;
+    xr_xir_compile_program_drop(program);
+}
 typedef struct CallFrame {
     struct CallFrame *parent;
     const XrXirCallEntry *entry;
@@ -803,6 +811,7 @@ static void pop_frame(XrXirCall *call, XrXirCallStatus reason) {
         xr_xir_value_drop(&frame->arguments[i]);
     xr_xir_call_result_drop(&frame->inbox);
     xr_xir_call_result_drop(&frame->pending);
+    call_view_return_program_drop(frame->view_return);
     --call->config.accounting->depth;
     frame_release(call, frame);
     frame_metadata_apply(call,call->top?call->top->metadata:&call->metadata);

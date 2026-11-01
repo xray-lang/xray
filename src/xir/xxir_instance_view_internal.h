@@ -12,6 +12,7 @@
 #ifndef XXIR_INSTANCE_VIEW_INTERNAL_H
 #define XXIR_INSTANCE_VIEW_INTERNAL_H
 #include "xxir_call_internal.h"
+#include "xxir_program.h"
 
 XR_FUNC XrXirCallStatus xir_instance_view_module_root(XrXirCallView *view,const XrXirValue *root);
 /* A missing genuine native/owned body proof returns no root. A present proof
@@ -19,5 +20,12 @@ XR_FUNC XrXirCallStatus xir_instance_view_module_root(XrXirCallView *view,const 
  * owned Storage observation; callers drop it before leaving this operation. */
 XR_FUNC XrXirCallStatus xir_instance_buffer_view_origin(XrXirCallView *view,
     const XrXirCallMetadata *metadata,uint32_t target,const XrXirValue *arguments,uint32_t count,
+    const XrXirCellAuthority *authority,XrXirProgram **owner,
     uint32_t *parameter,uint32_t *field,XrXirValue *output);
+/* The frame owns the Program returned by origin capture. Terminal observation
+ * uses that exact owner and metadata identity, without inventing a callback. */
+XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *owner,
+    const void *context,const XrXirCallMetadata *metadata,uint32_t target,
+    const XrXirValue *arguments,uint32_t count,const XrXirCellAuthority *authority,
+    XrXirValueAdmission *admission,uint32_t *parameter,uint32_t *field,XrXirValue *output);
 #endif /* XXIR_INSTANCE_VIEW_INTERNAL_H */

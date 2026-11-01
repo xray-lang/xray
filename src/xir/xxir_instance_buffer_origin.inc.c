@@ -10,23 +10,18 @@
  *   Sealed current construction rows select a real receiver field. Neither a
  *   Storage-shaped parameter nor a retained physical view invents that proof.
  */
-XR_FUNC XrXirCallStatus xir_instance_buffer_view_origin(XrXirCallView *view,
-    const XrXirCallMetadata *metadata,uint32_t target,const XrXirValue *arguments,uint32_t count,
-    uint32_t *parameter,uint32_t *field,XrXirValue *output) {
-    if (!parameter || !field || !output || !value_unit(*output)) return XR_XIR_CALL_BAD_ARGUMENT;
+static bool instance_buffer_view_work(XrXirValueAdmission *admission) {
+    if (!admission || !admission->work || !admission->domain || !xr_xir_domain_work(admission->domain,1)) return false;
+    --admission->work;return true;
+}
+XR_FUNC XrXirCallStatus xir_instance_buffer_view_recheck(const XrXirProgram *program,
+    const void *context,const XrXirCallMetadata *metadata,uint32_t target,
+    const XrXirValue *arguments,uint32_t count,const XrXirCellAuthority *authority,
+    XrXirValueAdmission *admission,uint32_t *parameter,uint32_t *field,XrXirValue *output) {
+    if (!program || !metadata || !parameter || !field || !output || !value_unit(*output) || !admission)
+        return XR_XIR_CALL_BAD_ARGUMENT;
     *parameter=UINT32_MAX;*field=UINT32_MAX;
-    XrXirInstance *instance=view_instance(view);
-    if (!instance || !metadata) return XR_XIR_CALL_READY;
-    XrXirInstance *root=instance_root(instance),*selected=NULL;
-    if (metadata->admission_context==instance) selected=instance;
-    else if (metadata->admission_context==root) selected=root;
-    else for (XrXirInstance *state=root->generation_next;state;state=state->generation_next) {
-        if (!instance_cell_work(view,1)) return XR_XIR_CALL_LIMIT;
-        if (metadata->admission_context==state) {selected=state;break;}
-    }
-    if (!selected) return XR_XIR_CALL_READY;
-    const XrXirProgram *program=selected->program;
-    if (selected->domain!=instance->domain || metadata->entries!=program->entries ||
+    if (!context || metadata->admission_context!=context || metadata->entries!=program->entries ||
         metadata->entry_count!=program->entry_count || metadata->arena!=program->arena ||
         metadata->cell_role!=instance_cell_role || metadata->cell_context!=program || target>=program->entry_count)
         return XR_XIR_CALL_BAD_ARGUMENT;
@@ -54,7 +49,7 @@ XR_FUNC XrXirCallStatus xir_instance_buffer_view_origin(XrXirCallView *view,
         const XrXirBorrowReturn *row=NULL;
         if (!rows || (rows->count && !rows->rows)) return XR_XIR_CALL_BAD_STATE;
         for (uint32_t i=0;i<rows->count;++i) {
-            if (!instance_cell_work(view,1)) return XR_XIR_CALL_LIMIT;
+            if (!instance_buffer_view_work(admission)) return XR_XIR_CALL_LIMIT;
             if (rows->rows[i].function!=target) continue;
             if (row) return XR_XIR_CALL_BAD_ARGUMENT;
             row=&rows->rows[i];
@@ -70,16 +65,42 @@ XR_FUNC XrXirCallStatus xir_instance_buffer_view_origin(XrXirCallView *view,
         if (!node || !xr_xir_type_is_class(program->types,expected) || node->nominal.declaration!=row->nominal ||
             row->field>=node->nominal.field_count || node->nominal.fields[row->field]!=XR_XIR_BUFFER_STORAGE)
             return XR_XIR_CALL_BAD_ARGUMENT;
-        status=cell ? xr_xir_call_cell_read(view,&arguments[row->receiver],&receiver) :
+        if (!xr_xir_value_argument(&arguments[row->receiver],program->arena,entry->parameters[row->receiver]))
+            return XR_XIR_CALL_BAD_ARGUMENT;
+        status=cell ? xr_xir_cell_authorized_read(&arguments[row->receiver],authority,&receiver) :
             xr_xir_value_copy(&arguments[row->receiver],&receiver);
         if (status==XR_XIR_VALUE_OK && !xr_xir_value_argument(&receiver,program->arena,expected))
             status=XR_XIR_VALUE_BAD_ARGUMENT;
-        if (status==XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,row->field,xr_xir_call_admission(view),output);
+        if (status==XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,row->field,admission,output);
         xr_xir_value_drop(&receiver);
         *parameter=row->receiver;*field=row->field;
     }
-    if (status==XR_XIR_VALUE_OK) status=xr_xir_value_admit(output,XR_XIR_BUFFER_STORAGE,xr_xir_call_admission(view));
+    if (status==XR_XIR_VALUE_OK) status=xr_xir_value_admit(output,XR_XIR_BUFFER_STORAGE,admission);
     if (status!=XR_XIR_VALUE_OK) xr_xir_value_drop(output);
     return status==XR_XIR_VALUE_OK ? XR_XIR_CALL_READY : status==XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM :
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_ARGUMENT;
+}
+XR_FUNC XrXirCallStatus xir_instance_buffer_view_origin(XrXirCallView *view,
+    const XrXirCallMetadata *metadata,uint32_t target,const XrXirValue *arguments,uint32_t count,
+    const XrXirCellAuthority *authority,XrXirProgram **owner,
+    uint32_t *parameter,uint32_t *field,XrXirValue *output) {
+    if (!owner || *owner || !metadata) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance=view_instance(view);
+    if (!instance) return XR_XIR_CALL_READY;
+    XrXirInstance *root=instance_root(instance),*selected=NULL;
+    if (metadata->admission_context==instance) selected=instance;
+    else if (metadata->admission_context==root) selected=root;
+    else for (XrXirInstance *state=root->generation_next;state;state=state->generation_next) {
+        if (!instance_cell_work(view,1)) return XR_XIR_CALL_LIMIT;
+        if (metadata->admission_context==state) {selected=state;break;}
+    }
+    if (!selected) return XR_XIR_CALL_READY;
+    if (selected->domain!=instance->domain || !selected->program) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirCallStatus status=xir_instance_buffer_view_recheck(selected->program,selected,metadata,target,
+        arguments,count,authority,xr_xir_call_admission(view),parameter,field,output);
+    if (status==XR_XIR_CALL_READY && output->type) {
+        if (!xr_xir_compile_program_retain(selected->program)) {xr_xir_value_drop(output);return XR_XIR_CALL_LIMIT;}
+        *owner=selected->program;
+    }
+    return status;
 }

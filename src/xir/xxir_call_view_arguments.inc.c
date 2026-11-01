@@ -84,6 +84,7 @@ static void frame_view_arguments_release(XrXirCall *call,CallFrame *frame) {
     frame_view_release(call,frame);
     for (uint32_t p=frame->entry->parameter_count;p;--p) xr_xir_value_drop(&frame->arguments[p-1]);
     if (frame->view_return) xr_xir_view_origin_unpin(&frame->view_return->origin);
+    call_view_return_program_drop(frame->view_return);
     call->admitting=admitting;
 }
 XR_FUNC XrXirValueStatus xr_xir_call_view_argument_take(XrXirCallView *view,

@@ -16,12 +16,14 @@ static XrXirCallStatus call_view_return_capture(XrXirCall *call,CallFrame *frame
     if (!frame->parent || !call->active_view) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!captures) {
         XrXirValue root={0};uint32_t parameter=UINT32_MAX,field=UINT32_MAX;
+        XrXirCellAuthority authority=frame_cell_authority(call,frame->parent);
         XrXirCallStatus status=xir_instance_buffer_view_origin(call->active_view,frame->metadata,
             (uint32_t)(frame->entry-frame->metadata->entries),arguments,frame->entry->parameter_count,
-            &parameter,&field,&root);
+            &authority,&result->storage_program,&parameter,&field,&root);
         if (status!=XR_XIR_CALL_READY) return status;
         if (root.type) {
             result->storage=true;result->parameter=parameter;result->storage_field=field;
+            result->storage_context=frame->metadata->admission_context;
             result->storage_identity=root.payload;xr_xir_value_drop(&root);return XR_XIR_CALL_READY;
         }
     }
@@ -83,9 +85,10 @@ static XrXirValueStatus call_view_return_root_prepare(XrXirCall *call,CallFrame 
     CallViewReturn *result=frame->view_return;
     if (result->storage) {
         XrXirValue root={0};uint32_t parameter=UINT32_MAX,field=UINT32_MAX;
-        XrXirCallStatus status=xir_instance_buffer_view_origin(call->active_view,frame->metadata,
+        XrXirCellAuthority authority=frame_cell_authority(call,frame);
+        XrXirCallStatus status=xir_instance_buffer_view_recheck(result->storage_program,result->storage_context,frame->metadata,
             (uint32_t)(frame->entry-frame->metadata->entries),frame->arguments,frame->entry->parameter_count,
-            &parameter,&field,&root);
+            &authority,&call->config.admission,&parameter,&field,&root);
         bool matches=root.type==XR_XIR_BUFFER_STORAGE && root.payload==result->storage_identity &&
             parameter==result->parameter && field==result->storage_field;
         xr_xir_value_drop(&root);
@@ -160,9 +163,10 @@ XR_FUNC XrXirValueStatus xr_xir_call_buffer_view(XrXirCallView *view,
         creation.frame->entry->result!=type || creation.spec.kind!=XR_XIR_TYPE_SLICE)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue root={0};uint32_t parameter=UINT32_MAX,field=UINT32_MAX;
-    XrXirCallStatus selected=xir_instance_buffer_view_origin(view,creation.frame->metadata,
+    XrXirCellAuthority authority=frame_cell_authority(creation.call,creation.frame);
+    XrXirCallStatus selected=xir_instance_buffer_view_recheck(result->storage_program,result->storage_context,creation.frame->metadata,
         (uint32_t)(creation.frame->entry-creation.frame->metadata->entries),view->arguments,view->argument_count,
-        &parameter,&field,&root);
+        &authority,&creation.call->config.admission,&parameter,&field,&root);
     if (selected!=XR_XIR_CALL_READY) return call_view_status(selected);
     if (root.type!=XR_XIR_BUFFER_STORAGE || root.payload!=result->storage_identity || parameter || field!=UINT32_MAX) {
         xr_xir_value_drop(&root);return XR_XIR_VALUE_BAD_ARGUMENT;
