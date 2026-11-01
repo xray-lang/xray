@@ -90,6 +90,7 @@ static bool cleanup_escape(XrXirCall *call,XrXirCallResult *escaped) {
     }
     xr_xir_call_result_drop(&parent->pending);
     xr_xir_call_result_move(&pending,&parent->pending);
+    parent->scope_failure_order=call->top->scope_failure_order;
     return true;
 }
 static void finish_exit(XrXirCall *call) {
