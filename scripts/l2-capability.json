@@ -110,6 +110,7 @@
       ],
       "reason": "Public slots, records, JSON float and Range complete Source/Catalog/VM/native receivers.",
       "tests": [
+        "test_xir_task_scope",
         "test_xir_json_float_catalog_state",
         "test_xir_json_float",
         "test_xir_json_float_native",
@@ -177,6 +178,7 @@
         "xir_fixed_bytes_native"
       ],
       "targets": [
+        "test_xir_task_scope",
         "test_xir_json_float",
         "test_xir_json_float_native",
         "test_xir_json_float_mixed",
