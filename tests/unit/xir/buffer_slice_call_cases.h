@@ -14,6 +14,16 @@
 #define BUFFER_SLICE_CALL_CASES_H
 #include "xir/xxir_program_internal.h"
 #include "xir/xxir_instance_debug_internal.h"
+#include <string.h>
+static XrXirOutputStatus buffer_callback_output(void *owner,const XrXirOutputGroup *group) {
+    uint32_t *entered=owner;const char *bytes=NULL;size_t length=0;
+    const char marker[]="buffer callback entered";
+    CHECK(entered && *entered<UINT32_MAX && group && group->stream==XR_XIR_STDOUT &&
+        group->line && group->count==1 && group->values);
+    CHECK(xr_xir_string_view(group->values,&bytes,&length) && length==sizeof(marker)-1 &&
+        !memcmp(bytes,marker,length));
+    ++*entered;return XR_XIR_OUTPUT_OK;
+}
 static struct {uint32_t entry,instruction,callee;} buffer_call_trace;
 static XrXirCallStatus buffer_trace_before(void *owner,const XirCallNativeSourcePoint *point,bool *stopped) {
     (void)owner;buffer_call_trace.entry=point->entry;buffer_call_trace.instruction=point->instruction;
@@ -68,6 +78,8 @@ static void buffer_warm_callable(XrXirInstance *instance,uint32_t target) {
 }
 static void buffer_call_cases(XrXirProgram *program,const uint32_t ids[7]) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    uint32_t entered=0;
+    config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,buffer_callback_output,&entered};
     uint32_t original=buffer_program_refs(program);XrXirInstance *instance=NULL;
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xir_instance_native_source_bind(instance,program,&buffer_call_observer)==XR_XIR_CALL_READY);
@@ -107,11 +119,12 @@ static void buffer_call_cases(XrXirProgram *program,const uint32_t ids[7]) {
     instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xir_instance_native_source_bind(instance,program,&buffer_call_observer)==XR_XIR_CALL_READY);
     buffer_initialize(instance,ids[0]);buffer_warm_callable(instance,ids[3]);baseline=buffer_program_refs(program);
-    buffer_call_trace.entry=UINT32_MAX;
+    buffer_call_trace.entry=UINT32_MAX;entered=0;
     CHECK(xr_xir_instance_start(instance,ids[3],NULL,0)==XR_XIR_CALL_READY);
-    for (uint32_t step=0;buffer_call_trace.entry!=ids[6];++step) {
+    for (uint32_t step=0;!entered;++step) {
         CHECK(step<100000 && xr_xir_instance_poll_bounded(instance,1).outcome.status==XR_XIR_CALL_READY);
     }
+    CHECK(entered==1);
     CHECK(xr_xir_instance_cancel_current(instance)==XR_XIR_CALL_CANCEL_REQUESTED);
     CHECK(buffer_poll(instance)==XR_XIR_CALL_CANCELLED && buffer_program_refs(program)==baseline);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_CANCELLED && buffer_program_refs(program)==original);

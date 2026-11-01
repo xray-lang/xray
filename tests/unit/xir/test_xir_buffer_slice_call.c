@@ -35,7 +35,7 @@ static const char input[]=
     "const changed=buffer.resize(8);const next:Slice<u8>=buffer.asBytes();"
     "if(!changed || len(next)!=8){return -2};return before}\n"
     "enum ScopedError{Expected}\n"
-    "fn scopedEdit(view:MutSlice<u8>){view[0]=7;view[1]=9}\n"
+    "fn scopedEdit(view:MutSlice<u8>){print(\"buffer callback entered\");view[0]=7;view[1]=9}\n"
     "fn scopedThrow(view:MutSlice<u8>) throws(ScopedError){view[0]=7;throw ScopedError.Expected}\n"
     "fn scopedPanicEdit(view:MutSlice<u8>){view[0]=7;assert(false)}\n"
     "export fn scoped()->i64{var buffer=mem.allocZeroed(4);"
