@@ -272,7 +272,10 @@
         "xir_crypto_suite_native",
         "xir_crypto_values",
         "xir_crypto_controls",
-        "xir_crypto_controls_native"
+        "xir_crypto_controls_native",
+        "test_xir_rest_values",
+        "test_xir_rest_values_native",
+        "test_xir_rest_values_cold_native"
       ],
       "targets": [
         "test_source_nullable_print",
@@ -309,7 +312,10 @@
         "test_xir_crypto_suite_native",
         "test_xir_crypto_values",
         "test_xir_crypto_controls",
-        "test_xir_crypto_controls_native"
+        "test_xir_crypto_controls_native",
+        "test_xir_rest_values",
+        "test_xir_rest_values_native",
+        "test_xir_rest_values_cold_native"
       ]
     },
     "errors-cleanup": {

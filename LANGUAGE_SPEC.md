@@ -1382,6 +1382,8 @@ uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
 
 A function type may carry the contextual prefix `nosuspend fn(T1, T2) throws(E) -> R`; a written type without the prefix may suspend. `nosuspend` is recognized only in type position immediately before `fn`, without crossing an ungrouped statement line boundary, and remains an ordinary name elsewhere. The guarantee belongs to the same callable type identity, independently of `throws(E)`, and survives alias substitution, nullable and nested types, formatting and receiving revalidation. A function literal directly checked against this expected type must prove the guarantee; unknown or potentially suspending calls reject. An already constructed ordinary function value cannot be implicitly strengthened from its body. A restricted callable may weaken to an ordinary one; the reverse requires an actual existing promise. This adds no own-function declaration effect annotation.
 
+A final READ rest is written `fn(...T) -> R`, or `fn(P, ...T) -> R` with a fixed prefix. Rest is an authentic callable type fact: the physical Array in the body does not make it equal or implicitly adaptable to `fn(Array<T>) -> R` or a fixed-arity type. Function values, generic substitution, nested types, formatting and cold-library reception retain the fact. Existing error, root and `nosuspend` matching remains independent; this does not introduce a C varargs ABI.
+
 #### 2.8.1 Function Error Types and Closures
 
 A throwing function type places `throws(E)` between its parameters and result, as in `fn(string) throws(ParseErr) -> i64`; a Unit-returning type is `fn(string) throws(ParseErr)`. Omitting the clause guarantees no business error. The error clause is part of type identity for function-value assignment, overload resolution, and interface matching. Panic is not an error type.
@@ -2117,8 +2119,9 @@ for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)
 
 Allowed in the following positions only:
 - **Function rest parameter declaration**: `fn f(...args: i64)`
-- **Function call spread**: `f(...args)`; the spread source must be a tuple whose arity is statically known.
-- Evaluate and retain each source tuple once in written order, then place its fields at the declaration's logical parameter positions. This is not runtime varargs. The original call declaration checks expanded total arity, ordinary generic inference, contextual conversions and trailing defaults; defaults execute after every explicit argument. An empty tuple/Unit spread contributes zero arguments while retaining evaluation effects. Expanded fields are ordinary READ values: they cannot replace `ref` arguments or acquire borrowing permission from a storage representation. Separately written `ref` arguments still require authentic named places, and the call's borrow starts after every argument has completed. Suspension and errors follow ordinary call rules without reevaluating retained spreads or rolling back prior effects.
+- **Function call spread**: `f(...args)` accepts a Tuple with statically known arity. An authentic rest call also permits one final `Array<T>` spread, as below.
+- For static Tuple call spread, evaluate and retain each source tuple once in written order, then place its fields at the declaration's logical parameter positions. This is not runtime varargs. The original call declaration checks expanded total arity, ordinary generic inference, contextual conversions and trailing defaults; defaults execute after every explicit argument. An empty tuple/Unit spread contributes zero arguments while retaining evaluation effects. Expanded fields are ordinary READ values: they cannot replace `ref` arguments or acquire borrowing permission from a storage representation. Separately written `ref` arguments still require authentic named places, and the call's borrow starts after every argument has completed. Suspension and errors follow ordinary call rules without reevaluating retained spreads or rolling back prior effects.
+- A dynamic Array spread fills only an authentic rest tail, never fixed parameters, an ordinary trailing Array parameter or a fixed-arity call. Permit at most one, as the final argument, after any ordinary rest arguments. Its source must be the exact `Array<T>`, without Slice, MutSlice or a whole `Array<U>` conversion. Retain an owned logical snapshot at its written position; later argument mutations do not change that snapshot. Static Tuple fields use positional conversions, rest elements use T, and only a complete owned Array is published. Ordinary allocation, suspension, errors and failed cleanup apply without reevaluation or rollback of completed effects.
 - Native Array methods with value operands follow the same spread and conversion rules. Evaluate the receiver before its arguments. Queries retain its logical value snapshot; mutation first binds an authentic writable place, then uses that root's current value after the arguments complete. Argument rebinding, suspension and errors preserve these receiver contracts. Spread grants no additional write permission, and each `concat` operand still requires the same exact `Array<T>`.
 - **Tuple literal spread**: `(head, ...tail)`; the spread source must be a tuple whose arity is statically known.
 - Evaluate a tuple spread once at its written position and append its statically ordered fields. Ordinary entries and expanded fields use the existing contextual type checks and conversions at their result positions. Nested tuple literal spreads may consume the corresponding outer positional context; runtime values never determine arity. Spreading `()` contributes zero fields while retaining its evaluation effects; an ordinary `()` entry still contributes one Unit field. The expanded total arity must exactly match an expected tuple; zero fields produce Unit, while one field remains a unary tuple. Ordinary value copying, class/synchronization identity, suspension, errors and failed cleanup apply without publishing a partial result or rolling back prior effects. An unconstrained generic cannot assume it is a tuple from a later instantiation.
@@ -3060,9 +3063,11 @@ fn sum(...nums: i64) -> i64 {
 sum(1, 2, 3)        // total = 6
 ```
 
-- The rest parameter must be **last**.
-- The actual internal type of `...T` is `Array<T>`.
-- Only one rest parameter is allowed.
+- An ordinary named function may declare one final READ rest parameter, `...name: T`, without a default, `ref` or `move`. This does not extend anonymous functions, methods or constructors. Nested named functions retain authentic capture and owner rules.
+- The body receives a read-only `Array<T>` binding. Elements meet existing Array storage and copying requirements; rest adds no Sendable or NoSuspend promise. Ordinary value copying, COW, identity and failed cleanup apply.
+- Fixed parameters retain ordinary argument and default rules. Legal trailing defaults precede rest; a dynamic Array cannot supply fixed parameters.
+- Function values retain their rest shape, `fn(...T) -> R` or `fn(P, ...T) -> R`. These are distinct from ordinary `fn(Array<T>) -> R` and fixed-arity functions, without implicit adapters. Existing result, error and execution-promise matching still applies. Calling a function value does not acquire declaration defaults.
+- Calls may use static Tuple spreads and at most one final Array spread of the same element type (§3.9), after ordinary rest arguments. The tail becomes one owned Array. Evaluate explicit arguments once from left to right, then omitted fixed-prefix defaults.
 
 #### 5.2.6 Function hoisting
 
@@ -8883,6 +8888,7 @@ CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
 FunctionType ::= 'nosuspend'? 'fn' '(' FunctionTypeParams? ')' ThrowsClause? ReturnType?
 FunctionTypeParams ::= ParamType (',' ParamType)* ','?
+                     | (ParamType ',')* '...' Type ','?
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
 FieldList   ::= ObjectField (',' ObjectField)* ','?

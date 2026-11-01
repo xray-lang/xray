@@ -23,7 +23,9 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
         XrXirType type;
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if ((param->passing_mode != XR_PARAM_READ && param->passing_mode != XR_PARAM_REF) ||
-            param->default_value || param->pattern || param->is_rest || (!param->type && !context))
+            param->default_value || param->pattern ||
+            (param->is_rest && (node->type!=AST_FUNCTION_DECL || i+1!=decl->param_count ||
+                param->passing_mode!=XR_PARAM_READ || !param->type)) || (!param->type && !context))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter requires an annotation or complete callable context");
         XrParamMode mode = param->passing_mode;
         if (context && mode == XR_PARAM_READ) mode = (XrParamMode)context->parameters[i].mode;
@@ -38,6 +40,10 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
         }
         if (type == XR_XIR_UNIT && !by_reference)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter cannot be unit");
+        if(param->is_rest) {
+            if(!source_array_element_type(ctx,type,&type))return false;
+            ctx->identities[ctx->function].promises|=XR_XIR_FUNCTION_REST;
+        }
         SourceName *symbol = source_parameter_name(ctx,node,param,scope+1);
         if (!symbol) return false;
         symbol->kind = SOURCE_LOCAL; symbol->index = scan->count + (uint32_t)i;

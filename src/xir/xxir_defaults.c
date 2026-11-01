@@ -112,7 +112,12 @@ XR_FUNC XrXirStatus xr_xir_compile_defaults_verify(const XrXirCompileContext *co
             a->function>=m->function_count || a->owner==a->function) return XR_XIR_BAD_STRUCTURE;
         const XrXirFunction *f=&m->functions[a->owner],*h=&m->functions[a->function];
         const XrXirFunctionIdentity *fi=&d->functions[a->owner],*hi=&d->functions[a->function];
-        if (a->ordinal>=f->parameter_count || !f->parameters || h->parameter_count || h->parameters ||
+        uint32_t fixed=f->parameter_count;
+        if(fi->promises&XR_XIR_FUNCTION_REST) {
+            if(!fixed||!f->parameters||!xr_xir_type_is_array(m->types,f->parameters[fixed-1]))return XR_XIR_BAD_STRUCTURE;
+            --fixed;
+        }
+        if (a->ordinal>=fixed || !f->parameters || h->parameter_count || h->parameters ||
             fi->cleanup_owner || fi->method_kind==XR_XIR_MEMBER_HELPER ||
             (fi->method_kind==XR_XIR_READ_METHOD && !a->ordinal) ||
             hi->module!=fi->module || hi->nominal_owner!=fi->nominal_owner ||
@@ -121,7 +126,7 @@ XR_FUNC XrXirStatus xr_xir_compile_defaults_verify(const XrXirCompileContext *co
             (m->linkage_kind==XR_XIR_PROGRAM && (a->function==d->entry_function || a->owner==d->entry_function))) return XR_XIR_BAD_STRUCTURE;
         if (i && (t->records[i-1].owner>a->owner ||
             (t->records[i-1].owner==a->owner && t->records[i-1].ordinal+1!=a->ordinal))) return XR_XIR_BAD_STRUCTURE;
-        if ((i+1==t->count || t->records[i+1].owner!=a->owner) && a->ordinal+1!=f->parameter_count)
+        if ((i+1==t->count || t->records[i+1].owner!=a->owner) && a->ordinal+1!=fixed)
             return XR_XIR_BAD_STRUCTURE;
         for (uint32_t j=0;j<t->count;++j) {
 

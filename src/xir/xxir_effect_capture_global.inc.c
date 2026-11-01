@@ -707,11 +707,67 @@ static XrXirStatus effect_capture_current_match(const XrXirCompileContext *work,
 static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const EffectInvocationFinal *final) {
     return effect_capture_current_match(work,final,NULL);
 }
+/* Canonical rows are consumed only after all positive and fallback domains
+ * close. Each cleanup gets fresh scratch; interning may move the graph, so
+ * the first growth ends this entire proof interval. */
+static XrXirStatus effect_capture_cleanup_project(EffectCaptureRead *read,
+    EffectInvocationWorkspace *owner,bool *growth) {
+    *growth=false;
+    if(read->final!=&owner->final || read->work!=owner->read.work ||
+        owner->read.final!=&owner->final || owner->read.discovery!=owner ||
+        !owner->read.roles.construction || owner->read.roles.sealed || owner->pending)
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t nodes=owner->final.count;
+    for(uint32_t n=0;n<nodes;++n) {
+        EffectBodyFunctionDimensions dimensions={0};
+        XrXirStatus status=effect_body_request_dimensions(&read->body,owner->final.nodes[n].body,&dimensions);
+        if(status!=XR_XIR_OK)return status;
+        for(uint32_t i=0;i<dimensions.instruction_count;++i) {
+            XrXirInstruction storage;const XrXirInstruction *op=NULL;
+            status=effect_body_request_operation(&read->body,owner->final.nodes[n].body,i,&storage,&op);
+            if(status!=XR_XIR_OK)return status;
+            bool cleanup=op->op==XR_XIR_CLEANUP_REGISTER;op=NULL;
+            if(!cleanup)continue;
+            EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=n};
+            read->body=(EffectBodyRequest){0};read->node_view=NULL;
+            status=effect_invocation_capture_storage(&flow);
+            if(status==XR_XIR_OK)status=effect_capture_frame(read);
+            EffectCaptureNode node={0};
+            if(status==XR_XIR_OK)status=effect_capture_node(read,n,&node);
+            if(status==XR_XIR_OK && (node.values!=flow.values ||
+                node.basis.parameters!=flow.basis.parameters || node.basis.fn_words!=flow.basis.fn_words ||
+                node.basis.origin_words!=flow.basis.origin_words || node.basis.cell_words!=flow.basis.cell_words ||
+                node.basis.row_words!=flow.basis.row_words))status=XR_XIR_BAD_STRUCTURE;
+            node=(EffectCaptureNode){0};
+            for(uint32_t v=0;v<flow.values && status==XR_XIR_OK;++v) {
+                uint64_t *row=effect_invocation_row(&flow,v);
+                for(uint32_t w=0;row && w<flow.basis.fn_words && status==XR_XIR_OK;++w)
+                    status=effect_capture_word(read,(EffectCaptureFact){n,v,w,0,0},&row[w]);
+                for(uint32_t flag=EFFECT_CAPTURE_FIXED;flag<=EFFECT_CAPTURE_RAW && status==XR_XIR_OK;++flag) {
+                    const EffectCaptureFact *fact=NULL;
+                    status=effect_capture_find(read,(EffectCaptureFact){n,v,EFFECT_CAPTURE_FLAGS,flag,0},&fact);
+                    if(status==XR_XIR_OK && fact) {
+                        uint64_t *bits=flag==EFFECT_CAPTURE_FIXED?flow.fixed:flow.certified;
+                        bits[v/64]|=UINT64_C(1)<<(v%64);
+                    }
+                }
+            }
+            if(status==XR_XIR_OK)status=effect_invocation_capture_cleanup(&flow,i,growth);
+            void *memory=flow.memory;flow=(EffectInvocationFlow){0};
+            read->body=(EffectBodyRequest){0};read->node_view=NULL;
+            xr_compile_resources_free(memory);
+            if(status!=XR_XIR_OK || *growth)return status;
+            status=effect_capture_frame(read);if(status!=XR_XIR_OK)return status;
+        }
+    }
+    return XR_XIR_OK;
+}
+
 /* Construction and its immediate receiver own the same private Input. The
  * parent descriptor is discarded before every possible cleanup callback;
  * no child stack projection or semantic result crosses this boundary. */
 static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectInvocationFinal *final,
-    const EffectInvocationWorkspace *discovery) {
+    EffectInvocationWorkspace *discovery) {
     if(!final || !discovery || !discovery->read.work || work->resources!=discovery->read.work->resources ||
         final->material!=discovery->final.material || final->nodes!=discovery->final.nodes ||
         final->count!=discovery->final.count || final->capacity!=discovery->final.capacity ||
@@ -752,6 +808,21 @@ static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectIn
     read.schedule=NULL;
     xr_compile_resources_free(schedule);
     if(status==XR_XIR_OK) status=effect_capture_frame(&read);
+    bool growth=false;
+    if(status==XR_XIR_OK && final==&discovery->final) {
+        read.builder=NULL;read.fixed_only=false;
+        status=effect_capture_cleanup_project(&read,discovery,&growth);
+    }
+    if(growth) {
+        read=(EffectCaptureRead){0};
+        xr_compile_resources_free(final->capture.facts);final->capture=(EffectCaptureProof){0};
+        effect_role_proof_clear(&final->role_proof);
+        return status;
+    }
+    if(status==XR_XIR_OK) {
+        status=effect_capture_frame(&read);
+        if(status==XR_XIR_OK)read.builder=&final->capture;
+    }
     EffectBodyCurrentRead current={0};
     if(status==XR_XIR_OK) {
         read.fixed_only=false;

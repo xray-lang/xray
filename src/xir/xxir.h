@@ -159,6 +159,7 @@ static inline uint32_t xr_xir_binder_kind(const XrXirGeneric *record, uint32_t p
 typedef struct XrXirCallableParameter { XrXirType type; uint32_t mode; } XrXirCallableParameter;
 
 #define XR_XIR_CALLABLE_NO_SUSPEND 1u
+#define XR_XIR_CALLABLE_REST 16u
 #define XR_XIR_CALLABLE_ROOT_NONE 2u
 #define XR_XIR_CALLABLE_ROOT_REQUIRED 4u
 #define XR_XIR_CALLABLE_ROOT_UNRESOLVED 8u

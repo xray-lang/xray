@@ -101,6 +101,7 @@ static void tref_to_str_impl(XrCompileState *state, const XrTypeRef *t, char *bu
                     do { tref_append(buf, pos, cap, xr_param_mode_label(mode)); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
                     do { tref_append(buf, pos, cap, " "); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
                 }
+                if (t->function_rest && i + 1 == nparam) tref_append(buf, pos, cap, "...");
                 do { tref_to_str_impl(state, t->children[i], buf, pos, cap); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
             }
             do { tref_append(buf, pos, cap, ")"); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);

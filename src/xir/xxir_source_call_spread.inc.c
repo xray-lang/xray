@@ -22,6 +22,7 @@ typedef struct SourceCallProjection {
     SourceCallSpread *spread;
     uint32_t field,formal;
     XrHirBodySignature signature;
+    bool rest;
 } SourceCallProjection;
 typedef struct SourceCallEntry {
     AstNode *syntax;
@@ -56,10 +57,12 @@ static SourceName *source_call_spread_function(SourceContext *ctx,AstNode *calle
 }
 /* Shape facts reserve operands only. Completion checks the real tuple type
  * and every declaration, conversion and access through the ordinary plan. */
-static bool source_call_spread_shape(SourceContext *ctx,AstNode *node,uint32_t depth,uint32_t *arity) {
+static bool source_call_spread_shape_kind(SourceContext *ctx,AstNode *node,uint32_t depth,uint32_t *arity,bool *array) {
+    if(array)*array=false;
     if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"call spread shape depth exhausted");
-    if (node->type==AST_GROUPING) return source_call_spread_shape(ctx,node->as.grouping,depth+1,arity);
+    if (array && node->type==AST_ARRAY_LITERAL) {*array=true;*arity=1;return true;}
+    if (node->type==AST_GROUPING) return source_call_spread_shape_kind(ctx,node->as.grouping,depth+1,arity,array);
     if (node->type==AST_TUPLE_LITERAL) {
         const TupleLiteralNode *tuple=&node->as.tuple_literal;
         if (tuple->count<0 || (tuple->count && !tuple->elements))
@@ -68,7 +71,7 @@ static bool source_call_spread_shape(SourceContext *ctx,AstNode *node,uint32_t d
         for (int f=0;f<tuple->count;++f) {
             AstNode *field=tuple->elements[f];uint32_t count=1;
             if (!field) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"call spread Tuple entry is missing");
-            if (field->type==AST_SPREAD_EXPR && !source_call_spread_shape(ctx,field->as.spread_expr.expr,depth+1,&count)) return false;
+            if (field->type==AST_SPREAD_EXPR && !source_call_spread_shape_kind(ctx,field->as.spread_expr.expr,depth+1,&count,NULL)) return false;
             if (!((ctx)->diagnostic.status == XR_XIR_OK) || count>65536-*arity)
                 return source_fail(ctx,node,XR_XIR_BUDGET,"call expanded arity exhausted");
             *arity+=count;
@@ -106,16 +109,20 @@ static bool source_call_spread_shape(SourceContext *ctx,AstNode *node,uint32_t d
                 for (uint32_t a=0;a<count && a<function->parameter_count;++a) {
                     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
                     if (function->parameters[a]==result && call->arguments[a]->type!=AST_SPREAD_EXPR)
-                        return source_call_spread_shape(ctx,call->arguments[a],depth+1,arity);
+                        return source_call_spread_shape_kind(ctx,call->arguments[a],depth+1,arity,array);
                 }
             }
             ground=(SourceExpectedType){true,result,false,false};
         }
     }
+    if(array&&ground.present&&xr_xir_type_is_array(&ctx->types,ground.type)) {*array=true;*arity=1;return true;}
     if(!ground.present)return source_fail(ctx,node,XR_XIR_BAD_TYPE,"call spread requires a statically known Tuple");
     XrHirTupleView tuple={0};XrXirStatus status=xr_hir_tuple_view(&ctx->types,ground.type,ctx->request,&tuple,NULL);
     if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"call spread requires a statically known Tuple");
     *arity=tuple.count;return true;
+}
+static bool source_call_spread_shape(SourceContext *ctx,AstNode *node,uint32_t depth,uint32_t *arity) {
+    return source_call_spread_shape_kind(ctx,node,depth,arity,NULL);
 }
 static bool source_call_spread_field_hints(SourceContext *ctx,AstNode *node,uint32_t count,
     uint32_t depth,XrXirType *types,bool *known) {
@@ -185,7 +192,7 @@ static bool source_call_expand_reserve(SourceContext *ctx,AstNode *node,
 static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax *call,
     SourceCallPlan *formal,uint32_t parameter_count) {
     if(formal->family!=SOURCE_CALL_ARRAY&&!source_hir_call_prepare(ctx,node,formal,parameter_count))return false;
-    bool present=formal->argument_contexts!=NULL;
+    bool present=formal->argument_contexts!=NULL||formal->rest_count;
     for (int a=0;a<call->arg_count;++a) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (call->arguments[a] && call->arguments[a]->type==AST_SPREAD_EXPR) present=true;
@@ -193,17 +200,18 @@ static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax
     if (!present) return true;
     SourceCallExpansion *expanded=source_recipe_storage(ctx,1,sizeof(*expanded));
     if (!expanded) return false;
-    bool variadic=formal->family==SOURCE_CALL_VARIADIC_READ;
+    bool variadic=formal->family==SOURCE_CALL_VARIADIC_READ||formal->rest_count;
+    if(formal->rest_count)parameter_count=65536;
     expanded->entry_capacity=variadic ? 0 : parameter_count;
     expanded->entries=expanded->entry_capacity ? source_recipe_storage(ctx,expanded->entry_capacity,sizeof(*expanded->entries)) : NULL;
     expanded->spreads=source_recipe_storage(ctx,(uint32_t)call->arg_count,sizeof(*expanded->spreads));
-    if ((expanded->entry_capacity && !expanded->entries) || !expanded->spreads) return false;
+    if ((expanded->entry_capacity && !expanded->entries) || (call->arg_count && !expanded->spreads)) return false;
     SourceFact *facts=ctx->facts;SourceEpoch *epochs=ctx->epochs;uint32_t count=0;bool ok=false;
     for (int a=0;a<call->arg_count;++a) {
         AstNode *input=call->arguments[a];
         if (!input || !((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
         XrCallArgAccess access=call->arg_accesses ? call->arg_accesses[a] : XR_CALL_ARG_PLAIN;
-        SourceCallSpread *spread=NULL;uint32_t arity=1;
+        SourceCallSpread *spread=NULL;SourceExpressionPlan *array_plan=NULL;uint32_t arity=1;
         if (input->type==AST_SPREAD_EXPR) {
             if (access!=XR_CALL_ARG_PLAIN) {source_fail(ctx,input,XR_XIR_BAD_TYPE,"call spread supplies ordinary READ values");goto done;}
             spread=&expanded->spreads[expanded->spread_count++];spread->first=count;
@@ -215,13 +223,19 @@ static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax
                 if (!((ctx)->diagnostic.status == XR_XIR_OK)) goto done;
                 ground=xr_xir_nullable_element(&ctx->types,ground);
             }
+            bool array=false;
             bool known=spread->source->type_ready&&xr_hir_tuple_kind(&ctx->types,ground)!=XR_HIR_TUPLE_OTHER;
             XrHirTupleView known_shape={0};
             if (known) {
                 XrXirStatus status=xr_hir_tuple_view(&ctx->types,ground,ctx->request,&known_shape,NULL);
                 if(status!=XR_XIR_OK){source_fail(ctx,input,status,"call spread hint shape is invalid");goto done;}
                 arity=known_shape.count;
-            } else if (!source_call_spread_shape(ctx,input->as.spread_expr.expr,0,&arity)) goto done;
+            } else if (!source_call_spread_shape_kind(ctx,input->as.spread_expr.expr,0,&arity,
+                formal->rest_count&&a+1==call->arg_count?&array:NULL)) goto done;
+            if(array) {
+                array_plan=spread->source;--expanded->spread_count;spread=NULL;formal->rest_array=count;
+                goto append_entry;
+            }
             spread->known_fields=arity ? source_recipe_storage(ctx,arity,sizeof(*spread->known_fields)) : NULL;
             spread->field_known=arity ? source_recipe_storage(ctx,arity,sizeof(*spread->field_known)) : NULL;
             if (arity && (!spread->known_fields || !spread->field_known)) goto done;
@@ -243,6 +257,7 @@ static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax
             }
             if (!source_planned_effects(ctx,spread->source,0)) goto done;
         }
+append_entry:
         if (formal->parameter_offset>parameter_count || arity>parameter_count-formal->parameter_offset-count) {
             source_fail(ctx,input,XR_XIR_BAD_TYPE,"too many call arguments");goto done;
         }
@@ -253,14 +268,18 @@ static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax
             XrHirBodyAction parameter_action={0};
             /* Array's real native contract classifies expansion as READ. It
              * grants no use; contextual types and actual ACCESS are checked later. */
-            if(formal->family!=SOURCE_CALL_ARRAY&&!source_hir_call_use(ctx,input,formal,(XrHirCallUseInput){.kind=XR_HIR_CALL_PLAN,
+            if(!source_call_rest_argument(formal,count-1)&&formal->family!=SOURCE_CALL_ARRAY&&!source_hir_call_use(ctx,input,formal,(XrHirCallUseInput){.kind=XR_HIR_CALL_PLAN,
                 .formal=parameter,.spread=spread!=NULL,.failure="call spread cannot satisfy a ref parameter"},NULL,&parameter_action))goto done;
             entry->reference=parameter_action.reference;
-            if (spread) {
+            if(source_call_rest_argument(formal,count-1)&&access!=XR_CALL_ARG_PLAIN) {
+                source_fail(ctx,input,XR_XIR_BAD_TYPE,"rest arguments require READ values");goto done;
+            }
+            if(array_plan) {entry->plan.value=array_plan;if(!source_planned_effects(ctx,array_plan,0))goto done;}
+            else if (spread) {
                 SourceCallProjection *projection=source_recipe_storage(ctx,1,sizeof(*projection));
                 SourceExpressionPlan *plan=source_plan_collect(ctx,input,(SourceExpectedType){0});
                 if (!projection || !plan) goto done;
-                *projection=(SourceCallProjection){spread,f,parameter,formal->signature};plan->call_projection=projection;
+                *projection=(SourceCallProjection){spread,f,parameter,formal->signature,source_call_rest_argument(formal,count-1)};plan->call_projection=projection;
                 if (spread->field_known[f]) {plan->type_ready=true;plan->ground_type=spread->known_fields[f];}
                 entry->plan.value=plan;
             } else if (entry->reference) {
@@ -286,6 +305,7 @@ static bool source_call_spread_read(SourceContext *ctx,SourceCallSpread *spread,
 static bool source_call_projection_complete(SourceContext *ctx,SourceExpressionPlan *plan,SourceValue *value) {
     SourceCallProjection projection=*plan->call_projection;SourceValue tuple;
     if (!source_call_spread_read(ctx,projection.spread,&tuple)) return false;
+    if(projection.rest)return source_tuple_projection(ctx,plan->syntax,tuple,projection.field,value);
     XrHirCallUseInput input={.types=&ctx->types,.scope=ctx->bodies[ctx->function].typed_scope,.origin=source_hir_origin(ctx,plan->syntax,0),.kind=XR_HIR_CALL_SPREAD,
         .formal=projection.formal,.argument=projection.formal,.type=tuple.type,.value=tuple.id,.spread_field=projection.field};
     XrHirBodyUse use={0};XrHirBodyAction action;
@@ -324,7 +344,7 @@ static bool source_call_spread_events(SourceContext *ctx,AstNode *node,const Sou
                 fields[f]=(SourceExpectedType){true,spread->known_fields[f],false,false};continue;
             }
             uint32_t parameter=spread->first+f+formal->parameter_offset;
-            XrXirType wanted=source_call_parameter_type(formal,parameter);
+            XrXirType wanted=source_call_argument_type(formal,parameter-formal->parameter_offset);
             SourceSubstitution substitution=formal->substitution;
             if (state) {
                 XrXirInferenceKnown known={0};

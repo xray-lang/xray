@@ -44,7 +44,7 @@ fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
 print("apply(square, 7) = ${apply(square, 7)}")
 
 // === Rest parameters (no type annotation on rest param) ===
-fn sum(...nums) -> i64 {
+fn sum(...nums: i64) -> i64 {
     var total = 0
     for (var i = 0; i < len(nums); i++) {
         total = total + nums[i]

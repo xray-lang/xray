@@ -142,7 +142,9 @@ typedef struct XrXirSourceDeclaration {
     /* Implicit receiver prefix copied from a verified Checked method identity.
      * Imported definitions retain absent lexical spans and no synthetic this. */
     uint32_t checked_receiver_count;
+    uint32_t flags;
 } XrXirSourceDeclaration;
+#define XR_XIR_SOURCE_DECL_REST 1u
 typedef enum XrXirSourceAccess {
     XR_XIR_SOURCE_READ, XR_XIR_SOURCE_WRITE, XR_XIR_SOURCE_READ_WRITE,
     XR_XIR_SOURCE_CALL, XR_XIR_SOURCE_FUNCTION_VALUE, XR_XIR_SOURCE_TYPE_USE,

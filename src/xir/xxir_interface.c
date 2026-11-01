@@ -41,7 +41,8 @@ static XrXirStatus interface_method_shape(const XrXirInterfaceMethod *method,
     b->limits.parameters -= method->own_parameter_count;
     XrXirStatus status = interface_name(method->name);
     if (status != XR_XIR_OK) return status;
-    if (method->receiver || !xr_xir_callable_signature(types,method->signature)) return XR_XIR_BAD_TYPE;
+    const XrXirTypeNode *callable=xr_xir_callable_signature(types,method->signature);
+    if (method->receiver || !callable || (callable->flags&XR_XIR_CALLABLE_REST)) return XR_XIR_BAD_TYPE;
     status = xr_xir_compile_type_expression_shape(b, types, method->signature, count);
     for (uint32_t p = 0; status == XR_XIR_OK && p < method->own_parameter_count; ++p)
         status = xr_xir_compile_constraint_structure(b, types, method->constraints[p], count);

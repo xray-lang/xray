@@ -199,6 +199,8 @@ static XrXirStatus effect_capture_reference(EffectCaptureRead *read,const Effect
     if(status!=XR_XIR_OK) return status;
     uint32_t value=node->head.parameter_count+instruction;
     if(!genuine) {
+        /* An open generator has no concrete origin or execution permission. */
+        if(op->op==XR_XIR_GENERATOR_NEW)return XR_XIR_OK;
         const XrXirTypeNode *signature=xr_xir_callable_signature(read->body.domain.types,op->type);
         EffectCaptureFact destination={node->node,value,0,0,0};
         return signature?effect_capture_opaque(read,node,&destination,signature->flags|XR_XIR_CALLABLE_ROOT_UNRESOLVED,true):XR_XIR_BAD_TYPE;

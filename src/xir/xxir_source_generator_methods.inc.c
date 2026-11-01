@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_source_generator_methods.inc.c - One visible factory owns each hidden method producer
+ * xxir_source_generator_methods.inc.c - One visible factory owns each hidden named producer
  */
 static bool source_generator_method_defaults(SourceContext *ctx,
     uint32_t producer,uint32_t factory) {
@@ -41,7 +41,7 @@ static bool source_generator_method_witnesses(SourceContext *ctx,uint32_t produc
     }
     return true;
 }
-static bool source_generator_method_factory(SourceContext *ctx,SourceName *method) {
+static bool source_generator_named_factory(SourceContext *ctx,SourceName *method) {
     uint32_t producer=method->index,factory=ctx->function_count;
     SourceFunction *original=&ctx->bodies[producer];
     if(factory>=ctx->function_capacity || factory>=ctx->compile.limits.functions)
@@ -58,12 +58,14 @@ static bool source_generator_method_factory(SourceContext *ctx,SourceName *metho
     ctx->functions[factory].error_type=XR_XIR_NEVER;
     ++ctx->function_count;
     char *name=source_alloc(ctx,40,1);
-    if(!name || source_format(ctx,name,40,"$generator_method%u",producer)!=XR_DIAG_OK)
+    if(!name || source_format(ctx,name,40,ctx->identities[producer].nominal_owner ?
+        "$generator_method%u" : "$generator_function%u",producer)!=XR_DIAG_OK)
         return source_fail(ctx,original->node,XR_XIR_BUDGET,"generator method producer name exhausted");
-    /* Both lowered entries retain the one lexical method declaration. The
-     * receiver and body locals still belong to that source method. */
+    /* Both entries retain one actual lexical declaration. A module function
+     * gains no nominal owner from its generated producer. */
     ctx->functions[producer].name=name;ctx->functions[producer].name_length=(uint32_t)source_text_size(ctx,name);
-    ctx->identities[producer].exported=0;ctx->identities[producer].method_kind=XR_XIR_MEMBER_HELPER;
+    ctx->identities[producer].exported=0;
+    ctx->identities[producer].method_kind=ctx->identities[producer].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
     ctx->identities[producer].promises&=~XR_XIR_FUNCTION_NO_SUSPEND;
     if(!source_generator_method_defaults(ctx,producer,factory) ||
         !source_generator_method_witnesses(ctx,producer,factory)) return false;
@@ -92,7 +94,7 @@ static bool source_generator_method_factory(SourceContext *ctx,SourceName *metho
     ctx->function=outer;ctx->returned=returned;
     return ok;
 }
-static bool source_generator_methods(SourceContext *ctx) {
+static bool source_generator_named_factories(SourceContext *ctx) {
     uint32_t outer=ctx->function,module=ctx->module;
     for(uint32_t n=0;n<ctx->nominals.count;++n) {
         if(ctx->nominal_sources[n]->checked_library) continue;
@@ -100,7 +102,22 @@ static bool source_generator_methods(SourceContext *ctx) {
             if(!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if(!(ctx->identities[method->index].promises & XR_XIR_FUNCTION_GENERATOR)) continue;
             ctx->module=method->module;
-            if(!source_generator_method_factory(ctx,method)) return false;
+            if(!source_generator_named_factory(ctx,method)) return false;
+        }
+    }
+    for(uint32_t m=0;m<(uint32_t)ctx->graph->spec_count;++m) {
+        if(!(m%64)&&!source_request_poll(ctx,NULL))return false;
+        if(source_owned_checked(&ctx->graph->specs[m]))continue;
+        for(SourceName *name=ctx->names[m];name;name=name->next) {
+            if(!source_request_poll(ctx,NULL))return false;
+            if(name->kind!=SOURCE_FUNCTION || name->checked_library || name->module!=m ||
+                !name->node || name->node->type!=AST_FUNCTION_DECL ||
+                !(ctx->identities[name->index].promises&XR_XIR_FUNCTION_GENERATOR))continue;
+            if(ctx->identities[name->index].nominal_owner || ctx->identities[name->index].cleanup_owner ||
+                ctx->identities[name->index].method_kind!=XR_XIR_NON_MEMBER)
+                return source_fail(ctx,name->node,XR_XIR_BAD_STRUCTURE,"named generator has no ordinary declaration owner");
+            ctx->module=m;
+            if(!source_generator_named_factory(ctx,name))return false;
         }
     }
     ctx->function=outer;ctx->module=module;return true;

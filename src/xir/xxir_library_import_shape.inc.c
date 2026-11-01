@@ -27,6 +27,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_SUSPEND:
     case XR_XIR_TASK_AWAIT: case XR_XIR_TASK_AWAIT_RESULT: case XR_XIR_TASK_POLL: case XR_XIR_TASK_CANCEL:
     case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
+    case XR_XIR_GENERATOR_YIELD:
     case XR_XIR_INVOKE_RESULT:
     case XR_XIR_INVOKE_ERROR:
     case XR_XIR_ERROR_ERASE:
@@ -220,7 +221,7 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m) {
             node->kind!=XR_XIR_TYPE_ARRAY && node->kind!=XR_XIR_TYPE_MAP && node->kind!=XR_XIR_TYPE_SET &&
             node->kind!=XR_XIR_TYPE_TUPLE && node->kind!=XR_XIR_TYPE_UNION &&
             !(node->kind==XR_XIR_TYPE_SLICE && node->element==XR_XIR_U8) &&
-            node->kind!=XR_XIR_TYPE_NULLABLE && node->kind!=XR_XIR_TYPE_CELL &&
+            node->kind!=XR_XIR_TYPE_NULLABLE && node->kind!=XR_XIR_TYPE_CELL && node->kind!=XR_XIR_TYPE_ITERATOR &&
             !((node->kind==XR_XIR_TYPE_ATOMIC || node->kind==XR_XIR_TYPE_TASK) &&
               node->element==XR_XIR_I64))
             return XR_XIR_BAD_STAGE;
@@ -334,7 +335,7 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
             const XrXirInstruction *op=&fn->instructions[i];
             if (!library_catalog_local_instruction(op->op) &&
                 op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_GO &&
-                op->op!=XR_XIR_FUNCTION_REF &&
+                op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_GENERATOR_NEW &&
                 op->op!=XR_XIR_CALL_REQUIREMENT && op->op!=XR_XIR_CALL_DEFAULT &&
                 op->op!=XR_XIR_CONST_STRING && op->op!=XR_XIR_SLOT_LOAD &&
                 op->op!=XR_XIR_SLOT_INIT && op->op!=XR_XIR_SLOT_STORE &&

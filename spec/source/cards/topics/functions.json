@@ -45,7 +45,8 @@
       "heading": "Rest parameters",
       "fences": [
         "decl-fn-rest"
-      ]
+      ],
+      "markdown": "One final READ rest has body type Array<T> and preserves fn(...T) / fn(P,...T) identity through function values, generics and cold libraries. It is distinct from a fixed-arity function or ordinary Array parameter, without implicit adaptation. Static Tuple spread and one final exact Array<T> spread fill the rest tail; a dynamic Array cannot supply fixed parameters. Ordinary defaults remain direct-declaration only and precede rest. Arguments evaluate once left to right with owned snapshots, COW and ordinary failure cleanup."
     },
     {
       "heading": "Lambda forms",

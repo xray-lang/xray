@@ -63,6 +63,12 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     SourceCallPlan plan = {.family=SOURCE_CALL_FUNCTION,.prefix=request->prefix,.substitution=substitution,.function_parameters=function.parameters,.requirement_parameters=NULL,
         .result=function.result,.expected_result=request->expected_result,.values=values,.parameter_offset=offset,.value_offset=offset,.parameter_kinds=ctx->generics[index].parameter_kinds,.argument_contexts=NULL};
     plan.declaration.function=index;
+    if(identity->promises&XR_XIR_FUNCTION_REST) {
+        plan.rest_count=function.parameter_count;plan.rest_array=UINT32_MAX;
+        if(!plan.rest_count||offset||!xr_xir_type_is_array(&ctx->types,function.parameters[plan.rest_count-1]))
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"rest declaration has no final Array owner");
+        plan.rest_element=xr_xir_array_element(&ctx->types,function.parameters[plan.rest_count-1]);
+    }
     const XrXirTypeNode *task=xr_xir_type_node(&ctx->types,function.result);
     if (!plan.expected_result.present && ctx->active_expression &&
         ctx->active_expression->task_element_context.present && task && task->kind==XR_XIR_TYPE_TASK) {
@@ -71,10 +77,15 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
         plan.result=task->element;plan.expected_result=ctx->active_expression->task_element_context;
     }
     if (!source_call_expand(ctx,node,&syntax,&plan,function.parameter_count)) return false;
-    supplied=(uint32_t)syntax.arg_count+offset;
+    supplied=plan.rest_count?source_call_rest_prefix(&plan,&syntax):(uint32_t)syntax.arg_count+offset;
+    if(plan.rest_count && syntax.arg_count) {
+        plan.values=source_recipe_storage(ctx,(uint32_t)syntax.arg_count,sizeof(*plan.values));
+        if(!plan.values)return false;
+    }
     if (!source_argument_arity(ctx,node,index,supplied) || !source_call_plan_arguments(ctx,node,&plan,&syntax,own_constraints)) return false;
     if (!source_instantiation_prove(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,index,0},substitution)) goto done;
-    for (uint32_t p=supplied;p<function.parameter_count;++p)
+    if(plan.rest_count&&!source_call_rest_pack(ctx,node,&plan,&syntax,values))goto done;
+    for (uint32_t p=supplied;p<function.parameter_count-(plan.rest_count?1u:0u);++p)
         if (!source_argument_default(ctx,node,index,p,&substitution,&values[p])) goto done;
     SourceCallConversions conversions={SOURCE_CALL_FUNCTION,substitution,function.parameters,NULL,
         values,function.parameter_count,0};
@@ -143,6 +154,10 @@ static bool source_direct_call_signature(SourceContext *ctx,AstNode *node,uint32
     }
     XrXirSourceCallSignature signature={.parameters=parameters,.parameter_count=prepared->count,
         .receiver_count=prepared->receiver_count,.result=source_query_type(ctx,prepared->result),.known=true};
+    if(ctx->identities[function].promises&XR_XIR_FUNCTION_REST) {
+        uint32_t *flags=source_alloc(ctx,prepared->count,sizeof(*flags));if(!flags)return false;
+        flags[prepared->count-1]=XR_XIR_SOURCE_CALL_VARIADIC;signature.parameter_flags=flags;
+    }
     uint32_t declaration_id=ctx->bodies[function].declaration;
     uint32_t owner=declaration_id?ctx->query.declarations[declaration_id-1].parent:0;
     if(owner&&ctx->query.declarations[owner-1].kind==XR_XIR_SOURCE_TYPE) {

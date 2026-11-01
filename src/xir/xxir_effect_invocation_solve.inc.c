@@ -345,11 +345,37 @@ static XrXirStatus effect_invocations_propagate(EffectInvocationWorkspace *owner
 
 /* Origins close over the completed immutable input graph before execution
  * residuals propagate. The same owning Final moves into publication later. */
+static XrXirStatus effect_invocation_capture_cleanup(EffectInvocationFlow *flow,
+    uint32_t instruction,bool *growth) {
+    EffectInvocationWorkspace *owner=flow?flow->owner:NULL;*growth=false;
+    if(!owner || flow->read!=&owner->read || owner->read.final!=&owner->final ||
+        owner->pending || !owner->states || flow->node>=owner->final.count ||
+        !owner->states[flow->node].expanded)return XR_XIR_BAD_STRUCTURE;
+    XrXirInstruction storage;const XrXirInstruction *borrowed=NULL;
+    XrXirStatus status=effect_invocation_flow_instruction(flow,instruction,&storage,&borrowed);
+    if(status!=XR_XIR_OK)return status;
+    if(borrowed->op!=XR_XIR_CLEANUP_REGISTER)return XR_XIR_BAD_STRUCTURE;
+    XrXirInstruction actual=*borrowed;borrowed=NULL;
+    uint32_t nodes=owner->final.count,edges=owner->final.edge_count;bool changed=false;
+    flow->instruction=instruction;flow->precision=true;
+    status=effect_invocation_instruction_decoded(flow,instruction,&actual,&changed);
+    if(status!=XR_XIR_OK)return status;
+    if(owner->final.count<nodes || owner->final.edge_count<edges)return XR_XIR_BAD_STRUCTURE;
+    *growth=owner->final.count!=nodes || owner->final.edge_count!=edges;
+    return XR_XIR_OK;
+}
 static XrXirStatus effect_invocation_origins_finalize(EffectInvocationWorkspace *owner) {
     if (!owner || owner->pending || !owner->states) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_role_proof_build(owner->read.work,owner->final.material,&owner->final.role_proof);
-    if (status==XR_XIR_OK) status=effect_capture_build(owner->read.work,&owner->final,owner);
-    return status;
+    for(;;) {
+        uint32_t nodes=owner->final.count,edges=owner->final.edge_count;
+        XrXirStatus status=effect_role_proof_build(owner->read.work,owner->final.material,&owner->final.role_proof);
+        if(status==XR_XIR_OK)status=effect_capture_build(owner->read.work,&owner->final,owner);
+        if(status!=XR_XIR_OK)return status;
+        if(owner->final.count==nodes && owner->final.edge_count==edges)return XR_XIR_OK;
+        if(owner->final.count<nodes || owner->final.edge_count<edges || owner->final.capture.facts ||
+            owner->final.capture.count || owner->final.role_proof.resources)return XR_XIR_BAD_STRUCTURE;
+        status=effect_invocations_discover(owner);if(status!=XR_XIR_OK)return status;
+    }
 }
 
 static XrXirStatus effect_invocations_solve(EffectInvocationWorkspace *owner) {

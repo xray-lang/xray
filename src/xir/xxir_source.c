@@ -555,7 +555,7 @@ static bool source_query_declare(SourceContext *ctx, SourceName *symbol,
     symbol->declaration = ctx->query.declaration_count;
     *record = (XrXirSourceDeclaration) {symbol->declaration, parent, 0, kind, symbol->name, range,
         {0}, NULL, 0, symbol->mutable,
-        (kind == XR_XIR_SOURCE_FUNCTION || kind == XR_XIR_SOURCE_TYPE || kind == XR_XIR_SOURCE_BINDING) && !parent && symbol->node && symbol->node->is_exported, 0, NULL, 0, 0, 0, NULL, NULL, 0};
+        (kind == XR_XIR_SOURCE_FUNCTION || kind == XR_XIR_SOURCE_TYPE || kind == XR_XIR_SOURCE_BINDING) && !parent && symbol->node && symbol->node->is_exported, 0, NULL, 0, 0, 0, NULL, NULL, 0, 0};
     if(kind==XR_XIR_SOURCE_BINDING&&symbol->node&&(symbol->node->type==AST_VAR_DECL||symbol->node->type==AST_CONST_DECL)&&
         symbol->node->as.var_decl.initializer&&!symbol->node->as.var_decl.type_annotation)
         ((XrXirSourceDeclarationSyntax *)ctx->syntax.declarations)[symbol->declaration-1].flags|=XR_XIR_SOURCE_SYNTAX_INFERRED_BINDING;
@@ -618,6 +618,7 @@ static bool source_query_parameters(SourceContext *ctx, uint32_t declaration) {
     XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[declaration - 1];
     record->type = source_query_type(ctx, function->result);
     record->parameters = parameters; record->parameter_count = function->parameter_count;
+    record->flags=ctx->identities[ctx->function].promises&XR_XIR_FUNCTION_REST?XR_XIR_SOURCE_DECL_REST:0;
     record->generic_parameter_count = ctx->generics[ctx->function].parameter_count;
     record->generic_constraints = ctx->generics[ctx->function].constraints;
     record->type_parameter_kinds = ctx->generics[ctx->function].parameter_kinds;
@@ -705,6 +706,8 @@ static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *
         if (mode != XR_PARAM_READ && mode != XR_PARAM_REF)
             return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "callable mode requires an implemented contract");
         if (!((ctx)->diagnostic.status == XR_XIR_OK) || !source_type(ctx, ref->children[p], &parameters[p].type)) return false;
+        if (ref->function_rest && p + 1 == count &&
+            (mode != XR_PARAM_READ || !source_array_element_type(ctx,parameters[p].type,&parameters[p].type))) return false;
         parameters[p].mode = mode;
         if (mode == XR_PARAM_REF && !source_cell_type(ctx, parameters[p].type, &parameters[p].type)) return false;
     }
@@ -713,9 +716,10 @@ static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *
         !source_error_clause_type(ctx, NULL, &ref->throws_clause, &error)) return false;
     --ctx->depth;
     if (!source_signature(ctx, parameters, count, result, error, type)) return false;
-    if (!ref->requires_nosuspend) return true;
+    if (!ref->requires_nosuspend && !ref->function_rest) return true;
     XrXirTypeNode qualified = *xr_xir_callable_signature(&ctx->types, *type);
-    qualified.flags |= XR_XIR_CALLABLE_NO_SUSPEND;
+    if (ref->requires_nosuspend) qualified.flags |= XR_XIR_CALLABLE_NO_SUSPEND;
+    if (ref->function_rest) qualified.flags |= XR_XIR_CALLABLE_REST;
     return source_intern_type(ctx, qualified, type);
 }
 static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);
@@ -1163,6 +1167,7 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, XrXirDeclara
 #include "xxir_source_inference_result.inc.c"
 #include "xxir_source_tuple.inc.c"
 #include "xxir_source_call_plan.inc.c"
+#include "xxir_source_rest_arguments.inc.c"
 #include "xxir_source_direct_arguments.inc.c"
 #include "xxir_source_indirect_call.inc.c"
 #include "xxir_source_native_read_arguments.inc.c"
@@ -1763,6 +1768,8 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
     if (!source_substitute(ctx,&arguments.substitution,function->result,0,&result) ||
         !source_substitute(ctx,&arguments.substitution,function->error_type,0,&error_type) ||
         !source_signature(ctx,parameters,count,result,error_type,&op.type)) return false;
+    if ((ctx->identities[symbol->index].promises & XR_XIR_FUNCTION_REST) &&
+        !source_signature_rest(ctx,&op.type)) return false;
     if (!source_reference_promise(ctx, node, symbol->index, expected, &op.type)) return false;
     return source_type_arguments(ctx, node, arguments.substitution.types, arguments.count, &op) && source_recipe_record(ctx,op,value);
 }
@@ -2273,7 +2280,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     for (int i = 0; i < decl->param_count; ++i) {
         XrParamNode *param = decl->params[i];
         bool by_reference = param->passing_mode == XR_PARAM_REF;
-        if (!param->type || (param->passing_mode != XR_PARAM_READ && !by_reference) || param->pattern || param->is_rest ||
+        if (!param->type || (param->passing_mode != XR_PARAM_READ && !by_reference) || param->pattern ||
             (by_reference && param->default_value) ||
             !source_type(ctx, param->type, &body->parameters[i]) || (body->parameters[i] == XR_XIR_UNIT && !by_reference))
             return source_fail_feature(ctx, node, XR_XIR_BAD_TYPE,
@@ -2282,6 +2289,12 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
                 param->pattern ? "destructured parameter syntax" :
                 by_reference && param->default_value ? "default-value syntax for ref parameters" :
                 !param->type ? "untyped parameter syntax" : "this parameter declaration syntax");
+        if (param->is_rest) {
+            if (i + 1 != decl->param_count || by_reference || param->default_value || identity.test_role)
+                return source_fail(ctx,node,XR_XIR_BAD_TYPE,"rest requires one final READ parameter without a default");
+            if (!source_array_element_type(ctx,body->parameters[i],&body->parameters[i])) return false;
+            identity.promises|=XR_XIR_FUNCTION_REST;
+        }
         /* A ref parameter is the caller's mutable cell: reads and writes in the body reach the
          * caller's binding through it, exactly as a captured mutable variable does. */
         if (by_reference && !source_cell_type(ctx, body->parameters[i], &body->parameters[i])) return false;
@@ -2868,6 +2881,8 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
         return source_fail_feature(ctx, node, XR_XIR_BAD_STRUCTURE,
             decl->type_param_count ? "generic anonymous function syntax" : "this anonymous function syntax");
     if (context) {
+        if (node->type!=AST_FUNCTION_DECL && (context->flags & XR_XIR_CALLABLE_REST))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"an ordinary closure cannot satisfy a rest function type");
         if (context->parameter_count != (uint32_t) decl->param_count)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure arity differs from its callable context");
         for (uint32_t p = 0; p < context->parameter_count; ++p) {
@@ -2946,12 +2961,14 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     if (ok && (nested_function || scan.self_used)) {
         ok = source_signature(ctx, parameters, (uint32_t) decl->param_count, ctx->functions[factory].result,
             ctx->functions[factory].error_type, &type);
+        if(ok&&(ctx->identities[factory].promises&XR_XIR_FUNCTION_REST))ok=source_signature_rest(ctx,&type);
         if (ok && scan.self_used) ok = source_closure_self(ctx, node, &scan, index, factory, type);
     }
     ok = ok &&
         statement(ctx, decl->body, false) && finish_body(ctx) &&
         (nested_function || source_signature(ctx, parameters, (uint32_t) decl->param_count, ctx->functions[factory].result,
             ctx->functions[factory].error_type, &type));
+    if(ok&&(ctx->identities[factory].promises&XR_XIR_FUNCTION_REST))ok=source_signature_rest(ctx,&type);
     if (ok && no_suspend) {
         XrXirTypeNode signature = *xr_xir_callable_signature(&ctx->types, type);
         signature.flags |= XR_XIR_CALLABLE_NO_SUSPEND;
@@ -2970,6 +2987,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
         XrXirSourceDeclaration *query_declaration = (XrXirSourceDeclaration *) &ctx->query.declarations[body->declaration - 1];
         query_declaration->type = source_query_type(ctx, ctx->functions[index].result);
         query_declaration->parameters = query_parameters; query_declaration->parameter_count = (uint32_t) decl->param_count;
+        query_declaration->flags=ctx->identities[index].promises&XR_XIR_FUNCTION_REST?XR_XIR_SOURCE_DECL_REST:0;
         query_declaration->generic_parent = body->generic_owner;
         query_declaration->generic_parent_count = body->type_parameter_count;
         query_declaration->generic_parameter_count = body->type_parameter_count;

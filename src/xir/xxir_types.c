@@ -287,6 +287,9 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
 
         remaining->limits.parameters -= node->parameter_count;
         if ((node->parameter_count != 0) != (node->parameters != NULL)) return XR_XIR_BAD_STRUCTURE;
+        if ((node->flags & XR_XIR_CALLABLE_REST) && (!node->parameter_count ||
+            node->parameters[node->parameter_count-1].mode != XR_PARAM_READ ||
+            !xr_xir_type_is_array(types,node->parameters[node->parameter_count-1].type))) return XR_XIR_BAD_TYPE;
         span = xr_xir_type_span(types, node->result);
         uint32_t error_span = xr_xir_type_span(types, node->element);
         if (error_span > span) span = error_span;

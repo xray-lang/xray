@@ -51,6 +51,7 @@ static bool source_default_binding_get(SourceContext *ctx, AstNode *node,
 }
 static bool source_argument_arity(SourceContext *ctx, AstNode *node, uint32_t index, uint32_t supplied) {
     uint32_t count = ctx->functions[index].parameter_count;
+    if (ctx->identities[index].promises & XR_XIR_FUNCTION_REST) --count;
     if (supplied > count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "too many call arguments");
     for (uint32_t p = supplied; p < count; ++p) {
         const XrXirDefaultBinding *binding = NULL;
@@ -88,6 +89,7 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             AstNode *expression = parameters[p]->default_value;
             if (!expression) {
+                if (parameters[p]->is_rest) continue;
                 if (seen) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "default parameters must be a trailing suffix");
                 continue;
             }

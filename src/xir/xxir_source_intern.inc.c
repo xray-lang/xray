@@ -180,6 +180,12 @@ static bool source_signature(SourceContext *ctx, const XrXirCallableParameter *p
     return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_CALLABLE, error_type,
         parameters, count, result, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}}, type);
 }
+static bool source_signature_rest(SourceContext *ctx,XrXirType *type) {
+    const XrXirTypeNode *actual=xr_xir_callable_signature(&ctx->types,*type);
+    if(!actual)return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"rest value requires its declared callable type");
+    XrXirTypeNode signature=*actual;signature.flags|=XR_XIR_CALLABLE_REST;
+    return source_intern_type(ctx,signature,type);
+}
 static bool source_reference_promise(SourceContext *ctx, AstNode *node,
     uint32_t function, SourceExpectedType expected, XrXirType *type) {
     const XrXirTypeNode *context = expected.present ? xr_xir_callable_signature(&ctx->types, expected.type) : NULL;

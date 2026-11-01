@@ -209,6 +209,10 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
         if ((signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) &&
             !(module->declarations->functions[op->immediate].promises & XR_XIR_FUNCTION_NO_SUSPEND))
             return XR_XIR_BAD_TYPE;
+        if (!!(signature->flags & XR_XIR_CALLABLE_REST) !=
+            !!(module->declarations->functions[op->immediate].promises & XR_XIR_FUNCTION_REST) ||
+            ((signature->flags & XR_XIR_CALLABLE_REST) && op->args[1] >= callee->parameter_count))
+            return XR_XIR_BAD_TYPE;
         result = signature->result;
         generic_status = xr_xir_compile_call_type_matches(remaining,module,caller_id,op,callee->error_type,signature->element);
         if (generic_status != XR_XIR_OK) return generic_status;
@@ -1292,6 +1296,9 @@ static XrXirStatus verify_signature_structure(const XrXirModule *module, XrXirCo
         const XrXirFunction *function = &module->functions[f];
         if (!!function->parameters != !!function->parameter_count) { status = XR_XIR_BAD_STRUCTURE; break; }
         if (function->parameter_count > remaining->limits.parameters) { status = XR_XIR_BUDGET; break; }
+        if (module->declarations && (module->declarations->functions[f].promises & XR_XIR_FUNCTION_REST) &&
+            (!function->parameter_count || !xr_xir_type_is_array(module->types,
+                function->parameters[function->parameter_count-1]))) {status=XR_XIR_BAD_TYPE;break;}
         uint32_t count = module->generics ? module->generics[f].parameter_count : 0;
         status = xr_xir_compile_type_expression_shape_scratch(remaining, module->types, function->result, count, &scratch);
         for (uint32_t p = 0; p < function->parameter_count && status == XR_XIR_OK; ++p) {

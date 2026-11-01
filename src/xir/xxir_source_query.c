@@ -131,10 +131,32 @@ static void query_modules(SourceQueryCopy *copy, const XrXirSourceView *source) 
 _Static_assert(_Alignof(SourceQueryMemory) >= _Alignof(XrXirSourceDeclaration) &&
     sizeof(SourceQueryMemory) % _Alignof(XrXirSourceDeclaration) == 0 &&
     _Alignof(SourceQueryMemory) >= _Alignof(XrXirSourceType), "query table alignment");
-static bool query_declaration_extent(SourceQueryCopy *copy, const XrXirSourceDeclaration *source,
-    size_t *extent) {
-    if (source->parameter_count && !source->parameters) {
+static bool query_declaration_extent(SourceQueryCopy *copy,const XrXirSourceView *view,
+    const XrXirSourceDeclaration *source,size_t *extent) {
+    if ((source->flags&~XR_XIR_SOURCE_DECL_REST) ||
+        ((source->flags&XR_XIR_SOURCE_DECL_REST) && (source->kind!=XR_XIR_SOURCE_FUNCTION ||
+            !source->parameter_count || !source->parameters || source->native_identity || source->checked_receiver_count)) ||
+        (source->parameter_count && !source->parameters)) {
         copy->status = XR_XIR_BAD_STRUCTURE; return false;
+    }
+    if(source->flags&XR_XIR_SOURCE_DECL_REST) {
+        const XrXirSourceType *tail=&source->parameters[source->parameter_count-1];
+        if(!tail->known||!xr_xir_type_is_array(view->types,tail->type)||
+            tail->generic_owner>view->declaration_count||
+            (!!tail->generic_owner!=!!xr_xir_type_span(view->types,tail->type))) {
+            copy->status=XR_XIR_BAD_TYPE;return false;
+        }
+        uint32_t parameters=0;
+        if(tail->generic_owner) {
+            const XrXirSourceDeclaration *owner=&view->declarations[tail->generic_owner-1];
+            if((owner->kind!=XR_XIR_SOURCE_TYPE && owner->kind!=XR_XIR_SOURCE_FUNCTION) ||
+                !owner->generic_parameter_count) {
+                copy->status=XR_XIR_BAD_TYPE;return false;
+            }
+            parameters=owner->generic_parameter_count;
+        }
+        copy->status=xr_xir_compile_type_expression_shape(&copy->snapshot->context,view->types,tail->type,parameters);
+        if(copy->status!=XR_XIR_OK)return false;
     }
     size_t alignment = _Alignof(XrXirSourceType);
     size_t padding = source->parameter_count ? (alignment - *extent % alignment) % alignment : 0;
@@ -187,7 +209,7 @@ static void query_declarations(SourceQueryCopy *copy, const XrXirSourceView *sou
     size_t table_bytes = count * sizeof(XrXirSourceDeclaration), extent = table_bytes;
     if (!query_declaration_admit(copy, extent)) return;
     for (size_t i = 0; i < count && ((copy)->status == XR_XIR_OK); ++i) {
-        if (!query_declaration_extent(copy, &source->declarations[i], &extent)) {
+        if (!query_declaration_extent(copy, source, &source->declarations[i], &extent)) {
             if (copy->status == XR_XIR_OK) copy->status = XR_XIR_BUDGET;
             return;
         }

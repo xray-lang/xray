@@ -4760,3 +4760,4 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/source_records.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/source_method_surface.cmake")
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/source_assert_throws.cmake)
+include("${CMAKE_CURRENT_LIST_DIR}/xir/rest_values/rest_values.cmake")

@@ -94,7 +94,8 @@ static XrXirStatus query_call_signature(SourceQueryCopy *copy,const XrXirSourceC
         return signature->parameters||signature->parameter_count||signature->receiver_count||signature->result.type||
             signature->result.generic_owner||signature->result.known||signature->type_parameters||
             signature->type_parameter_count||signature->type_parameter_owner||signature->owner_type.known||
-            signature->owner_type.type||signature->owner_type.generic_owner||signature->parameter_flags?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
+            signature->owner_type.type||signature->owner_type.generic_owner||signature->parameter_flags||
+            signature->callable.known||signature->callable.type||signature->callable.generic_owner?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
     }
     const XrXirSourceView *view=&copy->snapshot->view;
     if((!!signature->type_parameters!=!!signature->type_parameter_count)||
@@ -115,9 +116,33 @@ static XrXirStatus query_call_signature(SourceQueryCopy *copy,const XrXirSourceC
         if(query_length(copy,signature->type_parameters[p])<2)
             return copy->status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:copy->status;
     }
-    if(call->reference>=view->reference_count||signature->parameter_count>65536||
+    if(signature->parameter_count>65536||
         (!!signature->parameters!=!!signature->parameter_count)||signature->receiver_count>1||
         signature->receiver_count>signature->parameter_count)return XR_XIR_BAD_STRUCTURE;
+    if(call->reference==UINT32_MAX) {
+        if(!signature->callable.known||signature->receiver_count||signature->owner_type.known||
+            signature->owner_type.type||signature->owner_type.generic_owner)return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status=query_call_signature_type(copy,signature->callable);
+        if(status!=XR_XIR_OK)return status;
+        const XrXirTypeNode *actual=xr_xir_callable_signature(view->types,signature->callable.type);
+        if(!actual||actual->parameter_count!=signature->parameter_count||actual->result!=signature->result.type||
+            signature->result.generic_owner!= (xr_xir_type_span(view->types,actual->result)?signature->callable.generic_owner:0))return XR_XIR_BAD_TYPE;
+        status=query_call_signature_type(copy,signature->result);
+        if(status!=XR_XIR_OK)return status;
+        bool rest=(actual->flags&XR_XIR_CALLABLE_REST)!=0;
+        if(!!signature->parameter_flags!=rest)return XR_XIR_BAD_STRUCTURE;
+        for(uint32_t p=0;p<actual->parameter_count;++p) {
+            if(!((copy)->status==XR_XIR_OK))return copy->status;
+            XrXirType type=actual->parameters[p].type;
+            if(xr_xir_type_is_cell(view->types,type))type=xr_xir_cell_element(view->types,type);
+            if(!signature->parameters[p].known||signature->parameters[p].type!=type||
+                signature->parameters[p].generic_owner!=(xr_xir_type_span(view->types,type)?signature->callable.generic_owner:0)||
+                (rest&&signature->parameter_flags[p]!=(p+1==actual->parameter_count?XR_XIR_SOURCE_CALL_VARIADIC:0)))return XR_XIR_BAD_TYPE;
+        }
+        return XR_XIR_OK;
+    }
+    if(call->reference>=view->reference_count||signature->callable.known||signature->callable.type||
+        signature->callable.generic_owner)return XR_XIR_BAD_STRUCTURE;
     uint32_t target=view->references[call->reference].target;
     const XrNativeMemberDeclaration *native=NULL;
     if(target&&target<=view->declaration_count&&view->declarations[target-1].kind==XR_XIR_SOURCE_MEMBER&&
@@ -150,7 +175,10 @@ static XrXirStatus query_call_signature(SourceQueryCopy *copy,const XrXirSourceC
     if(receivers!=signature->receiver_count)return XR_XIR_BAD_STRUCTURE;
     if(native&&(!signature->owner_type.known||!xr_xir_type_is_array(view->types,signature->owner_type.type)||
         (!!signature->parameter_flags!=!!signature->parameter_count)))return XR_XIR_BAD_TYPE;
-    if(!native&&signature->parameter_flags)return XR_XIR_BAD_STRUCTURE;
+    bool rest=!native&&(callee->flags&XR_XIR_SOURCE_DECL_REST);
+    if(!native&&!!signature->parameter_flags!=rest)return XR_XIR_BAD_STRUCTURE;
+    if(rest&&(!signature->parameter_count||signature->receiver_count||callee->native_identity||
+        !xr_xir_type_is_array(view->types,signature->parameters[signature->parameter_count-1].type)))return XR_XIR_BAD_TYPE;
     if(signature->owner_type.known) {
         if(!callee->parent||callee->parent>view->declaration_count||view->declarations[callee->parent-1].kind!=XR_XIR_SOURCE_TYPE||
             (signature->owner_type.generic_owner&&signature->owner_type.generic_owner!=signature->type_parameter_owner))return XR_XIR_BAD_TYPE;
@@ -159,6 +187,8 @@ static XrXirStatus query_call_signature(SourceQueryCopy *copy,const XrXirSourceC
     if(signature->result.generic_owner&&signature->result.generic_owner!=signature->type_parameter_owner)return XR_XIR_BAD_TYPE;
     XrXirStatus status=query_call_signature_type(copy,signature->result);
     for(uint32_t p=0;p<signature->parameter_count&&status==XR_XIR_OK;++p) {
+        if(rest&&signature->parameter_flags[p]!=(p+1==signature->parameter_count?XR_XIR_SOURCE_CALL_VARIADIC:0))
+            return XR_XIR_BAD_STRUCTURE;
         if(native) {
             if(!((copy)->status == XR_XIR_OK))return copy->status;
             uint32_t expected=(native->parameters[p].optional?XR_XIR_SOURCE_CALL_OPTIONAL:0)|

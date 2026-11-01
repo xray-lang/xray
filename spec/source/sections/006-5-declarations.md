@@ -234,9 +234,11 @@ fn sum(...nums: i64) -> i64 {
 sum(1, 2, 3)        // total = 6
 ```
 
-- rest 参数在参数列表**最后**。
-- 类型 `...T` 内部实际是 `Array<T>`。
-- 只能有一个 rest 参数。
+- 普通具名函数允许一个末尾 READ rest：`...name: T`；不能带默认值、`ref` 或 `move`，也不扩展匿名函数、方法或构造器。嵌套具名函数沿真实捕获和拥有者规则。
+- 体内参数是只读绑定的 `Array<T>`；元素须满足既有 Array 保存和复制条件。不附加 Sendable 或 NoSuspend 承诺。普通值复制、COW、身份及失败清理规则保持。
+- 固定前缀沿普通参数和默认值规则；合法默认参数连续位于固定前缀末尾、rest 之前。动态 Array 不能补固定参数。
+- 取值后保留 rest 调用形状：`fn(...T) -> R` 或 `fn(P, ...T) -> R`。它与普通 `fn(Array<T>) -> R`、固定元数函数严格区分，不隐式互转；其它返回、错误与执行承诺的既有匹配规则保持。通过函数值调用不会获得声明的默认表达式。
+- 调用可使用静态 Tuple 展开，以及至多一个最后的同元素类型 Array 展开（§3.9）；普通 rest 实参可在最后的 Array 之前。整个尾部保存为拥有式 Array，所有显式实参从左到右各求值一次，随后执行被省略的固定前缀默认表达式。
 
 #### 5.2.6 函数提升
 
@@ -1533,9 +1535,11 @@ fn sum(...nums: i64) -> i64 {
 sum(1, 2, 3)        // total = 6
 ```
 
-- The rest parameter must be **last**.
-- The actual internal type of `...T` is `Array<T>`.
-- Only one rest parameter is allowed.
+- An ordinary named function may declare one final READ rest parameter, `...name: T`, without a default, `ref` or `move`. This does not extend anonymous functions, methods or constructors. Nested named functions retain authentic capture and owner rules.
+- The body receives a read-only `Array<T>` binding. Elements meet existing Array storage and copying requirements; rest adds no Sendable or NoSuspend promise. Ordinary value copying, COW, identity and failed cleanup apply.
+- Fixed parameters retain ordinary argument and default rules. Legal trailing defaults precede rest; a dynamic Array cannot supply fixed parameters.
+- Function values retain their rest shape, `fn(...T) -> R` or `fn(P, ...T) -> R`. These are distinct from ordinary `fn(Array<T>) -> R` and fixed-arity functions, without implicit adapters. Existing result, error and execution-promise matching still applies. Calling a function value does not acquire declaration defaults.
+- Calls may use static Tuple spreads and at most one final Array spread of the same element type (§3.9), after ordinary rest arguments. The tail becomes one owned Array. Evaluate explicit arguments once from left to right, then omitted fixed-prefix defaults.
 
 #### 5.2.6 Function hoisting
 

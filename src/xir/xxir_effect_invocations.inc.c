@@ -306,7 +306,7 @@ static XrXirStatus effect_invocation_shape(const EffectInvocationRead *owner,uin
 
 static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const EffectInvocationFinal *final);
 static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectInvocationFinal *final,
-    const EffectInvocationWorkspace *discovery);
+    EffectInvocationWorkspace *discovery);
 static void effect_invocation_result_clear(EffectFinalFunctions *result);
 static void effect_invocation_result_free(EffectFinalFunctions *result);
 static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,

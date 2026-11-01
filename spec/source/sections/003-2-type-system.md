@@ -761,6 +761,8 @@ var f: Mapper2<i64, string> = (n) -> string(n)
 
 函数类型允许可选的上下文前缀 `nosuspend fn(T1, T2) throws(E) -> R`；无前缀的书写类型默认可能挂起。`nosuspend` 只在类型位置、紧接 `fn` 之前识别，其它位置仍可作普通名字；它不越过未分组的语句换行。该保证属于同一个 callable 类型身份，与 `throws(E)` 独立，并由别名替换、可空及嵌套类型、格式化和接收后的复验保留。直接处于该期望类型的函数字面量按此保证检查，未知或可能挂起的调用拒绝；已经构造的普通函数值不能根据其函数体被隐式强化。限定类型可放宽到普通 callable，反向需要已有真实承诺；不新增函数声明自身的效应注解。
 
+末尾 READ rest 在函数类型中写作 `fn(...T) -> R`，带固定前缀时为 `fn(P, ...T) -> R`。rest 是真实 callable 类型事实；体内物理 Array 不使它与 `fn(Array<T>) -> R` 或固定元数类型相等，也不隐式适配。取值、泛型替换、嵌套类型、格式化及冷库接收均保留该事实。`throws`、root 与 `nosuspend` 仍按各自既有规则匹配；这不增加 C 可变参数 ABI。
+
 #### 2.8.1 函数的错误类型与闭包
 
 抛错函数类型在参数列表与返回类型之间写 `throws(E)`，例如 `fn(string) throws(ParseErr) -> i64`；返回 Unit 时写 `fn(string) throws(ParseErr)`。无子句的函数类型保证不抛业务错误。`throws` 是类型身份的一部分，参与函数值赋值、重载判定和接口匹配；panic 不进入错误类型。
@@ -1903,6 +1905,8 @@ a nullable function type is written directly as `(fn() -> i64)?`. `CFn<...>`
 uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
 
 A function type may carry the contextual prefix `nosuspend fn(T1, T2) throws(E) -> R`; a written type without the prefix may suspend. `nosuspend` is recognized only in type position immediately before `fn`, without crossing an ungrouped statement line boundary, and remains an ordinary name elsewhere. The guarantee belongs to the same callable type identity, independently of `throws(E)`, and survives alias substitution, nullable and nested types, formatting and receiving revalidation. A function literal directly checked against this expected type must prove the guarantee; unknown or potentially suspending calls reject. An already constructed ordinary function value cannot be implicitly strengthened from its body. A restricted callable may weaken to an ordinary one; the reverse requires an actual existing promise. This adds no own-function declaration effect annotation.
+
+A final READ rest is written `fn(...T) -> R`, or `fn(P, ...T) -> R` with a fixed prefix. Rest is an authentic callable type fact: the physical Array in the body does not make it equal or implicitly adaptable to `fn(Array<T>) -> R` or a fixed-arity type. Function values, generic substitution, nested types, formatting and cold-library reception retain the fact. Existing error, root and `nosuspend` matching remains independent; this does not introduce a C varargs ABI.
 
 #### 2.8.1 Function Error Types and Closures
 

@@ -195,6 +195,39 @@ static XrXirStatus effect_invocation_flags_match(EffectInvocationFlow *flow) {
     return ((flow->fixed[words-1]|flow->certified[words-1])&extra)?
         XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
 }
+/* Constructor projection owns only scratch. Reopen actual geometry after its
+ * allocation before consuming any current capture word or flag. */
+static XrXirStatus effect_invocation_capture_storage(EffectInvocationFlow *flow) {
+    EffectInvocationWorkspace *owner=flow?flow->owner:NULL;
+    if(!owner || flow->read!=&owner->read || owner->read.final!=&owner->final ||
+        owner->read.discovery!=owner || !owner->read.roles.construction || owner->read.roles.sealed ||
+        flow->memory || flow->node>=owner->final.count)return XR_XIR_BAD_STRUCTURE;
+    EffectBodyRequest request=effect_invocation_body(flow->read);
+    XrXirStatus status=effect_invocation_formal_prepare(flow,&request);if(status!=XR_XIR_OK)return status;
+    EffectInvocationBasis basis=flow->basis;
+    uint32_t body=owner->final.nodes[flow->node].body,root=owner->final.nodes[flow->node].root;
+    uint32_t values=flow->values,rows=flow->physical->origins,parameters=flow->head.parameter_count;
+    status=effect_invocation_flow_storage(flow,owner->final.nodes[flow->node].input);
+    if(status!=XR_XIR_OK)return status;
+    request=effect_invocation_body(flow->read);
+    status=effect_invocation_formal_prepare(flow,&request);if(status!=XR_XIR_OK)return status;
+    if(flow->values!=values || flow->physical->origins!=rows || flow->head.parameter_count!=parameters ||
+        flow->basis.parameters!=basis.parameters || flow->basis.fn_words!=basis.fn_words ||
+        flow->basis.origin_words!=basis.origin_words || flow->basis.cell_words!=basis.cell_words ||
+        flow->basis.row_words!=basis.row_words || owner->final.nodes[flow->node].body!=body ||
+        owner->final.nodes[flow->node].root!=root)return XR_XIR_BAD_STRUCTURE;
+    if(rows)memset(flow->rows,0,(size_t)rows*basis.fn_words*sizeof(*flow->rows));
+    if(rows)for(uint32_t v=0;v<values;++v)flow->row_indices[v]=UINT32_MAX;
+    uint32_t row=0;
+    for(uint32_t p=0;p<flow->physical->count;++p) {
+        EffectPhysicalRecord record=flow->physical->records[p];
+        if(!(record.mask&(EFFECT_PHYSICAL_CALLABLE|EFFECT_PHYSICAL_ITERATOR)))continue;
+        if(record.value>=values || row>=rows || flow->row_indices[record.value]!=UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
+        flow->row_indices[record.value]=row++;
+    }
+    if(row!=rows)return XR_XIR_BAD_STRUCTURE;
+    return effect_invocation_flags_match(flow);
+}
 static XrXirStatus effect_invocation_flag_get(EffectInvocationFlow *flow,
     uint32_t value,bool certified,bool *output) {
     if (!flow || !flow->read || !output || value>=flow->values ||

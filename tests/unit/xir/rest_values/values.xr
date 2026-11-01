@@ -1,0 +1,86 @@
+var trace:i64=0
+fn mark(n:i64)->i64{trace=trace*10+n;return n}
+fn tail()->Array<i64>{trace=trace*10+5;return [5,6]}
+fn sum(...xs:i64)->i64{var n=0;for(x in xs){n+=x};return n}
+fn ordinary(xs:Array<i64>)->i64{var n=0;for(x in xs){n+=x};return n}
+fn prefixed(head:i64=40,...xs:i64)->i64{return head+sum(...xs)}
+fn collect<T>(...xs:T)->Array<T>{return xs}
+fn pair<T>(x:T)->(T,T){return (x,x)}
+fn array<T>(x:T)->Array<T>{return [x,x]}
+fn identity<T>(x:T)->T{return x}
+fn choose()->fn(...i64)->i64{trace=trace*10+9;return sum}
+fn pass(f:fn(...i64)->i64)->fn(...i64)->i64{return f}
+fn passPlain(f:fn(Array<i64>)->i64)->fn(Array<i64>)->i64{return f}
+fn invoke(f:fn(...i64)->i64)->i64{return f(20,...[22])}
+fn values(...xs:i64)->Iterator<i64>{for(x in xs){yield x}}
+fn genericValues<T>(...xs:T)->Iterator<T>{for(x in xs){yield x}}
+fn plainValues(xs:Array<i64>)->Iterator<i64>{for(x in xs){yield x}}
+fn fail()->i64{trace=trace*10+2;assert(false,"rest-partial-failure");return 0}
+fn nested(seed:i64)->i64{
+ fn add(...xs:i64)->i64{return seed+sum(...xs)}
+ const f:fn(...i64)->i64=add
+ return f(20,21)
+}
+fn nestedYield(seed:i64)->i64{
+ fn items(...xs:i64)->Iterator<i64>{for(x in xs){yield x+seed}}
+ const f:fn(...i64)->Iterator<i64>=items
+ var total=0
+ for(x in f(19,21)){total+=x}
+ return total
+}
+fn ownedCapture()->i64{
+ var seed=20
+ fn items(...xs:i64)->Iterator<i64>{yield seed;for(x in xs){yield x}}
+ const generate=items
+ var total=0;for(x in generate(22)){total+=x}
+ return total
+}
+fn mergedCapture(useOpaque:bool)->i64{
+ var seed=20
+ fn items(...xs:i64)->Iterator<i64>{yield seed;for(x in xs){yield x}}
+ const generate=items
+ const it:Iterator<i64>=useOpaque ? genericValues<i64>(20,22) : generate(22)
+ var total=0;for(x in it){total+=x}
+ return total
+}
+export fn referenceAnswer()->i64{
+    assert(sum()==0,"rest-line-18")
+    assert(sum(1,2,3)==6,"rest-line-19")
+    assert(sum(...pair(3))==6,"rest-line-20")
+    assert(sum(...array(3))==6,"rest-line-21")
+    assert(sum(...identity([3,4]))==7,"rest-line-22")
+    assert(prefixed()==40,"rest-line-23")
+    assert(prefixed(...[])==40,"rest-line-24")
+    assert(prefixed(1,2,...[3])==6,"rest-line-25")
+    const fixed:fn(i64,...i64)->i64=prefixed
+    assert(fixed(1,2,3)==6,"rest-line-27")
+    const f:fn(...i64)->i64=pass(sum)
+    assert(invoke(f)==42,"rest-line-29")
+    assert(passPlain(ordinary)([20,22])==42,"rest-line-30")
+    var data=[3,4]
+    var saved=collect(1,2,...data)
+    data[0]=9
+    saved[1]=7
+    assert(data[1]==4 && saved[2]==3,"rest-line-35")
+    trace=0
+    assert(choose()(mark(1),...(mark(2),mark(3)),mark(4),...tail())==21,"rest-line-37")
+    assert(trace==912345,"rest-line-38")
+    trace=0
+    try {sum(mark(1),fail(),mark(3));assert(false)}
+    catch panic(p:PanicInfo){assert(p.code==445 && trace==12)}
+    const texts=collect<string>("A\0中","B")
+ assert(len(texts)==2 && len(texts[0])==3 && texts[0]=="A\0中","rest-string")
+ assert(nested(1)==42,"rest-nested")
+ assert(nestedYield(1)==42,"rest-nested-generator")
+ assert(ownedCapture()==42,"rest-owned-cell-capture")
+    const generator:fn(...i64)->Iterator<i64>=values
+    var n=0;for(x in generator(20,...[22])){n+=x};assert(n==42,"rest-generator")
+    const genericGenerator=genericValues<i64>
+    n=0;for(x in genericGenerator(20,22)){n+=x};assert(n==42,"rest-generic-generator")
+    n=0;for(x in genericValues<i64>(20,22)){n+=x};assert(n==42,"rest-generic-direct")
+    assert(mergedCapture(false)==42,"rest-merged-capture")
+    assert(mergedCapture(true)==42,"rest-merged-opaque")
+    const plainGenerator=plainValues
+    n=0;for(x in plainGenerator([20,22])){n+=x};assert(n==42,"ordinary-generator")
+    return 42
+}

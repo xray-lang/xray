@@ -25,6 +25,8 @@ typedef struct XrXirSourceCallSignature {
     /* Actual instantiated owner for static and instance qualification. */
     XrXirSourceType owner_type;
     const uint32_t *parameter_flags;
+    /* Indirect observations retain the actual value type, never a guessed target. */
+    XrXirSourceType callable;
 } XrXirSourceCallSignature;
 #define XR_XIR_SOURCE_CALL_OPTIONAL 1u
 #define XR_XIR_SOURCE_CALL_VARIADIC 2u

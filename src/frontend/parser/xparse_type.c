@@ -297,6 +297,7 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
             if (!xr_parser_healthy(parser) || !result) return NULL;
             result->requires_nothrow = src->requires_nothrow;
             result->requires_nosuspend = src->requires_nosuspend;
+            result->function_rest = src->function_rest;
             result->throws_clause = src->throws_clause;
             if (src->throws_clause.type) {
                 result->throws_clause.type = clone_subst_type_ref(parser, src->throws_clause.type, subst_alias, type_args);
@@ -911,6 +912,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             return xr_tref_error(parser->compiler_session);
         }
         int count = 0;
+        bool function_rest = false;
         while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
             if (count > 0) {
                 if (!xr_parser_match(parser, TK_COMMA)) {
@@ -969,11 +971,17 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 param_names = resized_names;
                 cap = new_cap;
             }
+            if (function_rest) {xr_parser_error(parser, "a rest type must be the final parameter");return NULL;}
+            bool rest = xr_parser_match(parser, TK_DOT_DOT_DOT);
             param_modes[count] = XR_PARAM_READ;
             do {
                 xr_parse_optional_param_mode(parser, true, &param_modes[count]);
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
+            if (rest && param_modes[count] != XR_PARAM_READ) {
+                xr_parser_error(parser, "a rest type requires READ elements");return NULL;
+            }
+            function_rest = rest;
             param_names[count] = NULL;
             if (xr_parser_check(parser, TK_NAME)) {
                 Scanner lookahead;
@@ -1040,7 +1048,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             parser->compiler_session, elems, param_modes, param_names, count, ret,
             borrow_origin_syntax, borrow_origins, borrow_origin_count);
         if (!xr_parser_healthy(parser)) return NULL;
-        if (result) {result->throws_clause = throws_clause;result->requires_nosuspend = no_suspend;}
+        if (result) {result->throws_clause = throws_clause;result->requires_nosuspend = no_suspend;result->function_rest = function_rest;}
         xr_tref_set_source_position(result, function_token.line, function_token.column);
 
 

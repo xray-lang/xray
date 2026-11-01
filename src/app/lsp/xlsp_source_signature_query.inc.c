@@ -41,7 +41,8 @@ static XrXirStatus signature_call_equal(const XlspSourceSnapshot *s,const XrXirS
         a->result.type!=b->result.type||a->result.generic_owner!=b->result.generic_owner||
         a->type_parameter_count!=b->type_parameter_count||a->type_parameter_owner!=b->type_parameter_owner||
         a->owner_type.known!=b->owner_type.known||a->owner_type.type!=b->owner_type.type||
-        a->owner_type.generic_owner!=b->owner_type.generic_owner)
+        a->owner_type.generic_owner!=b->owner_type.generic_owner||
+        a->callable.known!=b->callable.known||a->callable.type!=b->callable.type||a->callable.generic_owner!=b->callable.generic_owner)
         return XR_XIR_BAD_STRUCTURE;
     for(uint32_t p=0;p<a->type_parameter_count;++p)for(size_t c=0;;++c) {
         XrXirStatus status=lsp_work(s,2);if(status!=XR_XIR_OK)return status;
@@ -126,6 +127,10 @@ static XrXirStatus signature_parameters(const XlspSourceSnapshot *s,const XrXirS
         uint32_t flags=call->parameter_flags?call->parameter_flags[index]:0;
         XrXirSourceType shown=call->parameters[index++];
         if(receiver)continue;
+        if((declaration->flags&XR_XIR_SOURCE_DECL_REST)&&(flags&XR_XIR_SOURCE_CALL_VARIADIC)) {
+            if(!xr_xir_type_is_array(view->types,shown.type))return XR_XIR_BAD_TYPE;
+            shown.type=xr_xir_array_element(view->types,shown.type);
+        }
         if(syntax->declarations[i].role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED)return XR_XIR_UNSUPPORTED;
         uint32_t mode=0;status=signature_parameter_mode(s,syntax,parameter,&mode);
         if(status!=XR_XIR_OK)return status;

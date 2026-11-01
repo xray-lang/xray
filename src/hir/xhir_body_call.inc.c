@@ -125,7 +125,7 @@ static XrXirStatus body_array_callback(const XrHirBody *body,const HirBodySignat
     XrXirType type,XrCompileRequestControl *control,const char **reason) {
     const XrXirTypeNode *actual=xr_xir_callable_signature(body->types,type);
     XrHirArrayCallbackShape shape=call->callback;
-    if(!actual||actual->parameter_count<shape.minimum||actual->parameter_count>shape.maximum) {
+    if(!actual||(actual->flags&XR_XIR_CALLABLE_REST)||actual->parameter_count<shape.minimum||actual->parameter_count>shape.maximum) {
         if (reason)
             *reason = "Array callback requires a function of the declared shape";
         return XR_XIR_BAD_TYPE;
@@ -275,7 +275,8 @@ XR_FUNC XrXirStatus xr_hir_body_call_argument(XrHirBody *body,XrHirBodySignature
     }
     if(input->kind==XR_HIR_CALL_ACCESS) {
         HirBodySignature *call=&((HirBodySignature *)body->signatures.items)[signature.index];
-        call->accesses[parameter]|=1;++call->access_count;
+        call->accesses[parameter]|=1;
+        if(input->argument>=call->access_count)call->access_count=input->argument+1;
     }
     if(input->kind==XR_HIR_CALL_FINAL) {
         HirBodySignature *call=&((HirBodySignature *)body->signatures.items)[signature.index];

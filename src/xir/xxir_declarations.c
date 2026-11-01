@@ -216,7 +216,11 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
             d->functions[i].test_timeout_seconds > INT_MAX ||
             (d->functions[i].test_role && (d->functions[i].nominal_owner || d->functions[i].cleanup_owner)) ||
             (!!d->functions[i].nominal_owner != (d->functions[i].method_kind != XR_XIR_NON_MEMBER)) ||
-            (d->functions[i].promises & ~(XR_XIR_FUNCTION_NO_SUSPEND | XR_XIR_FUNCTION_GENERATOR)) ||
+            (d->functions[i].promises & ~(XR_XIR_FUNCTION_NO_SUSPEND | XR_XIR_FUNCTION_GENERATOR | XR_XIR_FUNCTION_REST)) ||
+            ((d->functions[i].promises & XR_XIR_FUNCTION_REST) &&
+             ((d->functions[i].method_kind != XR_XIR_NON_MEMBER && d->functions[i].method_kind != XR_XIR_MEMBER_HELPER) ||
+              d->functions[i].cleanup_owner || d->functions[i].native_callable ||
+              d->functions[i].test_role)) ||
             ((d->functions[i].promises & XR_XIR_FUNCTION_GENERATOR) &&
              (d->functions[i].cleanup_owner || d->functions[i].test_role ||
               (d->functions[i].promises & XR_XIR_FUNCTION_NO_SUSPEND)))) return XR_XIR_BAD_STRUCTURE;

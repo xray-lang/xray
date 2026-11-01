@@ -101,7 +101,7 @@ XR_FUNC XrXirStatus xir_effect_capture_bound_input(const XrXirCompileContext *co
     if (status!=XR_XIR_OK) return status;
     uint32_t mask=(selected.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
         (selected.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
-    result.flags=(mask?mask:XR_XIR_CALLABLE_ROOT_NONE)|(signature->flags&XR_XIR_CALLABLE_NO_SUSPEND);
+    result.flags=(mask?mask:XR_XIR_CALLABLE_ROOT_NONE)|(signature->flags&(XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_REST));
     if (!xr_xir_callable_flags_compatible(result.flags,signature->flags)) return XR_XIR_BAD_TYPE;
     result.refined=result.flags!=signature->flags;
 

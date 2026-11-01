@@ -31,7 +31,10 @@ static bool source_iterator_cleanup(SourceContext *ctx,AstNode *node,SourceValue
     ctx->identities[index].test_timeout_seconds=0;
     ctx->identities[index].method_kind=ctx->identities[index].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
     ++ctx->function_count;
+    SourceName *locals=ctx->locals,*scope=ctx->scope;
     bool returned=ctx->returned;ctx->function=index;ctx->returned=false;SourceValue ignored;
+    /* The helper has one explicit parameter and no caller lexical values. */
+    ctx->locals=ctx->scope=NULL;
     bool ok=source_iterator_consume(ctx,node,(SourceValue){.id=0,.type=iterator.type,.place={0}},(SourceValue){0},XR_XIR_ITERATOR_CLOSE,&ignored) &&
         source_recipe_append(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}},NULL);
     if(ok) {ctx->returned=true;ok=finish_body(ctx);}
@@ -42,7 +45,7 @@ static bool source_iterator_cleanup(SourceContext *ctx,AstNode *node,SourceValue
         record->generic_parameter_count=ctx->generics[index].parameter_count;
         record->generic_constraints=ctx->generics[index].constraints;
     }
-    ctx->function=outer;ctx->returned=returned;if(!ok) return false;
+    ctx->function=outer;ctx->returned=returned;ctx->locals=locals;ctx->scope=scope;if(!ok) return false;
     uint32_t count=ctx->generics[index].parameter_count;
     XrXirType *types=count ? source_alloc(ctx,count,sizeof(*types)) : NULL;
     if(count && !types) return false;

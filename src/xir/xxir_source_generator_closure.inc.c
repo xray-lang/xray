@@ -26,7 +26,8 @@ static bool source_generator_closure_factory(SourceContext *ctx,AstNode *node,ui
     body->generic_owner=original->generic_owner;body->type_parameters=original->type_parameters;
     body->type_parameter_count=original->type_parameter_count;body->parameters=original->parameters;
     ctx->generics[factory]=ctx->generics[producer];ctx->identities[factory]=ctx->identities[producer];
-    ctx->identities[factory].promises=no_suspend ? XR_XIR_FUNCTION_NO_SUSPEND : 0;
+    ctx->identities[factory].promises=(no_suspend ? XR_XIR_FUNCTION_NO_SUSPEND : 0) |
+        (ctx->identities[producer].promises&XR_XIR_FUNCTION_REST);
     char *name=source_alloc(ctx,40,sizeof(*name));
     if(!name || source_format(ctx,name,40,"$generator_factory%u",factory)!=XR_DIAG_OK)
         return source_fail(ctx,node,XR_XIR_BUDGET,"generator closure factory name exhausted");
