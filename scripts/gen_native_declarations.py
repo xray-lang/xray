@@ -1042,9 +1042,9 @@ def render_unicode_callable(root, decoder):
         if row.argc != str(len(params)) or row.arg_spec != 'v' * len(params):
             raise ValueError('Memory callable arity disagrees: ' + name)
         borrowed = row.return_ownership == 'borrowed_param:0'
-        if borrowed != (identity in (8, 9)):
+        if borrowed != (ordinal in (4, 5)):
             raise ValueError('Memory callable borrow origin disagrees: ' + name)
-        allocation = 'MAY_HEAP' if identity in (4, 5, 6, 8, 9, 10, 16) else 'NO_HEAP'
+        allocation = 'MAY_HEAP' if ordinal in (0, 1, 2, 4, 5, 6, 12) else 'NO_HEAP'
         if row.allocation.upper() != allocation:
             raise ValueError('Memory callable allocation facts disagree: ' + name)
         ownership = 'BORROWED_PARAM_0' if borrowed else 'UNIT' if result_text == '()' else 'OWNED'
