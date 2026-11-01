@@ -123,7 +123,7 @@ static void generic_sites(const XrXirCompileContext *context) {
 int main(void) {
     XrXirCompileContext context;context_new(&context);PreparedMaterialization input;prepare(&context,0,&input);
     XrXirConstruction *owner=NULL;const XrXirConstruction *source=input.source.checked->construction;
-    XrXirConstructionSpec spec={source->rows,source->count,input.edges,2,NULL};
+    XrXirConstructionSpec spec={source->rows,source->count,input.edges,2,NULL,NULL};
     CHECK(xr_xir_compile_construction_new_v5(&context,input.module.types,&spec,xr_xir_compile_construction_slots(source),&owner, NULL)==XR_XIR_OK);
     XrXirArtifact *received=relocation_admission(&context,&input.module,owner,false);
     xr_xir_compile_construction_free(owner);prepared_free(&input);

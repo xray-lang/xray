@@ -55,7 +55,7 @@ static bool source_view_construction(SourceContext *ctx,const XirViewNormalizati
         if (!source_view_construction_coordinate(ctx,normalization,sites[i].caller,&sites[i].instruction)) return false;
     }
     XrXirComptimeTable table={sites,comptime->site_count,comptime->bindings,comptime->binding_count};
-    XrXirConstructionSpec specification={rows,count,bindings,materializations,&table};
+    XrXirConstructionSpec specification={rows,count,bindings,materializations,&table,NULL};
     XrXirStatus status=xr_xir_compile_construction_new_v5(&ctx->compile,&ctx->types,&specification,
         xr_xir_compile_construction_slots(old),output,ctx->request);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"relocated construction ownership failed");

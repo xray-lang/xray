@@ -50,7 +50,7 @@ static XrXirStatus spec_materialization_construction(SpecContext *c,
     XrXirConstruction *empty=NULL;
     XrXirStatus status=xir_construction_project(&c->remaining,module->types,slots,&empty, c->control);
     if (status!=XR_XIR_OK) return status;
-    XrXirConstructionSpec input={empty->rows,empty->count,edges,count,NULL};
+    XrXirConstructionSpec input={empty->rows,empty->count,edges,count,NULL,NULL};
     status=xr_xir_compile_construction_new_v5(&c->remaining,module->types,&input,slots,output, c->control);
     xr_xir_compile_construction_free(empty);return status;
 }

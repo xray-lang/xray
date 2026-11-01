@@ -52,7 +52,7 @@ static void library_slot_raw_controls(const XrXirCompileContext *context,const X
     const XrXirConstruction *original=source->construction;
     const XrXirSlotFacts *facts=xr_xir_compile_construction_slots(original);
     XrXirConstructionSpec spec={original->rows,original->count,original->materializations,
-        original->materialization_count,&original->comptime};
+        original->materialization_count,&original->comptime,NULL};
     CHECK(facts && facts->count==4);XrXirConstruction *output=NULL;
     CHECK(xr_xir_compile_construction_new_v5(context,source->module.types,&spec,NULL,&output, NULL)==XR_XIR_BAD_STRUCTURE && !output);
     XrXirConstruction *occupied=(XrXirConstruction *)(uintptr_t)1;
@@ -408,7 +408,7 @@ static void library_comptime_controls(void) {
     XrXirComptimeTable unbound=source->construction->comptime;
     CHECK(unbound.binding_count==2);unbound.bindings+=1;--unbound.binding_count;
     XrXirConstructionSpec spec={source->construction->rows,source->construction->count,source->construction->materializations,
-        source->construction->materialization_count,&unbound};XrXirConstruction *removed=NULL;
+        source->construction->materialization_count,&unbound,NULL};XrXirConstruction *removed=NULL;
     CHECK(xr_xir_compile_construction_new_v5(&context,source->module.types,&spec,xr_xir_compile_construction_slots(source->construction),&removed, NULL)==XR_XIR_OK);
     literal=true;CHECK(xir_literal_type_names(&context,&source->module,removed,provider,&literal)==XR_XIR_OK && !literal);
     CHECK(xr_xir_compile_recheck_v2(&context,&source->module,removed,&received,NULL, NULL)==XR_XIR_BAD_TYPE && !received);

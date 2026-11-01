@@ -118,7 +118,7 @@ static void method_owner_cases(void) {
         XrXirConstructionRow rows[2] = {{0}, {0}};
         CHECK(identities[2].nominal_owner && identities[2].nominal_owner <= 2);
         rows[identities[2].nominal_owner - 1].default_initializer = 3;
-        XrXirConstructionSpec spec = {rows, 2, NULL, 0, NULL};
+        XrXirConstructionSpec spec = {rows, 2, NULL, 0, NULL,NULL};
         XrXirSlotFacts slots = {NULL, 0};
         XrXirConstruction *construction = NULL;
         CHECK(xr_xir_compile_types_structure_verify(&stage_context, &types) == XR_XIR_OK);

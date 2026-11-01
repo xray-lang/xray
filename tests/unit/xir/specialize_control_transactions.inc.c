@@ -45,7 +45,7 @@ static XrXirStatus specialize_pending_source(const XrXirCompileContext *context,
         XrXirComptimeTable table=source->construction->comptime;CHECK(table.binding_count);
         if(!--table.binding_count)table.bindings=NULL;
         XrXirConstructionSpec specification={source->construction->rows,source->construction->count,
-            source->construction->materializations,source->construction->materialization_count,&table};
+            source->construction->materializations,source->construction->materialization_count,&table,NULL};
         status=xr_xir_compile_construction_new_v5(context,source->module.types,&specification,
             &source->construction->slots,&construction,NULL);
         if(status==XR_XIR_OK){XrXirModule built=source->module;built.stage=XR_XIR_BUILT;

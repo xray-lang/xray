@@ -44,7 +44,7 @@ static void wire_built(const XrXirCompileContext *context) {
     XrXirProvenance evidence={.kind=XR_XIR_EVIDENCE_TEMPLATE,.contracts=contracts,.contract_count=4};
     XrXirModule built={XR_XIR_BUILT,functions,4,&declarations,NULL,&types,&evidence,XR_XIR_PROGRAM,NULL};
     uint32_t defaults[2]={0};XrXirConstructionRow row={0,defaults,2};
-    XrXirMaterializationBinding edge={1,0,2,0};XrXirConstructionSpec input={&row,1,&edge,1,NULL};
+    XrXirMaterializationBinding edge={1,0,2,0};XrXirConstructionSpec input={&row,1,&edge,1,NULL,NULL};
     XrXirConstruction *owner=NULL;CHECK(xr_xir_compile_construction_new_v5(context,&types,&input,&(XrXirSlotFacts){NULL,0},&owner, NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_OK);
     CHECK(xr_xir_compile_declarations_verify(context,&declarations,&types,4,XR_XIR_PROGRAM)==XR_XIR_OK);

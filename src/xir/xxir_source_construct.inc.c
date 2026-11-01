@@ -78,7 +78,7 @@ static bool source_construction_prepare(SourceContext *ctx) {
     if (!source_library_comptime_table(ctx,&comptime)) return false;
     XrXirSlotFacts slots={0};
     if (!source_slot_facts_prepare(ctx,&slots)) return false;
-    XrXirConstructionSpec input={rows,count,bindings,binding_count,&comptime};
+    XrXirConstructionSpec input={rows,count,bindings,binding_count,&comptime,NULL};
     XrXirStatus status=xr_xir_compile_construction_new_v5(&ctx->compile,&ctx->types,&input,&slots,&ctx->construction,ctx->request);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"source construction ownership failed");
 }

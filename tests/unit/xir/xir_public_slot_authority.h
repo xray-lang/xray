@@ -35,7 +35,7 @@ static void ci_direct_slot_authority(const XrXirCompileContext *context,const Xr
     CHECK(xr_compile_resources_alloc(context->resources,slots->count*sizeof(*rows),(void **)&rows)==XR_COMPILE_RESOURCE_OK);
     memcpy(rows,slots->rows,slots->count*sizeof(*rows));rows[slot].exported=0;
     XrXirSlotFacts private_slots={rows,slots->count};
-    XrXirConstructionSpec spec={original->rows,original->count,original->materializations,original->materialization_count,&original->comptime};
+    XrXirConstructionSpec spec={original->rows,original->count,original->materializations,original->materialization_count,&original->comptime,NULL};
     XrXirConstruction *private_owner=NULL;
     CHECK(xr_xir_compile_construction_new_v5(context,module->types,&spec,&private_slots,&private_owner,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_recheck_v2(context,module,private_owner,&received,NULL,NULL)==XR_XIR_BAD_STRUCTURE && !received);
