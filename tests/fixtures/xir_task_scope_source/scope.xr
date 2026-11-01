@@ -53,6 +53,17 @@ fn borrowedBeforeJoin() {
 fn handledBody() {
     scope { go worker(0); try { try businessError() } catch (error: WorkError) {} }
 }
+fn propagatedBody() throws(WorkError) {
+    try scope { go worker(0); try businessError() }
+}
+fn protectedBody() {
+    var caught = false
+    try { scope { go worker(0); try businessError() } } catch (error: WorkError) { caught = true }
+    assert(caught)
+    caught = false
+    try { try propagatedBody() } catch (error: WorkError) { caught = true }
+    assert(caught)
+}
 fn assertedBody() {
     var caught = false
     try { scope { go worker(0); try! businessError() } } catch panic { caught = true }
@@ -74,6 +85,7 @@ export fn main() -> i64 {
     assert(borrowedAcross() == 42 && borrowedPanic() == 42)
     borrowedBeforeJoin()
     handledBody()
+    protectedBody()
     assertedBody()
     scope { go worker(20); go fn() { total.add(22) }() }
     assert(total.load() == 42)

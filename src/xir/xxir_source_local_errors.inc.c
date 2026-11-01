@@ -111,7 +111,11 @@ static bool source_local_accept(SourceContext *ctx, AstNode *node, XrXirType err
     for(SourceTaskScope *scope=ctx->task_scope;scope;scope=scope->parent) if(scope->function==ctx->function) {
         XrXirType body_error=XR_XIR_NEVER;
         if(!source_local_escape_until(ctx,node,error,handlers,scope->handler,asserted,&body_error))return false;
-        if(body_error!=XR_XIR_NEVER)return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"escaping scope body errors are not yet admitted");
+        if(body_error!=XR_XIR_NEVER) {
+            XrXirCallableParameter members[2]={{scope->body_error,XR_PARAM_READ},{body_error,XR_PARAM_READ}};
+            if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_UNION,
+                .parameters=members,.parameter_count=2},&scope->body_error))return false;
+        }
     }
     if (!source_local_escape(ctx,node,error,handlers,asserted,&error)) return false;
     if (error==XR_XIR_NEVER) return true;

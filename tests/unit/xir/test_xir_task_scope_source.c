@@ -98,7 +98,9 @@ static void rejections(const XrXirCompileContext *context) {
         {"fn bad(){var x=42;scope {go fn(){print(x)}()}}",XR_XIR_BAD_TYPE},
         {"enum ErrorCode{Bad}\nfn bad(){scope {go fn() throws(ErrorCode){throw ErrorCode.Bad}()}}",XR_XIR_UNSUPPORTED},
         {"enum WorkError{Failed}\nfn failed() throws(WorkError){throw WorkError.Failed}\nfn worker(){}\n"
-            "fn run(){try{scope{go worker();try failed()}}catch(error:WorkError){}}",XR_XIR_UNSUPPORTED},
+            "fn run() throws(WorkError){scope{go worker();try failed()}}",XR_XIR_BAD_TYPE},
+        {"enum WorkError{Failed}\nfn failed() throws(WorkError){throw WorkError.Failed}\nfn worker(){}\n"
+            "fn run(){try scope{go worker();try failed()}}",XR_XIR_BAD_TYPE},
         {"fn worker(){}\nfn run()->i64{var values=[42];const view:Slice<i64> =values[:];"
             "scope{go worker();values[0]=1};return view[0]}",XR_XIR_BAD_VALUE},
         {"fn worker(){}\nfn run(){var values=[42];var view:MutSlice<i64> =values[:];"
