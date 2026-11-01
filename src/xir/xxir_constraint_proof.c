@@ -22,6 +22,7 @@
 #include "xxir_effect_contract_internal.h"
 #include "xxir_implementation.h"
 #include "xxir_generic.h"
+#include "xxir_stringable_internal.h"
 #include "../base/xmalloc.h"
 #include "../shared/xnative_declaration.h"
 
@@ -293,6 +294,7 @@ typedef struct ConstraintProof {
     bool borrowed_scratch;
     XirReadScratch *read;
     XrXirCompileContext *budget;
+    XirStringableRead stringable;
     unsigned char *type_seen;
     uint32_t initialized_prefix;
     XrXirInterfaceClosure *seed_closure;
@@ -527,6 +529,13 @@ static XrXirStatus proof_requirement_task(ConstraintProof *proof, const Constrai
     if (status != XR_XIR_OK) return status;
     status = constraint_markers(&proof->environment,task->subject,task->requirement.markers,proof->budget,proof->read);
     if (status != XR_XIR_OK || !task->requirement.interface_count) return status;
+    if (task->subject==XR_XIR_I64 || task->subject==XR_XIR_STRING) {
+        for (uint32_t r=0;r<task->requirement.interface_count;++r)
+            if (!xir_stringable_conformance(task->requirement_types ? task->requirement_types : task->declaration_domain->types,task->declaration_domain->declarations,
+                task->requirement.interfaces[r],task->subject,&proof->stringable))
+                return proof->stringable.status==XR_XIR_OK?XR_XIR_BAD_TYPE:proof->stringable.status;
+        return XR_XIR_OK;
+    }
     XrXirInterfaceClosure *closure = NULL;
     uint32_t id = (uint32_t)task->subject;
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT) {
@@ -614,6 +623,7 @@ static XrXirStatus proof_conformance_seed(ConstraintProof *proof) {
 static XrXirStatus proof_begin(ConstraintProof *proof, const XirMetadataProofContext *context, XrXirCompileContext *budget, XirConstraintScratch *scratch,XirReadScratch *read) {
     if (!context || !budget) return XR_XIR_BAD_STRUCTURE;
     *proof = (ConstraintProof){0}; proof->context = context; proof->budget = budget;proof->read=read;
+    proof->stringable=xir_stringable_read(NULL);
     proof->local.resources = budget->resources;
     proof->scratch = scratch ? scratch : &proof->local;
     proof->borrowed_scratch = scratch != NULL;
@@ -660,8 +670,9 @@ static XrXirStatus proof_selected_requirement(ConstraintProof *proof,
     return proof_enqueue(proof,task);
 }
 static XrXirStatus proof_argument_selection(const XrXirCompileContext *compile_context,
-    const XirMetadataProofContext *context, const XirMetadataArguments *use, uint32_t first, bool all) {
+    const XirMetadataProofContext *context, const XirMetadataArguments *use, uint32_t first, bool all, XrCompileRequestControl *control) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus entry=xir_receive_poll(control);if (entry!=XR_XIR_OK) return entry;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *budget = &compile_state;
     /* An empty whole-vector operation checks its formal shape but preserves the
@@ -674,6 +685,8 @@ static XrXirStatus proof_argument_selection(const XrXirCompileContext *compile_c
     }
     ConstraintProof proof = {0};
     XrXirStatus status = proof_begin(&proof,context,budget,NULL,NULL);
+    proof.stringable=xir_stringable_read(control);
+    if (status==XR_XIR_OK) status=proof.stringable.status;
     if (status != XR_XIR_OK || !use || !use->declaration_domain)
         return proof_run(&proof,status == XR_XIR_OK ? XR_XIR_BAD_STRUCTURE : status);
     XrXirConstraintEnvironment formal = {0};
@@ -693,11 +706,11 @@ static XrXirStatus proof_argument_selection(const XrXirCompileContext *compile_c
 }
 static XrXirStatus metadata_constraints_prove(const XrXirCompileContext *context,
     const XirMetadataProofContext *proof,const XirMetadataArguments *use,uint32_t parameter) {
-    return proof_argument_selection(context,proof,use,parameter,false);
+    return proof_argument_selection(context,proof,use,parameter,false,NULL);
 }
 XR_FUNC XrXirStatus xir_metadata_constraint_arguments_prove(const XrXirCompileContext *compile_context,
     const XirMetadataProofContext *context, const XirMetadataArguments *use) {
-    return proof_argument_selection(compile_context,context,use,0,true);
+    return proof_argument_selection(compile_context,context,use,0,true,NULL);
 }
 XR_FUNC XrXirStatus xir_metadata_type_use_verify_scratch(const XrXirCompileContext *compile_context,
     const XirMetadataProofContext *context, XrXirType type, XirConstraintScratch *scratch) {
@@ -842,8 +855,8 @@ XR_FUNC XrXirStatus xir_metadata_context_constraints_verify(const XrXirCompileCo
     }
     return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_compile_constraints_prove(const XrXirCompileContext *compile_context,
-    const XrXirProofContext *context,const XrXirConstraintUse *use) {
+XR_FUNC XrXirStatus xir_compile_constraints_prove_controlled(const XrXirCompileContext *compile_context,
+    const XrXirProofContext *context,const XrXirConstraintUse *use,XrCompileRequestControl *control) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XirMetadataDomain domain={0};
     XirMetadataProofContext proof=xir_metadata_context_from_raw(context,&domain);
@@ -851,8 +864,13 @@ XR_FUNC XrXirStatus xr_xir_compile_constraints_prove(const XrXirCompileContext *
     XirMetadataArguments arguments={use && use->declaration_module ? &declaration : NULL,
         use ? use->declaration : (XrXirDeclarationContext){0},
         use ? use->arguments : NULL,use ? use->argument_count : 0};
-    return metadata_constraints_prove(compile_context,context ? &proof : NULL,
-        use ? &arguments : NULL,use ? use->parameter : 0);
+    return proof_argument_selection(compile_context,context ? &proof : NULL,
+        use ? &arguments : NULL,use ? use->parameter : 0,false,control);
+}
+
+XR_FUNC XrXirStatus xr_xir_compile_constraints_prove(const XrXirCompileContext *context,
+    const XrXirProofContext *proof,const XrXirConstraintUse *use) {
+    return xir_compile_constraints_prove_controlled(context,proof,use,NULL);
 }
 
 XR_FUNC XrXirStatus xr_xir_compile_constraint_arguments_prove(const XrXirCompileContext *compile_context,

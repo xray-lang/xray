@@ -29,6 +29,7 @@
 #include "xxir_operand_roles.h"
 #include "xxir_library_catalog.h"
 #include "xxir_constraint_proof.h"
+#include "xxir_constraint_proof_internal.h"
 #include "xxir_view_types_internal.h"
 #include "xxir_implementation.h"
 #include "xxir_implementation_verify.h"
@@ -1139,7 +1140,7 @@ static bool source_instantiation_prove(SourceContext *ctx, AstNode *node,
         bool result = callee.kind == XR_XIR_CONTEXT_FUNCTION &&
             xr_xir_binder_kind(&ctx->generics[callee.declaration],i) == XR_XIR_BINDER_RESULT_VARIABLE;
         XrXirStatus status = result ? xr_xir_compile_result_argument(&ctx->compile, &view, ctx->function, substitution.types[i]) : XR_XIR_OK;
-        if (status == XR_XIR_OK) status = xr_xir_compile_constraints_prove(&ctx->compile, &context, &use);
+        if (status == XR_XIR_OK) status = xir_compile_constraints_prove_controlled(&ctx->compile, &context, &use,ctx->request);
         if (status == XR_XIR_OK)
             status = xr_xir_compile_type_access(&ctx->compile, &view, ctx->function, substitution.types[i]);
         if (status != XR_XIR_OK)

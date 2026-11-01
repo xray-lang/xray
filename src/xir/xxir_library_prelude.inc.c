@@ -12,6 +12,7 @@
 #include "xxir_prelude_source_internal.h"
 #include "xxir_interface.h"
 #include "xxir_implementation.h"
+#include "xxir_stringable_internal.h"
 static XrXirStatus library_prelude_literal(
     XrXirLiteral actual,const char *expected,bool *equal) {
     size_t length=0;
@@ -199,7 +200,8 @@ static XrXirStatus library_range_function(const XrXirModule *module,
     return status;
 }
 static XrXirStatus library_prelude_module(
-    const XrXirModule *module,uint32_t ordinal,bool *output) {
+    const XrXirModule *module,uint32_t ordinal,bool *output,XrCompileRequestControl *control) {
+    XirStringableRead read=xir_stringable_read(control);if (read.status!=XR_XIR_OK) return read.status;
     const XrXirDeclarations *d=module->declarations;
     if (!d || ordinal>=d->module_count || !output) return XR_XIR_BAD_STRUCTURE;
     const XrXirSourceModule *view=&d->modules[ordinal]; bool canonical=false;
@@ -278,11 +280,22 @@ static XrXirStatus library_prelude_module(
         if (owner) return XR_XIR_BAD_STRUCTURE;
     }
     const XrXirInterfaceTable *interfaces=module->types->interfaces;
+    uint32_t stringable=UINT32_MAX;
     for (uint32_t i=0;interfaces && i<interfaces->count;++i) {
+        if (!xir_stringable_step(&read)) return read.status;
         bool owner=false; status=library_prelude_literal(interfaces->declarations[i].module,XIR_PRELUDE_CANONICAL,&owner);
         if (status!=XR_XIR_OK) return status;
-        if (owner) return XR_XIR_BAD_STRUCTURE;
+        if (owner) {
+            if (stringable!=UINT32_MAX || !xir_stringable_schema(module->types,d,
+                (XrXirInterfaceApplication){i,NULL,0},NULL,&read))
+                return read.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:read.status;
+            stringable=i;
+        }
     }
+    uint32_t target=0;
+    if (stringable==UINT32_MAX || xir_stringable_witness(module,
+        (XrXirInterfaceApplication){stringable,NULL,0},0,XR_XIR_I64,&target,&read)!=XR_XIR_OK)
+        return read.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:read.status;
     for (uint32_t s=0;s<d->slot_count;++s) {
 
         if (d->slots[s].module==ordinal) return XR_XIR_BAD_STRUCTURE;
@@ -291,6 +304,7 @@ static XrXirStatus library_prelude_module(
     for (uint32_t f=0;f<module->function_count;++f) {
 
         if (d->functions[f].module==ordinal && f!=view->initializer) {
+            if (!d->functions[f].nominal_owner) continue;
             if(d->functions[f].nominal_owner!=range+1) return XR_XIR_BAD_STRUCTURE;
             status=library_range_function(module,f,range,&range_methods);
             if(status!=XR_XIR_OK) return status;

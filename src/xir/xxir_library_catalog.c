@@ -157,7 +157,7 @@ static XrXirStatus catalog_module(XrXirLibraryCatalog *catalog, size_t index,
         return XR_XIR_BUDGET;
     if (!root || root >= XR_PATH_MAX) return XR_XIR_BAD_STRUCTURE;
     bool governed=false;
-    status=library_prelude_module(checked,ordinal,&governed);
+    status=library_prelude_module(checked,ordinal,&governed,NULL);
     if (status!=XR_XIR_OK) return status;
     status = catalog_path(input,logical,name,governed);
     if (status != XR_XIR_OK) return status;

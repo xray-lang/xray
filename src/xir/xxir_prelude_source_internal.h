@@ -8,6 +8,7 @@
 #ifndef XXIR_PRELUDE_SOURCE_INTERNAL_H
 #define XXIR_PRELUDE_SOURCE_INTERNAL_H
 #include <stdint.h>
+#include "xxir_prelude_identity.h"
 typedef struct XirPreludeEnum {
     const char *name;
     uint32_t native_id, variant_count, parameter_count, field_count;
@@ -21,6 +22,4 @@ typedef struct XirPreludeSource {
     uint8_t range_input_sha256[32];
 } XirPreludeSource;
 #include "../shared/xprelude_source.inc.c"
-#define XIR_PRELUDE_LOGICAL "prelude/builtin_symbols.def"
-#define XIR_PRELUDE_CANONICAL "stdlib-module-v1:module=7:prelude:path=27:prelude/builtin_symbols.def"
 #endif

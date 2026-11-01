@@ -240,7 +240,7 @@ failed:
 }
 
 static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMap *map,
-    const XrXirInstruction *original, XrXirInstruction *output) {
+    uint32_t function,const XrXirInstruction *original, XrXirInstruction *output) {
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     XrXirInstruction result = *original;
     if (!source_library_type(ctx,map->unit,original->type,&result.type)) return false;
@@ -273,6 +273,13 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"library literal identity overflow");
         result.immediate += map->literal_begin;
         break;
+    case XR_XIR_TO_STRING: {
+        XirStringableRead read=xir_stringable_read(ctx->request);
+        if (!map->unit || !xir_stringable_text_helper(map->unit->library,function,&read))
+            return source_fail(ctx,NULL,read.status==XR_XIR_OK?XR_XIR_BAD_STAGE:read.status,
+                "library scalar witness body is not admitted");
+        break;
+    }
     case XR_XIR_PRINT: case XR_XIR_OUTPUT:
         if (!map->history)
             return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"program output requires a history owner");
@@ -417,7 +424,7 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     for (uint32_t p=0; p<original->parameter_count; ++p)
         if (!source_library_type(ctx,map->unit,original->parameters[p],&((XrXirType *)function->parameters)[p])) return false;
     for (uint32_t i = 0; i < original->instruction_count; ++i)
-        if (!source_library_instruction(ctx, map, &original->instructions[i], &instructions[i])) return false;
+        if (!source_library_instruction(ctx, map, index,&original->instructions[i], &instructions[i])) return false;
     ctx->identities[target] = library->declarations->functions[index];
     ctx->identities[target].module = module;
     if (ctx->identities[target].nominal_owner) {

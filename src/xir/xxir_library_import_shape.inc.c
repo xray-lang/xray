@@ -4,6 +4,7 @@
 #include "xxir_nominal.h"
 #include "xxir_interface.h"
 #include "xxir_types.h"
+#include "xxir_stringable_internal.h"
 #include "xxir_construction.h"
 #include "xxir_library_governed.inc.c"
 /* This is an import subset, not a replacement for Checked verification.
@@ -339,6 +340,11 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
         for(uint32_t i=0;i<fn->instruction_count;++i){
 
             const XrXirInstruction *op=&fn->instructions[i];
+            if (op->op==XR_XIR_TO_STRING) {
+                XirStringableRead read=xir_stringable_read(NULL);
+                if (!xir_stringable_text_helper(m,f,&read)) return XR_XIR_BAD_STAGE;
+                continue;
+            }
             if (!library_catalog_local_instruction(op->op) &&
                 op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_GO &&
                 op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_GENERATOR_NEW &&

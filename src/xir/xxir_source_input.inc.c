@@ -370,7 +370,7 @@ XR_FUNC XrXirStatus xr_xir_compile_prelude_library(const XrXirCompileContext *co
     XrXirStatus status=source_check_input(&request,input,&result,diagnostic,NULL);
     if (status==XR_XIR_OK) {
         bool admitted=false;
-        status=library_prelude_module(xr_xir_compile_artifact_module(result.checked),0,&admitted);
+        status=library_prelude_module(xr_xir_compile_artifact_module(result.checked),0,&admitted,NULL);
         if (status==XR_XIR_OK && !admitted) status=XR_XIR_BAD_STRUCTURE;
     }
     if (diagnostic) diagnostic->status=status;

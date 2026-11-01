@@ -1,0 +1,6 @@
+// A declaration requirement is distinct from an executable scalar witness.
+export interface Stringable {
+    toString() -> string
+}
+export fn __stringable_i64(value: i64) -> string { return value.toString() }
+export fn __stringable_string(value: string) -> string { return value.toString() }

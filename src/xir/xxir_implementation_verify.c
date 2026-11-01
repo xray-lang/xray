@@ -15,6 +15,7 @@
 #include "xxir_constraint_proof_internal.h"
 #include "xxir_interface_members.h"
 #include "xxir_types.h"
+#include "xxir_stringable_internal.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 static XrXirStatus implementation_identity_arguments(uint32_t count, XrXirCompileContext *budget, XrXirType **output) {
@@ -266,12 +267,20 @@ XrXirStatus xr_xir_compile_implementations_verify(const XrXirCompileContext *com
     }
     return XR_XIR_OK;
 }
-XrXirStatus xr_xir_compile_witness_resolve(const XrXirCompileContext *compile_context, const XrXirProofContext *context, const XrXirWitnessRequest *request, XrXirWitness *output) {
+XrXirStatus xir_compile_witness_resolve_controlled(const XrXirCompileContext *compile_context, const XrXirProofContext *context, const XrXirWitnessRequest *request, XrXirWitness *output,XrCompileRequestControl *control) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *budget = &compile_state;
     if (!context || !context->module || !request || !request->declaration_module || !budget || !output)
         return XR_XIR_BAD_STRUCTURE;
+    XirStringableRead read=xir_stringable_read(control);if (read.status!=XR_XIR_OK) return read.status;
+    if (request->receiver==XR_XIR_I64 || request->receiver==XR_XIR_STRING) {
+        uint32_t function=0;
+        XrXirStatus status=xir_stringable_witness(request->declaration_module,request->application,
+            request->member,request->receiver,&function,&read);
+        if (status==XR_XIR_OK) *output=(XrXirWitness){function,NULL,0};
+        return status;
+    }
     const XrXirTypeNode *node = xr_xir_type_node(context->module->types,request->receiver);
     if (!node || node->kind != XR_XIR_TYPE_NOMINAL) return XR_XIR_BAD_TYPE;
     XrXirStatus status = xr_xir_compile_interface_prove(budget, context, request->declaration_module, request->receiver, request->application);
@@ -299,4 +308,9 @@ XrXirStatus xr_xir_compile_witness_resolve(const XrXirCompileContext *compile_co
     if (function == UINT32_MAX) return XR_XIR_BAD_TYPE;
     *output = (XrXirWitness){function,node->nominal.arguments,node->nominal.argument_count};
     return XR_XIR_OK;
+}
+
+XrXirStatus xr_xir_compile_witness_resolve(const XrXirCompileContext *context,
+    const XrXirProofContext *proof,const XrXirWitnessRequest *request,XrXirWitness *output) {
+    return xir_compile_witness_resolve_controlled(context,proof,request,output,NULL);
 }
