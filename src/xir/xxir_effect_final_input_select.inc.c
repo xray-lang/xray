@@ -22,7 +22,7 @@ typedef struct EffectFinalInputSelect {
 static bool effect_final_input_selected(uint32_t selection,XrXirOp op) {
     if(selection==EFFECT_FINAL_SELECT_REFERENCE) return (op==XR_XIR_FUNCTION_REF || op==XR_XIR_GENERATOR_NEW);
     if(selection==EFFECT_FINAL_SELECT_EDGE) return op==XR_XIR_CALL || op==XR_XIR_INVOKE ||
-        op==XR_XIR_CLEANUP_REGISTER || op==XR_XIR_GO || op==XR_XIR_GENERATOR_NEW || op==XR_XIR_CALL_DEFAULT || op==XR_XIR_INVOKE_DEFAULT;
+        op==XR_XIR_CLEANUP_REGISTER || xr_xir_op_is_spawn(op) || op==XR_XIR_GENERATOR_NEW || op==XR_XIR_CALL_DEFAULT || op==XR_XIR_INVOKE_DEFAULT;
     if(selection==EFFECT_FINAL_SELECT_INDIRECT) return op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT;
     if(selection==EFFECT_FINAL_SELECT_CAPTURE) return effect_invocation_iterator_operation(op) || (op==XR_XIR_FUNCTION_REF || op==XR_XIR_GENERATOR_NEW) || op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT;
     if(selection==EFFECT_FINAL_SELECT_WRITE) return op==XR_XIR_LOCAL_WRITE || op==XR_XIR_SCALAR_LOCAL_WRITE || op==XR_XIR_OWNED_LOCAL_WRITE;

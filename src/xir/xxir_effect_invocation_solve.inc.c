@@ -13,7 +13,7 @@ static bool effect_invocation_dispatch_precision(XrXirOp op) {
     return op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_CALL_DEFAULT ||
         op==XR_XIR_INVOKE_DEFAULT || op==XR_XIR_CALL_REQUIREMENT || op==XR_XIR_CLEANUP_REGISTER ||
         op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT ||
-        op==XR_XIR_GO || op==XR_XIR_GENERATOR_NEW || op==XR_XIR_FUNCTION_REF ||
+        xr_xir_op_is_spawn(op) || op==XR_XIR_GENERATOR_NEW || op==XR_XIR_FUNCTION_REF ||
         effect_invocation_iterator_operation(op) || effect_invocation_cell_terminal(op);
 }
 

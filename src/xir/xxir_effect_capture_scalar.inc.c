@@ -24,7 +24,7 @@ static bool effect_capture_scalar_operation(XrXirOp opcode) {
     case XR_XIR_CELL_PLACE: case XR_XIR_OBJECT_PLACE: case XR_XIR_FIELD_PLACE: case XR_XIR_INDEX_PLACE:
     case XR_XIR_CLASS_NEW: case XR_XIR_CLASS_GET: case XR_XIR_CLASS_SET:
     case XR_XIR_SLOT_LOAD: case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE: case XR_XIR_SLOT_GROUP_INIT:
-    case XR_XIR_GO:
+    case XR_XIR_SCOPE_BEGIN: case XR_XIR_GO: case XR_XIR_SCOPED_GO:
         return false;
     default:
         return opcode>XR_XIR_INVALID && opcode<XR_XIR_OP_COUNT && !effect_invocation_iterator_operation(opcode) &&

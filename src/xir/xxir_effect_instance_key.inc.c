@@ -191,7 +191,7 @@ static bool spec_effect_default(SpecContext *c, const SpecInstance *instance, bo
 }
 
 static uint32_t spec_effect_family(XrXirOp op) {
-    if (op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_GO || op==XR_XIR_GENERATOR_NEW) return XR_XIR_EFFECT_BINDING_DIRECT;
+    if (op==XR_XIR_CALL || op==XR_XIR_INVOKE || xr_xir_op_is_spawn(op) || op==XR_XIR_GENERATOR_NEW) return XR_XIR_EFFECT_BINDING_DIRECT;
     if (op==XR_XIR_FUNCTION_REF) return XR_XIR_EFFECT_BINDING_CAPTURE;
     if (op==XR_XIR_CALL_DEFAULT || op==XR_XIR_INVOKE_DEFAULT) return XR_XIR_EFFECT_BINDING_DEFAULT;
     return op==XR_XIR_CALL_REQUIREMENT ? XR_XIR_EFFECT_BINDING_REQUIREMENT : 0;

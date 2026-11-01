@@ -12,7 +12,10 @@
  */
 static bool move_call_parameter(const XrXirModule *module,const XrXirFunction *function,
     const XrXirInstruction *op,uint32_t argument) {
-    if(op->op==XR_XIR_CALL||op->op==XR_XIR_INVOKE) {
+    if(op->op==XR_XIR_CALL||op->op==XR_XIR_INVOKE||xr_xir_op_is_spawn(op->op)) {
+        uint32_t prefix=op->op==XR_XIR_SCOPED_GO?1u:0u;
+        if(argument<prefix)return false;
+        argument-=prefix;
         const XrXirFunction *callee=&module->functions[op->immediate];
         return xr_xir_declared_parameter_mode(module->types,callee->parameters[argument],
             callee->consume_parameters,callee->consume_parameter_count,argument)==XR_PARAM_MOVE;
@@ -137,7 +140,7 @@ static XrXirStatus move_availability(InitializationGraph *graph,uint32_t value,b
         context->location.instruction=node->instruction;context->location.block=node->block;
         bool write=cell&&(op->op==XR_XIR_CELL_WRITE||op->op==XR_XIR_CELL_WRITE_TAKE||op->op==XR_XIR_CELL_LOCAL_WRITE);
         bool executing=op->op==XR_XIR_CALL||op->op==XR_XIR_INVOKE||op->op==XR_XIR_CALL_INDIRECT||
-            op->op==XR_XIR_INVOKE_INDIRECT||op->op==XR_XIR_GO||op->op==XR_XIR_GENERATOR_NEW;
+            op->op==XR_XIR_INVOKE_INDIRECT||xr_xir_op_is_spawn(op->op)||op->op==XR_XIR_GENERATOR_NEW;
         bool available=(node->state&1u)!=0,captured_unavailable=!available||(node->state&6u)!=0;
         if(cell&&captured_unavailable&&(op->op==XR_XIR_CALL_INDIRECT||op->op==XR_XIR_INVOKE_INDIRECT)&&
             aliases[(uint32_t)op->immediate])return XR_XIR_BAD_VALUE;

@@ -16,6 +16,7 @@
 #include "xxir_types.h"
 
 /* Classification is not permission or publication evidence. */
+static inline bool xr_xir_op_is_spawn(XrXirOp op) { return op==XR_XIR_GO||op==XR_XIR_SCOPED_GO; }
 static inline bool xr_xir_slot_is_unit(const XrXirSlot *slots, uint32_t count,
                                       const XrXirInstruction *op) {
     return slots && op && op->immediate >= 0 && (uint64_t)op->immediate < count &&

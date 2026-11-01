@@ -138,6 +138,7 @@ typedef struct SourceContext {
     /* This exact argument plan owns the pre-loss role, never its children. */
     SourceExpressionPlan *effect_argument;
     SourceLoop *loop;
+    SourceTaskScope *task_scope;
     bool returned, has_generics, query_ready;
     XrXirSourceView query;
     XrXirSourceSyntaxView syntax;

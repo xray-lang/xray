@@ -157,6 +157,7 @@ static XrXirStatus declaration_instruction(const XrXirFunction *function,
 #include "xxir_requirement_verify.inc.c"
 #include "xxir_slot_group_verify.inc.c"
 #include "xxir_task_verify.inc.c"
+#include "xxir_task_scope_verify.inc.c"
 
 static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
     const XrXirInstruction *op,const XrXirModule *module,XrXirCompileContext *remaining,
@@ -190,7 +191,9 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
         module->declarations->functions[op->immediate].cleanup_owner != (registration ? caller_id + 1 : 0)))
         return XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *callee = &module->functions[op->immediate];
-    if ((op->op != XR_XIR_FUNCTION_REF && callee->parameter_count != op->args[1]) || (callee->parameter_count && !callee->parameters))
+    uint32_t arguments=0,count=0;
+    if(!xr_xir_direct_argument_range(op,&arguments,&count))return XR_XIR_BAD_STRUCTURE;
+    if ((op->op != XR_XIR_FUNCTION_REF && callee->parameter_count != count) || (callee->parameter_count && !callee->parameters))
         return XR_XIR_BAD_STRUCTURE;
     XrXirStatus generic_status = xr_xir_compile_generic_call(remaining, module, caller_id, op);
     if (generic_status != XR_XIR_OK) return generic_status;
@@ -204,7 +207,7 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
         }
     }
     XrXirType result = op->type;
-    if (op->op == XR_XIR_GO) {
+    if (op->op == XR_XIR_GO || op->op==XR_XIR_SCOPED_GO) {
         generic_status = task_go_shape(module, op, remaining);
         if (generic_status != XR_XIR_OK) return generic_status;
         result = xr_xir_task_element(module->types, op->type);
@@ -301,6 +304,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if (range && (op->args[1] > 65536 || op->args[0] > function->operand_count ||
         op->args[1] > function->operand_count - op->args[0] || (!op->args[1] && op->args[0])))
         return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus scope_status=task_scope_shape(function,op,module);
+    if(scope_status!=XR_XIR_OK)return scope_status;
     if (op->op == XR_XIR_CALL_INTRINSIC) {
         const XrNativeIntrinsicDeclaration *call = xr_xir_intrinsic(op->immediate);
         XrXirType result;
@@ -410,7 +415,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     } else if (op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
         if (op->immediate < 0 || (uint64_t)op->immediate > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op != XR_XIR_CONST_INT && op->op != XR_XIR_CLEANUP_REGISTER && op->op != XR_XIR_CALL && op->op != XR_XIR_CALL_INTRINSIC &&
-               op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_GO && op->op != XR_XIR_GENERATOR_NEW && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
+               op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_GO && op->op != XR_XIR_SCOPED_GO && op->op!=XR_XIR_SCOPE_BEGIN && op->op!=XR_XIR_SCOPE_JOIN && op->op != XR_XIR_GENERATOR_NEW && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
                op->op != XR_XIR_INVOKE_RESULT && op->op != XR_XIR_INVOKE_ERROR && op->op != XR_XIR_INVOKE_DISCARD && op->op != XR_XIR_CALL_INDIRECT &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE && op->op != XR_XIR_SLOT_GROUP_INIT &&
@@ -1094,6 +1099,7 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
     uint32_t i,XrXirType *output) {
     const XrXirInstruction *op=&function->instructions[i];
     XrXirType expected = op->type;
+    if(op->op==XR_XIR_SCOPE_JOIN)expected=xr_xir_operand_type(function,op->args[0]);
     if (op->op == XR_XIR_TASK_AWAIT || op->op==XR_XIR_ITERATOR_HAS_NEXT || op->op==XR_XIR_ITERATOR_NEXT || op->op==XR_XIR_ITERATOR_NTH || op->op==XR_XIR_ITERATOR_CLOSE) {
         expected = xr_xir_operand_type(function, op->args[0]);
         const XrXirTypeNode *task = xr_xir_type_node(context->module->types, expected);
@@ -1237,7 +1243,8 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 uint32_t operand = function->operands[op->args[0] + a];
                 if (operand >= (uint64_t) function->parameter_count + function->instruction_count) return XR_XIR_BAD_VALUE;
                 operand_type = xr_xir_operand_type(function, operand);
-                XrXirStatus match = xr_xir_compile_call_type_matches(&context->remaining, context->module, context->location.function, op, context->module->functions[op->immediate].parameters[a], operand_type);
+                uint32_t prefix=op->op==XR_XIR_SCOPED_GO?1u:0u;
+                XrXirStatus match = a<prefix ? XR_XIR_OK : xr_xir_compile_call_type_matches(&context->remaining, context->module, context->location.function, op, context->module->functions[op->immediate].parameters[a-prefix], operand_type);
                 if (match == XR_XIR_BAD_TYPE && callable_binding_operation(op->op))
                     match = xir_effect_call_binding_candidate(&context->remaining,context->module,
                         context->location.function,i,a);
@@ -1301,6 +1308,8 @@ static XrXirStatus verify_function(const XrXirFunction *function, XrXirStage sta
         status = cleanup_frontiers(&graph, function, context);
     if (status == XR_XIR_OK)
         status = graph_uses(&graph, function, context);
+    if (status == XR_XIR_OK)
+        status = task_scope_uses(&graph,function,context);
     if (status == XR_XIR_OK)
         status = move_check(function,context);
     if (status == XR_XIR_OK)
