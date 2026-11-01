@@ -19,8 +19,8 @@ static void emit_select_step(CBuffer *buffer,const XrXirFunction *function,
         emit_value(buffer,function,layout,function->operands[op->args[0]+a]);append(buffer,";\n");
     }
     append(buffer," XrXirCallStatus status=xr_xir_instance_channel_select_at(view,%uu,state->frame,&state->select,state->arguments,&output);\n"
-        " if(status==XR_XIR_CALL_BUSY||status==XR_XIR_CALL_CANCELLED||status==XR_XIR_CALL_SUSPENDED)\n"
-        " return (XrXirAction){.kind=status==XR_XIR_CALL_SUSPENDED?XR_XIR_ACTION_AWAIT_CHANNEL:XR_XIR_ACTION_CONTINUE};\n"
+        " if(status==XR_XIR_CALL_BUSY||status==XR_XIR_CALL_CANCELLED||status==XR_XIR_CALL_SUSPENDED||status==XR_XIR_CALL_DEFER_ASYNC)\n"
+        " return (XrXirAction){.kind=status==XR_XIR_CALL_SUSPENDED||status==XR_XIR_CALL_DEFER_ASYNC?XR_XIR_ACTION_AWAIT_CHANNEL:XR_XIR_ACTION_CONTINUE};\n"
         " if(status!=XR_XIR_CALL_READY) ",index);
     emit_fault_return(buffer,function,layout,index,
         "xr_xir_call_fault(status==XR_XIR_CALL_OOM?XR_XIR_RUN_OUT_OF_MEMORY:"

@@ -18,8 +18,8 @@ static XrXirRunStatus vm_select_step(ScalarRun *run,VmState *state,
     XrXirValue output={0};
     XrXirCallStatus status=xr_xir_instance_channel_select_at(run->view,state->instruction,
         run->frame,&state->select,state->arguments,&output);
-    if(status==XR_XIR_CALL_BUSY||status==XR_XIR_CALL_CANCELLED||status==XR_XIR_CALL_SUSPENDED) {
-        *action=(XrXirAction){.kind=status==XR_XIR_CALL_SUSPENDED?
+    if(status==XR_XIR_CALL_BUSY||status==XR_XIR_CALL_CANCELLED||status==XR_XIR_CALL_SUSPENDED||status==XR_XIR_CALL_DEFER_ASYNC) {
+        *action=(XrXirAction){.kind=status==XR_XIR_CALL_SUSPENDED||status==XR_XIR_CALL_DEFER_ASYNC?
             XR_XIR_ACTION_AWAIT_CHANNEL:XR_XIR_ACTION_CONTINUE};return XR_XIR_RUN_OK;
     }
     if(status!=XR_XIR_CALL_READY)return status==XR_XIR_CALL_OOM?XR_XIR_RUN_OUT_OF_MEMORY:
