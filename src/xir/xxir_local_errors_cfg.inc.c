@@ -54,7 +54,7 @@ static XrXirStatus local_error_block(LocalErrorCfg *cfg,uint32_t b) {
         return status==XR_XIR_OK?local_error_edge(cfg,end->targets[1],end,false):status;
     }
     if (end->op==XR_XIR_INVOKE || end->op==XR_XIR_INVOKE_DEFAULT || end->op==XR_XIR_INVOKE_INDIRECT ||
-        end->op==XR_XIR_TASK_AWAIT || end->op==XR_XIR_ITERATOR_HAS_NEXT ||
+        end->op==XR_XIR_SCOPE_JOIN || end->op==XR_XIR_TASK_AWAIT || end->op==XR_XIR_ITERATOR_HAS_NEXT ||
         end->op==XR_XIR_ITERATOR_NEXT || end->op==XR_XIR_ITERATOR_NTH) {
         XrXirStatus status=local_error_edge(cfg,end->targets[0],NULL,true);
         return status==XR_XIR_OK && cfg->calls[last]!=XR_XIR_NEVER?

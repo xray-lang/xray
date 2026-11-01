@@ -253,6 +253,7 @@ typedef struct SourceFunction {
 } SourceFunction;
 typedef struct SourcePatch { struct SourcePatch *next; uint32_t instruction; } SourcePatch;
 typedef struct SourceLoop { struct SourceLoop *parent; SourcePatch *breaks, *continues; uint32_t frontier; } SourceLoop;
+typedef struct SourceTaskScope { struct SourceTaskScope *parent; uint32_t function; SourceValue group; } SourceTaskScope;
 struct SourceErrorEdge {
     struct SourceErrorEdge *next;
     uint32_t block, jump;
@@ -1844,6 +1845,7 @@ static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceE
 static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceExpectedType expected,SourceValue *value);
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value);
 static bool source_defer(SourceContext *ctx, AstNode *node);
+static bool source_task_scope(SourceContext *ctx,AstNode *node,bool marked);
 static bool source_block_functions(SourceContext *ctx,AstNode *block);
 #include "xxir_source_view.inc.c"
 #include "xxir_source_copy.inc.c"
@@ -2905,6 +2907,7 @@ static bool source_capture_parameters(SourceContext *ctx, AstNode *node, const S
 }
 #include "xxir_source_closure_parameters.inc.c"
 #include "xxir_source_cleanup.inc.c"
+#include "xxir_source_task_scope.inc.c"
 /* Inside its own body a nested declaration is the closure value rebuilt from the
  * body's captures, so recursion needs no extra capture and no cell. */
 static bool source_closure_self(SourceContext *ctx, AstNode *node, const SourceCaptureScan *scan,

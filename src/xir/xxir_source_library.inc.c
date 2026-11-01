@@ -245,7 +245,7 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
     XrXirInstruction result = *original;
     if (!source_library_type(ctx,map->unit,original->type,&result.type)) return false;
     switch (result.op) {
-    case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_GO: case XR_XIR_FUNCTION_REF: case XR_XIR_GENERATOR_NEW:
+    case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_GO: case XR_XIR_SCOPED_GO: case XR_XIR_FUNCTION_REF: case XR_XIR_GENERATOR_NEW:
         if (result.immediate < 0 || (uint64_t)result.immediate >= map->function_count ||
             map->functions[(uint32_t)result.immediate] == UINT32_MAX)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library call identity is invalid");

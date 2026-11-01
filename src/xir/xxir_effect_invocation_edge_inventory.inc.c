@@ -36,12 +36,13 @@ static XrXirStatus effect_final_edge_default(const XrXirCompileContext *work,
 }
 static XrXirStatus effect_final_edge_operands(const XrXirCompileContext *work,
     const EffectBodyFunctionHead *head,const XrXirInstruction *op,uint32_t count) {
-    if(op->args[1]!=count || op->args[0]>head->operand_count || count>head->operand_count-op->args[0])
+    uint32_t first=0,actual=0;
+    if(!xr_xir_direct_argument_range(op,&first,&actual)||actual!=count || op->args[0]>head->operand_count || op->args[1]>head->operand_count-op->args[0])
         return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_role_range(work,head->operands,head->operand_count,sizeof(*head->operands));
     if(status!=XR_XIR_OK) return status;
     uint64_t values=(uint64_t)head->parameter_count+head->instruction_count;
-    for(uint32_t p=0;p<count;++p) {
+    for(uint32_t p=0;p<op->args[1];++p) {
 
         if(head->operands[op->args[0]+p]>=values) return XR_XIR_BAD_STRUCTURE;
     }
@@ -59,9 +60,9 @@ static XrXirStatus effect_final_edge_payload(const XrXirCompileContext *work,
     if(status==XR_XIR_OK) status=effect_body_request_instruction(body,from->body,edge->instruction,&storage,&op);
     if(status!=XR_XIR_OK) return status;
     if(!(op)) return op?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
-    if(op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW) {
+    if(op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER || xr_xir_op_is_spawn(op->op) || op->op==XR_XIR_GENERATOR_NEW) {
         if(op->immediate<0 || (uint64_t)op->immediate!=to->body || edge->producer!=UINT32_MAX ||
-            edge->latent!=(op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW)) return XR_XIR_BAD_STRUCTURE;
+            edge->latent!=(xr_xir_op_is_spawn(op->op) || op->op==XR_XIR_GENERATOR_NEW)) return XR_XIR_BAD_STRUCTURE;
         if(op->op==XR_XIR_CLEANUP_REGISTER) {
             const XrXirDeclarations *declarations=body->domain.declarations;
             status=effect_role_range(work,declarations,1,sizeof(*declarations));if(status!=XR_XIR_OK) return status;
@@ -153,7 +154,7 @@ static XrXirStatus effect_final_edge_frontiers(const XrXirCompileContext *work,
             if(status!=XR_XIR_OK) return status;
             if(!found) break;
 
-            bool direct=op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW;
+            bool direct=op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER || xr_xir_op_is_spawn(op->op) || op->op==XR_XIR_GENERATOR_NEW;
             bool defaults=op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT;
             if(!direct && !defaults) continue;
             uint32_t target=UINT32_MAX;
@@ -177,7 +178,7 @@ static XrXirStatus effect_final_edge_frontiers(const XrXirCompileContext *work,
                 }
             }
             if(closed) {
-                status=effect_final_edge_present(final,n,i,target,op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW);
+                status=effect_final_edge_present(final,n,i,target,xr_xir_op_is_spawn(op->op) || op->op==XR_XIR_GENERATOR_NEW);
                 if(status!=XR_XIR_OK) return status;
             }
         }

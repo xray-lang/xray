@@ -385,12 +385,12 @@ typedef enum EffectSeedProjection {
  * Metadata-dependent calls require their actual operand/signature fields. */
 static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *effect) {
     switch (op) {
-    case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT: case XR_XIR_TASK_AWAIT_RESULT: case XR_XIR_GENERATOR_YIELD:
+    case XR_XIR_SCOPE_JOIN: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT: case XR_XIR_TASK_AWAIT_RESULT: case XR_XIR_GENERATOR_YIELD:
     case XR_XIR_CHANNEL_SEND: case XR_XIR_CHANNEL_RECV: case XR_XIR_CHANNEL_RECV_OR:
     case XR_XIR_CHANNEL_SEND_TIMEOUT: case XR_XIR_CHANNEL_RECV_TIMEOUT:
         effect->suspend = XR_XIR_EFFECT_MAY; return EFFECT_SEED_LOCAL;
     /* Lifecycle drain performs scheduler work without a language suspension. */
-    case XR_XIR_ITERATOR_CLOSE: case XR_XIR_GO: case XR_XIR_GENERATOR_NEW: return EFFECT_SEED_LOCAL;
+    case XR_XIR_SCOPE_BEGIN: case XR_XIR_ITERATOR_CLOSE: case XR_XIR_GO: case XR_XIR_SCOPED_GO: case XR_XIR_GENERATOR_NEW: return EFFECT_SEED_LOCAL;
     case XR_XIR_THROW: case XR_XIR_CLEANUP_REGISTER:
     case XR_XIR_CLEANUP_LEAVE: case XR_XIR_CLEANUP_ERROR: return EFFECT_SEED_LOCAL;
     case XR_XIR_CALL_REQUIREMENT: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
@@ -603,7 +603,7 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
                 if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
             }
             XrXirOp op=(XrXirOp)opcode;
-            if (effects && op==XR_XIR_GO) effects->outcomes_work.task_creation[f]=XR_XIR_EFFECT_MAY;
+            if (effects && xr_xir_op_is_spawn(op)) effects->outcomes_work.task_creation[f]=XR_XIR_EFFECT_MAY;
             if (symbolic && op==XR_XIR_FUNCTION_REF) {
 
                 if (counts->references==UINT32_MAX) return XR_XIR_BUDGET;

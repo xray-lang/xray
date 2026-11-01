@@ -150,6 +150,14 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
     if (status!=XR_XIR_OK)
         return source_fail(ctx,call,status,"Task worker declared error type must satisfy Sendable");
     XrXirInstruction op = {XR_XIR_GO, XR_XIR_UNIT, {0}, {0}, function, {0}};
+    if(ctx->task_scope&&ctx->task_scope->function==ctx->function) {
+        if(error!=XR_XIR_NEVER)return source_fail(ctx,node,XR_XIR_UNSUPPORTED,"scope child error propagation is not yet admitted");
+        if(prepared.count==UINT32_MAX)return source_fail(ctx,node,XR_XIR_OVERFLOW,"scoped argument count overflow");
+        SourceValue *arguments=source_alloc(ctx,(size_t)prepared.count+1,sizeof(*arguments));if(!arguments)return false;
+        arguments[0]=ctx->task_scope->group;
+        if(!source_copy_bytes(ctx,node,arguments+1,prepared.values,(size_t)prepared.count*sizeof(*arguments)))return false;
+        prepared.values=arguments;op.op=XR_XIR_SCOPED_GO;
+    }
     return source_task_type(ctx, call, prepared.result, error, &op.type) &&
         source_type_arguments(ctx, call, prepared.substitution.types, prepared.substitution.count, &op) &&
         (!target || source_query_reference(ctx, call->as.call_expr.callee, binding, target, XR_XIR_SOURCE_CALL)) &&

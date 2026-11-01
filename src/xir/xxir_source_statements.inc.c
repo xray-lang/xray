@@ -11,6 +11,7 @@ static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
     if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (ctx->returned) return source_unreachable_statement(ctx, node);
     switch (node->type) {
+    case AST_SCOPE_BLOCK: return source_task_scope(ctx,node,false);
     case AST_DEFER_STMT: return source_defer(ctx, node);
     case AST_TRY_CATCH: {
         /* Handlers are alternative paths: no fact about a binding they write survives, and none is learned inside. */
@@ -42,6 +43,8 @@ static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
     case AST_EXPR_STMT: {
         if(top && node==ctx->repl_tail)return source_repl_result(ctx,node);
         SourceValue value; AstNode *expr=node->as.expr_stmt;
+        if(expr->type==AST_TRY_EXPR&&expr->as.try_expr.operand&&expr->as.try_expr.operand->type==AST_SCOPE_BLOCK)
+            return source_task_scope(ctx,expr->as.try_expr.operand,true);
         bool appended = false;
         if (!source_string_append_statement(ctx, expr, &appended)) return false;
         if (appended) return true;

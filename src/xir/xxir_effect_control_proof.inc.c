@@ -119,7 +119,7 @@ static XrXirStatus effect_control_local_read(const EffectControlRead *read,uint3
                 local.suspend=true;local.instruction=run->first+i;
                 local.cause=actual==XR_XIR_EFFECT_MAY?XR_XIR_EFFECT_CAUSE_SUSPEND:XR_XIR_EFFECT_CAUSE_INDIRECT;
             }
-            local.task|=op.op==XR_XIR_GO;local.shape|=op.op==XR_XIR_SLOT_PLACE;
+            local.task|=xr_xir_op_is_spawn(op.op);local.shape|=op.op==XR_XIR_SLOT_PLACE;
         }
     }
     if(cursor.first!=head->instruction_count || cursor.run!=head->run_count) return XR_XIR_BAD_STRUCTURE;

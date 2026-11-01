@@ -24,9 +24,9 @@ static void local_error_assign(LocalErrorCfg *cfg,uint64_t *row,uint32_t target,
     }
 }
 static bool local_error_boundary(XrXirOp op) {
-    return op==XR_XIR_CALL || op==XR_XIR_CALL_DEFAULT || op==XR_XIR_CALL_INDIRECT || op==XR_XIR_CALL_REQUIREMENT ||
+    return op==XR_XIR_SCOPE_JOIN || op==XR_XIR_CALL || op==XR_XIR_CALL_DEFAULT || op==XR_XIR_CALL_INDIRECT || op==XR_XIR_CALL_REQUIREMENT ||
         op==XR_XIR_INVOKE || op==XR_XIR_INVOKE_DEFAULT || op==XR_XIR_INVOKE_INDIRECT ||
-        op==XR_XIR_TASK_POLL || op==XR_XIR_TASK_AWAIT_RESULT || op==XR_XIR_GO || op==XR_XIR_GENERATOR_NEW || op==XR_XIR_TASK_AWAIT ||
+        op==XR_XIR_TASK_POLL || op==XR_XIR_TASK_AWAIT_RESULT || xr_xir_op_is_spawn(op) || op==XR_XIR_GENERATOR_NEW || op==XR_XIR_TASK_AWAIT ||
         op==XR_XIR_ITERATOR_HAS_NEXT || op==XR_XIR_ITERATOR_NEXT || op==XR_XIR_ITERATOR_NTH ||
         op==XR_XIR_ITERATOR_CLOSE || op==XR_XIR_SUSPEND || op==XR_XIR_TIMER_AFTER_MS ||
         op==XR_XIR_PRINT || op==XR_XIR_OUTPUT || op==XR_XIR_WRITE_STREAM ||
