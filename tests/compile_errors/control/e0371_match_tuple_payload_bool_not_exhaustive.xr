@@ -1,0 +1,15 @@
+// 带 payload 的 enum 与 bool 组成的 tuple 同样强制穷举：Fail 且 retry 为 false 的组合无处可去。
+enum Ev { Ok, Fail { code: i64 }, }
+
+fn plan(e: Ev, retry: bool) -> string {
+    return match ((e, retry)) {
+        (Ev.Ok, _)               -> "ok",
+        (Ev.Fail { code }, true) -> "retry ${code}",
+    }
+}
+
+fn main() {
+    print(plan(Ev.Ok, false))
+}
+
+main()

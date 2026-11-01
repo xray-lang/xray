@@ -2369,7 +2369,7 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 ### 3.13 `match` Expression
 
 ```ebnf
-MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
+MatchExpr ::= 'match' '(' Expr ')' '{' MatchArm (',' MatchArm)* ','? '}'
 MatchArm ::= Pattern ('if' Expr)? '->' Expression
 ```
 
@@ -2386,9 +2386,10 @@ var result = match (x) {
 ```
 
 **Semantics**:
+- The parentheses around the scrutinee belong to `match` itself, as with `if (...)`, `while (...)` and `for (...)`; they hold one expression, so a tuple scrutinee keeps its own: `match ((a, b))`.
 - Matches top-down, taking the first successful arm.
 - All arm expressions must yield the same type (or a union).
-- **Exhaustiveness**: for enum scrutinees (ADT and simple enums), the compiler enforces exhaustiveness. Otherwise it is not enforced, and an unmatched value at runtime throws `PanicInfo(E0442)`.
+- **Exhaustiveness**: when the scrutinee's static type is in the closed family (enums, `bool`, and tuples whose elements are all in the closed family), the compiler enforces exhaustiveness and reports missing values with `E0371`. Other types are not checked, and an unmatched value at runtime throws `PanicInfo(E0442)`. See §6.10.
 - For pattern details see [§6](#6-patterns).
 
 ### 3.14 Construction expressions
@@ -4214,7 +4215,7 @@ match (msg) {
 When `match` is performed on an ADT enum, the compiler runs **exhaustiveness analysis**:
 
 - The check passes when unguarded patterns cover every payload value of every variant (including an unguarded `_` catch-all). Naming a variant while restricting its fields with refutable patterns does not cover that entire variant.
-- If a variant is missed, compilation fails with `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`, naming the missing variants.
+- If a variant is missed, compilation fails with `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`, listing the missing values (format in §6.10).
 
 ```xray
 enum NetEvent {
@@ -4231,7 +4232,7 @@ match (event) {
 }
 ```
 
-> Both simple enums (no payload) and ADT enums **require** exhaustiveness; an unguarded `_` catch-all covers every remaining value; guarded arms do not count as unconditional coverage. Non-enum operands (such as `i64`) are not subject to the check.
+> Both simple enums (no payload) and ADT enums **require** exhaustiveness; an unguarded `_` catch-all covers every remaining value; guarded arms do not count as unconditional coverage. `bool` and tuples built from closed types are checked the same way (see §6.10); open types such as `i64` and `string` are not.
 
 ### 6.4 Type Patterns `is T`
 
@@ -4317,9 +4318,55 @@ match (p) {
 
 ### 6.10 Exhaustiveness and Match Failure
 
-- `match` over an enum expression is exhaustive (error code `E0371`, see §6.3.3).
-- Other operand types are not enforced; if no arm matches at runtime, an `PanicInfo` with code `E0442` is raised (see §18.x).
-- Always providing a `_` fallback is recommended.
+- **Closed family**:
+  - enums, including ADT enums with payloads;
+  - `bool`;
+  - tuples whose element types are all in the closed family (nesting allowed).
+
+  Integers, floats, `rune`, `string`, arrays, structs, classes, nullable types, type parameters and unions are not in the closed family, and neither is a tuple that contains any of them.
+- When the scrutinee's static type is in the closed family, `match` must be exhaustive: every possible value must be covered by an unguarded arm, or compilation fails with `E0371`. Coverage follows §6.3.3, §6.5 and §6.6: an unguarded `_` or bare binding covers every value at its position; guarded arms do not count; a refutable payload sub-pattern covers only the values it matches; integer literals and ranges take part in the analysis but never make an integer position closed.
+- `E0371` points at the `match` keyword and lists up to three missing values in declaration order, ending with ` and more` when there are others. A wholly missing variant is written `Enum.Variant`; a partly covered payload shows the fields that still constrain, such as `Ev.Fail { code: _ }`; `bool` values are `true` or `false`; tuples are `(a, b)`; unconstrained and open positions are `_`.
+- Other operand types are not checked; if no arm matches at runtime, a `PanicInfo` with code `E0442` is raised (see §18.x). For them, a `_` fallback is recommended.
+
+```xray
+enum Req { A, B, C, }
+enum Code { BadRequest, Unauthorized, NotFound, }
+
+fn message(req: Req, code: Code) -> string {
+    return match ((req, code)) {
+        (Req.A, Code.BadRequest)   -> "A: bad request",
+        (Req.A, Code.Unauthorized) -> "A: unauthorized",
+        (Req.A, Code.NotFound)     -> "A: not found",
+        (Req.B, _)                 -> "B: failed",
+        (Req.C, Code.NotFound)     -> "C: not found",
+        (Req.C, _)                 -> "C: failed",
+    }
+}
+
+fn main() {
+    print(message(Req.C, Code.BadRequest))
+}
+
+main()
+```
+
+Removing the last arm leaves `(Req.C, Code.BadRequest)` and `(Req.C, Code.Unauthorized)` uncovered:
+
+```xray
+enum Req { A, B, C, }
+enum Code { BadRequest, Unauthorized, NotFound, }
+
+fn message(req: Req, code: Code) -> string {
+    // error[E0371]: Non-exhaustive match: missing '(Req.C, Code.BadRequest)', '(Req.C, Code.Unauthorized)'
+    return match ((req, code)) {
+        (Req.A, Code.BadRequest)   -> "A: bad request",
+        (Req.A, Code.Unauthorized) -> "A: unauthorized",
+        (Req.A, Code.NotFound)     -> "A: not found",
+        (Req.B, _)                 -> "B: failed",
+        (Req.C, Code.NotFound)     -> "C: not found",
+    }
+}
+```
 
 ---
 

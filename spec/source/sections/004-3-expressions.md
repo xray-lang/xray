@@ -631,7 +631,7 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 ### 3.13 `match` 表达式
 
 ```ebnf
-MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
+MatchExpr ::= 'match' '(' Expr ')' '{' MatchArm (',' MatchArm)* ','? '}'
 MatchArm ::= Pattern ('if' Expr)? '->' Expression
 ```
 
@@ -648,9 +648,10 @@ var result = match (x) {
 ```
 
 **语义**：
+- 被匹配值外的括号属于 `match` 语法本身，与 `if (...)`、`while (...)`、`for (...)` 一致；括号内只有一个表达式，tuple 被匹配值要自带括号：`match ((a, b))`。
 - 自上而下匹配第一个成功的分支。
 - 所有分支表达式必须返回相同类型（或 union）。
-- **穷举性**：对 enum 变量（ADT 与简单枚举）编译器强制穷举。对其他表达式不强制，运行时无匹配抛 `PanicInfo(E0442)`。
+- **穷举性**：被匹配值的静态类型属于封闭族（enum、`bool`，以及元素全部属于封闭族的 tuple）时，编译器强制穷举，缺失时报 `E0371`；其他类型不强制，运行时无匹配抛 `PanicInfo(E0442)`。见 §6.10。
 - 模式详见 [§6](#6-模式-patterns)。
 
 ### 3.14 构造表达式
@@ -1349,7 +1350,7 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 ### 3.13 `match` Expression
 
 ```ebnf
-MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
+MatchExpr ::= 'match' '(' Expr ')' '{' MatchArm (',' MatchArm)* ','? '}'
 MatchArm ::= Pattern ('if' Expr)? '->' Expression
 ```
 
@@ -1366,9 +1367,10 @@ var result = match (x) {
 ```
 
 **Semantics**:
+- The parentheses around the scrutinee belong to `match` itself, as with `if (...)`, `while (...)` and `for (...)`; they hold one expression, so a tuple scrutinee keeps its own: `match ((a, b))`.
 - Matches top-down, taking the first successful arm.
 - All arm expressions must yield the same type (or a union).
-- **Exhaustiveness**: for enum scrutinees (ADT and simple enums), the compiler enforces exhaustiveness. Otherwise it is not enforced, and an unmatched value at runtime throws `PanicInfo(E0442)`.
+- **Exhaustiveness**: when the scrutinee's static type is in the closed family (enums, `bool`, and tuples whose elements are all in the closed family), the compiler enforces exhaustiveness and reports missing values with `E0371`. Other types are not checked, and an unmatched value at runtime throws `PanicInfo(E0442)`. See §6.10.
 - For pattern details see [§6](#6-patterns).
 
 ### 3.14 Construction expressions

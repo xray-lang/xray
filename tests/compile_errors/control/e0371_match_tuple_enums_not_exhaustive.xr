@@ -1,0 +1,19 @@
+// 两个 enum 组成的 tuple 属于封闭族：(Req.C, BadRequest) 与 (Req.C, Unauthorized) 没有分支覆盖。
+enum Req { A, B, C, }
+enum Code { BadRequest, Unauthorized, NotFound, }
+
+fn message(req: Req, code: Code) -> string {
+    return match ((req, code)) {
+        (Req.A, Code.BadRequest)   -> "A bad request",
+        (Req.A, Code.Unauthorized) -> "A unauthorized",
+        (Req.A, Code.NotFound)     -> "A not found",
+        (Req.B, _)                 -> "B failed",
+        (Req.C, Code.NotFound)     -> "C not found",
+    }
+}
+
+fn main() {
+    print(message(Req.A, Code.NotFound))
+}
+
+main()

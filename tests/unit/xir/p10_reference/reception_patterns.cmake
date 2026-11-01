@@ -22,7 +22,7 @@ add_test(NAME test_xir_p10_array_match_reject_duplicate_binding COMMAND test_xir
 set_tests_properties(test_xir_p10_array_match_reject_duplicate_binding PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;source;ownership;reception")
 add_test(NAME test_xir_p10_array_match_reject_alternative_types COMMAND test_xir_p10_reference --reject array_match_reject_alternative_types 1 "alternatives require the same binding names and exact types")
 set_tests_properties(test_xir_p10_array_match_reject_alternative_types PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;source;ownership;reception")
-add_test(NAME test_xir_p10_array_match_reject_enum_incomplete COMMAND test_xir_p10_reference --reject array_match_reject_enum_incomplete 2 "enum match is not exhaustive")
+add_test(NAME test_xir_p10_array_match_reject_enum_incomplete COMMAND test_xir_p10_reference --reject array_match_reject_enum_incomplete 2 "E0371: Non-exhaustive match: missing 'Packet.Data { items: _ }'")
 set_tests_properties(test_xir_p10_array_match_reject_enum_incomplete PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;source;ownership;reception")
 add_test(NAME test_xir_p10_array_match_reject_unreachable COMMAND test_xir_p10_reference --reject-structure array_match_reject_unreachable 1 "unreachable match arm")
 set_tests_properties(test_xir_p10_array_match_reject_unreachable PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;source;ownership;reception")

@@ -682,10 +682,11 @@ AstNode *xr_parse_match_expr(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_match_expr: NULL parser");
     int line = parser->previous.line;  // match keyword already consumed
+    int column = parser->previous.column;
 
-    // Scrutinee must be parenthesised, mirroring `if (...)`, `for (...)`,
-    // `while (...)`. Required parens also disambiguate tuple scrutinees
-    // (`match (x, y) { (a, b) -> ... }`) from a sequence of bare names.
+    // The parentheses belong to `match` itself, as with `if (...)`,
+    // `for (...)` and `while (...)`. They hold one expression, so a tuple
+    // scrutinee keeps its own: `match ((x, y)) { (a, b) -> ... }`.
     do {
         xr_parser_consume(parser, TK_LPAREN, "expected '(' after 'match'");
         if (!xr_parser_healthy(parser)) return NULL;
@@ -702,7 +703,9 @@ AstNode *xr_parse_match_expr(Parser *parser) {
     }
 
     do {
-        xr_parser_consume(parser, TK_RPAREN, "expected ')' after match scrutinee");
+        xr_parser_consume(parser, TK_RPAREN, xr_parser_check(parser, TK_COMMA) ?
+            "expected ')' after match scrutinee; a tuple scrutinee keeps its own parentheses: match ((a, b))" :
+            "expected ')' after match scrutinee");
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
     do {
@@ -780,6 +783,7 @@ AstNode *xr_parse_match_expr(Parser *parser) {
 
     AstNode *node = xr_ast_match_expr(parser->compiler_session, expr, arms, arm_count, line);
     if (!xr_parser_healthy(parser)) return NULL;
+    node->column = column;
     node->end_line = match_end_line;
     node->end_column = match_end_column;
     return node;

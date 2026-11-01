@@ -58,6 +58,29 @@ static bool source_pattern_bindings(SourceContext *ctx, SourceMatchPattern *patt
         if (!source_pattern_bindings(ctx,pattern->fields[i],arm,alternative,depth+1)) return false;
     return true;
 }
+/* E0371 lists the first missing values that fit the diagnostic; when there
+ * are more than it lists, the message says so instead of counting them. */
+static bool source_match_incomplete(SourceContext *ctx, AstNode *node, XrXirType type,
+    SourceMatchPattern **rows, uint32_t count) {
+    static const char prefix[]="E0371: Non-exhaustive match: missing ";
+    static const char more[]=" and more";
+    SourcePatternMissing missing;
+    if (!source_pattern_missing(ctx,(SourcePatternMatrix){&type,rows,1,count},0,&missing)) return false;
+    if (!missing.count) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"incomplete match has no missing value");
+    char message[sizeof(ctx->diagnostic.message)];
+    size_t used=sizeof(prefix)-1; uint32_t listed=0;
+    memcpy(message,prefix,used);
+    for (;listed<missing.count && listed+1<SOURCE_PATTERN_MISSING_LIMIT;++listed) {
+        const char *text=missing.rows[listed][0]; size_t length=strlen(text);
+        if ((listed?2:0)+length+2>sizeof(message)-sizeof(more)-used) break;
+        if (listed) {memcpy(message+used,", ",2);used+=2;}
+        message[used++]='\''; memcpy(message+used,text,length); used+=length; message[used++]='\'';
+    }
+    if (!listed) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"E0371: Non-exhaustive match: missing values are too long to list");
+    if (listed<missing.count) {memcpy(message+used,more,sizeof(more)-1);used+=sizeof(more)-1;}
+    message[used]=0;
+    return source_fail(ctx,node,XR_XIR_BAD_TYPE,message);
+}
 static bool source_match_normalize_arms(SourceContext *ctx, AstNode *node, XrXirType type,
     SourceMatchArm **output, bool *exhaustive) {
     MatchExprNode *match=&node->as.match_expr; uint32_t count=(uint32_t)match->arm_count,total=0;
@@ -97,7 +120,8 @@ static bool source_match_normalize_arms(SourceContext *ctx, AstNode *node, XrXir
         if (!arm->guard && !source_pattern_coverage(ctx,(SourcePatternMatrix){&type,rows,1,row_count},0,&complete)) return false;
         source_hir_scope_leave(ctx,previous_scope);
     }
-    if (!complete && xr_xir_type_is_enum(&ctx->types,type))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"enum match is not exhaustive");
+    bool closed=false;
+    if (!complete && !source_pattern_closed(ctx,type,0,&closed)) return false;
+    if (!complete && closed) return source_match_incomplete(ctx,node,type,rows,row_count);
     *output=arms; *exhaustive=complete; return true;
 }

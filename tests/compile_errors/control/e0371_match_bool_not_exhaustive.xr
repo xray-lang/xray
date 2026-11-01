@@ -1,0 +1,12 @@
+// bool 属于封闭族：只写 true 分支时，false 无处可去。
+fn label(flag: bool) -> string {
+    return match (flag) {
+        true -> "on",
+    }
+}
+
+fn main() {
+    print(label(true))
+}
+
+main()

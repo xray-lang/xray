@@ -1,0 +1,13 @@
+// (bool, bool) 有四个值，只覆盖了三个：缺 (true, false)。
+fn pair(a: bool, b: bool) -> string {
+    return match ((a, b)) {
+        (true, true) -> "both",
+        (false, _)   -> "first off",
+    }
+}
+
+fn main() {
+    print(pair(true, true))
+}
+
+main()

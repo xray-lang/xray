@@ -95,7 +95,7 @@ match (msg) {
 `match` 一个 ADT enum 时，编译器执行**穷举性分析**：
 
 - 若所有变体的全部载荷取值均被无 guard 的模式覆盖（含无 guard 的 `_` 兜底），通过；只列出变体名但对子字段施加可失败模式，不足以覆盖整个变体
-- 若漏写某变体，编译报错 `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`，并提示缺失的变体名
+- 若漏写某变体，编译报错 `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`，并列出缺失的值（格式见 §6.10）
 
 ```xray
 enum NetEvent {
@@ -112,7 +112,7 @@ match (event) {
 }
 ```
 
-> 简单枚举（无 payload）与 ADT enum 均**强制**穷举；无 guard 的 `_` 兜底分支覆盖所有剩余值；带 guard 的分支不计作无条件覆盖。对非 enum 变量（如 `i64`）不强制。
+> 简单枚举（无 payload）与 ADT enum 均**强制**穷举；无 guard 的 `_` 兜底分支覆盖所有剩余值；带 guard 的分支不计作无条件覆盖。`bool` 与由封闭族组成的 tuple 同样强制穷举（见 §6.10）；开放类型（如 `i64`、`string`）不强制。
 
 ### 6.4 类型模式 `is T`
 
@@ -198,9 +198,55 @@ match (p) {
 
 ### 6.10 穷举性与匹配失败
 
-- 对 enum 表达式的 `match` 强制穷举（错误码 `E0371`，见 §6.3.3）。
-- 其他类型不强制；运行时无分支匹配 → 抛 `PanicInfo` 错误码 `E0442`（见 §18.x）。
-- 建议总是提供 `_` 兜底。
+- **封闭族**：
+  - enum，包括带 payload 的 ADT enum；
+  - `bool`；
+  - tuple，且每个元素类型都属于封闭族（可嵌套）。
+
+  整数、浮点、`rune`、`string`、数组、struct、class、可空类型、类型形参与 union 不属于封闭族；含有这些元素的 tuple 也不属于。
+- 被匹配值的静态类型属于封闭族时，`match` 必须穷举：每个可能的值都要被某个无 guard 的分支覆盖，否则编译报错 `E0371`。覆盖规则见 §6.3.3、§6.5、§6.6：无 guard 的 `_` 与裸名绑定覆盖该位置的全部值；带 guard 的分支不计覆盖；payload 中的可失败子模式只覆盖它匹配到的值；整数字面量与范围参与计算，但不会让整数位置变成封闭族。
+- `E0371` 指向 `match` 关键字，按声明顺序列出最多 3 个缺失的值，还有更多时以 ` and more` 结尾。缺失值的写法：整个变体缺失写 `Enum.Variant`；只覆盖了部分 payload 时写出仍有约束的字段，例如 `Ev.Fail { code: _ }`；`bool` 写 `true` 或 `false`；tuple 写 `(a, b)`；不受约束的位置和开放类型的位置写 `_`。
+- 其他类型不强制；运行时无分支匹配 → 抛 `PanicInfo` 错误码 `E0442`（见 §18.x）。对这些类型建议总是提供 `_` 兜底。
+
+```xray
+enum Req { A, B, C, }
+enum Code { BadRequest, Unauthorized, NotFound, }
+
+fn message(req: Req, code: Code) -> string {
+    return match ((req, code)) {
+        (Req.A, Code.BadRequest)   -> "A: bad request",
+        (Req.A, Code.Unauthorized) -> "A: unauthorized",
+        (Req.A, Code.NotFound)     -> "A: not found",
+        (Req.B, _)                 -> "B: failed",
+        (Req.C, Code.NotFound)     -> "C: not found",
+        (Req.C, _)                 -> "C: failed",
+    }
+}
+
+fn main() {
+    print(message(Req.C, Code.BadRequest))
+}
+
+main()
+```
+
+删掉最后一个分支后，`(Req.C, Code.BadRequest)` 与 `(Req.C, Code.Unauthorized)` 没有分支覆盖：
+
+```xray
+enum Req { A, B, C, }
+enum Code { BadRequest, Unauthorized, NotFound, }
+
+fn message(req: Req, code: Code) -> string {
+    // error[E0371]: Non-exhaustive match: missing '(Req.C, Code.BadRequest)', '(Req.C, Code.Unauthorized)'
+    return match ((req, code)) {
+        (Req.A, Code.BadRequest)   -> "A: bad request",
+        (Req.A, Code.Unauthorized) -> "A: unauthorized",
+        (Req.A, Code.NotFound)     -> "A: not found",
+        (Req.B, _)                 -> "B: failed",
+        (Req.C, Code.NotFound)     -> "C: not found",
+    }
+}
+```
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -295,7 +341,7 @@ match (msg) {
 When `match` is performed on an ADT enum, the compiler runs **exhaustiveness analysis**:
 
 - The check passes when unguarded patterns cover every payload value of every variant (including an unguarded `_` catch-all). Naming a variant while restricting its fields with refutable patterns does not cover that entire variant.
-- If a variant is missed, compilation fails with `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`, naming the missing variants.
+- If a variant is missed, compilation fails with `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`, listing the missing values (format in §6.10).
 
 ```xray
 enum NetEvent {
@@ -312,7 +358,7 @@ match (event) {
 }
 ```
 
-> Both simple enums (no payload) and ADT enums **require** exhaustiveness; an unguarded `_` catch-all covers every remaining value; guarded arms do not count as unconditional coverage. Non-enum operands (such as `i64`) are not subject to the check.
+> Both simple enums (no payload) and ADT enums **require** exhaustiveness; an unguarded `_` catch-all covers every remaining value; guarded arms do not count as unconditional coverage. `bool` and tuples built from closed types are checked the same way (see §6.10); open types such as `i64` and `string` are not.
 
 ### 6.4 Type Patterns `is T`
 
@@ -398,7 +444,53 @@ match (p) {
 
 ### 6.10 Exhaustiveness and Match Failure
 
-- `match` over an enum expression is exhaustive (error code `E0371`, see §6.3.3).
-- Other operand types are not enforced; if no arm matches at runtime, an `PanicInfo` with code `E0442` is raised (see §18.x).
-- Always providing a `_` fallback is recommended.
+- **Closed family**:
+  - enums, including ADT enums with payloads;
+  - `bool`;
+  - tuples whose element types are all in the closed family (nesting allowed).
+
+  Integers, floats, `rune`, `string`, arrays, structs, classes, nullable types, type parameters and unions are not in the closed family, and neither is a tuple that contains any of them.
+- When the scrutinee's static type is in the closed family, `match` must be exhaustive: every possible value must be covered by an unguarded arm, or compilation fails with `E0371`. Coverage follows §6.3.3, §6.5 and §6.6: an unguarded `_` or bare binding covers every value at its position; guarded arms do not count; a refutable payload sub-pattern covers only the values it matches; integer literals and ranges take part in the analysis but never make an integer position closed.
+- `E0371` points at the `match` keyword and lists up to three missing values in declaration order, ending with ` and more` when there are others. A wholly missing variant is written `Enum.Variant`; a partly covered payload shows the fields that still constrain, such as `Ev.Fail { code: _ }`; `bool` values are `true` or `false`; tuples are `(a, b)`; unconstrained and open positions are `_`.
+- Other operand types are not checked; if no arm matches at runtime, a `PanicInfo` with code `E0442` is raised (see §18.x). For them, a `_` fallback is recommended.
+
+```xray
+enum Req { A, B, C, }
+enum Code { BadRequest, Unauthorized, NotFound, }
+
+fn message(req: Req, code: Code) -> string {
+    return match ((req, code)) {
+        (Req.A, Code.BadRequest)   -> "A: bad request",
+        (Req.A, Code.Unauthorized) -> "A: unauthorized",
+        (Req.A, Code.NotFound)     -> "A: not found",
+        (Req.B, _)                 -> "B: failed",
+        (Req.C, Code.NotFound)     -> "C: not found",
+        (Req.C, _)                 -> "C: failed",
+    }
+}
+
+fn main() {
+    print(message(Req.C, Code.BadRequest))
+}
+
+main()
+```
+
+Removing the last arm leaves `(Req.C, Code.BadRequest)` and `(Req.C, Code.Unauthorized)` uncovered:
+
+```xray
+enum Req { A, B, C, }
+enum Code { BadRequest, Unauthorized, NotFound, }
+
+fn message(req: Req, code: Code) -> string {
+    // error[E0371]: Non-exhaustive match: missing '(Req.C, Code.BadRequest)', '(Req.C, Code.Unauthorized)'
+    return match ((req, code)) {
+        (Req.A, Code.BadRequest)   -> "A: bad request",
+        (Req.A, Code.Unauthorized) -> "A: unauthorized",
+        (Req.A, Code.NotFound)     -> "A: not found",
+        (Req.B, _)                 -> "B: failed",
+        (Req.C, Code.NotFound)     -> "C: not found",
+    }
+}
+```
 <!-- /xr-spec:en -->

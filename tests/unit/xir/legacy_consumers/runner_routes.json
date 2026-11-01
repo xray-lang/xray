@@ -9849,20 +9849,16 @@
         "kind": "compile",
         "path": "tests/compile_errors/control/e0371_match_not_exhaustive.xr.expected",
         "state": "PRESENT",
-        "lf_sha256": "09f75135b5803da63308a96e1174c6c0e41260c49ad0bb657f845ba74bf26861",
+        "lf_sha256": "573e68e44e7ed84ecfd41b291d19b575fda6373459f8cb23523b17d2671c5eb8",
         "assertions": [
           {
             "where": {
               "file": null,
               "line": 7,
-              "col": 1
-            },
-            "code": "E0371",
-            "misplaced": {
-              "file": null,
-              "line": 7,
               "col": 5
             },
+            "code": "E0371",
+            "misplaced": null,
             "texts": [
               "Non-exhaustive match: missing 'Color.Blue'"
             ],

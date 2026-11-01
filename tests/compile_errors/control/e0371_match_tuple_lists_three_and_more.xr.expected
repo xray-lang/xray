@@ -1,0 +1,2 @@
+--> 5:12 E0371
+Non-exhaustive match: missing '(Dir.North, Dir.East)', '(Dir.North, Dir.South)', '(Dir.North, Dir.West)' and more

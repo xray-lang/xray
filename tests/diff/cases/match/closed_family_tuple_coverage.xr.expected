@@ -1,0 +1,57 @@
+A bad request
+A unauthorized
+A not found
+B failed
+B failed
+B failed
+C failed
+C failed
+C not found
+on
+tt
+A on
+A on
+A on
+rest bad
+B rest
+B rest
+rest bad
+C true
+C true
+tf
+A on
+A on
+A on
+rest bad
+B rest
+B rest
+rest bad
+C true
+C true
+ok
+retry server
+retry 404
+off
+ft
+A off other
+A off other
+A off missing
+rest bad
+B rest
+B rest
+rest bad
+C false
+C false
+ff
+A off other
+A off other
+A off missing
+rest bad
+B rest
+B rest
+rest bad
+C false
+C false
+ok
+give up 500
+give up 404

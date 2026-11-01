@@ -1,0 +1,14 @@
+// 缺失组合多于三个时只列前三个，再以 and more 结尾。
+enum Dir { North, East, South, West, }
+
+fn turn(from: Dir, to: Dir) -> string {
+    return match ((from, to)) {
+        (Dir.North, Dir.North) -> "stay",
+    }
+}
+
+fn main() {
+    print(turn(Dir.North, Dir.North))
+}
+
+main()

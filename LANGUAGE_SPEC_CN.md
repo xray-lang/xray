@@ -2345,7 +2345,7 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 ### 3.13 `match` 表达式
 
 ```ebnf
-MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
+MatchExpr ::= 'match' '(' Expr ')' '{' MatchArm (',' MatchArm)* ','? '}'
 MatchArm ::= Pattern ('if' Expr)? '->' Expression
 ```
 
@@ -2362,9 +2362,10 @@ var result = match (x) {
 ```
 
 **语义**：
+- 被匹配值外的括号属于 `match` 语法本身，与 `if (...)`、`while (...)`、`for (...)` 一致；括号内只有一个表达式，tuple 被匹配值要自带括号：`match ((a, b))`。
 - 自上而下匹配第一个成功的分支。
 - 所有分支表达式必须返回相同类型（或 union）。
-- **穷举性**：对 enum 变量（ADT 与简单枚举）编译器强制穷举。对其他表达式不强制，运行时无匹配抛 `PanicInfo(E0442)`。
+- **穷举性**：被匹配值的静态类型属于封闭族（enum、`bool`，以及元素全部属于封闭族的 tuple）时，编译器强制穷举，缺失时报 `E0371`；其他类型不强制，运行时无匹配抛 `PanicInfo(E0442)`。见 §6.10。
 - 模式详见 [§6](#6-模式-patterns)。
 
 ### 3.14 构造表达式
@@ -4197,7 +4198,7 @@ match (msg) {
 `match` 一个 ADT enum 时，编译器执行**穷举性分析**：
 
 - 若所有变体的全部载荷取值均被无 guard 的模式覆盖（含无 guard 的 `_` 兜底），通过；只列出变体名但对子字段施加可失败模式，不足以覆盖整个变体
-- 若漏写某变体，编译报错 `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`，并提示缺失的变体名
+- 若漏写某变体，编译报错 `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`，并列出缺失的值（格式见 §6.10）
 
 ```xray
 enum NetEvent {
@@ -4214,7 +4215,7 @@ match (event) {
 }
 ```
 
-> 简单枚举（无 payload）与 ADT enum 均**强制**穷举；无 guard 的 `_` 兜底分支覆盖所有剩余值；带 guard 的分支不计作无条件覆盖。对非 enum 变量（如 `i64`）不强制。
+> 简单枚举（无 payload）与 ADT enum 均**强制**穷举；无 guard 的 `_` 兜底分支覆盖所有剩余值；带 guard 的分支不计作无条件覆盖。`bool` 与由封闭族组成的 tuple 同样强制穷举（见 §6.10）；开放类型（如 `i64`、`string`）不强制。
 
 ### 6.4 类型模式 `is T`
 
@@ -4300,9 +4301,55 @@ match (p) {
 
 ### 6.10 穷举性与匹配失败
 
-- 对 enum 表达式的 `match` 强制穷举（错误码 `E0371`，见 §6.3.3）。
-- 其他类型不强制；运行时无分支匹配 → 抛 `PanicInfo` 错误码 `E0442`（见 §18.x）。
-- 建议总是提供 `_` 兜底。
+- **封闭族**：
+  - enum，包括带 payload 的 ADT enum；
+  - `bool`；
+  - tuple，且每个元素类型都属于封闭族（可嵌套）。
+
+  整数、浮点、`rune`、`string`、数组、struct、class、可空类型、类型形参与 union 不属于封闭族；含有这些元素的 tuple 也不属于。
+- 被匹配值的静态类型属于封闭族时，`match` 必须穷举：每个可能的值都要被某个无 guard 的分支覆盖，否则编译报错 `E0371`。覆盖规则见 §6.3.3、§6.5、§6.6：无 guard 的 `_` 与裸名绑定覆盖该位置的全部值；带 guard 的分支不计覆盖；payload 中的可失败子模式只覆盖它匹配到的值；整数字面量与范围参与计算，但不会让整数位置变成封闭族。
+- `E0371` 指向 `match` 关键字，按声明顺序列出最多 3 个缺失的值，还有更多时以 ` and more` 结尾。缺失值的写法：整个变体缺失写 `Enum.Variant`；只覆盖了部分 payload 时写出仍有约束的字段，例如 `Ev.Fail { code: _ }`；`bool` 写 `true` 或 `false`；tuple 写 `(a, b)`；不受约束的位置和开放类型的位置写 `_`。
+- 其他类型不强制；运行时无分支匹配 → 抛 `PanicInfo` 错误码 `E0442`（见 §18.x）。对这些类型建议总是提供 `_` 兜底。
+
+```xray
+enum Req { A, B, C, }
+enum Code { BadRequest, Unauthorized, NotFound, }
+
+fn message(req: Req, code: Code) -> string {
+    return match ((req, code)) {
+        (Req.A, Code.BadRequest)   -> "A: bad request",
+        (Req.A, Code.Unauthorized) -> "A: unauthorized",
+        (Req.A, Code.NotFound)     -> "A: not found",
+        (Req.B, _)                 -> "B: failed",
+        (Req.C, Code.NotFound)     -> "C: not found",
+        (Req.C, _)                 -> "C: failed",
+    }
+}
+
+fn main() {
+    print(message(Req.C, Code.BadRequest))
+}
+
+main()
+```
+
+删掉最后一个分支后，`(Req.C, Code.BadRequest)` 与 `(Req.C, Code.Unauthorized)` 没有分支覆盖：
+
+```xray
+enum Req { A, B, C, }
+enum Code { BadRequest, Unauthorized, NotFound, }
+
+fn message(req: Req, code: Code) -> string {
+    // error[E0371]: Non-exhaustive match: missing '(Req.C, Code.BadRequest)', '(Req.C, Code.Unauthorized)'
+    return match ((req, code)) {
+        (Req.A, Code.BadRequest)   -> "A: bad request",
+        (Req.A, Code.Unauthorized) -> "A: unauthorized",
+        (Req.A, Code.NotFound)     -> "A: not found",
+        (Req.B, _)                 -> "B: failed",
+        (Req.C, Code.NotFound)     -> "C: not found",
+    }
+}
+```
 
 ---
 

@@ -1,0 +1,80 @@
+// anchor: closed-family-tuple-coverage
+//
+// A match the compiler proves exhaustive skips the test on its last arm and
+// emits no runtime failure path. Every arm below is reached, so a coverage
+// result that wrongly called one of these matches complete would print a
+// wrong label on VM, native, or both.
+
+enum Req { A, B, C, }
+enum Code { BadRequest, Unauthorized, NotFound, }
+enum Ev { Ok, Fail { code: i64 }, }
+
+fn message(req: Req, code: Code) -> string {
+    return match ((req, code)) {
+        (Req.A, Code.BadRequest)   -> "A bad request",
+        (Req.A, Code.Unauthorized) -> "A unauthorized",
+        (Req.A, Code.NotFound)     -> "A not found",
+        (Req.B, _)                 -> "B failed",
+        (Req.C, Code.NotFound)     -> "C not found",
+        (Req.C, _)                 -> "C failed",
+    }
+}
+
+fn pair(a: bool, b: bool) -> string {
+    return match ((a, b)) {
+        (true, true)   -> "tt",
+        (true, false)  -> "tf",
+        (false, true)  -> "ft",
+        (false, false) -> "ff",
+    }
+}
+
+fn flag(b: bool) -> string {
+    return match (b) {
+        false -> "off",
+        true  -> "on",
+    }
+}
+
+fn nested(p: ((Req, bool), Code)) -> string {
+    return match (p) {
+        ((Req.A, true), _)              -> "A on",
+        ((Req.A, false), Code.NotFound) -> "A off missing",
+        ((Req.A, false), _)             -> "A off other",
+        ((_, _), Code.BadRequest)       -> "rest bad",
+        ((Req.B, _), _)                 -> "B rest",
+        ((Req.C, on), _)                -> "C ${on}",
+    }
+}
+
+fn plan(e: Ev, retry: bool) -> string {
+    return match ((e, retry)) {
+        (Ev.Ok, _)                     -> "ok",
+        (Ev.Fail { code: 500 }, true)  -> "retry server",
+        (Ev.Fail { code }, true)       -> "retry ${code}",
+        (Ev.Fail { code }, false)      -> "give up ${code}",
+    }
+}
+
+const reqs = [Req.A, Req.B, Req.C]
+const codes = [Code.BadRequest, Code.Unauthorized, Code.NotFound]
+for (r in reqs) {
+    for (c in codes) {
+        print(message(r, c))
+    }
+}
+const bools = [true, false]
+for (a in bools) {
+    print(flag(a))
+    for (b in bools) {
+        print(pair(a, b))
+        for (r in reqs) {
+            for (c in codes) {
+                print(nested(((r, a), c)))
+            }
+        }
+    }
+    print(plan(Ev.Ok, a))
+    print(plan(Ev.Fail { code: 500 }, a))
+    print(plan(Ev.Fail { code: 404 }, a))
+}
