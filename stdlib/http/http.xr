@@ -112,7 +112,7 @@ fn _monthNumber(raw: string) -> i64 {
 }
 
 fn _parseHms(raw: string) -> Array<i64>? {
-    var parts = raw.split(":")
+    var parts = try! raw.split(":")
     if (len(parts) < 2 || len(parts) > 3) { return null }
     var h = _parseIntStrict(parts[0])
     var m = _parseIntStrict(parts[1])
@@ -153,7 +153,7 @@ fn _parseCookieDate(raw: string) -> i64 {
     }
 
     if (len(tokens) >= 3 && tokens[0].endsWith(",")) {
-        var dateParts = tokens[1].split("-")
+        var dateParts = try! tokens[1].split("-")
         if (len(dateParts) == 3) {
             var day2 = _parseIntStrict(dateParts[0])
             var month2 = _monthNumber(dateParts[1])
@@ -354,7 +354,7 @@ export fn parseSetCookie(header: string, requestDomain: string = "", requestPath
                   nowSeconds: i64 = 0) -> Cookie? {
     var now = _cookieNow(nowSeconds)
     if (len(header) == 0 || len(header.bytes()) > COOKIE_MAX_INPUT_LEN) { return null }
-    var parts = header.split(";")
+    var parts = try! header.split(";")
     if (len(parts) == 0) { return null }
     var first = parts[0]
     var eq = first.indexOf("=")
@@ -454,7 +454,7 @@ fn _formBasename(path: Path) -> string {
 }
 
 fn _boundary() -> string {
-    return "----XrayFormBoundary" + crypto.randomBytes(16)
+    return "----XrayFormBoundary" + (try! crypto.randomBytes(16))
 }
 
 fn _guessMimeType(filename: string) -> string {
@@ -520,7 +520,7 @@ fn _routeSegments(path: string) -> Array<string> {
     var clean = _routePathOnly(path)
     if (clean == "/" || len(clean) == 0) { return [] }
     if (clean.runes().nth(0) == '/') { clean = clean.slice(1) }
-    return copy(clean.split("/"))
+    return copy(try! clean.split("/"))
 }
 
 fn _routeWildcardName(seg: string) -> string? {
@@ -2527,7 +2527,7 @@ export fn decodeChunkedBody(raw: string, maxBodyBytes: i64 = 67108864) -> string
 export fn parseRequestHead(raw: string, maxHeaders: i64 = 100) -> RequestHead? {
     var end = _responseHeadEnd(raw)
     if (end < 0) { return null }
-    var lines = raw.slice(0, end).split("\n")
+    var lines = try! raw.slice(0, end).split("\n")
     if (len(lines) == 0) { return null }
 
     var requestLine = _trimLineEnd(lines[0])
@@ -2664,7 +2664,7 @@ export fn parseResponseText(
 export fn parseResponseHead(raw: string, maxHeaders: i64 = 100) -> ResponseHead? {
     var end = _responseHeadEnd(raw)
     if (end < 0) { return null }
-    var lines = raw.slice(0, end).split("\n")
+    var lines = try! raw.slice(0, end).split("\n")
     if (len(lines) == 0) { return null }
 
     var statusLine = _trimLineEnd(lines[0])

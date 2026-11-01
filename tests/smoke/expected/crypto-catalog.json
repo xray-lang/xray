@@ -1,0 +1,382 @@
+{
+  "schema": 1,
+  "suites": [
+    {
+      "source": "tests/regression/10_stdlib/1400_crypto_hash.xr",
+      "sourceCanonicalSha256": "5509c3d277a83bf0fcc0d28374157a799e52ddcbc293796a08fa8f6e0263074a",
+      "entries": [
+        {
+          "name": "test_md5_empty_string",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_md5_hello",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_md5_hello_world",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_md5_numbers",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_md5_long_string",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_sha1_empty_string",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_sha1_hello",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_sha1_hello_world",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_sha1_long_string",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_sha256_empty_string",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_sha256_hello",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_sha256_hello_world",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_sha256_long_string",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hash_lengths",
+          "role": 1,
+          "timeout": 0
+        }
+      ]
+    },
+    {
+      "source": "tests/regression/10_stdlib/1401_crypto_hmac.xr",
+      "sourceCanonicalSha256": "f38f6d6dd7656313eb0b0f6d5f50143ffbe4e0c6776e20674082b6e392d4b4e6",
+      "entries": [
+        {
+          "name": "test_hmac_sha256_basic",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hmac_sha256_empty_message",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hmac_sha256_complex_key",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hmac_sha256_rfc4231_jefe_vector",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hmac_sha256_long_data",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hmac_sha1_basic",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hmac_sha1_empty_message",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hmac_sha1_length",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hmac_md5_basic",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hmac_md5_empty_message",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hmac_md5_length",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hmac_unsupported_algorithm_returns_null",
+          "role": 1,
+          "timeout": 0
+        }
+      ]
+    },
+    {
+      "source": "tests/regression/10_stdlib/1402_crypto_random.xr",
+      "sourceCanonicalSha256": "c91bbd8432566e620484a04bce7867cda50cc65c9a22db98de00d0bb96fa1e16",
+      "entries": [
+        {
+          "name": "test_random_bytes_length_8",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_random_bytes_length_16",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_random_bytes_length_32",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_random_bytes_uniqueness",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_random_bytes_hex_format",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_uuid_length",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_uuid_format",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_uuid_parts_length",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_uuid_uniqueness",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_uuid_multiple_uniqueness",
+          "role": 1,
+          "timeout": 0
+        }
+      ]
+    },
+    {
+      "source": "tests/regression/10_stdlib/1403_crypto_sha512.xr",
+      "sourceCanonicalSha256": "f68514a69cd5e5e6c7943ac6218a418a5c1d4fabb70f2ccb1e52f6b29aa95323",
+      "entries": [
+        {
+          "name": "test_sha512_empty_string",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_sha512_hello",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_sha512_hello_world",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_sha512_length",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_sha512_long_string",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hmac_sha512_basic",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hmac_sha512_empty_message",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_hmac_sha512_known_vector",
+          "role": 1,
+          "timeout": 0
+        }
+      ]
+    },
+    {
+      "source": "tests/regression/10_stdlib/1404_crypto_aes.xr",
+      "sourceCanonicalSha256": "c1308a3ade28fe9d87833bf02d42ac14a87f730f9429243c340862696e5dcb36",
+      "entries": [
+        {
+          "name": "test_encrypt_decrypt_basic",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_encrypt_decrypt_empty",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_encrypt_decrypt_long_text",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_encrypt_output_is_hex",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_encrypt_different_each_time",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_decrypt_wrong_key",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_encrypt_decrypt_exactly_16_bytes",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_encrypt_decrypt_unicode",
+          "role": 1,
+          "timeout": 0
+        }
+      ]
+    },
+    {
+      "source": "tests/regression/10_stdlib/1405_crypto_utils.xr",
+      "sourceCanonicalSha256": "f896bcf95b3d92627f0ca399c6cf343896d2f4527013833882d1d0acd678ce24",
+      "entries": [
+        {
+          "name": "test_timing_safe_equal_same",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_timing_safe_equal_different",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_timing_safe_equal_different_length",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_timing_safe_equal_empty",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_timing_safe_equal_hmac_verify",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_timing_safe_equal_hmac_mismatch",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_all_hash_lengths",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_all_hmac_lengths",
+          "role": 1,
+          "timeout": 0
+        }
+      ]
+    },
+    {
+      "source": "tests/regression/10_stdlib/1406_crypto_aead.xr",
+      "sourceCanonicalSha256": "4b86fc4f2026488801c76a231a6c52fd2b1d35c7b9a71af58b276439ab20bca6",
+      "entries": [
+        {
+          "name": "test_reference_wire_forms_decrypt_to_their_plaintext",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_every_padding_length_round_trips",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_a_different_key_does_not_authenticate",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_two_encryptions_of_one_plaintext_differ",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_tampering_anywhere_is_refused",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_a_wire_form_of_the_wrong_length_is_a_typed_error",
+          "role": 1,
+          "timeout": 0
+        },
+        {
+          "name": "test_a_non_hex_wire_form_answers_null",
+          "role": 1,
+          "timeout": 0
+        }
+      ]
+    }
+  ]
+}

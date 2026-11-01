@@ -251,12 +251,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_compress[] = {
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_crypto[] = {
-    {.name = "decrypt", .signature = "(key: string, ciphertext: string): string?", .summary = "",},
+    {.name = "decrypt", .signature = "(key: string, ciphertext: string) throws(CryptoError | Utf8Error): string?", .summary = "",},
     {.name = "encrypt", .signature = "(key: string, plaintext: string): string", .summary = "",},
     {.name = "hmac", .signature = "(algo: string, key: string, data: string): string?", .summary = "",},
     {.name = "hmacBytes", .signature = "(algo: string, key: Array<u8>, msg: Array<u8>): Array<u8>?", .summary = "",},
     {.name = "md5", .signature = "(data: string): string", .summary = "",},
-    {.name = "randomBytes", .signature = "(n: i64): string", .summary = "",},
+    {.name = "randomBytes", .signature = "(n: i64) throws(CryptoError): string", .summary = "",},
     {.name = "sha1", .signature = "(data: string): string", .summary = "",},
     {.name = "sha256", .signature = "(data: string): string", .summary = "",},
     {.name = "sha512", .signature = "(data: string): string", .summary = "",},
@@ -1807,7 +1807,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
         .aliases_csv = "strings,string_methods,interpolation,template",
         .body =
             "[Language reference](#165-\xe5\xad\x97\xe7\xac\xa6\xe4\xb8\xb2\xe5\xad\x97\xe9\x9d\xa2\xe9\x87\x8f)\n" "\n" "## String\n" "\n" "### Quoted literals\n" "Use no prefix / `r` for valid UTF-8 strings, `b/br` for `[u8; L]`, and `c/cr` for `[u8; L+1]` with an appended NUL. `r/br/cr` preserve backslashes; interpolation remains enabled only for no prefix / `r`.\n" "```xray\n" "var card = r\"\"\"\n" "<div class=\"card\">\n" "  ${title}\n" "</div>\n" "\"\"\"\n" "```\n" "```xray\n" "var path = br\"C:\\\\raw\\\\path\"\n" "var asset = cr\"asset-name\"\n" "```\n" "One quote is single-line inline form, two quotes encode an empty payload, and three or more quotes form a block. A block opener is followed immediately by a newline; its exact-count closer occupies its own line. Increase the quote count when a quote-only payload line would collide.\n" "\n" "### String interpolation\n" "```xray\n" "var greeting = \"Hello, ${name}! Age: ${user.age + 1}\"\n" "```\n"
-            "Note: `${...}` is scanned as an expression, so nested strings may use the same quote as the outer template.\n" "\n" "### Slicing\n" "```xray\n" "arr[1:4]                // elements [1, 4)\n" "arr[:3]                 // first 3\n" "arr[2:]                 // from index 2 to the end\n" "arr[:]                  // full-length view (not a copy)\n" "var view: Slice<i64> = arr[1:4]\n" "```\n" "\n" "### Common methods\n" "- `len(s)` counts Unicode scalars; `len(s.bytes())` counts UTF-8 bytes\n" "- `s.startsWith(prefix)` / `s.endsWith(suffix)`\n" "- `s.indexOf(sub)` / `s.contains(sub)`\n" "- `s.slice(start, end)` / `s.split(sep)` / `s.replace(old, new)`\n" "",
+            "Note: `${...}` is scanned as an expression, so nested strings may use the same quote as the outer template.\n" "\n" "### Slicing\n" "```xray\n" "arr[1:4]                // elements [1, 4)\n" "arr[:3]                 // first 3\n" "arr[2:]                 // from index 2 to the end\n" "arr[:]                  // full-length view (not a copy)\n" "var view: Slice<i64> = arr[1:4]\n" "```\n" "\n" "### Common methods\n" "- `len(s)` counts Unicode scalars; `len(s.bytes())` counts UTF-8 bytes\n" "- `s.startsWith(prefix)` / `s.endsWith(suffix)`\n" "- `s.indexOf(sub)` / `s.contains(sub)`\n" "- `s.slice(start, end)` / `try s.split(sep)` / `s.replace(old, new)`; split preserves empty fields and throws `StringPatternError.EmptyPattern` for an empty separator\n" "",
     },
     {
         .id = "struct",
@@ -1920,7 +1920,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "crypto",
         .summary = "Cryptographic hashing and encryption",
         .body =
-            "# crypto module\n" "\n" "Cryptographic hashing and encryption.\n" "\n" "Usage: `import crypto` then call `crypto.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `crypto.decrypt` | `(key: string, ciphertext: string): string?` |  |\n" "| `crypto.encrypt` | `(key: string, plaintext: string): string` |  |\n" "| `crypto.hmac` | `(algo: string, key: string, data: string): string?` |  |\n" "| `crypto.hmacBytes` | `(algo: string, key: Array<u8>, msg: Array<u8>): Array<u8>?` |  |\n" "| `crypto.md5` | `(data: string): string` |  |\n" "| `crypto.randomBytes` | `(n: i64): string` |  |\n" "| `crypto.sha1` | `(data: string): string` |  |\n" "| `crypto.sha256` | `(data: string): string` |  |\n" "| `crypto.sha512` | `(data: string): string` |  |\n" "| `crypto.timingSafeEqual` | `(a: string, b: string): bool` |  |\n" "| `crypto.timingSafeEqualBytes` | `(a: Array<u8>, b: Array<u8>): bool` |  |\n" "| `crypto.uuid` | `(): string` |  |\n" "",
+            "# crypto module\n" "\n" "Cryptographic hashing and encryption.\n" "\n" "Usage: `import crypto` then call `crypto.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `crypto.decrypt` | `(key: string, ciphertext: string) throws(CryptoError \\| Utf8Error): string?` |  |\n" "| `crypto.encrypt` | `(key: string, plaintext: string): string` |  |\n" "| `crypto.hmac` | `(algo: string, key: string, data: string): string?` |  |\n" "| `crypto.hmacBytes` | `(algo: string, key: Array<u8>, msg: Array<u8>): Array<u8>?` |  |\n" "| `crypto.md5` | `(data: string): string` |  |\n" "| `crypto.randomBytes` | `(n: i64) throws(CryptoError): string` |  |\n" "| `crypto.sha1` | `(data: string): string` |  |\n" "| `crypto.sha256` | `(data: string): string` |  |\n" "| `crypto.sha512` | `(data: string): string` |  |\n" "| `crypto.timingSafeEqual` | `(a: string, b: string): bool` |  |\n" "| `crypto.timingSafeEqualBytes` | `(a: Array<u8>, b: Array<u8>): bool` |  |\n"
+            "| `crypto.uuid` | `(): string` |  |\n" "",
         .symbols = _symbols_crypto,
         .symbol_count = (int)(sizeof(_symbols_crypto) / sizeof(_symbols_crypto[0])),
     },

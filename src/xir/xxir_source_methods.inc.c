@@ -255,6 +255,10 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             if (*next >= ctx->first_closure)
                 return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "method function inventory mismatch");
             uint32_t index = (*next)++; ctx->function = index;
+            uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE :
+                method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
+            ctx->identities[index] = (XrXirFunctionIdentity) {owner->module,
+                access ? 0 : ctx->nominals.declarations[d].exported, d + 1, access, 0, 0, method->is_static ? XR_XIR_STATIC_METHOD : XR_XIR_READ_METHOD, 0, 0, 0};
             symbol->kind = SOURCE_FUNCTION; symbol->index = index; symbol->module = owner->module;
             SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = owner->module;
             if(!source_method_parameter_scope(ctx,node,&body->parameter_scope))return false;
@@ -291,10 +295,6 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                 if (parameter_reference && !source_cell_type(ctx, body->parameters[i + offset], &body->parameters[i + offset]))
                     return false;
             }
-            uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE :
-                method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
-            ctx->identities[index] = (XrXirFunctionIdentity) {owner->module,
-                access ? 0 : ctx->nominals.declarations[d].exported, d + 1, access, 0, 0, method->is_static ? XR_XIR_STATIC_METHOD : XR_XIR_READ_METHOD, 0, 0, 0};
             if (!source_generator_declaration(ctx,node,index,&ctx->identities[index],0) ||
                 !source_query_parameters(ctx, symbol->declaration)) return false;
         }

@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import run_smoke as smoke
 import suite_catalog
+from test_crypto_catalog import CryptoCatalogTests
 from copy import deepcopy
 
 

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import xray_crypto_suite
 
 
 LEGACY = ("src/ir/", "src/plan/", "src/aot/", "src/analysis/")
@@ -153,6 +154,11 @@ def fixed_metrics(baseline: dict, cases: list[dict], results: list[dict]) -> dic
                 and isinstance(suite.get("generated_c_sha256"), str) and re.fullmatch(r"[0-9a-f]{64}", suite["generated_c_sha256"]) is not None)
 
     def paired_suite(name: str) -> bool:
+        if current[name].get("crypto_suite") is not None:
+            vm = actual.get(name, {}).get("crypto_suite", {})
+            native = actual.get("native:" + name, {}).get("crypto_suite", {})
+            return (vm.get("catalog") == native.get("catalog") and
+                    vm.get("generated_c_sha256") == native.get("generated_c_sha256"))
         if current[name].get("suite") is None:
             return True
         vm = actual.get(name, {}).get("suite", {})
@@ -165,8 +171,11 @@ def fixed_metrics(baseline: dict, cases: list[dict], results: list[dict]) -> dic
         commands = row.get("commands", [])
         if current.get(name, {}).get("suite") is not None:
             stages = stages + ["suite-native" if current[name]["mode"] == "build-run" else "suite-vm"]
+        if current.get(name, {}).get("crypto_suite") is not None:
+            stages = stages + ["crypto-suite-native" if current[name]["mode"] == "build-run" else "crypto-suite-vm"]
         return (current.get(name, {}).get("expect") == "pass" and row.get("status") == "pass"
                 and suite_passed(name)
+                and xray_crypto_suite.passed(current.get(name, {}), row)
                 and row.get("executed") is True and [item.get("stage") for item in commands] == stages
                 and all(item.get("exit_code") == 0 and item.get("timed_out") is False for item in commands))
 
@@ -175,7 +184,8 @@ def fixed_metrics(baseline: dict, cases: list[dict], results: list[dict]) -> dic
                       and paired_suite(name)
                       and current["native:" + name].get("path") == current[name]["path"]
                       and current["native:" + name].get("mode") == "build-run")
-    return {"original_pass": sum(actual[row["id"]]["status"] == "pass" and suite_passed(row["id"]) for row in original),
+    return {"original_pass": sum(actual[row["id"]]["status"] == "pass" and suite_passed(row["id"]) and
+                                 xray_crypto_suite.passed(current[row["id"]], actual[row["id"]]) for row in original),
             "original_total": 60, "original_failed_demo_repaired": len(repaired),
             "original_failed_demo_total": 20, "repaired_demo_ids": repaired}
 

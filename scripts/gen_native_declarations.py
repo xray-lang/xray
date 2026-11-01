@@ -167,6 +167,8 @@ def simple_term(term, binder):
         return 'U32'
     if term == ('name', 'Array', (('name', 'u8', ()),)):
         return 'ARRAY_U8'
+    if term == ('name', 'Array', (('name', 'string', ()),)):
+        return 'ARRAY_STRING'
     if term == ('name', 'Slice', (('name', 'u8', ()),)):
         return 'SLICE_U8'
     if term == ('name', 'string', ()):
@@ -470,20 +472,22 @@ def parse_source(source, prelude):
             'STRING_REPEAT': ('repeat', 'READ', ('I64',), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
             'STRING_COPY_BYTES': ('copyBytes', 'READ', (), 'ARRAY_U8', 'may_heap', 'allocation,retain,limit', 'owned'),
             'STRING_RUNES': ('runes', 'READ', (), 'ITERATOR_RUNE', 'may_heap', 'allocation,retain,limit', 'owned'),
+            'STRING_SPLIT': ('split', 'READ', ('STRING',), 'ARRAY_STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
             'STRING_REPLACE': ('replace', 'READ', ('STRING', 'STRING'), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
             'STRING_REPLACE_ALL': ('replaceAll', 'READ', ('STRING', 'STRING'), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
         }.get(member.operation)
         optional = tuple(p[3] for p in member.parameters)
         expected_optional = (False, True) if member.operation in ('STRING_INDEX_OF', 'STRING_SLICE') else (False,) * len(member.parameters)
         expected_static = member.operation in ('ARRAY_WITH_CAPACITY', 'STRING_FROM_UTF8')
-        if member.error != ('Utf8Error' if member.operation == 'STRING_FROM_UTF8' else 'Never'):
+        if member.error != ('Utf8Error' if member.operation == 'STRING_FROM_UTF8' else
+                            'StringPatternError' if member.operation == 'STRING_SPLIT' else 'Never'):
             raise ValueError('native operation error type disagrees with its declaration')
         expected_method = member.operation != 'ARRAY_CAPACITY'
         if shape != expected or member.static != expected_static or member.method != expected_method or optional != expected_optional or any(p[4] for p in member.parameters):
             raise ValueError('operation declaration disagrees with its semantic contract: ' + member.operation)
     required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(recipes) if header[0] == 1 else {
         'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH', 'STRING_INDEX_OF', 'STRING_LAST_INDEX_OF',
-        'STRING_TO_STRING', 'STRING_REPEAT', 'STRING_COPY_BYTES', 'STRING_REPLACE', 'STRING_REPLACE_ALL', 'STRING_SLICE', 'STRING_FROM_UTF8', 'STRING_RUNES'}
+        'STRING_TO_STRING', 'STRING_REPEAT', 'STRING_COPY_BYTES', 'STRING_REPLACE', 'STRING_REPLACE_ALL', 'STRING_SLICE', 'STRING_FROM_UTF8', 'STRING_RUNES', 'STRING_SPLIT'}
     if used != required:
         raise ValueError('incorrect admitted native operation set')
     return header, members
@@ -872,6 +876,7 @@ def channel_result_rows(root):
     rows = [('Utf8Error', 'UTF8_ERROR', [('InvalidUtf8','NONE')], 17, 0),
             ('Ordering', 'ORDERING', [('Relaxed','NONE'),('Acquire','NONE'),('Release','NONE'),('AcquireRelease','NONE'),('SeqCst','NONE')], 4, 0),
             ('CryptoError', 'CRYPTO_ERROR', [('InvalidLength','NONE')], 0, 0),
+            ('StringPatternError', 'STRING_PATTERN_ERROR', [('EmptyPattern','NONE')], 0, 0),
             ('Recv', 'RECV', [('Value','TYPE_PARAM_0'),('Empty','NONE'),('Timeout','NONE'),('Closed','NONE')], 7, 1),
             ('SendResult', 'SEND_RESULT', [('Sent','NONE'),('Full','NONE'),('Timeout','NONE'),('Closed','NONE')], 8, 0),
             ('Endian', 'ENDIAN', [('Native','NONE'),('LE','NONE'),('BE','NONE')], 0, 0),
@@ -1027,6 +1032,42 @@ def render_unicode_callable(root, decoder):
             '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_' + ('NO_HEAP' if ordinal == 3 else 'MAY_HEAP') + ',',
             '    ' + c_string('none' if ordinal == 3 else 'allocation,retain,limit') + ', XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + symbol + '_parameters, ' + count + ', XR_NATIVE_TERM_' + result, '};']
         buffer_rows.append('    {' + str(ordinal + 4) + ', NULL, &' + symbol + ', NULL, false, "mem", "stdlib/defs/core.def", FINGERPRINT}')
+    crypto_contracts = (
+        ('__fillRandomBytes', '(bytes: ref Array<u8>): ()', '1', 'v'),
+        ('__timingSafeEqualBytes', '(a: Array<u8>, b: Array<u8>): bool', '2', 'vv'),
+    )
+    for ordinal, (name, signature, count, arguments) in enumerate(crypto_contracts):
+        rows = [row for row in declarations if row.module == 'crypto' and row.name == name]
+        if len(rows) != 1 or (rows[0].signature, rows[0].argc, rows[0].arg_spec,
+                rows[0].visibility, rows[0].effect, rows[0].allocation) != (
+                signature, count, arguments, 'internal', 'nothrow', '' if ordinal == 0 else 'no_heap'):
+            raise ValueError('Crypto callable differs from its complete source contract: ' + name)
+        provider = rows[0].provider_declaration
+        if ordinal == 0:
+            if not provider or (provider.contract, provider.operation,
+                    tuple((p.type, p.mode, p.owner) for p in provider.logical.parameters),
+                    provider.logical.result_type, provider.logical.result_owner,
+                    provider.logical.error, provider.logical.panic, provider.logical.suspend,
+                    provider.logical.refusal, provider.logical.resources, provider.logical.effects,
+                    provider.logical.threads, provider.logical.reentry, provider.logical.callbacks,
+                    provider.logical.platforms, provider.logical.profiles,
+                    provider.host.adapter, provider.host.header, provider.host.symbol) != (
+                    'xray.runtime.provider.v1/entropy', 'xray.runtime.provider-operation.v1/entropy/fill-bytes',
+                    (('Array<u8>', 'ref', 'borrow'),), '()', 'trivial', 'none', 'none', 'never',
+                    'trap', (), ('io',), 'any', 'forbidden', 'none', ('linux', 'macos', 'windows'),
+                    ('hosted',), 'typed', 'execution/xr_random_provider.h', 'xr_random_provider_fill'):
+                raise ValueError('Entropy provider contract differs from its typed receiver')
+        elif provider is not None:
+            raise ValueError('Timing comparison must remain a no-heap core operation')
+        symbol = 'xr_native_crypto_' + str(ordinal)
+        params = [('bytes', 'ref Array<u8>')] if ordinal == 0 else [('a', 'Array<u8>'), ('b', 'Array<u8>')]
+        buffer_lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
+        buffer_lines += ['    {' + c_string(n) + ', ' + c_string(t) + ', XR_NATIVE_TERM_ARRAY_U8, false, false},' for n, t in params]
+        buffer_lines += ['};', 'static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(ordinal + 1) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string('()' if ordinal == 0 else 'bool') + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_' + ('UNKNOWN' if ordinal == 0 else 'NO_HEAP') + ',',
+            '    "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + symbol + '_parameters, ' + count + ', XR_NATIVE_TERM_' + ('UNIT' if ordinal == 0 else 'BOOL'), '};']
+        buffer_rows.append('    {' + str(ordinal + 8) + ', NULL, &' + symbol + ', NULL, false, "crypto", "stdlib/defs/core.def", FINGERPRINT}')
     digest = hashlib.sha256((root / 'stdlib/defs/core.def').read_bytes()).digest()
     fingerprint = '{{' + ','.join(str(byte) for byte in digest) + '}}'
     return buffer_lines + [

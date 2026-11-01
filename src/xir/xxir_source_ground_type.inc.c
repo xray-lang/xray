@@ -81,6 +81,17 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
         return true;
     }
     if (!member || member->type!=AST_MEMBER_ACCESS) return true;
+    if (call && member->as.member_access.object && member->as.member_access.object->type==AST_VARIABLE) {
+        SourceName *space=visible_name(ctx,member->as.member_access.object->as.variable.name);
+        if (space && space->kind==SOURCE_MODULE) {
+            SourceName *target=imported_declaration(ctx,space,member->as.member_access.name);
+            if (!target) return false;
+            if (target->kind==SOURCE_FUNCTION && target->index<ctx->function_count &&
+                !ctx->generics[target->index].parameter_count)
+                *output=(SourceExpectedType){true,ctx->functions[target->index].result,false,false};
+            return true;
+        }
+    }
     if (call && source_array_static_receiver(ctx, member->as.member_access.object)) {
         const XrNativeMemberDeclaration *native = source_array_member(ctx, member, member->as.member_access.name);
         if (!native || native->operation != XR_NATIVE_OPERATION_ARRAY_WITH_CAPACITY || !native->is_static)

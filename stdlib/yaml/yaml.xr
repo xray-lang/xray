@@ -393,7 +393,7 @@ fn _trimCR(line: string) -> string {
 }
 
 fn _lines(data: string) -> Array<string> {
-    var raw = data.split("\n")
+    var raw = try! data.split("\n")
     var out: Array<string> = []
     for (var i = 0; i < len(raw); i++) {
         out.push(_trimCR(raw[i]))

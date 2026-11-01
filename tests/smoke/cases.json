@@ -237,12 +237,12 @@
       "id": "demos/07-advanced/crypto_entropy.xr",
       "path": "demos/07-advanced/crypto_entropy.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F04",
-        "first_diagnostic": "stdlib/crypto/crypto.xr:374:5: error: name is not an initialized value"
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/crypto_entropy.txt",
+      "crypto_suite": {
+        "schema": 1,
+        "catalog": "tests/smoke/expected/crypto-catalog.json"
       }
     },
     {
@@ -361,13 +361,9 @@
       "id": "stdlib/crypto/crypto.xr",
       "path": "stdlib/crypto/crypto.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F04",
-        "first_diagnostic": "stdlib/crypto/crypto.xr:374:5: error: name is not an initialized value"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/csv/csv.xr",
@@ -784,6 +780,26 @@
     {
       "id": "native:stdlib/encoding/encoding.xr",
       "path": "stdlib/encoding/encoding.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
+    },
+    {
+      "id": "native:demos/07-advanced/crypto_entropy.xr",
+      "path": "demos/07-advanced/crypto_entropy.xr",
+      "mode": "build-run",
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/crypto_entropy.txt",
+      "crypto_suite": {
+        "schema": 1,
+        "catalog": "tests/smoke/expected/crypto-catalog.json"
+      }
+    },
+    {
+      "id": "native:stdlib/crypto/crypto.xr",
+      "path": "stdlib/crypto/crypto.xr",
       "mode": "build-run",
       "expect": "pass",
       "exit_code": 0,

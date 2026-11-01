@@ -15,36 +15,36 @@ import crypto
 @test
 fn test_random_bytes_length_8() {
     // 生成 8 字节随机数（hex 编码后 16 字符）
-    var r = crypto.randomBytes(8)
+    var r = try! crypto.randomBytes(8)
     assertEqual(len(r), 16)
 }
 
 @test
 fn test_random_bytes_length_16() {
     // 生成 16 字节随机数（hex 编码后 32 字符）
-    var r = crypto.randomBytes(16)
+    var r = try! crypto.randomBytes(16)
     assertEqual(len(r), 32)
 }
 
 @test
 fn test_random_bytes_length_32() {
     // 生成 32 字节随机数（hex 编码后 64 字符）
-    var r = crypto.randomBytes(32)
+    var r = try! crypto.randomBytes(32)
     assertEqual(len(r), 64)
 }
 
 @test
 fn test_random_bytes_uniqueness() {
     // 验证每次生成的随机数不同
-    var r1 = crypto.randomBytes(16)
-    var r2 = crypto.randomBytes(16)
+    var r1 = try! crypto.randomBytes(16)
+    var r2 = try! crypto.randomBytes(16)
     assert(r1 != r2)
 }
 
 @test
 fn test_random_bytes_hex_format() {
     // 验证输出是有效的十六进制字符串
-    var r = crypto.randomBytes(4)
+    var r = try! crypto.randomBytes(4)
     assertEqual(len(r), 8)
     // 十六进制字符检查可以通过长度间接验证
 }
@@ -64,7 +64,7 @@ fn test_uuid_length() {
 fn test_uuid_format() {
     // 验证 UUID 包含 4 个破折号
     var uuid = crypto.uuid()
-    var parts = uuid.split("-")
+    var parts = try! uuid.split("-")
     assertEqual(len(parts), 5)
 }
 
@@ -72,7 +72,7 @@ fn test_uuid_format() {
 fn test_uuid_parts_length() {
     // 验证各段长度：8-4-4-4-12
     var uuid = crypto.uuid()
-    var parts = uuid.split("-")
+    var parts = try! uuid.split("-")
     assertEqual(len(parts[0]), 8)
     assertEqual(len(parts[1]), 4)
     assertEqual(len(parts[2]), 4)

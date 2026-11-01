@@ -449,7 +449,7 @@ fn removeDotSegments(path: string) -> string {
     var isAbs = path.startsWith("/")
     var trailing = len(path) > 1 && path.endsWith("/")
     var segs: Array<string> = []
-    var parts = path.split("/")
+    var parts = try! path.split("/")
 
     for (var i = 0; i < len(parts); i++) {
         var seg = parts[i]

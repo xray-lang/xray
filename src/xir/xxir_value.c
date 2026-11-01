@@ -1759,6 +1759,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 #include "xxir_value_observe.inc.c"
 #include "xxir_value_path.inc.c"
 #include "xxir_cell_projection.inc.c"
+#include "xxir_crypto_value.inc.c"
 #include "xxir_view_storage.inc.c"
 #include "xxir_view_value.inc.c"
 #include "xxir_borrowed_value.inc.c"

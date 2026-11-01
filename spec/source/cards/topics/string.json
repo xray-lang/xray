@@ -33,7 +33,7 @@
     },
     {
       "heading": "Common methods",
-      "markdown": "- `len(s)` counts Unicode scalars; `len(s.bytes())` counts UTF-8 bytes\n- `s.startsWith(prefix)` / `s.endsWith(suffix)`\n- `s.indexOf(sub)` / `s.contains(sub)`\n- `s.slice(start, end)` / `s.split(sep)` / `s.replace(old, new)`"
+      "markdown": "- `len(s)` counts Unicode scalars; `len(s.bytes())` counts UTF-8 bytes\n- `s.startsWith(prefix)` / `s.endsWith(suffix)`\n- `s.indexOf(sub)` / `s.contains(sub)`\n- `s.slice(start, end)` / `try s.split(sep)` / `s.replace(old, new)`; split preserves empty fields and throws `StringPatternError.EmptyPattern` for an empty separator"
     }
   ]
 }

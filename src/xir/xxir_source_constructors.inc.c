@@ -126,6 +126,9 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
     uint32_t index = (*next)++; ctx->function = index;
     XrXirNominalDeclaration *declaration = (XrXirNominalDeclaration *)&ctx->nominals.declarations[owner->index];
     if (declaration->kind == XR_XIR_NOMINAL_STRUCT) declaration->flags |= XR_XIR_NOMINAL_MODULE_LITERAL;
+    uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE : method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
+    ctx->identities[index] = (XrXirFunctionIdentity) {owner->module, access ? 0 : declaration->exported, owner->index + 1, access, 0,
+        declaration->kind == XR_XIR_NOMINAL_CLASS ? XR_XIR_FUNCTION_NO_SUSPEND : 0, XR_XIR_CONSTRUCTOR, 0, 0, 0};
     SourceFunction *body = &ctx->bodies[index]; body->node = node; body->module = owner->module;
     if(!source_method_parameter_scope(ctx,node,&body->parameter_scope))return false;
     if (!source_nominal_function_scope(ctx,index,owner)) return false;
@@ -139,7 +142,6 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
     if (count && !body->parameters) return false;
     ctx->functions[index] = (XrXirFunction) {"init", 4, body->parameters, count, owner->type, NULL, 0, NULL, 0, NULL, 0, XR_XIR_NEVER};
     if (!source_error_clause_type(ctx,node,&method->throws_clause,&ctx->functions[index].error_type)) return false;
-    const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[owner->index];
     for (uint32_t p = 0; p < count; ++p) {
         XrParamNode *param = method->params[p];
         if (param->passing_mode != XR_PARAM_READ || param->pattern || param->is_rest || source_text_same(ctx, NULL, param->name, "this"))
@@ -155,9 +157,6 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
         }
         if (body->parameters[p] == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor parameter needs a declaration type");
     }
-    uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE : method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
-    ctx->identities[index] = (XrXirFunctionIdentity) {owner->module, access ? 0 : decl->exported, owner->index + 1, access, 0,
-        decl->kind == XR_XIR_NOMINAL_CLASS ? XR_XIR_FUNCTION_NO_SUSPEND : 0, XR_XIR_CONSTRUCTOR, 0, 0, 0};
     return source_hir_nominal_bind(ctx,node,owner->index,index,XR_HIR_NOMINAL_EXPLICIT,UINT32_MAX)&&source_query_parameters(ctx, symbol.declaration);
 }
 typedef struct SourceConstructorCall {

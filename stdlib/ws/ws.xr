@@ -295,8 +295,8 @@ fn _bytesToString(data: Array<u8>, start: i64, end: i64) -> string {
     return string.fromUtf8(out[:])!
 }
 
-fn _randomBytes(n: i64) -> Array<u8> {
-    return _hexBytes(crypto.randomBytes(n))
+fn _randomBytes(n: i64) throws(CryptoError) -> Array<u8> {
+    return _hexBytes(try crypto.randomBytes(n))
 }
 
 fn _header(headers: string, name: string) -> string? {
@@ -408,7 +408,7 @@ export fn acceptKey(secKey: string) -> string {
 }
 
 export fn randomKey() -> string {
-    var bytes = _randomBytes(16)
+    var bytes = try! _randomBytes(16)
     return _base64Encode(bytes)
 }
 
@@ -761,7 +761,7 @@ export fn frame(payload: Array<u8>, opcode: i64 = _OP_TEXT, mask: bool = true) -
 
     var body = payload
     if (mask) {
-        var key = _randomBytes(4)
+        var key = try! _randomBytes(4)
         _copyInto(ref out, 2 + ext, key)
         body = maskPayload(payload, key)
     }
