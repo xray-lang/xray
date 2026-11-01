@@ -832,6 +832,7 @@ static void emit_tuple_step(CBuffer *buffer,const XrXirFunction *function,
     else if (op->type!=XR_XIR_UNIT) EMIT_FORMAT(buffer, et_2ab808f49ceeebf8, " xr_xir_scalar_store(state->frame, %uu, value.payload);\n",destination);
     EMIT_STATIC(buffer, es_babd64ba6b0681db," }\n return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n");
 }
+#include "xxir_emit_fixed_array.inc.c"
 static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination) {
     if (op->op == XR_XIR_STRUCT_SET) {
@@ -1257,6 +1258,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     }
     if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_TUPLE_FIELD) {
         emit_tuple_step(buffer,function,op,layout,destination);return;
+    }
+    if(op->op>=XR_XIR_FIXED_ARRAY_NEW && op->op<=XR_XIR_FIXED_ARRAY_LEN) {
+        emit_fixed_array_step(buffer,function,op,layout,destination,index);return;
     }
     if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
         (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||
@@ -2049,6 +2053,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
            "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_generator_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#include \"xir/xxir_atomic.h\"\n"
+           "#include \"xir/xxir_fixed_array.h\"\n"
            "#include \"xir/xxir_channel.h\"\n"
            "#include \"xir/xxir_task.h\"\n"
            "#include \"xir/xxir_task_result_internal.h\"\n"

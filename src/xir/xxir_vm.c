@@ -24,6 +24,7 @@
 #include "xxir_program_packet_internal.h"
 #include "xxir_internal.h"
 #include "xxir_tuple.h"
+#include "xxir_fixed_array.h"
 #include "xxir_atomic.h"
 #include "xxir_channel.h"
 #include "xxir_task.h"
@@ -325,6 +326,7 @@ static XrXirRunStatus vm_tuple_step(ScalarRun *run,VmState *state,
     else if (op->type!=XR_XIR_UNIT) xr_xir_scalar_store(run->frame,destination,output.payload);
     return XR_XIR_RUN_OK;
 }
+#include "xxir_vm_fixed_array.inc.c"
 static XrXirRunStatus vm_nominal_step(ScalarRun *run, VmState *state,
                                       const XrXirInstruction *op, uint32_t destination) {
     XrXirValueAdmission *admission = xr_xir_call_admission(run->view);
@@ -728,6 +730,10 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
     if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_TUPLE_FIELD) {
         state->instruction=next;
         return vm_tuple_step(run,state,op,run->layout->offsets[result_id]);
+    }
+    if(op->op>=XR_XIR_FIXED_ARRAY_NEW && op->op<=XR_XIR_FIXED_ARRAY_LEN) {
+        state->instruction=next;
+        return vm_fixed_array_step(run,state,op,run->layout->offsets[result_id],action);
     }
     if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
         (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||

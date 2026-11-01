@@ -68,7 +68,7 @@ static XrXirStatus layout_outgoing(const LayoutInputRequest *request,
         if (!op) return XR_XIR_BAD_STRUCTURE;
         uint32_t count = op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op==XR_XIR_ITERATOR_NTH ? 1 :
             xr_xir_op_references_function(op->op) || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_CALL_INDIRECT ||
-            op->op == XR_XIR_PRINT || op->op == XR_XIR_MAP_NEW || op->op == XR_XIR_SET_NEW || op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_STRUCT_NEW ||
+            op->op == XR_XIR_PRINT || op->op == XR_XIR_MAP_NEW || op->op == XR_XIR_SET_NEW || op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_STRUCT_NEW ||
             op->op == XR_XIR_ENUM_NEW || op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_SLOT_GROUP_INIT ? op->args[1] : 0;
         if (op->op==XR_XIR_TUPLE_NEW) {
             const XrXirTypeNode *tuple=xr_xir_tuple_signature(request->input->domain.types,op->type);

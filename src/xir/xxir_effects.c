@@ -455,6 +455,7 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
     case XR_XIR_INVOKE_ERROR: case XR_XIR_INVOKE_DISCARD: case XR_XIR_ERROR_IS: case XR_XIR_ERROR_NARROW:
     case XR_XIR_PANIC_CATCH: case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE: case XR_XIR_PANIC_REPLACED_ERROR:
     case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
+    case XR_XIR_FIXED_ARRAY_NEW: case XR_XIR_FIXED_ARRAY_GET: case XR_XIR_FIXED_ARRAY_LEN:
     case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD:
         return EFFECT_SEED_LOCAL;
     default: return EFFECT_SEED_INVALID;
@@ -798,6 +799,7 @@ static bool effect_default_access_local(XrXirOp op) {
     case XR_XIR_ENUM_NEW: case XR_XIR_ENUM_TAG: case XR_XIR_ENUM_GET:
     case XR_XIR_CLASS_NEW: case XR_XIR_CLASS_GET: case XR_XIR_CLASS_SET:
     case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME: case XR_XIR_NULLABLE_UNWRAP:
+    case XR_XIR_FIXED_ARRAY_NEW: case XR_XIR_FIXED_ARRAY_GET: case XR_XIR_FIXED_ARRAY_LEN:
     case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD:
     case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW: case XR_XIR_VIEW_LEN: case XR_XIR_VIEW_GET:
     case XR_XIR_VIEW_SET: case XR_XIR_VIEW_COPY: case XR_XIR_VIEW_END: case XR_XIR_VIEW_CLEANUP:
