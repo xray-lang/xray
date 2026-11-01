@@ -71,7 +71,7 @@ static XrXirStatus view_root_parameter(ViewRootQuery *q,ViewOriginPair site,View
             selected_type=n->parameters[field].type;
         }
     }
-    bool cell=xr_xir_type_is_cell(c->module->types,type),object=xr_xir_type_is_class(c->module->types,type);
+    bool cell=xr_xir_type_is_cell(c->module->types,type),object=type==XR_XIR_BUFFER_STORAGE || xr_xir_type_is_class(c->module->types,type);
     if (!cell && !object && !view_flags_at(c->module->types,c->flags,selected_type)) return XR_XIR_BAD_TYPE;
     XrXirStatus status=view_root_emit(q,site,context,cell ? XR_XIR_VIEW_ROOT_PARAMETER :
         object ? XR_XIR_VIEW_ROOT_OBJECT : XR_XIR_VIEW_ROOT_BORROWED_PARAMETER);
@@ -192,7 +192,18 @@ static XrXirStatus view_root_step(ViewRootQuery *q,ViewOriginPair site,ViewOrigi
     case XR_XIR_NULLABLE_UNWRAP:return view_root_select(q,(ViewOriginPair){site.first,op->args[0]},UINT32_MAX,context);
     case XR_XIR_TUPLE_FIELD:return view_root_select(q,(ViewOriginPair){site.first,op->args[0]},(uint32_t)op->immediate,context);
     case XR_XIR_TUPLE_NEW:return view_root_tuple(q,site,op,context);
-    case XR_XIR_CALL:case XR_XIR_CALL_INDIRECT:case XR_XIR_CALL_DEFAULT:case XR_XIR_CALL_REQUIREMENT:
+    case XR_XIR_CALL:
+        if (op->type==XR_XIR_BUFFER_STORAGE && c->module->declarations && op->immediate>=0 &&
+            (uint64_t)op->immediate<c->module->function_count) {
+            uint32_t leaf=c->module->declarations->functions[op->immediate].native_callable;
+            if (leaf==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE || leaf==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ZEROED ||
+                leaf==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ALIGNED) {
+                XrXirStatus status=xir_native_callable_verify(c->module,(uint32_t)op->immediate);
+                return status!=XR_XIR_OK?status:view_root_emit(q,site,context,XR_XIR_VIEW_ROOT_OBJECT);
+            }
+        }
+        return view_root_call(q,site,op,context);
+    case XR_XIR_CALL_INDIRECT:case XR_XIR_CALL_DEFAULT:case XR_XIR_CALL_REQUIREMENT:
         return view_root_call(q,site,op,context);
     case XR_XIR_INVOKE_RESULT:
         return view_root_call(q,site,&body->instructions[op->immediate],context);

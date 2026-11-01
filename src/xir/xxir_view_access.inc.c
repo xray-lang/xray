@@ -34,10 +34,17 @@ static XrXirStatus view_access_buffer_source(ViewAccess *a,uint32_t value,uint32
     uint32_t argument=a->body->operands[op->args[0]];
     if (!row) {
         uint32_t leaf=c->module->declarations->functions[op->immediate].native_callable;
+        if (leaf!=XR_NATIVE_CALLABLE_BUFFER_AS_BYTES && leaf!=XR_NATIVE_CALLABLE_BUFFER_BORROW_PTR) return XR_XIR_OK;
+        XrXirStatus verified=xir_native_callable_verify(c->module,(uint32_t)op->immediate);
+        if (verified!=XR_XIR_OK) return verified;
         row=xir_borrow_return_find(c->construction,a->function);
-        if (!row || leaf!=row->native_callable) return XR_XIR_OK;
         XrXirStatus status=view_access_buffer_alias(a,&argument);
         if (status!=XR_XIR_OK) return status;
+        if (!row) {
+            if (xr_xir_operand_type(a->body,argument)!=XR_XIR_BUFFER_STORAGE) return XR_XIR_BAD_TYPE;
+            *receiver=argument;*known=true;return XR_XIR_OK;
+        }
+        if (leaf!=row->native_callable) return XR_XIR_OK;
         if (argument<a->body->parameter_count) return XR_XIR_OK;
         const XrXirInstruction *field=&a->body->instructions[argument-a->body->parameter_count];
         if (field->op!=XR_XIR_CLASS_GET || field->immediate!=row->field || field->type!=XR_XIR_BUFFER_STORAGE)
@@ -227,6 +234,17 @@ static XrXirStatus view_access_constructor(ViewAccess *a,uint32_t value) {
         uint32_t cell=0;bool binding=false;
         status=view_access_buffer_binding(a,receiver,&cell,&binding);if (status!=XR_XIR_OK) return status;
         bool stable=receiver<a->body->parameter_count || binding;
+        if (!stable && xr_xir_operand_type(a->body,receiver)==XR_XIR_BUFFER_STORAGE) {
+            const XrXirInstruction *producer=&a->body->instructions[receiver-a->body->parameter_count];
+            const XrXirModule *module=a->resolver->check.module;
+            if (producer->op==XR_XIR_CALL && producer->immediate>=0 && (uint64_t)producer->immediate<module->function_count) {
+                uint32_t leaf=module->declarations->functions[producer->immediate].native_callable;
+                if (leaf==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE || leaf==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ZEROED ||
+                    leaf==XR_NATIVE_CALLABLE_BUFFER_ALLOCATE_ALIGNED) {
+                    status=xir_native_callable_verify(module,(uint32_t)producer->immediate);stable=status==XR_XIR_OK;
+                }
+            }
+        }
         if (!stable) status=view_access_class_body(a,receiver,&stable);
         if (status!=XR_XIR_OK) return status;
         if (stable) return XR_XIR_OK;

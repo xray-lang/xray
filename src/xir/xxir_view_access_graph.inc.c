@@ -86,7 +86,8 @@ static XrXirStatus view_access_function_new(ViewAccess *a,uint32_t function) {
         a->raw_words=raw/64u+(raw%64u!=0);a->raw_bytes=(uint64_t)a->body->instruction_count*a->raw_words*sizeof(uint64_t);
         a->raw_live=view_access_allocate(a,a->raw_bytes,&status);if (!a->raw_live) return status;
         XrXirCompileContext remaining=*c->context;remaining.limits.frame_bytes-=c->reserved;
-        status=xir_compile_view_liveness_function_verified(&remaining,c->module,function,view_access_raw_demand,a,NULL);
+        status=xir_compile_view_liveness_function_verified(&remaining,c->module,function,view_access_raw_demand,a,NULL,
+            a->cells?a->cells->control:NULL);
         if (status!=XR_XIR_OK) return status;
     }
     for (uint32_t start=0;start<blocks;++start) {

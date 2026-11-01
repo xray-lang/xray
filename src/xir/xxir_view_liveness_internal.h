@@ -44,5 +44,6 @@ XR_FUNC XrXirStatus xir_compile_view_liveness_verified(const XrXirCompileContext
 /* Same immutable module and actual function ordinal; no synthetic submodule.
  * Demand alone never supplies origin, lifetime or access authority. */
 XR_FUNC XrXirStatus xir_compile_view_liveness_function_verified(const XrXirCompileContext *context,
-    const XrXirModule *module,uint32_t function,XrXirViewLiveVisitor visitor,void *user,XrXirDiagnostic *diagnostic);
+    const XrXirModule *module,uint32_t function,XrXirViewLiveVisitor visitor,void *user,XrXirDiagnostic *diagnostic,
+    XrCompileRequestControl *control);
 #endif // XXIR_VIEW_LIVENESS_INTERNAL_H

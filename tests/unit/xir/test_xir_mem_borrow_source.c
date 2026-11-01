@@ -19,6 +19,8 @@
 #include "base/xresource_limits.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_type_arena.h"
+#include "xir/xxir_view_liveness_internal.h"
+#include "base/xcompile_request.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +29,59 @@
 static uint64_t held(XrCompileResources *resources) {
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(resources,&stats)==XR_COMPILE_RESOURCE_OK);
     return stats.held_bytes;
+}
+typedef struct Cancel {uint32_t polls,stop;} Cancel;
+static bool cancel_at(const void *opaque) {
+    Cancel *state=(Cancel *)opaque;return ++state->polls==state->stop;
+}
+static XrCompileRequestControl request_control(Cancel *state) {
+    XrCompileRequestControl control={0};XrCompileRequestOptions options={cancel_at,state,XR_COMPILE_DEADLINE_NONE,0};
+    CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);return control;
+}
+static void return_controls(const XrXirCompileContext *context,const XrXirModule *module,
+    const XrXirConstruction *construction,const XrXirConstructionSpec *base) {
+    const XrXirBorrowReturns *original=xr_xir_compile_construction_borrow_returns(construction);
+    CHECK(original && original->count==2);uint64_t baseline=held(context->resources);
+    for (uint32_t kind=0;kind<6;++kind) {
+        XrXirBorrowReturn rows[2]={original->rows[0],original->rows[1]};
+        XrXirBorrowReturns table={rows,2};XrXirConstructionSpec specification=*base;
+        if (!kind) rows[0].function=module->function_count;
+        if (kind==1) rows[0].native_callable=rows[1].native_callable;
+        if (kind==2) rows[0].field=1;
+        if (kind==3) rows[0].receiver=1;
+        if (kind==4) table.count=1;
+        if (kind==5) table.rows=NULL;
+        specification.borrow_returns=&table;XrXirConstruction *received=NULL;
+        XrXirStatus status=xr_xir_compile_construction_new_v5(context,module->types,&specification,
+            xr_xir_compile_construction_slots(construction),&received,NULL);
+        if (status==XR_XIR_OK) {
+            XrXirArtifact *output=NULL;
+            CHECK(xr_xir_compile_recheck_v2(context,module,received,&output,NULL,NULL)!=XR_XIR_OK && !output);
+        } else CHECK(!received);
+        xr_xir_compile_construction_free(received);CHECK(held(context->resources)==baseline);
+    }
+    XrXirConstructionSpec specification=*base;specification.borrow_returns=original;
+    Cancel state={0,UINT32_MAX};XrCompileRequestControl control=request_control(&state);
+    XrXirConstruction *received=NULL;
+    CHECK(xr_xir_compile_construction_new_v5(context,module->types,&specification,
+        xr_xir_compile_construction_slots(construction),&received,&control)==XR_XIR_OK && received);
+    xr_xir_compile_construction_free(received);CHECK(state.polls>2 && held(context->resources)==baseline);
+    state=(Cancel){0,state.polls/2};control=request_control(&state);received=NULL;
+    CHECK(xr_xir_compile_construction_new_v5(context,module->types,&specification,
+        xr_xir_compile_construction_slots(construction),&received,&control)==XR_XIR_CANCELLED && !received);
+    CHECK(held(context->resources)==baseline);
+    state=(Cancel){0,UINT32_MAX};control=request_control(&state);
+    CHECK(xir_compile_view_liveness_function_verified(context,module,original->rows[0].function,
+        NULL,NULL,NULL,&control)==XR_XIR_OK && state.polls>2);
+    uint32_t stop=state.polls/2;state=(Cancel){0,stop};control=request_control(&state);
+    CHECK(xir_compile_view_liveness_function_verified(context,module,original->rows[0].function,
+        NULL,NULL,NULL,&control)==XR_XIR_CANCELLED && held(context->resources)==baseline);
+    state=(Cancel){0,UINT32_MAX};control=request_control(&state);
+    CHECK(xir_compile_view_liveness_function_verified(context,module,original->rows[0].function,
+        NULL,NULL,NULL,&control)==XR_XIR_OK && held(context->resources)==baseline);
+    XrXirCompileContext bounded=*context;bounded.limits.frame_bytes=1;
+    CHECK(xir_compile_view_liveness_function_verified(&bounded,module,original->rows[0].function,
+        NULL,NULL,NULL,NULL)==XR_XIR_BUDGET && held(context->resources)==baseline);
 }
 static void physical_flags(const XrXirCompileContext *context) {
     XrXirCallableParameter field={(XrXirType)256,XR_PARAM_READ};
@@ -67,7 +122,9 @@ static void caller_controls(const XrXirCompileContext *context,const char *stdli
         {"local-buffer-return","import mem\nfn use()->MutPtr<u8> {const b=mem.alloc(4);return b.borrowPtr()}\nprint(1)\n",false},
         {"temporary-buffer","import mem\nfn use() {const p=mem.alloc(4).borrowPtr();unsafe {print(p[0])}}\nprint(1)\n",false},
         {"pointer-array-escape","import mem\nfn use(b:mem.Buffer) {const p=b.borrowPtr();const escaped=[p];print(len(escaped))}\nprint(1)\n",false},
-        {"bound-method-escape","import mem\nfn use(b:mem.Buffer) {const f=b.borrowPtr;const p=f();unsafe {print(p[0])}}\nprint(1)\n",false}
+        {"bound-method-escape","import mem\nfn use(b:mem.Buffer) {const f=b.borrowPtr;const p=f();unsafe {print(p[0])}}\nprint(1)\n",false},
+        {"pointer-capture","import mem\nfn use(b:mem.Buffer) {const p=b.borrowPtr();const f=fn()->i64{unsafe{return p[0] as i64}};b.resize(8);print(f())}\nprint(1)\n",false},
+        {"unknown-return","import mem\nfn use(f:fn()->MutPtr<u8>)->i64 {const p=f();unsafe{return p[0] as i64}}\nprint(1)\n",false}
     };
     for (uint32_t i=0;i<sizeof(cases)/sizeof(*cases);++i) {
         XrCompilerSession *session=NULL;
@@ -120,6 +177,7 @@ int main(int argc,char **argv) {
         xr_xir_compile_construction_slots(construction),&missing,NULL)==XR_XIR_OK);
     XrXirArtifact *rejected=NULL;
     CHECK(xr_xir_compile_recheck_v2(&context,module,missing,&rejected,NULL,NULL)!=XR_XIR_OK && !rejected);
+    return_controls(&context,module,construction,&specification);
     xr_xir_compile_construction_free(missing);xr_compile_resources_free(rows);xr_compile_resources_free(materializations);
     xr_xir_compile_artifact_free(cold);CHECK(held(resources)==frame);
     physical_flags(&context);caller_controls(&context,stdlib);CHECK(held(resources)==frame);xr_compile_resources_release(resources);
