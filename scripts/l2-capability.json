@@ -106,7 +106,12 @@
         "src/xir/xxir_value_display.inc.c",
         "tests/unit/xir/test_xir_typed_display_*.c",
         "tests/unit/xir/typed_display_cases.h",
-        "tests/unit/xir/typed_display_receiving_cases.h"
+        "tests/unit/xir/typed_display_receiving_cases.h",
+        "src/xir/xxir_channel_select*",
+        "src/xir/xxir_call_select*",
+        "src/xir/xxir_call_channel.inc.c",
+        "src/xir/xxir_channel_call_timing.inc.c",
+        "src/xir/xxir_call.c"
       ],
       "reason": "Public slots, records, JSON float and Range complete Source/Catalog/VM/native receivers.",
       "tests": [
@@ -174,7 +179,9 @@
         "test_xir_move_values",
         "xir_fixed_bytes",
         "xir_fixed_bytes_source",
-        "xir_fixed_bytes_native"
+        "xir_fixed_bytes_native",
+        "test_xir_channel_select",
+        "test_xir_call_select"
       ],
       "targets": [
         "test_xir_json_float",
@@ -229,7 +236,9 @@
         "test_xir_move_values",
         "test_xir_fixed_bytes",
         "test_xir_fixed_bytes_source",
-        "test_xir_fixed_bytes_native"
+        "test_xir_fixed_bytes_native",
+        "test_xir_channel_select",
+        "test_xir_call_select"
       ]
     },
     "frontend": {
