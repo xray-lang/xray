@@ -301,7 +301,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         if(grouped!=XR_XIR_OK)return grouped;
     }
     bool range = xr_xir_op_uses_operand_table(op->op);
-    if (range && (op->args[1] > 65536 || op->args[0] > function->operand_count ||
+    if (range && (op->args[1] > 65536u+(op->op==XR_XIR_SCOPED_GO) || op->args[0] > function->operand_count ||
         op->args[1] > function->operand_count - op->args[0] || (!op->args[1] && op->args[0])))
         return XR_XIR_BAD_STRUCTURE;
     XrXirStatus scope_status=task_scope_shape(function,op,module);

@@ -16,6 +16,7 @@ static XrXirStatus task_go_shape(const XrXirModule *module, const XrXirInstructi
         !task || task->kind != XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
     uint32_t callee = (uint32_t)op->immediate;
     const XrXirFunction *function = &module->functions[callee];
+    if(function->consume_parameter_count)return XR_XIR_UNSUPPORTED;
     if (module->stage == XR_XIR_LOWERED) {
         if (!xr_xir_task_result_shape(module->types, function->result))
             return XR_XIR_UNSUPPORTED;

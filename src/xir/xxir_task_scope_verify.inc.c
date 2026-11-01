@@ -38,6 +38,10 @@ static XrXirStatus task_scope_shape(const XrXirFunction *function,const XrXirIns
     if(!group||group->kind!=XR_XIR_TYPE_TASK||group->element!=XR_XIR_UNIT)return XR_XIR_BAD_TYPE;
     /* Non-Never propagation lands with its real Source and exit consumers. */
     if(group->result!=XR_XIR_NEVER)return XR_XIR_UNSUPPORTED;
+    if(op->op==XR_XIR_SCOPED_GO) {
+        const XrXirTypeNode *child=xr_xir_type_node(module->types,op->type);
+        if(!child||child->kind!=XR_XIR_TYPE_TASK||child->result!=group->result)return XR_XIR_BAD_TYPE;
+    }
     if(op->op==XR_XIR_SCOPE_BEGIN&&op->immediate!=0&&op->immediate!=2)return XR_XIR_BAD_STRUCTURE;
     if(op->op==XR_XIR_SCOPE_JOIN&&op->immediate!=0&&op->immediate!=1)return XR_XIR_BAD_STRUCTURE;
     return XR_XIR_OK;
