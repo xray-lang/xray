@@ -52,6 +52,7 @@ XR_FUNC int xfmt_compare(XrFmtContext *ctx, const char *left, const char *right)
 XR_FUNC void xfmt_write_bytes(XrFmtContext *ctx, const char *bytes, size_t length);
 XR_FUNC void xfmt_node(XrFmtContext *ctx, AstNode *node);
 XR_FUNC void xfmt_type(XrFmtContext *ctx, XrTypeRef *type);
+XR_FUNC void xfmt_scope(XrFmtContext *ctx, AstNode *node);
 
 // ---------------------------------------------------------------------------
 // Buffer helpers (defined in xfmt.c)

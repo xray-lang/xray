@@ -997,7 +997,9 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_TRY_EXPR:
             xfmt_write_str(ctx, node->as.try_expr.mode == XR_TRY_OPTIONAL ? "try? " :
                 node->as.try_expr.mode == XR_TRY_ASSERT ? "try! " : "try ");
-            xfmt_emit_expression(ctx, node->as.try_expr.operand);
+            if (node->as.try_expr.operand && node->as.try_expr.operand->type == AST_SCOPE_BLOCK)
+                xfmt_scope(ctx, node->as.try_expr.operand);
+            else xfmt_emit_expression(ctx, node->as.try_expr.operand);
             break;
         case AST_AWAIT_EXPR: {
             xfmt_write_indent(ctx);

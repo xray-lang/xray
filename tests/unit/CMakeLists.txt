@@ -4325,6 +4325,15 @@ include("${CMAKE_CURRENT_LIST_DIR}/program/source_product_consumers.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/go_source.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/go_closure.cmake")
+add_executable(test_xir_scope_syntax frontend/test_scope_syntax.c)
+target_link_libraries(test_xir_scope_syntax PRIVATE xray_frontend_format)
+if(MSVC)
+    target_compile_options(test_xir_scope_syntax PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_scope_syntax PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME xir_scope_syntax COMMAND test_xir_scope_syntax)
+set_tests_properties(xir_scope_syntax PROPERTIES TIMEOUT 60 LABELS "unit;parser;ownership")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_executor.cmake")
 
