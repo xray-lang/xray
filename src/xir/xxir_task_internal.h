@@ -71,15 +71,13 @@ XR_FUNC XrXirCallStatus xir_task_scope_seal(XrXirTaskExecutor *executor,
     XrXirCallView *view,const XrXirValue *scope,bool abandon);
 /* Metadata identity of the exact active frame; it lends no state or permission. */
 XR_FUNC XrXirCallStatus xir_call_scope_frame(const XrXirCallView *view,uint64_t *epoch,uint32_t *frontier);
-typedef struct XirTaskScopeExit {
-    XrXirValue completion;
-    bool earlier_child_panic;
-} XirTaskScopeExit;
 /* A real cleanup frontier drains its own lexical group before its helper runs. */
 XR_FUNC XrXirCallStatus xir_task_scope_cleanup(XrXirTaskExecutor *executor,
-    XrXirCallView *view,XirTaskScopeExit *output);
+    XrXirCallView *view,XrXirValue *output);
 XR_FUNC XrXirCallStatus xir_task_scope_observe(const XrXirValue *task,
-    XrXirCall *call,uint64_t frame);
+    XrXirCall *call,uint64_t frame,uint64_t *failure_order);
+/* Driver publication order is separate from Task identity and source order. */
+XR_FUNC XrXirCallStatus xir_task_scope_failure_order(XrXirTaskExecutor *executor,uint64_t *output);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_poll(XrXirTaskExecutor *executor, uint64_t quantum);
 /* The instance owns its root Call; the executor only schedules the activation. */
 XR_FUNC bool xr_xir_task_executor_root_idle(const XrXirTaskExecutor *executor);

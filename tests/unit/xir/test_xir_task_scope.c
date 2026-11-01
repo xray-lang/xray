@@ -26,7 +26,7 @@ typedef struct ScopeWitness {
     XrXirValue group,members[2];
     uint32_t mode,root_calls,child_calls,cleanup_calls;
 } ScopeWitness;
-typedef struct ScopeState {uint32_t phase;bool cleanup_waiting,cleanup_done;} ScopeState;
+typedef struct ScopeState {uint32_t phase;bool cleanup_waiting,cleanup_done,exit_delay;} ScopeState;
 static XrXirAction scope_worker(XrXirCallView *view) {
     ScopeWitness *witness=(ScopeWitness *)view->environment;++witness->child_calls;
     uint32_t *phase=view->state;
@@ -40,6 +40,9 @@ static XrXirAction scope_root(XrXirCallView *view) {
     ScopeState *state=view->state;
     if(view->phase==XR_XIR_CALL_EXIT) {
         if(state->cleanup_done)return (XrXirAction){.kind=XR_XIR_ACTION_EXIT_DONE};
+        if((witness->mode==6||witness->mode==7)&&!state->exit_delay) {
+            state->exit_delay=true;return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};
+        }
         if(!state->cleanup_waiting) {
             state->cleanup_waiting=true;
             return (XrXirAction){.kind=XR_XIR_ACTION_CALL,.callee=3,.flags=XR_XIR_ACTION_CLEANUP};
@@ -57,15 +60,17 @@ static XrXirAction scope_root(XrXirCallView *view) {
         XrXirCallView forged=*view;XrXirValue refused={0};
         CHECK(xir_task_scope_begin(witness->executor,&forged,(XrXirType)257,0,&refused)!=XR_XIR_CALL_READY&&!refused.type);
         for(uint32_t i=0;i<2;++i) {
-            XrXirValue argument={XR_XIR_I64,0,witness->mode==2&&!i?-1:20+(int64_t)i*2};
+            bool panic=(witness->mode==2||witness->mode==6||witness->mode==7)&&!i;
+            XrXirValue argument={XR_XIR_I64,0,panic?-1:20+(int64_t)i*2};
             const XrXirCallRequest request={.entry=2,.arguments=&argument,.count=1};
             CHECK(xir_task_spawn_scoped(witness->executor,view,&witness->group,(XrXirType)256,
                 &request,&witness->members[i])==XR_XIR_CALL_READY);
         }
         XirTask *completion=(XirTask *)(uintptr_t)witness->group.payload;
         CHECK(completion->aggregation->count==2&&completion->aggregation->pending==2&&!witness->child_calls);
-        if(witness->mode==3)return (XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value={XR_XIR_I64,0,42}};
-        if(witness->mode==4) {
+        if(witness->mode==3||witness->mode==8)return (XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value={XR_XIR_I64,0,42}};
+        if(witness->mode==7)return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};
+        if(witness->mode==4||witness->mode==6) {
             XrXirAction leave=xr_xir_call_bounds(-9,2);leave.kind=XR_XIR_ACTION_LEAVE;
             leave.flags=XR_XIR_ACTION_LEAVE_PANIC;return leave;
         }
@@ -73,6 +78,16 @@ static XrXirAction scope_root(XrXirCallView *view) {
         CHECK(xir_task_scope_seal(witness->executor,view,&witness->group,witness->mode==1)==XR_XIR_CALL_READY);
         CHECK(xir_task_scope_seal(witness->executor,view,&witness->group,false)==XR_XIR_CALL_BAD_STATE);
         return (XrXirAction){.kind=XR_XIR_ACTION_AWAIT_TASK,.value=witness->group};
+    }
+    if(witness->mode==7&&phase<3) {
+        if(phase==1)return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};
+        XrXirAction leave=xr_xir_call_bounds(-9,2);leave.kind=XR_XIR_ACTION_LEAVE;
+        leave.flags=XR_XIR_ACTION_LEAVE_PANIC;return leave;
+    }
+    if(witness->mode==6||witness->mode==7) {
+        CHECK(view->inbox.status==XR_XIR_CALL_BOUNDS&&witness->cleanup_calls==1);
+        CHECK(view->inbox.panic.detail.index==(witness->mode==6?-9:-7));
+        return (XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value={XR_XIR_I64,0,42}};
     }
     if(witness->mode==4) {
         CHECK(view->inbox.status==XR_XIR_CALL_BOUNDS&&witness->cleanup_calls==1);
@@ -143,13 +158,25 @@ static void scope_case(uint32_t mode) {
     const XrXirCallRequest request={.entry=1};XrXirCall *root=NULL;
     CHECK(xr_xir_call_new_budgeted(&config,&request,&budget,&root)==XR_XIR_CALL_READY);
     CHECK(xr_xir_task_executor_attach_root(witness.executor,root,1)==XR_XIR_CALL_READY);
-    XrXirCallResult result={0};unsigned polls=0;
-    do {CHECK(++polls<128);result=xr_xir_task_executor_poll_root(witness.executor,1);}while(result.status==XR_XIR_CALL_READY);
+    XrXirCallResult result={0};unsigned polls=0;bool cancelled=false;
+    do {
+        CHECK(++polls<128);result=xr_xir_task_executor_poll_root(witness.executor,1);
+        if(mode==8&&!cancelled&&witness.group.payload) {
+            const XirTaskGroup *group=((XirTask *)(uintptr_t)witness.group.payload)->aggregation;
+            if(group->departed&&group->pending&&xr_xir_call_state(root)==XR_XIR_CALL_SUSPENDED) {
+                CHECK(xr_xir_task_executor_cancel_root(witness.executor)==XR_XIR_CALL_CANCEL_REQUESTED);
+                cancelled=true;
+            }
+        }
+    }while(result.status==XR_XIR_CALL_READY);
     fprintf(stderr,"scope mode%u status%u root%u child%u polls%u\n",mode,result.status,witness.root_calls,witness.child_calls,polls);
-    CHECK(result.status==(mode==2?XR_XIR_CALL_BOUNDS:XR_XIR_CALL_RETURNED));
+    CHECK(result.status==(mode==2?XR_XIR_CALL_BOUNDS:mode==8?XR_XIR_CALL_CANCELLED:XR_XIR_CALL_RETURNED));
     CHECK(witness.cleanup_calls==1);
-    CHECK(witness.root_calls==(mode==2||mode==3?3u:mode==4||mode==5?5u:4u));
-    XrXirCallResult group={0};CHECK(xr_xir_task_copy_outcome(&witness.group,&group)==result.status);
+    const uint32_t expected_root[]={4,4,3,3,5,5,6,8,3};CHECK(witness.root_calls==expected_root[mode]);
+    if(mode==8)CHECK(cancelled);
+    XrXirCallResult group={0};
+    CHECK(xr_xir_task_copy_outcome(&witness.group,&group)==
+        (mode==2||mode==6||mode==7?XR_XIR_CALL_BOUNDS:XR_XIR_CALL_RETURNED));
     xr_xir_call_result_drop(&group);CHECK(xr_xir_task_executor_root_idle(witness.executor));
     CHECK(xr_xir_call_free(root)==XR_XIR_CALL_READY);
     CHECK(xr_xir_task_executor_free(witness.executor,NULL)==XR_XIR_CALL_READY);
@@ -159,4 +186,4 @@ static void scope_case(uint32_t mode) {
     CHECK(native_fixture_stats(&compiler.context).held_bytes==baseline.held_bytes);native_fixture_owner_free(&compiler);
     CHECK(!runtime_live&&!runtime_bytes);
 }
-int main(void) {for(uint32_t mode=0;mode<6;++mode)scope_case(mode);return 0;}
+int main(void) {for(uint32_t mode=0;mode<9;++mode)scope_case(mode);return 0;}

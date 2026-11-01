@@ -115,7 +115,8 @@ typedef struct CallFrame {
     bool effect_pending;
     uint32_t cleanup_frontier;
     uint32_t scope_cleanup_callee;
-    bool scope_draining,scope_resume,scope_child_first;
+    uint64_t scope_failure_order;
+    bool scope_draining,scope_resume;
     bool protected_call, entered, exiting, scope_exit, cleanup_call, in_cleanup, exit_done, return_staged;
     bool observer_announced;
     bool native_pending;
@@ -1639,14 +1640,15 @@ static XrXirCallStatus call_cancelled_error(XrXirCall *call,XrXirCallResult *out
     return XR_XIR_CALL_READY;
 }
 static XrXirCallStatus complete_owned_wait(XrXirCall *call,XrXirCallResult *outcome) {
+    uint64_t failure_order=0;
     if(call->wait.kind==XR_XIR_WAIT_TASK) {
-        XrXirCallStatus observed=xir_task_scope_observe(&call->waiting_task,call,call->top->epoch);
+        XrXirCallStatus observed=xir_task_scope_observe(&call->waiting_task,call,call->top->epoch,&failure_order);
         if(observed!=XR_XIR_CALL_READY) {xr_xir_call_result_drop(outcome);outcome->status=observed;}
     }
     if(call->top->scope_draining) {
         xr_xir_value_drop(&call->waiting_task);call->wait=(XrXirWaitRequest){0};
         call->result=call_result(XR_XIR_CALL_READY);
-        call_scope_cleanup_complete(call,outcome);return XR_XIR_CALL_READY;
+        call_scope_cleanup_complete(call,outcome,failure_order);return XR_XIR_CALL_READY;
     }
     if (call->top->task_result) {
         XrXirValue result={0};
