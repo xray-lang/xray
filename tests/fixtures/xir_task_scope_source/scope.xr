@@ -131,6 +131,29 @@ export fn exitOrder() throws(SendResult) -> i64 {
         return value
     }
 }
+export fn panicBoundary() -> i64 {
+    try {
+        scope {
+            const task = go failed()
+            try {
+                try { try! await task } catch panic {}
+                return 1
+            } catch panic { return 2 }
+        }
+    } catch panic { return 42 }
+}
+export fn childFirstFailure() -> i64 {
+    var caught = 0
+    try {
+        try scope {
+            const task = go payloadError()
+            try { try await task } catch (error) {}
+            throw WorkError.Failed
+        }
+    } catch (error: PayloadError) { caught = 42 }
+      catch (error: WorkError) { caught = 1 }
+    return caught
+}
 fn assertedBody() {
     var caught = false
     try { scope { go worker(0); try! businessError() } } catch panic { caught = true }
