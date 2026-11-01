@@ -27,8 +27,8 @@ struct XrXirChannelSelect {
     _Atomic(uint32_t) state;
     XrXirChannelSelectKind kind;
     XrXirValue candidate,value;
+    ChannelSelectArm *arms;
     bool has_default,has_timeout,prepared,taken;
-    ChannelSelectArm arms[];
 };
 static uint32_t *channel_select_order(XrXirChannelSelect *select) {
     return (uint32_t *)(select->arms+select->count);
@@ -109,6 +109,7 @@ XR_FUNC XrXirValueStatus xr_xir_channel_select_begin(const XrXirChannelSelectReq
         xr_xir_value_graph_end();return status;
     }
     memset(select,0,(size_t)bytes);atomic_init(&select->state,CHANNEL_SELECT_OPEN);
+    select->arms=(ChannelSelectArm *)(select+1);
     select->domain=admission->domain;select->arena=(XrXirTypeArena *)admission->arena;
     select->bytes=(size_t)bytes;select->count=request->count;select->has_default=request->has_default;
     select->has_timeout=request->has_timeout;select->start_ns=select->last_ns=request->now_ns;
