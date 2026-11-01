@@ -83,6 +83,34 @@ fn childErrors() {
         caught = true
     }
     assert(caught)
+    caught = false
+    try {
+        try scope { go businessError(); go payloadError(); go worker(0) }
+    } catch (error: WorkError) { caught = true }
+      catch (error: PayloadError) { caught = true }
+    assert(caught)
+}
+export fn returnBoundary() -> i64 {
+    try {
+        try scope {
+            const task = go payloadError()
+            try { try await task } catch (error) {}
+            return 1
+        }
+    } catch (error: PayloadError) { return 42 }
+}
+export fn breakBoundary() -> i64 {
+    var caught = false
+    for (var i = 0; i < 1; i++) {
+        try {
+            try scope {
+                const task = go payloadError()
+                try { try await task } catch (error) {}
+                break
+            }
+        } catch (error: PayloadError) { caught = true }
+    }
+    return caught ? 42 : 0
 }
 fn assertedBody() {
     var caught = false

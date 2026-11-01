@@ -31,8 +31,13 @@ static XrXirCallStatus execute_entry(XrXirInstance *instance,uint32_t entry,int6
     for(uint32_t step=0;status==XR_XIR_CALL_READY;++step) {
         CHECK(step<100000);status=xr_xir_instance_poll_bounded(instance,1).outcome.status;
     }
+    if(status!=XR_XIR_CALL_RETURNED&&status!=XR_XIR_CALL_CANCELLED)
+        fprintf(stderr,"entry %u actual status %u\n",entry,status);
     if(status==XR_XIR_CALL_RETURNED) {
         XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
+        if(result.type!=XR_XIR_I64||result.payload!=expected)
+            fprintf(stderr,"entry %u result type %u payload %lld expected %lld\n",entry,result.type,
+                (long long)result.payload,(long long)expected);
         CHECK(result.type==XR_XIR_I64 && result.payload==expected);xr_xir_value_drop(&result);
     }
     return status;
@@ -43,8 +48,10 @@ static XrXirInstance *new_instance(XrXirProgram *program,uint32_t initializer) {
     CHECK(execute_entry(instance,initializer,0)==XR_XIR_CALL_RETURNED);
     return instance;
 }
-static void execute(XrXirProgram *program,const uint32_t ids[4]) {
+static void execute(XrXirProgram *program,const uint32_t ids[6]) {
     XrXirInstance *instance=new_instance(program,ids[0]);
+    CHECK(execute_entry(instance,ids[4],42)==XR_XIR_CALL_RETURNED);
+    CHECK(execute_entry(instance,ids[5],42)==XR_XIR_CALL_RETURNED);
     CHECK(execute_entry(instance,ids[1],42)==XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
     CHECK(initializer_slot_controls==4 && task_go_transfers>=3);
@@ -72,7 +79,7 @@ static void execute(XrXirProgram *program,const uint32_t ids[4]) {
 }
 #if defined(XR_TASK_SCOPE_SOURCE_NATIVE)
 XR_DATA const XrXirProgramSpec task_scope_source_program;
-XR_DATA const uint32_t task_scope_source_ids[4];
+XR_DATA const uint32_t task_scope_source_ids[6];
 #else
 static XrXirStatus check(const XrXirCompileContext *context,const char *text,XrXirSourceResult *result,
     XrCompileRequestControl *control) {
@@ -151,18 +158,20 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_specialize(cold,&closed,NULL,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(cold);
     CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},NULL,&code,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);const XrXirModule *module=xr_xir_compile_artifact_module(code);
-    uint32_t ids[4]={module->declarations->entry_function,UINT32_MAX,UINT32_MAX,UINT32_MAX};
-    const char *names[3]={"main","moveStandalone","moveScoped"};
+    uint32_t ids[6]={module->declarations->entry_function,UINT32_MAX,UINT32_MAX,UINT32_MAX,UINT32_MAX,UINT32_MAX};
+    const char *names[5]={"main","moveStandalone","moveScoped","returnBoundary","breakBoundary"};
     for(uint32_t f=0;f<module->function_count;++f)
-        for(unsigned n=0;n<3;++n)
+        for(unsigned n=0;n<5;++n)
             if(module->functions[f].name_length==strlen(names[n]) &&
                 !memcmp(module->functions[f].name,names[n],strlen(names[n]))) {CHECK(ids[1+n]==UINT32_MAX);ids[1+n]=f;}
-    CHECK(ids[1]!=UINT32_MAX && ids[2]!=UINT32_MAX && ids[3]!=UINT32_MAX);
+    CHECK(ids[1]!=UINT32_MAX && ids[2]!=UINT32_MAX && ids[3]!=UINT32_MAX &&
+        ids[4]!=UINT32_MAX && ids[5]!=UINT32_MAX);
     if(emit) {
         XrXirCSource generated={0};CHECK(xr_xir_compile_emit_c(code,"task_scope_source",16777216,&generated)==XR_XIR_OK);
         FILE *file=fopen(argv[2],"wb");CHECK(file && !strstr(generated.text,"({"));
         CHECK(fwrite(generated.text,1,generated.length,file)==generated.length);
-        CHECK(fprintf(file,"\nconst uint32_t task_scope_source_ids[4]={%u,%u,%u,%u};\n",ids[0],ids[1],ids[2],ids[3])>0 && !fclose(file));
+        CHECK(fprintf(file,"\nconst uint32_t task_scope_source_ids[6]={%u,%u,%u,%u,%u,%u};\n",
+            ids[0],ids[1],ids[2],ids[3],ids[4],ids[5])>0 && !fclose(file));
         xr_xir_compile_c_source_free(&generated);xr_xir_compile_artifact_free(code);
     } else {
         CHECK(xr_xir_compile_vm_program_take(&code,&program)==XR_XIR_OK && !code);execute(program,ids);
