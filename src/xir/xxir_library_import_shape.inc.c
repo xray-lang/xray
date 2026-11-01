@@ -14,6 +14,8 @@
  * the copied body. Calls, references, literals and requirements map separately. */
 static bool library_catalog_local_instruction(XrXirOp op) {
     switch (op) {
+    case XR_XIR_ASSERT_CONDITION:case XR_XIR_INVOKE_INDIRECT:
+    case XR_XIR_INVOKE_DISCARD:case XR_XIR_PANIC_CATCH:
     case XR_XIR_PTR_NULL:case XR_XIR_PTR_READONLY:case XR_XIR_PTR_OFFSET:
     case XR_XIR_PTR_LOAD:case XR_XIR_PTR_STORE:case XR_XIR_PTR_COPY:case XR_XIR_PTR_EQ:
     case XR_XIR_CHANNEL_TRY_SEND: case XR_XIR_CHANNEL_TRY_RECV:
@@ -243,7 +245,8 @@ static XrXirStatus library_catalog_generic(const XrXirModule *module, const XrXi
     for (uint32_t p = 0; p < generic->parameter_count; ++p) {
 
         const XrXirConstraint *constraint = &generic->constraints[p];
-        if (xr_xir_binder_kind(generic,p) != XR_XIR_BINDER_TYPE ||
+        uint32_t kind=xr_xir_binder_kind(generic,p);
+        if ((kind!=XR_XIR_BINDER_TYPE && kind!=XR_XIR_BINDER_RESULT_VARIABLE) ||
             (constraint->markers & ~XR_XIR_CONSTRAINT_MASK)) return XR_XIR_BAD_STAGE;
     }
     for (uint32_t a = 0; a < generic->argument_count; ++a) {

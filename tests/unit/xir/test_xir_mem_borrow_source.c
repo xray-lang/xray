@@ -25,6 +25,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef XR_MEM_COLD_ROOT
+#define XR_MEM_COLD_ROOT "."
+#endif
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"mem Source %d: %s\n",__LINE__,#c);exit(1);}} while (0)
 static uint64_t held(XrCompileResources *resources) {
     XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(resources,&stats)==XR_COMPILE_RESOURCE_OK);
@@ -42,8 +45,8 @@ static void return_controls(const XrXirCompileContext *context,const XrXirModule
     const XrXirConstruction *construction,const XrXirConstructionSpec *base) {
     const XrXirBorrowReturns *original=xr_xir_compile_construction_borrow_returns(construction);
     CHECK(original && original->count==2);uint64_t baseline=held(context->resources);
-    for (uint32_t kind=0;kind<6;++kind) {
-        XrXirBorrowReturn rows[2]={original->rows[0],original->rows[1]};
+    for (uint32_t kind=0;kind<8;++kind) {
+        XrXirBorrowReturn rows[3]={original->rows[0],original->rows[1],{0}};
         XrXirBorrowReturns table={rows,2};XrXirConstructionSpec specification=*base;
         if (!kind) rows[0].function=module->function_count;
         if (kind==1) rows[0].native_callable=rows[1].native_callable;
@@ -51,6 +54,10 @@ static void return_controls(const XrXirCompileContext *context,const XrXirModule
         if (kind==3) rows[0].receiver=1;
         if (kind==4) table.count=1;
         if (kind==5) table.rows=NULL;
+        if (kind==6) rows[0].nominal=module->types->nominals->count;
+        if (kind==7) {
+            rows[2]=rows[1];rows[1]=rows[0];rows[0].function=0;table.count=3;
+        }
         specification.borrow_returns=&table;XrXirConstruction *received=NULL;
         XrXirStatus status=xr_xir_compile_construction_new_v5(context,module->types,&specification,
             xr_xir_compile_construction_slots(construction),&received,NULL);
@@ -135,6 +142,7 @@ static void caller_controls(const XrXirCompileContext *context,const char *stdli
         xr_compile_session_free(session);
     }
 }
+#include "xir_mem_borrow_library_cases.h"
 int main(int argc,char **argv) {
     CHECK(argc==2);char stdlib[2048];
     CHECK(snprintf(stdlib,sizeof(stdlib),"%s/stdlib",argv[1])>0);
@@ -180,6 +188,9 @@ int main(int argc,char **argv) {
     return_controls(&context,module,construction,&specification);
     xr_xir_compile_construction_free(missing);xr_compile_resources_free(rows);xr_compile_resources_free(materializations);
     xr_xir_compile_artifact_free(cold);CHECK(held(resources)==frame);
-    physical_flags(&context);caller_controls(&context,stdlib);CHECK(held(resources)==frame);xr_compile_resources_release(resources);
+    physical_flags(&context);caller_controls(&context,stdlib);
+    mem_library_case(&context,stdlib,false);mem_library_case(&context,stdlib,true);
+    mem_library_root_rejection(&context);
+    CHECK(held(resources)==frame);xr_compile_resources_release(resources);
     puts("mem source return facts PASS");return 0;
 }

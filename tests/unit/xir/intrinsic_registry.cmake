@@ -262,6 +262,8 @@ foreach(display_part source values)
 endforeach()
 
 add_executable(test_xir_mem_borrow_source xir/test_xir_mem_borrow_source.c)
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mem-borrow-cold")
+target_compile_definitions(test_xir_mem_borrow_source PRIVATE XR_MEM_COLD_ROOT="${CMAKE_CURRENT_BINARY_DIR}/mem-borrow-cold")
 target_link_libraries(test_xir_mem_borrow_source PRIVATE xray_xir_source)
 set_target_properties(test_xir_mem_borrow_source PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)

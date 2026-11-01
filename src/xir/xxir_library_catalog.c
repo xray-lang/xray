@@ -122,30 +122,45 @@ static XrXirStatus catalog_io_status(XrOsIoStatus status) {
 static XrXirStatus catalog_module(XrXirLibraryCatalog *catalog, size_t index,
     const XrXirLibraryModuleInput *input, XrXirArtifact *artifact, uint32_t ordinal) {
     const XrXirCompileContext *context = &catalog->context;
-    if (!input->logical_path || !input->authority.physical_root) return XR_XIR_BAD_STRUCTURE;
+    bool internal=input->authority.kind==XR_MODULE_IDENTITY_MEMORY;
+    if (internal ? input->logical_path || input->authority.physical_root :
+        !input->logical_path || !input->authority.physical_root) return XR_XIR_BAD_STRUCTURE;
     if (input->authority.kind != XR_MODULE_IDENTITY_SCRIPT &&
-        input->authority.kind != XR_MODULE_IDENTITY_STDLIB) return XR_XIR_BAD_STAGE;
+        input->authority.kind != XR_MODULE_IDENTITY_STDLIB && !internal) return XR_XIR_BAD_STAGE;
     XrModuleResourceBinding *resource = &catalog->resources[index];
     char *identity = NULL;
     XrXirStatus status = catalog_module_status(xr_compile_module_identity_from_logical(
         context->resources,&input->authority,input->logical_path,&identity));
     if (status != XR_XIR_OK) return status;
     resource->canonical = identity;
-    size_t logical, root, name = 0, canonical;
+    const XrXirModule *checked=xr_xir_compile_artifact_module(artifact);
+    const XrXirSourceModule *module=&checked->declarations->modules[ordinal];
+    size_t canonical=0;
+    if (!catalog_length(identity,&canonical)) return XR_XIR_BUDGET;
+    if (module->name_length!=canonical || memcmp(module->name,identity,canonical)) return XR_XIR_BAD_STRUCTURE;
+    if (internal) {
+        bool dependency=false;
+        for (uint32_t m=0;m<checked->declarations->module_count;++m) {
+            const XrXirSourceModule *owner=&checked->declarations->modules[m];
+            for (uint32_t e=0;e<owner->dependency_count;++e) dependency|=owner->dependencies[e]==ordinal;
+        }
+        if (!dependency || ordinal==checked->declarations->root_module) return XR_XIR_BAD_STRUCTURE;
+        size_t length=0;if (!catalog_length(input->authority.namespace_id,&length)) return XR_XIR_BAD_STRUCTURE;
+        resource->authority.kind=XR_MODULE_IDENTITY_MEMORY;
+        resource->authority.namespace_id=catalog_text(context,input->authority.namespace_id,length,&status);
+        resource->checked=artifact;resource->checked_module=ordinal;return status;
+    }
+    size_t logical, root, name = 0;
     if (!catalog_length(input->logical_path,&logical) ||
         !catalog_length(input->authority.physical_root,&root) ||
-        !catalog_length(identity,&canonical) ||
         (input->authority.namespace_id && !catalog_length(input->authority.namespace_id,&name)))
         return XR_XIR_BUDGET;
     if (!root || root >= XR_PATH_MAX) return XR_XIR_BAD_STRUCTURE;
-    const XrXirModule *checked=xr_xir_compile_artifact_module(artifact);bool governed=false;
+    bool governed=false;
     status=library_prelude_module(checked,ordinal,&governed);
     if (status!=XR_XIR_OK) return status;
     status = catalog_path(input,logical,name,governed);
     if (status != XR_XIR_OK) return status;
-    const XrXirSourceModule *module = &checked->declarations->modules[ordinal];
-
-    if (module->name_length != canonical || memcmp(module->name,identity,canonical)) return XR_XIR_BAD_STRUCTURE;
     resource->logical_path = catalog_text(context,input->logical_path,logical,&status);
     resource->authority.kind = input->authority.kind;
     resource->authority.physical_root = catalog_text(context,input->authority.physical_root,root,&status);
