@@ -36,7 +36,7 @@ static inline bool xir_native_callable_types(uint32_t id,const XrXirTypes *types
     const XrXirType *parameters,uint32_t count,XrXirType result,XrXirType error) {
     const XrNativeCallableDeclaration *canonical=xr_native_callable_by_id(id);
     if(id==XR_NATIVE_CALLABLE_SYS_THREAD_YIELD)return xir_sys_thread_yield_signature(parameters,count,result,error);
-    if(id==XR_NATIVE_CALLABLE_OS_PLATFORM)return xir_os_platform_signature(parameters,count,result,error);
+    if(xir_os_native_id(id))return xir_os_native_signature(id,parameters,count,result,error);
     if(xir_math_native_id(id))return xir_math_native_signature(id,parameters,count,result,error);
     if(xir_task_aggregate_native(id))return xir_task_aggregate_signature(id,types,parameters,count,result,error);
     if (xir_mem_native_id(id)) return xir_mem_native_signature(id,types,parameters,count,result,error);
@@ -117,8 +117,8 @@ static inline XrXirStatus xir_native_callable_verify(const XrXirModule *module,u
     const XrXirFunction *function=&module->functions[index];
     if(id->native_callable==XR_NATIVE_CALLABLE_SYS_THREAD_YIELD &&
         !xir_sys_thread_yield_scope(module->declarations,index,module->function_count))return XR_XIR_BAD_TYPE;
-    if(id->native_callable==XR_NATIVE_CALLABLE_OS_PLATFORM &&
-        !xir_os_platform_scope(module->declarations,index,module->function_count))return XR_XIR_BAD_TYPE;
+    if(xir_os_native_id(id->native_callable) &&
+        !xir_os_native_scope(module->declarations,index,module->function_count))return XR_XIR_BAD_TYPE;
     if(xir_math_native_id(id->native_callable) &&
         !xir_math_native_scope(module->declarations,index,module->function_count))return XR_XIR_BAD_TYPE;
     if (xir_mem_native_id(id->native_callable) && !xir_buffer_storage_scope(module->declarations,index))

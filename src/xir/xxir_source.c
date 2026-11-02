@@ -2555,8 +2555,9 @@ static bool collect_declarations(SourceContext *ctx) {
     for(uint32_t m=0;m<count;++m) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_os_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
-        if(capacity==UINT32_MAX)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"os native callable capacity overflow");
-        ++capacity;
+        uint32_t natives=XR_NATIVE_CALLABLE_OS_ARCH-XR_NATIVE_CALLABLE_OS_PLATFORM+1;
+        if(natives>UINT32_MAX-capacity)return source_fail(ctx,NULL,XR_XIR_OVERFLOW,"os native callable capacity overflow");
+        capacity+=natives;
     }
     if (!ctx->core_factory && capacity <= UINT32_MAX - 9) capacity += 9;
     if (readers>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_BUDGET,"binding reader capacity exhausted");

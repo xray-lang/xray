@@ -2425,10 +2425,10 @@ XR_FUNC XrXirAction xr_xir_instance_native_callable(XrXirCallView *view) {
         if(!xir_math_native_scope(program->declarations,index,program->entry_count))goto failed;
         XrXirRunStatus evaluated=instance_math_call(id,view->arguments,view->argument_count,value);
         if(evaluated!=XR_XIR_RUN_OK)return xr_xir_call_fault(evaluated);
-    } else if(id==XR_NATIVE_CALLABLE_OS_PLATFORM) {
-        if(!xir_os_platform_scope(program->declarations,index,program->entry_count))goto failed;
-        const char *platform=xr_os_core_platform();
-        converted=xr_xir_string_new(instance->domain,platform,strlen(platform),value);
+    } else if(xir_os_native_id(id)) {
+        if(!xir_os_native_scope(program->declarations,index,program->entry_count))goto failed;
+        const char *text=id==XR_NATIVE_CALLABLE_OS_PLATFORM?xr_os_core_platform():xr_os_core_arch();
+        converted=xr_xir_string_new(instance->domain,text,strlen(text),value);
     } else if (id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM || id==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL) {
         if(!xir_crypto_scope(program->declarations,index)){status=XR_XIR_CALL_BAD_ARGUMENT;goto failed;}
         if(id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM) {
