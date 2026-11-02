@@ -548,6 +548,75 @@ class StringBuilder {
                 schema.channel_result_rows(root)
 
 
+class SysThreadYieldDeclaration(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools' / 'stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_thread_yield_is_one_private_system_leaf(self):
+        lines, rows = schema.render_sys_thread_yield(self.declarations)
+        self.assertEqual(len(rows), 1)
+        self.assertIn('XR_NATIVE_CALLABLE_SYS_THREAD_YIELD, NULL,', rows[0])
+        self.assertIn('NULL, false, "sys", "stdlib/defs/core.def", FINGERPRINT', rows[0])
+        self.assertIn('"__threadYield", "(): ()", "()"', '\n'.join(lines))
+        self.assertIn('NULL, 0, XR_NATIVE_TERM_UNIT', '\n'.join(lines))
+
+    def test_thread_yield_rejects_missing_duplicate_and_changed_contracts(self):
+        row = next(row for row in self.declarations if row.module == 'sys' and row.name == '__threadYield')
+        for changed in [[item for item in self.declarations if item is not row], self.declarations + [row]]:
+            with self.assertRaises(ValueError):
+                schema.render_sys_thread_yield(changed)
+        for field, value in [('signature', '(): i64'), ('argc', '1'), ('arg_spec', 'v'),
+                             ('visibility', 'public'), ('effect', 'nothrow'), ('allocation', 'no_heap'),
+                             ('return_ownership', 'fresh'), ('layer', 'pure'), ('vm', 'sys_task_yield'),
+                             ('aot', 'other_provider'), ('aot_direct', False), ('aot_kind', 'builtin'),
+                             ('link_object', 'other_provider'), ('vm_binding', 'yieldable'),
+                             ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'),
+                             ('semantic_intrinsic', True), ('caps', ('task',)), ('suspension_kind', 'task')]:
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                schema.render_sys_thread_yield([replace(item, **{field: value}) if item is row else item
+                                              for item in self.declarations])
+
+
+class OsHostFactDeclarations(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / 'tools' / 'stdlibgen'))
+        from stdlibgen import parse_defs
+        cls.declarations = parse_defs(ROOT)
+
+    def test_private_system_strings_keep_owned_and_runtime_contract(self):
+        lines, rows = schema.render_os_callables(self.declarations)
+        self.assertEqual(len(rows), 2)
+        for name in ('platform', 'arch'):
+            self.assertTrue(any('XR_NATIVE_CALLABLE_OS_' + name.upper() + ', NULL,' in row and
+                                'NULL, false, "os", "stdlib/defs/core.def", FINGERPRINT' in row for row in rows))
+            self.assertIn('"__' + name + '", "(): string", "string"', '\n'.join(lines))
+        self.assertEqual('\n'.join(lines).count('NULL, 0, XR_NATIVE_TERM_STRING'), 2)
+        self.assertEqual('\n'.join(lines).count('XR_NATIVE_ALLOCATION_UNKNOWN'), 2)
+        self.assertNotIn('XR_NATIVE_ALLOCATION_NO_HEAP', '\n'.join(lines))
+
+    def test_missing_duplicate_and_changed_contracts_are_rejected(self):
+        for name in ('__platform', '__arch'):
+            row = next(row for row in self.declarations if row.module == 'os' and row.name == name)
+            for changed in [[item for item in self.declarations if item is not row], self.declarations + [row]]:
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    schema.render_os_callables(changed)
+            for field, value in [('signature', '(): i64'), ('argc', '1'), ('arg_spec', 'v'),
+                                 ('module', 'other'), ('visibility', 'public'), ('effect', 'nothrow'),
+                                 ('allocation', 'no_heap'), ('return_ownership', ''), ('layer', 'pure'),
+                                 ('vm', 'os_other_fact'), ('aot', 'other_provider'), ('aot_direct', False),
+                                 ('aot_kind', 'builtin'), ('link_object', 'other_provider'), ('vm_binding', 'yieldable'),
+                                 ('vm_ifdef', 'OTHER'), ('define', 'OTHER'), ('ret', 'i64'),
+                                 ('semantic_intrinsic', True), ('caps', ('task',)), ('suspension_kind', 'task')]:
+                with self.subTest(name=name, field=field), self.assertRaises(ValueError):
+                    schema.render_os_callables([replace(item, **{field: value}) if item is row else item
+                                               for item in self.declarations])
+
+
+
 class MathCallableDeclarations(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

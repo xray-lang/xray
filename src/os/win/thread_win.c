@@ -25,7 +25,7 @@
 
 #include "../os_thread.h"
 
-#include "xmalloc.h"
+#include "../../base/xmalloc.h"
 #include <process.h>
 
 struct xr_thread_ctx {
