@@ -1138,7 +1138,13 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
     }
     if(op->op==XR_XIR_COPY || op->op==XR_XIR_OWNED_RETAIN) {
         XrXirType actual=xr_xir_operand_type(function,op->args[0]);
-        if(actual!=op->type && xr_xir_class_is_subtype(context->module->types,actual,op->type))expected=actual;
+        if(actual!=op->type && xr_xir_class_is_subtype(context->module->types,actual,op->type)) {
+            if(op->args[0]>=function->parameter_count) {
+                XrXirOp source=function->instructions[op->args[0]-function->parameter_count].op;
+                if(source==XR_XIR_CELL_TAKE || source==XR_XIR_VALUE_TAKE)return XR_XIR_UNSUPPORTED;
+            }
+            expected=actual;
+        }
     }
     if (op->op == XR_XIR_FUNCTION_WEAKEN) {
         expected = xr_xir_operand_type(function, op->args[0]);

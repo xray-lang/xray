@@ -13,6 +13,11 @@ static XrXirStatus source_conversion_intern(void *owner,const XrXirTypeNode *nod
 }
 static bool source_conversion_plan(SourceContext *ctx,AstNode *site,XrXirType actual,
     SourceExpectedType expected,XrHirConversion *output) {
+    AstNode *root=site;
+    while(root && root->type==AST_GROUPING)root=root->as.grouping;
+    if(root && root->type==AST_MOVE_EXPR && expected.present && actual!=expected.type &&
+        xr_xir_class_is_subtype(&ctx->types,actual,expected.type))
+        return source_fail(ctx,site,XR_XIR_UNSUPPORTED,"move conversion has no owned transfer recipe");
     XrXirSourceRange range=source_query_range(ctx,site,NULL);
     XrHirConversionInput input={.origin={site?site->node_id:0,range.module,range.line,range.column,range.end_line,range.end_column},
         .actual=actual,.expected=expected.type,.has_expected=expected.present,
